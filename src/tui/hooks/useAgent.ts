@@ -23,7 +23,7 @@ export interface UseAgentResult {
   sendMessage: (input: string, attachments?: FileAttachment[]) => Promise<void>;
   clearMessages: () => void;
   interrupt: () => void;
-  getModel: () => string;
+  model: string;
   setModel: (model: string) => void;
   isWebSearchEnabled: () => boolean;
   setWebSearchEnabled: (enabled: boolean) => void;
@@ -45,6 +45,7 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
     outputTokens: 0,
     totalTokens: 0,
   });
+  const [model, setModelState] = useState(config.model || 'claude-sonnet-4-5-20250929');
 
   const agentRef = useRef<CraftAgent | null>(null);
   const toolStartTimeRef = useRef<Map<string, number>>(new Map());
@@ -283,16 +284,10 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
     ]);
   }, []);
 
-  const getModel = useCallback(() => {
+  const setModel = useCallback((newModel: string) => {
+    setModelState(newModel);
     if (agentRef.current) {
-      return agentRef.current.getModel();
-    }
-    return config.model || 'claude-sonnet-4-5-20250929';
-  }, [config.model]);
-
-  const setModel = useCallback((model: string) => {
-    if (agentRef.current) {
-      agentRef.current.setModel(model);
+      agentRef.current.setModel(newModel);
     }
   }, []);
 
@@ -346,7 +341,7 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
     sendMessage,
     clearMessages,
     interrupt,
-    getModel,
+    model,
     setModel,
     isWebSearchEnabled,
     setWebSearchEnabled,

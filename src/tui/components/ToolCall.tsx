@@ -12,89 +12,42 @@ export interface ToolCallProps {
   compact?: boolean;
 }
 
-// Generate a human-readable description for a tool call
-const getToolDescription = (toolName: string, input?: Record<string, unknown>): string => {
-  const get = (key: string): string => {
-    const val = input?.[key];
-    if (val === undefined || val === null) return '';
-    return typeof val === 'string' ? val : JSON.stringify(val);
-  };
-
-  const shorten = (path: string, maxLen = 40): string => {
-    if (path.length <= maxLen) return path;
-    // Show last part of path
-    const parts = path.split('/');
-    let result = parts[parts.length - 1] || path;
-    if (result.length < maxLen && parts.length > 1) {
-      result = '…/' + result;
-    }
-    return truncateText(result, maxLen);
-  };
-
-  switch (toolName.toLowerCase()) {
-    // File operations
-    case 'read':
-      return `Read ${shorten(get('file_path'))}`;
-    case 'write':
-      return `Write ${shorten(get('file_path'))}`;
-    case 'edit':
-      return `Edit ${shorten(get('file_path'))}`;
-    case 'notebookedit':
-      return `Edit notebook ${shorten(get('notebook_path'))}`;
-
-    // Search operations
-    case 'glob':
-      return `Find files matching ${truncateText(get('pattern'), 30)}`;
-    case 'grep':
-      const pattern = get('pattern');
-      const glob = get('glob');
-      return glob
-        ? `Search "${truncateText(pattern, 20)}" in ${glob}`
-        : `Search "${truncateText(pattern, 30)}"`;
-
-    // Shell operations
-    case 'bash':
-      const cmd = get('command');
-      return `Run ${truncateText(cmd, 50)}`;
-    case 'bashoutput':
-      return `Check command output`;
-    case 'killshell':
-      return `Stop background process`;
-
-    // Web operations
-    case 'webfetch':
-      const url = get('url');
-      try {
-        const hostname = new URL(url).hostname;
-        return `Fetch ${hostname}`;
-      } catch {
-        return `Fetch URL`;
-      }
-    case 'websearch':
-      return `Search web: "${truncateText(get('query'), 35)}"`;
-
-    // Task/agent operations
-    case 'task':
-      return `${get('description') || 'Run agent task'}`;
-
-    // Other operations
-    case 'todowrite':
-      return `Update task list`;
-    case 'askuserquestion':
-      return `Ask question`;
-
-    // MCP tools (prefixed with mcp__)
-    default:
-      if (toolName.startsWith('mcp__')) {
-        const parts = toolName.split('__');
-        const server = parts[1] || 'mcp';
-        const tool = parts[2] || parts[1] || toolName;
-        return `${server}: ${tool.replace(/_/g, ' ')}`;
-      }
-      // Fallback: format tool name nicely
-      const displayName = toolName.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-      return displayName;
+// Format tool name for display (snake_case to Title Case)
+const formatToolName = (name: string): string => {
+  // Handle MCP tools (mcp__server__tool)
+  if (name.startsWith('mcp__')) {
+    const parts = name.split('__');
+    const tool = parts[2] || parts[1] || name;
+    return tool.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
   }
+  return name.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+};
+
+// Format input params as clean, readable text
+const formatInputParams = (input?: Record<string, unknown>): string => {
+  if (!input || Object.keys(input).length === 0) return '';
+
+  const parts: string[] = [];
+  for (const [key, value] of Object.entries(input)) {
+    if (value === undefined || value === null) continue;
+
+    let valStr: string;
+    if (typeof value === 'string') {
+      // Clean up whitespace, trim
+      valStr = value.replace(/\s+/g, ' ').trim();
+    } else if (typeof value === 'boolean' || typeof value === 'number') {
+      valStr = String(value);
+    } else {
+      // For objects/arrays, stringify and clean up
+      valStr = JSON.stringify(value).replace(/[{}"]/g, '').replace(/,/g, ', ').trim();
+    }
+
+    if (valStr) {
+      parts.push(`${key}: ${valStr}`);
+    }
+  }
+
+  return truncateText(parts.join(', '), 60);
 };
 
 export const ToolCall: React.FC<ToolCallProps> = memo(({
@@ -124,21 +77,9 @@ export const ToolCall: React.FC<ToolCallProps> = memo(({
 
   const { icon, color } = getStatusDisplay();
 
-  // Get human-readable description
-  const description = getToolDescription(toolName, input);
-
-  // Format tool name for display (snake_case to readable) - used in expanded view
-  const displayName = toolName.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-
-  // Get result summary (only for expanded or error display)
-  const getResultSummary = (): string => {
-    if (!result) return '';
-    // Clean up result text
-    const cleaned = result.replace(/\n/g, ' ').trim();
-    return truncateText(cleaned, 80);
-  };
-
-  const resultSummary = getResultSummary();
+  // Format for display
+  const displayName = formatToolName(toolName);
+  const inputParams = formatInputParams(input);
 
   // Compact view (single line)
   if (compact && !expanded) {
@@ -150,7 +91,8 @@ export const ToolCall: React.FC<ToolCallProps> = memo(({
           ) : (
             <Text color={color}>{icon} </Text>
           )}
-          <Text dimColor>{description}</Text>
+          <Text dimColor>{displayName}</Text>
+          {inputParams && <Text color="gray"> {inputParams}</Text>}
           {status === 'completed' && duration !== undefined && (
             <Text dimColor> ({formatDuration(duration)})</Text>
           )}

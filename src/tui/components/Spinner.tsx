@@ -23,7 +23,7 @@ export interface ThinkingIndicatorProps {
 // Static indicator - no animation to prevent flashing
 export const ThinkingIndicator: React.FC<ThinkingIndicatorProps> = memo(({ status }) => {
   return (
-    <Box marginY={1}>
+    <Box paddingLeft={1} marginY={1}>
       <Text color="yellow">●</Text>
       <Text color="gray"> {status || 'Thinking...'}</Text>
     </Box>

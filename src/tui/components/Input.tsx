@@ -4,10 +4,13 @@ import { Box, Text, useInput, useStdout } from 'ink';
 export interface InputProps {
   onSubmit: (input: string) => void;
   onPaste?: () => void;
+  onRemoveAttachment?: () => void;
+  onPastedText?: (text: string) => void;
   disabled?: boolean;
   history?: string[];
   placeholder?: string;
   attachmentCount?: number;
+  attachmentLabel?: string;
 }
 
 // Simple custom text input without cursor animation
@@ -15,9 +18,11 @@ const SimpleTextInput: React.FC<{
   value: string;
   onChange: (value: string) => void;
   onSubmit: (value: string) => void;
+  onBackspaceEmpty?: () => void;
+  onPastedText?: (text: string) => void;
   placeholder?: string;
   disabled?: boolean;
-}> = ({ value, onChange, onSubmit, placeholder = '', disabled = false }) => {
+}> = ({ value, onChange, onSubmit, onBackspaceEmpty, onPastedText, placeholder = '', disabled = false }) => {
   useInput(
     (input, key) => {
       if (disabled) return;
@@ -28,12 +33,41 @@ const SimpleTextInput: React.FC<{
       }
 
       if (key.backspace || key.delete) {
-        onChange(value.slice(0, -1));
+        if (value.length === 0 && onBackspaceEmpty) {
+          onBackspaceEmpty();
+        } else {
+          onChange(value.slice(0, -1));
+        }
         return;
       }
 
       // Ignore control characters
       if (key.ctrl || key.meta || key.escape || key.upArrow || key.downArrow || key.leftArrow || key.rightArrow) {
+        return;
+      }
+
+      // Check for multi-character input (indicates paste from terminal)
+      // This happens when terminal pastes text directly or via bracketed paste mode
+      if (input && input.length > 1) {
+        // Strip bracketed paste markers if present: \x1b[200~ (start) and \x1b[201~ (end)
+        let pastedText = input;
+        const bracketStart = '\x1b[200~';
+        const bracketEnd = '\x1b[201~';
+        if (pastedText.startsWith(bracketStart)) {
+          pastedText = pastedText.slice(bracketStart.length);
+        }
+        if (pastedText.endsWith(bracketEnd)) {
+          pastedText = pastedText.slice(0, -bracketEnd.length);
+        }
+        // Also handle case where markers come separately
+        pastedText = pastedText.replace(/\x1b\[200~/g, '').replace(/\x1b\[201~/g, '');
+
+        // This is likely pasted/dragged text - check if it's a file path
+        if (onPastedText && pastedText.trim()) {
+          onPastedText(pastedText.trim());
+        } else if (pastedText) {
+          onChange(value + pastedText);
+        }
         return;
       }
 
@@ -84,10 +118,13 @@ const InputPrompt = memo<{ disabled: boolean }>(({ disabled }) => (
 export const Input: React.FC<InputProps> = ({
   onSubmit,
   onPaste,
+  onRemoveAttachment,
+  onPastedText,
   disabled = false,
   history = [],
   placeholder,
   attachmentCount = 0,
+  attachmentLabel,
 }) => {
   const [value, setValue] = useState('');
   const [historyIndex, setHistoryIndex] = useState(-1);
@@ -125,15 +162,20 @@ export const Input: React.FC<InputProps> = ({
         }
       }
 
-      // Handle Ctrl+U to clear line
-      if (key.ctrl && input === 'u') {
+      // Handle Ctrl+U to clear line (Ctrl+U = ASCII 21 = '\x15')
+      if (input === '\x15' || (key.ctrl && input === 'u')) {
         setValue('');
         setHistoryIndex(-1);
       }
 
-      // Handle Ctrl+V to paste from clipboard (for images)
-      if (key.ctrl && input === 'v' && onPaste) {
-        onPaste();
+      // Handle paste from clipboard
+      // Ctrl+V (ASCII 22 / 0x16) - often intercepted by terminal
+      // Ctrl+P (ASCII 16 / 0x10) - alternative that works in more terminals
+      const charCode = input.charCodeAt(0);
+      const isCtrlV = charCode === 22 || input === '\x16' || (key.ctrl && (input === 'v' || input === 'V'));
+      const isCtrlP = charCode === 16 || input === '\x10' || (key.ctrl && (input === 'p' || input === 'P'));
+      if (isCtrlV || isCtrlP) {
+        if (onPaste) onPaste();
       }
     },
     { isActive: !disabled }
@@ -166,13 +208,15 @@ export const Input: React.FC<InputProps> = ({
         <InputPrompt disabled={disabled} />
         {attachmentCount > 0 && (
           <Text color="cyan">
-            [{attachmentCount === 1 ? 'Image' : `${attachmentCount} files`}]{' '}
+            [{attachmentLabel || (attachmentCount === 1 ? '1 file' : `${attachmentCount} files`)}]{' '}
           </Text>
         )}
         <SimpleTextInput
           value={value}
           onChange={setValue}
           onSubmit={handleSubmit}
+          onBackspaceEmpty={onRemoveAttachment}
+          onPastedText={onPastedText}
           placeholder={placeholderText}
           disabled={disabled}
         />
@@ -196,8 +240,8 @@ function getCommandHint(input: string): string {
   const commands: Record<string, string> = {
     '/help': 'Show help and available commands',
     '/clear': 'Clear conversation history',
-    '/paste': 'Paste image from clipboard',
-    '/image': 'Paste image from clipboard',
+    '/paste': 'Paste files/images from clipboard',
+    '/image': 'Paste files/images from clipboard',
     '/tools': 'List available Craft MCP tools',
     '/config': 'Show current configuration',
     '/prefs': 'Show user preferences',
@@ -236,7 +280,7 @@ export const InputHint: React.FC<{ visible?: boolean }> = memo(({ visible = true
   return (
     <Box paddingX={1} marginTop={1}>
       <Text dimColor>
-        Enter to send | ↑↓ history | Ctrl+U clear | Ctrl+C exit
+        Enter send | ↑↓ history | /paste or drag files | ⌫ remove file | Ctrl+C exit
       </Text>
     </Box>
   );

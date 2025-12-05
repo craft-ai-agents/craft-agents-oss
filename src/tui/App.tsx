@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useMemo } from 'react';
 import { Box, useApp, useInput, Text } from 'ink';
 import { Header, WelcomeBanner } from './components/Header.tsx';
 import { Messages, type Message } from './components/Messages.tsx';
@@ -11,7 +11,7 @@ import { formatToolsHelp } from '../mcp/tools.ts';
 import { getConfigPath } from '../config/storage.ts';
 import { formatPreferencesDisplay, getPreferencesPath } from '../config/preferences.ts';
 import { formatTokens, estimateCost } from './utils/markdown.ts';
-import { processInputWithFiles, formatAttachmentDisplay, readClipboardImage, type FileAttachment } from './utils/files.ts';
+import { processInputWithFiles, readClipboard, type FileAttachment } from './utils/files.ts';
 import type { CraftAgentConfig } from '../agent/craft-agent.ts';
 
 export interface AppProps {
@@ -28,7 +28,7 @@ const HELP_TEXT = `
 **Commands**
   /help      Show this help message
   /clear     Clear conversation history
-  /paste     Paste image from clipboard
+  /paste     Paste files/images from clipboard
   /tools     List available Craft MCP tools
   /config    Show current configuration
   /prefs     Show user preferences
@@ -44,9 +44,20 @@ const HELP_TEXT = `
 **Keyboard Shortcuts**
   Enter      Send message
   ↑/↓        Navigate command history
+  Backspace  Remove last attached file (when input is empty)
   Ctrl+C     Interrupt / Exit
   Ctrl+U     Clear input line
   Esc        Interrupt current operation
+
+**Attaching Files**
+  Drag & drop   Drag file into terminal window
+  /paste        Paste from clipboard (Cmd+C a file first)
+  Type path     Include /path/to/file in your message
+
+**Ghostty Users**
+  By default Ghostty uses Ctrl+Shift+V for paste.
+  Add to ~/.config/ghostty/config:
+    keybind = performable:ctrl+v=paste_from_clipboard
 
 **Examples**
   "Show me today's daily note"
@@ -72,7 +83,7 @@ export const App: React.FC<AppProps> = ({ config, onRequestSetup }) => {
     sendMessage,
     clearMessages,
     interrupt,
-    getModel,
+    model,
     setModel,
     isWebSearchEnabled,
     setWebSearchEnabled,
@@ -113,12 +124,60 @@ export const App: React.FC<AppProps> = ({ config, onRequestSetup }) => {
   }, []);
 
   const handlePaste = useCallback(() => {
-    const clipboardImage = readClipboardImage();
-    if (clipboardImage) {
-      setPendingAttachments(prev => [...prev, clipboardImage]);
-      addLocalMessage(`📎 Image from clipboard (${Math.round(clipboardImage.size / 1024)}KB)`, 'system');
+    try {
+      const clipboardItems = readClipboard();
+
+      if (clipboardItems.length > 0) {
+        setPendingAttachments(prev => [...prev, ...clipboardItems]);
+      } else {
+        addLocalMessage('No files or images in clipboard. Copy a file (Cmd+C) or take a screenshot first.', 'error');
+      }
+    } catch (err) {
+      addLocalMessage(`Clipboard error: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
     }
   }, [addLocalMessage]);
+
+  // Remove last attachment when backspace pressed with empty input
+  const handleRemoveAttachment = useCallback(() => {
+    setPendingAttachments(prev => {
+      if (prev.length > 0) {
+        return prev.slice(0, -1);
+      }
+      return prev;
+    });
+  }, []);
+
+  // Handle pasted text (e.g., dragged file paths from terminal)
+  const handlePastedText = useCallback((text: string) => {
+    // Check if the pasted text contains file paths
+    const { attachments, errors } = processInputWithFiles(text);
+
+    if (attachments.length > 0) {
+      setPendingAttachments(prev => [...prev, ...attachments]);
+    }
+
+    // Only show errors (e.g., file too large)
+    for (const error of errors) {
+      addLocalMessage(error, 'error');
+    }
+  }, [addLocalMessage]);
+
+  // Generate attachment label for display
+  const attachmentLabel = useMemo(() => {
+    if (pendingAttachments.length === 0) return '';
+    if (pendingAttachments.length === 1) {
+      const att = pendingAttachments[0];
+      if (!att) return '1 file';
+      const icon = att.type === 'image' ? '🖼' : att.type === 'pdf' ? '📄' : '📝';
+      return `${icon} ${att.name}`;
+    }
+    const imageCount = pendingAttachments.filter(a => a.type === 'image').length;
+    const fileCount = pendingAttachments.length - imageCount;
+    const parts: string[] = [];
+    if (imageCount > 0) parts.push(`${imageCount} image${imageCount > 1 ? 's' : ''}`);
+    if (fileCount > 0) parts.push(`${fileCount} file${fileCount > 1 ? 's' : ''}`);
+    return parts.join(', ');
+  }, [pendingAttachments]);
 
   const handleSubmit = useCallback(
     async (input: string) => {
@@ -130,7 +189,23 @@ export const App: React.FC<AppProps> = ({ config, onRequestSetup }) => {
       // Handle slash commands
       if (input.startsWith('/')) {
         const parts = input.toLowerCase().trim().split(/\s+/);
-        const command = parts[0];
+        let command = parts[0] ?? '';
+
+        // Primary commands for partial matching (order matters for priority)
+        const primaryCommands = [
+          '/help', '/clear', '/paste', '/tools', '/config', '/prefs',
+          '/setup', '/compact', '/cost', '/model', '/web', '/fetch',
+          '/code', '/exit'
+        ];
+
+        // If not an exact match, try partial matching
+        const aliases = ['/?', '/q', '/quit', '/image', '/preferences', '/websearch', '/webfetch', '/codeexec', '/execute'];
+        if (!primaryCommands.includes(command) && !aliases.includes(command)) {
+          const matches = primaryCommands.filter(cmd => cmd.startsWith(command));
+          if (matches.length === 1 && matches[0]) {
+            command = matches[0];
+          }
+        }
 
         switch (command) {
           case '/exit':
@@ -140,21 +215,22 @@ export const App: React.FC<AppProps> = ({ config, onRequestSetup }) => {
             return;
 
           case '/clear':
-            // Clear the terminal screen
-            process.stdout.write('\x1b[2J\x1b[H');
+            // Clear state first
             clearMessages();
             setLocalMessages([]);
             setPendingAttachments([]);
+            setShowWelcome(true);
+            // Clear screen and scrollback only - let Ink handle cursor
+            process.stdout.write('\x1b[2J\x1b[3J');
             return;
 
           case '/paste':
           case '/image': {
-            const clipboardImage = readClipboardImage();
-            if (clipboardImage) {
-              setPendingAttachments(prev => [...prev, clipboardImage]);
-              addLocalMessage(`📎 Image from clipboard attached (${Math.round(clipboardImage.size / 1024)}KB)`, 'system');
+            const clipboardItems = readClipboard();
+            if (clipboardItems.length > 0) {
+              setPendingAttachments(prev => [...prev, ...clipboardItems]);
             } else {
-              addLocalMessage('No image found in clipboard. Copy an image first (Cmd+C on a screenshot or image).', 'error');
+              addLocalMessage('No files or images in clipboard. Copy a file (Cmd+C) or take a screenshot first.', 'error');
             }
             return;
           }
@@ -182,7 +258,7 @@ export const App: React.FC<AppProps> = ({ config, onRequestSetup }) => {
 
 - Config file: \`${getConfigPath()}\`
 - MCP URL: \`${config.mcpUrl}\`
-- Model: \`${getModel()}\`
+- Model: \`${model}\`
 - Compact mode: ${compactMode ? 'On' : 'Off'}
 - Web search: ${isWebSearchEnabled() ? 'On' : 'Off'}
 - Web fetch: ${isWebFetchEnabled() ? 'On' : 'Off'}
@@ -227,7 +303,6 @@ export const App: React.FC<AppProps> = ({ config, onRequestSetup }) => {
                 const selected = models[num - 1];
                 if (selected) {
                   setModel(selected.id);
-                  addLocalMessage(`Model: ${selected.name}`, 'system');
                 }
                 return;
               }
@@ -240,7 +315,6 @@ export const App: React.FC<AppProps> = ({ config, onRequestSetup }) => {
 
               if (matchedModel) {
                 setModel(matchedModel.id);
-                addLocalMessage(`Model: ${matchedModel.name}`, 'system');
               } else {
                 addLocalMessage(`Unknown model: ${modelArg}`, 'error');
               }
@@ -308,12 +382,6 @@ export const App: React.FC<AppProps> = ({ config, onRequestSetup }) => {
         addLocalMessage(error, 'error');
       }
 
-      // Show what files are being attached
-      if (allAttachments.length > 0) {
-        const attachmentList = allAttachments.map(formatAttachmentDisplay).join('\n');
-        addLocalMessage(`Attaching:\n${attachmentList}`, 'system');
-      }
-
       // Regular message - add to history and send with attachments
       addToHistory(input);
       await sendMessage(text || input, allAttachments.length > 0 ? allAttachments : undefined);
@@ -329,7 +397,7 @@ export const App: React.FC<AppProps> = ({ config, onRequestSetup }) => {
       compactMode,
       tokenUsage,
       showWelcome,
-      getModel,
+      model,
       setModel,
       isWebSearchEnabled,
       setWebSearchEnabled,
@@ -389,7 +457,7 @@ export const App: React.FC<AppProps> = ({ config, onRequestSetup }) => {
       {showModelSelector && (
         <ModelSelector
           models={models}
-          currentModelId={getModel()}
+          currentModelId={model}
           onSelect={handleModelSelect}
           onCancel={handleModelCancel}
         />
@@ -401,14 +469,17 @@ export const App: React.FC<AppProps> = ({ config, onRequestSetup }) => {
           <Input
             onSubmit={handleSubmit}
             onPaste={handlePaste}
+            onRemoveAttachment={handleRemoveAttachment}
+            onPastedText={handlePastedText}
             disabled={isProcessing}
             history={history}
             attachmentCount={pendingAttachments.length}
+            attachmentLabel={attachmentLabel}
           />
         )}
         <Header
           connected={connected}
-          model={config.model}
+          model={model}
           mcpUrl={config.mcpUrl}
           inputTokens={tokenUsage.inputTokens}
           outputTokens={tokenUsage.outputTokens}

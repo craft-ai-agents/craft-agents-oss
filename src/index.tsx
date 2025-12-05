@@ -123,6 +123,18 @@ async function main() {
   // Clear screen
   console.clear();
 
+  // Enable bracketed paste mode for better paste/drag-drop handling
+  // This wraps pasted text with escape sequences so we can detect it
+  process.stdout.write('\x1b[?2004h');
+
+  // Ensure we clean up on exit
+  const cleanup = () => {
+    process.stdout.write('\x1b[?2004l'); // Disable bracketed paste mode
+  };
+  process.on('exit', cleanup);
+  process.on('SIGINT', () => { cleanup(); process.exit(0); });
+  process.on('SIGTERM', () => { cleanup(); process.exit(0); });
+
   // Check for existing config
   const storedConfig = loadStoredConfig();
   const forceSetup = cli.flags.setup;
@@ -137,6 +149,7 @@ async function main() {
   );
 
   await waitUntilExit();
+  cleanup();
 }
 
 main().catch((err) => {
