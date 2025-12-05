@@ -29,9 +29,14 @@ const SimpleTextInput: React.FC<{
       if (disabled) return;
 
       if (key.return) {
-        // Check if the current input looks like a file path
-        if (onPastedText && value.trim() && (value.startsWith('/') || value.startsWith('~/'))) {
-          onPastedText(value.trim());
+        // Check if the current input looks like a file path (not a slash command)
+        // File paths: /Users/..., ~/Documents/... but NOT /clear, /help, etc.
+        const trimmed = value.trim();
+        const looksLikeFilePath = trimmed.startsWith('~/') ||
+          (trimmed.startsWith('/') && trimmed.length > 2 && trimmed.slice(1).includes('/'));
+
+        if (onPastedText && trimmed && looksLikeFilePath) {
+          onPastedText(trimmed);
           onChange('');
           return;
         }
@@ -61,8 +66,11 @@ const SimpleTextInput: React.FC<{
         const printable = chars.split('').filter(c => c.charCodeAt(0) >= 32).join('');
 
         if (printable) {
-          // Check if this is a pasted file path (multi-char input starting with / or ~/)
-          if (onPastedText && printable.length > 1 && (printable.startsWith('/') || printable.startsWith('~/'))) {
+          // Check if this is a pasted file path (multi-char input with path structure)
+          const looksLikePastedPath = printable.startsWith('~/') ||
+            (printable.startsWith('/') && printable.length > 2 && printable.slice(1).includes('/'));
+
+          if (onPastedText && printable.length > 1 && looksLikePastedPath) {
             onPastedText(printable);
           } else {
             onChange(value + printable);
