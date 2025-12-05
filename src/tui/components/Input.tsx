@@ -1,5 +1,5 @@
 import React, { useState, useCallback, memo, useMemo } from 'react';
-import { Box, Text, useInput, useStdout } from 'ink';
+import { Box, Text, useInput } from 'ink';
 
 export interface InputProps {
   onSubmit: (input: string) => void;
@@ -12,6 +12,7 @@ export interface InputProps {
   placeholder?: string;
   attachmentCount?: number;
   attachmentLabel?: string;
+  columns?: number;
 }
 
 // Simple custom text input without cursor animation
@@ -101,10 +102,9 @@ const SimpleTextInput: React.FC<{
   );
 };
 
-// Horizontal line for top/bottom borders - no memo to allow resize updates
-const HorizontalLine: React.FC<{ color: string }> = ({ color }) => {
-  const { stdout } = useStdout();
-  const width = Math.max(20, (stdout?.columns || 80) - 4);
+// Horizontal line for top/bottom borders
+const HorizontalLine: React.FC<{ color: string; columns: number }> = ({ color, columns }) => {
+  const width = Math.max(20, columns - 6);
   return (
     <Text color={color}>{'─'.repeat(width)}</Text>
   );
@@ -128,6 +128,7 @@ export const Input: React.FC<InputProps> = ({
   placeholder,
   attachmentCount = 0,
   attachmentLabel,
+  columns = 80,
 }) => {
   const [value, setValue] = useState('');
   const [historyIndex, setHistoryIndex] = useState(-1);
@@ -198,7 +199,7 @@ export const Input: React.FC<InputProps> = ({
   // Determine placeholder text
   const placeholderText = disabled
     ? 'Thinking...'
-    : placeholder || 'Message craft...';
+    : placeholder || 'Message Craft...';
 
   // Memoize command hint to avoid recalculation
   const commandHint = useMemo(() => {
@@ -216,7 +217,7 @@ export const Input: React.FC<InputProps> = ({
         </Box>
       )}
       {/* Top line */}
-      <HorizontalLine color={lineColor} />
+      <HorizontalLine color={lineColor} columns={columns} />
       {/* Input row */}
       <Box paddingX={1}>
         <InputPrompt disabled={disabled} />
@@ -236,7 +237,7 @@ export const Input: React.FC<InputProps> = ({
         />
       </Box>
       {/* Bottom line */}
-      <HorizontalLine color={lineColor} />
+      <HorizontalLine color={lineColor} columns={columns} />
     </Box>
   );
 };

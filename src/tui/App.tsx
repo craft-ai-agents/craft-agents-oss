@@ -71,7 +71,7 @@ export const App: React.FC<AppProps> = ({ config, onRequestSetup }) => {
   const { exit } = useApp();
 
   // Handle terminal resize - clears screen to prevent artifacts
-  useResize();
+  const { columns } = useResize();
 
   const {
     messages,
@@ -482,6 +482,7 @@ export const App: React.FC<AppProps> = ({ config, onRequestSetup }) => {
             history={history}
             attachmentCount={pendingAttachments.length}
             attachmentLabel={attachmentLabel}
+            columns={columns}
           />
         )}
         <Header
