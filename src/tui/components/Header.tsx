@@ -86,7 +86,7 @@ export const Header: React.FC<HeaderProps> = memo(({
         {workspaceName && (
           <>
             <Text dimColor> | </Text>
-            <Text color="yellow">{workspaceName}</Text>
+            <Text color="yellow">{workspaceName.length > 20 ? workspaceName.slice(0, 20) + '…' : workspaceName}</Text>
           </>
         )}
       </Box>

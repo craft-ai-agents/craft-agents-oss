@@ -962,7 +962,7 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
   // Keep ref updated so the callback can access the latest version
   reloadAgentRef.current = reloadAgent;
 
-  // Reset current agent (invalidate cache AND clear auth credentials)
+  // Reset current agent (invalidate cache AND clear auth credentials, then exit to main)
   const resetAgent = useCallback(async (): Promise<boolean> => {
     if (!activeAgentDefinition || !agentManagerRef.current) {
       return false;
@@ -977,20 +977,18 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
       return false;
     }
 
-    // Invalidate the cache AND clear auth credentials
+    // Clear all caches: in-memory, file cache, and auth credentials
+    agentManagerRef.current.clearDefinitionCache(agentMeta.id);
     invalidateDefinition(workspace.id, agentMeta.id);
     clearMcpCredentials(workspace.id, agentMeta.id);
-    debug('[useAgent.resetAgent] Cache and auth cleared for agent:', agentMeta.id);
+    debug('[useAgent.resetAgent] All caches cleared for agent:', agentMeta.id);
 
-    // Deactivate first
+    // Deactivate and return to main (don't re-activate - user can re-select to restart setup)
     deactivateAgent();
+    debug('[useAgent.resetAgent] Agent deactivated, user can re-select to restart setup');
 
-    // Re-activate (will trigger fresh extraction and may require re-auth)
-    const result = await activateAgent(agentName);
-    debug('[useAgent.resetAgent] Re-activation result:', result);
-
-    return result === true;
-  }, [activeAgentDefinition, workspace.id, deactivateAgent, activateAgent]);
+    return true;
+  }, [activeAgentDefinition, workspace.id, deactivateAgent]);
 
   // Complete MCP auth flow - called when auth finishes (success or failure)
   const completeMcpAuth = useCallback(async (success: boolean) => {

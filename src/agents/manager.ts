@@ -294,6 +294,15 @@ export class SubAgentManager {
   }
 
   /**
+   * Clear in-memory definition cache for an agent
+   * Called during reset to ensure fresh extraction on next activation
+   */
+  clearDefinitionCache(agentId: string): void {
+    debug('[clearDefinitionCache] Clearing cache for:', agentId);
+    this.definitionCache.delete(agentId);
+  }
+
+  /**
    * Get current active agent state
    */
   getActiveAgent(): ActiveAgentState {
@@ -382,7 +391,14 @@ export class SubAgentManager {
 
       // Get credentials if auth required
       let headers: Record<string, string> | undefined;
-      if (config.requiresAuth) {
+
+      // Check for static bearer token first (no OAuth needed)
+      if (config.bearerToken) {
+        headers = {
+          Authorization: `Bearer ${config.bearerToken}`,
+        };
+        debug('[manager.buildMcpServerConfig] Using static bearer token for', name);
+      } else if (config.requiresAuth) {
         const creds = getServerCredentials(
           this.workspaceId,
           this.activeAgent.agentId,

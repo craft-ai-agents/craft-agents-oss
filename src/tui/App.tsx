@@ -84,10 +84,6 @@ const HELP_TEXT = `
 export const App: React.FC<AppProps> = ({ config, onRequestSetup }) => {
   const { exit } = useApp();
 
-  // Handle terminal resize - clears screen to prevent artifacts
-  // resetKey increments on resize so Static content gets re-rendered
-  const { columns, resetKey: resizeResetKey } = useResize();
-
   const {
     messages,
     isProcessing,
@@ -145,6 +141,13 @@ export const App: React.FC<AppProps> = ({ config, onRequestSetup }) => {
   const [showWorkspaceRename, setShowWorkspaceRename] = useState(false);
   const [showApiKeyChange, setShowApiKeyChange] = useState(false);
   const [pendingRemoveWorkspace, setPendingRemoveWorkspace] = useState<string | null>(null);
+
+  // Handle terminal resize - clears screen (debounced) and increments staticResetKey
+  // Both state updates batch together so Static items re-render on clean screen
+  const handleTerminalResize = useCallback(() => {
+    setStaticResetKey(k => k + 1);
+  }, []);
+  const { columns: terminalColumns } = useResize(handleTerminalResize);
 
   // Models list
   const models: Model[] = [
@@ -214,7 +217,7 @@ export const App: React.FC<AppProps> = ({ config, onRequestSetup }) => {
         try {
           const success = await resetAgent();
           if (success) {
-            addLocalMessage(`Agent @${agentToReset} fully reset. Re-read instructions from document.`, 'system');
+            addLocalMessage(`Agent @${agentToReset} reset. Select it again to restart setup.`, 'system');
           } else {
             addLocalMessage(`Failed to reset agent @${agentToReset}`, 'error');
           }
@@ -304,6 +307,39 @@ export const App: React.FC<AppProps> = ({ config, onRequestSetup }) => {
     }
     setShowWorkspaceRename(true);
   }, [workspace.id, setWorkspace]);
+
+  const handleWorkspaceRemove = useCallback((workspaceId: string) => {
+    setShowWorkspaceSelector(false);
+    const workspaces = getWorkspaces();
+
+    if (workspaces.length === 1) {
+      addLocalMessage('Cannot remove the only workspace. Add another workspace first.', 'error');
+      return;
+    }
+
+    const workspaceToRemove = workspaces.find(w => w.id === workspaceId);
+    if (!workspaceToRemove) {
+      addLocalMessage('Workspace not found.', 'error');
+      return;
+    }
+
+    const isActive = workspaceId === workspace.id;
+    const removed = removeWorkspace(workspaceId);
+
+    if (removed) {
+      addLocalMessage(`Workspace "${workspaceToRemove.name}" removed.`, 'system');
+      // If we removed the active workspace, switch to another
+      if (isActive) {
+        const remainingWorkspaces = getWorkspaces();
+        if (remainingWorkspaces.length > 0 && remainingWorkspaces[0]) {
+          setActiveWorkspace(remainingWorkspaces[0].id);
+          setWorkspace(remainingWorkspaces[0]);
+        }
+      }
+    } else {
+      addLocalMessage('Failed to remove workspace.', 'error');
+    }
+  }, [workspace.id, setWorkspace, addLocalMessage]);
 
   const handleWorkspaceAddComplete = useCallback((newWorkspace: Workspace) => {
     setShowWorkspaceAdd(false);
@@ -777,7 +813,7 @@ export const App: React.FC<AppProps> = ({ config, onRequestSetup }) => {
               try {
                 const success = await resetAgent();
                 if (success) {
-                  addLocalMessage(`Agent @${agentToReset} fully reset. Re-read instructions from document.`, 'system');
+                  addLocalMessage(`Agent @${agentToReset} reset. Select it again to restart setup.`, 'system');
                 } else {
                   addLocalMessage(`Failed to reset agent @${agentToReset}`, 'error');
                 }
@@ -961,7 +997,7 @@ export const App: React.FC<AppProps> = ({ config, onRequestSetup }) => {
       {/* Messages area (includes welcome banner as static content) */}
       <Box flexDirection="column">
         <Messages
-          resetKey={staticResetKey + resizeResetKey}
+          resetKey={staticResetKey}
           messages={allMessages}
           isProcessing={isProcessing}
           streamingText={streamingText}
@@ -1002,6 +1038,7 @@ export const App: React.FC<AppProps> = ({ config, onRequestSetup }) => {
           onCancel={handleWorkspaceCancel}
           onAdd={handleWorkspaceAddOpen}
           onRename={handleWorkspaceRenameOpen}
+          onRemove={handleWorkspaceRemove}
         />
       )}
 
@@ -1069,7 +1106,7 @@ export const App: React.FC<AppProps> = ({ config, onRequestSetup }) => {
             />
           </Box>
         )}
-        {!showModelSelector && !showWorkspaceSelector && !showWorkspaceAdd && !showWorkspaceRename && !showApiKeyChange && !pendingPermission && !pendingQuestion && !pendingMcpAuth && (
+        {!showModelSelector && !showAgentMenu && !showWorkspaceSelector && !showWorkspaceAdd && !showWorkspaceRename && !showApiKeyChange && !pendingPermission && !pendingQuestion && !pendingMcpAuth && (
           <Input
             onSubmit={handleSubmit}
             onPaste={handlePaste}
@@ -1080,9 +1117,9 @@ export const App: React.FC<AppProps> = ({ config, onRequestSetup }) => {
             history={history}
             attachmentCount={pendingAttachments.length}
             attachmentLabel={attachmentLabel}
-            columns={columns}
             availableAgents={availableAgents}
             activeAgentName={activeAgentName ?? undefined}
+            columns={terminalColumns}
           />
         )}
         <Header

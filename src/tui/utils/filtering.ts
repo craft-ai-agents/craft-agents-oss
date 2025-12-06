@@ -95,7 +95,7 @@ export const SUBCOMMANDS: Record<string, Record<string, string>> = {
     'create': 'Create a new sub-agent',
     'clear': 'Return to main assistant',
     'reload': 'Reload agent instructions',
-    'reset': 'Fully reset agent (including MCP connections)',
+    'reset': 'Clear all data and exit (re-select to restart setup)',
     'refresh': 'Re-scan Agents folder',
     'info': 'Show active agent details',
   },

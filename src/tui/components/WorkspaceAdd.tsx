@@ -63,7 +63,7 @@ const SimpleTextInput: React.FC<{
   );
 };
 
-type AddStep = 'name' | 'url' | 'checking-auth' | 'oauth-auth' | 'complete' | 'error';
+type AddStep = 'name' | 'url' | 'checking-auth' | 'no-oauth-options' | 'oauth-auth' | 'bearer-token' | 'complete' | 'error';
 
 export interface WorkspaceAddProps {
   onComplete: (workspace: Workspace) => void;
@@ -77,6 +77,7 @@ export const WorkspaceAdd: React.FC<WorkspaceAddProps> = ({ onComplete, onCancel
   const [oauthStatus, setOauthStatus] = useState('');
   const [oauthResult, setOauthResult] = useState<OAuthCredentials | null>(null);
   const [isPublicServer, setIsPublicServer] = useState(false);
+  const [bearerToken, setBearerToken] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [oauthClient, setOauthClient] = useState<CraftOAuth | null>(null);
 
@@ -132,15 +133,13 @@ export const WorkspaceAdd: React.FC<WorkspaceAddProps> = ({ onComplete, onCancel
           setIsPublicServer(false);
           setStep('oauth-auth');
         } else {
-          setIsPublicServer(true);
-          // Public server - save workspace immediately
-          saveWorkspace(null, true);
+          // No OAuth detected - offer bearer token or public options
+          setStep('no-oauth-options');
         }
       })
       .catch(() => {
-        // If we can't check, assume it's public
-        setIsPublicServer(true);
-        saveWorkspace(null, true);
+        // Can't detect OAuth - offer alternatives
+        setStep('no-oauth-options');
       });
   }, [step, mcpUrl]);
 
@@ -177,9 +176,10 @@ export const WorkspaceAdd: React.FC<WorkspaceAddProps> = ({ onComplete, onCancel
         saveWorkspace(oauthCreds, false);
       })
       .catch((err) => {
-        setError(err instanceof Error ? err.message : 'OAuth authentication failed');
+        // OAuth failed - offer bearer token as alternative
+        setOauthStatus(err instanceof Error ? err.message : 'OAuth authentication failed');
         setOauthClient(null);
-        setStep('error');
+        setStep('no-oauth-options');
       });
 
     return () => {
@@ -187,12 +187,13 @@ export const WorkspaceAdd: React.FC<WorkspaceAddProps> = ({ onComplete, onCancel
     };
   }, [step, mcpUrl]);
 
-  const saveWorkspace = useCallback((oauth: OAuthCredentials | null, isPublic: boolean) => {
+  const saveWorkspace = useCallback((oauth: OAuthCredentials | null, isPublic: boolean, token?: string) => {
     try {
       const workspace = addWorkspace({
         name,
         mcpUrl,
         oauth: oauth || undefined,
+        bearerToken: token || undefined,
         isPublic,
       });
 
@@ -207,6 +208,20 @@ export const WorkspaceAdd: React.FC<WorkspaceAddProps> = ({ onComplete, onCancel
       setStep('error');
     }
   }, [name, mcpUrl, onComplete]);
+
+  const handleNoOAuthSelect = useCallback((method: 'bearer' | 'public') => {
+    if (method === 'bearer') {
+      setStep('bearer-token');
+    } else {
+      setIsPublicServer(true);
+      saveWorkspace(null, true);
+    }
+  }, [saveWorkspace]);
+
+  const handleBearerToken = useCallback((token: string) => {
+    if (!token.trim()) return;
+    saveWorkspace(null, false, token.trim());
+  }, [saveWorkspace]);
 
   const handleRetry = useCallback(() => {
     setError(null);
@@ -249,6 +264,18 @@ export const WorkspaceAdd: React.FC<WorkspaceAddProps> = ({ onComplete, onCancel
             <Text> {oauthStatus || 'Connecting...'}</Text>
           </Box>
         </Box>
+      )}
+
+      {step === 'no-oauth-options' && (
+        <NoOAuthOptionsStep onSelect={handleNoOAuthSelect} message={oauthStatus} />
+      )}
+
+      {step === 'bearer-token' && (
+        <BearerTokenStep
+          value={bearerToken}
+          onChange={setBearerToken}
+          onSubmit={handleBearerToken}
+        />
       )}
 
       {step === 'oauth-auth' && (
@@ -295,7 +322,9 @@ function getStepNumber(step: AddStep): number {
     case 'name': return 1;
     case 'url': return 2;
     case 'checking-auth':
+    case 'no-oauth-options':
     case 'oauth-auth':
+    case 'bearer-token':
     case 'complete':
     case 'error':
       return 3;
@@ -377,6 +406,79 @@ const ErrorStep: React.FC<ErrorStepProps> = ({ error, onRetry }) => {
       <Text color="red">{error}</Text>
       <Box marginTop={1}>
         <Text dimColor>Press Enter to retry</Text>
+      </Box>
+    </Box>
+  );
+};
+
+// No OAuth options - shown when OAuth is not detected or fails
+interface NoOAuthOptionsStepProps {
+  onSelect: (method: 'bearer' | 'public') => void;
+  message?: string;
+}
+
+const NoOAuthOptionsStep: React.FC<NoOAuthOptionsStepProps> = ({ onSelect, message }) => {
+  const [selected, setSelected] = useState(0);
+  const options = [
+    { label: 'Enter Bearer Token', value: 'bearer' as const },
+    { label: 'No authentication (public server)', value: 'public' as const },
+  ];
+
+  useInput((_, key) => {
+    if (key.upArrow) {
+      setSelected(s => Math.max(0, s - 1));
+    } else if (key.downArrow) {
+      setSelected(s => Math.min(options.length - 1, s + 1));
+    } else if (key.return) {
+      const option = options[selected];
+      if (option) onSelect(option.value);
+    }
+  });
+
+  return (
+    <Box flexDirection="column">
+      <Text bold>Choose Authentication Method</Text>
+      {message && (
+        <Box marginY={1}>
+          <Text dimColor>{message}</Text>
+        </Box>
+      )}
+      <Box marginY={1} flexDirection="column">
+        {options.map((opt, i) => (
+          <Text key={opt.value}>
+            <Text color={i === selected ? 'green' : undefined}>
+              {i === selected ? '> ' : '  '}{opt.label}
+            </Text>
+          </Text>
+        ))}
+      </Box>
+      <Text dimColor>Use arrow keys to select, Enter to confirm</Text>
+    </Box>
+  );
+};
+
+// Bearer token input step
+interface BearerTokenStepProps {
+  value: string;
+  onChange: (value: string) => void;
+  onSubmit: (value: string) => void;
+}
+
+const BearerTokenStep: React.FC<BearerTokenStepProps> = ({ value, onChange, onSubmit }) => {
+  return (
+    <Box flexDirection="column">
+      <Text>Enter your bearer token:</Text>
+      <Box marginY={1}>
+        <Text dimColor>The token will be sent as: Authorization: Bearer {'<token>'}</Text>
+      </Box>
+      <Box>
+        <Text color="green">&gt; </Text>
+        <SimpleTextInput
+          value={value}
+          onChange={onChange}
+          onSubmit={onSubmit}
+          placeholder="Paste your bearer token..."
+        />
       </Box>
     </Box>
   );

@@ -6,11 +6,6 @@ import { createHighlighter, type Highlighter } from 'shiki';
 // Lazy-loaded highlighter instance
 let highlighter: Highlighter | null = null;
 
-// Color replacements for tokyo-night theme
-const colorReplacements: Record<string, string> = {
-  '#bb9af7': '#bb9af7',  // no change for now
-};
-
 async function getHighlighter(): Promise<Highlighter> {
   if (!highlighter) {
     highlighter = await createHighlighter({
@@ -22,6 +17,25 @@ async function getHighlighter(): Promise<Highlighter> {
 }
 
 /**
+ * Map hex color to nearest ANSI color for terminal theme adaptation
+ */
+function hexToAnsiColor(hex: string): typeof chalk {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+
+  // Map based on dominant channel / hue
+  if (r > 200 && g < 150 && b < 150) return chalk.red;
+  if (r < 150 && g > 180 && b < 150) return chalk.green;
+  if (r < 150 && g < 150 && b > 200) return chalk.blue;
+  if (r > 180 && g > 180 && b < 150) return chalk.yellow;
+  if (r > 180 && g < 150 && b > 180) return chalk.magenta;
+  if (r < 150 && g > 180 && b > 180) return chalk.cyan;
+  if (r < 100 && g < 100 && b < 100) return chalk.gray;
+  return chalk.white;
+}
+
+/**
  * Convert highlighted tokens to ANSI escape codes
  */
 function tokensToANSI(tokens: { color?: string; content: string }[][]): string {
@@ -30,10 +44,9 @@ function tokensToANSI(tokens: { color?: string; content: string }[][]): string {
   for (const line of tokens) {
     let lineStr = '';
     for (const token of line) {
-      const originalColor = token.color || tokyoNight.fg;
-      // Apply color replacements
-      const color = colorReplacements[originalColor] ?? originalColor;
-      lineStr += chalk.hex(color)(token.content);
+      const color = token.color || '#dcdee8';
+      const chalkColor = hexToAnsiColor(color);
+      lineStr += chalkColor(token.content);
     }
     lines.push(lineStr);
   }
@@ -41,20 +54,6 @@ function tokensToANSI(tokens: { color?: string; content: string }[][]): string {
   return lines.join('\n');
 }
 
-// Tokyo Night color palette
-const tokyoNight = {
-  fg: '#dcdee8',        // very light with subtle purple tint
-  comment: '#565f89',
-  purple: '#bb9af7',
-  blue: '#7aa2f7',
-  cyan: '#7dcfff',
-  green: '#9ece6a',
-  orange: '#ff9e64',
-  red: '#f7768e',
-  yellow: '#e0af68',
-  magenta: '#bb9af7',
-  bg: '#1a1b26',
-};
 
 // Simple LRU cache for markdown rendering to avoid re-parsing
 const markdownCache = new Map<string, string>();
@@ -116,7 +115,7 @@ export async function prepareCodeBlocks(text: string): Promise<void> {
       codeBlockCache.set(key, highlighted);
     } catch {
       // Fallback to plain styling if language not supported
-      codeBlockCache.set(key, chalk.hex(tokyoNight.fg)(code));
+      codeBlockCache.set(key, chalk.white(code));
     }
   });
 
@@ -137,7 +136,7 @@ function injectHighlightedCodeBlocks(text: string): string {
 
     if (highlighted) {
       // Return a special marker that won't be re-highlighted
-      const langLabel = lang ? chalk.hex(tokyoNight.comment)(`  ${lang}`) : '';
+      const langLabel = lang ? chalk.gray(`  ${lang}`) : '';
       return `\n${langLabel}\n${highlighted}\n`;
     }
 
@@ -170,23 +169,23 @@ function ensureMarkedConfigured(): void {
 
   marked.use(
     markedTerminal({
-      // Tokyo Night themed styling - code uses cli-highlight by default
-      code: chalk.hex(tokyoNight.fg),
-      blockquote: chalk.hex(tokyoNight.comment).italic,
-      html: chalk.hex(tokyoNight.comment),
-      heading: chalk.hex(tokyoNight.blue).bold,
-      firstHeading: chalk.hex(tokyoNight.purple).bold,
-      hr: chalk.hex(tokyoNight.comment),
-      listitem: chalk.hex(tokyoNight.fg),
+      // Semantic ANSI colors - terminal remaps these based on light/dark theme
+      code: chalk.white,
+      blockquote: chalk.gray.italic,
+      html: chalk.gray,
+      heading: chalk.blue.bold,
+      firstHeading: chalk.magenta.bold,
+      hr: chalk.gray,
+      listitem: chalk.reset,
       list: (body: string) => body,
-      table: chalk.hex(tokyoNight.fg),
-      paragraph: chalk.hex(tokyoNight.fg),
-      strong: chalk.hex(tokyoNight.orange).bold,
-      em: chalk.hex(tokyoNight.green).italic,
-      codespan: chalk.hex(tokyoNight.cyan),
-      del: chalk.hex(tokyoNight.comment).strikethrough,
-      link: chalk.hex(tokyoNight.blue).underline,
-      href: chalk.hex(tokyoNight.cyan),
+      table: chalk.reset,
+      paragraph: chalk.reset,
+      strong: chalk.yellow.bold,
+      em: chalk.green.italic,
+      codespan: chalk.cyan,
+      del: chalk.gray.strikethrough,
+      link: chalk.blue.underline,
+      href: chalk.cyan,
       showSectionPrefix: false,
       unescape: true,
       width: currentWidth,

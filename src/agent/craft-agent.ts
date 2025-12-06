@@ -367,8 +367,13 @@ export class CraftAgent {
       return null;
     }
 
+    // Bearer token - static, no refresh needed
+    if (workspace.bearerToken) {
+      return workspace.bearerToken;
+    }
+
     if (!workspace.oauth) {
-      throw new Error('No OAuth credentials found for workspace. Please re-add the workspace.');
+      throw new Error('No authentication credentials found for workspace. Please re-add the workspace.');
     }
 
     if (isWorkspaceTokenExpired(workspace) && workspace.oauth.refreshToken) {

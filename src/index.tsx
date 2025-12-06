@@ -154,10 +154,6 @@ const Root: React.FC<RootProps> = ({ initialConfig, cliFlags, forceSetup }) => {
 };
 
 async function main() {
-  // Enter alternate screen buffer (like vim, less, htop)
-  // This isolates our output and prevents flickering
-  process.stdout.write('\x1b[?1049h');
-
   // Clear screen and move cursor to top-left
   process.stdout.write('\x1b[2J\x1b[H');
 
@@ -168,7 +164,6 @@ async function main() {
   // Ensure we clean up on exit
   const cleanup = () => {
     process.stdout.write('\x1b[?2004l'); // Disable bracketed paste mode
-    process.stdout.write('\x1b[?1049l'); // Leave alternate screen buffer
   };
   process.on('exit', cleanup);
   process.on('SIGINT', () => { cleanup(); process.exit(0); });

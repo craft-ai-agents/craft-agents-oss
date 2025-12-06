@@ -9,6 +9,7 @@ export interface WorkspaceSelectorProps {
   onCancel: () => void;
   onAdd: () => void;
   onRename: (workspaceId: string) => void;
+  onRemove: (workspaceId: string) => void;
 }
 
 export const WorkspaceSelector: React.FC<WorkspaceSelectorProps> = ({
@@ -18,6 +19,7 @@ export const WorkspaceSelector: React.FC<WorkspaceSelectorProps> = ({
   onCancel,
   onAdd,
   onRename,
+  onRemove,
 }) => {
   // Start with current workspace highlighted, +1 for "Add new" option
   const currentIndex = workspaces.findIndex((w) => w.id === currentWorkspaceId);
@@ -59,6 +61,14 @@ export const WorkspaceSelector: React.FC<WorkspaceSelectorProps> = ({
         const workspace = workspaces[selectedIndex];
         if (workspace) {
           onRename(workspace.id);
+        }
+      }
+    } else if (input.toLowerCase() === 'd') {
+      // 'd' shortcut to remove selected workspace (not "Add new" option)
+      if (selectedIndex < workspaces.length) {
+        const workspace = workspaces[selectedIndex];
+        if (workspace) {
+          onRemove(workspace.id);
         }
       }
     }
@@ -124,7 +134,7 @@ export const WorkspaceSelector: React.FC<WorkspaceSelectorProps> = ({
 
       <Box marginTop={1}>
         <Text dimColor>
-          Enter select | Esc cancel | 1-{workspaces.length} quick | 'a' add | 'r' rename
+          Enter select | Esc cancel | 1-{workspaces.length} quick | 'a' add | 'r' rename | 'd' remove
         </Text>
       </Box>
     </Box>

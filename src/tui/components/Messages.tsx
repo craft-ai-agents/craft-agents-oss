@@ -119,26 +119,36 @@ export const Messages: React.FC<MessagesProps> = memo(({
       </Static>
 
       {/* Currently executing tools - dynamic area */}
+      {/* Use justifyContent="space-between" to fill full width (prevents resize artifacts) */}
       {executingMessages.map((message) => (
-        <Box key={message.id} paddingX={1}>
-          <MessageItem
-            message={message}
-            compact={compact}
-          />
+        <Box key={message.id} justifyContent="space-between" paddingX={1}>
+          <Box>
+            <MessageItem
+              message={message}
+              compact={compact}
+            />
+          </Box>
+          <Box />
         </Box>
       ))}
 
       {/* Show streaming text */}
       {streamingText && (
-        <Box paddingX={1}>
-          <StreamingMessage content={streamingText} />
+        <Box justifyContent="space-between" paddingX={1}>
+          <Box>
+            <StreamingMessage content={streamingText} />
+          </Box>
+          <Box />
         </Box>
       )}
 
       {/* Show thinking indicator when processing but no streaming text and no executing tool */}
       {isProcessing && !streamingText && !hasExecutingTool && (
-        <Box paddingX={1}>
-          <ThinkingIndicator status={status} elapsedMs={elapsed ?? undefined} />
+        <Box justifyContent="space-between" paddingX={1}>
+          <Box>
+            <ThinkingIndicator status={status} elapsedMs={elapsed ?? undefined} />
+          </Box>
+          <Box />
         </Box>
       )}
     </Box>

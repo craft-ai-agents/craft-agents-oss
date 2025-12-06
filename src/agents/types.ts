@@ -55,6 +55,8 @@ export interface McpServerConfig {
   url: string;
   /** If true, needs OAuth authentication */
   requiresAuth?: boolean;
+  /** Static bearer token (alternative to OAuth) */
+  bearerToken?: string;
   /** Optional description */
   description?: string;
   /** Tools available on this server (populated after connection) */

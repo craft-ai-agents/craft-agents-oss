@@ -6,6 +6,66 @@ import type { McpServerConfig } from '../../agents/types.ts';
 import { AnimatedSpinner } from './Spinner.tsx';
 import { debug } from '../utils/debug.ts';
 
+// Simple text input component for bearer token entry
+const SimpleTextInput: React.FC<{
+  value: string;
+  onChange: (value: string) => void;
+  onSubmit: (value: string) => void;
+  placeholder?: string;
+}> = ({ value, onChange, onSubmit, placeholder = '' }) => {
+  useInput((input, key) => {
+    if (key.return) {
+      onSubmit(value);
+      return;
+    }
+
+    if (key.backspace || key.delete) {
+      onChange(value.slice(0, -1));
+      return;
+    }
+
+    // Handle Ctrl+U to clear
+    if (input === '\x15') {
+      onChange('');
+      return;
+    }
+
+    // Ignore control characters (except for text entry)
+    if (key.ctrl || key.meta || key.escape || key.upArrow || key.downArrow || key.leftArrow || key.rightArrow) {
+      return;
+    }
+
+    // Add printable characters (supports paste - multi-char input)
+    if (input && input.length >= 1) {
+      // Strip bracketed paste markers
+      const chars = input.replace(/\x1b\[200~/g, '').replace(/\x1b\[201~/g, '');
+      // Filter to printable characters
+      const printable = chars.split('').filter(c => c.charCodeAt(0) >= 32).join('');
+      if (printable) {
+        onChange(value + printable);
+      }
+    }
+  });
+
+  const showPlaceholder = value.length === 0;
+
+  return (
+    <Text>
+      {showPlaceholder ? (
+        <>
+          <Text color="green">|</Text>
+          <Text dimColor>{placeholder}</Text>
+        </>
+      ) : (
+        <>
+          <Text>{value}</Text>
+          <Text color="green">|</Text>
+        </>
+      )}
+    </Text>
+  );
+};
+
 export interface McpAuthProps {
   servers: McpServerConfig[];
   workspaceId: string;
@@ -14,7 +74,7 @@ export interface McpAuthProps {
   onCancel: () => void;
 }
 
-type AuthStep = 'confirm' | 'authenticating' | 'complete' | 'error';
+type AuthStep = 'confirm' | 'authenticating' | 'bearer-token' | 'complete' | 'error';
 
 export const McpAuth: React.FC<McpAuthProps> = ({
   servers,
@@ -28,6 +88,7 @@ export const McpAuth: React.FC<McpAuthProps> = ({
   const [status, setStatus] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [completedServers, setCompletedServers] = useState<string[]>([]);
+  const [bearerToken, setBearerToken] = useState('');
   const oauthRef = useRef<CraftOAuth | null>(null);
   const isCancelledRef = useRef(false);
 
@@ -66,7 +127,7 @@ export const McpAuth: React.FC<McpAuthProps> = ({
     }
   });
 
-  const authenticateServer = useCallback(async (server: McpServerConfig): Promise<boolean> => {
+  const authenticateServer = useCallback(async (server: McpServerConfig): Promise<boolean | 'oauth-failed'> => {
     if (isCancelledRef.current) return false;
 
     debug('[McpAuth] Starting auth for server:', server.name, 'url:', server.url);
@@ -117,10 +178,11 @@ export const McpAuth: React.FC<McpAuthProps> = ({
     } catch (err) {
       if (isCancelledRef.current) return false;
       const message = err instanceof Error ? err.message : 'Authentication failed';
-      debug('[McpAuth] Auth failed for', server.name, ':', message);
+      debug('[McpAuth] OAuth failed for', server.name, ':', message, '- offering bearer token fallback');
       setError(`${server.name}: ${message}`);
       oauthRef.current = null;
-      return false;
+      // Return 'oauth-failed' to indicate we should offer bearer token as fallback
+      return 'oauth-failed' as const;
     }
   }, [workspaceId, agentId]);
 
@@ -138,11 +200,19 @@ export const McpAuth: React.FC<McpAuthProps> = ({
     setStep('authenticating');
     setError(null);
 
-    const success = await authenticateServer(server);
+    const result = await authenticateServer(server);
 
     if (isCancelledRef.current) return;
 
-    if (!success) {
+    if (result === 'oauth-failed') {
+      // OAuth failed - offer bearer token as fallback
+      debug('[McpAuth] OAuth failed, offering bearer token fallback');
+      setBearerToken('');
+      setStep('bearer-token');
+      return;
+    }
+
+    if (!result) {
       debug('[McpAuth] Server auth failed');
       setStep('error');
       return;
@@ -174,6 +244,45 @@ export const McpAuth: React.FC<McpAuthProps> = ({
     }
   }, [servers, currentServerIndex, authenticateServer, onComplete]);
 
+  // Handle bearer token submission
+  const handleBearerTokenSubmit = useCallback((token: string) => {
+    if (!token.trim()) return;
+
+    const server = servers[currentServerIndex];
+    if (!server) return;
+
+    debug('[McpAuth] Saving bearer token for', server.name);
+
+    // Save token as non-expiring access token
+    saveServerCredentials(workspaceId, agentId, server.name, {
+      accessToken: token.trim(),
+      // No refreshToken, no expiresAt - static bearer token
+    });
+
+    setCompletedServers((prev) => [...prev, server.name]);
+
+    // Check if there are more servers
+    const nextIndex = currentServerIndex + 1;
+    if (nextIndex < servers.length) {
+      setCurrentServerIndex(nextIndex);
+      setStep('confirm');
+      setBearerToken('');
+      setError(null);
+      setStatus('');
+    } else {
+      // All done
+      debug('[McpAuth] All servers authenticated successfully');
+      setStep('complete');
+      setStatus('All servers authenticated');
+
+      setTimeout(() => {
+        if (!isCancelledRef.current) {
+          onComplete(true);
+        }
+      }, 1000);
+    }
+  }, [servers, currentServerIndex, workspaceId, agentId, onComplete]);
+
   return (
     <Box flexDirection="column" paddingX={1}>
       {/* Header */}
@@ -193,7 +302,7 @@ export const McpAuth: React.FC<McpAuthProps> = ({
                 <Text color="green">✓ </Text>
               ) : i === currentServerIndex && step === 'authenticating' ? (
                 <Text color="yellow">● </Text>
-              ) : i === currentServerIndex && step === 'confirm' ? (
+              ) : i === currentServerIndex && (step === 'confirm' || step === 'bearer-token') ? (
                 <Text color="cyan">→ </Text>
               ) : (
                 <Text dimColor>○ </Text>
@@ -231,6 +340,26 @@ export const McpAuth: React.FC<McpAuthProps> = ({
         </Box>
       )}
 
+      {/* Bearer token step - fallback when OAuth fails */}
+      {step === 'bearer-token' && currentServer && (
+        <Box marginY={1} flexDirection="column">
+          <Text color="yellow">OAuth authentication failed for {currentServer.name}</Text>
+          {error && <Text dimColor>{error}</Text>}
+          <Box marginTop={1} flexDirection="column">
+            <Text>Enter a bearer token instead:</Text>
+            <Box marginTop={1}>
+              <Text color="green">&gt; </Text>
+              <SimpleTextInput
+                value={bearerToken}
+                onChange={setBearerToken}
+                onSubmit={handleBearerTokenSubmit}
+                placeholder="Paste your bearer token..."
+              />
+            </Box>
+          </Box>
+        </Box>
+      )}
+
       {/* Error step */}
       {step === 'error' && (
         <Box marginY={1} flexDirection="column">
@@ -246,6 +375,9 @@ export const McpAuth: React.FC<McpAuthProps> = ({
         )}
         {step === 'authenticating' && (
           <Text dimColor>Complete authorization in your browser. Press Esc to cancel.</Text>
+        )}
+        {step === 'bearer-token' && (
+          <Text dimColor>Press Enter to submit, Esc to cancel</Text>
         )}
         {step === 'error' && (
           <Text dimColor>Press Esc to close</Text>

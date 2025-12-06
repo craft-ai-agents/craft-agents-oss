@@ -51,7 +51,7 @@ export const AgentMenu: React.FC<AgentMenuProps> = ({
     menuItems.push({
       key: 'reset',
       label: 'Reset',
-      desc: 'Fully reset agent (including MCP connections)',
+      desc: 'Clear all data and exit (re-select to restart setup)',
       action: { type: 'reset' },
       requiresActive: true,
     });

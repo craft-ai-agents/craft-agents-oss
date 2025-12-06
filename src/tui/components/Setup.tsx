@@ -55,7 +55,7 @@ const SimpleTextInput: React.FC<{
   );
 };
 
-type SetupStep = 'welcome' | 'auth-type' | 'api-key' | 'oauth-token' | 'oauth-token-setup' | 'mcp-url' | 'checking-auth' | 'oauth-auth' | 'confirm' | 'testing' | 'complete' | 'error';
+type SetupStep = 'welcome' | 'auth-type' | 'api-key' | 'oauth-token' | 'oauth-token-setup' | 'mcp-url' | 'checking-auth' | 'no-oauth-options' | 'oauth-auth' | 'bearer-token' | 'confirm' | 'testing' | 'complete' | 'error';
 
 export interface SetupProps {
   onComplete: (config: StoredConfig) => void;
@@ -104,6 +104,7 @@ export const Setup: React.FC<SetupProps> = ({ onComplete, onCancel }) => {
     tokenType: string;
   } | null>(null);
   const [isPublicServer, setIsPublicServer] = useState(false);
+  const [mcpBearerToken, setMcpBearerToken] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [showApiKey, setShowApiKey] = useState(false);
   const [showOauthToken, setShowOauthToken] = useState(false);
@@ -228,6 +229,21 @@ export const Setup: React.FC<SetupProps> = ({ onComplete, onCancel }) => {
     }
   }, []);
 
+  const handleNoOAuthSelect = useCallback((method: 'bearer' | 'public') => {
+    if (method === 'bearer') {
+      setStep('bearer-token');
+    } else {
+      setIsPublicServer(true);
+      setStep('confirm');
+    }
+  }, []);
+
+  const handleMcpBearerToken = useCallback((token: string) => {
+    if (!token.trim()) return;
+    setMcpBearerToken(token.trim());
+    setStep('confirm');
+  }, []);
+
   // Check if OAuth is required when entering checking-auth step
   useEffect(() => {
     if (step !== 'checking-auth' || !mcpUrl) return;
@@ -249,16 +265,13 @@ export const Setup: React.FC<SetupProps> = ({ onComplete, onCancel }) => {
           setIsPublicServer(false);
           setStep('oauth-auth');
         } else {
-          setIsPublicServer(true);
-          setOauthStatus('Server is public - no authentication required');
-          setStep('confirm');
+          // No OAuth detected - offer bearer token or public options
+          setStep('no-oauth-options');
         }
       })
       .catch(() => {
-        // If we can't check, assume it's public
-        setIsPublicServer(true);
-        setOauthStatus('Could not verify - assuming public server');
-        setStep('confirm');
+        // Can't detect OAuth - offer alternatives
+        setStep('no-oauth-options');
       });
   }, [step, mcpUrl]);
 
@@ -293,9 +306,10 @@ export const Setup: React.FC<SetupProps> = ({ onComplete, onCancel }) => {
         setStep('confirm');
       })
       .catch((err) => {
-        setError(err instanceof Error ? err.message : 'OAuth authentication failed');
+        // OAuth failed - offer bearer token as alternative
+        setOauthStatus(err instanceof Error ? err.message : 'OAuth failed');
         setOauthClient(null);
-        setStep('error');
+        setStep('no-oauth-options');
       });
 
     return () => {
@@ -304,9 +318,9 @@ export const Setup: React.FC<SetupProps> = ({ onComplete, onCancel }) => {
   }, [step, mcpUrl]);
 
   const handleConfirm = useCallback(() => {
-    // For new MCP setup with OAuth servers, we need oauthResult
-    if (!hasExistingMcp && !isPublicServer && !oauthResult) {
-      setError('OAuth authentication not completed');
+    // For new MCP setup, we need OAuth, bearer token, or public
+    if (!hasExistingMcp && !isPublicServer && !oauthResult && !mcpBearerToken) {
+      setError('MCP authentication not completed');
       setStep('error');
       return;
     }
@@ -338,6 +352,7 @@ export const Setup: React.FC<SetupProps> = ({ onComplete, onCancel }) => {
             tokenType: oauthResult.tokenType,
           },
         }),
+        ...(mcpBearerToken && { bearerToken: mcpBearerToken }),
         createdAt: Date.now(),
       };
     }
@@ -390,7 +405,7 @@ export const Setup: React.FC<SetupProps> = ({ onComplete, onCancel }) => {
       setError(err instanceof Error ? err.message : 'Failed to save configuration');
       setStep('error');
     }
-  }, [apiKey, oauthToken, authType, mcpUrl, oauthResult, isPublicServer, onComplete, hasExistingMcp, existingWorkspace]);
+  }, [apiKey, oauthToken, authType, mcpUrl, oauthResult, isPublicServer, mcpBearerToken, onComplete, hasExistingMcp, existingWorkspace]);
 
   const handleBack = useCallback(() => {
     setError(null);
@@ -415,8 +430,12 @@ export const Setup: React.FC<SetupProps> = ({ onComplete, onCancel }) => {
         }
         break;
       case 'checking-auth':
+      case 'no-oauth-options':
       case 'oauth-auth':
         setStep('mcp-url');
+        break;
+      case 'bearer-token':
+        setStep('no-oauth-options');
         break;
       case 'confirm':
         // If we skipped MCP setup, go back to auth input
@@ -430,6 +449,7 @@ export const Setup: React.FC<SetupProps> = ({ onComplete, onCancel }) => {
           setStep('mcp-url'); // Go back to URL, will re-check auth
           setOauthResult(null);
           setIsPublicServer(false);
+          setMcpBearerToken('');
         }
         break;
       case 'error':
@@ -544,6 +564,23 @@ export const Setup: React.FC<SetupProps> = ({ onComplete, onCancel }) => {
           </Box>
         )}
 
+        {step === 'no-oauth-options' && (
+          <NoOAuthOptionsStep
+            onSelect={handleNoOAuthSelect}
+            onBack={handleBack}
+            message={oauthStatus}
+          />
+        )}
+
+        {step === 'bearer-token' && (
+          <BearerTokenStep
+            value={mcpBearerToken}
+            onChange={setMcpBearerToken}
+            onSubmit={handleMcpBearerToken}
+            onBack={handleBack}
+          />
+        )}
+
         {step === 'oauth-auth' && (
           <OAuthStep
             status={oauthStatus}
@@ -559,6 +596,7 @@ export const Setup: React.FC<SetupProps> = ({ onComplete, onCancel }) => {
             mcpUrl={mcpUrl}
             isPublic={isPublicServer}
             oauthAuthenticated={!!oauthResult}
+            bearerToken={mcpBearerToken ? maskValue(mcpBearerToken, false) : undefined}
             onConfirm={handleConfirm}
             onBack={handleBack}
           />
@@ -630,7 +668,9 @@ function getStepNumber(step: SetupStep, hasExistingMcp: boolean = false): number
     case 'oauth-token-setup': return 2;
     case 'mcp-url': return 3;
     case 'checking-auth': return 4;
+    case 'no-oauth-options': return 4;
     case 'oauth-auth': return 4;
+    case 'bearer-token': return 4;
     case 'confirm':
     case 'testing':
     case 'complete':
@@ -648,7 +688,9 @@ function getStepName(step: SetupStep): string {
     case 'oauth-token-setup': return 'Setting up...';
     case 'mcp-url': return 'MCP URL';
     case 'checking-auth': return 'Checking...';
+    case 'no-oauth-options': return 'Auth Method';
     case 'oauth-auth': return 'Authorization';
+    case 'bearer-token': return 'Bearer Token';
     case 'confirm': return 'Confirm';
     case 'testing': return 'Saving...';
     case 'complete': return 'Complete';
@@ -873,6 +915,7 @@ interface ConfirmStepProps {
   mcpUrl: string;
   isPublic: boolean;
   oauthAuthenticated: boolean;
+  bearerToken?: string;
   onConfirm: () => void;
   onBack: () => void;
 }
@@ -884,6 +927,7 @@ const ConfirmStep: React.FC<ConfirmStepProps> = ({
   mcpUrl,
   isPublic,
   oauthAuthenticated,
+  bearerToken,
   onConfirm,
   onBack,
 }) => {
@@ -902,6 +946,9 @@ const ConfirmStep: React.FC<ConfirmStepProps> = ({
     }
     if (oauthAuthenticated) {
       return { color: 'green' as const, text: '✓ OAuth authenticated' };
+    }
+    if (bearerToken) {
+      return { color: 'green' as const, text: '✓ Bearer token' };
     }
     return { color: 'red' as const, text: '✗ Not authenticated' };
   };
@@ -1096,6 +1143,92 @@ const OAuthTokenStep: React.FC<OAuthTokenStepProps> = ({
           </Text>
         </Box>
       )}
+    </Box>
+  );
+};
+
+// No OAuth options - shown when OAuth is not detected or fails
+interface NoOAuthOptionsStepProps {
+  onSelect: (method: 'bearer' | 'public') => void;
+  onBack: () => void;
+  message?: string;
+}
+
+const NoOAuthOptionsStep: React.FC<NoOAuthOptionsStepProps> = ({ onSelect, onBack, message }) => {
+  const [selected, setSelected] = useState(0);
+  const options = [
+    { label: 'Enter Bearer Token', value: 'bearer' as const },
+    { label: 'No authentication (public server)', value: 'public' as const },
+  ];
+
+  useInput((_, key) => {
+    if (key.upArrow) {
+      setSelected(s => Math.max(0, s - 1));
+    } else if (key.downArrow) {
+      setSelected(s => Math.min(options.length - 1, s + 1));
+    } else if (key.return) {
+      const option = options[selected];
+      if (option) onSelect(option.value);
+    } else if (key.escape) {
+      onBack();
+    }
+  });
+
+  return (
+    <Box flexDirection="column">
+      <Text bold>Choose Authentication Method</Text>
+      {message && (
+        <Box marginY={1}>
+          <Text dimColor>{message}</Text>
+        </Box>
+      )}
+      <Box marginY={1} flexDirection="column">
+        {options.map((opt, i) => (
+          <Text key={opt.value}>
+            <Text color={i === selected ? 'green' : undefined}>
+              {i === selected ? '> ' : '  '}{opt.label}
+            </Text>
+          </Text>
+        ))}
+      </Box>
+      <Text dimColor>Use arrow keys to select, Enter to confirm, Esc to go back</Text>
+    </Box>
+  );
+};
+
+// Bearer token input step
+interface BearerTokenStepProps {
+  value: string;
+  onChange: (value: string) => void;
+  onSubmit: (value: string) => void;
+  onBack: () => void;
+}
+
+const BearerTokenStep: React.FC<BearerTokenStepProps> = ({ value, onChange, onSubmit, onBack }) => {
+  useInput((_, key) => {
+    if (key.escape) {
+      onBack();
+    }
+  });
+
+  return (
+    <Box flexDirection="column">
+      <Text bold>Enter Bearer Token</Text>
+      <Box marginY={1}>
+        <Text dimColor>The token will be sent as: Authorization: Bearer {'<token>'}</Text>
+      </Box>
+      <Box>
+        <Text color="green">&gt; </Text>
+        <SimpleTextInput
+          value={value}
+          onChange={onChange}
+          onSubmit={onSubmit}
+          placeholder="Paste your bearer token..."
+        />
+      </Box>
+      <Box marginTop={1}>
+        <Text dimColor>Press Enter to confirm, Esc to go back</Text>
+      </Box>
     </Box>
   );
 };

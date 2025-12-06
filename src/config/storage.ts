@@ -16,6 +16,7 @@ export interface Workspace {
   name: string;
   mcpUrl: string;
   oauth?: OAuthCredentials;
+  bearerToken?: string;  // Static bearer token (alternative to OAuth)
   isPublic?: boolean;
   createdAt: number;
   sessionId?: string;  // SDK session ID for conversation continuity
@@ -86,6 +87,7 @@ function migrateConfig(rawConfig: Record<string, unknown>): StoredConfig | null 
   const claudeOAuthToken = rawConfig.claudeOAuthToken as string | undefined;
   const craftMcpUrl = rawConfig.craftMcpUrl as string | undefined;
   const oauth = rawConfig.oauth as OAuthCredentials | undefined;
+  const bearerToken = rawConfig.bearerToken as string | undefined;
   const isPublic = rawConfig.isPublic as boolean | undefined;
   const model = rawConfig.model as string | undefined;
 
@@ -95,8 +97,8 @@ function migrateConfig(rawConfig: Record<string, unknown>): StoredConfig | null 
     return null;
   }
 
-  // Must have either OAuth credentials or be marked as public
-  if (!oauth?.accessToken && !isPublic) {
+  // Must have OAuth credentials, bearer token, or be marked as public
+  if (!oauth?.accessToken && !bearerToken && !isPublic) {
     return null;
   }
 
@@ -106,6 +108,7 @@ function migrateConfig(rawConfig: Record<string, unknown>): StoredConfig | null 
     name: extractWorkspaceName(craftMcpUrl),
     mcpUrl: craftMcpUrl,
     oauth,
+    bearerToken,
     isPublic,
     createdAt: Date.now(),
   };
@@ -201,6 +204,10 @@ export function getAccessToken(config: StoredConfig): string | null {
 export function getWorkspaceAccessToken(workspace: Workspace): string | null {
   if (workspace.isPublic) {
     return null;
+  }
+  // Check bearer token first (static, no refresh needed)
+  if (workspace.bearerToken) {
+    return workspace.bearerToken;
   }
   return workspace.oauth?.accessToken || null;
 }
