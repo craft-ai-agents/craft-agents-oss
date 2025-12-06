@@ -945,7 +945,8 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
       return false;
     }
 
-    // Invalidate the definition cache only (not auth)
+    // Invalidate both in-memory and file cache (not auth)
+    agentManagerRef.current.clearDefinitionCache(agentMeta.id);
     invalidateDefinition(workspace.id, agentMeta.id);
     debug('[useAgent.reloadAgent] Definition cache invalidated for agent:', agentMeta.id);
 
