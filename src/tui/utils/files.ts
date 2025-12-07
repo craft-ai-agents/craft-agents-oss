@@ -290,24 +290,6 @@ export function processInputWithFiles(input: string): {
 }
 
 /**
- * Format attachment info for display
- */
-export function formatAttachmentDisplay(attachment: FileAttachment): string {
-  const sizeStr = attachment.size < 1024
-    ? `${attachment.size}B`
-    : attachment.size < 1024 * 1024
-    ? `${Math.round(attachment.size / 1024)}KB`
-    : `${(attachment.size / 1024 / 1024).toFixed(1)}MB`;
-
-  const icon = attachment.type === 'image' ? '🖼'
-    : attachment.type === 'pdf' ? '📄'
-    : attachment.type === 'text' ? '📝'
-    : '📎';
-
-  return `${icon} ${attachment.name} (${sizeStr})`;
-}
-
-/**
  * Read from clipboard (macOS only)
  * Checks for: 1) File URLs (copied files), 2) Images
  * Returns FileAttachment[] - could be multiple files
@@ -441,15 +423,6 @@ if (imgData && !imgData.isNil()) {
   }
 
   return null;
-}
-
-/**
- * Legacy function for backwards compatibility
- */
-export function readClipboardImage(): FileAttachment | null {
-  const attachments = readClipboard();
-  // Return first image, or first file if no images
-  return attachments.find(a => a.type === 'image') || attachments[0] || null;
 }
 
 /**

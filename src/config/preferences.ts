@@ -23,10 +23,6 @@ export interface UserPreferences {
 const CONFIG_DIR = join(homedir(), '.craft-agent');
 const PREFERENCES_FILE = join(CONFIG_DIR, 'preferences.json');
 
-export function preferencesExist(): boolean {
-  return existsSync(PREFERENCES_FILE);
-}
-
 export function loadPreferences(): UserPreferences {
   try {
     if (!existsSync(PREFERENCES_FILE)) {

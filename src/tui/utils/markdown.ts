@@ -69,14 +69,6 @@ function getCachedMarkdown(text: string): string | undefined {
   return markdownCache.get(text);
 }
 
-/**
- * Clear all markdown caches. Useful after config changes.
- */
-export function clearMarkdownCache(): void {
-  markdownCache.clear();
-  codeBlockCache.clear();
-}
-
 function setCachedMarkdown(text: string, rendered: string): void {
   if (markdownCache.size >= CACHE_MAX_SIZE) {
     const firstKey = markdownCache.keys().next().value;
@@ -358,21 +350,6 @@ export function truncateText(text: string, maxLength: number): string {
 }
 
 /**
- * Format JSON for display (with truncation)
- */
-export function formatJSON(obj: unknown, maxLength = 200): string {
-  try {
-    const str = JSON.stringify(obj, null, 2);
-    if (str.length > maxLength) {
-      return str.slice(0, maxLength - 3) + '...';
-    }
-    return str;
-  } catch {
-    return String(obj);
-  }
-}
-
-/**
  * Format a duration in ms to human readable
  */
 export function formatDuration(ms: number): string {
@@ -388,19 +365,4 @@ export function formatTokens(count: number): string {
   if (count < 1000) return String(count);
   if (count < 1000000) return `${(count / 1000).toFixed(1)}k`;
   return `${(count / 1000000).toFixed(2)}M`;
-}
-
-/**
- * Estimate cost based on token usage (Claude 3.5 Sonnet pricing)
- */
-export function estimateCost(inputTokens: number, outputTokens: number): string {
-  // Claude 3.5 Sonnet: $3/M input, $15/M output
-  const inputCost = (inputTokens / 1000000) * 3;
-  const outputCost = (outputTokens / 1000000) * 15;
-  const total = inputCost + outputCost;
-
-  if (total < 0.01) {
-    return `$${total.toFixed(4)}`;
-  }
-  return `$${total.toFixed(2)}`;
 }

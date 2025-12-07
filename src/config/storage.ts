@@ -30,11 +30,7 @@ export interface StoredConfig {
   claudeOAuthToken?: string;
   // Which auth method to use
   authType?: AuthType;
-  // Legacy fields (kept for migration from single-workspace config)
-  craftMcpUrl?: string;
-  oauth?: OAuthCredentials;
-  isPublic?: boolean;
-  // Multi-workspace fields
+  // Workspace fields
   workspaces: Workspace[];
   activeWorkspaceId: string | null;
   model?: string;
@@ -49,116 +45,27 @@ export function ensureConfigDir(): void {
   }
 }
 
-export function configExists(): boolean {
-  return existsSync(CONFIG_FILE);
-}
-
-// Extract a friendly name from MCP URL for migration
-function extractWorkspaceName(mcpUrl: string): string {
-  try {
-    const url = new URL(mcpUrl);
-    // Try to get meaningful name from path (e.g., /links/ABC123/mcp -> ABC123)
-    const parts = url.pathname.split('/').filter(Boolean);
-    if (parts.length >= 2 && parts[0] === 'links' && parts[1]) {
-      return `Workspace ${parts[1].substring(0, 6)}`;
-    }
-    return url.hostname.replace(/^mcp\./, '').split('.')[0] || 'Default';
-  } catch {
-    return 'Default';
-  }
-}
-
-// Migrate legacy single-workspace config to multi-workspace format
-function migrateConfig(rawConfig: Record<string, unknown>): StoredConfig | null {
-  // Check if already migrated (has workspaces array)
-  if (Array.isArray(rawConfig.workspaces)) {
-    // Already migrated - just validate it has required auth
-    const config = rawConfig as unknown as StoredConfig;
-    const hasApiKey = config.anthropicApiKey && config.anthropicApiKey.length > 0;
-    const hasOAuthToken = config.claudeOAuthToken && config.claudeOAuthToken.length > 0;
-    if (!hasApiKey && !hasOAuthToken) {
-      return null;
-    }
-    return config;
-  }
-
-  // Validate legacy required fields
-  const anthropicApiKey = rawConfig.anthropicApiKey as string | undefined;
-  const claudeOAuthToken = rawConfig.claudeOAuthToken as string | undefined;
-  const craftMcpUrl = rawConfig.craftMcpUrl as string | undefined;
-  const oauth = rawConfig.oauth as OAuthCredentials | undefined;
-  const bearerToken = rawConfig.bearerToken as string | undefined;
-  const isPublic = rawConfig.isPublic as boolean | undefined;
-  const model = rawConfig.model as string | undefined;
-
-  // Must have either API key or OAuth token for Claude auth
-  const hasClaudeAuth = (anthropicApiKey && anthropicApiKey.length > 0) || (claudeOAuthToken && claudeOAuthToken.length > 0);
-  if (!hasClaudeAuth || !craftMcpUrl) {
-    return null;
-  }
-
-  // Must have OAuth credentials, bearer token, or be marked as public
-  if (!oauth?.accessToken && !bearerToken && !isPublic) {
-    return null;
-  }
-
-  // Create workspace from legacy config
-  const workspace: Workspace = {
-    id: randomUUID(),
-    name: extractWorkspaceName(craftMcpUrl),
-    mcpUrl: craftMcpUrl,
-    oauth,
-    bearerToken,
-    isPublic,
-    createdAt: Date.now(),
-  };
-
-  const migratedConfig: StoredConfig = {
-    anthropicApiKey: anthropicApiKey || '',
-    claudeOAuthToken: claudeOAuthToken,
-    // Keep legacy fields for backwards compatibility
-    craftMcpUrl,
-    oauth,
-    isPublic,
-    // New multi-workspace fields
-    workspaces: [workspace],
-    activeWorkspaceId: workspace.id,
-    model,
-  };
-
-  // Save migrated config
-  saveConfig(migratedConfig);
-
-  return migratedConfig;
-}
-
 export function loadStoredConfig(): StoredConfig | null {
   try {
     if (!existsSync(CONFIG_FILE)) {
       return null;
     }
     const content = readFileSync(CONFIG_FILE, 'utf-8');
-    const rawConfig = JSON.parse(content) as Record<string, unknown>;
+    const config = JSON.parse(content) as StoredConfig;
 
     // Validate Claude auth exists (either API key or OAuth token)
-    const hasApiKey = rawConfig.anthropicApiKey && (rawConfig.anthropicApiKey as string).length > 0;
-    const hasOAuthToken = rawConfig.claudeOAuthToken && (rawConfig.claudeOAuthToken as string).length > 0;
+    const hasApiKey = config.anthropicApiKey && config.anthropicApiKey.length > 0;
+    const hasOAuthToken = config.claudeOAuthToken && config.claudeOAuthToken.length > 0;
     if (!hasApiKey && !hasOAuthToken) {
       return null;
     }
 
-    // Migrate if needed and validate
-    const config = migrateConfig(rawConfig);
-    if (!config) {
+    // Must have workspaces array (legacy single-workspace configs not supported)
+    if (!Array.isArray(config.workspaces) || config.workspaces.length === 0) {
       return null;
     }
 
-    // Must have at least one workspace with valid auth
-    if (!config.workspaces || config.workspaces.length === 0) {
-      return null;
-    }
-
-    // Validate active workspace exists and has valid auth
+    // Validate active workspace exists
     const activeWorkspace = config.workspaces.find(w => w.id === config.activeWorkspaceId);
     if (!activeWorkspace) {
       // Default to first workspace
@@ -171,15 +78,6 @@ export function loadStoredConfig(): StoredConfig | null {
   }
 }
 
-// Check if OAuth token needs refresh (with 5 minute buffer)
-export function isTokenExpired(config: StoredConfig): boolean {
-  if (!config.oauth?.expiresAt) {
-    return false; // No expiry means it doesn't expire (or unknown)
-  }
-  const bufferMs = 5 * 60 * 1000; // 5 minutes
-  return Date.now() + bufferMs >= config.oauth.expiresAt;
-}
-
 // Check if workspace OAuth token needs refresh (with 5 minute buffer)
 export function isWorkspaceTokenExpired(workspace: Workspace): boolean {
   if (!workspace.oauth?.expiresAt) {
@@ -187,17 +85,6 @@ export function isWorkspaceTokenExpired(workspace: Workspace): boolean {
   }
   const bufferMs = 5 * 60 * 1000; // 5 minutes
   return Date.now() + bufferMs >= workspace.oauth.expiresAt;
-}
-
-// Get the access token to use for API calls (empty string for public servers)
-export function getAccessToken(config: StoredConfig): string | null {
-  if (config.isPublic) {
-    return null; // No auth needed
-  }
-  if (config.oauth?.accessToken) {
-    return config.oauth.accessToken;
-  }
-  return null;
 }
 
 // Get access token for a specific workspace
@@ -210,26 +97,6 @@ export function getWorkspaceAccessToken(workspace: Workspace): string | null {
     return workspace.bearerToken;
   }
   return workspace.oauth?.accessToken || null;
-}
-
-// Update OAuth tokens after refresh
-export function updateOAuthTokens(
-  accessToken: string,
-  refreshToken?: string,
-  expiresAt?: number
-): void {
-  const config = loadStoredConfig();
-  if (!config || !config.oauth) return;
-
-  config.oauth.accessToken = accessToken;
-  if (refreshToken) {
-    config.oauth.refreshToken = refreshToken;
-  }
-  if (expiresAt) {
-    config.oauth.expiresAt = expiresAt;
-  }
-
-  saveConfig(config);
 }
 
 // Update OAuth tokens for a specific workspace
@@ -261,28 +128,12 @@ export function saveConfig(config: StoredConfig): void {
   writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf-8');
 }
 
-export function clearConfig(): void {
-  if (existsSync(CONFIG_FILE)) {
-    writeFileSync(CONFIG_FILE, '{}', 'utf-8');
-  }
-}
-
 export function updateApiKey(newApiKey: string): boolean {
   const config = loadStoredConfig();
   if (!config) return false;
 
   config.anthropicApiKey = newApiKey;
   config.authType = 'api_key';
-  saveConfig(config);
-  return true;
-}
-
-export function updateOAuthToken(newToken: string): boolean {
-  const config = loadStoredConfig();
-  if (!config) return false;
-
-  config.claudeOAuthToken = newToken;
-  config.authType = 'oauth_token';
   saveConfig(config);
   return true;
 }
@@ -367,12 +218,6 @@ export function removeWorkspace(workspaceId: string): boolean {
 
   saveConfig(config);
   return true;
-}
-
-export function getWorkspaceById(workspaceId: string): Workspace | null {
-  const config = loadStoredConfig();
-  if (!config) return null;
-  return config.workspaces.find(w => w.id === workspaceId) || null;
 }
 
 export function renameWorkspace(workspaceId: string, newName: string): boolean {

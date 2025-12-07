@@ -376,19 +376,6 @@ export const Setup: React.FC<SetupProps> = ({ onComplete, onCancel }) => {
       anthropicApiKey: authType === 'api_key' ? apiKey : '', // Empty if using OAuth token
       claudeOAuthToken: authType === 'oauth_token' ? oauthToken : undefined,
       authType,
-      // Legacy fields (kept for compatibility)
-      craftMcpUrl: mcpUrl,
-      isPublic: isPublicServer,
-      ...(oauthResult && {
-        oauth: {
-          accessToken: oauthResult.accessToken,
-          refreshToken: oauthResult.refreshToken,
-          expiresAt: oauthResult.expiresAt,
-          clientId: oauthResult.clientId,
-          tokenType: oauthResult.tokenType,
-        },
-      }),
-      // Multi-workspace fields
       workspaces: updatedWorkspaces,
       activeWorkspaceId: workspaceId,
     };

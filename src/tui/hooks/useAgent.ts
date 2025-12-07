@@ -997,8 +997,7 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
       return false;
     }
 
-    // Invalidate both in-memory and file cache (not auth)
-    agentManagerRef.current.clearDefinitionCache(agentMeta.id);
+    // Invalidate file cache (not auth)
     invalidateDefinition(workspace.id, agentMeta.id);
     debug('[useAgent.reloadAgent] Definition cache invalidated for agent:', agentMeta.id);
 
@@ -1030,11 +1029,10 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
       return false;
     }
 
-    // Clear all caches: in-memory, file cache, and auth credentials
-    agentManagerRef.current.clearDefinitionCache(agentMeta.id);
+    // Clear file cache and auth credentials
     invalidateDefinition(workspace.id, agentMeta.id);
     clearMcpCredentials(workspace.id, agentMeta.id);
-    debug('[useAgent.resetAgent] All caches cleared for agent:', agentMeta.id);
+    debug('[useAgent.resetAgent] Caches cleared for agent:', agentMeta.id);
 
     // Deactivate and return to main (don't re-activate - user can re-select to restart setup)
     deactivateAgent();

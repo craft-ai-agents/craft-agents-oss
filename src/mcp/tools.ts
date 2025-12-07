@@ -138,10 +138,6 @@ export function getToolsByCategory(category: ToolInfo['category']): ToolInfo[] {
   return CRAFT_TOOLS.filter(tool => tool.category === category);
 }
 
-export function getToolNames(): string[] {
-  return CRAFT_TOOLS.map(tool => tool.name);
-}
-
 export function formatToolsHelp(): string {
   const categories = ['read', 'write', 'organize', 'destructive'] as const;
   const categoryLabels = {

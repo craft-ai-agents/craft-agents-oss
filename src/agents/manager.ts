@@ -70,7 +70,6 @@ export class SubAgentManager {
   private config: SubAgentManagerConfig;
   private activeAgent: ActiveAgentState = { type: 'main' };
   private registry: AgentRegistry | null = null;
-  private definitionCache: Map<string, SubAgentDefinition> = new Map();
   /** Cache for API servers (created once per agent activation) */
   private apiServerCache: Map<string, ReturnType<typeof createApiServer>> = new Map();
 
@@ -88,11 +87,6 @@ export class SubAgentManager {
    * Used by UI to show extraction progress
    */
   needsFreshExtraction(agentId: string): boolean {
-    // Check in-memory cache
-    if (this.definitionCache.has(agentId)) {
-      return false;
-    }
-    // Check file cache
     const fileCached = loadDefinition(this.workspaceId, agentId);
     return !fileCached?.definition;
   }
@@ -190,18 +184,10 @@ export class SubAgentManager {
   async getDefinition(agentId: string): Promise<SubAgentDefinition | null> {
     debug('[getDefinition] agentId:', agentId);
 
-    // Check in-memory cache first
-    const cached = this.definitionCache.get(agentId);
-    debug('[getDefinition] in-memory cache:', cached ? 'HIT' : 'MISS');
-    if (cached) {
-      return cached;
-    }
-
     // Check file cache
     const fileCached = loadDefinition(this.workspaceId, agentId);
     debug('[getDefinition] file cache:', fileCached ? 'HIT' : 'MISS');
     if (fileCached?.definition) {
-      this.definitionCache.set(agentId, fileCached.definition);
       return fileCached.definition;
     }
 
@@ -245,8 +231,7 @@ export class SubAgentManager {
         'instructionsBlockId:', definition.instructionsBlockId || 'none',
         'mcpServers:', definition.mcpServers?.length || 0);
 
-      // Cache the definition
-      this.definitionCache.set(agentId, definition);
+      // Cache the definition to file
       saveDefinition(this.workspaceId, metadata, definition);
 
       return definition;
@@ -300,29 +285,10 @@ export class SubAgentManager {
   }
 
   /**
-   * Clear in-memory definition cache for an agent
-   * Called during reset to ensure fresh extraction on next activation
-   */
-  clearDefinitionCache(agentId: string): void {
-    debug('[clearDefinitionCache] Clearing cache for:', agentId);
-    this.definitionCache.delete(agentId);
-  }
-
-  /**
    * Get current active agent state
    */
   getActiveAgent(): ActiveAgentState {
     return this.activeAgent;
-  }
-
-  /**
-   * Get active agent definition (if any)
-   */
-  async getActiveAgentDefinition(): Promise<SubAgentDefinition | null> {
-    if (this.activeAgent.type !== 'sub-agent' || !this.activeAgent.agentId) {
-      return null;
-    }
-    return this.getDefinition(this.activeAgent.agentId);
   }
 
   /**
@@ -365,7 +331,6 @@ export class SubAgentManager {
 
       // Invalidate cache so next fetch gets updated content
       invalidateDefinition(this.workspaceId, this.activeAgent.agentId);
-      this.definitionCache.delete(this.activeAgent.agentId);
 
       return true;
     } catch (error) {

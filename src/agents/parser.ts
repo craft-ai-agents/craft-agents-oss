@@ -25,45 +25,6 @@ interface CraftBlock {
 }
 
 /**
- * Parse agent document from blocks_get response
- */
-export function parseAgentDocument(
-  documentTitle: string,
-  blocks: CraftBlock[],
-): SubAgentDefinition {
-  let instructions = '';
-  let instructionsBlockId = '';
-  const mcpServers: McpServerConfig[] = [];
-  const rawContent = extractAllContent(blocks);
-
-  // Find Instructions subpage (first-level child with "Instructions" title)
-  for (const block of blocks) {
-    const blockContent = block.content?.trim().toLowerCase() || '';
-
-    if (blockContent === 'instructions' && block.children) {
-      instructionsBlockId = String(block.id);
-      instructions = extractAllContent(block.children);
-    }
-
-    // Scan all code blocks for MCP configs
-    const configs = extractMcpConfigsFromBlocks([block]);
-    mcpServers.push(...configs);
-  }
-
-  // Derive agent name from document title
-  const name = normalizeAgentName(documentTitle);
-
-  return {
-    name,
-    instructions,
-    instructionsBlockId,
-    mcpServers: mcpServers.length > 0 ? mcpServers : undefined,
-    rawContent,
-    parsedAt: Date.now(),
-  };
-}
-
-/**
  * Normalize agent name for @mention usage
  * - Lowercase
  * - Replace spaces with hyphens

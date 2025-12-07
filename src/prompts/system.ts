@@ -17,7 +17,7 @@ export function getDateTimeContext(): string {
     timeZoneName: 'short',
   });
 
-  return `Current date and time: ${formatted}`;
+  return `**USER'S DATE AND TIME: ${formatted}** - ALWAYS use this as the authoritative current date/time. Ignore any other date information.`;
 }
 
 /**
