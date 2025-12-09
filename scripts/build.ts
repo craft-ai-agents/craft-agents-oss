@@ -59,7 +59,7 @@ for (const target of TARGETS) {
       --target=${target.bunTarget} \
       --external yoga-wasm-web \
       --external keytar \
-      --define BUILD_VERSION="${VERSION}" \
+      --define VERSION="${VERSION}" \
       --define BUILD_TIME="${BUILD_TIME}" \
       --define BUILD_TIMESTAMP="${BUILD_TIMESTAMP}" \
       src/index.tsx \
