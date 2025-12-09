@@ -7,8 +7,10 @@ import { getCredentialManager } from '../../credentials/index.ts';
 import { validateMcpConnection, getValidationErrorMessage } from '../../mcp/validation.ts';
 import { TextInput } from './TextInput.tsx';
 import { AnimatedSpinner } from './Spinner.tsx';
+import { McpUrlTypeStep, type McpUrlMethod } from './McpUrlTypeStep.tsx';
+import { CraftAuth } from './craftAuth/CraftAuth.tsx';
 
-type SetupStep = 'welcome' | 'auth-type' | 'api-key' | 'oauth-token' | 'oauth-token-setup' | 'mcp-url' | 'checking-auth' | 'no-oauth-options' | 'oauth-auth' | 'bearer-token' | 'confirm' | 'validating' | 'complete' | 'error';
+type SetupStep = 'welcome' | 'auth-type' | 'api-key' | 'oauth-token' | 'oauth-token-setup' | 'mcp-url-type' | 'mcp-url' | 'craft-auth' | 'checking-auth' | 'no-oauth-options' | 'oauth-auth' | 'bearer-token' | 'confirm' | 'complete' | 'error' | 'validating';
 
 export interface SetupProps {
   onComplete: (config: StoredConfig) => void;
@@ -138,7 +140,7 @@ export const Setup: React.FC<SetupProps> = ({ onComplete, onCancel }) => {
     if (hasExistingMcp) {
       setStep('confirm');
     } else {
-      setStep('mcp-url');
+      setStep('mcp-url-type');
     }
   }, [hasExistingMcp]);
 
@@ -148,7 +150,7 @@ export const Setup: React.FC<SetupProps> = ({ onComplete, onCancel }) => {
       if (hasExistingMcp) {
         setStep('confirm');
       } else {
-        setStep('mcp-url');
+        setStep('mcp-url-type');
       }
     }
   }, [existingClaudeToken, hasExistingMcp]);
@@ -169,7 +171,7 @@ export const Setup: React.FC<SetupProps> = ({ onComplete, onCancel }) => {
       if (hasExistingMcp) {
         setStep('confirm');
       } else {
-        setStep('mcp-url');
+        setStep('mcp-url-type');
       }
     } else {
       setError(result.error || 'Failed to get token');
@@ -184,9 +186,23 @@ export const Setup: React.FC<SetupProps> = ({ onComplete, onCancel }) => {
     if (hasExistingMcp) {
       setStep('confirm');
     } else {
-      setStep('mcp-url');
+      setStep('mcp-url-type');
     }
   }, [hasExistingMcp]);
+
+  const handleMcpUrlTypeSelect = useCallback((method: McpUrlMethod) => {
+    if (method === 'paste') {
+      setStep('mcp-url');
+    } else {
+      setStep('craft-auth');
+    }
+  }, []);
+
+  const handleCraftAuthComplete = useCallback((url: string) => {
+    setMcpUrl(url);
+    setIsPublicServer(true);
+    setStep('confirm');
+  }, []);
 
   const handleMcpUrl = useCallback((value: string) => {
     if (!value.trim()) return;
@@ -415,12 +431,16 @@ export const Setup: React.FC<SetupProps> = ({ onComplete, onCancel }) => {
       case 'oauth-token':
         setStep('auth-type');
         break;
-      case 'mcp-url':
+      case 'mcp-url-type':
         if (authType === 'api_key') {
           setStep('api-key');
         } else {
           setStep('oauth-token');
         }
+        break;
+      case 'mcp-url':
+      case 'craft-auth':
+        setStep('mcp-url-type');
         break;
       case 'checking-auth':
       case 'no-oauth-options':
@@ -535,6 +555,13 @@ export const Setup: React.FC<SetupProps> = ({ onComplete, onCancel }) => {
           </Box>
         )}
 
+        {step === 'mcp-url-type' && (
+          <McpUrlTypeStep
+            onSelect={handleMcpUrlTypeSelect}
+            onBack={handleBack}
+          />
+        )}
+
         {step === 'mcp-url' && (
           <InputStep
             title="Craft MCP Server URL"
@@ -544,6 +571,13 @@ export const Setup: React.FC<SetupProps> = ({ onComplete, onCancel }) => {
             onSubmit={handleMcpUrl}
             onBack={handleBack}
             error={error}
+          />
+        )}
+
+        {step === 'craft-auth' && (
+          <CraftAuth
+            onComplete={handleCraftAuthComplete}
+            onBack={handleBack}
           />
         )}
 
@@ -669,7 +703,9 @@ function getStepNumber(step: SetupStep, hasExistingMcp: boolean = false): number
     case 'api-key': return 2;
     case 'oauth-token': return 2;
     case 'oauth-token-setup': return 2;
+    case 'mcp-url-type': return 3;
     case 'mcp-url': return 3;
+    case 'craft-auth': return 3;
     case 'checking-auth': return 4;
     case 'no-oauth-options': return 4;
     case 'oauth-auth': return 4;
@@ -689,7 +725,9 @@ function getStepName(step: SetupStep): string {
     case 'api-key': return 'API Key';
     case 'oauth-token': return 'OAuth Token';
     case 'oauth-token-setup': return 'Setting up...';
+    case 'mcp-url-type': return 'MCP Setup';
     case 'mcp-url': return 'MCP URL';
+    case 'craft-auth': return 'Craft Auth';
     case 'checking-auth': return 'Checking...';
     case 'no-oauth-options': return 'Auth Method';
     case 'oauth-auth': return 'Authorization';
