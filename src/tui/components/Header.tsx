@@ -127,27 +127,29 @@ export const StatusLine: React.FC<StatusLineProps> = memo(({
 
 /**
  * Welcome banner shown on startup with ASCII art logo
+ *
+ * Use direct ANSI escape sequences for maximum terminal compatibility
+ * Ink/chalk's color handling can is inconsistent across terminals
  */
 export const WelcomeBanner: React.FC<{ version?: string }> = memo(({ version = '1.0.0' }) => {
+  const purple = '\x1b[38;2;157;140;255m';
+  const reset = '\x1b[0m';
+
   const logo = [
-    '                                                      ',
-    '                                                      ',
     '  ████████ █████████    ██████   ██████████ ██████████',
     '██████████ ██████████ ██████████ █████████  ██████████',
     '██████     ██████████ ██████████ ████████   ██████████',
     '██████████ ████████   ██████████ ███████      █████   ',
     '  ████████ ████  ████ ████  ████ █████        █████   ',
-    '                                                      ',
-    '                                                      ',
   ];
 
   return (
     <Box flexDirection="column" marginBottom={1}>
+      <Text>{' '}</Text>
       {logo.map((line, i) => (
-        <Box key={i}>
-          <Text color="magenta" bold>{line}</Text>
-        </Box>
+        <Text key={i}>{purple}{line}{reset}</Text>
       ))}
+      <Text>{' '}</Text>
     </Box>
   );
 });
