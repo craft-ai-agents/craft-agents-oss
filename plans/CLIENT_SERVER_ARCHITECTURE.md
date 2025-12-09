@@ -860,15 +860,15 @@ src/config/storage.ts      → packages/local/src/config.ts (local config)
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
-| Code structure | Bun monorepo with 3 packages | Maximizes code sharing via `@craft/shared` |
-| Transport | WebSocket + HTTP | WS for chat/events, HTTP for OAuth callback |
+| Deployment modes | Local + Remote | Supports offline dev and multi-client access |
+| Code structure | Bun monorepo with 6 packages | Core logic shared between modes |
+| Core package | `@craft/core` | Agent, MCP, OAuth reused by local + server |
+| TUI package | `@craft/tui` | Components reused by local + remote-client |
+| Credential backends | Keytar (local) + Modal Secrets (remote) | Swappable via interface |
+| Transport (remote) | WebSocket + HTTP | WS for chat/events, HTTP for OAuth callback |
 | Server runtime | Bun subprocess on Modal | Reuses existing TypeScript code |
-| Credential storage | Modal Secrets API | Native integration, no custom encryption |
-| Secret isolation | Naming prefix per user | Single workspace, `craft-{userId}-...` |
-| Encryption | Modal-managed | SOC 2 / HIPAA compliant, at-rest encryption |
-| OAuth flow | Server handles entirely | Client just opens browser URL |
-| Session management | Server-side Map | Single user per instance, no DB needed |
-| Client state | serverUrl only | Everything else comes from server |
+| Secret isolation | Naming prefix per user | Single Modal workspace, `craft-{userId}-...` |
+| OAuth callback | Configurable URL | `localhost:8914` (local) or Modal URL (remote) |
 
 ## Critical Files Reference
 

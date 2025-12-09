@@ -225,7 +225,43 @@ bun run typecheck
 
 # Run in watch mode
 bun dev
+
+# Debug logging (writes to /tmp/craft-debug.log)
+craft --debug
 ```
+
+## Trace Viewer & Langsmith Upload
+
+A standalone utility to view SDK session transcripts and upload them to Langsmith for analysis.
+
+```bash
+# List recent sessions
+bun tools/langsmith-upload.ts
+
+# View last session (ergonomic - no ID needed)
+bun tools/langsmith-upload.ts view
+
+# View specific session (partial ID match)
+bun tools/langsmith-upload.ts view abc123
+
+# Output as JSON
+bun tools/langsmith-upload.ts view --json
+
+# Upload to Langsmith
+LANGSMITH_API_KEY=ls-... bun tools/langsmith-upload.ts upload
+
+# Upload with custom project name
+LANGSMITH_API_KEY=ls-... bun tools/langsmith-upload.ts upload --project "My Project"
+```
+
+Session transcripts are stored by the Claude Agent SDK at:
+```
+~/.claude/projects/-{encoded-project-path}/{sessionId}.jsonl
+```
+
+**Environment Variables:**
+- `LANGSMITH_API_KEY` - Required for upload (get from Langsmith settings)
+- `LANGSMITH_ENDPOINT` - Optional, defaults to `https://api.smith.langchain.com`
 
 ## Tech Stack
 
