@@ -109,3 +109,18 @@ export function isClearLine(input: string, key: InkKey): boolean {
 export function isCancel(input: string, key: InkKey): boolean {
   return key.escape === true || (key.ctrl === true && input === 'c');
 }
+
+/**
+ * Ctrl+R - Reverse history search
+ * Standard terminal shortcut for searching command history
+ */
+export function isHistorySearch(input: string, key: InkKey): boolean {
+  return (key.ctrl === true && input === 'r') || input === '\x12';
+}
+
+/**
+ * Ctrl+G - Abort (alternative cancel, commonly used in search)
+ */
+export function isAbort(input: string, key: InkKey): boolean {
+  return (key.ctrl === true && input === 'g') || input === '\x07';
+}

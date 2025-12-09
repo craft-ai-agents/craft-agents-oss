@@ -29,4 +29,6 @@ export {
   isWordRight,
   isClearLine,
   isCancel,
+  isHistorySearch,
+  isAbort,
 } from './mappings.ts';
