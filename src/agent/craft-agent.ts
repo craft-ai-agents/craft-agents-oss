@@ -3,6 +3,7 @@ import type { ContentBlockParam } from '@anthropic-ai/sdk/resources';
 import { z } from 'zod';
 import { getSystemPrompt, getDateTimeContext } from '../prompts/system.ts';
 import type { SubAgentDefinition } from '../agents/types.ts';
+import { updateAgentInstructions as agenticUpdateInstructions, type UpdateInstructionsContext, type UpdateInstructionsResult } from '../agents/instruction-updater.ts';
 import { getWorkspaceAccessTokenAsync, isWorkspaceTokenExpiredAsync, updateWorkspaceOAuthTokensAsync, type Workspace } from '../config/storage.ts';
 import { getCredentialManager } from '../credentials/index.ts';
 import { updatePreferences, loadPreferences, type UserPreferences } from '../config/preferences.ts';
@@ -68,13 +69,88 @@ interface PendingQuestion {
   questions: Question[];
 }
 
-// Callback for agent instructions update (set by TUI when agent is active)
-let updateAgentInstructionsCallback: ((content: string) => Promise<boolean>) | null = null;
+// Context provider for agent instructions update (set by TUI when agent is active)
+// Provides all context needed for agentic update
+let updateAgentInstructionsContextProvider: (() => UpdateInstructionsContext | null) | null = null;
 
-export function setUpdateAgentInstructionsCallback(
-  callback: ((content: string) => Promise<boolean>) | null
+export function setUpdateAgentInstructionsContextProvider(
+  provider: (() => UpdateInstructionsContext | null) | null
 ): void {
-  updateAgentInstructionsCallback = callback;
+  updateAgentInstructionsContextProvider = provider;
+}
+
+// Result callback for update_agent_instructions (set by TUI)
+// Called after update completes to invalidate cache
+let updateAgentInstructionsResultCallback: ((success: boolean) => Promise<void>) | null = null;
+
+export function setUpdateAgentInstructionsResultCallback(
+  callback: ((success: boolean) => Promise<void>) | null
+): void {
+  updateAgentInstructionsResultCallback = callback;
+}
+
+// ============================================================
+// Global Tool Permission System
+// Used by both bash commands (via agent instance) and MCP tools (via global functions)
+// ============================================================
+
+interface GlobalPendingPermission {
+  resolve: (allowed: boolean) => void;
+  toolName: string;
+  command: string;
+}
+
+const globalPendingPermissions = new Map<string, GlobalPendingPermission>();
+
+// Handler set by TUI to receive permission requests
+let globalPermissionHandler: ((request: { requestId: string; toolName: string; command: string; description: string }) => void) | null = null;
+
+/**
+ * Set the global permission request handler (called by TUI)
+ */
+export function setGlobalPermissionHandler(
+  handler: ((request: { requestId: string; toolName: string; command: string; description: string }) => void) | null
+): void {
+  globalPermissionHandler = handler;
+}
+
+/**
+ * Request permission for a tool operation (used by MCP tools)
+ * Returns a promise that resolves to true if allowed, false if denied
+ */
+export function requestToolPermission(
+  toolName: string,
+  command: string,
+  description: string
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    const requestId = `perm-${toolName}-${Date.now()}`;
+
+    globalPendingPermissions.set(requestId, {
+      resolve,
+      toolName,
+      command,
+    });
+
+    if (globalPermissionHandler) {
+      globalPermissionHandler({ requestId, toolName, command, description });
+    } else {
+      // No handler - deny by default
+      globalPendingPermissions.delete(requestId);
+      resolve(false);
+    }
+  });
+}
+
+/**
+ * Resolve a pending global permission request (called by TUI)
+ */
+export function resolveGlobalPermission(requestId: string, allowed: boolean): void {
+  const pending = globalPendingPermissions.get(requestId);
+  if (pending) {
+    pending.resolve(allowed);
+    globalPendingPermissions.delete(requestId);
+  }
 }
 
 // Callback for agent instructions reload (set by TUI when agent is active)
@@ -212,7 +288,14 @@ function getPreferencesServer() {
         ),
         tool(
           'update_agent_instructions',
-          `Add a new learning or instruction to your Instructions document. Use this when you learn something from the user that should persist across conversations.
+          `Update your Instructions document with a new learning or instruction. Use this when you learn something from the user that should persist across conversations.
+
+**CRITICAL: This is the ONLY way to update your source instructions.** Never use direct Craft MCP tools (blocks_update, markdown_add, etc.) to modify your Instructions document. Always use this tool instead - it handles the update safely and correctly.
+
+This tool requires user permission before running. It will:
+1. Read the current Instructions document from Craft (source of truth)
+2. Intelligently add or update the content based on your request
+3. Write the changes back to the document
 
 IMPORTANT guidelines for what to write:
 - Write ONLY the new learning or instruction, not your full instructions
@@ -234,24 +317,60 @@ Example bad content:
             section: z.string().optional().describe('Optional: which section to add this to (e.g., "Learnings", "User Preferences"). Defaults to appending at the end.'),
           },
           async (args) => {
-            if (!updateAgentInstructionsCallback) {
+            // Check if context provider is set
+            if (!updateAgentInstructionsContextProvider) {
               return {
                 content: [{ type: 'text', text: 'No agent is currently active. This tool only works when a sub-agent is active.' }],
               };
             }
+
+            // Get the context
+            const context = updateAgentInstructionsContextProvider();
+            if (!context) {
+              return {
+                content: [{ type: 'text', text: 'Could not get agent context. Ensure an agent is active.' }],
+              };
+            }
+
+            // Request user permission via global permission system
+            const allowed = await requestToolPermission(
+              'update_agent_instructions',
+              args.content.substring(0, 100) + (args.content.length > 100 ? '...' : ''),
+              `Update ${context.agentName}'s instructions with:\n${args.content}`
+            );
+            if (!allowed) {
+              return {
+                content: [{ type: 'text', text: 'User denied permission to update instructions.' }],
+              };
+            }
+
             try {
-              // Format the content for the document
+              // Format the content with optional section header
               const section = args.section ? `## ${args.section}\n` : '';
               const formattedContent = section ? `${section}${args.content}` : args.content;
 
-              const success = await updateAgentInstructionsCallback(formattedContent);
+              // Run the agentic update
+              debug('[update_agent_instructions] Running agentic update with context:', {
+                documentId: context.documentId,
+                instructionsBlockId: context.instructionsBlockId,
+                agentName: context.agentName,
+              });
+
+              const result: UpdateInstructionsResult = await agenticUpdateInstructions(formattedContent, context);
+
+              // Notify TUI of result to invalidate cache
+              if (updateAgentInstructionsResultCallback) {
+                await updateAgentInstructionsResultCallback(result.success);
+              }
+
               return {
                 content: [{
                   type: 'text',
-                  text: success
-                    ? `Successfully added to my instructions:\n\n${args.content}\n\nThis will persist across conversations.`
-                    : 'Failed to update instructions. The instructionsBlockId may be missing.',
+                  text: result.success
+                    ? `${result.message}\n\nUpdated content:\n${result.updatedContent || args.content}\n\nThis will persist across conversations.`
+                    : result.message,
                 }],
+                ...(result.success ? {} : { isError: true }),
               };
             } catch (error) {
               const message = error instanceof Error ? error.message : 'Unknown error';

@@ -24,6 +24,8 @@ export interface McpValidationResult {
     version: string;
   };
   invalidProperties?: InvalidProperty[];
+  /** Tool names available on this server (populated on successful connection) */
+  tools?: string[];
 }
 
 /**
@@ -203,6 +205,7 @@ export async function validateMcpConnection(
 
         try {
           const tools = await mcpClient.listTools();
+          const toolNames = tools.map((t) => t.name);
           const allInvalidProperties: InvalidProperty[] = [];
 
           debug(`Validating schemas for ${tools.length} tools`);
@@ -235,12 +238,14 @@ export async function validateMcpConnection(
               errorType: 'invalid-schema',
               serverInfo: status.serverInfo,
               invalidProperties: allInvalidProperties,
+              tools: toolNames,
             };
           }
 
           return {
             success: true,
             serverInfo: status.serverInfo,
+            tools: toolNames,
           };
         } catch (err) {
           // If we can't list tools, for now report connection success

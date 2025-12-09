@@ -114,6 +114,12 @@ export const McpAuth: React.FC<McpAuthProps> = ({
         return 'validation-failed' as const;
       }
 
+      // Store tools from validation result on the server config
+      if (validationResult.tools) {
+        server.tools = validationResult.tools;
+        debug('[McpAuth] Stored', validationResult.tools.length, 'tools for', server.name);
+      }
+
       debug('[McpAuth] No-auth server validated successfully:', server.name);
       return true;
     } catch (err) {
@@ -184,6 +190,12 @@ export const McpAuth: React.FC<McpAuthProps> = ({
         setFailureReason('oauth');
         oauthRef.current = null;
         return 'oauth-failed' as const;
+      }
+
+      // Store tools from validation result on the server config
+      if (validationResult.tools) {
+        server.tools = validationResult.tools;
+        debug('[McpAuth] Stored', validationResult.tools.length, 'tools for', server.name);
       }
 
       // Validation passed - save credentials including clientId for future token refresh (to keychain)
@@ -353,6 +365,12 @@ export const McpAuth: React.FC<McpAuthProps> = ({
       setFailureReason('bearer');
       setStep('bearer-token'); // Go back to token entry
       return;
+    }
+
+    // Store tools from validation result on the server config
+    if (validationResult.tools) {
+      server.tools = validationResult.tools;
+      debug('[McpAuth] Stored', validationResult.tools.length, 'tools for', server.name);
     }
 
     debug('[McpAuth] Saving bearer token for', server.name);

@@ -48,6 +48,46 @@ export function getSystemPrompt(
 }
 
 /**
+ * Generate tool priority section for the system prompt
+ * Lists agent server names (not individual tools) to keep prompt size manageable
+ */
+function generateToolPrioritySection(agent: SubAgentDefinition): string {
+  const serverNames: string[] = [];
+
+  // Collect MCP server names
+  if (agent.mcpServers) {
+    for (const server of agent.mcpServers) {
+      serverNames.push(server.name);
+    }
+  }
+
+  // Collect API names
+  if (agent.apis) {
+    for (const api of agent.apis) {
+      serverNames.push(`${api.name} (API)`);
+    }
+  }
+
+  if (serverNames.length === 0) {
+    return '';
+  }
+
+  return `
+### Tool Priority
+
+This agent connects to: ${serverNames.join(', ')}
+
+**IMPORTANT**: When the user asks for operations that match this agent's purpose, prefer tools from these servers over Craft tools.
+
+Only use Craft MCP tools when:
+1. The user explicitly mentions "Craft", "Craft document", or "Craft folder"
+2. The operation is Craft-specific (blocks, daily notes, collections)
+3. The agent's servers don't have a relevant tool
+
+`;
+}
+
+/**
  * Format sub-agent context for injection into system prompt
  * Makes clear the agent must ADOPT the persona, not just append instructions
  */
@@ -61,6 +101,8 @@ The user has provided these clarifications during setup. They are NOT yet saved 
 ${temporaryClarifications}
 `
     : '';
+
+  const toolPrioritySection = generateToolPrioritySection(agent);
 
   return `
 
@@ -77,9 +119,10 @@ You must:
 
 ### Agent Instructions
 ${agent.instructions}
-${clarificationsSection}
-### Self-Modification
+${clarificationsSection}${toolPrioritySection}### Self-Modification
 You can update your Instructions document using \`update_agent_instructions\` when you learn something that should persist across conversations. Only add NEW learnings - don't rewrite existing instructions. Use human-friendly references like "this document" instead of IDs.
+
+**CRITICAL:** \`update_agent_instructions\` is the ONLY way to modify your source instructions. NEVER use direct Craft MCP tools (blocks_update, markdown_add, markdown_replace, etc.) to edit your Instructions document - always use \`update_agent_instructions\` instead.
 
 ### Platform Limitations
 This is an interactive CLI tool. You CANNOT:

@@ -1,5 +1,15 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { CraftAgent, type CraftAgentConfig, type AgentEvent, type Question, setUpdateAgentInstructionsCallback, setReloadAgentInstructionsCallback } from '../../agent/craft-agent.ts';
+import {
+  CraftAgent,
+  type CraftAgentConfig,
+  type Question,
+  setUpdateAgentInstructionsContextProvider,
+  setUpdateAgentInstructionsResultCallback,
+  setReloadAgentInstructionsCallback,
+  setGlobalPermissionHandler,
+  resolveGlobalPermission,
+} from '../../agent/craft-agent.ts';
+import type { UpdateInstructionsContext } from '../../agents/instruction-updater.ts';
 import type { Message } from '../components/Messages.tsx';
 import type { FileAttachment } from '../utils/files.ts';
 import { setTerminalProgressIndeterminate, clearTerminalProgress } from '../utils/terminalProgress.ts';
@@ -209,6 +219,7 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
   const interruptedRef = useRef<boolean>(false);
   const reloadAgentRef = useRef<(() => Promise<boolean>) | null>(null);
   const sendMessageRef = useRef<((input: string, attachments?: FileAttachment[], options?: { hideUserMessage?: boolean }) => Promise<void>) | null>(null);
+  const activeAgentContextRef = useRef<UpdateInstructionsContext | null>(null);
 
   // Load saved conversation on initial mount (only if edited within last 5 minutes)
   const initialLoadDoneRef = useRef(false);
@@ -380,8 +391,11 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
         mcpClientRef.current = null;
       }
       agentManagerRef.current = null;
-      // Clear agent instructions callback
-      setUpdateAgentInstructionsCallback(null);
+      // Clear agent instructions callbacks
+      setUpdateAgentInstructionsContextProvider(null);
+      setUpdateAgentInstructionsResultCallback(null);
+      setGlobalPermissionHandler(null);
+      activeAgentContextRef.current = null;
       setActiveAgentDefinition(null);
       // Don't clear availableAgents here - it causes race condition with token refresh
     };
@@ -391,10 +405,15 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
   const getAgent = useCallback(() => {
     if (!agentRef.current) {
       agentRef.current = new CraftAgent(config);
-      // Set up permission request callback
+      // Set up permission request callback (for bash commands from agent)
       agentRef.current.onPermissionRequest = (request) => {
         setPendingPermission(request);
       };
+      // Set up global permission handler (for MCP tools like update_agent_instructions)
+      // Routes global permission requests to the same UI as agent permissions
+      setGlobalPermissionHandler((request) => {
+        setPendingPermission(request);
+      });
       // Set up AskUserQuestion callback
       agentRef.current.onAskUserQuestion = (request) => {
         setPendingQuestion(request);
@@ -417,8 +436,13 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
   }, [config, model, webSearchEnabled, webFetchEnabled, codeExecutionEnabled, workspace]);
 
   const respondToPermission = useCallback((allowed: boolean, alwaysAllow: boolean = false) => {
-    if (pendingPermission && agentRef.current) {
-      agentRef.current.respondToPermission(pendingPermission.requestId, allowed, alwaysAllow);
+    if (pendingPermission) {
+      // Try to resolve via agent first (for bash commands)
+      if (agentRef.current) {
+        agentRef.current.respondToPermission(pendingPermission.requestId, allowed, alwaysAllow);
+      }
+      // Also try to resolve via global system (for MCP tools like update_agent_instructions)
+      resolveGlobalPermission(pendingPermission.requestId, allowed);
       setPendingPermission(null);
     }
   }, [pendingPermission]);
@@ -894,13 +918,47 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
     const agent = getAgent();
     agent.setActiveAgentDefinition(definition, mcpServers, apiServers);
 
-    // Set callbacks for agent tools
-    setUpdateAgentInstructionsCallback(async (content: string) => {
-      if (agentManagerRef.current) {
-        return agentManagerRef.current.updateInstructions(content);
+    // Get the document ID from the registry
+    const registry = loadRegistry(workspace.id);
+    const agentMeta = registry?.agents.find(a => a.id === agentId);
+    const documentId = agentMeta?.documentId || '';
+
+    // Build MCP URL for the context
+    let mcpUrl = workspace.mcpUrl;
+    mcpUrl = mcpUrl.replace(/\/+$/, '');
+    if (!mcpUrl.endsWith('/mcp')) {
+      mcpUrl = mcpUrl.replace(/\/sse$/, '/mcp');
+      if (!mcpUrl.endsWith('/mcp')) {
+        mcpUrl = mcpUrl + '/mcp';
       }
-      return false;
+    }
+
+    // Store context for update instructions callbacks
+    activeAgentContextRef.current = {
+      documentId,
+      instructionsBlockId: definition.instructionsBlockId,
+      currentInstructions: definition.instructions,
+      agentName: definition.name,
+      mcpUrl,
+      workspaceId: workspace.id,
+      model: model,
+    };
+
+    // Set context provider callback - returns the current context
+    setUpdateAgentInstructionsContextProvider(() => {
+      return activeAgentContextRef.current;
     });
+
+    // Set result callback - invalidates cache on success
+    setUpdateAgentInstructionsResultCallback(async (success: boolean) => {
+      if (success && agentManagerRef.current) {
+        // Invalidate cache so next reload gets fresh content
+        invalidateDefinition(workspace.id, agentId);
+        debug('[activationComplete] Cache invalidated after instructions update');
+      }
+    });
+
+    // Set reload callback for agent tools
     setReloadAgentInstructionsCallback(async () => {
       if (reloadAgentRef.current) {
         return reloadAgentRef.current();
@@ -1069,7 +1127,9 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
       agentRef.current.setActiveAgentDefinition(null, {}, {});
     }
     // Clear callbacks for agent tools
-    setUpdateAgentInstructionsCallback(null);
+    setUpdateAgentInstructionsContextProvider(null);
+    setUpdateAgentInstructionsResultCallback(null);
+    activeAgentContextRef.current = null;
     setReloadAgentInstructionsCallback(null);
     // Clear review state to prevent stale UI
     setPendingReview(null);

@@ -400,17 +400,41 @@ export const TextInput: React.FC<TextInputProps> = ({
         return;
       }
 
-      // Ignore other control keys
-      if (key.upArrow || key.downArrow || key.ctrl || key.meta) {
+      // Ignore up/down arrows in non-multiline mode
+      if (key.upArrow || key.downArrow) {
         return;
       }
 
       // Handle printable input
+      // Note: process this BEFORE checking for meta key due to bracketed pastes
       if (input && input.length >= 1) {
-        // Strip bracketed paste markers
-        const chars = input.replace(/\x1b\[200~/g, '').replace(/\x1b\[201~/g, '');
-        // Filter to printable characters
-        const printable = chars.split('').filter(c => c.charCodeAt(0) >= 32).join('');
+        // Strip bracketed paste markers - both raw and after Ink strips \x1b
+        // Raw form: \x1b[200~ and \x1b[201~
+        let chars = input
+          .replace(/\x1b\[200~/g, '')   // Raw start marker
+          .replace(/\x1b\[201~/g, '')   // Raw end marker
+          .replace(/\[200~/g, '')       // After Ink strips \x1b (start)
+          .replace(/\[201~/g, '');      // After Ink strips \x1b (end)
+
+        // Check if this was a paste (markers present)
+        const wasPaste = chars !== input;
+
+        // If this wasn't a paste and meta/ctrl are set, let other handlers deal with it
+        // (still allow single characters like Option+b for word navigation which are handled above)
+        if (!wasPaste && (key.ctrl || key.meta)) {
+          return;
+        }
+
+        // If the entire input was just paste markers, nothing to process
+        if (chars.length === 0) {
+          return;
+        }
+
+        // Filter to printable characters (charCode >= 32 or newlines for multiline)
+        const printable = chars.split('').filter(c => {
+          const code = c.charCodeAt(0);
+          return code >= 32 || (multiline && c === '\n');
+        }).join('');
 
         if (printable) {
           // Check for pasted file path (only if detectFilePaths is enabled)
