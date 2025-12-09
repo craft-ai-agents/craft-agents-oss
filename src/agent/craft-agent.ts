@@ -3,7 +3,7 @@ import type { ContentBlockParam } from '@anthropic-ai/sdk/resources';
 import { z } from 'zod';
 import { getSystemPrompt, getDateTimeContext } from '../prompts/system.ts';
 import type { SubAgentDefinition } from '../agents/types.ts';
-import { updateAgentInstructions as agenticUpdateInstructions, type UpdateInstructionsContext, type UpdateInstructionsResult } from '../agents/instruction-updater.ts';
+import { updateAgentInstructions as agenticUpdateInstructions, type UpdateInstructionsContext, type UpdateInstructionsResult, type UpdateInstructionsProgressEvent } from '../agents/instruction-updater.ts';
 import { getWorkspaceAccessTokenAsync, isWorkspaceTokenExpiredAsync, updateWorkspaceOAuthTokensAsync, type Workspace } from '../config/storage.ts';
 import { getCredentialManager } from '../credentials/index.ts';
 import { updatePreferences, loadPreferences, type UserPreferences } from '../config/preferences.ts';
@@ -87,6 +87,16 @@ export function setUpdateAgentInstructionsResultCallback(
   callback: ((success: boolean) => Promise<void>) | null
 ): void {
   updateAgentInstructionsResultCallback = callback;
+}
+
+// Progress callback for update_agent_instructions (set by TUI)
+// Called during agentic update to show nested tool progress
+let updateAgentInstructionsProgressCallback: ((event: UpdateInstructionsProgressEvent) => void) | null = null;
+
+export function setUpdateAgentInstructionsProgressCallback(
+  callback: ((event: UpdateInstructionsProgressEvent) => void) | null
+): void {
+  updateAgentInstructionsProgressCallback = callback;
 }
 
 // ============================================================
@@ -356,7 +366,11 @@ Example bad content:
                 agentName: context.agentName,
               });
 
-              const result: UpdateInstructionsResult = await agenticUpdateInstructions(formattedContent, context);
+              const result: UpdateInstructionsResult = await agenticUpdateInstructions(
+                formattedContent,
+                context,
+                updateAgentInstructionsProgressCallback ?? undefined
+              );
 
               // Notify TUI of result to invalidate cache
               if (updateAgentInstructionsResultCallback) {

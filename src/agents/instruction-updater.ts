@@ -34,6 +34,32 @@ export interface UpdateInstructionsResult {
   updatedContent?: string;
 }
 
+/** Progress events emitted during agentic instruction update */
+export interface UpdateInstructionsProgressEvent {
+  type: 'tool_start' | 'tool_complete' | 'status';
+  toolName?: string;
+  message: string;
+}
+
+/**
+ * Format a tool name into a user-friendly progress message
+ */
+function formatToolProgressMessage(toolName: string): string {
+  // Handle MCP tools (mcp__craft__blocks_get -> "Reading document...")
+  if (toolName.includes('blocks_get')) {
+    return 'Reading document structure...';
+  }
+  if (toolName.includes('blocks_update') || toolName.includes('markdown_add') || toolName.includes('markdown_replace')) {
+    return 'Writing update to document...';
+  }
+  if (toolName.includes('blocks_add')) {
+    return 'Adding content to document...';
+  }
+  // Default: clean up the tool name
+  const cleanName = toolName.replace(/^mcp__\w+__/, '').replace(/_/g, ' ');
+  return `Running ${cleanName}...`;
+}
+
 /**
  * Agentically update agent instructions in a Craft document
  *
@@ -46,6 +72,7 @@ export interface UpdateInstructionsResult {
 export async function updateAgentInstructions(
   requestedUpdate: string,
   context: UpdateInstructionsContext,
+  onProgress?: (event: UpdateInstructionsProgressEvent) => void,
 ): Promise<UpdateInstructionsResult> {
   debug('[instruction-updater] Starting agentic update for agent:', context.agentName);
   debug('[instruction-updater] Document ID:', context.documentId);
@@ -176,11 +203,19 @@ Or if something went wrong:
     let result: UpdateInstructionsResult | null = null;
 
     for await (const message of query({ prompt, options })) {
-      // Log tool usage for debugging
+      // Log tool usage for debugging and emit progress events
       if (message.type === 'assistant') {
         for (const block of message.message.content) {
           if (block.type === 'tool_use') {
             debug('[instruction-updater] Tool call:', block.name, JSON.stringify(block.input));
+            // Emit progress event for tool start
+            const progressMessage = formatToolProgressMessage(block.name);
+            debug('[instruction-updater] Emitting progress event:', progressMessage, 'callback exists:', !!onProgress);
+            onProgress?.({
+              type: 'tool_start',
+              toolName: block.name,
+              message: progressMessage,
+            });
           }
         }
       }

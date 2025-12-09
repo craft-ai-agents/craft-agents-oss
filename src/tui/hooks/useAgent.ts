@@ -5,11 +5,12 @@ import {
   type Question,
   setUpdateAgentInstructionsContextProvider,
   setUpdateAgentInstructionsResultCallback,
+  setUpdateAgentInstructionsProgressCallback,
   setReloadAgentInstructionsCallback,
   setGlobalPermissionHandler,
   resolveGlobalPermission,
 } from '../../agent/craft-agent.ts';
-import type { UpdateInstructionsContext } from '../../agents/instruction-updater.ts';
+import type { UpdateInstructionsContext, UpdateInstructionsProgressEvent } from '../../agents/instruction-updater.ts';
 import type { Message } from '../components/Messages.tsx';
 import type { FileAttachment } from '../utils/files.ts';
 import { setTerminalProgressIndeterminate, clearTerminalProgress } from '../utils/terminalProgress.ts';
@@ -220,6 +221,8 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
   const reloadAgentRef = useRef<(() => Promise<boolean>) | null>(null);
   const sendMessageRef = useRef<((input: string, attachments?: FileAttachment[], options?: { hideUserMessage?: boolean }) => Promise<void>) | null>(null);
   const activeAgentContextRef = useRef<UpdateInstructionsContext | null>(null);
+  // Track the message ID for update_agent_instructions tool (for progress updates)
+  const updateInstructionsToolMsgIdRef = useRef<string | null>(null);
 
   // Load saved conversation on initial mount (only if edited within last 5 minutes)
   const initialLoadDoneRef = useRef(false);
@@ -395,8 +398,10 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
       // Clear agent instructions callbacks
       setUpdateAgentInstructionsContextProvider(null);
       setUpdateAgentInstructionsResultCallback(null);
+      setUpdateAgentInstructionsProgressCallback(null);
       setGlobalPermissionHandler(null);
       activeAgentContextRef.current = null;
+      updateInstructionsToolMsgIdRef.current = null;
       setActiveAgentDefinition(null);
       // Don't clear availableAgents here - it causes race condition with token refresh
     };
@@ -410,11 +415,6 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
       agentRef.current.onPermissionRequest = (request) => {
         setPendingPermission(request);
       };
-      // Set up global permission handler (for MCP tools like update_agent_instructions)
-      // Routes global permission requests to the same UI as agent permissions
-      setGlobalPermissionHandler((request) => {
-        setPendingPermission(request);
-      });
       // Set up AskUserQuestion callback
       agentRef.current.onAskUserQuestion = (request) => {
         setPendingQuestion(request);
@@ -433,6 +433,26 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
         agentRef.current.setSessionId(workspace.sessionId);
       }
     }
+
+    // Always set up global callbacks (may have been cleared by workspace change)
+    // These are module-level callbacks, not per-agent, so must be re-set each time
+    setGlobalPermissionHandler((request) => {
+      setPendingPermission(request);
+    });
+    setUpdateAgentInstructionsProgressCallback((event: UpdateInstructionsProgressEvent) => {
+      const toolMsgId = updateInstructionsToolMsgIdRef.current;
+      if (toolMsgId && event.type === 'tool_start') {
+        debug('[useAgent] Update instructions progress:', event.message, 'toolMsgId:', toolMsgId);
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === toolMsgId
+              ? { ...m, content: event.message }
+              : m
+          )
+        );
+      }
+    });
+
     return agentRef.current;
   }, [config, model, webSearchEnabled, webFetchEnabled, codeExecutionEnabled, workspace]);
 
@@ -607,6 +627,11 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
             // Clear status and mark that we have an executing tool
             setStatus('');
             setHasExecutingTool(true);
+            // Track update_agent_instructions tool for progress updates
+            if (event.toolName === 'update_agent_instructions') {
+              updateInstructionsToolMsgIdRef.current = toolMessageId;
+            }
+
             setMessages((prev) => {
               // Check if a tool message with this ID already exists
               const existingIndex = prev.findIndex((m) => m.id === toolMessageId);
@@ -642,6 +667,12 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
             const startTime = toolStartTimeRef.current.get(event.toolUseId);
             const duration = startTime ? Date.now() - startTime : undefined;
             toolStartTimeRef.current.delete(event.toolUseId);
+
+            // Clear update_agent_instructions tracking if this was that tool
+            const toolMessageId = `tool-${event.toolUseId}`;
+            if (updateInstructionsToolMsgIdRef.current === toolMessageId) {
+              updateInstructionsToolMsgIdRef.current = null;
+            }
 
             // Clear executing tool flag if no more tools are running
             if (toolStartTimeRef.current.size === 0) {
