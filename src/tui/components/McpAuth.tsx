@@ -33,7 +33,7 @@ export const McpAuth: React.FC<McpAuthProps> = ({
   const [completedServers, setCompletedServers] = useState<string[]>([]);
   const [skippedServers, setSkippedServers] = useState<string[]>([]);
   const [bearerToken, setBearerToken] = useState('');
-  const [failureReason, setFailureReason] = useState<'oauth' | 'bearer' | null>(null);
+  const [failureReason, setFailureReason] = useState<'oauth' | 'bearer' | 'schema-error' | null>(null);
   const oauthRef = useRef<CraftOAuth | null>(null);
   const isCancelledRef = useRef(false);
 
@@ -71,8 +71,8 @@ export const McpAuth: React.FC<McpAuthProps> = ({
       startAuthForCurrentServer();
     }
 
-    // 's' to skip when in confirm step
-    if (input === 's' && step === 'confirm') {
+    // 's' to skip when in confirm or error step
+    if (input === 's' && (step === 'confirm' || step === 'error')) {
       skipCurrentServer();
     }
 
@@ -81,6 +81,50 @@ export const McpAuth: React.FC<McpAuthProps> = ({
       skipCurrentServer();
     }
   });
+
+  // Validate a no-auth (public) server
+  const validateNoAuthServer = useCallback(async (server: McpServerConfig): Promise<boolean | 'validation-failed' | 'schema-error'> => {
+    if (isCancelledRef.current) return false;
+
+    debug('[McpAuth] Testing connection to no-auth server:', server.name);
+    setStatus(`Testing connection to ${server.name}...`);
+
+    try {
+      // Get Claude credentials for validation
+      const manager = getCredentialManager();
+      const claudeApiKey = await manager.getApiKey();
+      const claudeOAuthToken = await manager.getClaudeOAuth();
+
+      const validationResult = await validateMcpConnection({
+        mcpUrl: server.url,
+        // No mcpAccessToken for public servers
+        claudeApiKey: claudeApiKey || undefined,
+        claudeOAuthToken: claudeOAuthToken || undefined,
+      });
+
+      if (!validationResult.success) {
+        debug('[McpAuth] No-auth validation failed for', server.name, ':', validationResult.error);
+        setError(`${server.name}: ${getValidationErrorMessage(validationResult)}`);
+        // Check if this is a schema error (can't be fixed with bearer token)
+        if (validationResult.errorType === 'invalid-schema') {
+          return 'schema-error' as const;
+        }
+        // For connection errors, we can try bearer token as fallback
+        setFailureReason('oauth');
+        return 'validation-failed' as const;
+      }
+
+      debug('[McpAuth] No-auth server validated successfully:', server.name);
+      return true;
+    } catch (err) {
+      if (isCancelledRef.current) return false;
+      const message = err instanceof Error ? err.message : 'Validation failed';
+      debug('[McpAuth] Validation error for', server.name, ':', message);
+      setError(`${server.name}: ${message}`);
+      setFailureReason('oauth');
+      return 'validation-failed' as const;
+    }
+  }, []);
 
   const authenticateServer = useCallback(async (server: McpServerConfig): Promise<boolean | 'oauth-failed'> => {
     if (isCancelledRef.current) return false;
@@ -176,9 +220,63 @@ export const McpAuth: React.FC<McpAuthProps> = ({
     const server = servers[currentServerIndex];
     if (!server) return;
 
-    debug('[McpAuth] Starting authentication for server', currentServerIndex + 1, 'of', servers.length, ':', server.name);
-    setStep('authenticating');
+    debug('[McpAuth] Processing server', currentServerIndex + 1, 'of', servers.length, ':', server.name, 'requiresAuth:', server.requiresAuth);
     setError(null);
+
+    // Check if this is a no-auth (public) server - validate directly without auth
+    if (!server.requiresAuth && !server.bearerToken) {
+      debug('[McpAuth] No-auth server detected, validating directly');
+      setStep('validating');
+
+      const result = await validateNoAuthServer(server);
+
+      if (isCancelledRef.current) return;
+
+      if (result === 'schema-error') {
+        // Schema validation error - can't be fixed with bearer token, must skip or fix server
+        debug('[McpAuth] Schema validation error, cannot continue');
+        setFailureReason('schema-error');
+        setStep('error');
+        return;
+      }
+
+      if (result === 'validation-failed') {
+        // Connection validation failed - offer bearer token as fallback (maybe it needs auth after all)
+        debug('[McpAuth] Validation failed, offering bearer token fallback');
+        setBearerToken('');
+        setStep('bearer-token');
+        return;
+      }
+
+      if (!result) {
+        debug('[McpAuth] Server validation failed');
+        setStep('error');
+        return;
+      }
+
+      // Validation passed
+      setCompletedServers((prev) => [...prev, server.name]);
+
+      // Move to next server or complete
+      const nextIndex = currentServerIndex + 1;
+      if (nextIndex < servers.length) {
+        setCurrentServerIndex(nextIndex);
+        setStep('confirm');
+        setStatus('');
+      } else {
+        setStep('complete');
+        setStatus('All servers validated');
+        setTimeout(() => {
+          if (!isCancelledRef.current) {
+            onComplete(true);
+          }
+        }, 1000);
+      }
+      return;
+    }
+
+    // Regular auth flow for servers that require authentication
+    setStep('authenticating');
 
     const result = await authenticateServer(server);
 
@@ -222,7 +320,7 @@ export const McpAuth: React.FC<McpAuthProps> = ({
         }
       }, 1000);
     }
-  }, [servers, currentServerIndex, authenticateServer, onComplete]);
+  }, [servers, currentServerIndex, authenticateServer, validateNoAuthServer, onComplete]);
 
   // Handle bearer token submission
   const handleBearerTokenSubmit = useCallback(async (token: string) => {
@@ -323,7 +421,7 @@ export const McpAuth: React.FC<McpAuthProps> = ({
     <Box flexDirection="column" paddingX={1}>
       {/* Header */}
       <Box marginBottom={1}>
-        <Text bold>MCP Server Authentication</Text>
+        <Text bold>MCP Server Setup</Text>
         {servers.length > 1 && (
           <Text dimColor> - {currentServerIndex + 1} of {servers.length}</Text>
         )}
@@ -358,9 +456,11 @@ export const McpAuth: React.FC<McpAuthProps> = ({
       {step === 'confirm' && currentServer && (
         <Box marginY={1} flexDirection="column">
           <Text>
-            Ready to authenticate with <Text bold color="cyan">{currentServer.name}</Text>
+            Ready to {currentServer.requiresAuth ? 'authenticate with' : 'test connection to'} <Text bold color="cyan">{currentServer.name}</Text>
           </Text>
-          <Text dimColor>This will open your browser for authorization.</Text>
+          {currentServer.requiresAuth && (
+            <Text dimColor>This will open your browser for authorization.</Text>
+          )}
         </Box>
       )}
 
@@ -391,9 +491,13 @@ export const McpAuth: React.FC<McpAuthProps> = ({
       {step === 'bearer-token' && currentServer && (
         <Box marginY={1} flexDirection="column">
           <Text color="yellow">
-            {failureReason === 'bearer'
+            {failureReason === 'schema-error'
+              ? `Connection failed for ${currentServer.name}`
+              : failureReason === 'bearer'
               ? `Token validation failed for ${currentServer.name}`
-              : `OAuth authentication failed for ${currentServer.name}`}
+              : currentServer.requiresAuth
+              ? `OAuth authentication failed for ${currentServer.name}`
+              : `Connection failed for ${currentServer.name}`}
           </Text>
           {error && <Text dimColor>{error}</Text>}
           <Box marginTop={1} flexDirection="column">
@@ -415,10 +519,15 @@ export const McpAuth: React.FC<McpAuthProps> = ({
       )}
 
       {/* Error step */}
-      {step === 'error' && (
+      {step === 'error' && currentServer && (
         <Box marginY={1} flexDirection="column">
-          <Text color="red">✗ Authentication failed</Text>
+          <Text color="red">✗ {failureReason === 'schema-error' ? 'Validation failed' : 'Authentication failed'}</Text>
           {error && <Text color="red">{error}</Text>}
+          {failureReason === 'schema-error' && (
+            <Box marginTop={1}>
+              <Text dimColor>This server has schema validation errors that cannot be fixed with authentication. Use an alternative server instead.</Text>
+            </Box>
+          )}
         </Box>
       )}
 
@@ -434,7 +543,7 @@ export const McpAuth: React.FC<McpAuthProps> = ({
           <Text dimColor>Press Enter to submit, Tab to skip, Esc to cancel</Text>
         )}
         {step === 'error' && (
-          <Text dimColor>Press Esc to close</Text>
+          <Text dimColor>Press Esc to cancel</Text>
         )}
       </Box>
     </Box>

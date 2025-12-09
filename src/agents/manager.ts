@@ -468,6 +468,18 @@ export class SubAgentManager {
     return results;
   }
 
+  /**
+   * Get no-auth (public) MCP servers that need validation
+   * Returns all servers without requiresAuth flag
+   */
+  getNoAuthMcpServers(definition: SubAgentDefinition): McpServerConfig[] {
+    if (!definition.mcpServers) {
+      return [];
+    }
+
+    return definition.mcpServers.filter(config => !config.requiresAuth && !config.bearerToken);
+  }
+
   // ============================================================
   // API Server Config
   // ============================================================
