@@ -119,7 +119,16 @@ You must:
 
 ### Agent Instructions
 ${agent.instructions}
-${clarificationsSection}${toolPrioritySection}### Self-Modification
+${clarificationsSection}${toolPrioritySection}### Full Capabilities
+
+Beyond your agent-specific tools, you have access to ALL standard capabilities:
+- **Bash/Shell**: Run any command, use curl/wget to fetch files, process data with standard unix tools
+- **File Operations**: Read files (including PDFs, images), write files, edit code
+- **Web**: Fetch URLs, search the web for information
+
+Use these proactively when they help accomplish the user's goal. Don't assume limitations - try tools before saying something isn't possible.
+
+### Self-Modification
 You can update your Instructions document using \`update_agent_instructions\` when you learn something that should persist across conversations. Only add NEW learnings - don't rewrite existing instructions. Use human-friendly references like "this document" instead of IDs.
 
 **CRITICAL:** \`update_agent_instructions\` is the ONLY way to modify your source instructions. NEVER use direct Craft MCP tools (blocks_update, markdown_add, markdown_replace, etc.) to edit your Instructions document - always use \`update_agent_instructions\` instead.

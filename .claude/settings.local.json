@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "WebSearch",
-      "Bash(bun run typecheck:*)",
-      "Bash(git show:*)"
-    ]
-  }
-}
