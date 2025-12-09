@@ -67,6 +67,12 @@ src/
 │   └── validation.ts         # SDK-based MCP connection validation
 ├── prompts/
 │   └── system.ts             # System prompt with date/time and preferences
+├── tracing/
+│   ├── index.ts              # TracingManager singleton + exports
+│   ├── config.ts             # TracingConfig + env var loading
+│   ├── pii-redactor.ts       # PiiRedactor class (hash + block patterns)
+│   ├── span-processor.ts     # RedactingSpanProcessor wraps export
+│   └── instrumentation.ts    # TraceInstrumentation captures SDK events
 └── tui/
     ├── App.tsx               # Main app, command routing
     ├── components/
@@ -268,6 +274,44 @@ API responses can be huge (e.g., full web page content). To prevent context over
 - PKCE for security, state for CSRF protection
 - Local callback server on port 8914
 - Automatic token refresh
+
+### Telemetry (`src/tracing/`)
+Optional OpenTelemetry tracing with built-in PII protection. Disabled by default.
+
+**Key files:**
+- `config.ts` - `TracingConfig` interface and environment variable loading
+- `pii-redactor.ts` - `PiiRedactor` class for hashing IDs and blocking sensitive patterns
+- `span-processor.ts` - `RedactingSpanProcessor` wraps exporter with PII filtering
+- `instrumentation.ts` - `TraceInstrumentation` captures SDK events as spans
+- `index.ts` - `TracingManager` singleton entry point
+
+**Environment variables:**
+```bash
+# Enable tracing
+CRAFT_TRACING_ENABLED=true
+
+# OTLP exporter (default)
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+OTEL_SERVICE_NAME=craft-terminal-agent
+
+# LangSmith exporter
+CRAFT_TRACING_EXPORTER=langsmith
+LANGSMITH_API_KEY=ls-xxx
+LANGSMITH_PROJECT=my-project
+
+# Console exporter (debug)
+CRAFT_TRACING_EXPORTER=console
+```
+
+**Data handling:**
+- **Captured (safe)**: Token metrics, cost, duration, tool names, model, hashed session/workspace IDs
+- **Blocked (never sent)**: User messages, file contents, tool inputs/outputs, error messages, API responses
+- **Pattern blocked**: API keys, bearer tokens, emails, user paths (`/Users/*`, `/home/*`)
+
+**Architecture:**
+```
+SDK Events → TraceInstrumentation → PiiRedactor → RedactingSpanProcessor → Exporter
+```
 
 ### TUI Layer (`src/tui/`)
 **App.tsx** - Main component handling:

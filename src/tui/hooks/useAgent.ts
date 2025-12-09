@@ -417,6 +417,10 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
       agentRef.current.onAskUserQuestion = (request) => {
         setPendingQuestion(request);
       };
+      // Set up debug callback for SDK message logging
+      agentRef.current.onDebug = (message) => {
+        debug('[SDK]', message);
+      };
       // Sync current state to the newly created agent
       agentRef.current.setModel(model);
       agentRef.current.setWebSearchEnabled(webSearchEnabled);
