@@ -4,7 +4,6 @@
  * Manages the lifecycle of sub-agents:
  * - Discovery: Scan "Agents" folder via MCP
  * - Activation: Load and activate agents
- * - Self-modification: Update agent instructions
  */
 
 import { CraftMcpClient } from '../mcp/client.ts';
@@ -24,7 +23,6 @@ import {
   saveRegistry,
   loadDefinition,
   saveDefinition,
-  invalidateDefinition,
   getServerCredentialsAsync,
   isCredentialExpiredAsync,
   saveServerCredentialsAsync,
@@ -310,48 +308,6 @@ export class SubAgentManager {
     }
     const agent = this.registry?.agents.find((a) => a.id === this.activeAgent.agentId);
     return agent?.name || null;
-  }
-
-  // ============================================================
-  // Self-Modification
-  // ============================================================
-
-  /**
-   * Update the active agent's instructions
-   * Appends content to the Instructions subpage
-   */
-  async updateInstructions(content: string): Promise<boolean> {
-    if (this.activeAgent.type !== 'sub-agent' || !this.activeAgent.agentId) {
-      return false;
-    }
-
-    const definition = await this.getDefinition(this.activeAgent.agentId);
-    if (!definition) {
-      debug('[updateInstructions] No definition found for agent:', this.activeAgent.agentId);
-      return false;
-    }
-    if (!definition.instructionsBlockId) {
-      debug('[updateInstructions] No instructionsBlockId in definition - cannot save to Craft');
-      return false;
-    }
-
-    try {
-      // Append to the instructions block using markdown_add
-      await this.callMcpTool('markdown_add', {
-        documentId: this.registry?.agents.find((a) => a.id === this.activeAgent.agentId)?.documentId,
-        blockId: definition.instructionsBlockId,
-        content: `\n\n${content}`,
-        position: 'end',
-      });
-
-      // Invalidate cache so next fetch gets updated content
-      invalidateDefinition(this.workspaceId, this.activeAgent.agentId);
-
-      return true;
-    } catch (error) {
-      debug('Failed to update agent instructions:', error);
-      return false;
-    }
   }
 
   // ============================================================
