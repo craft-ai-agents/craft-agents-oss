@@ -456,7 +456,7 @@ export const McpAuth: React.FC<McpAuthProps> = ({
       {step === 'confirm' && currentServer && (
         <Box marginY={1} flexDirection="column">
           <Text>
-            Ready to {currentServer.requiresAuth ? 'authenticate with' : 'validate'} <Text bold color="cyan">{currentServer.name}</Text>
+            Ready to {currentServer.requiresAuth ? 'authenticate with' : 'test connection to'} <Text bold color="cyan">{currentServer.name}</Text>
           </Text>
           {currentServer.requiresAuth && (
             <Text dimColor>This will open your browser for authorization.</Text>
