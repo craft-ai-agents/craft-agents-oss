@@ -54,11 +54,11 @@ export async function install(version: string | null): Promise<VersionInstallRes
     return { success: false, error: 'Failed to get the manifest' };
   }
 
-  const currentArch = process.arch;
-  const binary = manifest.binaries[currentArch];
+  const platform = `${process.platform}-${process.arch}`;
+  const binary = manifest.binaries[platform];
   if (binary == null) {
-    console.error(`No binary found for architecture: ${currentArch}`);
-    return { success: false, error: `No binary found for architecture: ${currentArch}` };
+    console.error(`No binary found for platform: ${platform}`);
+    return { success: false, error: `No binary found for platform: ${platform}` };
   }
   const binaryUrl = binary.url;
   const binarySha256 = binary.sha256;

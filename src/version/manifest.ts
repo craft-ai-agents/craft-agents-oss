@@ -1,8 +1,8 @@
-const VERSIONS_URL = 'https://versions.chaps.app/latest';
+const VERSIONS_URL = 'https://version.chaps.app';
 
 export async function getLatestVersion(): Promise<string | null> {
     try {
-      const response = await fetch(VERSIONS_URL);
+      const response = await fetch(`${VERSIONS_URL}/latest`);
       const data = await response.json();
       const version = (data as { version?: string }).version;
       if (typeof version !== 'string') {
@@ -17,7 +17,9 @@ export async function getLatestVersion(): Promise<string | null> {
 
 export async function getManifest(version: string): Promise<VersionManifest | null> {
     try {
-        const response = await fetch(`${VERSIONS_URL}/${version}/manifest.json`);
+        const url = `${VERSIONS_URL}/${version}/manifest.json`;
+        console.log(`Getting manifest for version: ${url}`);
+        const response = await fetch(url);
         const data = await response.json();
         return data as VersionManifest;
     } catch (error) {
