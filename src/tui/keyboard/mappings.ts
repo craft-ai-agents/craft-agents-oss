@@ -37,14 +37,18 @@ interface InkKey {
 
 /**
  * Shift+Enter detection
- * Ghostty sends \x1b[27;2;13~ (fixterms), Ink parses this and delivers:
- * - input='\r' with key.meta=true (Ink's interpretation of the escape sequence)
- * Also check for raw sequence in case Ink version changes behavior
+ * Ghostty sends \x1b[27;2;13~ (fixterms). Different Ink versions handle this differently:
+ * - Ink 5: input='\r' (char code 13) with all key flags false
+ * - Ink 4: input='\r' with key.meta=true
+ *
+ * We detect Shift+Enter as: char code 13 WITHOUT key.return being set
+ * (Regular Enter sets key.return=true, Shift+Enter doesn't in Ink 5)
  */
 export function isShiftEnter(input: string, key: InkKey): boolean {
   return (
-    (input === '\r' && key.meta === true) ||  // Ghostty/modern terminals (Ink's parsing)
-    input === '[27;2;13~'                      // Raw fixterms if Ink doesn't parse
+    (input === '\r' && key.return !== true) ||  // Ink 5: char 13 without return flag
+    (input === '\r' && key.meta === true) ||    // Ink 4: Ghostty/modern terminals
+    input === '[27;2;13~'                       // Raw fixterms if Ink doesn't parse
   );
 }
 
