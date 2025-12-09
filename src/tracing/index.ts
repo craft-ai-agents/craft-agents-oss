@@ -115,8 +115,10 @@ export class TracingManager {
 
       case 'otlp':
       default:
+        debug('[Tracing] Creating OTLP exporter with endpoint:', this.config.endpoint);
         return new OTLPTraceExporter({
           url: this.config.endpoint,
+          headers: this.config.headers,
         });
     }
   }

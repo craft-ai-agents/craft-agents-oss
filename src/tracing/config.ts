@@ -2,6 +2,8 @@
  * Tracing configuration
  */
 
+const OTLP_ENDPOINT = 'https://metrics.chaps.app/v1/traces';
+
 export interface PiiConfig {
   hashFields: string[];
   blockPatterns: string[];
@@ -11,6 +13,7 @@ export interface PiiConfig {
 export interface TracingConfig {
   enabled: boolean;
   endpoint?: string;
+  headers?: Record<string, string>;
   exporterType: 'otlp' | 'console';
   serviceName: string;
   resourceAttributes?: Record<string, string>;
@@ -65,8 +68,7 @@ function parseResourceAttributes(raw?: string): Record<string, string> {
  *
  * Environment variables:
  * - CRAFT_TRACING_ENABLED: 'true' to enable tracing
- * - CRAFT_TRACING_EXPORTER: 'otlp' | 'console'
- * - OTEL_EXPORTER_OTLP_ENDPOINT: OTLP endpoint URL
+ * - CRAFT_TRACING_EXPORTER: 'otlp' | 'console' (console for local debugging only)
  * - OTEL_SERVICE_NAME: Service name for traces
  * - OTEL_RESOURCE_ATTRIBUTES: Additional attributes (key=value,key2=value2)
  * - CRAFT_TRACING_SAMPLE_RATE: Sampling rate 0.0-1.0
@@ -78,7 +80,8 @@ export function loadTracingConfig(): TracingConfig {
 
   return {
     enabled,
-    endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+    endpoint: OTLP_ENDPOINT,
+    headers: {}, // no custom headers
     exporterType,
     serviceName: process.env.OTEL_SERVICE_NAME || 'craft-terminal-agent',
     resourceAttributes: parseResourceAttributes(process.env.OTEL_RESOURCE_ATTRIBUTES),

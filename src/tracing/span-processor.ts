@@ -6,7 +6,7 @@ import type {
 import type { Context, Attributes, AttributeValue } from '@opentelemetry/api';
 import type { PiiRedactor } from './pii-redactor.ts';
 import { BLOCKED_FIELDS, SAFE_FIELDS } from './pii-redactor.ts';
-import { debug } from '../tui/utils/debug.ts';
+import { debug, isDebugEnabled } from '../tui/utils/debug.ts';
 
 export class RedactingSpanProcessor implements SpanProcessor {
   private delegate: SpanProcessor;
@@ -23,8 +23,9 @@ export class RedactingSpanProcessor implements SpanProcessor {
   }
 
   onEnd(span: ReadableSpan): void {
-    // redacted copy of span
+    // redacted copy of span (or passthrough in debug mode)
     const redactedSpan = this.redactSpan(span);
+    debug(`[Tracing] Exporting span: ${span.name}, attributes:`, Object.keys(redactedSpan.attributes));
     this.delegate.onEnd(redactedSpan);
   }
 
@@ -37,6 +38,12 @@ export class RedactingSpanProcessor implements SpanProcessor {
   }
 
   private redactSpan(span: ReadableSpan): ReadableSpan {
+    // In debug mode, pass through all attributes without filtering
+    if (isDebugEnabled()) {
+      debug('[Tracing] Debug mode: skipping PII redaction');
+      return span;
+    }
+
     const originalAttributes = span.attributes;
     const redactedAttributes: Attributes = {};
 
@@ -47,20 +54,20 @@ export class RedactingSpanProcessor implements SpanProcessor {
         continue;
       }
 
-      // passthrough
+      // passthrough safe fields
       if (SAFE_FIELDS.has(key)) {
         redactedAttributes[key] = value;
         continue;
       }
 
-      // redaction to everything else
+      // apply redaction to everything else
       const redactedValue = this.redactor.redactAttribute(key, value);
       if (this.isValidAttributeValue(redactedValue)) {
         redactedAttributes[key] = redactedValue as AttributeValue;
       }
     }
 
-    // the proxy that actually redacts
+    // return proxy with redacted attributes
     return new RedactedSpan(span, redactedAttributes);
   }
 

@@ -477,9 +477,11 @@ export class CraftAgent {
       model: this.config.model || 'claude-sonnet-4-5-20250929',
       hasAttachments: !!attachments && attachments.length > 0,
       attachmentCount: attachments?.length || 0,
+      userMessage,  // Pass user message for debug mode tracing
     });
 
     let tracingSuccess = true;
+    let assistantResponse = '';  // Track assistant response for tracing (debug mode)
 
     try {
       // Check if we have binary attachments that need the AsyncIterable interface
@@ -734,6 +736,11 @@ export class CraftAgent {
             // send event to tracing
             tracing?.processEvent(event);
 
+            // Track assistant's text response for tracing
+            if (event.type === 'text_complete') {
+              assistantResponse += event.text;
+            }
+
             if (event.type === 'complete') {
               receivedComplete = true;
             }
@@ -776,8 +783,11 @@ export class CraftAgent {
       yield { type: 'complete' };
     } finally {
       this.currentQuery = null;
-      // end tracing span
-      tracing?.endConversationTurn({ success: tracingSuccess });
+      // end tracing span with assistant response (for debug mode)
+      tracing?.endConversationTurn({
+        success: tracingSuccess,
+        assistantResponse: assistantResponse || undefined,
+      });
     }
   }
 
@@ -957,6 +967,10 @@ export class CraftAgent {
       case 'stream_event': {
         // Streaming partial message
         const event = message.event;
+        // Debug: log all stream events to understand tool result flow
+        if (this.onDebug && event.type !== 'content_block_delta') {
+          this.onDebug(`stream_event: ${event.type}, content_type=${(event as any).content_block?.type || (event as any).delta?.type || 'n/a'}`);
+        }
         if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
           events.push({ type: 'text_delta', text: event.delta.text });
         } else if (event.type === 'content_block_start' && event.content_block.type === 'tool_use') {
@@ -988,43 +1002,64 @@ export class CraftAgent {
         // Debug: log user message structure for tool results
         if (this.onDebug && 'parent_tool_use_id' in message) {
           const hasResult = 'tool_use_result' in message && message.tool_use_result !== undefined;
-          this.onDebug(`User message for tool ${message.parent_tool_use_id}: hasResult=${hasResult}`);
+          this.onDebug(`User message for tool ${message.parent_tool_use_id}: hasResult=${hasResult}, pendingTools=${pendingToolUses.size}`);
         }
 
         // User message (including tool results)
-        if (message.tool_use_result !== undefined && message.parent_tool_use_id) {
-          const toolUse = pendingToolUses.get(message.parent_tool_use_id);
+        // For in-process MCP tools, parent_tool_use_id may be null
+        // In that case, match with the oldest pending tool
+        if (message.tool_use_result !== undefined) {
+          let toolUseId = message.parent_tool_use_id;
+          let toolUse: { name: string; input: Record<string, unknown> } | undefined;
 
-          // Safely stringify result, handling circular references
-          let resultStr: string;
-          if (typeof message.tool_use_result === 'string') {
-            resultStr = message.tool_use_result;
-          } else {
-            try {
-              resultStr = JSON.stringify(message.tool_use_result, null, 2);
-            } catch {
-              resultStr = '[Result contains non-serializable data]';
+          if (toolUseId) {
+            toolUse = pendingToolUses.get(toolUseId);
+          } else if (pendingToolUses.size > 0) {
+            // parent_tool_use_id is null - match with first pending tool (FIFO order)
+            // Map iteration is in insertion order per ES6 spec
+            const firstEntry = pendingToolUses.entries().next().value;
+            if (firstEntry) {
+              [toolUseId, toolUse] = firstEntry;
+              this.onDebug?.(`Matched null parent_tool_use_id to pending tool: ${toolUseId} (${toolUse.name})`);
             }
           }
 
-          // Check if result indicates an error
-          const isError = this.isToolResultError(message.tool_use_result);
+          if (toolUseId) {
+            // Safely stringify result, handling circular references
+            let resultStr: string;
+            if (typeof message.tool_use_result === 'string') {
+              resultStr = message.tool_use_result;
+            } else {
+              try {
+                resultStr = JSON.stringify(message.tool_use_result, null, 2);
+              } catch {
+                resultStr = '[Result contains non-serializable data]';
+              }
+            }
 
-          events.push({
-            type: 'tool_result',
-            toolUseId: message.parent_tool_use_id,
-            result: resultStr,
-            isError,
-            input: toolUse?.input,
-          });
+            // Check if result indicates an error
+            const isError = this.isToolResultError(message.tool_use_result);
 
-          pendingToolUses.delete(message.parent_tool_use_id);
+            events.push({
+              type: 'tool_result',
+              toolUseId,
+              result: resultStr,
+              isError,
+              input: toolUse?.input,
+            });
+
+            pendingToolUses.delete(toolUseId);
+          }
         }
         break;
       }
 
       case 'tool_progress': {
-        // Tool is in progress - we already emitted tool_start
+        // Debug: log tool_progress structure to understand when tools complete
+        if (this.onDebug) {
+          const progress = message as any;
+          this.onDebug(`tool_progress: tool_use_id=${progress.tool_use_id}, content_type=${progress.content?.type}, is_error=${progress.is_error}`);
+        }
         break;
       }
 

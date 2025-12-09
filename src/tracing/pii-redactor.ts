@@ -26,6 +26,42 @@ export const BLOCKED_FIELDS = new Set([
 ]);
 
 export const SAFE_FIELDS = new Set([
+  'langsmith.span.kind',
+
+  // genai semantic conventions
+  'gen_ai.system',
+  'gen_ai.operation.name',
+  'gen_ai.request.model',
+  'gen_ai.response.model',
+  'gen_ai.tool.name',
+  'gen_ai.usage.input_tokens',
+  'gen_ai.usage.output_tokens',
+  'gen_ai.usage.prompt_tokens',
+  'gen_ai.usage.completion_tokens',
+  'gen_ai.usage.total_tokens',
+  'gen_ai.usage.cache_read_input_tokens',
+  'gen_ai.usage.cache_creation_input_tokens',
+  'gen_ai.usage.cache_read_tokens',
+  'gen_ai.usage.cache_creation_tokens',
+  'gen_ai.usage.cost',
+
+  // langsmith indexed message format (values are placeholder in non-debug mode)
+  'gen_ai.prompt.0.role',
+  'gen_ai.prompt.0.content',
+  'gen_ai.completion.0.role',
+  'gen_ai.completion.0.content',
+
+  // traceloop format (values are placeholder in non-debug mode)
+  'traceloop.span.kind',
+  'traceloop.entity.input',
+  'traceloop.entity.output',
+
+  // llm token count format
+  'llm.token_count.prompt',
+  'llm.token_count.completion',
+  'llm.token_count.total',
+
+  // legacy token fields (keep for backwards compat)
   'input_tokens',
   'output_tokens',
   'cache_read_tokens',
@@ -39,7 +75,7 @@ export const SAFE_FIELDS = new Set([
   'start_time',
   'end_time',
 
-  // model
+  // model (legacy)
   'model',
   'model_version',
 
@@ -51,12 +87,17 @@ export const SAFE_FIELDS = new Set([
   // status
   'status',
   'success',
-  'error_type',  // type only
+  'error_type',
+  'error_occurred',
+  'orphaned',
+  'failure_reason',
+  'debug_mode',
 
   // counts
   'message_count',
   'turn_count',
   'attachment_count',
+  'has_attachments',
 
   // these are hashed but included here as safe for completeness
   'session_id',
