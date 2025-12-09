@@ -238,10 +238,21 @@ Examples: "Search the web using Exa neural search", "Create and edit Craft docum
 ONLY extract concerns that are ACTUAL issues that could prevent the agent from working correctly.
 DO NOT include trivial, obvious, or non-actionable items. Quality over quantity.
 
+CRITICAL: Concerns must be based on EXISTING content in the document.
+- If no Instructions section is found, DO NOT create concerns asking "What should this agent do?"
+- If instructions are empty or minimal, DO NOT suggest general capabilities or features
+- Suggested answers must NEVER imply new functionality not already in the document
+- A concern is about CLARIFYING existing content, not ADDING new content
+
+When NO instructions are found:
+- Return empty concerns array []
+- Use the info array to notify: "No Instructions section found in document."
+- The user can add instructions themselves - do not prompt them with suggestions
+
 Types:
 1. CONFUSING: Instructions that could genuinely be interpreted multiple ways
 2. CONFLICTING: Clear contradictions that need resolution
-3. MISSING: Critical info without which the agent cannot function
+3. MISSING: Critical info WITHOUT which existing functionality cannot work
 4. GENERAL: Significant risks or issues (not minor edge cases)
 
 For each concern, include:
