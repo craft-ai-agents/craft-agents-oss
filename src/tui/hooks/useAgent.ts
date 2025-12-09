@@ -19,7 +19,7 @@ import {
 import { getCredentialManager } from '../../credentials/index.ts';
 import { CraftMcpClient } from '../../mcp/client.ts';
 import { SubAgentManager } from '../../agents/manager.ts';
-import type { SubAgentDefinition, McpServerConfig, ApiConfig } from '../../agents/types.ts';
+import type { SubAgentDefinition, McpServerConfig, ApiConfig, Concern } from '../../agents/types.ts';
 import type { ExtractionProgressEvent } from '../../agents/extractor.ts';
 import { invalidateDefinition, loadRegistry, clearAgentCredentialsAsync } from '../../agents/cache.ts';
 import { CraftOAuth, getMcpBaseUrl } from '../../auth/oauth.ts';
@@ -41,20 +41,21 @@ export interface PendingApiAuthRequest {
   definition: SubAgentDefinition;
 }
 
-// Review request for post-activation clarification
-export interface PendingReviewRequest {
-  agentId: string;
-  agentName: string;
-  definition: SubAgentDefinition;
-}
-
-// Pending clarifications (not yet saved to Craft document)
+// Pending clarifications (for saving to Craft document)
 export interface PendingClarifications {
   agentName: string;
   agentId: string;
   definition: SubAgentDefinition;
   answers: Record<string, string>;
   refinementRound: number;
+}
+
+// Pending review request (concerns from extraction that need user input)
+export interface PendingReviewRequest {
+  agentId: string;
+  agentName: string;
+  definition: SubAgentDefinition;
+  concerns: Concern[];
 }
 
 // Helper to convert Message to StoredMessage for persistence
@@ -158,14 +159,10 @@ export interface UseAgentResult {
   pendingApiAuth: PendingApiAuthRequest | null;
   completeApiAuth: (success: boolean) => Promise<void>;
   cancelApiAuth: () => void;
-  // Post-activation review for clarifying concerns
+  // Review mode (concerns from extraction that need user input)
   pendingReview: PendingReviewRequest | null;
   completeReview: (answers: Record<string, string>) => Promise<void>;
-  // Refinement mode (after Q&A, before saving)
-  pendingClarifications: PendingClarifications | null;
-  showRefinementOptions: boolean;
-  saveClarifications: () => Promise<void>;
-  continueRefinement: () => void;
+  skipReview: () => Promise<void>;
 }
 
 export function useAgent(config: CraftAgentConfig): UseAgentResult {
@@ -201,9 +198,6 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
   const [pendingMcpAuth, setPendingMcpAuth] = useState<PendingMcpAuthRequest | null>(null);
   const [pendingApiAuth, setPendingApiAuth] = useState<PendingApiAuthRequest | null>(null);
   const [pendingReview, setPendingReview] = useState<PendingReviewRequest | null>(null);
-  const [pendingClarifications, setPendingClarifications] = useState<PendingClarifications | null>(null);
-  const [showRefinementOptions, setShowRefinementOptions] = useState(false);
-  const [reviewShownForAgent, setReviewShownForAgent] = useState<string | null>(null);
 
   const agentRef = useRef<CraftAgent | null>(null);
   const agentManagerRef = useRef<SubAgentManager | null>(null);
@@ -214,7 +208,7 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
   const streamingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const interruptedRef = useRef<boolean>(false);
   const reloadAgentRef = useRef<(() => Promise<boolean>) | null>(null);
-  const sendMessageRef = useRef<((input: string, attachments?: FileAttachment[]) => Promise<void>) | null>(null);
+  const sendMessageRef = useRef<((input: string, attachments?: FileAttachment[], options?: { hideUserMessage?: boolean }) => Promise<void>) | null>(null);
 
   // Load saved conversation on initial mount (only if edited within last 5 minutes)
   const initialLoadDoneRef = useRef(false);
@@ -255,18 +249,6 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
       }
     }
   }, [messages, isProcessing, workspace.id, tokenUsage]);
-
-  // Show refinement options after processing ends when in refinement mode
-  useEffect(() => {
-    // If we just finished processing and we're in refinement mode, show options
-    if (!isProcessing && pendingClarifications && !showRefinementOptions) {
-      // Small delay to let the UI update before showing options
-      const timer = setTimeout(() => {
-        setShowRefinementOptions(true);
-      }, 100);
-      return () => clearTimeout(timer);
-    }
-  }, [isProcessing, pendingClarifications, showRefinementOptions]);
 
   // Helper to get MCP token for current workspace
   const getMcpToken = useCallback(async (): Promise<string | null> => {
@@ -444,25 +426,31 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
     }
   }, [pendingQuestion]);
 
-  const sendMessage = useCallback(async (input: string, attachments?: FileAttachment[]) => {
+  const sendMessage = useCallback(async (
+    input: string,
+    attachments?: FileAttachment[],
+    options?: { hideUserMessage?: boolean }
+  ) => {
     if (isProcessing) return;
 
     const agent = getAgent();
 
-    // Add user message (include attachment names in display)
-    const attachmentInfo = attachments && attachments.length > 0
-      ? `\n[Attached: ${attachments.map(a => a.name).join(', ')}]`
-      : '';
+    // Add user message (include attachment names in display) - unless hidden
+    if (!options?.hideUserMessage) {
+      const attachmentInfo = attachments && attachments.length > 0
+        ? `\n[Attached: ${attachments.map(a => a.name).join(', ')}]`
+        : '';
 
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: `user-${Date.now()}`,
-        type: 'user',
-        content: input + attachmentInfo,
-        timestamp: Date.now(),
-      },
-    ]);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `user-${Date.now()}`,
+          type: 'user',
+          content: input + attachmentInfo,
+          timestamp: Date.now(),
+        },
+      ]);
+    }
 
     setIsProcessing(true);
     setProcessingStartTime(Date.now());
@@ -849,10 +837,8 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
       }
     }
 
-    // Clear review/clarification state from previous workspace
+    // Clear review state from previous workspace
     setPendingReview(null);
-    setPendingClarifications(null);
-    setShowRefinementOptions(false);
 
     // Update workspace state (triggers useEffect to reinitialize MCP proxy)
     setWorkspaceState(newWorkspace);
@@ -935,22 +921,7 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
       content,
       timestamp: Date.now(),
     }]);
-
-    // Trigger review if first-time setup and has concerns with questions
-    // Only show review once per agent activation (prevent repeated questions on auth completion)
-    if (isFirstTimeSetup && reviewShownForAgent !== agentId) {
-      const concernsWithQuestions = definition.concerns?.filter(c => c.suggestedQuestion) || [];
-      if (concernsWithQuestions.length > 0) {
-        debug('[activationComplete] Triggering review with', concernsWithQuestions.length, 'questions');
-        setReviewShownForAgent(agentId);  // Mark review as shown for this agent
-        setPendingReview({
-          agentId,
-          agentName,
-          definition,
-        });
-      }
-    }
-  }, [getAgent, reviewShownForAgent]);
+  }, [getAgent]);
 
   // Sub-agent functions
   const activateAgent = useCallback(async (name: string): Promise<boolean | 'pending_auth'> => {
@@ -1030,6 +1001,18 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
 
       setActiveAgentDefinition(definition);
 
+      // Check if definition has concerns that need user input (only on fresh extraction)
+      if (needsExtraction && definition.concerns && definition.concerns.length > 0) {
+        debug('[useAgent.activateAgent] Concerns found:', definition.concerns.length);
+        setPendingReview({
+          agentId,
+          agentName: name,
+          definition,
+          concerns: definition.concerns,
+        });
+        return 'pending_auth';  // Reuse 'pending_auth' to indicate async flow
+      }
+
       // Check if any MCP servers need authentication
       const serversNeedingAuth = await agentManagerRef.current.getMcpServersNeedingAuth(definition);
       if (serversNeedingAuth.length > 0) {
@@ -1081,11 +1064,8 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
     // Clear callbacks for agent tools
     setUpdateAgentInstructionsCallback(null);
     setReloadAgentInstructionsCallback(null);
-    // Clear review/clarification state to prevent stale UI
+    // Clear review state to prevent stale UI
     setPendingReview(null);
-    setPendingClarifications(null);
-    setShowRefinementOptions(false);
-    setReviewShownForAgent(null);
   }, []);
 
   // Reload current agent instructions (preserves auth credentials)
@@ -1263,111 +1243,28 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
     completeApiAuth(false);
   }, [completeApiAuth]);
 
-  // Complete review - enter refinement mode instead of immediately saving
-  // This stores the clarifications and triggers a message to the agent
-  const completeReview = useCallback(async (answers: Record<string, string>) => {
-    if (!pendingReview || !activeAgentDefinition) {
-      setPendingReview(null);
-      return;
-    }
-
-    debug('[completeReview] Entering refinement mode with answers:', Object.keys(answers).length);
-
-    // Filter out skipped answers (empty)
-    const meaningfulAnswers = Object.entries(answers).filter(
-      ([_, answer]) => answer && answer.trim() !== ''
-    );
-
-    if (meaningfulAnswers.length === 0) {
-      // User skipped all questions - no refinement needed
-      setMessages(prev => [...prev, {
-        id: `review-skip-${Date.now()}`,
-        type: 'system',
-        content: 'Review complete. No clarifications added.',
-        timestamp: Date.now(),
-      }]);
-      setPendingReview(null);
-      return;
-    }
-
-    // Build clarifications text
-    const clarificationsText = meaningfulAnswers
-      .map(([question, answer]) => `Q: ${question}\nA: ${answer}`)
-      .join('\n\n');
-
-    // Store pending clarifications (not saved yet)
-    setPendingClarifications({
-      agentName: pendingReview.agentName,
-      agentId: pendingReview.agentId,
-      definition: pendingReview.definition,
-      answers: Object.fromEntries(meaningfulAnswers),
-      refinementRound: 0,
-    });
-
-    // Inject temporary clarifications into agent context
-    const agent = getAgent();
-    agent.setTemporaryClarifications(clarificationsText);
-
-    // Clear the review modal
-    setPendingReview(null);
-
-    // Send initial message to agent with clarifications context
-    // This triggers the agent to acknowledge and potentially suggest refinements
-    const userMessage = `Here are my clarifications for setting up this agent:
-
-${clarificationsText}
-
-Please acknowledge these clarifications and let me know if you have any suggestions or if anything needs more detail.`;
-
-    // Note: The useEffect for refinement mode will show options after processing ends
-    // sendMessage will be called, and when isProcessing goes false, the useEffect triggers
-    try {
-      await sendMessageRef.current?.(userMessage);
-    } catch (err) {
-      setMessages(prev => [...prev, {
-        id: `review-error-${Date.now()}`,
-        type: 'error',
-        content: `Failed to send clarifications: ${err instanceof Error ? err.message : 'Unknown error'}`,
-        timestamp: Date.now(),
-      }]);
-    }
-  }, [pendingReview, getAgent, activeAgentDefinition]);
-
-  // Save clarifications to Craft document using the existing agent loop
-  const saveClarifications = useCallback(async () => {
-    if (!pendingClarifications) {
-      setPendingClarifications(null);
-      setShowRefinementOptions(false);
-      return;
-    }
-
-    debug('[saveClarifications] Asking agent to save clarifications');
-    setShowRefinementOptions(false);
-
-    // Clear pending clarifications immediately to prevent useEffect from re-showing options
-    const clarificationsToSave = pendingClarifications;
-    setPendingClarifications(null);
+  // Save clarifications to Craft document - sends HIDDEN message to agent
+  // Accepts clarifications directly to avoid React state timing issues
+  const saveClarificationsWithData = useCallback(async (clarifications: PendingClarifications) => {
+    debug('[saveClarifications] Sending hidden save request to agent');
 
     // Clear temporary clarifications - they'll be saved permanently
     const agent = getAgent();
     agent.setTemporaryClarifications(null);
 
     // Build clarifications text
-    const clarificationsText = Object.entries(clarificationsToSave.answers)
+    const clarificationsText = Object.entries(clarifications.answers)
       .map(([question, answer]) => `Q: ${question}\nA: ${answer}`)
       .join('\n\n');
 
-    // Ask the EXISTING agent to save using its Craft MCP tools directly
-    // The agent has access to blocks_get, blocks_update, markdown_add, etc.
-    // It should intelligently merge the clarifications into the document
-
     // Get document ID from the registry
     const registry = loadRegistry(workspace.id);
-    const agentMeta = registry?.agents.find(a => a.id === clarificationsToSave.agentId);
+    const agentMeta = registry?.agents.find(a => a.id === clarifications.agentId);
     const documentId = agentMeta?.documentId;
-    const blockId = clarificationsToSave.definition.instructionsBlockId;
+    const blockId = clarifications.definition.instructionsBlockId;
 
-    const saveMessage = `Update your Instructions document in Craft with these clarifications. This is important:
+    // Build save prompt (NOT shown in UI due to hideUserMessage option)
+    const savePrompt = `Update your Instructions document in Craft with these clarifications. This is important:
 
 1. First, use blocks_get to read the current instructions content
 2. Find any open questions or concerns in the instructions that these clarifications answer
@@ -1383,34 +1280,87 @@ ${clarificationsText}
 The goal is to have clean, actionable instructions without unanswered questions. Remove the questions and integrate the answers naturally into the relevant sections.`;
 
     try {
-      await sendMessageRef.current?.(saveMessage);
-      // Agent will use Craft MCP tools to update the document and respond
-      // After this completes, reload the agent to use updated instructions
+      // Use sendMessage with hideUserMessage - reuses all event handling logic
+      await sendMessageRef.current?.(savePrompt, undefined, { hideUserMessage: true });
+
+      // After save completes, reload the agent to use updated instructions
       if (reloadAgentRef.current) {
         await reloadAgentRef.current();
       }
     } catch (err) {
       setMessages(prev => [...prev, {
-        id: `refinement-error-${Date.now()}`,
+        id: `save-error-${Date.now()}`,
         type: 'error',
-        content: `Failed to save: ${err instanceof Error ? err.message : 'Unknown error'}`,
+        content: `Failed to save clarifications: ${err instanceof Error ? err.message : 'Unknown error'}`,
         timestamp: Date.now(),
       }]);
     }
-  }, [pendingClarifications, getAgent, workspace.id]);
+  }, [getAgent, workspace.id]);
 
-  // Continue refinement - hide options and let user type more
-  const continueRefinement = useCallback(() => {
-    debug('[continueRefinement] User wants to add more input');
-    setShowRefinementOptions(false);
-    // Increment round counter (limits to one round of refinement)
-    setPendingClarifications(prev => prev ? {
-      ...prev,
-      refinementRound: prev.refinementRound + 1,
-    } : null);
-    // Input component will be visible, user can type
-    // After next agent response, we'll show options again via useEffect
-  }, []);
+  // Complete review - user answered the concerns, save and finish activation
+  const completeReview = useCallback(async (answers: Record<string, string>) => {
+    if (!pendingReview) return;
+
+    debug('[completeReview] User answered concerns, saving to document');
+
+    // Build clarifications object
+    const clarifications: PendingClarifications = {
+      agentName: pendingReview.agentName,
+      agentId: pendingReview.agentId,
+      definition: pendingReview.definition,
+      answers,
+      refinementRound: 0,
+    };
+
+    // Clear the review request
+    setPendingReview(null);
+
+    // Go DIRECTLY to save - pass clarifications explicitly
+    // (Can't use state because React hasn't re-rendered yet)
+    await saveClarificationsWithData(clarifications);
+  }, [pendingReview, saveClarificationsWithData]);
+
+  // Skip review - user wants to skip clarifications and continue with activation
+  const skipReview = useCallback(async () => {
+    if (!pendingReview) return;
+
+    debug('[skipReview] User skipped clarifications');
+
+    const { definition, agentId, agentName } = pendingReview;
+    setPendingReview(null);
+
+    // Continue with activation flow - check for MCP auth, API auth, then complete
+    if (agentManagerRef.current) {
+      // Check if MCP servers need authentication
+      const serversNeedingAuth = await agentManagerRef.current.getMcpServersNeedingAuth(definition);
+      if (serversNeedingAuth.length > 0) {
+        setPendingMcpAuth({
+          servers: serversNeedingAuth,
+          agentId,
+          agentName,
+          definition,
+        });
+        return;
+      }
+
+      // Check if APIs need authentication
+      const apisNeedingAuth = await agentManagerRef.current.getApisNeedingAuth(definition);
+      if (apisNeedingAuth.length > 0) {
+        setPendingApiAuth({
+          apis: apisNeedingAuth,
+          agentId,
+          agentName,
+          definition,
+        });
+        return;
+      }
+
+      // No auth needed - complete activation immediately
+      const mcpServers = await agentManagerRef.current.buildMcpServerConfig(definition);
+      const apiServers = await agentManagerRef.current.buildApiServers(definition);
+      activationComplete(definition, mcpServers, apiServers, agentName, true, agentId);
+    }
+  }, [pendingReview, activationComplete]);
 
   const refreshAgents = useCallback(async (): Promise<string[] | { error: string }> => {
     try {
@@ -1523,13 +1473,9 @@ The goal is to have clean, actionable instructions without unanswered questions.
     pendingApiAuth,
     completeApiAuth,
     cancelApiAuth,
-    // Post-activation review for clarifying concerns
+    // Review mode (concerns from extraction that need user input)
     pendingReview,
     completeReview,
-    // Refinement mode (after Q&A, before saving)
-    pendingClarifications,
-    showRefinementOptions,
-    saveClarifications,
-    continueRefinement,
+    skipReview,
   };
 }

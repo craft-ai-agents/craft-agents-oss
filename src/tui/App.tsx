@@ -14,7 +14,6 @@ import { AskUserQuestion } from './components/AskUserQuestion.tsx';
 import { McpAuth } from './components/McpAuth.tsx';
 import { ApiAuth } from './components/ApiAuth.tsx';
 import { AgentReview } from './components/AgentReview.tsx';
-import { RefinementOptions } from './components/RefinementOptions.tsx';
 import { HelpPanel } from './components/HelpPanel.tsx';
 import { useAgent } from './hooks/useAgent.ts';
 import { useHistory } from './hooks/useHistory.ts';
@@ -83,14 +82,10 @@ export const App: React.FC<AppProps> = ({ config, onRequestSetup }) => {
     pendingApiAuth,
     completeApiAuth,
     cancelApiAuth,
-    // Post-activation review
+    // Review mode (concerns from extraction)
     pendingReview,
     completeReview,
-    // Refinement mode
-    pendingClarifications,
-    showRefinementOptions,
-    saveClarifications,
-    continueRefinement,
+    skipReview,
   } = useAgent(config);
 
   const { history, addToHistory } = useHistory();
@@ -1111,24 +1106,14 @@ export const App: React.FC<AppProps> = ({ config, onRequestSetup }) => {
         />
       )}
 
-      {/* Agent review for post-activation clarifications */}
-      {pendingReview && pendingReview.definition.concerns && (
+      {/* Agent review (concerns from extraction that need user input) */}
+      {pendingReview && (
         <Box marginTop={1} paddingX={1}>
           <AgentReview
             agentName={pendingReview.agentName}
-            concerns={pendingReview.definition.concerns || []}
+            concerns={pendingReview.concerns}
             onSubmit={completeReview}
-          />
-        </Box>
-      )}
-
-      {/* Refinement options (after Q&A, before saving) */}
-      {showRefinementOptions && !isProcessing && (
-        <Box marginTop={1} paddingX={1}>
-          <RefinementOptions
-            onDone={saveClarifications}
-            onMoreInput={continueRefinement}
-            isLastRound={(pendingClarifications?.refinementRound ?? 0) >= 1}
+            onSkip={skipReview}
           />
         </Box>
       )}
@@ -1161,7 +1146,7 @@ export const App: React.FC<AppProps> = ({ config, onRequestSetup }) => {
             />
           </Box>
         )}
-        {!showModelSelector && !showHelp && !showAgentMenu && !showWorkspaceSelector && !showWorkspaceAdd && !showWorkspaceRename && !showApiKeyChange && !pendingPermission && !pendingQuestion && !pendingMcpAuth && !pendingApiAuth && !pendingReview && !showRefinementOptions && (
+        {!showModelSelector && !showHelp && !showAgentMenu && !showWorkspaceSelector && !showWorkspaceAdd && !showWorkspaceRename && !showApiKeyChange && !pendingPermission && !pendingQuestion && !pendingMcpAuth && !pendingApiAuth && !pendingReview && (
           <Input
             onSubmit={handleSubmit}
             onPaste={handlePaste}
