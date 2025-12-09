@@ -7,10 +7,12 @@ import { join } from "path";
 export async function downloadBinary(params: { url: string, sha256: string }): Promise<ArrayBuffer | null> {
   const { url, sha256 } = params;
   const response = await fetch(url);
+  console.log(`Fetching binary from: ${url}`);
   const data = await response.arrayBuffer();
   const buffer = Buffer.from(data);
   const hash = createHash('sha256').update(buffer).digest('hex');
   if (hash !== sha256) {
+    console.error(`Checksum mismatch: ${hash} !== ${sha256}`);
     console.error('Checksum mismatch');
     return null;
   }

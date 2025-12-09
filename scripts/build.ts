@@ -74,7 +74,7 @@ for (const target of TARGETS) {
     console.log(`    SHA256: ${hash}`);
 
     manifest.binaries[target.name] = {
-      url: `https://version.chaps.app/${VERSION}/${target.name}${target.ext}`,
+      url: `https://version.chaps.app/${VERSION}/craft-${target.name}${target.ext}`,
       sha256: hash,
       size,
     };
