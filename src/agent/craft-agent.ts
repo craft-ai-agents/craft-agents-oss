@@ -3,7 +3,7 @@ import type { ContentBlockParam } from '@anthropic-ai/sdk/resources';
 import { z } from 'zod';
 import { getSystemPrompt, getDateTimeContext } from '../prompts/system.ts';
 import type { SubAgentDefinition } from '../agents/types.ts';
-import { updateAgentInstructions as agenticUpdateInstructions, type UpdateInstructionsContext, type UpdateInstructionsResult } from '../agents/instruction-updater.ts';
+import { updateAgentInstructions as agenticUpdateInstructions, type UpdateInstructionsContext, type UpdateInstructionsResult, type UpdateInstructionsProgressEvent } from '../agents/instruction-updater.ts';
 import { getWorkspaceAccessTokenAsync, isWorkspaceTokenExpiredAsync, updateWorkspaceOAuthTokensAsync, type Workspace } from '../config/storage.ts';
 import { getCredentialManager } from '../credentials/index.ts';
 import { updatePreferences, loadPreferences, type UserPreferences } from '../config/preferences.ts';
@@ -87,6 +87,16 @@ export function setUpdateAgentInstructionsResultCallback(
   callback: ((success: boolean) => Promise<void>) | null
 ): void {
   updateAgentInstructionsResultCallback = callback;
+}
+
+// Progress callback for update_agent_instructions (set by TUI)
+// Called during agentic update to show nested tool progress
+let updateAgentInstructionsProgressCallback: ((event: UpdateInstructionsProgressEvent) => void) | null = null;
+
+export function setUpdateAgentInstructionsProgressCallback(
+  callback: ((event: UpdateInstructionsProgressEvent) => void) | null
+): void {
+  updateAgentInstructionsProgressCallback = callback;
 }
 
 // ============================================================
@@ -219,76 +229,71 @@ function handleUpdatePreferences(input: Record<string, unknown>): string {
 }
 
 
-// Create the preferences MCP server with the update_user_preferences tool
-// Lazy-initialized singleton
-let preferencesServerInstance: ReturnType<typeof createSdkMcpServer> | null = null;
+// Base tool: update_user_preferences (always available)
+const updateUserPreferencesTool = tool(
+  'update_user_preferences',
+  `Update stored user preferences. Use this when you learn information about the user that would be helpful to remember for future conversations. This includes their name, timezone, location, preferred language, or any other relevant notes. Only update fields you have confirmed information about - don't guess.`,
+  {
+    name: z.string().optional().describe("The user's preferred name or how they'd like to be addressed"),
+    timezone: z.string().optional().describe("The user's timezone in IANA format (e.g., 'America/New_York', 'Europe/London')"),
+    city: z.string().optional().describe("The user's city"),
+    region: z.string().optional().describe("The user's state/region/province"),
+    country: z.string().optional().describe("The user's country"),
+    language: z.string().optional().describe("The user's preferred language for responses"),
+    notes: z.string().optional().describe('Additional notes about the user that would be helpful to remember (preferences, context, etc.). This appends to existing notes.'),
+  },
+  async (args) => {
+    try {
+      const result = handleUpdatePreferences(args);
+      return {
+        content: [{ type: 'text', text: result }],
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      return {
+        content: [{ type: 'text', text: `Failed to update preferences: ${message}` }],
+        isError: true,
+      };
+    }
+  }
+);
 
-function getPreferencesServer() {
-  if (!preferencesServerInstance) {
-    preferencesServerInstance = createSdkMcpServer({
-      name: 'preferences',
-      version: '1.0.0',
-      tools: [
-        tool(
-          'update_user_preferences',
-          `Update stored user preferences. Use this when you learn information about the user that would be helpful to remember for future conversations. This includes their name, timezone, location, preferred language, or any other relevant notes. Only update fields you have confirmed information about - don't guess.`,
-          {
-            name: z.string().optional().describe("The user's preferred name or how they'd like to be addressed"),
-            timezone: z.string().optional().describe("The user's timezone in IANA format (e.g., 'America/New_York', 'Europe/London')"),
-            city: z.string().optional().describe("The user's city"),
-            region: z.string().optional().describe("The user's state/region/province"),
-            country: z.string().optional().describe("The user's country"),
-            language: z.string().optional().describe("The user's preferred language for responses"),
-            notes: z.string().optional().describe('Additional notes about the user that would be helpful to remember (preferences, context, etc.). This appends to existing notes.'),
-          },
-          async (args) => {
-            try {
-              const result = handleUpdatePreferences(args);
-              return {
-                content: [{ type: 'text', text: result }],
-              };
-            } catch (error) {
-              const message = error instanceof Error ? error.message : 'Unknown error';
-              return {
-                content: [{ type: 'text', text: `Failed to update preferences: ${message}` }],
-                isError: true,
-              };
-            }
-          }
-        ),
-        tool(
-          'reload_agent_instructions',
-          `Reload the current agent's instructions from the Craft document. Use this when the user asks you to refresh, reload, or update your instructions. This will fetch the latest version of your instructions from the source document.`,
-          {},
-          async () => {
-            const callback = getReloadAgentInstructionsCallback();
-            if (!callback) {
-              return {
-                content: [{ type: 'text', text: 'No agent is currently active. This tool only works when a sub-agent is active.' }],
-              };
-            }
-            try {
-              const success = await callback();
-              return {
-                content: [{
-                  type: 'text',
-                  text: success
-                    ? 'Instructions reloaded successfully from the Craft document. My instructions have been updated.'
-                    : 'Failed to reload instructions. Please try again or use /agent reload.',
-                }],
-              };
-            } catch (error) {
-              const message = error instanceof Error ? error.message : 'Unknown error';
-              return {
-                content: [{ type: 'text', text: `Failed to reload instructions: ${message}` }],
-                isError: true,
-              };
-            }
-          }
-        ),
-        tool(
-          'update_agent_instructions',
-          `Update your Instructions document with a new learning or instruction. Use this when you learn something from the user that should persist across conversations.
+// Agent-only tool: reload_agent_instructions
+const reloadAgentInstructionsTool = tool(
+  'reload_agent_instructions',
+  `Reload the current agent's instructions from the Craft document. Use this when the user asks you to refresh, reload, or update your instructions. This will fetch the latest version of your instructions from the source document.`,
+  {},
+  async () => {
+    const callback = getReloadAgentInstructionsCallback();
+    if (!callback) {
+      return {
+        content: [{ type: 'text', text: 'No agent is currently active. This tool only works when a sub-agent is active.' }],
+      };
+    }
+    try {
+      const success = await callback();
+      return {
+        content: [{
+          type: 'text',
+          text: success
+            ? 'Instructions reloaded successfully from the Craft document. My instructions have been updated.'
+            : 'Failed to reload instructions. Please try again or use /agent reload.',
+        }],
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      return {
+        content: [{ type: 'text', text: `Failed to reload instructions: ${message}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+// Agent-only tool: update_agent_instructions
+const updateAgentInstructionsTool = tool(
+  'update_agent_instructions',
+  `Update your Instructions document with a new learning or instruction. Use this when you learn something from the user that should persist across conversations.
 
 **CRITICAL: This is the ONLY way to update your source instructions.** Never use direct Craft MCP tools (blocks_update, markdown_add, etc.) to modify your Instructions document. Always use this tool instead - it handles the update safely and correctly.
 
@@ -312,79 +317,107 @@ Example good content:
 Example bad content:
 - "Update document 12345 with..." (don't include IDs)
 - [Entire rewrite of instructions] (only add what's new)`,
-          {
-            content: z.string().describe('The new learning or instruction to add. Should be a concise, actionable note.'),
-            section: z.string().optional().describe('Optional: which section to add this to (e.g., "Learnings", "User Preferences"). Defaults to appending at the end.'),
-          },
-          async (args) => {
-            // Check if context provider is set
-            if (!updateAgentInstructionsContextProvider) {
-              return {
-                content: [{ type: 'text', text: 'No agent is currently active. This tool only works when a sub-agent is active.' }],
-              };
-            }
+  {
+    content: z.string().describe('The new learning or instruction to add. Should be a concise, actionable note.'),
+    section: z.string().optional().describe('Optional: which section to add this to (e.g., "Learnings", "User Preferences"). Defaults to appending at the end.'),
+  },
+  async (args) => {
+    // Check if context provider is set
+    if (!updateAgentInstructionsContextProvider) {
+      return {
+        content: [{ type: 'text', text: 'No agent is currently active. This tool only works when a sub-agent is active.' }],
+      };
+    }
 
-            // Get the context
-            const context = updateAgentInstructionsContextProvider();
-            if (!context) {
-              return {
-                content: [{ type: 'text', text: 'Could not get agent context. Ensure an agent is active.' }],
-              };
-            }
+    // Get the context
+    const context = updateAgentInstructionsContextProvider();
+    if (!context) {
+      return {
+        content: [{ type: 'text', text: 'Could not get agent context. Ensure an agent is active.' }],
+      };
+    }
 
-            // Request user permission via global permission system
-            const allowed = await requestToolPermission(
-              'update_agent_instructions',
-              args.content.substring(0, 100) + (args.content.length > 100 ? '...' : ''),
-              `Update ${context.agentName}'s instructions with:\n${args.content}`
-            );
-            if (!allowed) {
-              return {
-                content: [{ type: 'text', text: 'User denied permission to update instructions.' }],
-              };
-            }
+    // Request user permission via global permission system
+    const allowed = await requestToolPermission(
+      'update_agent_instructions',
+      args.content.substring(0, 100) + (args.content.length > 100 ? '...' : ''),
+      `Update ${context.agentName}'s instructions with:\n${args.content}`
+    );
+    if (!allowed) {
+      return {
+        content: [{ type: 'text', text: 'User denied permission to update instructions.' }],
+      };
+    }
 
-            try {
-              // Format the content with optional section header
-              const section = args.section ? `## ${args.section}\n` : '';
-              const formattedContent = section ? `${section}${args.content}` : args.content;
+    try {
+      // Format the content with optional section header
+      const section = args.section ? `## ${args.section}\n` : '';
+      const formattedContent = section ? `${section}${args.content}` : args.content;
 
-              // Run the agentic update
-              debug('[update_agent_instructions] Running agentic update with context:', {
-                documentId: context.documentId,
-                instructionsBlockId: context.instructionsBlockId,
-                agentName: context.agentName,
-              });
+      // Run the agentic update
+      debug('[update_agent_instructions] Running agentic update with context:', {
+        documentId: context.documentId,
+        instructionsBlockId: context.instructionsBlockId,
+        agentName: context.agentName,
+      });
 
-              const result: UpdateInstructionsResult = await agenticUpdateInstructions(formattedContent, context);
+      const result: UpdateInstructionsResult = await agenticUpdateInstructions(
+        formattedContent,
+        context,
+        updateAgentInstructionsProgressCallback ?? undefined
+      );
 
-              // Notify TUI of result to invalidate cache
-              if (updateAgentInstructionsResultCallback) {
-                await updateAgentInstructionsResultCallback(result.success);
-              }
+      // Notify TUI of result to invalidate cache
+      if (updateAgentInstructionsResultCallback) {
+        await updateAgentInstructionsResultCallback(result.success);
+      }
 
-              return {
-                content: [{
-                  type: 'text',
-                  text: result.success
-                    ? `${result.message}\n\nUpdated content:\n${result.updatedContent || args.content}\n\nThis will persist across conversations.`
-                    : result.message,
-                }],
-                ...(result.success ? {} : { isError: true }),
-              };
-            } catch (error) {
-              const message = error instanceof Error ? error.message : 'Unknown error';
-              return {
-                content: [{ type: 'text', text: `Failed to update instructions: ${message}` }],
-                isError: true,
-              };
-            }
-          }
-        ),
-      ],
-    });
+      return {
+        content: [{
+          type: 'text',
+          text: result.success
+            ? `${result.message}\n\nUpdated content:\n${result.updatedContent || args.content}\n\nThis will persist across conversations.`
+            : result.message,
+        }],
+        ...(result.success ? {} : { isError: true }),
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      return {
+        content: [{ type: 'text', text: `Failed to update instructions: ${message}` }],
+        isError: true,
+      };
+    }
   }
-  return preferencesServerInstance;
+);
+
+// Create the preferences MCP server dynamically based on whether an agent is active
+// Cached servers for performance (recreated when agent state changes)
+let cachedPrefToolsServerForBase: ReturnType<typeof createSdkMcpServer> | null = null;
+let cachedPrefToolsServerForAgent: ReturnType<typeof createSdkMcpServer> | null = null;
+
+function getPreferencesServer(hasActiveAgent: boolean): ReturnType<typeof createSdkMcpServer> {
+  if (hasActiveAgent) {
+    // Agent is active - include all tools
+    if (!cachedPrefToolsServerForAgent) {
+      cachedPrefToolsServerForAgent = createSdkMcpServer({
+        name: 'preferences',
+        version: '1.0.0',
+        tools: [updateUserPreferencesTool, reloadAgentInstructionsTool, updateAgentInstructionsTool],
+      });
+    }
+    return cachedPrefToolsServerForAgent;
+  } else {
+    // No agent - only include base preferences tool
+    if (!cachedPrefToolsServerForBase) {
+      cachedPrefToolsServerForBase = createSdkMcpServer({
+        name: 'preferences',
+        version: '1.0.0',
+        tools: [updateUserPreferencesTool],
+      });
+    }
+    return cachedPrefToolsServerForBase;
+  }
 }
 
 export class CraftAgent {
@@ -643,13 +676,14 @@ export class CraftAgent {
       debug('[chat] agentMcpServers:', agentMcpServers);
       debug('[chat] agentApiServers:', agentApiServers);
 
+      const hasActiveAgent = this.activeAgentDefinition !== null;
       const mcpServers: Options['mcpServers'] = {
         craft: {
           type: 'http',
           url: mcpUrl,
           ...(token ? { headers: { Authorization: `Bearer ${token}` } } : {}),
         },
-        preferences: getPreferencesServer(),
+        preferences: getPreferencesServer(hasActiveAgent),
         documentation: getDocumentationServer(),
         // Add agent-specific MCP servers if an agent is active
         ...agentMcpServers,
