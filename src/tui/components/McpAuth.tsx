@@ -491,11 +491,13 @@ export const McpAuth: React.FC<McpAuthProps> = ({
       {step === 'bearer-token' && currentServer && (
         <Box marginY={1} flexDirection="column">
           <Text color="yellow">
-            {failureReason === 'bearer'
+            {failureReason === 'schema-error'
+              ? `Connection failed for ${currentServer.name}`
+              : failureReason === 'bearer'
               ? `Token validation failed for ${currentServer.name}`
               : currentServer.requiresAuth
               ? `OAuth authentication failed for ${currentServer.name}`
-              : `Validation failed for ${currentServer.name}`}
+              : `Connection failed for ${currentServer.name}`}
           </Text>
           {error && <Text dimColor>{error}</Text>}
           <Box marginTop={1} flexDirection="column">
