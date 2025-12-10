@@ -62,8 +62,7 @@ src/
 │       ├── keytar.ts         # Primary: keytar (cross-platform native)
 │       └── env.ts            # Environment variables (server deployment)
 ├── mcp/
-│   ├── client.ts             # MCP client & proxy for persistent connections
-│   ├── tools.ts              # Tool registry and help formatting
+│   ├── client.ts             # MCP client for persistent connections
 │   └── validation.ts         # SDK-based MCP connection validation
 ├── prompts/
 │   └── system.ts             # System prompt with date/time and preferences
@@ -198,9 +197,9 @@ Stored in `~/.craft-agent/preferences.json`:
 - Updated via `update_user_preferences` tool
 
 ### MCP Integration (`src/mcp/`)
-- `CraftMcpClient`: Basic MCP client for direct tool calls (used by sub-agent manager)
+- `CraftMcpClient`: Basic MCP client for direct tool calls (used by sub-agent manager and `/tools` command)
 - SDK handles MCP connections via HTTP mode configuration
-- `tools.ts`: Registry of 32+ Craft tools for `/tools` command
+- `/tools` command fetches actual tools from connected MCP servers via `fetchTools()` in useAgent
 
 ### MCP Validation (`src/mcp/validation.ts`)
 Validates MCP connections using the Claude Agent SDK's `mcpServerStatus()` method. This ensures connections work before saving credentials.

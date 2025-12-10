@@ -47,7 +47,7 @@ export const COMMANDS: [string, string][] = [
   // Standard commands
   ['/help', 'Show help and available commands'],
   ['/clear', 'Clear conversation history'],
-  ['/tools', 'List available Craft MCP tools'],
+  ['/tools', 'List available tools (-v for details)'],
   ['/config', 'Show current configuration'],
   ['/cost', 'Show token usage and estimated cost'],
   ['/compact', 'Toggle compact mode for tool output'],

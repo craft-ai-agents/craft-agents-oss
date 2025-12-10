@@ -18,7 +18,6 @@ import { HelpPanel } from './components/HelpPanel.tsx';
 import { useAgent } from './hooks/useAgent.ts';
 import { useHistory } from './hooks/useHistory.ts';
 import { useResize } from './hooks/useResize.ts';
-import { formatToolsHelp } from '../mcp/tools.ts';
 import { getConfigPath, getWorkspaces, setActiveWorkspace, removeWorkspace, renameWorkspace, getWorkspaceDataPath, updateApiKey, getAuthType, type Workspace, type AuthType } from '../config/storage.ts';
 import { formatPreferencesDisplay, getPreferencesPath } from '../config/preferences.ts';
 import { formatTokens } from './utils/markdown.ts';
@@ -71,7 +70,7 @@ export const App: React.FC<AppProps> = ({ config, onRequestSetup }) => {
     reloadAgent,
     resetAgent,
     refreshAgents,
-    fetchAgentTools,
+    fetchTools,
     agentsLoading,
     // MCP auth for sub-agent servers
     pendingMcpAuth,
@@ -218,28 +217,18 @@ export const App: React.FC<AppProps> = ({ config, onRequestSetup }) => {
             }
           }
 
-          // Fetch tools from MCP servers
-          const serversWithTools = await fetchAgentTools();
-          if (serversWithTools.length > 0) {
-            for (const server of serversWithTools) {
-              info += `\n\n**${server.name}**`;
-              if (server.tools && server.tools.length > 0) {
-                info += `: ${server.tools.join(', ')}`;
-              } else {
-                info += ': (no tools)';
-              }
+          // Fetch tools and show agent-specific ones (exclude Craft)
+          const toolGroups = await fetchTools();
+          const agentToolGroups = toolGroups.filter(g => g.name !== 'Craft');
+          for (const group of agentToolGroups) {
+            info += `\n\n**${group.name}**`;
+            if (group.tools.length > 0) {
+              info += `: ${group.tools.map(t => t.name).join(', ')}`;
+            } else {
+              info += ': (no tools)';
             }
           }
 
-          // Show API tools (in-process servers)
-          if (activeAgentDefinition.apis && activeAgentDefinition.apis.length > 0) {
-            for (const api of activeAgentDefinition.apis) {
-              info += `\n\n**${api.name}** (API)`;
-              for (const endpoint of api.endpoints) {
-                info += `\n  • ${api.name}_${endpoint.name} - ${endpoint.description.split('.')[0]}`;
-              }
-            }
-          }
           debug('[handleAgentAction.info] Adding message:', info);
           addLocalMessage(info, 'assistant');
         } else {
@@ -248,7 +237,7 @@ export const App: React.FC<AppProps> = ({ config, onRequestSetup }) => {
         break;
       }
     }
-  }, [activateAgent, deactivateAgent, reloadAgent, resetAgent, refreshAgents, fetchAgentTools, activeAgentName, activeAgentDefinition, activeAgentMcpServers, addLocalMessage]);
+  }, [activateAgent, deactivateAgent, reloadAgent, resetAgent, refreshAgents, fetchTools, activeAgentName, activeAgentDefinition, activeAgentMcpServers, addLocalMessage]);
 
   const handleAgentMenuCancel = useCallback(() => {
     setShowAgentMenu(false);
@@ -511,26 +500,31 @@ export const App: React.FC<AppProps> = ({ config, onRequestSetup }) => {
             setShowHelp(true);
             return;
 
-          case '/tools':
-            if (activeAgentName && activeAgentMcpServers.length > 0) {
-              // Show sub-agent's MCP servers
-              let toolsHelp = `**@${activeAgentName} MCP Servers**\n\n`;
-              for (const server of activeAgentMcpServers) {
-                toolsHelp += `- **${server.name}**: ${server.url}`;
-                if (server.requiresAuth) {
-                  toolsHelp += ' (requires auth)';
-                }
-                if (server.description) {
-                  toolsHelp += `\n  ${server.description}`;
-                }
-                toolsHelp += '\n';
-              }
-              toolsHelp += '\n_Craft MCP tools are also available._';
-              addLocalMessage(toolsHelp, 'assistant');
-            } else {
-              addLocalMessage(formatToolsHelp(), 'assistant');
+          case '/tools': {
+            const verbose = parts[1] === '-v' || parts[1] === '--verbose';
+            const toolGroups = await fetchTools();
+            if (toolGroups.length === 0) {
+              addLocalMessage('No tools available. MCP connection may not be established.', 'error');
+              return;
             }
+            let toolsHelp = '**Available Tools**\n';
+            for (const group of toolGroups) {
+              toolsHelp += `\n**${group.name}**\n`;
+              if (verbose) {
+                for (const tool of group.tools) {
+                  toolsHelp += `  - ${tool.name}`;
+                  if (tool.description) {
+                    toolsHelp += `: ${tool.description}`;
+                  }
+                  toolsHelp += '\n';
+                }
+              } else {
+                toolsHelp += `  ${group.tools.map(t => t.name).join(', ')}\n`;
+              }
+            }
+            addLocalMessage(toolsHelp.trim(), 'assistant');
             return;
+          }
 
           case '/setup':
             if (onRequestSetup) {
@@ -764,8 +758,6 @@ export const App: React.FC<AppProps> = ({ config, onRequestSetup }) => {
 
             if (subCommand === 'info') {
               if (activeAgentName) {
-                // Fetch tools from MCP servers
-                const serversWithTools = await fetchAgentTools();
                 let info = `**Active Agent**: @${activeAgentName}`;
 
                 // Show capabilities if available
@@ -773,14 +765,15 @@ export const App: React.FC<AppProps> = ({ config, onRequestSetup }) => {
                   info += '\n\n**Capabilities**\n' + activeAgentDefinition.capabilities.map(c => `• ${c}`).join('\n');
                 }
 
-                if (serversWithTools.length > 0) {
-                  for (const server of serversWithTools) {
-                    info += `\n\n**${server.name}**`;
-                    if (server.tools && server.tools.length > 0) {
-                      info += `: ${server.tools.join(', ')}`;
-                    } else {
-                      info += ': (no tools)';
-                    }
+                // Fetch tools and show agent-specific ones (exclude Craft)
+                const toolGroups = await fetchTools();
+                const agentToolGroups = toolGroups.filter(g => g.name !== 'Craft');
+                for (const group of agentToolGroups) {
+                  info += `\n\n**${group.name}**`;
+                  if (group.tools.length > 0) {
+                    info += `: ${group.tools.map(t => t.name).join(', ')}`;
+                  } else {
+                    info += ': (no tools)';
                   }
                 }
                 addLocalMessage(info, 'assistant');
@@ -1029,7 +1022,7 @@ Filename: ${workspace.sessionId}.jsonl`;
       reloadAgent,
       resetAgent,
       refreshAgents,
-      fetchAgentTools,
+      fetchTools,
     ]
   );
 

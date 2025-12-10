@@ -162,7 +162,7 @@ export interface UseAgentResult {
   reloadAgent: () => Promise<boolean>;
   resetAgent: () => Promise<boolean>;
   refreshAgents: () => Promise<string[] | { error: string }>;
-  fetchAgentTools: () => Promise<McpServerConfig[]>;
+  fetchTools: () => Promise<{ name: string; tools: { name: string; description?: string }[] }[]>;
   agentsLoading: boolean;
   // MCP auth for sub-agent servers
   pendingMcpAuth: PendingMcpAuthRequest | null;
@@ -1556,12 +1556,50 @@ The goal is to have clean, actionable instructions without unanswered questions.
     }
   }, [workspace, getMcpToken]);
 
-  // Fetch tools from active agent's MCP servers
-  const fetchAgentTools = useCallback(async (): Promise<McpServerConfig[]> => {
-    if (!activeAgentDefinition || !agentManagerRef.current) {
-      return [];
+  // Fetch all available tools (Craft MCP + active agent's MCP servers + APIs)
+  const fetchTools = useCallback(async (): Promise<{ name: string; tools: { name: string; description?: string }[] }[]> => {
+    const result: { name: string; tools: { name: string; description?: string }[] }[] = [];
+
+    // 1. Craft MCP tools
+    if (mcpClientRef.current) {
+      try {
+        const craftTools = await mcpClientRef.current.listTools();
+        result.push({
+          name: 'Craft',
+          tools: craftTools.map(t => ({ name: t.name, description: t.description })),
+        });
+      } catch (err) {
+        debug('[fetchTools] Failed to fetch Craft tools:', err);
+      }
     }
-    return agentManagerRef.current.fetchMcpServerTools(activeAgentDefinition);
+
+    // 2. Active agent's MCP server tools
+    if (activeAgentDefinition && agentManagerRef.current) {
+      const agentServers = await agentManagerRef.current.fetchMcpServerTools(activeAgentDefinition);
+      for (const server of agentServers) {
+        if (server.tools && server.tools.length > 0) {
+          result.push({
+            name: server.name,
+            tools: server.tools.map(name => ({ name })),
+          });
+        }
+      }
+
+      // 3. Active agent's API tools
+      if (activeAgentDefinition.apis) {
+        for (const api of activeAgentDefinition.apis) {
+          result.push({
+            name: api.name,
+            tools: api.endpoints.map(e => ({
+              name: `${api.name}_${e.name}`,
+              description: e.description,
+            })),
+          });
+        }
+      }
+    }
+
+    return result;
   }, [activeAgentDefinition]);
 
   // Derive active agent name from definition
@@ -1606,7 +1644,7 @@ The goal is to have clean, actionable instructions without unanswered questions.
     reloadAgent,
     resetAgent,
     refreshAgents,
-    fetchAgentTools,
+    fetchTools,
     agentsLoading,
     // MCP auth for sub-agent servers
     pendingMcpAuth,

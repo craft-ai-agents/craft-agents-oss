@@ -12,7 +12,7 @@ const HELP_TEXT = `
   /help        Show this help message
   /clear       Clear conversation history
   /paste       Paste files/images from clipboard
-  /tools       List available Craft MCP tools
+  /tools       List available tools (-v for details)
   /config      Show current configuration
   /prefs       Show user preferences
   /setup       Reconfigure API keys and MCP settings
