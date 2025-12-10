@@ -36,26 +36,47 @@ export async function writeStreamingOutput(
   format: 'text' | 'json' | 'stream-json'
 ): Promise<HeadlessResult> {
   let result: HeadlessResult = { success: false };
+  let receivedComplete = false;
 
-  for await (const event of events) {
-    // Handle streaming output based on format
-    if (format === 'stream-json') {
-      // Stream each event as a JSON line
-      console.log(formatStreamEvent(event));
-    } else if (format === 'text') {
-      // For text mode, only output text deltas (streaming response)
-      if (event.type === 'text_delta') {
-        process.stdout.write(event.text);
-      } else if (event.type === 'error') {
-        // Show errors in text mode
-        console.error(`\nError: ${event.message}`);
+  try {
+    for await (const event of events) {
+      // Handle streaming output based on format
+      if (format === 'stream-json') {
+        // Stream each event as a JSON line
+        console.log(formatStreamEvent(event));
+      } else if (format === 'text') {
+        // For text mode, only output text deltas (streaming response)
+        if (event.type === 'text_delta') {
+          process.stdout.write(event.text);
+        } else if (event.type === 'error') {
+          // Show errors in text mode
+          console.error(`\nError: ${event.message}`);
+        }
+      }
+      // For json mode, we collect everything and output at the end
+
+      // Capture the final result
+      if (event.type === 'complete') {
+        result = event.result;
+        receivedComplete = true;
       }
     }
-    // For json mode, we collect everything and output at the end
+  } catch (error) {
+    // Generator threw an exception
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`{"type":"error","message":"Generator exception: ${message}"}`);
+    result = {
+      success: false,
+      error: { code: 'execution_error', message: `Generator exception: ${message}` },
+    };
+  }
 
-    // Capture the final result
-    if (event.type === 'complete') {
-      result = event.result;
+  // Safety check: if we never received a complete event, something went wrong
+  if (!receivedComplete) {
+    console.error(`{"type":"error","message":"No complete event received - generator ended unexpectedly"}`);
+    if (result.success) {
+      // This shouldn't happen, but just in case
+      result = { success: false, error: { code: 'execution_error', message: 'No complete event received' } };
     }
   }
 
