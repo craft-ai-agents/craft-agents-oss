@@ -12,23 +12,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Install dependencies
-        run: bun install
+      - name: Install Craft CLI
+        run: curl -fsSL https://agents.craft.do/install.sh | bash
 
       - name: Run Daily Team Discussion Points Agent
         timeout-minutes: 10
         env:
           CRAFT_ANTHROPIC_API_KEY: ${{ secrets.CRAFT_ANTHROPIC_API_KEY }}
         run: |
-          bun run src/index.tsx \
+          craft \
             -w "${{ secrets.CRAFT_KB_MCP_URL }}" \
             -a "@daily-team-discussion-points" \
             -p "dry-run: don't create discussion points on any day, just try to find todays daily note and return if you succeeded" \
