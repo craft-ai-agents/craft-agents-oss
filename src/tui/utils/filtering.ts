@@ -50,6 +50,7 @@ export const COMMANDS: [string, string][] = [
   ['/tools', 'List available tools (-v for details)'],
   ['/config', 'Show current configuration'],
   ['/cost', 'Show token usage and estimated cost'],
+  ['/balance', 'Open Craft AI Credits top-up page'],
   ['/compact', 'Toggle compact mode for tool output'],
   // Feature toggles
   ['/web', 'Toggle web search capability'],
@@ -307,7 +308,7 @@ export function getCommandHint(input: string): HintData {
     return {
       selected: null,
       description: null,
-      others: ['/agent', '/workspace', '/model', '/help', '/clear', '/tools', '/web', '/cost', '/exit'],
+      others: ['/agent', '/workspace', '/model', '/help', '/clear', '/tools', '/web', '/cost', '/balance', '/exit'],
     };
   }
 

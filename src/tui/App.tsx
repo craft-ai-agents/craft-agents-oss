@@ -15,6 +15,7 @@ import { McpAuth } from './components/McpAuth.tsx';
 import { ApiAuth } from './components/ApiAuth.tsx';
 import { AgentReview } from './components/AgentReview.tsx';
 import { HelpPanel } from './components/HelpPanel.tsx';
+import { Balance } from './components/Balance.tsx';
 import { useAgent } from './hooks/useAgent.ts';
 import { useHistory } from './hooks/useHistory.ts';
 import { useResize } from './hooks/useResize.ts';
@@ -118,6 +119,7 @@ export const App: React.FC<AppProps> = ({ config, onRequestSetup, initialAgent, 
   const [showWorkspaceAdd, setShowWorkspaceAdd] = useState(false);
   const [showWorkspaceRename, setShowWorkspaceRename] = useState(false);
   const [showApiKeyChange, setShowApiKeyChange] = useState(false);
+  const [showBalance, setShowBalance] = useState(false);
   const [pendingRemoveWorkspace, setPendingRemoveWorkspace] = useState<string | null>(null);
 
   // Track if we've processed initial startup params
@@ -1001,6 +1003,11 @@ export const App: React.FC<AppProps> = ({ config, onRequestSetup, initialAgent, 
             return;
           }
 
+          case '/balance': {
+            setShowBalance(true);
+            return;
+          }
+
           case '/debug': {
             const dataPath = getWorkspaceDataPath(workspace.id);
             const conversationPath = `${dataPath}/conversation.json`;
@@ -1272,6 +1279,11 @@ Filename: ${workspace.sessionId}.jsonl`;
         />
       )}
 
+      {/* Balance / AI credits top-up */}
+      {showBalance && (
+        <Balance onClose={() => setShowBalance(false)} />
+      )}
+
       {/* MCP server authentication for sub-agents */}
       {pendingMcpAuth && (
         <McpAuth
@@ -1334,7 +1346,7 @@ Filename: ${workspace.sessionId}.jsonl`;
             />
           </Box>
         )}
-        {!showModelSelector && !showHelp && !showAgentMenu && !showWorkspaceSelector && !showWorkspaceAdd && !showWorkspaceRename && !showApiKeyChange && !pendingPermission && !pendingQuestion && !pendingMcpAuth && !pendingApiAuth && !pendingReview && (
+        {!showModelSelector && !showHelp && !showAgentMenu && !showWorkspaceSelector && !showWorkspaceAdd && !showWorkspaceRename && !showApiKeyChange && !showBalance && !pendingPermission && !pendingQuestion && !pendingMcpAuth && !pendingApiAuth && !pendingReview && (
           <Input
             onSubmit={handleSubmit}
             onPaste={handlePaste}

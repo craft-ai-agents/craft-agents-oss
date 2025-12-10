@@ -100,6 +100,34 @@ export class CraftApi {
             },
         });
     }
+
+    async renewSession(authToken: string): Promise<string> {
+        return this.fetch({
+            method: 'POST',
+            path: '/auth/session/renew',
+            authToken,
+            responseParser: async (response) => {
+                const data = JSON.parse(response) as { authToken?: string };
+                if (typeof data.authToken !== 'string') {
+                    throw new Error('Invalid response from session renew API: missing authToken');
+                }
+                return data.authToken;
+            },
+        });
+    }
+
+    async generateAiCreditCheckoutToken(params: { authToken: string, teamId: string }) {
+        const { authToken, teamId } = params;
+        return this.fetch({
+            method: 'GET',
+            path: '/subscription/teams/generate-ai-credit-checkout-token',
+            queryParams: { teamId },
+            authToken,
+            responseParser: async (response) => {
+                return aiCreditCheckoutTokenResponseSchema.parse(JSON.parse(response));
+            },
+        });
+    }
 }
 
 const workflowLinkSchema = z.object({
@@ -125,4 +153,15 @@ const profileResponseSchema = z.object({
     firstName: z.string(),
     lastName: z.string(),
     spaces: z.array(z.object({ id: z.string(), name: z.string() })),
+    teams: z.array(z.object({
+        id: z.string(),
+        isPrivate: z.boolean(),
+        role: z.string(),
+        name: z.string()
+    })),
+});
+
+const aiCreditCheckoutTokenResponseSchema = z.object({
+    token: z.string(),
+    expirationTime: z.number(),
 });
