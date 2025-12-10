@@ -28,7 +28,7 @@ jobs:
         env:
           CRAFT_ANTHROPIC_API_KEY: ${{ secrets.CRAFT_ANTHROPIC_API_KEY }}
         run: |
-          craft \
+          bun run src/index.tsx \
             -w "${{ secrets.CRAFT_KB_MCP_URL }}" \
             -a "@daily-team-discussion-points" \
             -p "dry-run: don't create discussion points on any day, just try to find todays daily note and return if you succeeded" \
