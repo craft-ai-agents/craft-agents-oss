@@ -17,14 +17,11 @@ jobs:
 
       - name: Check installation
         run: |
-          echo "=== Installed files ==="
-          ls -la ~/.local/bin/
-          ls -la ~/.local/share/craft/versions/ || echo "No versions dir"
-          ls -laR ~/.local/share/craft/ || echo "No craft dir"
-          echo "=== Node version ==="
-          node --version || echo "Node not found"
-          echo "=== PATH ==="
-          echo $PATH
+          echo "=== Check cli.js shebang ==="
+          head -1 ~/.local/share/craft/versions/0.0.16/claude-agent-sdk/cli.js
+          echo ""
+          echo "=== Test cli.js directly ==="
+          node ~/.local/share/craft/versions/0.0.16/claude-agent-sdk/cli.js --help 2>&1 || echo "cli.js failed with exit code $?"
 
       - name: Run Daily Team Discussion Points Agent
         timeout-minutes: 10
