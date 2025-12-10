@@ -31,6 +31,26 @@ function generateUrlWorkspaceId(url: string): string {
   return `cli-ws-url-${hash}`;
 }
 
+/**
+ * Check if a string is an MCP server URL (starts with http:// or https://)
+ */
+function isUrl(value: string): boolean {
+  return value.startsWith('http://') || value.startsWith('https://');
+}
+
+/**
+ * Create a temporary workspace from a URL
+ */
+function createUrlWorkspace(url: string): Workspace {
+  return {
+    id: generateUrlWorkspaceId(url),
+    name: url, // Show URL as name in header
+    mcpUrl: url,
+    isPublic: true,
+    createdAt: Date.now(),
+  };
+}
+
 const cli = meow(
   `
   Craft Document Assistant - A Claude Code-like TUI for Craft documents
@@ -47,7 +67,7 @@ const cli = meow(
 
   Common Options (both modes)
     --agent, -a <name>      Agent to activate (with or without @ prefix)
-    --workspace, -w <name>  Select workspace by name or ID
+    --workspace, -w <name>  Select workspace by name, ID, or MCP server URL (http/https)
     --model, -m <model>     Claude model to use (default: claude-sonnet-4-5-20250929)
     --debug                 Enable debug logging to /tmp/craft-debug.log
 
@@ -60,7 +80,6 @@ const cli = meow(
 
   Interactive Mode Options
     --setup         Run the setup wizard (reconfigure)
-    --url, -u       Craft MCP server URL (overrides saved config)
     --token, -t     Bearer token for MCP authentication (overrides saved config)
     --help          Show this help message
     --version       Show version number
@@ -84,6 +103,7 @@ const cli = meow(
     $ craft "What documents do I have?"        # Interactive with initial prompt
     $ craft -a writer "Help me draft an email" # Activate agent + prompt
     $ craft -w work -p "list my documents"     # Print mode with specific workspace
+    $ craft -w https://mcp.example.com -p "query"  # Use MCP URL directly
     $ craft -p "summarize" -a writer           # Print mode with agent
     $ craft -p "query" --session-resume        # Print mode, resume session
     $ craft -p "query" --output-format json    # JSON output for scripts
@@ -125,10 +145,6 @@ const cli = meow(
       setup: {
         type: 'boolean',
         default: false,
-      },
-      url: {
-        type: 'string',
-        shortFlag: 'u',
       },
       token: {
         type: 'string',
@@ -224,29 +240,27 @@ const Root: React.FC<RootProps> = ({ initialConfig, cliFlags, forceSetup, initia
   }
 
   // Build agent config from stored config + CLI overrides
-  // Priority: --url (temporary workspace) > -w (workspace by name/ID) > active workspace
+  // Priority: -w URL > -w workspace name/ID > active workspace
   let workspace: Workspace;
   let workspaceError: string | undefined;
-  if (cliFlags.url) {
-    // URL override creates a temporary workspace with deterministic ID from URL
-    workspace = {
-      id: generateUrlWorkspaceId(cliFlags.url),
-      name: 'CLI Override',
-      mcpUrl: cliFlags.url,
-      isPublic: true, // Assume public for CLI override
-      createdAt: Date.now(),
-    };
-  } else if (cliFlags.workspace) {
-    // -w flag: lookup by name or ID
-    const found = getWorkspaceByNameOrId(cliFlags.workspace);
-    if (!found) {
-      // Workspace not found - fall back to active workspace, cancel initial agent/prompt
-      workspaceError = `Workspace '${cliFlags.workspace}' not found. Using '${activeWorkspace.name}' instead.`;
-      workspace = activeWorkspace;
+  if (cliFlags.workspace) {
+    if (isUrl(cliFlags.workspace)) {
+      // -w with URL creates a temporary workspace
+      workspace = createUrlWorkspace(cliFlags.workspace);
     } else {
-      workspace = found;
-      // Update last active workspace for REPL mode (user is interactively working here now)
-      setActiveWorkspace(found.id);
+      // -w with name/ID: lookup existing workspace
+      const found = getWorkspaceByNameOrId(cliFlags.workspace);
+      if (!found) {
+        // Workspace not found - fall back to active workspace, cancel initial agent/prompt
+        const available = getWorkspaces();
+        const names = available.map(w => w.name).join(', ') || 'none';
+        workspaceError = `Workspace '${cliFlags.workspace}' not found. Available: ${names}. Using '${activeWorkspace.name}' instead.`;
+        workspace = activeWorkspace;
+      } else {
+        workspace = found;
+        // Update last active workspace for REPL mode (user is interactively working here now)
+        setActiveWorkspace(found.id);
+      }
     }
   } else {
     workspace = activeWorkspace;
@@ -319,25 +333,21 @@ async function main() {
       process.exit(1);
     }
 
-    // Get workspace: -w flag > --url override > active workspace
+    // Get workspace: -w URL > -w workspace name/ID > active workspace
     let workspace: Workspace | null = null;
-    if (cli.flags.url) {
-      // URL override creates a temporary workspace with deterministic ID from URL
-      workspace = {
-        id: generateUrlWorkspaceId(cli.flags.url),
-        name: 'CLI Override',
-        mcpUrl: cli.flags.url,
-        isPublic: true,
-        createdAt: Date.now(),
-      };
-    } else if (cli.flags.workspace) {
-      // -w flag: lookup by name or ID
-      workspace = getWorkspaceByNameOrId(cli.flags.workspace);
-      if (!workspace) {
-        const available = getWorkspaces();
-        const names = available.map(w => w.name).join(', ') || 'none';
-        console.error(`Error: Workspace '${cli.flags.workspace}' not found. Available: ${names}`);
-        process.exit(1);
+    if (cli.flags.workspace) {
+      if (isUrl(cli.flags.workspace)) {
+        // -w with URL creates a temporary workspace
+        workspace = createUrlWorkspace(cli.flags.workspace);
+      } else {
+        // -w with name/ID: lookup existing workspace
+        workspace = getWorkspaceByNameOrId(cli.flags.workspace);
+        if (!workspace) {
+          const available = getWorkspaces();
+          const names = available.map(w => w.name).join(', ') || 'none';
+          console.error(`Error: Workspace '${cli.flags.workspace}' not found. Available: ${names}`);
+          process.exit(1);
+        }
       }
     } else {
       workspace = getActiveWorkspace();
