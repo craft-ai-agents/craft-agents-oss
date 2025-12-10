@@ -1,4 +1,8 @@
 #!/usr/bin/env bun
+// Cache TTL interceptor - MUST be first import (patches fetch before SDK loads)
+// Works in both dev (bunfig.toml preload) and compiled mode (direct import)
+import './cache-ttl-interceptor.ts';
+
 import React, { useState, useCallback } from 'react';
 import { render } from 'ink';
 import { createHash } from 'crypto';

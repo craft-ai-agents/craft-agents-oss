@@ -37,6 +37,7 @@ export interface StoredConfig {
   workspaces: Workspace[];
   activeWorkspaceId: string | null;
   model?: string;
+  extendedCacheTtl?: boolean;  // Extended cache TTL: true=1h all, false=5m all, undefined=auto (Opus only)
 }
 
 const CONFIG_DIR = join(homedir(), '.craft-agent');
@@ -72,6 +73,30 @@ export function loadStoredConfig(): StoredConfig | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Get extended cache TTL configuration.
+ * @returns true (force 1h), false (force 5m), or null (auto: 1h for Opus only)
+ */
+export function getExtendedCacheTtlConfig(): boolean | null {
+  const config = loadStoredConfig();
+  if (config && typeof config.extendedCacheTtl === 'boolean') {
+    return config.extendedCacheTtl;
+  }
+  return null; // Auto mode
+}
+
+/**
+ * Check if extended cache TTL should be used for the given model.
+ * Auto mode enables 1h cache for Opus models only (cost-effective).
+ */
+export function shouldUseExtendedCacheTtl(model: string): boolean {
+  const config = getExtendedCacheTtlConfig();
+  if (config === true) return true;
+  if (config === false) return false;
+  // Auto mode: only for Opus models
+  return model.includes('opus');
 }
 
 /**

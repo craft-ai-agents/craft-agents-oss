@@ -335,6 +335,36 @@ Includes:
 - Context tokens = base + cache for next request
 - Cost calculated by SDK (`total_cost_usd`)
 
+### Extended Prompt Cache TTL (`src/cache-ttl-interceptor.ts`)
+Extends Anthropic's prompt cache from 5 minutes to 1 hour for longer conversations.
+
+**How it works:**
+1. Imported as FIRST import in `index.tsx` (patches fetch before SDK loads)
+2. Also loaded via `bunfig.toml` preload for dev mode (belt-and-suspenders)
+3. Patches `globalThis.fetch` before the SDK captures the reference
+4. Intercepts Anthropic API requests and adds `ttl: "1h"` to `cache_control` blocks
+5. Beta header in `craft-agent.ts` conditionally added based on config/model
+
+**Why first import matters:**
+- ES modules capture references at load time
+- The interceptor must patch fetch before SDK imports evaluate
+- Direct import works in compiled binaries (preload doesn't)
+- Preload still helps in dev mode as extra safety
+
+**Configuration (`~/.craft-agent/config.json`):**
+- Not set (default): Auto mode - 1h for Opus models, 5m for others
+- `extendedCacheTtl: true`: Force 1h for all models
+- `extendedCacheTtl: false`: Force 5m for all models
+
+**Why Opus only by default:**
+Opus is expensive ($15/MTok input vs $3/MTok for Sonnet). The 2x cache write cost is negligible compared to Opus base cost, but significant for cheaper models.
+
+**Pricing impact:**
+| Cache Type | Write Cost | Read Cost |
+|------------|------------|-----------|
+| 5-minute (default) | 1.25x base | 0.1x base |
+| 1-hour (extended) | 2x base | 0.1x base |
+
 ### Keyboard Input Layer (`src/tui/keyboard/`)
 
 Centralized detection helpers for keyboard shortcuts. Works WITH Ink's `useInput` (not as a wrapper).
