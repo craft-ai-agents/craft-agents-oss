@@ -19,6 +19,7 @@ jobs:
         timeout-minutes: 10
         env:
           CRAFT_ANTHROPIC_API_KEY: ${{ secrets.CRAFT_ANTHROPIC_API_KEY }}
+          DEBUG: "*"
         run: |
           craft \
             -w "${{ secrets.CRAFT_KB_MCP_URL }}" \
@@ -32,10 +33,3 @@ jobs:
         if: always()
         run: cat /tmp/craft-debug.log || echo "No craft debug log found"
 
-      - name: Upload SDK debug log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: sdk-debug-log
-          path: ~/.claude/debug/latest
-          if-no-files-found: ignore

@@ -325,6 +325,10 @@ Rules:
       canUseTool: async (_toolName, input) => {
         return { behavior: 'allow' as const, updatedInput: input as Record<string, unknown> };
       },
+      // Capture stderr from SDK subprocess for debugging
+      stderr: (data: string) => {
+        debug('[extractor] SDK stderr:', data);
+      },
       // Structured output guarantees valid JSON matching schema
       outputFormat: {
         type: 'json_schema',
