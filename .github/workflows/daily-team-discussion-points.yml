@@ -16,6 +16,7 @@ jobs:
         run: curl -fsSL https://agents.craft.do/install.sh | bash
 
       - name: Run Daily Team Discussion Points Agent
+        timeout-minutes: 10
         env:
           CRAFT_ANTHROPIC_API_KEY: ${{ secrets.CRAFT_ANTHROPIC_API_KEY }}
         run: |
@@ -24,4 +25,9 @@ jobs:
             -a "@daily-team-discussion-points" \
             -p "dry-run: don't create discussion points on any day, just try to find todays daily note and return if you succeeded" \
             --output-format stream-json \
-            -m claude-opus-4-5-20251101
+            -m claude-opus-4-5-20251101 \
+            --debug
+
+      - name: Show debug log
+        if: always()
+        run: cat /tmp/craft-debug.log || echo "No debug log found"
