@@ -581,10 +581,6 @@ export class CraftAgent {
 
     const workspace = this.config.workspace;
 
-    if (workspace.isPublic) {
-      return null;
-    }
-
     // Get token from credential store (handles bearer token, OAuth, and legacy config fallback)
     const { authType, token } = await getWorkspaceAccessTokenAsync(workspace.id);
     if (!token && authType !== 'public') {

@@ -194,7 +194,14 @@ export class HeadlessRunner {
       }
 
       // Get token from credential store
-      const { token } = await getWorkspaceAccessTokenAsync(this.config.workspace.id);
+      const { authType, token } = await getWorkspaceAccessTokenAsync(this.config.workspace.id);
+
+      if (authType !== 'public' && !token) {
+        return {
+          success: false,
+          error: { code: 'auth_required', message: 'No authentication credentials found for workspace. Please re-add the workspace.' },
+        };
+      }
 
       debug('[HeadlessRunner] Connecting to MCP:', mcpUrl, 'hasToken:', !!token);
 

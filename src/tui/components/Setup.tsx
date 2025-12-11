@@ -361,8 +361,7 @@ export const Setup: React.FC<SetupProps> = ({ onComplete, onCancel, authState, s
           id: workspaceId,
           name: selectedSpaceName || 'Craft Workspace',
           mcpUrl: mcpUrl,
-          // MCP servers have their own OAuth, separate from Craft platform OAuth
-          mcpAuthType: 'workspace_oauth' as McpAuthType,
+          mcpAuthType: mcpOAuthResult ? 'workspace_oauth' as McpAuthType : 'public' as McpAuthType,
           createdAt: Date.now(),
         };
       }

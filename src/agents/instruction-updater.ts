@@ -83,7 +83,10 @@ export async function updateAgentInstructions(
 
   try {
     // Fetch fresh token for the workspace
-    const { token: mcpToken } = await getWorkspaceAccessTokenAsync(context.workspaceId);
+    const { authType, token: mcpToken } = await getWorkspaceAccessTokenAsync(context.workspaceId);
+    if (authType !== 'public' && !mcpToken) {
+      throw new Error('No authentication credentials found for workspace. Please re-add the workspace.');
+    }
     debug('[instruction-updater] Got fresh token:', mcpToken ? 'yes' : 'no');
 
     // Configure Craft MCP server for the embedded query
