@@ -82,7 +82,7 @@ export async function updateAgentInstructions(
 
   try {
     // Fetch fresh token for the workspace
-    const mcpToken = await getWorkspaceAccessTokenAsync(context.workspaceId);
+    const { token: mcpToken } = await getWorkspaceAccessTokenAsync(context.workspaceId);
     debug('[instruction-updater] Got fresh token:', mcpToken ? 'yes' : 'no');
 
     // Configure Craft MCP server for the embedded query

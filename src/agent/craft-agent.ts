@@ -585,8 +585,8 @@ export class CraftAgent {
     }
 
     // Get token from credential store (handles bearer token, OAuth, and legacy config fallback)
-    const token = await getWorkspaceAccessTokenAsync(workspace.id);
-    if (!token) {
+    const { authType, token } = await getWorkspaceAccessTokenAsync(workspace.id);
+    if (!token && authType !== 'public') {
       throw new Error('No authentication credentials found for workspace. Please re-add the workspace.');
     }
 

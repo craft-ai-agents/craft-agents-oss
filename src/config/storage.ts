@@ -167,11 +167,13 @@ function getWorkspaceMcpAuthType(workspace: Workspace): McpAuthType {
  * Craft OAuth is for the Craft API (managing spaces, MCP links).
  * MCP servers require their own workspace-specific authentication.
  */
-export async function getWorkspaceAccessTokenAsync(workspaceId: string): Promise<string | null> {
+export async function getWorkspaceAccessTokenAsync(workspaceId: string): Promise<{ authType: McpAuthType; token: string | null }> {
   const config = loadStoredConfig();
   const workspace = config?.workspaces.find(w => w.id === workspaceId);
 
-  if (!workspace) return null;
+  if (!workspace) {
+    return { authType: 'public', token: null };
+  }
 
   const manager = getCredentialManager();
   const authType = getWorkspaceMcpAuthType(workspace);
@@ -180,19 +182,19 @@ export async function getWorkspaceAccessTokenAsync(workspaceId: string): Promise
     case 'workspace_oauth': {
       const oauth = await manager.getWorkspaceOAuth(workspaceId);
       // Return token if found, null otherwise (no fallback to craft_oauth!)
-      return oauth?.accessToken ?? null;
+      return { authType, token: oauth?.accessToken ?? null };
     }
 
     case 'workspace_bearer': {
       const bearer = await manager.getWorkspaceBearer(workspaceId);
-      return bearer ?? null;
+      return { authType, token: bearer ?? null };
     }
 
     case 'public':
-      return null;
+      return { authType: 'public', token: null };
 
     default:
-      return null;
+      return { authType: 'public', token: null };
   }
 }
 
