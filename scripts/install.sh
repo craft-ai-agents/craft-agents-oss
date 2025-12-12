@@ -329,77 +329,21 @@ else
         printf "%b\n" "    2. Run: ${BOLD}source $config_file${NC}"
         echo ""
     else
-        warn "PATH is not configured."
-        echo ""
-        printf "%b\n" "  The ${BOLD}craft${NC} command won't be available in new terminals unless you"
-        printf "%b\n" "  add ${BOLD}$INSTALL_DIR${NC} to your PATH."
-        echo ""
-
-        # Ask user what they want to do
-        printf "%b\n" "  ${BOLD}How would you like to configure PATH?${NC}"
-        echo ""
-        printf "%b\n" "    [1] ${GREEN}Add to $config_filename automatically${NC} (recommended)"
-        printf "%b\n" "    [2] Show me what to add (manual)"
-        printf "%b\n" "    [3] Skip for now"
-        echo ""
-        printf "  Choice [1/2/3]: "
-        read -r choice
-
-        case "$choice" in
-            1|"")
-                # Automatic - add to shell config
-                if add_path_to_config "$config_file"; then
-                    echo ""
-                    success "Added PATH to $config_filename"
-                    echo ""
-                    printf "%b\n" "  To use ${BOLD}craft${NC} now, either:"
-                    printf "%b\n" "    • Open a ${BOLD}new terminal window${NC}, or"
-                    printf "%b\n" "    • Run: ${BOLD}source $config_file${NC}"
-                    echo ""
-                else
-                    # Fallback gracefully - binary is already installed!
-                    echo ""
-                    warn "Could not update $config_filename automatically."
-                    echo ""
-                    printf "%b\n" "  Add this line manually to your ${BOLD}$config_filename${NC}:"
-                    echo ""
-                    if [ "$shell_name" = "fish" ]; then
-                        printf "%b\n" "    ${BOLD}fish_add_path $INSTALL_DIR${NC}"
-                    else
-                        printf "%b\n" "    ${BOLD}export PATH=\"\$HOME/.local/bin:\$PATH\"${NC}"
-                    fi
-                    echo ""
-                fi
-                ;;
-            2)
-                # Manual - show instructions
-                echo ""
-                printf "%b\n" "  Add this line to your ${BOLD}$config_filename${NC}:"
-                echo ""
-                if [ "$shell_name" = "fish" ]; then
-                    printf "%b\n" "    ${BOLD}fish_add_path $INSTALL_DIR${NC}"
-                else
-                    printf "%b\n" "    ${BOLD}export PATH=\"\$HOME/.local/bin:\$PATH\"${NC}"
-                fi
-                echo ""
-                printf "%b\n" "  Then restart your terminal or run:"
-                printf "%b\n" "    ${BOLD}source $config_file${NC}"
-                echo ""
-                ;;
-            3)
-                # Skip
-                echo ""
-                warn "Skipping PATH configuration."
-                echo ""
-                printf "%b\n" "  To run craft, use the full path:"
-                printf "%b\n" "    ${BOLD}$INSTALL_DIR/craft${NC}"
-                echo ""
-                ;;
-            *)
-                warn "Invalid choice, skipping PATH configuration."
-                echo ""
-                ;;
-        esac
+        # Automatically add PATH - no need to ask
+        if add_path_to_config "$config_file"; then
+            success "Added PATH to $config_filename"
+        else
+            # Fallback gracefully - binary is already installed!
+            warn "Could not update $config_filename automatically."
+            echo ""
+            printf "%b\n" "  Add this line manually to your ${BOLD}$config_filename${NC}:"
+            echo ""
+            if [ "$shell_name" = "fish" ]; then
+                printf "%b\n" "    ${BOLD}fish_add_path $INSTALL_DIR${NC}"
+            else
+                printf "%b\n" "    ${BOLD}export PATH=\"\$HOME/.local/bin:\$PATH\"${NC}"
+            fi
+        fi
     fi
 fi
 
