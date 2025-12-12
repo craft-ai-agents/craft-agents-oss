@@ -4,7 +4,7 @@ import { CraftApi } from '../clients/craftApi';
 export async function getAiCreditTopUpUrl(): Promise<string | null> {
   const authToken = await getCraftToken();
 
-  const craftApi = new CraftApi("https://api.craft.do");
+  const craftApi = new CraftApi();
   const teamId = await getTeamId();
   if (!teamId) {
     return null;
@@ -20,6 +20,6 @@ export async function getAiCreditsBalance(): Promise<{ credits: number } | null>
   if (!teamId) {
     return null;
   }
-  const craftApi = new CraftApi("https://api.craft.do");
+  const craftApi = new CraftApi();
   return craftApi.getAiCreditsBalance({ authToken, teamId });
 }

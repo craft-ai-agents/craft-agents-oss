@@ -168,10 +168,6 @@ export const Setup: React.FC<SetupProps> = ({ onComplete, onCancel, authState, s
     setCraftToken(token);
     setCraftProfile(profile);
 
-    // Save the Craft OAuth token immediately so it's available for subscription check
-    const manager = getCredentialManager();
-    await manager.setCraftOAuth(token);
-
     setStep('select-space');
   }, []);
 
@@ -187,7 +183,7 @@ export const Setup: React.FC<SetupProps> = ({ onComplete, onCancel, authState, s
     setValidationError(null);
 
     try {
-      const craftApi = new CraftApi('https://api.craft.do');
+      const craftApi = new CraftApi();
       const workflowLinks = await craftApi.getWorkflowLinks({ authToken: craftToken, spaceId });
 
       // Filter for fullSpace MCP links that are enabled
@@ -223,7 +219,7 @@ export const Setup: React.FC<SetupProps> = ({ onComplete, onCancel, authState, s
     setValidationError(null);
 
     try {
-      const craftApi = new CraftApi('https://api.craft.do');
+      const craftApi = new CraftApi();
       const link = await craftApi.createSpaceWorkflowLink({
         authToken: craftToken,
         spaceId: id,
@@ -233,9 +229,6 @@ export const Setup: React.FC<SetupProps> = ({ onComplete, onCancel, authState, s
       });
 
       if (link.urls?.mcp) {
-        // Save Craft OAuth token and proceed to validation
-        const manager = getCredentialManager();
-        await manager.setCraftOAuth(craftToken);
         setMcpUrl(link.urls.mcp);
         // Now validate the MCP connection
         validateMcp(link.urls.mcp);
@@ -249,11 +242,6 @@ export const Setup: React.FC<SetupProps> = ({ onComplete, onCancel, authState, s
 
   // MCP link selected -> Validate MCP
   const handleMcpSelected = useCallback(async (url: string) => {
-    // Save Craft OAuth token
-    if (craftToken) {
-      const manager = getCredentialManager();
-      await manager.setCraftOAuth(craftToken);
-    }
     setMcpUrl(url);
     setStep('mcp-validating');
     validateMcp(url);

@@ -1,7 +1,10 @@
 import z from "zod";
 
+
+const CRAFT_API_BASE_URL = 'https://api.craft.do';
+
 export class CraftApi {
-    constructor(private baseUrl: string) {}
+    constructor(private baseUrl: string = CRAFT_API_BASE_URL) {}
 
     private async fetch<T>(params: {
         method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';

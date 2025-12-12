@@ -87,9 +87,6 @@ export const CraftCallbackStep: React.FC<CraftCallbackStepProps> = ({ onComplete
     const authResult = authResultRef.current;
     if (!authResult) return;
 
-    const manager = getCredentialManager();
-    await manager.setCraftOAuth(authResult.token);
-
     setStatus('checking-subscription');
     const subUrl = await checkSubscription(authResult.profile);
     if (subUrl) {
@@ -150,7 +147,7 @@ export const CraftCallbackStep: React.FC<CraftCallbackStepProps> = ({ onComplete
           return;
         }
         
-        const craftApi = new CraftApi('https://api.craft.do');
+        const craftApi = new CraftApi();
         debug('[CraftCallbackStep] exchanging code for token:', { code: callbackCode.substring(0, 10) + '...', redirectUri: callbackUrl, codeVerifier: codeVerifier.substring(0, 10) + '...' });
         const token = await craftApi.exchangeCodeForToken({ code: callbackCode, redirectUri: callbackUrl, codeVerifier });
 

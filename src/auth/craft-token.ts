@@ -88,7 +88,7 @@ export async function getTeamId(): Promise<string | null> {
   if (!token) {
     throw new Error('No Craft token stored. Please authenticate first.');
   }
-  const craftApi = new CraftApi(CRAFT_API_BASE_URL);
+  const craftApi = new CraftApi();
   const profile = await craftApi.getProfile(token);
   return getTeamIdFromProfile(profile);
 }
