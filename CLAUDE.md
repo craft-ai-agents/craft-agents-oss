@@ -445,8 +445,10 @@ Centralized detection helpers for keyboard shortcuts. Works WITH Ink's `useInput
 | Ctrl+U | `\x15` | `input='\x15'` | Clear line |
 | Ctrl+W | `\x17` | `input='\x17'` | Delete word backward |
 | Ctrl+K | `\x0b` | `input='\x0b'` | Kill to end of line |
-| Option+Backspace | `\x1b\x7f` | `input='\x7f'` + `key.meta=true` | Delete word backward |
-| Option+Delete | `\x1bd` | `input='d'` + `key.meta=true` | Delete word forward |
+| Option+Delete | `\x1b\x7f` | `input='\x7f'` + `key.meta=true` | Delete word backward |
+| Alt+D | `\x1bd` | `input='d'` + `key.meta=true` | Delete word forward |
+
+**Note:** Mac keyboards have "Delete" (acts as backspace) but no "Backspace" key.
 
 **Architecture:**
 - `mappings.ts` - Detection functions + documentation

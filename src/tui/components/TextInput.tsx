@@ -210,7 +210,7 @@ export const TextInput: React.FC<TextInputProps> = ({
         return;
       }
 
-      // Handle delete word backward (Option+Backspace, Ctrl+W, Ctrl+Backspace)
+      // Handle delete word backward (Option+Delete on Mac, Ctrl+W, Ctrl+Backspace on Linux)
       if (isDeleteWordBackward(input, key)) {
         if (sel) {
           // If there's a selection, delete the selection
@@ -232,7 +232,7 @@ export const TextInput: React.FC<TextInputProps> = ({
         return;
       }
 
-      // Handle delete word forward (Option+Delete, Ctrl+Delete, Alt+D)
+      // Handle delete word forward (Alt+D / Option+D, Ctrl+Delete on Linux)
       if (isDeleteWordForward(input, key)) {
         if (sel) {
           // If there's a selection, delete the selection

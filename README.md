@@ -103,15 +103,17 @@ Standard terminal/readline shortcuts for efficient text editing:
 | `Cmd+Right` / `Ctrl+E` | ✅ | ✅ | Jump to line end |
 | `Option+Left` | ✅ | - | Jump to previous word |
 | `Option+Right` | ✅ | - | Jump to next word |
-| `Option+Backspace` | ✅ | - | Delete word backward |
+| `Option+Delete` | ✅ | - | Delete word backward |
 | `Ctrl+W` | ✅ | ✅ | Delete word backward |
 | `Ctrl+Backspace` | - | ✅ | Delete word backward |
-| `Option+Delete` / `Alt+D` | ✅ | ✅ | Delete word forward |
+| `Alt+D` / `Option+D` | ✅ | ✅ | Delete word forward |
 | `Ctrl+Delete` | - | ✅ | Delete word forward |
 | `Ctrl+K` | ✅ | ✅ | Kill to end of line |
 | `Ctrl+U` | ✅ | ✅ | Clear entire line |
 | `Shift+Enter` / `Alt+Enter` | ✅ | ✅ | Insert newline (multiline) |
 | `Shift+Arrow` | ✅ | ✅ | Text selection |
+
+> **Note:** Mac keyboards have a "Delete" key (acts as backspace) but no "Backspace" key.
 
 ## Available Craft Tools
 
