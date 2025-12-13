@@ -18,6 +18,11 @@
  * | Option+Left    | \x1bb              | input='b' + key.meta=true |
  * | Option+Right   | \x1bf              | input='f' + key.meta=true |
  * | Ctrl+U         | \x15               | input='\x15'              |
+ * | Ctrl+W         | \x17               | input='\x17'              |
+ * | Ctrl+K         | \x0b               | input='\x0b'              |
+ * | Option+Bksp    | \x1b\x7f           | input='\x7f' + key.meta   |
+ * | Option+Delete  | \x1bd              | input='d' + key.meta      |
+ * | Ctrl+Backspace | \x1b[3;5~          | input='[3;5~' (varies)    |
  */
 
 // Ink's Key type (subset of what we need)
@@ -129,4 +134,74 @@ export function isHistorySearch(input: string, key: InkKey): boolean {
  */
 export function isAbort(input: string, key: InkKey): boolean {
   return (key.ctrl === true && input === 'g') || input === '\x07';
+}
+
+/**
+ * Delete word backward - Option+Backspace (Mac), Ctrl+W, Ctrl+Backspace (Linux)
+ *
+ * Option+Backspace: Terminal sends ESC+DEL (\x1b\x7f)
+ * - Ink may deliver: input='\x7f' with key.meta=true, or key.backspace with key.meta
+ * - Some terminals: input='\x17' (same as Ctrl+W)
+ *
+ * Ctrl+W: Standard readline delete-word-backward
+ * - Raw: \x17 (ASCII 23, W is 23rd letter)
+ *
+ * Ctrl+Backspace (Linux): Varies by terminal
+ * - Often: \x08 with ctrl, or \x7f with ctrl, or \x1b[3;5~
+ */
+export function isDeleteWordBackward(input: string, key: InkKey): boolean {
+  // Ctrl+W (most common, works everywhere)
+  if (input === '\x17' || (key.ctrl === true && input === 'w')) {
+    return true;
+  }
+  // Option+Backspace on Mac (ESC + DEL)
+  if (key.meta === true && (key.backspace === true || input === '\x7f')) {
+    return true;
+  }
+  // Ctrl+Backspace variations
+  if (key.ctrl === true && (key.backspace === true || input === '\x08' || input === '\x7f')) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Delete word forward - Option+Delete (Mac), Ctrl+Delete (Linux), Alt+D
+ *
+ * Option+Delete (Mac): ESC+d (\x1bd)
+ * - Ink delivers: input='d' with key.meta=true
+ *
+ * Alt+D: Standard readline kill-word
+ * - Same as Option+Delete on Mac
+ *
+ * Ctrl+Delete (Linux): \x1b[3;5~ or similar
+ */
+export function isDeleteWordForward(input: string, key: InkKey): boolean {
+  // Option+Delete / Alt+D (ESC + d)
+  if (key.meta === true && input === 'd') {
+    return true;
+  }
+  // Raw ESC+d
+  if (input === '\x1bd') {
+    return true;
+  }
+  // Ctrl+Delete (CSI sequence)
+  if (input === '[3;5~') {
+    return true;
+  }
+  // Ctrl+Delete with key flag
+  if (key.ctrl === true && key.delete === true) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Kill to end of line - Ctrl+K
+ * Standard readline kill-line (deletes from cursor to end of line)
+ *
+ * Ctrl+K: \x0b (ASCII 11, K is 11th letter)
+ */
+export function isKillToEnd(input: string, key: InkKey): boolean {
+  return input === '\x0b' || (key.ctrl === true && input === 'k');
 }

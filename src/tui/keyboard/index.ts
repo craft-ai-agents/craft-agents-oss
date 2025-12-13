@@ -31,4 +31,7 @@ export {
   isCancel,
   isHistorySearch,
   isAbort,
+  isDeleteWordBackward,
+  isDeleteWordForward,
+  isKillToEnd,
 } from './mappings.ts';

@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Text, useInput } from 'ink';
-import { isShiftOrAltEnter, isLineStart, isLineEnd, isShiftVariant, isWordLeft, isWordRight, isClearLine, isCancel } from '../keyboard/index.ts';
+import { isShiftOrAltEnter, isLineStart, isLineEnd, isShiftVariant, isWordLeft, isWordRight, isClearLine, isCancel, isDeleteWordBackward, isDeleteWordForward, isKillToEnd } from '../keyboard/index.ts';
 
 export interface TextInputProps {
   // Required
@@ -207,6 +207,60 @@ export const TextInput: React.FC<TextInputProps> = ({
         selectionRef.current = null;
         prevValueRef.current = '';
         onChange('');
+        return;
+      }
+
+      // Handle delete word backward (Option+Backspace, Ctrl+W, Ctrl+Backspace)
+      if (isDeleteWordBackward(input, key)) {
+        if (sel) {
+          // If there's a selection, delete the selection
+          const selStart = Math.min(sel.anchor, sel.active);
+          const selEnd = Math.max(sel.anchor, sel.active);
+          const newValue = value.slice(0, selStart) + value.slice(selEnd);
+          cursorRef.current = selStart;
+          selectionRef.current = null;
+          prevValueRef.current = newValue;
+          onChange(newValue);
+        } else if (cursor > 0) {
+          // Delete from cursor to previous word boundary
+          const wordStart = findPrevWordBoundary(value, cursor);
+          const newValue = value.slice(0, wordStart) + value.slice(cursor);
+          cursorRef.current = wordStart;
+          prevValueRef.current = newValue;
+          onChange(newValue);
+        }
+        return;
+      }
+
+      // Handle delete word forward (Option+Delete, Ctrl+Delete, Alt+D)
+      if (isDeleteWordForward(input, key)) {
+        if (sel) {
+          // If there's a selection, delete the selection
+          const selStart = Math.min(sel.anchor, sel.active);
+          const selEnd = Math.max(sel.anchor, sel.active);
+          const newValue = value.slice(0, selStart) + value.slice(selEnd);
+          cursorRef.current = selStart;
+          selectionRef.current = null;
+          prevValueRef.current = newValue;
+          onChange(newValue);
+        } else if (cursor < value.length) {
+          // Delete from cursor to next word boundary
+          const wordEnd = findNextWordBoundary(value, cursor);
+          const newValue = value.slice(0, cursor) + value.slice(wordEnd);
+          prevValueRef.current = newValue;
+          onChange(newValue);
+        }
+        return;
+      }
+
+      // Handle kill to end of line (Ctrl+K)
+      if (isKillToEnd(input, key)) {
+        if (cursor < value.length) {
+          const newValue = value.slice(0, cursor);
+          selectionRef.current = null;
+          prevValueRef.current = newValue;
+          onChange(newValue);
+        }
         return;
       }
 

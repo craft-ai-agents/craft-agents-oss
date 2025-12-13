@@ -434,14 +434,19 @@ Centralized detection helpers for keyboard shortcuts. Works WITH Ink's `useInput
 - Strips `\x1b` prefix from sequences
 - Sets `key.return`, `key.escape`, etc. for recognized keys
 
-| Key Combo | Ghostty Sends | Ink Delivers |
-|-----------|---------------|--------------|
-| Shift+Enter | `\x1b[27;2;13~` | `input='[27;2;13~'` |
-| Alt+Enter | `\x1b\r` | `input='\r'` + `key.meta=true` |
-| Cmd+Left | `\x01` (Ctrl+A) | `input='\x01'` |
-| Cmd+Right | `\x05` (Ctrl+E) | `input='\x05'` |
-| Option+Left | `\x1bb` | `input='b'` + `key.meta=true` |
-| Option+Right | `\x1bf` | `input='f'` + `key.meta=true` |
+| Key Combo | Ghostty Sends | Ink Delivers | Action |
+|-----------|---------------|--------------|--------|
+| Shift+Enter | `\x1b[27;2;13~` | `input='[27;2;13~'` | Insert newline |
+| Alt+Enter | `\x1b\r` | `input='\r'` + `key.meta=true` | Insert newline |
+| Cmd+Left | `\x01` (Ctrl+A) | `input='\x01'` | Line start |
+| Cmd+Right | `\x05` (Ctrl+E) | `input='\x05'` | Line end |
+| Option+Left | `\x1bb` | `input='b'` + `key.meta=true` | Word left |
+| Option+Right | `\x1bf` | `input='f'` + `key.meta=true` | Word right |
+| Ctrl+U | `\x15` | `input='\x15'` | Clear line |
+| Ctrl+W | `\x17` | `input='\x17'` | Delete word backward |
+| Ctrl+K | `\x0b` | `input='\x0b'` | Kill to end of line |
+| Option+Backspace | `\x1b\x7f` | `input='\x7f'` + `key.meta=true` | Delete word backward |
+| Option+Delete | `\x1bd` | `input='d'` + `key.meta=true` | Delete word forward |
 
 **Architecture:**
 - `mappings.ts` - Detection functions + documentation
@@ -472,8 +477,10 @@ const isCtrlC = input === '\x03' || (key.ctrl && input === 'c');
 // Common raw character codes:
 // Ctrl+C → '\x03' (ETX, ASCII 3)  - C is 3rd letter
 // Ctrl+G → '\x07' (BEL, ASCII 7)  - G is 7th letter
+// Ctrl+K → '\x0b' (VT, ASCII 11)  - K is 11th letter
 // Ctrl+R → '\x12' (DC2, ASCII 18) - R is 18th letter
 // Ctrl+U → '\x15' (NAK, ASCII 21) - U is 21st letter
+// Ctrl+W → '\x17' (ETB, ASCII 23) - W is 23rd letter
 ```
 
 Different terminals/Ink versions may deliver only the raw character without setting `key.ctrl`. See `mappings.ts` for the canonical implementations.
