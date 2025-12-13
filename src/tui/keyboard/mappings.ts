@@ -20,7 +20,7 @@
  * | Ctrl+U         | \x15               | input='\x15'              |
  * | Ctrl+W         | \x17               | input='\x17'              |
  * | Ctrl+K         | \x0b               | input='\x0b'              |
- * | Option+Delete  | \x1b\x7f           | input='\x7f' + key.meta   | (Mac - delete word backward)
+ * | Option+Delete  | (varies)           | key.meta + key.delete     | (Mac - delete word backward)
  * | Alt+D          | \x1bd              | input='d' + key.meta      | (delete word forward)
  * | Ctrl+Backspace | (varies)           | key.ctrl + key.backspace  | (Linux)
  */
@@ -139,12 +139,10 @@ export function isAbort(input: string, key: InkKey): boolean {
 /**
  * Delete word backward - Option+Delete (Mac), Ctrl+W, Ctrl+Backspace (Linux)
  *
- * Mac Note: The "Delete" key on Mac acts as backspace (sends \x7f).
- * There is no "Backspace" key on Mac keyboards.
+ * Mac Note: The "Delete" key on Mac acts as backspace, but Ink reports it
+ * as key.delete=true (not key.backspace) when used with Option.
  *
- * Option+Delete (Mac): Terminal sends ESC+DEL (\x1b\x7f)
- * - Ink may deliver: input='\x7f' with key.meta=true, or key.backspace with key.meta
- * - Some terminals: input='\x17' (same as Ctrl+W)
+ * Option+Delete (Mac): Ink delivers key.meta=true + key.delete=true + input=""
  *
  * Ctrl+W: Standard readline delete-word-backward (works on all platforms)
  * - Raw: \x17 (ASCII 23, W is 23rd letter)
@@ -157,7 +155,11 @@ export function isDeleteWordBackward(input: string, key: InkKey): boolean {
   if (input === '\x17' || (key.ctrl === true && input === 'w')) {
     return true;
   }
-  // Option+Delete on Mac (ESC + DEL) - Mac's Delete key acts as backspace
+  // Option+Delete on Mac - Ink reports key.delete=true (not backspace) with meta
+  if (key.meta === true && key.delete === true) {
+    return true;
+  }
+  // Fallback: Option+Delete might also send \x7f with meta in some terminals
   if (key.meta === true && (key.backspace === true || input === '\x7f')) {
     return true;
   }
