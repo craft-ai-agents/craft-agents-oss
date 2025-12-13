@@ -17,6 +17,14 @@ on:
         required: false
         type: boolean
         default: false
+      createRelease:
+        description: 'Create a GitHub release with binaries'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
 
 jobs:
   build-and-upload:
@@ -36,7 +44,7 @@ jobs:
       - name: Build
         run: bun run scripts/build.ts ${{ inputs.version }}
 
-      - name: Upload
+      - name: Upload to S3
         env:
           S3_VERSIONS_BUCKET_ENDPOINT: ${{ secrets.S3_VERSIONS_BUCKET_ENDPOINT }}
           S3_VERSIONS_BUCKET_ACCESS_KEY_ID: ${{ secrets.S3_VERSIONS_BUCKET_ACCESS_KEY_ID }}
@@ -50,3 +58,15 @@ jobs:
             FLAGS="$FLAGS --script"
           fi
           bun run scripts/upload.ts $FLAGS
+
+      - name: Create GitHub Release
+        if: ${{ inputs.createRelease }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Create the release with auto-generated notes
+          gh release create "v${{ inputs.version }}" \
+            --title "v${{ inputs.version }}" \
+            --generate-notes \
+            .build/upload/*.tar.gz \
+            .build/upload/manifest.json
