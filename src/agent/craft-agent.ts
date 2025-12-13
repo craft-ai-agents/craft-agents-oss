@@ -859,6 +859,9 @@ export class CraftAgent {
         disallowedTools,
       };
 
+      // Track whether we're trying to resume a session (for error handling)
+      const wasResuming = !_isRetry && !!this.sessionId;
+
       // Create the query - use AsyncIterable for messages with binary attachments
       if (hasBinaryAttachments) {
         const sdkMessage = this.buildSDKUserMessage(userMessage, attachments);
@@ -908,18 +911,61 @@ export class CraftAgent {
           return;
         }
 
-        // Session resume failures - clear session and retry automatically
-        if (this.sessionId && sdkError instanceof Error) {
-          // Only retry once to prevent infinite loops
-          if (!_isRetry) {
+        // Classify and handle other errors
+        if (sdkError instanceof Error) {
+          const errorMsg = sdkError.message.toLowerCase();
+
+          // Debug logging - always log the actual error and context
+          this.onDebug?.(`Error in chat: ${sdkError.message}`);
+          this.onDebug?.(`Context: wasResuming=${wasResuming}, isRetry=${_isRetry}`);
+
+          // Check for auth errors - these won't be fixed by clearing session
+          const isAuthError =
+            errorMsg.includes('unauthorized') ||
+            errorMsg.includes('401') ||
+            errorMsg.includes('authentication failed') ||
+            errorMsg.includes('invalid api key') ||
+            errorMsg.includes('invalid x-api-key');
+
+          if (isAuthError) {
+            // Auth errors should surface immediately, not retry
+            yield { type: 'error', message: sdkError.message };
+            yield { type: 'complete' };
+            return;
+          }
+
+          // Rate limit errors - don't retry immediately, surface to user
+          const isRateLimitError =
+            errorMsg.includes('429') ||
+            errorMsg.includes('rate limit') ||
+            errorMsg.includes('too many requests');
+
+          if (isRateLimitError) {
+            yield { type: 'error', message: sdkError.message };
+            yield { type: 'complete' };
+            return;
+          }
+
+          // Session-related retry: only if we were resuming and haven't retried yet
+          if (wasResuming && !_isRetry) {
             this.sessionId = null;
-            yield { type: 'status', message: 'Session expired, retrying...' };
+
+            // Provide context-aware message (conservative: only match explicit session/resume terms)
+            const isSessionError =
+              errorMsg.includes('session') ||
+              errorMsg.includes('resume');
+
+            const statusMessage = isSessionError
+              ? 'Conversation sync failed, starting fresh...'
+              : 'Request failed, retrying without history...';
+
+            yield { type: 'status', message: statusMessage };
             // Recursively call with isRetry=true (yield* delegates all events)
             yield* this.chat(userMessage, attachments, true);
             return;
           }
 
-          // Retry also failed - show actual error
+          // Retry also failed, or wasn't resuming - show actual error
           yield { type: 'error', message: sdkError.message };
           yield { type: 'complete' };
           return;

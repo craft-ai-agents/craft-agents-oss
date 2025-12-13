@@ -81,21 +81,120 @@ function isAnthropicMessagesUrl(url: string): boolean {
 
 const originalFetch = globalThis.fetch.bind(globalThis);
 
+/**
+ * Convert headers to cURL -H flags, redacting sensitive values
+ */
+function headersToCurl(headers: HeadersInit | undefined): string {
+  if (!headers) return '';
+
+  const headerObj: Record<string, string> =
+    headers instanceof Headers
+      ? Object.fromEntries(headers.entries())
+      : Array.isArray(headers)
+        ? Object.fromEntries(headers)
+        : (headers as Record<string, string>);
+
+  const sensitiveKeys = ['x-api-key', 'authorization', 'cookie'];
+
+  return Object.entries(headerObj)
+    .map(([key, value]) => {
+      const redacted = sensitiveKeys.includes(key.toLowerCase())
+        ? '[REDACTED]'
+        : value;
+      return `-H '${key}: ${redacted}'`;
+    })
+    .join(' \\\n  ');
+}
+
+/**
+ * Format a fetch request as a cURL command
+ */
+function toCurl(url: string, init?: RequestInit): string {
+  const method = init?.method?.toUpperCase() ?? 'GET';
+  const headers = headersToCurl(init?.headers);
+
+  let curl = `curl -X ${method}`;
+  if (headers) {
+    curl += ` \\\n  ${headers}`;
+  }
+  if (init?.body && typeof init.body === 'string') {
+    // Escape single quotes in body for shell safety
+    const escapedBody = init.body.replace(/'/g, "'\\''");
+    curl += ` \\\n  -d '${escapedBody}'`;
+  }
+  curl += ` \\\n  '${url}'`;
+
+  return curl;
+}
+
+/**
+ * Clone response and log its body (handles streaming responses)
+ */
+async function logResponse(response: Response, url: string, startTime: number): Promise<Response> {
+  if (!DEBUG) return response;
+
+  const duration = Date.now() - startTime;
+  debugLog(`\n← RESPONSE ${response.status} ${response.statusText} (${duration}ms)`);
+  debugLog(`  URL: ${url}`);
+
+  // Log response headers
+  const respHeaders: Record<string, string> = {};
+  response.headers.forEach((value, key) => {
+    respHeaders[key] = value;
+  });
+  debugLog('  Headers:', respHeaders);
+
+  // For streaming responses, we can't easily log the body without consuming it
+  // For non-streaming, clone and log
+  const contentType = response.headers.get('content-type') ?? '';
+  if (contentType.includes('text/event-stream')) {
+    debugLog('  Body: [SSE stream - not logged]');
+    return response;
+  }
+
+  // Clone the response so we can read the body without consuming it
+  const clone = response.clone();
+  try {
+    const text = await clone.text();
+    // Limit logged response size to prevent huge logs
+    const maxLogSize = 5000;
+    if (text.length > maxLogSize) {
+      debugLog(`  Body (truncated to ${maxLogSize} chars):\n${text.substring(0, maxLogSize)}...`);
+    } else {
+      debugLog(`  Body:\n${text}`);
+    }
+  } catch (e) {
+    debugLog('  Body: [failed to read]', e);
+  }
+
+  return response;
+}
+
 async function interceptedFetch(
   input: string | URL | Request,
   init?: RequestInit
 ): Promise<Response> {
-  // Skip if explicitly disabled
-  if (EXTENDED_CACHE_CONFIG === false) {
-    return originalFetch(input, init);
-  }
-
   const url =
     typeof input === 'string'
       ? input
       : input instanceof URL
         ? input.toString()
         : input.url;
+
+  const startTime = Date.now();
+
+  // Log all requests as cURL commands
+  if (DEBUG) {
+    debugLog('\n' + '='.repeat(80));
+    debugLog('→ REQUEST');
+    debugLog(toCurl(url, init));
+  }
+
+  // Skip cache TTL modification if explicitly disabled
+  if (EXTENDED_CACHE_CONFIG === false) {
+    const response = await originalFetch(input, init);
+    return logResponse(response, url, startTime);
+  }
 
   if (
     isAnthropicMessagesUrl(url) &&
@@ -112,6 +211,7 @@ async function interceptedFetch(
           ...JSON.parse(JSON.stringify(headers)),
           'authorization': `${process.env.CRAFT_API_GATEWAY_TOKEN}`,
         };
+        debugLog('  [Redirecting to Craft AI Gateway]');
       }
       const body = typeof init.body === 'string' ? init.body : undefined;
       if (body) {
@@ -125,18 +225,33 @@ async function interceptedFetch(
           EXTENDED_CACHE_CONFIG === true ||
           (EXTENDED_CACHE_CONFIG === null && model && isOpusModel(model));
 
+        if (shouldApply) {
+          debugLog('  [Applying 1h cache TTL]');
+        }
+
         const modified = shouldApply ? addCacheTtl(parsed) : parsed;
-        return originalFetch(newUrl.toString(), {
+        const modifiedInit = {
           ...init,
           body: JSON.stringify(modified),
           headers: headers,
-        });
+        };
+
+        // Log the modified request if it differs
+        if (DEBUG && (shouldApply || newUrl.toString() !== url)) {
+          debugLog('\n→ MODIFIED REQUEST');
+          debugLog(toCurl(newUrl.toString(), modifiedInit));
+        }
+
+        const response = await originalFetch(newUrl.toString(), modifiedInit);
+        return logResponse(response, newUrl.toString(), startTime);
       }
     } catch (e) {
       debugLog('FETCH modification failed:', e);
     }
   }
-  return originalFetch(input, init);
+
+  const response = await originalFetch(input, init);
+  return logResponse(response, url, startTime);
 }
 
 // Create proxy to handle both function calls and static properties (e.g., fetch.preconnect in Bun)
