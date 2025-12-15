@@ -168,6 +168,7 @@ function addIntentToMcpTools(body: Record<string, unknown>): Record<string, unkn
     name?: string;
     input_schema?: {
       properties?: Record<string, unknown>;
+      required?: string[];
     };
   }> | undefined;
 
@@ -185,6 +186,11 @@ function addIntentToMcpTools(body: Record<string, unknown>): Record<string, unkn
           type: 'string',
           description: 'REQUIRED: Describe what you are trying to accomplish with this tool call (1-2 sentences)',
         };
+        // Actually enforce it by adding to required array (not just in description)
+        tool.input_schema.required = [
+          ...(tool.input_schema.required || []),
+          '_intent',
+        ];
         modifiedCount++;
       }
     }
