@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, readdirSync, unlinkSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
 import { randomUUID } from 'crypto';
@@ -47,15 +47,25 @@ export type AuthType = 'api_key' | 'oauth_token' | 'craft_credits';
 // Token display mode for status bar
 export type TokenDisplayMode = 'hidden' | 'total' | 'separate';
 
+// Global cumulative usage tracking across all workspaces
+export interface CumulativeUsage {
+  totalCostUsd: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  lastUpdated: number;
+}
+
 // Config stored in JSON file (credentials stored in encrypted file, not here)
 export interface StoredConfig {
   authType?: AuthType;
   workspaces: Workspace[];
   activeWorkspaceId: string | null;
+  activeSessionId: string | null;  // Currently active session (primary scope)
   model?: string;
   extendedCacheTtl?: boolean;  // Extended cache TTL: true=1h all, false=5m all, undefined=auto (Opus only)
   tokenDisplay?: TokenDisplayMode;  // How to show tokens in status bar: hidden, total, or separate in/out
   showCost?: boolean;  // Whether to show cost in status bar (only relevant for API Key auth)
+  cumulativeUsage?: CumulativeUsage;  // Global cumulative cost across all workspaces
 }
 
 const CONFIG_DIR = join(homedir(), '.craft-agent');
@@ -343,6 +353,49 @@ export function setShowCost(show: boolean): void {
   saveConfig(config);
 }
 
+export function getCumulativeUsage(): CumulativeUsage {
+  const config = loadStoredConfig();
+  return config?.cumulativeUsage ?? {
+    totalCostUsd: 0,
+    totalInputTokens: 0,
+    totalOutputTokens: 0,
+    lastUpdated: 0,
+  };
+}
+
+/**
+ * Add to cumulative usage (called when workspace token usage changes).
+ * Pass the delta (difference from previous), not the absolute values.
+ */
+export function addToCumulativeUsage(delta: {
+  costUsd: number;
+  inputTokens: number;
+  outputTokens: number;
+}): CumulativeUsage {
+  const config = loadStoredConfig();
+  if (!config) {
+    return getCumulativeUsage();
+  }
+
+  const current = config.cumulativeUsage ?? {
+    totalCostUsd: 0,
+    totalInputTokens: 0,
+    totalOutputTokens: 0,
+    lastUpdated: 0,
+  };
+
+  const updated: CumulativeUsage = {
+    totalCostUsd: current.totalCostUsd + delta.costUsd,
+    totalInputTokens: current.totalInputTokens + delta.inputTokens,
+    totalOutputTokens: current.totalOutputTokens + delta.outputTokens,
+    lastUpdated: Date.now(),
+  };
+
+  config.cumulativeUsage = updated;
+  saveConfig(config);
+  return updated;
+}
+
 export function getConfigPath(): string {
   return CONFIG_FILE;
 }
@@ -412,6 +465,70 @@ export function setActiveWorkspace(workspaceId: string): void {
 
   config.activeWorkspaceId = workspaceId;
   saveConfig(config);
+}
+
+/**
+ * Atomically switch to a different workspace.
+ * Performs a single config write with both workspace and session updates.
+ *
+ * This prevents race conditions where multiple saves could leave config
+ * in an inconsistent state if the process crashes mid-switch.
+ *
+ * @returns The workspace and session to use, or null if workspace not found
+ */
+export function switchWorkspaceAtomic(workspaceId: string): { workspace: Workspace; session: Session } | null {
+  const config = loadStoredConfig();
+  if (!config) return null;
+
+  const workspace = config.workspaces.find(w => w.id === workspaceId);
+  if (!workspace) return null;
+
+  // Get or create session for the workspace
+  const sessions = listSessions(workspaceId);
+  let session: Session;
+
+  if (sessions.length > 0 && sessions[0]) {
+    // Use existing session
+    const latest = sessions[0];
+    session = {
+      id: latest.id,
+      sdkSessionId: latest.sdkSessionId,
+      workspaceId: latest.workspaceId,
+      name: latest.name,
+      createdAt: latest.createdAt,
+      lastUsedAt: latest.lastUsedAt,
+    };
+  } else {
+    // Create new session (saves session file but not config)
+    const now = Date.now();
+    session = {
+      id: generateSessionId(),
+      workspaceId,
+      createdAt: now,
+      lastUsedAt: now,
+    };
+
+    // Save empty session file
+    const storedSession: StoredSession = {
+      ...session,
+      messages: [],
+      tokenUsage: {
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        contextTokens: 0,
+        costUsd: 0,
+      },
+    };
+    saveSession(storedSession);
+  }
+
+  // Single atomic write for both workspace and session
+  config.activeWorkspaceId = workspaceId;
+  config.activeSessionId = session.id;
+  saveConfig(config);
+
+  return { workspace, session };
 }
 
 export function addWorkspace(workspace: Omit<Workspace, 'id' | 'createdAt'>): Workspace {
@@ -577,5 +694,231 @@ export function clearWorkspaceConversation(workspaceId: string): void {
 
   // Also clear session ID
   updateWorkspaceSessionId(workspaceId, null);
+}
+
+// ============================================
+// Session Storage (Primary Scope)
+// ============================================
+// Sessions are the primary isolation boundary. Each session maps 1:1
+// with a CraftAgent instance and SDK conversation.
+
+const SESSIONS_DIR = join(CONFIG_DIR, 'sessions');
+
+function ensureSessionsDir(): string {
+  if (!existsSync(SESSIONS_DIR)) {
+    mkdirSync(SESSIONS_DIR, { recursive: true });
+  }
+  return SESSIONS_DIR;
+}
+
+// Session token usage (reuse WorkspaceConversation structure)
+export type SessionTokenUsage = WorkspaceConversation['tokenUsage'];
+
+// Session represents a conversation scope (SDK session = our scope boundary)
+export interface Session {
+  id: string;                    // Our UUID (stable, known immediately)
+  sdkSessionId?: string;         // SDK session ID (captured after first message)
+  workspaceId: string;           // Which workspace this session belongs to
+  name?: string;                 // Optional user-defined name
+  createdAt: number;
+  lastUsedAt: number;
+}
+
+// Stored session with conversation data
+export interface StoredSession extends Session {
+  messages: StoredMessage[];
+  tokenUsage: SessionTokenUsage;
+}
+
+// Generate a UUID for session IDs
+function generateSessionId(): string {
+  return randomUUID();
+}
+
+// Create a new session for a workspace
+export function createSession(workspaceId: string, name?: string): Session {
+  const now = Date.now();
+  const session: Session = {
+    id: generateSessionId(),
+    workspaceId,
+    name,
+    createdAt: now,
+    lastUsedAt: now,
+  };
+
+  // Save empty session file
+  const storedSession: StoredSession = {
+    ...session,
+    messages: [],
+    tokenUsage: {
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      contextTokens: 0,
+      costUsd: 0,
+    },
+  };
+  saveSession(storedSession);
+
+  // Update active session in config
+  const config = loadStoredConfig();
+  if (config) {
+    config.activeSessionId = session.id;
+    saveConfig(config);
+  }
+
+  return session;
+}
+
+// Save session (conversation data + metadata)
+export function saveSession(session: StoredSession): void {
+  ensureSessionsDir();
+  const filePath = join(SESSIONS_DIR, `${session.id}.json`);
+  session.lastUsedAt = Date.now();
+  writeFileSync(filePath, JSON.stringify(session, null, 2), 'utf-8');
+}
+
+// Load session by ID
+export function loadSession(sessionId: string): StoredSession | null {
+  const filePath = join(SESSIONS_DIR, `${sessionId}.json`);
+  try {
+    if (!existsSync(filePath)) {
+      return null;
+    }
+    const content = readFileSync(filePath, 'utf-8');
+    return JSON.parse(content) as StoredSession;
+  } catch {
+    return null;
+  }
+}
+
+// Get session metadata (without loading full messages)
+export interface SessionMetadata {
+  id: string;
+  workspaceId: string;
+  name?: string;
+  createdAt: number;
+  lastUsedAt: number;
+  messageCount: number;
+  preview?: string;  // Preview of first user message
+  sdkSessionId?: string;
+}
+
+// List sessions, optionally filtered by workspace
+export function listSessions(workspaceId?: string): SessionMetadata[] {
+  ensureSessionsDir();
+
+  const files = readdirSync(SESSIONS_DIR).filter(f => f.endsWith('.json'));
+  const sessions: SessionMetadata[] = [];
+
+  for (const file of files) {
+    try {
+      const content = readFileSync(join(SESSIONS_DIR, file), 'utf-8');
+      const session = JSON.parse(content) as StoredSession;
+
+      if (!workspaceId || session.workspaceId === workspaceId) {
+        // Find first user message for preview
+        const firstUserMessage = session.messages?.find(m => m.type === 'user');
+        const preview = firstUserMessage?.content?.replace(/\n/g, ' ').substring(0, 100);
+
+        sessions.push({
+          id: session.id,
+          workspaceId: session.workspaceId,
+          name: session.name,
+          createdAt: session.createdAt,
+          lastUsedAt: session.lastUsedAt,
+          messageCount: session.messages?.length ?? 0,
+          preview,
+          sdkSessionId: session.sdkSessionId,
+        });
+      }
+    } catch {
+      // Skip invalid files
+    }
+  }
+
+  // Sort by lastUsedAt descending (most recent first)
+  return sessions.sort((a, b) => b.lastUsedAt - a.lastUsedAt);
+}
+
+// Delete session
+export function deleteSession(sessionId: string): boolean {
+  const filePath = join(SESSIONS_DIR, `${sessionId}.json`);
+  try {
+    if (existsSync(filePath)) {
+      unlinkSync(filePath);
+
+      // If this was the active session, clear it
+      const config = loadStoredConfig();
+      if (config && config.activeSessionId === sessionId) {
+        config.activeSessionId = null;
+        saveConfig(config);
+      }
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+// Get or create the latest session for a workspace
+export function getOrCreateLatestSession(workspaceId: string): Session {
+  const sessions = listSessions(workspaceId);
+  if (sessions.length > 0 && sessions[0]) {
+    // Return metadata as Session (full data loaded separately if needed)
+    const latest = sessions[0];
+    return {
+      id: latest.id,
+      sdkSessionId: latest.sdkSessionId,
+      workspaceId: latest.workspaceId,
+      name: latest.name,
+      createdAt: latest.createdAt,
+      lastUsedAt: latest.lastUsedAt,
+    };
+  }
+  // No sessions exist - create one
+  return createSession(workspaceId);
+}
+
+// Update active session ID in config
+export function setActiveSession(sessionId: string | null): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+  config.activeSessionId = sessionId;
+  saveConfig(config);
+}
+
+// Get active session ID from config
+export function getActiveSessionId(): string | null {
+  const config = loadStoredConfig();
+  return config?.activeSessionId ?? null;
+}
+
+// Update SDK session ID for a session (called after first message)
+export function updateSessionSdkId(sessionId: string, sdkSessionId: string): void {
+  const session = loadSession(sessionId);
+  if (session) {
+    session.sdkSessionId = sdkSessionId;
+    saveSession(session);
+  }
+}
+
+// Clean up old workspace-based conversations (replaced by session-based storage)
+// Called once on startup to remove stale data
+export function cleanupLegacyConversations(): void {
+  try {
+    if (!existsSync(WORKSPACES_DIR)) return;
+
+    const workspaceDirs = readdirSync(WORKSPACES_DIR);
+    for (const dir of workspaceDirs) {
+      const conversationPath = join(WORKSPACES_DIR, dir, 'conversation.json');
+      if (existsSync(conversationPath)) {
+        unlinkSync(conversationPath);
+      }
+    }
+  } catch {
+    // Ignore cleanup errors - non-critical
+  }
 }
 

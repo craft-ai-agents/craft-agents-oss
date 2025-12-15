@@ -385,10 +385,12 @@ export const Setup: React.FC<SetupProps> = ({ onComplete, onCancel, authState, s
       }
 
       // Build config (credentials stored in credential store, not here)
+      // activeSessionId is null - session will be created on first use
       const config: StoredConfig = {
         authType: method,
         workspaces: updatedWorkspaces,
         activeWorkspaceId: workspaceId,
+        activeSessionId: null,
       };
 
       saveConfig(config);

@@ -2,7 +2,7 @@ import React, { useState, memo } from 'react';
 import { Box, Text } from 'ink';
 import { formatDuration, truncateText } from '../utils/markdown.ts';
 import { AnimatedSpinner } from './Spinner.tsx';
-import { useElapsedTime } from '../hooks/useElapsedTime.ts';
+import { useElapsedTime } from '../hooks/index.ts';
 
 export interface ToolCallProps {
   toolName: string;

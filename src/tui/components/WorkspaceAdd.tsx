@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { addWorkspace, getWorkspaces, type Workspace, type OAuthCredentials, type McpAuthType } from '../../config/storage.ts';
 import { CraftOAuth, getMcpBaseUrl } from '../../auth/oauth.ts';
@@ -54,6 +54,9 @@ export const WorkspaceAdd: React.FC<WorkspaceAddProps> = ({ onComplete, onCancel
   const [validationError, setValidationError] = useState<string | null>(null);
   const [pendingAuth, setPendingAuth] = useState<{ oauth: OAuthCredentials | null; isPublic: boolean; token?: string } | null>(null);
   const [oauthClient, setOauthClient] = useState<CraftOAuth | null>(null);
+
+  // Single CraftApi instance (stateless, reusable across effects)
+  const craftApi = useMemo(() => new CraftApi(), []);
 
   // Check for Craft OAuth availability on mount
   useEffect(() => {
@@ -124,46 +127,38 @@ export const WorkspaceAdd: React.FC<WorkspaceAddProps> = ({ onComplete, onCancel
 
     const fetchSpaces = async () => {
       try {
-        const craftApi = new CraftApi();
         const profile = await craftApi.getProfile(craftToken);
 
         if (cancelled) return;
 
+        // Save profile for CraftSpaceSelector (needed for categorization)
         setCraftProfile(profile);
 
         // Get existing workspace MCP URLs to filter out already-connected spaces
         const existingUrls = getWorkspaces().map(w => w.mcpUrl);
 
-        // Filter out spaces that already have workspace connections
-        const spacesWithLinks: Array<{ id: string; name: string; hasConnection: boolean }> = [];
+        // Fetch links for all spaces in parallel (much faster than sequential)
+        const spacesWithLinks = await Promise.all(
+          profile.spaces.map(async (space) => {
+            try {
+              const links = await craftApi.getWorkflowLinks({ authToken: craftToken, spaceId: space.id });
+              const mcpLinks = links.filter(
+                (l: { type: string; enabled: boolean; urls?: { mcp?: string } }) =>
+                  l.type === 'mcp' && l.enabled && l.urls?.mcp
+              );
 
-        for (const space of profile.spaces) {
-          try {
-            const links = await craftApi.getWorkflowLinks({ authToken: craftToken, spaceId: space.id });
-            const mcpLinks = links.filter(
-              (l: { type: string; enabled: boolean; urls?: { mcp?: string } }) =>
-                l.type === 'mcp' && l.enabled && l.urls?.mcp
-            );
+              // Check if any of this space's MCP links are already used
+              const alreadyConnected = mcpLinks.some((link: { linkId: string }) =>
+                existingUrls.some(url => url.includes(link.linkId))
+              );
 
-            // Check if any of this space's MCP links are already used
-            const alreadyConnected = mcpLinks.some((link: { linkId: string }) =>
-              existingUrls.some(url => url.includes(link.linkId))
-            );
-
-            spacesWithLinks.push({
-              id: space.id,
-              name: space.name,
-              hasConnection: alreadyConnected,
-            });
-          } catch {
-            // If we can't fetch links for a space, include it anyway
-            spacesWithLinks.push({
-              id: space.id,
-              name: space.name,
-              hasConnection: false,
-            });
-          }
-        }
+              return { id: space.id, name: space.name, hasConnection: alreadyConnected };
+            } catch {
+              // If we can't fetch links for a space, include it anyway
+              return { id: space.id, name: space.name, hasConnection: false };
+            }
+          })
+        );
 
         if (cancelled) return;
 
@@ -209,7 +204,6 @@ export const WorkspaceAdd: React.FC<WorkspaceAddProps> = ({ onComplete, onCancel
 
     const fetchLinks = async () => {
       try {
-        const craftApi = new CraftApi();
         const links = await craftApi.getWorkflowLinks({
           authToken: craftToken,
           spaceId: selectedSpace.id,
@@ -271,7 +265,6 @@ export const WorkspaceAdd: React.FC<WorkspaceAddProps> = ({ onComplete, onCancel
 
     const createLink = async () => {
       try {
-        const craftApi = new CraftApi();
         const newLink = await craftApi.createSpaceWorkflowLink({
           authToken: craftToken,
           spaceId: selectedSpace.id,

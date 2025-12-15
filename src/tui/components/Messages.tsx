@@ -3,7 +3,7 @@ import { Box, Text, Static } from 'ink';
 import { ToolCall } from './ToolCall.tsx';
 import { ThinkingIndicator } from './Spinner.tsx';
 import { WelcomeBanner } from './Header.tsx';
-import { useElapsedTime } from '../hooks/useElapsedTime.ts';
+import { useElapsedTime } from '../hooks/index.ts';
 import { renderMarkdown } from '../utils/markdown.ts';
 
 export interface Message {

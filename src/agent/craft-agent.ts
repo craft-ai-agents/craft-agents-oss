@@ -6,7 +6,7 @@ import { getSystemPrompt, getDateTimeContext } from '../prompts/system.ts';
 import type { SubAgentDefinition } from '../agents/types.ts';
 import { parseError, type AgentError } from './errors.ts';
 import { updateAgentInstructions as agenticUpdateInstructions, type UpdateInstructionsContext, type UpdateInstructionsResult, type UpdateInstructionsProgressEvent } from '../agents/instruction-updater.ts';
-import { getWorkspaceAccessTokenAsync, isWorkspaceTokenExpiredAsync, updateWorkspaceOAuthTokensAsync, shouldUseExtendedCacheTtl, type Workspace } from '../config/storage.ts';
+import { getWorkspaceAccessTokenAsync, isWorkspaceTokenExpiredAsync, updateWorkspaceOAuthTokensAsync, shouldUseExtendedCacheTtl, type Workspace, type Session } from '../config/storage.ts';
 import { DEFAULT_MODEL } from '../config/models.ts';
 import { getCredentialManager } from '../credentials/index.ts';
 import { updatePreferences, loadPreferences, type UserPreferences } from '../config/preferences.ts';
@@ -17,6 +17,7 @@ import { debug } from '../tui/utils/debug.ts';
 
 export interface CraftAgentConfig {
   workspace: Workspace;
+  session?: Session;           // Current session (primary isolation boundary)
   mcpToken?: string;           // Override token (for testing)
   model?: string;
 }
@@ -1523,5 +1524,37 @@ export class CraftAgent {
 
   async close(): Promise<void> {
     this.interrupt();
+  }
+
+  /**
+   * Dispose the agent instance and clean up all resources.
+   * Called when the session ends (component unmount).
+   * Clears all instance state and module-level callbacks that reference this instance.
+   */
+  dispose(): void {
+    // Stop any running query
+    this.interrupt();
+
+    // Clear pending operations
+    this.pendingPermissions.clear();
+    this.pendingQuestions.clear();
+
+    // Clear security whitelists
+    this.alwaysAllowedCommands.clear();
+    this.alwaysAllowedDomains.clear();
+
+    // Clear active agent state
+    this.activeAgentDefinition = null;
+    this.agentMcpServers = {};
+    this.agentApiServers = {};
+    this.temporaryClarifications = null;
+
+    // Clear callbacks
+    this.onPermissionRequest = null;
+    this.onDebug = null;
+    this.onAskUserQuestion = null;
+
+    // Clear session
+    this.sessionId = null;
   }
 }

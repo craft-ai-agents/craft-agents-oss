@@ -10,35 +10,36 @@ import {
   setGlobalPermissionHandler,
   resolveGlobalPermission,
   clearGlobalPermissions,
-} from '../../agent/craft-agent.ts';
-import { parseSDKErrorText, isSDKErrorText, type AgentError } from '../../agent/errors.ts';
-import type { UpdateInstructionsContext, UpdateInstructionsProgressEvent } from '../../agents/instruction-updater.ts';
-import type { Message } from '../components/Messages.tsx';
-import type { FileAttachment } from '../utils/files.ts';
-import { setTerminalProgressIndeterminate, clearTerminalProgress } from '../utils/terminalProgress.ts';
+} from '../../../agent/craft-agent.ts';
+import { parseSDKErrorText, isSDKErrorText, type AgentError } from '../../../agent/errors.ts';
+import type { UpdateInstructionsContext, UpdateInstructionsProgressEvent } from '../../../agents/instruction-updater.ts';
+import type { Message } from '../../components/Messages.tsx';
+import type { FileAttachment } from '../../utils/files.ts';
+import { setTerminalProgressIndeterminate, clearTerminalProgress } from '../../utils/terminalProgress.ts';
 import {
-  updateWorkspaceSessionId,
-  saveWorkspaceConversation,
-  loadWorkspaceConversation,
-  clearWorkspaceConversation,
   getWorkspaceAccessTokenAsync,
   isWorkspaceTokenExpiredAsync,
   updateWorkspaceOAuthTokensAsync,
   checkWorkspaceAuthStatus,
   loadStoredConfig,
   saveConfig,
+  loadSession,
+  saveSession,
+  updateSessionSdkId,
   type Workspace,
+  type Session,
   type StoredMessage,
-} from '../../config/storage.ts';
-import { DEFAULT_MODEL } from '../../config/models.ts';
-import { getCredentialManager } from '../../credentials/index.ts';
-import { CraftMcpClient } from '../../mcp/client.ts';
-import { SubAgentManager } from '../../agents/manager.ts';
-import type { SubAgentDefinition, McpServerConfig, ApiConfig, Concern } from '../../agents/types.ts';
-import type { ExtractionProgressEvent } from '../../agents/extractor.ts';
-import { invalidateDefinition, loadRegistry, clearAgentCredentialsAsync } from '../../agents/cache.ts';
-import { CraftOAuth, getMcpBaseUrl } from '../../auth/oauth.ts';
-import { debug } from '../utils/debug.ts';
+  type StoredSession,
+} from '../../../config/storage.ts';
+import { DEFAULT_MODEL } from '../../../config/models.ts';
+import { getCredentialManager } from '../../../credentials/index.ts';
+import { CraftMcpClient } from '../../../mcp/client.ts';
+import { SubAgentManager } from '../../../agents/manager.ts';
+import type { SubAgentDefinition, McpServerConfig, ApiConfig, Concern } from '../../../agents/types.ts';
+import type { ExtractionProgressEvent } from '../../../agents/extractor.ts';
+import { invalidateDefinition, loadRegistry, clearAgentCredentialsAsync } from '../../../agents/cache.ts';
+import { CraftOAuth, getMcpBaseUrl } from '../../../auth/oauth.ts';
+import { debug } from '../../utils/debug.ts';
 
 // MCP auth request for sub-agent servers
 export interface PendingMcpAuthRequest {
@@ -157,10 +158,8 @@ export interface UseAgentResult {
   interrupt: () => void;
   respondToPermission: (allowed: boolean, alwaysAllow?: boolean) => void;
   respondToQuestion: (answers: Record<string, string>) => void;
-  model: string;
-  setModel: (model: string) => void;
-  workspace: Workspace;
-  setWorkspace: (workspace: Workspace) => void;
+  // NOTE: model, setModel, workspace, setWorkspace are now in GlobalContext
+  // SessionContainer gets them from useGlobalContext() instead
   // Sub-agent related
   availableAgents: string[];
   activeAgentName: string | null;
@@ -206,8 +205,12 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
     cacheReadTokens: 0,
     cacheCreationTokens: 0,
   });
-  const [model, setModelState] = useState(config.model || DEFAULT_MODEL);
-  const [workspace, setWorkspaceState] = useState<Workspace>(config.workspace);
+  // NOTE: model, workspace, and session state removed - now managed by GlobalContext
+  // useAgent receives these via config prop, no internal state needed
+  // When session changes, SessionContainer remounts (key={session.id})
+  // which automatically resets all useState/useRef in this hook
+  const workspace = config.workspace;
+  const session = config.session;
   const [pendingPermission, setPendingPermission] = useState<PermissionRequest | null>(null);
   const [pendingQuestion, setPendingQuestion] = useState<AskUserQuestionRequest | null>(null);
   const [hasExecutingTool, setHasExecutingTool] = useState(false);
@@ -237,6 +240,10 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
   // Track SDK text error for this request (to handle React batching)
   // When SDK emits error as text AND throws, we want to keep the text error (more specific)
   const sdkTextErrorRef = useRef<AgentError | null>(null);
+  // Debounce timer for session auto-save (prevents excessive disk I/O during streaming)
+  const saveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Track pending save data for flush on unmount
+  const pendingSaveRef = useRef<StoredSession | null>(null);
 
   // Load saved conversation on initial mount (only if edited within last 5 minutes)
   const initialLoadDoneRef = useRef(false);
@@ -244,32 +251,37 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
     if (initialLoadDoneRef.current) return;
     initialLoadDoneRef.current = true;
 
-    const savedConversation = loadWorkspaceConversation(workspace.id);
-    if (savedConversation && savedConversation.messages && savedConversation.messages.length > 0) {
+    // Load conversation from session storage (primary scope)
+    if (!session) return;
+
+    const savedSession = loadSession(session.id);
+    if (savedSession && savedSession.messages && savedSession.messages.length > 0) {
       // Only restore if conversation was edited within the last 5 minutes
       const fiveMinutesMs = 5 * 60 * 1000;
-      const isRecent = savedConversation.savedAt && (Date.now() - savedConversation.savedAt) < fiveMinutesMs;
+      const isRecent = savedSession.lastUsedAt && (Date.now() - savedSession.lastUsedAt) < fiveMinutesMs;
 
       if (isRecent) {
-        const restoredMessages = savedConversation.messages.map(storedMessageToMessage);
+        const restoredMessages = savedSession.messages.map(storedMessageToMessage);
         setMessages(restoredMessages);
-        // Provide defaults for cache fields that may not exist in old saved conversations
+        // Provide defaults for cache fields that may not exist in old saved sessions
         setTokenUsage({
-          ...savedConversation.tokenUsage,
-          cacheReadTokens: savedConversation.tokenUsage.cacheReadTokens ?? 0,
-          cacheCreationTokens: savedConversation.tokenUsage.cacheCreationTokens ?? 0,
+          ...savedSession.tokenUsage,
+          cacheReadTokens: savedSession.tokenUsage.cacheReadTokens ?? 0,
+          cacheCreationTokens: savedSession.tokenUsage.cacheCreationTokens ?? 0,
         });
-      } else {
-        // Conversation is stale - clear it to start fresh
-        clearWorkspaceConversation(workspace.id);
       }
+      // Note: Unlike workspace model, we don't clear stale sessions - they're historical records
     }
   }, []);  // Empty deps - only run on mount
 
   // Auto-save conversation when messages change and we're not processing
+  // Uses debouncing (500ms) to prevent excessive disk I/O during streaming
+  const SAVE_DEBOUNCE_MS = 500;
+
   useEffect(() => {
-    // Skip during initial load
+    // Skip during initial load or if no session
     if (!initialLoadDoneRef.current) return;
+    if (!session) return;
     // Only save if we have messages and we're not currently processing
     if (messages.length > 0 && !isProcessing) {
       // Filter out transient messages that shouldn't persist across sessions:
@@ -281,16 +293,59 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
         m => m.type !== 'error' && m.type !== 'status' && m.type !== 'system' && !isSDKErrorMessage(m)
       );
       const storedMessages = persistableMessages.map(messageToStoredMessage);
-      saveWorkspaceConversation(workspace.id, storedMessages, tokenUsage);
 
-      // Also save session ID if available and update React state
-      const sessionId = agentRef.current?.getSessionId();
-      if (sessionId && sessionId !== workspace.sessionId) {
-        updateWorkspaceSessionId(workspace.id, sessionId);
-        setWorkspaceState(prev => ({ ...prev, sessionId }));
+      // Prepare session data for save
+      const updatedSession: StoredSession = {
+        id: session.id,
+        sdkSessionId: agentRef.current?.getSessionId() ?? session.sdkSessionId,
+        workspaceId: session.workspaceId,
+        name: session.name,
+        createdAt: session.createdAt,
+        lastUsedAt: Date.now(),
+        messages: storedMessages,
+        tokenUsage,
+      };
+
+      // Store pending save data for potential flush on unmount
+      pendingSaveRef.current = updatedSession;
+
+      // Cancel any pending save
+      if (saveDebounceRef.current) {
+        clearTimeout(saveDebounceRef.current);
       }
+
+      // Debounced save - prevents excessive disk I/O during streaming
+      saveDebounceRef.current = setTimeout(() => {
+        if (pendingSaveRef.current) {
+          saveSession(pendingSaveRef.current);
+          pendingSaveRef.current = null;
+        }
+        saveDebounceRef.current = null;
+
+        // Also update SDK session ID if it changed (for resuming conversations)
+        const sdkSessionId = agentRef.current?.getSessionId();
+        if (sdkSessionId && sdkSessionId !== session.sdkSessionId) {
+          updateSessionSdkId(session.id, sdkSessionId);
+        }
+      }, SAVE_DEBOUNCE_MS);
     }
-  }, [messages, isProcessing, workspace.id, tokenUsage]);
+  }, [messages, isProcessing, session, tokenUsage]);
+
+  // Cleanup: flush pending save on unmount to prevent data loss
+  useEffect(() => {
+    return () => {
+      // Cancel any pending debounced save
+      if (saveDebounceRef.current) {
+        clearTimeout(saveDebounceRef.current);
+        saveDebounceRef.current = null;
+      }
+      // Flush pending save immediately on unmount
+      if (pendingSaveRef.current) {
+        saveSession(pendingSaveRef.current);
+        pendingSaveRef.current = null;
+      }
+    };
+  }, []);
 
   // Helper to get MCP token for current workspace
   const getMcpToken = useCallback(async (): Promise<string | null> => {
@@ -402,7 +457,7 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
 
         // Create agent manager with MCP config for agentic extraction
         const manager = new SubAgentManager(workspace.id, client, {
-          model,
+          model: config.model || DEFAULT_MODEL,
           mcpUrl,
           mcpToken: token || undefined,
         });
@@ -461,11 +516,11 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
       agentRef.current.onDebug = (message) => {
         debug('[SDK]', message);
       };
-      // Sync current state to the newly created agent
-      agentRef.current.setModel(model);
-      // Restore session ID from workspace if available (for conversation continuity)
-      if (workspace.sessionId) {
-        agentRef.current.setSessionId(workspace.sessionId);
+      // Sync current model to the newly created agent
+      agentRef.current.setModel(config.model || DEFAULT_MODEL);
+      // Restore SDK session ID from session if available (for conversation continuity)
+      if (session?.sdkSessionId) {
+        agentRef.current.setSessionId(session.sdkSessionId);
       }
     }
 
@@ -495,7 +550,7 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
     });
 
     return agentRef.current;
-  }, [config, model, workspace]);
+  }, [config, session]);
 
   const respondToPermission = useCallback((allowed: boolean, alwaysAllow: boolean = false) => {
     if (pendingPermission) {
@@ -885,14 +940,10 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
     if (agentRef.current) {
       agentRef.current.clearHistory();
     }
-    // Also clear the persisted conversation for this workspace
-    clearWorkspaceConversation(workspace.id);
-    // Update local workspace state to remove session ID
-    setWorkspaceState(prev => ({
-      ...prev,
-      sessionId: undefined,
-    }));
-  }, [workspace.id]);
+    // Note: With session-based scoping, /clear creates a NEW session via startNewSession()
+    // which triggers component remount with fresh state. This function just clears local state.
+    // The session file is preserved as historical record.
+  }, []);
 
   const interrupt = useCallback(() => {
     // Set interrupted flag first to break out of the event loop
@@ -916,116 +967,74 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
     ]);
   }, []);
 
-  const setModel = useCallback((newModel: string) => {
-    setModelState(newModel);
-    if (agentRef.current) {
-      agentRef.current.setModel(newModel);
+  // Sync model changes to CraftAgent (GlobalContext is source of truth)
+  // When model changes in GlobalContext → config.model updates → update agent
+  useEffect(() => {
+    if (config.model && agentRef.current) {
+      agentRef.current.setModel(config.model);
     }
-    // Persist model selection to config
-    const config = loadStoredConfig();
-    if (config) {
-      config.model = newModel;
-      saveConfig(config);
-    }
-  }, []);
+  }, [config.model]);
 
-  const setWorkspace = useCallback((newWorkspace: Workspace) => {
-    // Save current workspace's conversation before switching
-    const currentMessages = messages;
-    const currentSessionId = agentRef.current?.getSessionId() ?? null;
+  // NOTE: setWorkspace callback REMOVED - no longer needed!
+  // With key-based session isolation (SessionContainer key={session.id}):
+  // 1. When session changes in GlobalContext (workspace switch, /clear, --new)
+  // 2. SessionContainer unmounts (cleanup runs below)
+  // 3. New SessionContainer mounts with fresh state
+  // 4. useAgent runs fresh, initialLoadDoneRef resets, conversation loads
+  // All the manual state cleanup that was here is now automatic!
 
-    if (currentMessages.length > 0) {
-      // Filter out transient messages before saving (same as auto-save)
-      const persistableMessages = currentMessages.filter(
-        m => m.type !== 'error' && m.type !== 'status' && m.type !== 'system' && !isSDKErrorMessage(m)
-      );
-      const storedMessages = persistableMessages.map(messageToStoredMessage);
-      saveWorkspaceConversation(workspace.id, storedMessages, tokenUsage);
+  // Save conversation on unmount (when switching sessions)
+  // Use refs to capture current values since cleanup runs after render
+  const messagesRef = useRef(messages);
+  const tokenUsageRef = useRef(tokenUsage);
+  const sessionRef = useRef(session);
+  messagesRef.current = messages;
+  tokenUsageRef.current = tokenUsage;
+  sessionRef.current = session;
 
-      // Save session ID for conversation continuity
-      if (currentSessionId) {
-        updateWorkspaceSessionId(workspace.id, currentSessionId);
+  useEffect(() => {
+    return () => {
+      // Save conversation when component unmounts (session switch)
+      const currentMessages = messagesRef.current;
+      const currentSession = sessionRef.current;
+      const sdkSessionId = agentRef.current?.getSessionId() ?? null;
+
+      if (currentSession && currentMessages.length > 0) {
+        const persistableMessages = currentMessages.filter(
+          m => m.type !== 'error' && m.type !== 'status' && m.type !== 'system' && !isSDKErrorMessage(m)
+        );
+        const storedMessages = persistableMessages.map(messageToStoredMessage);
+
+        // Save to session storage
+        const updatedSession: StoredSession = {
+          id: currentSession.id,
+          sdkSessionId: sdkSessionId ?? currentSession.sdkSessionId,
+          workspaceId: currentSession.workspaceId,
+          name: currentSession.name,
+          createdAt: currentSession.createdAt,
+          lastUsedAt: Date.now(),
+          messages: storedMessages,
+          tokenUsage: tokenUsageRef.current,
+        };
+        saveSession(updatedSession);
       }
-    }
 
-    // Load target workspace's conversation
-    const savedConversation = loadWorkspaceConversation(newWorkspace.id);
-
-    if (savedConversation && savedConversation.messages && savedConversation.messages.length > 0) {
-      // Restore saved messages and token usage
-      const restoredMessages = savedConversation.messages.map(storedMessageToMessage);
-      setMessages(restoredMessages);
-      // Provide defaults for cache fields that may not exist in old saved conversations
-      setTokenUsage({
-        ...savedConversation.tokenUsage,
-        cacheReadTokens: savedConversation.tokenUsage.cacheReadTokens ?? 0,
-        cacheCreationTokens: savedConversation.tokenUsage.cacheCreationTokens ?? 0,
-      });
-      setError(null);
-
-      // Update agent with restored session ID
+      // Dispose the agent instance (clears all instance state)
       if (agentRef.current) {
-        agentRef.current.setWorkspace(newWorkspace, true);  // true = restore session
+        agentRef.current.dispose();
+        agentRef.current = null;
       }
-    } else {
-      // No saved conversation - start fresh
-      setMessages([]);
-      setError(null);
-      setTokenUsage({
-        inputTokens: 0,
-        outputTokens: 0,
-        totalTokens: 0,
-        contextTokens: 0,
-        costUsd: 0,
-        cacheReadTokens: 0,
-        cacheCreationTokens: 0,
-      });
 
-      if (agentRef.current) {
-        agentRef.current.setWorkspace(newWorkspace, false);  // false = fresh start
+      // Clear global callbacks to prevent stale references
+      clearGlobalPermissions();
+      setReloadAgentInstructionsCallback(null);
+
+      // Clear streaming timeout
+      if (streamingTimeoutRef.current) {
+        clearTimeout(streamingTimeoutRef.current);
       }
-    }
-
-    // Clear ALL workspace-scoped state from previous workspace
-    setPendingReview(null);
-    setPendingMcpAuth(null);
-    setPendingApiAuth(null);
-    setPendingQuestion(null);
-    setPendingPermission(null);
-
-    // Clear active agent (will be re-discovered in new workspace)
-    setActiveAgentDefinition(null);
-
-    // Reset processing state (in case switching during a query)
-    setIsProcessing(false);
-
-    // Clear UI state that could show stale content from previous workspace
-    setStreamingText('');
-    setStatus('');
-    setHasExecutingTool(false);
-    setTypedError(null);
-
-    // Clear streaming refs (could have pending timeout or stale buffer)
-    streamingBufferRef.current = '';
-    if (streamingTimeoutRef.current) {
-      clearTimeout(streamingTimeoutRef.current);
-      streamingTimeoutRef.current = null;
-    }
-
-    // Clear global permission map (orphaned permissions from old workspace)
-    clearGlobalPermissions();
-
-    // Clear global agent reload callback (matches deactivateAgent behavior)
-    setReloadAgentInstructionsCallback(null);
-
-    // Reset agent instance state (security whitelists, active agent servers, pending operations)
-    if (agentRef.current) {
-      agentRef.current.resetWorkspaceState();
-    }
-
-    // Update workspace state (triggers useEffect to reinitialize MCP proxy)
-    setWorkspaceState(newWorkspace);
-  }, [messages, workspace, tokenUsage]);
+    };
+  }, [session?.id]);
 
   // Complete agent activation - called when ENTIRE setup (extraction + all auth) is done
   // isFirstTimeSetup: true when extraction happened (show info), false when switching to cached agent
@@ -1063,7 +1072,7 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
       agentName: definition.name,
       mcpUrl,
       workspaceId: workspace.id,
-      model: model,
+      model: config.model || DEFAULT_MODEL,
     };
 
     // Set context provider callback - returns the current context
@@ -1632,7 +1641,7 @@ The goal is to have clean, actionable instructions without unanswered questions.
 
       // Create NEW agent manager with MCP config for agentic extraction
       const manager = new SubAgentManager(workspace.id, client, {
-        model,
+        model: config.model || DEFAULT_MODEL,
         mcpUrl,
         mcpToken: token || undefined,
       });
@@ -1722,10 +1731,7 @@ The goal is to have clean, actionable instructions without unanswered questions.
     interrupt,
     respondToPermission,
     respondToQuestion,
-    model,
-    setModel,
-    workspace,
-    setWorkspace,
+    // NOTE: model, setModel, workspace, setWorkspace moved to GlobalContext
     // Sub-agent related
     availableAgents,
     activeAgentName,
