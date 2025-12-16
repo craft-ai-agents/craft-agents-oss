@@ -14,6 +14,8 @@ export interface SubAgentMetadata {
   id: string;
   /** Short name for @mention (e.g., "writer", "work/coder") */
   name: string;
+  /** Original document title for display (e.g., "My Writer Agent") */
+  displayName?: string;
   /** Craft document ID containing the agent definition */
   documentId: string;
   /** Workspace this agent belongs to */

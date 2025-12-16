@@ -4,107 +4,172 @@
 /* Tell Tailwind where to scan for utility classes */
 @source "../**/*.{tsx,ts,jsx,js}";
 
-/* Font Families */
+/* =============================================================================
+   DEFAULT THEME - Craft Documentation Style (oklch)
+
+   Colors inspired by https://agents.craft.do/docs
+   - Light: neutral gray background (#f9fafb / rgb 249 250 251)
+   - Dark: deep blue-black background (#0e0d12)
+   - Purple accent (#8B5CF6) used very sparingly for highlights
+   - Primary/secondary colors are neutral for general UI elements
+   - Use --highlight only for special emphasis (active states, important badges)
+
+   To add a custom theme, create selectors like:
+   [data-theme="ocean"] { --primary: oklch(0.6 0.15 230); }
+   .dark[data-theme="ocean"] { --primary: oklch(0.7 0.12 230); }
+============================================================================= */
+
+/* Light Mode - Craft Documentation Theme
+   Background: #f9fafb (neutral light gray)
+   Text: #1b191e (dark gray)
+   Accent: #8B5CF6 (purple - used very sparingly)
+*/
 :root {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --background: oklch(0.98 0.003 265);
+  --foreground: oklch(0.185 0.01 270);
+  --card: oklch(0.98 0.003 265);
+  --card-foreground: oklch(0.185 0.01 270);
+  --popover: oklch(0.97 0.003 265);
+  --popover-foreground: oklch(0.185 0.01 270);
+  --primary: oklch(0.25 0.01 270);
+  --primary-foreground: oklch(0.98 0.003 265);
+  --secondary: oklch(0.955 0.003 265);
+  --secondary-foreground: oklch(0.25 0.01 270);
+  --muted: oklch(0.955 0.003 265);
+  --muted-foreground: oklch(0.55 0.005 265);
+  --accent: oklch(0.945 0.005 265);
+  --accent-foreground: oklch(0.25 0.01 270);
+  --destructive: oklch(0.5830 0.2387 28.4765);
+  --destructive-foreground: oklch(0.98 0.003 265);
+  --border: oklch(0.91 0.003 265);
+  --input: oklch(0.91 0.003 265);
+  --ring: oklch(0.185 0.01 270 / 0.3);
+  --ring-width: 1px;
+  --ring-offset: 0px;
+  --chart-1: oklch(0.58 0.22 293);
+  --chart-2: oklch(0.50 0.18 293);
+  --chart-3: oklch(0.65 0.20 293);
+  --chart-4: oklch(0.45 0.15 293);
+  --chart-5: oklch(0.70 0.18 293);
+  --sidebar: oklch(0.98 0.003 265 / 0.6);
+  --sidebar-foreground: oklch(0.185 0.01 270);
+  --sidebar-primary: oklch(0.25 0.01 270);
+  --sidebar-primary-foreground: oklch(0.98 0.003 265);
+  --sidebar-accent: oklch(0.945 0.005 265 / 0.5);
+  --sidebar-accent-foreground: oklch(0.25 0.01 270);
+  --sidebar-border: oklch(0.91 0.003 265 / 0.5);
+  --sidebar-ring: oklch(0.185 0.01 270 / 0.3);
+
+  /* Highlight - the vibrant purple accent, use VERY sparingly */
+  --highlight: oklch(0.58 0.22 293);
+  --highlight-foreground: oklch(0.98 0.003 265);
+  --highlight-muted: oklch(0.58 0.22 293 / 0.15);
+
+  /* Fonts */
+  --font-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-serif: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --font-default: var(--font-mono);
+
+  /* Layout */
+  --font-size-base: 15px;
+  --radius: 0rem;
+  --spacing: 0.25rem;
+  --tracking-normal: 0em;
+
+  /* Shadows (disabled) */
+  --shadow-x: 0px;
+  --shadow-y: 1px;
+  --shadow-blur: 0px;
+  --shadow-spread: 0px;
+  --shadow-opacity: 0;
+  --shadow-color: hsl(0 0% 0%);
+  --shadow-2xs: 0px 1px 0px 0px hsl(0 0% 0% / 0.00);
+  --shadow-xs: 0px 1px 0px 0px hsl(0 0% 0% / 0.00);
+  --shadow-sm: 0px 1px 0px 0px hsl(0 0% 0% / 0.00), 0px 1px 2px -1px hsl(0 0% 0% / 0.00);
+  --shadow: 0px 1px 0px 0px hsl(0 0% 0% / 0.00), 0px 1px 2px -1px hsl(0 0% 0% / 0.00);
+  --shadow-md: 0px 1px 0px 0px hsl(0 0% 0% / 0.00), 0px 2px 4px -1px hsl(0 0% 0% / 0.00);
+  --shadow-lg: 0px 1px 0px 0px hsl(0 0% 0% / 0.00), 0px 4px 6px -1px hsl(0 0% 0% / 0.00);
+  --shadow-xl: 0px 1px 0px 0px hsl(0 0% 0% / 0.00), 0px 8px 10px -1px hsl(0 0% 0% / 0.00);
+  --shadow-2xl: 0px 1px 0px 0px hsl(0 0% 0% / 0.00);
 }
 
-/* Base CSS Variables - Light Mode (default) */
-:root {
-  --background: hsl(0 0% 100%);
-  --foreground: hsl(222 47% 11%);
-
-  --card: hsl(0 0% 98%);
-  --card-foreground: hsl(222 47% 11%);
-
-  --popover: hsl(0 0% 100%);
-  --popover-foreground: hsl(222 47% 11%);
-
-  --primary: hsl(271 37% 59%);
-  --primary-foreground: hsl(0 0% 100%);
-
-  --secondary: hsl(0 0% 98%);
-  --secondary-foreground: hsl(222 47% 11%);
-
-  --muted: hsl(0 0% 98%);
-  --muted-foreground: hsl(215 16% 47%);
-
-  --accent: hsl(220 14% 96%);
-  --accent-foreground: hsl(222 47% 11%);
-
-  --destructive: hsl(0 84% 60%);
-  --destructive-foreground: hsl(0 0% 100%);
-
-  --border: hsl(220 13% 91%);
-  --input: hsl(220 13% 91%);
-  --ring: hsl(271 37% 59%);
-
-  --sidebar: hsl(0 0% 98%);
-  --sidebar-foreground: hsl(222 47% 11%);
-  --sidebar-border: hsl(220 13% 91%);
-
-  --radius: 0.5rem;
-}
-
-/* Dark Mode */
+/* Dark Mode - Craft Documentation Theme
+   Background: #0e0d12 (very dark blue-black)
+   Text: light with purple tint
+   Accent: #8B5CF6 / #A78BFA (purple - used very sparingly)
+*/
 .dark {
-  --background: hsl(222 47% 5%);
-  --foreground: hsl(0 0% 95%);
+  --background: oklch(0.127 0.012 290);
+  --foreground: oklch(0.92 0.008 300);
+  --card: oklch(0.16 0.012 290);
+  --card-foreground: oklch(0.92 0.008 300);
+  --popover: oklch(0.18 0.012 290);
+  --popover-foreground: oklch(0.92 0.008 300);
+  --primary: oklch(0.88 0.008 300);
+  --primary-foreground: oklch(0.15 0.012 290);
+  --secondary: oklch(0.20 0.012 290);
+  --secondary-foreground: oklch(0.88 0.008 300);
+  --muted: oklch(0.20 0.012 290);
+  --muted-foreground: oklch(0.58 0.008 290);
+  --accent: oklch(0.24 0.015 290);
+  --accent-foreground: oklch(0.88 0.008 300);
+  --destructive: oklch(0.7022 0.1892 22.2279);
+  --destructive-foreground: oklch(0.15 0.012 290);
+  --border: oklch(0.26 0.012 290);
+  --input: oklch(0.30 0.012 290);
+  --ring: oklch(0.92 0.008 300 / 0.3);
+  --ring-width: 1px;
+  --ring-offset: 0px;
+  --chart-1: oklch(0.65 0.20 293);
+  --chart-2: oklch(0.55 0.18 293);
+  --chart-3: oklch(0.70 0.18 293);
+  --chart-4: oklch(0.50 0.15 293);
+  --chart-5: oklch(0.75 0.16 293);
+  --sidebar: oklch(0.127 0.012 290 / 0.6);
+  --sidebar-foreground: oklch(0.92 0.008 300);
+  --sidebar-primary: oklch(0.88 0.008 300);
+  --sidebar-primary-foreground: oklch(0.15 0.012 290);
+  --sidebar-accent: oklch(0.24 0.015 290 / 0.5);
+  --sidebar-accent-foreground: oklch(0.88 0.008 300);
+  --sidebar-border: oklch(0.92 0.008 300 / 0.1);
+  --sidebar-ring: oklch(0.92 0.008 300 / 0.3);
 
-  --card: hsl(222 47% 8%);
-  --card-foreground: hsl(0 0% 95%);
+  /* Highlight - the vibrant purple accent, use VERY sparingly */
+  --highlight: oklch(0.65 0.20 293);
+  --highlight-foreground: oklch(0.98 0.005 300);
+  --highlight-muted: oklch(0.65 0.20 293 / 0.15);
 
-  --popover: hsl(222 47% 8%);
-  --popover-foreground: hsl(0 0% 95%);
+  /* Fonts (same as light) */
+  --font-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-serif: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --font-default: var(--font-mono);
 
-  --primary: hsl(271 37% 70%);
-  --primary-foreground: hsl(222 47% 5%);
+  /* Layout (same as light) */
+  --radius: 0rem;
+  --spacing: 0.25rem;
+  --tracking-normal: 0em;
 
-  --secondary: hsl(222 30% 15%);
-  --secondary-foreground: hsl(0 0% 95%);
-
-  --muted: hsl(222 30% 15%);
-  --muted-foreground: hsl(215 16% 60%);
-
-  --accent: hsl(222 30% 18%);
-  --accent-foreground: hsl(0 0% 95%);
-
-  --destructive: hsl(0 70% 50%);
-  --destructive-foreground: hsl(0 0% 95%);
-
-  --border: hsl(222 30% 20%);
-  --input: hsl(222 30% 20%);
-  --ring: hsl(271 37% 70%);
-
-  --sidebar: hsl(222 47% 8%);
-  --sidebar-foreground: hsl(0 0% 95%);
-  --sidebar-border: hsl(222 30% 20%);
+  /* Shadows (disabled) */
+  --shadow-x: 0px;
+  --shadow-y: 1px;
+  --shadow-blur: 0px;
+  --shadow-spread: 0px;
+  --shadow-opacity: 0;
+  --shadow-color: hsl(0 0% 0%);
+  --shadow-2xs: 0px 1px 0px 0px hsl(0 0% 0% / 0.00);
+  --shadow-xs: 0px 1px 0px 0px hsl(0 0% 0% / 0.00);
+  --shadow-sm: 0px 1px 0px 0px hsl(0 0% 0% / 0.00), 0px 1px 2px -1px hsl(0 0% 0% / 0.00);
+  --shadow: 0px 1px 0px 0px hsl(0 0% 0% / 0.00), 0px 1px 2px -1px hsl(0 0% 0% / 0.00);
+  --shadow-md: 0px 1px 0px 0px hsl(0 0% 0% / 0.00), 0px 2px 4px -1px hsl(0 0% 0% / 0.00);
+  --shadow-lg: 0px 1px 0px 0px hsl(0 0% 0% / 0.00), 0px 4px 6px -1px hsl(0 0% 0% / 0.00);
+  --shadow-xl: 0px 1px 0px 0px hsl(0 0% 0% / 0.00), 0px 8px 10px -1px hsl(0 0% 0% / 0.00);
+  --shadow-2xl: 0px 1px 0px 0px hsl(0 0% 0% / 0.00);
 }
-
-/*
- * Custom Color Theme Template
- * ---------------------------
- * To create a custom theme, add selectors like:
- *
- * [data-theme="ocean"] {
- *   --primary: hsl(200 80% 50%);
- *   --ring: hsl(200 80% 50%);
- * }
- *
- * .dark[data-theme="ocean"] {
- *   --primary: hsl(200 80% 65%);
- *   --ring: hsl(200 80% 65%);
- * }
- */
 
 /* Theme integration for Tailwind v4 */
 @theme inline {
-  /* Fonts */
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-mono);
-
-  /* Colors */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -124,15 +189,40 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-highlight: var(--highlight);
+  --color-highlight-foreground: var(--highlight-foreground);
+  --color-highlight-muted: var(--highlight-muted);
 
-  /* Border Radius */
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --font-serif: var(--font-serif);
+
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+
+  --shadow-2xs: var(--shadow-2xs);
+  --shadow-xs: var(--shadow-xs);
+  --shadow-sm: var(--shadow-sm);
+  --shadow: var(--shadow);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+  --shadow-xl: var(--shadow-xl);
+  --shadow-2xl: var(--shadow-2xl);
 }
 
 /* Global styles - MUST be in @layer base so utilities can override */
@@ -142,16 +232,19 @@
     border-color: var(--border);
   }
 
+  html {
+    font-size: var(--font-size-base);
+  }
+
   html, body, #root {
     height: 100%;
     overflow: hidden;
   }
 
   body {
-    font-family: var(--font-sans);
-    background: var(--background);
+    font-family: var(--font-default);
+    background: transparent;
     color: var(--foreground);
-    font-feature-settings: "rlig" 1, "calt" 1; /* Enable Inter's ligatures */
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
@@ -174,4 +267,32 @@
   ::-webkit-scrollbar-thumb:hover {
     background: var(--muted-foreground);
   }
+
+  /* Focus ring styles - override Tailwind ring utilities */
+  *:focus-visible {
+    outline: none;
+    --tw-ring-offset-width: var(--ring-offset);
+    --tw-ring-width: var(--ring-width);
+    --tw-ring-color: var(--ring);
+  }
+}
+
+/* Override Tailwind ring width utilities to use theme variable */
+@layer utilities {
+  .ring-1, .ring-2, .ring-\[3px\], .ring-4 {
+    --tw-ring-offset-shadow: var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);
+    --tw-ring-shadow: var(--tw-ring-inset) 0 0 0 calc(var(--ring-width) + var(--tw-ring-offset-width)) var(--tw-ring-color);
+    box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000);
+  }
+}
+
+/* Draggable title bar region for transparent window */
+.titlebar-drag-region {
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+.titlebar-no-drag {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
 }

@@ -4,7 +4,7 @@ import { SessionContainer } from './components/SessionContainer.tsx';
 import { loadStoredConfig, saveConfig, getOrCreateLatestSession, createSession, getOrCreateSessionById, type Session } from '../../../src/config/storage.ts';
 import { DEFAULT_MODEL } from '../../../src/config/models.ts';
 import type { CraftAgentConfig } from '../../../src/agent/craft-agent.ts';
-import { debug } from './utils/debug.ts';
+import { debug } from '../../../src/utils/debug.ts';
 
 export interface AppProps {
   config: CraftAgentConfig;

@@ -42,8 +42,8 @@ import {
   type TokenDisplayMode,
   type Session,
 } from '../../../../src/config/storage.ts';
-import { processInputWithFiles, readClipboard, type FileAttachment } from '../utils/files.ts';
-import { debug } from '../utils/debug.ts';
+import { processInputWithFiles, readClipboard, type FileAttachment } from '../../../../src/utils/files.ts';
+import { debug } from '../../../../src/utils/debug.ts';
 import type { CraftAgentConfig } from '../../../../src/agent/craft-agent.ts';
 import { getCurrentVersion } from '../../../../src/version/version.ts';
 import { checkAndUpdate } from '../../../../src/version/install.ts';

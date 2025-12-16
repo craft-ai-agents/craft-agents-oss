@@ -2,7 +2,7 @@
   "name": "craft-tui-agent",
   "version": "1.0.0",
   "description": "Claude Code-like agent for Craft documents",
-  "module": "src/index.tsx",
+  "module": "apps/tui/src/index.tsx",
   "type": "module",
   "private": true,
   "workspaces": [

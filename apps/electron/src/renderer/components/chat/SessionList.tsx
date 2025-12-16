@@ -4,6 +4,7 @@ import { Archive, ArchiveRestore, Trash2, Bot } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Separator } from "@/components/ui/separator"
 import { Button } from "@/components/ui/button"
 import { useSession } from "@/hooks/useSession"
 import type { Session } from "../../../shared/types"
@@ -37,25 +38,26 @@ export function SessionList({ items, onDelete, onArchive, onUnarchive }: Session
 
   return (
     <ScrollArea className="h-screen">
-      <div className="flex flex-col gap-2 p-4 pt-0">
+      <div className="flex flex-col">
         {sortedItems.length === 0 ? (
           /* Empty State */
           <p className="text-sm text-muted-foreground text-center py-8">
             No conversations yet
           </p>
         ) : (
-          sortedItems.map((item) => {
+          sortedItems.map((item, index) => {
             const lastMessage = item.messages[item.messages.length - 1]
             const preview = lastMessage?.content?.slice(0, 300) || 'New conversation'
 
             return (
               /* Session Card: Clickable button that selects the session */
-              <button
-                key={item.id}
-                className={cn(
-                  "group flex flex-col items-start gap-2 rounded-lg border p-3 text-left text-sm transition-all hover:bg-accent relative",
-                  session.selected === item.id && "bg-muted"  // Selected state
-                )}
+              <div key={item.id}>
+                {index > 0 && <Separator />}
+                <button
+                  className={cn(
+                    "group flex w-full flex-col items-start gap-2 px-4 py-3 text-left text-sm transition-all hover:bg-accent relative",
+                    session.selected === item.id && "bg-muted"  // Selected state
+                  )}
                 onClick={() =>
                   setSession({
                     ...session,
@@ -64,35 +66,24 @@ export function SessionList({ items, onDelete, onArchive, onUnarchive }: Session
                 }
               >
                 {/* Card Header Row */}
-                <div className="flex w-full flex-col gap-1">
-                  <div className="flex items-center">
-                    <div className="flex items-center gap-2">
-                      {/* Workspace Name */}
-                      <div className="font-semibold">{item.workspaceName || 'Workspace'}</div>
-                      {/* Processing Indicator: Pulsing blue dot */}
-                      {item.isProcessing && (
-                        <span className="flex h-2 w-2 rounded-full bg-primary animate-pulse" />
-                      )}
-                    </div>
-                    {/* Relative Timestamp */}
-                    <div
-                      className={cn(
-                        "ml-auto text-xs",
-                        session.selected === item.id
-                          ? "text-foreground"
-                          : "text-muted-foreground"
-                      )}
-                    >
-                      {item.lastMessageAt ? formatDistanceToNow(new Date(item.lastMessageAt), {
-                        addSuffix: true,
-                      }) : ''}
-                    </div>
+                <div className="flex w-full flex-col gap-0.5">
+                  {/* Workspace Name + Processing Indicator */}
+                  <div className="flex items-center gap-2">
+                    <div className="font-semibold font-sans">{item.workspaceName || 'Workspace'}</div>
+                    {item.isProcessing && (
+                      <span className="flex h-2 w-2 rounded-full bg-primary animate-pulse" />
+                    )}
                   </div>
-                  {/* Meta Row: Message count + Agent name */}
-                  <div className="flex items-center gap-2 text-xs font-medium">
-                    <span>{item.messages.length} message{item.messages.length !== 1 ? 's' : ''}</span>
+                  {/* Meta Row: Message count · Timestamp + Agent name */}
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground/70">
+                    <span>
+                      {item.messages.length} message{item.messages.length !== 1 ? 's' : ''}
+                      {item.lastMessageAt && (
+                        <> · {formatDistanceToNow(new Date(item.lastMessageAt), { addSuffix: true })}</>
+                      )}
+                    </span>
                     {item.agentName && (
-                      <span className="flex items-center gap-1 text-muted-foreground">
+                      <span className="flex items-center gap-1 ml-auto">
                         <Bot className="h-3 w-3" />
                         {item.agentName}
                       </span>
@@ -112,51 +103,49 @@ export function SessionList({ items, onDelete, onArchive, onUnarchive }: Session
 
                 {/* Hover Action Buttons: Archive, Unarchive, Delete */}
                 <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  {/* Archive Button (shown in Inbox view) */}
                   {onArchive && (
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="size-6"
+                      className="group/btn size-6 hover:bg-foreground/5"
+                      title="Archive"
                       onClick={(e) => {
                         e.stopPropagation()
                         onArchive(item.id)
                       }}
-                      title="Archive"
                     >
-                      <Archive className="size-3.5 text-muted-foreground hover:text-foreground" />
+                      <Archive className="size-3.5 text-muted-foreground group-hover/btn:text-foreground" />
                     </Button>
                   )}
-                  {/* Unarchive Button (shown in Archive view) */}
                   {onUnarchive && (
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="size-6"
+                      className="group/btn size-6 hover:bg-foreground/5"
+                      title="Unarchive"
                       onClick={(e) => {
                         e.stopPropagation()
                         onUnarchive(item.id)
                       }}
-                      title="Unarchive"
                     >
-                      <ArchiveRestore className="size-3.5 text-muted-foreground hover:text-foreground" />
+                      <ArchiveRestore className="size-3.5 text-muted-foreground group-hover/btn:text-foreground" />
                     </Button>
                   )}
-                  {/* Delete Button */}
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="size-6"
+                    className="group/btn size-6 hover:bg-foreground/5"
+                    title="Delete"
                     onClick={(e) => {
                       e.stopPropagation()
                       onDelete(item.id)
                     }}
-                    title="Delete"
                   >
-                    <Trash2 className="size-3.5 text-muted-foreground hover:text-destructive" />
+                    <Trash2 className="size-3.5 text-muted-foreground group-hover/btn:text-foreground" />
                   </Button>
                 </div>
-              </button>
+                </button>
+              </div>
             )
           })
         )}

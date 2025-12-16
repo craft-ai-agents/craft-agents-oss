@@ -2,7 +2,7 @@ import React, { useState, useCallback, useMemo } from 'react';
 import { Box, Text } from 'ink';
 import { saveApiKeyCredentialAsync } from '../../../../src/agents/cache.ts';
 import type { ApiConfig } from '../../../../src/agents/types.ts';
-import { debug } from '../utils/debug.ts';
+import { debug } from '../../../../src/utils/debug.ts';
 import { TextInput } from './TextInput.tsx';
 
 export interface ApiAuthProps {

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import type { Session, Workspace, SessionEvent, Message, SubAgentMetadata } from '../shared/types'
 import { generateMessageId } from '../shared/types'
-import { Mail } from '@/components/mail/Mail'
+import { Chat } from '@/components/chat/Chat'
 import { TooltipProvider } from '@/components/ui/tooltip'
 
 export default function App() {
@@ -272,14 +272,13 @@ export default function App() {
 
   return (
     <TooltipProvider>
-      <div className="h-full bg-background text-foreground">
-        <Mail
+      <div className="h-full text-foreground">
+        <Chat
           workspaces={workspaces}
           sessions={sessions}
           agents={agents}
           activeWorkspaceId={activeWorkspaceId}
           defaultLayout={[20, 32, 48]}
-          navCollapsedSize={4}
           onSelectWorkspace={setActiveWorkspaceId}
           onCreateSession={handleCreateSession}
           onDeleteSession={handleDeleteSession}

@@ -66,7 +66,7 @@ for (const target of TARGETS) {
       --define CRAFT_AGENT_CLI_BUILD_DATE='"${CRAFT_AGENT_CLI_BUILD_DATE}"' \
       --define CRAFT_AGENT_CLI_BUILD_TIMESTAMP='"${CRAFT_AGENT_CLI_BUILD_TIMESTAMP}"' \
       --outfile ${outfile} \
-      src/index.tsx
+      apps/tui/src/index.tsx
       `.text());
     console.log(await $`cp -r node_modules/@anthropic-ai/claude-agent-sdk ${folder}`.text());
     

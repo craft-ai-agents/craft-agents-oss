@@ -4,7 +4,7 @@ import { CraftOAuth, getMcpBaseUrl } from '../../../../src/auth/oauth.ts';
 import { saveServerCredentialsAsync } from '../../../../src/agents/cache.ts';
 import type { McpServerConfig } from '../../../../src/agents/types.ts';
 import { AnimatedSpinner } from './Spinner.tsx';
-import { debug } from '../utils/debug.ts';
+import { debug } from '../../../../src/utils/debug.ts';
 import { TextInput } from './TextInput.tsx';
 import { validateMcpConnection, getValidationErrorMessage } from '../../../../src/mcp/validation.ts';
 import { getCredentialManager } from '../../../../src/credentials/index.ts';

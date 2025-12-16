@@ -334,7 +334,7 @@ When handling Ctrl+key shortcuts in Ink's raw terminal mode, always check for bo
 - High-level: `key.ctrl && input === 'c'`
 - Raw character: `input === '\x03'` (Ctrl+C = ASCII 3)
 
-Different terminals may deliver only the raw character without setting `key.ctrl`. See `src/tui/keyboard/mappings.ts` for canonical implementations.
+Different terminals may deliver only the raw character without setting `key.ctrl`. See `apps/tui/src/keyboard/mappings.ts` for canonical implementations.
 
 ## Extended Prompt Cache
 

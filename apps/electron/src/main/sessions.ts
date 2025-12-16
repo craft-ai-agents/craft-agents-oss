@@ -1,7 +1,23 @@
 import { BrowserWindow, app } from 'electron'
 import { join } from 'path'
 import { CraftAgent, type AgentEvent } from '../../../../src/agent/craft-agent'
-import { loadStoredConfig, getWorkspaces, getWorkspaceByNameOrId, type Workspace } from '../../../../src/config/storage'
+import {
+  loadStoredConfig,
+  getWorkspaces,
+  getWorkspaceByNameOrId,
+  type Workspace,
+  // Session persistence functions
+  listSessions as listStoredSessions,
+  loadSession as loadStoredSession,
+  saveSession as saveStoredSession,
+  createSession as createStoredSession,
+  deleteSession as deleteStoredSession,
+  archiveSession as archiveStoredSession,
+  unarchiveSession as unarchiveStoredSession,
+  type StoredSession,
+  type StoredMessage,
+  type SessionMetadata,
+} from '../../../../src/config/storage'
 import { getAuthState } from '../../../../src/auth/state'
 import { setAnthropicOptionsEnv, setPathToClaudeCodeExecutable } from '../../../../src/agent/options'
 import { getCraftToken } from '../../../../src/auth/craft-token'
@@ -10,7 +26,7 @@ import { type Session, type Message, type SessionEvent, IPC_CHANNELS, generateMe
 interface ManagedSession {
   id: string
   workspace: Workspace
-  agent: CraftAgent
+  agent: CraftAgent | null  // Lazy-loaded - null until first message
   messages: Message[]
   isProcessing: boolean
   lastMessageAt: number
@@ -22,6 +38,48 @@ interface ManagedSession {
   agentId?: string
   agentName?: string
   isArchived: boolean
+  // SDK session ID for conversation continuity
+  sdkSessionId?: string
+  // Token usage for display
+  tokenUsage?: {
+    inputTokens: number
+    outputTokens: number
+    totalTokens: number
+    contextTokens: number
+    costUsd: number
+    cacheReadTokens?: number
+    cacheCreationTokens?: number
+  }
+}
+
+// Convert runtime Message to StoredMessage for persistence
+function messageToStored(msg: Message): StoredMessage {
+  return {
+    id: msg.id,
+    type: msg.role,  // Message uses 'role', StoredMessage uses 'type'
+    content: msg.content,
+    timestamp: msg.timestamp,
+    toolName: msg.toolName,
+    toolInput: msg.toolInput,
+    toolStatus: msg.toolStatus,
+    toolDuration: msg.toolDuration,
+    isError: msg.isError,
+  }
+}
+
+// Convert StoredMessage to runtime Message
+function storedToMessage(stored: StoredMessage): Message {
+  return {
+    id: stored.id,
+    role: stored.type,  // StoredMessage uses 'type', Message uses 'role'
+    content: stored.content,
+    timestamp: stored.timestamp ?? Date.now(),
+    toolName: stored.toolName,
+    toolInput: stored.toolInput,
+    toolStatus: stored.toolStatus,
+    toolDuration: stored.toolDuration,
+    isError: stored.isError,
+  }
 }
 
 export class SessionManager {
@@ -75,6 +133,94 @@ export class SessionManager {
     } catch (error) {
       console.error('[SessionManager] Failed to initialize auth:', error)
     }
+
+    // Load existing sessions from disk
+    this.loadSessionsFromDisk()
+  }
+
+  // Load all existing sessions from disk into memory
+  private loadSessionsFromDisk(): void {
+    try {
+      const workspaces = getWorkspaces()
+      const allSessionMetadata = listStoredSessions()  // Get all sessions across workspaces
+
+      console.log(`[SessionManager] Found ${allSessionMetadata.length} sessions on disk`)
+
+      for (const meta of allSessionMetadata) {
+        // Find the workspace for this session
+        const workspace = workspaces.find(w => w.id === meta.workspaceId)
+        if (!workspace) {
+          console.warn(`[SessionManager] Skipping session ${meta.id}: workspace ${meta.workspaceId} not found`)
+          continue
+        }
+
+        // Load full session data
+        const storedSession = loadStoredSession(meta.id)
+        if (!storedSession) {
+          console.warn(`[SessionManager] Skipping session ${meta.id}: could not load from disk`)
+          continue
+        }
+
+        // Convert stored messages to runtime messages
+        const messages = (storedSession.messages || []).map(storedToMessage)
+
+        // Create managed session (agent is lazy-loaded on first message)
+        const managed: ManagedSession = {
+          id: storedSession.id,
+          workspace,
+          agent: null,  // Lazy-load agent when needed
+          messages,
+          isProcessing: false,
+          lastMessageAt: storedSession.lastUsedAt,
+          streamingText: '',
+          pendingTools: new Map(),
+          agentId: storedSession.agentId,
+          agentName: storedSession.agentName,
+          isArchived: storedSession.isArchived ?? false,
+          sdkSessionId: storedSession.sdkSessionId,
+          tokenUsage: storedSession.tokenUsage,
+        }
+
+        this.sessions.set(storedSession.id, managed)
+        console.log(`[SessionManager] Loaded session ${storedSession.id} with ${messages.length} messages`)
+      }
+    } catch (error) {
+      console.error('[SessionManager] Failed to load sessions from disk:', error)
+    }
+  }
+
+  // Persist a session to disk
+  private persistSession(managed: ManagedSession): void {
+    try {
+      // Filter out transient messages (error, status, system) that shouldn't be persisted
+      const persistableMessages = managed.messages.filter(m =>
+        m.role !== 'error' && m.role !== 'status' && m.role !== 'system'
+      )
+
+      const storedSession: StoredSession = {
+        id: managed.id,
+        workspaceId: managed.workspace.id,
+        createdAt: managed.lastMessageAt,  // Approximate, will be overwritten if already exists
+        lastUsedAt: Date.now(),
+        sdkSessionId: managed.sdkSessionId,
+        agentId: managed.agentId,
+        agentName: managed.agentName,
+        isArchived: managed.isArchived,
+        messages: persistableMessages.map(messageToStored),
+        tokenUsage: managed.tokenUsage ?? {
+          inputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+          contextTokens: 0,
+          costUsd: 0,
+        },
+      }
+
+      saveStoredSession(storedSession)
+      console.log(`[SessionManager] Persisted session ${managed.id}`)
+    } catch (error) {
+      console.error(`[SessionManager] Failed to persist session ${managed.id}:`, error)
+    }
   }
 
   getWorkspaces(): Workspace[] {
@@ -103,22 +249,16 @@ export class SessionManager {
       throw new Error(`Workspace ${workspaceId} not found`)
     }
 
-    const sessionId = `session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-    const config = loadStoredConfig()
-
-    // CraftAgent expects the full workspace object, not just the ID
-    const agent = new CraftAgent({
-      workspace,
-      model: config?.model
-    })
+    // Use storage layer to create and persist the session
+    const storedSession = createStoredSession(workspaceId)
 
     const managed: ManagedSession = {
-      id: sessionId,
+      id: storedSession.id,
       workspace,
-      agent,
+      agent: null,  // Lazy-load agent on first message
       messages: [],
       isProcessing: false,
-      lastMessageAt: Date.now(),
+      lastMessageAt: storedSession.lastUsedAt,
       streamingText: '',
       pendingTools: new Map(),
       agentId,
@@ -126,10 +266,15 @@ export class SessionManager {
       isArchived: false
     }
 
-    this.sessions.set(sessionId, managed)
+    this.sessions.set(storedSession.id, managed)
+
+    // Persist with agent info if provided
+    if (agentId || agentName) {
+      this.persistSession(managed)
+    }
 
     return {
-      id: sessionId,
+      id: storedSession.id,
       workspaceId: workspace.id,
       workspaceName: workspace.name,
       lastMessageAt: managed.lastMessageAt,
@@ -141,10 +286,32 @@ export class SessionManager {
     }
   }
 
+  // Get or create agent for a session (lazy loading)
+  private getOrCreateAgent(managed: ManagedSession): CraftAgent {
+    if (!managed.agent) {
+      const config = loadStoredConfig()
+      managed.agent = new CraftAgent({
+        workspace: managed.workspace,
+        model: config?.model,
+        // Pass session object for conversation resumption (SDK uses sdkSessionId to resume)
+        session: managed.sdkSessionId ? {
+          id: managed.id,
+          workspaceId: managed.workspace.id,
+          sdkSessionId: managed.sdkSessionId,
+          createdAt: managed.lastMessageAt,
+          lastUsedAt: managed.lastMessageAt,
+        } : undefined,
+      })
+      console.log(`[SessionManager] Created agent for session ${managed.id}${managed.sdkSessionId ? ' (resuming)' : ''}`)
+    }
+    return managed.agent
+  }
+
   async archiveSession(sessionId: string): Promise<void> {
     const managed = this.sessions.get(sessionId)
     if (managed) {
       managed.isArchived = true
+      archiveStoredSession(sessionId)
     }
   }
 
@@ -152,6 +319,7 @@ export class SessionManager {
     const managed = this.sessions.get(sessionId)
     if (managed) {
       managed.isArchived = false
+      unarchiveStoredSession(sessionId)
     }
   }
 
@@ -164,6 +332,8 @@ export class SessionManager {
       }
       this.sessions.delete(sessionId)
     }
+    // Delete from disk too
+    deleteStoredSession(sessionId)
   }
 
   async sendMessage(sessionId: string, message: string): Promise<void> {
@@ -189,16 +359,19 @@ export class SessionManager {
     managed.streamingText = ''
     managed.abortController = new AbortController()
 
+    // Get or create the agent (lazy loading)
+    const agent = this.getOrCreateAgent(managed)
+
     try {
       console.log('[SessionManager] Starting chat for session:', sessionId)
       console.log('[SessionManager] Workspace:', JSON.stringify(managed.workspace, null, 2))
       console.log('[SessionManager] Message:', message)
-      console.log('[SessionManager] Agent model:', managed.agent.getModel())
+      console.log('[SessionManager] Agent model:', agent.getModel())
       console.log('[SessionManager] process.cwd():', process.cwd())
 
       // Process the message through the agent
       console.log('[SessionManager] Calling agent.chat()...')
-      const chatIterator = managed.agent.chat(message)
+      const chatIterator = agent.chat(message)
       console.log('[SessionManager] Got chat iterator, starting iteration...')
 
       for await (const event of chatIterator) {
@@ -208,6 +381,15 @@ export class SessionManager {
           break
         }
         this.processEvent(managed, event)
+
+        // Capture SDK session ID after first event (for conversation continuity)
+        if (!managed.sdkSessionId) {
+          const sdkId = agent.getSessionId()
+          if (sdkId) {
+            managed.sdkSessionId = sdkId
+            console.log(`[SessionManager] Captured SDK session ID: ${sdkId}`)
+          }
+        }
       }
       console.log('[SessionManager] Chat completed')
     } catch (error) {
@@ -223,6 +405,9 @@ export class SessionManager {
       managed.isProcessing = false
       managed.abortController = undefined
       this.sendEvent({ type: 'complete', sessionId })
+
+      // Persist session to disk after each message exchange
+      this.persistSession(managed)
     }
   }
 

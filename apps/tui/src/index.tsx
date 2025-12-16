@@ -26,7 +26,7 @@ import {
 } from '../../../src/config/storage.ts';
 import { getAuthState, getSetupNeeds, type AuthState, type SetupNeeds } from '../../../src/auth/state.ts';
 import type { CraftAgentConfig } from '../../../src/agent/craft-agent.ts';
-import { debug, enableDebug } from './utils/debug.ts';
+import { debug, enableDebug } from '../../../src/utils/debug.ts';
 import { install } from '../../../src/version/install.ts';
 import { getCurrentVersion } from '../../../src/version/version.ts';
 import { DEFAULT_MODEL } from '../../../src/config/models.ts';

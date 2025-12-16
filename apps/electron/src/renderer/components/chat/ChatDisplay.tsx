@@ -1,30 +1,12 @@
 import * as React from "react"
-import { format } from "date-fns"
 import {
-  MoreVertical,
   Send,
-  Trash2,
   MessageSquare,
 } from "lucide-react"
 
-import {
-  Avatar,
-  AvatarFallback,
-} from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 import type { Session, Message } from "../../../shared/types"
@@ -34,15 +16,13 @@ interface ChatDisplayProps {
   onSendMessage: (message: string) => void
   onOpenFile: (path: string) => void
   onOpenUrl: (url: string) => void
-  onDelete: () => void
 }
 
 /**
  * ChatDisplay - Main chat interface for a selected session
  *
  * Structure:
- * - Toolbar: Delete button, More options dropdown
- * - Session Header: Avatar, workspace name, message count, timestamp
+ * - Session Header: Avatar + workspace name
  * - Messages Area: Scrollable list of MessageBubble components
  * - Input Area: Textarea + Send button
  *
@@ -53,15 +33,22 @@ export function ChatDisplay({
   onSendMessage,
   onOpenFile,
   onOpenUrl,
-  onDelete,
 }: ChatDisplayProps) {
   const [input, setInput] = React.useState("")
   const messagesEndRef = React.useRef<HTMLDivElement>(null)
+  const prevSessionIdRef = React.useRef<string | null>(null)
 
-  // Auto-scroll to bottom on new messages
+  // Auto-scroll to bottom
+  // - Instant scroll on session switch
+  // - Smooth scroll on new messages in same session
   React.useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [session?.messages])
+    const isSessionSwitch = prevSessionIdRef.current !== session?.id
+    prevSessionIdRef.current = session?.id ?? null
+
+    messagesEndRef.current?.scrollIntoView({
+      behavior: isSessionSwitch ? 'instant' : 'smooth'
+    })
+  }, [session?.id, session?.messages])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -79,62 +66,11 @@ export function ChatDisplay({
 
   return (
     <div className="flex h-full flex-col min-w-0">
-      {/* === TOOLBAR: Action buttons at top === */}
-      <div className="flex h-[52px] items-center px-2">
-        <div className="flex items-center gap-2">
-          {/* Delete Button with Tooltip */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" disabled={!session} onClick={onDelete}>
-                <Trash2 className="h-4 w-4" />
-                <span className="sr-only">Delete session</span>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Delete session</TooltipContent>
-          </Tooltip>
-        </div>
-        <Separator orientation="vertical" className="mx-2 h-6 ml-auto" />
-        {/* More Options Dropdown */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" disabled={!session}>
-              <MoreVertical className="h-4 w-4" />
-              <span className="sr-only">More</span>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={onDelete}>Delete session</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-      <Separator />
-
       {session ? (
         <div className="flex flex-1 flex-col min-h-0 min-w-0">
-          {/* === SESSION HEADER: Avatar, name, message count, timestamp === */}
-          <div className="flex items-start p-4">
-            <div className="flex items-start gap-4 text-sm">
-              {/* Workspace Avatar: First letter of name */}
-              <Avatar>
-                <AvatarFallback>
-                  {session.workspaceName?.charAt(0).toUpperCase() || 'W'}
-                </AvatarFallback>
-              </Avatar>
-              <div className="grid gap-1">
-                {/* Workspace Name */}
-                <div className="font-semibold">{session.workspaceName || 'Chat'}</div>
-                {/* Message Count */}
-                <div className="line-clamp-1 text-xs text-muted-foreground">
-                  {session.messages.length} message{session.messages.length !== 1 ? 's' : ''}
-                </div>
-              </div>
-            </div>
-            {/* Last Message Timestamp (right side) */}
-            {session.lastMessageAt && (
-              <div className="ml-auto text-xs text-muted-foreground">
-                {format(new Date(session.lastMessageAt), "PPpp")}
-              </div>
-            )}
+          {/* === SESSION HEADER: Title only === */}
+          <div className="flex h-[42px] shrink-0 items-center px-4 relative z-50">
+            <div className="font-semibold font-sans text-sm">{session.workspaceName || 'Chat'}</div>
           </div>
           <Separator />
 
@@ -203,12 +139,17 @@ export function ChatDisplay({
         </div>
       ) : (
         /* === EMPTY STATE: No session selected === */
-        <div className="p-8 text-center text-muted-foreground flex-1 flex flex-col items-center justify-center">
-          <div className="size-16 rounded-2xl bg-muted flex items-center justify-center mb-4">
-            <MessageSquare className="size-8 text-muted-foreground/50" />
+        <div className="flex flex-1 flex-col min-h-0">
+          {/* Empty header to match session header height */}
+          <div className="h-[42px] shrink-0" />
+          <Separator />
+          <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground">
+            <div className="size-16 rounded-2xl bg-muted flex items-center justify-center mb-4">
+              <MessageSquare className="size-8 text-muted-foreground/50" />
+            </div>
+            <h2 className="text-lg font-medium text-foreground">No session selected</h2>
+            <p className="text-sm mt-1">Select a session from the list or create a new one</p>
           </div>
-          <h2 className="text-lg font-medium text-foreground">No session selected</h2>
-          <p className="text-sm mt-1">Select a session from the list or create a new one</p>
         </div>
       )}
     </div>

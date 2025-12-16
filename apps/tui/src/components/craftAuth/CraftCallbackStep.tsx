@@ -5,7 +5,7 @@ import open from 'open';
 import { createCallbackServer } from '../../../../../src/auth/callback-server';
 import { CraftApi, type ProfileResponse } from '../../../../../src/clients/craftApi';
 import { AnimatedSpinner } from '../Spinner';
-import { debug } from '../../utils/debug';
+import { debug } from '../../../../../src/utils/debug.ts';
 import { checkSubscription } from '../../../../../src/subscription/check';
 import { getCredentialManager } from '../../../../../src/credentials';
 

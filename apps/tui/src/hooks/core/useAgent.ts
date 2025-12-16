@@ -14,7 +14,7 @@ import {
 import { parseSDKErrorText, isSDKErrorText, type AgentError } from '../../../../../src/agent/errors.ts';
 import type { UpdateInstructionsContext, UpdateInstructionsProgressEvent } from '../../../../../src/agents/instruction-updater.ts';
 import type { Message } from '../../components/Messages.tsx';
-import type { FileAttachment } from '../../utils/files.ts';
+import type { FileAttachment } from '../../../../../src/utils/files.ts';
 import { setTerminalProgressIndeterminate, clearTerminalProgress } from '../../utils/terminalProgress.ts';
 import {
   getWorkspaceAccessTokenAsync,
@@ -39,7 +39,7 @@ import type { SubAgentDefinition, McpServerConfig, ApiConfig, Concern } from '..
 import type { ExtractionProgressEvent } from '../../../../../src/agents/extractor.ts';
 import { invalidateDefinition, loadRegistry, clearAgentCredentialsAsync } from '../../../../../src/agents/cache.ts';
 import { CraftOAuth, getMcpBaseUrl } from '../../../../../src/auth/oauth.ts';
-import { debug } from '../../utils/debug.ts';
+import { debug } from '../../../../../src/utils/debug.ts';
 
 // MCP auth request for sub-agent servers
 export interface PendingMcpAuthRequest {

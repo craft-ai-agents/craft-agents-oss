@@ -46,8 +46,7 @@ apps/tui/
 │   ├── keyboard/
 │   │   └── mappings.ts    # Keyboard shortcut detection
 │   └── utils/
-│       ├── debug.ts       # Debug logging to /tmp/craft-debug.log
-│       ├── files.ts       # File attachment processing
+│       ├── filtering.ts   # Command hints, tab completion
 │       ├── markdown.ts    # Markdown rendering with Shiki
 │       ├── terminalProgress.ts
 │       └── toolStatus.ts
@@ -65,11 +64,12 @@ The TUI app uses relative imports to access shared code from the root `src/` dir
 // Imports from root src/
 import { loadStoredConfig } from '../../../src/config/storage.ts';
 import { CraftAgent } from '../../../src/agent/craft-agent.ts';
-import { getAuthState } from '../../../src/auth/state.ts';
+import { debug } from '../../../src/utils/debug.ts';
+import { processInputWithFiles } from '../../../src/utils/files.ts';
 
 // Local imports (TUI-specific)
-import { debug } from './utils/debug.ts';
 import { useAgent } from './hooks/core/useAgent.ts';
+import { renderMarkdown } from './utils/markdown.ts';
 ```
 
 **Note:** This is a transitional state. Eventually, shared logic should move to `@craft-agent/core` and be imported as a workspace dependency.
@@ -128,7 +128,7 @@ bun start --debug
 tail -f /tmp/craft-debug.log
 ```
 
-Use `debug()` from `./utils/debug.ts` to add log entries.
+Use `debug()` from `../../../src/utils/debug.ts` to add log entries.
 
 ## Dependencies
 
@@ -145,5 +145,7 @@ Use `debug()` from `./utils/debug.ts` to add log entries.
 | Terminal-specific hooks   | Storage (`config/`) |
 | Keyboard handling         | Auth (`auth/`) |
 | Markdown rendering        | MCP client (`mcp/`) |
-| Debug utilities           | Credentials (`credentials/`) |
+|                           | Credentials (`credentials/`) |
 |                           | Sub-agents (`agents/`) |
+|                           | Debug utilities (`utils/debug.ts`) |
+|                           | File processing (`utils/files.ts`) |

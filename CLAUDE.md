@@ -491,17 +491,16 @@ Includes:
 Extends Anthropic's prompt cache from 5 minutes to 1 hour for longer conversations.
 
 **How it works:**
-1. Imported as FIRST import in `index.tsx` (patches fetch before SDK loads)
-2. Also loaded via `bunfig.toml` preload for dev mode (belt-and-suspenders)
+1. Loaded via `bunfig.toml` preload (patches fetch before any imports evaluate)
+2. For production builds, copied to output folder and loaded via Bun's preload mechanism
 3. Patches `globalThis.fetch` before the SDK captures the reference
 4. Intercepts Anthropic API requests and adds `ttl: "1h"` to `cache_control` blocks
 5. Beta header in `craft-agent.ts` conditionally added based on config/model
 
-**Why first import matters:**
+**Why preload matters:**
 - ES modules capture references at load time
 - The interceptor must patch fetch before SDK imports evaluate
-- Direct import works in compiled binaries (preload doesn't)
-- Preload still helps in dev mode as extra safety
+- Preload ensures the patch runs before any application code
 
 **Configuration (`~/.craft-agent/config.json`):**
 - Not set (default): Auto mode - 1h for Opus models, 5m for others

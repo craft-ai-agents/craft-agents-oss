@@ -10,7 +10,7 @@ import {
 } from '../../../../../src/config/storage.ts';
 import { formatPreferencesDisplay } from '../../../../../src/config/preferences.ts';
 import { resolveCommand } from '../../utils/filtering.ts';
-import { readClipboard, type FileAttachment } from '../../utils/files.ts';
+import { readClipboard, type FileAttachment } from '../../../../../src/utils/files.ts';
 import { getCurrentVersion } from '../../../../../src/version/version.ts';
 import type { ModalName } from '../modals/useModalState.ts';
 import type { Message } from '../../components/Messages.tsx';

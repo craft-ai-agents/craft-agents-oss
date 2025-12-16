@@ -175,6 +175,7 @@ export class SubAgentManager {
       agents.push({
         id: doc.id,
         name: normalizeAgentName(doc.title, folderPath),
+        displayName: doc.title,
         documentId: doc.id,
         workspaceId: this.workspaceId,
         createdAt: Date.now(),

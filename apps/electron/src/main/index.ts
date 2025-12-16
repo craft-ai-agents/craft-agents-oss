@@ -39,9 +39,13 @@ function createWindow(): void {
     height: 900,
     minWidth: 800,
     minHeight: 600,
-    title: 'Craft Agents',
+    title: '',
     icon: iconExists ? iconPath : undefined,
-    backgroundColor: '#1a1a1a',
+    transparent: true,
+    titleBarStyle: 'hidden',
+    trafficLightPosition: { x: 16, y: 14 },  // y=14 centers in 42px header (42/2 - 7)
+    vibrancy: 'under-window',
+    visualEffectState: 'active',
     webPreferences: {
       preload: join(__dirname, 'preload.cjs'),
       contextIsolation: true,
