@@ -17,6 +17,14 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src/renderer')
-    }
+    },
+    dedupe: ['react', 'react-dom']
+  },
+  optimizeDeps: {
+    include: ['react', 'react-dom', 'jotai']
+  },
+  server: {
+    port: 5173,
+    open: true
   }
 })

@@ -1,0 +1,44 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Electron: Main",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "runtimeExecutable": "${workspaceFolder}/../node_modules/.bin/electron",
+      "args": ["${workspaceFolder}/dist/main.js"],
+      "outputCapture": "std",
+      "preLaunchTask": "electron:build",
+      "sourceMaps": true,
+      "outFiles": ["${workspaceFolder}/dist/**/*.js"]
+    },
+    {
+      "name": "Electron: Renderer",
+      "type": "chrome",
+      "request": "attach",
+      "port": 9222,
+      "webRoot": "${workspaceFolder}/src/renderer",
+      "sourceMaps": true
+    },
+    {
+      "name": "Electron: All",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "runtimeExecutable": "${workspaceFolder}/../node_modules/.bin/electron",
+      "args": ["${workspaceFolder}/dist/main.js", "--remote-debugging-port=9222"],
+      "outputCapture": "std",
+      "preLaunchTask": "electron:build",
+      "sourceMaps": true,
+      "outFiles": ["${workspaceFolder}/dist/**/*.js"]
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Electron: Main + Renderer",
+      "configurations": ["Electron: All", "Electron: Renderer"],
+      "stopAll": true
+    }
+  ]
+}

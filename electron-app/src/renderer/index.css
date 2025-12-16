@@ -1,50 +1,162 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
+/* Tell Tailwind where to scan for utility classes */
+@source "../**/*.{tsx,ts,jsx,js}";
+
+/* Base CSS Variables - Light Mode (default) */
 :root {
-  --craft-purple: #9570BE;
-  --craft-purple-light: #B08DD4;
-  --craft-purple-dark: #7A5AA5;
+  --background: hsl(0 0% 100%);
+  --foreground: hsl(222 47% 11%);
+
+  --card: hsl(0 0% 98%);
+  --card-foreground: hsl(222 47% 11%);
+
+  --popover: hsl(0 0% 100%);
+  --popover-foreground: hsl(222 47% 11%);
+
+  --primary: hsl(271 37% 59%);
+  --primary-foreground: hsl(0 0% 100%);
+
+  --secondary: hsl(0 0% 98%);
+  --secondary-foreground: hsl(222 47% 11%);
+
+  --muted: hsl(0 0% 98%);
+  --muted-foreground: hsl(215 16% 47%);
+
+  --accent: hsl(220 14% 96%);
+  --accent-foreground: hsl(222 47% 11%);
+
+  --destructive: hsl(0 84% 60%);
+  --destructive-foreground: hsl(0 0% 100%);
+
+  --border: hsl(220 13% 91%);
+  --input: hsl(220 13% 91%);
+  --ring: hsl(271 37% 59%);
+
+  --sidebar: hsl(0 0% 98%);
+  --sidebar-foreground: hsl(222 47% 11%);
+  --sidebar-border: hsl(220 13% 91%);
+
+  --radius: 0.5rem;
 }
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+/* Dark Mode */
+.dark {
+  --background: hsl(222 47% 5%);
+  --foreground: hsl(0 0% 95%);
+
+  --card: hsl(222 47% 8%);
+  --card-foreground: hsl(0 0% 95%);
+
+  --popover: hsl(222 47% 8%);
+  --popover-foreground: hsl(0 0% 95%);
+
+  --primary: hsl(271 37% 70%);
+  --primary-foreground: hsl(222 47% 5%);
+
+  --secondary: hsl(222 30% 15%);
+  --secondary-foreground: hsl(0 0% 95%);
+
+  --muted: hsl(222 30% 15%);
+  --muted-foreground: hsl(215 16% 60%);
+
+  --accent: hsl(222 30% 18%);
+  --accent-foreground: hsl(0 0% 95%);
+
+  --destructive: hsl(0 70% 50%);
+  --destructive-foreground: hsl(0 0% 95%);
+
+  --border: hsl(222 30% 20%);
+  --input: hsl(222 30% 20%);
+  --ring: hsl(271 37% 70%);
+
+  --sidebar: hsl(222 47% 8%);
+  --sidebar-foreground: hsl(0 0% 95%);
+  --sidebar-border: hsl(222 30% 20%);
 }
 
-html, body, #root {
-  height: 100%;
-  overflow: hidden;
+/*
+ * Custom Color Theme Template
+ * ---------------------------
+ * To create a custom theme, add selectors like:
+ *
+ * [data-theme="ocean"] {
+ *   --primary: hsl(200 80% 50%);
+ *   --ring: hsl(200 80% 50%);
+ * }
+ *
+ * .dark[data-theme="ocean"] {
+ *   --primary: hsl(200 80% 65%);
+ *   --ring: hsl(200 80% 65%);
+ * }
+ */
+
+/* Theme integration for Tailwind v4 */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
 }
 
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-  background: #1a1a1a;
-  color: #e5e5e5;
-}
+/* Global styles - MUST be in @layer base so utilities can override */
+@layer base {
+  * {
+    box-sizing: border-box;
+    border-color: var(--border);
+  }
 
-/* Scrollbar styling */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
+  html, body, #root {
+    height: 100%;
+    overflow: hidden;
+  }
 
-::-webkit-scrollbar-track {
-  background: #1a1a1a;
-}
+  body {
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--background);
+    color: var(--foreground);
+  }
 
-::-webkit-scrollbar-thumb {
-  background: #3a3a3a;
-  border-radius: 4px;
-}
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
 
-::-webkit-scrollbar-thumb:hover {
-  background: #4a4a4a;
-}
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
 
-/* Custom colors - Tailwind v4 way */
-@theme {
-  --color-craft-purple: #9570BE;
-  --color-craft-purple-light: #B08DD4;
-  --color-craft-purple-dark: #7A5AA5;
+  ::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--muted-foreground);
+  }
 }

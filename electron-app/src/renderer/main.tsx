@@ -1,21 +1,27 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import { Provider as JotaiProvider } from 'jotai'
 import App from './App'
 import './index.css'
 
-// Verify electronAPI is available
+// Inject mock API when running in browser (no Electron)
 if (!window.electronAPI) {
-  console.error('electronAPI not available')
-  document.getElementById('root')!.innerHTML = `
-    <div style="padding: 40px; color: #ef4444; font-family: system-ui; background: #1a1a1a; height: 100vh;">
-      <h1>Error: Electron API not available</h1>
-      <p>The preload script may not have loaded correctly.</p>
-    </div>
-  `
+  console.log('[Dev] Running in browser mode with mock data')
+  // Dynamic import to avoid bundling mocks in production Electron build
+  import('./mocks/electronAPI').then(({ mockElectronAPI }) => {
+    window.electronAPI = mockElectronAPI
+    renderApp()
+  })
 } else {
+  renderApp()
+}
+
+function renderApp() {
   ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
-      <App />
+      <JotaiProvider>
+        <App />
+      </JotaiProvider>
     </React.StrictMode>
   )
 }

@@ -76,6 +76,10 @@ export const IPC_CHANNELS = {
   // File operations
   READ_FILE: 'file:read',
 
+  // Theme
+  GET_SYSTEM_THEME: 'theme:getSystemPreference',
+  SYSTEM_THEME_CHANGED: 'theme:systemChanged',
+
   // System
   GET_VERSIONS: 'system:versions'
 } as const
@@ -97,6 +101,10 @@ export interface ElectronAPI {
 
   // File operations
   readFile(path: string): Promise<string>
+
+  // Theme
+  getSystemTheme(): Promise<boolean>
+  onSystemThemeChange(callback: (isDark: boolean) => void): () => void
 
   // System
   getVersions(): { node: string; chrome: string; electron: string }

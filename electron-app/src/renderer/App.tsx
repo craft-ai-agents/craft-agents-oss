@@ -1,19 +1,22 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import type { Session, Workspace, SessionEvent, Message } from '../shared/types'
 import { generateMessageId } from '../shared/types'
-import ThreadList from './components/ThreadList'
-import ChatView from './components/ChatView'
-import RightSidebar from './components/RightSidebar'
+import { Mail } from '@/components/mail/Mail'
+import { TooltipProvider } from '@/components/ui/tooltip'
 
 export default function App() {
   const [sessions, setSessions] = useState<Session[]>([])
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
-  const [rightPanelContent, setRightPanelContent] = useState<{ type: 'markdown' | 'browser'; url: string } | null>(null)
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null)
 
   // Load workspaces on mount
   useEffect(() => {
-    window.electronAPI.getWorkspaces().then(setWorkspaces)
+    window.electronAPI.getWorkspaces().then((ws) => {
+      setWorkspaces(ws)
+      if (ws.length > 0 && !activeWorkspaceId) {
+        setActiveWorkspaceId(ws[0].id)
+      }
+    })
     window.electronAPI.getSessions().then(setSessions)
   }, [])
 
@@ -26,10 +29,8 @@ export default function App() {
 
           switch (event.type) {
             case 'text_delta': {
-              // Update streaming text - append to existing streaming message or create new one
               const lastMsg = session.messages[session.messages.length - 1]
 
-              // If last message is a streaming assistant message, append to it
               if (lastMsg?.role === 'assistant' && lastMsg.isStreaming) {
                 return {
                   ...session,
@@ -40,8 +41,6 @@ export default function App() {
                 }
               }
 
-              // If last message is assistant but not streaming (shouldn't happen normally),
-              // or last message is something else, start a new streaming message
               return {
                 ...session,
                 messages: [
@@ -90,7 +89,6 @@ export default function App() {
               }
 
             case 'tool_result': {
-              // Match by toolUseId for reliable matching (not toolName which could have duplicates)
               const toolMsgs = session.messages
               const matchingTool = toolMsgs.find(m => m.toolUseId === event.toolUseId)
               if (matchingTool) {
@@ -103,7 +101,6 @@ export default function App() {
                   )
                 }
               }
-              // Fallback: try matching by toolName (for backwards compatibility)
               const lastTool = toolMsgs.findLast(m => m.toolName === event.toolName && !m.toolResult)
               if (lastTool) {
                 return {
@@ -133,7 +130,6 @@ export default function App() {
               }
 
             case 'typed_error':
-              // Typed errors have structured information - show title and message
               return {
                 ...session,
                 messages: [
@@ -150,7 +146,6 @@ export default function App() {
               }
 
             case 'status':
-              // Add status messages to show progress (e.g., "Compacting conversation...")
               return {
                 ...session,
                 messages: [
@@ -180,21 +175,14 @@ export default function App() {
   const handleCreateSession = useCallback(async (workspaceId: string) => {
     const session = await window.electronAPI.createSession(workspaceId)
     setSessions(prev => [session, ...prev])
-    setActiveSessionId(session.id)
   }, [])
 
   const handleDeleteSession = useCallback(async (sessionId: string) => {
     await window.electronAPI.deleteSession(sessionId)
     setSessions(prev => prev.filter(s => s.id !== sessionId))
-    if (activeSessionId === sessionId) {
-      setActiveSessionId(null)
-    }
-  }, [activeSessionId])
+  }, [])
 
-  const handleSendMessage = useCallback(async (message: string) => {
-    if (!activeSessionId) return
-
-    // Add user message to local state immediately for responsive UI
+  const handleSendMessage = useCallback(async (sessionId: string, message: string) => {
     const userMessage: Message = {
       id: generateMessageId(),
       role: 'user',
@@ -203,19 +191,17 @@ export default function App() {
     }
 
     setSessions(prev => prev.map(s =>
-      s.id === activeSessionId
-        ? { ...s, messages: [...s.messages, userMessage], isProcessing: true }
+      s.id === sessionId
+        ? { ...s, messages: [...s.messages, userMessage], isProcessing: true, lastMessageAt: Date.now() }
         : s
     ))
 
-    // Send to main process - this returns immediately, results come via events
     try {
-      await window.electronAPI.sendMessage(activeSessionId, message)
+      await window.electronAPI.sendMessage(sessionId, message)
     } catch (error) {
-      // Handle IPC errors (e.g., main process crashed)
       console.error('Failed to send message:', error)
       setSessions(prev => prev.map(s =>
-        s.id === activeSessionId
+        s.id === sessionId
           ? {
               ...s,
               isProcessing: false,
@@ -232,60 +218,35 @@ export default function App() {
           : s
       ))
     }
-  }, [activeSessionId])
+  }, [])
 
   const handleOpenFile = useCallback((path: string) => {
-    setRightPanelContent({ type: 'markdown', url: path })
+    console.log('Open file:', path)
+    // TODO: Integrate file viewer
   }, [])
 
   const handleOpenUrl = useCallback((url: string) => {
-    setRightPanelContent({ type: 'browser', url })
+    console.log('Open URL:', url)
+    // TODO: Integrate browser view
   }, [])
 
-  const activeSession = sessions.find(s => s.id === activeSessionId)
-
   return (
-    <div className="flex h-full bg-[#1a1a1a]">
-      {/* Left sidebar - Thread list */}
-      <div className="w-64 border-r border-[#2a2a2a] flex flex-col">
-        <ThreadList
-          sessions={sessions}
+    <TooltipProvider>
+      <div className="h-full bg-background text-foreground">
+        <Mail
           workspaces={workspaces}
-          activeSessionId={activeSessionId}
-          onSelectSession={setActiveSessionId}
+          sessions={sessions}
+          activeWorkspaceId={activeWorkspaceId}
+          defaultLayout={[20, 32, 48]}
+          navCollapsedSize={4}
+          onSelectWorkspace={setActiveWorkspaceId}
           onCreateSession={handleCreateSession}
           onDeleteSession={handleDeleteSession}
+          onSendMessage={handleSendMessage}
+          onOpenFile={handleOpenFile}
+          onOpenUrl={handleOpenUrl}
         />
       </div>
-
-      {/* Main area - Chat */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {activeSession ? (
-          <ChatView
-            session={activeSession}
-            onSendMessage={handleSendMessage}
-            onOpenFile={handleOpenFile}
-            onOpenUrl={handleOpenUrl}
-          />
-        ) : (
-          <div className="flex-1 flex items-center justify-center text-[#666]">
-            <div className="text-center">
-              <h2 className="text-xl mb-2">Welcome to Craft Agent</h2>
-              <p>Select a thread or create a new one to get started</p>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Right sidebar - File viewer / Browser */}
-      {rightPanelContent && (
-        <div className="w-96 border-l border-[#2a2a2a]">
-          <RightSidebar
-            content={rightPanelContent}
-            onClose={() => setRightPanelContent(null)}
-          />
-        </div>
-      )}
-    </div>
+    </TooltipProvider>
   )
 }

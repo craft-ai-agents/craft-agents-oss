@@ -1,0 +1,20 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "electron:build",
+      "type": "shell",
+      "command": "bun",
+      "args": ["run", "electron:build"],
+      "options": {
+        "cwd": "${workspaceFolder}/.."
+      },
+      "group": "build",
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    }
+  ]
+}

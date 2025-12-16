@@ -27,6 +27,19 @@ const api: ElectronAPI = {
   // File operations
   readFile: (path: string) => ipcRenderer.invoke(IPC_CHANNELS.READ_FILE, path),
 
+  // Theme
+  getSystemTheme: () => ipcRenderer.invoke(IPC_CHANNELS.GET_SYSTEM_THEME),
+  onSystemThemeChange: (callback: (isDark: boolean) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, isDark: boolean) => {
+      callback(isDark)
+    }
+    ipcRenderer.on(IPC_CHANNELS.SYSTEM_THEME_CHANGED, handler)
+    // Return cleanup function
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.SYSTEM_THEME_CHANGED, handler)
+    }
+  },
+
   // System
   getVersions: () => ({
     node: process.versions.node,

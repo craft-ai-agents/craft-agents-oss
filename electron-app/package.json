@@ -13,5 +13,10 @@
     "build": "This package is built from the root package.json using: bun run electron:build",
     "start": "Run from root using: bun run electron:start",
     "dependencies": "All dependencies are managed in the root package.json"
+  },
+  "dependencies": {
+    "@radix-ui/react-label": "^2.1.8",
+    "@radix-ui/react-popover": "^1.1.15",
+    "@radix-ui/react-switch": "^1.2.6"
   }
 }
