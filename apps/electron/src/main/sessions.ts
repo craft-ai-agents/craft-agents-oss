@@ -1,10 +1,14 @@
 import { BrowserWindow, app } from 'electron'
 import { join } from 'path'
+import { rm } from 'fs/promises'
 import { CraftAgent, type AgentEvent } from '../../../../src/agent/craft-agent'
 import {
   loadStoredConfig,
   getWorkspaces,
   getWorkspaceByNameOrId,
+  getWorkspaceAccessTokenAsync,
+  updateSessionMetadata,
+  getSessionAttachmentsPath,
   type Workspace,
   // Session persistence functions
   listSessions as listStoredSessions,
@@ -21,7 +25,12 @@ import {
 import { getAuthState } from '../../../../src/auth/state'
 import { setAnthropicOptionsEnv, setPathToClaudeCodeExecutable } from '../../../../src/agent/options'
 import { getCraftToken } from '../../../../src/auth/craft-token'
-import { type Session, type Message, type SessionEvent, IPC_CHANNELS, generateMessageId } from '../shared/types'
+import { CraftMcpClient } from '../../../../src/mcp/client'
+import { SubAgentManager, type SubAgentManagerConfig } from '../../../../src/agents/manager'
+import type { SubAgentDefinition } from '../../../../src/agents/types'
+import { type Session, type Message, type SessionEvent, type FileAttachment, IPC_CHANNELS, generateMessageId } from '../shared/types'
+import { generateSessionTitle } from '../../../../src/utils/title-generator'
+import { DEFAULT_MODEL } from '../../../../src/config/models'
 
 interface ManagedSession {
   id: string
@@ -34,6 +43,8 @@ interface ManagedSession {
   abortController?: AbortController
   // Track tool_use_id -> toolName mapping (since tool_result only has toolUseId)
   pendingTools: Map<string, string>
+  // Session name (user-defined or AI-generated)
+  name?: string
   // Inbox/Archive features
   agentId?: string
   agentName?: string
@@ -53,6 +64,7 @@ interface ManagedSession {
 }
 
 // Convert runtime Message to StoredMessage for persistence
+// Note: For tool messages, result is stored in `content` (not duplicated in toolResult)
 function messageToStored(msg: Message): StoredMessage {
   return {
     id: msg.id,
@@ -64,6 +76,7 @@ function messageToStored(msg: Message): StoredMessage {
     toolStatus: msg.toolStatus,
     toolDuration: msg.toolDuration,
     isError: msg.isError,
+    attachments: msg.attachments,
   }
 }
 
@@ -79,15 +92,89 @@ function storedToMessage(stored: StoredMessage): Message {
     toolStatus: stored.toolStatus,
     toolDuration: stored.toolDuration,
     isError: stored.isError,
+    attachments: stored.attachments,
   }
 }
 
 export class SessionManager {
   private sessions: Map<string, ManagedSession> = new Map()
   private mainWindow: BrowserWindow | null = null
+  // Cache SubAgentManager per workspace (reused across sessions)
+  private agentManagers: Map<string, SubAgentManager> = new Map()
 
   setMainWindow(window: BrowserWindow): void {
     this.mainWindow = window
+  }
+
+  /**
+   * Get or create a SubAgentManager for a workspace
+   * The manager is cached and reused across sessions for the same workspace
+   */
+  private async getAgentManager(workspace: Workspace): Promise<SubAgentManager | null> {
+    // Check cache first
+    if (this.agentManagers.has(workspace.id)) {
+      return this.agentManagers.get(workspace.id)!
+    }
+
+    try {
+      // Get MCP token for the workspace (returns { authType, token })
+      const { token: mcpToken } = await getWorkspaceAccessTokenAsync(workspace.id)
+
+      if (!mcpToken) {
+        console.warn(`[SessionManager] No MCP token for workspace ${workspace.id}, cannot create agent manager`)
+        return null
+      }
+
+      // Create MCP client for this workspace
+      const mcpClient = new CraftMcpClient({
+        url: workspace.mcpUrl,
+        headers: { Authorization: `Bearer ${mcpToken}` },
+      })
+
+      // Connect to MCP server
+      await mcpClient.connect()
+
+      // Get config
+      const config = loadStoredConfig()
+      const managerConfig: SubAgentManagerConfig = {
+        model: config?.model || DEFAULT_MODEL,
+        mcpUrl: workspace.mcpUrl,
+        mcpToken,
+      }
+
+      // Create and cache the manager
+      const manager = new SubAgentManager(workspace.id, mcpClient, managerConfig)
+      this.agentManagers.set(workspace.id, manager)
+
+      console.log(`[SessionManager] Created agent manager for workspace ${workspace.id}`)
+      return manager
+    } catch (error) {
+      console.error(`[SessionManager] Failed to create agent manager for workspace ${workspace.id}:`, error)
+      return null
+    }
+  }
+
+  /**
+   * Load agent definition for a given agent ID
+   * Used when activating an agent for a session
+   */
+  private async loadAgentDefinition(agentId: string, workspace: Workspace): Promise<SubAgentDefinition | null> {
+    const manager = await this.getAgentManager(workspace)
+    if (!manager) {
+      console.warn(`[SessionManager] No agent manager for workspace ${workspace.id}`)
+      return null
+    }
+
+    try {
+      const definition = await manager.getDefinition(agentId)
+      if (definition) {
+        console.log(`[SessionManager] Loaded agent definition: ${definition.name}`)
+      }
+      return definition
+    } catch (error) {
+      console.error(`[SessionManager] Failed to load agent definition ${agentId}:`, error)
+      return null
+    }
   }
 
   async initialize(): Promise<void> {
@@ -174,6 +261,7 @@ export class SessionManager {
           lastMessageAt: storedSession.lastUsedAt,
           streamingText: '',
           pendingTools: new Map(),
+          name: storedSession.name,
           agentId: storedSession.agentId,
           agentName: storedSession.agentName,
           isArchived: storedSession.isArchived ?? false,
@@ -200,6 +288,7 @@ export class SessionManager {
       const storedSession: StoredSession = {
         id: managed.id,
         workspaceId: managed.workspace.id,
+        name: managed.name,
         createdAt: managed.lastMessageAt,  // Approximate, will be overwritten if already exists
         lastUsedAt: Date.now(),
         sdkSessionId: managed.sdkSessionId,
@@ -233,6 +322,7 @@ export class SessionManager {
         id: m.id,
         workspaceId: m.workspace.id,
         workspaceName: m.workspace.name,
+        name: m.name,
         lastMessageAt: m.lastMessageAt,
         messages: m.messages,
         isProcessing: m.isProcessing,
@@ -286,8 +376,11 @@ export class SessionManager {
     }
   }
 
-  // Get or create agent for a session (lazy loading)
-  private getOrCreateAgent(managed: ManagedSession): CraftAgent {
+  /**
+   * Get or create agent for a session (lazy loading)
+   * If session has an agentId, loads and applies the agent definition
+   */
+  private async getOrCreateAgent(managed: ManagedSession): Promise<CraftAgent> {
     if (!managed.agent) {
       const config = loadStoredConfig()
       managed.agent = new CraftAgent({
@@ -303,6 +396,30 @@ export class SessionManager {
         } : undefined,
       })
       console.log(`[SessionManager] Created agent for session ${managed.id}${managed.sdkSessionId ? ' (resuming)' : ''}`)
+
+      // If session has an agent, load and apply the definition
+      if (managed.agentId) {
+        const definition = await this.loadAgentDefinition(managed.agentId, managed.workspace)
+        if (definition) {
+          // Get the agent manager to build server configs
+          const manager = await this.getAgentManager(managed.workspace)
+          if (manager) {
+            try {
+              // Build MCP server configs with auth
+              const mcpServers = await manager.buildMcpServerConfig(definition)
+              // Build API servers (in-process MCP servers for REST APIs)
+              const apiServers = await manager.buildApiServers(definition)
+
+              // Apply definition to the agent
+              managed.agent.setActiveAgentDefinition(definition, mcpServers, apiServers)
+              console.log(`[SessionManager] Applied agent definition "${definition.name}" to session ${managed.id}`)
+            } catch (error) {
+              console.error(`[SessionManager] Failed to build agent configs for ${managed.agentId}:`, error)
+              // Continue without agent configs - will use base agent
+            }
+          }
+        }
+      }
     }
     return managed.agent
   }
@@ -323,20 +440,42 @@ export class SessionManager {
     }
   }
 
+  async renameSession(sessionId: string, name: string): Promise<void> {
+    const managed = this.sessions.get(sessionId)
+    if (managed) {
+      managed.name = name
+      this.persistSession(managed)
+      // Notify renderer of the name change
+      this.sendEvent({ type: 'title_generated', sessionId, title: name })
+    }
+  }
+
   async deleteSession(sessionId: string): Promise<void> {
     const managed = this.sessions.get(sessionId)
     if (managed) {
-      // Cancel any ongoing processing
-      if (managed.abortController) {
+      // If processing is in progress, abort and wait for cleanup
+      if (managed.isProcessing && managed.abortController) {
         managed.abortController.abort()
+        // Brief wait for abort to propagate and in-flight operations to settle
+        await new Promise(resolve => setTimeout(resolve, 100))
       }
       this.sessions.delete(sessionId)
     }
     // Delete from disk too
     deleteStoredSession(sessionId)
+
+    // Clean up attachments directory
+    try {
+      const attachmentsDir = getSessionAttachmentsPath(sessionId)
+      await rm(attachmentsDir, { recursive: true, force: true })
+      console.log(`[SessionManager] Cleaned up attachments for session ${sessionId}`)
+    } catch (error) {
+      // Ignore errors - directory might not exist
+      console.log(`[SessionManager] No attachments to clean up for session ${sessionId}`)
+    }
   }
 
-  async sendMessage(sessionId: string, message: string): Promise<void> {
+  async sendMessage(sessionId: string, message: string, attachments?: FileAttachment[]): Promise<void> {
     const managed = this.sessions.get(sessionId)
     if (!managed) {
       throw new Error(`Session ${sessionId} not found`)
@@ -359,8 +498,8 @@ export class SessionManager {
     managed.streamingText = ''
     managed.abortController = new AbortController()
 
-    // Get or create the agent (lazy loading)
-    const agent = this.getOrCreateAgent(managed)
+    // Get or create the agent (lazy loading, applies agent definition if present)
+    const agent = await this.getOrCreateAgent(managed)
 
     try {
       console.log('[SessionManager] Starting chat for session:', sessionId)
@@ -371,7 +510,10 @@ export class SessionManager {
 
       // Process the message through the agent
       console.log('[SessionManager] Calling agent.chat()...')
-      const chatIterator = agent.chat(message)
+      if (attachments?.length) {
+        console.log('[SessionManager] Attachments:', attachments.length)
+      }
+      const chatIterator = agent.chat(message, attachments)
       console.log('[SessionManager] Got chat iterator, starting iteration...')
 
       for await (const event of chatIterator) {
@@ -418,6 +560,25 @@ export class SessionManager {
     }
   }
 
+  /**
+   * Generate an AI title for a session based on the first exchange
+   * Called asynchronously after the first assistant response
+   */
+  private async generateTitle(managed: ManagedSession, userMessage: string, assistantResponse: string): Promise<void> {
+    try {
+      const title = await generateSessionTitle(userMessage, assistantResponse)
+      if (title) {
+        managed.name = title
+        this.persistSession(managed)
+        // Notify renderer of the generated title
+        this.sendEvent({ type: 'title_generated', sessionId: managed.id, title })
+        console.log(`[SessionManager] Generated title for session ${managed.id}: "${title}"`)
+      }
+    } catch (error) {
+      console.error(`[SessionManager] Failed to generate title for session ${managed.id}:`, error)
+    }
+  }
+
   private processEvent(managed: ManagedSession, event: AgentEvent): void {
     const sessionId = managed.id
 
@@ -429,6 +590,10 @@ export class SessionManager {
         break
 
       case 'text_complete':
+        // Check if this is the first assistant message and no name exists yet
+        const existingAssistantCount = managed.messages.filter(m => m.role === 'assistant').length
+        const shouldGenerateTitle = existingAssistantCount === 0 && !managed.name
+
         const assistantMessage: Message = {
           id: generateMessageId(),
           role: 'assistant',
@@ -438,6 +603,14 @@ export class SessionManager {
         managed.messages.push(assistantMessage)
         managed.streamingText = ''
         this.sendEvent({ type: 'text_complete', sessionId, text: event.text })
+
+        // Generate title asynchronously after first assistant response
+        if (shouldGenerateTitle) {
+          const firstUserMsg = managed.messages.find(m => m.role === 'user')
+          if (firstUserMsg) {
+            this.generateTitle(managed, firstUserMsg.content, event.text)
+          }
+        }
         break
 
       case 'tool_start':

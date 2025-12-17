@@ -4,7 +4,7 @@ import { execSync } from 'child_process';
 import { tmpdir } from 'os';
 
 export interface FileAttachment {
-  type: 'image' | 'text' | 'pdf' | 'unknown';
+  type: 'image' | 'text' | 'pdf' | 'office' | 'unknown';
   path: string;
   name: string;
   mimeType: string;
@@ -39,6 +39,16 @@ const TEXT_EXTENSIONS = new Set([
   '.env', '.gitignore', '.dockerfile', '.makefile',
   '.csv', '.log', '.conf', '.ini', '.cfg',
 ]);
+
+// Office file extensions (will be converted to markdown via markitdown-js)
+const OFFICE_EXTENSIONS: Record<string, string> = {
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  '.doc': 'application/msword',
+  '.xls': 'application/vnd.ms-excel',
+  '.ppt': 'application/vnd.ms-powerpoint',
+};
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB limit
 const MAX_TEXT_SIZE = 100 * 1024; // 100KB for text files
@@ -135,7 +145,7 @@ export function resolvePath(filePath: string): string {
  * Determine the type of a file based on extension
  * Falls back to 'text' for unknown extensions (will try to read as text)
  */
-export function getFileType(filePath: string): 'image' | 'text' | 'pdf' | 'unknown' {
+export function getFileType(filePath: string): 'image' | 'text' | 'pdf' | 'office' | 'unknown' {
   const ext = extname(filePath).toLowerCase();
 
   if (ext in IMAGE_EXTENSIONS) {
@@ -143,6 +153,9 @@ export function getFileType(filePath: string): 'image' | 'text' | 'pdf' | 'unkno
   }
   if (ext === '.pdf') {
     return 'pdf';
+  }
+  if (ext in OFFICE_EXTENSIONS) {
+    return 'office';
   }
   if (TEXT_EXTENSIONS.has(ext)) {
     return 'text';
@@ -165,6 +178,10 @@ export function getMimeType(filePath: string): string {
   }
   if (ext === '.pdf') {
     return 'application/pdf';
+  }
+  const officeMime = OFFICE_EXTENSIONS[ext];
+  if (officeMime) {
+    return officeMime;
   }
 
   // Default to text for known text extensions
@@ -224,6 +241,10 @@ export function readFileAttachment(filePath: string): FileAttachment | null {
       }
     } else if (type === 'pdf') {
       // Read PDF as base64
+      const buffer = readFileSync(resolved);
+      attachment.base64 = buffer.toString('base64');
+    } else if (type === 'office') {
+      // Read Office files as base64 (will be converted to markdown later)
       const buffer = readFileSync(resolved);
       attachment.base64 = buffer.toString('base64');
     }

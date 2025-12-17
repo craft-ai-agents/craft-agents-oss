@@ -1,46 +1,351 @@
+import { useState, useCallback, useEffect, useRef } from "react"
 import { formatDistanceToNow } from "date-fns"
-import { Archive, ArchiveRestore, Trash2, Bot } from "lucide-react"
+import { Archive, ArchiveRestore, Trash2, Bot, Pencil, MoreHorizontal } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { Button } from "@/components/ui/button"
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
 import { useSession } from "@/hooks/useSession"
+import { useFocusZone, useRovingTabIndex } from "@/hooks/keyboard"
+import { useFocusContext } from "@/context/FocusContext"
 import type { Session } from "../../../shared/types"
+
+/**
+ * Get display title for a session.
+ * Priority: custom name > first user message > "New thread"
+ */
+function getSessionTitle(item: Session): string {
+  if (item.name) {
+    return item.name
+  }
+
+  const firstUserMessage = item.messages.find(m => m.role === 'user')
+  if (firstUserMessage?.content) {
+    const trimmed = firstUserMessage.content.slice(0, 50)
+    return trimmed.length < firstUserMessage.content.length
+      ? trimmed + '…'
+      : trimmed
+  }
+
+  return 'New thread'
+}
+
+interface SessionItemProps {
+  item: Session
+  index: number
+  preview: string
+  itemProps: {
+    id: string
+    tabIndex: number
+    'aria-selected': boolean
+    onKeyDown: (e: React.KeyboardEvent) => void
+    onFocus: () => void
+    ref: (el: HTMLElement | null) => void
+    role: string
+  }
+  isSelected: boolean
+  onKeyDown: (e: React.KeyboardEvent, item: Session) => void
+  onRenameClick: (sessionId: string, currentName: string) => void
+  onArchive?: (sessionId: string) => void
+  onUnarchive?: (sessionId: string) => void
+  onDelete: (sessionId: string) => void
+}
+
+/**
+ * SessionItem - Individual session card with context menu
+ * Tracks its own context menu open state to keep "..." button visible
+ */
+function SessionItem({
+  item,
+  index,
+  preview,
+  itemProps,
+  isSelected,
+  onKeyDown,
+  onRenameClick,
+  onArchive,
+  onUnarchive,
+  onDelete,
+}: SessionItemProps) {
+  const [menuOpen, setMenuOpen] = useState(false)
+
+  return (
+    <div>
+      {index > 0 && <Separator />}
+      <ContextMenu onOpenChange={setMenuOpen}>
+        <ContextMenuTrigger asChild>
+          <button
+            {...itemProps}
+            className={cn(
+              "group flex w-full flex-col items-start gap-2 pl-5 pr-4 py-3 text-left text-sm transition-all hover:bg-foreground/5 relative outline-none",
+              isSelected && "bg-muted",
+              "focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+            )}
+            onKeyDown={(e) => {
+              itemProps.onKeyDown(e)
+              onKeyDown(e, item)
+            }}
+          >
+            {/* Card Header Row */}
+            <div className="flex w-full flex-col gap-0.5 pr-6">
+              <div className="flex items-center gap-2">
+                <div className="font-semibold font-sans truncate">
+                  {getSessionTitle(item)}
+                </div>
+                {item.isProcessing && (
+                  <span className="flex h-2 w-2 rounded-full bg-primary animate-pulse shrink-0" />
+                )}
+              </div>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground/70">
+                <span>
+                  {item.messages.length} message{item.messages.length !== 1 ? 's' : ''}
+                  {item.lastMessageAt && (
+                    <> · {formatDistanceToNow(new Date(item.lastMessageAt), { addSuffix: true })}</>
+                  )}
+                </span>
+                {item.agentName && (
+                  <span className="flex items-center gap-1 ml-auto">
+                    <Bot className="h-3 w-3" />
+                    {item.agentName}
+                  </span>
+                )}
+              </div>
+            </div>
+            {/* Preview Text */}
+            <div className="line-clamp-2 text-xs text-muted-foreground">
+              {preview}
+            </div>
+            {/* Processing Badge */}
+            {item.isProcessing && (
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary">Processing</Badge>
+              </div>
+            )}
+            {/* More menu button - visible on hover or when menu is open */}
+            <div
+              className={cn(
+                "absolute right-2 top-3 transition-opacity",
+                menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+              )}
+              onClick={(e) => {
+                e.stopPropagation()
+                e.preventDefault()
+                const rect = e.currentTarget.getBoundingClientRect()
+                const event = new MouseEvent('contextmenu', {
+                  bubbles: true,
+                  cancelable: true,
+                  clientX: rect.right,
+                  clientY: rect.bottom,
+                })
+                e.currentTarget.dispatchEvent(event)
+              }}
+            >
+              <div className="p-1 rounded hover:bg-foreground/10 cursor-pointer">
+                <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
+              </div>
+            </div>
+          </button>
+        </ContextMenuTrigger>
+        <ContextMenuContent className="w-48">
+          <ContextMenuItem onClick={() => onRenameClick(item.id, getSessionTitle(item))} shortcut="R">
+            <Pencil />
+            Rename
+          </ContextMenuItem>
+          <ContextMenuSeparator />
+          {onArchive && (
+            <ContextMenuItem onClick={() => onArchive(item.id)} shortcut="A">
+              <Archive />
+              Archive
+            </ContextMenuItem>
+          )}
+          {onUnarchive && (
+            <ContextMenuItem onClick={() => onUnarchive(item.id)} shortcut="A">
+              <ArchiveRestore />
+              Unarchive
+            </ContextMenuItem>
+          )}
+          <ContextMenuItem onClick={() => onDelete(item.id)} variant="destructive" shortcut="D">
+            <Trash2 />
+            Delete
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
+    </div>
+  )
+}
 
 interface SessionListProps {
   items: Session[]
   onDelete: (sessionId: string) => void
   onArchive?: (sessionId: string) => void
   onUnarchive?: (sessionId: string) => void
+  onRename: (sessionId: string, name: string) => void
+  /** Called when Enter is pressed to focus chat input */
+  onFocusChatInput?: () => void
 }
 
 /**
- * SessionList - Scrollable list of session cards
+ * SessionList - Scrollable list of session cards with keyboard navigation
  *
- * Each card displays:
- * - Workspace name + processing indicator (pulsing dot)
- * - Relative timestamp ("2 hours ago")
- * - Message count + agent name (if applicable)
- * - Preview text (first 300 chars of last message)
- * - Processing badge when agent is working
- *
- * Hover actions: Archive/Unarchive, Delete
+ * Keyboard shortcuts:
+ * - Arrow Up/Down: Navigate and select sessions (immediate selection)
+ * - Enter: Focus chat input
+ * - Delete/Backspace: Delete session
+ * - A: Archive session
+ * - R: Rename session
+ * - Right-click or Menu key: Open context menu
  */
-export function SessionList({ items, onDelete, onArchive, onUnarchive }: SessionListProps) {
+export function SessionList({
+  items,
+  onDelete,
+  onArchive,
+  onUnarchive,
+  onRename,
+  onFocusChatInput,
+}: SessionListProps) {
   const [session, setSession] = useSession()
+  const [renameDialogOpen, setRenameDialogOpen] = useState(false)
+  const [renameSessionId, setRenameSessionId] = useState<string | null>(null)
+  const [renameName, setRenameName] = useState("")
+  const scrollRef = useRef<HTMLDivElement>(null)
 
   // Sort by most recent activity first
   const sortedItems = [...items].sort((a, b) =>
     (b.lastMessageAt || 0) - (a.lastMessageAt || 0)
   )
 
+  // Find initial index based on selected session
+  const selectedIndex = sortedItems.findIndex(item => item.id === session.selected)
+
+  // Focus zone management
+  const { focusZone } = useFocusContext()
+
+  // Register as focus zone
+  const { zoneRef, isFocused } = useFocusZone({ zoneId: 'session-list' })
+
+  // Handle session selection (immediate on arrow navigation)
+  const handleActiveChange = useCallback((item: Session) => {
+    setSession({ ...session, selected: item.id })
+  }, [session, setSession])
+
+  // Handle Enter to focus chat input
+  const handleEnter = useCallback(() => {
+    onFocusChatInput?.()
+  }, [onFocusChatInput])
+
+  // Handle Delete key
+  const handleDelete = useCallback((item: Session) => {
+    onDelete(item.id)
+  }, [onDelete])
+
+  // Roving tabindex for keyboard navigation
+  const {
+    activeIndex,
+    setActiveIndex,
+    getItemProps,
+    focusActiveItem,
+  } = useRovingTabIndex({
+    items: sortedItems,
+    getId: (item, _index) => item.id,
+    orientation: 'vertical',
+    wrap: true,
+    onActiveChange: handleActiveChange,
+    onEnter: handleEnter,
+    onDelete: handleDelete,
+    initialIndex: selectedIndex >= 0 ? selectedIndex : 0,
+    enabled: isFocused,
+  })
+
+  // Sync activeIndex when selection changes externally
+  useEffect(() => {
+    const newIndex = sortedItems.findIndex(item => item.id === session.selected)
+    if (newIndex >= 0 && newIndex !== activeIndex) {
+      setActiveIndex(newIndex)
+    }
+  }, [session.selected, sortedItems, activeIndex, setActiveIndex])
+
+  // Focus active item when zone gains focus
+  useEffect(() => {
+    if (isFocused && sortedItems.length > 0) {
+      focusActiveItem()
+    }
+  }, [isFocused, focusActiveItem, sortedItems.length])
+
+  // Handle single-key shortcuts (A, R, Left/Right) when focused
+  const handleKeyDown = useCallback((e: React.KeyboardEvent, item: Session) => {
+    // Handle arrow keys for zone navigation (no modifiers required)
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault()
+      focusZone('sidebar')
+      return
+    }
+    if (e.key === 'ArrowRight') {
+      e.preventDefault()
+      focusZone('chat')
+      return
+    }
+
+    // Only handle letter shortcuts when no modifiers
+    if (e.metaKey || e.ctrlKey || e.altKey) return
+
+    switch (e.key.toLowerCase()) {
+      case 'a':
+        e.preventDefault()
+        if (onArchive) {
+          onArchive(item.id)
+        } else if (onUnarchive) {
+          onUnarchive(item.id)
+        }
+        break
+      case 'r':
+        e.preventDefault()
+        handleRenameClick(item.id, getSessionTitle(item))
+        break
+    }
+  }, [onArchive, onUnarchive, focusZone])
+
+  const handleRenameClick = (sessionId: string, currentName: string) => {
+    setRenameSessionId(sessionId)
+    setRenameName(currentName)
+    setRenameDialogOpen(true)
+  }
+
+  const handleRenameSubmit = () => {
+    if (renameSessionId && renameName.trim()) {
+      onRename(renameSessionId, renameName.trim())
+    }
+    setRenameDialogOpen(false)
+    setRenameSessionId(null)
+    setRenameName("")
+  }
+
   return (
-    <ScrollArea className="h-screen">
-      <div className="flex flex-col">
+    <ScrollArea className="h-screen" ref={scrollRef}>
+      <div
+        ref={zoneRef}
+        className="flex flex-col"
+        data-focus-zone="session-list"
+        role="listbox"
+        aria-label="Sessions"
+      >
         {sortedItems.length === 0 ? (
-          /* Empty State */
           <p className="text-sm text-muted-foreground text-center py-8">
             No conversations yet
           </p>
@@ -48,108 +353,56 @@ export function SessionList({ items, onDelete, onArchive, onUnarchive }: Session
           sortedItems.map((item, index) => {
             const lastMessage = item.messages[item.messages.length - 1]
             const preview = lastMessage?.content?.slice(0, 300) || 'New conversation'
+            const itemProps = getItemProps(item, index)
 
             return (
-              /* Session Card: Clickable button that selects the session */
-              <div key={item.id}>
-                {index > 0 && <Separator />}
-                <button
-                  className={cn(
-                    "group flex w-full flex-col items-start gap-2 pl-5 pr-4 py-3 text-left text-sm transition-all hover:bg-foreground/5 relative",
-                    session.selected === item.id && "bg-muted"  // Selected state
-                  )}
-                onClick={() =>
-                  setSession({
-                    ...session,
-                    selected: item.id,
-                  })
-                }
-              >
-                {/* Card Header Row */}
-                <div className="flex w-full flex-col gap-0.5">
-                  {/* Workspace Name + Processing Indicator */}
-                  <div className="flex items-center gap-2">
-                    <div className="font-semibold font-sans">{item.workspaceName || 'Workspace'}</div>
-                    {item.isProcessing && (
-                      <span className="flex h-2 w-2 rounded-full bg-primary animate-pulse" />
-                    )}
-                  </div>
-                  {/* Meta Row: Message count · Timestamp + Agent name */}
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground/70">
-                    <span>
-                      {item.messages.length} message{item.messages.length !== 1 ? 's' : ''}
-                      {item.lastMessageAt && (
-                        <> · {formatDistanceToNow(new Date(item.lastMessageAt), { addSuffix: true })}</>
-                      )}
-                    </span>
-                    {item.agentName && (
-                      <span className="flex items-center gap-1 ml-auto">
-                        <Bot className="h-3 w-3" />
-                        {item.agentName}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                {/* Preview Text: First 300 chars of last message */}
-                <div className="line-clamp-2 text-xs text-muted-foreground">
-                  {preview}
-                </div>
-                {/* Processing Badge */}
-                {item.isProcessing && (
-                  <div className="flex items-center gap-2">
-                    <Badge variant="secondary">Processing</Badge>
-                  </div>
-                )}
-
-                {/* Hover Action Buttons: Archive, Unarchive, Delete */}
-                <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  {onArchive && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="group/btn size-6 hover:bg-foreground/5"
-                      title="Archive"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onArchive(item.id)
-                      }}
-                    >
-                      <Archive className="size-3.5 text-muted-foreground group-hover/btn:text-foreground" />
-                    </Button>
-                  )}
-                  {onUnarchive && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="group/btn size-6 hover:bg-foreground/5"
-                      title="Unarchive"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onUnarchive(item.id)
-                      }}
-                    >
-                      <ArchiveRestore className="size-3.5 text-muted-foreground group-hover/btn:text-foreground" />
-                    </Button>
-                  )}
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="group/btn size-6 hover:bg-foreground/5"
-                    title="Delete"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      onDelete(item.id)
-                    }}
-                  >
-                    <Trash2 className="size-3.5 text-muted-foreground group-hover/btn:text-foreground" />
-                  </Button>
-                </div>
-                </button>
-              </div>
+              <SessionItem
+                key={item.id}
+                item={item}
+                index={index}
+                preview={preview}
+                itemProps={itemProps}
+                isSelected={session.selected === item.id}
+                onKeyDown={handleKeyDown}
+                onRenameClick={handleRenameClick}
+                onArchive={onArchive}
+                onUnarchive={onUnarchive}
+                onDelete={onDelete}
+              />
             )
           })
         )}
       </div>
+
+      {/* Rename Dialog */}
+      <Dialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Rename conversation</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <Input
+              value={renameName}
+              onChange={(e) => setRenameName(e.target.value)}
+              placeholder="Enter a name..."
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleRenameSubmit()
+                }
+              }}
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRenameDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleRenameSubmit}>
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </ScrollArea>
   )
 }

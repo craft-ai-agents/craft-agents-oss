@@ -23,11 +23,12 @@ Or add to `package.json`:
 ```typescript
 import { SessionManager } from '@craft-agent/session-manager';
 import type { Session } from '@craft-agent/core';
+import { DEFAULT_MODEL } from '../../src/config/models'; // Use centralized config
 
 // Create a session manager
 const manager = new SessionManager({
   session: mySession,
-  model: 'claude-sonnet-4-20250514',
+  model: DEFAULT_MODEL, // Always use centralized model config
 });
 
 // Subscribe to events

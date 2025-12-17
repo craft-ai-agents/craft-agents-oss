@@ -4,6 +4,7 @@ import { join } from 'path';
 import { randomUUID } from 'crypto';
 import { getCredentialManager } from '../credentials/index.ts';
 import { isOpusModel } from './models.ts';
+import type { StoredAttachment } from '../../packages/core/src/types/message';
 
 /**
  * OAuth credentials from a fresh authentication flow.
@@ -620,6 +621,9 @@ export function updateWorkspaceSessionId(workspaceId: string, sessionId: string 
   saveConfig(config);
 }
 
+// Re-export StoredAttachment for convenience (imported at top of file)
+export type { StoredAttachment };
+
 // Stored message format (simplified for persistence)
 export interface StoredMessage {
   id: string;
@@ -631,6 +635,8 @@ export interface StoredMessage {
   toolStatus?: 'pending' | 'executing' | 'completed' | 'error';
   toolDuration?: number;
   isError?: boolean;
+  /** Stored attachments for user messages (persisted to disk) */
+  attachments?: StoredAttachment[];
 }
 
 export interface WorkspaceConversation {
@@ -709,6 +715,21 @@ function ensureSessionsDir(): string {
     mkdirSync(SESSIONS_DIR, { recursive: true });
   }
   return SESSIONS_DIR;
+}
+
+/**
+ * Get the attachments directory path for a session.
+ * Files are stored at: ~/.craft-agent/sessions/{sessionId}/attachments/
+ */
+export function getSessionAttachmentsPath(sessionId: string): string {
+  return join(SESSIONS_DIR, sessionId, 'attachments');
+}
+
+/**
+ * Get the config directory path (~/.craft-agent)
+ */
+export function getConfigDir(): string {
+  return CONFIG_DIR;
 }
 
 // Session token usage (reuse WorkspaceConversation structure)

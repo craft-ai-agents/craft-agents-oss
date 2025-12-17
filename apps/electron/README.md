@@ -151,20 +151,29 @@ DevTools opens automatically (configured in `index.ts`). Remove `mainWindow.webC
 
 1. **No permission handling** - Bash commands execute without approval
 2. **No AskUserQuestion UI** - Agent can't ask clarifying questions
-3. **No session persistence** - Sessions lost on restart
-4. **No file attachments** - Can't attach images/PDFs
-5. **In development only** - No electron-builder config for distribution
+3. **In development only** - No electron-builder config for distribution
+
+## Implemented Features
+
+- **Session persistence** - Sessions, messages, and names are saved to disk
+- **File attachments** - Attach images, PDFs, and code files to messages
+- **AI-generated titles** - Sessions get automatic titles after first exchange
+- **Subagent support** - Load and apply agent definitions from Craft documents
+- **Shell integration** - Open URLs in browser, open files in default apps
 
 ## File Overview
 
 | File | Purpose |
 |------|---------|
 | `main/index.ts` | App entry, window creation |
-| `main/sessions.ts` | CraftAgent wrapper, event processing |
-| `main/ipc.ts` | IPC channel handlers |
+| `main/sessions.ts` | CraftAgent wrapper, event processing, subagent integration |
+| `main/ipc.ts` | IPC channel handlers (sessions, files, shell) |
+| `main/agent-service.ts` | Agent listing, caching, auth checking |
 | `preload/index.ts` | Context bridge API |
 | `renderer/App.tsx` | React root, state management |
-| `renderer/components/ChatView.tsx` | Message list, input |
-| `renderer/components/ThreadList.tsx` | Session sidebar |
-| `renderer/components/MessageBubble.tsx` | Message rendering |
-| `shared/types.ts` | IPC channels, Message/Session types |
+| `renderer/components/chat/Chat.tsx` | Main chat layout with resizable panels |
+| `renderer/components/chat/ChatInput.tsx` | Message input with file attachments |
+| `renderer/components/chat/ChatDisplay.tsx` | Message list with markdown rendering |
+| `renderer/components/chat/SessionList.tsx` | Session sidebar with rename support |
+| `renderer/components/chat/AttachmentPreview.tsx` | File attachment bubbles |
+| `shared/types.ts` | IPC channels, Message/Session/FileAttachment types |

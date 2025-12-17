@@ -4,6 +4,7 @@ export const mockWorkspaces: Workspace[] = [
   { id: 'ws-personal', name: 'Personal Notes', mcpUrl: 'https://mcp.craft.do/personal', createdAt: Date.now() - 86400000 * 30 },
   { id: 'ws-work', name: 'Work Projects', mcpUrl: 'https://mcp.craft.do/work', createdAt: Date.now() - 86400000 * 60 },
   { id: 'ws-research', name: 'Research', mcpUrl: 'https://mcp.craft.do/research', createdAt: Date.now() - 86400000 * 15 },
+  { id: 'ws-linktest', name: 'Link Testing', mcpUrl: 'https://mcp.craft.do/linktest', createdAt: Date.now() - 86400000 * 1 },
 ]
 
 // Helper to create message IDs
@@ -135,6 +136,86 @@ Would you like me to open either of these?`,
   },
 ]
 
+// Conversation to test link detection
+const linkTestConversation: Message[] = [
+  {
+    id: msgId(300),
+    role: 'user',
+    content: 'Test various link formats',
+    timestamp: Date.now() - 60000,
+  },
+  {
+    id: msgId(301),
+    role: 'assistant',
+    content: `Here are various link formats to test auto-detection:
+
+## Full URLs
+- HTTPS: https://github.com/anthropics/claude-code
+- HTTP: http://example.com/path?query=value
+- With port: https://localhost:3000/api
+
+## Bare Domains (no protocol)
+- Simple: google.com
+- With path: github.com/user/repo
+- Subdomain: docs.craft.do/getting-started
+
+## WWW URLs
+- Basic: www.example.org
+- With path: www.npmjs.com/package/linkify-it
+
+## File Paths
+- Absolute: /Users/test/Documents/project/src/index.ts
+- Home: ~/Documents/notes.md
+- Relative: ./src/components/App.tsx
+- Deep: /var/log/app.log
+
+## Real File Paths (click to test!)
+- This project's README: /Users/balintorosz/Documents/GitHub/craft-tui-agent/README.md
+- The linkify module: /Users/balintorosz/Documents/GitHub/craft-tui-agent/apps/electron/src/renderer/components/markdown/linkify.ts
+- Package.json: /Users/balintorosz/Documents/GitHub/craft-tui-agent/package.json
+
+## Emails
+- Simple: hello@example.com
+- Complex: support+test@company.io
+
+## Already Linked (should NOT double-link)
+- Markdown: [Google](https://google.com)
+- Reference: Check the [documentation](https://docs.craft.do)
+
+## In Code (should NOT link)
+\`\`\`typescript
+const apiUrl = 'https://api.example.com/v1';
+const configPath = '/etc/app/config.json';
+\`\`\`
+
+Inline code: \`https://should-not-link.com\` and \`/path/to/file.ts\`
+
+## Edge Cases
+- Trailing punctuation: https://example.com.
+- In parentheses: (see https://mcp.linear.app/mcp)
+- Multiple on one line: https://a.com https://b.com https://c.com`,
+    timestamp: Date.now() - 55000,
+  },
+  {
+    id: msgId(302),
+    role: 'user',
+    content: 'Done! I\'ve updated my instructions with the correct Linear MCP server configuration:\n\nURL: https://mcp.linear.app/mcp',
+    timestamp: Date.now() - 50000,
+  },
+  {
+    id: msgId(303),
+    role: 'assistant',
+    content: `Great! I can confirm the Linear MCP server is configured at https://mcp.linear.app/mcp
+
+For reference, here are some other useful MCP endpoints:
+- Craft: https://mcp.craft.do/workspace
+- GitHub: https://mcp.github.com/repos
+
+You can also check the documentation at docs.linear.app/mcp for more details, or email support@linear.app if you have questions.`,
+    timestamp: Date.now() - 45000,
+  },
+]
+
 // Conversation showing an error state
 const errorConversation: Message[] = [
   {
@@ -170,6 +251,14 @@ const errorConversation: Message[] = [
 ]
 
 export const mockSessions: Session[] = [
+  {
+    id: 'session-linktest',
+    workspaceId: 'ws-linktest',
+    workspaceName: 'Link Testing',
+    lastMessageAt: Date.now() - 45000,
+    messages: linkTestConversation,
+    isProcessing: false,
+  },
   {
     id: 'session-1',
     workspaceId: 'ws-personal',

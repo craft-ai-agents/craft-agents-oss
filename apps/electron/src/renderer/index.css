@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@plugin "@tailwindcss/typography";
 
 /* Tell Tailwind where to scan for utility classes */
 @source "../**/*.{tsx,ts,jsx,js}";
@@ -64,6 +65,10 @@
   --highlight: oklch(0.58 0.22 293);
   --highlight-foreground: oklch(0.98 0.003 265);
   --highlight-muted: oklch(0.58 0.22 293 / 0.15);
+
+  /* Markdown list markers */
+  --md-bullets: oklch(0.45 0.005 265);
+  --md-counters: oklch(0.45 0.005 265);
 
   /* Fonts */
   --font-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -140,6 +145,10 @@
   --highlight-foreground: oklch(0.98 0.005 300);
   --highlight-muted: oklch(0.65 0.20 293 / 0.15);
 
+  /* Markdown list markers */
+  --md-bullets: oklch(0.55 0.008 290);
+  --md-counters: oklch(0.55 0.008 290);
+
   /* Fonts (same as light) */
   --font-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-serif: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
@@ -205,6 +214,8 @@
   --color-highlight: var(--highlight);
   --color-highlight-foreground: var(--highlight-foreground);
   --color-highlight-muted: var(--highlight-muted);
+  --color-md-bullets: var(--md-bullets);
+  --color-md-counters: var(--md-counters);
 
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
@@ -295,4 +306,86 @@
 .titlebar-no-drag {
   -webkit-app-region: no-drag;
   app-region: no-drag;
+}
+
+/* =============================================================================
+   DISABLE ANIMATIONS FOR DIALOGS, DROPDOWNS, AND POPOVERS
+
+   Radix UI (used by shadcn/ui) applies animations via data-state attributes.
+   This globally disables enter/exit animations for overlay components.
+
+   To re-enable for specific components, use: animation: revert !important;
+============================================================================= */
+
+/* Dialog overlay (backdrop) */
+[data-radix-dialog-overlay] {
+  animation: none !important;
+}
+
+/* Dialog content */
+[role="dialog"][data-state],
+[data-radix-dialog-content] {
+  animation: none !important;
+}
+
+/* Dropdown menu content */
+[data-radix-menu-content],
+[data-radix-dropdown-menu-content] {
+  animation: none !important;
+}
+
+/* Popover content */
+[data-radix-popover-content] {
+  animation: none !important;
+}
+
+/* Select content */
+[data-radix-select-content] {
+  animation: none !important;
+}
+
+/* Tooltip content (if you want tooltips instant too) */
+[data-radix-tooltip-content] {
+  animation: none !important;
+}
+
+/* Context menu content */
+[data-radix-context-menu-content] {
+  animation: none !important;
+}
+
+/* Alert dialog */
+[data-radix-alert-dialog-overlay],
+[data-radix-alert-dialog-content] {
+  animation: none !important;
+}
+
+/* =============================================================================
+   KEYBOARD NAVIGATION FOCUS STYLES
+
+   Consistent focus indicators for keyboard navigation across all focusable
+   components: session list items, sidebar buttons, agent tree items, etc.
+
+   Uses inset ring to avoid layout shifts and keep focus within bounds.
+============================================================================= */
+
+/* Session list items, nav buttons, tree items - consistent focus ring */
+[role="listbox"] button:focus-visible,
+[role="tree"] button:focus-visible,
+[role="treeitem"]:focus-visible,
+[role="option"]:focus-visible,
+[data-focus-zone] button:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+/* Ensure focus is visible even on selected/highlighted items */
+[role="option"][aria-selected="true"]:focus-visible,
+[role="treeitem"][aria-selected="true"]:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+/* Focus zone containers - subtle indicator when zone has focus */
+[data-focus-zone]:focus-visible {
+  outline: none;
 }

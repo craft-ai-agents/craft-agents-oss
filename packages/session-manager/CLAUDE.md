@@ -132,10 +132,11 @@ class SessionManager extends TypedEventEmitter<SessionManagerEvents> {
 
 ```typescript
 import { SessionManager } from '@craft-agent/session-manager';
+import { DEFAULT_MODEL } from '../../src/config/models'; // Use centralized config
 
 const manager = new SessionManager({
   session: currentSession,
-  model: 'claude-sonnet-4-20250514',
+  model: DEFAULT_MODEL, // Always use centralized model config
   onPermissionRequest: async (request) => {
     // Show permission dialog
     return { allowed: true, alwaysAllow: false };

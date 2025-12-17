@@ -37,7 +37,7 @@ export function GradientResizeHandle({ className, headerHeight = 50 }: GradientR
       {/* Horizontal connector - joins the header separators across panels */}
       <div
         className="absolute h-px bg-border"
-        style={{ top: headerHeight, left: -6, right: -6 }}
+        style={{ top: headerHeight, left: -6, right: 0 }}
       />
 
       {/* Touch area container - extends 6px each side for 12px total hit area */}

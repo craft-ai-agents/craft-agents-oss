@@ -25,6 +25,9 @@ export type {
 export type {
   MessageRole,
   ToolStatus,
+  AttachmentType,
+  MessageAttachment,
+  StoredAttachment,
   Message,
   StoredMessage,
   TokenUsage,

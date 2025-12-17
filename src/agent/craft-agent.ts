@@ -1239,9 +1239,18 @@ export class CraftAgent {
             },
           });
         } else if (attachment.type === 'text' && attachment.text) {
+          // Send text files as document blocks (not inline text) to:
+          // - Avoid context overflow for large files
+          // - Enable citation support (char_location)
+          // - Consistent handling with PDFs
           contentBlocks.push({
-            type: 'text',
-            text: `[File: ${attachment.name}]\n\`\`\`\n${attachment.text}\n\`\`\``,
+            type: 'document',
+            source: {
+              type: 'text',
+              media_type: 'text/plain',
+              data: attachment.text,
+            },
+            title: attachment.name,
           });
         }
       }

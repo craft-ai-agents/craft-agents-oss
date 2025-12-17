@@ -20,7 +20,8 @@
     "noUnusedParameters": false,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/renderer/*"]
+      "@/*": ["src/renderer/*"],
+      "@config/*": ["../../src/config/*"]
     }
   },
   "include": ["src/**/*", "../src/**/*"],

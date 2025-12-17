@@ -21,6 +21,37 @@ export type MessageRole =
 export type ToolStatus = 'pending' | 'executing' | 'completed' | 'error';
 
 /**
+ * Attachment type categories
+ */
+export type AttachmentType = 'image' | 'text' | 'pdf' | 'office' | 'unknown';
+
+/**
+ * Attachment preview for display in user messages (runtime, before storage)
+ */
+export interface MessageAttachment {
+  type: AttachmentType;
+  name: string;
+  mimeType: string;
+  size: number;
+  base64?: string;  // For images - enables thumbnail rendering
+}
+
+/**
+ * Stored attachment metadata (persisted to disk, no base64)
+ * Created when user sends a message with attachments
+ */
+export interface StoredAttachment {
+  id: string;                    // UUID for uniqueness
+  type: AttachmentType;
+  name: string;                  // Original filename
+  mimeType: string;
+  size: number;
+  storedPath: string;            // Full path to copied file on disk
+  thumbnailPath?: string;        // Path to OS-generated thumbnail (images/PDFs/Office)
+  markdownPath?: string;         // For Office files: converted markdown for Claude
+}
+
+/**
  * Runtime message type (includes transient fields like isStreaming)
  */
 export interface Message {
@@ -36,6 +67,8 @@ export interface Message {
   toolStatus?: ToolStatus;
   toolDuration?: number;
   toolIntent?: string;
+  // Stored attachments for user messages (persistent, no base64)
+  attachments?: StoredAttachment[];
   isError?: boolean;
   isStreaming?: boolean;
 }
@@ -43,6 +76,7 @@ export interface Message {
 /**
  * Stored message format (persistence)
  * Excludes transient fields like isStreaming
+ * Note: For tool messages, the result is stored in `content` (not duplicated in toolResult)
  */
 export interface StoredMessage {
   id: string;
@@ -54,6 +88,8 @@ export interface StoredMessage {
   toolStatus?: ToolStatus;
   toolDuration?: number;
   isError?: boolean;
+  /** Stored attachments for user messages (persisted to disk) */
+  attachments?: StoredAttachment[];
 }
 
 /**

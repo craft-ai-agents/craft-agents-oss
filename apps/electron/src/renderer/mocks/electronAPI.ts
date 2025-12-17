@@ -1,4 +1,4 @@
-import type { ElectronAPI, Session, SessionEvent } from '../../shared/types'
+import type { ElectronAPI, Session, SessionEvent, FileAttachment, StoredAttachment } from '../../shared/types'
 import { generateMessageId } from '../../shared/types'
 import { mockWorkspaces, mockSessions, mockStreamingResponses } from './dummyData'
 
@@ -109,6 +109,14 @@ export const mockElectronAPI: ElectronAPI = {
     sessions = sessions.filter(s => s.id !== sessionId)
   },
 
+  async renameSession(sessionId: string, name: string): Promise<void> {
+    await sleep(100)
+    const session = sessions.find(s => s.id === sessionId)
+    if (session) {
+      session.name = name
+    }
+  },
+
   async archiveSession(sessionId: string): Promise<void> {
     await sleep(100)
     const session = sessions.find(s => s.id === sessionId)
@@ -125,7 +133,7 @@ export const mockElectronAPI: ElectronAPI = {
     }
   },
 
-  async sendMessage(sessionId: string, message: string): Promise<void> {
+  async sendMessage(sessionId: string, message: string, _attachments?: FileAttachment[]): Promise<void> {
     // This returns immediately - results stream via events
     const session = sessions.find(s => s.id === sessionId)
     if (!session) {
@@ -195,6 +203,12 @@ export const mockElectronAPI: ElectronAPI = {
     return [...mockAgents]
   },
 
+  async checkAgentAuth(_workspaceId: string, _agentId: string) {
+    await sleep(100)
+    // Mock: assume agents don't need auth for testing
+    return { needsAuth: false }
+  },
+
   // ===== Event Listener =====
 
   onSessionEvent(callback: (event: SessionEvent) => void): () => void {
@@ -207,6 +221,26 @@ export const mockElectronAPI: ElectronAPI = {
   },
 
   // ===== File Operations =====
+
+  async openFileDialog(): Promise<string[]> {
+    // Mock: return empty array (user cancelled) - can't open real file dialog in browser
+    console.log('[Mock] openFileDialog called - returning empty array (browser mode)')
+    return []
+  },
+
+  async readFileAttachment(path: string): Promise<FileAttachment | null> {
+    await sleep(100)
+    // Mock: return a fake text file attachment
+    console.log('[Mock] readFileAttachment called for:', path)
+    return {
+      type: 'text',
+      path,
+      name: path.split('/').pop() || 'mock-file.txt',
+      mimeType: 'text/plain',
+      text: 'Mock file content for browser development mode.',
+      size: 50,
+    }
+  },
 
   async readFile(path: string): Promise<string> {
     await sleep(200)
@@ -233,6 +267,23 @@ console.log(example);
 `
   },
 
+  async storeAttachment(_sessionId: string, attachment: FileAttachment): Promise<StoredAttachment> {
+    await sleep(100)
+    // Mock: return a fake StoredAttachment without actually storing anything
+    console.log('[Mock] storeAttachment called for:', attachment.name)
+    const mockId = `mock-${Date.now()}`
+    return {
+      id: mockId,
+      type: attachment.type,
+      name: attachment.name,
+      mimeType: attachment.mimeType,
+      size: attachment.size,
+      storedPath: `/mock/attachments/${mockId}_${attachment.name}`,
+      thumbnailPath: attachment.type === 'image' ? `/mock/attachments/${mockId}_thumb.png` : undefined,
+      markdownPath: attachment.type === 'office' ? `/mock/attachments/${mockId}_${attachment.name}.md` : undefined,
+    }
+  },
+
   // ===== Theme =====
 
   async getSystemTheme(): Promise<boolean> {
@@ -256,5 +307,20 @@ console.log(example);
       chrome: '120.0.0',
       electron: 'browser-mock',
     }
+  },
+
+  // ===== Shell Operations =====
+
+  async openUrl(url: string): Promise<void> {
+    console.log('[Mock] Opening URL:', url)
+    // In browser dev mode, open in new tab
+    window.open(url, '_blank', 'noopener,noreferrer')
+  },
+
+  async openFile(path: string): Promise<void> {
+    console.log('[Mock] Opening file:', path)
+    // In browser dev mode, we can't open local files
+    // Just log a message
+    alert(`[Dev Mode] Would open file:\n${path}`)
   },
 }

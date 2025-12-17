@@ -4,6 +4,7 @@
  */
 
 import { getWorkspaceByNameOrId, loadStoredConfig, type Workspace } from '../../../../src/config/storage'
+import { DEFAULT_MODEL } from '../../../../src/config/models'
 import { getCredentialManager } from '../../../../src/credentials'
 import { CraftMcpClient } from '../../../../src/mcp/client'
 import { SubAgentManager, type SubAgentManagerConfig } from '../../../../src/agents/manager'
@@ -66,7 +67,7 @@ export class AgentService {
     // Create manager config
     const config = loadStoredConfig()
     const managerConfig: SubAgentManagerConfig = {
-      model: config?.model || 'claude-sonnet-4-5-20250929',
+      model: config?.model || DEFAULT_MODEL,
       mcpUrl: workspace.mcpUrl,
       mcpToken: token,
     }
@@ -120,6 +121,45 @@ export class AgentService {
    */
   clearAllCaches(): void {
     this.managerCache.clear()
+  }
+
+  /**
+   * Check if an agent needs authentication (MCP servers or APIs without credentials)
+   * Returns { needsAuth: boolean, reason?: string }
+   */
+  async checkAgentAuthStatus(workspaceId: string, agentId: string): Promise<{
+    needsAuth: boolean
+    reason?: string
+  }> {
+    try {
+      const manager = await this.getManager(workspaceId)
+      const definition = await manager.getDefinition(agentId)
+
+      if (!definition) {
+        return { needsAuth: false }
+      }
+
+      // Check MCP servers needing auth
+      const mcpNeedingAuth = await manager.getMcpServersNeedingAuth(definition)
+      // Check APIs needing auth
+      const apisNeedingAuth = await manager.getApisNeedingAuth(definition)
+
+      if (mcpNeedingAuth.length > 0 || apisNeedingAuth.length > 0) {
+        const services = [
+          ...mcpNeedingAuth.map(s => s.name || 'MCP Server'),
+          ...apisNeedingAuth.map(a => a.name || 'API')
+        ]
+        return {
+          needsAuth: true,
+          reason: `Requires authentication: ${services.join(', ')}`
+        }
+      }
+
+      return { needsAuth: false }
+    } catch (error) {
+      console.error('[AgentService] Error checking auth status:', error)
+      return { needsAuth: false }
+    }
   }
 }
 

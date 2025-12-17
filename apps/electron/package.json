@@ -23,6 +23,9 @@
   "dependencies": {
     "@craft-agent/core": "workspace:*",
     "@craft-agent/session-manager": "workspace:*",
+    "@radix-ui/react-context-menu": "^2.2.16",
+    "@radix-ui/react-dialog": "^1.1.15",
+    "@radix-ui/react-dropdown-menu": "^2.1.16",
     "@radix-ui/react-label": "^2.1.8",
     "@radix-ui/react-popover": "^1.1.15",
     "@radix-ui/react-switch": "^1.2.6",
