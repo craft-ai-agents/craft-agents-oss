@@ -512,7 +512,8 @@ async function main() {
     process.stdout.write('\x1b[?2004l'); // Disable bracketed paste mode
   };
   process.on('exit', cleanup);
-  process.on('SIGINT', () => { cleanup(); process.exit(0); });
+  // Note: Don't handle SIGINT here - let Ink's useInput handle Ctrl+C
+  // so we can implement double-press-to-exit behavior
   process.on('SIGTERM', () => { cleanup(); process.exit(0); });
 
   // Get unified auth state
@@ -535,7 +536,8 @@ async function main() {
       setupNeeds={setupNeeds}
       initialAgent={initialAgent}
       initialPrompt={initialPrompt}
-    />
+    />,
+    { exitOnCtrlC: false } // Let useInput handle Ctrl+C for double-press-to-exit
   );
 
   await waitUntilExit();
