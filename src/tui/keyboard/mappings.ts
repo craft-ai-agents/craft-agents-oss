@@ -211,3 +211,12 @@ export function isDeleteWordForward(input: string, key: InkKey): boolean {
 export function isKillToEnd(input: string, key: InkKey): boolean {
   return input === '\x0b' || (key.ctrl === true && input === 'k');
 }
+
+/**
+ * Shift+Tab - Toggle plan mode
+ * Terminal sends \x1b[Z (CSI Z) for Shift+Tab
+ * Ink delivers: input='[Z' with key.tab=true and key.shift=true (or just input='[Z')
+ */
+export function isShiftTab(input: string, key: InkKey): boolean {
+  return input === '[Z' || (key.tab === true && key.shift === true);
+}

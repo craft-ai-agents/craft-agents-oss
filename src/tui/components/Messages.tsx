@@ -5,6 +5,7 @@ import { ThinkingIndicator } from './Spinner.tsx';
 import { WelcomeBanner } from './Header.tsx';
 import { useElapsedTime } from '../hooks/index.ts';
 import { renderMarkdown } from '../utils/markdown.ts';
+import { shouldHideTool } from '../utils/toolNames.ts';
 
 export interface Message {
   id: string;
@@ -66,9 +67,14 @@ export const Messages: React.FC<MessagesProps> = memo(({
     lastResetKeyRef.current = resetKey;
   }
 
+  // Filter out hidden tools (internal state-change tools like EnterCraftAgentsPlanMode)
+  const visibleMessages = messages.filter(m =>
+    m.type !== 'tool' || !m.toolName || !shouldHideTool(m.toolName)
+  );
+
   // Split messages: completed ones go in Static (won't re-render), active in dynamic area
-  const completedMessages = messages.filter(m => m.toolStatus !== 'executing');
-  const executingMessages = messages.filter(m => m.toolStatus === 'executing');
+  const completedMessages = visibleMessages.filter(m => m.toolStatus !== 'executing');
+  const executingMessages = visibleMessages.filter(m => m.toolStatus === 'executing');
 
   // Build static items: only include NEW items not yet rendered
   const staticItems: StaticItem[] = [];

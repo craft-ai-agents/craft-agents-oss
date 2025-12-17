@@ -34,4 +34,5 @@ export {
   isDeleteWordBackward,
   isDeleteWordForward,
   isKillToEnd,
+  isShiftTab,
 } from './mappings.ts';

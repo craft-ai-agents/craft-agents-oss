@@ -3,6 +3,9 @@ import {
   CraftAgent,
   type CraftAgentConfig,
   type Question,
+  type PlanReviewResult,
+  type PlanQuestion,
+  type SwarmConfig,
   setUpdateAgentInstructionsContextProvider,
   setUpdateAgentInstructionsResultCallback,
   setUpdateAgentInstructionsProgressCallback,
@@ -10,10 +13,13 @@ import {
   setGlobalPermissionHandler,
   resolveGlobalPermission,
   clearGlobalPermissions,
+  enterCraftPlanMode,
+  exitCraftPlanMode,
 } from '../../../agent/craft-agent.ts';
 import { parseSDKErrorText, isSDKErrorText, type AgentError } from '../../../agent/errors.ts';
 import type { UpdateInstructionsContext, UpdateInstructionsProgressEvent } from '../../../agents/instruction-updater.ts';
 import type { Message } from '../../components/Messages.tsx';
+import type { TodoItem } from '../../components/TodoList.tsx';
 import type { FileAttachment } from '../../utils/files.ts';
 import { setTerminalProgressIndeterminate, clearTerminalProgress } from '../../utils/terminalProgress.ts';
 import {
@@ -30,6 +36,9 @@ import {
   type Session,
   type StoredMessage,
   type StoredSession,
+  saveWorkspacePlan,
+  loadWorkspacePlan,
+  clearWorkspacePlan,
 } from '../../../config/storage.ts';
 import { DEFAULT_MODEL } from '../../../config/models.ts';
 import { getCredentialManager } from '../../../credentials/index.ts';
@@ -37,6 +46,7 @@ import { CraftMcpClient } from '../../../mcp/client.ts';
 import { SubAgentManager } from '../../../agents/manager.ts';
 import type { SubAgentDefinition, McpServerConfig, ApiConfig, Concern } from '../../../agents/types.ts';
 import type { ExtractionProgressEvent } from '../../../agents/extractor.ts';
+import type { Plan } from '../../../agents/plan-types.ts';
 import { invalidateDefinition, loadRegistry, clearAgentCredentialsAsync } from '../../../agents/cache.ts';
 import { CraftOAuth, getMcpBaseUrl } from '../../../auth/oauth.ts';
 import { debug } from '../../utils/debug.ts';
@@ -133,11 +143,25 @@ export interface PermissionRequest {
   toolName: string;
   command: string;
   description: string;
+  type?: 'bash' | 'plan_mode';  // Type of permission request
 }
 
 export interface AskUserQuestionRequest {
   requestId: string;
   questions: Question[];
+}
+
+// Pending plan review request (from Craft Agents plan mode)
+export interface PendingPlanReviewRequest {
+  requestId: string;
+  plan: Plan;
+  questions: string[];
+}
+
+// Pending CraftAskUserQuestion request (from Craft Agents plan mode)
+export interface PendingCraftQuestionRequest {
+  requestId: string;
+  questions: PlanQuestion[];
 }
 
 export interface UseAgentResult {
@@ -187,6 +211,22 @@ export interface UseAgentResult {
   pendingReview: PendingReviewRequest | null;
   completeReview: (answers: Record<string, string>) => Promise<void>;
   skipReview: () => Promise<void>;
+  // Plan mode
+  activePlan: Plan | null;
+  planMode: boolean;
+  cancelPlan: () => void;
+  approvePlan: () => void;
+  shouldSuggestPlanning: (message: string) => boolean;
+  // Craft Agents plan mode UI interactions
+  pendingPlanReview: PendingPlanReviewRequest | null;
+  respondToPlanReview: (result: PlanReviewResult) => void;
+  pendingCraftQuestion: PendingCraftQuestionRequest | null;
+  respondToCraftQuestion: (answers: Record<string, string>) => void;
+  // Craft Agents plan mode toggle (for SHIFT+TAB)
+  startCraftPlanning: () => void;
+  cancelCraftPlanning: () => void;
+  // Todos (from TodoWrite tool)
+  todos: TodoItem[];
   // Ultrathink mode (extended thinking)
   isUltrathink: boolean;
 }
@@ -228,6 +268,15 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
   const [pendingReview, setPendingReview] = useState<PendingReviewRequest | null>(null);
   // Ultrathink mode (extended thinking)
   const [isUltrathink, setIsUltrathink] = useState(false);
+
+  // Plan mode state
+  const [activePlan, setActivePlan] = useState<Plan | null>(null);
+  const [planMode, setPlanMode] = useState(false);
+  // Craft Agents plan mode UI state
+  const [pendingPlanReview, setPendingPlanReview] = useState<PendingPlanReviewRequest | null>(null);
+  const [pendingCraftQuestion, setPendingCraftQuestion] = useState<PendingCraftQuestionRequest | null>(null);
+  // Todos (from TodoWrite tool)
+  const [todos, setTodos] = useState<TodoItem[]>([]);
 
   const agentRef = useRef<CraftAgent | null>(null);
   const agentManagerRef = useRef<SubAgentManager | null>(null);
@@ -525,6 +574,38 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
       agentRef.current.onDebug = (message) => {
         debug('[SDK]', message);
       };
+      // Set up plan mode change callback to sync React state
+      agentRef.current.onPlanModeChange = (mode) => {
+        debug('[SDK] Plan mode changed:', mode);
+        setPlanMode(mode);
+      };
+      // Set up Craft Agents plan review callback
+      agentRef.current.onPlanReview = (request) => {
+        debug('[SDK] Plan review requested:', request.requestId);
+        setPendingPlanReview(request);
+      };
+      // Set up Craft Agents ask question callback
+      agentRef.current.onCraftAskQuestion = (request) => {
+        debug('[SDK] Craft ask question requested:', request.requestId);
+        setPendingCraftQuestion(request);
+      };
+      // Set up swarm launch callback
+      agentRef.current.onLaunchSwarm = async (swarmConfig, plan, planFilePath) => {
+        debug('[SDK] Swarm launch requested:', swarmConfig.teammateCount, 'teammates for plan:', plan.title);
+        // For now, just log the swarm request - actual parallel agent spawning will be implemented
+        // when we have the Task tool infrastructure ready
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `swarm-${Date.now()}`,
+            type: 'info',
+            content: `🚀 Launching swarm with ${swarmConfig.teammateCount} parallel agents for plan: ${plan.title}\nPlan file: ${planFilePath}`,
+            timestamp: Date.now(),
+          },
+        ]);
+        // TODO: Implement actual parallel agent spawning using Task tool pattern
+        // For now, this serves as a placeholder that logs the intent
+      };
       // Sync current model to the newly created agent
       agentRef.current.setModel(config.model || DEFAULT_MODEL);
       // Restore SDK session ID from session if available (for conversation continuity)
@@ -580,6 +661,39 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
     }
   }, [pendingQuestion]);
 
+  // Respond to Craft Agents plan review
+  const respondToPlanReview = useCallback((result: PlanReviewResult) => {
+    if (pendingPlanReview && agentRef.current) {
+      debug('[respondToPlanReview] Responding with:', result);
+      agentRef.current.respondToPlanReview(pendingPlanReview.requestId, result);
+      setPendingPlanReview(null);
+    }
+  }, [pendingPlanReview]);
+
+  // Respond to Craft Agents CraftAskUserQuestion
+  const respondToCraftQuestion = useCallback((answers: Record<string, string>) => {
+    if (pendingCraftQuestion && agentRef.current) {
+      debug('[respondToCraftQuestion] Responding with:', Object.keys(answers));
+      agentRef.current.respondToCraftAskQuestion(pendingCraftQuestion.requestId, answers);
+      setPendingCraftQuestion(null);
+    }
+  }, [pendingCraftQuestion]);
+
+  // Start Craft Agents plan mode (for SHIFT+TAB)
+  const startCraftPlanning = useCallback(() => {
+    debug('[startCraftPlanning] Entering Craft Agents plan mode');
+    enterCraftPlanMode();
+  }, []);
+
+  // Cancel Craft Agents plan mode (for SHIFT+TAB)
+  const cancelCraftPlanning = useCallback(() => {
+    debug('[cancelCraftPlanning] Exiting Craft Agents plan mode');
+    exitCraftPlanMode();
+    // Also clear any pending UI states
+    setPendingPlanReview(null);
+    setPendingCraftQuestion(null);
+  }, []);
+
   const dismissTypedError = useCallback(() => {
     setTypedError(null);
   }, []);
@@ -622,6 +736,25 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
       ]);
     }
 
+    // If in plan mode and plan has no context, set the user's input as the plan context
+    // Use agent's internal state (always current) instead of React state (might be stale)
+    const agentPlan = agent.getActivePlan();
+    const agentPlanMode = agent.isInPlanMode();
+    debug('[sendMessage] agentPlanMode:', agentPlanMode, 'agentPlan:', agentPlan?.title || 'none', 'agentPlan.context:', agentPlan?.context || 'empty');
+
+    if (agentPlanMode && agentPlan && !agentPlan.context) {
+      const updatedPlan: Plan = {
+        ...agentPlan,
+        context: input,
+        title: input.substring(0, 50) + (input.length > 50 ? '...' : ''),
+        updatedAt: Date.now(),
+      };
+      setActivePlan(updatedPlan);
+      agent.setActivePlan(updatedPlan);
+      saveWorkspacePlan(workspace.id, updatedPlan);
+      debug('[sendMessage] Updated plan context:', input.substring(0, 50));
+    }
+
     setIsProcessing(true);
     setProcessingStartTime(Date.now());
     setTerminalProgressIndeterminate();
@@ -629,6 +762,8 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
     setStatus('');
     setError(null);
     setTypedError(null);  // Clear any typed errors from previous request
+    // Clear completed todos from UI on new message
+    setTodos(prev => prev.filter(t => t.status !== 'completed'));
     toolStartTimeRef.current.clear();
     streamingBufferRef.current = '';
     lastStreamingUpdateRef.current = 0;
@@ -719,6 +854,9 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
               break;
             }
 
+            // Plan mode: Claude calls ExitCraftAgentsPlanMode when ready, which triggers onPlanReady callback
+            // No text parsing needed here - the ExitCraftAgentsPlanMode tool handles everything via PlanReview UI
+
             // Normal assistant message
             if (assistantText.trim()) {
               setMessages((prev) => [
@@ -767,6 +905,12 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
             // Check for exact match or MCP-prefixed version (mcp__preferences__update_agent_instructions)
             if (event.toolName === 'update_agent_instructions' || event.toolName?.includes('update_agent_instructions')) {
               updateInstructionsToolMsgIdRef.current = toolMessageId;
+            }
+
+            // Capture TodoWrite tool calls to update todo list UI
+            if (event.toolName === 'TodoWrite' && event.input?.todos) {
+              const newTodos = event.input.todos as TodoItem[];
+              setTodos(newTodos);
             }
 
             setMessages((prev) => {
@@ -942,7 +1086,7 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
       setStatus('');
       setHasExecutingTool(false);
     }
-  }, [getAgent, isProcessing]);
+  }, [getAgent, isProcessing, planMode, activePlan, workspace.id]);
 
   // Keep sendMessageRef updated
   useEffect(() => {
@@ -979,6 +1123,11 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
     setIsProcessing(false);
     setStreamingText('');
     setStatus('');
+
+    // Clear plan mode state to avoid being stuck
+    exitCraftPlanMode();
+    setPendingPlanReview(null);
+    setPendingCraftQuestion(null);
 
     setMessages((prev) => [
       ...prev,
@@ -1684,11 +1833,24 @@ The goal is to have clean, actionable instructions without unanswered questions.
     }
   }, [workspace, getMcpToken]);
 
-  // Fetch all available tools (Craft MCP + active agent's MCP servers + APIs)
+  // Fetch all available tools (SDK + Craft MCP + active agent's MCP servers + APIs)
   const fetchTools = useCallback(async (): Promise<{ name: string; tools: { name: string; description?: string }[] }[]> => {
     const result: { name: string; tools: { name: string; description?: string }[] }[] = [];
 
-    // 1. Craft MCP tools
+    // 1. Claude SDK tools (captured from init message after first conversation)
+    // Filter out MCP tools (prefixed with mcp__) as they're shown separately
+    const agent = agentRef.current;
+    if (agent) {
+      const sdkTools = agent.getSdkTools().filter(name => !name.startsWith('mcp__'));
+      if (sdkTools.length > 0) {
+        result.push({
+          name: 'Claude',
+          tools: sdkTools.map(name => ({ name })),
+        });
+      }
+    }
+
+    // 2. Craft MCP tools
     if (mcpClientRef.current) {
       try {
         const craftTools = await mcpClientRef.current.listTools();
@@ -1701,7 +1863,7 @@ The goal is to have clean, actionable instructions without unanswered questions.
       }
     }
 
-    // 2. Active agent's MCP server tools
+    // 3. Active agent's MCP server tools
     if (activeAgentDefinition && agentManagerRef.current) {
       const agentServers = await agentManagerRef.current.fetchMcpServerTools(activeAgentDefinition);
       for (const server of agentServers) {
@@ -1713,7 +1875,7 @@ The goal is to have clean, actionable instructions without unanswered questions.
         }
       }
 
-      // 3. Active agent's API tools (prefixed with api_ to avoid collisions)
+      // 4. Active agent's API tools (prefixed with api_ to avoid collisions)
       if (activeAgentDefinition.apis) {
         for (const api of activeAgentDefinition.apis) {
           // Each API has one flexible tool prefixed with api_
@@ -1735,6 +1897,52 @@ The goal is to have clean, actionable instructions without unanswered questions.
   const activeAgentName = activeAgentDefinition?.name ?? null;
   // Derive active agent MCP servers from definition
   const activeAgentMcpServers = activeAgentDefinition?.mcpServers ?? [];
+
+  // ============================================
+  // Plan Mode Functions
+  // ============================================
+
+  /**
+   * Cancel the current plan
+   */
+  const cancelPlan = useCallback(() => {
+    const agent = agentRef.current;
+    if (agent) {
+      agent.clearPlan();
+    }
+
+    setActivePlan(null);
+    setPlanMode(false);
+
+    // Clear from storage
+    clearWorkspacePlan(workspace.id);
+
+    debug('[cancelPlan] Plan cancelled');
+  }, [workspace.id]);
+
+  /**
+   * Approve the current plan and exit plan mode
+   * This allows Claude to execute the planned actions
+   */
+  const approvePlan = useCallback(() => {
+    const agent = agentRef.current;
+    if (agent) {
+      agent.exitPlanMode();
+    }
+
+    setPlanMode(false);
+
+    debug('[approvePlan] Plan approved, exiting plan mode');
+  }, []);
+
+  /**
+   * Check if a message should trigger plan mode suggestion
+   */
+  const shouldSuggestPlanning = useCallback((message: string): boolean => {
+    const agent = agentRef.current;
+    if (!agent) return false;
+    return agent.shouldSuggestPlanning(message);
+  }, []);
 
   return {
     messages,
@@ -1782,6 +1990,22 @@ The goal is to have clean, actionable instructions without unanswered questions.
     pendingReview,
     completeReview,
     skipReview,
+    // Plan mode
+    activePlan,
+    planMode,
+    cancelPlan,
+    approvePlan,
+    shouldSuggestPlanning,
+    // Craft Agents plan mode UI interactions
+    pendingPlanReview,
+    respondToPlanReview,
+    pendingCraftQuestion,
+    respondToCraftQuestion,
+    // Craft Agents plan mode toggle (for SHIFT+TAB)
+    startCraftPlanning,
+    cancelCraftPlanning,
+    // Todos (from TodoWrite tool)
+    todos,
     // Ultrathink mode (extended thinking)
     isUltrathink,
   };

@@ -21,6 +21,7 @@ export interface HeaderProps {
   tokenDisplay?: TokenDisplayMode;
   showCost?: boolean;
   version?: string;
+  planMode?: boolean;
   /** Show "Press Ctrl+C again to exit" warning */
   exitWarning?: boolean;
 }
@@ -40,6 +41,7 @@ export const Header: React.FC<HeaderProps> = memo(({
   tokenDisplay = 'hidden',
   showCost = true,
   version,
+  planMode = false,
   exitWarning = false,
 }) => {
   // Map model IDs to friendly names
@@ -71,6 +73,12 @@ export const Header: React.FC<HeaderProps> = memo(({
           <Text color="magenta" bold>@{activeAgentName.length > 12 ? activeAgentName.slice(0, 12) + '…' : activeAgentName}</Text>
         ) : (
           <Text color="magenta" bold>craft</Text>
+        )}
+        {planMode && (
+          <>
+            <Text dimColor> </Text>
+            <Text backgroundColor="#006400" color="white" bold> PLAN </Text>
+          </>
         )}
         <Text dimColor> | </Text>
         <Text color={connected ? 'green' : 'red'}>

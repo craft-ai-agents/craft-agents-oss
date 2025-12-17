@@ -4,17 +4,18 @@ import { MODELS } from '../../../config/models.ts';
 import {
   getWorkspaces,
   removeWorkspace,
-  renameWorkspace,
+  listPlanFiles,
   type Workspace,
   type Session,
 } from '../../../config/storage.ts';
 import { formatPreferencesDisplay } from '../../../config/preferences.ts';
 import { resolveCommand } from '../../utils/filtering.ts';
-import { readClipboard, type FileAttachment } from '../../utils/files.ts';
+import { readClipboard, readFileAttachment, type FileAttachment } from '../../utils/files.ts';
 import { getCurrentVersion } from '../../../version/version.ts';
 import type { ModalName } from '../modals/useModalState.ts';
 import type { Message } from '../../components/Messages.tsx';
 import type { SubAgentDefinition } from '../../../agents/types.ts';
+import { PLAN_MODE_ENTER_MESSAGE, PLAN_MODE_ENTER_PROMPT } from '../../../agents/plan-types.ts';
 
 /**
  * Result of command execution
@@ -24,6 +25,8 @@ export interface CommandResult {
   handled: boolean;
   /** Optional message to display */
   message?: { content: string; type: Message['type'] };
+  /** Optional message to send to the agent */
+  sendToAgent?: string;
 }
 
 /**
@@ -63,6 +66,14 @@ export interface UseCommandsProps {
   resetAgent: () => Promise<boolean>;
   refreshAgents: () => Promise<string[] | { error: string }>;
   fetchTools: () => Promise<ToolGroup[]>;
+
+  // Plan mode operations
+  planMode: boolean;
+  approvePlan: () => void;
+  cancelPlan: () => void;
+  // Craft Agents plan mode (uses CraftAskUserQuestion, blocks API calls during planning)
+  startCraftPlanning: () => void;
+  cancelCraftPlanning: () => void;
 
   // Exit handler
   exitApp: () => void;
@@ -109,6 +120,11 @@ export function useCommands(props: UseCommandsProps) {
     resetAgent,
     refreshAgents,
     fetchTools,
+    planMode,
+    approvePlan,
+    cancelPlan,
+    startCraftPlanning,
+    cancelCraftPlanning,
     exitApp,
   } = props;
 
@@ -449,6 +465,137 @@ export function useCommands(props: UseCommandsProps) {
       }
 
       // ============================================
+      // Plan Commands
+      // ============================================
+      case '/plan': {
+        const subCommand = parts[1] ?? '';
+
+        if (subCommand === 'start') {
+          if (planMode) {
+            return {
+              handled: true,
+              message: { content: 'Already in plan mode. Use /plan cancel to exit first.', type: 'error' },
+            };
+          }
+          // Start Craft Agents plan mode (blocks API calls, uses CraftAskUserQuestion)
+          startCraftPlanning();
+          return {
+            handled: true,
+            message: {
+              content: PLAN_MODE_ENTER_MESSAGE,
+              type: 'system',
+            },
+            sendToAgent: PLAN_MODE_ENTER_PROMPT,
+          };
+        }
+
+        if (subCommand === 'plans' || subCommand === 'list') {
+          // Open unified plan selector modal
+          openModal('planSelector');
+          return { handled: true };
+        }
+
+        if (subCommand === 'load') {
+          const planArg = parts.slice(2).join(' ');
+          if (!planArg) {
+            // No argument - open the modal selector
+            openModal('planSelector');
+            return { handled: true };
+          }
+
+          const planFiles = listPlanFiles(session.id);
+          if (planFiles.length === 0) {
+            return {
+              handled: true,
+              message: { content: 'No plan files found.', type: 'error' },
+            };
+          }
+
+          // Try to match by number first
+          const num = parseInt(planArg, 10);
+          let selectedPlan: { name: string; path: string } | undefined;
+
+          if (!isNaN(num) && num >= 1 && num <= planFiles.length) {
+            selectedPlan = planFiles[num - 1];
+          } else {
+            // Match by name (partial, case-insensitive)
+            selectedPlan = planFiles.find(f =>
+              f.name.toLowerCase().includes(planArg.toLowerCase())
+            );
+          }
+
+          if (!selectedPlan) {
+            return {
+              handled: true,
+              message: { content: `Plan not found: ${planArg}`, type: 'error' },
+            };
+          }
+
+          // Load the plan file as attachment
+          const attachment = readFileAttachment(selectedPlan.path);
+          if (!attachment) {
+            return {
+              handled: true,
+              message: { content: `Failed to read plan file: ${selectedPlan.path}`, type: 'error' },
+            };
+          }
+
+          setPendingAttachments(prev => [...prev, attachment]);
+          return {
+            handled: true,
+            message: {
+              content: `Plan "${selectedPlan.name}" loaded as attachment. Send a message to include it in context.`,
+              type: 'system',
+            },
+          };
+        }
+
+        if (subCommand === 'view') {
+          openModal('planReview');
+          return { handled: true };
+        }
+
+        if (subCommand === 'approve') {
+          if (!planMode) {
+            return {
+              handled: true,
+              message: { content: 'No active plan mode. Plan approval happens via the PlanReview UI after calling ExitCraftAgentsPlanMode.', type: 'system' },
+            };
+          }
+          approvePlan();
+          return {
+            handled: true,
+            message: { content: 'Plan mode exited. You can now proceed.', type: 'system' },
+          };
+        }
+
+        if (subCommand === 'cancel') {
+          if (!planMode) {
+            return {
+              handled: true,
+              message: { content: 'No active plan to cancel.', type: 'error' },
+            };
+          }
+          cancelCraftPlanning();
+          return {
+            handled: true,
+            message: { content: 'Plan cancelled. Returned to normal mode.', type: 'system' },
+          };
+        }
+
+        if (subCommand === 'save') {
+          return {
+            handled: true,
+            message: { content: 'Use the plan review modal to save plans to Craft.', type: 'system' },
+          };
+        }
+
+        // No subcommand - open interactive plan menu
+        openModal('planMenu');
+        return { handled: true };
+      }
+
+      // ============================================
       // Agent Commands
       // ============================================
       case '/agent': {
@@ -642,6 +789,11 @@ export function useCommands(props: UseCommandsProps) {
     resetAgent,
     refreshAgents,
     fetchTools,
+    planMode,
+    approvePlan,
+    cancelPlan,
+    startCraftPlanning,
+    cancelCraftPlanning,
     exitApp,
   ]);
 

@@ -15,7 +15,10 @@ export type ModalName =
   | 'claudeMaxAuth'
   | 'balance'
   | 'settings'
-  | 'logoutConfirm';
+  | 'logoutConfirm'
+  | 'planMenu'
+  | 'planSelector'
+  | 'planReview';
 
 export interface UseModalStateResult {
   /** Currently active modal, or null if none */

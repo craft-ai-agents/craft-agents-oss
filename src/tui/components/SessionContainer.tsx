@@ -12,9 +12,13 @@ import { WorkspaceRename } from './WorkspaceRename.tsx';
 import { ApiKeyChange } from './ApiKeyChange.tsx';
 import { ClaudeMaxAuth } from './ClaudeMaxAuth.tsx';
 import { AskUserQuestion } from './AskUserQuestion.tsx';
+import { PlanReview } from './PlanReview.tsx';
+import { TodoList } from './TodoList.tsx';
 import { McpAuth } from './McpAuth.tsx';
 import { ApiAuth } from './ApiAuth.tsx';
 import { AgentReview } from './AgentReview.tsx';
+import { PlanMenu, type PlanAction } from './PlanMenu.tsx';
+import { PlanSelector, type PlanFile } from './PlanSelector.tsx';
 import { HelpPanel } from './HelpPanel.tsx';
 import { Balance } from './Balance.tsx';
 import { ErrorBanner } from './ErrorBanner.tsx';
@@ -31,6 +35,14 @@ import {
   useAgentMenuHandlers,
   useSettingsHandlers,
 } from '../hooks/index.ts';
+import { isShiftTab } from '../keyboard/index.ts';
+import {
+  PLAN_MODE_ENTER_MESSAGE,
+  PLAN_MODE_EXIT_MESSAGE,
+  PLAN_MODE_ENTER_PROMPT,
+  PLAN_MODE_EXIT_PROMPT,
+} from '../../agents/plan-types.ts';
+import { getPlanModeState } from '../../agent/plan-tools.ts';
 import { useGlobalContext } from '../context/GlobalContext.tsx';
 import {
   getWorkspaces,
@@ -39,10 +51,12 @@ import {
   getTokenDisplay,
   getShowCost,
   loadSession,
+  listPlanFiles,
+  deletePlanFile,
   type TokenDisplayMode,
   type Session,
 } from '../../config/storage.ts';
-import { processInputWithFiles, readClipboard, type FileAttachment } from '../utils/files.ts';
+import { processInputWithFiles, readClipboard, readFileAttachment, type FileAttachment } from '../utils/files.ts';
 import { debug } from '../utils/debug.ts';
 import type { CraftAgentConfig } from '../../agent/craft-agent.ts';
 import { getCurrentVersion } from '../../version/version.ts';
@@ -122,7 +136,6 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
     pendingQuestion,
     hasExecutingTool,
     sendMessage,
-    clearMessages,
     interrupt,
     respondToPermission,
     respondToQuestion,
@@ -152,6 +165,21 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
     pendingReview,
     completeReview,
     skipReview,
+    // Plan mode
+    activePlan,
+    planMode,
+    cancelPlan,
+    approvePlan,
+    // Craft Agents plan mode UI interactions
+    pendingPlanReview,
+    respondToPlanReview,
+    pendingCraftQuestion,
+    respondToCraftQuestion,
+    // Craft Agents plan mode toggle (for SHIFT+TAB)
+    startCraftPlanning,
+    cancelCraftPlanning,
+    // Todos (from TodoWrite tool)
+    todos,
     // Ultrathink mode
     isUltrathink,
   } = useAgent(agentConfig);
@@ -350,6 +378,11 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
     resetAgent,
     refreshAgents,
     fetchTools,
+    planMode,
+    approvePlan,
+    cancelPlan,
+    startCraftPlanning,
+    cancelCraftPlanning,
     exitApp,
   });
 
@@ -424,6 +457,77 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
       openModal('claudeMaxAuth');
     }
   }, [dismissTypedError, openModal]);
+
+  // Plan menu handler
+  const handlePlanAction = useCallback((action: PlanAction) => {
+    closeModal();
+
+    switch (action.type) {
+      case 'start':
+        // Start Craft Agents plan mode (same as /plan start and SHIFT+TAB)
+        startCraftPlanning();
+        addLocalMessage(PLAN_MODE_ENTER_MESSAGE, 'system');
+        sendMessage(PLAN_MODE_ENTER_PROMPT);
+        break;
+      case 'plans':
+        // Open unified plan selector (list/load/delete)
+        openModal('planSelector');
+        break;
+      case 'view':
+        if (activePlan) {
+          addLocalMessage(`Active plan: ${activePlan.title}\nState: ${activePlan.state}\nSteps: ${activePlan.steps.length}`, 'system');
+        } else {
+          addLocalMessage('No active plan.', 'system');
+        }
+        break;
+      case 'approve':
+        if (activePlan) {
+          approvePlan();
+          addLocalMessage('Plan approved. Proceeding with execution...', 'system');
+        }
+        break;
+      case 'cancel':
+        if (activePlan) {
+          const title = activePlan.title;
+          cancelPlan();
+          addLocalMessage(`Plan cancelled: ${title}`, 'system');
+        }
+        break;
+    }
+  }, [activePlan, approvePlan, cancelPlan, closeModal, openModal, addLocalMessage, sendMessage, startCraftPlanning]);
+
+  // Plan selector handler - loads selected plan as attachment
+  const handlePlanSelect = useCallback((plan: PlanFile) => {
+    closeModal();
+    const attachment = readFileAttachment(plan.path);
+    if (attachment) {
+      setPendingAttachments(prev => [...prev, attachment]);
+      // Clean the name for display
+      const displayName = plan.name
+        .replace(/^==PLAN==\s*/, '')
+        .replace(/\s*\(\d{8}-\d{6}\)$/, '')
+        .trim();
+      addLocalMessage(`Plan "${displayName}" loaded. Send a message to include it in context.`, 'system');
+    } else {
+      addLocalMessage(`Failed to read plan file: ${plan.path}`, 'error');
+    }
+  }, [closeModal, addLocalMessage]);
+
+  // Plan selector delete handler
+  const handlePlanDelete = useCallback((plans: PlanFile[]) => {
+    closeModal();
+    let deleted = 0;
+    for (const plan of plans) {
+      if (deletePlanFile(session.id, plan.name)) {
+        deleted++;
+      }
+    }
+    if (deleted > 0) {
+      addLocalMessage(`Deleted ${deleted} plan${deleted > 1 ? 's' : ''}.`, 'system');
+    } else {
+      addLocalMessage('Failed to delete plans.', 'error');
+    }
+  }, [closeModal, addLocalMessage, session.id]);
 
   const handlePaste = useCallback(() => {
     try {
@@ -517,6 +621,10 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
           if (result.message) {
             addLocalMessage(result.message.content, result.message.type);
           }
+          // Send message to agent if command requested it
+          if (result.sendToAgent) {
+            await sendMessage(result.sendToAgent);
+          }
           return;
         }
       }
@@ -555,16 +663,50 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
     }
 
     if (pendingPermission) {
-      if (input.toLowerCase() === 'y') {
-        respondToPermission(true, false);
-        return;
-      } else if (input.toLowerCase() === 'n') {
-        respondToPermission(false, false);
-        return;
-      } else if (input.toLowerCase() === 'a') {
-        respondToPermission(true, true);
-        return;
+      if (pendingPermission.type === 'plan_mode') {
+        // Plan mode permission: Y/N only (no "Always" option)
+        if (input.toLowerCase() === 'y') {
+          respondToPermission(true, false);
+          return;
+        } else if (input.toLowerCase() === 'n') {
+          respondToPermission(false, false);
+          return;
+        }
+      } else {
+        // Bash permission: Y/N/A
+        if (input.toLowerCase() === 'y') {
+          respondToPermission(true, false);
+          return;
+        } else if (input.toLowerCase() === 'n') {
+          respondToPermission(false, false);
+          return;
+        } else if (input.toLowerCase() === 'a') {
+          respondToPermission(true, true);
+          return;
+        }
       }
+    }
+
+    // SHIFT+TAB: Toggle Craft Agents plan mode
+    // Use synchronous internal state (getPlanModeState) instead of async React state (planMode)
+    // to avoid race conditions when toggling quickly
+    if (isShiftTab(input, key)) {
+      const internalPlanMode = getPlanModeState().isActive;
+      if (internalPlanMode) {
+        // Exit Craft Agents plan mode (cancel without calling ExitCraftAgentsPlanMode)
+        cancelCraftPlanning();
+        addLocalMessage(PLAN_MODE_EXIT_MESSAGE, 'system');
+        // Only send exit prompt if not already processing
+        if (!isProcessing) {
+          sendMessage(PLAN_MODE_EXIT_PROMPT);
+        }
+      } else if (!isProcessing) {
+        // Enter Craft Agents plan mode
+        startCraftPlanning();
+        addLocalMessage(PLAN_MODE_ENTER_MESSAGE, 'system');
+        sendMessage(PLAN_MODE_ENTER_PROMPT);
+      }
+      return;
     }
 
     if (input === '\x03' || (key.ctrl && input === 'c')) {
@@ -604,6 +746,9 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
         setStaticResetKey(k => k + 1);
       } else if (pendingPermission) {
         respondToPermission(false, false);
+      } else if (pendingPlanReview || pendingQuestion || pendingCraftQuestion) {
+        // These components handle Escape themselves - don't also interrupt
+        return;
       } else if (isProcessing) {
         interrupt();
       }
@@ -614,6 +759,11 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
 
   return (
     <Box flexDirection="column" width="100%" minHeight={20}>
+      {/* Todo list (from TodoWrite tool) */}
+      {todos.length > 0 && !isOpen('help') && (
+        <TodoList todos={todos} />
+      )}
+
       {/* Messages area */}
       {!isOpen('help') && (
         <Box flexDirection="column">
@@ -657,6 +807,25 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
           activeAgentName={activeAgentName}
           onAction={handleAgentAction}
           onCancel={handleAgentMenuCancel}
+        />
+      )}
+
+      {/* Plan menu overlay */}
+      {isOpen('planMenu') && (
+        <PlanMenu
+          activePlan={activePlan}
+          onAction={handlePlanAction}
+          onCancel={closeModal}
+        />
+      )}
+
+      {/* Plan selector overlay */}
+      {isOpen('planSelector') && (
+        <PlanSelector
+          plans={listPlanFiles(session.id)}
+          onSelect={handlePlanSelect}
+          onDelete={handlePlanDelete}
+          onCancel={closeModal}
         />
       )}
 
@@ -791,21 +960,36 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
         {pendingPermission && (
           <Box flexDirection="column" borderStyle="round" borderColor="yellow" paddingX={1} marginBottom={1}>
             <Text color="yellow" bold>⚠ Permission Required</Text>
-            <Text>Tool: <Text color="cyan">{pendingPermission.toolName}</Text></Text>
-            <Text dimColor>Command: <Text>{pendingPermission.command}</Text></Text>
-            <Box marginTop={1}>
-              <Text>Allow? </Text>
-              <Text color="green" bold>[Y]es</Text>
-              <Text> / </Text>
-              <Text color="red" bold>[N]o</Text>
-              <Text> / </Text>
-              <Text color="blue" bold>[A]lways</Text>
-              <Text dimColor> (for this command)</Text>
-            </Box>
+            {pendingPermission.type === 'plan_mode' ? (
+              <>
+                <Text>Craft Agents wants to enter <Text color="cyan" bold>Plan Mode</Text></Text>
+                <Text dimColor>Task: {pendingPermission.command}</Text>
+                <Box marginTop={1}>
+                  <Text>Allow? </Text>
+                  <Text color="green" bold>[Y]es</Text>
+                  <Text> / </Text>
+                  <Text color="red" bold>[N]o</Text>
+                </Box>
+              </>
+            ) : (
+              <>
+                <Text>Tool: <Text color="cyan">{pendingPermission.toolName}</Text></Text>
+                <Text dimColor>Command: <Text>{pendingPermission.command}</Text></Text>
+                <Box marginTop={1}>
+                  <Text>Allow? </Text>
+                  <Text color="green" bold>[Y]es</Text>
+                  <Text> / </Text>
+                  <Text color="red" bold>[N]o</Text>
+                  <Text> / </Text>
+                  <Text color="blue" bold>[A]lways</Text>
+                  <Text dimColor> (for this command)</Text>
+                </Box>
+              </>
+            )}
           </Box>
         )}
 
-        {/* AskUserQuestion prompt */}
+        {/* AskUserQuestion prompt (SDK built-in) */}
         {pendingQuestion && (
           <Box marginBottom={1}>
             <AskUserQuestion
@@ -815,7 +999,32 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
           </Box>
         )}
 
-        {!hasOpenModal && !pendingPermission && !pendingQuestion && !pendingMcpAuth && !pendingApiAuth && !pendingReview && (
+        {/* CraftAskUserQuestion prompt (Craft Agents plan mode) */}
+        {pendingCraftQuestion && (
+          <Box marginBottom={1}>
+            <AskUserQuestion
+              questions={pendingCraftQuestion.questions}
+              onSubmit={respondToCraftQuestion}
+            />
+          </Box>
+        )}
+
+        {/* PlanReview prompt (Craft Agents plan mode) */}
+        {pendingPlanReview && (
+          <Box marginBottom={1}>
+            <PlanReview
+              plan={pendingPlanReview.plan}
+              sessionId={session.id}
+              questions={pendingPlanReview.questions}
+              onApprove={(modifiedPlan, savedPath) => respondToPlanReview({ action: 'approve', modifiedPlan, savedPath })}
+              onRefine={(feedback) => respondToPlanReview({ action: 'refine', feedback })}
+              onSaveOnly={(modifiedPlan, savedPath) => respondToPlanReview({ action: 'saveOnly', modifiedPlan, savedPath })}
+              onCancel={() => respondToPlanReview({ action: 'cancel' })}
+            />
+          </Box>
+        )}
+
+        {!hasOpenModal && !pendingPermission && !pendingQuestion && !pendingCraftQuestion && !pendingPlanReview && !pendingMcpAuth && !pendingApiAuth && !pendingReview && (
           <Input
             onSubmit={handleSubmit}
             onPaste={handlePaste}
@@ -847,6 +1056,7 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
           tokenDisplay={tokenDisplayMode}
           showCost={showCostSetting}
           version={getCurrentVersion()}
+          planMode={planMode}
           exitWarning={showExitWarning}
         />
       </Box>

@@ -98,7 +98,12 @@ export class HeadlessRunner {
       const toolCalls: ToolCallRecord[] = [];
       let usage: HeadlessResult['usage'];
 
-      for await (const event of this.agent!.chat(this.config.prompt)) {
+      // Wrap prompt with headless mode XML tags to signal plan mode should be disabled
+      const wrappedPrompt = `<headless_mode tools_usage="no-interactive-tools" plan_mode="disabled">
+${this.config.prompt}
+</headless_mode>`;
+
+      for await (const event of this.agent!.chat(wrappedPrompt)) {
         switch (event.type) {
           case 'status':
             yield { type: 'status', message: event.message };
@@ -312,6 +317,7 @@ export class HeadlessRunner {
     const agentConfig: CraftAgentConfig = {
       workspace: this.config.workspace,
       model: this.config.model,
+      isHeadless: true,
     };
 
     this.agent = new CraftAgent(agentConfig);

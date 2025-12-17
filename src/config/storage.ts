@@ -1,9 +1,10 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, readdirSync, unlinkSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, readdirSync, unlinkSync, statSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
 import { randomUUID } from 'crypto';
 import { getCredentialManager } from '../credentials/index.ts';
 import { isOpusModel } from './models.ts';
+import type { Plan } from '../agents/plan-types.ts';
 
 /**
  * OAuth credentials from a fresh authentication flow.
@@ -694,6 +695,335 @@ export function clearWorkspaceConversation(workspaceId: string): void {
 
   // Also clear session ID
   updateWorkspaceSessionId(workspaceId, null);
+
+  // Also clear any active plan (plans are session-scoped)
+  clearWorkspacePlan(workspaceId);
+}
+
+// ============================================
+// Plan Storage (Session-Scoped)
+// Plans are stored per-workspace and cleared with /clear
+// ============================================
+
+/**
+ * Save a plan for a workspace.
+ * Plans are session-scoped - they persist during the session but are
+ * cleared when the user runs /clear or starts a new session.
+ */
+export function saveWorkspacePlan(workspaceId: string, plan: Plan): void {
+  const dir = ensureWorkspaceDir(workspaceId);
+  const filePath = join(dir, 'plan.json');
+  writeFileSync(filePath, JSON.stringify(plan, null, 2), 'utf-8');
+}
+
+/**
+ * Load the current plan for a workspace.
+ * Returns null if no plan exists.
+ */
+export function loadWorkspacePlan(workspaceId: string): Plan | null {
+  const filePath = join(WORKSPACES_DIR, workspaceId, 'plan.json');
+
+  try {
+    if (!existsSync(filePath)) {
+      return null;
+    }
+    const content = readFileSync(filePath, 'utf-8');
+    return JSON.parse(content) as Plan;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Clear the plan for a workspace.
+ * Called when user runs /clear or cancels a plan.
+ */
+export function clearWorkspacePlan(workspaceId: string): void {
+  const filePath = join(WORKSPACES_DIR, workspaceId, 'plan.json');
+  if (existsSync(filePath)) {
+    rmSync(filePath);
+  }
+}
+
+// ============================================
+// Plan File Storage (Session-scoped)
+// ============================================
+// Plans are stored as markdown files in ~/.craft-agent/sessions/{sessionId}/plans/
+// with descriptive names based on plan title for display in GUI.
+
+/**
+ * Get the plans directory for a session.
+ * Structure: ~/.craft-agent/sessions/{sessionId}/plans/
+ */
+function getSessionPlansDir(sessionId: string): string {
+  return join(CONFIG_DIR, 'sessions', sessionId, 'plans');
+}
+
+/**
+ * Generate a plan file name from the plan title.
+ * Keeps spaces for readability in GUI, sanitizes dangerous filesystem characters.
+ * Includes ==PLAN== prefix for clear identification in file lists.
+ * Adds timestamp suffix to ensure uniqueness.
+ */
+function generatePlanFileName(plan: Plan): string {
+  // Start with title or fallback
+  let name = plan.title || plan.context?.substring(0, 50) || 'Untitled';
+
+  // Remove or replace dangerous filesystem characters
+  // Keep: letters, numbers, spaces, hyphens, underscores
+  // Remove: / \ : * ? " < > | and control characters
+  name = name
+    .replace(/[/\\:*?"<>|]/g, '')  // Remove dangerous chars
+    .replace(/[\x00-\x1f\x7f]/g, '')  // Remove control chars
+    .replace(/\s+/g, ' ')  // Normalize multiple spaces to single
+    .trim();
+
+  // Truncate if too long (max 50 chars for the base name)
+  if (name.length > 50) {
+    name = name.substring(0, 50).trim();
+  }
+
+  // Add timestamp for uniqueness (format: YYYYMMDD-HHmmss)
+  const now = new Date();
+  const timestamp = now.toISOString()
+    .replace(/[-:]/g, '')
+    .replace('T', '-')
+    .substring(0, 15);  // YYYYMMDD-HHmmss
+
+  return `==PLAN== ${name} (${timestamp})`;
+}
+
+/**
+ * Ensure the plans directory exists for a session
+ */
+function ensurePlansDir(sessionId: string): string {
+  const plansDir = getSessionPlansDir(sessionId);
+  if (!existsSync(plansDir)) {
+    mkdirSync(plansDir, { recursive: true });
+  }
+  return plansDir;
+}
+
+/**
+ * Format a plan as markdown for file storage
+ */
+export function formatPlanAsMarkdown(plan: Plan): string {
+  const lines: string[] = [];
+
+  lines.push(`# ${plan.title}`);
+  lines.push('');
+  lines.push(`**Status:** ${plan.state}`);
+  lines.push(`**Created:** ${new Date(plan.createdAt).toISOString()}`);
+  if (plan.updatedAt !== plan.createdAt) {
+    lines.push(`**Updated:** ${new Date(plan.updatedAt).toISOString()}`);
+  }
+  lines.push('');
+
+  if (plan.context) {
+    lines.push('## Summary');
+    lines.push('');
+    lines.push(plan.context);
+    lines.push('');
+  }
+
+  lines.push('## Steps');
+  lines.push('');
+  for (const step of plan.steps) {
+    const checkbox = step.status === 'completed' ? '[x]' : '[ ]';
+    const status = step.status === 'in_progress' ? ' *(in progress)*' : '';
+    lines.push(`- ${checkbox} ${step.description}${status}`);
+    if (step.details) {
+      lines.push(`  - Tools: ${step.details}`);
+    }
+  }
+  lines.push('');
+
+  if (plan.refinementHistory && plan.refinementHistory.length > 0) {
+    lines.push('## Refinement History');
+    lines.push('');
+    for (const entry of plan.refinementHistory) {
+      lines.push(`### Round ${entry.round}`);
+      lines.push(`**Feedback:** ${entry.feedback}`);
+      if (entry.questions && entry.questions.length > 0) {
+        lines.push(`**Questions:** ${entry.questions.join(', ')}`);
+      }
+      lines.push('');
+    }
+  }
+
+  return lines.join('\n');
+}
+
+/**
+ * Parse a markdown plan file back to a Plan object.
+ * Note: This is a best-effort parse; some metadata may be lost.
+ */
+export function parsePlanFromMarkdown(content: string, planId: string): Plan | null {
+  try {
+    const lines = content.split('\n');
+
+    // Extract title (first # heading)
+    const titleLine = lines.find(l => l.startsWith('# '));
+    const title = titleLine ? titleLine.substring(2).trim() : 'Untitled Plan';
+
+    // Extract status
+    const statusLine = lines.find(l => l.startsWith('**Status:**'));
+    const stateStr = statusLine ? statusLine.replace('**Status:**', '').trim() : 'ready';
+    const state = (['creating', 'refining', 'ready', 'executing', 'completed', 'cancelled'].includes(stateStr)
+      ? stateStr
+      : 'ready') as Plan['state'];
+
+    // Extract summary
+    const summaryIdx = lines.findIndex(l => l === '## Summary');
+    const stepsIdx = lines.findIndex(l => l === '## Steps');
+    let context = '';
+    if (summaryIdx !== -1 && stepsIdx !== -1) {
+      context = lines.slice(summaryIdx + 2, stepsIdx).join('\n').trim();
+    }
+
+    // Extract steps
+    const steps: Plan['steps'] = [];
+    if (stepsIdx !== -1) {
+      for (let i = stepsIdx + 2; i < lines.length; i++) {
+        const line = lines[i];
+        if (!line || line.startsWith('##')) break;
+        if (line.startsWith('- [')) {
+          const isCompleted = line.startsWith('- [x]');
+          const isInProgress = line.includes('*(in progress)*');
+          const description = line
+            .replace(/^- \[[ x]\] /, '')
+            .replace(' *(in progress)*', '')
+            .trim();
+          steps.push({
+            id: `step-${steps.length + 1}`,
+            description,
+            status: isCompleted ? 'completed' : isInProgress ? 'in_progress' : 'pending',
+          });
+        }
+      }
+    }
+
+    return {
+      id: planId,
+      title,
+      state,
+      context,
+      steps,
+      refinementRound: 0,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Save a plan to a markdown file within a session's plans directory.
+ * Returns the file path.
+ *
+ * If fileName is not provided, generates a descriptive name from the plan title.
+ * File names include spaces for readability in GUI attachments.
+ */
+export function savePlanToFile(sessionId: string, plan: Plan, fileName?: string): string {
+  const plansDir = ensurePlansDir(sessionId);
+
+  const name = fileName || generatePlanFileName(plan);
+  const filePath = join(plansDir, `${name}.md`);
+  const content = formatPlanAsMarkdown(plan);
+
+  writeFileSync(filePath, content, 'utf-8');
+  return filePath;
+}
+
+/**
+ * Load a plan from a markdown file by name (without .md extension).
+ */
+export function loadPlanFromFile(sessionId: string, fileName: string): Plan | null {
+  const plansDir = getSessionPlansDir(sessionId);
+  const filePath = join(plansDir, `${fileName}.md`);
+  if (!existsSync(filePath)) {
+    return null;
+  }
+
+  try {
+    const content = readFileSync(filePath, 'utf-8');
+    return parsePlanFromMarkdown(content, fileName);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Load a plan from a full file path.
+ */
+export function loadPlanFromPath(filePath: string): Plan | null {
+  if (!existsSync(filePath)) {
+    return null;
+  }
+
+  try {
+    const content = readFileSync(filePath, 'utf-8');
+    const fileName = filePath.split('/').pop()?.replace('.md', '') || 'unknown';
+    return parsePlanFromMarkdown(content, fileName);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * List all plan files in a session's plans directory.
+ * Returns array of { name, path, modifiedAt }.
+ */
+export function listPlanFiles(sessionId: string): Array<{ name: string; path: string; modifiedAt: number }> {
+  const plansDir = ensurePlansDir(sessionId);
+
+  try {
+    const files = readdirSync(plansDir)
+      .filter(f => f.endsWith('.md'))
+      .map(f => {
+        const filePath = join(plansDir, f);
+        const stats = existsSync(filePath) ? statSync(filePath) : null;
+        return {
+          name: f.replace('.md', ''),
+          path: filePath,
+          modifiedAt: stats?.mtimeMs || 0,
+        };
+      })
+      .sort((a, b) => b.modifiedAt - a.modifiedAt);
+
+    return files;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Delete a plan file by name within a session.
+ */
+export function deletePlanFile(sessionId: string, fileName: string): boolean {
+  const plansDir = getSessionPlansDir(sessionId);
+  const filePath = join(plansDir, `${fileName}.md`);
+  if (existsSync(filePath)) {
+    unlinkSync(filePath);
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Get the most recent plan file for a session (for resuming).
+ */
+export function getMostRecentPlanFile(sessionId: string): { name: string; path: string } | null {
+  const files = listPlanFiles(sessionId);
+  return files.length > 0 ? files[0]! : null;
+}
+
+/**
+ * Get the plans directory path for a session.
+ */
+export function getPlansDir(sessionId: string): string {
+  return ensurePlansDir(sessionId);
 }
 
 // ============================================

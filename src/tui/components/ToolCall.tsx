@@ -3,6 +3,7 @@ import { Box, Text } from 'ink';
 import { formatDuration, truncateText } from '../utils/markdown.ts';
 import { AnimatedSpinner } from './Spinner.tsx';
 import { useElapsedTime } from '../hooks/index.ts';
+import { getToolDisplayName } from '../utils/toolNames.ts';
 
 export interface ToolCallProps {
   toolName: string;
@@ -16,24 +17,14 @@ export interface ToolCallProps {
   compact?: boolean;
 }
 
-// Format tool name for display (snake_case to Title Case)
-const formatToolName = (name: string): string => {
-  // Handle MCP tools (mcp__server__tool)
-  if (name.startsWith('mcp__')) {
-    const parts = name.split('__');
-    const tool = parts[2] || parts[1] || name;
-    return tool.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-  }
-  return name.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-};
-
 // Format input params as clean, readable text
 const formatInputParams = (input?: Record<string, unknown>): string => {
   if (!input || Object.keys(input).length === 0) return '';
 
   const parts: string[] = [];
   for (const [key, value] of Object.entries(input)) {
-    if (value === undefined || value === null) continue;
+    // Skip _intent field (used for UI display separately) and undefined/null values
+    if (key === '_intent' || value === undefined || value === null) continue;
 
     let valStr: string;
     if (typeof value === 'string') {
@@ -54,24 +45,24 @@ const formatInputParams = (input?: Record<string, unknown>): string => {
   return truncateText(parts.join(', '), 60);
 };
 
-// Get custom display for specific tools
+// Get custom display for specific tools that need special formatting
 const getCustomToolDisplay = (toolName: string, input?: Record<string, unknown>): { name: string; params: string } | null => {
   if (toolName === 'WebFetch' && input?.url) {
     return {
-      name: 'Fetching content for',
+      name: 'Fetching',
       params: truncateText(String(input.url), 60),
     };
   }
   if (toolName === 'WebSearch' && input?.query) {
     return {
-      name: 'Searching for',
+      name: 'Searching',
       params: truncateText(String(input.query), 60),
     };
   }
   // Docs server tools - friendly names for documentation
   if (toolName === 'mcp__docs__SearchCraftAgents' || toolName === 'SearchCraftAgents') {
     return {
-      name: 'Searching Documentation',
+      name: 'Searching Docs',
       params: input?.query ? truncateText(String(input.query), 60) : '',
     };
   }
@@ -119,8 +110,8 @@ export const ToolCall: React.FC<ToolCallProps> = memo(({
   const displayDescription = intent
     ? truncateText(intent, 70)
     : customDisplay?.params ?? formatInputParams(input);
-  // Use custom name if available, otherwise format tool name
-  const displayName = customDisplay?.name ?? formatToolName(toolName);
+  // Use custom name if available, otherwise use friendly display name
+  const displayName = customDisplay?.name ?? getToolDisplayName(toolName);
 
   // Compact view (single line, but with progress sub-lines when executing)
   if (compact && !expanded) {

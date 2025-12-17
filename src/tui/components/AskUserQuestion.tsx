@@ -19,6 +19,12 @@ export interface AskUserQuestionProps {
   onCancel?: () => void;
 }
 
+// Virtual "Other" option added to end of each question's options
+const OTHER_OPTION: QuestionOption = {
+  label: 'Other',
+  description: 'Enter a custom response',
+};
+
 export const AskUserQuestion: React.FC<AskUserQuestionProps> = ({
   questions,
   onSubmit,
@@ -26,7 +32,7 @@ export const AskUserQuestion: React.FC<AskUserQuestionProps> = ({
 }) => {
   // Current question index
   const [questionIndex, setQuestionIndex] = useState(0);
-  // Currently highlighted option for each question
+  // Currently highlighted option for each question (includes "Other" as last option)
   const [highlightedOptions, setHighlightedOptions] = useState<number[]>(
     questions.map(() => 0)
   );
@@ -38,11 +44,21 @@ export const AskUserQuestion: React.FC<AskUserQuestionProps> = ({
   const [singleSelections, setSingleSelections] = useState<(number | null)[]>(
     questions.map(() => null)
   );
+  // Custom text for "Other" option per question
+  const [otherTexts, setOtherTexts] = useState<string[]>(
+    questions.map(() => '')
+  );
+  // Whether we're currently editing "Other" text
+  const [editingOther, setEditingOther] = useState(false);
 
   const currentQuestion = questions[questionIndex];
+  // Include "Other" as an extra option at the end
+  const totalOptions = currentQuestion ? currentQuestion.options.length + 1 : 0;
+  const otherIndex = currentQuestion ? currentQuestion.options.length : 0;
   const currentHighlight = highlightedOptions[questionIndex] ?? 0;
   const currentSelected = selectedOptions[questionIndex] ?? new Set<number>();
   const currentSingleSelection = singleSelections[questionIndex];
+  const currentOtherText = otherTexts[questionIndex] ?? '';
 
   const handleSubmit = useCallback(() => {
     // Build answers object
@@ -52,17 +68,29 @@ export const AskUserQuestion: React.FC<AskUserQuestionProps> = ({
       const q = questions[i];
       if (!q) continue;
 
+      const otherIdx = q.options.length; // "Other" is always last
+      const otherText = otherTexts[i] ?? '';
+
       if (q.multiSelect) {
         const selected = selectedOptions[i] ?? new Set<number>();
         const labels = Array.from(selected)
-          .map(idx => q.options[idx]?.label)
+          .map(idx => {
+            if (idx === otherIdx) {
+              return otherText || 'Other (no text)';
+            }
+            return q.options[idx]?.label;
+          })
           .filter(Boolean)
           .join(', ');
         answers[q.question] = labels || 'None selected';
       } else {
         const idx = singleSelections[i];
         if (idx !== null && idx !== undefined) {
-          answers[q.question] = q.options[idx]?.label ?? '';
+          if (idx === otherIdx) {
+            answers[q.question] = otherText || 'Other (no text)';
+          } else {
+            answers[q.question] = q.options[idx]?.label ?? '';
+          }
         } else {
           answers[q.question] = '';
         }
@@ -70,26 +98,58 @@ export const AskUserQuestion: React.FC<AskUserQuestionProps> = ({
     }
 
     onSubmit(answers);
-  }, [questions, selectedOptions, singleSelections, onSubmit]);
+  }, [questions, selectedOptions, singleSelections, otherTexts, onSubmit]);
 
   useInput((input, key) => {
     if (!currentQuestion) return;
 
-    // Navigation
+    // If editing "Other" text, handle text input
+    if (editingOther) {
+      if (key.escape) {
+        // Cancel editing, go back to selection
+        setEditingOther(false);
+        return;
+      }
+      if (key.return) {
+        // Confirm text, go back to selection
+        setEditingOther(false);
+        return;
+      }
+      if (key.backspace || key.delete) {
+        setOtherTexts(prev => {
+          const newTexts = [...prev];
+          newTexts[questionIndex] = (prev[questionIndex] ?? '').slice(0, -1);
+          return newTexts;
+        });
+        return;
+      }
+      // Type character
+      if (input && !key.ctrl && !key.meta) {
+        setOtherTexts(prev => {
+          const newTexts = [...prev];
+          newTexts[questionIndex] = (prev[questionIndex] ?? '') + input;
+          return newTexts;
+        });
+        return;
+      }
+      return;
+    }
+
+    // Navigation (includes "Other" option at the end)
     if (key.upArrow) {
       setHighlightedOptions(prev => {
         const newHighlights = [...prev];
         const current = newHighlights[questionIndex] ?? 0;
         newHighlights[questionIndex] = current > 0
           ? current - 1
-          : currentQuestion.options.length - 1;
+          : totalOptions - 1;
         return newHighlights;
       });
     } else if (key.downArrow) {
       setHighlightedOptions(prev => {
         const newHighlights = [...prev];
         const current = newHighlights[questionIndex] ?? 0;
-        newHighlights[questionIndex] = current < currentQuestion.options.length - 1
+        newHighlights[questionIndex] = current < totalOptions - 1
           ? current + 1
           : 0;
         return newHighlights;
@@ -105,6 +165,32 @@ export const AskUserQuestion: React.FC<AskUserQuestionProps> = ({
     }
     // Space to toggle/select
     else if (input === ' ') {
+      // If on "Other", start editing
+      if (currentHighlight === otherIndex) {
+        if (currentQuestion.multiSelect) {
+          // Toggle "Other" selection
+          setSelectedOptions(prev => {
+            const newSelected = [...prev];
+            const current = new Set(newSelected[questionIndex]);
+            if (current.has(currentHighlight)) {
+              current.delete(currentHighlight);
+            } else {
+              current.add(currentHighlight);
+            }
+            newSelected[questionIndex] = current;
+            return newSelected;
+          });
+        } else {
+          setSingleSelections(prev => {
+            const newSelections = [...prev];
+            newSelections[questionIndex] = currentHighlight;
+            return newSelections;
+          });
+        }
+        setEditingOther(true);
+        return;
+      }
+
       if (currentQuestion.multiSelect) {
         // Toggle selection
         setSelectedOptions(prev => {
@@ -129,6 +215,29 @@ export const AskUserQuestion: React.FC<AskUserQuestionProps> = ({
     }
     // Enter to confirm/next/submit
     else if (key.return) {
+      // If on "Other" and not yet selected, select it and start editing
+      if (currentHighlight === otherIndex) {
+        if (!currentQuestion.multiSelect && currentSingleSelection !== otherIndex) {
+          setSingleSelections(prev => {
+            const newSelections = [...prev];
+            newSelections[questionIndex] = currentHighlight;
+            return newSelections;
+          });
+          setEditingOther(true);
+          return;
+        } else if (currentQuestion.multiSelect && !currentSelected.has(otherIndex)) {
+          setSelectedOptions(prev => {
+            const newSelected = [...prev];
+            const current = new Set(newSelected[questionIndex]);
+            current.add(currentHighlight);
+            newSelected[questionIndex] = current;
+            return newSelected;
+          });
+          setEditingOther(true);
+          return;
+        }
+      }
+
       // For single select, select current if nothing selected
       if (!currentQuestion.multiSelect && currentSingleSelection === null) {
         setSingleSelections(prev => {
@@ -150,8 +259,8 @@ export const AskUserQuestion: React.FC<AskUserQuestionProps> = ({
     else if (key.escape) {
       onCancel?.();
     }
-    // Number keys for quick select
-    else if (input >= '1' && input <= String(currentQuestion.options.length)) {
+    // Number keys for quick select (includes "Other" as last number)
+    else if (input >= '1' && input <= String(totalOptions)) {
       const idx = parseInt(input, 10) - 1;
       if (currentQuestion.multiSelect) {
         setSelectedOptions(prev => {
@@ -177,6 +286,10 @@ export const AskUserQuestion: React.FC<AskUserQuestionProps> = ({
         newHighlights[questionIndex] = idx;
         return newHighlights;
       });
+      // If selected "Other", start editing
+      if (idx === otherIndex) {
+        setEditingOther(true);
+      }
     }
   });
 
@@ -233,12 +346,58 @@ export const AskUserQuestion: React.FC<AskUserQuestionProps> = ({
         );
       })}
 
+      {/* "Other" option - always shown as last option */}
+      {(() => {
+        const isHighlighted = otherIndex === currentHighlight;
+        const isSelected = currentQuestion.multiSelect
+          ? currentSelected.has(otherIndex)
+          : currentSingleSelection === otherIndex;
+
+        const indicator = currentQuestion.multiSelect
+          ? (isSelected ? '[✓]' : '[ ]')
+          : (isSelected ? '(●)' : '( )');
+
+        return (
+          <Box key="other" flexDirection="column" marginLeft={1}>
+            <Box>
+              <Text
+                color={isHighlighted ? 'cyan' : undefined}
+                bold={isHighlighted}
+                inverse={isHighlighted}
+              >
+                {' '}{indicator} {otherIndex + 1}. {OTHER_OPTION.label}{' '}
+              </Text>
+              {isSelected && currentOtherText && !editingOther && (
+                <Text color="green">: {currentOtherText}</Text>
+              )}
+            </Box>
+            {editingOther && isSelected ? (
+              <Box marginLeft={4}>
+                <Text color="yellow">&gt; </Text>
+                <Text>{currentOtherText}</Text>
+                <Text color="cyan">▋</Text>
+              </Box>
+            ) : (
+              <Box marginLeft={4}>
+                <Text dimColor>{OTHER_OPTION.description}</Text>
+              </Box>
+            )}
+          </Box>
+        );
+      })()}
+
       {/* Help text */}
       <Box marginTop={1}>
         <Text dimColor>
-          ↑↓ navigate | {currentQuestion.multiSelect ? 'Space toggle' : 'Space select'} | Enter {questionIndex < questions.length - 1 ? 'next' : 'submit'}
-          {questions.length > 1 && ' | Tab switch'}
-          {onCancel && ' | Esc cancel'}
+          {editingOther ? (
+            'Type your response | Enter confirm | Esc cancel'
+          ) : (
+            <>
+              ↑↓ navigate | {currentQuestion.multiSelect ? 'Space toggle' : 'Space select'} | Enter {questionIndex < questions.length - 1 ? 'next' : 'submit'}
+              {questions.length > 1 && ' | Tab switch'}
+              {onCancel && ' | Esc cancel'}
+            </>
+          )}
         </Text>
       </Box>
     </Box>

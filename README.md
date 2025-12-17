@@ -88,11 +88,155 @@ bun dev
 | `/tools` | List available Craft MCP tools |
 | `/agent` | List, activate, or deactivate subagents |
 | `/info` | Show active agent info and available tools |
+| `/plan` | Plan mode menu (start, plans, view, approve, cancel) |
 | `/setup` | Re-run the configuration wizard |
 | `/clear` | Clear conversation |
 | `/exit` | Exit application |
 | `Ctrl+C` | Interrupt / Exit |
 | `Up/Down` | Navigate command history |
+| `SHIFT+TAB` | Toggle Plan Mode |
+
+## Headless Mode (Non-Interactive)
+
+Headless mode allows running Craft Agent in scripts, CI/CD pipelines, and automation workflows without user interaction.
+
+### Basic Usage
+
+```bash
+# Execute a single prompt and exit
+craft --print "List all documents in my workspace"
+
+# With JSON output for parsing
+craft --print "Search for meeting notes" --output-format json
+
+# Streaming JSON for real-time processing
+craft --print "Summarize today's tasks" --output-format stream-json
+
+# Use a specific workspace
+craft --print "What tasks are due?" --workspace my-workspace
+
+# Use a specific subagent
+craft --print "Search for TypeScript tutorials" --agent researcher
+```
+
+### CLI Flags
+
+| Flag | Description |
+|------|-------------|
+| `--print, -p <query>` | Execute prompt and exit (enables headless mode) |
+| `--output-format <fmt>` | Output: `text` (default), `json`, `stream-json` |
+| `--permission-policy` | Bash permissions: `deny-all` (default), `allow-safe`, `allow-all` |
+| `--session-resume` | Resume last session instead of starting fresh |
+| `--session <id>` | Use explicit session ID (for workflow management) |
+| `--workspace, -w <name>` | Use specific workspace |
+| `--agent, -a <name>` | Activate specific subagent |
+| `--model, -m <model>` | Override model selection |
+
+### Permission Policies
+
+| Policy | Behavior |
+|--------|----------|
+| `deny-all` | Block all bash commands (safest, default) |
+| `allow-safe` | Allow read-only commands (ls, cat, grep, find, etc.) |
+| `allow-all` | Allow all commands (use with caution) |
+
+### Output Formats
+
+**text** (default): Plain text response
+```bash
+craft --print "What's in my inbox?"
+# Output: You have 3 tasks in your inbox...
+```
+
+**json**: Structured JSON with response, tool calls, and usage
+```bash
+craft --print "List tasks" --output-format json
+# Output: {"success":true,"response":"...","toolCalls":[...],"usage":{...}}
+```
+
+**stream-json**: Newline-delimited JSON events for real-time processing
+```bash
+craft --print "Summarize document" --output-format stream-json
+# Output: {"type":"status","message":"Processing..."}
+#         {"type":"text_delta","text":"The document..."}
+#         {"type":"complete","result":{...}}
+```
+
+### Plan Mode Disabled
+
+In headless mode, plan mode tools (`EnterCraftAgentsPlanMode`, `ExitCraftAgentsPlanMode`, `CraftAskUserQuestion`) are automatically disabled. The agent executes tasks directly without planning phases, which is appropriate for non-interactive automation.
+
+### Session Management
+
+By default, each headless run starts with a fresh session. For multi-turn conversations:
+
+```bash
+# Resume the last session
+craft --print "Continue where we left off" --session-resume
+
+# Use explicit session ID (for external workflow management)
+craft --print "Step 1" --session my-workflow-123
+craft --print "Step 2" --session my-workflow-123
+```
+
+### Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | Error (auth required, agent not found, execution error) |
+
+## Plan Mode
+
+Plan Mode is a structured approach to handling complex, multi-step tasks. Instead of immediately executing actions, the agent first creates a plan describing **what** it will do, gets user approval, and then executes.
+
+### Why Plan Mode?
+
+Without planning, agents often:
+- Execute prematurely before fully understanding requirements
+- Make unnecessary API calls that could have been avoided
+- Lack transparency about intended actions
+
+### How It Works
+
+```
+Enter Plan Mode (SHIFT+TAB) → Clarify Requirements → Design Plan → User Review → Execute
+```
+
+1. **Enter Plan Mode**: Press `SHIFT+TAB` or type `/plan start`
+2. **Clarify Requirements**: Agent uses `CraftAskUserQuestion` for interactive clarification
+3. **Design Plan**: Agent describes steps without executing them
+4. **User Review**: Approve, refine, or cancel via PlanReview UI
+5. **Execute**: After approval, agent executes the plan
+
+### What's Blocked During Planning
+
+| Blocked | Allowed |
+|---------|---------|
+| API calls (`api_*`) | `CraftAskUserQuestion` |
+| `Bash`, `Write`, `Edit` | `Read`, `Glob`, `Grep` |
+| Craft MCP write tools | `WebSearch`, `WebFetch` (sparingly) |
+| `Task`, `TaskOutput` | Craft MCP read tools |
+
+### Usage
+
+```bash
+SHIFT+TAB      # Toggle plan mode
+/plan start    # Enter plan mode
+/plan plans    # View, load, or delete saved plans
+/plan view     # View current plan details
+/plan approve  # Approve and execute current plan
+/plan cancel   # Exit plan mode
+```
+
+**Plan Selector Controls:**
+- `↑↓` - Navigate plans
+- `Enter` - Load selected plan
+- `Space` - Toggle selection for deletion
+- `D/d` - Delete selected plans (with confirmation)
+- `Esc` - Clear selections or close
+
+The header shows `PLAN` indicator when active.
 
 ## Keyboard Shortcuts
 

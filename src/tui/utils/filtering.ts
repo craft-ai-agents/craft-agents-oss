@@ -58,6 +58,7 @@ export interface CommandDefinition {
 export const COMMANDS: CommandDefinition[] = [
   // Heavy/common commands first (for tab completion priority)
   { command: '/agent', description: 'Manage sub-agents (list, info, refresh, clear)', category: 'Sub-Agents' },
+  { command: '/plan', description: 'Enter planning mode for complex tasks', category: 'General' },
   { command: '/workspace', description: 'Switch workspace (add, rename, remove)', category: 'Workspace' },
   { command: '/model', description: 'Show or change model (e.g., /model opus)', category: 'AI & Billing' },
 
@@ -137,6 +138,13 @@ export const SUBCOMMANDS: Record<string, Record<string, string>> = {
     'reset': 'Clear all data and exit (re-select to restart setup)',
     'refresh': 'Re-scan Agents folder',
     'info': 'Show active agent details',
+  },
+  '/plan': {
+    'start': 'Start planning a complex task',
+    'plans': 'View, load, or delete saved plans',
+    'view': 'View current plan',
+    'approve': 'Approve and execute current plan',
+    'cancel': 'Cancel current plan',
   },
 };
 
