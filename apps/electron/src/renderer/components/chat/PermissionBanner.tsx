@@ -26,12 +26,12 @@ export function PermissionBanner({ request, onRespond }: PermissionBannerProps) 
           </div>
 
           {/* Command preview */}
-          <div className="bg-background/50 rounded-md p-2 font-mono text-xs text-foreground/90 overflow-x-auto whitespace-pre">
+          <div className="bg-background/50 rounded-md p-2 font-mono text-xs text-foreground/90 whitespace-pre-wrap break-all">
             {request.command}
           </div>
 
           {/* Action buttons */}
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               size="sm"
               variant="default"
@@ -43,8 +43,8 @@ export function PermissionBanner({ request, onRespond }: PermissionBannerProps) 
             </Button>
             <Button
               size="sm"
-              variant="outline"
-              className="h-7 gap-1.5"
+              variant="ghost"
+              className="h-7 gap-1.5 border border-foreground/10 hover:bg-background active:bg-background"
               onClick={() => onRespond(true, true)}
             >
               <RefreshCw className="h-3.5 w-3.5" />
@@ -53,7 +53,7 @@ export function PermissionBanner({ request, onRespond }: PermissionBannerProps) 
             <Button
               size="sm"
               variant="ghost"
-              className="h-7 gap-1.5 text-muted-foreground hover:text-foreground"
+              className="h-7 gap-1.5 text-red-700 dark:text-red-300 hover:text-red-700 dark:hover:text-red-300 border border-dashed border-red-500/50 hover:bg-red-500/20 hover:border-red-500/70 active:bg-red-500/30"
               onClick={() => onRespond(false, false)}
             >
               <X className="h-3.5 w-3.5" />
@@ -61,7 +61,7 @@ export function PermissionBanner({ request, onRespond }: PermissionBannerProps) 
             </Button>
           </div>
 
-          <p className="text-[10px] text-muted-foreground">
+          <p className="text-[10px] text-muted-foreground break-words">
             Tip: "Always Allow" remembers this command type for the current session
           </p>
         </div>

@@ -176,7 +176,6 @@ export function AgentSetupWizard({
             mcpServers={mcpServers}
             apis={apis}
             onActivate={onActivate}
-            onBack={onBack}
             isLoading={isLoading}
           />
         )

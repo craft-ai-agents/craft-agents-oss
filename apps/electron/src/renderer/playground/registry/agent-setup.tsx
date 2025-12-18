@@ -332,7 +332,12 @@ export const agentSetupComponents: ComponentEntry[] = [
         name: 'Full Resources',
         props: {
           agentName: 'Code Assistant',
-          capabilities: ['Code generation', 'Bug fixing', 'Refactoring', 'Documentation'],
+          capabilities: [
+            'Generate clean, well-documented code from natural language descriptions',
+            'Debug and fix issues with detailed explanations of root causes',
+            'Refactor existing code for better performance and maintainability',
+            'Create comprehensive documentation with examples and usage guides',
+          ],
           mcpServers: sampleMcpServers.slice(0, 2),
           apis: sampleApis.slice(0, 2),
         },
@@ -341,7 +346,11 @@ export const agentSetupComponents: ComponentEntry[] = [
         name: 'MCP Only',
         props: {
           agentName: 'Document Agent',
-          capabilities: ['Read documents', 'Summarize', 'Search'],
+          capabilities: [
+            'Search and retrieve documents across your workspace',
+            'Summarize lengthy documents into key takeaways',
+            'Cross-reference information between multiple sources',
+          ],
           mcpServers: sampleMcpServers.slice(0, 1),
           apis: [],
         },
@@ -349,8 +358,13 @@ export const agentSetupComponents: ComponentEntry[] = [
       {
         name: 'APIs Only',
         props: {
-          agentName: 'API Helper',
-          capabilities: ['API calls', 'Data transformation'],
+          agentName: 'Analytics Helper',
+          capabilities: [
+            'Query Amplitude API for version distribution data',
+            'Analyze update rates across iOS and macOS platforms',
+            'Generate executive summary reports with key metrics',
+            'Track version migration and adoption velocity',
+          ],
           mcpServers: [],
           apis: sampleApis.slice(0, 2),
         },
@@ -368,7 +382,7 @@ export const agentSetupComponents: ComponentEntry[] = [
         name: 'Activating',
         props: {
           agentName: 'Code Assistant',
-          capabilities: ['Code generation'],
+          capabilities: ['Generate clean, well-documented code from natural language descriptions'],
           mcpServers: sampleMcpServers.slice(0, 1),
           apis: [],
           isLoading: true,
@@ -376,7 +390,12 @@ export const agentSetupComponents: ComponentEntry[] = [
       },
     ],
     mockData: () => ({
-      capabilities: ['Code generation', 'Bug fixing', 'Refactoring', 'Documentation'],
+      capabilities: [
+        'Generate clean, well-documented code from natural language descriptions',
+        'Debug and fix issues with detailed explanations of root causes',
+        'Refactor existing code for better performance and maintainability',
+        'Create comprehensive documentation with examples and usage guides',
+      ],
       mcpServers: sampleMcpServers.slice(0, 2),
       apis: sampleApis.slice(0, 2),
       onActivate: noopHandler,
@@ -528,7 +547,11 @@ export const agentSetupComponents: ComponentEntry[] = [
           state: createAgentSetupState({
             step: 'ready',
             agentName: 'Code Assistant',
-            capabilities: ['Code generation', 'Bug fixing', 'Refactoring'],
+            capabilities: [
+              'Generate clean, well-documented code from natural language descriptions',
+              'Debug and fix issues with detailed explanations of root causes',
+              'Refactor existing code for better performance and maintainability',
+            ],
             mcpServers: sampleMcpServers.slice(0, 2),
             apis: sampleApis.slice(0, 2),
           }),
@@ -559,7 +582,7 @@ export const agentSetupComponents: ComponentEntry[] = [
           state: createAgentSetupState({
             step: 'ready',
             agentName: 'Simple Agent',
-            capabilities: ['Text generation'],
+            capabilities: ['Generate text responses based on your instructions'],
             mcpServers: [],
             apis: [],
           }),

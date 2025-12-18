@@ -37,7 +37,7 @@ export function AppMenu({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
-          className="flex items-center gap-1 p-1.5 rounded-[4px] hover:bg-foreground/5 data-[state=open]:bg-foreground/5 focus:outline-none"
+          className="flex items-center gap-1 p-1.5 rounded-[4px] hover:bg-foreground/5 data-[state=open]:bg-foreground/5 focus:outline-none focus-visible:ring-0"
           aria-label="Craft menu"
         >
           <CraftAgentsSymbol className="h-4" />

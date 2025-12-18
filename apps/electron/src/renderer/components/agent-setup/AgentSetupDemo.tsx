@@ -63,7 +63,13 @@ const demoApis: ApiConfig[] = [
   },
 ]
 
-const demoCapabilities = ['Code generation', 'Bug fixing', 'Refactoring', 'Documentation', 'Code review']
+const demoCapabilities = [
+  'Generate clean, well-documented code from natural language descriptions',
+  'Debug and fix issues with detailed explanations of root causes',
+  'Refactor existing code for better performance and maintainability',
+  'Create comprehensive documentation with examples and usage guides',
+  'Review code changes and provide actionable feedback',
+]
 
 /**
  * AgentSetupDemo - Interactive demo of the full agent setup flow

@@ -98,13 +98,14 @@ export function AgentInfoDialog({
               {definition.capabilities && definition.capabilities.length > 0 && (
                 <div>
                   <h4 className="text-sm font-medium mb-2">Capabilities</h4>
-                  <div className="flex flex-wrap gap-1">
+                  <ul className="space-y-1.5">
                     {definition.capabilities.map((cap, i) => (
-                      <Badge key={i} variant="secondary" className="text-xs">
-                        {cap}
-                      </Badge>
+                      <li key={i} className="flex items-start gap-2 text-sm">
+                        <span className="text-muted-foreground mt-0.5">•</span>
+                        <span>{cap}</span>
+                      </li>
                     ))}
-                  </div>
+                  </ul>
                 </div>
               )}
 

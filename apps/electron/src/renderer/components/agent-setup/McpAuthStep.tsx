@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { ExternalLink, Key, CheckCircle2, Clock, SkipForward } from "lucide-react"
+import { ExternalLink, CheckCircle2, Clock, SkipForward } from "lucide-react"
 import { McpIcon } from "@/components/icons/McpIcon"
 import { StepFormLayout, BackButton, ContinueButton } from "@/components/onboarding/primitives"
 import { cn } from "@/lib/utils"
@@ -61,7 +61,6 @@ export function McpAuthStep({
   isLoading = false,
 }: McpAuthStepProps) {
   const [bearerTokens, setBearerTokens] = useState<Record<string, string>>({})
-  const [showBearerInput, setShowBearerInput] = useState<Record<string, boolean>>({})
 
   const allDone = servers.every(
     (s) => serverStatus[s.name] === 'authenticated' || serverStatus[s.name] === 'skipped'
@@ -76,10 +75,6 @@ export function McpAuthStep({
     if (token?.trim()) {
       onSubmitBearer?.(serverName, token.trim())
     }
-  }
-
-  const toggleBearerInput = (serverName: string) => {
-    setShowBearerInput(prev => ({ ...prev, [serverName]: !prev[serverName] }))
   }
 
   const getStatusBadge = (status: McpServerAuthStatus | undefined) => {
@@ -139,7 +134,7 @@ export function McpAuthStep({
           const status = serverStatus[server.name]
           const isDone = status === 'authenticated' || status === 'skipped'
           const isAuthenticating = status === 'authenticating'
-          const showBearer = showBearerInput[server.name] || status === 'bearer-input'
+          const showBearer = status === 'bearer-input'
 
           return (
             <div
@@ -170,70 +165,72 @@ export function McpAuthStep({
                 </div>
               </div>
 
-              {/* Auth actions (only show if not done) */}
-              {!isDone && !isAuthenticating && (
+              {/* Auth actions (only show if not done and not authenticating) */}
+              {!isDone && !isAuthenticating && !showBearer && (
                 <div className="mt-3 pt-3 border-t border-border/30">
-                  {!showBearer ? (
-                    <div className="flex items-center gap-2">
-                      <Button
-                        size="sm"
-                        onClick={() => handleOAuth(server.name)}
-                        className="gap-2"
-                      >
-                        <ExternalLink className="size-3.5" />
-                        Sign in
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => toggleBearerInput(server.name)}
-                        className="text-muted-foreground"
-                      >
-                        <Key className="mr-1.5 size-3.5" />
-                        Use token
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => onSkip?.(server.name)}
-                        className="ml-auto text-muted-foreground"
-                      >
-                        Skip
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <Label htmlFor={`bearer-${server.name}`} className="text-xs">
-                        Bearer Token
-                      </Label>
-                      <div className="flex gap-2">
-                        <Input
-                          id={`bearer-${server.name}`}
-                          type="password"
-                          placeholder="Enter bearer token..."
-                          value={bearerTokens[server.name] || ''}
-                          onChange={(e) =>
-                            setBearerTokens(prev => ({ ...prev, [server.name]: e.target.value }))
-                          }
-                          className="flex-1 text-sm"
-                        />
-                        <Button
-                          size="sm"
-                          onClick={() => handleBearerSubmit(server.name)}
-                          disabled={!bearerTokens[server.name]?.trim()}
-                        >
-                          Save
-                        </Button>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => toggleBearerInput(server.name)}
-                        className="text-xs text-muted-foreground hover:text-foreground"
-                      >
-                        Use OAuth instead
-                      </button>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => handleOAuth(server.name)}
+                      className="gap-2"
+                    >
+                      <ExternalLink className="size-3.5" />
+                      Sign in
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => onSkip?.(server.name)}
+                      className="ml-auto text-muted-foreground"
+                    >
+                      Skip
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Bearer token input (shown when OAuth fails) */}
+              {!isDone && showBearer && (
+                <div className="mt-3 pt-3 border-t border-border/30 space-y-2">
+                  <p className="text-xs text-muted-foreground">
+                    OAuth sign-in failed. Enter a bearer token instead:
+                  </p>
+                  <div className="flex gap-2">
+                    <Input
+                      id={`bearer-${server.name}`}
+                      type="password"
+                      placeholder="Enter bearer token..."
+                      value={bearerTokens[server.name] || ''}
+                      onChange={(e) =>
+                        setBearerTokens(prev => ({ ...prev, [server.name]: e.target.value }))
+                      }
+                      className="flex-1 text-sm"
+                    />
+                    <Button
+                      size="sm"
+                      onClick={() => handleBearerSubmit(server.name)}
+                      disabled={!bearerTokens[server.name]?.trim()}
+                    >
+                      Save
+                    </Button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleOAuth(server.name)}
+                      className="text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      Try OAuth again
+                    </button>
+                    <span className="text-xs text-muted-foreground">·</span>
+                    <button
+                      type="button"
+                      onClick={() => onSkip?.(server.name)}
+                      className="text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      Skip
+                    </button>
+                  </div>
                 </div>
               )}
 

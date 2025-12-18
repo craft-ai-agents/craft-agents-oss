@@ -46,7 +46,6 @@ import { SessionList } from "./SessionList"
 import { LeftSidebar } from "./LeftSidebar"
 import { AgentContextMenu, type AgentAction } from "./AgentContextMenu"
 import { AgentInfoDialog } from "./AgentInfoDialog"
-import { AgentAuthDialog } from "./AgentAuthDialog"
 import { SetupAuthBanner, type BannerState } from "./SetupAuthBanner"
 import { useSession } from "@/hooks/useSession"
 import { TabContainer, useTabs } from "@/tabs"
@@ -436,10 +435,6 @@ export function Chat({
   const [infoDialogOpen, setInfoDialogOpen] = React.useState(false)
   const [infoDialogAgent, setInfoDialogAgent] = React.useState<SubAgentMetadata | null>(null)
 
-  // Agent auth dialog state
-  const [authDialogOpen, setAuthDialogOpen] = React.useState(false)
-  const [authDialogAgent, setAuthDialogAgent] = React.useState<SubAgentMetadata | null>(null)
-
   // Agent status indicators - tracks setup/auth status for sidebar icons
   const [agentStatus, setAgentStatus] = React.useState<Map<string, SidebarAgentStatus>>(new Map())
 
@@ -473,6 +468,7 @@ export function Chat({
     openSettingsTab,
     openShortcutsTab,
     openAgentInfoTab,
+    openAgentSetupTab,
     updateChatTabLabel,
     validateTabs,
     previousTab,
@@ -572,26 +568,31 @@ export function Chat({
     damping: 49,
   }
 
-  // Count sessions by archive status
-  const inboxCount = sessions.filter(s => !s.isArchived).length
-  const archiveCount = sessions.filter(s => s.isArchived).length
+  // Filter sessions by active workspace
+  const workspaceSessions = activeWorkspaceId
+    ? sessions.filter(s => s.workspaceId === activeWorkspaceId)
+    : sessions
 
-  // Get conversation count per agent
+  // Count sessions by archive status (scoped to workspace)
+  const inboxCount = workspaceSessions.filter(s => !s.isArchived).length
+  const archiveCount = workspaceSessions.filter(s => s.isArchived).length
+
+  // Get conversation count per agent (scoped to workspace)
   const getConversationCount = React.useCallback((agentId: string) => {
-    return sessions.filter(s => s.agentId === agentId && !s.isArchived).length
-  }, [sessions])
+    return workspaceSessions.filter(s => s.agentId === agentId && !s.isArchived).length
+  }, [workspaceSessions])
 
   // Filter sessions based on view mode and agent selection
   const filteredSessions = React.useMemo(() => {
     if (viewMode === 'inbox') {
-      return sessions.filter(s => !s.isArchived)
+      return workspaceSessions.filter(s => !s.isArchived)
     } else if (viewMode === 'archive') {
-      return sessions.filter(s => s.isArchived)
+      return workspaceSessions.filter(s => s.isArchived)
     } else if (viewMode === 'agent' && selectedAgentId) {
-      return sessions.filter(s => s.agentId === selectedAgentId && !s.isArchived)
+      return workspaceSessions.filter(s => s.agentId === selectedAgentId && !s.isArchived)
     }
-    return sessions
-  }, [sessions, viewMode, selectedAgentId])
+    return workspaceSessions
+  }, [workspaceSessions, viewMode, selectedAgentId])
 
   const selectedSession = sessions.find(s => s.id === session.selected) || null
 
@@ -745,18 +746,16 @@ export function Chat({
     setViewMode('agent')
   }, [activeWorkspaceId])
 
-  // Handle banner action (open auth dialog)
+  // Handle banner action (open setup tab)
   const handleBannerAction = useCallback(() => {
-    if (!selectedAgentId) return
+    if (!selectedAgentId || !activeWorkspaceId) return
 
     const agent = agents.find(a => a.id === selectedAgentId)
     if (!agent) return
 
-    // Open auth dialog for both setup and auth states
-    // Auth dialog handles extraction + credential setup in one flow
-    setAuthDialogAgent(agent)
-    setAuthDialogOpen(true)
-  }, [selectedAgentId, agents])
+    // Open setup tab for both setup and auth states
+    openAgentSetupTab(agent.id, activeWorkspaceId, agent.displayName || agent.name)
+  }, [selectedAgentId, activeWorkspaceId, agents, openAgentSetupTab])
 
   const handleInboxClick = useCallback(() => {
     setViewMode('inbox')
@@ -788,18 +787,6 @@ export function Chat({
     menuTriggerRef.current = menuNewChatTrigger
     handleNewChat(true)
   }, [menuNewChatTrigger, handleNewChat])
-
-  // Handle auth dialog completion
-  const handleAuthComplete = useCallback((success: boolean) => {
-    setAuthDialogOpen(false)
-    if (success && authDialogAgent) {
-      // Auth successful - clear banner state
-      setBannerState({ state: 'hidden' })
-      // Update status to ready in sidebar
-      setAgentStatus(prev => new Map(prev).set(authDialogAgent.id, 'ready'))
-    }
-    setAuthDialogAgent(null)
-  }, [authDialogAgent])
 
   // Handle agent context menu actions
   const handleAgentAction = useCallback(async (action: AgentAction) => {
@@ -843,9 +830,8 @@ export function Chat({
         await window.electronAPI.resetAgent(activeWorkspaceId, action.agent.id)
         // Mark as needing setup since we reset
         setAgentStatus(prev => new Map(prev).set(action.agent.id, 'needs_setup'))
-        // Open auth dialog
-        setAuthDialogAgent(action.agent)
-        setAuthDialogOpen(true)
+        // Open setup tab
+        openAgentSetupTab(action.agent.id, activeWorkspaceId, action.agent.displayName || action.agent.name)
         break
 
       case 'reset':
@@ -861,7 +847,7 @@ export function Chat({
         }
         break
     }
-  }, [activeWorkspaceId])
+  }, [activeWorkspaceId, openAgentSetupTab])
 
   // Unified sidebar items: nav buttons + tree items
   // This creates one continuous navigable list for the entire sidebar
@@ -1186,15 +1172,17 @@ export function Chat({
                   {/* Scrollable Agent Tree */}
                   <ScrollArea className="flex-1 min-h-0">
                     <div className="px-2 pb-2">
-                      {isLoadingAgents ? (
-                        <div className="flex items-center gap-2 px-2 py-4">
-                          <Spinner className="text-sm text-muted-foreground" />
-                          <span className="text-xs text-muted-foreground">Loading agents...</span>
-                        </div>
-                      ) : agents.length === 0 ? (
-                        <p className="text-xs text-muted-foreground px-2 py-4">
-                          No agents found. Create an "Agents" folder in your Craft space.
-                        </p>
+                      {agents.length === 0 ? (
+                        isLoadingAgents ? (
+                          <div className="flex items-center gap-2 px-2 py-4">
+                            <Spinner className="text-sm text-muted-foreground" />
+                            <span className="text-xs text-muted-foreground">Loading agents...</span>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground px-2 py-4">
+                            No agents found. Create an "Agents" folder in your Craft space.
+                          </p>
+                        )
                       ) : (
                         <AgentTree
                           folder={agentTree}
@@ -1354,17 +1342,6 @@ export function Chat({
             open={infoDialogOpen}
             onOpenChange={setInfoDialogOpen}
             workspaceId={activeWorkspaceId}
-          />
-        )}
-
-        {/* Agent Auth Dialog */}
-        {activeWorkspaceId && authDialogAgent && (
-          <AgentAuthDialog
-            agent={authDialogAgent}
-            workspaceId={activeWorkspaceId}
-            open={authDialogOpen}
-            onOpenChange={setAuthDialogOpen}
-            onComplete={handleAuthComplete}
           />
         )}
       </TooltipProvider>
