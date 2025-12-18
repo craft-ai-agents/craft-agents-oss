@@ -1,7 +1,7 @@
 import { BrowserWindow, app } from 'electron'
 import { join } from 'path'
 import { rm } from 'fs/promises'
-import { CraftAgent, type AgentEvent } from '../../../../src/agent/craft-agent'
+import { CraftAgent, type AgentEvent } from '@craft-agent/shared/agent'
 import {
   loadStoredConfig,
   getWorkspaces,
@@ -21,17 +21,17 @@ import {
   type StoredSession,
   type StoredMessage,
   type SessionMetadata,
-} from '../../../../src/config/storage'
-import { getAuthState } from '../../../../src/auth/state'
-import { setAnthropicOptionsEnv, setPathToClaudeCodeExecutable } from '../../../../src/agent/options'
-import { getCraftToken } from '../../../../src/auth/craft-token'
-import { CraftMcpClient } from '../../../../src/mcp/client'
-import { SubAgentManager, type SubAgentManagerConfig } from '../../../../src/agents/manager'
-import type { SubAgentDefinition, AgentStatus, AgentActivateOptions } from '../../../../src/agents/types'
-import { AgentStateManager } from '../../../../src/agents/agent-state'
+} from '@craft-agent/shared/config'
+import { getAuthState } from '@craft-agent/shared/auth'
+import { setAnthropicOptionsEnv, setPathToClaudeCodeExecutable } from '@craft-agent/shared/agent'
+import { getCraftToken } from '@craft-agent/shared/auth'
+import { CraftMcpClient } from '@craft-agent/shared/mcp'
+import { SubAgentManager, type SubAgentManagerConfig } from '@craft-agent/shared/agents'
+import type { SubAgentDefinition, AgentStatus, AgentActivateOptions } from '@craft-agent/shared/agents'
+import { AgentStateManager } from '@craft-agent/shared/agents'
 import { type Session, type Message, type SessionEvent, type FileAttachment, type StoredAttachment, IPC_CHANNELS, generateMessageId } from '../shared/types'
-import { generateSessionTitle } from '../../../../src/utils/title-generator'
-import { DEFAULT_MODEL } from '../../../../src/config/models'
+import { generateSessionTitle } from '@craft-agent/shared/utils'
+import { DEFAULT_MODEL } from '@craft-agent/shared/config'
 
 interface ManagedSession {
   id: string

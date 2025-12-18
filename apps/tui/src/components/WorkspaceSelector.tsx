@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
-import type { Workspace } from '../../../../src/config/storage.ts';
+import type { Workspace } from '@craft-agent/shared/config';
 
 export interface WorkspaceSelectorProps {
   workspaces: Workspace[];

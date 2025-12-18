@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
-import { CraftOAuth, getMcpBaseUrl } from '../../../../src/auth/oauth.ts';
-import { saveServerCredentialsAsync } from '../../../../src/agents/cache.ts';
-import type { McpServerConfig } from '../../../../src/agents/types.ts';
+import { CraftOAuth, getMcpBaseUrl } from '@craft-agent/shared/auth';
+import { saveServerCredentialsAsync } from '@craft-agent/shared/agents';
+import type { McpServerConfig } from '@craft-agent/shared/agents';
 import { AnimatedSpinner } from './Spinner.tsx';
-import { debug } from '../../../../src/utils/debug.ts';
+import { debug } from '@craft-agent/shared/utils';
 import { TextInput } from './TextInput.tsx';
-import { validateMcpConnection, getValidationErrorMessage } from '../../../../src/mcp/validation.ts';
-import { getCredentialManager } from '../../../../src/credentials/index.ts';
+import { validateMcpConnection, getValidationErrorMessage } from '@craft-agent/shared/mcp';
+import { getCredentialManager } from '@craft-agent/shared/credentials';
 
 export interface McpAuthProps {
   servers: McpServerConfig[];

@@ -3,7 +3,7 @@ import { Box, Text, useInput } from 'ink';
 import { getCommandHint, getAgentHint, getTabCompletion, type HintData } from '../utils/filtering.ts';
 import { TextInput } from './TextInput.tsx';
 import { isHistorySearch, isAbort } from '../keyboard/index.ts';
-import { debug } from '../../../../src/utils/debug.ts';
+import { debug } from '@craft-agent/shared/utils';
 
 export interface InputProps {
   onSubmit: (input: string) => void;

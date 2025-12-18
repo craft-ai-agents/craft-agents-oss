@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { resolveAgentMention } from '../../utils/filtering.ts';
-import { debug } from '../../../../../src/utils/debug.ts';
+import { debug } from '@craft-agent/shared/utils';
 import type { ModalName } from '../modals/useModalState.ts';
 import type { Message } from '../../components/Messages.tsx';
 

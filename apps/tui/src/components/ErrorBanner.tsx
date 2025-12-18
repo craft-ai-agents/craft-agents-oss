@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Text, useInput } from 'ink';
-import type { AgentError, RecoveryAction } from '../../../../src/agent/errors.ts';
+import type { AgentError, RecoveryAction } from '@craft-agent/shared/agent';
 
 export interface ErrorBannerProps {
   error: AgentError;

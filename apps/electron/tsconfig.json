@@ -21,9 +21,11 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/renderer/*"],
-      "@config/*": ["../../src/config/*"]
+      "@config/*": ["../../packages/shared/src/config/*"],
+      "@craft-agent/shared": ["../../packages/shared/src/index.ts"],
+      "@craft-agent/shared/*": ["../../packages/shared/src/*"]
     }
   },
-  "include": ["src/**/*", "../src/**/*"],
+  "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
 }

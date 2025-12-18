@@ -20,7 +20,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src/renderer'),
-      '@config': resolve(__dirname, '../../src/config')
+      '@config': resolve(__dirname, '../../packages/shared/src/config')
     },
     dedupe: ['react', 'react-dom']
   },

@@ -28,7 +28,7 @@ import type {
   McpServerConfig,
   ApiConfig,
   Concern,
-} from '../../../../../src/agents/types'
+} from '@craft-agent/shared/agents'
 
 export interface UseAgentStateResult {
   // Current status (discriminated union)

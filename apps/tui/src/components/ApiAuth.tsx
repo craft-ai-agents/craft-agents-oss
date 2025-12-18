@@ -1,8 +1,8 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import { Box, Text } from 'ink';
-import { saveApiKeyCredentialAsync } from '../../../../src/agents/cache.ts';
-import type { ApiConfig } from '../../../../src/agents/types.ts';
-import { debug } from '../../../../src/utils/debug.ts';
+import { saveApiKeyCredentialAsync } from '@craft-agent/shared/agents';
+import type { ApiConfig } from '@craft-agent/shared/agents';
+import { debug } from '@craft-agent/shared/utils';
 import { TextInput } from './TextInput.tsx';
 
 export interface ApiAuthProps {

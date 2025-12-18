@@ -4,7 +4,7 @@ import {
   removeWorkspace,
   renameWorkspace,
   type Workspace,
-} from '../../../../../src/config/storage.ts';
+} from '@craft-agent/shared/config';
 import type { ModalName } from './useModalState.ts';
 import type { Message } from '../../components/Messages.tsx';
 

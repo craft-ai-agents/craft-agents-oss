@@ -6,8 +6,8 @@ import { randomUUID } from 'crypto'
 import { SessionManager } from './sessions'
 import { agentService } from './agent-service'
 import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type AgentActivateOptions } from '../shared/types'
-import { readFileAttachment } from '../../../../src/utils/files'
-import { getSessionAttachmentsPath } from '../../../../src/config/storage'
+import { readFileAttachment } from '@craft-agent/shared/utils'
+import { getSessionAttachmentsPath } from '@craft-agent/shared/config'
 import { MarkItDown } from 'markitdown-js'
 
 /**

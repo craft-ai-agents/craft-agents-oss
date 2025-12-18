@@ -23,15 +23,15 @@ import {
   type Workspace,
   type AuthType,
   type Session,
-} from '../../../src/config/storage.ts';
-import { getAuthState, getSetupNeeds, type AuthState, type SetupNeeds } from '../../../src/auth/state.ts';
-import type { CraftAgentConfig } from '../../../src/agent/craft-agent.ts';
-import { debug, enableDebug } from '../../../src/utils/debug.ts';
-import { install } from '../../../src/version/install.ts';
-import { getCurrentVersion } from '../../../src/version/version.ts';
-import { DEFAULT_MODEL } from '../../../src/config/models.ts';
-import { setAnthropicOptionsEnv } from '../../../src/agent/options.ts';
-import { getCraftToken } from '../../../src/auth/craft-token.ts';
+} from '@craft-agent/shared/config';
+import { getAuthState, getSetupNeeds, type AuthState, type SetupNeeds } from '@craft-agent/shared/auth';
+import type { CraftAgentConfig } from '@craft-agent/shared/agent';
+import { debug, enableDebug } from '@craft-agent/shared/utils';
+import { install } from '@craft-agent/shared/version';
+import { getCurrentVersion } from '@craft-agent/shared/version';
+import { DEFAULT_MODEL } from '@craft-agent/shared/config';
+import { setAnthropicOptionsEnv } from '@craft-agent/shared/agent';
+import { getCraftToken } from '@craft-agent/shared/auth';
 
 /**
  * Generate a deterministic workspace ID from a URL.
@@ -207,8 +207,14 @@ const Root: React.FC<RootProps> = ({ initialConfig, cliFlags, authState, setupNe
 
   const { billing } = currentAuthState;
   useEffect(() => {
+    // Skip credential setup when showing Setup wizard - credentials don't exist yet
+    if (showSetup) {
+      debug(`[Root] Skipping credential setup - showing Setup wizard`);
+      return;
+    }
+
     debug(`billing type: ${billing.type}`);
-    
+
     (async () => {
       if (billing.type === 'craft_credits') {
         const token = await getCraftToken();
@@ -238,7 +244,7 @@ const Root: React.FC<RootProps> = ({ initialConfig, cliFlags, authState, setupNe
         debug(`Set Anthropic API Key`);
       }
     })();
-  }, [billing.type, billing.apiKey, billing.claudeOAuthToken]);
+  }, [showSetup, billing.type, billing.apiKey, billing.claudeOAuthToken]);
 
   const handleSetupComplete = useCallback(async (newConfig: StoredConfig) => {
     setConfig(newConfig);
@@ -400,7 +406,7 @@ async function main() {
   // HEADLESS MODE (-p flag)
   // ========================================
   if (cli.flags.print !== undefined) {
-    const { HeadlessRunner, writeStreamingOutput } = await import('../../../src/headless/index.ts');
+    const { HeadlessRunner, writeStreamingOutput } = await import('@craft-agent/shared/headless');
 
     // Check if using URL workspace (allows skipping config requirement)
     const isUrlWorkspace = cli.flags.workspace && isUrl(cli.flags.workspace);

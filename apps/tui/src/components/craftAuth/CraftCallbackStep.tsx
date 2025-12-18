@@ -2,12 +2,12 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
 import crypto from 'crypto';
 import open from 'open';
-import { createCallbackServer } from '../../../../../src/auth/callback-server';
-import { CraftApi, type ProfileResponse } from '../../../../../src/clients/craftApi';
+import { createCallbackServer } from '@craft-agent/shared/auth';
+import { CraftApi, type ProfileResponse } from '@craft-agent/shared/clients';
 import { AnimatedSpinner } from '../Spinner';
-import { debug } from '../../../../../src/utils/debug.ts';
-import { checkSubscription } from '../../../../../src/subscription/check';
-import { getCredentialManager } from '../../../../../src/credentials';
+import { debug } from '@craft-agent/shared/utils';
+import { checkSubscription } from '@craft-agent/shared/subscription';
+import { getCredentialManager } from '@craft-agent/shared/credentials';
 
 // Re-export ProfileResponse as CraftProfile for backwards compatibility
 export type CraftProfile = ProfileResponse;

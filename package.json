@@ -15,8 +15,8 @@
   "scripts": {
     "start": "bun run apps/tui/src/index.tsx",
     "dev": "bun --watch run apps/tui/src/index.tsx",
-    "typecheck": "tsc --noEmit",
-    "typecheck:all": "bun run typecheck && cd packages/core && bun run tsc --noEmit && cd ../session-manager && bun run tsc --noEmit",
+    "typecheck": "cd packages/shared && bun run tsc --noEmit",
+    "typecheck:all": "cd packages/core && bun run tsc --noEmit && cd ../shared && bun run tsc --noEmit",
     "link": "bun link",
     "electron:build:main": "esbuild apps/electron/src/main/index.ts --bundle --platform=node --format=cjs --outfile=apps/electron/dist/main.cjs --external:electron",
     "electron:build:preload": "esbuild apps/electron/src/preload/index.ts --bundle --platform=node --format=cjs --outfile=apps/electron/dist/preload.cjs --external:electron",

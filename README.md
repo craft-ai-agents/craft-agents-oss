@@ -385,8 +385,8 @@ craft-tui-agent/
 │           └── utils/         # Terminal utilities
 ├── packages/
 │   ├── core/                  # Shared types (Workspace, Session, Message)
-│   └── session-manager/       # Event-driven session orchestration
-└── src/                       # Shared business logic
+│   └── shared/                # Shared business logic (agent, auth, storage)
+└── src/                       # Legacy - being migrated to packages/shared
     ├── agent/
     │   ├── craft-agent.ts     # Claude Agent SDK wrapper
     │   └── plan-tools.ts      # Plan mode tools

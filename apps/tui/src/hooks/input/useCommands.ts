@@ -1,21 +1,21 @@
 import { useCallback } from 'react';
 import { homedir } from 'os';
-import { MODELS } from '../../../../../src/config/models.ts';
+import { MODELS } from '@craft-agent/shared/config';
 import {
   getWorkspaces,
   removeWorkspace,
   listPlanFiles,
   type Workspace,
   type Session,
-} from '../../../../../src/config/storage.ts';
-import { formatPreferencesDisplay } from '../../../../../src/config/preferences.ts';
+} from '@craft-agent/shared/config';
+import { formatPreferencesDisplay } from '@craft-agent/shared/config';
 import { resolveCommand } from '../../utils/filtering.ts';
-import { readClipboard, readFileAttachment, type FileAttachment } from '../../../../../src/utils/files.ts';
-import { getCurrentVersion } from '../../../../../src/version/version.ts';
+import { readClipboard, readFileAttachment, type FileAttachment } from '@craft-agent/shared/utils';
+import { getCurrentVersion } from '@craft-agent/shared/version';
 import type { ModalName } from '../modals/useModalState.ts';
 import type { Message } from '../../components/Messages.tsx';
-import type { SubAgentDefinition } from '../../../../../src/agents/types.ts';
-import { PLAN_MODE_ENTER_MESSAGE, PLAN_MODE_ENTER_PROMPT } from '../../../../../src/agents/plan-types.ts';
+import type { SubAgentDefinition } from '@craft-agent/shared/agents';
+import { PLAN_MODE_ENTER_MESSAGE, PLAN_MODE_ENTER_PROMPT } from '@craft-agent/shared/agents';
 
 /**
  * Result of command execution

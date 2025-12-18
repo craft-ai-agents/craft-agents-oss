@@ -1,8 +1,8 @@
 import { useCallback } from 'react';
 import type { AgentAction } from '../../components/AgentMenu.tsx';
-import type { SubAgentDefinition, McpServerConfig } from '../../../../../src/agents/types.ts';
+import type { SubAgentDefinition, McpServerConfig } from '@craft-agent/shared/agents';
 import type { Message } from '../../components/Messages.tsx';
-import { debug } from '../../../../../src/utils/debug.ts';
+import { debug } from '@craft-agent/shared/utils';
 
 /**
  * Tool group structure for agent info display

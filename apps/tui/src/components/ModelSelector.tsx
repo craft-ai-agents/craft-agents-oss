@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
-import type { ModelDefinition } from '../../../../src/config/models.ts';
+import type { ModelDefinition } from '@craft-agent/shared/config';
 
 export interface ModelSelectorProps {
   models: ModelDefinition[];

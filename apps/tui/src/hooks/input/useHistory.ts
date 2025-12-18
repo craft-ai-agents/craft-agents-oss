@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
-import { ensureConfigDir } from '../../../../../src/config/storage.ts';
+import { ensureConfigDir } from '@craft-agent/shared/config';
 
 const MAX_HISTORY_SIZE = 100;
 const TEST_INPUT_HISTORY_FILE = join(homedir(), '.craft-agent', 'input_history.json');

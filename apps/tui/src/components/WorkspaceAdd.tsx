@@ -1,17 +1,17 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { Box, Text, useInput } from 'ink';
-import { addWorkspace, getWorkspaces, type Workspace, type OAuthCredentials, type McpAuthType } from '../../../../src/config/storage.ts';
-import { CraftOAuth, getMcpBaseUrl } from '../../../../src/auth/oauth.ts';
-import { getCredentialManager } from '../../../../src/credentials/index.ts';
-import { validateMcpConnection, getValidationErrorMessage } from '../../../../src/mcp/validation.ts';
-import { validateMcpUrl } from '../../../../src/validation/url-validator.ts';
+import { addWorkspace, getWorkspaces, type Workspace, type OAuthCredentials, type McpAuthType } from '@craft-agent/shared/config';
+import { CraftOAuth, getMcpBaseUrl } from '@craft-agent/shared/auth';
+import { getCredentialManager } from '@craft-agent/shared/credentials';
+import { validateMcpConnection, getValidationErrorMessage } from '@craft-agent/shared/mcp';
+import { validateMcpUrl } from '@craft-agent/shared/validation';
 import { TextInput } from './TextInput.tsx';
 import { AnimatedSpinner } from './Spinner.tsx';
 import { ErrorBanner } from './ErrorBanner.tsx';
 import { CraftSpaceSelector, McpLinkSelector, type McpLink } from './craftAuth/CraftSpaceSelector.tsx';
-import { CraftApi } from '../../../../src/clients/craftApi.ts';
+import { CraftApi } from '@craft-agent/shared/clients';
 import type { CraftProfile } from './craftAuth/CraftCallbackStep.tsx';
-import type { AgentError, RecoveryAction } from '../../../../src/agent/errors.ts';
+import type { AgentError, RecoveryAction } from '@craft-agent/shared/agent';
 
 type AddStep =
   // New steps for Craft space selection

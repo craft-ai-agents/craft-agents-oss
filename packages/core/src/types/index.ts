@@ -33,6 +33,7 @@ export type {
   TokenUsage,
   TypedError,
   Question,
+  PermissionRequest,
   AgentEvent,
 } from './message.ts';
 export { generateMessageId } from './message.ts';

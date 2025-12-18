@@ -19,8 +19,8 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { AgentStateManager } from '../../../../../src/agents/agent-state.ts';
-import { SubAgentManager } from '../../../../../src/agents/manager.ts';
+import { AgentStateManager } from '@craft-agent/shared/agents';
+import { SubAgentManager } from '@craft-agent/shared/agents';
 import type {
   AgentStatus,
   SubAgentDefinition,
@@ -28,9 +28,9 @@ import type {
   ApiConfig,
   Concern,
   AgentActivateOptions,
-} from '../../../../../src/agents/types.ts';
-import { createApiServer } from '../../../../../src/agents/api-tools.ts';
-import { debug } from '../../../../../src/utils/debug.ts';
+} from '@craft-agent/shared/agents';
+import { createApiServer } from '@craft-agent/shared/agents';
+import { debug } from '@craft-agent/shared/utils';
 
 export interface UseAgentStateResult {
   // Current status (discriminated union)

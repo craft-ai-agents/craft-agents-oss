@@ -4,7 +4,7 @@ import { Header } from './Header.tsx';
 import { Messages, type Message } from './Messages.tsx';
 import { Input } from './Input.tsx';
 import { ModelSelector } from './ModelSelector.tsx';
-import { MODELS } from '../../../../src/config/models.ts';
+import { MODELS } from '@craft-agent/shared/config';
 import { AgentMenu, type AgentAction } from './AgentMenu.tsx';
 import { WorkspaceSelector } from './WorkspaceSelector.tsx';
 import { WorkspaceAdd } from './WorkspaceAdd.tsx';
@@ -23,7 +23,7 @@ import { SessionMenu } from './SessionMenu.tsx';
 import { HelpPanel } from './HelpPanel.tsx';
 import { Balance } from './Balance.tsx';
 import { ErrorBanner } from './ErrorBanner.tsx';
-import type { RecoveryAction } from '../../../../src/agent/errors.ts';
+import type { RecoveryAction } from '@craft-agent/shared/agent';
 import { Settings, type SettingsAction } from './Settings.tsx';
 import {
   useAgent,
@@ -42,8 +42,8 @@ import {
   PLAN_MODE_EXIT_MESSAGE,
   PLAN_MODE_ENTER_PROMPT,
   PLAN_MODE_EXIT_PROMPT,
-} from '../../../../src/agents/plan-types.ts';
-import { getPlanModeState } from '../../../../src/agent/plan-tools.ts';
+} from '@craft-agent/shared/agents';
+import { getPlanModeState } from '@craft-agent/shared/agent';
 import { useGlobalContext } from '../context/GlobalContext.tsx';
 import {
   getWorkspaces,
@@ -59,12 +59,12 @@ import {
   type TokenDisplayMode,
   type Session,
   type SessionMetadata,
-} from '../../../../src/config/storage.ts';
-import { processInputWithFiles, readClipboard, readFileAttachment, type FileAttachment } from '../../../../src/utils/files.ts';
-import { debug } from '../../../../src/utils/debug.ts';
-import type { CraftAgentConfig } from '../../../../src/agent/craft-agent.ts';
-import { getCurrentVersion } from '../../../../src/version/version.ts';
-import { checkAndUpdate } from '../../../../src/version/install.ts';
+} from '@craft-agent/shared/config';
+import { processInputWithFiles, readClipboard, readFileAttachment, type FileAttachment } from '@craft-agent/shared/utils';
+import { debug } from '@craft-agent/shared/utils';
+import type { CraftAgentConfig } from '@craft-agent/shared/agent';
+import { getCurrentVersion } from '@craft-agent/shared/version';
+import { checkAndUpdate } from '@craft-agent/shared/version';
 
 export interface SessionContainerProps {
   config: CraftAgentConfig;

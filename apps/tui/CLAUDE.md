@@ -132,7 +132,7 @@ Use `debug()` from `../../../src/utils/debug.ts` to add log entries.
 
 ## Dependencies
 
-- **Workspace packages:** `@craft-agent/core`, `@craft-agent/session-manager`
+- **Workspace packages:** `@craft-agent/core`, `@craft-agent/shared`
 - **UI:** Ink 5.x (React for CLIs)
 - **Styling:** chalk for colors
 - **Markdown:** marked + marked-terminal + Shiki

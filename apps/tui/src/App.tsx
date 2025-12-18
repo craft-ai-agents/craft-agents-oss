@@ -1,10 +1,10 @@
 import React, { useCallback, useMemo } from 'react';
 import { GlobalProvider } from './context/GlobalContext.tsx';
 import { SessionContainer } from './components/SessionContainer.tsx';
-import { loadStoredConfig, saveConfig, getOrCreateLatestSession, createSession, getOrCreateSessionById, type Session } from '../../../src/config/storage.ts';
-import { DEFAULT_MODEL } from '../../../src/config/models.ts';
-import type { CraftAgentConfig } from '../../../src/agent/craft-agent.ts';
-import { debug } from '../../../src/utils/debug.ts';
+import { loadStoredConfig, saveConfig, getOrCreateLatestSession, createSession, getOrCreateSessionById, type Session } from '@craft-agent/shared/config';
+import { DEFAULT_MODEL } from '@craft-agent/shared/config';
+import type { CraftAgentConfig } from '@craft-agent/shared/agent';
+import { debug } from '@craft-agent/shared/utils';
 
 export interface AppProps {
   config: CraftAgentConfig;

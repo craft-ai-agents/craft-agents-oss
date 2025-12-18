@@ -1,27 +1,46 @@
 // Types shared between main and renderer processes
 // Core types are re-exported from @craft-agent/core
 
-// Re-export core types
-export type {
-  Message,
-  MessageRole,
+// Import and re-export core types
+import type {
+  Message as CoreMessage,
+  MessageRole as CoreMessageRole,
   TypedError,
-  TokenUsage,
-  Workspace,
-  SessionMetadata,
-  SubAgentMetadata,
-  StoredAttachment,
-} from '../../../../packages/core/src/types/index.ts';
+  TokenUsage as CoreTokenUsage,
+  Workspace as CoreWorkspace,
+  SessionMetadata as CoreSessionMetadata,
+  SubAgentMetadata as CoreSubAgentMetadata,
+  StoredAttachment as CoreStoredAttachment,
+} from '@craft-agent/core/types';
 
-// Re-export agent types for Info dialog
+export type {
+  CoreMessage as Message,
+  CoreMessageRole as MessageRole,
+  TypedError,
+  CoreTokenUsage as TokenUsage,
+  CoreWorkspace as Workspace,
+  CoreSessionMetadata as SessionMetadata,
+  CoreSubAgentMetadata as SubAgentMetadata,
+  CoreStoredAttachment as StoredAttachment,
+};
+
+// Import and re-export agent types for Info dialog
+import type {
+  SubAgentDefinition,
+  McpServerConfig,
+  ApiConfig,
+  AgentStatus,
+  AgentActivateOptions,
+} from '@craft-agent/shared/agents';
+
 export type {
   SubAgentDefinition,
   McpServerConfig,
   ApiConfig,
   AgentStatus,
   AgentActivateOptions,
-} from '../../../../src/agents/types.ts';
-export { generateMessageId } from '../../../../packages/core/src/types/index.ts';
+};
+export { generateMessageId } from '@craft-agent/core/types';
 
 /**
  * Auth requirements for an agent - lists MCP servers and APIs needing credentials
@@ -57,9 +76,9 @@ export interface AgentSetupStatus {
   reason?: string
 }
 
-// Re-export permission types from session-manager, extended with sessionId for multi-session context
-export type { PermissionRequest as BasePermissionRequest } from '../../../../packages/session-manager/src/index.ts';
-import type { PermissionRequest as BasePermissionRequest } from '../../../../packages/session-manager/src/index.ts';
+// Re-export permission types from core, extended with sessionId for multi-session context
+export type { PermissionRequest as BasePermissionRequest } from '@craft-agent/core/types';
+import type { PermissionRequest as BasePermissionRequest } from '@craft-agent/core/types';
 
 /**
  * Permission request with session context (for multi-session Electron app)
@@ -113,7 +132,7 @@ export interface FileAttachment {
 }
 
 // Import types needed for Session interface
-import type { Message } from '../../../../packages/core/src/types/index.ts';
+import type { Message } from '@craft-agent/core/types';
 
 /**
  * Electron-specific Session type (includes runtime state)
@@ -140,11 +159,11 @@ export type SessionEvent =
   | { type: 'tool_start'; sessionId: string; toolName: string; toolUseId: string; toolInput: Record<string, unknown> }
   | { type: 'tool_result'; sessionId: string; toolUseId: string; toolName: string; result: string }
   | { type: 'error'; sessionId: string; error: string }
-  | { type: 'typed_error'; sessionId: string; error: import('../../../../packages/core/src/types/index.ts').TypedError }
+  | { type: 'typed_error'; sessionId: string; error: TypedError }
   | { type: 'complete'; sessionId: string }
   | { type: 'status'; sessionId: string; message: string }
   | { type: 'title_generated'; sessionId: string; title: string }
-  | { type: 'agent_status'; sessionId: string; status: import('../../../../src/agents/types.ts').AgentStatus }
+  | { type: 'agent_status'; sessionId: string; status: AgentStatus }
   | { type: 'permission_request'; sessionId: string; request: PermissionRequest }
 
 // IPC channel names
@@ -220,8 +239,8 @@ export const IPC_CHANNELS = {
 } as const
 
 // Re-import types for ElectronAPI
-import type { Workspace, SessionMetadata, StoredAttachment as StoredAttachmentType } from '../../../../packages/core/src/types/index.ts';
-import type { SubAgentMetadata } from '../../../../packages/core/src/types/index.ts';
+import type { Workspace, SessionMetadata, StoredAttachment as StoredAttachmentType } from '@craft-agent/core/types';
+import type { SubAgentMetadata } from '@craft-agent/core/types';
 
 // Type-safe IPC API exposed to renderer
 export interface ElectronAPI {
@@ -245,7 +264,7 @@ export interface ElectronAPI {
   checkAgentAuth(workspaceId: string, agentId: string): Promise<{ needsAuth: boolean; reason?: string }>
   getAgentSetupStatus(workspaceId: string, agentId: string): Promise<AgentSetupStatus>
   getAgentAuthStatus(workspaceId: string, agentId: string): Promise<AgentAuthStatus>
-  getAgentDefinition(workspaceId: string, agentId: string): Promise<import('../../../../src/agents/types.ts').SubAgentDefinition | null>
+  getAgentDefinition(workspaceId: string, agentId: string): Promise<SubAgentDefinition | null>
   reloadAgent(workspaceId: string, agentId: string): Promise<boolean>
   resetAgent(workspaceId: string, agentId: string): Promise<boolean>
 
@@ -257,13 +276,13 @@ export interface ElectronAPI {
   validateMcpConnection(serverUrl: string, accessToken?: string): Promise<McpValidationResult>
 
   // Agent state management (unified state machine)
-  getAgentStatus(sessionId: string): Promise<import('../../../../src/agents/types.ts').AgentStatus>
-  activateAgent(sessionId: string, agentId: string, options?: import('../../../../src/agents/types.ts').AgentActivateOptions): Promise<import('../../../../src/agents/types.ts').AgentStatus>
-  continueAfterReview(sessionId: string, answers: Record<string, string>): Promise<import('../../../../src/agents/types.ts').AgentStatus>
-  continueAfterMcpAuth(sessionId: string): Promise<import('../../../../src/agents/types.ts').AgentStatus>
-  continueAfterApiAuth(sessionId: string): Promise<import('../../../../src/agents/types.ts').AgentStatus>
+  getAgentStatus(sessionId: string): Promise<AgentStatus>
+  activateAgent(sessionId: string, agentId: string, options?: AgentActivateOptions): Promise<AgentStatus>
+  continueAfterReview(sessionId: string, answers: Record<string, string>): Promise<AgentStatus>
+  continueAfterMcpAuth(sessionId: string): Promise<AgentStatus>
+  continueAfterApiAuth(sessionId: string): Promise<AgentStatus>
   deactivateAgent(sessionId: string): Promise<void>
-  reloadAgentState(sessionId: string): Promise<import('../../../../src/agents/types.ts').AgentStatus>
+  reloadAgentState(sessionId: string): Promise<AgentStatus>
   resetAgentState(sessionId: string): Promise<void>
   markAgentActive(sessionId: string): Promise<void>
 

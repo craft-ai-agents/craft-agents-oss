@@ -6,11 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 | If you change... | Update these docs |
 |------------------|-------------------|
-| `src/` (agent, auth, config, credentials, mcp, prompts, utils) | This file (`CLAUDE.md`) |
+| `packages/shared/` (agent, auth, config, credentials, mcp, prompts, utils) | This file (`CLAUDE.md`) |
 | `apps/electron/` | `apps/electron/CLAUDE.md`, `apps/electron/README.md` |
 | `apps/tui/` | `apps/tui/CLAUDE.md`, `apps/tui/README.md` |
 | `packages/core/` | `packages/core/CLAUDE.md`, `packages/core/README.md` |
-| `packages/session-manager/` | `packages/session-manager/CLAUDE.md`, `packages/session-manager/README.md` |
 | Monorepo structure, commands, releases | This file (`CLAUDE.md`), root `README.md` |
 
 ## Project Overview
@@ -30,19 +29,23 @@ craft-tui-agent/
 ├── apps/
 │   ├── electron/          # Electron desktop app (GUI)
 │   └── tui/               # Terminal interface (CLI)
-├── packages/
-│   ├── core/              # Shared types and utilities
-│   └── session-manager/   # Session orchestration (event-driven)
-└── src/                   # Core business logic (agent, auth, storage)
+└── packages/
+    ├── core/              # @craft-agent/core - Shared types only
+    └── shared/            # @craft-agent/shared - Core business logic (agent, auth, storage)
 ```
 
-**Current State:** This is a transitional architecture. The `packages/` contain shared types and session management, but most business logic still lives in `src/`. Apps use relative imports (`../../../src/`) to access it.
+Apps import shared code via clean package imports:
+```typescript
+import { CraftAgent } from '@craft-agent/shared/agent';
+import { loadStoredConfig } from '@craft-agent/shared/config';
+import type { Workspace } from '@craft-agent/core/types';
+```
 
 **Sub-project documentation:**
 - [`apps/electron/CLAUDE.md`](apps/electron/CLAUDE.md) - Electron app details
 - [`apps/tui/CLAUDE.md`](apps/tui/CLAUDE.md) - TUI app details
 - [`packages/core/CLAUDE.md`](packages/core/CLAUDE.md) - Core types
-- [`packages/session-manager/CLAUDE.md`](packages/session-manager/CLAUDE.md) - Session management
+- [`packages/shared/CLAUDE.md`](packages/shared/CLAUDE.md) - Shared business logic
 
 ## Commands
 
@@ -60,8 +63,8 @@ bun run electron:build   # Build only
 bun run electron:dev     # Vite dev server (renderer only)
 
 # ===== Type Checking =====
-bun run typecheck        # Check root project
-bun run typecheck:all    # Check all packages
+bun run typecheck        # Check shared package
+bun run typecheck:all    # Check all packages (core, shared)
 
 # ===== Global Install =====
 bun link                 # Creates 'craft' command
@@ -103,12 +106,12 @@ bash scripts/uninstall.sh
 
 ## Project Structure
 
-### Core Business Logic (`src/`)
+### Shared Business Logic (`packages/shared/src/`)
 
-This directory contains the shared business logic used by both TUI and Electron apps:
+This package (`@craft-agent/shared`) contains the shared business logic used by both TUI and Electron apps:
 
 ```
-src/
+packages/shared/src/
 ├── agent/
 │   ├── craft-agent.ts        # Claude Agent SDK wrapper
 │   └── plan-tools.ts         # Plan mode tools and state management
@@ -150,20 +153,25 @@ src/
     └── summarize.ts          # Shared summarization for large tool results
 ```
 
-> **Note:** TUI components and hooks live in `apps/tui/src/`. This `src/` directory contains only shared business logic used by both TUI and Electron apps.
+> **Note:** TUI components and hooks live in `apps/tui/src/`. The `packages/shared/src/` directory contains the shared business logic used by both TUI and Electron apps, imported via `@craft-agent/shared/*`.
 
 ### Workspace Packages (`packages/`)
 
 ```
 packages/
-├── core/                     # @craft-agent/core
+├── core/                     # @craft-agent/core - Shared types only
 │   └── src/
 │       ├── types/            # Workspace, Session, Message, Agent types
-│       └── utils/            # Shared utilities (debug)
-└── session-manager/          # @craft-agent/session-manager
+│       └── utils/            # Shared utilities (debug stub)
+└── shared/                   # @craft-agent/shared - Core business logic
     └── src/
-        ├── session-manager.ts  # Event-driven session orchestration
-        └── event-emitter.ts    # Type-safe EventEmitter base
+        ├── agent/            # CraftAgent, plan-tools
+        ├── agents/           # SubAgent management, extraction
+        ├── auth/             # OAuth, credentials
+        ├── config/           # Storage, preferences
+        ├── credentials/      # Secure credential storage
+        ├── mcp/              # MCP client and validation
+        └── utils/            # Debug, files, summarization
 ```
 
 ### Applications (`apps/`)
@@ -194,9 +202,9 @@ apps/
 - Enables bracketed paste mode for file drag-drop
 - Routes to Setup wizard or main App based on config
 - Config stored in `~/.craft-agent/config.json`
-- Imports business logic from `../../../src/`
+- Imports business logic from `@craft-agent/shared/*`
 
-### Agent Layer (`src/agent/craft-agent.ts`)
+### Agent Layer (`packages/shared/src/agent/craft-agent.ts`)
 Core `CraftAgent` class that:
 - Uses `@anthropic-ai/claude-agent-sdk` via the `query()` function
 - Leverages SDK's built-in agentic loop (no manual tool call handling)
@@ -211,7 +219,7 @@ Core `CraftAgent` class that:
 
 **AgentEvent types:** `status`, `text_delta`, `text_complete`, `tool_start`, `tool_result`, `permission_request`, `ask_user`, `error`, `complete`
 
-### Configuration (`src/config/storage.ts`)
+### Configuration (`packages/shared/src/config/storage.ts`)
 Multi-workspace support with:
 ```typescript
 interface StoredConfig {
@@ -262,7 +270,7 @@ The setup wizard uses a "Craft-first" flow:
 - If found: shows list with existing links + "Create new" option
 - If none: auto-creates a new MCP link named "Craft Agent MCP"
 
-### Credential Storage (`src/credentials/`)
+### Credential Storage (`packages/shared/src/credentials/`)
 All sensitive credentials are stored in an AES-256-GCM encrypted file:
 - **Location**: `~/.craft-agent/credentials.enc`
 - **Encryption**: AES-256-GCM with machine-derived key (PBKDF2)
@@ -309,18 +317,18 @@ const mcpCreds = await manager.getMcpOAuth(wsId, agentId, serverName);
 const apiKey = await manager.getApiKeyForAgent(wsId, agentId, apiName);
 ```
 
-### User Preferences (`src/config/preferences.ts`)
+### User Preferences (`packages/shared/src/config/preferences.ts`)
 Stored in `~/.craft-agent/preferences.json`:
 - name, timezone, location, language, notes
 - Embedded in system prompt
 - Updated via `update_user_preferences` tool
 
-### MCP Integration (`src/mcp/`)
+### MCP Integration (`packages/shared/src/mcp/`)
 - `CraftMcpClient`: Basic MCP client for direct tool calls (used by sub-agent manager and `/tools` command)
 - SDK handles MCP connections via HTTP mode configuration
 - `/tools` command fetches actual tools from connected MCP servers via `fetchTools()` in useAgent
 
-### MCP Validation (`src/mcp/validation.ts`)
+### MCP Validation (`packages/shared/src/mcp/validation.ts`)
 Validates MCP connections using the Claude Agent SDK's `mcpServerStatus()` method. This ensures connections work before saving credentials.
 
 **When validation runs:**
@@ -340,7 +348,7 @@ Validates MCP connections using the Claude Agent SDK's `mcpServerStatus()` metho
 - Enter to retry, Esc to go back
 - Credentials are preserved for retry
 
-### Headless Mode (`src/headless/`)
+### Headless Mode (`packages/shared/src/headless/`)
 Non-interactive execution mode for scripts, CI/CD pipelines, and automation workflows.
 
 **Key files:**
@@ -389,7 +397,7 @@ This defense-in-depth approach ensures plan mode is never triggered in automatio
 
 Questions (from `AskUserQuestion` tool) return empty answers in headless mode.
 
-### Subagent System (`src/agents/`)
+### Subagent System (`packages/shared/src/agents/`)
 Subagents are specialized agents defined in Craft documents. When activated, they extend the base agent with custom instructions, MCP servers, and REST APIs.
 
 **Key files:**
@@ -448,7 +456,7 @@ Tool responses can be huge (e.g., full web page content, large Craft documents).
 7. Summary header tells model it can re-call with more specific parameters if needed
 
 **Intent via `_intent` Field (Schema-Enforced):**
-The `_intent` field is enforced via schema modification. The fetch interceptor (`src/cache-ttl-interceptor.ts`) intercepts Anthropic API requests and injects `_intent` into every MCP tool's schema before sending to Claude.
+The `_intent` field is enforced via schema modification. The fetch interceptor (`packages/shared/src/cache-ttl-interceptor.ts`) intercepts Anthropic API requests and injects `_intent` into every MCP tool's schema before sending to Claude.
 
 ```
 SDK subprocess → fetches tools from MCP → Anthropic API request
@@ -484,14 +492,14 @@ This provides:
 | REST API tools (`api_*`) | ✅ Yes | `_intent` field (or tool params fallback) |
 | Built-in SDK tools | ❌ No | N/A (use their own `description` field for UI) |
 
-Shared summarization utility: `src/utils/summarize.ts`
+Shared summarization utility: `packages/shared/src/utils/summarize.ts`
 
 **Credential storage:**
 - Stored in encrypted file via `CredentialManager` (see Credential Storage section)
 - MCP OAuth: `mcp_oauth::{workspaceId}::{agentId}::{serverName}`
 - API keys: `api_key::{workspaceId}::{agentId}::{apiName}` (string or JSON `{username,password}` for basic auth)
 
-### OAuth (`src/auth/oauth.ts`)
+### OAuth (`packages/shared/src/auth/oauth.ts`)
 - Dynamic client registration (no pre-registration)
 - PKCE for security, state for CSRF protection
 - Local callback server on port 8914
@@ -510,7 +518,7 @@ Shared summarization utility: `src/utils/summarize.ts`
 
 **Message types:** `user`, `assistant`, `tool`, `error`, `status`, `system`
 
-### System Prompt (`src/prompts/system.ts`)
+### System Prompt (`packages/shared/src/prompts/system.ts`)
 Includes:
 - Current date/time context
 - User preferences
@@ -542,15 +550,15 @@ Includes:
 - Session failures clear and start fresh
 - Replayed messages skipped via `isReplay` flag
 
-### Plan Mode (`src/agent/plan-tools.ts`)
+### Plan Mode (`packages/shared/src/agent/plan-tools.ts`)
 
 Plan Mode is a structured approach for complex multi-step tasks. Instead of immediately executing actions, the agent first creates a plan, gets user approval, then executes.
 
 **Key Files:**
-- `src/agent/plan-tools.ts` - Custom plan mode tools and state management
-- `src/agents/plan-types.ts` - Plan, PlanStep, PlanState interfaces
-- `src/tui/components/PlanReview.tsx` - User approval UI
-- `src/tui/components/TodoList.tsx` - Task visualization
+- `packages/shared/src/agent/plan-tools.ts` - Custom plan mode tools and state management
+- `packages/shared/src/agents/plan-types.ts` - Plan, PlanStep, PlanState interfaces
+- `apps/tui/src/components/PlanReview.tsx` - User approval UI
+- `apps/tui/src/components/TodoList.tsx` - Task visualization
 
 **Custom Tools (in-process MCP):**
 - `EnterCraftAgentsPlanMode` - Enters planning mode with task description
@@ -632,7 +640,7 @@ When plan mode is active, the hook blocks external operations:
 - Context tokens = base + cache for next request
 - Cost calculated by SDK (`total_cost_usd`)
 
-### Extended Prompt Cache TTL (`src/cache-ttl-interceptor.ts`)
+### Extended Prompt Cache TTL (`packages/shared/src/cache-ttl-interceptor.ts`)
 Extends Anthropic's prompt cache from 5 minutes to 1 hour for longer conversations.
 
 **How it works:**
@@ -681,7 +689,7 @@ Extended thinking mode triggered by the "ultrathink" keyword in user messages.
 
 **Files involved:**
 - `apps/tui/src/utils/gradient.ts` - `containsUltrathink()`, `stripUltrathink()`, `renderUltrathinkGradient()`
-- `src/agent/craft-agent.ts` - `ultrathinkMode` property, `setUltrathinkMode()` method
+- `packages/shared/src/agent/craft-agent.ts` - `ultrathinkMode` property, `setUltrathinkMode()` method
 - `apps/tui/src/hooks/core/useAgent.ts` - Detection, state management, agent configuration
 - `apps/tui/src/components/TextInput.tsx` - Live gradient coloring while typing
 - `apps/tui/src/components/Spinner.tsx` - ThinkingIndicator gradient display
@@ -810,7 +818,7 @@ Shared text input used by all input dialogs (API keys, bearer tokens, workspace 
 
 Debug logging is disabled by default. Enable it with the `--debug` flag to write logs to `/tmp/craft-debug.log`.
 
-Use the `debug()` function from `src/utils/debug.ts` to add log entries. These calls are no-ops unless `--debug` is passed.
+Use the `debug()` function from `packages/shared/src/utils/debug.ts` to add log entries. These calls are no-ops unless `--debug` is passed.
 
 **Important:** Never trim or truncate log output (e.g., using `.substring()`). Full log content is essential for debugging.
 

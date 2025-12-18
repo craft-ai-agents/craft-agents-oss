@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Text, useInput } from 'ink';
 import open from 'open';
-import { getAiCreditTopUpUrl, getAiCreditsBalance } from '../../../../src/auth/balance.ts';
-import type { AuthType } from '../../../../src/config/storage.ts';
+import { getAiCreditTopUpUrl, getAiCreditsBalance } from '@craft-agent/shared/auth';
+import type { AuthType } from '@craft-agent/shared/config';
 import { AnimatedSpinner } from './Spinner.tsx';
 
 const AUTH_TYPE_LABELS: Record<AuthType, string> = {

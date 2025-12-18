@@ -1,12 +1,12 @@
 import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
-import type { Workspace, CumulativeUsage, Session } from '../../../../src/config/storage.ts';
+import type { Workspace, CumulativeUsage, Session } from '@craft-agent/shared/config';
 import {
   getCumulativeUsage,
   addToCumulativeUsage,
   createSession,
   setActiveSession,
   switchWorkspaceAtomic,
-} from '../../../../src/config/storage.ts';
+} from '@craft-agent/shared/config';
 
 /**
  * GlobalContext holds state that PERSISTS across session switches.

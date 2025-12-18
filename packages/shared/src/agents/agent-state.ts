@@ -11,7 +11,35 @@
  * Design: One instance per session. Each session can have at most one agent.
  */
 
-import { TypedEventEmitter } from '../../packages/session-manager/src/event-emitter.ts';
+import { EventEmitter } from 'events';
+
+/**
+ * Type-safe EventEmitter wrapper
+ * Returns unsubscribe functions from on() for React useEffect cleanup
+ */
+class TypedEventEmitter<TEvents> {
+  private emitter = new EventEmitter();
+
+  emit<K extends keyof TEvents>(event: K, data: TEvents[K]): boolean {
+    return this.emitter.emit(event as string, data);
+  }
+
+  /** Subscribe to an event. Returns an unsubscribe function. */
+  on<K extends keyof TEvents>(event: K, listener: (data: TEvents[K]) => void): () => void {
+    this.emitter.on(event as string, listener);
+    return () => this.emitter.off(event as string, listener);
+  }
+
+  off<K extends keyof TEvents>(event: K, listener: (data: TEvents[K]) => void): this {
+    this.emitter.off(event as string, listener);
+    return this;
+  }
+
+  removeAllListeners<K extends keyof TEvents>(event?: K): this {
+    this.emitter.removeAllListeners(event as string | undefined);
+    return this;
+  }
+}
 import { SubAgentManager } from './manager.ts';
 import type {
   SubAgentDefinition,

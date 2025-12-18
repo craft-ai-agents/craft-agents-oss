@@ -15,12 +15,12 @@ import {
   clearGlobalPermissions,
   enterCraftPlanMode,
   exitCraftPlanMode,
-} from '../../../../../src/agent/craft-agent.ts';
-import { parseSDKErrorText, isSDKErrorText, type AgentError } from '../../../../../src/agent/errors.ts';
-import type { UpdateInstructionsContext, UpdateInstructionsProgressEvent } from '../../../../../src/agents/instruction-updater.ts';
+} from '@craft-agent/shared/agent';
+import { parseSDKErrorText, isSDKErrorText, type AgentError } from '@craft-agent/shared/agent';
+import type { UpdateInstructionsContext, UpdateInstructionsProgressEvent } from '@craft-agent/shared/agents';
 import type { Message } from '../../components/Messages.tsx';
 import type { TodoItem } from '../../components/TodoList.tsx';
-import type { FileAttachment } from '../../../../../src/utils/files.ts';
+import type { FileAttachment } from '@craft-agent/shared/utils';
 import { setTerminalProgressIndeterminate, clearTerminalProgress } from '../../utils/terminalProgress.ts';
 import {
   getWorkspaceAccessTokenAsync,
@@ -39,17 +39,17 @@ import {
   saveWorkspacePlan,
   loadWorkspacePlan,
   clearWorkspacePlan,
-} from '../../../../../src/config/storage.ts';
-import { DEFAULT_MODEL } from '../../../../../src/config/models.ts';
-import { getCredentialManager } from '../../../../../src/credentials/index.ts';
-import { CraftMcpClient } from '../../../../../src/mcp/client.ts';
-import { SubAgentManager } from '../../../../../src/agents/manager.ts';
-import type { SubAgentDefinition, McpServerConfig, ApiConfig, Concern } from '../../../../../src/agents/types.ts';
-import type { ExtractionProgressEvent } from '../../../../../src/agents/extractor.ts';
-import type { Plan } from '../../../../../src/agents/plan-types.ts';
-import { invalidateDefinition, loadRegistry, clearAgentCredentialsAsync } from '../../../../../src/agents/cache.ts';
-import { CraftOAuth, getMcpBaseUrl } from '../../../../../src/auth/oauth.ts';
-import { debug } from '../../../../../src/utils/debug.ts';
+} from '@craft-agent/shared/config';
+import { DEFAULT_MODEL } from '@craft-agent/shared/config';
+import { getCredentialManager } from '@craft-agent/shared/credentials';
+import { CraftMcpClient } from '@craft-agent/shared/mcp';
+import { SubAgentManager } from '@craft-agent/shared/agents';
+import type { SubAgentDefinition, McpServerConfig, ApiConfig, Concern } from '@craft-agent/shared/agents';
+import type { ExtractionProgressEvent } from '@craft-agent/shared/agents';
+import type { Plan } from '@craft-agent/shared/agents';
+import { invalidateDefinition, loadRegistry, clearAgentCredentialsAsync } from '@craft-agent/shared/agents';
+import { CraftOAuth, getMcpBaseUrl } from '@craft-agent/shared/auth';
+import { debug } from '@craft-agent/shared/utils';
 import { containsUltrathink, stripUltrathink } from '../../utils/gradient.ts';
 import { useAgentState } from './useAgentState.ts';
 
@@ -579,8 +579,8 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
     if (!agentState.manager) return;
 
     const unsubProgress = agentState.manager.on('progress', (event) => {
-      // Create or update extraction message for tool_start events
-      if (event.type === 'extraction_progress' || event.type === 'tool_start') {
+      // Create or update extraction message for progress events
+      if (event.type === 'extraction_progress') {
         if (!extractionMsgIdRef.current) {
           // Create initial extraction message
           extractionMsgIdRef.current = `extraction-${Date.now()}`;

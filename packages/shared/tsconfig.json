@@ -24,9 +24,10 @@
     "paths": {
       "@craft-agent/core": ["../core/src/index.ts"],
       "@craft-agent/core/*": ["../core/src/*"],
-      "@craft-agent/session-manager": ["./src/index.ts"]
+      "@craft-agent/shared": ["./src/index.ts"],
+      "@craft-agent/shared/*": ["./src/*"]
     }
   },
-  "include": ["src/**/*", "../core/src/**/*"],
+  "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
 }

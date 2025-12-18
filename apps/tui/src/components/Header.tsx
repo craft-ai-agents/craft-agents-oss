@@ -1,10 +1,10 @@
 import React, { memo, useMemo } from 'react';
 import { Box, Text } from 'ink';
 import { formatTokens } from '../utils/markdown.ts';
-import type { AuthType, TokenDisplayMode } from '../../../../src/config/storage.ts';
+import type { AuthType, TokenDisplayMode } from '@craft-agent/shared/config';
 import { AnimatedSpinner } from './Spinner.tsx';
-import { DEFAULT_MODEL, getModelDisplayName } from '../../../../src/config/models.ts';
-import { CRAFT_LOGO } from '../../../../src/branding.ts';
+import { DEFAULT_MODEL, getModelDisplayName } from '@craft-agent/shared/config';
+import { CRAFT_LOGO } from '@craft-agent/shared/branding';
 
 export interface HeaderProps {
   connected: boolean;

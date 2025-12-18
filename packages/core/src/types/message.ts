@@ -130,6 +130,17 @@ export interface Question {
 }
 
 /**
+ * Permission request from agent (e.g., bash command approval)
+ */
+export interface PermissionRequest {
+  requestId: string;
+  toolName: string;
+  command: string;
+  description: string;
+  type?: 'bash' | 'plan_mode';  // Type of permission request
+}
+
+/**
  * Events emitted by CraftAgent during chat
  */
 export type AgentEvent =

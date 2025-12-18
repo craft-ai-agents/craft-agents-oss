@@ -1,16 +1,16 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { Box, Text, useInput, useApp } from 'ink';
-import { saveConfig, getConfigPath, generateWorkspaceId, loadStoredConfig, getActiveWorkspace, type StoredConfig, type Workspace, type AuthType, type OAuthCredentials, type McpAuthType } from '../../../../src/config/storage.ts';
-import { type AuthState, type SetupNeeds } from '../../../../src/auth/state.ts';
-import { getExistingClaudeToken, isClaudeCliInstalled, runClaudeSetupToken } from '../../../../src/auth/claude-token.ts';
-import { getCredentialManager } from '../../../../src/credentials/index.ts';
-import { validateMcpConnection, getValidationErrorMessage } from '../../../../src/mcp/validation.ts';
-import { CraftOAuth, getMcpBaseUrl } from '../../../../src/auth/oauth.ts';
+import { saveConfig, getConfigPath, generateWorkspaceId, loadStoredConfig, getActiveWorkspace, type StoredConfig, type Workspace, type AuthType, type OAuthCredentials, type McpAuthType } from '@craft-agent/shared/config';
+import { type AuthState, type SetupNeeds } from '@craft-agent/shared/auth';
+import { getExistingClaudeToken, isClaudeCliInstalled, runClaudeSetupToken } from '@craft-agent/shared/auth';
+import { getCredentialManager } from '@craft-agent/shared/credentials';
+import { validateMcpConnection, getValidationErrorMessage } from '@craft-agent/shared/mcp';
+import { CraftOAuth, getMcpBaseUrl } from '@craft-agent/shared/auth';
 import { TextInput } from './TextInput.tsx';
 import { AnimatedSpinner } from './Spinner.tsx';
 import { CraftCallbackStep, type CraftProfile } from './craftAuth/CraftCallbackStep.tsx';
 import { CraftSpaceSelector, McpLinkSelector, type McpLink } from './craftAuth/CraftSpaceSelector.tsx';
-import { CraftApi } from '../../../../src/clients/craftApi.ts';
+import { CraftApi } from '@craft-agent/shared/clients';
 
 // Streamlined flow: Craft Login (includes subscription check) -> Select Space -> [Select MCP] -> MCP Validation -> Billing -> [Credentials] -> Save
 type SetupStep =

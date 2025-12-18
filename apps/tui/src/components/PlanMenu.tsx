@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Box, Text, useInput } from 'ink';
-import type { Plan } from '../../../../src/agents/plan-types.ts';
+import type { Plan } from '@craft-agent/shared/agents';
 
 export type PlanAction =
   | { type: 'start' }

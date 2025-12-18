@@ -2,14 +2,14 @@ import { useCallback } from 'react';
 import type { SettingsAction } from '../../components/Settings.tsx';
 import type { ModalName } from './useModalState.ts';
 import type { Message } from '../../components/Messages.tsx';
-import type { TokenDisplayMode } from '../../../../../src/config/storage.ts';
+import type { TokenDisplayMode } from '@craft-agent/shared/config';
 import {
   updateApiKey,
   setAuthType,
   setTokenDisplay,
   setShowCost,
-} from '../../../../../src/config/storage.ts';
-import { getCredentialManager } from '../../../../../src/credentials/index.ts';
+} from '@craft-agent/shared/config';
+import { getCredentialManager } from '@craft-agent/shared/credentials';
 
 /**
  * Props for useSettingsHandlers hook

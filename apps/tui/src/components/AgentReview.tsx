@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
-import type { Concern } from '../../../../src/agents/types.ts';
+import type { Concern } from '@craft-agent/shared/agents';
 
 export interface AgentReviewProps {
   agentName: string;

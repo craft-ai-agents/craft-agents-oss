@@ -3,15 +3,15 @@
  * Uses SubAgentManager from core to discover and manage agents
  */
 
-import { getWorkspaceByNameOrId, loadStoredConfig, type Workspace } from '../../../../src/config/storage'
-import { DEFAULT_MODEL } from '../../../../src/config/models'
-import { getCredentialManager } from '../../../../src/credentials'
-import { CraftMcpClient } from '../../../../src/mcp/client'
-import { SubAgentManager, type SubAgentManagerConfig } from '../../../../src/agents/manager'
-import type { SubAgentMetadata, SubAgentDefinition } from '../../../../src/agents/types'
-import { clearDefinition, clearAgentCredentialsAsync, saveServerCredentialsAsync, saveApiKeyCredentialAsync } from '../../../../src/agents/cache'
-import { CraftOAuth, getMcpBaseUrl } from '../../../../src/auth/oauth'
-import { validateMcpConnection } from '../../../../src/mcp/validation'
+import { getWorkspaceByNameOrId, loadStoredConfig, type Workspace } from '@craft-agent/shared/config'
+import { DEFAULT_MODEL } from '@craft-agent/shared/config'
+import { getCredentialManager } from '@craft-agent/shared/credentials'
+import { CraftMcpClient } from '@craft-agent/shared/mcp'
+import { SubAgentManager, type SubAgentManagerConfig } from '@craft-agent/shared/agents'
+import type { SubAgentMetadata, SubAgentDefinition } from '@craft-agent/shared/agents'
+import { clearDefinition, clearAgentCredentialsAsync, saveServerCredentialsAsync, saveApiKeyCredentialAsync } from '@craft-agent/shared/agents'
+import { CraftOAuth, getMcpBaseUrl } from '@craft-agent/shared/auth'
+import { validateMcpConnection } from '@craft-agent/shared/mcp'
 import type { AgentAuthRequirements, AgentSetupStatus, AgentAuthStatus, OAuthResult, McpValidationResult } from '../shared/types'
 
 /**

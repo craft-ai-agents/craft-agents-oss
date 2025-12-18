@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { AnimatedSpinner } from './Spinner.tsx';
-import { getExistingClaudeToken, isClaudeCliInstalled, runClaudeSetupToken } from '../../../../src/auth/claude-token.ts';
+import { getExistingClaudeToken, isClaudeCliInstalled, runClaudeSetupToken } from '@craft-agent/shared/auth';
 
 export interface ClaudeMaxAuthProps {
   onSubmit: (token: string) => void;

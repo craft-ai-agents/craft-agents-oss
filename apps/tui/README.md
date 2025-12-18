@@ -79,7 +79,7 @@ Business logic (agent, storage, auth) is imported from the root `src/` directory
 ## Dependencies
 
 - `@craft-agent/core` - Shared types
-- `@craft-agent/session-manager` - Session orchestration
+- `@craft-agent/shared` - Business logic (agent, auth, storage)
 - `ink` - React for CLIs
 - `chalk` - Terminal colors
 - `shiki` - Syntax highlighting

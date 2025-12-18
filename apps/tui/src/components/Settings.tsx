@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
-import type { AuthType, TokenDisplayMode } from '../../../../src/config/storage.ts';
+import type { AuthType, TokenDisplayMode } from '@craft-agent/shared/config';
 
 export type SettingsAction =
   | { type: 'set_verbose'; verbose: boolean }

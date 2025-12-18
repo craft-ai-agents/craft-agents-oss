@@ -4,7 +4,7 @@ import { join } from 'path';
 import { randomUUID } from 'crypto';
 import { getCredentialManager } from '../credentials/index.ts';
 import { isOpusModel } from './models.ts';
-import type { StoredAttachment } from '../../packages/core/src/types/message';
+import type { StoredAttachment } from '@craft-agent/core/types';
 import type { Plan } from '../agents/plan-types.ts';
 
 /**
