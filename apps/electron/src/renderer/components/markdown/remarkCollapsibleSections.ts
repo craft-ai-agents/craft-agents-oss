@@ -61,7 +61,8 @@ function wrapHeadingsAtDepth(tree: Root, depth: number): void {
       const node = parent.children[i]
 
       // Recursively process existing sections (for nested content)
-      if (node.type === 'section') {
+      // Note: 'section' is our custom node type, not in mdast types
+      if ((node as { type: string }).type === 'section') {
         processNode(node as Parent)
         i++
         continue
@@ -83,7 +84,8 @@ function wrapHeadingsAtDepth(tree: Root, depth: number): void {
 
           // Stop at a section that contains a same-or-higher level heading
           // (already processed deeper sections)
-          if (sibling.type === 'section' && (sibling as SectionNode).depth <= depth) {
+          // Note: 'section' is our custom node type, not in mdast types
+          if ((sibling as { type: string }).type === 'section' && (sibling as unknown as SectionNode).depth <= depth) {
             break
           }
 

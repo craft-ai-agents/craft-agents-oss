@@ -72,6 +72,12 @@ export interface Message {
   attachments?: StoredAttachment[];
   isError?: boolean;
   isStreaming?: boolean;
+  // Error-specific fields (for typed errors with diagnostics)
+  errorCode?: string;
+  errorTitle?: string;
+  errorDetails?: string[];
+  errorOriginal?: string;
+  errorCanRetry?: boolean;
 }
 
 /**
@@ -114,6 +120,10 @@ export interface TypedError {
   title: string;
   message: string;
   canRetry: boolean;
+  /** Diagnostic check results for debugging (e.g., "✓ Credits: 150") */
+  details?: string[];
+  /** Original error message for debugging */
+  originalError?: string;
 }
 
 /**

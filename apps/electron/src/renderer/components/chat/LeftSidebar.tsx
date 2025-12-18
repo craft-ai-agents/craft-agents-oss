@@ -31,7 +31,7 @@ interface LeftSidebarProps {
  * sidebar keyboard navigation. This component just renders the items.
  *
  * Styling matches agent items in the sidebar for consistency:
- * - py-[7px] px-2 text-sm rounded-md
+ * - py-[7px] px-2 text-[13px] rounded-md
  * - Icon: h-3.5 w-3.5
  *
  * Link variants:
@@ -51,7 +51,7 @@ export function LeftSidebar({ links, isCollapsed, getItemProps, focusedItemId }:
               {...itemProps}
               onClick={link.onClick}
               className={cn(
-                "flex w-full items-center gap-2 rounded-md py-[7px] px-2 text-sm select-none outline-none",
+                "flex w-full items-center gap-2 rounded-md py-[7px] px-2 text-[13px] select-none outline-none",
                 "focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring",
                 link.variant === "default"
                   ? "bg-primary text-primary-foreground dark:bg-muted dark:text-foreground"

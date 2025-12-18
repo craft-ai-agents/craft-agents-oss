@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { IPC_CHANNELS, type SessionEvent, type ElectronAPI, type FileAttachment, type AgentActivateOptions } from '../shared/types'
+import { IPC_CHANNELS, type SessionEvent, type ElectronAPI, type FileAttachment, type AgentActivateOptions, type AuthType } from '../shared/types'
 
 const api: ElectronAPI = {
   // Session management
@@ -109,6 +109,34 @@ const api: ElectronAPI = {
     ipcRenderer.on(IPC_CHANNELS.MENU_OPEN_HELP, handler)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.MENU_OPEN_HELP, handler)
   },
+
+  // Auth
+  showLogoutConfirmation: () => ipcRenderer.invoke(IPC_CHANNELS.SHOW_LOGOUT_CONFIRMATION),
+  logout: () => ipcRenderer.invoke(IPC_CHANNELS.LOGOUT),
+
+  // Onboarding
+  getAuthState: () => ipcRenderer.invoke(IPC_CHANNELS.ONBOARDING_GET_AUTH_STATE).then(r => r.authState),
+  getSetupNeeds: () => ipcRenderer.invoke(IPC_CHANNELS.ONBOARDING_GET_AUTH_STATE).then(r => r.setupNeeds),
+  startCraftOAuth: () => ipcRenderer.invoke(IPC_CHANNELS.ONBOARDING_START_CRAFT_OAUTH),
+  getCraftProfile: () => ipcRenderer.invoke(IPC_CHANNELS.ONBOARDING_GET_CRAFT_PROFILE),
+  getMcpLinks: (spaceId: string, authToken: string) => ipcRenderer.invoke(IPC_CHANNELS.ONBOARDING_GET_MCP_LINKS, spaceId, authToken),
+  createMcpLink: (spaceId: string, authToken: string) => ipcRenderer.invoke(IPC_CHANNELS.ONBOARDING_CREATE_MCP_LINK, spaceId, authToken),
+  startWorkspaceMcpOAuth: (mcpUrl: string) => ipcRenderer.invoke(IPC_CHANNELS.ONBOARDING_START_MCP_OAUTH, mcpUrl),
+  saveOnboardingConfig: (config: {
+    authType: AuthType
+    workspace: { name: string; mcpUrl: string }
+    credential?: string
+    mcpCredentials?: { accessToken: string; clientId?: string }
+  }) => ipcRenderer.invoke(IPC_CHANNELS.ONBOARDING_SAVE_CONFIG, config),
+  // Claude OAuth
+  getExistingClaudeToken: () => ipcRenderer.invoke(IPC_CHANNELS.ONBOARDING_GET_EXISTING_CLAUDE_TOKEN),
+  isClaudeCliInstalled: () => ipcRenderer.invoke(IPC_CHANNELS.ONBOARDING_IS_CLAUDE_CLI_INSTALLED),
+  runClaudeSetupToken: () => ipcRenderer.invoke(IPC_CHANNELS.ONBOARDING_RUN_CLAUDE_SETUP_TOKEN),
+
+  // Settings - Billing
+  getBillingMethod: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET_BILLING_METHOD),
+  updateBillingMethod: (authType: AuthType, credential?: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_UPDATE_BILLING_METHOD, authType, credential),
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)

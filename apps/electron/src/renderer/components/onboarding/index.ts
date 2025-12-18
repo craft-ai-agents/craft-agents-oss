@@ -1,3 +1,14 @@
+// Shared primitives for building step components
+export {
+  StepIcon,
+  StepHeader,
+  StepFormLayout,
+  StepActions,
+  BackButton,
+  ContinueButton,
+  type StepIconVariant,
+} from './primitives'
+
 // Step indicator
 export { StepIndicator, type OnboardingStep } from './StepIndicator'
 
@@ -11,3 +22,29 @@ export { CompletionStep } from './CompletionStep'
 
 // Main wizard container
 export { OnboardingWizard, type OnboardingState } from './OnboardingWizard'
+
+// Re-export all types for convenient import
+export type {
+  OnboardingStep as OnboardingStepType,
+} from './StepIndicator'
+
+export type {
+  LoginStatus as LoginStatusType,
+} from './CraftLoginStep'
+
+export type {
+  CraftSpace as CraftSpaceType,
+  SpaceCategory as SpaceCategoryType,
+} from './SpaceSelectionStep'
+
+export type {
+  BillingMethod as BillingMethodType,
+} from './BillingMethodStep'
+
+export type {
+  CredentialStatus as CredentialStatusType,
+} from './CredentialsStep'
+
+export type {
+  OnboardingState as OnboardingStateType,
+} from './OnboardingWizard'

@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react"
-import { Bot, Server, Key, Loader2, AlertCircle, CheckCircle2, ExternalLink } from "lucide-react"
+import { Bot, Server, Key, AlertCircle, CheckCircle2, ExternalLink } from "lucide-react"
+import { Spinner } from "@/components/ui/loading-indicator"
 import {
   Dialog,
   DialogContent,
@@ -300,7 +301,7 @@ export function AgentAuthDialog({
           {/* Loading */}
           {step === 'loading' && (
             <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              <Spinner className="text-lg text-muted-foreground" />
             </div>
           )}
 
@@ -331,7 +332,7 @@ export function AgentAuthDialog({
                 </div>
               </div>
               <div className="flex items-center gap-2 text-sm">
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Spinner className="text-sm" />
                 <span>Waiting for authentication...</span>
                 <ExternalLink className="h-3.5 w-3.5 ml-auto text-muted-foreground" />
               </div>

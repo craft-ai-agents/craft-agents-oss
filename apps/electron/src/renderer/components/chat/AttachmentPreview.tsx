@@ -1,5 +1,6 @@
 import * as React from "react"
-import { X, File, Image as ImageIcon, Loader2 } from "lucide-react"
+import { X, File, Image as ImageIcon } from "lucide-react"
+import { Spinner } from "@/components/ui/loading-indicator"
 import { cn } from "@/lib/utils"
 import type { FileAttachment } from "../../../shared/types"
 
@@ -43,8 +44,8 @@ export function AttachmentPreview({ attachments, onRemove, disabled, loadingCoun
 
 function LoadingBubble() {
   return (
-    <div className="h-14 w-14 rounded-lg border bg-muted/50 flex items-center justify-center shrink-0">
-      <Loader2 className="h-5 w-5 text-muted-foreground animate-spin" />
+    <div className="h-16 w-16 rounded-lg border bg-muted/50 flex items-center justify-center shrink-0">
+      <Spinner className="text-muted-foreground" />
     </div>
   )
 }
@@ -88,7 +89,7 @@ function AttachmentBubble({ attachment, onRemove, disabled }: AttachmentBubblePr
 
       {isImage ? (
         /* IMAGE: Square thumbnail only */
-        <div className="h-14 w-14 rounded-lg overflow-hidden border bg-muted">
+        <div className="h-16 w-16 rounded-lg overflow-hidden border bg-muted">
           {imageSrc ? (
             <img src={imageSrc} alt={attachment.name} className="h-full w-full object-cover" />
           ) : (
@@ -99,9 +100,9 @@ function AttachmentBubble({ attachment, onRemove, disabled }: AttachmentBubblePr
         </div>
       ) : (
         /* DOCUMENT: Bubble with thumbnail/icon + 2-line text */
-        <div className="flex items-center gap-2.5 rounded-xl border bg-muted/50 pl-1.5 pr-3 py-1.5">
+        <div className="h-16 flex items-center gap-2.5 rounded-xl border bg-muted/50 pl-1.5 pr-3">
           {/* Square preview */}
-          <div className="h-11 w-11 rounded-lg overflow-hidden bg-muted flex items-center justify-center shrink-0">
+          <div className="h-12 w-12 rounded-lg overflow-hidden bg-muted flex items-center justify-center shrink-0">
             {hasThumbnail ? (
               <img
                 src={`data:image/png;base64,${attachment.thumbnailBase64}`}

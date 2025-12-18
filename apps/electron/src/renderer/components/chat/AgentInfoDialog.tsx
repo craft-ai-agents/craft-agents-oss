@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
-import { Bot, Server, Wrench, AlertCircle, Loader2, CheckCircle2 } from "lucide-react"
+import { Bot, Server, Wrench, AlertCircle, CheckCircle2 } from "lucide-react"
+import { Spinner } from "@/components/ui/loading-indicator"
 import {
   Dialog,
   DialogContent,
@@ -79,7 +80,7 @@ export function AgentInfoDialog({
         <ScrollArea className="max-h-[60vh] pr-4">
           {loading && (
             <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              <Spinner className="text-lg text-muted-foreground" />
             </div>
           )}
 

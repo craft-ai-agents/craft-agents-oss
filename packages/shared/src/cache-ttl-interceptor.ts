@@ -222,7 +222,7 @@ function headersToCurl(headers: HeadersInitType | undefined): string {
 
   const headerObj: Record<string, string> =
     headers instanceof Headers
-      ? Object.fromEntries(headers.entries())
+      ? Object.fromEntries(Array.from(headers as unknown as Iterable<[string, string]>))
       : Array.isArray(headers)
         ? Object.fromEntries(headers)
         : (headers as Record<string, string>);

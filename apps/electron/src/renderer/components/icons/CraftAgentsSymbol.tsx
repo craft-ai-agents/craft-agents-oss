@@ -1,12 +1,12 @@
-interface CraftSymbolProps {
+interface CraftAgentsSymbolProps {
   className?: string
 }
 
 /**
- * Craft "E" symbol - the small pixel art icon
+ * Craft Agents "E" symbol - the small pixel art icon
  * Uses original brand color: #9570BE
  */
-export function CraftSymbol({ className }: CraftSymbolProps) {
+export function CraftAgentsSymbol({ className }: CraftAgentsSymbolProps) {
   return (
     <svg
       viewBox="452 368 115 129"

@@ -1,51 +1,33 @@
 import * as React from "react"
-import { useState, useEffect } from "react"
+import { useEffect } from "react"
 import {
   MessageSquare,
   Sparkles,
   ChevronDown,
+  ChevronRight,
   Paperclip,
   ArrowUp,
   Bot,
-  MoreHorizontal,
-  Pencil,
-  Archive,
-  Trash2,
+  AlertTriangle,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu"
 import {
   DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Separator } from "@/components/ui/separator"
+  StyledDropdownMenuContent,
+  StyledDropdownMenuItem,
+} from "@/components/ui/styled-dropdown"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 import { Markdown, CollapsibleMarkdownProvider, type RenderMode } from "@/components/markdown"
+import { AnimatedCollapsibleContent } from "@/components/ui/collapsible"
 import { AttachmentPreview, FileTypeIcon, getFileTypeLabel } from "./AttachmentPreview"
+import { LoadingIndicator } from "@/components/ui/loading-indicator"
 import { useFocusZone } from "@/hooks/keyboard"
 import type { Session, Message, FileAttachment, StoredAttachment, PermissionRequest } from "../../../shared/types"
 import { PermissionBanner } from "./PermissionBanner"
 import { MODELS, getModelDisplayName } from "@config/models"
-import { getSessionTitle } from "@/utils/session"
 
 interface ChatDisplayProps {
   session: Session | null
@@ -55,10 +37,6 @@ interface ChatDisplayProps {
   // Model selection
   currentModel: string
   onModelChange: (model: string) => void
-  // Session actions
-  onRename?: (name: string) => void
-  onArchive?: () => void
-  onDelete?: () => void
   /** Ref for the textarea, used for external focus control */
   textareaRef?: React.RefObject<HTMLTextAreaElement>
   /** When true, disables input (e.g., when agent needs setup) */
@@ -86,9 +64,6 @@ export function ChatDisplay({
   onOpenUrl,
   currentModel,
   onModelChange,
-  onRename,
-  onArchive,
-  onDelete,
   textareaRef: externalTextareaRef,
   disabled = false,
   pendingPermission,
@@ -105,10 +80,6 @@ export function ChatDisplay({
   const internalTextareaRef = React.useRef<HTMLTextAreaElement>(null)
   const textareaRef = externalTextareaRef || internalTextareaRef
   const dragCounterRef = React.useRef(0)
-
-  // Rename dialog state
-  const [renameDialogOpen, setRenameDialogOpen] = useState(false)
-  const [renameName, setRenameName] = useState("")
 
   // Register as focus zone - when zone gains focus, focus the textarea
   const { zoneRef, isFocused } = useFocusZone({
@@ -270,19 +241,6 @@ export function ChatDisplay({
     setAttachments([])
   }, [session?.id])
 
-  const handleRenameClick = () => {
-    setRenameName(session?.name || session?.agentName || session?.workspaceName || '')
-    setRenameDialogOpen(true)
-  }
-
-  const handleRenameSubmit = () => {
-    if (onRename && renameName.trim()) {
-      onRename(renameName.trim())
-    }
-    setRenameDialogOpen(false)
-    setRenameName("")
-  }
-
   // Auto-scroll to bottom
   // - Instant scroll on session switch
   // - Smooth scroll on new messages in same session
@@ -324,68 +282,8 @@ export function ChatDisplay({
     <div ref={zoneRef} className="flex h-full flex-col min-w-0" data-focus-zone="chat">
       {session ? (
         <div className="flex flex-1 flex-col min-h-0 min-w-0">
-          {/* === SESSION HEADER: Title + Agent Badge + Actions Menu === */}
-          <div className="flex h-[50px] shrink-0 items-center px-4 relative z-50 gap-3">
-            {session.agentName ? (
-              <Bot className="h-4 w-4 text-muted-foreground" />
-            ) : null}
-            <div className="font-semibold font-sans text-sm truncate">
-              {getSessionTitle(session)}
-            </div>
-            {session.agentName && (
-              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Agent</Badge>
-            )}
-
-            {/* Spacer to push menu to the right */}
-            <div className="flex-1" />
-
-            {/* Session Actions Menu */}
-            <ContextMenu>
-              <ContextMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 titlebar-no-drag"
-                  onClick={(e) => {
-                    e.preventDefault()
-                    const rect = e.currentTarget.getBoundingClientRect()
-                    const event = new MouseEvent('contextmenu', {
-                      bubbles: true,
-                      cancelable: true,
-                      clientX: rect.right,
-                      clientY: rect.bottom,
-                    })
-                    e.currentTarget.dispatchEvent(event)
-                  }}
-                >
-                  <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
-                </Button>
-              </ContextMenuTrigger>
-              <ContextMenuContent className="w-40">
-                <ContextMenuItem onClick={handleRenameClick} shortcut="R">
-                  <Pencil />
-                  Rename
-                </ContextMenuItem>
-                <ContextMenuSeparator />
-                {onArchive && (
-                  <ContextMenuItem onClick={onArchive} shortcut="A">
-                    <Archive />
-                    Archive
-                  </ContextMenuItem>
-                )}
-                {onDelete && (
-                  <ContextMenuItem onClick={onDelete} variant="destructive" shortcut="D">
-                    <Trash2 />
-                    Delete
-                  </ContextMenuItem>
-                )}
-              </ContextMenuContent>
-            </ContextMenu>
-          </div>
-          <Separator />
-
           {/* === MESSAGES AREA: Scrollable list of message bubbles === */}
-          <ScrollArea className="flex-1 min-w-0">
+          <ScrollArea className="flex-1 min-w-0 font-mono">
             <div className="px-5 py-4 space-y-4 min-w-0">
               {session.messages.length === 0 ? (
                 /* Empty State: Welcome message for new sessions */
@@ -432,7 +330,7 @@ export function ChatDisplay({
           )}
 
           {/* === INPUT CONTAINER: Textarea + Bottom row with controls === */}
-          <div className="px-4 pb-4">
+          <div className="px-4 pb-4 font-mono">
             <form onSubmit={handleSubmit}>
               <div
                 className={cn(
@@ -486,24 +384,24 @@ export function ChatDisplay({
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-7 gap-1 text-xs shrink-0 data-[state=open]:bg-accent"
+                        className="h-7 gap-1 text-xs shrink-0 hover:bg-foreground/5 data-[state=open]:bg-foreground/5"
                       >
                         <Sparkles className="h-3.5 w-3.5" />
                         {getModelDisplayName(currentModel)}
                         <ChevronDown className="h-3 w-3 opacity-50" />
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent side="top" align="start" sideOffset={8}>
+                    <StyledDropdownMenuContent side="top" align="start" sideOffset={8}>
                       {MODELS.map((model) => (
-                        <DropdownMenuItem
+                        <StyledDropdownMenuItem
                           key={model.id}
                           onClick={() => onModelChange(model.id)}
-                          className={cn(currentModel === model.id && "bg-accent")}
+                          className={cn(currentModel === model.id && "bg-foreground/10")}
                         >
                           {model.name}
-                        </DropdownMenuItem>
+                        </StyledDropdownMenuItem>
                       ))}
-                    </DropdownMenuContent>
+                    </StyledDropdownMenuContent>
                   </DropdownMenu>
 
                   {/* Spacer */}
@@ -524,36 +422,6 @@ export function ChatDisplay({
           </div>
         </div>
       ) : null}
-
-      {/* Rename Dialog */}
-      <Dialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>
-        <DialogContent className="sm:max-w-[400px]">
-          <DialogHeader>
-            <DialogTitle>Rename conversation</DialogTitle>
-          </DialogHeader>
-          <div className="py-4">
-            <Input
-              value={renameName}
-              onChange={(e) => setRenameName(e.target.value)}
-              placeholder="Enter a name..."
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  handleRenameSubmit()
-                }
-              }}
-              autoFocus
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setRenameDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleRenameSubmit}>
-              Save
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }
@@ -577,6 +445,51 @@ interface MessageBubbleProps {
    * @default 'minimal'
    */
   renderMode?: RenderMode
+}
+
+/**
+ * ErrorMessage - Separate component for error messages to allow useState hook
+ */
+function ErrorMessage({ message }: { message: Message }) {
+  const hasDetails = (message.errorDetails && message.errorDetails.length > 0) || message.errorOriginal
+  const [detailsOpen, setDetailsOpen] = React.useState(false)
+
+  return (
+    <div className="flex justify-start">
+      <div className="max-w-[80%] bg-destructive/10 border border-destructive/20 rounded-lg pl-5 pr-4 py-2 break-words">
+        {/* Error Header: Warning icon + title */}
+        <div className="flex items-center gap-2 text-xs text-destructive mb-1 font-semibold">
+          <AlertTriangle className="w-4 h-4" />
+          <span>{message.errorTitle || 'Error'}</span>
+        </div>
+        <p className="text-sm text-destructive">{message.content}</p>
+
+        {/* Collapsible Details Toggle */}
+        {hasDetails && (
+          <div className="mt-2">
+            <button
+              onClick={() => setDetailsOpen(!detailsOpen)}
+              className="flex items-center gap-1 text-xs text-destructive/70 hover:text-destructive transition-colors"
+            >
+              {detailsOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+              <span>{detailsOpen ? 'Hide' : 'Show'} technical details</span>
+            </button>
+
+            <AnimatedCollapsibleContent isOpen={detailsOpen} className="overflow-hidden">
+              <div className="mt-2 pt-2 border-t border-destructive/20 text-xs text-destructive/60 font-mono space-y-0.5">
+                {message.errorDetails?.map((detail, i) => (
+                  <div key={i}>{detail}</div>
+                ))}
+                {message.errorOriginal && !message.errorDetails?.some(d => d.includes('Raw error:')) && (
+                  <div className="mt-1">Raw: {message.errorOriginal.slice(0, 200)}{message.errorOriginal.length > 200 ? '...' : ''}</div>
+                )}
+              </div>
+            </AnimatedCollapsibleContent>
+          </div>
+        )}
+      </div>
+    </div>
+  )
 }
 
 function MessageBubble({ message, onOpenFile, onOpenUrl, renderMode = 'minimal' }: MessageBubbleProps) {
@@ -713,15 +626,12 @@ function MessageBubble({ message, onOpenFile, onOpenUrl, renderMode = 'minimal' 
                   </pre>
                 )
               }
-              /* Running Indicator: Pulsing dot + "Running..." text */
+              /* Running Indicator: Braille spinner + "Running..." text */
               return (
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <span className="flex h-2 w-2 relative">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
-                  </span>
-                  <span className="text-xs">Running...</span>
-                </div>
+                <LoadingIndicator
+                  label="Running..."
+                  className="text-sm text-muted-foreground"
+                />
               )
             })()}
           </div>
@@ -730,33 +640,19 @@ function MessageBubble({ message, onOpenFile, onOpenUrl, renderMode = 'minimal' 
     )
   }
 
-  // === ERROR MESSAGE: Red bordered bubble with warning icon ===
+  // === ERROR MESSAGE: Red bordered bubble with warning icon and collapsible details ===
   if (message.role === 'error') {
-    return (
-      <div className="flex justify-start">
-        <div className="max-w-[80%] bg-destructive/10 border border-destructive/20 rounded-lg pl-5 pr-4 py-2 break-words">
-          {/* Error Header: Warning icon + "Error" label */}
-          <div className="flex items-center gap-2 text-xs text-destructive mb-1 font-semibold">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-            <span>Error</span>
-          </div>
-          <p className="text-sm text-destructive">{message.content}</p>
-        </div>
-      </div>
-    )
+    return <ErrorMessage message={message} />
   }
 
-  // === STATUS MESSAGE: Centered pill badge with pulsing dot ===
+  // === STATUS MESSAGE: Left-aligned with braille spinner (TUI-style) ===
   if (message.role === 'status') {
     return (
-      <div className="flex justify-center my-2">
-        <div className="px-3 py-1 rounded-full bg-muted border text-xs font-medium text-muted-foreground flex items-center gap-2">
-          {/* Pulsing Status Indicator */}
-          <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></div>
-          {message.content}
-        </div>
+      <div className="flex justify-start pl-1">
+        <LoadingIndicator
+          label={message.content}
+          className="text-sm"
+        />
       </div>
     )
   }

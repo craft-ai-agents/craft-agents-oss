@@ -9,9 +9,11 @@ import {
   FolderOpen,
   MoreHorizontal,
   RotateCw,
-  Loader2,
-  AlertCircle,
+  CircleAlert,
+  CloudOff,
+  PowerOff,
 } from "lucide-react"
+import { Spinner } from "@/components/ui/loading-indicator"
 import { AppMenu } from "../AppMenu"
 import { PanelLeftRounded } from "../icons/PanelLeftRounded"
 import { SquarePenRounded } from "../icons/SquarePenRounded"
@@ -26,11 +28,11 @@ import { GradientResizeHandle } from "@/components/ui/gradient-resize-handle"
 import { Separator } from "@/components/ui/separator"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu"
+  DropdownMenu,
+  DropdownMenuTrigger,
+  StyledDropdownMenuContent,
+  StyledDropdownMenuItem,
+} from "@/components/ui/styled-dropdown"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   Collapsible,
@@ -39,7 +41,6 @@ import {
   springTransition as collapsibleSpring,
 } from "@/components/ui/collapsible"
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher"
-import { ChatDisplay } from "./ChatDisplay"
 import { SessionList } from "./SessionList"
 import { LeftSidebar } from "./LeftSidebar"
 import { AgentContextMenu, type AgentAction } from "./AgentContextMenu"
@@ -47,9 +48,12 @@ import { AgentInfoDialog } from "./AgentInfoDialog"
 import { AgentAuthDialog } from "./AgentAuthDialog"
 import { SetupAuthBanner, type BannerState } from "./SetupAuthBanner"
 import { useSession } from "@/hooks/useSession"
+import { TabContainer, useTabs } from "@/tabs"
+import { ChatProvider, type ChatContextType } from "@/context/ChatContext"
 import { getResizeGradientStyle } from "@/hooks/useResizeGradient"
 import { useFocusZone, useGlobalShortcuts } from "@/hooks/keyboard"
 import { useFocusContext } from "@/context/FocusContext"
+import { getSessionTitle } from "@/utils/session"
 import type { Session, Workspace, SubAgentMetadata, FileAttachment, PermissionRequest } from "../../../shared/types"
 
 type ViewMode = 'inbox' | 'archive' | 'agent'
@@ -58,6 +62,7 @@ interface ChatProps {
   workspaces: Workspace[]
   sessions: Session[]
   agents: SubAgentMetadata[]
+  isLoadingAgents?: boolean
   activeWorkspaceId: string | null
   defaultLayout?: number[]
   defaultCollapsed?: boolean
@@ -79,6 +84,8 @@ interface ChatProps {
   onOpenSettings: () => void
   onOpenKeyboardShortcuts: () => void
   onRefreshAgents: () => void
+  onLogout: () => void
+  onAddWorkspace: () => void
   // Permission handling (queue to support multiple concurrent requests)
   pendingPermissions?: Map<string, PermissionRequest[]>
   onRespondToPermission?: (sessionId: string, requestId: string, allowed: boolean, alwaysAllow: boolean) => void
@@ -94,6 +101,18 @@ interface AgentFolder {
   agents: SubAgentMetadata[]      // Agents directly in this folder
   subfolders: AgentFolder[]       // Nested folders
 }
+
+/**
+ * SidebarAgentStatus - Status displayed in sidebar for each agent
+ * Based on AgentSetupStatus but with additional UI-specific states
+ */
+type SidebarAgentStatus =
+  | 'idle'         // Default state, no special indicator
+  | 'loading'      // Currently loading/extracting
+  | 'needs_setup'  // Agent has never been extracted
+  | 'needs_auth'   // Credentials missing
+  | 'ready'        // Fully set up and ready to use
+  | 'error'        // Error state
 
 /**
  * Groups flat agent list into hierarchical folder structure
@@ -147,8 +166,7 @@ interface AgentTreeProps {
     ref: (el: HTMLElement | null) => void
   }
   /** Agent status indicators */
-  loadingAgents?: Set<string>
-  agentStatus?: Map<string, { needsAuth?: boolean; error?: boolean }>
+  agentStatus?: Map<string, SidebarAgentStatus>
 }
 
 /**
@@ -231,9 +249,11 @@ function AgentTree({
   focusedItemId,
   onFocusItem,
   getItemProps,
-  loadingAgents,
   agentStatus,
 }: AgentTreeProps) {
+  // Track which agent has an open context menu
+  const [openMenuAgentId, setOpenMenuAgentId] = React.useState<string | null>(null)
+
   // For non-root levels, use parent's expanded state if provided
   const folderPath = folder.path.join('/')
   const isOpen = expandedFolders ? expandedFolders.has(folderPath) : true
@@ -261,18 +281,19 @@ function AgentTree({
   const renderAgentItem = (agent: SubAgentMetadata) => {
     const itemProps = getItemProps?.(`agent:${agent.id}`)
     const isFocusedItem = focusedItemId === `agent:${agent.id}`
+    const isMenuOpen = openMenuAgentId === agent.id
 
     const agentButton = (
       <button
         {...itemProps}
         onClick={() => onSelectAgent(agent.id, agent.name)}
         className={cn(
-          "flex w-full items-center gap-2 overflow-hidden rounded-md py-[6px] px-2 text-sm select-none outline-none",
+          "flex w-full items-center gap-2 overflow-hidden rounded-md py-[6px] px-2 text-[13px] select-none outline-none",
           "focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
           isSelected(agent.id)
             ? "bg-primary text-primary-foreground dark:bg-muted dark:text-foreground"
             : "hover:bg-foreground/5",
-          isFocusedItem && !isSelected(agent.id) && "bg-foreground/5"
+          (isFocusedItem || isMenuOpen) && !isSelected(agent.id) && "bg-foreground/5"
         )}
         role="treeitem"
         aria-selected={isSelected(agent.id)}
@@ -280,26 +301,43 @@ function AgentTree({
         <FadingText>
           {agent.displayName || agent.name.split('/').pop()}
         </FadingText>
-        {/* Status indicator: spinner (loading), exclamation (auth/error), or count (hover only) */}
-        {loadingAgents?.has(agent.id) ? (
-          <Loader2 className="ml-auto h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
-        ) : agentStatus?.get(agent.id)?.needsAuth || agentStatus?.get(agent.id)?.error ? (
-          <AlertCircle className="ml-auto h-3.5 w-3.5 shrink-0 text-amber-500" />
-        ) : (
-          <span className={cn(
-            "ml-auto shrink-0 text-xs opacity-0 group-hover/agents:opacity-100 transition-opacity",
-            isSelected(agent.id) ? "text-primary-foreground/50 dark:text-foreground/50" : "text-muted-foreground/50"
-          )}>
-            {getConversationCount(agent.id)}
-          </span>
-        )}
+        {/* Status indicator based on SidebarAgentStatus - all shown on hover only */}
+        {(() => {
+          const status = agentStatus?.get(agent.id)
+          const hoverClasses = "ml-auto shrink-0 opacity-0 group-hover/agents:opacity-100 transition-opacity"
+          switch (status) {
+            case 'loading':
+              return <Spinner className={cn("text-sm text-foreground/40", hoverClasses)} />
+            case 'needs_setup':
+              return <PowerOff className={cn("h-3.5 w-3.5 text-foreground/40", hoverClasses)} />
+            case 'needs_auth':
+              return <CloudOff className={cn("h-3.5 w-3.5 text-foreground/40", hoverClasses)} />
+            case 'error':
+              return <CircleAlert className={cn("h-3.5 w-3.5 text-foreground/40", hoverClasses)} />
+            default:
+              // idle, ready, or undefined - show conversation count on hover
+              return (
+                <span className={cn(
+                  "text-xs",
+                  hoverClasses,
+                  isSelected(agent.id) ? "text-primary-foreground/50 dark:text-foreground/50" : "text-muted-foreground/50"
+                )}>
+                  {getConversationCount(agent.id)}
+                </span>
+              )
+          }
+        })()}
       </button>
     )
 
     return (
       <li key={agent.id} className="min-w-0">
         {onAgentAction ? (
-          <AgentContextMenu agent={agent} onAction={onAgentAction}>
+          <AgentContextMenu
+            agent={agent}
+            onAction={onAgentAction}
+            onOpenChange={(open) => setOpenMenuAgentId(open ? agent.id : null)}
+          >
             {agentButton}
           </AgentContextMenu>
         ) : (
@@ -326,7 +364,6 @@ function AgentTree({
       focusedItemId={focusedItemId}
       onFocusItem={onFocusItem}
       getItemProps={getItemProps}
-      loadingAgents={loadingAgents}
       agentStatus={agentStatus}
     />
   )
@@ -353,7 +390,7 @@ function AgentTree({
         <CollapsibleTrigger
           {...folderItemProps}
           className={cn(
-            "group flex w-full items-center gap-2 overflow-hidden rounded-md py-1.5 px-2 text-sm select-none outline-none",
+            "group flex w-full items-center gap-2 overflow-hidden rounded-md py-1.5 px-2 text-[13px] select-none outline-none",
             "hover:bg-foreground/[0.03]",
             "focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
             isFocusedFolder && "bg-foreground/[0.03]"
@@ -405,6 +442,7 @@ export function Chat({
   workspaces,
   sessions,
   agents,
+  isLoadingAgents = false,
   activeWorkspaceId,
   defaultLayout = [20, 32, 48],
   defaultCollapsed = false,
@@ -423,6 +461,8 @@ export function Chat({
   onOpenSettings,
   onOpenKeyboardShortcuts,
   onRefreshAgents,
+  onLogout,
+  onAddWorkspace,
   pendingPermissions,
   onRespondToPermission,
 }: ChatProps) {
@@ -446,9 +486,8 @@ export function Chat({
   const [authDialogOpen, setAuthDialogOpen] = React.useState(false)
   const [authDialogAgent, setAuthDialogAgent] = React.useState<SubAgentMetadata | null>(null)
 
-  // Agent status indicators
-  const [loadingAgents, setLoadingAgents] = React.useState<Set<string>>(new Set())
-  const [agentStatus, setAgentStatus] = React.useState<Map<string, { needsAuth?: boolean; error?: boolean }>>(new Map())
+  // Agent status indicators - tracks setup/auth status for sidebar icons
+  const [agentStatus, setAgentStatus] = React.useState<Map<string, SidebarAgentStatus>>(new Map())
 
   // Banner state for selected agent (setup needed vs auth needed)
   const [bannerState, setBannerState] = React.useState<{
@@ -457,11 +496,36 @@ export function Chat({
   }>({ state: 'hidden' })
 
   // Unified sidebar keyboard navigation state
-  const [expandedFolders, setExpandedFolders] = React.useState<Set<string>>(() => new Set())
+  // Load expanded folders from localStorage (default: all collapsed)
+  const [expandedFolders, setExpandedFolders] = React.useState<Set<string>>(() => {
+    const saved = localStorage.getItem('sidebar-expanded-folders')
+    if (saved) {
+      try {
+        return new Set(JSON.parse(saved))
+      } catch {
+        return new Set()
+      }
+    }
+    return new Set()
+  })
   const [focusedSidebarItemId, setFocusedSidebarItemId] = React.useState<string | null>(null)
   const sidebarItemRefs = React.useRef<Map<string, HTMLElement>>(new Map())
 
   const activeWorkspace = workspaces.find(w => w.id === activeWorkspaceId)
+
+  // Tab system
+  const {
+    openChatTab,
+    openSettingsTab,
+    openShortcutsTab,
+    openAgentInfoTab,
+    updateChatTabLabel,
+    validateTabs,
+    previousTab,
+    nextTab,
+    closeTab,
+    activeTab,
+  } = useTabs()
 
   // Focus zone management
   const { focusZone, focusNextZone, focusPreviousZone } = useFocusContext()
@@ -485,6 +549,10 @@ export function Chat({
       // Tab navigation between zones
       { key: 'Tab', action: focusNextZone, when: () => !document.querySelector('[role="dialog"]') },
       { key: 'Tab', shift: true, action: focusPreviousZone, when: () => !document.querySelector('[role="dialog"]') },
+      // Panel tab navigation
+      { key: '[', cmd: true, action: previousTab },
+      { key: ']', cmd: true, action: nextTab },
+      { key: 'w', cmd: true, action: () => { if (activeTab?.closable) closeTab(activeTab.id) } },
       // Sidebar toggle
       { key: 'b', cmd: true, action: () => setIsSidebarVisible(v => !v) },
       // New chat (context-aware: uses selected agent if in agent view)
@@ -573,21 +641,122 @@ export function Chat({
 
   const selectedSession = sessions.find(s => s.id === session.selected) || null
 
+  // Ref for openChatTab to avoid circular dependency in sync effect
+  // Without this, clicking a tab would trigger the effect because openChatTab
+  // depends on state.activeTabId, causing it to fight with the user's click
+  const openChatTabRef = React.useRef(openChatTab)
+  openChatTabRef.current = openChatTab
+
+  // Sync session selection with tab system
+  // When a session is selected, open (or focus) its chat tab
+  // Uses ref for openChatTab to prevent re-running when tabs switch
+  React.useEffect(() => {
+    if (session.selected && activeWorkspaceId) {
+      const selectedSess = sessions.find(s => s.id === session.selected)
+      if (selectedSess) {
+        openChatTabRef.current(
+          selectedSess.id,
+          selectedSess.workspaceId,
+          selectedSess.name || 'New Chat',
+          selectedSess.agentId
+        )
+      }
+    }
+  }, [session.selected, sessions, activeWorkspaceId])
+
+  // Track if sessions have been loaded at least once
+  const sessionsLoadedRef = React.useRef(false)
+
+  // Validate tabs when sessions change (remove stale chat tabs)
+  // Skip validation until sessions are loaded to prevent removing tabs on initial empty state
+  React.useEffect(() => {
+    // Mark as loaded once we have sessions
+    if (sessions.length > 0) {
+      sessionsLoadedRef.current = true
+    }
+    // Only validate after sessions have been loaded at least once
+    if (!sessionsLoadedRef.current) {
+      return
+    }
+    const validSessionIds = new Set(sessions.map(s => s.id))
+    validateTabs(validSessionIds)
+  }, [sessions, validateTabs])
+
+  // Create ChatContext value for tab panels
+  const chatContextValue = React.useMemo<ChatContextType>(() => ({
+    sessions,
+    workspaces,
+    agents,
+    activeWorkspaceId,
+    currentModel,
+    pendingPermissions: pendingPermissions || new Map(),
+    onSendMessage,
+    onRenameSession,
+    onArchiveSession,
+    onDeleteSession,
+    onRespondToPermission,
+    onOpenFile,
+    onOpenUrl,
+    onModelChange,
+    textareaRef: chatInputRef,
+  }), [
+    sessions,
+    workspaces,
+    agents,
+    activeWorkspaceId,
+    currentModel,
+    pendingPermissions,
+    onSendMessage,
+    onRenameSession,
+    onArchiveSession,
+    onDeleteSession,
+    onRespondToPermission,
+    onOpenFile,
+    onOpenUrl,
+    onModelChange,
+  ])
+
   // Group agents for tree view
   const agentTree = React.useMemo(() => groupAgentsByFolder(agents), [agents])
 
-  // Initialize expanded folders when agents change (expand all by default)
+  // Persist expanded folders to localStorage
   React.useEffect(() => {
-    const allFolderPaths = new Set<string>()
-    const collectPaths = (folder: AgentFolder) => {
-      if (folder.path.length > 0) {
-        allFolderPaths.add(folder.path.join('/'))
-      }
-      folder.subfolders.forEach(collectPaths)
+    localStorage.setItem('sidebar-expanded-folders', JSON.stringify([...expandedFolders]))
+  }, [expandedFolders])
+
+  // Fetch setup/auth status for all agents when agents list changes
+  React.useEffect(() => {
+    if (!activeWorkspaceId || agents.length === 0) {
+      setAgentStatus(new Map())
+      return
     }
-    collectPaths(agentTree)
-    setExpandedFolders(allFolderPaths)
-  }, [agentTree])
+
+    // Fetch status for each agent
+    const fetchStatuses = async () => {
+      const newStatus = new Map<string, SidebarAgentStatus>()
+
+      await Promise.all(
+        agents.map(async (agent) => {
+          try {
+            const result = await window.electronAPI.getAgentSetupStatus(activeWorkspaceId, agent.id)
+            if (result.needsSetup) {
+              newStatus.set(agent.id, 'needs_setup')
+            } else if (result.needsAuth) {
+              newStatus.set(agent.id, 'needs_auth')
+            } else {
+              newStatus.set(agent.id, 'ready')
+            }
+          } catch {
+            newStatus.set(agent.id, 'error')
+          }
+        })
+      )
+
+      setAgentStatus(newStatus)
+    }
+
+    fetchStatuses()
+  }, [activeWorkspaceId, agents])
 
   // Check agent setup/auth status when agent is selected
   React.useEffect(() => {
@@ -672,12 +841,8 @@ export function Chat({
     if (success && authDialogAgent) {
       // Auth successful - clear banner state
       setBannerState({ state: 'hidden' })
-      // Clear needsAuth status in sidebar
-      setAgentStatus(prev => {
-        const next = new Map(prev)
-        next.delete(authDialogAgent.id)
-        return next
-      })
+      // Update status to ready in sidebar
+      setAgentStatus(prev => new Map(prev).set(authDialogAgent.id, 'ready'))
     }
     setAuthDialogAgent(null)
   }, [authDialogAgent])
@@ -685,8 +850,6 @@ export function Chat({
   // Handle agent context menu actions
   const handleAgentAction = useCallback(async (action: AgentAction) => {
     if (!activeWorkspaceId) return
-
-    const agentDisplayName = action.agent.displayName || action.agent.name
 
     switch (action.type) {
       case 'info':
@@ -697,34 +860,35 @@ export function Chat({
       case 'reload':
         console.log('[Chat] Reloading agent:', action.agent.name)
         // Set loading state
-        setLoadingAgents(prev => new Set(prev).add(action.agent.id))
+        setAgentStatus(prev => new Map(prev).set(action.agent.id, 'loading'))
         try {
           const reloadSuccess = await window.electronAPI.reloadAgent(activeWorkspaceId, action.agent.id)
           if (reloadSuccess) {
             console.log('[Chat] Agent reloaded successfully:', action.agent.name)
-            // Re-check auth status after reload
-            const authResult = await window.electronAPI.checkAgentAuth(activeWorkspaceId, action.agent.id)
-            setAgentStatus(prev => new Map(prev).set(action.agent.id, { needsAuth: authResult.needsAuth }))
+            // Re-check setup status after reload
+            const result = await window.electronAPI.getAgentSetupStatus(activeWorkspaceId, action.agent.id)
+            if (result.needsSetup) {
+              setAgentStatus(prev => new Map(prev).set(action.agent.id, 'needs_setup'))
+            } else if (result.needsAuth) {
+              setAgentStatus(prev => new Map(prev).set(action.agent.id, 'needs_auth'))
+            } else {
+              setAgentStatus(prev => new Map(prev).set(action.agent.id, 'ready'))
+            }
           } else {
             console.error('[Chat] Failed to reload agent:', action.agent.name)
-            setAgentStatus(prev => new Map(prev).set(action.agent.id, { error: true }))
+            setAgentStatus(prev => new Map(prev).set(action.agent.id, 'error'))
           }
         } catch (err) {
           console.error('[Chat] Error reloading agent:', err)
-          setAgentStatus(prev => new Map(prev).set(action.agent.id, { error: true }))
-        } finally {
-          // Clear loading state
-          setLoadingAgents(prev => {
-            const next = new Set(prev)
-            next.delete(action.agent.id)
-            return next
-          })
+          setAgentStatus(prev => new Map(prev).set(action.agent.id, 'error'))
         }
         break
 
       case 'reauthenticate':
         console.log('[Chat] Reauthenticating agent:', action.agent.name)
         await window.electronAPI.resetAgent(activeWorkspaceId, action.agent.id)
+        // Mark as needing setup since we reset
+        setAgentStatus(prev => new Map(prev).set(action.agent.id, 'needs_setup'))
         // Open auth dialog
         setAuthDialogAgent(action.agent)
         setAuthDialogOpen(true)
@@ -735,11 +899,11 @@ export function Chat({
         const resetSuccess = await window.electronAPI.resetAgent(activeWorkspaceId, action.agent.id)
         if (resetSuccess) {
           console.log('[Chat] Agent reset successfully:', action.agent.name)
-          // Mark as needing auth since credentials were cleared
-          setAgentStatus(prev => new Map(prev).set(action.agent.id, { needsAuth: true }))
+          // Mark as needing setup since credentials were cleared
+          setAgentStatus(prev => new Map(prev).set(action.agent.id, 'needs_setup'))
         } else {
           console.error('[Chat] Failed to reset agent:', action.agent.name)
-          setAgentStatus(prev => new Map(prev).set(action.agent.id, { error: true }))
+          setAgentStatus(prev => new Map(prev).set(action.agent.id, 'error'))
         }
         break
     }
@@ -943,15 +1107,16 @@ export function Chat({
                       'Inbox'
 
   return (
-    <TooltipProvider delayDuration={0}>
-      {/*
-        Draggable title bar region for transparent window (macOS)
-        - Fixed overlay at z-40 allows window dragging from the top bar area
-        - Interactive elements (buttons, dropdowns) must use:
-          1. titlebar-no-drag: prevents drag behavior on clickable elements
-          2. relative z-50: ensures elements render above this drag overlay
-      */}
-      <div className="titlebar-drag-region fixed top-0 left-0 right-0 h-[50px] z-40" />
+    <ChatProvider value={chatContextValue}>
+      <TooltipProvider delayDuration={0}>
+        {/*
+          Draggable title bar region for transparent window (macOS)
+          - Fixed overlay at z-40 allows window dragging from the top bar area
+          - Interactive elements (buttons, dropdowns) must use:
+            1. titlebar-no-drag: prevents drag behavior on clickable elements
+            2. relative z-50: ensures elements render above this drag overlay
+        */}
+        <div className="titlebar-drag-region fixed top-0 left-0 right-0 h-[50px] z-40" />
 
       {/* Sidebar Toggle Button - fixed position, animated opacity */}
       <motion.div
@@ -999,8 +1164,9 @@ export function Chat({
                   onNewChat={() => handleNewChat(true)}
                   onOpenSettings={onOpenSettings}
                   onOpenKeyboardShortcuts={onOpenKeyboardShortcuts}
-                  onOpenHelp={() => window.electronAPI.openUrl('https://agents.craft.do/doc')}
+                  onOpenHelp={() => window.electronAPI.openUrl('https://agents.craft.do/docs')}
                   onOpenCraft={() => window.electronAPI.openUrl('craftdocs://')}
+                  onLogout={onLogout}
                 />
               </div>
               {/* Toggle button - right aligned */}
@@ -1048,37 +1214,31 @@ export function Chat({
                   {/* Agents Section Header with menu */}
                   <div className="flex items-center justify-between pl-4 pr-2 py-2 shrink-0">
                     <span className="text-xs font-medium text-muted-foreground select-none">Agents</span>
-                    <ContextMenu>
-                      <ContextMenuTrigger asChild>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
                         <button
-                          className="p-1 rounded hover:bg-foreground/5 text-muted-foreground hover:text-foreground"
-                          onClick={(e) => {
-                            e.preventDefault()
-                            const rect = e.currentTarget.getBoundingClientRect()
-                            const event = new MouseEvent('contextmenu', {
-                              bubbles: true,
-                              cancelable: true,
-                              clientX: rect.right,
-                              clientY: rect.bottom,
-                            })
-                            e.currentTarget.dispatchEvent(event)
-                          }}
+                          className="p-1 rounded hover:bg-foreground/5 data-[state=open]:bg-foreground/5 text-muted-foreground hover:text-foreground"
                         >
                           <MoreHorizontal className="h-3.5 w-3.5" />
                         </button>
-                      </ContextMenuTrigger>
-                      <ContextMenuContent className="min-w-0">
-                        <ContextMenuItem onClick={onRefreshAgents}>
+                      </DropdownMenuTrigger>
+                      <StyledDropdownMenuContent align="end" minWidth="min-w-0">
+                        <StyledDropdownMenuItem onClick={onRefreshAgents}>
                           <RotateCw />
                           Refresh
-                        </ContextMenuItem>
-                      </ContextMenuContent>
-                    </ContextMenu>
+                        </StyledDropdownMenuItem>
+                      </StyledDropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                   {/* Scrollable Agent Tree */}
                   <ScrollArea className="flex-1 min-h-0">
                     <div className="px-2 pb-2">
-                      {agents.length === 0 ? (
+                      {isLoadingAgents ? (
+                        <div className="flex items-center gap-2 px-2 py-4">
+                          <Spinner className="text-sm text-muted-foreground" />
+                          <span className="text-xs text-muted-foreground">Loading agents...</span>
+                        </div>
+                      ) : agents.length === 0 ? (
                         <p className="text-xs text-muted-foreground px-2 py-4">
                           No agents found. Create an "Agents" folder in your Craft space.
                         </p>
@@ -1097,7 +1257,6 @@ export function Chat({
                           focusedItemId={focusedSidebarItemId}
                           onFocusItem={setFocusedSidebarItemId}
                           getItemProps={getSidebarItemProps}
-                          loadingAgents={loadingAgents}
                           agentStatus={agentStatus}
                         />
                       )}
@@ -1116,6 +1275,7 @@ export function Chat({
                       workspaces={workspaces}
                       activeWorkspaceId={activeWorkspaceId}
                       onSelect={onSelectWorkspace}
+                      onAddWorkspace={onAddWorkspace}
                     />
                   </div>
                   <Button
@@ -1209,54 +1369,52 @@ export function Chat({
                   onUnarchive={viewMode === 'archive' ? onUnarchiveSession : undefined}
                   onRename={onRenameSession}
                   onFocusChatInput={focusChatInput}
+                  onSessionSelect={(selectedSession, { forceNewTab }) => {
+                    if (activeWorkspaceId) {
+                      openChatTab(
+                        selectedSession.id,
+                        activeWorkspaceId,
+                        getSessionTitle(selectedSession),
+                        selectedSession.agentId,
+                        { forceNew: forceNewTab }
+                      )
+                    }
+                  }}
                 />
               </div>
             </ResizablePanel>
 
             <GradientResizeHandle />
 
-            {/* === CHAT DISPLAY PANEL === */}
+            {/* === TAB CONTAINER PANEL === */}
             <ResizablePanel defaultSize={60} minSize={35} className="overflow-hidden min-w-0 bg-background">
-              <ChatDisplay
-                session={selectedSession}
-                onSendMessage={(message, attachments) => selectedSession && onSendMessage(selectedSession.id, message, attachments)}
-                onOpenFile={onOpenFile}
-                onOpenUrl={onOpenUrl}
-                currentModel={currentModel}
-                onModelChange={onModelChange}
-                onRename={(name) => selectedSession && onRenameSession(selectedSession.id, name)}
-                onArchive={selectedSession && !selectedSession.isArchived ? () => onArchiveSession(selectedSession.id) : undefined}
-                onDelete={selectedSession ? () => onDeleteSession(selectedSession.id) : undefined}
-                textareaRef={chatInputRef}
-                disabled={viewMode === 'agent' && bannerState.state === 'setup'}
-                pendingPermission={selectedSession ? pendingPermissions?.get(selectedSession.id)?.[0] : undefined}
-                onRespondToPermission={onRespondToPermission}
-              />
+              <TabContainer />
             </ResizablePanel>
           </ResizablePanelGroup>
         </div>
       </div>
 
-      {/* Agent Info Dialog */}
-      {activeWorkspaceId && (
-        <AgentInfoDialog
-          agent={infoDialogAgent}
-          open={infoDialogOpen}
-          onOpenChange={setInfoDialogOpen}
-          workspaceId={activeWorkspaceId}
-        />
-      )}
+        {/* Agent Info Dialog */}
+        {activeWorkspaceId && (
+          <AgentInfoDialog
+            agent={infoDialogAgent}
+            open={infoDialogOpen}
+            onOpenChange={setInfoDialogOpen}
+            workspaceId={activeWorkspaceId}
+          />
+        )}
 
-      {/* Agent Auth Dialog */}
-      {activeWorkspaceId && authDialogAgent && (
-        <AgentAuthDialog
-          agent={authDialogAgent}
-          workspaceId={activeWorkspaceId}
-          open={authDialogOpen}
-          onOpenChange={setAuthDialogOpen}
-          onComplete={handleAuthComplete}
-        />
-      )}
-    </TooltipProvider>
+        {/* Agent Auth Dialog */}
+        {activeWorkspaceId && authDialogAgent && (
+          <AgentAuthDialog
+            agent={authDialogAgent}
+            workspaceId={activeWorkspaceId}
+            open={authDialogOpen}
+            onOpenChange={setAuthDialogOpen}
+            onComplete={handleAuthComplete}
+          />
+        )}
+      </TooltipProvider>
+    </ChatProvider>
   )
 }

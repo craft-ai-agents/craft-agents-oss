@@ -6,8 +6,9 @@ import { getSystemPrompt, getDateTimeContext } from '../prompts/system.ts';
 import type { SubAgentDefinition } from '../agents/types.ts';
 import type { Plan } from '../agents/plan-types.ts';
 import { parseError, type AgentError } from './errors.ts';
+import { runErrorDiagnostics } from './diagnostics.ts';
 import { updateAgentInstructions as agenticUpdateInstructions, type UpdateInstructionsContext, type UpdateInstructionsResult, type UpdateInstructionsProgressEvent } from '../agents/instruction-updater.ts';
-import { getWorkspaceAccessTokenAsync, isWorkspaceTokenExpiredAsync, updateWorkspaceOAuthTokensAsync, shouldUseExtendedCacheTtl, type Workspace, type Session } from '../config/storage.ts';
+import { getWorkspaceAccessTokenAsync, isWorkspaceTokenExpiredAsync, updateWorkspaceOAuthTokensAsync, shouldUseExtendedCacheTtl, loadStoredConfig, type Workspace, type Session } from '../config/storage.ts';
 import { DEFAULT_MODEL } from '../config/models.ts';
 import { getCredentialManager } from '../credentials/index.ts';
 import { updatePreferences, loadPreferences, type UserPreferences } from '../config/preferences.ts';
@@ -1620,19 +1621,44 @@ export class CraftAgent {
         // The SDK's internal Claude Code process exits with code 1 for various API errors
         const isProcessError = errorMsg.includes('process exited with code');
         if (isProcessError) {
-          // Show a helpful error that suggests common causes
+          // Run diagnostics to identify specific cause (2s timeout)
+          const storedConfig = loadStoredConfig();
+          const diagnostics = await runErrorDiagnostics({
+            authType: storedConfig?.authType,
+            workspaceId: this.config.workspace?.id,
+            mcpUrl: this.config.workspace?.mcpUrl,
+            rawError: rawErrorMsg,
+          });
+
+          // Get recovery actions based on diagnostic code
+          const actions = diagnostics.code === 'credits_exhausted'
+            ? [
+                { key: 'c', label: 'Top up credits', command: '/credits', action: 'credits' as const },
+                { key: 's', label: 'Switch to API key', command: '/settings', action: 'settings' as const },
+              ]
+            : diagnostics.code === 'token_expired' || diagnostics.code === 'mcp_unreachable'
+            ? [
+                { key: 'w', label: 'Open workspace menu', command: '/workspace' },
+                { key: 'r', label: 'Retry', action: 'retry' as const },
+              ]
+            : diagnostics.code === 'invalid_credentials'
+            ? [
+                { key: 's', label: 'Update credentials', command: '/settings', action: 'settings' as const },
+              ]
+            : [
+                { key: 'r', label: 'Retry', action: 'retry' as const },
+                { key: 's', label: 'Check settings', command: '/settings', action: 'settings' as const },
+              ];
+
           yield {
             type: 'typed_error',
             error: {
-              code: 'service_error' as const,
-              title: 'Request Failed',
-              message: 'The AI service request failed. This is often caused by billing issues (insufficient credits), expired or incorrect API tokens, or temporary service problems.',
-              actions: [
-                { key: 'c', label: 'Check credits', command: '/credits', action: 'credits' as const },
-                { key: 's', label: 'Re-authenticate via settings', command: '/settings', action: 'settings' as const },
-                { key: 'r', label: 'Retry', action: 'retry' as const },
-              ],
-              canRetry: true,
+              code: diagnostics.code,
+              title: diagnostics.title,
+              message: diagnostics.message,
+              details: diagnostics.details,
+              actions,
+              canRetry: diagnostics.code !== 'credits_exhausted' && diagnostics.code !== 'invalid_credentials',
               retryDelayMs: 1000,
               originalError: rawErrorMsg,
             },

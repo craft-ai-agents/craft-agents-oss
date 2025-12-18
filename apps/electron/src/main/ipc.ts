@@ -1,13 +1,15 @@
 import { ipcMain, nativeTheme, nativeImage, dialog, shell, BrowserWindow } from 'electron'
-import { readFile, realpath, mkdir, writeFile, unlink } from 'fs/promises'
+import { readFile, realpath, mkdir, writeFile, unlink, rm } from 'fs/promises'
 import { normalize, isAbsolute, join, basename } from 'path'
 import { homedir, tmpdir } from 'os'
 import { randomUUID } from 'crypto'
 import { SessionManager } from './sessions'
 import { agentService } from './agent-service'
-import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type AgentActivateOptions } from '../shared/types'
+import { registerOnboardingHandlers } from './onboarding'
+import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type AgentActivateOptions, type AuthType, type BillingMethodInfo } from '../shared/types'
 import { readFileAttachment } from '@craft-agent/shared/utils'
-import { getSessionAttachmentsPath } from '@craft-agent/shared/config'
+import { getSessionAttachmentsPath, getAuthType, setAuthType } from '@craft-agent/shared/config'
+import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { MarkItDown } from 'markitdown-js'
 
 /**
@@ -513,4 +515,100 @@ export function registerIpcHandlers(sessionManager: SessionManager): void {
       throw new Error(`Failed to open file: ${message}`)
     }
   })
+
+  // Show logout confirmation dialog
+  ipcMain.handle(IPC_CHANNELS.SHOW_LOGOUT_CONFIRMATION, async () => {
+    const mainWindow = BrowserWindow.getAllWindows()[0]
+    const result = await dialog.showMessageBox(mainWindow, {
+      type: 'warning',
+      buttons: ['Cancel', 'Log Out'],
+      defaultId: 0,
+      cancelId: 0,
+      destructiveId: 1,  // Makes "Log Out" button red on macOS
+      title: 'Log Out',
+      message: 'Are you sure you want to log out?',
+      detail: 'All conversations will be deleted. This action cannot be undone.',
+    })
+    // result.response is the index of the clicked button
+    // 0 = Cancel, 1 = Log Out
+    return result.response === 1
+  })
+
+  // Logout - clear all credentials and config
+  ipcMain.handle(IPC_CHANNELS.LOGOUT, async () => {
+    try {
+      const manager = getCredentialManager()
+
+      // List and delete all stored credentials
+      const allCredentials = await manager.list()
+      for (const credId of allCredentials) {
+        await manager.delete(credId)
+      }
+
+      // Delete the config file
+      const configPath = join(homedir(), '.craft-agent', 'config.json')
+      await unlink(configPath).catch(() => {
+        // Ignore if file doesn't exist
+      })
+
+      console.log('[IPC] Logout complete - cleared all credentials and config')
+    } catch (error) {
+      console.error('[IPC] Logout error:', error)
+      throw error
+    }
+  })
+
+  // ============================================================
+  // Settings - Billing Method
+  // ============================================================
+
+  // Get current billing method and credential status
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_GET_BILLING_METHOD, async (): Promise<BillingMethodInfo> => {
+    const authType = getAuthType()
+    const manager = getCredentialManager()
+
+    let hasCredential = false
+    if (authType === 'api_key') {
+      hasCredential = !!(await manager.getApiKey())
+    } else if (authType === 'oauth_token') {
+      hasCredential = !!(await manager.getClaudeOAuth())
+    } else if (authType === 'craft_credits') {
+      // Craft credits use Craft OAuth which is always present after setup
+      hasCredential = true
+    }
+
+    return { authType, hasCredential }
+  })
+
+  // Update billing method and credential
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_UPDATE_BILLING_METHOD, async (_event, authType: AuthType, credential?: string) => {
+    const manager = getCredentialManager()
+
+    // Clear old credentials when switching auth types
+    const oldAuthType = getAuthType()
+    if (oldAuthType !== authType) {
+      if (oldAuthType === 'api_key') {
+        await manager.delete({ type: 'anthropic_api_key' })
+      } else if (oldAuthType === 'oauth_token') {
+        await manager.delete({ type: 'claude_oauth' })
+      }
+    }
+
+    // Set new auth type
+    setAuthType(authType)
+
+    // Store new credential if provided
+    if (credential) {
+      if (authType === 'api_key') {
+        await manager.setApiKey(credential)
+      } else if (authType === 'oauth_token') {
+        await manager.setClaudeOAuth(credential)
+      }
+    }
+
+    console.log(`[IPC] Billing method updated to: ${authType}`)
+  })
+
+  // Register onboarding handlers
+  registerOnboardingHandlers()
 }

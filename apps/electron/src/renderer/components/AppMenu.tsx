@@ -1,13 +1,13 @@
 import {
   DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuShortcut,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { ChevronDown, Settings, Keyboard, HelpCircle, ExternalLink } from "lucide-react"
-import { CraftSymbol } from "./icons/CraftSymbol"
+  DropdownMenuShortcut,
+  StyledDropdownMenuContent,
+  StyledDropdownMenuItem,
+  StyledDropdownMenuSeparator,
+} from "@/components/ui/styled-dropdown"
+import { ChevronDown, Settings, Keyboard, HelpCircle, ExternalLink, LogOut } from "lucide-react"
+import { CraftAgentsSymbol } from "./icons/CraftAgentsSymbol"
 import { SquarePenRounded } from "./icons/SquarePenRounded"
 
 interface AppMenuProps {
@@ -16,6 +16,7 @@ interface AppMenuProps {
   onOpenKeyboardShortcuts: () => void
   onOpenHelp: () => void
   onOpenCraft: () => void
+  onLogout: () => void
 }
 
 /**
@@ -30,6 +31,7 @@ export function AppMenu({
   onOpenKeyboardShortcuts,
   onOpenHelp,
   onOpenCraft,
+  onLogout,
 }: AppMenuProps) {
   return (
     <DropdownMenu>
@@ -38,48 +40,52 @@ export function AppMenu({
           className="flex items-center gap-1 p-1.5 rounded-[4px] hover:bg-foreground/5 data-[state=open]:bg-foreground/5 focus:outline-none"
           aria-label="Craft menu"
         >
-          <CraftSymbol className="h-4" />
+          <CraftAgentsSymbol className="h-4" />
           <ChevronDown className="h-3 w-3 text-muted-foreground" />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="start"
-        className="w-fit min-w-48 font-sans whitespace-nowrap text-xs dark bg-background/80 backdrop-blur-xl backdrop-saturate-150 border-border/50"
-        style={{ borderRadius: '8px', boxShadow: '0 8px 24px rgba(0, 0, 0, 0.25)' }}
-      >
+      <StyledDropdownMenuContent align="start" minWidth="min-w-48">
         {/* Primary action */}
-        <DropdownMenuItem onClick={onNewChat} className="gap-3 pr-4 hover:bg-foreground/10 focus:bg-foreground/10">
+        <StyledDropdownMenuItem onClick={onNewChat}>
           <SquarePenRounded className="h-3.5 w-3.5" />
           New Chat
           <DropdownMenuShortcut className="pl-6">⌘N</DropdownMenuShortcut>
-        </DropdownMenuItem>
+        </StyledDropdownMenuItem>
 
-        <DropdownMenuSeparator className="bg-foreground/10" />
+        <StyledDropdownMenuSeparator />
 
         {/* Settings and preferences */}
-        <DropdownMenuItem onClick={onOpenSettings} className="gap-3 pr-4 hover:bg-foreground/10 focus:bg-foreground/10">
+        <StyledDropdownMenuItem onClick={onOpenSettings}>
           <Settings className="h-3.5 w-3.5" />
           Settings...
           <DropdownMenuShortcut className="pl-6">⌘,</DropdownMenuShortcut>
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={onOpenKeyboardShortcuts} className="gap-3 pr-4 hover:bg-foreground/10 focus:bg-foreground/10">
+        </StyledDropdownMenuItem>
+        <StyledDropdownMenuItem onClick={onOpenKeyboardShortcuts}>
           <Keyboard className="h-3.5 w-3.5" />
           Keyboard Shortcuts
           <DropdownMenuShortcut className="pl-6">⌘/</DropdownMenuShortcut>
-        </DropdownMenuItem>
+        </StyledDropdownMenuItem>
 
-        <DropdownMenuSeparator className="bg-foreground/10" />
+        <StyledDropdownMenuSeparator />
 
         {/* External links */}
-        <DropdownMenuItem onClick={onOpenHelp} className="gap-3 pr-4 hover:bg-foreground/10 focus:bg-foreground/10">
+        <StyledDropdownMenuItem onClick={onOpenHelp}>
           <HelpCircle className="h-3.5 w-3.5" />
           Help & Documentation
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={onOpenCraft} className="gap-3 pr-4 hover:bg-foreground/10 focus:bg-foreground/10">
+        </StyledDropdownMenuItem>
+        <StyledDropdownMenuItem onClick={onOpenCraft}>
           <ExternalLink className="h-3.5 w-3.5" />
           Open Craft App
-        </DropdownMenuItem>
-      </DropdownMenuContent>
+        </StyledDropdownMenuItem>
+
+        <StyledDropdownMenuSeparator />
+
+        {/* Logout */}
+        <StyledDropdownMenuItem onClick={onLogout}>
+          <LogOut className="h-3.5 w-3.5" />
+          Log Out
+        </StyledDropdownMenuItem>
+      </StyledDropdownMenuContent>
     </DropdownMenu>
   )
 }

@@ -3,8 +3,10 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
-import { Eye, EyeOff, ExternalLink, Loader2, CheckCircle2, XCircle } from "lucide-react"
+import { Eye, EyeOff, ExternalLink, CheckCircle2, XCircle } from "lucide-react"
+import { Spinner } from "@/components/ui/loading-indicator"
 import type { BillingMethod } from "./BillingMethodStep"
+import { StepFormLayout, BackButton, ContinueButton, type StepIconVariant } from "./primitives"
 
 export type CredentialStatus = 'idle' | 'validating' | 'success' | 'error'
 
@@ -15,6 +17,47 @@ interface CredentialsStepProps {
   onSubmit: (credential: string) => void
   onStartOAuth?: () => void
   onBack: () => void
+  // Claude OAuth specific
+  existingClaudeToken?: string | null
+  isClaudeCliInstalled?: boolean
+  onUseExistingClaudeToken?: () => void
+}
+
+function getOAuthIcon(status: CredentialStatus): React.ReactNode {
+  switch (status) {
+    case 'idle': return undefined
+    case 'validating': return <Spinner className="text-2xl" />
+    case 'success': return <CheckCircle2 />
+    case 'error': return <XCircle />
+  }
+}
+
+function getOAuthIconVariant(status: CredentialStatus): StepIconVariant {
+  switch (status) {
+    case 'idle': return 'primary'
+    case 'validating': return 'loading'
+    case 'success': return 'success'
+    case 'error': return 'error'
+  }
+}
+
+const OAUTH_STATUS_CONTENT: Record<CredentialStatus, { title: string; description: string }> = {
+  idle: {
+    title: 'Connect Claude Account',
+    description: 'Sign in with your Claude Pro or Max subscription to continue.',
+  },
+  validating: {
+    title: 'Connecting...',
+    description: 'Waiting for authentication to complete...',
+  },
+  success: {
+    title: 'Connected!',
+    description: 'Your Claude account is connected.',
+  },
+  error: {
+    title: 'Connection failed',
+    description: '', // Will use errorMessage prop
+  },
 }
 
 /**
@@ -29,7 +72,10 @@ export function CredentialsStep({
   errorMessage,
   onSubmit,
   onStartOAuth,
-  onBack
+  onBack,
+  existingClaudeToken,
+  isClaudeCliInstalled,
+  onUseExistingClaudeToken,
 }: CredentialsStepProps) {
   const [value, setValue] = useState('')
   const [showValue, setShowValue] = useState(false)
@@ -46,88 +92,92 @@ export function CredentialsStep({
 
   // OAuth flow
   if (isOAuth) {
-    return (
-      <div className="flex flex-col items-center justify-center text-center">
-        {/* Status Icon */}
-        <div className="mb-6 flex size-16 items-center justify-center rounded-2xl bg-primary/10">
-          {status === 'validating' && (
-            <Loader2 className="size-8 text-primary animate-spin" />
-          )}
-          {status === 'success' && (
-            <CheckCircle2 className="size-8 text-green-500" />
-          )}
-          {status === 'error' && (
-            <XCircle className="size-8 text-destructive" />
-          )}
-          {status === 'idle' && (
-            <svg className="size-8 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
-              <polyline points="10 17 15 12 10 7" />
-              <line x1="15" y1="12" x2="3" y2="12" />
-            </svg>
-          )}
-        </div>
+    const content = OAUTH_STATUS_CONTENT[status]
 
-        {/* Title */}
-        <h1 className="text-2xl font-semibold tracking-tight">
-          {status === 'validating' && 'Connecting...'}
-          {status === 'success' && 'Connected!'}
-          {status === 'error' && 'Connection failed'}
-          {status === 'idle' && 'Connect Claude Account'}
-        </h1>
+    // Check if we have options to show
+    const hasExistingToken = !!existingClaudeToken
+    const hasCliOption = isClaudeCliInstalled
+    const hasNoOptions = !hasExistingToken && !hasCliOption
 
-        {/* Description */}
-        <p className="mt-3 max-w-sm text-muted-foreground">
-          {status === 'validating' && 'Waiting for authentication to complete...'}
-          {status === 'success' && 'Your Claude account is connected.'}
-          {status === 'error' && (errorMessage || 'Something went wrong. Please try again.')}
-          {status === 'idle' && 'Sign in with your Claude Pro or Max subscription to continue.'}
-        </p>
-
-        {/* Actions */}
-        <div className="mt-8 flex flex-col gap-3">
-          {status === 'idle' && (
-            <>
-              <Button onClick={onStartOAuth} className="gap-2">
+    const actions = (
+      <>
+        {status === 'idle' && (
+          <>
+            <BackButton onClick={onBack} />
+            {hasExistingToken ? (
+              <ContinueButton onClick={onUseExistingClaudeToken} className="gap-2">
+                <CheckCircle2 className="size-4" />
+                Use Existing Token
+              </ContinueButton>
+            ) : hasCliOption ? (
+              <ContinueButton onClick={onStartOAuth} className="gap-2">
                 <ExternalLink className="size-4" />
                 Sign in with Claude
-              </Button>
-              <Button variant="ghost" onClick={onBack}>
-                Back
-              </Button>
-            </>
-          )}
+              </ContinueButton>
+            ) : null}
+          </>
+        )}
 
-          {status === 'validating' && (
-            <Button variant="ghost" onClick={onBack}>
-              Cancel
-            </Button>
-          )}
+        {status === 'validating' && (
+          <BackButton onClick={onBack} className="w-full">Cancel</BackButton>
+        )}
 
-          {status === 'error' && (
-            <>
-              <Button onClick={onStartOAuth}>
-                Try Again
-              </Button>
-              <Button variant="ghost" onClick={onBack}>
-                Back
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
+        {status === 'error' && (
+          <>
+            <BackButton onClick={onBack} />
+            <ContinueButton onClick={hasExistingToken ? onUseExistingClaudeToken : onStartOAuth}>
+              Try Again
+            </ContinueButton>
+          </>
+        )}
+      </>
+    )
+
+    // Dynamic description based on available options
+    let description = content.description
+    if (status === 'idle') {
+      if (hasExistingToken && existingClaudeToken) {
+        // Show preview of detected token (first 20 chars) like TUI does
+        const tokenPreview = existingClaudeToken.length > 20
+          ? `${existingClaudeToken.slice(0, 20)}...`
+          : existingClaudeToken
+        description = `Found existing token: ${tokenPreview}`
+      } else if (hasCliOption) {
+        description = 'This will open Claude CLI to authenticate with your Claude subscription.'
+      } else if (hasNoOptions) {
+        description = 'Claude CLI is not installed. Please install it first: npm install -g @anthropic-ai/claude-code'
+      }
+    }
+
+    return (
+      <StepFormLayout
+        icon={getOAuthIcon(status)}
+        iconVariant={getOAuthIconVariant(status)}
+        title={content.title}
+        description={status === 'error' ? (errorMessage || 'Something went wrong. Please try again.') : description}
+        actions={actions}
+      >
+        {/* Show secondary option if both are available */}
+        {status === 'idle' && hasExistingToken && hasCliOption && (
+          <div className="text-center">
+            <button
+              onClick={onStartOAuth}
+              className="text-sm text-muted-foreground hover:text-foreground underline"
+            >
+              Or run claude setup-token to get a new token
+            </button>
+          </div>
+        )}
+      </StepFormLayout>
     )
   }
 
   // API Key flow
   return (
-    <div className="flex w-full max-w-md flex-col">
-      {/* Header */}
-      <div className="mb-6 text-center">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Enter API Key
-        </h1>
-        <p className="mt-2 text-muted-foreground">
+    <StepFormLayout
+      title="Enter API Key"
+      description={
+        <>
           Get your API key from{' '}
           <a
             href="https://console.anthropic.com"
@@ -137,11 +187,22 @@ export function CredentialsStep({
           >
             console.anthropic.com
           </a>
-        </p>
-      </div>
-
-      {/* Form */}
-      <form onSubmit={handleSubmit}>
+        </>
+      }
+      actions={
+        <>
+          <BackButton onClick={onBack} disabled={status === 'validating'} />
+          <ContinueButton
+            type="submit"
+            form="api-key-form"
+            disabled={!value.trim()}
+            loading={status === 'validating'}
+            loadingText="Validating..."
+          />
+        </>
+      }
+    >
+      <form id="api-key-form" onSubmit={handleSubmit}>
         <div className="space-y-2">
           <Label htmlFor="api-key">Anthropic API Key</Label>
           <div className="relative">
@@ -175,34 +236,7 @@ export function CredentialsStep({
             <p className="text-sm text-destructive">{errorMessage}</p>
           )}
         </div>
-
-        {/* Actions */}
-        <div className="mt-8 flex gap-3">
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={onBack}
-            className="flex-1"
-            disabled={status === 'validating'}
-          >
-            Back
-          </Button>
-          <Button
-            type="submit"
-            disabled={!value.trim() || status === 'validating'}
-            className="flex-1"
-          >
-            {status === 'validating' ? (
-              <>
-                <Loader2 className="mr-2 size-4 animate-spin" />
-                Validating...
-              </>
-            ) : (
-              'Continue'
-            )}
-          </Button>
-        </div>
       </form>
-    </div>
+    </StepFormLayout>
   )
 }

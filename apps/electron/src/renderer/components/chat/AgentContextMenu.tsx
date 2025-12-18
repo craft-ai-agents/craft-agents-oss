@@ -1,11 +1,11 @@
 import { Info, RotateCw, KeyRound, Trash2 } from "lucide-react"
 import {
   ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
   ContextMenuTrigger,
-} from "@/components/ui/context-menu"
+  StyledContextMenuContent,
+  StyledContextMenuItem,
+  StyledContextMenuSeparator,
+} from "@/components/ui/styled-context-menu"
 import type { SubAgentMetadata } from "../../../shared/types"
 
 export type AgentAction =
@@ -36,26 +36,26 @@ export function AgentContextMenu({
       <ContextMenuTrigger asChild>
         {children}
       </ContextMenuTrigger>
-      <ContextMenuContent className="w-48">
-        <ContextMenuItem onClick={() => onAction({ type: 'info', agent })} shortcut="I">
+      <StyledContextMenuContent>
+        <StyledContextMenuItem onClick={() => onAction({ type: 'info', agent })}>
           <Info />
           Info
-        </ContextMenuItem>
-        <ContextMenuSeparator />
-        <ContextMenuItem onClick={() => onAction({ type: 'reload', agent })} shortcut="L">
+        </StyledContextMenuItem>
+        <StyledContextMenuSeparator />
+        <StyledContextMenuItem onClick={() => onAction({ type: 'reload', agent })}>
           <RotateCw />
           Reload
-        </ContextMenuItem>
-        <ContextMenuItem onClick={() => onAction({ type: 'reauthenticate', agent })} shortcut="A">
+        </StyledContextMenuItem>
+        <StyledContextMenuItem onClick={() => onAction({ type: 'reauthenticate', agent })}>
           <KeyRound />
           Reauthenticate
-        </ContextMenuItem>
-        <ContextMenuSeparator />
-        <ContextMenuItem onClick={() => onAction({ type: 'reset', agent })} variant="destructive" shortcut="R">
+        </StyledContextMenuItem>
+        <StyledContextMenuSeparator />
+        <StyledContextMenuItem onClick={() => onAction({ type: 'reset', agent })} variant="destructive">
           <Trash2 />
           Reset
-        </ContextMenuItem>
-      </ContextMenuContent>
+        </StyledContextMenuItem>
+      </StyledContextMenuContent>
     </ContextMenu>
   )
 }

@@ -16,8 +16,8 @@ This is the Electron desktop app for Craft Agent - a GUI alternative to the TUI.
 
 Available components in `src/renderer/components/ui/`:
 - `avatar`, `badge`, `button`, `collapsible`, `dialog`, `dropdown-menu`
-- `input`, `label`, `popover`, `resizable`, `scroll-area`
-- `select`, `separator`, `switch`, `tabs`, `textarea`, `tooltip`
+- `input`, `kbd`, `label`, `loading-indicator`, `popover`, `resizable`, `scroll-area`
+- `select`, `separator`, `sonner`, `switch`, `tabs`, `textarea`, `tooltip`
 
 To add new shadcn components:
 ```bash
@@ -26,6 +26,87 @@ cd apps/electron && npx shadcn@latest add <component-name>
 ```
 
 Icons: Use [Lucide React](https://lucide.dev/icons/) (`lucide-react` package).
+
+### Loading Indicators
+
+**Always use `Spinner` or `LoadingIndicator`** for loading states. Never use `Loader2` from lucide-react or `animate-spin` classes.
+
+```tsx
+import { Spinner, LoadingIndicator } from "@/components/ui/loading-indicator"
+
+// Simple spinner - inherits size and color from parent
+<Spinner />
+
+// Control size via text-* classes (uses 1em sizing)
+<Spinner className="text-sm" />   // Small
+<Spinner className="text-lg" />   // Large
+<Spinner className="text-2xl" />  // Extra large
+
+// Control color via text-* classes (uses currentColor)
+<Spinner className="text-muted-foreground" />
+<Spinner className="text-amber-500" />
+
+// Or inherit from parent element
+<div className="text-muted-foreground text-sm">
+  <Spinner />  {/* Inherits size and color */}
+</div>
+
+// Full loading indicator with label
+<LoadingIndicator label="Loading..." />
+<LoadingIndicator label="Thinking..." showElapsed />  // With elapsed time
+<LoadingIndicator ultrathink />                       // Gradient animation
+```
+
+The spinner is based on [SpinKit Grid](https://github.com/tobiasahlin/SpinKit):
+- 3x3 grid of cubes with staggered scale animation
+- Scales with font-size (uses `em` units)
+- Uses `currentColor` (inherits text color)
+- Pure CSS animation (no JS state needed)
+- CSS defined in `index.css` (`.spinner` class)
+
+### Keyboard Shortcuts
+
+**Always use `Kbd` and `KbdGroup`** for displaying keyboard shortcuts. Never use plain text or custom styled spans.
+
+```tsx
+import { Kbd, KbdGroup } from "@/components/ui/kbd"
+
+// Single key
+<Kbd>⌘</Kbd>
+<Kbd>Enter</Kbd>
+<Kbd>Esc</Kbd>
+
+// Key combination (use KbdGroup)
+<KbdGroup>
+  <Kbd>⌘</Kbd>
+  <Kbd>K</Kbd>
+</KbdGroup>
+
+// In dropdown menus (common pattern)
+<DropdownMenuItem>
+  <span>New Chat</span>
+  <KbdGroup className="ml-auto">
+    <Kbd>⌘</Kbd>
+    <Kbd>N</Kbd>
+  </KbdGroup>
+</DropdownMenuItem>
+
+// In tooltips (automatically adapts styling)
+<Tooltip>
+  <TooltipTrigger>...</TooltipTrigger>
+  <TooltipContent>
+    Press <Kbd>⌘</Kbd><Kbd>K</Kbd> to open
+  </TooltipContent>
+</Tooltip>
+```
+
+**Common modifier symbols:**
+- `⌘` - Command (Mac)
+- `⌃` - Control
+- `⌥` - Option/Alt
+- `⇧` - Shift
+- `↵` or `Enter` - Return/Enter
+- `⎋` or `Esc` - Escape
 
 ### Hover States with Alpha Colors
 
@@ -83,6 +164,56 @@ When creating dropdowns or popovers that need consistent styling regardless of t
 - Use `gap-3` for icon-to-text spacing
 - Use `pl-6` on shortcuts for spacing from label (keeps `ml-auto` right alignment)
 - Use `pr-4` on items for right padding
+
+### Toast Notifications
+
+**Always use Sonner** for toast notifications (success, error, info, warning). The `<Toaster />` component is already mounted in `main.tsx`.
+
+```tsx
+import { toast } from "sonner"
+
+// Basic toasts
+toast.success("Settings saved")
+toast.error("Failed to connect")
+toast.info("New version available")
+toast.warning("This action cannot be undone")
+
+// With description
+toast.success("File uploaded", {
+  description: "document.pdf has been uploaded successfully",
+})
+
+// With action button
+toast.error("Connection lost", {
+  action: {
+    label: "Retry",
+    onClick: () => reconnect(),
+  },
+})
+
+// Loading state with promise
+toast.promise(saveData(), {
+  loading: "Saving...",
+  success: "Saved!",
+  error: "Failed to save",
+})
+
+// Dismiss programmatically
+const toastId = toast.loading("Processing...")
+// Later...
+toast.dismiss(toastId)
+```
+
+**When to use toasts:**
+- Success confirmations (save, delete, copy)
+- Error notifications (API failures, validation errors)
+- Async operation feedback (loading → success/error)
+- Non-blocking alerts that auto-dismiss
+
+**When NOT to use toasts:**
+- Critical errors requiring user action (use dialogs)
+- Form validation errors (show inline)
+- Blocking confirmations (use dialogs with actions)
 
 ## Model Configuration
 

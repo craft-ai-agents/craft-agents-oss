@@ -1,23 +1,102 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import type { Session, Workspace, SessionEvent, Message, SubAgentMetadata, FileAttachment, StoredAttachment, PermissionRequest } from '../shared/types'
+import type { Session, Workspace, SessionEvent, Message, SubAgentMetadata, FileAttachment, StoredAttachment, PermissionRequest, SetupNeeds } from '../shared/types'
 import { generateMessageId } from '../shared/types'
 import { Chat } from '@/components/chat/Chat'
+import { OnboardingWizard } from '@/components/onboarding'
+import { AddWorkspaceWizard } from '@/components/AddWorkspaceWizard'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { FocusProvider } from '@/context/FocusContext'
 import { useGlobalShortcuts } from '@/hooks/keyboard'
-import { KeyboardShortcutsDialog } from '@/components/KeyboardShortcutsDialog'
+import { useOnboarding } from '@/hooks/useOnboarding'
+import { useAddWorkspace } from '@/hooks/useAddWorkspace'
+import { useTabs } from '@/tabs'
+import { Spinner } from '@/components/ui/loading-indicator'
 import { DEFAULT_MODEL } from '@config/models'
 
+type AppState = 'loading' | 'onboarding' | 'ready' | 'adding-workspace'
+
 export default function App() {
+  // App state: loading -> check auth -> onboarding or ready
+  const [appState, setAppState] = useState<AppState>('loading')
+  const [setupNeeds, setSetupNeeds] = useState<SetupNeeds | null>(null)
+
   const [sessions, setSessions] = useState<Session[]>([])
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [agents, setAgents] = useState<SubAgentMetadata[]>([])
+  const [isLoadingAgents, setIsLoadingAgents] = useState(false)
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null)
   const [currentModel, setCurrentModel] = useState(DEFAULT_MODEL)
-  const [shortcutsDialogOpen, setShortcutsDialogOpen] = useState(false)
   const [menuNewChatTrigger, setMenuNewChatTrigger] = useState(0)
   // Permission requests per session (queue to handle multiple concurrent requests)
   const [pendingPermissions, setPendingPermissions] = useState<Map<string, PermissionRequest[]>>(new Map())
+
+  // Handle onboarding completion
+  const handleOnboardingComplete = useCallback(() => {
+    setAppState('ready')
+    // Reload workspaces and sessions after onboarding
+    window.electronAPI.getWorkspaces().then((ws) => {
+      setWorkspaces(ws)
+      if (ws.length > 0) {
+        setActiveWorkspaceId(ws[0].id)
+      }
+    })
+    window.electronAPI.getSessions().then(setSessions)
+  }, [])
+
+  // Onboarding hook
+  const onboarding = useOnboarding({
+    onComplete: handleOnboardingComplete,
+    initialSetupNeeds: setupNeeds || undefined,
+  })
+
+  // Add workspace completion handler
+  const handleAddWorkspaceComplete = useCallback(() => {
+    setAppState('ready')
+    // Reload workspaces after adding
+    window.electronAPI.getWorkspaces().then((ws) => {
+      setWorkspaces(ws)
+      // Switch to the newly added workspace (last one)
+      if (ws.length > 0) {
+        setActiveWorkspaceId(ws[ws.length - 1].id)
+      }
+    })
+  }, [])
+
+  // Add workspace cancel handler
+  const handleAddWorkspaceCancel = useCallback(() => {
+    setAppState('ready')
+  }, [])
+
+  // Add workspace hook (separate from onboarding)
+  const addWorkspace = useAddWorkspace({
+    onComplete: handleAddWorkspaceComplete,
+    onCancel: handleAddWorkspaceCancel,
+  })
+
+  // Check auth state on mount
+  useEffect(() => {
+    const checkAuthState = async () => {
+      try {
+        const needs = await window.electronAPI.getSetupNeeds()
+        setSetupNeeds(needs)
+
+        if (needs.isFullyConfigured) {
+          setAppState('ready')
+        } else {
+          setAppState('onboarding')
+        }
+      } catch (error) {
+        console.error('Failed to check auth state:', error)
+        // If check fails, show onboarding to be safe
+        setAppState('onboarding')
+      }
+    }
+
+    checkAuthState()
+  }, [])
+
+  // Tab system
+  const { openShortcutsTab } = useTabs()
 
   // Global shortcut: Cmd+/ to show keyboard shortcuts
   useGlobalShortcuts({
@@ -25,14 +104,15 @@ export default function App() {
       {
         key: '/',
         cmd: true,
-        action: () => setShortcutsDialogOpen(true),
+        action: openShortcutsTab,
       },
     ],
-    disabled: shortcutsDialogOpen,
   })
 
-  // Load workspaces and sessions on mount
+  // Load workspaces and sessions when app is ready
   useEffect(() => {
+    if (appState !== 'ready') return
+
     window.electronAPI.getWorkspaces().then((ws) => {
       setWorkspaces(ws)
       // Set first workspace as active if none selected
@@ -44,14 +124,18 @@ export default function App() {
       })
     })
     window.electronAPI.getSessions().then(setSessions)
-  }, [])
+  }, [appState])
 
   // Load agents when workspace changes
   useEffect(() => {
     if (activeWorkspaceId) {
-      window.electronAPI.getAgents(activeWorkspaceId).then(setAgents)
+      setIsLoadingAgents(true)
+      window.electronAPI.getAgents(activeWorkspaceId)
+        .then(setAgents)
+        .finally(() => setIsLoadingAgents(false))
     } else {
       setAgents([])
+      setIsLoadingAgents(false)
     }
   }, [activeWorkspaceId])
 
@@ -199,7 +283,13 @@ export default function App() {
                     content: event.error.title
                       ? `${event.error.title}: ${event.error.message}`
                       : event.error.message,
-                    timestamp: Date.now()
+                    timestamp: Date.now(),
+                    // Include error details for collapsible display
+                    errorCode: event.error.code,
+                    errorTitle: event.error.title,
+                    errorDetails: event.error.details,
+                    errorOriginal: event.error.originalError,
+                    errorCanRetry: event.error.canRetry,
                   }
                 ]
               }
@@ -243,7 +333,7 @@ export default function App() {
       handleOpenSettings()
     })
     const unsubShortcuts = window.electronAPI.onMenuKeyboardShortcuts(() => {
-      setShortcutsDialogOpen(true)
+      openShortcutsTab()
     })
     const unsubHelp = window.electronAPI.onMenuOpenHelp(() => {
       // Open help documentation URL
@@ -256,7 +346,7 @@ export default function App() {
       unsubShortcuts()
       unsubHelp()
     }
-  }, [])
+  }, [openShortcutsTab])
 
   const handleCreateSession = useCallback(async (workspaceId: string, agentId?: string): Promise<Session> => {
     // Find agent if provided - prefer displayName for human-readable title
@@ -472,9 +562,99 @@ export default function App() {
   }, [])
 
   const handleOpenKeyboardShortcuts = useCallback(() => {
-    setShortcutsDialogOpen(true)
+    openShortcutsTab()
+  }, [openShortcutsTab])
+
+  const handleLogout = useCallback(async () => {
+    try {
+      // Show native confirmation dialog
+      const confirmed = await window.electronAPI.showLogoutConfirmation()
+      if (!confirmed) return
+
+      await window.electronAPI.logout()
+      // Reset all state
+      setSessions([])
+      setWorkspaces([])
+      setAgents([])
+      setActiveWorkspaceId(null)
+      // Reset setupNeeds to force fresh onboarding start
+      setSetupNeeds({
+        needsCraftAuth: true,
+        needsBillingConfig: true,
+        needsCredentials: true,
+        isFullyConfigured: false,
+      })
+      // Reset onboarding hook state
+      onboarding.reset()
+      setAppState('onboarding')
+    } catch (error) {
+      console.error('Logout failed:', error)
+    }
+  }, [onboarding])
+
+  // Start add workspace flow (separate from onboarding)
+  const handleAddWorkspace = useCallback(() => {
+    setAppState('adding-workspace')
   }, [])
 
+  // Handle cancel during onboarding
+  const handleOnboardingCancel = useCallback(() => {
+    onboarding.handleCancel()
+  }, [onboarding])
+
+  // Loading state
+  if (appState === 'loading') {
+    return (
+      <div className="h-full flex items-center justify-center bg-background text-foreground">
+        <div className="flex flex-col items-center gap-4">
+          <Spinner className="text-2xl text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Onboarding state
+  if (appState === 'onboarding') {
+    return (
+      <OnboardingWizard
+        state={onboarding.state}
+        spaceCategories={onboarding.spaceCategories}
+        isLoadingSpaces={onboarding.isLoadingSpaces}
+        onCancel={handleOnboardingCancel}
+        onContinue={onboarding.handleContinue}
+        onBack={onboarding.handleBack}
+        onLogin={onboarding.handleLogin}
+        onOpenLoginManually={onboarding.handleOpenLoginManually}
+        onRetryLogin={onboarding.handleRetryLogin}
+        onSelectSpace={onboarding.handleSelectSpace}
+        onSelectBillingMethod={onboarding.handleSelectBillingMethod}
+        onSubmitCredential={onboarding.handleSubmitCredential}
+        onStartOAuth={onboarding.handleStartOAuth}
+        onFinish={onboarding.handleFinish}
+        existingClaudeToken={onboarding.existingClaudeToken}
+        isClaudeCliInstalled={onboarding.isClaudeCliInstalled}
+        onUseExistingClaudeToken={onboarding.handleUseExistingClaudeToken}
+      />
+    )
+  }
+
+  // Add workspace state (separate from onboarding)
+  if (appState === 'adding-workspace') {
+    return (
+      <AddWorkspaceWizard
+        state={addWorkspace.state}
+        spaceCategories={addWorkspace.spaceCategories}
+        onLogin={addWorkspace.handleLogin}
+        onSelectSpace={addWorkspace.handleSelectSpace}
+        onContinue={addWorkspace.handleContinue}
+        onBack={addWorkspace.handleBack}
+        onCancel={addWorkspace.handleCancel}
+      />
+    )
+  }
+
+  // Ready state - main app
   return (
     <FocusProvider>
       <TooltipProvider>
@@ -483,6 +663,7 @@ export default function App() {
             workspaces={workspaces}
             sessions={sessions}
             agents={agents}
+            isLoadingAgents={isLoadingAgents}
             activeWorkspaceId={activeWorkspaceId}
             defaultLayout={[20, 32, 48]}
             currentModel={currentModel}
@@ -500,14 +681,12 @@ export default function App() {
             onOpenSettings={handleOpenSettings}
             onOpenKeyboardShortcuts={handleOpenKeyboardShortcuts}
             onRefreshAgents={handleRefreshAgents}
+            onLogout={handleLogout}
+            onAddWorkspace={handleAddWorkspace}
             pendingPermissions={pendingPermissions}
             onRespondToPermission={handleRespondToPermission}
           />
         </div>
-        <KeyboardShortcutsDialog
-          open={shortcutsDialogOpen}
-          onOpenChange={setShortcutsDialogOpen}
-        />
       </TooltipProvider>
     </FocusProvider>
   )

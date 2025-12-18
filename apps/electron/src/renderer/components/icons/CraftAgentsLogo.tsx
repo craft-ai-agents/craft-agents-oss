@@ -1,15 +1,15 @@
 import { useTheme } from "@/context/ThemeContext"
 
-interface CraftLogoProps {
+interface CraftAgentsLogoProps {
   className?: string
 }
 
 /**
- * Craft pixel art logo - switches between dark/light colors based on theme
+ * Craft Agents pixel art logo - switches between dark/light colors based on theme
  * Dark mode: #B492DB (light purple)
  * Light mode: #6B3F9D (dark purple)
  */
-export function CraftLogo({ className }: CraftLogoProps) {
+export function CraftAgentsLogo({ className }: CraftAgentsLogoProps) {
   const { resolvedMode } = useTheme()
   const fill = resolvedMode === 'dark' ? '#B492DB' : '#6B3F9D'
 

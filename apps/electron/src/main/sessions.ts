@@ -912,7 +912,9 @@ export class SessionManager {
             code: event.error.code,
             title: event.error.title,
             message: event.error.message,
-            canRetry: event.error.canRetry
+            canRetry: event.error.canRetry,
+            details: event.error.details,
+            originalError: event.error.originalError,
           }
         })
         break

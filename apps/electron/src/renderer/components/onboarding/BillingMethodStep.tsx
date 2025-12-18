@@ -1,6 +1,6 @@
-import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { Check, CreditCard, Key, Zap } from "lucide-react"
+import { StepFormLayout, BackButton, ContinueButton } from "./primitives"
 
 export type BillingMethod = 'craft_credits' | 'api_key' | 'claude_oauth'
 
@@ -17,20 +17,20 @@ const BILLING_OPTIONS: BillingOption[] = [
     id: 'craft_credits',
     name: 'Craft Credits',
     description: 'Use your Craft subscription credits. No additional setup needed.',
-    icon: <Zap className="size-5" />,
+    icon: <Zap className="size-4" />,
     recommended: true,
   },
   {
     id: 'api_key',
     name: 'Anthropic API Key',
     description: 'Pay-as-you-go with your own API key from console.anthropic.com',
-    icon: <Key className="size-5" />,
+    icon: <Key className="size-4" />,
   },
   {
     id: 'claude_oauth',
     name: 'Claude Pro/Max',
     description: 'Use your Claude subscription for unlimited access.',
-    icon: <CreditCard className="size-5" />,
+    icon: <CreditCard className="size-4" />,
   },
 ]
 
@@ -56,17 +56,16 @@ export function BillingMethodStep({
   onBack
 }: BillingMethodStepProps) {
   return (
-    <div className="flex w-full max-w-md flex-col">
-      {/* Header */}
-      <div className="mb-6 text-center">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Choose Billing Method
-        </h1>
-        <p className="mt-2 text-muted-foreground">
-          Select how you'd like to pay for AI usage.
-        </p>
-      </div>
-
+    <StepFormLayout
+      title="Choose Billing Method"
+      description="Select how you'd like to pay for AI usage."
+      actions={
+        <>
+          <BackButton onClick={onBack} />
+          <ContinueButton onClick={onContinue} disabled={!selectedMethod} />
+        </>
+      }
+    >
       {/* Options */}
       <div className="space-y-3">
         {BILLING_OPTIONS.map((option) => {
@@ -97,14 +96,14 @@ export function BillingMethodStep({
               {/* Content */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="font-medium">{option.name}</span>
+                  <span className="font-medium text-sm">{option.name}</span>
                   {option.recommended && (
-                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                    <span className="bg-primary/5 px-2 py-0.5 text-[11px] font-medium text-primary/70">
                       Recommended
                     </span>
                   )}
                 </div>
-                <p className="mt-1 text-sm text-muted-foreground">
+                <p className="mt-1 text-xs text-muted-foreground">
                   {option.description}
                 </p>
               </div>
@@ -115,7 +114,7 @@ export function BillingMethodStep({
                   "flex size-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors",
                   isSelected
                     ? "border-primary bg-primary text-primary-foreground"
-                    : "border-muted-foreground/30"
+                    : "border-muted-foreground/20"
                 )}
               >
                 {isSelected && <Check className="size-3" strokeWidth={3} />}
@@ -124,20 +123,6 @@ export function BillingMethodStep({
           )
         })}
       </div>
-
-      {/* Actions */}
-      <div className="mt-8 flex gap-3">
-        <Button variant="ghost" onClick={onBack} className="flex-1">
-          Back
-        </Button>
-        <Button
-          onClick={onContinue}
-          disabled={!selectedMethod}
-          className="flex-1"
-        >
-          Continue
-        </Button>
-      </div>
-    </div>
+    </StepFormLayout>
   )
 }

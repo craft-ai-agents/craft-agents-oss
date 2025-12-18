@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import type { AgentError, RecoveryAction } from '@craft-agent/shared/agent';
 
@@ -19,9 +19,18 @@ export const ErrorBanner: React.FC<ErrorBannerProps> = ({
   onAction,
   onDismiss,
 }) => {
+  const [showDetails, setShowDetails] = useState(false);
+  const hasDetails = (error.details && error.details.length > 0) || error.originalError;
+
   useInput((input, key) => {
     if (key.escape) {
       onDismiss();
+      return;
+    }
+
+    // Toggle details
+    if (input.toLowerCase() === 'd' && hasDetails) {
+      setShowDetails(!showDetails);
       return;
     }
 
@@ -69,6 +78,28 @@ export const ErrorBanner: React.FC<ErrorBannerProps> = ({
               <Text dimColor> to {action.label}</Text>
             </Box>
           ))}
+        </Box>
+      )}
+
+      {/* Technical Details Toggle */}
+      {hasDetails && (
+        <Box marginTop={1}>
+          <Text dimColor>  Press </Text>
+          <Text color="cyan" bold>D</Text>
+          <Text dimColor> to {showDetails ? 'hide' : 'show'} technical details</Text>
+        </Box>
+      )}
+
+      {/* Technical Details Content */}
+      {showDetails && hasDetails && (
+        <Box flexDirection="column" marginTop={1} paddingLeft={2}>
+          <Text dimColor bold>─── Technical Details ───</Text>
+          {error.details?.map((detail, i) => (
+            <Text key={i} dimColor>{detail}</Text>
+          ))}
+          {error.originalError && !error.details?.some(d => d.includes('Raw error:')) && (
+            <Text dimColor>Raw: {error.originalError.slice(0, 200)}{error.originalError.length > 200 ? '...' : ''}</Text>
+          )}
         </Box>
       )}
 

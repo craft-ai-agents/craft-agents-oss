@@ -70,11 +70,21 @@
   --md-bullets: oklch(0.45 0.005 265);
   --md-counters: oklch(0.45 0.005 265);
 
+  /* Onboarding step styling - change these to update all steps globally */
+  --step-icon-size: 4rem;           /* size-16 */
+  --step-icon-inner-size: 2rem;     /* size-8 */
+  --step-icon-radius: 1rem;         /* rounded-2xl */
+  --step-title-size: 1.5rem;        /* text-2xl */
+  --step-description-max-width: 24rem; /* max-w-sm */
+  --step-actions-gap: 0.75rem;      /* gap-3 */
+  --step-content-gap: 1.5rem;       /* mt-6 */
+  --step-actions-margin: 2rem;      /* mt-8 */
+
   /* Fonts */
   --font-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-serif: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-  --font-default: var(--font-mono);
+  --font-default: var(--font-sans);
 
   /* Layout */
   --font-size-base: 15px;
@@ -153,7 +163,7 @@
   --font-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-serif: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-  --font-default: var(--font-mono);
+  --font-default: var(--font-sans);
 
   /* Layout (same as light) */
   --radius: 0rem;
@@ -361,6 +371,43 @@
 }
 
 /* =============================================================================
+   ONBOARDING STEP STYLES
+
+   Global styles for onboarding components using CSS custom properties.
+   Change the variables in :root to update all steps at once.
+============================================================================= */
+
+@layer components {
+  .step-icon {
+    width: var(--step-icon-size);
+    height: var(--step-icon-size);
+    border-radius: var(--step-icon-radius);
+  }
+
+  .step-icon > div {
+    width: var(--step-icon-inner-size);
+    height: var(--step-icon-inner-size);
+  }
+
+  .step-title {
+    font-size: var(--step-title-size);
+  }
+
+  .step-description {
+    max-width: var(--step-description-max-width);
+  }
+
+  .step-actions {
+    margin-top: var(--step-actions-margin);
+    gap: var(--step-actions-gap);
+  }
+
+  .feature-bullet {
+    background-color: var(--primary);
+  }
+}
+
+/* =============================================================================
    KEYBOARD NAVIGATION FOCUS STYLES
 
    Consistent focus indicators for keyboard navigation across all focusable
@@ -388,4 +435,84 @@
 /* Focus zone containers - subtle indicator when zone has focus */
 [data-focus-zone]:focus-visible {
   outline: none;
+}
+
+/* =============================================================================
+   LOADING INDICATOR - ULTRATHINK GRADIENT
+
+   Animated gradient text effect for ultrathink mode.
+   Gradient: cyan → blue → magenta → blue → cyan (symmetrical)
+============================================================================= */
+
+@keyframes ultrathink-shimmer {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 200% 50%;
+  }
+}
+
+.ultrathink-gradient {
+  background: linear-gradient(
+    90deg,
+    #00ffff,
+    #00d7ff,
+    #00afff,
+    #af00ff,
+    #ff00ff,
+    #ff00ff,
+    #af00ff,
+    #00afff,
+    #00d7ff,
+    #00ffff
+  );
+  background-size: 200% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: ultrathink-shimmer 2s linear infinite;
+}
+
+/* =============================================================================
+   LOADING INDICATOR - SPINKIT GRID SPINNER
+
+   3x3 grid spinner based on SpinKit Grid.
+   - Uses currentColor (inherits text color)
+   - Uses em units (scales with font-size)
+   - Pure CSS animation with staggered delays
+
+   https://github.com/tobiasahlin/SpinKit
+============================================================================= */
+
+.spinner {
+  display: inline-grid;
+  grid-template-columns: repeat(3, 1fr);
+  width: 1em;
+  height: 1em;
+  gap: 0.08em;
+}
+
+.spinner-cube {
+  background-color: currentColor;
+  animation: spinner-grid 1.3s infinite ease-in-out;
+}
+
+.spinner-cube:nth-child(1) { animation-delay: 0.2s; }
+.spinner-cube:nth-child(2) { animation-delay: 0.3s; }
+.spinner-cube:nth-child(3) { animation-delay: 0.4s; }
+.spinner-cube:nth-child(4) { animation-delay: 0.1s; }
+.spinner-cube:nth-child(5) { animation-delay: 0.2s; }
+.spinner-cube:nth-child(6) { animation-delay: 0.3s; }
+.spinner-cube:nth-child(7) { animation-delay: 0s; }
+.spinner-cube:nth-child(8) { animation-delay: 0.1s; }
+.spinner-cube:nth-child(9) { animation-delay: 0.2s; }
+
+@keyframes spinner-grid {
+  0%, 70%, 100% {
+    transform: scale3d(1, 1, 1);
+  }
+  35% {
+    transform: scale3d(0, 0, 1);
+  }
 }

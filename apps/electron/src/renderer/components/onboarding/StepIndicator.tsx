@@ -44,7 +44,9 @@ export function StepIndicator({
   isExistingUser = false,
   className
 }: StepIndicatorProps) {
-  const steps = isExistingUser ? EXISTING_USER_STEPS : NEW_USER_STEPS
+  const steps = isExistingUser
+    ? EXISTING_USER_STEPS
+    : NEW_USER_STEPS
   const currentIndex = steps.indexOf(currentStep)
 
   return (

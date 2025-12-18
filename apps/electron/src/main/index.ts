@@ -12,8 +12,55 @@ const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
 // Vite dev server URL for hot reload
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL
 
+// Custom URL scheme for deeplinks (e.g., craftagents://auth-complete)
+const DEEPLINK_SCHEME = 'craftagents'
+
 let mainWindow: BrowserWindow | null = null
 let sessionManager: SessionManager | null = null
+
+// Register as default protocol client for craftagents:// URLs
+// This must be done before app.whenReady() on some platforms
+if (process.defaultApp) {
+  // Development mode: need to pass the app path
+  if (process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient(DEEPLINK_SCHEME, process.execPath, [process.argv[1]])
+  }
+} else {
+  // Production mode
+  app.setAsDefaultProtocolClient(DEEPLINK_SCHEME)
+}
+
+// Handle deeplink on macOS (when app is already running)
+app.on('open-url', (event, url) => {
+  event.preventDefault()
+  console.log('[Main] Received deeplink:', url)
+
+  // Bring the app to focus
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.focus()
+  }
+})
+
+// Handle deeplink on Windows/Linux (single instance check)
+const gotTheLock = app.requestSingleInstanceLock()
+if (!gotTheLock) {
+  app.quit()
+} else {
+  app.on('second-instance', (_event, commandLine, _workingDirectory) => {
+    // Someone tried to run a second instance, we should focus our window.
+    // On Windows/Linux, the deeplink is in commandLine
+    const url = commandLine.find(arg => arg.startsWith(`${DEEPLINK_SCHEME}://`))
+    if (url) {
+      console.log('[Main] Received deeplink from second instance:', url)
+    }
+
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore()
+      mainWindow.focus()
+    }
+  })
+}
 
 function createWindow(): void {
   // Load platform-specific app icon

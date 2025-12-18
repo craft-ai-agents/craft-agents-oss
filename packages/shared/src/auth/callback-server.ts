@@ -16,6 +16,32 @@ export interface CallbackServer {
   url: string;
 }
 
+export type AppType = 'terminal' | 'electron';
+
+interface AppTypeLabels {
+  titleBarText: string;
+  returnMessage: string;
+  fallbackMessage: string;
+}
+
+function getAppTypeLabels(appType: AppType): AppTypeLabels {
+  switch (appType) {
+    case 'electron':
+      return {
+        titleBarText: 'user@craft-agents ~',
+        returnMessage: 'returning to Craft Agents',
+        fallbackMessage: 'If you haven\'t been redirected automatically, you can safely close this window and return to Craft Agents.',
+      };
+    case 'terminal':
+    default:
+      return {
+        titleBarText: 'user@craft-cli ~',
+        returnMessage: 'returning to terminal',
+        fallbackMessage: 'If you haven\'t been redirected automatically, you can safely close this window and return to the terminal.',
+      };
+  }
+}
+
 /**
  * Generate a styled callback page with terminal emulator aesthetic
  * Matches the OAuth page design with Tokyo Night theme
@@ -24,8 +50,11 @@ function generateCallbackPage(options: {
   title: string;
   isSuccess: boolean;
   errorDetail?: string;
+  appType?: AppType;
+  deeplinkUrl?: string;
 }): string {
-  const { title, isSuccess, errorDetail } = options;
+  const { title, isSuccess, errorDetail, appType = 'terminal', deeplinkUrl } = options;
+  const labels = getAppTypeLabels(appType);
 
   // Terminal output lines based on success/error
   interface TerminalLine {
@@ -44,7 +73,7 @@ function generateCallbackPage(options: {
         { text: 'verifying authorization', status: '[PROCESSING]', statusClass: 'status-wait' },
         { text: 'token received', status: '[OK]', statusClass: 'status-ok' },
         { text: 'AUTHORIZATION SUCCESSFUL', isHighlight: true, highlightColor: 'green' },
-        { text: 'returning to terminal', hasCursor: true },
+        { text: labels.returnMessage, hasCursor: true },
       ]
     : [
         { text: 'initiating craft connection...' },
@@ -93,10 +122,15 @@ function generateCallbackPage(options: {
         </div>
         <div id="redirect-notice" style="display: none;">
           <span style="color: var(--comment); font-size: 12px;">
-            If you haven't been redirected automatically, you can safely close this window and return to the terminal.
+            ${labels.fallbackMessage}
           </span>
         </div>
       </div>` : '';
+
+  // Generate deeplink redirect code if provided
+  const deeplinkCode = deeplinkUrl ? `
+          // Try deeplink redirect first
+          window.location.href = '${deeplinkUrl}';` : '';
 
   const autoCloseScript = isSuccess ? `
     // Countdown Logic
@@ -117,6 +151,7 @@ function generateCallbackPage(options: {
         if (elapsed < duration) {
           requestAnimationFrame(tick);
         } else {
+${deeplinkCode}
           // Try to close the window
           window.close();
           // If window.close() didn't work (browser blocked it), show fallback message
@@ -441,7 +476,7 @@ function generateCallbackPage(options: {
         <div class="control maximize"></div>
       </div>
       <div class="title-text">
-        user@craft-cli ~
+        ${labels.titleBarText}
       </div>
       <div style="width: 48px;"></div>
     </div>
@@ -498,7 +533,15 @@ async function findAvailablePort(): Promise<number> {
   throw new Error(`No available port found in range ${START_PORT}-${START_PORT + MAX_PORT_ATTEMPTS - 1}`);
 }
 
-export async function createCallbackServer(): Promise<CallbackServer> {
+export interface CreateCallbackServerOptions {
+  appType?: AppType;
+  /** Deep link URL to redirect to after successful auth (e.g., craftagents://auth-complete) */
+  deeplinkUrl?: string;
+}
+
+export async function createCallbackServer(options?: CreateCallbackServerOptions): Promise<CallbackServer> {
+  const appType = options?.appType ?? 'terminal';
+  const deeplinkUrl = options?.deeplinkUrl;
   const port = await findAvailablePort();
   
   let server: Server | null = null;
@@ -540,6 +583,8 @@ export async function createCallbackServer(): Promise<CallbackServer> {
         title: hasError ? 'Authorization Failed' : 'Authorization Complete',
         isSuccess: hasCode && !hasError,
         errorDetail: query.error_description || query.error,
+        appType,
+        deeplinkUrl: (hasCode && !hasError) ? deeplinkUrl : undefined,
       });
 
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -558,6 +603,7 @@ export async function createCallbackServer(): Promise<CallbackServer> {
         title: 'Error',
         isSuccess: false,
         errorDetail: error instanceof Error ? error.message : 'Internal Server Error',
+        appType,
       });
 
       res.writeHead(500, { 'Content-Type': 'text/html; charset=utf-8' });

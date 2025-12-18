@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react'
 import { Input } from '@/components/ui/input'
-import { Globe, Loader2, AlertCircle } from 'lucide-react'
+import { Globe, AlertCircle } from 'lucide-react'
+import { Spinner } from '@/components/ui/loading-indicator'
 
 interface BrowserViewProps {
   url: string | null
@@ -127,7 +128,7 @@ export function BrowserView({ url }: BrowserViewProps) {
       <div className="p-3 bg-muted/50 border-b shrink-0">
         <div className="flex items-center gap-2 bg-background border rounded-lg px-3 py-1.5 shadow-sm focus-within:ring-2 focus-within:ring-ring/20 focus-within:border-ring transition-all">
           {isLoading ? (
-            <Loader2 className="size-4 text-muted-foreground animate-spin shrink-0" />
+            <Spinner className="text-sm text-muted-foreground" />
           ) : (
             <Globe className="size-4 text-muted-foreground shrink-0" />
           )}

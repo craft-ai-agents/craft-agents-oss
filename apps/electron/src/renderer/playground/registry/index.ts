@@ -1,5 +1,6 @@
 import type { ComponentEntry, CategoryGroup, Category } from './types'
 import { onboardingComponents } from './onboarding'
+import { agentSetupComponents } from './agent-setup'
 import { chatComponents } from './chat'
 import { markdownComponents } from './markdown'
 import { iconComponents } from './icons'
@@ -8,13 +9,14 @@ export * from './types'
 
 export const componentRegistry: ComponentEntry[] = [
   ...onboardingComponents,
+  ...agentSetupComponents,
   ...chatComponents,
   ...markdownComponents,
   ...iconComponents,
 ]
 
 export function getCategories(): CategoryGroup[] {
-  const categoryOrder: Category[] = ['Onboarding', 'Chat', 'Markdown', 'Icons']
+  const categoryOrder: Category[] = ['Onboarding', 'Agent Setup', 'Chat', 'Markdown', 'Icons']
   const categoryMap = new Map<Category, ComponentEntry[]>()
 
   for (const entry of componentRegistry) {

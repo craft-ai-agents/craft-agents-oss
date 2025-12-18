@@ -7,12 +7,17 @@
 
 export type ErrorCode =
   | 'insufficient_credits'
+  | 'credits_exhausted'      // Craft credits specifically ran out (from diagnostics)
   | 'invalid_api_key'
+  | 'invalid_credentials'    // Generic credential issue (from diagnostics)
   | 'expired_oauth_token'
+  | 'token_expired'          // Workspace token expired (from diagnostics)
   | 'rate_limited'
   | 'service_error'
+  | 'service_unavailable'    // Service unavailable (from diagnostics)
   | 'network_error'
   | 'mcp_auth_required'
+  | 'mcp_unreachable'        // MCP server unreachable (from diagnostics)
   | 'unknown_error';
 
 export interface RecoveryAction {
@@ -41,17 +46,28 @@ export interface AgentError {
   retryDelayMs?: number;
   /** Original error message for debugging */
   originalError?: string;
+  /** Diagnostic check results for debugging (e.g., "✓ Credits: 150") */
+  details?: string[];
 }
 
 /**
  * Error definitions with user-friendly messages and recovery actions
  */
-const ERROR_DEFINITIONS: Record<ErrorCode, Omit<AgentError, 'code' | 'originalError'>> = {
+const ERROR_DEFINITIONS: Record<ErrorCode, Omit<AgentError, 'code' | 'originalError' | 'details'>> = {
   insufficient_credits: {
     title: 'Insufficient Credits',
     message: 'Your Craft Credits balance is empty.',
     actions: [
       { key: 'c', label: 'Check and top-up credits if needed', command: '/credits', action: 'credits' },
+    ],
+    canRetry: false,
+  },
+  credits_exhausted: {
+    title: 'Craft Credits Exhausted',
+    message: 'Your Craft AI credits have run out. Add more credits or switch to an API key.',
+    actions: [
+      { key: 'c', label: 'Top up credits', command: '/credits', action: 'credits' },
+      { key: 's', label: 'Switch to API key', command: '/settings', action: 'settings' },
     ],
     canRetry: false,
   },
@@ -63,12 +79,28 @@ const ERROR_DEFINITIONS: Record<ErrorCode, Omit<AgentError, 'code' | 'originalEr
     ],
     canRetry: false,
   },
+  invalid_credentials: {
+    title: 'Invalid Credentials',
+    message: 'Your API key or OAuth token is missing or invalid.',
+    actions: [
+      { key: 's', label: 'Update credentials', command: '/settings', action: 'settings' },
+    ],
+    canRetry: false,
+  },
   expired_oauth_token: {
     title: 'Session Expired',
     message: 'Your Claude Max session has expired.',
     actions: [
       { key: 'r', label: 'Re-authenticate', action: 'reauth' },
       { key: 's', label: 'Switch billing method', command: '/settings', action: 'settings' },
+    ],
+    canRetry: false,
+  },
+  token_expired: {
+    title: 'Workspace Session Expired',
+    message: 'Your workspace authentication has expired. Please re-authenticate the workspace.',
+    actions: [
+      { key: 'w', label: 'Open workspace menu', command: '/workspace' },
     ],
     canRetry: false,
   },
@@ -84,6 +116,15 @@ const ERROR_DEFINITIONS: Record<ErrorCode, Omit<AgentError, 'code' | 'originalEr
   service_error: {
     title: 'Service Error',
     message: 'The AI service is temporarily unavailable.',
+    actions: [
+      { key: 'r', label: 'Retry', action: 'retry' },
+    ],
+    canRetry: true,
+    retryDelayMs: 2000,
+  },
+  service_unavailable: {
+    title: 'Service Unavailable',
+    message: 'The AI service is experiencing issues. All credentials appear valid. Try again in a moment.',
     actions: [
       { key: 'r', label: 'Retry', action: 'retry' },
     ],
@@ -106,6 +147,15 @@ const ERROR_DEFINITIONS: Record<ErrorCode, Omit<AgentError, 'code' | 'originalEr
       { key: 'w', label: 'Open workspace menu', command: '/workspace' },
     ],
     canRetry: false,
+  },
+  mcp_unreachable: {
+    title: 'MCP Server Unreachable',
+    message: 'Cannot connect to the Craft MCP server. Check your network connection.',
+    actions: [
+      { key: 'r', label: 'Retry', action: 'retry' },
+    ],
+    canRetry: true,
+    retryDelayMs: 2000,
   },
   unknown_error: {
     title: 'Error',

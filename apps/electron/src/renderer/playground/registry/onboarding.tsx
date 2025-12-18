@@ -231,24 +231,12 @@ export const onboardingComponents: ComponentEntry[] = [
     }),
   },
   {
-    id: 'credentials-step',
-    name: 'CredentialsStep',
+    id: 'credentials-step-api-key',
+    name: 'Credentials - API Key',
     category: 'Onboarding',
-    description: 'Enter API key or start OAuth flow',
+    description: 'Enter Anthropic API key for authentication',
     component: CredentialsStep,
     props: [
-      {
-        name: 'billingMethod',
-        description: 'Which billing method was selected',
-        control: {
-          type: 'select',
-          options: [
-            { label: 'API Key', value: 'api_key' },
-            { label: 'Claude OAuth', value: 'claude_oauth' },
-          ],
-        },
-        defaultValue: 'api_key',
-      },
       {
         name: 'status',
         description: 'Credential validation status',
@@ -271,14 +259,54 @@ export const onboardingComponents: ComponentEntry[] = [
       },
     ],
     variants: [
-      { name: 'API Key - Idle', props: { billingMethod: 'api_key', status: 'idle' } },
-      { name: 'API Key - Validating', props: { billingMethod: 'api_key', status: 'validating' } },
-      { name: 'API Key - Error', props: { billingMethod: 'api_key', status: 'error', errorMessage: 'Invalid API key. Please check and try again.' } },
-      { name: 'OAuth - Idle', props: { billingMethod: 'claude_oauth', status: 'idle' } },
-      { name: 'OAuth - Waiting', props: { billingMethod: 'claude_oauth', status: 'validating' } },
-      { name: 'OAuth - Error', props: { billingMethod: 'claude_oauth', status: 'error', errorMessage: 'Authentication failed. Please try again.' } },
+      { name: 'Idle', props: { billingMethod: 'api_key', status: 'idle' } },
+      { name: 'Validating', props: { billingMethod: 'api_key', status: 'validating' } },
+      { name: 'Success', props: { billingMethod: 'api_key', status: 'success' } },
+      { name: 'Error', props: { billingMethod: 'api_key', status: 'error', errorMessage: 'Invalid API key. Please check and try again.' } },
     ],
     mockData: () => ({
+      billingMethod: 'api_key',
+      onSubmit: (cred: string) => console.log('[Playground] Submitted credential:', cred),
+      onStartOAuth: noopHandler,
+      onBack: noopHandler,
+    }),
+  },
+  {
+    id: 'credentials-step-oauth',
+    name: 'Credentials - OAuth',
+    category: 'Onboarding',
+    description: 'Claude Max/Pro OAuth authentication flow',
+    component: CredentialsStep,
+    props: [
+      {
+        name: 'status',
+        description: 'OAuth status',
+        control: {
+          type: 'select',
+          options: [
+            { label: 'Idle', value: 'idle' },
+            { label: 'Waiting', value: 'validating' },
+            { label: 'Success', value: 'success' },
+            { label: 'Error', value: 'error' },
+          ],
+        },
+        defaultValue: 'idle',
+      },
+      {
+        name: 'errorMessage',
+        description: 'Error message to display',
+        control: { type: 'string', placeholder: 'Error message' },
+        defaultValue: '',
+      },
+    ],
+    variants: [
+      { name: 'Idle', props: { billingMethod: 'claude_oauth', status: 'idle' } },
+      { name: 'Waiting', props: { billingMethod: 'claude_oauth', status: 'validating' } },
+      { name: 'Success', props: { billingMethod: 'claude_oauth', status: 'success' } },
+      { name: 'Error', props: { billingMethod: 'claude_oauth', status: 'error', errorMessage: 'Authentication failed. Please try again.' } },
+    ],
+    mockData: () => ({
+      billingMethod: 'claude_oauth',
       onSubmit: (cred: string) => console.log('[Playground] Submitted credential:', cred),
       onStartOAuth: noopHandler,
       onBack: noopHandler,
@@ -418,6 +446,7 @@ export const onboardingComponents: ComponentEntry[] = [
     mockData: () => ({
       state: createOnboardingState(),
       spaceCategories: sampleSpaceCategories,
+      className: 'min-h-0 h-full',
       onCancel: noopHandler,
       onContinue: noopHandler,
       onBack: noopHandler,

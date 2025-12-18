@@ -40,6 +40,11 @@ export type {
   AgentStatus,
   AgentActivateOptions,
 };
+
+// Import and re-export auth types for onboarding
+import type { AuthState, SetupNeeds } from '@craft-agent/shared/auth';
+import type { AuthType } from '@craft-agent/shared/config';
+export type { AuthState, SetupNeeds, AuthType };
 export { generateMessageId } from '@craft-agent/core/types';
 
 /**
@@ -114,6 +119,55 @@ export interface ApiWithAuthStatus {
 export interface AgentAuthStatus {
   mcpServers: McpServerWithAuthStatus[]
   apis: ApiWithAuthStatus[]
+}
+
+// ============================================
+// Onboarding Types
+// ============================================
+
+/**
+ * Craft space from user's profile
+ */
+export interface CraftSpace {
+  id: string
+  name: string
+  teamId?: string | null
+}
+
+/**
+ * MCP link from a Craft space
+ */
+export interface CraftMcpLink {
+  linkId: string
+  name: string
+  mcpUrl?: string
+  scope: string
+  enabled: boolean
+}
+
+/**
+ * Craft OAuth result with profile info
+ */
+export interface CraftOAuthResult {
+  success: boolean
+  error?: string
+  token?: string
+  profile?: {
+    userId: string
+    firstName: string
+    lastName: string
+    spaces: CraftSpace[]
+    teams: Array<{ id: string; name: string; isPrivate: boolean; role: string; tier?: string | null }>
+  }
+}
+
+/**
+ * Result of saving onboarding configuration
+ */
+export interface OnboardingSaveResult {
+  success: boolean
+  error?: string
+  workspaceId?: string
 }
 
 /**
@@ -236,6 +290,28 @@ export const IPC_CHANNELS = {
   MENU_OPEN_SETTINGS: 'menu:openSettings',
   MENU_KEYBOARD_SHORTCUTS: 'menu:keyboardShortcuts',
   MENU_OPEN_HELP: 'menu:openHelp',
+
+  // Auth
+  LOGOUT: 'auth:logout',
+  SHOW_LOGOUT_CONFIRMATION: 'auth:showLogoutConfirmation',
+
+  // Onboarding
+  ONBOARDING_GET_AUTH_STATE: 'onboarding:getAuthState',
+  ONBOARDING_START_CRAFT_OAUTH: 'onboarding:startCraftOAuth',
+  ONBOARDING_GET_CRAFT_PROFILE: 'onboarding:getCraftProfile',
+  ONBOARDING_GET_MCP_LINKS: 'onboarding:getMcpLinks',
+  ONBOARDING_CREATE_MCP_LINK: 'onboarding:createMcpLink',
+  ONBOARDING_VALIDATE_MCP: 'onboarding:validateMcp',
+  ONBOARDING_START_MCP_OAUTH: 'onboarding:startMcpOAuth',
+  ONBOARDING_SAVE_CONFIG: 'onboarding:saveConfig',
+  // Claude OAuth
+  ONBOARDING_GET_EXISTING_CLAUDE_TOKEN: 'onboarding:getExistingClaudeToken',
+  ONBOARDING_IS_CLAUDE_CLI_INSTALLED: 'onboarding:isClaudeCliInstalled',
+  ONBOARDING_RUN_CLAUDE_SETUP_TOKEN: 'onboarding:runClaudeSetupToken',
+
+  // Settings - Billing
+  SETTINGS_GET_BILLING_METHOD: 'settings:getBillingMethod',
+  SETTINGS_UPDATE_BILLING_METHOD: 'settings:updateBillingMethod',
 } as const
 
 // Re-import types for ElectronAPI
@@ -312,6 +388,50 @@ export interface ElectronAPI {
   onMenuOpenSettings(callback: () => void): () => void
   onMenuKeyboardShortcuts(callback: () => void): () => void
   onMenuOpenHelp(callback: () => void): () => void
+
+  // Auth
+  showLogoutConfirmation(): Promise<boolean>
+  logout(): Promise<void>
+
+  // Onboarding
+  getAuthState(): Promise<AuthState>
+  getSetupNeeds(): Promise<SetupNeeds>
+  startCraftOAuth(): Promise<CraftOAuthResult>
+  getCraftProfile(): Promise<CraftOAuthResult>  // Get profile using existing stored token
+  getMcpLinks(spaceId: string, authToken: string): Promise<CraftMcpLink[]>
+  createMcpLink(spaceId: string, authToken: string): Promise<CraftMcpLink>
+  startWorkspaceMcpOAuth(mcpUrl: string): Promise<OAuthResult & { accessToken?: string; clientId?: string }>
+  saveOnboardingConfig(config: {
+    authType?: AuthType  // Optional - if not provided, preserves existing auth type (for add workspace)
+    workspace?: { name: string; mcpUrl: string }  // Optional - if not provided, only updates billing
+    credential?: string  // API key or OAuth token based on authType
+    mcpCredentials?: { accessToken: string; clientId?: string }  // MCP OAuth credentials
+  }): Promise<OnboardingSaveResult>
+  // Claude OAuth
+  getExistingClaudeToken(): Promise<string | null>
+  isClaudeCliInstalled(): Promise<boolean>
+  runClaudeSetupToken(): Promise<ClaudeOAuthResult>
+
+  // Settings - Billing
+  getBillingMethod(): Promise<BillingMethodInfo>
+  updateBillingMethod(authType: AuthType, credential?: string): Promise<void>
+}
+
+/**
+ * Result from Claude OAuth (setup-token) flow
+ */
+export interface ClaudeOAuthResult {
+  success: boolean
+  token?: string
+  error?: string
+}
+
+/**
+ * Current billing method info for settings
+ */
+export interface BillingMethodInfo {
+  authType: AuthType
+  hasCredential: boolean
 }
 
 declare global {

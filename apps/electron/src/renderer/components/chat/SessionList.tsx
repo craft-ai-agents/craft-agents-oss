@@ -8,12 +8,12 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { Button } from "@/components/ui/button"
 import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu"
+  DropdownMenu,
+  DropdownMenuTrigger,
+  StyledDropdownMenuContent,
+  StyledDropdownMenuItem,
+  StyledDropdownMenuSeparator,
+} from "@/components/ui/styled-dropdown"
 import {
   Dialog,
   DialogContent,
@@ -42,16 +42,18 @@ interface SessionItemProps {
     role: string
   }
   isSelected: boolean
+  isLast: boolean
   onKeyDown: (e: React.KeyboardEvent, item: Session) => void
   onRenameClick: (sessionId: string, currentName: string) => void
   onArchive?: (sessionId: string) => void
   onUnarchive?: (sessionId: string) => void
   onDelete: (sessionId: string) => void
+  onSelect: (forceNewTab: boolean) => void
 }
 
 /**
- * SessionItem - Individual session card with context menu
- * Tracks its own context menu open state to keep "..." button visible
+ * SessionItem - Individual session card with dropdown menu
+ * Tracks menu open state to keep "..." button visible
  */
 function SessionItem({
   item,
@@ -59,115 +61,114 @@ function SessionItem({
   preview,
   itemProps,
   isSelected,
+  isLast,
   onKeyDown,
   onRenameClick,
   onArchive,
   onUnarchive,
   onDelete,
+  onSelect,
 }: SessionItemProps) {
   const [menuOpen, setMenuOpen] = useState(false)
+
+  const handleClick = (e: React.MouseEvent) => {
+    // Cmd+Click (Mac) or Ctrl+Click (Windows/Linux) opens in new tab
+    const forceNewTab = e.metaKey || e.ctrlKey
+    onSelect(forceNewTab)
+  }
 
   return (
     <div>
       {index > 0 && <Separator />}
-      <ContextMenu onOpenChange={setMenuOpen}>
-        <ContextMenuTrigger asChild>
-          <button
-            {...itemProps}
-            className={cn(
-              "group flex w-full flex-col items-start gap-2 pl-5 pr-4 py-3 text-left text-sm transition-all hover:bg-foreground/5 relative outline-none",
-              isSelected && "bg-muted",
-              "focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-            )}
-            onKeyDown={(e) => {
-              itemProps.onKeyDown(e)
-              onKeyDown(e, item)
-            }}
-          >
-            {/* Card Header Row */}
-            <div className="flex w-full flex-col gap-0.5 pr-6">
-              <div className="flex items-center gap-2">
-                <div className="font-semibold font-sans truncate">
-                  {getSessionTitle(item)}
-                </div>
-                {item.isProcessing && (
-                  <span className="flex h-2 w-2 rounded-full bg-primary animate-pulse shrink-0" />
-                )}
-              </div>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground/70">
-                <span>
-                  {item.messages.length} message{item.messages.length !== 1 ? 's' : ''}
-                  {item.lastMessageAt && (
-                    <> · {formatDistanceToNow(new Date(item.lastMessageAt), { addSuffix: true })}</>
-                  )}
-                </span>
-                {item.agentName && (
-                  <span className="flex items-center gap-1 ml-auto">
-                    <Bot className="h-3 w-3" />
-                    {item.agentName}
-                  </span>
-                )}
-              </div>
+      <button
+        {...itemProps}
+        className={cn(
+          "group flex w-full flex-col items-start gap-2 pl-5 pr-4 py-3 text-left text-sm transition-all hover:bg-foreground/5 relative outline-none",
+          isSelected && "bg-muted",
+          "focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+        )}
+        onClick={handleClick}
+        onKeyDown={(e) => {
+          itemProps.onKeyDown(e)
+          onKeyDown(e, item)
+        }}
+      >
+        {/* Card Header Row */}
+        <div className="flex w-full flex-col gap-0.5 pr-6">
+          <div className="flex items-center gap-2">
+            <div className="font-semibold font-sans truncate">
+              {getSessionTitle(item)}
             </div>
-            {/* Preview Text */}
-            <div className="line-clamp-2 text-xs text-muted-foreground">
-              {preview}
-            </div>
-            {/* Processing Badge */}
             {item.isProcessing && (
-              <div className="flex items-center gap-2">
-                <Badge variant="secondary">Processing</Badge>
-              </div>
+              <span className="flex h-2 w-2 rounded-full bg-primary animate-pulse shrink-0" />
             )}
-            {/* More menu button - visible on hover or when menu is open */}
+          </div>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground/70">
+            <span>
+              {item.messages.length} message{item.messages.length !== 1 ? 's' : ''}
+              {item.lastMessageAt && (
+                <> · {formatDistanceToNow(new Date(item.lastMessageAt), { addSuffix: true })}</>
+              )}
+            </span>
+            {item.agentName && (
+              <span className="flex items-center gap-1 ml-auto">
+                <Bot className="h-3 w-3" />
+                {item.agentName}
+              </span>
+            )}
+          </div>
+        </div>
+        {/* Preview Text */}
+        <div className="line-clamp-2 text-xs text-muted-foreground">
+          {preview}
+        </div>
+        {/* Processing Badge */}
+        {item.isProcessing && (
+          <div className="flex items-center gap-2">
+            <Badge variant="secondary">Processing</Badge>
+          </div>
+        )}
+        {/* More menu dropdown - visible on hover or when menu is open */}
+        <DropdownMenu onOpenChange={setMenuOpen}>
+          <DropdownMenuTrigger asChild>
             <div
               className={cn(
                 "absolute right-2 top-3 transition-opacity",
                 menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100"
               )}
-              onClick={(e) => {
-                e.stopPropagation()
-                e.preventDefault()
-                const rect = e.currentTarget.getBoundingClientRect()
-                const event = new MouseEvent('contextmenu', {
-                  bubbles: true,
-                  cancelable: true,
-                  clientX: rect.right,
-                  clientY: rect.bottom,
-                })
-                e.currentTarget.dispatchEvent(event)
-              }}
+              onClick={(e) => e.stopPropagation()}
             >
-              <div className="p-1 rounded hover:bg-foreground/10 cursor-pointer">
+              <div className="p-1 rounded hover:bg-foreground/10 data-[state=open]:bg-foreground/10 cursor-pointer">
                 <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
               </div>
             </div>
-          </button>
-        </ContextMenuTrigger>
-        <ContextMenuContent className="w-48">
-          <ContextMenuItem onClick={() => onRenameClick(item.id, getSessionTitle(item))} shortcut="R">
-            <Pencil />
-            Rename
-          </ContextMenuItem>
-          <ContextMenuSeparator />
-          {onArchive && (
-            <ContextMenuItem onClick={() => onArchive(item.id)} shortcut="A">
-              <Archive />
-              Archive
-            </ContextMenuItem>
-          )}
-          {onUnarchive && (
-            <ContextMenuItem onClick={() => onUnarchive(item.id)} shortcut="A">
-              <ArchiveRestore />
-              Unarchive
-            </ContextMenuItem>
-          )}
-          <ContextMenuItem onClick={() => onDelete(item.id)} variant="destructive" shortcut="D">
-            <Trash2 />
-            Delete
-          </ContextMenuItem>
-        </ContextMenuContent>
-      </ContextMenu>
+          </DropdownMenuTrigger>
+          <StyledDropdownMenuContent align="end">
+            <StyledDropdownMenuItem onClick={() => onRenameClick(item.id, getSessionTitle(item))}>
+              <Pencil />
+              Rename
+            </StyledDropdownMenuItem>
+            <StyledDropdownMenuSeparator />
+            {onArchive && (
+              <StyledDropdownMenuItem onClick={() => onArchive(item.id)}>
+                <Archive />
+                Archive
+              </StyledDropdownMenuItem>
+            )}
+            {onUnarchive && (
+              <StyledDropdownMenuItem onClick={() => onUnarchive(item.id)}>
+                <ArchiveRestore />
+                Unarchive
+              </StyledDropdownMenuItem>
+            )}
+            <StyledDropdownMenuItem onClick={() => onDelete(item.id)} variant="destructive">
+              <Trash2 />
+              Delete
+            </StyledDropdownMenuItem>
+          </StyledDropdownMenuContent>
+        </DropdownMenu>
+      </button>
+      {isLast && <Separator />}
     </div>
   )
 }
@@ -180,6 +181,8 @@ interface SessionListProps {
   onRename: (sessionId: string, name: string) => void
   /** Called when Enter is pressed to focus chat input */
   onFocusChatInput?: () => void
+  /** Called when a session is selected (click or Cmd+click for new tab) */
+  onSessionSelect?: (session: Session, options: { forceNewTab: boolean }) => void
 }
 
 /**
@@ -191,7 +194,6 @@ interface SessionListProps {
  * - Delete/Backspace: Delete session
  * - A: Archive session
  * - R: Rename session
- * - Right-click or Menu key: Open context menu
  */
 export function SessionList({
   items,
@@ -200,6 +202,7 @@ export function SessionList({
   onUnarchive,
   onRename,
   onFocusChatInput,
+  onSessionSelect,
 }: SessionListProps) {
   const [session, setSession] = useSession()
   const [renameDialogOpen, setRenameDialogOpen] = useState(false)
@@ -321,7 +324,7 @@ export function SessionList({
     <ScrollArea className="h-screen" ref={scrollRef}>
       <div
         ref={zoneRef}
-        className="flex flex-col"
+        className="flex flex-col pb-14"
         data-focus-zone="session-list"
         role="listbox"
         aria-label="Sessions"
@@ -344,11 +347,18 @@ export function SessionList({
                 preview={preview}
                 itemProps={itemProps}
                 isSelected={session.selected === item.id}
+                isLast={index === sortedItems.length - 1}
                 onKeyDown={handleKeyDown}
                 onRenameClick={handleRenameClick}
                 onArchive={onArchive}
                 onUnarchive={onUnarchive}
                 onDelete={onDelete}
+                onSelect={(forceNewTab) => {
+                  // Always update selection
+                  setSession({ ...session, selected: item.id })
+                  // Notify parent for tab handling
+                  onSessionSelect?.(item, { forceNewTab })
+                }}
               />
             )
           })

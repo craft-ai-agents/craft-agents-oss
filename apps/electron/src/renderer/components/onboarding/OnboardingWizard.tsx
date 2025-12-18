@@ -35,11 +35,16 @@ interface OnboardingWizardProps {
   onLogin: () => void
   onOpenLoginManually?: () => void
   onRetryLogin?: () => void
-  onSelectSpace: (spaceId: string) => void
+  onSelectSpace: (spaceId: string, spaceName: string) => void
   onSelectBillingMethod: (method: BillingMethod) => void
   onSubmitCredential: (credential: string) => void
   onStartOAuth?: () => void
   onFinish: () => void
+
+  // Claude OAuth
+  existingClaudeToken?: string | null
+  isClaudeCliInstalled?: boolean
+  onUseExistingClaudeToken?: () => void
 
   className?: string
 }
@@ -70,6 +75,9 @@ export function OnboardingWizard({
   onSubmitCredential,
   onStartOAuth,
   onFinish,
+  existingClaudeToken,
+  isClaudeCliInstalled,
+  onUseExistingClaudeToken,
   className
 }: OnboardingWizardProps) {
   const renderStep = () => {
@@ -126,6 +134,9 @@ export function OnboardingWizard({
             onSubmit={onSubmitCredential}
             onStartOAuth={onStartOAuth}
             onBack={onBack}
+            existingClaudeToken={existingClaudeToken}
+            isClaudeCliInstalled={isClaudeCliInstalled}
+            onUseExistingClaudeToken={onUseExistingClaudeToken}
           />
         )
 
@@ -150,8 +161,11 @@ export function OnboardingWizard({
         className
       )}
     >
+      {/* Draggable title bar region for transparent window (macOS) */}
+      <div className="titlebar-drag-region fixed top-0 left-0 right-0 h-[50px] z-40" />
+
       {/* Header with progress indicator */}
-      <header className="flex h-14 items-center justify-center border-b border-border px-4">
+      <header className="flex h-14 items-center justify-center px-4">
         <StepIndicator
           currentStep={state.step}
           isExistingUser={state.isExistingUser}

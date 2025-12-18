@@ -1,5 +1,7 @@
 import { Button } from "@/components/ui/button"
-import { CheckCircle2, Loader2 } from "lucide-react"
+import { Spinner } from "@/components/ui/loading-indicator"
+import { CraftAgentsSymbol } from "@/components/icons/CraftAgentsSymbol"
+import { StepFormLayout } from "./primitives"
 
 interface CompletionStepProps {
   status: 'saving' | 'complete'
@@ -19,63 +21,39 @@ export function CompletionStep({
   spaceName,
   onFinish
 }: CompletionStepProps) {
+  const isSaving = status === 'saving'
+
   return (
-    <div className="flex flex-col items-center justify-center text-center">
-      {/* Icon */}
-      <div className="mb-6 flex size-16 items-center justify-center rounded-2xl bg-green-500/10">
-        {status === 'saving' ? (
-          <Loader2 className="size-8 text-green-500 animate-spin" />
-        ) : (
-          <CheckCircle2 className="size-8 text-green-500" />
-        )}
-      </div>
-
-      {/* Title */}
-      <h1 className="text-2xl font-semibold tracking-tight">
-        {status === 'saving' ? 'Setting up...' : 'You\'re all set!'}
-      </h1>
-
-      {/* Description */}
-      <p className="mt-3 max-w-sm text-muted-foreground">
-        {status === 'saving' ? (
+    <StepFormLayout
+      iconElement={isSaving ? (
+        <div className="flex size-16 items-center justify-center">
+          <Spinner className="text-2xl text-primary" />
+        </div>
+      ) : (
+        <div className="flex size-16 items-center justify-center">
+          <CraftAgentsSymbol className="size-10" />
+        </div>
+      )}
+      title={isSaving ? 'Setting up...' : "You're all set!"}
+      description={
+        isSaving ? (
           'Saving your configuration...'
         ) : (
           <>
-            {spaceName ? (
+            {spaceName && (
               <>Connected to <span className="font-medium text-foreground">{spaceName}</span>. </>
-            ) : null}
+            )}
             Start chatting with Claude to manage your Craft documents.
           </>
-        )}
-      </p>
-
-      {/* What's next */}
-      {status === 'complete' && (
-        <div className="mt-6 rounded-lg border border-border bg-muted/50 p-4 text-left">
-          <h3 className="text-sm font-medium">What you can do:</h3>
-          <ul className="mt-2 space-y-1.5 text-sm text-muted-foreground">
-            <li className="flex items-start gap-2">
-              <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-primary" />
-              Search and read your Craft documents
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-primary" />
-              Create and edit blocks with natural language
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-primary" />
-              Activate custom agents from your Agents folder
-            </li>
-          </ul>
-        </div>
-      )}
-
-      {/* Action */}
-      {status === 'complete' && (
-        <Button onClick={onFinish} className="mt-8" size="lg">
-          Start Chatting
-        </Button>
-      )}
-    </div>
+        )
+      }
+      actions={
+        status === 'complete' ? (
+          <Button onClick={onFinish} className="w-full" size="lg">
+            Get Started
+          </Button>
+        ) : undefined
+      }
+    />
   )
 }

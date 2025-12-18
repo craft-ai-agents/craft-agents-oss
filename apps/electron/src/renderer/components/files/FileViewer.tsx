@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { FileText, Loader2 } from 'lucide-react'
+import { FileText } from 'lucide-react'
+import { Spinner } from '@/components/ui/loading-indicator'
 
 interface FileViewerProps {
   path: string | null
@@ -62,7 +63,7 @@ export function FileViewer({ path }: FileViewerProps) {
         <div className="p-4">
           {isLoading ? (
             <div className="flex flex-col items-center justify-center h-32 text-muted-foreground gap-3">
-              <Loader2 className="size-6 animate-spin" />
+              <Spinner className="text-lg" />
               <span className="text-sm font-medium">Loading content...</span>
             </div>
           ) : error ? (

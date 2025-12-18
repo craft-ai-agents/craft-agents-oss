@@ -409,4 +409,290 @@ console.log(example);
     // Just log a message
     alert(`[Dev Mode] Would open file:\n${path}`)
   },
+
+  // ===== Permission Response =====
+
+  async respondToPermission(_sessionId: string, _requestId: string, _allowed: boolean, _alwaysAllow: boolean): Promise<boolean> {
+    console.log('[Mock] respondToPermission called')
+    return true
+  },
+
+  // ===== Agent State Management =====
+
+  async getAgentStatus(_sessionId: string): Promise<import('../../shared/types').AgentStatus> {
+    await sleep(100)
+    return { status: 'idle' }
+  },
+
+  async activateAgent(_sessionId: string, agentId: string, _options?: import('../../shared/types').AgentActivateOptions): Promise<import('../../shared/types').AgentStatus> {
+    await sleep(300)
+    console.log('[Mock] activateAgent called for:', agentId)
+    // Return a mock 'active' status with required fields
+    return {
+      status: 'active',
+      agentId,
+      agentName: 'Mock Agent',
+      definition: {
+        name: 'Mock Agent',
+        instructions: 'Mock instructions',
+        mcpServers: [],
+        apis: [],
+        capabilities: [],
+        info: [],
+        rawContent: '',
+        parsedAt: Date.now(),
+      }
+    }
+  },
+
+  async continueAfterReview(_sessionId: string, _answers: Record<string, string>): Promise<import('../../shared/types').AgentStatus> {
+    await sleep(200)
+    console.log('[Mock] continueAfterReview called')
+    return { status: 'idle' }
+  },
+
+  async continueAfterMcpAuth(_sessionId: string): Promise<import('../../shared/types').AgentStatus> {
+    await sleep(200)
+    console.log('[Mock] continueAfterMcpAuth called')
+    return { status: 'idle' }
+  },
+
+  async continueAfterApiAuth(_sessionId: string): Promise<import('../../shared/types').AgentStatus> {
+    await sleep(200)
+    console.log('[Mock] continueAfterApiAuth called')
+    return { status: 'idle' }
+  },
+
+  async deactivateAgent(_sessionId: string): Promise<void> {
+    console.log('[Mock] deactivateAgent called')
+  },
+
+  async reloadAgentState(_sessionId: string): Promise<import('../../shared/types').AgentStatus> {
+    await sleep(300)
+    console.log('[Mock] reloadAgentState called')
+    return { status: 'idle' }
+  },
+
+  async resetAgentState(_sessionId: string): Promise<void> {
+    console.log('[Mock] resetAgentState called')
+  },
+
+  async markAgentActive(_sessionId: string): Promise<void> {
+    console.log('[Mock] markAgentActive called')
+  },
+
+  // ===== Menu Event Listeners =====
+
+  onMenuNewChat(callback: () => void): () => void {
+    // Mock: no-op in browser mode
+    console.log('[Mock] onMenuNewChat registered')
+    return () => {}
+  },
+
+  onMenuOpenSettings(callback: () => void): () => void {
+    console.log('[Mock] onMenuOpenSettings registered')
+    return () => {}
+  },
+
+  onMenuKeyboardShortcuts(callback: () => void): () => void {
+    console.log('[Mock] onMenuKeyboardShortcuts registered')
+    return () => {}
+  },
+
+  onMenuOpenHelp(callback: () => void): () => void {
+    console.log('[Mock] onMenuOpenHelp registered')
+    return () => {}
+  },
+
+  // ===== Auth =====
+
+  async showLogoutConfirmation() {
+    await sleep(100)
+    console.log('[Mock] showLogoutConfirmation called')
+    // In mock mode, always confirm
+    return true
+  },
+
+  async logout() {
+    await sleep(100)
+    console.log('[Mock] logout called')
+    // In mock mode, just log - no actual cleanup needed
+  },
+
+  // ===== Onboarding =====
+
+  async getAuthState() {
+    await sleep(100)
+    console.log('[Mock] getAuthState called')
+    // Mock: return a state that requires setup
+    return {
+      craft: {
+        hasToken: false,
+        token: null,
+      },
+      billing: {
+        type: null,
+        hasCredentials: false,
+        apiKey: null,
+        claudeOAuthToken: null,
+      },
+      workspace: {
+        hasWorkspace: false,
+        active: null,
+      },
+    }
+  },
+
+  async getSetupNeeds() {
+    await sleep(100)
+    console.log('[Mock] getSetupNeeds called')
+    // Mock: return needs that trigger onboarding
+    return {
+      needsCraftAuth: true,
+      needsBillingConfig: true,
+      needsCredentials: true,
+      isFullyConfigured: false,
+    }
+  },
+
+  async startCraftOAuth() {
+    await sleep(2000) // Simulate OAuth flow
+    console.log('[Mock] startCraftOAuth called')
+    // Mock: return successful OAuth result
+    return {
+      success: true,
+      token: 'mock-craft-token-12345',
+      profile: {
+        userId: 'mock-user-id',
+        firstName: 'Test',
+        lastName: 'User',
+        spaces: [
+          { id: 'mock-user-id', name: 'Personal Space', teamId: null },
+          { id: 'space-work-1', name: 'Work Space', teamId: 'team-1' },
+          { id: 'space-shared-1', name: 'Shared Projects', teamId: null },
+        ],
+        teams: [
+          { id: 'team-1', name: 'Work Team', isPrivate: false, role: 'admin', tier: 'pro' },
+        ],
+      },
+    }
+  },
+
+  async getMcpLinks(spaceId: string, _authToken: string) {
+    await sleep(300)
+    console.log('[Mock] getMcpLinks called for space:', spaceId)
+    // Mock: return existing MCP links for the space
+    return [
+      {
+        linkId: 'mock-link-1',
+        name: 'Craft Agents MCP',
+        mcpUrl: 'https://mcp.craft.do/mock-link-1',
+        scope: 'fullSpace',
+        enabled: true,
+      },
+    ]
+  },
+
+  async createMcpLink(spaceId: string, _authToken: string) {
+    await sleep(500)
+    console.log('[Mock] createMcpLink called for space:', spaceId)
+    // Mock: return a newly created MCP link
+    return {
+      linkId: `mock-link-${Date.now()}`,
+      name: 'Craft Agents MCP',
+      mcpUrl: `https://mcp.craft.do/mock-link-${Date.now()}`,
+      scope: 'fullSpace',
+      enabled: true,
+    }
+  },
+
+  async startWorkspaceMcpOAuth(mcpUrl: string) {
+    await sleep(1500) // Simulate OAuth flow
+    console.log('[Mock] startWorkspaceMcpOAuth called for:', mcpUrl)
+    // Mock: return successful MCP OAuth result
+    return {
+      success: true,
+      accessToken: 'mock-mcp-access-token-12345',
+      clientId: 'mock-client-id',
+    }
+  },
+
+  async saveOnboardingConfig(config: {
+    authType: import('../../shared/types').AuthType
+    workspace: { name: string; mcpUrl: string }
+    credential?: string
+    mcpCredentials?: { accessToken: string; clientId?: string }
+  }) {
+    await sleep(300)
+    console.log('[Mock] saveOnboardingConfig called:', config)
+    // Mock: return successful save result
+    return {
+      success: true,
+      workspaceId: `ws-${Date.now()}`,
+    }
+  },
+
+  // Claude OAuth
+  async getExistingClaudeToken() {
+    await sleep(100)
+    console.log('[Mock] getExistingClaudeToken called')
+    // Mock: return a fake existing token (simulates finding one in keychain)
+    return 'mock-claude-oauth-token-12345'
+  },
+
+  async isClaudeCliInstalled() {
+    await sleep(100)
+    console.log('[Mock] isClaudeCliInstalled called')
+    // Mock: simulate Claude CLI being installed
+    return true
+  },
+
+  async runClaudeSetupToken() {
+    await sleep(2000) // Simulate OAuth flow
+    console.log('[Mock] runClaudeSetupToken called')
+    // Mock: return successful OAuth result
+    return {
+      success: true,
+      token: 'mock-claude-oauth-token-from-setup-12345',
+    }
+  },
+
+  async getCraftProfile() {
+    await sleep(200)
+    console.log('[Mock] getCraftProfile called')
+    // Mock: return profile using "stored" token
+    return {
+      success: true,
+      token: 'mock-craft-token-12345',
+      profile: {
+        userId: 'mock-user-id',
+        firstName: 'Test',
+        lastName: 'User',
+        spaces: [
+          { id: 'mock-user-id', name: 'Personal Space', teamId: null },
+          { id: 'space-work-1', name: 'Work Space', teamId: 'team-1' },
+          { id: 'space-shared-1', name: 'Shared Projects', teamId: null },
+        ],
+        teams: [
+          { id: 'team-1', name: 'Work Team', isPrivate: false, role: 'admin', tier: 'pro' },
+        ],
+      },
+    }
+  },
+
+  async getBillingMethod() {
+    await sleep(100)
+    console.log('[Mock] getBillingMethod called')
+    // Mock: return current billing method
+    return {
+      authType: 'craft_credits' as const,
+      hasCredential: true,
+    }
+  },
+
+  async updateBillingMethod(authType: import('../../shared/types').AuthType, credential?: string) {
+    await sleep(200)
+    console.log('[Mock] updateBillingMethod called:', authType, credential ? '(with credential)' : '(no credential)')
+    // Mock: just log, no actual update
+  },
 }

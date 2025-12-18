@@ -150,6 +150,7 @@ export const markdownComponents: ComponentEntry[] = [
     category: 'Markdown',
     description: 'Customizable markdown renderer with three render modes: terminal, minimal, full',
     component: Markdown,
+    layout: 'top',
     props: [
       {
         name: 'children',

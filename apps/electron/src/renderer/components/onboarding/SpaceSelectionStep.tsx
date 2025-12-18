@@ -1,8 +1,9 @@
 import { useState } from "react"
-import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
-import { Check, ChevronDown, Loader2, User, Users, Globe } from "lucide-react"
+import { Check, ChevronDown, User, Users, Globe } from "lucide-react"
+import { Spinner } from "@/components/ui/loading-indicator"
+import { StepFormLayout, BackButton, ContinueButton } from "./primitives"
 
 export interface CraftSpace {
   id: string
@@ -20,9 +21,11 @@ interface SpaceSelectionStepProps {
   categories: SpaceCategory[]
   selectedSpaceId: string | null
   isLoading?: boolean
-  onSelect: (spaceId: string) => void
+  onSelect: (spaceId: string, spaceName: string) => void
   onContinue: () => void
   onBack: () => void
+  /** Optional cancel callback (shows Cancel button when provided) */
+  onCancel?: () => void
 }
 
 function SpaceIcon({ type, iconUrl }: { type: CraftSpace['type']; iconUrl?: string }) {
@@ -74,7 +77,8 @@ export function SpaceSelectionStep({
   isLoading = false,
   onSelect,
   onContinue,
-  onBack
+  onBack,
+  onCancel
 }: SpaceSelectionStepProps) {
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(
     new Set(categories.map(c => c.name))
@@ -95,21 +99,24 @@ export function SpaceSelectionStep({
   const totalSpaces = categories.reduce((sum, cat) => sum + cat.spaces.length, 0)
 
   return (
-    <div className="flex w-full max-w-md flex-col">
-      {/* Header */}
-      <div className="mb-6 text-center">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Select a Space
-        </h1>
-        <p className="mt-2 text-muted-foreground">
-          Choose which Craft space to connect to the agent.
-        </p>
-      </div>
-
+    <StepFormLayout
+      title="Select a Space"
+      description="Choose which Craft space to connect to the agent."
+      actions={
+        <>
+          {onCancel ? (
+            <BackButton onClick={onCancel}>Cancel</BackButton>
+          ) : (
+            <BackButton onClick={onBack} />
+          )}
+          <ContinueButton onClick={onContinue} disabled={!selectedSpaceId} />
+        </>
+      }
+    >
       {/* Space List */}
       {isLoading ? (
         <div className="flex h-64 items-center justify-center">
-          <Loader2 className="size-6 animate-spin text-muted-foreground" />
+          <Spinner className="text-lg text-muted-foreground" />
         </div>
       ) : totalSpaces === 0 ? (
         <div className="flex h-64 flex-col items-center justify-center text-center">
@@ -149,7 +156,7 @@ export function SpaceSelectionStep({
                       return (
                         <button
                           key={space.id}
-                          onClick={() => onSelect(space.id)}
+                          onClick={() => onSelect(space.id, space.name)}
                           className={cn(
                             "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors",
                             "hover:bg-foreground/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
@@ -173,20 +180,6 @@ export function SpaceSelectionStep({
           </div>
         </ScrollArea>
       )}
-
-      {/* Actions */}
-      <div className="mt-6 flex gap-3">
-        <Button variant="ghost" onClick={onBack} className="flex-1">
-          Back
-        </Button>
-        <Button
-          onClick={onContinue}
-          disabled={!selectedSpaceId}
-          className="flex-1"
-        >
-          Continue
-        </Button>
-      </div>
-    </div>
+    </StepFormLayout>
   )
 }
