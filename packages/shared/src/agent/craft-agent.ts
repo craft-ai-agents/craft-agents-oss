@@ -2105,7 +2105,7 @@ export class CraftAgent {
           }
         } else if (message.subtype === 'compact_boundary') {
           events.push({
-            type: 'status',
+            type: 'info',
             message: `Compacted conversation (was ${message.compact_metadata.pre_tokens} tokens)`,
           });
         } else if (message.subtype === 'status' && message.status === 'compacting') {

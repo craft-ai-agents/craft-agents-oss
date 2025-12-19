@@ -6,8 +6,8 @@ import {
   AlertTriangle,
   ChevronDown,
   ChevronRight,
-  CircleSlash,
   ExternalLink,
+  Info,
 } from 'lucide-react'
 import { Markdown, CollapsibleMarkdownProvider } from '@/components/markdown'
 import { AnimatedCollapsibleContent } from '@/components/ui/collapsible'
@@ -67,7 +67,7 @@ function ErrorMessage({ content, errorTitle, errorDetails, errorOriginal }: Erro
 
   return (
     <div className="flex justify-start">
-      <div className="max-w-[80%] bg-destructive/10 rounded-[8px] pl-5 pr-4 pt-2 pb-3 break-words">
+      <div className="max-w-[80%] bg-destructive/10 rounded-[8px] pl-5 pr-4 pt-2 pb-2.5 break-words">
         <div className="text-xs text-destructive/50 mb-0.5 font-semibold">
           {errorTitle || 'Error'}
         </div>
@@ -112,12 +112,12 @@ function StatusMessage({ content }: { content: string }) {
   )
 }
 
-/** Info message - muted icon with text */
+/** Info message - info icon with text */
 function InfoMessage({ content }: { content: string }) {
   return (
     <div className="flex items-center gap-2 px-3 py-1 text-[13px] text-muted-foreground">
       <div className="w-3 h-3 flex items-center justify-center shrink-0">
-        <CircleSlash className="w-3 h-3" />
+        <Info className="w-3 h-3" />
       </div>
       <span>{content}</span>
     </div>
@@ -128,7 +128,7 @@ function InfoMessage({ content }: { content: string }) {
 function WarningMessage({ content }: { content: string }) {
   return (
     <div className="flex justify-start">
-      <div className="max-w-[80%] bg-amber-500/10 rounded-[8px] pl-5 pr-4 pt-2 pb-3 break-words">
+      <div className="max-w-[80%] bg-amber-500/10 rounded-[8px] pl-5 pr-4 pt-2 pb-2.5 break-words">
         <div className="text-xs text-amber-600/50 dark:text-amber-500/50 mb-0.5 font-semibold">
           Warning
         </div>
@@ -210,7 +210,7 @@ function MessageGallery() {
         <h2 className="text-lg font-semibold mb-4 text-foreground/80">System Messages</h2>
         <div className="space-y-3 bg-muted/20 rounded-lg p-4">
           <StatusMessage content="Compacting conversation..." />
-          <StatusMessage content="Compacted conversation (was 180000 tokens)" />
+          <InfoMessage content="Compacted conversation (was 180000 tokens)" />
           <InfoMessage content="Session restored from 5 minutes ago" />
           <InfoMessage content="Agent activated successfully" />
         </div>

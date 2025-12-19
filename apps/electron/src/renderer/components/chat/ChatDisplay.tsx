@@ -717,7 +717,7 @@ function ErrorMessage({ message }: { message: Message }) {
 
   return (
     <div className="flex justify-start">
-      <div className="max-w-[80%] bg-destructive/10 rounded-[8px] pl-5 pr-4 pt-2 pb-3 break-words">
+      <div className="max-w-[80%] bg-destructive/10 rounded-[8px] pl-5 pr-4 pt-2 pb-2.5 break-words">
         <div className="text-xs text-destructive/50 mb-0.5 font-semibold">
           {message.errorTitle || 'Error'}
         </div>
@@ -914,7 +914,7 @@ function MessageBubble({
   if (message.role === 'warning') {
     return (
       <div className="flex justify-start">
-        <div className="max-w-[80%] bg-amber-500/10 rounded-[8px] pl-5 pr-4 pt-2 pb-3 break-words">
+        <div className="max-w-[80%] bg-amber-500/10 rounded-[8px] pl-5 pr-4 pt-2 pb-2.5 break-words">
           <div className="text-xs text-amber-600/50 dark:text-amber-500/50 mb-0.5 font-semibold">
             Warning
           </div>
