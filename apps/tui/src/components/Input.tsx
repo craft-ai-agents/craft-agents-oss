@@ -1,6 +1,6 @@
 import React, { useState, useCallback, memo, useMemo } from 'react';
 import { Box, Text, useInput } from 'ink';
-import { getCommandHint, getAgentHint, getTabCompletion, type HintData } from '../utils/filtering.ts';
+import { getCommandHint, getAgentHint, getTabCompletion, getHintDescription, type HintData } from '../utils/filtering.ts';
 import { TextInput } from './TextInput.tsx';
 import { isHistorySearch, isAbort } from '../keyboard/index.ts';
 import { debug } from '@craft-agent/shared/utils';
@@ -26,10 +26,11 @@ export interface InputProps {
   columns?: number;
 }
 
-// Memoized prompt character
+// Memoized prompt character - shows regular prompt even when disabled
+// (the Messages component handles showing the thinking indicator)
 const InputPrompt = memo<{ disabled: boolean }>(({ disabled }) => (
   <Text color={disabled ? 'gray' : 'blue'} bold>
-    {disabled ? '◌' : '>'}{' '}
+    {'>'}{' '}
   </Text>
 ));
 
@@ -52,6 +53,7 @@ export const Input: React.FC<InputProps> = ({
 }) => {
   const [value, setValueRaw] = useState('');
   const [historyIndex, setHistoryIndex] = useState(-1);
+  const [hintIndex, setHintIndex] = useState(0);
 
   // Search mode state
   const [isSearching, setIsSearching] = useState(false);
@@ -59,9 +61,10 @@ export const Input: React.FC<InputProps> = ({
   const [searchMatchIndex, setSearchMatchIndex] = useState(-1);
   const [savedInputBeforeSearch, setSavedInputBeforeSearch] = useState('');
 
-  // Wrap setValue to reset history index when value is cleared
+  // Wrap setValue to reset history and hint indices when value changes
   const setValue = useCallback((newValue: string) => {
     setValueRaw(newValue);
+    setHintIndex(0); // Reset hint selection on input change
     if (newValue === '') {
       setHistoryIndex(-1);
     }
@@ -115,16 +118,58 @@ export const Input: React.FC<InputProps> = ({
     setSearchMatchIndex(matchIndex);
   }, [findMatch]);
 
-  // Find next (older) match
+  // Find next (older) match, wrapping around to newest when reaching the end
   const findNextMatch = useCallback(() => {
     if (searchMatchIndex >= 0) {
       const nextIndex = findMatch(searchQuery, searchMatchIndex);
       if (nextIndex >= 0) {
         setSearchMatchIndex(nextIndex);
+      } else {
+        // No more older matches, wrap around to newest match
+        const newestMatch = findMatch(searchQuery, -1);
+        if (newestMatch >= 0) {
+          setSearchMatchIndex(newestMatch);
+        }
       }
-      // If no more matches, keep current one (don't wrap)
     }
   }, [searchQuery, searchMatchIndex, findMatch]);
+
+  // Count all matches in history for display
+  const searchMatchInfo = useMemo(() => {
+    if (!searchQuery || history.length === 0) return { total: 0, current: 0 };
+    const lowerQuery = searchQuery.toLowerCase();
+    const matchingIndices: number[] = [];
+    for (let i = history.length - 1; i >= 0; i--) {
+      if (history[i]?.toLowerCase().includes(lowerQuery)) {
+        matchingIndices.push(i);
+      }
+    }
+    const current = searchMatchIndex >= 0 ? matchingIndices.indexOf(searchMatchIndex) + 1 : 0;
+    return { total: matchingIndices.length, current };
+  }, [searchQuery, history, searchMatchIndex]);
+
+  // Memoize command/mention hint to avoid recalculation
+  // Defined early so it can be used in useInput handler
+  const hintData = useMemo((): HintData | null => {
+    // @mention hints
+    if (value.startsWith('@')) {
+      return getAgentHint(value.slice(1), availableAgents);
+    }
+    // Slash command hints
+    if (value.startsWith('/')) {
+      return getCommandHint(value);
+    }
+    return null;
+  }, [value, availableAgents]);
+
+  // Combine all hints into a single navigable list
+  const allHints = useMemo((): string[] => {
+    if (!hintData) return [];
+    const hints: string[] = [];
+    if (hintData.selected) hints.push(hintData.selected);
+    hints.push(...hintData.others);
+    return hints;
+  }, [hintData]);
 
   const handleSubmit = useCallback(
     (input: string) => {
@@ -208,33 +253,61 @@ export const Input: React.FC<InputProps> = ({
       }
 
       // Handle Tab for auto-completion
+      // If hints are visible, use the keyboard-navigated selection
       if (key.tab) {
-        const completion = getTabCompletion(value, availableAgents);
-        if (completion) {
-          setValue(completion);
-          setHistoryIndex(-1);
+        if (allHints.length > 0) {
+          // Use keyboard-navigated hint from allHints
+          const idx = Math.min(hintIndex, allHints.length - 1);
+          const completion = allHints[idx];
+          if (completion) {
+            // Add space after completion for commands/mentions
+            setValue(completion + ' ');
+            setHistoryIndex(-1);
+          }
+        } else {
+          // Fallback to original tab completion (for partial matches without hints)
+          const completion = getTabCompletion(value, availableAgents);
+          if (completion) {
+            setValue(completion);
+            setHistoryIndex(-1);
+          }
         }
         return;
       }
 
-      // Handle up arrow for history (only if not using meta/shift modifiers)
-      if (key.upArrow && !key.meta && !key.shift && history.length > 0) {
-        const newIndex = Math.min(historyIndex + 1, history.length - 1);
-        setHistoryIndex(newIndex);
-        const histValue = history[history.length - 1 - newIndex] || '';
-        setValue(histValue);
+      // Handle up/down arrows for hint navigation when hints are visible
+      if (key.upArrow && !key.meta && !key.shift) {
+        if (allHints.length > 0) {
+          // Navigate hints (wrap around)
+          setHintIndex(prev => (prev - 1 + allHints.length) % allHints.length);
+          return;
+        } else if (history.length > 0) {
+          // Navigate history
+          const newIndex = Math.min(historyIndex + 1, history.length - 1);
+          setHistoryIndex(newIndex);
+          const histValue = history[history.length - 1 - newIndex] || '';
+          setValueRaw(histValue); // Use setValueRaw to avoid resetting hintIndex
+        }
+        return;
       }
 
-      // Handle down arrow for history (only if not using meta/shift modifiers)
-      if (key.downArrow && !key.meta && !key.shift && historyIndex > -1) {
-        const newIndex = historyIndex - 1;
-        setHistoryIndex(newIndex);
-        if (newIndex < 0) {
-          setValue('');
-        } else {
-          const histValue = history[history.length - 1 - newIndex] || '';
-          setValue(histValue);
+      if (key.downArrow && !key.meta && !key.shift) {
+        if (allHints.length > 0) {
+          // Navigate hints (wrap around)
+          setHintIndex(prev => (prev + 1) % allHints.length);
+          return;
+        } else if (historyIndex > -1) {
+          // Navigate history
+          const newIndex = historyIndex - 1;
+          setHistoryIndex(newIndex);
+          if (newIndex < 0) {
+            setValueRaw('');
+          } else {
+            const histValue = history[history.length - 1 - newIndex] || '';
+            setValueRaw(histValue);
+          }
         }
+        return;
       }
 
       // Handle Escape to clear input and attachments (when not processing - App handles interrupt)
@@ -261,29 +334,28 @@ export const Input: React.FC<InputProps> = ({
   );
 
   // Determine placeholder text - dynamic based on active agent
+  // Don't show "Thinking..." when disabled - the Messages component has its own ThinkingIndicator
   const placeholderText = disabled
-    ? 'Thinking...'
+    ? ''
     : placeholder
       ? placeholder
       : activeAgentName
         ? `Message @${activeAgentName}...`
         : 'Message Craft...';
 
-  // Memoize command/mention hint to avoid recalculation
-  const hintData = useMemo((): HintData | null => {
-    // @mention hints
-    if (value.startsWith('@')) {
-      return getAgentHint(value.slice(1), availableAgents);
-    }
-    // Slash command hints
-    if (value.startsWith('/')) {
-      return getCommandHint(value);
-    }
-    return null;
-  }, [value, availableAgents]);
-
   // Check if we have any hint to show
   const hasHint = hintData && (hintData.selected || hintData.others.length > 0);
+
+  // Clamp hintIndex to valid range
+  const effectiveHintIndex = allHints.length > 0 ? Math.min(hintIndex, allHints.length - 1) : 0;
+
+  // Calculate visible window for dropdown (max 5 items)
+  const maxVisibleHints = 5;
+  const scrollOffset = Math.max(0, effectiveHintIndex - maxVisibleHints + 1);
+  const visibleHints = allHints.slice(scrollOffset, scrollOffset + maxVisibleHints);
+  const visibleSelectedIndex = effectiveHintIndex - scrollOffset;
+  const hasMoreAbove = scrollOffset > 0;
+  const hasMoreBelow = scrollOffset + maxVisibleHints < allHints.length;
 
   // Border color based on state
   const borderColor = disabled ? 'gray' : 'blue';
@@ -303,11 +375,17 @@ export const Input: React.FC<InputProps> = ({
             <Text color="yellow">(search): </Text>
             <Text>{searchQuery}</Text>
             <Text color="gray">▏</Text>
+            {searchMatchInfo.total > 0 && (
+              <Text dimColor> [{searchMatchInfo.current}/{searchMatchInfo.total}]</Text>
+            )}
           </Box>
           {searchResultText ? (
             <Box paddingLeft={2}>
               <Text dimColor>  → </Text>
               <Text>{searchResultText.length > columns - 10 ? searchResultText.slice(0, columns - 13) + '...' : searchResultText}</Text>
+              {searchMatchInfo.total > 1 && (
+                <Text dimColor>  (Ctrl+R next)</Text>
+              )}
             </Box>
           ) : searchQuery ? (
             <Box paddingLeft={2}>
@@ -318,27 +396,6 @@ export const Input: React.FC<InputProps> = ({
               <Text dimColor>  type to search history...</Text>
             </Box>
           )}
-        </Box>
-      )}
-      {/* Command/mention hints (only when not searching) */}
-      {!isSearching && !disabled && hasHint && (
-        <Box justifyContent="space-between" paddingLeft={2} marginBottom={1}>
-          <Box>
-            {hintData.selected ? (
-              // Show selected (highlighted) + description + others
-              <Text>
-                <Text color="blue" bold>{hintData.selected}</Text>
-                {hintData.description && <Text dimColor>: {hintData.description}</Text>}
-                {hintData.others.length > 0 && (
-                  <Text dimColor>  {hintData.others.join('  ')}</Text>
-                )}
-              </Text>
-            ) : (
-              // No selection, just show options
-              <Text dimColor>{hintData.others.join('  ')}</Text>
-            )}
-          </Box>
-          <Box />
         </Box>
       )}
       {/* Top separator - exact terminal width */}
@@ -379,6 +436,37 @@ export const Input: React.FC<InputProps> = ({
       </Box>
       {/* Bottom separator - exact terminal width */}
       <Text color={borderColor}>{'─'.repeat(separatorWidth)}</Text>
+      {/* Command/mention hints dropdown (only when not searching) */}
+      {!isSearching && !disabled && hasHint && allHints.length > 0 && (() => {
+        // Calculate max hint width for alignment
+        const maxHintWidth = Math.max(...visibleHints.map(h => h.length));
+        return (
+          <Box flexDirection="column" paddingLeft={2}>
+            {hasMoreAbove && (
+              <Text dimColor>  ↑ more</Text>
+            )}
+            {visibleHints.map((hint, idx) => {
+              const isSelected = idx === visibleSelectedIndex;
+              const description = getHintDescription(hint);
+              const padding = ' '.repeat(maxHintWidth - hint.length + 2);
+              return (
+                <Box key={hint}>
+                  <Text
+                    color={isSelected ? 'blue' : undefined}
+                    bold={isSelected}
+                    inverse={isSelected}
+                  >
+                    {' '}{hint}{padding}{description || ''}{' '}
+                  </Text>
+                </Box>
+              );
+            })}
+            {hasMoreBelow && (
+              <Text dimColor>  ↓ more</Text>
+            )}
+          </Box>
+        );
+      })()}
     </Box>
   );
 };

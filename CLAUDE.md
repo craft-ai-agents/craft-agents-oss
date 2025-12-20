@@ -507,7 +507,7 @@ Shared summarization utility: `packages/shared/src/utils/summarize.ts`
 
 ### TUI Layer (`apps/tui/src/`)
 **App.tsx** - Main component handling:
-- Slash commands: `/help`, `/clear`, `/paste`, `/tools`, `/settings`, `/prefs`, `/setup`, `/cost`, `/model`, `/workspace`, `/debug`, `/exit`
+- Slash commands: `/help`, `/clear`, `/new`, `/resume`, `/paste`, `/tools`, `/settings`, `/prefs`, `/setup`, `/cost`, `/model`, `/workspace`, `/debug`, `/exit`
 - Modal state (model selector, workspace selector, etc.)
 - Message persistence
 
@@ -549,6 +549,38 @@ Includes:
 - `resume` option continues previous conversations
 - Session failures clear and start fresh
 - Replayed messages skipped via `isReplay` flag
+
+### Session Management (`packages/shared/src/config/storage.ts`)
+
+**Two IDs per session:**
+- `session.id` - Our internal UUID, used as filename (`~/.craft-agent/sessions/{id}.json`) and React key
+- `sdkSessionId` - Claude Agent SDK's ID, used for conversation continuity with Claude's servers
+
+**Relationship:**
+```
+Session File (~/.craft-agent/sessions/{session.id}.json)
+├── id: "abc-123"              ← our ID (stable, exists immediately)
+├── sdkSessionId: "sdk-xyz"    ← SDK's ID (generated after first message)
+├── messages: [...]            ← what we show in UI
+└── tokenUsage: {...}
+```
+
+**Session commands:**
+- `/clear` - Clears messages and resets `sdkSessionId` (fresh Claude conversation), keeps `session.id`
+- `/new` - Creates entirely new session (new `session.id`, no `sdkSessionId` yet)
+- `/resume` - Switch to a previous session (loads both IDs from that session)
+- `Ctrl+D` - Exit application (same as `/exit`)
+- `Ctrl+L` - Same as `/clear`
+
+**Why `/clear` clears `sdkSessionId`:**
+Without clearing it, Claude would still "remember" the conversation even though UI shows blank. Clearing ensures both UI and Claude start fresh.
+
+**Key function:**
+```typescript
+// packages/shared/src/config/storage.ts
+clearSessionMessages(sessionId: string): boolean
+// Clears messages, tokenUsage, and sdkSessionId from session file
+```
 
 ### Plan Mode (`packages/shared/src/agent/plan-tools.ts`)
 

@@ -50,6 +50,8 @@ export interface UseCommandsProps {
   setModel: (model: string) => void;
   setWorkspace: (workspace: Workspace) => void;
   startNewSession: () => Session;
+  /** Clears messages and token usage in current session, resets UI state */
+  resetSession: () => void;
   tokenUsage: TokenUsage;
 
   // Modal control
@@ -111,6 +113,7 @@ export function useCommands(props: UseCommandsProps) {
     setModel,
     setWorkspace,
     startNewSession,
+    resetSession,
     tokenUsage,
     openModal,
     pendingAttachments,
@@ -156,6 +159,13 @@ export function useCommands(props: UseCommandsProps) {
         return { handled: true };
 
       case '/clear':
+        // Clear messages in current session (preserves session ID)
+        // resetSession() handles clearing storage, updating state, and triggering remount
+        process.stdout.write('\x1b[2J\x1b[3J\x1b[H');
+        resetSession();
+        return { handled: true };
+
+      case '/new':
         // Create a new session - triggers component remount via key={session.id}
         process.stdout.write('\x1b[2J\x1b[3J\x1b[H');
         startNewSession();
@@ -435,7 +445,7 @@ export function useCommands(props: UseCommandsProps) {
           if (!workspaceToRemove) {
             return {
               handled: true,
-              message: { content: `Workspace not found: ${nameToRemove}`, type: 'error' },
+              message: { content: `Space not found: ${nameToRemove}`, type: 'error' },
             };
           }
 
@@ -443,7 +453,7 @@ export function useCommands(props: UseCommandsProps) {
             return {
               handled: true,
               message: {
-                content: 'Cannot remove the only workspace. Add another workspace first.',
+                content: 'Cannot remove the only space. Add another space first.',
                 type: 'error',
               },
             };
@@ -463,7 +473,7 @@ export function useCommands(props: UseCommandsProps) {
           }
           return {
             handled: true,
-            message: { content: 'Failed to remove workspace', type: 'error' },
+            message: { content: 'Failed to remove space', type: 'error' },
           };
         }
 
@@ -584,20 +594,6 @@ export function useCommands(props: UseCommandsProps) {
         if (subCommand === 'view') {
           openModal('planReview');
           return { handled: true };
-        }
-
-        if (subCommand === 'approve') {
-          if (!planMode) {
-            return {
-              handled: true,
-              message: { content: 'No active plan mode. Plan approval happens via the PlanReview UI after calling ExitCraftAgentsPlanMode.', type: 'system' },
-            };
-          }
-          approvePlan();
-          return {
-            handled: true,
-            message: { content: 'Plan mode exited. You can now proceed.', type: 'system' },
-          };
         }
 
         if (subCommand === 'cancel') {
@@ -808,6 +804,7 @@ export function useCommands(props: UseCommandsProps) {
     setModel,
     setWorkspace,
     startNewSession,
+    resetSession,
     tokenUsage,
     openModal,
     pendingAttachments,

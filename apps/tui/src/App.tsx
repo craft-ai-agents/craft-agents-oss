@@ -127,7 +127,7 @@ const SessionContainerWithKey: React.FC<SessionContainerWithKeyProps> = ({
   initialPrompt,
   initialError,
 }) => {
-  const { workspace, model, session } = useGlobalContext();
+  const { workspace, model, session, sessionResetKey } = useGlobalContext();
 
   // Create a modified config with current workspace, model, and session from global context
   const currentConfig: CraftAgentConfig = {
@@ -138,7 +138,9 @@ const SessionContainerWithKey: React.FC<SessionContainerWithKeyProps> = ({
 
   return (
     <SessionContainer
-      key={session.id}  // THE MAGIC: Session change = full remount = fresh state
+      // Session change = full remount = fresh state
+      // sessionResetKey increments on /clear to force remount with same session.id
+      key={`${session.id}-${sessionResetKey}`}
       config={currentConfig}
       session={session}
       onRequestSetup={onRequestSetup}

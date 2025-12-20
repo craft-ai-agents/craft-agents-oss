@@ -220,3 +220,21 @@ export function isKillToEnd(input: string, key: InkKey): boolean {
 export function isShiftTab(input: string, key: InkKey): boolean {
   return input === '[Z' || (key.tab === true && key.shift === true);
 }
+
+/**
+ * Ctrl+L - Clear screen
+ * Standard terminal shortcut for clearing the screen
+ * Ctrl+L: \x0c (ASCII 12, L is 12th letter)
+ */
+export function isClearScreen(input: string, key: InkKey): boolean {
+  return input === '\x0c' || (key.ctrl === true && input === 'l');
+}
+
+/**
+ * Ctrl+D - Exit (EOF)
+ * Standard terminal shortcut for end-of-file/exit
+ * Ctrl+D: \x04 (ASCII 4, D is 4th letter)
+ */
+export function isExit(input: string, key: InkKey): boolean {
+  return input === '\x04' || (key.ctrl === true && input === 'd');
+}

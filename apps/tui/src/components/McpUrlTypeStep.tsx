@@ -27,7 +27,7 @@ export const McpUrlTypeStep: React.FC<McpUrlTypeStepProps> = ({ onSelect, onBack
     <Box flexDirection="column">
       <Text bold>Connect to Craft MCP Server</Text>
       <Box marginY={1}>
-        <Text dimColor>How would you like to connect to your Craft workspace?</Text>
+        <Text dimColor>How would you like to connect to your Craft space?</Text>
       </Box>
 
       <Box flexDirection="column" marginY={1}>

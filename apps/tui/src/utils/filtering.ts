@@ -40,7 +40,7 @@ export type CommandCategory =
   | 'Planning Mode'
   | 'AI & Billing'
   | 'Configuration'
-  | 'Workspace'
+  | 'Space'
   | 'Sub-Agents'
   | 'Attaching Files'
   | 'Troubleshooting';
@@ -60,12 +60,13 @@ export const COMMANDS: CommandDefinition[] = [
   // Heavy/common commands first (for tab completion priority)
   { command: '/agent', description: 'Manage sub-agents (list, info, refresh, clear)', category: 'Sub-Agents' },
   { command: '/plan', description: 'Enter planning mode for complex tasks', category: 'Planning Mode' },
-  { command: '/workspace', description: 'Switch workspace (add, rename, remove)', category: 'Workspace' },
+  { command: '/workspace', description: 'Switch Craft space (add, rename, remove)', category: 'Space' },
   { command: '/model', description: 'Show or change model (e.g., /model opus)', category: 'AI & Billing' },
 
   // General
   { command: '/help', description: 'Show help and available commands', category: 'General' },
   { command: '/clear', description: 'Clear conversation history', category: 'General' },
+  { command: '/new', description: 'Start a new session', category: 'General' },
   { command: '/resume', description: 'View and resume previous sessions', category: 'General' },
   { command: '/exit', description: 'Exit the application (or Ctrl+C)', category: 'General' },
 
@@ -92,7 +93,7 @@ export const CATEGORY_ORDER: CommandCategory[] = [
   'Planning Mode',
   'AI & Billing',
   'Configuration',
-  'Workspace',
+  'Space',
   'Sub-Agents',
   'Attaching Files',
   'Troubleshooting',
@@ -129,9 +130,9 @@ export const COMMAND_ALIASES: Record<string, string> = {
 
 export const SUBCOMMANDS: Record<string, Record<string, string>> = {
   '/workspace': {
-    'add': 'Add a new workspace',
-    'rename': 'Rename current workspace',
-    'remove': 'Remove a workspace',
+    'add': 'Add a new Craft space',
+    'rename': 'Rename current space',
+    'remove': 'Remove a Craft space',
   },
   '/agent': {
     'list': 'List available sub-agents',
@@ -146,7 +147,6 @@ export const SUBCOMMANDS: Record<string, Record<string, string>> = {
     'start': 'Start planning a complex task',
     'plans': 'View, load, or delete saved plans',
     'view': 'View current plan',
-    'approve': 'Approve and execute current plan',
     'cancel': 'Cancel current plan',
   },
 };
@@ -356,7 +356,7 @@ export function getCommandHint(input: string): HintData {
     return {
       selected: null,
       description: null,
-      others: ['/agent', '/workspace', '/model', '/help', '/clear', '/tools', '/cost', '/credits', '/exit'],
+      others: ['/agent', '/workspace', '/model', '/help', '/clear', '/tools', '/credits', '/exit'],
     };
   }
 
@@ -399,6 +399,25 @@ export function getCommandHint(input: string): HintData {
 /**
  * Get hint data for @mentions
  */
+/**
+ * Get description for a specific hint (command or agent mention)
+ */
+export function getHintDescription(hint: string): string | null {
+  // Command hints
+  if (hint.startsWith('/')) {
+    return COMMAND_MAP[hint] ?? null;
+  }
+  // Agent hints
+  if (hint.startsWith('@')) {
+    const name = hint.slice(1);
+    if (name === 'main') return 'Return to main assistant';
+    if (name === 'agent') return 'Open agent menu';
+    if (name.includes('/')) return `Activate ${name.split('/').pop()} agent`;
+    return 'Activate sub-agent';
+  }
+  return null;
+}
+
 export function getAgentHint(query: string, agents: string[]): HintData {
   // Empty @ shows all options
   if (query === '') {

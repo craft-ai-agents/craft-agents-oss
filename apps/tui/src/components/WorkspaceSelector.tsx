@@ -94,7 +94,7 @@ export const WorkspaceSelector: React.FC<WorkspaceSelectorProps> = ({
     <Box flexDirection="column" paddingX={1}>
       <Box marginBottom={1}>
         <Text>
-          <Text bold>Select Workspace</Text>
+          <Text bold>Select Space</Text>
           <Text dimColor> (Current: {currentName})</Text>
         </Text>
       </Box>

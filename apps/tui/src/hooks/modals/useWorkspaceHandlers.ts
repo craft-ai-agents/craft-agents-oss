@@ -106,13 +106,13 @@ export function useWorkspaceHandlers(props: UseWorkspaceHandlersProps): UseWorks
     const workspaces = getWorkspaces();
 
     if (workspaces.length === 1) {
-      addMessage('Cannot remove the only workspace. Add another workspace first.', 'error');
+      addMessage('Cannot remove the only space. Add another space first.', 'error');
       return;
     }
 
     const workspaceToRemove = workspaces.find(w => w.id === workspaceId);
     if (!workspaceToRemove) {
-      addMessage('Workspace not found.', 'error');
+      addMessage('Space not found.', 'error');
       return;
     }
 
@@ -120,7 +120,7 @@ export function useWorkspaceHandlers(props: UseWorkspaceHandlersProps): UseWorks
     const removed = await removeWorkspace(workspaceId);
 
     if (removed) {
-      addMessage(`Workspace "${workspaceToRemove.name}" removed.`, 'system');
+      addMessage(`Space "${workspaceToRemove.name}" removed.`, 'system');
       if (isActive) {
         const remainingWorkspaces = getWorkspaces();
         if (remainingWorkspaces.length > 0 && remainingWorkspaces[0]) {
@@ -128,7 +128,7 @@ export function useWorkspaceHandlers(props: UseWorkspaceHandlersProps): UseWorks
         }
       }
     } else {
-      addMessage('Failed to remove workspace.', 'error');
+      addMessage('Failed to remove space.', 'error');
     }
   }, [workspace.id, setWorkspace, addMessage, closeModal]);
 

@@ -25,7 +25,7 @@ export const WorkspaceRename: React.FC<WorkspaceRenameProps> = ({
   return (
     <Box flexDirection="column" paddingX={1}>
       <Box marginBottom={1}>
-        <Text bold>Rename Workspace</Text>
+        <Text bold>Rename Space</Text>
       </Box>
 
       <Box>

@@ -40,7 +40,7 @@ import {
   useAgentMenuHandlers,
   useSettingsHandlers,
 } from '../hooks/index.ts';
-import { isShiftTab } from '../keyboard/index.ts';
+import { isShiftTab, isClearScreen, isExit } from '../keyboard/index.ts';
 import {
   PLAN_MODE_ENTER_MESSAGE,
   PLAN_MODE_EXIT_MESSAGE,
@@ -55,6 +55,7 @@ import {
   clearAllConfig,
   getTokenDisplay,
   getShowCost,
+  getShowClock,
   loadSession,
   listPlanFiles,
   deletePlanFile,
@@ -101,7 +102,7 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
   initialError,
 }) => {
   const { exit } = useApp();
-  const { model, setModel, workspace, setWorkspace, setSession, startNewSession, addUsage } = useGlobalContext();
+  const { model, setModel, workspace, setWorkspace, setSession, startNewSession, resetSession, addUsage } = useGlobalContext();
 
   // Centralized exit function
   const exitApp = useCallback(() => {
@@ -243,6 +244,7 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
   const [compactMode, setCompactMode] = useState(true);
   const [tokenDisplayMode, setTokenDisplayMode] = useState<TokenDisplayMode>(getTokenDisplay());
   const [showCostSetting, setShowCostSetting] = useState(getShowCost());
+  const [showClockSetting, setShowClockSetting] = useState(getShowClock());
   // Only show welcome banner on truly new sessions (no prior messages)
   // This prevents duplicate banners when switching to workspaces with existing sessions
   const [showWelcome, setShowWelcome] = useState(() => {
@@ -379,6 +381,7 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
     setModel,
     setWorkspace,
     startNewSession,
+    resetSession,
     tokenUsage,
     openModal,
     pendingAttachments,
@@ -459,6 +462,7 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
     setCompactMode,
     setTokenDisplayMode,
     setShowCostSetting,
+    setShowClockSetting,
     addMessage: addLocalMessage,
     resetAgentInstance,
     isProcessing,
@@ -536,7 +540,7 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
         .replace(/^==PLAN==\s*/, '')
         .replace(/\s*\(\d{8}-\d{6}\)$/, '')
         .trim();
-      addLocalMessage(`Plan "${displayName}" loaded. Send a message to include it in context.`, 'system');
+      addLocalMessage(`Plan "${displayName}" loaded. Send a message to execute, or type "approve" to run immediately.`, 'system');
     } else {
       addLocalMessage(`Failed to read plan file: ${plan.path}`, 'error');
     }
@@ -625,7 +629,15 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
       const att = pendingAttachments[0];
       if (!att) return '1 file';
       const icon = att.type === 'image' ? '🖼' : att.type === 'pdf' ? '📄' : '📝';
-      return `${icon} ${att.name}`;
+      // Truncate long names (especially plan files with ==PLAN== prefix)
+      let displayName = att.name;
+      // Clean plan file names
+      displayName = displayName.replace(/^==PLAN==\s*/, '').replace(/\s*\(\d{8}-\d{6}\)\.md$/, '');
+      // Truncate to max 25 chars
+      if (displayName.length > 25) {
+        displayName = displayName.slice(0, 22) + '...';
+      }
+      return `${icon} ${displayName}`;
     }
     const imageCount = pendingAttachments.filter(a => a.type === 'image').length;
     const fileCount = pendingAttachments.length - imageCount;
@@ -745,6 +757,19 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
       return;
     }
 
+    // Ctrl+L: Clear screen (like /clear command)
+    if (isClearScreen(input, key)) {
+      process.stdout.write('\x1b[2J\x1b[3J\x1b[H');
+      resetSession();
+      return;
+    }
+
+    // Ctrl+D: Exit (like /exit command) - only when input is empty
+    if (isExit(input, key) && !isProcessing && !hasOpenModal) {
+      exitApp();
+      return;
+    }
+
     if (input === '\x03' || (key.ctrl && input === 'c')) {
       debug('[SessionContainer] main useInput Ctrl+C detected:', { pendingPermission: !!pendingPermission, isProcessing, hasOpenModal, pendingQuestion: !!pendingQuestion, pendingMcpAuth: !!pendingMcpAuth, pendingApiAuth: !!pendingApiAuth, pendingReview: !!pendingReview });
       if (pendingPermission) {
@@ -780,6 +805,9 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
       if (isOpen('help')) {
         closeModal();
         setStaticResetKey(k => k + 1);
+      } else if (isOpen('planReview') && !activePlan) {
+        // Close /plan view when there's no active plan
+        closeModal();
       } else if (pendingPermission) {
         respondToPermission(false, false);
       } else if (pendingPlanReview || pendingQuestion || pendingCraftQuestion) {
@@ -888,6 +916,35 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
         />
       )}
 
+      {/* Plan review overlay (/plan view command) */}
+      {isOpen('planReview') && activePlan && (
+        <PlanReview
+          plan={activePlan}
+          sessionId={session.id}
+          onApprove={(modifiedPlan, savedPath) => {
+            closeModal();
+            respondToPlanReview({ action: 'approve', modifiedPlan, savedPath });
+          }}
+          onRefine={(feedback) => {
+            closeModal();
+            respondToPlanReview({ action: 'refine', feedback });
+          }}
+          onSaveOnly={(modifiedPlan, savedPath) => {
+            closeModal();
+            respondToPlanReview({ action: 'saveOnly', modifiedPlan, savedPath });
+          }}
+          onCancel={closeModal}
+        />
+      )}
+
+      {/* Plan review overlay - no active plan message */}
+      {isOpen('planReview') && !activePlan && (
+        <Box flexDirection="column" paddingX={1}>
+          <Text dimColor>No active plan. Use '/plan start' to create one or '/plan list' to view saved plans.</Text>
+          <Text dimColor>Press Escape to close.</Text>
+        </Box>
+      )}
+
       {/* Session menu overlay */}
       {isOpen('sessionMenu') && (
         <SessionMenu
@@ -968,6 +1025,7 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
           currentAuthType={getAuthType()}
           tokenDisplay={tokenDisplayMode}
           showCost={showCostSetting}
+          showClock={showClockSetting}
           onAction={settingsHandlers.handleSettingsAction}
           onCancel={settingsHandlers.handleSettingsCancel}
         />
@@ -1143,6 +1201,7 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
           agentsLoading={agentsLoading}
           tokenDisplay={tokenDisplayMode}
           showCost={showCostSetting}
+          showClock={showClockSetting}
           version={getCurrentVersion()}
           planMode={planMode}
           exitWarning={showExitWarning}

@@ -577,9 +577,12 @@ Use these answers to inform your plan. You can:
  */
 export const READ_ONLY_MCP_PATTERNS = [
   // Craft MCP - read operations
+  /blocks_get/,
   /blocks_read/,
   /blocks_list/,
   /document_get/,
+  /document_read/,
+  /document_search/,
   /spaces_list/,
   /folders_list/,
   /search/,

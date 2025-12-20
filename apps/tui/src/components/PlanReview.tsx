@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, memo } from 'react';
 import { Box, Text, useInput } from 'ink';
 import type { Plan, PlanStep } from '@craft-agent/shared/agents';
 import { savePlanToFile } from '@craft-agent/shared/config';
@@ -37,7 +37,7 @@ export interface PlanReviewProps {
   onCancel: () => void;
 }
 
-export const PlanReview: React.FC<PlanReviewProps> = ({
+export const PlanReview: React.FC<PlanReviewProps> = memo(({
   plan,
   sessionId,
   questions = [],
@@ -579,4 +579,4 @@ export const PlanReview: React.FC<PlanReviewProps> = ({
       )}
     </Box>
   );
-};
+});

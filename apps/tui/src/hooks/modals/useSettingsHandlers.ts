@@ -8,6 +8,7 @@ import {
   setAuthType,
   setTokenDisplay,
   setShowCost,
+  setShowClock,
 } from '@craft-agent/shared/config';
 import { getCredentialManager } from '@craft-agent/shared/credentials';
 import { setAuthEnvironment } from '@craft-agent/shared/auth';
@@ -30,6 +31,7 @@ export interface UseSettingsHandlersProps {
   setCompactMode: (compact: boolean) => void;
   setTokenDisplayMode: (mode: TokenDisplayMode) => void;
   setShowCostSetting: (show: boolean) => void;
+  setShowClockSetting: (show: boolean) => void;
   addMessage: (content: string, type: Message['type']) => void;
   /** Reset the CraftAgent instance (for hot-switching auth) */
   resetAgentInstance: () => void;
@@ -89,6 +91,7 @@ export function useSettingsHandlers(props: UseSettingsHandlersProps): UseSetting
     setCompactMode,
     setTokenDisplayMode,
     setShowCostSetting,
+    setShowClockSetting,
     addMessage,
     resetAgentInstance,
     isProcessing,
@@ -189,6 +192,10 @@ export function useSettingsHandlers(props: UseSettingsHandlersProps): UseSetting
         setShowCost(action.show);
         setShowCostSetting(action.show);
         break;
+      case 'set_show_clock':
+        setShowClock(action.show);
+        setShowClockSetting(action.show);
+        break;
       case 'change_auth_mode': {
         // Block if processing a message
         if (isProcessing) {
@@ -228,7 +235,7 @@ export function useSettingsHandlers(props: UseSettingsHandlersProps): UseSetting
         break;
       }
     }
-  }, [closeModal, openModal, setCompactMode, setTokenDisplayMode, setShowCostSetting, addMessage, isProcessing, resetAgentInstance]);
+  }, [closeModal, openModal, setCompactMode, setTokenDisplayMode, setShowCostSetting, setShowClockSetting, addMessage, isProcessing, resetAgentInstance]);
 
   const handleSettingsCancel = useCallback(() => {
     closeModal();

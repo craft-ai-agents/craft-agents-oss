@@ -6,7 +6,8 @@ export type SettingsAction =
   | { type: 'set_verbose'; verbose: boolean }
   | { type: 'change_auth_mode'; mode: AuthType }
   | { type: 'set_token_display'; mode: TokenDisplayMode }
-  | { type: 'set_show_cost'; show: boolean };
+  | { type: 'set_show_cost'; show: boolean }
+  | { type: 'set_show_clock'; show: boolean };
 
 interface MenuItem {
   key: string;
@@ -23,6 +24,7 @@ export interface SettingsProps {
   currentAuthType: AuthType;
   tokenDisplay: TokenDisplayMode;
   showCost: boolean;
+  showClock: boolean;
   onAction: (action: SettingsAction) => void;
   onCancel: () => void;
 }
@@ -38,6 +40,7 @@ export const Settings: React.FC<SettingsProps> = ({
   currentAuthType,
   tokenDisplay,
   showCost,
+  showClock,
   onAction,
   onCancel,
 }) => {
@@ -117,6 +120,28 @@ export const Settings: React.FC<SettingsProps> = ({
         isCurrent: !showCost,
       },
     ] as MenuItem[] : []),
+    // Clock section
+    {
+      key: 'clock_header',
+      label: '── Status Bar Clock ──',
+      desc: '',
+      action: null,
+      isHeader: true,
+    },
+    {
+      key: 'clock_show',
+      label: 'Show',
+      desc: 'Display clock with timezone',
+      action: showClock ? null : { type: 'set_show_clock', show: true },
+      isCurrent: showClock,
+    },
+    {
+      key: 'clock_hide',
+      label: 'Hide',
+      desc: 'Hide clock from status bar',
+      action: showClock ? { type: 'set_show_clock', show: false } : null,
+      isCurrent: !showClock,
+    },
     // AI Usage Mode section
     {
       key: 'ai_header',

@@ -67,6 +67,7 @@ export interface StoredConfig {
   extendedCacheTtl?: boolean;  // Extended cache TTL: true=1h all, false=5m all, undefined=auto (Opus only)
   tokenDisplay?: TokenDisplayMode;  // How to show tokens in status bar: hidden, total, or separate in/out
   showCost?: boolean;  // Whether to show cost in status bar (only relevant for API Key auth)
+  showClock?: boolean;  // Whether to show clock with timezone in header
   cumulativeUsage?: CumulativeUsage;  // Global cumulative cost across all workspaces
 }
 
@@ -352,6 +353,19 @@ export function setShowCost(show: boolean): void {
   const config = loadStoredConfig();
   if (!config) return;
   config.showCost = show;
+  saveConfig(config);
+}
+
+export function getShowClock(): boolean {
+  const config = loadStoredConfig();
+  // Default to false if not set
+  return config?.showClock === true;
+}
+
+export function setShowClock(show: boolean): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+  config.showClock = show;
   saveConfig(config);
 }
 
@@ -1372,6 +1386,30 @@ export function listInboxSessions(workspaceId?: string): SessionMetadata[] {
 // List sessions by agent for a workspace
 export function listSessionsByAgent(workspaceId: string, agentId: string): SessionMetadata[] {
   return listSessions(workspaceId).filter(s => s.agentId === agentId);
+}
+
+/**
+ * Clear all messages and token usage from a session.
+ * Used by /clear command to reset conversation without creating a new session.
+ * Preserves session ID and metadata, clears conversation data and SDK session.
+ */
+export function clearSessionMessages(sessionId: string): boolean {
+  const session = loadSession(sessionId);
+  if (!session) return false;
+
+  session.messages = [];
+  session.tokenUsage = {
+    inputTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0,
+    contextTokens: 0,
+    costUsd: 0,
+  };
+  // Clear SDK session ID so next message starts fresh conversation with Claude
+  session.sdkSessionId = undefined;
+
+  saveSession(session);
+  return true;
 }
 
 // Clean up old workspace-based conversations (replaced by session-based storage)

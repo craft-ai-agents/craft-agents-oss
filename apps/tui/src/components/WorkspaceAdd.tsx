@@ -529,7 +529,7 @@ export const WorkspaceAdd: React.FC<WorkspaceAddProps> = ({ onComplete, onCancel
     <Box flexDirection="column" paddingX={1}>
       {/* Header */}
       <Box marginBottom={1}>
-        <Text bold>Add New Workspace</Text>
+        <Text bold>Add New Space</Text>
         <Text dimColor> - Step {getStepNumber(step)} of 3</Text>
       </Box>
 
@@ -708,7 +708,7 @@ export const WorkspaceAdd: React.FC<WorkspaceAddProps> = ({ onComplete, onCancel
 
       {step === 'complete' && (
         <Box flexDirection="column">
-          <Text color="green" bold>Workspace added: {name}</Text>
+          <Text color="green" bold>Space added: {name}</Text>
         </Box>
       )}
 
@@ -775,7 +775,7 @@ const NameStep: React.FC<NameStepProps> = ({ value, onChange, onSubmit, onCancel
           onChange={onChange}
           onSubmit={onSubmit}
           onCancel={onCancel}
-          placeholder="My Workspace"
+          placeholder="My Space"
         />
       </Box>
     </Box>

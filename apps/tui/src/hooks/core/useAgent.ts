@@ -418,8 +418,14 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
         saveDebounceRef.current = null;
       }
       // Flush pending save immediately on unmount
+      // But first check if session was intentionally cleared (e.g., /clear command)
+      // If storage shows empty messages, don't overwrite with stale ref data
       if (pendingSaveRef.current) {
-        saveSession(pendingSaveRef.current);
+        const storedSession = loadSession(pendingSaveRef.current.id);
+        const wasIntentionallyCleared = storedSession && storedSession.messages.length === 0;
+        if (!wasIntentionallyCleared) {
+          saveSession(pendingSaveRef.current);
+        }
         pendingSaveRef.current = null;
       }
     };
@@ -1267,23 +1273,30 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
       const sdkSessionId = agentRef.current?.getSessionId() ?? null;
 
       if (currentSession && currentMessages.length > 0) {
-        const persistableMessages = currentMessages.filter(
-          m => m.type !== 'error' && m.type !== 'status' && m.type !== 'system' && !isSDKErrorMessage(m)
-        );
-        const storedMessages = persistableMessages.map(messageToStoredMessage);
+        // Check if session was intentionally cleared (e.g., /clear command)
+        // If storage shows empty messages, don't overwrite with stale ref data
+        const storedSession = loadSession(currentSession.id);
+        const wasIntentionallyCleared = storedSession && storedSession.messages.length === 0;
 
-        // Save to session storage
-        const updatedSession: StoredSession = {
-          id: currentSession.id,
-          sdkSessionId: sdkSessionId ?? currentSession.sdkSessionId,
-          workspaceId: currentSession.workspaceId,
-          name: currentSession.name,
-          createdAt: currentSession.createdAt,
-          lastUsedAt: Date.now(),
-          messages: storedMessages,
-          tokenUsage: tokenUsageRef.current,
-        };
-        saveSession(updatedSession);
+        if (!wasIntentionallyCleared) {
+          const persistableMessages = currentMessages.filter(
+            m => m.type !== 'error' && m.type !== 'status' && m.type !== 'system' && !isSDKErrorMessage(m)
+          );
+          const storedMessages = persistableMessages.map(messageToStoredMessage);
+
+          // Save to session storage
+          const updatedSession: StoredSession = {
+            id: currentSession.id,
+            sdkSessionId: sdkSessionId ?? currentSession.sdkSessionId,
+            workspaceId: currentSession.workspaceId,
+            name: currentSession.name,
+            createdAt: currentSession.createdAt,
+            lastUsedAt: Date.now(),
+            messages: storedMessages,
+            tokenUsage: tokenUsageRef.current,
+          };
+          saveSession(updatedSession);
+        }
       }
 
       // Dispose the agent instance (clears all instance state)

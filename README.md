@@ -90,9 +90,13 @@ bun dev
 | `/info` | Show active agent info and available tools |
 | `/plan` | Plan mode menu (start, plans, view, approve, cancel) |
 | `/setup` | Re-run the configuration wizard |
-| `/clear` | Clear conversation |
+| `/clear` | Clear conversation (keeps session, starts fresh with Claude) |
+| `/new` | Start a new session |
+| `/resume` | View and resume previous sessions |
 | `/exit` | Exit application |
 | `Ctrl+C` | Interrupt / Exit |
+| `Ctrl+D` | Exit application (same as `/exit`) |
+| `Ctrl+L` | Clear conversation (same as `/clear`) |
 | `Up/Down` | Navigate command history |
 | `SHIFT+TAB` | Toggle Plan Mode |
 

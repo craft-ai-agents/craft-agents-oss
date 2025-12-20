@@ -352,7 +352,7 @@ export const Setup: React.FC<SetupProps> = ({ onComplete, onCancel, authState, s
         workspaceId = generateWorkspaceId();
         workspace = {
           id: workspaceId,
-          name: selectedSpaceName || 'Craft Workspace',
+          name: selectedSpaceName || 'Craft Space',
           mcpUrl: mcpUrl,
           mcpAuthType: mcpOAuthResult ? 'workspace_oauth' as McpAuthType : 'public' as McpAuthType,
           createdAt: Date.now(),
