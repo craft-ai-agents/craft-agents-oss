@@ -20,7 +20,7 @@ export interface ComponentVariant {
   props: Record<string, unknown>
 }
 
-export type Category = 'Onboarding' | 'Agent Setup' | 'Chat' | 'Markdown' | 'Icons' | 'Settings'
+export type Category = 'Onboarding' | 'Agent Setup' | 'Chat' | 'Chat Messages' | 'Chat Inputs' | 'Markdown' | 'Icons' | 'Settings'
 
 export interface ComponentEntry {
   id: string
@@ -35,8 +35,8 @@ export interface ComponentEntry {
   mockData?: () => Record<string, unknown>
   /** Optional wrapper component for context providers */
   wrapper?: ComponentType<{ children: ReactNode }>
-  /** Layout mode: 'centered' (default) or 'top' for scrollable content */
-  layout?: 'centered' | 'top'
+  /** Layout mode: 'centered' (default), 'top' for scrollable content, 'full' for full-height flex layout */
+  layout?: 'centered' | 'top' | 'full'
 }
 
 export interface CategoryGroup {

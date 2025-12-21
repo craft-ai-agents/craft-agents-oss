@@ -173,8 +173,9 @@ export function ComponentPreview({ component, props }: ComponentPreviewProps) {
           {/* Component preview box */}
           <div
             className={cn(
-              'w-full h-full rounded-lg border border-border overflow-auto',
-              component.layout !== 'top' && 'flex items-center justify-center',
+              'w-full h-full rounded-lg border border-border',
+              component.layout === 'full' ? 'overflow-hidden' : 'overflow-auto',
+              component.layout === 'centered' || !component.layout ? 'flex items-center justify-center' : '',
               bgClasses[bgStyle]
             )}
           >

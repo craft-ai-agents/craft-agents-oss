@@ -81,6 +81,8 @@ export interface Message {
   turnId?: string;
   // Status type for special status messages (e.g., compacting)
   statusType?: 'compacting' | 'compaction_complete';
+  // Info level for info messages (determines icon/color)
+  infoLevel?: 'info' | 'warning' | 'error' | 'success';
   // Error-specific fields (for typed errors with diagnostics)
   errorCode?: string;
   errorTitle?: string;

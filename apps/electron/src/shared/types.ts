@@ -222,7 +222,7 @@ export type SessionEvent =
   | { type: 'complete'; sessionId: string }
   | { type: 'interrupted'; sessionId: string; message: Message }
   | { type: 'status'; sessionId: string; message: string; statusType?: 'compacting' }
-  | { type: 'info'; sessionId: string; message: string; statusType?: 'compaction_complete' }
+  | { type: 'info'; sessionId: string; message: string; statusType?: 'compaction_complete'; level?: 'info' | 'warning' | 'error' | 'success' }
   | { type: 'title_generated'; sessionId: string; title: string }
   | { type: 'agent_status'; sessionId: string; status: AgentStatus }
   | { type: 'permission_request'; sessionId: string; request: PermissionRequest }
@@ -350,6 +350,12 @@ export const IPC_CHANNELS = {
   // User Preferences
   PREFERENCES_READ: 'preferences:read',
   PREFERENCES_WRITE: 'preferences:write',
+
+  // Session Drafts (input text persisted across app restarts)
+  DRAFTS_GET: 'drafts:get',
+  DRAFTS_SET: 'drafts:set',
+  DRAFTS_DELETE: 'drafts:delete',
+  DRAFTS_GET_ALL: 'drafts:getAll',
 
   // Preview window
   PREVIEW_OPEN: 'preview:open',
@@ -490,6 +496,12 @@ export interface ElectronAPI {
   getPreviewContent(sessionId: string, messageId: string): Promise<string>
   savePreview(sessionId: string, messageId: string, content: string): Promise<void>
   onMessageUpdated(callback: (sessionId: string, messageId: string, content: string) => void): () => void
+
+  // Session Drafts (persisted input text)
+  getDraft(sessionId: string): Promise<string | null>
+  setDraft(sessionId: string, text: string): Promise<void>
+  deleteDraft(sessionId: string): Promise<void>
+  getAllDrafts(): Promise<Record<string, string>>
 }
 
 /**

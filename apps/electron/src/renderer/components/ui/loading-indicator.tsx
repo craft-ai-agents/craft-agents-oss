@@ -4,13 +4,14 @@ import { cn } from "@/lib/utils"
 /**
  * Format duration in human-readable form
  * @param ms Duration in milliseconds
+ * @returns "45s" for under a minute, "1:02" for 1+ minutes
  */
 function formatDuration(ms: number): string {
   const seconds = Math.floor(ms / 1000)
   if (seconds < 60) return `${seconds}s`
   const minutes = Math.floor(seconds / 60)
   const remainingSeconds = seconds % 60
-  return `${minutes}m ${remainingSeconds}s`
+  return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`
 }
 
 export interface SpinnerProps {

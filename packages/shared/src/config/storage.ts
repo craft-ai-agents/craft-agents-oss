@@ -1439,3 +1439,100 @@ export function cleanupLegacyConversations(): void {
   }
 }
 
+// ============================================
+// Session Input Drafts
+// Persists input text per session across app restarts
+// ============================================
+
+const DRAFTS_FILE = join(CONFIG_DIR, 'drafts.json');
+
+interface DraftsData {
+  drafts: Record<string, string>;
+  updatedAt: number;
+}
+
+/**
+ * Load all drafts from disk
+ */
+function loadDraftsData(): DraftsData {
+  try {
+    if (!existsSync(DRAFTS_FILE)) {
+      return { drafts: {}, updatedAt: 0 };
+    }
+    const content = readFileSync(DRAFTS_FILE, 'utf-8');
+    return JSON.parse(content) as DraftsData;
+  } catch {
+    return { drafts: {}, updatedAt: 0 };
+  }
+}
+
+/**
+ * Save drafts to disk
+ */
+function saveDraftsData(data: DraftsData): void {
+  ensureConfigDir();
+  data.updatedAt = Date.now();
+  writeFileSync(DRAFTS_FILE, JSON.stringify(data, null, 2), 'utf-8');
+}
+
+/**
+ * Get draft text for a session
+ */
+export function getSessionDraft(sessionId: string): string | null {
+  const data = loadDraftsData();
+  return data.drafts[sessionId] ?? null;
+}
+
+/**
+ * Set draft text for a session
+ * Pass empty string to clear the draft
+ */
+export function setSessionDraft(sessionId: string, text: string): void {
+  const data = loadDraftsData();
+  if (text) {
+    data.drafts[sessionId] = text;
+  } else {
+    delete data.drafts[sessionId];
+  }
+  saveDraftsData(data);
+}
+
+/**
+ * Delete draft for a session
+ */
+export function deleteSessionDraft(sessionId: string): void {
+  const data = loadDraftsData();
+  delete data.drafts[sessionId];
+  saveDraftsData(data);
+}
+
+/**
+ * Get all drafts as a record
+ */
+export function getAllSessionDrafts(): Record<string, string> {
+  const data = loadDraftsData();
+  return data.drafts;
+}
+
+/**
+ * Clean up drafts for sessions that no longer exist
+ * Call this periodically to prevent stale data buildup
+ */
+export function cleanupOrphanedDrafts(): void {
+  const data = loadDraftsData();
+  const sessionIds = Object.keys(data.drafts);
+  let changed = false;
+
+  for (const sessionId of sessionIds) {
+    const sessionPath = join(SESSIONS_DIR, `${sessionId}.json`);
+    if (!existsSync(sessionPath)) {
+      delete data.drafts[sessionId];
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    saveDraftsData(data);
+  }
+}
+

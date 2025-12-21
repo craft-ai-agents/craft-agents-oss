@@ -99,6 +99,9 @@ interface ChatProps {
   onUltrathinkChange?: (enabled: boolean) => void
   skipPermissions?: boolean
   onSkipPermissionsChange?: (enabled: boolean) => void
+  // Input drafts per session
+  sessionDrafts?: Map<string, string>
+  onInputChange?: (sessionId: string, value: string) => void
 }
 
 /**
@@ -467,8 +470,14 @@ export function Chat({
   onUltrathinkChange,
   skipPermissions = false,
   onSkipPermissionsChange,
+  // Input drafts per session
+  sessionDrafts,
+  onInputChange,
 }: ChatProps) {
-  const [isSidebarVisible, setIsSidebarVisible] = React.useState(!defaultCollapsed)
+  const [isSidebarVisible, setIsSidebarVisible] = React.useState(() => {
+    const saved = localStorage.getItem('chat-sidebar-visible')
+    return saved !== null ? saved === 'true' : !defaultCollapsed
+  })
   const [sidebarWidth, setSidebarWidth] = React.useState(() => {
     const saved = localStorage.getItem('chat-sidebar-width')
     return saved ? Number(saved) : 260
@@ -787,6 +796,7 @@ export function Chat({
     activeWorkspaceId,
     currentModel,
     pendingPermissions: pendingPermissions || new Map(),
+    sessionDrafts: sessionDrafts || new Map(),
     // Advanced options
     ultrathinkEnabled,
     skipPermissions,
@@ -804,6 +814,7 @@ export function Chat({
     // Advanced options callbacks
     onUltrathinkChange: onUltrathinkChange || (() => {}),
     onSkipPermissionsChange: onSkipPermissionsChange || (() => {}),
+    onInputChange: onInputChange || (() => {}),
     textareaRef: chatInputRef,
   }), [
     sessions,
@@ -827,6 +838,8 @@ export function Chat({
     onModelChange,
     onUltrathinkChange,
     onSkipPermissionsChange,
+    sessionDrafts,
+    onInputChange,
   ])
 
   // Group agents for tree view
@@ -836,6 +849,11 @@ export function Chat({
   React.useEffect(() => {
     localStorage.setItem('sidebar-expanded-folders', JSON.stringify([...expandedFolders]))
   }, [expandedFolders])
+
+  // Persist sidebar visibility to localStorage
+  React.useEffect(() => {
+    localStorage.setItem('chat-sidebar-visible', String(isSidebarVisible))
+  }, [isSidebarVisible])
 
   // Helper to map AgentStatus to SidebarAgentStatus (centralized logic)
   const mapAgentStatusToSidebar = React.useCallback((status: import('../../../shared/types').AgentStatus): SidebarAgentStatus => {

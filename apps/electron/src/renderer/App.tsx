@@ -32,6 +32,8 @@ export default function App() {
   const [menuNewChatTrigger, setMenuNewChatTrigger] = useState(0)
   // Permission requests per session (queue to handle multiple concurrent requests)
   const [pendingPermissions, setPendingPermissions] = useState<Map<string, PermissionRequest[]>>(new Map())
+  // Draft input text per session (preserved across mode switches and conversation changes)
+  const [sessionDrafts, setSessionDrafts] = useState<Map<string, string>>(new Map())
   // Advanced options
   const [ultrathinkEnabled, setUltrathinkEnabled] = useState(false)
   const [skipPermissions, setSkipPermissions] = useState(false)
@@ -45,6 +47,76 @@ export default function App() {
   useEffect(() => {
     skipPermissionsRef.current = skipPermissions
   }, [skipPermissions])
+
+  // Performance: Throttle streaming text state updates to reduce React re-renders
+  // Accumulates deltas in ref, flushes to state every 100ms (or immediately on complete)
+  const STREAMING_THROTTLE_MS = 100
+  const DRAFT_SAVE_DEBOUNCE_MS = 500
+  const streamingTextRef = useRef<Map<string, { content: string; turnId?: string; timer?: ReturnType<typeof setTimeout> }>>(new Map())
+
+  // Helper to flush accumulated streaming text to React state
+  const flushStreamingText = useCallback((sessionId: string, createNew: boolean = false) => {
+    const streaming = streamingTextRef.current.get(sessionId)
+    if (!streaming) return
+
+    // Clear timer first, then atomically read and clear content
+    // This prevents race conditions where new deltas arrive mid-flush
+    if (streaming.timer) {
+      clearTimeout(streaming.timer)
+      streaming.timer = undefined
+    }
+
+    // Atomically grab and clear content (new deltas will start fresh accumulation)
+    const content = streaming.content
+    const turnId = streaming.turnId
+    streaming.content = ''
+
+    // If no content accumulated, nothing to flush
+    if (!content) {
+      streamingTextRef.current.delete(sessionId)
+      return
+    }
+
+    // Update React state with accumulated content
+    setSessions(prev => prev.map(session => {
+      if (session.id !== sessionId) return session
+
+      const lastMsg = session.messages[session.messages.length - 1]
+
+      // Append to existing streaming message
+      if (lastMsg?.role === 'assistant' && lastMsg.isStreaming &&
+          (!turnId || lastMsg.turnId === turnId)) {
+        return {
+          ...session,
+          messages: [
+            ...session.messages.slice(0, -1),
+            { ...lastMsg, content: lastMsg.content + content }
+          ]
+        }
+      }
+
+      // Create new streaming message if needed
+      if (createNew) {
+        return {
+          ...session,
+          messages: [
+            ...session.messages,
+            {
+              id: generateMessageId(),
+              role: 'assistant' as const,
+              content,
+              timestamp: Date.now(),
+              isStreaming: true,
+              isPending: true,
+              turnId
+            }
+          ]
+        }
+      }
+
+      return session
+    }))
+  }, [])
 
   // Handle onboarding completion
   const handleOnboardingComplete = useCallback(() => {
@@ -180,7 +252,7 @@ export default function App() {
     ],
   })
 
-  // Load workspaces, sessions, and model when app is ready
+  // Load workspaces, sessions, model, and drafts when app is ready
   useEffect(() => {
     if (appState !== 'ready') return
 
@@ -190,6 +262,12 @@ export default function App() {
     window.electronAPI.getModel().then((storedModel) => {
       if (storedModel) {
         setCurrentModel(storedModel)
+      }
+    })
+    // Load persisted input drafts
+    window.electronAPI.getAllDrafts().then((drafts) => {
+      if (Object.keys(drafts).length > 0) {
+        setSessionDrafts(new Map(Object.entries(drafts)))
       }
     })
   }, [appState])
@@ -215,7 +293,6 @@ export default function App() {
       if (event.type === 'permission_request') {
         // Auto-approve if skipPermissions is enabled
         if (skipPermissionsRef.current) {
-          console.log('[App] Skip permissions enabled - auto-approving:', event.request.command)
           window.electronAPI.respondToPermission(event.sessionId, event.request.requestId, true, false)
           return
         }
@@ -240,42 +317,83 @@ export default function App() {
         })
       }
 
-      setSessions(prev => {
-        return prev.map(session => {
+      // Performance: Handle text_delta with throttled updates
+      // Accumulates deltas in ref, only triggers React state update every 100ms
+      if (event.type === 'text_delta') {
+        const sessionId = event.sessionId
+        const existing = streamingTextRef.current.get(sessionId)
+
+        if (existing) {
+          // Append to existing accumulated content
+          existing.content += event.delta
+          if (event.turnId) existing.turnId = event.turnId
+          // Schedule timer if not already scheduled (might have been cleared by flush)
+          if (!existing.timer) {
+            existing.timer = setTimeout(() => flushStreamingText(sessionId, false), STREAMING_THROTTLE_MS)
+          }
+        } else {
+          // First delta for this session - need to check if we should create new message
+          // Check current state to see if there's an existing streaming message
+          setSessions(prev => {
+            const session = prev.find(s => s.id === sessionId)
+            if (!session) return prev
+
+            const lastMsg = session.messages[session.messages.length - 1]
+            const hasExistingStreaming = lastMsg?.role === 'assistant' && lastMsg.isStreaming &&
+              (!event.turnId || lastMsg.turnId === event.turnId)
+
+            if (hasExistingStreaming) {
+              // Will append to existing message on flush
+              streamingTextRef.current.set(sessionId, {
+                content: event.delta,
+                turnId: event.turnId,
+                timer: setTimeout(() => flushStreamingText(sessionId, false), STREAMING_THROTTLE_MS)
+              })
+              return prev // Don't update state yet
+            } else {
+              // Need to create new streaming message immediately (first delta of a turn)
+              streamingTextRef.current.set(sessionId, {
+                content: '',
+                turnId: event.turnId,
+                timer: setTimeout(() => flushStreamingText(sessionId, false), STREAMING_THROTTLE_MS)
+              })
+              return prev.map(s => {
+                if (s.id !== sessionId) return s
+                return {
+                  ...s,
+                  messages: [
+                    ...s.messages,
+                    {
+                      id: generateMessageId(),
+                      role: 'assistant' as const,
+                      content: event.delta,
+                      timestamp: Date.now(),
+                      isStreaming: true,
+                      isPending: true,
+                      turnId: event.turnId
+                    }
+                  ]
+                }
+              })
+            }
+          })
+        }
+        return // Don't process through normal setSessions below
+      }
+
+      // Handle text_complete - flush any pending deltas and clean up
+      if (event.type === 'text_complete') {
+        flushStreamingText(event.sessionId, false)
+        // Full cleanup - streaming for this session is done
+        streamingTextRef.current.delete(event.sessionId)
+      }
+
+      setSessions(prev => prev.map(session => {
           if (session.id !== event.sessionId) return session
 
           switch (event.type) {
-            case 'text_delta': {
-              const lastMsg = session.messages[session.messages.length - 1]
-
-              // Append to existing streaming assistant if same turnId or no turnId
-              if (lastMsg?.role === 'assistant' && lastMsg.isStreaming &&
-                  (!event.turnId || lastMsg.turnId === event.turnId)) {
-                return {
-                  ...session,
-                  messages: [
-                    ...session.messages.slice(0, -1),
-                    { ...lastMsg, content: lastMsg.content + event.delta }
-                  ]
-                }
-              }
-
-              return {
-                ...session,
-                messages: [
-                  ...session.messages,
-                  {
-                    id: generateMessageId(),
-                    role: 'assistant' as const,
-                    content: event.delta,
-                    timestamp: Date.now(),
-                    isStreaming: true,
-                    isPending: true,  // Don't know if intermediate yet - wait for text_complete
-                    turnId: event.turnId
-                  }
-                ]
-              }
-            }
+            // Note: text_delta is handled above with throttling for performance
+            // It accumulates deltas in a ref and flushes every 100ms
 
             case 'text_complete': {
               const msgs = session.messages
@@ -323,7 +441,6 @@ export default function App() {
               const queuedResult = orphanedToolResultsRef.current.get(event.toolUseId)
               if (queuedResult) {
                 orphanedToolResultsRef.current.delete(event.toolUseId)
-                console.log(`[App] Applying queued tool_result for ${event.toolUseId} (${event.toolName})`)
 
                 // Create message AND apply result in one update
                 return {
@@ -369,7 +486,8 @@ export default function App() {
 
             case 'tool_result': {
               const toolMsgs = session.messages
-              const matchingTool = toolMsgs.find(m => m.toolUseId === event.toolUseId)
+              // Explicit role check to avoid matching non-tool messages
+              const matchingTool = toolMsgs.find(m => m.role === 'tool' && m.toolUseId === event.toolUseId)
 
               if (matchingTool) {
                 // Normal case - message exists, update it
@@ -467,7 +585,7 @@ export default function App() {
                   ...session,
                   messages: session.messages.map(m =>
                     m.role === 'status' && m.statusType === 'compacting'
-                      ? { ...m, role: 'info' as const, content: event.message, statusType: 'compaction_complete' as const }
+                      ? { ...m, role: 'info' as const, content: event.message, statusType: 'compaction_complete' as const, infoLevel: event.level }
                       : m
                   )
                 }
@@ -481,7 +599,8 @@ export default function App() {
                     id: generateMessageId(),
                     role: 'info' as const,
                     content: event.message,
-                    timestamp: Date.now()
+                    timestamp: Date.now(),
+                    infoLevel: event.level
                   }
                 ]
               }
@@ -489,12 +608,7 @@ export default function App() {
 
             case 'complete': {
               // Clear any orphaned tool results (memory cleanup)
-              // If any orphans exist, it indicates a bug - tool_start never arrived for some results
-              if (orphanedToolResultsRef.current.size > 0) {
-                console.warn(`[App] Session complete but ${orphanedToolResultsRef.current.size} orphaned tool results exist:`,
-                  Array.from(orphanedToolResultsRef.current.keys()))
-                orphanedToolResultsRef.current.clear()
-              }
+              orphanedToolResultsRef.current.clear()
 
               // Fail-safe: Mark any still-running tools as complete
               // This ensures tools never get stuck in "running" state if tool_result was lost
@@ -503,7 +617,6 @@ export default function App() {
               )
 
               if (hasRunningTools) {
-                console.warn('[App] Session complete but has running tools - marking as complete')
                 return {
                   ...session,
                   isProcessing: false,
@@ -542,8 +655,8 @@ export default function App() {
             default:
               return session
           }
-        })
-      })
+        }
+      ))
     })
 
     return cleanup
@@ -781,8 +894,43 @@ export default function App() {
     setSkipPermissions(enabled)
   }, [])
 
+  // Handle input draft changes per session with debounced persistence
+  const draftSaveTimeoutRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+
+  // Cleanup draft save timers on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      draftSaveTimeoutRef.current.forEach(clearTimeout)
+      draftSaveTimeoutRef.current.clear()
+    }
+  }, [])
+
+  const handleInputChange = useCallback((sessionId: string, value: string) => {
+    // Update local state immediately
+    setSessionDrafts(prev => {
+      const next = new Map(prev)
+      if (value) {
+        next.set(sessionId, value)
+      } else {
+        next.delete(sessionId) // Clean up empty drafts
+      }
+      return next
+    })
+
+    // Debounced persistence to disk (500ms delay)
+    const existingTimeout = draftSaveTimeoutRef.current.get(sessionId)
+    if (existingTimeout) {
+      clearTimeout(existingTimeout)
+    }
+
+    const timeout = setTimeout(() => {
+      window.electronAPI.setDraft(sessionId, value)
+      draftSaveTimeoutRef.current.delete(sessionId)
+    }, DRAFT_SAVE_DEBOUNCE_MS)
+    draftSaveTimeoutRef.current.set(sessionId, timeout)
+  }, [])
+
   const handleRespondToPermission = useCallback(async (sessionId: string, requestId: string, allowed: boolean, alwaysAllow: boolean) => {
-    // Send response to main process
     const success = await window.electronAPI.respondToPermission(sessionId, requestId, allowed, alwaysAllow)
 
     if (success) {
@@ -798,10 +946,11 @@ export default function App() {
         }
         return next
       })
+      // Force sessions state refresh to ensure React processes any pending tool_result updates
+      setSessions(prev => [...prev])
     } else {
       // Response failed (agent/session gone) - clear the permission anyway
       // to avoid UI being stuck with stale permission
-      console.error('Permission response failed - agent may be gone')
       setPendingPermissions(prev => {
         const next = new Map(prev)
         const queue = next.get(sessionId) || []
@@ -988,6 +1137,9 @@ export default function App() {
             onUltrathinkChange={handleUltrathinkChange}
             skipPermissions={skipPermissions}
             onSkipPermissionsChange={handleSkipPermissionsChange}
+            // Input drafts per session
+            sessionDrafts={sessionDrafts}
+            onInputChange={handleInputChange}
           />
         </div>
       </TooltipProvider>

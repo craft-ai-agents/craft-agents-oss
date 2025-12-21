@@ -1550,6 +1550,14 @@ export class CraftAgent {
           }
         }
 
+        // Defensive: flush any pending text that wasn't emitted
+        // This can happen if the SDK sends an assistant message with text but skips the
+        // message_delta event that normally triggers text_complete (e.g., in some ultrathink scenarios)
+        if (pendingTextForStopReason) {
+          yield { type: 'text_complete', text: pendingTextForStopReason, isIntermediate: false, turnId: currentTurnId || undefined };
+          pendingTextForStopReason = null;
+        }
+
         // Defensive: emit complete if SDK didn't send result message
         if (!receivedComplete) {
           yield { type: 'complete' };
@@ -2106,7 +2114,7 @@ export class CraftAgent {
         } else if (message.subtype === 'compact_boundary') {
           events.push({
             type: 'info',
-            message: `Compacted conversation (was ${message.compact_metadata.pre_tokens} tokens)`,
+            message: 'Compacted Conversation',
           });
         } else if (message.subtype === 'status' && message.status === 'compacting') {
           events.push({ type: 'status', message: 'Compacting conversation...' });

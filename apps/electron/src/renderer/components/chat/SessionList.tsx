@@ -368,6 +368,7 @@ export function SessionList({
           ref={zoneRef}
           className="flex flex-col pb-14 min-w-0 pt-2"
           data-focus-zone="session-list"
+          data-session-list
           role="listbox"
           aria-label="Sessions"
         >

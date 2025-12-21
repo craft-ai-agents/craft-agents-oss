@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import {
   ChevronRight,
@@ -10,7 +10,7 @@ import {
   ExternalLink,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { Markdown, CollapsibleMarkdownProvider, StreamingMarkdown } from '@/components/markdown'
+import { Markdown } from '@/components/markdown'
 import { Spinner } from '@/components/ui/loading-indicator'
 import { stripMarkdown } from '@/utils/text'
 
@@ -103,7 +103,7 @@ const BUFFER_CONFIG = {
   MAX_BUFFER_MS: 2500,         // Never buffer longer than 2.5s
   TIMEOUT_MIN_WORDS: 5,        // Show on timeout if at least this many words
   HIGH_WORD_COUNT: 60,         // Show regardless of structure at this count
-  REEVAL_INTERVAL_MS: 200,     // Re-evaluate buffering every 200ms
+  CONTENT_THROTTLE_MS: 300,    // Throttle content updates during streaming (perf optimization)
 } as const
 
 type BufferReason =
@@ -404,10 +404,14 @@ interface StreamingResponsePreviewProps {
  * - High-confidence patterns (code blocks, headers, lists) with lower threshold OR
  * - Timeout after 2.5 seconds
  *
+ * Performance optimization: Uses throttled static snapshots instead of re-rendering
+ * on every character. Content updates every 300ms during streaming, avoiding
+ * expensive markdown parsing on every delta.
+ *
  * States:
  * - Buffering: Shows nothing (TurnCard shows "Preparing response..." indicator)
- * - Streaming: Shows content with spinner in footer
- * - Completed: Shows content with checkmark in footer
+ * - Streaming: Shows throttled content with spinner in footer
+ * - Completed: Shows final content with checkmark in footer
  */
 function StreamingResponsePreview({
   text,
@@ -417,21 +421,37 @@ function StreamingResponsePreview({
   onOpenUrl,
   onPopOut,
 }: StreamingResponsePreviewProps) {
-  // Time-based re-evaluation tick (forces recalculation of shouldShowContent)
-  const [, setTick] = useState(0)
+  // Throttled content for display - updates every CONTENT_THROTTLE_MS during streaming
+  const [displayedText, setDisplayedText] = useState(text)
+  const lastUpdateRef = useRef(Date.now())
 
-  // Re-evaluate buffering decision every 200ms while streaming
+  // Throttle content updates during streaming for performance
+  // Updates immediately when streaming ends to show final content
   useEffect(() => {
-    if (!isStreaming) return
+    if (!isStreaming) {
+      // Streaming ended - show final content immediately
+      setDisplayedText(text)
+      return
+    }
 
-    const interval = setInterval(() => {
-      setTick(t => t + 1)
-    }, BUFFER_CONFIG.REEVAL_INTERVAL_MS)
+    const now = Date.now()
+    const elapsed = now - lastUpdateRef.current
 
-    return () => clearInterval(interval)
-  }, [isStreaming])
+    if (elapsed >= BUFFER_CONFIG.CONTENT_THROTTLE_MS) {
+      // Enough time passed - update immediately
+      setDisplayedText(text)
+      lastUpdateRef.current = now
+    } else {
+      // Schedule update for remaining time
+      const timeout = setTimeout(() => {
+        setDisplayedText(text)
+        lastUpdateRef.current = Date.now()
+      }, BUFFER_CONFIG.CONTENT_THROTTLE_MS - elapsed)
+      return () => clearTimeout(timeout)
+    }
+  }, [text, isStreaming])
 
-  // Calculate buffering decision (recalculates on tick, text, or streaming changes)
+  // Calculate buffering decision based on current text (not displayed text)
   const bufferDecision = useMemo(() => {
     return shouldShowContent(text, isStreaming, streamStartTime)
   }, [text, isStreaming, streamStartTime])
@@ -449,7 +469,7 @@ function StreamingResponsePreview({
   // Completed response - show with max height and footer
   if (isCompleted) {
     return (
-      <div className="max-w-[800px] bg-white shadow-minimal rounded-[8px] overflow-hidden">
+      <div className="bg-white shadow-minimal rounded-[8px] overflow-hidden">
         <div
           className="pl-[22px] pr-4 py-3 text-sm overflow-y-auto"
           style={{ maxHeight: MAX_HEIGHT }}
@@ -488,21 +508,21 @@ function StreamingResponsePreview({
     )
   }
 
-  // Streaming response - show with max height (same as completed)
+  // Streaming response - show throttled content with spinner
   return (
-    <div className="max-w-[800px] bg-white shadow-minimal rounded-[8px] overflow-hidden">
-      {/* Content area */}
+    <div className="bg-white shadow-minimal rounded-[8px] overflow-hidden">
+      {/* Content area - uses displayedText (throttled) for performance */}
       <div
         className="pl-[22px] pr-4 py-3 text-sm overflow-y-auto"
         style={{ maxHeight: MAX_HEIGHT }}
       >
-        <StreamingMarkdown
-          content={text}
-          isStreaming={true}
+        <Markdown
           mode="minimal"
           onUrlClick={onOpenUrl}
           onFileClick={onOpenFile}
-        />
+        >
+          {displayedText}
+        </Markdown>
       </div>
 
       {/* Footer */}
@@ -540,21 +560,8 @@ export function TurnCard({
   const hasRunning = activities.some(a => a.status === 'running')
   const [isExpanded, setIsExpanded] = useState(defaultExpanded)
 
-  // Time-based re-evaluation for buffering state
-  const [, setTick] = useState(0)
-
-  // Re-evaluate buffering state periodically while streaming
-  useEffect(() => {
-    if (!response?.isStreaming) return
-
-    const interval = setInterval(() => {
-      setTick(t => t + 1)
-    }, BUFFER_CONFIG.REEVAL_INTERVAL_MS)
-
-    return () => clearInterval(interval)
-  }, [response?.isStreaming])
-
   // Check if response is in buffering state
+  // No polling needed - parent updates trigger re-evaluation naturally
   const isBuffering = useMemo(
     () => isResponseBuffering(response),
     [response]
@@ -650,7 +657,7 @@ export function TurnCard({
                 animate={{ height: 'auto', opacity: 1 }}
                 exit={{ height: 0, opacity: 0 }}
                 transition={{
-                  height: { type: 'spring', stiffness: 400, damping: 30 },
+                  height: { duration: 0.25, ease: [0.4, 0, 0.2, 1] },
                   opacity: { duration: 0.15 }
                 }}
                 className="overflow-hidden"
@@ -658,7 +665,7 @@ export function TurnCard({
                 {/* Scrollable container when many activities - subtle background for scroll context */}
                 <div
                   className={cn(
-                    "pl-4 pr-3 py-0 my-0.5 space-y-0.5 border-l-2 border-muted ml-[16px]",
+                    "pl-4 pr-3 py-0 space-y-0.5 border-l-2 border-muted ml-[16px]",
                     sortedActivities.length > SIZE_CONFIG.maxVisibleActivities && "bg-muted/30 rounded-r-md overflow-y-auto py-1.5"
                   )}
                   style={{

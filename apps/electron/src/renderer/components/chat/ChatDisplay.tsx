@@ -1,79 +1,28 @@
 import * as React from "react"
 import { useEffect } from "react"
 import {
-  ChevronDown,
-  ChevronUp,
-  ChevronRight,
-  Paperclip,
-  ArrowUp,
-  Square,
   AlertTriangle,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  CircleAlert,
   ExternalLink,
-  CircleSlash,
-  Zap,
-  ShieldOff,
-  SquareSlash,
-  Brain,
-  FileCheck,
-  X,
+  Info,
 } from "lucide-react"
 import { motion, AnimatePresence } from "motion/react"
 
-import { Button } from "@/components/ui/button"
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  StyledDropdownMenuContent,
-  StyledDropdownMenuItem,
-} from "@/components/ui/styled-dropdown"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 import { Markdown, CollapsibleMarkdownProvider, StreamingMarkdown, type RenderMode } from "@/components/markdown"
 import { AnimatedCollapsibleContent } from "@/components/ui/collapsible"
-import { AttachmentPreview, FileTypeIcon, getFileTypeLabel } from "./AttachmentPreview"
+import { FileTypeIcon, getFileTypeLabel } from "./AttachmentPreview"
 import { Spinner } from "@/components/ui/loading-indicator"
 import { useFocusZone } from "@/hooks/keyboard"
 import type { Session, Message, FileAttachment, StoredAttachment, PermissionRequest } from "../../../shared/types"
-import { PermissionBanner } from "./PermissionBanner"
 import { SetupAuthBanner, type BannerState } from "./SetupAuthBanner"
-import { MODELS, getModelDisplayName } from "@config/models"
 import { TurnCard } from "./TurnCard"
 import { groupMessagesByTurn, type Turn, type AssistantTurn, type UserTurn, type SystemTurn } from "./turn-utils"
-
-/** Slash command options */
-type SlashCommandOption = 'plan' | 'ultrathink' | 'skip-permissions'
-
-interface SlashCommandConfig {
-  id: SlashCommandOption
-  label: string
-  description: string
-  icon: React.ReactNode
-  activeStyle: string
-}
-
-const SLASH_COMMANDS: SlashCommandConfig[] = [
-  {
-    id: 'plan',
-    label: 'Plan Mode',
-    description: 'Enter planning mode for complex tasks',
-    icon: <Brain className="h-3.5 w-3.5" />,
-    activeStyle: 'bg-blue-500/10 text-blue-500 border-blue-500/30',
-  },
-  {
-    id: 'ultrathink',
-    label: 'Ultrathink',
-    description: 'Extended reasoning for complex problems',
-    icon: <Zap className="h-3.5 w-3.5" />,
-    activeStyle: 'bg-gradient-to-r from-violet-500/20 via-fuchsia-500/20 to-pink-500/20 text-fuchsia-500 border-fuchsia-500/30 shadow-[0_0_12px_rgba(217,70,239,0.2)]',
-  },
-  {
-    id: 'skip-permissions',
-    label: 'Skip Permissions',
-    description: 'Auto-approve all permission prompts',
-    icon: <ShieldOff className="h-3.5 w-3.5" />,
-    activeStyle: 'bg-red-500/10 text-red-500 border-red-500/30',
-  },
-]
+import { InputContainer, type StructuredInputState, type StructuredResponse, type PermissionResponse } from "./input"
 
 /** Agent setup state for showing setup indicator in input area */
 interface AgentSetupState {
@@ -114,6 +63,11 @@ interface ChatDisplayProps {
   /** Enable plan mode for complex tasks */
   planModeEnabled?: boolean
   onPlanModeChange?: (enabled: boolean) => void
+  // Input value preservation (controlled from parent)
+  /** Current input value - preserved across mode switches and conversation changes */
+  inputValue?: string
+  /** Callback when input value changes */
+  onInputChange?: (value: string) => void
 }
 
 /**
@@ -174,23 +128,41 @@ const PROCESSING_MESSAGES = [
 ]
 
 /**
+ * Format elapsed time: "45s" under a minute, "1:02" for 1+ minutes
+ */
+function formatElapsed(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  const remainingSeconds = seconds % 60
+  return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`
+}
+
+interface ProcessingIndicatorProps {
+  /** Start timestamp (persists across remounts) */
+  startTime?: number
+}
+
+/**
  * ProcessingIndicator - Shows cycling status messages with elapsed time
  * Matches TurnCard header layout for visual continuity
  */
-function ProcessingIndicator() {
+function ProcessingIndicator({ startTime }: ProcessingIndicatorProps) {
   const [elapsed, setElapsed] = React.useState(0)
   const [messageIndex, setMessageIndex] = React.useState(() =>
     Math.floor(Math.random() * PROCESSING_MESSAGES.length)
   )
-  const startTimeRef = React.useRef(Date.now())
 
-  // Update elapsed time every second
+  // Update elapsed time every second using provided startTime
   React.useEffect(() => {
+    const start = startTime || Date.now()
+    // Set initial elapsed immediately
+    setElapsed(Math.floor((Date.now() - start) / 1000))
+
     const interval = setInterval(() => {
-      setElapsed(Math.floor((Date.now() - startTimeRef.current) / 1000))
+      setElapsed(Math.floor((Date.now() - start) / 1000))
     }, 1000)
     return () => clearInterval(interval)
-  }, [])
+  }, [startTime])
 
   // Cycle through messages every 10 seconds
   React.useEffect(() => {
@@ -235,7 +207,7 @@ function ProcessingIndicator() {
             layout
             transition={{ duration: 0.4, ease: 'easeInOut' }}
           >
-            {elapsed}s
+            {formatElapsed(elapsed)}
           </motion.span>
         )}
       </motion.span>
@@ -272,25 +244,21 @@ export function ChatDisplay({
   onSkipPermissionsChange,
   planModeEnabled = false,
   onPlanModeChange,
+  // Input value preservation
+  inputValue,
+  onInputChange,
 }: ChatDisplayProps) {
   // Input is only disabled when explicitly disabled (e.g., agent needs activation)
   // User can type during streaming - submitting will stop the stream and send
   const isInputDisabled = disabled
-  const [input, setInput] = React.useState("")
-  const [attachments, setAttachments] = React.useState<FileAttachment[]>([])
-  const [isDraggingOver, setIsDraggingOver] = React.useState(false)
-  const [loadingCount, setLoadingCount] = React.useState(0)
-  // Slash command menu state
-  const [slashMenuOpen, setSlashMenuOpen] = React.useState(false) // Autocomplete from typing
-  const [slashDropdownOpen, setSlashDropdownOpen] = React.useState(false) // Button dropdown
-  const [slashFilter, setSlashFilter] = React.useState("")
   const messagesEndRef = React.useRef<HTMLDivElement>(null)
   const scrollViewportRef = React.useRef<HTMLDivElement>(null)
   const prevSessionIdRef = React.useRef<string | null>(null)
   const isAtBottomRef = React.useRef(true)
   const internalTextareaRef = React.useRef<HTMLTextAreaElement>(null)
   const textareaRef = externalTextareaRef || internalTextareaRef
-  const dragCounterRef = React.useRef(0)
+  // Performance: Track pending scroll to avoid redundant scrollIntoView calls
+  const pendingScrollRef = React.useRef<number | null>(null)
 
   // Register as focus zone - when zone gains focus, focus the textarea
   const { zoneRef, isFocused } = useFocusZone({
@@ -313,151 +281,6 @@ export function ChatDisplay({
     window.electronAPI.openPreview(session.id, message.id, message.content)
   }, [session])
 
-  // File attachment handlers
-  const handleAttachClick = async () => {
-    console.log('[ChatDisplay] Attach button clicked')
-    if (isInputDisabled) {
-      console.log('[ChatDisplay] Input is disabled, ignoring click')
-      return
-    }
-    try {
-      console.log('[ChatDisplay] Opening file dialog...')
-      const paths = await window.electronAPI.openFileDialog()
-      console.log('[ChatDisplay] File dialog returned:', paths)
-      for (const path of paths) {
-        const attachment = await window.electronAPI.readFileAttachment(path)
-        console.log('[ChatDisplay] Read attachment:', attachment?.name)
-        if (attachment) {
-          setAttachments(prev => [...prev, attachment])
-        }
-      }
-    } catch (error) {
-      console.error('[ChatDisplay] Failed to attach files:', error)
-    }
-  }
-
-  const handleRemoveAttachment = (index: number) => {
-    setAttachments(prev => prev.filter((_, i) => i !== index))
-  }
-
-  // Drag and drop handlers
-  // Uses a counter to properly track enter/leave events with nested elements
-  const handleDragEnter = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    dragCounterRef.current++
-    if (e.dataTransfer.types.includes('Files')) {
-      setIsDraggingOver(true)
-    }
-  }
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    dragCounterRef.current--
-    if (dragCounterRef.current === 0) {
-      setIsDraggingOver(false)
-    }
-  }
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-  }
-
-  // Helper to read a File using FileReader API (for when Electron's file.path isn't available)
-  const readFileAsAttachment = async (file: File): Promise<FileAttachment | null> => {
-    return new Promise((resolve) => {
-      const reader = new FileReader()
-      reader.onload = async () => {
-        const result = reader.result as ArrayBuffer
-        const base64 = btoa(
-          new Uint8Array(result).reduce((data, byte) => data + String.fromCharCode(byte), '')
-        )
-
-        // Determine type from MIME
-        let type: FileAttachment['type'] = 'unknown'
-        if (file.type.startsWith('image/')) type = 'image'
-        else if (file.type === 'application/pdf') type = 'pdf'
-        else if (file.type.includes('text') || file.name.match(/\.(txt|md|json|js|ts|tsx|py|css|html)$/i)) type = 'text'
-        else if (file.type.includes('officedocument') || file.name.match(/\.(docx?|xlsx?|pptx?)$/i)) type = 'office'
-
-        const mimeType = file.type || 'application/octet-stream'
-
-        // Generate thumbnail via IPC (uses Quick Look on macOS)
-        let thumbnailBase64: string | undefined
-        try {
-          const thumb = await window.electronAPI.generateThumbnail(base64, mimeType)
-          if (thumb) {
-            thumbnailBase64 = thumb
-          }
-        } catch (err) {
-          console.log('[ChatDisplay] Thumbnail generation failed:', err)
-        }
-
-        resolve({
-          type,
-          path: file.name, // Use name as path since we don't have the real path
-          name: file.name,
-          mimeType,
-          base64,
-          size: file.size,
-          thumbnailBase64,
-        })
-      }
-      reader.onerror = () => resolve(null)
-      reader.readAsArrayBuffer(file)
-    })
-  }
-
-  const handleDrop = async (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    dragCounterRef.current = 0
-    setIsDraggingOver(false)
-    if (isInputDisabled) return
-
-    const files = Array.from(e.dataTransfer.files)
-    console.log('[ChatDisplay] Dropped files:', files.map(f => ({ name: f.name, path: (f as any).path })))
-
-    // Show loading indicators for all files
-    setLoadingCount(files.length)
-
-    for (const file of files) {
-      // In Electron, dropped files have a path property - try it first
-      const filePath = (file as File & { path?: string }).path
-      if (filePath) {
-        try {
-          const attachment = await window.electronAPI.readFileAttachment(filePath)
-          if (attachment) {
-            setAttachments(prev => [...prev, attachment])
-            setLoadingCount(prev => prev - 1)
-            continue
-          }
-        } catch (error) {
-          console.error('[ChatDisplay] Failed to read via IPC:', error)
-        }
-      }
-
-      // Fallback: read file directly using FileReader API
-      console.log('[ChatDisplay] Using FileReader fallback for:', file.name)
-      try {
-        const attachment = await readFileAsAttachment(file)
-        if (attachment) {
-          setAttachments(prev => [...prev, attachment])
-        }
-      } catch (error) {
-        console.error('[ChatDisplay] Failed to read dropped file:', error)
-      }
-      setLoadingCount(prev => prev - 1)
-    }
-  }
-
-  // Clear attachments when session changes
-  React.useEffect(() => {
-    setAttachments([])
-  }, [session?.id])
-
   // Track scroll position to determine if user is at bottom
   // Threshold of 50px allows for small scroll variations
   const handleScroll = React.useCallback(() => {
@@ -477,71 +300,88 @@ export function ChatDisplay({
   }, [handleScroll])
 
   // Auto-scroll to bottom
-  // - Always scroll on session switch (instant)
-  // - Only scroll on new messages if user was at bottom (smooth)
+  // - Session switch: scroll immediately (no animation delay)
+  // - Streaming updates: use requestAnimationFrame to batch (performance)
   React.useEffect(() => {
     const isSessionSwitch = prevSessionIdRef.current !== session?.id
     prevSessionIdRef.current = session?.id ?? null
 
     // Always scroll on session switch, otherwise only if user is at bottom
     if (isSessionSwitch || isAtBottomRef.current) {
-      messagesEndRef.current?.scrollIntoView({
-        behavior: isSessionSwitch ? 'instant' : 'smooth'
-      })
+      // Cancel any pending scroll
+      if (pendingScrollRef.current !== null) {
+        cancelAnimationFrame(pendingScrollRef.current)
+        pendingScrollRef.current = null
+      }
+
+      if (isSessionSwitch) {
+        // Session switch: scroll immediately (synchronous) to avoid visible jump
+        messagesEndRef.current?.scrollIntoView({ behavior: 'instant' })
+      } else {
+        // Streaming updates: batch with requestAnimationFrame for performance
+        pendingScrollRef.current = requestAnimationFrame(() => {
+          pendingScrollRef.current = null
+          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+        })
+      }
+    }
+
+    // Cleanup on unmount
+    return () => {
+      if (pendingScrollRef.current !== null) {
+        cancelAnimationFrame(pendingScrollRef.current)
+      }
     }
   }, [session?.id, session?.messages])
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const hasContent = input.trim() || attachments.length > 0
-    if (!hasContent || isInputDisabled) return
-
+  // Handle message submission from InputContainer
+  const handleSubmit = async (message: string, attachments?: FileAttachment[]) => {
     // If currently processing, stop the stream first
     if (session?.isProcessing) {
       try {
         await window.electronAPI.cancelProcessing(session.id)
-        // Small delay to let the cancellation complete
         await new Promise(resolve => setTimeout(resolve, 100))
       } catch (error) {
         console.error('[ChatDisplay] Failed to cancel before send:', error)
       }
     }
 
-    onSendMessage(input.trim(), attachments.length > 0 ? attachments : undefined)
-    setInput("")
-    setAttachments([])
-
-    // Scroll to bottom with animation when sending a message
+    onSendMessage(message, attachments)
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
 
+  // Handle stop request from InputContainer
   const handleStop = () => {
     if (!session?.isProcessing) return
-    // Fire and forget - don't await, UI updates when 'complete' event arrives
     window.electronAPI.cancelProcessing(session.id).catch(error => {
       console.error('[ChatDisplay] Failed to cancel processing:', error)
     })
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    // Enter (without shift) or Cmd+Enter to submit
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      handleSubmit(e)
+  // Handle structured input responses (permissions, clarifications, plan reviews)
+  const handleStructuredResponse = (response: StructuredResponse) => {
+    if (response.type === 'permission' && pendingPermission && onRespondToPermission) {
+      const permResponse = response as PermissionResponse
+      onRespondToPermission(
+        pendingPermission.sessionId,
+        pendingPermission.requestId,
+        permResponse.allowed,
+        permResponse.alwaysAllow
+      )
     }
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-      e.preventDefault()
-      handleSubmit(e)
-    }
-    // Escape to stop streaming (if processing) or blur textarea
-    if (e.key === 'Escape') {
-      if (session?.isProcessing) {
-        handleStop()
-      } else {
-        textareaRef.current?.blur()
-      }
-    }
+    // TODO: Handle clarification and plan_review responses
   }
+
+  // Build structured input state from pending permission
+  const structuredInput: StructuredInputState | undefined = pendingPermission
+    ? { type: 'permission', data: pendingPermission }
+    : undefined
+
+  // Memoize turn grouping - avoids O(n) iteration on every render/keystroke
+  const turns = React.useMemo(
+    () => session ? groupMessagesByTurn(session.messages) : [],
+    [session?.messages]
+  )
 
   return (
     <div ref={zoneRef} className="flex h-full flex-col min-w-0" data-focus-zone="chat">
@@ -561,10 +401,8 @@ export function ChatDisplay({
                   <p className="text-xs mt-1 text-center">Start a conversation by typing a message below.</p>
                 </div>
               ) : (
-                /* Turn-based Message Display */
+                /* Turn-based Message Display - memoized to avoid re-grouping on every render */
                 (() => {
-                  const turns = groupMessagesByTurn(session.messages)
-
                   return turns.map((turn) => {
                     // User turns - render with MemoizedMessageBubble
                     // Extra top margin creates visual separation after AI responses
@@ -614,7 +452,11 @@ export function ChatDisplay({
                 })()
               )}
               {/* Processing Indicator - always visible while processing */}
-              {session.isProcessing && <ProcessingIndicator />}
+              {session.isProcessing && (() => {
+                // Find the last user message timestamp for accurate elapsed time
+                const lastUserMsg = [...session.messages].reverse().find(m => m.role === 'user')
+                return <ProcessingIndicator startTime={lastUserMsg?.timestamp} />
+              })()}
               {/* Scroll Anchor: For auto-scroll to bottom */}
               <div ref={messagesEndRef} />
             </div>
@@ -623,322 +465,39 @@ export function ChatDisplay({
           {/* Bottom fade gradient - overlays bottom of scroll area (pr-2 avoids scrollbar) */}
           <div className="h-8 -mt-8 relative z-10 bg-gradient-to-t from-background to-transparent pointer-events-none pr-2" />
 
-          {/* === INPUT CONTAINER: Textarea + Bottom row with controls === */}
+          {/* === INPUT CONTAINER: FreeForm or Structured Input === */}
           <div className="max-w-[960px] mx-auto w-full px-4 pb-4 mt-1">
-            <div className="relative">
-              {/* Permission Banner - crossfades with input, anchored to bottom */}
-              {pendingPermission && onRespondToPermission && (
-                <motion.div
-                  initial={false}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
-                  className="absolute inset-x-0 bottom-0 z-10"
-                >
-                  <PermissionBanner
-                    request={pendingPermission}
-                    onRespond={(allowed, alwaysAllow) =>
-                      onRespondToPermission(pendingPermission.sessionId, pendingPermission.requestId, allowed, alwaysAllow)
-                    }
-                  />
-                </motion.div>
-              )}
-
-              {/* Agent Setup Banner - shown instead of input when agent needs setup */}
-              {agentSetupState && agentSetupState.state !== 'hidden' && !pendingPermission && (
-                <motion.div
-                  initial={false}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
-                  className="absolute inset-x-0 bottom-0 z-10"
-                >
-                  <SetupAuthBanner
-                    state={agentSetupState.state}
-                    agentName={agentSetupState.agentName}
-                    reason={agentSetupState.reason}
-                    onAction={agentSetupState.onAction}
-                    variant="inputAreaCover"
-                  />
-                </motion.div>
-              )}
-
-              {/* Slash Command Autocomplete Menu - uses DropdownMenu for keyboard nav */}
-              <DropdownMenu open={slashMenuOpen} onOpenChange={(open) => {
-                setSlashMenuOpen(open)
-                if (!open) {
-                  setSlashFilter("")
-                  textareaRef.current?.focus()
-                }
-              }}>
-                <DropdownMenuTrigger asChild>
-                  <div className="absolute bottom-full left-4 w-0 h-0" />
-                </DropdownMenuTrigger>
-                <StyledDropdownMenuContent side="top" align="start" sideOffset={8} className="w-72 p-1">
-                  {SLASH_COMMANDS.filter(cmd =>
-                    !slashFilter || cmd.label.toLowerCase().includes(slashFilter.toLowerCase()) || cmd.id.includes(slashFilter.toLowerCase())
-                  ).map((cmd) => {
-                    const isActive =
-                      (cmd.id === 'plan' && planModeEnabled) ||
-                      (cmd.id === 'ultrathink' && ultrathinkEnabled) ||
-                      (cmd.id === 'skip-permissions' && skipPermissions)
-                    return (
-                      <StyledDropdownMenuItem
-                        key={cmd.id}
-                        onClick={() => {
-                          if (cmd.id === 'plan') onPlanModeChange?.(!planModeEnabled)
-                          else if (cmd.id === 'ultrathink') onUltrathinkChange?.(!ultrathinkEnabled)
-                          else if (cmd.id === 'skip-permissions') onSkipPermissionsChange?.(!skipPermissions)
-                          // Remove the /command from input
-                          setInput(prev => prev.replace(/(?:^|\s)\/\w*$/, '').trim())
-                        }}
-                        className={cn(
-                          "flex items-start gap-3 px-3 py-2.5 cursor-pointer",
-                          isActive && "bg-foreground/5"
-                        )}
-                      >
-                        <div className="mt-0.5 shrink-0">{cmd.icon}</div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium">{cmd.label}</div>
-                          <div className="text-xs text-muted-foreground whitespace-normal">{cmd.description}</div>
-                        </div>
-                        {isActive && <FileCheck className="h-4 w-4 mt-0.5 shrink-0 text-green-500" />}
-                      </StyledDropdownMenuItem>
-                    )
-                  })}
-                  {SLASH_COMMANDS.filter(cmd =>
-                    !slashFilter || cmd.label.toLowerCase().includes(slashFilter.toLowerCase()) || cmd.id.includes(slashFilter.toLowerCase())
-                  ).length === 0 && (
-                    <div className="px-3 py-3 text-sm text-muted-foreground text-center">
-                      No matching commands
-                    </div>
-                  )}
-                </StyledDropdownMenuContent>
-              </DropdownMenu>
-
-              {/* Normal Input Form - fades when permission/setup shows */}
-              <motion.form
-                initial={false}
-                animate={{
-                  opacity: (pendingPermission || (agentSetupState && agentSetupState.state !== 'hidden')) ? 0 : 1
-                }}
-                transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
+            {/* Agent Setup Banner - shown instead of input when agent needs setup */}
+            {agentSetupState && agentSetupState.state !== 'hidden' && !pendingPermission ? (
+              <SetupAuthBanner
+                state={agentSetupState.state}
+                agentName={agentSetupState.agentName}
+                reason={agentSetupState.reason}
+                onAction={agentSetupState.onAction}
+                variant="inputAreaCover"
+              />
+            ) : (
+              <InputContainer
+                placeholder={`Message ${session.agentName || session.workspaceName || 'Chat'}...`}
+                disabled={isInputDisabled}
+                isProcessing={session.isProcessing}
                 onSubmit={handleSubmit}
-                style={{
-                  pointerEvents: (pendingPermission || (agentSetupState && agentSetupState.state !== 'hidden')) ? 'none' : 'auto'
-                }}
-              >
-                <div
-                  className={cn(
-                    "rounded-[8px] bg-background overflow-hidden transition-all shadow-middle",
-                    isDraggingOver && "ring-2 ring-primary ring-offset-2 ring-offset-background bg-primary/5"
-                  )}
-                  onDragEnter={handleDragEnter}
-                  onDragLeave={handleDragLeave}
-                  onDragOver={handleDragOver}
-                  onDrop={handleDrop}
-                >
-                  {/* Attachment Preview - ChatGPT-style bubbles above textarea */}
-                  <AttachmentPreview
-                    attachments={attachments}
-                    onRemove={handleRemoveAttachment}
-                    disabled={isInputDisabled}
-                    loadingCount={loadingCount}
-                  />
-
-                  {/* Textarea */}
-                  <div className="relative">
-                    <textarea
-                      ref={textareaRef}
-                      className="w-full min-h-[72px] pl-5 pr-4 pt-4 pb-3 bg-transparent outline-none text-sm placeholder:text-muted-foreground resize-none focus-visible:ring-0"
-                      placeholder={`Message ${session.agentName || session.workspaceName || 'Chat'}...`}
-                      value={input}
-                      onChange={(e) => {
-                        let value = e.target.value
-
-                        // Check for slash command trigger anywhere: find /word pattern
-                        // Match / followed by word chars, where / is either at start or after whitespace
-                        const slashMatch = value.match(/(?:^|\s)\/(\w*)$/)
-                        if (slashMatch) {
-                          // Open menu and set filter based on text after /
-                          setSlashMenuOpen(true)
-                          setSlashFilter(slashMatch[1] || "")
-                        } else if (slashMenuOpen) {
-                          // Close menu if no longer typing slash command
-                          setSlashMenuOpen(false)
-                          setSlashFilter("")
-                        }
-
-                        // Auto-capitalize first letter (but not for slash commands)
-                        if (value.length > 0 && value.charAt(0) !== '/') {
-                          value = value.charAt(0).toUpperCase() + value.slice(1)
-                        }
-                        setInput(value)
-                      }}
-                      onKeyDown={handleKeyDown}
-                      onDragOver={handleDragOver}
-                      onDrop={handleDrop}
-                      disabled={isInputDisabled}
-                      rows={3}
-                    />
-                  </div>
-
-                  {/* Bottom Row: Slash commands, Attach, Model selector, Active badges, Send */}
-                  <div className="flex items-center gap-1 px-2 py-2 border-t border-border/50">
-                    {/* Slash Command Button - opens dropdown menu */}
-                    <DropdownMenu open={slashDropdownOpen} onOpenChange={setSlashDropdownOpen}>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 shrink-0"
-                          disabled={isInputDisabled}
-                        >
-                          <SquareSlash className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <StyledDropdownMenuContent side="top" align="start" sideOffset={8} className="w-72 p-1">
-                        {SLASH_COMMANDS.map((cmd) => {
-                          const isActive =
-                            (cmd.id === 'plan' && planModeEnabled) ||
-                            (cmd.id === 'ultrathink' && ultrathinkEnabled) ||
-                            (cmd.id === 'skip-permissions' && skipPermissions)
-                          return (
-                            <StyledDropdownMenuItem
-                              key={cmd.id}
-                              onClick={() => {
-                                if (cmd.id === 'plan') onPlanModeChange?.(!planModeEnabled)
-                                else if (cmd.id === 'ultrathink') onUltrathinkChange?.(!ultrathinkEnabled)
-                                else if (cmd.id === 'skip-permissions') onSkipPermissionsChange?.(!skipPermissions)
-                              }}
-                              className={cn(
-                                "flex items-start gap-3 px-3 py-2.5 cursor-pointer",
-                                isActive && "bg-foreground/5"
-                              )}
-                            >
-                              <div className="mt-0.5 shrink-0">{cmd.icon}</div>
-                              <div className="flex-1 min-w-0">
-                                <div className="text-sm font-medium">{cmd.label}</div>
-                                <div className="text-xs text-muted-foreground whitespace-normal">{cmd.description}</div>
-                              </div>
-                              {isActive && <FileCheck className="h-4 w-4 mt-0.5 shrink-0 text-green-500" />}
-                            </StyledDropdownMenuItem>
-                          )
-                        })}
-                      </StyledDropdownMenuContent>
-                    </DropdownMenu>
-
-                    {/* Attach File Button */}
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 shrink-0"
-                      onClick={handleAttachClick}
-                      disabled={isInputDisabled}
-                    >
-                      <Paperclip className="h-4 w-4" />
-                    </Button>
-
-                    {/* Model Selector Dropdown */}
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 gap-1 text-xs shrink-0 hover:bg-foreground/5 data-[state=open]:bg-foreground/5"
-                        >
-                          {getModelDisplayName(currentModel)}
-                          <ChevronDown className="h-3 w-3 opacity-50" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <StyledDropdownMenuContent side="top" align="start" sideOffset={8}>
-                        {MODELS.map((model) => (
-                          <StyledDropdownMenuItem
-                            key={model.id}
-                            onClick={() => onModelChange(model.id)}
-                            className={cn(currentModel === model.id && "bg-foreground/10")}
-                          >
-                            {model.name}
-                          </StyledDropdownMenuItem>
-                        ))}
-                      </StyledDropdownMenuContent>
-                    </DropdownMenu>
-
-                    {/* Active Options - Badges with X to remove */}
-                    {planModeEnabled && (
-                      <button
-                        type="button"
-                        onClick={() => onPlanModeChange?.(false)}
-                        className="h-6 px-2 text-[11px] font-medium rounded-[4px] flex items-center gap-1 transition-all bg-blue-500/10 text-blue-500 border border-blue-500/30 hover:bg-blue-500/20"
-                      >
-                        <Brain className="h-3 w-3" />
-                        <span>Plan</span>
-                        <X className="h-3 w-3 ml-0.5 opacity-60 hover:opacity-100" />
-                      </button>
-                    )}
-
-                    {ultrathinkEnabled && (
-                      <button
-                        type="button"
-                        onClick={() => onUltrathinkChange?.(false)}
-                        className="h-6 px-2 text-[11px] font-medium rounded-[4px] flex items-center gap-1 transition-all bg-gradient-to-r from-violet-500/20 via-fuchsia-500/20 to-pink-500/20 text-fuchsia-500 border border-fuchsia-500/30 shadow-[0_0_12px_rgba(217,70,239,0.2)] hover:from-violet-500/30 hover:via-fuchsia-500/30 hover:to-pink-500/30"
-                      >
-                        <Zap className="h-3 w-3 fill-fuchsia-500" />
-                        <span>Ultrathink</span>
-                        <X className="h-3 w-3 ml-0.5 opacity-60 hover:opacity-100" />
-                      </button>
-                    )}
-
-                    {skipPermissions && (
-                      <button
-                        type="button"
-                        onClick={() => onSkipPermissionsChange?.(false)}
-                        className="h-6 px-2 text-[11px] font-medium rounded-[4px] flex items-center gap-1 transition-all bg-red-500/10 text-red-500 border border-red-500/30 hover:bg-red-500/20"
-                      >
-                        <ShieldOff className="h-3 w-3" />
-                        <span>Skip Perms</span>
-                        <X className="h-3 w-3 ml-0.5 opacity-60 hover:opacity-100" />
-                      </button>
-                    )}
-
-                    {/* Spacer */}
-                    <div className="flex-1" />
-
-                    {/* Send/Stop Button - show send if there's content, stop if processing with no content */}
-                    {(() => {
-                      const hasContent = input.trim() || attachments.length > 0
-                      // Show send button if there's content OR not processing
-                      if (hasContent || !session?.isProcessing) {
-                        return (
-                          <Button
-                            type="submit"
-                            size="icon"
-                            className="h-7 w-7 rounded-full shrink-0"
-                            disabled={!hasContent || disabled}
-                          >
-                            <ArrowUp className="h-4 w-4" />
-                          </Button>
-                        )
-                      }
-                      // Show stop button when processing with no content
-                      return (
-                        <Button
-                          type="button"
-                          size="icon"
-                          variant="secondary"
-                          className="h-7 w-7 rounded-full shrink-0 hover:bg-foreground/15 active:bg-foreground/20"
-                          onClick={handleStop}
-                        >
-                          <Square className="h-3 w-3 fill-current" />
-                        </Button>
-                      )
-                    })()}
-                  </div>
-                </div>
-              </motion.form>
-            </div>
+                onStop={handleStop}
+                textareaRef={textareaRef}
+                currentModel={currentModel}
+                onModelChange={onModelChange}
+                ultrathinkEnabled={ultrathinkEnabled}
+                onUltrathinkChange={onUltrathinkChange}
+                skipPermissions={skipPermissions}
+                onSkipPermissionsChange={onSkipPermissionsChange}
+                planModeEnabled={planModeEnabled}
+                onPlanModeChange={onPlanModeChange}
+                structuredInput={structuredInput}
+                onStructuredResponse={handleStructuredResponse}
+                inputValue={inputValue}
+                onInputChange={onInputChange}
+              />
+            )}
           </div>
         </div>
       ) : null}
@@ -1105,7 +664,7 @@ function MessageBubble({
   if (message.role === 'assistant') {
     return (
       <div className="flex justify-start group">
-        <div className="relative max-w-[80%] bg-white shadow-minimal rounded-[8px] pl-6 pr-4 py-3 break-words min-w-0">
+        <div className="relative max-w-[90%] bg-white shadow-minimal rounded-[8px] pl-6 pr-4 py-3 break-words min-w-0">
           {/* Pop-out button - visible on hover */}
           {onPopOut && !message.isStreaming && (
             <button
@@ -1162,12 +721,21 @@ function MessageBubble({
     )
   }
 
-  // === INFO MESSAGE: Matches TurnCard header style ===
+  // === INFO MESSAGE: Icon and color based on level ===
   if (message.role === 'info') {
+    const level = message.infoLevel || 'info'
+    const config = {
+      info: { icon: Info, className: 'text-muted-foreground' },
+      warning: { icon: AlertTriangle, className: 'text-amber-600' },
+      error: { icon: CircleAlert, className: 'text-destructive' },
+      success: { icon: CheckCircle2, className: 'text-emerald-600' },
+    }[level]
+    const Icon = config.icon
+
     return (
-      <div className="flex items-center gap-2 px-3 py-1 text-[13px] text-muted-foreground">
+      <div className={cn('flex items-center gap-2 px-3 py-1 text-[13px]', config.className)}>
         <div className="w-3 h-3 flex items-center justify-center shrink-0">
-          <CircleSlash className="w-3 h-3" />
+          <Icon className="w-3 h-3" />
         </div>
         <span>{message.content}</span>
       </div>

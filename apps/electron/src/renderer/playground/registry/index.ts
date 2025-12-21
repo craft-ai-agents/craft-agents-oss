@@ -4,6 +4,7 @@ import { agentSetupComponents } from './agent-setup'
 import { chatComponents } from './chat'
 import { turnCardComponents } from './turn-card'
 import { messagesComponents } from './messages'
+import { inputComponents } from './input'
 import { markdownComponents } from './markdown'
 import { iconComponents } from './icons'
 import { settingsComponents } from './settings'
@@ -16,13 +17,14 @@ export const componentRegistry: ComponentEntry[] = [
   ...chatComponents,
   ...turnCardComponents,
   ...messagesComponents,
+  ...inputComponents,
   ...markdownComponents,
   ...iconComponents,
   ...settingsComponents,
 ]
 
 export function getCategories(): CategoryGroup[] {
-  const categoryOrder: Category[] = ['Onboarding', 'Agent Setup', 'Chat', 'Markdown', 'Icons', 'Settings']
+  const categoryOrder: Category[] = ['Onboarding', 'Agent Setup', 'Chat', 'Chat Messages', 'Chat Inputs', 'Markdown', 'Icons', 'Settings']
   const categoryMap = new Map<Category, ComponentEntry[]>()
 
   for (const entry of componentRegistry) {

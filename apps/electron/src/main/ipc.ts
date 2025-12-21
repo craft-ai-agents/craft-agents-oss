@@ -12,7 +12,7 @@ import { registerOnboardingHandlers } from './onboarding'
 import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type AgentActivateOptions, type AuthType, type BillingMethodInfo, type SendMessageOptions } from '../shared/types'
 import { readFileAttachment } from '@craft-agent/shared/utils'
 import { getAiCreditTopUpUrl } from '@craft-agent/shared/auth'
-import { getSessionAttachmentsPath, getAuthType, setAuthType, getPreferencesPath, getModel, setModel } from '@craft-agent/shared/config'
+import { getSessionAttachmentsPath, getAuthType, setAuthType, getPreferencesPath, getModel, setModel, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts } from '@craft-agent/shared/config'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { MarkItDown } from 'markitdown-js'
 
@@ -732,6 +732,30 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
     }
+  })
+
+  // ============================================================
+  // Session Drafts (persisted input text)
+  // ============================================================
+
+  // Get draft text for a session
+  ipcMain.handle(IPC_CHANNELS.DRAFTS_GET, async (_event, sessionId: string) => {
+    return getSessionDraft(sessionId)
+  })
+
+  // Set draft text for a session (pass empty string to clear)
+  ipcMain.handle(IPC_CHANNELS.DRAFTS_SET, async (_event, sessionId: string, text: string) => {
+    setSessionDraft(sessionId, text)
+  })
+
+  // Delete draft for a session
+  ipcMain.handle(IPC_CHANNELS.DRAFTS_DELETE, async (_event, sessionId: string) => {
+    deleteSessionDraft(sessionId)
+  })
+
+  // Get all drafts (for loading on app start)
+  ipcMain.handle(IPC_CHANNELS.DRAFTS_GET_ALL, async () => {
+    return getAllSessionDrafts()
   })
 
   // ============================================================

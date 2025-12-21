@@ -129,6 +129,14 @@ function storedToMessage(stored: StoredMessage): Message {
   }
 }
 
+// Performance: Batch IPC delta events to reduce renderer load
+const DELTA_BATCH_INTERVAL_MS = 50  // Flush batched deltas every 50ms
+
+interface PendingDelta {
+  delta: string
+  turnId?: string
+}
+
 export class SessionManager {
   private sessions: Map<string, ManagedSession> = new Map()
   private windowManager: WindowManager | null = null
@@ -139,6 +147,9 @@ export class SessionManager {
   // Cache AgentStateManager per agent (agent-scoped: workspaceId:agentId)
   // This is the single source of truth for agent activation state
   private agentStateManagers: Map<string, AgentStateManager> = new Map()
+  // Delta batching for performance - reduces IPC events from 50+/sec to ~20/sec
+  private pendingDeltas: Map<string, PendingDelta> = new Map()
+  private deltaFlushTimers: Map<string, NodeJS.Timeout> = new Map()
 
   setWindowManager(wm: WindowManager): void {
     this.windowManager = wm
@@ -1020,10 +1031,14 @@ export class SessionManager {
       case 'text_delta':
         // AgentEvent uses `text` not `delta`
         managed.streamingText += event.text
-        this.sendEvent({ type: 'text_delta', sessionId, delta: event.text, turnId: event.turnId }, workspaceId)
+        // Queue delta for batched sending (performance: reduces IPC from 50+/sec to ~20/sec)
+        this.queueDelta(sessionId, workspaceId, event.text, event.turnId)
         break
 
       case 'text_complete':
+        // Flush any pending deltas before sending complete (ensures renderer has all content)
+        this.flushDelta(sessionId, workspaceId)
+
         // Check if this is the first assistant message and no name exists yet
         const existingAssistantCount = managed.messages.filter(m => m.role === 'assistant').length
         const shouldGenerateTitle = existingAssistantCount === 0 && !managed.name
@@ -1180,6 +1195,11 @@ export class SessionManager {
           }
         }, workspaceId)
         break
+
+      case 'complete':
+        // Complete event from CraftAgent - actual 'complete' sent to renderer
+        // comes from the finally block in sendMessage, not here
+        break
     }
   }
 
@@ -1208,6 +1228,56 @@ export class SessionManager {
       window.webContents.send(IPC_CHANNELS.SESSION_EVENT, event)
     } catch (error) {
       console.error(`[SessionManager] Failed to send ${event.type} event:`, error)
+    }
+  }
+
+  /**
+   * Queue a text delta for batched sending (performance optimization)
+   * Instead of sending 50+ IPC events per second, batches deltas and flushes every 50ms
+   */
+  private queueDelta(sessionId: string, workspaceId: string, delta: string, turnId?: string): void {
+    const existing = this.pendingDeltas.get(sessionId)
+    if (existing) {
+      // Append to existing batch
+      existing.delta += delta
+      // Keep the latest turnId (should be the same, but just in case)
+      if (turnId) existing.turnId = turnId
+    } else {
+      // Start new batch
+      this.pendingDeltas.set(sessionId, { delta, turnId })
+    }
+
+    // Schedule flush if not already scheduled
+    if (!this.deltaFlushTimers.has(sessionId)) {
+      const timer = setTimeout(() => {
+        this.flushDelta(sessionId, workspaceId)
+      }, DELTA_BATCH_INTERVAL_MS)
+      this.deltaFlushTimers.set(sessionId, timer)
+    }
+  }
+
+  /**
+   * Flush any pending deltas for a session (sends batched IPC event)
+   * Called on timer or when streaming ends (text_complete)
+   */
+  private flushDelta(sessionId: string, workspaceId: string): void {
+    // Clear the timer
+    const timer = this.deltaFlushTimers.get(sessionId)
+    if (timer) {
+      clearTimeout(timer)
+      this.deltaFlushTimers.delete(sessionId)
+    }
+
+    // Send batched delta if any
+    const pending = this.pendingDeltas.get(sessionId)
+    if (pending && pending.delta) {
+      this.sendEvent({
+        type: 'text_delta',
+        sessionId,
+        delta: pending.delta,
+        turnId: pending.turnId
+      }, workspaceId)
+      this.pendingDeltas.delete(sessionId)
     }
   }
 }

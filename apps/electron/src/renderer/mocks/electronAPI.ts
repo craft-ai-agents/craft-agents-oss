@@ -852,4 +852,40 @@ console.log(example);
     // Mock: no-op in browser mode - we could implement a BroadcastChannel for cross-tab sync
     return () => {}
   },
+
+  // ===== Session Drafts =====
+
+  async getDraft(sessionId: string): Promise<string | null> {
+    // Mock: get from localStorage
+    return localStorage.getItem(`draft:${sessionId}`)
+  },
+
+  async setDraft(sessionId: string, text: string): Promise<void> {
+    // Mock: save to localStorage
+    if (text) {
+      localStorage.setItem(`draft:${sessionId}`, text)
+    } else {
+      localStorage.removeItem(`draft:${sessionId}`)
+    }
+  },
+
+  async deleteDraft(sessionId: string): Promise<void> {
+    localStorage.removeItem(`draft:${sessionId}`)
+  },
+
+  async getAllDrafts(): Promise<Record<string, string>> {
+    // Mock: get all drafts from localStorage
+    const drafts: Record<string, string> = {}
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key?.startsWith('draft:')) {
+        const sessionId = key.replace('draft:', '')
+        const value = localStorage.getItem(key)
+        if (value) {
+          drafts[sessionId] = value
+        }
+      }
+    }
+    return drafts
+  },
 }

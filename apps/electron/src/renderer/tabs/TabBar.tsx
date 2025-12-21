@@ -87,6 +87,7 @@ export function TabBar({ className, onClose }: TabBarProps) {
   return (
     <div
       ref={containerRef}
+      data-tab-bar
       className={cn('h-[32px] shrink-0 bg-foreground/5 mx-2 mb-2 p-[1px] rounded-full overflow-x-auto scrollbar-hide', className)}
     >
       <div

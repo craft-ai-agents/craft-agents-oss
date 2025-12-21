@@ -4,13 +4,16 @@ import { TurnCard, type ActivityItem, type ResponseContent } from '@/components/
 import { Spinner } from '@/components/ui/loading-indicator'
 import {
   AlertTriangle,
+  CheckCircle2,
   ChevronDown,
   ChevronRight,
+  CircleAlert,
   ExternalLink,
   Info,
 } from 'lucide-react'
 import { Markdown, CollapsibleMarkdownProvider } from '@/components/markdown'
 import { AnimatedCollapsibleContent } from '@/components/ui/collapsible'
+import { AnimatePresence, motion } from 'motion/react'
 import { cn } from '@/lib/utils'
 
 // ============================================================================
@@ -112,12 +115,29 @@ function StatusMessage({ content }: { content: string }) {
   )
 }
 
-/** Info message - info icon with text */
-function InfoMessage({ content }: { content: string }) {
+/** Info message - icon with text, supports different severity levels */
+type InfoMessageLevel = 'info' | 'warning' | 'error' | 'success'
+
+interface InfoMessageProps {
+  content: string
+  level?: InfoMessageLevel
+}
+
+const infoMessageConfig: Record<InfoMessageLevel, { icon: typeof Info; className: string }> = {
+  info: { icon: Info, className: 'text-muted-foreground' },
+  warning: { icon: AlertTriangle, className: 'text-amber-600' },
+  error: { icon: CircleAlert, className: 'text-destructive' },
+  success: { icon: CheckCircle2, className: 'text-emerald-600' },
+}
+
+function InfoMessage({ content, level = 'info' }: InfoMessageProps) {
+  const config = infoMessageConfig[level]
+  const Icon = config.icon
+
   return (
-    <div className="flex items-center gap-2 px-3 py-1 text-[13px] text-muted-foreground">
+    <div className={cn('flex items-center gap-2 px-3 py-1 text-[13px]', config.className)}>
       <div className="w-3 h-3 flex items-center justify-center shrink-0">
-        <Info className="w-3 h-3" />
+        <Icon className="w-3 h-3" />
       </div>
       <span>{content}</span>
     </div>
@@ -138,17 +158,146 @@ function WarningMessage({ content }: { content: string }) {
   )
 }
 
-/** Thinking indicator with elapsed time */
-function ThinkingIndicator({ elapsed = 0 }: { elapsed?: number }) {
+/** Processing indicator with cycling messages and elapsed time */
+const PROCESSING_MESSAGES = [
+  'Thinking…',
+  'Pondering…',
+  'Contemplating…',
+  'Reasoning…',
+  'Processing…',
+  'Computing…',
+  'Considering…',
+  'Reflecting…',
+  'Deliberating…',
+  'Cogitating…',
+  'Ruminating…',
+  'Musing…',
+  'Working on it…',
+  'On it…',
+  'Crunching…',
+  'Brewing…',
+  'Connecting dots…',
+  'Mulling it over…',
+  'Deep in thought…',
+  'Hmm…',
+  'Let me see…',
+  'One moment…',
+  'Hold on…',
+  'Bear with me…',
+  'Just a sec…',
+  'Hang tight…',
+  'Getting there…',
+  'Almost…',
+  'Working…',
+  'Busy busy…',
+  'Whirring…',
+  'Churning…',
+  'Percolating…',
+  'Simmering…',
+  'Cooking…',
+  'Baking…',
+  'Stirring…',
+  'Spinning up…',
+  'Warming up…',
+  'Revving…',
+  'Buzzing…',
+  'Humming…',
+  'Ticking…',
+  'Clicking…',
+  'Whizzing…',
+  'Zooming…',
+  'Zipping…',
+  'Chugging…',
+  'Trucking…',
+  'Rolling…',
+]
+
+interface ProcessingIndicatorProps {
+  /** Animation cycle duration in milliseconds */
+  cycleMs?: number
+  /** Whether the elapsed counter should count automatically */
+  counting?: boolean
+  /** Initial elapsed time (only used if counting is false) */
+  elapsed?: number
+}
+
+function ProcessingIndicator({ cycleMs = 10000, counting = true, elapsed: initialElapsed = 0 }: ProcessingIndicatorProps) {
+  const [elapsed, setElapsed] = React.useState(initialElapsed)
+  const [messageIndex, setMessageIndex] = React.useState(() =>
+    Math.floor(Math.random() * PROCESSING_MESSAGES.length)
+  )
+  const startTimeRef = React.useRef(Date.now())
+
+  // Update elapsed time every second (only if counting)
+  React.useEffect(() => {
+    if (!counting) return
+    const interval = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - startTimeRef.current) / 1000))
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [counting])
+
+  // Cycle through messages based on cycleMs
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      setMessageIndex(prev => {
+        // Pick a random different message
+        let next = Math.floor(Math.random() * PROCESSING_MESSAGES.length)
+        while (next === prev && PROCESSING_MESSAGES.length > 1) {
+          next = Math.floor(Math.random() * PROCESSING_MESSAGES.length)
+        }
+        return next
+      })
+    }, cycleMs)
+    return () => clearInterval(interval)
+  }, [cycleMs])
+
+  const currentMessage = PROCESSING_MESSAGES[messageIndex]
+
+  const labelRef = React.useRef<HTMLSpanElement>(null)
+  const [labelWidth, setLabelWidth] = React.useState<number | 'auto'>('auto')
+
+  // Measure label width when message changes (not when counter changes)
+  React.useLayoutEffect(() => {
+    if (labelRef.current) {
+      setLabelWidth(labelRef.current.offsetWidth)
+    }
+  }, [currentMessage])
+
   return (
     <div className="flex items-center gap-2 px-3 py-1 text-[13px] text-muted-foreground">
+      {/* Spinner */}
       <div className="w-3 h-3 flex items-center justify-center shrink-0">
         <Spinner className="text-[10px]" />
       </div>
-      <span>
-        Thinking...
+      {/* Label container */}
+      <span className="inline-flex items-center h-5">
+        {/* Animated width container - only animates when label changes */}
+        <motion.span
+          className="relative inline-block h-5"
+          animate={{ width: labelWidth }}
+          transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+        >
+          {/* True crossfade for label only */}
+          <AnimatePresence initial={false}>
+            <motion.span
+              ref={labelRef}
+              key={currentMessage}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+              className="absolute left-0 top-0 h-5 flex items-center whitespace-nowrap"
+            >
+              {currentMessage}
+            </motion.span>
+          </AnimatePresence>
+        </motion.span>
+        {/* Counter - no animation, just updates instantly */}
         {elapsed >= 1 && (
-          <span className="text-muted-foreground/60 ml-1">{elapsed}s</span>
+          <span className="text-muted-foreground/60 ml-1 tabular-nums">
+            {elapsed}s
+          </span>
         )}
       </span>
     </div>
@@ -212,17 +361,17 @@ function MessageGallery() {
           <StatusMessage content="Compacting conversation..." />
           <InfoMessage content="Compacted conversation (was 180000 tokens)" />
           <InfoMessage content="Session restored from 5 minutes ago" />
-          <InfoMessage content="Agent activated successfully" />
+          <InfoMessage content="Agent activated successfully" level="success" />
+          <InfoMessage content="Rate limit approaching" level="warning" />
+          <InfoMessage content="Connection lost" level="error" />
         </div>
       </section>
 
-      {/* Section: Thinking States */}
+      {/* Section: Processing States */}
       <section>
-        <h2 className="text-lg font-semibold mb-4 text-foreground/80">Thinking States</h2>
+        <h2 className="text-lg font-semibold mb-4 text-foreground/80">Processing States</h2>
         <div className="bg-muted/20 rounded-lg ">
-          <ThinkingIndicator elapsed={0} />
-          <ThinkingIndicator elapsed={5} />
-          <ThinkingIndicator elapsed={23} />
+          <ProcessingIndicator />
         </div>
       </section>
 
@@ -351,7 +500,7 @@ export const messagesComponents: ComponentEntry[] = [
   {
     id: 'message-gallery',
     name: 'Message Gallery',
-    category: 'Chat',
+    category: 'Chat Messages',
     description: 'All message types displayed together for easy design comparison',
     component: MessageGallery,
     layout: 'top',
@@ -362,7 +511,7 @@ export const messagesComponents: ComponentEntry[] = [
   {
     id: 'user-message',
     name: 'UserMessage',
-    category: 'Chat',
+    category: 'Chat Messages',
     description: 'Right-aligned user message bubble',
     component: UserMessage,
     props: [
@@ -383,7 +532,7 @@ export const messagesComponents: ComponentEntry[] = [
   {
     id: 'assistant-message',
     name: 'AssistantMessage',
-    category: 'Chat',
+    category: 'Chat Messages',
     description: 'Left-aligned assistant response with markdown support',
     component: AssistantMessage,
     props: [
@@ -404,7 +553,7 @@ export const messagesComponents: ComponentEntry[] = [
   {
     id: 'status-message',
     name: 'StatusMessage',
-    category: 'Chat',
+    category: 'Chat Messages',
     description: 'System status with spinner (compaction, connecting, etc)',
     component: StatusMessage,
     props: [
@@ -425,8 +574,8 @@ export const messagesComponents: ComponentEntry[] = [
   {
     id: 'info-message',
     name: 'InfoMessage',
-    category: 'Chat',
-    description: 'Informational message with muted styling',
+    category: 'Chat Messages',
+    description: 'System message with icon indicating severity level',
     component: InfoMessage,
     props: [
       {
@@ -435,18 +584,33 @@ export const messagesComponents: ComponentEntry[] = [
         control: { type: 'string', placeholder: 'Info message...' },
         defaultValue: 'Session restored from 5 minutes ago',
       },
+      {
+        name: 'level',
+        description: 'Severity level determining icon and color',
+        control: {
+          type: 'select',
+          options: [
+            { label: 'Info', value: 'info' },
+            { label: 'Warning', value: 'warning' },
+            { label: 'Error', value: 'error' },
+            { label: 'Success', value: 'success' },
+          ],
+        },
+        defaultValue: 'info',
+      },
     ],
     variants: [
-      { name: 'Session Restored', props: { content: 'Session restored from 5 minutes ago' } },
-      { name: 'Agent Activated', props: { content: 'Agent activated successfully' } },
-      { name: 'Cancelled', props: { content: 'Operation cancelled by user' } },
+      { name: 'Info', props: { content: 'Session restored from 5 minutes ago', level: 'info' } },
+      { name: 'Success', props: { content: 'Agent activated successfully', level: 'success' } },
+      { name: 'Warning', props: { content: 'Rate limit approaching', level: 'warning' } },
+      { name: 'Error', props: { content: 'Connection lost', level: 'error' } },
     ],
     mockData: () => ({}),
   },
   {
     id: 'warning-message',
     name: 'WarningMessage',
-    category: 'Chat',
+    category: 'Chat Messages',
     description: 'Amber-themed warning message',
     component: WarningMessage,
     props: [
@@ -467,7 +631,7 @@ export const messagesComponents: ComponentEntry[] = [
   {
     id: 'error-message',
     name: 'ErrorMessage',
-    category: 'Chat',
+    category: 'Chat Messages',
     description: 'Red-themed error with collapsible technical details',
     component: ErrorMessage,
     props: [
@@ -500,23 +664,36 @@ export const messagesComponents: ComponentEntry[] = [
     mockData: () => ({}),
   },
   {
-    id: 'thinking-indicator',
-    name: 'ThinkingIndicator',
-    category: 'Chat',
-    description: 'Spinner with "Thinking..." text and optional elapsed time',
-    component: ThinkingIndicator,
+    id: 'processing-indicator',
+    name: 'ProcessingIndicator',
+    category: 'Chat Messages',
+    description: 'Animated processing indicator with cycling messages and elapsed time counter',
+    component: ProcessingIndicator,
     props: [
       {
+        name: 'cycleMs',
+        description: 'Message cycle interval in milliseconds',
+        control: { type: 'number', min: 1000, max: 30000, step: 1000 },
+        defaultValue: 10000,
+      },
+      {
+        name: 'counting',
+        description: 'Whether the elapsed counter auto-increments',
+        control: { type: 'boolean' },
+        defaultValue: true,
+      },
+      {
         name: 'elapsed',
-        description: 'Elapsed time in seconds',
+        description: 'Initial elapsed time in seconds (only used when counting is false)',
         control: { type: 'number', min: 0, max: 120, step: 1 },
         defaultValue: 0,
       },
     ],
     variants: [
-      { name: 'Just Started', props: { elapsed: 0 } },
-      { name: '5 Seconds', props: { elapsed: 5 } },
-      { name: '30 Seconds', props: { elapsed: 30 } },
+      { name: 'Default (10s cycle, counting)', props: { cycleMs: 10000, counting: true } },
+      { name: 'Fast Cycle (3s)', props: { cycleMs: 3000, counting: true } },
+      { name: 'Static at 5s', props: { cycleMs: 10000, counting: false, elapsed: 5 } },
+      { name: 'Static at 30s', props: { cycleMs: 10000, counting: false, elapsed: 30 } },
     ],
     mockData: () => ({}),
   },

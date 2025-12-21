@@ -24,6 +24,8 @@ export interface ChatContextType {
   activeWorkspaceId: string | null
   currentModel: string
   pendingPermissions: Map<string, PermissionRequest[]>
+  /** Draft input text per session - preserved across mode switches and conversation changes */
+  sessionDrafts: Map<string, string>
 
   // Advanced options
   ultrathinkEnabled: boolean
@@ -56,6 +58,9 @@ export interface ChatContextType {
   // Advanced options callbacks
   onUltrathinkChange: (enabled: boolean) => void
   onSkipPermissionsChange: (enabled: boolean) => void
+
+  // Input draft callback
+  onInputChange: (sessionId: string, value: string) => void
 
   // Chat input ref (for focusing)
   textareaRef?: React.RefObject<HTMLTextAreaElement>

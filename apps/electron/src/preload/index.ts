@@ -198,6 +198,12 @@ const api: ElectronAPI = {
     ipcRenderer.on(IPC_CHANNELS.PREVIEW_MESSAGE_UPDATED, handler)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.PREVIEW_MESSAGE_UPDATED, handler)
   },
+
+  // Session Drafts (persisted input text)
+  getDraft: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.DRAFTS_GET, sessionId),
+  setDraft: (sessionId: string, text: string) => ipcRenderer.invoke(IPC_CHANNELS.DRAFTS_SET, sessionId, text),
+  deleteDraft: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.DRAFTS_DELETE, sessionId),
+  getAllDrafts: () => ipcRenderer.invoke(IPC_CHANNELS.DRAFTS_GET_ALL),
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)
