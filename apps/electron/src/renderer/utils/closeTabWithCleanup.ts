@@ -16,13 +16,14 @@ export interface CloseTabParams {
   tabId: string
   tabs: Tab[]
   sessions: Session[]
-  onDeleteSession: (sessionId: string) => void
+  onDeleteSession: (sessionId: string, skipConfirmation?: boolean) => Promise<boolean>
   closeTab: (tabId: string) => void
 }
 
 /**
  * Close a tab with automatic cleanup for empty sessions.
  * If closing a chat tab with no messages, deletes the session entirely.
+ * Empty sessions are deleted without confirmation (no valuable content to lose).
  */
 export function closeTabWithCleanup(params: CloseTabParams): void {
   const { tabId, tabs, sessions, onDeleteSession, closeTab } = params
@@ -31,9 +32,9 @@ export function closeTabWithCleanup(params: CloseTabParams): void {
   if (tab?.type === 'chat') {
     const chatTab = tab as ChatTab
     const session = sessions.find(s => s.id === chatTab.sessionId)
-    // If session has no messages, delete it entirely
+    // If session has no messages, delete it entirely (skip confirmation for empty sessions)
     if (session && session.messages.length === 0) {
-      onDeleteSession(session.id)
+      onDeleteSession(session.id, true) // skipConfirmation = true
       // Note: onDeleteSession already closes the tab via closeChatTabBySession
       return
     }

@@ -15,7 +15,7 @@ import { registerOnboardingHandlers } from './onboarding'
 import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type AgentActivateOptions, type AuthType, type BillingMethodInfo, type SendMessageOptions, type DiffPreviewData, type CodePreviewData, type TerminalPreviewData } from '../shared/types'
 import { readFileAttachment } from '@craft-agent/shared/utils'
 import { getAiCreditTopUpUrl } from '@craft-agent/shared/auth'
-import { getSessionAttachmentsPath, getAuthType, setAuthType, getPreferencesPath, getModel, setModel, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts } from '@craft-agent/shared/config'
+import { getSessionAttachmentsPath, getAuthType, setAuthType, getPreferencesPath, getModel, setModel, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getDefaultPlanMode, setDefaultPlanMode, getDefaultSkipPermissions, setDefaultSkipPermissions } from '@craft-agent/shared/config'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { MarkItDown } from 'markitdown-js'
 
@@ -189,16 +189,6 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     return sessionManager.cancelProcessing(sessionId)
   })
 
-  // Archive a session
-  ipcMain.handle(IPC_CHANNELS.ARCHIVE_SESSION, async (_event, sessionId: string) => {
-    return sessionManager.archiveSession(sessionId)
-  })
-
-  // Unarchive a session
-  ipcMain.handle(IPC_CHANNELS.UNARCHIVE_SESSION, async (_event, sessionId: string) => {
-    return sessionManager.unarchiveSession(sessionId)
-  })
-
   // Flag a session
   ipcMain.handle(IPC_CHANNELS.FLAG_SESSION, async (_event, sessionId: string) => {
     return sessionManager.flagSession(sessionId)
@@ -207,6 +197,21 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // Unflag a session
   ipcMain.handle(IPC_CHANNELS.UNFLAG_SESSION, async (_event, sessionId: string) => {
     return sessionManager.unflagSession(sessionId)
+  })
+
+  // Set todo state for a session
+  ipcMain.handle(IPC_CHANNELS.SET_TODO_STATE, async (_event, sessionId: string, state: 'todo' | 'in-progress' | 'needs-review' | 'done' | 'cancelled') => {
+    return sessionManager.setTodoState(sessionId, state)
+  })
+
+  // Mark session as read (set lastReadMessageId to last message)
+  ipcMain.handle(IPC_CHANNELS.MARK_SESSION_READ, async (_event, sessionId: string) => {
+    return sessionManager.markSessionRead(sessionId)
+  })
+
+  // Mark session as unread (clear lastReadMessageId)
+  ipcMain.handle(IPC_CHANNELS.MARK_SESSION_UNREAD, async (_event, sessionId: string) => {
+    return sessionManager.markSessionUnread(sessionId)
   })
 
   // Rename a session
@@ -223,6 +228,23 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // Returns true if the response was delivered, false if agent/session is gone
   ipcMain.handle(IPC_CHANNELS.RESPOND_TO_PERMISSION, async (_event, sessionId: string, requestId: string, allowed: boolean, alwaysAllow: boolean) => {
     return sessionManager.respondToPermission(sessionId, requestId, allowed, alwaysAllow)
+  })
+
+  // Respond to a plan review request
+  // Returns true if the response was delivered, false if agent/session is gone
+  ipcMain.handle(IPC_CHANNELS.RESPOND_TO_PLAN_REVIEW, async (_event, sessionId: string, requestId: string, response: { action: string; feedback?: string; modifiedPlan?: unknown }) => {
+    return sessionManager.respondToPlanReview(sessionId, requestId, response)
+  })
+
+  // Respond to an ask question request (CraftAgentsPlanModeAskQuestion tool)
+  // Returns true if the response was delivered, false if agent/session is gone
+  ipcMain.handle(IPC_CHANNELS.RESPOND_TO_ASK_QUESTION, async (_event, sessionId: string, requestId: string, answers: Record<string, string>) => {
+    return sessionManager.respondToAskQuestion(sessionId, requestId, answers)
+  })
+
+  // Set plan mode for a session
+  ipcMain.handle(IPC_CHANNELS.SET_PLAN_MODE, async (_event, sessionId: string, enabled: boolean) => {
+    return sessionManager.setPlanMode(sessionId, enabled)
   })
 
   // Read a file (with path validation to prevent traversal attacks)
@@ -616,6 +638,23 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     return result.response === 1
   })
 
+  // Show delete session confirmation dialog
+  ipcMain.handle(IPC_CHANNELS.SHOW_DELETE_SESSION_CONFIRMATION, async (_event, name: string) => {
+    const window = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0]
+    const result = await dialog.showMessageBox(window, {
+      type: 'warning',
+      buttons: ['Cancel', 'Delete'],
+      defaultId: 0,
+      cancelId: 0,
+      title: 'Delete Conversation',
+      message: `Are you sure you want to delete: "${name}"?`,
+      detail: 'This action cannot be undone.',
+    } as Electron.MessageBoxOptions)
+    // result.response is the index of the clicked button
+    // 0 = Cancel, 1 = Delete
+    return result.response === 1
+  })
+
   // Logout - clear all credentials and config
   ipcMain.handle(IPC_CHANNELS.LOGOUT, async () => {
     try {
@@ -699,6 +738,15 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     }
 
     console.log(`[IPC] Billing method updated to: ${authType}`)
+
+    // Reinitialize SessionManager auth to pick up new credentials
+    try {
+      await sessionManager.reinitializeAuth()
+      console.log('[IPC] Reinitialized auth after billing update')
+    } catch (authError) {
+      console.error('[IPC] Failed to reinitialize auth:', authError)
+      // Don't fail the whole operation if auth reinit fails
+    }
   })
 
   // ============================================================
@@ -714,6 +762,32 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   ipcMain.handle(IPC_CHANNELS.SETTINGS_SET_MODEL, async (_event, model: string) => {
     setModel(model)
     console.log(`[IPC] Model updated to: ${model}`)
+  })
+
+  // ============================================================
+  // Settings - New Session Defaults
+  // ============================================================
+
+  // Get default plan mode for new sessions
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_GET_DEFAULT_PLAN_MODE, async (): Promise<boolean> => {
+    return getDefaultPlanMode()
+  })
+
+  // Set default plan mode for new sessions
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_SET_DEFAULT_PLAN_MODE, async (_event, enabled: boolean) => {
+    setDefaultPlanMode(enabled)
+    console.log(`[IPC] Default plan mode updated to: ${enabled}`)
+  })
+
+  // Get default skip permissions for new sessions
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_GET_DEFAULT_SKIP_PERMISSIONS, async (): Promise<boolean> => {
+    return getDefaultSkipPermissions()
+  })
+
+  // Set default skip permissions for new sessions
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_SET_DEFAULT_SKIP_PERMISSIONS, async (_event, enabled: boolean) => {
+    setDefaultSkipPermissions(enabled)
+    console.log(`[IPC] Default skip permissions updated to: ${enabled}`)
   })
 
   // ============================================================
@@ -833,5 +907,5 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   })
 
   // Register onboarding handlers
-  registerOnboardingHandlers()
+  registerOnboardingHandlers(sessionManager)
 }

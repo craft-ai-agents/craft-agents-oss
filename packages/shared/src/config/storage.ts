@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, readdirSync, unlinkSync, statSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
-import { randomUUID } from 'crypto';
+import { randomUUID, createHash } from 'crypto';
 import { getCredentialManager } from '../credentials/index.ts';
 import { isOpusModel } from './models.ts';
 import type { StoredAttachment } from '@craft-agent/core/types';
@@ -68,6 +68,9 @@ export interface StoredConfig {
   tokenDisplay?: TokenDisplayMode;  // How to show tokens in status bar: hidden, total, or separate in/out
   showCost?: boolean;  // Whether to show cost in status bar (only relevant for API Key auth)
   cumulativeUsage?: CumulativeUsage;  // Global cumulative cost across all workspaces
+  // New session defaults
+  defaultPlanMode?: boolean;  // Whether new sessions start with plan mode enabled (default: false)
+  defaultSkipPermissions?: boolean;  // Whether new sessions auto-approve permissions (default: false)
 }
 
 const CONFIG_DIR = join(homedir(), '.craft-agent');
@@ -367,6 +370,32 @@ export function setShowCost(show: boolean): void {
   saveConfig(config);
 }
 
+// New session defaults getters/setters
+
+export function getDefaultPlanMode(): boolean {
+  const config = loadStoredConfig();
+  return config?.defaultPlanMode ?? false;
+}
+
+export function setDefaultPlanMode(enabled: boolean): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+  config.defaultPlanMode = enabled;
+  saveConfig(config);
+}
+
+export function getDefaultSkipPermissions(): boolean {
+  const config = loadStoredConfig();
+  return config?.defaultSkipPermissions ?? false;
+}
+
+export function setDefaultSkipPermissions(enabled: boolean): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+  config.defaultSkipPermissions = enabled;
+  saveConfig(config);
+}
+
 export function getCumulativeUsage(): CumulativeUsage {
   const config = loadStoredConfig();
   return config?.cumulativeUsage ?? {
@@ -441,8 +470,23 @@ export async function clearAllConfig(): Promise<void> {
 // Workspace Management Functions
 // ============================================
 
-export function generateWorkspaceId(): string {
-  return randomUUID();
+/**
+ * Generate a deterministic workspace ID from an MCP URL.
+ * This ensures the same workspace gets the same ID across logins,
+ * so credentials stored under workspace_oauth::{workspaceId} are reused.
+ *
+ * Uses SHA-256 hash formatted as a UUID v4-like string for compatibility.
+ */
+export function generateWorkspaceId(mcpUrl: string): string {
+  // Normalize the URL: lowercase, trim whitespace, remove trailing slash
+  const normalized = mcpUrl.toLowerCase().trim().replace(/\/+$/, '');
+
+  // Create SHA-256 hash
+  const hash = createHash('sha256').update(normalized).digest('hex');
+
+  // Format as UUID-like string (8-4-4-4-12)
+  // Using first 32 hex chars of the hash
+  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-${hash.slice(12, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`;
 }
 
 export function getWorkspaces(): Workspace[] {
@@ -551,9 +595,27 @@ export function addWorkspace(workspace: Omit<Workspace, 'id' | 'createdAt'>): Wo
     throw new Error('No config found');
   }
 
+  const workspaceId = generateWorkspaceId(workspace.mcpUrl);
+
+  // Check if workspace with this ID already exists (same MCP URL)
+  const existing = config.workspaces.find(w => w.id === workspaceId);
+  if (existing) {
+    // Update existing workspace with new settings (name, auth type, etc.)
+    const updated: Workspace = {
+      ...existing,
+      ...workspace,
+      id: workspaceId,
+      createdAt: existing.createdAt, // Preserve original creation time
+    };
+    const existingIndex = config.workspaces.indexOf(existing);
+    config.workspaces[existingIndex] = updated;
+    saveConfig(config);
+    return updated;
+  }
+
   const newWorkspace: Workspace = {
     ...workspace,
-    id: generateWorkspaceId(),
+    id: workspaceId,
     createdAt: Date.now(),
   };
 
@@ -656,6 +718,8 @@ export interface StoredMessage {
   toolUseId?: string;
   /** Tool result content (for tool messages) */
   toolResult?: string;
+  /** Parent tool use ID for nested tool calls (e.g., child tools inside Task subagent) */
+  parentToolUseId?: string;
   /** Whether this is an intermediate assistant message (commentary between tool calls) */
   isIntermediate?: boolean;
   /** Turn ID for grouping messages in TurnCard after reload */
@@ -794,37 +858,51 @@ function getSessionPlansDir(sessionId: string): string {
 }
 
 /**
- * Generate a plan file name from the plan title.
- * Keeps spaces for readability in GUI, sanitizes dangerous filesystem characters.
- * Includes ==PLAN== prefix for clear identification in file lists.
- * Adds timestamp suffix to ensure uniqueness.
+ * Slugify a string for use in file names.
+ * Converts to lowercase, replaces spaces with hyphens, removes special chars.
  */
-function generatePlanFileName(plan: Plan): string {
-  // Start with title or fallback
-  let name = plan.title || plan.context?.substring(0, 50) || 'Untitled';
-
-  // Remove or replace dangerous filesystem characters
-  // Keep: letters, numbers, spaces, hyphens, underscores
-  // Remove: / \ : * ? " < > | and control characters
-  name = name
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
     .replace(/[/\\:*?"<>|]/g, '')  // Remove dangerous chars
     .replace(/[\x00-\x1f\x7f]/g, '')  // Remove control chars
-    .replace(/\s+/g, ' ')  // Normalize multiple spaces to single
+    .replace(/\s+/g, '-')  // Replace spaces with hyphens
+    .replace(/-+/g, '-')  // Collapse multiple hyphens
+    .replace(/^-|-$/g, '')  // Trim leading/trailing hyphens
     .trim();
+}
 
-  // Truncate if too long (max 50 chars for the base name)
-  if (name.length > 50) {
-    name = name.substring(0, 50).trim();
+/**
+ * Generate a unique, readable file name for a plan.
+ * Format: YYYY-MM-DD-{slug}.md with collision suffix if needed.
+ * Example: 2025-12-22-trip-to-paris.md or 2025-12-22-trip-to-paris-2.md
+ */
+function generatePlanFileName(plan: Plan, plansDir: string): string {
+  // Start with title or fallback
+  let name = plan.title || plan.context?.substring(0, 50) || 'untitled';
+
+  // Slugify the name
+  let slug = slugify(name);
+
+  // Truncate if too long (max 40 chars for the slug part)
+  if (slug.length > 40) {
+    slug = slug.substring(0, 40).replace(/-$/, '');
   }
 
-  // Add timestamp for uniqueness (format: YYYYMMDD-HHmmss)
-  const now = new Date();
-  const timestamp = now.toISOString()
-    .replace(/[-:]/g, '')
-    .replace('T', '-')
-    .substring(0, 15);  // YYYYMMDD-HHmmss
+  // Add date prefix (YYYY-MM-DD)
+  const date = new Date().toISOString().split('T')[0];
+  const baseName = `${date}-${slug}`;
 
-  return `==PLAN== ${name} (${timestamp})`;
+  // Check for collisions and add suffix if needed
+  let fileName = baseName;
+  let counter = 2;
+
+  while (existsSync(join(plansDir, `${fileName}.md`))) {
+    fileName = `${baseName}-${counter}`;
+    counter++;
+  }
+
+  return fileName;
 }
 
 /**
@@ -957,12 +1035,12 @@ export function parsePlanFromMarkdown(content: string, planId: string): Plan | n
  * Returns the file path.
  *
  * If fileName is not provided, generates a descriptive name from the plan title.
- * File names include spaces for readability in GUI attachments.
+ * Format: YYYY-MM-DD-{slug}.md with collision suffix if needed.
  */
 export function savePlanToFile(sessionId: string, plan: Plan, fileName?: string): string {
   const plansDir = ensurePlansDir(sessionId);
 
-  const name = fileName || generatePlanFileName(plan);
+  const name = fileName || generatePlanFileName(plan, plansDir);
   const filePath = join(plansDir, `${name}.md`);
   const content = formatPlanAsMarkdown(plan);
 
@@ -1093,6 +1171,16 @@ export function getConfigDir(): string {
 // Session token usage (reuse WorkspaceConversation structure)
 export type SessionTokenUsage = WorkspaceConversation['tokenUsage'];
 
+/**
+ * Todo state for sessions (user-controlled, never automatic)
+ * - 'todo': Not started
+ * - 'in-progress': Currently working on
+ * - 'needs-review': Awaiting review
+ * - 'done': Completed successfully
+ * - 'cancelled': Cancelled/abandoned
+ */
+export type TodoState = 'todo' | 'in-progress' | 'needs-review' | 'done' | 'cancelled';
+
 // Session represents a conversation scope (SDK session = our scope boundary)
 export interface Session {
   id: string;                    // Our UUID (stable, known immediately)
@@ -1101,13 +1189,17 @@ export interface Session {
   name?: string;                 // Optional user-defined name
   createdAt: number;
   lastUsedAt: number;
-  // Inbox/Archive/Agent features
+  // Session metadata
   agentId?: string;              // Assigned agent ID (for filtering)
   agentName?: string;            // Cached agent name for display
-  isArchived?: boolean;          // Whether this session is archived
   isFlagged?: boolean;           // Whether this session is flagged
   // Advanced options (persisted per session)
   skipPermissions?: boolean;     // Auto-approve all permission requests
+  planModeEnabled?: boolean;     // Plan mode active for this session
+  // Todo state (user-controlled) - determines inbox vs completed
+  todoState?: TodoState;
+  // Read/unread tracking - ID of last message user has read
+  lastReadMessageId?: string;
 }
 
 // Stored session with conversation data
@@ -1230,11 +1322,11 @@ export interface SessionMetadata {
   messageCount: number;
   preview?: string;  // Preview of first user message
   sdkSessionId?: string;
-  // Inbox/Archive/Agent features
+  // Session metadata
   agentId?: string;        // Assigned agent ID (for filtering)
   agentName?: string;      // Cached agent name for display (e.g., "work/coder")
-  isArchived?: boolean;    // Whether this session is archived
   isFlagged?: boolean;     // Whether this session is flagged
+  todoState?: TodoState;   // User-controlled todo state
   agents?: string[];  // Distinct agent names used in this session
   planCount?: number;  // Number of plan files for this session
 }
@@ -1284,8 +1376,8 @@ export function listSessions(workspaceId?: string): SessionMetadata[] {
           sdkSessionId: session.sdkSessionId,
           agentId: session.agentId,
           agentName: session.agentName,
-          isArchived: session.isArchived,
           isFlagged: session.isFlagged,
+          todoState: session.todoState,
           agents: agents.size > 0 ? Array.from(agents) : undefined,
           planCount: planCount > 0 ? planCount : undefined,
         });
@@ -1362,30 +1454,22 @@ export function updateSessionSdkId(sessionId: string, sdkSessionId: string): voi
   }
 }
 
-// Update session metadata (agentId, agentName, isArchived, isFlagged, name)
+// Update session metadata (agentId, agentName, isFlagged, name, todoState, lastReadMessageId)
 export function updateSessionMetadata(
   sessionId: string,
-  updates: Partial<Pick<Session, 'agentId' | 'agentName' | 'isArchived' | 'isFlagged' | 'name'>>
+  updates: Partial<Pick<Session, 'agentId' | 'agentName' | 'isFlagged' | 'name' | 'todoState' | 'lastReadMessageId'>>
 ): void {
   const session = loadSession(sessionId);
   if (session) {
     if (updates.agentId !== undefined) session.agentId = updates.agentId;
     if (updates.agentName !== undefined) session.agentName = updates.agentName;
-    if (updates.isArchived !== undefined) session.isArchived = updates.isArchived;
     if (updates.isFlagged !== undefined) session.isFlagged = updates.isFlagged;
     if (updates.name !== undefined) session.name = updates.name;
+    if (updates.todoState !== undefined) session.todoState = updates.todoState;
+    // Special case: lastReadMessageId can be explicitly cleared by checking if the key exists
+    if ('lastReadMessageId' in updates) session.lastReadMessageId = updates.lastReadMessageId;
     saveSession(session);
   }
-}
-
-// Archive a session
-export function archiveSession(sessionId: string): void {
-  updateSessionMetadata(sessionId, { isArchived: true });
-}
-
-// Unarchive a session
-export function unarchiveSession(sessionId: string): void {
-  updateSessionMetadata(sessionId, { isArchived: false });
 }
 
 // Flag a session
@@ -1398,6 +1482,11 @@ export function unflagSession(sessionId: string): void {
   updateSessionMetadata(sessionId, { isFlagged: false });
 }
 
+// Set todo state for a session (user-controlled, never automatic)
+export function setSessionTodoState(sessionId: string, todoState: TodoState): void {
+  updateSessionMetadata(sessionId, { todoState });
+}
+
 // List flagged sessions for a workspace
 export function listFlaggedSessions(workspaceId?: string): SessionMetadata[] {
   return listSessions(workspaceId).filter(s => s.isFlagged === true);
@@ -1408,14 +1497,14 @@ export function assignAgentToSession(sessionId: string, agentId: string, agentNa
   updateSessionMetadata(sessionId, { agentId, agentName });
 }
 
-// List archived sessions for a workspace
-export function listArchivedSessions(workspaceId?: string): SessionMetadata[] {
-  return listSessions(workspaceId).filter(s => s.isArchived === true);
+// List done sessions for a workspace (todoState === 'done' or 'cancelled')
+export function listCompletedSessions(workspaceId?: string): SessionMetadata[] {
+  return listSessions(workspaceId).filter(s => s.todoState === 'done' || s.todoState === 'cancelled');
 }
 
-// List non-archived sessions (inbox) for a workspace
+// List inbox sessions for a workspace (todoState !== 'done' and !== 'cancelled')
 export function listInboxSessions(workspaceId?: string): SessionMetadata[] {
-  return listSessions(workspaceId).filter(s => !s.isArchived);
+  return listSessions(workspaceId).filter(s => s.todoState !== 'done' && s.todoState !== 'cancelled');
 }
 
 // List sessions by agent for a workspace

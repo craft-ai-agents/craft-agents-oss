@@ -1,7 +1,7 @@
 import { app } from 'electron'
 import { join } from 'path'
 import { rm } from 'fs/promises'
-import { CraftAgent, type AgentEvent } from '@craft-agent/shared/agent'
+import { CraftAgent, type AgentEvent, enterCraftPlanMode, exitCraftPlanMode } from '@craft-agent/shared/agent'
 import type { WindowManager } from './window-manager'
 import {
   loadStoredConfig,
@@ -10,6 +10,8 @@ import {
   getWorkspaceAccessTokenAsync,
   updateSessionMetadata,
   getSessionAttachmentsPath,
+  getDefaultPlanMode,
+  getDefaultSkipPermissions,
   type Workspace,
   // Session persistence functions
   listSessions as listStoredSessions,
@@ -17,13 +19,13 @@ import {
   saveSession as saveStoredSession,
   createSession as createStoredSession,
   deleteSession as deleteStoredSession,
-  archiveSession as archiveStoredSession,
-  unarchiveSession as unarchiveStoredSession,
   flagSession as flagStoredSession,
   unflagSession as unflagStoredSession,
+  setSessionTodoState as setStoredSessionTodoState,
   type StoredSession,
   type StoredMessage,
   type SessionMetadata,
+  type TodoState,
 } from '@craft-agent/shared/config'
 import { getAuthState } from '@craft-agent/shared/auth'
 import { setAnthropicOptionsEnv, setPathToClaudeCodeExecutable, setInterceptorPath } from '@craft-agent/shared/agent'
@@ -40,8 +42,8 @@ import { DEFAULT_MODEL } from '@craft-agent/shared/config'
  * Feature flags for agent behavior
  */
 export const AGENT_FLAGS = {
-  /** Disable plan mode tools (EnterCraftAgentsPlanMode, ExitCraftAgentsPlanMode, CraftAskUserQuestion) */
-  planModeEnabled: false,
+  /** Enable plan mode tools (ExitCraftAgentsPlanMode, CraftAgentsPlanModeAskQuestion) */
+  planModeEnabled: true,
 } as const
 
 interface ManagedSession {
@@ -55,15 +57,22 @@ interface ManagedSession {
   abortController?: AbortController
   // Track tool_use_id -> toolName mapping (since tool_result only has toolUseId)
   pendingTools: Map<string, string>
+  // Stack of parent tool IDs for nested tool calls (e.g., Task spawning Read/Grep)
+  // Using a stack handles concurrent parent tools correctly - each child tool
+  // gets associated with the most recent parent that started before it
+  parentToolStack: string[]
+  // Map of toolUseId -> parentToolUseId for tracking which parent was active when each tool started
+  // This is used to correctly attribute child tools even with concurrent parent tools
+  toolToParentMap: Map<string, string>
   // Session name (user-defined or AI-generated)
   name?: string
-  // Inbox/Archive features
+  // Session metadata
   agentId?: string
   agentName?: string
-  isArchived: boolean
   isFlagged: boolean
   // Advanced options (persisted per session)
   skipPermissions: boolean
+  planModeEnabled?: boolean
   // SDK session ID for conversation continuity
   sdkSessionId?: string
   // Track whether agent was successfully activated via AgentStateManager
@@ -78,6 +87,10 @@ interface ManagedSession {
     cacheReadTokens?: number
     cacheCreationTokens?: number
   }
+  // Todo state (user-controlled) - determines inbox vs done
+  todoState?: 'todo' | 'in-progress' | 'needs-review' | 'done' | 'cancelled'
+  // Read/unread tracking - ID of last message user has read
+  lastReadMessageId?: string
 }
 
 // Convert runtime Message to StoredMessage for persistence
@@ -96,6 +109,7 @@ function messageToStored(msg: Message): StoredMessage {
     toolStatus: msg.toolStatus,
     toolDuration: msg.toolDuration,
     toolIntent: msg.toolIntent,
+    parentToolUseId: msg.parentToolUseId,
     isError: msg.isError,
     attachments: msg.attachments,
     // Turn grouping
@@ -127,6 +141,7 @@ function storedToMessage(stored: StoredMessage): Message {
     toolStatus: stored.toolStatus,
     toolDuration: stored.toolDuration,
     toolIntent: stored.toolIntent,
+    parentToolUseId: stored.parentToolUseId,
     isError: stored.isError,
     attachments: stored.attachments,
     // Turn grouping
@@ -460,25 +475,16 @@ export class SessionManager {
     }
   }
 
-  async initialize(): Promise<void> {
-    // Set path to Claude Code executable (cli.js from SDK)
-    // This is critical because the bundled SDK can't auto-detect the path
-    const cliPath = join(process.cwd(), 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'cli.js')
-    console.log('[SessionManager] Setting pathToClaudeCodeExecutable:', cliPath)
-    setPathToClaudeCodeExecutable(cliPath)
-
-    // Set path to cache-ttl-interceptor for SDK subprocess
-    // This interceptor redirects requests to the Craft gateway when using Craft credits
-    const interceptorPath = join(process.cwd(), 'packages', 'shared', 'src', 'cache-ttl-interceptor.ts')
-    console.log('[SessionManager] Setting interceptorPath:', interceptorPath)
-    setInterceptorPath(interceptorPath)
-
-    // Set up authentication environment variables (critical for SDK to work)
+  /**
+   * Reinitialize authentication environment variables
+   * Call this after onboarding or settings changes to pick up new credentials
+   */
+  async reinitializeAuth(): Promise<void> {
     try {
       const authState = await getAuthState()
       const { billing } = authState
 
-      console.log('[SessionManager] Initializing with billing type:', billing.type)
+      console.log('[SessionManager] Reinitializing auth with billing type:', billing.type)
 
       if (billing.type === 'craft_credits') {
         const token = await getCraftToken()
@@ -507,8 +513,26 @@ export class SessionManager {
         console.error('[SessionManager] No authentication configured!')
       }
     } catch (error) {
-      console.error('[SessionManager] Failed to initialize auth:', error)
+      console.error('[SessionManager] Failed to reinitialize auth:', error)
+      throw error
     }
+  }
+
+  async initialize(): Promise<void> {
+    // Set path to Claude Code executable (cli.js from SDK)
+    // This is critical because the bundled SDK can't auto-detect the path
+    const cliPath = join(process.cwd(), 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'cli.js')
+    console.log('[SessionManager] Setting pathToClaudeCodeExecutable:', cliPath)
+    setPathToClaudeCodeExecutable(cliPath)
+
+    // Set path to cache-ttl-interceptor for SDK subprocess
+    // This interceptor redirects requests to the Craft gateway when using Craft credits
+    const interceptorPath = join(process.cwd(), 'packages', 'shared', 'src', 'cache-ttl-interceptor.ts')
+    console.log('[SessionManager] Setting interceptorPath:', interceptorPath)
+    setInterceptorPath(interceptorPath)
+
+    // Set up authentication environment variables (critical for SDK to work)
+    await this.reinitializeAuth()
 
     // Load existing sessions from disk
     this.loadSessionsFromDisk()
@@ -550,14 +574,18 @@ export class SessionManager {
           lastMessageAt: storedSession.lastUsedAt,
           streamingText: '',
           pendingTools: new Map(),
+          parentToolStack: [],
+          toolToParentMap: new Map(),
           name: storedSession.name,
           agentId: storedSession.agentId,
           agentName: storedSession.agentName,
-          isArchived: storedSession.isArchived ?? false,
           isFlagged: storedSession.isFlagged ?? false,
           skipPermissions: storedSession.skipPermissions ?? false,
+          planModeEnabled: storedSession.planModeEnabled ?? false,
           sdkSessionId: storedSession.sdkSessionId,
           tokenUsage: storedSession.tokenUsage,
+          todoState: storedSession.todoState,
+          lastReadMessageId: storedSession.lastReadMessageId,
         }
 
         this.sessions.set(storedSession.id, managed)
@@ -585,9 +613,10 @@ export class SessionManager {
         sdkSessionId: managed.sdkSessionId,
         agentId: managed.agentId,
         agentName: managed.agentName,
-        isArchived: managed.isArchived,
         isFlagged: managed.isFlagged,
         skipPermissions: managed.skipPermissions,
+        planModeEnabled: managed.planModeEnabled,
+        todoState: managed.todoState,
         messages: persistableMessages.map(messageToStored),
         tokenUsage: managed.tokenUsage ?? {
           inputTokens: 0,
@@ -621,9 +650,11 @@ export class SessionManager {
         isProcessing: m.isProcessing,
         agentId: m.agentId,
         agentName: m.agentName,
-        isArchived: m.isArchived,
         isFlagged: m.isFlagged,
         skipPermissions: m.skipPermissions,
+        planModeEnabled: m.planModeEnabled,
+        todoState: m.todoState,
+        lastReadMessageId: m.lastReadMessageId,
       }))
       .sort((a, b) => b.lastMessageAt - a.lastMessageAt)
   }
@@ -633,6 +664,10 @@ export class SessionManager {
     if (!workspace) {
       throw new Error(`Workspace ${workspaceId} not found`)
     }
+
+    // Get new session defaults from settings
+    const defaultSkipPerms = getDefaultSkipPermissions()
+    const defaultPlanMode = getDefaultPlanMode()
 
     // Use storage layer to create and persist the session
     const storedSession = createStoredSession(workspaceId)
@@ -646,17 +681,18 @@ export class SessionManager {
       lastMessageAt: storedSession.lastUsedAt,
       streamingText: '',
       pendingTools: new Map(),
+      parentToolStack: [],
+      toolToParentMap: new Map(),
       agentId,
       agentName,
-      isArchived: false,
       isFlagged: false,
-      skipPermissions: false,
+      skipPermissions: defaultSkipPerms,
     }
 
     this.sessions.set(storedSession.id, managed)
 
-    // Persist with agent info if provided
-    if (agentId || agentName) {
+    // Persist with agent info or if defaults are set
+    if (agentId || agentName || defaultSkipPerms) {
       this.persistSession(managed)
     }
 
@@ -669,9 +705,10 @@ export class SessionManager {
       isProcessing: false,
       agentId,
       agentName,
-      isArchived: false,
       isFlagged: false,
-      skipPermissions: false,
+      skipPermissions: defaultSkipPerms,
+      planModeEnabled: defaultPlanMode,
+      todoState: undefined,  // User-controlled, defaults to undefined (treated as 'todo')
     }
   }
 
@@ -686,14 +723,15 @@ export class SessionManager {
         workspace: managed.workspace,
         model: config?.model,
         isHeadless: !AGENT_FLAGS.planModeEnabled,
-        // Pass session object for conversation resumption (SDK uses sdkSessionId to resume)
-        session: managed.sdkSessionId ? {
+        // Always pass session object - id is required for plan mode callbacks
+        // sdkSessionId is optional and used for conversation resumption
+        session: {
           id: managed.id,
           workspaceId: managed.workspace.id,
           sdkSessionId: managed.sdkSessionId,
           createdAt: managed.lastMessageAt,
           lastUsedAt: managed.lastMessageAt,
-        } : undefined,
+        },
       })
       console.log(`[SessionManager] Created agent for session ${managed.id}${managed.sdkSessionId ? ' (resuming)' : ''}`)
 
@@ -710,28 +748,55 @@ export class SessionManager {
         }, managed.workspace.id)
       }
 
+      // Set up plan mode handlers
+      managed.agent.onPlanModeChange = (enabled) => {
+        console.log(`[SessionManager] Plan mode changed for session ${managed.id}:`, enabled)
+        managed.planModeEnabled = enabled
+        this.sendEvent({
+          type: 'plan_mode_changed',
+          sessionId: managed.id,
+          enabled,
+        }, managed.workspace.id)
+      }
+
+      managed.agent.onPlanReview = (request) => {
+        console.log(`[SessionManager] Plan review request for session ${managed.id}:`, request.plan.title)
+        this.sendEvent({
+          type: 'plan_review_request',
+          sessionId: managed.id,
+          request: {
+            sessionId: managed.id,
+            requestId: request.requestId,
+            plan: request.plan,
+            questions: request.questions,
+          }
+        }, managed.workspace.id)
+      }
+
+      managed.agent.onCraftAskQuestion = (request) => {
+        console.log(`[SessionManager] Ask question request for session ${managed.id}:`, request.questions.length, 'questions')
+        this.sendEvent({
+          type: 'ask_question_request',
+          sessionId: managed.id,
+          request: {
+            sessionId: managed.id,
+            requestId: request.requestId,
+            questions: request.questions,
+          }
+        }, managed.workspace.id)
+      }
+
       // NOTE: Agent definition is now applied in sendMessage() via AgentStateManager.activate()
       // This ensures proper state machine flow: extraction → auth checks → activation
+
+      // Apply session-scoped plan mode state to the newly created agent
+      // This ensures the UI toggle state is reflected in the agent before first message
+      if (managed.planModeEnabled) {
+        managed.agent.enterPlanMode()
+        console.log(`[SessionManager] Applied plan mode to agent for session ${managed.id}`)
+      }
     }
     return managed.agent
-  }
-
-  async archiveSession(sessionId: string): Promise<void> {
-    const managed = this.sessions.get(sessionId)
-    if (managed) {
-      managed.isArchived = true
-      managed.isFlagged = false  // Unflag when archiving
-      archiveStoredSession(sessionId)
-      unflagStoredSession(sessionId)  // Persist unflag to disk
-    }
-  }
-
-  async unarchiveSession(sessionId: string): Promise<void> {
-    const managed = this.sessions.get(sessionId)
-    if (managed) {
-      managed.isArchived = false
-      unarchiveStoredSession(sessionId)
-    }
   }
 
   async flagSession(sessionId: string): Promise<void> {
@@ -747,6 +812,64 @@ export class SessionManager {
     if (managed) {
       managed.isFlagged = false
       unflagStoredSession(sessionId)
+    }
+  }
+
+  async setTodoState(sessionId: string, todoState: TodoState): Promise<void> {
+    const managed = this.sessions.get(sessionId)
+    if (managed) {
+      managed.todoState = todoState
+      setStoredSessionTodoState(sessionId, todoState)
+    }
+  }
+
+  /**
+   * Get the last final assistant message ID from a list of messages
+   * A "final" message is one where:
+   * - role === 'assistant' AND
+   * - isIntermediate !== true (not commentary between tool calls)
+   * Returns undefined if no final assistant message exists
+   */
+  private getLastFinalAssistantMessageId(messages: Message[]): string | undefined {
+    // Iterate backwards to find the most recent final assistant message
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i]
+      if (msg.role === 'assistant' && !msg.isIntermediate) {
+        return msg.id
+      }
+    }
+    return undefined
+  }
+
+  /**
+   * Mark a session as read by setting lastReadMessageId to the last final assistant message
+   * Called when user navigates to a session
+   */
+  markSessionRead(sessionId: string): void {
+    const managed = this.sessions.get(sessionId)
+    if (managed && managed.messages.length > 0) {
+      const lastFinalId = this.getLastFinalAssistantMessageId(managed.messages)
+      if (!lastFinalId) return  // No final assistant message yet
+
+      // Only update if actually changed (avoid unnecessary persistence)
+      if (managed.lastReadMessageId !== lastFinalId) {
+        managed.lastReadMessageId = lastFinalId
+        // Persist to disk
+        updateSessionMetadata(sessionId, { lastReadMessageId: lastFinalId })
+      }
+    }
+  }
+
+  /**
+   * Mark a session as unread by clearing the lastReadMessageId
+   * Called when user manually marks a session as unread
+   */
+  markSessionUnread(sessionId: string): void {
+    const managed = this.sessions.get(sessionId)
+    if (managed) {
+      managed.lastReadMessageId = undefined
+      // Persist to disk (undefined will clear the field)
+      updateSessionMetadata(sessionId, { lastReadMessageId: undefined })
     }
   }
 
@@ -946,7 +1069,16 @@ export class SessionManager {
       console.log('[SessionManager] Got chat iterator, starting iteration...')
 
       for await (const event of chatIterator) {
-        console.log('[SessionManager] Got event:', event.type)
+        // Log events (skip noisy text_delta)
+        if (event.type !== 'text_delta') {
+          if (event.type === 'tool_start') {
+            console.log(`[SessionManager] tool_start: ${event.toolName} (${event.toolUseId})`)
+          } else if (event.type === 'tool_result') {
+            console.log(`[SessionManager] tool_result: ${event.toolUseId} isError=${event.isError}`)
+          } else {
+            console.log('[SessionManager] Got event:', event.type)
+          }
+        }
         // Check if cancelled - break immediately (interrupted event already sent by cancelProcessing)
         if (managed.abortController?.signal.aborted || !managed.isProcessing) {
           console.log('[SessionManager] Aborted, breaking out of event loop')
@@ -980,6 +1112,9 @@ export class SessionManager {
       if (managed.abortController === myAbortController) {
         managed.isProcessing = false
         managed.abortController = undefined
+        // Clear parent tool tracking (should be empty after normal completion, but ensures clean state)
+        managed.parentToolStack = []
+        managed.toolToParentMap.clear()
         this.sendEvent({ type: 'complete', sessionId }, managed.workspace.id)
       }
       // Always persist (for aborted messages)
@@ -1008,6 +1143,10 @@ export class SessionManager {
     // Set state immediately (no polling) - just like TUI's interruptedRef pattern
     managed.isProcessing = false
     managed.abortController = undefined
+
+    // Clear parent tool tracking (stale entries would corrupt future parent-child tracking)
+    managed.parentToolStack = []
+    managed.toolToParentMap.clear()
 
     // Add interrupted info message to session (for persistence)
     const interruptedMessage: Message = {
@@ -1038,6 +1177,88 @@ export class SessionManager {
     } else {
       console.warn(`[SessionManager] Cannot respond to permission - no agent for session ${sessionId}`)
       return false
+    }
+  }
+
+  /**
+   * Respond to a pending plan review request
+   * Returns true if the response was delivered, false if agent/session is gone
+   */
+  respondToPlanReview(sessionId: string, requestId: string, response: { action: string; feedback?: string; modifiedPlan?: unknown }): boolean {
+    const managed = this.sessions.get(sessionId)
+    if (managed?.agent) {
+      console.log(`[SessionManager] Plan review response for ${requestId}: action=${response.action}`)
+      // Map the response to the format expected by the agent
+      let result: import('@craft-agent/shared/agent').PlanReviewResult
+      switch (response.action) {
+        case 'approve':
+          result = { action: 'approve', modifiedPlan: response.modifiedPlan as import('@craft-agent/shared/agents').Plan }
+          break
+        case 'refine':
+          result = { action: 'refine', feedback: response.feedback || '' }
+          break
+        case 'saveOnly':
+          result = { action: 'saveOnly', modifiedPlan: response.modifiedPlan as import('@craft-agent/shared/agents').Plan }
+          break
+        case 'cancel':
+        default:
+          result = { action: 'cancel' }
+          break
+      }
+      managed.agent.respondToPlanReview(requestId, result)
+      return true
+    } else {
+      console.warn(`[SessionManager] Cannot respond to plan review - no agent for session ${sessionId}`)
+      return false
+    }
+  }
+
+  /**
+   * Respond to a pending ask question request
+   * Returns true if the response was delivered, false if agent/session is gone
+   */
+  respondToAskQuestion(sessionId: string, requestId: string, answers: Record<string, string>): boolean {
+    const managed = this.sessions.get(sessionId)
+    if (managed?.agent) {
+      console.log(`[SessionManager] Ask question response for ${requestId}:`, Object.keys(answers).length, 'answers')
+      managed.agent.respondToCraftAskQuestion(requestId, answers)
+      return true
+    } else {
+      console.warn(`[SessionManager] Cannot respond to ask question - no agent for session ${sessionId}`)
+      return false
+    }
+  }
+
+  /**
+   * Set plan mode for a session
+   */
+  setPlanMode(sessionId: string, enabled: boolean): void {
+    const managed = this.sessions.get(sessionId)
+    if (managed) {
+      managed.planModeEnabled = enabled
+
+      // Update the plan mode state for this specific session
+      if (enabled) {
+        enterCraftPlanMode(sessionId)
+      } else {
+        exitCraftPlanMode(sessionId)
+      }
+
+      // If we have an agent, update its plan mode state
+      if (managed.agent) {
+        if (enabled) {
+          managed.agent.enterPlanMode()
+        } else {
+          managed.agent.exitPlanMode()
+        }
+      }
+      this.sendEvent({
+        type: 'plan_mode_changed',
+        sessionId: managed.id,
+        enabled,
+      }, managed.workspace.id)
+      // Persist to disk
+      this.persistSession(managed)
     }
   }
 
@@ -1108,14 +1329,44 @@ export class SessionManager {
         // Format tool input paths to relative for better readability
         const formattedToolInput = formatToolInputPaths(event.input)
 
-        // Check if a message with this toolUseId already exists
+        // Check if a message with this toolUseId already exists FIRST
         // SDK sends two events per tool: first from stream_event (empty input),
         // second from assistant message (complete input)
         const existingStartMsg = managed.messages.find(m => m.toolUseId === event.toolUseId)
+        const isDuplicateEvent = !!existingStartMsg
+
+        // Track parent-child relationships for nested tool calls
+        // Parent tools spawn child tools (e.g., Task runs Read, Grep, etc.)
+        // Include Task (subagents) and AgentOutputTool (retrieves subagent results)
+        const PARENT_TOOLS = ['Task', 'AgentOutputTool']
+        const isParentTool = PARENT_TOOLS.includes(event.toolName)
+
+        // Determine parent BEFORE potentially pushing this tool onto the stack
+        // The parent is the most recent parent tool that's still running (top of stack)
+        const parentToolUseId = !isParentTool && managed.parentToolStack.length > 0
+          ? managed.parentToolStack[managed.parentToolStack.length - 1]
+          : undefined
+
+        // If this is a parent tool, push it onto the stack
+        // IMPORTANT: Only push on first event, not duplicate events (SDK sends two tool_start per tool)
+        if (isParentTool && !isDuplicateEvent) {
+          managed.parentToolStack.push(event.toolUseId)
+        }
+
+        // Store the parent assignment for this tool (only on first event)
+        // This allows us to look up the correct parent later even with concurrent parent tools
+        if (!isDuplicateEvent && parentToolUseId) {
+          managed.toolToParentMap.set(event.toolUseId, parentToolUseId)
+        }
+
         if (existingStartMsg) {
           // Update existing message with complete input (second event has full input)
           if (formattedToolInput) {
             existingStartMsg.toolInput = formattedToolInput
+          }
+          // Also set parent if not already set
+          if (parentToolUseId && !existingStartMsg.parentToolUseId) {
+            existingStartMsg.parentToolUseId = parentToolUseId
           }
         } else {
           // Add tool message immediately (will be updated on tool_result)
@@ -1129,7 +1380,8 @@ export class SessionManager {
             toolUseId: event.toolUseId,
             toolInput: formattedToolInput,
             toolStatus: 'pending',
-            turnId: event.turnId
+            turnId: event.turnId,
+            parentToolUseId,
           }
           managed.messages.push(toolStartMessage)
         }
@@ -1140,15 +1392,28 @@ export class SessionManager {
           toolName: event.toolName,
           toolUseId: event.toolUseId,
           toolInput: formattedToolInput,
-          turnId: event.turnId
+          turnId: event.turnId,
+          parentToolUseId,
         }, workspaceId)
         break
       }
 
-      case 'tool_result':
+      case 'tool_result': {
         // AgentEvent tool_result only has toolUseId, look up the toolName
         const toolName = managed.pendingTools.get(event.toolUseId) || 'unknown'
         managed.pendingTools.delete(event.toolUseId)
+
+        // Remove this tool from parent stack if it's there (parent tool completing)
+        const stackIndex = managed.parentToolStack.indexOf(event.toolUseId)
+        if (stackIndex !== -1) {
+          managed.parentToolStack.splice(stackIndex, 1)
+        }
+
+        // Get the stored parent mapping before cleaning up (for fallback)
+        const storedParentId = managed.toolToParentMap.get(event.toolUseId)
+
+        // Clean up the tool-to-parent mapping for this tool
+        managed.toolToParentMap.delete(event.toolUseId)
 
         // Format absolute paths to relative paths for better readability
         const formattedResult = event.result ? formatPathsToRelative(event.result) : ''
@@ -1159,6 +1424,11 @@ export class SessionManager {
           existingToolMsg.content = formattedResult
           existingToolMsg.toolResult = formattedResult
           existingToolMsg.toolStatus = 'completed'
+          // If message doesn't have parent set, use stored mapping as fallback
+          // Note: SDK's event.parentToolUseId is for result matching, NOT hierarchy
+          if (!existingToolMsg.parentToolUseId && storedParentId) {
+            existingToolMsg.parentToolUseId = storedParentId
+          }
         } else {
           // Fallback: create new message if not found (shouldn't happen normally)
           const toolMessage: Message = {
@@ -1169,10 +1439,14 @@ export class SessionManager {
             toolName: toolName,
             toolUseId: event.toolUseId,
             toolResult: formattedResult,
-            toolStatus: 'completed'
+            toolStatus: 'completed',
+            parentToolUseId: storedParentId,
           }
           managed.messages.push(toolMessage)
         }
+
+        // Use stored parent mapping or existing message's parent
+        const finalParentToolUseId = existingToolMsg?.parentToolUseId || storedParentId
 
         this.sendEvent({
           type: 'tool_result',
@@ -1180,9 +1454,11 @@ export class SessionManager {
           toolUseId: event.toolUseId,
           toolName: toolName,
           result: formattedResult,
-          turnId: event.turnId
+          turnId: event.turnId,
+          parentToolUseId: finalParentToolUseId,
         }, workspaceId)
         break
+      }
 
       case 'status':
         this.sendEvent({

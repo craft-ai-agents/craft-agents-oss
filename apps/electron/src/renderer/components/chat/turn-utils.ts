@@ -6,7 +6,7 @@
  */
 
 import type { Message } from '../../../shared/types'
-import type { ActivityItem, ActivityStatus, ActivityType, ResponseContent } from './TurnCard'
+import type { ActivityItem, ActivityStatus, ActivityType, ResponseContent, TodoItem } from './TurnCard'
 
 // ============================================================================
 // Types
@@ -22,6 +22,8 @@ export interface AssistantTurn {
   isStreaming: boolean
   isComplete: boolean
   timestamp: number
+  /** Extracted from TodoWrite tool - latest todo state in this turn */
+  todos?: TodoItem[]
 }
 
 /** Represents a user message */
@@ -55,19 +57,112 @@ function getToolStatus(message: Message): ActivityStatus {
   return 'running'
 }
 
-/** Convert message to ActivityItem */
-function messageToActivity(message: Message): ActivityItem {
-  return {
+/**
+ * Convert message to ActivityItem with incremental depth calculation.
+ * Depth is calculated immediately using existing activities, enabling
+ * correct tree view rendering during streaming (not just on flush).
+ *
+ * @param message - The message to convert
+ * @param existingActivities - Activities already in the turn (for depth lookup)
+ */
+function messageToActivity(message: Message, existingActivities: ActivityItem[] = []): ActivityItem {
+  const activity: ActivityItem = {
     id: message.id,
     type: 'tool' as ActivityType,
     status: getToolStatus(message),
     toolName: message.toolName,
+    toolUseId: message.toolUseId,  // For parent-child matching
     toolInput: message.toolInput,
     content: message.toolResult || message.content,
     intent: message.toolIntent,
     timestamp: message.timestamp,
     error: message.isError ? message.content : undefined,
+    // parentId: The toolUseId of the parent tool (e.g., Task subagent).
+    // This is tracked by session manager's parentToolStack, NOT the SDK's
+    // parent_tool_use_id which is for result-matching, not hierarchy.
+    parentId: message.parentToolUseId,
   }
+
+  // Calculate depth incrementally using existing activities
+  // This enables correct tree view rendering during streaming
+  if (activity.parentId) {
+    const parent = existingActivities.find(a => a.toolUseId === activity.parentId)
+    activity.depth = parent ? (parent.depth || 0) + 1 : 1
+  } else {
+    activity.depth = 0
+  }
+
+  return activity
+}
+
+/**
+ * Calculate nesting depths for activities based on parent-child relationships.
+ * Modifies activities in place, adding depth field (0 = root, 1 = child, etc.)
+ *
+ * Note: With incremental depth calculation in messageToActivity(), this function
+ * serves as a safety net for edge cases (e.g., parent arrives after child) and
+ * ensures all depths are correctly set when a turn is flushed.
+ */
+function calculateActivityDepths(activities: ActivityItem[]): void {
+  // Build a map of toolUseId -> activity for fast parent lookup
+  const toolIdToActivity = new Map<string, ActivityItem>()
+  for (const activity of activities) {
+    if (activity.toolUseId) {
+      toolIdToActivity.set(activity.toolUseId, activity)
+    }
+  }
+
+  // Calculate depth for each activity (recalculates to handle edge cases)
+  for (const activity of activities) {
+    let depth = 0
+    let parentId = activity.parentId
+
+    // Walk up the parent chain, max 10 levels to prevent infinite loops
+    while (parentId && depth < 10) {
+      depth++
+      const parent = toolIdToActivity.get(parentId)
+      parentId = parent?.parentId
+    }
+
+    activity.depth = depth
+  }
+}
+
+// ============================================================================
+// TodoWrite Extraction
+// ============================================================================
+
+/**
+ * Extract todos from TodoWrite tool results in activities.
+ * Returns the latest todo state (from the most recent TodoWrite call).
+ */
+function extractTodosFromActivities(activities: ActivityItem[]): TodoItem[] | undefined {
+  // Find all TodoWrite tool results, get the latest one
+  const todoWriteActivities = activities
+    .filter(a => a.toolName === 'TodoWrite' && a.status === 'completed' && a.content)
+    .sort((a, b) => b.timestamp - a.timestamp) // Most recent first
+
+  if (todoWriteActivities.length === 0) return undefined
+
+  const latestResult = todoWriteActivities[0].content
+  if (!latestResult) return undefined
+
+  try {
+    // TodoWrite result is typically a success message, but the input contains the todos
+    // We need to get the toolInput which has the todos array
+    const input = todoWriteActivities[0].toolInput
+    if (input && Array.isArray(input.todos)) {
+      return input.todos.map((todo: { content: string; status: string; activeForm?: string }) => ({
+        content: todo.content,
+        status: todo.status as 'pending' | 'in_progress' | 'completed',
+        activeForm: todo.activeForm,
+      }))
+    }
+  } catch {
+    // Failed to parse, return undefined
+  }
+
+  return undefined
 }
 
 // ============================================================================
@@ -99,6 +194,12 @@ export function groupMessagesByTurn(messages: Message[]): Turn[] {
       // This is necessary because buffering can delay when messages are added
       // to the array, causing commentary to appear after tools that started later
       currentTurn.activities.sort((a, b) => a.timestamp - b.timestamp)
+
+      // Calculate nesting depths for parent-child tool relationships
+      calculateActivityDepths(currentTurn.activities)
+
+      // Extract todos from TodoWrite tool results
+      currentTurn.todos = extractTodosFromActivities(currentTurn.activities)
 
       // If interrupted, mark any running activities as error
       if (interrupted) {
@@ -158,7 +259,8 @@ export function groupMessagesByTurn(messages: Message[]): Turn[] {
         }
       }
       // Always add to current turn (ignoring turnId differences)
-      currentTurn.activities.push(messageToActivity(message))
+      // Pass existing activities for incremental depth calculation
+      currentTurn.activities.push(messageToActivity(message, currentTurn.activities))
       currentTurn.isStreaming = !isToolComplete
       continue
     }
@@ -184,13 +286,23 @@ export function groupMessagesByTurn(messages: Message[]): Turn[] {
         }
         // Always add to current turn as activity (ignoring turnId differences)
         // Pending messages show as 'running' until we know they're complete
-        currentTurn.activities.push({
+        // Include parentId for intermediate messages to support nesting within subagents
+        const intermediateActivity: ActivityItem = {
           id: message.id,
           type: 'intermediate',
           status: message.isPending ? 'running' : 'completed',
           content: message.content,
           timestamp: message.timestamp,
-        })
+          parentId: message.parentToolUseId,
+        }
+        // Calculate depth for intermediate messages too
+        if (intermediateActivity.parentId) {
+          const parent = currentTurn.activities.find(a => a.toolUseId === intermediateActivity.parentId)
+          intermediateActivity.depth = parent ? (parent.depth || 0) + 1 : 1
+        } else {
+          intermediateActivity.depth = 0
+        }
+        currentTurn.activities.push(intermediateActivity)
         continue
       }
 
@@ -462,4 +574,61 @@ export function formatActivityAsMarkdown(activity: ActivityItem): string {
   }
 
   return lines.join('\n')
+}
+
+// ============================================================================
+// Last Turn/Message Utilities
+// ============================================================================
+
+/**
+ * Get the last assistant turn from a list of turns.
+ * Useful for determining the current/most recent assistant response.
+ */
+export function getLastAssistantTurn(turns: Turn[]): AssistantTurn | undefined {
+  for (let i = turns.length - 1; i >= 0; i--) {
+    if (turns[i].type === 'assistant') {
+      return turns[i] as AssistantTurn
+    }
+  }
+  return undefined
+}
+
+/**
+ * Get the timestamp of the last user message from turns.
+ * Useful for calculating elapsed time since user sent their message.
+ */
+export function getLastUserMessageTime(turns: Turn[]): number | undefined {
+  for (let i = turns.length - 1; i >= 0; i--) {
+    if (turns[i].type === 'user') {
+      return (turns[i] as UserTurn).timestamp
+    }
+  }
+  return undefined
+}
+
+/**
+ * Check if the last assistant turn is still streaming/processing.
+ */
+export function isLastTurnStreaming(turns: Turn[]): boolean {
+  const lastAssistant = getLastAssistantTurn(turns)
+  return lastAssistant?.isStreaming ?? false
+}
+
+/**
+ * Pre-compute which activities are the last child at their depth level.
+ * Returns a Set of activity IDs that are last children.
+ * This is O(n) instead of O(n²) for checking during render.
+ */
+export function computeLastChildSet(activities: ActivityItem[]): Set<string> {
+  // Track the last activity for each parentId
+  const lastByParent = new Map<string | undefined, string>()
+
+  for (const activity of activities) {
+    if (activity.depth && activity.depth > 0) {
+      // This activity has a parent - mark it as the (potentially) last child
+      lastByParent.set(activity.parentId, activity.id)
+    }
+  }
+
+  return new Set(lastByParent.values())
 }

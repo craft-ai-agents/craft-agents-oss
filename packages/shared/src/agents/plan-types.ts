@@ -186,10 +186,11 @@ export function addRefinementEntry(
 }
 
 // NOTE: Plan mode uses Craft-specific tools (not SDK's EnterPlanMode/ExitPlanMode):
-// 1. User enters plan mode via SHIFT+TAB or /plan start
-// 2. Claude uses CraftAskUserQuestion to clarify requirements
-// 3. Claude calls ExitCraftAgentsPlanMode with a structured plan
-// 4. User reviews via PlanReview UI (approve/refine/cancel)
+// 1. User enters plan mode via SHIFT+TAB or /plan start (UI toggle)
+// 2. Plan mode context injected into user messages (not system prompt, for caching)
+// 3. Claude uses CraftAgentsPlanModeAskQuestion to clarify requirements
+// 4. Claude calls ExitCraftAgentsPlanMode with a structured plan
+// 5. User reviews via PlanReview UI (approve/refine/cancel)
 // This provides better UX with interactive question/answer and structured plan review.
 
 // ============================================
@@ -203,7 +204,7 @@ export const PLAN_MODE_ENTER_MESSAGE = 'Plan mode active. Describe what you want
 export const PLAN_MODE_EXIT_MESSAGE = 'Exited plan mode.';
 
 /** System prompt sent to Claude when entering plan mode via Shift+Tab */
-export const PLAN_MODE_ENTER_PROMPT = 'The user wants to enter planning mode. Call the EnterCraftAgentsPlanMode tool to enter plan mode, then wait for the user to describe their task.';
+export const PLAN_MODE_ENTER_PROMPT = 'The user has activated planning mode. You are now in plan mode. Wait for the user to describe their task, then use CraftAgentsPlanModeAskQuestion to clarify requirements and ExitCraftAgentsPlanMode to submit your plan for review.';
 
 /** System prompt sent to Claude when exiting plan mode via Shift+Tab */
 export const PLAN_MODE_EXIT_PROMPT = 'The user wants to exit planning mode. Ask how can you help.';

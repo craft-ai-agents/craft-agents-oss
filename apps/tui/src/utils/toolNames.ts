@@ -10,16 +10,15 @@
  */
 const TOOL_DISPLAY_NAMES: Record<string, string> = {
   // Plan mode tools
-  'EnterCraftAgentsPlanMode': 'Starting Plan',
   'ExitCraftAgentsPlanMode': 'Plan Ready',
-  'CraftAskUserQuestion': 'Questions',
+  'CraftAgentsPlanModeAskQuestion': 'Questions',
 };
 
 /**
  * Tools that should be hidden from the UI (purely internal state changes)
  */
-export const HIDDEN_TOOLS = new Set([
-  'EnterCraftAgentsPlanMode',
+export const HIDDEN_TOOLS = new Set<string>([
+  // EnterCraftAgentsPlanMode was removed - plan mode is now entered via UI toggle
 ]);
 
 /**

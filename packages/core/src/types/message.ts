@@ -68,6 +68,8 @@ export interface Message {
   toolStatus?: ToolStatus;
   toolDuration?: number;
   toolIntent?: string;
+  // Parent tool ID for nested tool calls (e.g., child tools inside Task subagent)
+  parentToolUseId?: string;
   // Stored attachments for user messages (persistent, no base64)
   attachments?: StoredAttachment[];
   isError?: boolean;
@@ -110,6 +112,8 @@ export interface StoredMessage {
   toolStatus?: ToolStatus;
   toolDuration?: number;
   toolIntent?: string;
+  // Parent tool ID for nested tool calls (persisted for session restore)
+  parentToolUseId?: string;
   isError?: boolean;
   /** Stored attachments for user messages (persisted to disk) */
   attachments?: StoredAttachment[];
@@ -238,8 +242,8 @@ export type AgentEvent =
   | { type: 'info'; message: string }
   | { type: 'text_delta'; text: string; turnId?: string }
   | { type: 'text_complete'; text: string; isIntermediate?: boolean; turnId?: string }
-  | { type: 'tool_start'; toolName: string; toolUseId: string; input: Record<string, unknown>; intent?: string; turnId?: string }
-  | { type: 'tool_result'; toolUseId: string; result: string; isError: boolean; input?: Record<string, unknown>; turnId?: string }
+  | { type: 'tool_start'; toolName: string; toolUseId: string; input: Record<string, unknown>; intent?: string; turnId?: string; parentToolUseId?: string }
+  | { type: 'tool_result'; toolUseId: string; result: string; isError: boolean; input?: Record<string, unknown>; turnId?: string; parentToolUseId?: string }
   | { type: 'permission_request'; requestId: string; toolName: string; command: string; description: string }
   | { type: 'ask_user'; requestId: string; questions: Question[] }
   | { type: 'error'; message: string }

@@ -71,7 +71,7 @@ export interface UseCommandsProps {
   planMode: boolean;
   approvePlan: () => void;
   cancelPlan: () => void;
-  // Craft Agents plan mode (uses CraftAskUserQuestion, blocks API calls during planning)
+  // Craft Agents plan mode (uses CraftAgentsPlanModeAskQuestion, blocks API calls during planning)
   startCraftPlanning: () => void;
   cancelCraftPlanning: () => void;
 
@@ -481,7 +481,7 @@ export function useCommands(props: UseCommandsProps) {
               message: { content: 'Already in plan mode. Use /plan cancel to exit first.', type: 'error' },
             };
           }
-          // Start Craft Agents plan mode (blocks API calls, uses CraftAskUserQuestion)
+          // Start Craft Agents plan mode (blocks API calls, uses CraftAgentsPlanModeAskQuestion)
           startCraftPlanning();
           return {
             handled: true,

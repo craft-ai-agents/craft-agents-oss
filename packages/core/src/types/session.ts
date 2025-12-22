@@ -22,6 +22,8 @@ export interface Session {
   agentName?: string;            // Cached agent name for display
   isArchived?: boolean;          // Whether this session is archived
   isFlagged?: boolean;           // Whether this session is flagged
+  // Read/unread tracking
+  lastReadMessageId?: string;    // ID of the last message the user has read
 }
 
 /**

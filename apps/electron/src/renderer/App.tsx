@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import type { Session, Workspace, SessionEvent, Message, SubAgentMetadata, FileAttachment, StoredAttachment, PermissionRequest, SetupNeeds } from '../shared/types'
+import type { Session, Workspace, SessionEvent, Message, SubAgentMetadata, FileAttachment, StoredAttachment, PermissionRequest, SetupNeeds, TodoState } from '../shared/types'
 import { generateMessageId } from '../shared/types'
 import { Chat } from '@/components/chat/Chat'
 import { OnboardingWizard, ReauthScreen } from '@/components/onboarding'
@@ -32,6 +32,10 @@ export default function App() {
   const [menuNewChatTrigger, setMenuNewChatTrigger] = useState(0)
   // Permission requests per session (queue to handle multiple concurrent requests)
   const [pendingPermissions, setPendingPermissions] = useState<Map<string, PermissionRequest[]>>(new Map())
+  // Plan review requests per session
+  const [pendingPlanReviews, setPendingPlanReviews] = useState<Map<string, import('../shared/types').PlanReviewRequest>>(new Map())
+  // Ask question requests per session
+  const [pendingAskQuestions, setPendingAskQuestions] = useState<Map<string, import('../shared/types').AskQuestionRequest>>(new Map())
   // Draft input text per session (preserved across mode switches and conversation changes)
   const [sessionDrafts, setSessionDrafts] = useState<Map<string, string>>(new Map())
   // Advanced options (all session-scoped)
@@ -126,23 +130,15 @@ export default function App() {
   const handleOnboardingComplete = useCallback(() => {
     // Reload workspaces after onboarding
     window.electronAPI.getWorkspaces().then((ws) => {
-      setWorkspaces(ws)
       if (ws.length > 0) {
-        // Open the new workspace's window (this will focus/create it)
-        // and the current onboarding window will be replaced
+        // Open new workspace window, then close this (stale) window
         window.electronAPI.openWorkspace(ws[0].id)
+        window.electronAPI.closeWindow()
+        return
       }
-    })
-    setAppState('ready')
-    window.electronAPI.getSessions().then((loadedSessions) => {
-      setSessions(loadedSessions)
-      // Initialize skipPermissionsSessions from session data
-      const skipSessions = new Set(
-        loadedSessions.filter(s => s.skipPermissions).map(s => s.id)
-      )
-      if (skipSessions.size > 0) {
-        setSkipPermissionsSessions(skipSessions)
-      }
+      // Fallback: no workspaces (shouldn't happen after onboarding)
+      setWorkspaces(ws)
+      setAppState('ready')
     })
   }, [])
 
@@ -156,16 +152,14 @@ export default function App() {
   const handleAddWorkspaceComplete = useCallback(() => {
     // Reload workspaces after adding
     window.electronAPI.getWorkspaces().then((ws) => {
-      setWorkspaces(ws)
       if (ws.length > 0) {
         // Get the newly added workspace (last one in list)
         const newWorkspace = ws[ws.length - 1]
-        // If this was an add-workspace window, transition to the new workspace
-        // by opening it (which will update this window's workspace)
+        // Open new workspace window, then close this (add-workspace) window
         window.electronAPI.openWorkspace(newWorkspace.id)
+        window.electronAPI.closeWindow()
       }
     })
-    // Note: Don't setAppState('ready') here - the window will be reloaded by openWorkspace
   }, [])
 
   // Add workspace cancel handler
@@ -277,6 +271,11 @@ export default function App() {
         loadedSessions.filter(s => s.skipPermissions).map(s => s.id)
       )
       setSkipPermissionsSessions(skipSessions)
+      // Initialize planModeSessions from session data
+      const planSessions = new Set(
+        loadedSessions.filter(s => s.planModeEnabled).map(s => s.id)
+      )
+      setPlanModeSessions(planSessions)
     })
     // Load stored model preference
     window.electronAPI.getModel().then((storedModel) => {
@@ -333,9 +332,61 @@ export default function App() {
         return
       }
 
-      // Handle complete event - clear any pending permission for the session
+      // Handle plan mode events
+      if (event.type === 'plan_mode_changed') {
+        console.log('[App] plan_mode_changed:', event.sessionId, event.enabled)
+        setPlanModeSessions(prev => {
+          const next = new Set(prev)
+          if (event.enabled) {
+            next.add(event.sessionId)
+          } else {
+            next.delete(event.sessionId)
+          }
+          return next
+        })
+        return
+      }
+
+      if (event.type === 'plan_review_request') {
+        console.log('[App] plan_review_request:', event.sessionId, event.request.plan.title)
+        setPendingPlanReviews(prev => {
+          const next = new Map(prev)
+          next.set(event.sessionId, event.request)
+          return next
+        })
+        return
+      }
+
+      if (event.type === 'ask_question_request') {
+        console.log('[App] ask_question_request:', event.sessionId, event.request.questions.length, 'questions')
+        setPendingAskQuestions(prev => {
+          const next = new Map(prev)
+          next.set(event.sessionId, event.request)
+          return next
+        })
+        return
+      }
+
+      // Handle complete event - clear any pending requests for the session
       if (event.type === 'complete') {
         setPendingPermissions(prev => {
+          if (prev.has(event.sessionId)) {
+            const next = new Map(prev)
+            next.delete(event.sessionId)
+            return next
+          }
+          return prev
+        })
+        // Also clear pending plan reviews and ask questions
+        setPendingPlanReviews(prev => {
+          if (prev.has(event.sessionId)) {
+            const next = new Map(prev)
+            next.delete(event.sessionId)
+            return next
+          }
+          return prev
+        })
+        setPendingAskQuestions(prev => {
           if (prev.has(event.sessionId)) {
             const next = new Map(prev)
             next.delete(event.sessionId)
@@ -777,6 +828,15 @@ export default function App() {
     // Pass agentName to main process so it's stored in the session
     const session = await window.electronAPI.createSession(workspaceId, agentId, agentName)
     setSessions(prev => [session, ...prev])
+
+    // Apply session defaults to the UI state
+    if (session.skipPermissions) {
+      setSkipPermissionsSessions(prev => new Set([...prev, session.id]))
+    }
+    if (session.planModeEnabled) {
+      setPlanModeSessions(prev => new Set([...prev, session.id]))
+    }
+
     return session
   }, [agents])
 
@@ -788,27 +848,26 @@ export default function App() {
     isReady: appState === 'ready',
   })
 
-  const handleDeleteSession = useCallback(async (sessionId: string) => {
+  const handleDeleteSession = useCallback(async (sessionId: string, skipConfirmation = false): Promise<boolean> => {
+    // Show confirmation dialog before deleting (unless skipped or session is empty)
+    if (!skipConfirmation) {
+      // Check if session has any messages - skip confirmation for empty sessions
+      const session = sessions.find(s => s.id === sessionId)
+      const isEmpty = !session || session.messages.length === 0
+
+      if (!isEmpty) {
+        const confirmed = await window.electronAPI.showDeleteSessionConfirmation(session.name || 'Untitled')
+        if (!confirmed) return false
+      }
+    }
+
     // Close the tab first to prevent race conditions where the tab
     // tries to render while the session is being deleted
     closeChatTabBySession(sessionId)
     await window.electronAPI.deleteSession(sessionId)
     setSessions(prev => prev.filter(s => s.id !== sessionId))
-  }, [closeChatTabBySession])
-
-  const handleArchiveSession = useCallback(async (sessionId: string) => {
-    await window.electronAPI.archiveSession(sessionId)
-    setSessions(prev => prev.map(s =>
-      s.id === sessionId ? { ...s, isArchived: true, isFlagged: false } : s
-    ))
-  }, [])
-
-  const handleUnarchiveSession = useCallback(async (sessionId: string) => {
-    await window.electronAPI.unarchiveSession(sessionId)
-    setSessions(prev => prev.map(s =>
-      s.id === sessionId ? { ...s, isArchived: false } : s
-    ))
-  }, [])
+    return true
+  }, [closeChatTabBySession, sessions])
 
   const handleFlagSession = useCallback(async (sessionId: string) => {
     await window.electronAPI.flagSession(sessionId)
@@ -821,6 +880,32 @@ export default function App() {
     await window.electronAPI.unflagSession(sessionId)
     setSessions(prev => prev.map(s =>
       s.id === sessionId ? { ...s, isFlagged: false } : s
+    ))
+  }, [])
+
+  const handleMarkSessionRead = useCallback(async (sessionId: string) => {
+    await window.electronAPI.markSessionRead(sessionId)
+    // Find the session and compute the last final assistant message ID
+    setSessions(prev => prev.map(s => {
+      if (s.id !== sessionId) return s
+      const lastFinalId = s.messages.findLast(
+        m => m.role === 'assistant' && !m.isIntermediate
+      )?.id
+      return lastFinalId ? { ...s, lastReadMessageId: lastFinalId } : s
+    }))
+  }, [])
+
+  const handleMarkSessionUnread = useCallback(async (sessionId: string) => {
+    await window.electronAPI.markSessionUnread(sessionId)
+    setSessions(prev => prev.map(s =>
+      s.id === sessionId ? { ...s, lastReadMessageId: undefined } : s
+    ))
+  }, [])
+
+  const handleTodoStateChange = useCallback(async (sessionId: string, state: TodoState) => {
+    await window.electronAPI.setTodoState(sessionId, state)
+    setSessions(prev => prev.map(s =>
+      s.id === sessionId ? { ...s, todoState: state } : s
     ))
   }, [])
 
@@ -1014,6 +1099,8 @@ export default function App() {
       }
       return next
     })
+    // Persist to backend and update agent state
+    window.electronAPI.setPlanMode(sessionId, enabled)
   }, [])
 
   // Handle input draft changes per session with debounced persistence
@@ -1087,6 +1174,56 @@ export default function App() {
         } else {
           next.set(sessionId, remainingQueue)
         }
+        return next
+      })
+    }
+  }, [])
+
+  const handleRespondToPlanReview = useCallback(async (sessionId: string, requestId: string, response: import('../shared/types').PlanReviewResponse) => {
+    console.log('[App] handleRespondToPlanReview called:', { sessionId, requestId, action: response.action })
+
+    const success = await window.electronAPI.respondToPlanReview(sessionId, requestId, response)
+    console.log('[App] handleRespondToPlanReview IPC result:', { success })
+
+    if (success) {
+      // Clear the pending plan review
+      setPendingPlanReviews(prev => {
+        const next = new Map(prev)
+        next.delete(sessionId)
+        return next
+      })
+      // Force sessions state refresh
+      setSessions(prev => [...prev])
+    } else {
+      // Clear anyway to avoid UI stuck
+      setPendingPlanReviews(prev => {
+        const next = new Map(prev)
+        next.delete(sessionId)
+        return next
+      })
+    }
+  }, [])
+
+  const handleRespondToAskQuestion = useCallback(async (sessionId: string, requestId: string, answers: import('../shared/types').AskQuestionResponse) => {
+    console.log('[App] handleRespondToAskQuestion called:', { sessionId, requestId, answerCount: Object.keys(answers).length })
+
+    const success = await window.electronAPI.respondToAskQuestion(sessionId, requestId, answers)
+    console.log('[App] handleRespondToAskQuestion IPC result:', { success })
+
+    if (success) {
+      // Clear the pending ask question
+      setPendingAskQuestions(prev => {
+        const next = new Map(prev)
+        next.delete(sessionId)
+        return next
+      })
+      // Force sessions state refresh
+      setSessions(prev => [...prev])
+    } else {
+      // Clear anyway to avoid UI stuck
+      setPendingAskQuestions(prev => {
+        const next = new Map(prev)
+        next.delete(sessionId)
         return next
       })
     }
@@ -1243,10 +1380,11 @@ export default function App() {
             onSelectWorkspace={handleSelectWorkspace}
             onCreateSession={handleCreateSession}
             onDeleteSession={handleDeleteSession}
-            onArchiveSession={handleArchiveSession}
-            onUnarchiveSession={handleUnarchiveSession}
             onFlagSession={handleFlagSession}
             onUnflagSession={handleUnflagSession}
+            onMarkSessionRead={handleMarkSessionRead}
+            onMarkSessionUnread={handleMarkSessionUnread}
+            onTodoStateChange={handleTodoStateChange}
             onRenameSession={handleRenameSession}
             onSendMessage={handleSendMessage}
             onOpenFile={handleOpenFile}
@@ -1259,6 +1397,11 @@ export default function App() {
             onAddWorkspace={handleAddWorkspace}
             pendingPermissions={pendingPermissions}
             onRespondToPermission={handleRespondToPermission}
+            // Plan mode
+            pendingPlanReviews={pendingPlanReviews}
+            onRespondToPlanReview={handleRespondToPlanReview}
+            pendingAskQuestions={pendingAskQuestions}
+            onRespondToAskQuestion={handleRespondToAskQuestion}
             // Advanced options (all session-scoped)
             ultrathinkSessions={ultrathinkSessions}
             onUltrathinkChange={handleUltrathinkChange}

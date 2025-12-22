@@ -14,6 +14,8 @@ import { cn } from '@/lib/utils'
 import { Markdown } from '@/components/markdown'
 import { Spinner } from '@/components/ui/loading-indicator'
 import { stripMarkdown } from '@/utils/text'
+import { CircleCheckFilled } from '@/components/icons/TodoStateIcons'
+import { computeLastChildSet } from './turn-utils'
 
 // ============================================================================
 // Size Configuration
@@ -47,16 +49,35 @@ const SIZE_CONFIG = {
 export type ActivityStatus = 'pending' | 'running' | 'completed' | 'error'
 export type ActivityType = 'tool' | 'thinking' | 'intermediate'
 
+// ============================================================================
+// Todo Types (for TodoWrite tool visualization)
+// ============================================================================
+
+export type TodoStatus = 'pending' | 'in_progress' | 'completed'
+
+export interface TodoItem {
+  /** Task content/description */
+  content: string
+  /** Current status */
+  status: TodoStatus
+  /** Present continuous form shown when in_progress (e.g., "Running tests") */
+  activeForm?: string
+}
+
 export interface ActivityItem {
   id: string
   type: ActivityType
   status: ActivityStatus
   toolName?: string
+  toolUseId?: string  // For matching parent-child relationships
   toolInput?: Record<string, unknown>
   content?: string
   intent?: string
   timestamp: number
   error?: string
+  // Parent-child nesting for Task subagents
+  parentId?: string  // Parent activity's toolUseId
+  depth?: number     // Nesting level (0 = root, 1 = child, etc.)
 }
 
 export interface ResponseContent {
@@ -88,6 +109,8 @@ export interface TurnCardProps {
   onOpenDetails?: () => void
   /** Callback to open individual activity details in Monaco */
   onOpenActivityDetails?: (activity: ActivityItem) => void
+  /** TodoWrite tool state - shown at bottom of turn */
+  todos?: TodoItem[]
 }
 
 // ============================================================================
@@ -244,10 +267,16 @@ function isResponseBuffering(response: ResponseContent | undefined): boolean {
 // Helper Functions
 // ============================================================================
 
-/** Get display name for a tool (strip MCP prefixes) */
+/** Get display name for a tool (strip MCP prefixes, apply friendly names) */
 function getToolDisplayName(name: string): string {
   const stripped = name.replace(/^mcp__[^_]+__/, '')
-  return stripped
+
+  // Friendly display names for specific tools
+  const displayNames: Record<string, string> = {
+    'TodoWrite': 'Todo List Updated',
+  }
+
+  return displayNames[stripped] || stripped
 }
 
 /** Format tool input as a concise summary - CSS truncate handles overflow */
@@ -345,10 +374,51 @@ interface ActivityRowProps {
   activity: ActivityItem
   /** Callback to open activity details in Monaco */
   onOpenDetails?: () => void
+  /** Whether this is the last child at its depth level (for └ corner in tree view) */
+  isLastChild?: boolean
+}
+
+/**
+ * Renders vertical line connectors for nested tool calls (tree-view style)
+ * Each depth level gets a vertical line with a horizontal connector at the deepest level
+ * @param isLastChild - If true, the vertical line stops at center (└ corner) instead of extending below
+ */
+function TreeViewConnector({ depth, isLastChild }: { depth: number; isLastChild?: boolean }) {
+  if (depth === 0) return null
+
+  return (
+    <div className="flex self-stretch">
+      {Array.from({ length: depth }).map((_, i) => {
+        const isLastLevel = i === depth - 1
+        return (
+          <div
+            key={i}
+            className="w-4 shrink-0 relative"
+          >
+            {/* Vertical line - extends beyond row bounds to connect with adjacent rows
+                For last child at deepest level: only draw from top to center (└ corner) */}
+            <div
+              className="absolute left-1.5 w-px bg-border/60"
+              style={{
+                top: '-4px',
+                bottom: isLastLevel && isLastChild ? '50%' : '-4px'
+              }}
+            />
+            {/* Horizontal connector on the last level */}
+            {isLastLevel && (
+              <div className="absolute left-1.5 top-1/2 w-2.5 h-px bg-border/60 -translate-y-px" />
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
 /** Single activity row in expanded view */
-function ActivityRow({ activity, onOpenDetails }: ActivityRowProps) {
+function ActivityRow({ activity, onOpenDetails, isLastChild }: ActivityRowProps) {
+  const depth = activity.depth || 0
+
   // Intermediate messages (LLM commentary) - render with dashed circle icon
   // Show "Thinking" while streaming, stripped markdown content when complete
   if (activity.type === 'intermediate') {
@@ -356,15 +426,83 @@ function ActivityRow({ activity, onOpenDetails }: ActivityRowProps) {
     const displayContent = isThinking ? 'Thinking...' : stripMarkdown(activity.content || '')
     const isComplete = activity.status === 'completed'
     return (
-      <div className={cn("group/row flex items-center gap-2 py-0.5 text-muted-foreground/70", SIZE_CONFIG.fontSize)}>
-        {isThinking ? (
-          <div className={cn(SIZE_CONFIG.iconSize, "flex items-center justify-center shrink-0")}>
-            <Spinner className={SIZE_CONFIG.spinnerSize} />
-          </div>
-        ) : (
-          <MessageCircleDashed className={cn(SIZE_CONFIG.iconSize, "shrink-0")} />
+      <div className="flex items-stretch">
+        <TreeViewConnector depth={depth} isLastChild={isLastChild} />
+        <div className={cn("group/row flex items-center gap-2 py-0.5 text-foreground/75 flex-1 min-w-0", SIZE_CONFIG.fontSize)}>
+          {isThinking ? (
+            <div className={cn(SIZE_CONFIG.iconSize, "flex items-center justify-center shrink-0")}>
+              <Spinner className={SIZE_CONFIG.spinnerSize} />
+            </div>
+          ) : (
+            <MessageCircleDashed className={cn(SIZE_CONFIG.iconSize, "shrink-0")} />
+          )}
+          <span className="truncate flex-1">{displayContent}</span>
+          {/* Open details button */}
+          {onOpenDetails && isComplete && (
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={(e) => {
+                e.stopPropagation()
+                onOpenDetails()
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.stopPropagation()
+                  onOpenDetails()
+                }
+              }}
+              className={cn(
+                "p-0.5 rounded-[3px] opacity-0 group-hover/row:opacity-100 transition-opacity shrink-0",
+                "hover:bg-muted/80 focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              )}
+            >
+              <ArrowUpRight className={SIZE_CONFIG.iconSize} />
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // Tool activities - show with status icon
+  // Format: "Description · ToolName [lighter details]"
+  const toolName = activity.toolName
+    ? getToolDisplayName(activity.toolName)
+    : activity.type === 'thinking'
+    ? 'Thinking'
+    : 'Processing'
+
+  // Extract description from toolInput if available (e.g., Bash commands have a description field)
+  const description = activity.toolInput?.description as string | undefined
+  const inputSummary = formatToolInput(activity.toolInput)
+  const isComplete = activity.status === 'completed' || activity.status === 'error'
+
+  return (
+    <div className="flex items-stretch">
+      <TreeViewConnector depth={depth} isLastChild={isLastChild} />
+      <div className={cn("group/row flex items-center gap-2 py-0.5 text-muted-foreground flex-1 min-w-0", SIZE_CONFIG.fontSize)}>
+        <ActivityStatusIcon status={activity.status} />
+        {/* Tool name (always shown, darker) */}
+        <span className="font-medium shrink-0">{toolName}</span>
+        {/* Description if available (darker, after interpunct) - truncates to leave room for details button */}
+        {description && (
+          <>
+            <span className="opacity-60 shrink-0">·</span>
+            <span className="font-medium truncate min-w-0 max-w-[200px]">{description}</span>
+          </>
         )}
-        <span className="truncate flex-1">{displayContent}</span>
+        {/* Additional params (lighter) */}
+        {inputSummary && (
+          <span className="opacity-50 truncate flex-1 min-w-0">{inputSummary}</span>
+        )}
+        {activity.status === 'error' && activity.error && (
+          <span className="text-destructive truncate max-w-[150px]">
+            — {activity.error}
+          </span>
+        )}
+        {/* Spacer when no inputSummary */}
+        {!inputSummary && <span className="flex-1" />}
         {/* Open details button */}
         {onOpenDetails && isComplete && (
           <div
@@ -389,68 +527,6 @@ function ActivityRow({ activity, onOpenDetails }: ActivityRowProps) {
           </div>
         )}
       </div>
-    )
-  }
-
-  // Tool activities - show with status icon
-  // Format: "Description · ToolName [lighter details]"
-  const toolName = activity.toolName
-    ? getToolDisplayName(activity.toolName)
-    : activity.type === 'thinking'
-    ? 'Thinking'
-    : 'Processing'
-
-  // Extract description from toolInput if available (e.g., Bash commands have a description field)
-  const description = activity.toolInput?.description as string | undefined
-  const inputSummary = formatToolInput(activity.toolInput)
-  const isComplete = activity.status === 'completed' || activity.status === 'error'
-
-  return (
-    <div className={cn("group/row flex items-center gap-2 py-0.5 text-muted-foreground", SIZE_CONFIG.fontSize)}>
-      <ActivityStatusIcon status={activity.status} />
-      {/* Tool name (always shown, darker) */}
-      <span className="font-medium shrink-0">{toolName}</span>
-      {/* Description if available (darker, after interpunct) */}
-      {description && (
-        <>
-          <span className="opacity-60 shrink-0">·</span>
-          <span className="font-medium shrink-0">{description}</span>
-        </>
-      )}
-      {/* Additional params (lighter) */}
-      {inputSummary && (
-        <span className="opacity-50 truncate flex-1 min-w-0">{inputSummary}</span>
-      )}
-      {activity.status === 'error' && activity.error && (
-        <span className="text-destructive truncate max-w-[150px]">
-          — {activity.error}
-        </span>
-      )}
-      {/* Spacer when no inputSummary */}
-      {!inputSummary && <span className="flex-1" />}
-      {/* Open details button */}
-      {onOpenDetails && isComplete && (
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={(e) => {
-            e.stopPropagation()
-            onOpenDetails()
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.stopPropagation()
-              onOpenDetails()
-            }
-          }}
-          className={cn(
-            "p-0.5 rounded-[3px] opacity-0 group-hover/row:opacity-100 transition-opacity shrink-0",
-            "hover:bg-muted/80 focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-          )}
-        >
-          <ArrowUpRight className={SIZE_CONFIG.iconSize} />
-        </div>
-      )}
     </div>
   )
 }
@@ -612,6 +688,81 @@ function StreamingResponsePreview({
 }
 
 // ============================================================================
+// TodoList Component (for TodoWrite tool visualization)
+// ============================================================================
+
+/** Status icon for a todo item - uses purple filled icon for completed */
+function TodoStatusIcon({ status }: { status: TodoStatus }) {
+  switch (status) {
+    case 'pending':
+      return <Circle className={cn(SIZE_CONFIG.iconSize, "text-muted-foreground/50")} />
+    case 'in_progress':
+      return (
+        <div className={cn(SIZE_CONFIG.iconSize, "flex items-center justify-center")}>
+          <Spinner className={cn(SIZE_CONFIG.spinnerSize, "text-amber-500")} />
+        </div>
+      )
+    case 'completed':
+      return <CircleCheckFilled className={cn(SIZE_CONFIG.iconSize, "text-[#9570BE]")} />
+  }
+}
+
+/** Single todo row - styled like ActivityRow */
+function TodoRow({ todo }: { todo: TodoItem }) {
+  const displayText = todo.status === 'in_progress' && todo.activeForm
+    ? todo.activeForm
+    : todo.content
+
+  return (
+    <div className={cn(
+      "flex items-center gap-2 py-0.5 text-muted-foreground",
+      SIZE_CONFIG.fontSize,
+      todo.status === 'completed' && "opacity-50"
+    )}>
+      <TodoStatusIcon status={todo.status} />
+      <span className={cn(
+        "truncate flex-1",
+        todo.status === 'completed' && "line-through"
+      )}>
+        {displayText}
+      </span>
+    </div>
+  )
+}
+
+interface TodoListProps {
+  todos: TodoItem[]
+}
+
+/**
+ * TodoList - Displays the current state of TodoWrite tool
+ * Styled to blend with TurnCard activities
+ */
+function TodoList({ todos }: TodoListProps) {
+  if (todos.length === 0) return null
+
+  return (
+    <div className="pl-4 pr-3 pt-2.5 pb-1.5 space-y-0.5 border-l-2 border-muted ml-[16px] bg-muted/20 rounded-r-md">
+      {/* Header */}
+      <div className={cn("text-muted-foreground pb-1", SIZE_CONFIG.fontSize)}>
+        Todo List
+      </div>
+      {/* Todo items */}
+      {todos.map((todo, index) => (
+        <motion.div
+          key={`${todo.content}-${index}`}
+          initial={{ opacity: 0, x: -8 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: index * 0.03 }}
+        >
+          <TodoRow todo={todo} />
+        </motion.div>
+      ))}
+    </div>
+  )
+}
+
+// ============================================================================
 // Main Component
 // ============================================================================
 
@@ -633,6 +784,7 @@ export function TurnCard({
   onPopOut,
   onOpenDetails,
   onOpenActivityDetails,
+  todos,
 }: TurnCardProps) {
   const hasRunning = activities.some(a => a.status === 'running')
   const [isExpanded, setIsExpanded] = useState(defaultExpanded)
@@ -656,6 +808,12 @@ export function TurnCard({
   const sortedActivities = useMemo(
     () => [...activities].sort((a, b) => a.timestamp - b.timestamp),
     [activities]
+  )
+
+  // Pre-compute which activities are last children - O(n) instead of O(n²) per-render check
+  const lastChildSet = useMemo(
+    () => computeLastChildSet(sortedActivities),
+    [sortedActivities]
   )
 
   // Don't render if nothing to show and turn is complete
@@ -716,11 +874,6 @@ export function TurnCard({
                 </motion.span>
               </AnimatePresence>
             </span>
-
-            {/* Streaming indicator */}
-            {isStreaming && !isComplete && (
-              <Spinner className={cn(SIZE_CONFIG.spinnerSizeSmall, "text-muted-foreground")} />
-            )}
 
             {/* Open details button - shown when turn is complete */}
             {onOpenDetails && isComplete && (
@@ -783,6 +936,7 @@ export function TurnCard({
                       <ActivityRow
                         activity={activity}
                         onOpenDetails={onOpenActivityDetails ? () => onOpenActivityDetails(activity) : undefined}
+                        isLastChild={lastChildSet.has(activity.id)}
                       />
                     </motion.div>
                   ))}
@@ -800,6 +954,10 @@ export function TurnCard({
                     </motion.div>
                   )}
                 </div>
+                {/* TodoList - inside expanded section */}
+                {todos && todos.length > 0 && (
+                  <TodoList todos={todos} />
+                )}
               </motion.div>
             )}
           </AnimatePresence>

@@ -74,18 +74,6 @@ export interface PendingAskQuestion {
 }
 
 /**
- * Swarm configuration for parallel agent execution
- */
-export interface SwarmConfig {
-  /** Whether to launch a swarm */
-  enabled: boolean;
-  /** Number of parallel agents to spawn */
-  teammateCount: number;
-  /** Callback to spawn a teammate (returns agent ID) */
-  onSpawnTeammate?: (taskDescription: string, stepIndex: number) => Promise<string>;
-}
-
-/**
  * State shared between plan tools and CraftAgent
  */
 export interface CraftPlanModeState {
@@ -107,83 +95,240 @@ export interface CraftPlanModeState {
   onPlanReviewRequest?: (request: { requestId: string; plan: Plan; questions: string[] }) => void;
   /** Callback to ask user questions via UI (set by CraftAgent) */
   onAskUserQuestion?: (request: { requestId: string; questions: PlanQuestion[] }) => void;
-  /** Callback to launch swarm agents (set by CraftAgent) */
-  onLaunchSwarm?: (config: SwarmConfig, plan: Plan, planFilePath: string) => Promise<void>;
 }
 
-// Global state (initialized by CraftAgent)
-let planModeState: CraftPlanModeState = {
-  isActive: false,
-  userInitiatedPlanMode: false,
-  sessionId: null,
-  plan: null,
-  planFilePath: null,
-  taskDescription: null,
-};
+/**
+ * Manager for per-session plan mode state.
+ * Each session has its own state and pending requests.
+ */
+class PlanModeManager {
+  private states: Map<string, CraftPlanModeState> = new Map();
+  private pendingPlanReviews: Map<string, PendingPlanReview> = new Map();
+  private pendingAskQuestions: Map<string, PendingAskQuestion> = new Map();
+  /** Maps requestId -> sessionId for explicit ownership tracking */
+  private requestOwnership: Map<string, string> = new Map();
+  private currentSessionId: string | null = null;
 
-// Pending plan reviews (similar to pendingQuestions in craft-agent.ts)
-const pendingPlanReviews = new Map<string, PendingPlanReview>();
+  /**
+   * Get or create state for a session
+   */
+  getState(sessionId: string): CraftPlanModeState {
+    let state = this.states.get(sessionId);
+    if (!state) {
+      state = {
+        isActive: false,
+        userInitiatedPlanMode: false,
+        sessionId,
+        plan: null,
+        planFilePath: null,
+        taskDescription: null,
+      };
+      this.states.set(sessionId, state);
+    }
+    return state;
+  }
 
-// Pending user questions
-const pendingAskQuestions = new Map<string, PendingAskQuestion>();
+  /**
+   * Set state for a session (merges with existing state)
+   */
+  setState(sessionId: string, updates: Partial<CraftPlanModeState>): void {
+    const existing = this.getState(sessionId);
+    const newState = { ...existing, ...updates, sessionId };
+    this.states.set(sessionId, newState);
+  }
+
+  /**
+   * Get the current session's state (for tools that don't have explicit session context)
+   */
+  getCurrentState(): CraftPlanModeState {
+    if (this.currentSessionId) {
+      return this.getState(this.currentSessionId);
+    }
+    // Fallback for legacy code - return first active session or empty state
+    for (const state of this.states.values()) {
+      if (state.isActive) {
+        return state;
+      }
+    }
+    return {
+      isActive: false,
+      userInitiatedPlanMode: false,
+      sessionId: null,
+      plan: null,
+      planFilePath: null,
+      taskDescription: null,
+    };
+  }
+
+  /**
+   * Set the current active session (called when agent starts processing)
+   */
+  setCurrentSession(sessionId: string | null): void {
+    this.currentSessionId = sessionId;
+  }
+
+  /**
+   * Clean up a session's state and pending requests
+   */
+  cleanupSession(sessionId: string): void {
+    this.states.delete(sessionId);
+    // Clean up pending requests for this session using explicit ownership tracking
+    for (const [requestId, ownerId] of this.requestOwnership) {
+      if (ownerId === sessionId) {
+        this.pendingPlanReviews.delete(requestId);
+        this.pendingAskQuestions.delete(requestId);
+        this.requestOwnership.delete(requestId);
+      }
+    }
+  }
+
+  /**
+   * Add a pending plan review request
+   * @param requestId - Unique request ID
+   * @param pending - The pending request data
+   * @param sessionId - The owning session ID for cleanup tracking
+   */
+  addPendingPlanReview(requestId: string, pending: PendingPlanReview, sessionId: string): void {
+    this.pendingPlanReviews.set(requestId, pending);
+    this.requestOwnership.set(requestId, sessionId);
+  }
+
+  /**
+   * Get and remove a pending plan review
+   */
+  resolvePlanReview(requestId: string): PendingPlanReview | undefined {
+    const pending = this.pendingPlanReviews.get(requestId);
+    if (pending) {
+      this.pendingPlanReviews.delete(requestId);
+      this.requestOwnership.delete(requestId);
+    }
+    return pending;
+  }
+
+  /**
+   * Add a pending ask question request
+   * @param requestId - Unique request ID
+   * @param pending - The pending request data
+   * @param sessionId - The owning session ID for cleanup tracking
+   */
+  addPendingAskQuestion(requestId: string, pending: PendingAskQuestion, sessionId: string): void {
+    this.pendingAskQuestions.set(requestId, pending);
+    this.requestOwnership.set(requestId, sessionId);
+  }
+
+  /**
+   * Get and remove a pending ask question
+   */
+  resolveAskQuestion(requestId: string): PendingAskQuestion | undefined {
+    const pending = this.pendingAskQuestions.get(requestId);
+    if (pending) {
+      this.pendingAskQuestions.delete(requestId);
+      this.requestOwnership.delete(requestId);
+    }
+    return pending;
+  }
+}
+
+// Singleton manager instance
+export const planModeManager = new PlanModeManager();
 
 /**
  * Set the plan mode state (called by CraftAgent on init)
  */
 export function setPlanModeState(state: CraftPlanModeState): void {
-  planModeState = state;
+  if (state.sessionId) {
+    planModeManager.setCurrentSession(state.sessionId);
+    planModeManager.setState(state.sessionId, state);
+  }
 }
 
 /**
  * Get the current plan mode state (used by PreToolUse hook)
  */
 export function getPlanModeState(): CraftPlanModeState {
-  return planModeState;
+  return planModeManager.getCurrentState();
+}
+
+/**
+ * Get plan mode state for a specific session
+ */
+export function getPlanModeStateForSession(sessionId: string): CraftPlanModeState {
+  return planModeManager.getState(sessionId);
+}
+
+/**
+ * Set the current active session (called when agent starts processing a message)
+ * This ensures tools use the correct session's state and callbacks
+ */
+export function setCurrentPlanModeSession(sessionId: string | null): void {
+  planModeManager.setCurrentSession(sessionId);
 }
 
 /**
  * Enter Craft Agents plan mode programmatically (called by TUI for SHIFT+TAB)
- * Note: sessionId should already be set via setPlanModeState
+ * @param sessionId - Optional session ID to target. If not provided, uses current session.
  */
-export function enterCraftPlanMode(): void {
-  debug('[enterCraftPlanMode] Setting userInitiatedPlanMode=true');
-  planModeState.isActive = true;
-  planModeState.userInitiatedPlanMode = true;  // User initiated via SHIFT+TAB or /plan
-  planModeState.plan = null;
-  planModeState.planFilePath = null;
-  planModeState.taskDescription = null;
-  // sessionId is preserved (set by CraftAgent)
-  planModeState.onStateChange?.(planModeState);
-  debug(`[enterCraftPlanMode] State after: userInitiatedPlanMode=${planModeState.userInitiatedPlanMode}`);
+export function enterCraftPlanMode(sessionId?: string): void {
+  const currentState = planModeManager.getCurrentState();
+  const targetSessionId = sessionId || currentState.sessionId;
+  debug(`[enterCraftPlanMode] Setting userInitiatedPlanMode=true for session ${targetSessionId}`);
+
+  if (targetSessionId) {
+    const existingState = planModeManager.getState(targetSessionId);
+    planModeManager.setState(targetSessionId, {
+      isActive: true,
+      userInitiatedPlanMode: true,
+      plan: null,
+      planFilePath: null,
+      taskDescription: null,
+    });
+    // Call the session's onStateChange callback if it exists
+    const updatedState = planModeManager.getState(targetSessionId);
+    existingState.onStateChange?.(updatedState);
+  }
+
+  debug(`[enterCraftPlanMode] State after: userInitiatedPlanMode=true for session ${targetSessionId}`);
 }
 
 /**
  * Exit Craft Agents plan mode programmatically (called by TUI for SHIFT+TAB)
+ * @param sessionId - Optional session ID to target. If not provided, uses current session.
  */
-export function exitCraftPlanMode(): void {
-  planModeState.isActive = false;
-  planModeState.userInitiatedPlanMode = false;  // Reset
-  planModeState.plan = null;
-  // Keep planFilePath so it can be referenced after exit
-  planModeState.taskDescription = null;
-  planModeState.onStateChange?.(planModeState);
+export function exitCraftPlanMode(sessionId?: string): void {
+  const currentState = planModeManager.getCurrentState();
+  const targetSessionId = sessionId || currentState.sessionId;
+  debug(`[exitCraftPlanMode] Exiting plan mode for session ${targetSessionId}`);
+
+  if (targetSessionId) {
+    const existingState = planModeManager.getState(targetSessionId);
+    planModeManager.setState(targetSessionId, {
+      isActive: false,
+      userInitiatedPlanMode: false,
+      plan: null,
+      taskDescription: null,
+    });
+    // Call the session's onStateChange callback if it exists
+    const updatedState = planModeManager.getState(targetSessionId);
+    existingState.onStateChange?.(updatedState);
+  }
 }
 
 /**
  * Get the current plan file path (for reference after exit)
  */
 export function getCurrentPlanFilePath(): string | null {
-  return planModeState.planFilePath;
+  const state = getPlanModeState();
+  return state.planFilePath;
 }
 
 /**
  * Respond to a pending plan review (called by TUI when user makes a choice)
  */
 export function respondToPlanReview(requestId: string, result: PlanReviewResult): void {
-  const pending = pendingPlanReviews.get(requestId);
+  // Try the manager first (session-scoped)
+  const pending = planModeManager.resolvePlanReview(requestId);
   if (pending) {
     pending.resolve(result);
-    pendingPlanReviews.delete(requestId);
   }
 }
 
@@ -191,10 +336,10 @@ export function respondToPlanReview(requestId: string, result: PlanReviewResult)
  * Respond to a pending AskUserQuestion request (called by TUI when user answers)
  */
 export function respondToAskQuestion(requestId: string, answers: Record<string, string>): void {
-  const pending = pendingAskQuestions.get(requestId);
+  // Try the manager first (session-scoped)
+  const pending = planModeManager.resolveAskQuestion(requestId);
   if (pending) {
     pending.resolve(answers);
-    pendingAskQuestions.delete(requestId);
   }
 }
 
@@ -203,20 +348,24 @@ export function respondToAskQuestion(requestId: string, answers: Record<string, 
  * Returns a promise that resolves when user submits answers
  */
 async function requestUserQuestion(questions: PlanQuestion[]): Promise<Record<string, string>> {
+  const state = getPlanModeState();
   return new Promise((resolve) => {
-    const requestId = `ask-question-${Date.now()}`;
+    const sessionId = state.sessionId || 'unknown';
+    // Use UUID for collision-free request IDs
+    const requestId = `ask-question-${randomUUID()}`;
 
-    pendingAskQuestions.set(requestId, {
+    // Store in manager with explicit session ownership for cleanup
+    planModeManager.addPendingAskQuestion(requestId, {
       resolve,
       questions,
-    });
+    }, sessionId);
 
     // Emit event to TUI
-    if (planModeState.onAskUserQuestion) {
-      planModeState.onAskUserQuestion({ requestId, questions });
+    if (state.onAskUserQuestion) {
+      state.onAskUserQuestion({ requestId, questions });
     } else {
-      // No handler - return empty answers
-      pendingAskQuestions.delete(requestId);
+      // No handler - cancel the request (consistent with plan review behavior)
+      planModeManager.resolveAskQuestion(requestId);
       resolve({});
     }
   });
@@ -227,103 +376,35 @@ async function requestUserQuestion(questions: PlanQuestion[]): Promise<Record<st
  * Returns a promise that resolves when user approves, refines, or cancels
  */
 async function requestPlanReview(plan: Plan, questions: string[]): Promise<PlanReviewResult> {
+  const state = getPlanModeState();
   return new Promise((resolve) => {
-    const requestId = `plan-review-${Date.now()}`;
+    const sessionId = state.sessionId || 'unknown';
+    // Use UUID for collision-free request IDs
+    const requestId = `plan-review-${randomUUID()}`;
 
-    pendingPlanReviews.set(requestId, {
+    // Store in manager with explicit session ownership for cleanup
+    planModeManager.addPendingPlanReview(requestId, {
       resolve,
       plan,
       questions,
-    });
+    }, sessionId);
 
     // Emit event to TUI
-    if (planModeState.onPlanReviewRequest) {
-      planModeState.onPlanReviewRequest({ requestId, plan, questions });
+    if (state.onPlanReviewRequest) {
+      state.onPlanReviewRequest({ requestId, plan, questions });
     } else {
       // No handler - auto-cancel
-      pendingPlanReviews.delete(requestId);
+      planModeManager.resolvePlanReview(requestId);
       resolve({ action: 'cancel' });
     }
   });
 }
 
 // ============================================================
-// EnterCraftAgentsPlanMode Tool
+// EnterCraftAgentsPlanMode Tool - REMOVED
+// Plan mode is now entered via UI toggle (badge/SHIFT+TAB).
+// The agent is informed via user message injection instead.
 // ============================================================
-
-export const enterCraftAgentsPlanModeTool = tool(
-  'EnterCraftAgentsPlanMode',
-  `Enter planning mode for complex Craft Agent workflows. Use this when the task involves:
-- Multiple MCP operations (reading/creating Craft documents)
-- API integrations (fetching external data)
-- Multi-step workflows that need user approval before execution
-
-**CRITICAL: Plan mode is for PLANNING only - describe what you WILL do, don't execute it.**
-
-**FLOW:**
-1. Enter plan mode with this tool
-2. Use CraftAskUserQuestion to clarify requirements (MANDATORY - no plain text questions)
-3. Design your plan - describe WHAT you will do (don't call APIs, don't search)
-4. Call ExitCraftAgentsPlanMode with your plan
-
-**BLOCKED in plan mode:**
-- API calls (describe what you'll call in the plan)
-- Web search/fetch (describe what you'll search)
-- Write operations (wait for approval)
-
-**ALLOWED:**
-- CraftAskUserQuestion (required for questions)
-- Reading existing Craft documents
-- Local file exploration (Read, Glob, Grep)`,
-  {
-    task: z.string().describe('Brief description of the task being planned'),
-    context: z.string().optional().describe('Additional context about the workflow'),
-  },
-  async (args) => {
-    // Set plan mode active and store task description
-    planModeState.isActive = true;
-    planModeState.plan = null; // Clear any previous plan
-    planModeState.planFilePath = null; // Will be set when plan is saved
-    planModeState.taskDescription = args.task;
-    planModeState.onStateChange?.(planModeState);
-
-    // Get session-scoped plans directory
-    const plansDir = planModeState.sessionId ? getPlansDir(planModeState.sessionId) : '(session not initialized)';
-
-    return {
-      content: [{
-        type: 'text' as const,
-        text: `Entered Craft Agents plan mode for: "${args.task}"
-
-**Plan files are stored in:** ${plansDir}
-
-**CRITICAL: Plan mode is for PLANNING only - describe what you WILL do, don't execute it.**
-
-**NEXT STEP: Use CraftAskUserQuestion tool to clarify requirements.**
-Do NOT ask questions in plain text - use the interactive tool.
-
-**What to do:**
-1. Use CraftAskUserQuestion to understand what the user wants
-2. Design a plan describing WHAT you will do (steps, tools, etc.)
-3. Call ExitCraftAgentsPlanMode with your plan
-
-**BLOCKED (do NOT call these - just describe them in your plan):**
-- API calls
-- Creating/updating Craft documents
-- Bash commands, file writes
-
-**ALLOWED:**
-- CraftAskUserQuestion for clarification
-- Reading existing Craft documents
-- Local file exploration (Read, Glob, Grep)
-- Web search/fetch (use sparingly - quick lookups only)
-
-When your plan is ready, call ExitCraftAgentsPlanMode. The user will see a PlanReview UI to approve/refine/cancel.
-You can optionally set launchSwarm=true to execute steps in parallel with multiple agents.`,
-      }],
-    };
-  }
-);
 
 // ============================================================
 // ExitCraftAgentsPlanMode Tool
@@ -341,14 +422,7 @@ Call this when you have:
 The user will see an interactive review UI where they can:
 - **Approve** the plan to start execution
 - **Refine** by providing feedback (you'll receive their feedback and can adjust)
-- **Cancel** to discard the plan entirely
-
-**Swarm Mode (optional):**
-Set launchSwarm=true to execute plan steps in parallel using multiple agents.
-- Each step becomes a separate task assigned to a teammate agent
-- Steps execute concurrently for faster completion
-- Use teammateCount to control parallelism (default: 3, max: 5)
-- Best for steps that are independent and don't depend on each other`,
+- **Cancel** to discard the plan entirely`,
   {
     title: z.string().describe('Short title for the plan'),
     summary: z.string().describe('1-2 sentence summary of what the plan accomplishes'),
@@ -357,10 +431,12 @@ Set launchSwarm=true to execute plan steps in parallel using multiple agents.
       tools: z.array(z.string()).optional().describe('MCP/API tools this step will use'),
     })).describe('Ordered list of steps to execute'),
     questions: z.array(z.string()).optional().describe('Any remaining questions for the user'),
-    launchSwarm: z.boolean().optional().describe('If true, execute steps in parallel using multiple agents'),
-    teammateCount: z.number().min(1).max(5).optional().describe('Number of parallel agents (default: 3, max: 5)'),
   },
   async (args) => {
+    // Get current state from manager (session-scoped)
+    const state = getPlanModeState();
+    const sessionId = state.sessionId;
+
     // Build the plan object using our Plan type
     const plan: Plan = {
       id: randomUUID(),
@@ -378,9 +454,17 @@ Set launchSwarm=true to execute plan steps in parallel using multiple agents.
       updatedAt: Date.now(),
     };
 
+    // Helper to update state through manager
+    const updateState = (updates: Partial<CraftPlanModeState>) => {
+      if (sessionId) {
+        planModeManager.setState(sessionId, updates);
+        const updatedState = planModeManager.getState(sessionId);
+        state.onStateChange?.(updatedState);
+      }
+    };
+
     // Store the plan in state (file will be saved when user approves/saves in PlanReview)
-    planModeState.plan = plan;
-    planModeState.planFilePath = null;  // Will be set by PlanReview on save
+    updateState({ plan, planFilePath: null });
 
     // Request user review via UI
     const result = await requestPlanReview(plan, args.questions || []);
@@ -389,43 +473,11 @@ Set launchSwarm=true to execute plan steps in parallel using multiple agents.
     switch (result.action) {
       case 'approve': {
         // User approved - exit plan mode and proceed
-        planModeState.isActive = false;
-        planModeState.planFilePath = result.savedPath || null;
-        planModeState.onStateChange?.(planModeState);
+        updateState({
+          isActive: false,
+          planFilePath: result.savedPath || null,
+        });
 
-        // Check if swarm mode is requested
-        const launchSwarm = args.launchSwarm ?? false;
-        const teammateCount = Math.min(args.teammateCount ?? 3, 5);
-
-        if (launchSwarm && planModeState.onLaunchSwarm && result.savedPath) {
-          // Launch swarm for parallel execution
-          const swarmConfig: SwarmConfig = {
-            enabled: true,
-            teammateCount,
-          };
-
-          // Trigger swarm launch (non-blocking)
-          planModeState.onLaunchSwarm(swarmConfig, plan, result.savedPath).catch(() => {
-            // Swarm launch failed, continue with sequential execution
-          });
-
-          return {
-            content: [{
-              type: 'text' as const,
-              text: `Plan "${args.title}" has been APPROVED with SWARM MODE.
-
-**Plan saved to:** ${result.savedPath}
-
-Launching ${teammateCount} parallel agents to execute:
-${args.steps.map((s, i) => `${i + 1}. ${s.description}`).join('\n')}
-
-Each step will be assigned to a teammate agent for concurrent execution.
-You can monitor progress and coordinate the team.`,
-            }],
-          };
-        }
-
-        // Regular sequential execution
         return {
           content: [{
             type: 'text' as const,
@@ -444,8 +496,7 @@ Begin executing the plan steps in order.`,
       case 'refine':
         // User wants changes - stay in plan mode, return feedback
         // Plan mode stays active so Claude can make more read-only calls
-        planModeState.isActive = true;
-        planModeState.onStateChange?.(planModeState);
+        updateState({ isActive: true });
         return {
           content: [{
             type: 'text' as const,
@@ -463,10 +514,11 @@ Please adjust your plan based on this feedback. You can:
 
       case 'saveOnly': {
         // User saved plan but cancelled execution - exit plan mode
-        planModeState.isActive = false;
-        planModeState.plan = null;
-        planModeState.planFilePath = result.savedPath || null;
-        planModeState.onStateChange?.(planModeState);
+        updateState({
+          isActive: false,
+          plan: null,
+          planFilePath: result.savedPath || null,
+        });
         return {
           content: [{
             type: 'text' as const,
@@ -482,10 +534,11 @@ Use \`/plan list\` to see saved plans and \`/plan load\` to inject them into fut
 
       case 'cancel':
         // User cancelled - exit plan mode, don't save
-        planModeState.isActive = false;
-        planModeState.plan = null;
-        planModeState.planFilePath = null;
-        planModeState.onStateChange?.(planModeState);
+        updateState({
+          isActive: false,
+          plan: null,
+          planFilePath: null,
+        });
         return {
           content: [{
             type: 'text' as const,
@@ -499,11 +552,11 @@ The plan was not saved and will not be executed.`,
 );
 
 // ============================================================
-// CraftAskUserQuestion Tool
+// CraftAgentsPlanModeAskQuestion Tool
 // ============================================================
 
-export const craftAskUserQuestionTool = tool(
-  'CraftAskUserQuestion',
+export const craftAgentsPlanModeAskQuestionTool = tool(
+  'CraftAgentsPlanModeAskQuestion',
   `Ask the user questions during Craft Agents plan mode to clarify requirements.
 
 Use this tool when you need to:
@@ -560,7 +613,7 @@ The tool presents an interactive UI where users can:
 ${answersFormatted}
 
 Use these answers to inform your plan. You can:
-- Ask more questions with CraftAskUserQuestion if needed
+- Ask more questions with CraftAgentsPlanModeAskQuestion if needed
 - Read relevant data with allowed tools
 - Call ExitCraftAgentsPlanMode when your plan is ready`,
       }],
@@ -605,3 +658,43 @@ export function isReadOnlyApiMethod(method: string): boolean {
  * Tools that are always blocked in plan mode
  */
 export const BLOCKED_IN_PLAN_MODE = ['Bash', 'Write', 'Edit'];
+
+/**
+ * Generate plan mode context to inject into user messages.
+ * This is used instead of system prompt injection to preserve prompt caching.
+ *
+ * Returns null if not in plan mode.
+ */
+export function getPlanModeUserMessageContext(sessionId?: string): string | null {
+  const state = sessionId
+    ? planModeManager.getState(sessionId)
+    : planModeManager.getCurrentState();
+
+  if (!state.isActive) {
+    return null;
+  }
+
+  // Build the plan mode context message
+  const parts: string[] = [];
+
+  parts.push(`<plan_mode_active>`);
+  parts.push(`You are in **PLAN MODE**. The user activated this via the UI.`);
+  parts.push(``);
+  parts.push(`**Your task:**`);
+  parts.push(`1. Use \`CraftAgentsPlanModeAskQuestion\` to clarify requirements`);
+  parts.push(`2. Design a clear step-by-step plan`);
+  parts.push(`3. Call \`ExitCraftAgentsPlanMode\` to submit your plan for review`);
+  parts.push(``);
+  parts.push(`**Restrictions:** Write operations are blocked. Only read/explore to understand context.`);
+
+  // If there's an existing plan file, tell the agent where it is
+  if (state.planFilePath) {
+    parts.push(``);
+    parts.push(`**Current plan file:** \`${state.planFilePath}\``);
+    parts.push(`Use the Read tool to view the plan if needed.`);
+  }
+
+  parts.push(`</plan_mode_active>`);
+
+  return parts.join('\n');
+}

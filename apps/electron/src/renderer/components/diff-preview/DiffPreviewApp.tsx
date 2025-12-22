@@ -3,8 +3,10 @@ import { useState, useEffect, useCallback } from 'react'
 import { DiffEditor } from '@monaco-editor/react'
 import loader from '@monaco-editor/loader'
 import * as monaco from 'monaco-editor'
+import { PencilLine } from 'lucide-react'
 import { useTheme } from '@/context/ThemeContext'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { WindowHeader, WindowHeaderBadge, BADGE_CONFIGS } from '@/components/ui/window-header-badge'
 import type { DiffPreviewData } from '../../../shared/types'
 
 // Configure loader to use local monaco-editor package (not CDN)
@@ -110,35 +112,34 @@ export function DiffPreviewApp({ sessionId, diffId }: DiffPreviewAppProps) {
   const monacoBackground = resolvedMode === 'dark' ? '#1e1e1e' : '#ffffff'
   const toolbarBorder = resolvedMode === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)'
 
+  // Open file in default macOS app
+  const handleOpenFile = useCallback(() => {
+    if (data?.filePath) {
+      window.electronAPI?.openFile(data.filePath)
+    }
+  }, [data?.filePath])
+
+  const isDark = resolvedMode === 'dark'
+
   return (
     <TooltipProvider delayDuration={0}>
       <div className="h-screen w-screen flex flex-col" style={{ backgroundColor: monacoBackground }}>
-        {/* Toolbar / Title bar */}
-        <div
-          className="titlebar-drag-region h-[52px] shrink-0 flex items-center justify-between px-4"
-          style={{ borderBottom: `1px solid ${toolbarBorder}` }}
-        >
-          {/* Left side - space for traffic lights on macOS */}
-          <div className="w-[70px]" />
-
-          {/* Center - file path */}
-          <div className="flex items-center gap-2">
-            {data && (
-              <span
-                className="text-xs font-mono px-2 py-0.5 rounded"
-                style={{
-                  backgroundColor: resolvedMode === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)',
-                  color: resolvedMode === 'dark' ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.7)',
-                }}
-              >
-                {formatFilePath(data.filePath)}
-              </span>
-            )}
-          </div>
-
-          {/* Right side - placeholder for future actions */}
-          <div className="w-[70px]" />
-        </div>
+        <WindowHeader borderColor={toolbarBorder}>
+          {data && (
+            <>
+              <WindowHeaderBadge
+                Icon={PencilLine}
+                label="Edit"
+                {...BADGE_CONFIGS.edit}
+              />
+              <WindowHeaderBadge
+                label={formatFilePath(data.filePath)}
+                onClick={handleOpenFile}
+                {...(isDark ? BADGE_CONFIGS.neutralDark : BADGE_CONFIGS.neutralLight)}
+              />
+            </>
+          )}
+        </WindowHeader>
 
         {/* Error overlay */}
         {error && (
@@ -174,7 +175,7 @@ export function DiffPreviewApp({ sessionId, diffId }: DiffPreviewAppProps) {
                 padding: { top: 16, bottom: 16 },
 
                 // Diff-specific options
-                renderSideBySide: true,
+                renderSideBySide: false,
                 enableSplitViewResizing: true,
                 renderOverviewRuler: true,
 

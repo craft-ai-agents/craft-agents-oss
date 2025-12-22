@@ -332,6 +332,13 @@ export function FreeFormInput({
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    // Shift+Tab toggles plan mode
+    if (e.key === 'Tab' && e.shiftKey) {
+      e.preventDefault()
+      onPlanModeChange?.(!planModeEnabled)
+      return
+    }
+
     // Don't submit when slash command menu is open - let it handle the Enter key
     if (inlineSlash.isOpen) {
       if (e.key === 'Enter' || e.key === 'Tab' || e.key === 'ArrowUp' || e.key === 'ArrowDown') {

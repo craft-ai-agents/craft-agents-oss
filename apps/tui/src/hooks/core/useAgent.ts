@@ -5,7 +5,6 @@ import {
   type Question,
   type PlanReviewResult,
   type PlanQuestion,
-  type SwarmConfig,
   setUpdateAgentInstructionsContextProvider,
   setUpdateAgentInstructionsResultCallback,
   setUpdateAgentInstructionsProgressCallback,
@@ -142,7 +141,7 @@ export interface PendingPlanReviewRequest {
   questions: string[];
 }
 
-// Pending CraftAskUserQuestion request (from Craft Agents plan mode)
+// Pending CraftAgentsPlanModeAskQuestion request (from Craft Agents plan mode)
 export interface PendingCraftQuestionRequest {
   requestId: string;
   questions: PlanQuestion[];
@@ -648,23 +647,6 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
         debug('[SDK] Craft ask question requested:', request.requestId);
         setPendingCraftQuestion(request);
       };
-      // Set up swarm launch callback
-      agentRef.current.onLaunchSwarm = async (swarmConfig, plan, planFilePath) => {
-        debug('[SDK] Swarm launch requested:', swarmConfig.teammateCount, 'teammates for plan:', plan.title);
-        // For now, just log the swarm request - actual parallel agent spawning will be implemented
-        // when we have the Task tool infrastructure ready
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `swarm-${Date.now()}`,
-            type: 'info',
-            content: `🚀 Launching swarm with ${swarmConfig.teammateCount} parallel agents for plan: ${plan.title}\nPlan file: ${planFilePath}`,
-            timestamp: Date.now(),
-          },
-        ]);
-        // TODO: Implement actual parallel agent spawning using Task tool pattern
-        // For now, this serves as a placeholder that logs the intent
-      };
       // Sync current model to the newly created agent
       agentRef.current.setModel(config.model || DEFAULT_MODEL);
       // Restore SDK session ID from session if available (for conversation continuity)
@@ -729,7 +711,7 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
     }
   }, [pendingPlanReview]);
 
-  // Respond to Craft Agents CraftAskUserQuestion
+  // Respond to Craft Agents CraftAgentsPlanModeAskQuestion
   const respondToCraftQuestion = useCallback((answers: Record<string, string>) => {
     if (pendingCraftQuestion && agentRef.current) {
       debug('[respondToCraftQuestion] Responding with:', Object.keys(answers));

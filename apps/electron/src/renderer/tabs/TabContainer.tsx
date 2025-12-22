@@ -6,7 +6,7 @@
  */
 
 import * as React from 'react'
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import {
   ExternalLink,
   Copy,
@@ -184,7 +184,7 @@ interface TabHeaderActionsProps {
 function TabHeaderActions({ tab, onOpenRename }: TabHeaderActionsProps) {
   const { closeTab } = useCloseTab()
   const { closeTab: rawCloseTab } = useTabs()
-  const { sessions, onArchiveSession, onDeleteSession } = useChatContext()
+  const { sessions, onDeleteSession } = useChatContext()
 
   // Get session for chat tab
   const session = tab.type === 'chat'
@@ -211,11 +211,11 @@ function TabHeaderActions({ tab, onOpenRename }: TabHeaderActionsProps) {
     }
   }, [session, onOpenRename])
 
-  const handleArchive = React.useCallback(() => {
+  const handleComplete = React.useCallback(async () => {
     if (session) {
-      onArchiveSession(session.id)
+      await window.electronAPI.setTodoState(session.id, 'done')
     }
-  }, [session, onArchiveSession])
+  }, [session])
 
   const handleDelete = React.useCallback(() => {
     if (session) {
@@ -258,10 +258,10 @@ function TabHeaderActions({ tab, onOpenRename }: TabHeaderActionsProps) {
               Rename
             </StyledDropdownMenuItem>
             <StyledDropdownMenuSeparator />
-            {!session.isArchived && (
-              <StyledDropdownMenuItem onClick={handleArchive}>
+            {session.todoState !== 'done' && session.todoState !== 'cancelled' && (
+              <StyledDropdownMenuItem onClick={handleComplete}>
                 <Archive />
-                Archive
+                Mark Done
               </StyledDropdownMenuItem>
             )}
             <StyledDropdownMenuItem onClick={handleDelete} variant="destructive">
@@ -322,6 +322,17 @@ interface RenameDialogProps {
 function RenameDialog({ open, onOpenChange, sessionId, name, onNameChange }: RenameDialogProps) {
   const { onRenameSession } = useChatContext()
   const { updateChatTabLabel } = useTabs()
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  // Focus input after dialog opens (avoids Radix Dialog focus race condition)
+  useEffect(() => {
+    if (open) {
+      const timer = setTimeout(() => {
+        inputRef.current?.focus()
+      }, 0)
+      return () => clearTimeout(timer)
+    }
+  }, [open])
 
   const handleSubmit = () => {
     if (sessionId && name.trim()) {
@@ -340,6 +351,7 @@ function RenameDialog({ open, onOpenChange, sessionId, name, onNameChange }: Ren
         </DialogHeader>
         <div className="py-4">
           <Input
+            ref={inputRef}
             value={name}
             onChange={(e) => onNameChange(e.target.value)}
             placeholder="Enter a name..."
@@ -348,7 +360,6 @@ function RenameDialog({ open, onOpenChange, sessionId, name, onNameChange }: Ren
                 handleSubmit()
               }
             }}
-            autoFocus
           />
         </div>
         <DialogFooter>

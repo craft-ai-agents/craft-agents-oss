@@ -2,7 +2,7 @@ import * as React from "react"
 import { useRef, useState, useEffect, useCallback } from "react"
 import { motion, AnimatePresence } from "motion/react"
 import {
-  Archive,
+  CheckCircle2,
   Inbox,
   Settings,
   ChevronRight,
@@ -23,7 +23,6 @@ import { ServiceLogo } from "@/components/ui/service-logo"
 import { AppMenu } from "../AppMenu"
 import { PanelLeftRounded } from "../icons/PanelLeftRounded"
 import { SquarePenRounded } from "../icons/SquarePenRounded"
-
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -56,7 +55,7 @@ import { useFocusZone, useGlobalShortcuts } from "@/hooks/keyboard"
 import { useFocusContext } from "@/context/FocusContext"
 import { getSessionTitle } from "@/utils/session"
 import { closeTabWithCleanup } from "@/utils/closeTabWithCleanup"
-import type { Session, Workspace, SubAgentMetadata, FileAttachment, PermissionRequest } from "../../../shared/types"
+import type { Session, Workspace, SubAgentMetadata, FileAttachment, PermissionRequest, TodoState, PlanReviewRequest, PlanReviewResponse, AskQuestionRequest, AskQuestionResponse } from "../../../shared/types"
 
 type ViewMode = 'inbox' | 'archive' | 'flagged' | 'agent'
 
@@ -76,11 +75,12 @@ interface ChatProps {
   // Callbacks
   onSelectWorkspace: (id: string) => void
   onCreateSession: (workspaceId: string, agentId?: string) => Promise<Session>
-  onDeleteSession: (sessionId: string) => void
-  onArchiveSession: (sessionId: string) => void
-  onUnarchiveSession: (sessionId: string) => void
+  onDeleteSession: (sessionId: string, skipConfirmation?: boolean) => Promise<boolean>
   onFlagSession: (sessionId: string) => void
   onUnflagSession: (sessionId: string) => void
+  onMarkSessionRead: (sessionId: string) => void
+  onMarkSessionUnread: (sessionId: string) => void
+  onTodoStateChange: (sessionId: string, state: TodoState) => void
   onRenameSession: (sessionId: string, name: string) => void
   onSendMessage: (sessionId: string, message: string, attachments?: FileAttachment[]) => void
   onOpenFile: (path: string) => void
@@ -94,6 +94,11 @@ interface ChatProps {
   // Permission handling (queue to support multiple concurrent requests)
   pendingPermissions?: Map<string, PermissionRequest[]>
   onRespondToPermission?: (sessionId: string, requestId: string, allowed: boolean, alwaysAllow: boolean) => void
+  // Plan mode handling
+  pendingPlanReviews?: Map<string, PlanReviewRequest>
+  onRespondToPlanReview?: (sessionId: string, requestId: string, response: PlanReviewResponse) => void
+  pendingAskQuestions?: Map<string, AskQuestionRequest>
+  onRespondToAskQuestion?: (sessionId: string, requestId: string, answers: AskQuestionResponse) => void
   // Advanced options (all session-scoped)
   ultrathinkSessions?: Set<string>
   onUltrathinkChange?: (sessionId: string, enabled: boolean) => void
@@ -451,10 +456,11 @@ export function Chat({
   onSelectWorkspace,
   onCreateSession,
   onDeleteSession,
-  onArchiveSession,
-  onUnarchiveSession,
   onFlagSession,
   onUnflagSession,
+  onMarkSessionRead,
+  onMarkSessionUnread,
+  onTodoStateChange,
   onRenameSession,
   onSendMessage,
   onOpenFile,
@@ -467,6 +473,11 @@ export function Chat({
   onAddWorkspace,
   pendingPermissions,
   onRespondToPermission,
+  // Plan mode
+  pendingPlanReviews,
+  onRespondToPlanReview,
+  pendingAskQuestions,
+  onRespondToAskQuestion,
   // Advanced options (all session-scoped)
   ultrathinkSessions,
   onUltrathinkChange,
@@ -576,9 +587,9 @@ export function Chat({
       { key: '1', cmd: true, action: () => focusZone('sidebar') },
       { key: '2', cmd: true, action: () => focusZone('session-list') },
       { key: '3', cmd: true, action: () => focusZone('chat') },
-      // Tab navigation between zones
+      // Tab navigation between zones (disabled when in textarea - Shift+Tab toggles plan mode there)
       { key: 'Tab', action: focusNextZone, when: () => !document.querySelector('[role="dialog"]') },
-      { key: 'Tab', shift: true, action: focusPreviousZone, when: () => !document.querySelector('[role="dialog"]') },
+      { key: 'Tab', shift: true, action: focusPreviousZone, when: () => !document.querySelector('[role="dialog"]') && document.activeElement?.tagName !== 'TEXTAREA' },
       // Panel tab navigation
       { key: '[', cmd: true, action: previousTab },
       { key: ']', cmd: true, action: nextTab },
@@ -657,26 +668,30 @@ export function Chat({
     ? sessions.filter(s => s.workspaceId === activeWorkspaceId)
     : sessions
 
-  // Count sessions by archive status (scoped to workspace)
-  const inboxCount = workspaceSessions.filter(s => !s.isArchived).length
-  const archiveCount = workspaceSessions.filter(s => s.isArchived).length
-  const flaggedCount = workspaceSessions.filter(s => s.isFlagged && !s.isArchived).length
+  // Count sessions by todo state (scoped to workspace)
+  // Inbox = not done/cancelled, Done = todoState === 'done' or 'cancelled'
+  const isDone = (s: Session) => s.todoState === 'done' || s.todoState === 'cancelled'
+  const inboxCount = workspaceSessions.filter(s => !isDone(s)).length
+  const archiveCount = workspaceSessions.filter(s => isDone(s)).length
+  // Flagged can be both done and not done
+  const flaggedCount = workspaceSessions.filter(s => s.isFlagged).length
 
   // Get conversation count per agent (scoped to workspace)
   const getConversationCount = React.useCallback((agentId: string) => {
-    return workspaceSessions.filter(s => s.agentId === agentId && !s.isArchived).length
+    return workspaceSessions.filter(s => s.agentId === agentId && !isDone(s)).length
   }, [workspaceSessions])
 
   // Filter sessions based on view mode and agent selection
   const filteredSessions = React.useMemo(() => {
     if (viewMode === 'inbox') {
-      return workspaceSessions.filter(s => !s.isArchived)
+      return workspaceSessions.filter(s => !isDone(s))
     } else if (viewMode === 'archive') {
-      return workspaceSessions.filter(s => s.isArchived)
+      return workspaceSessions.filter(s => isDone(s))
     } else if (viewMode === 'flagged') {
-      return workspaceSessions.filter(s => s.isFlagged && !s.isArchived)
+      // Flagged view shows both done and not done flagged items
+      return workspaceSessions.filter(s => s.isFlagged)
     } else if (viewMode === 'agent' && selectedAgentId) {
-      return workspaceSessions.filter(s => s.agentId === selectedAgentId && !s.isArchived)
+      return workspaceSessions.filter(s => s.agentId === selectedAgentId && !isDone(s))
     }
     return workspaceSessions
   }, [workspaceSessions, viewMode, selectedAgentId])
@@ -784,12 +799,12 @@ export function Chat({
 
   // Wrap delete handler to clear selection when deleting the currently selected session
   // This prevents stale state during re-renders that could cause crashes
-  const handleDeleteSession = useCallback((sessionId: string) => {
+  const handleDeleteSession = useCallback(async (sessionId: string, skipConfirmation?: boolean): Promise<boolean> => {
     // Clear selection first if this is the selected session
     if (session.selected === sessionId) {
       setSession({ selected: null })
     }
-    onDeleteSession(sessionId)
+    return onDeleteSession(sessionId, skipConfirmation)
   }, [session.selected, setSession, onDeleteSession])
 
   // Create ChatContext value for tab panels
@@ -800,6 +815,8 @@ export function Chat({
     activeWorkspaceId,
     currentModel,
     pendingPermissions: pendingPermissions || new Map(),
+    pendingPlanReviews: pendingPlanReviews || new Map(),
+    pendingAskQuestions: pendingAskQuestions || new Map(),
     sessionDrafts: sessionDrafts || new Map(),
     // Advanced options (all session-scoped)
     ultrathinkSessions: ultrathinkSessions || new Set(),
@@ -808,11 +825,13 @@ export function Chat({
     onCreateSession,
     onSendMessage,
     onRenameSession,
-    onArchiveSession,
     onFlagSession,
     onUnflagSession,
+    onMarkSessionRead,
     onDeleteSession: handleDeleteSession,
     onRespondToPermission,
+    onRespondToPlanReview,
+    onRespondToAskQuestion,
     onOpenFile,
     onOpenUrl,
     onModelChange,
@@ -829,17 +848,21 @@ export function Chat({
     activeWorkspaceId,
     currentModel,
     pendingPermissions,
+    pendingPlanReviews,
+    pendingAskQuestions,
     ultrathinkSessions,
     skipPermissionsSessions,
     planModeSessions,
     onCreateSession,
     onSendMessage,
     onRenameSession,
-    onArchiveSession,
     onFlagSession,
     onUnflagSession,
+    onMarkSessionRead,
     handleDeleteSession,
     onRespondToPermission,
+    onRespondToPlanReview,
+    onRespondToAskQuestion,
     onOpenFile,
     onOpenUrl,
     onModelChange,
@@ -1258,7 +1281,8 @@ export function Chat({
   }, [sidebarFocused, focusedSidebarItemId, unifiedSidebarItems])
 
   // Get title based on view mode
-  const listTitle = viewMode === 'archive' ? 'Archive' :
+  const listTitle = viewMode === 'archive' ? 'Done' :
+                    viewMode === 'flagged' ? 'Flagged' :
                     viewMode === 'agent' && selectedAgentId ?
                       (agents.find(a => a.id === selectedAgentId)?.displayName || agents.find(a => a.id === selectedAgentId)?.name || 'Inbox') :
                       'Inbox'
@@ -1366,9 +1390,9 @@ export function Chat({
                     },
                     {
                       id: "nav:archive",
-                      title: "Archive",
+                      title: "Done",
                       label: String(archiveCount),
-                      icon: Archive,
+                      icon: CheckCircle2,
                       variant: viewMode === 'archive' ? "default" : "ghost",
                       onClick: handleArchiveClick,
                     },
@@ -1543,13 +1567,15 @@ export function Chat({
               onAction={handleBannerAction}
             />
             {/* SessionList: Scrollable list of session cards */}
+            {/* Key on viewMode forces full remount when switching views, skipping animations */}
             <SessionList
+              key={viewMode}
               items={filteredSessions}
               onDelete={handleDeleteSession}
-              onArchive={viewMode !== 'archive' ? onArchiveSession : undefined}
-              onUnarchive={onUnarchiveSession}
               onFlag={onFlagSession}
               onUnflag={onUnflagSession}
+              onMarkUnread={onMarkSessionUnread}
+              onTodoStateChange={onTodoStateChange}
               onRename={onRenameSession}
               onFocusChatInput={focusChatInput}
               onSessionSelect={(selectedSession, { forceNewTab }) => {
@@ -1563,6 +1589,16 @@ export function Chat({
                   )
                 }
               }}
+              onNavigateToView={(view) => {
+                if (view === 'completed') {
+                  setViewMode('archive')
+                } else if (view === 'inbox') {
+                  setViewMode('inbox')
+                } else if (view === 'flagged') {
+                  setViewMode('flagged')
+                }
+              }}
+              planModeSessions={planModeSessions}
             />
           </div>
 

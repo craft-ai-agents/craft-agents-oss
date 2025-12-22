@@ -6,6 +6,7 @@ import * as monaco from 'monaco-editor'
 import { BookOpen, PenLine } from 'lucide-react'
 import { useTheme } from '@/context/ThemeContext'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { WindowHeader, WindowHeaderBadge, BADGE_CONFIGS } from '@/components/ui/window-header-badge'
 import type { CodePreviewData } from '../../../shared/types'
 
 // Configure loader to use local monaco-editor package (not CDN)
@@ -114,63 +115,46 @@ export function CodePreviewApp({ sessionId, previewId }: CodePreviewAppProps) {
   const monacoBackground = resolvedMode === 'dark' ? '#1e1e1e' : '#ffffff'
   const toolbarBorder = resolvedMode === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)'
 
-  // Mode indicator styling
+  // Mode badge config
   const modeConfig = data?.mode === 'write'
-    ? { Icon: PenLine, label: 'Write', bgColor: 'rgba(34, 197, 94, 0.15)', textColor: 'rgb(34, 197, 94)' }
-    : { Icon: BookOpen, label: 'Read', bgColor: 'rgba(59, 130, 246, 0.15)', textColor: 'rgb(59, 130, 246)' }
+    ? { Icon: PenLine, label: 'Write', ...BADGE_CONFIGS.write }
+    : { Icon: BookOpen, label: 'Read', ...BADGE_CONFIGS.read }
+
+  // Open file in default macOS app
+  const handleOpenFile = useCallback(() => {
+    if (data?.filePath) {
+      window.electronAPI?.openFile(data.filePath)
+    }
+  }, [data?.filePath])
+
+  const isDark = resolvedMode === 'dark'
 
   return (
     <TooltipProvider delayDuration={0}>
       <div className="h-screen w-screen flex flex-col" style={{ backgroundColor: monacoBackground }}>
-        {/* Toolbar / Title bar */}
-        <div
-          className="titlebar-drag-region h-[52px] shrink-0 flex items-center justify-between px-4"
-          style={{ borderBottom: `1px solid ${toolbarBorder}` }}
-        >
-          {/* Left side - space for traffic lights on macOS */}
-          <div className="w-[70px]" />
-
-          {/* Center - file path + mode badge + line info */}
-          <div className="flex items-center gap-3">
-            {data && (
-              <>
-                {/* Mode badge */}
-                <div
-                  className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium"
-                  style={{ backgroundColor: modeConfig.bgColor, color: modeConfig.textColor }}
-                >
-                  <modeConfig.Icon className="w-3.5 h-3.5" />
-                  {modeConfig.label}
-                </div>
-                {/* File path */}
-                <span
-                  className="text-xs font-mono px-2 py-0.5 rounded"
-                  style={{
-                    backgroundColor: resolvedMode === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)',
-                    color: resolvedMode === 'dark' ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.7)',
-                  }}
-                >
-                  {formatFilePath(data.filePath)}
-                </span>
-                {/* Line info badge (for partial reads) */}
-                {data.startLine !== undefined && data.totalLines !== undefined && (
-                  <span
-                    className="text-xs px-2 py-0.5 rounded"
-                    style={{
-                      backgroundColor: resolvedMode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
-                      color: resolvedMode === 'dark' ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)',
-                    }}
-                  >
-                    Lines {data.startLine}–{data.startLine + (data.numLines || 0) - 1} of {data.totalLines}
-                  </span>
-                )}
-              </>
-            )}
-          </div>
-
-          {/* Right side - placeholder for future actions */}
-          <div className="w-[70px]" />
-        </div>
+        <WindowHeader borderColor={toolbarBorder}>
+          {data && (
+            <>
+              <WindowHeaderBadge
+                Icon={modeConfig.Icon}
+                label={modeConfig.label}
+                bgColor={modeConfig.bgColor}
+                textColor={modeConfig.textColor}
+              />
+              <WindowHeaderBadge
+                label={formatFilePath(data.filePath)}
+                onClick={handleOpenFile}
+                {...(isDark ? BADGE_CONFIGS.neutralDark : BADGE_CONFIGS.neutralLight)}
+              />
+              {data.startLine !== undefined && data.totalLines !== undefined && (
+                <WindowHeaderBadge
+                  label={`Lines ${data.startLine}–${data.startLine + (data.numLines || 0) - 1} of ${data.totalLines}`}
+                  {...(isDark ? BADGE_CONFIGS.dimmedDark : BADGE_CONFIGS.dimmedLight)}
+                />
+              )}
+            </>
+          )}
+        </WindowHeader>
 
         {/* Error overlay */}
         {error && (

@@ -164,7 +164,7 @@ craft --print "Summarize document" --output-format stream-json
 
 ### Plan Mode Disabled
 
-In headless mode, plan mode tools (`EnterCraftAgentsPlanMode`, `ExitCraftAgentsPlanMode`, `CraftAskUserQuestion`) are automatically disabled. The agent executes tasks directly without planning phases, which is appropriate for non-interactive automation.
+In headless mode, plan mode tools (`ExitCraftAgentsPlanMode`, `CraftAgentsPlanModeAskQuestion`) are automatically disabled. The agent executes tasks directly without planning phases, which is appropriate for non-interactive automation.
 
 ### Session Management
 
@@ -204,7 +204,7 @@ Enter Plan Mode (SHIFT+TAB) → Clarify Requirements → Design Plan → User Re
 ```
 
 1. **Enter Plan Mode**: Press `SHIFT+TAB` or type `/plan start`
-2. **Clarify Requirements**: Agent uses `CraftAskUserQuestion` for interactive clarification
+2. **Clarify Requirements**: Agent uses `CraftAgentsPlanModeAskQuestion` for interactive clarification
 3. **Design Plan**: Agent describes steps without executing them
 4. **User Review**: Approve, refine, or cancel via PlanReview UI
 5. **Execute**: After approval, agent executes the plan
@@ -213,10 +213,9 @@ Enter Plan Mode (SHIFT+TAB) → Clarify Requirements → Design Plan → User Re
 
 | Blocked | Allowed |
 |---------|---------|
-| API calls (`api_*`) | `CraftAskUserQuestion` |
-| `Bash`, `Write`, `Edit` | `Read`, `Glob`, `Grep` |
+| API calls (`api_*`) | `CraftAgentsPlanModeAskQuestion` |
+| `Bash`, `Write`, `Edit` | `Read`, `Glob`, `Grep`, `Task` |
 | Craft MCP write tools | `WebSearch`, `WebFetch` (sparingly) |
-| `Task`, `TaskOutput` | Craft MCP read tools |
 
 ### Usage
 

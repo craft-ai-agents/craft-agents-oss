@@ -10,7 +10,7 @@ import { AlertCircle, Bot } from 'lucide-react'
 import { ChatDisplay } from '@/components/chat/ChatDisplay'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/loading-indicator'
-import { useChatContext, usePendingPermission } from '@/context/ChatContext'
+import { useChatContext, usePendingPermission, usePendingPlanReview, usePendingAskQuestion } from '@/context/ChatContext'
 import { useAgentState } from '../../hooks/useAgentState'
 import type { Tab, ChatTab } from '../types'
 import { useTabs } from '../useTabs'
@@ -29,6 +29,9 @@ export default function ChatTabPanel({ tab }: ChatTabPanelProps) {
     onOpenUrl,
     onModelChange,
     onRespondToPermission,
+    onRespondToPlanReview,
+    onRespondToAskQuestion,
+    onMarkSessionRead,
     textareaRef,
     // Advanced options (all session-scoped)
     ultrathinkSessions,
@@ -44,8 +47,19 @@ export default function ChatTabPanel({ tab }: ChatTabPanelProps) {
 
   const { closeTab, openAgentSetupTab } = useTabs()
 
-  // Find the session for this tab - check early to avoid unnecessary hook calls
-  const session = sessions.find((s) => s.id === chatTab.sessionId) || null
+  // Memoize session lookup to prevent unnecessary re-renders of ChatDisplay
+  // Only returns a new reference when this specific session's data changes
+  const session = React.useMemo(() => {
+    return sessions.find((s) => s.id === chatTab.sessionId) || null
+  }, [sessions, chatTab.sessionId])
+
+  // Mark session as read when displayed (not processing)
+  // This handles all navigation methods: click, keyboard, tab switch
+  React.useEffect(() => {
+    if (session && !session.isProcessing) {
+      onMarkSessionRead(session.id)
+    }
+  }, [session?.id, session?.isProcessing, onMarkSessionRead])
 
   // Get agent status from main process (source of truth)
   // Agent-scoped: keyed by (workspaceId, agentId), not sessionId
@@ -57,6 +71,10 @@ export default function ChatTabPanel({ tab }: ChatTabPanelProps) {
 
   // Get pending permission for this session
   const pendingPermission = usePendingPermission(chatTab.sessionId)
+
+  // Get pending plan review and ask question for this session
+  const pendingPlanReview = usePendingPlanReview(chatTab.sessionId)
+  const pendingAskQuestion = usePendingAskQuestion(chatTab.sessionId)
 
   // Get draft input value for this session
   const inputValue = sessionDrafts.get(chatTab.sessionId) ?? ''
@@ -170,6 +188,10 @@ export default function ChatTabPanel({ tab }: ChatTabPanelProps) {
       textareaRef={textareaRef}
       pendingPermission={pendingPermission}
       onRespondToPermission={onRespondToPermission}
+      pendingPlanReview={pendingPlanReview}
+      onRespondToPlanReview={onRespondToPlanReview}
+      pendingAskQuestion={pendingAskQuestion}
+      onRespondToAskQuestion={onRespondToAskQuestion}
       agentSetupState={agentSetupState}
       // Advanced options (all session-scoped)
       ultrathinkEnabled={ultrathinkSessions.has(chatTab.sessionId)}

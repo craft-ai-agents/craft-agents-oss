@@ -1,6 +1,5 @@
 import { formatPreferencesForPrompt } from '../config/preferences.ts';
 import type { SubAgentDefinition } from '../agents/types.ts';
-import type { Plan } from '../agents/plan-types.ts';
 import { debug } from '../utils/debug.ts';
 
 /**
@@ -23,19 +22,19 @@ export function getDateTimeContext(): string {
 
 /**
  * Get the full system prompt with current date/time and user preferences
- * Optionally includes active sub-agent context, temporary clarifications, and plan context
+ * Optionally includes active sub-agent context and temporary clarifications.
+ *
+ * Note: Plan mode context is now injected via user messages instead of system prompt
+ * to preserve prompt caching. The agent reads the plan file directly when needed.
  */
 export function getSystemPrompt(
   activeAgent?: SubAgentDefinition,
-  temporaryClarifications?: string,
-  activePlan?: Plan
+  temporaryClarifications?: string
 ): string {
   const preferences = formatPreferencesForPrompt();
   const agentContext = activeAgent ? formatAgentContext(activeAgent, temporaryClarifications) : '';
-  const planContext = activePlan ? formatPlanContext(activePlan) : '';
 
   debug('[getSystemPrompt] activeAgent:', activeAgent?.name || 'none');
-  debug('[getSystemPrompt] activePlan:', activePlan?.title || 'none');
   debug('[getSystemPrompt] instructions length:', activeAgent?.instructions?.length || 0);
   if (activeAgent?.instructions) {
     debug('[getSystemPrompt] instructions:', activeAgent.instructions);
@@ -43,11 +42,11 @@ export function getSystemPrompt(
 
   // Note: Date/time context is now added to user messages instead of system prompt
   // to enable prompt caching. The system prompt stays static and cacheable.
-  const fullPrompt = `${preferences}${CRAFT_ASSISTANT_SYSTEM_PROMPT}${agentContext}${planContext}`;
+  // Plan mode context is also in user messages for the same reason.
+  const fullPrompt = `${preferences}${CRAFT_ASSISTANT_SYSTEM_PROMPT}${agentContext}`;
 
   debug('[getSystemPrompt] full prompt length:', fullPrompt.length);
   debug('[getSystemPrompt] agentContext length:', agentContext.length);
-  debug('[getSystemPrompt] planContext length:', planContext.length);
 
   return fullPrompt;
 }
@@ -156,115 +155,6 @@ User can type \`@main\` or \`/agent clear\` to return to default Craft Assistant
 `;
 }
 
-/**
- * Format plan context for injection into system prompt
- * Shows the current plan state and guides execution behavior
- */
-function formatPlanContext(plan: Plan): string {
-  const stepsFormatted = plan.steps.length > 0
-    ? plan.steps
-        .map((step, index) => {
-          const statusIcon = step.status === 'completed' ? '[x]' :
-                             step.status === 'in_progress' ? '[>]' :
-                             step.status === 'skipped' ? '[-]' : '[ ]';
-          const filesInfo = step.files?.length ? ` (${step.files.join(', ')})` : '';
-          return `${index + 1}. ${statusIcon} ${step.description}${filesInfo}`;
-        })
-        .join('\n')
-    : '(No steps yet - create the plan)';
-
-  const refinementInfo = plan.refinementHistory?.length
-    ? `\n\n**Refinement History (${plan.refinementRound} rounds):**\n${
-        plan.refinementHistory.map(entry =>
-          `- Round ${entry.round}: ${entry.feedback.substring(0, 100)}${entry.feedback.length > 100 ? '...' : ''}`
-        ).join('\n')
-      }`
-    : '';
-
-  const stateGuidance = getPlanStateGuidance(plan.state);
-
-  const titleDisplay = plan.title || '(Awaiting task description from user)';
-  const contextDisplay = plan.context || '(User will describe the task in their next message)';
-
-  return `
-
----
-## 🎯 ACTIVE PLAN MODE
-
-**Plan:** ${titleDisplay}
-**State:** ${plan.state.toUpperCase()}
-**Task:** ${contextDisplay}
-
-### Current Steps
-${stepsFormatted}
-${refinementInfo}
-
-${stateGuidance}
----
-`;
-}
-
-/**
- * Get guidance text based on plan state
- */
-function getPlanStateGuidance(state: Plan['state']): string {
-  switch (state) {
-    case 'creating':
-      return `### Mode: PLANNING (ACTIVE)
-
-You are in Craft Agent's planning mode.
-
-**FLOW:**
-1. Use \`CraftAskUserQuestion\` to clarify requirements (MANDATORY for all questions)
-2. Design a clear step-by-step plan describing WHAT you will do
-3. Call \`ExitCraftAgentsPlanMode\` with your structured plan
-4. User will see an interactive PlanReview UI to approve/refine/cancel
-
-**TOOL RESTRICTIONS:**
-- \`CraftAskUserQuestion\` - REQUIRED for all clarification questions
-- \`Read\`, \`Glob\`, \`Grep\` - allowed to understand the task
-- Read-only MCP operations - allowed to gather context
-- \`ExitCraftAgentsPlanMode\` - call when your plan is ready
-- All write operations are BLOCKED until plan is approved
-
-**⚠️ IMPORTANT:**
-- Do NOT ask questions in plain text - use CraftAskUserQuestion
-- Do NOT execute actions - just describe what you WILL do
-- The user will approve/refine/cancel via the interactive UI`;
-
-    case 'refining':
-      return `### Mode: REFINING
-The user is providing feedback on the plan. Incorporate their suggestions and update the plan.
-- Address any concerns or questions
-- Adjust steps as needed
-- Present the refined plan for approval`;
-
-    case 'ready':
-      return `### Mode: READY TO EXECUTE
-The plan has been approved. Wait for user confirmation to begin execution.`;
-
-    case 'executing':
-      return `### Mode: EXECUTING
-Execute the plan steps in order. For each step:
-- Mark it as in_progress when starting
-- Complete the work described
-- Mark it as completed when done
-- Move to the next step
-- Report progress to the user`;
-
-    case 'completed':
-      return `### Mode: COMPLETED
-The plan has been fully executed. Summarize what was accomplished.`;
-
-    case 'cancelled':
-      return `### Mode: CANCELLED
-The plan was cancelled by the user. Resume normal operation.`;
-
-    default:
-      return '';
-  }
-}
-
 export const CRAFT_ASSISTANT_SYSTEM_PROMPT = `
 You are a Craft Document Assistant - an AI helper for managing Craft documents through a terminal interface. 
 Your goal is to assist the user in their task - sometimes that will be related explicitly to Craft documents, and sometimes it will be general questions or tasks. 
@@ -370,33 +260,24 @@ You have access to Craft MCP tools for reading, writing, and organizing document
 
 ## Planning Mode (Craft Agents)
 
-For complex, multi-step tasks involving Craft documents or API integrations, use the Craft Agents planning mode.
+For complex, multi-step tasks, the user can activate planning mode via the UI (badge toggle or SHIFT+TAB) or \`/plan\` command.
 
-### When to Use Plan Mode
+**IMPORTANT: You do NOT activate plan mode yourself.** The user controls when plan mode is active. You will know you're in plan mode when you see the "ACTIVE PLAN MODE" section in your system context.
 
-Use \`EnterCraftAgentsPlanMode\` when the task involves:
-- Multiple MCP operations (reading/creating Craft documents)
-- API integrations (fetching external data)
-- Multi-step workflows that need user approval before execution
+### When Plan Mode is Active
 
-### Plan Mode Flow
+When the user has activated plan mode, you will see a system context section indicating plan mode is active. In this mode:
 
-**CRITICAL: Follow this exact flow:**
-
-1. **Enter Plan Mode**: Call \`EnterCraftAgentsPlanMode\` with a task description
-
-2. **Clarify Requirements FIRST** (before any planning):
-   - **MUST USE \`CraftAskUserQuestion\` tool** for ALL clarification questions
+1. **Clarify Requirements FIRST**:
+   - **MUST USE \`CraftAgentsPlanModeAskQuestion\` tool** for ALL clarification questions
    - Do NOT ask questions in plain text - use the interactive tool
    - Ask about: preferences, constraints, budget, timeline, specific requirements
-   - The tool shows an interactive UI where users select options
 
-3. **Design Your Plan**: Create a clear step-by-step plan describing WHAT you will do
+2. **Design Your Plan**: Create a clear step-by-step plan describing WHAT you will do
    - DO NOT execute the steps - just describe them
    - DO NOT call APIs, web search, or fetch data - just plan what to call
-   - DO NOT search for flights, hotels, etc. - just describe THAT you will search
 
-4. **Submit for Review**: Call \`ExitCraftAgentsPlanMode\` with:
+3. **Submit for Review**: Call \`ExitCraftAgentsPlanMode\` with:
    - \`title\`: Short plan title
    - \`summary\`: 1-2 sentence summary
    - \`steps\`: Array of steps with descriptions and tools to use
@@ -413,7 +294,7 @@ Use \`EnterCraftAgentsPlanMode\` when the task involves:
 
 | Operation | Allowed? | Notes |
 |-----------|----------|-------|
-| Ask user questions | ✅ | **CraftAskUserQuestion tool (REQUIRED)** |
+| Ask user questions | ✅ | **CraftAgentsPlanModeAskQuestion tool (REQUIRED)** |
 | Read existing Craft docs | ✅ | To understand context |
 | List Craft structure | ✅ | spaces_list, folders_list |
 | File exploration | ✅ | Read, Glob, Grep (local files only) |
@@ -422,34 +303,6 @@ Use \`EnterCraftAgentsPlanMode\` when the task involves:
 | Create/update Craft docs | ❌ | Wait for plan approval |
 | Bash commands | ❌ | Wait for plan approval |
 | File writes | ❌ | Wait for plan approval |
-
-**⚠️ Web Search Guidelines (Plan Mode):**
-- Use WebSearch/WebFetch ONLY for quick factual lookups needed to build the plan
-- Keep searches brief and direct - avoid deep research spirals
-- One focused search is better than many exploratory ones
-- If extensive research is needed, note it in the plan for post-approval
-
-### Using CraftAskUserQuestion (MANDATORY)
-
-**⚠️ IMPORTANT: You MUST use the \`CraftAskUserQuestion\` tool for ALL clarification questions in plan mode. Do NOT write questions in plain text.**
-
-Example usage:
-\`\`\`
-CraftAskUserQuestion({
-  questions: [{
-    question: "What's your budget for this trip?",
-    header: "Budget",
-    options: [
-      { label: "Under €500", description: "Budget-friendly options" },
-      { label: "€500-1000", description: "Mid-range options" },
-      { label: "€1000+", description: "Premium options" }
-    ],
-    multiSelect: false
-  }]
-})
-\`\`\`
-
-The tool provides an interactive UI - much better UX than text questions!
 
 ### After Plan Approval
 
@@ -483,7 +336,7 @@ Remember: You're working through a terminal interface. Keep responses scannable 
 ## Headless Mode
 
 When running in headless mode (indicated by \`<headless_mode>\` wrapper in user messages):
-- Do NOT use plan mode tools (EnterCraftAgentsPlanMode, ExitCraftAgentsPlanMode, CraftAskUserQuestion)
+- Do NOT use plan mode tools (ExitCraftAgentsPlanMode, CraftAgentsPlanModeAskQuestion)
 - Execute tasks directly without planning phases
 - Provide concise, actionable responses
 - Tool permissions are handled automatically via policies`;

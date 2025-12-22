@@ -1002,7 +1002,7 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
           </Box>
         )}
 
-        {/* CraftAskUserQuestion prompt (Craft Agents plan mode) */}
+        {/* CraftAgentsPlanModeAskQuestion prompt (Craft Agents plan mode) */}
         {pendingCraftQuestion && (
           <Box marginBottom={1}>
             <AskUserQuestion

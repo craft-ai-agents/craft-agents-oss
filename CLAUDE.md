@@ -383,9 +383,8 @@ interface HeadlessConfig {
 When `isHeadless: true` is passed to CraftAgent:
 1. Prompts are wrapped in `<headless_mode>` XML tags to signal intent
 2. PreToolUse hook blocks plan mode tools:
-   - `EnterCraftAgentsPlanMode`
    - `ExitCraftAgentsPlanMode`
-   - `CraftAskUserQuestion`
+   - `CraftAgentsPlanModeAskQuestion`
 3. Agent executes tasks directly without planning phases
 
 This defense-in-depth approach ensures plan mode is never triggered in automation contexts.
@@ -561,11 +560,10 @@ Plan Mode is a structured approach for complex multi-step tasks. Instead of imme
 - `apps/tui/src/components/TodoList.tsx` - Task visualization
 
 **Custom Tools (in-process MCP):**
-- `EnterCraftAgentsPlanMode` - Enters planning mode with task description
 - `ExitCraftAgentsPlanMode` - Exits with structured plan for user review
-- `CraftAskUserQuestion` - Interactive clarification during planning
+- `CraftAgentsPlanModeAskQuestion` - Interactive clarification during planning
 
-**CraftAskUserQuestion "Other" Option:**
+**CraftAgentsPlanModeAskQuestion "Other" Option:**
 Every question automatically includes an "Other" option at the end, allowing users to provide custom text responses instead of selecting from predefined options.
 
 - Navigate to "Other" with arrow keys or number key (last number)
@@ -595,14 +593,14 @@ When plan mode is active, the hook blocks external operations:
 // BLOCKED in plan mode:
 - api_* tools (all REST API calls)
 - Bash, Write, Edit
-- Task, TaskOutput
 - MCP write tools (blocks_add, blocks_update, etc.)
 
 // ALLOWED in plan mode:
 - Read, Glob, Grep (local file exploration)
+- Task (for research/exploration)
 - WebFetch, WebSearch (use sparingly - quick lookups only)
 - MCP read tools (blocks_get, document_search, etc.)
-- CraftAskUserQuestion
+- CraftAgentsPlanModeAskQuestion
 - TodoWrite
 ```
 
@@ -621,9 +619,9 @@ When plan mode is active, the hook blocks external operations:
 - `Esc` - Clear selections first, then close modal
 
 **Flow:**
-1. User presses SHIFT+TAB or types `/plan start`
-2. System message sent to agent with `EnterCraftAgentsPlanMode` instruction
-3. Agent can read files, query MCP, ask questions via `CraftAskUserQuestion`
+1. User presses SHIFT+TAB or types `/plan start` (toggles plan mode via UI)
+2. Plan mode context injected into user messages (not system prompt, for caching)
+3. Agent can read files, query MCP, ask questions via `CraftAgentsPlanModeAskQuestion`
 4. Agent calls `ExitCraftAgentsPlanMode` with structured plan
 5. User reviews via PlanReview component (approve/refine/cancel)
 6. On approval, plan executes with full tool access
@@ -632,7 +630,7 @@ When plan mode is active, the hook blocks external operations:
 - SDK's plan mode is generic; ours is Craft-specific
 - We allow read-only MCP operations during planning
 - We block ALL external API calls (not just writes)
-- Better integration with Craft's UI components (PlanReview, CraftAskUserQuestion)
+- Better integration with Craft's UI components (PlanReview, CraftAgentsPlanModeAskQuestion)
 - SDK tools are blocked via `disallowedTools` and PreToolUse hook redirects to Craft versions
 
 ### Token Counting

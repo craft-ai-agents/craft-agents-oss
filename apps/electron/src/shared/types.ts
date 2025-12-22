@@ -92,6 +92,90 @@ export interface PermissionRequest extends BasePermissionRequest {
   sessionId: string
 }
 
+// ============================================
+// Plan Mode Types
+// ============================================
+
+/**
+ * Step in a plan
+ */
+export interface PlanStep {
+  id: string
+  description: string
+  tools?: string[]
+  status?: 'pending' | 'in_progress' | 'completed' | 'failed' | 'skipped'
+}
+
+/**
+ * Plan from the agent
+ */
+export interface Plan {
+  id: string
+  title: string
+  summary?: string
+  steps: PlanStep[]
+  questions?: string[]
+  state?: 'creating' | 'refining' | 'ready' | 'executing' | 'completed' | 'cancelled'
+  createdAt?: number
+  updatedAt?: number
+}
+
+/**
+ * Plan review request from the agent
+ */
+export interface PlanReviewRequest {
+  sessionId: string
+  requestId: string
+  plan: Plan
+  questions: string[]
+}
+
+/**
+ * Plan review response action
+ */
+export type PlanReviewAction = 'approve' | 'refine' | 'saveOnly' | 'cancel'
+
+/**
+ * Plan review response to send back to the agent
+ */
+export interface PlanReviewResponse {
+  action: PlanReviewAction
+  feedback?: string  // Required when action is 'refine'
+  modifiedPlan?: Plan  // Optional modified plan (for step edits)
+}
+
+/**
+ * Question option for CraftAgentsPlanModeAskQuestion
+ */
+export interface PlanQuestionOption {
+  label: string
+  description: string
+}
+
+/**
+ * Question from CraftAgentsPlanModeAskQuestion tool
+ */
+export interface PlanQuestion {
+  question: string
+  header: string
+  options: PlanQuestionOption[]
+  multiSelect: boolean
+}
+
+/**
+ * Ask question request from the agent
+ */
+export interface AskQuestionRequest {
+  sessionId: string
+  requestId: string
+  questions: PlanQuestion[]
+}
+
+/**
+ * Ask question response - maps question index to selected option labels
+ */
+export type AskQuestionResponse = Record<string, string>
+
 /**
  * MCP server with auth status for Info dialog
  */
@@ -195,6 +279,16 @@ import type { Message } from '@craft-agent/core/types';
  * Electron-specific Session type (includes runtime state)
  * Extends core Session with messages array and processing state
  */
+/**
+ * Todo state for sessions (user-controlled, never automatic)
+ * - 'todo': Not started
+ * - 'in-progress': Currently working on
+ * - 'needs-review': Awaiting review
+ * - 'done': Completed successfully
+ * - 'cancelled': Cancelled/abandoned
+ */
+export type TodoState = 'todo' | 'in-progress' | 'needs-review' | 'done' | 'cancelled'
+
 export interface Session {
   id: string
   workspaceId: string
@@ -203,13 +297,17 @@ export interface Session {
   lastMessageAt: number
   messages: Message[]
   isProcessing: boolean
-  // Inbox/Archive features (from core SessionMetadata)
+  // Session metadata
   agentId?: string
   agentName?: string
-  isArchived?: boolean
   isFlagged?: boolean
   // Advanced options (persisted per session)
   skipPermissions?: boolean
+  planModeEnabled?: boolean  // Whether plan mode is enabled for this session
+  // Todo state (user-controlled) - determines inbox vs completed
+  todoState?: TodoState
+  // Read/unread tracking - ID of last message user has read
+  lastReadMessageId?: string
 }
 
 // Events sent from main to renderer
@@ -217,8 +315,8 @@ export interface Session {
 export type SessionEvent =
   | { type: 'text_delta'; sessionId: string; delta: string; turnId?: string }
   | { type: 'text_complete'; sessionId: string; text: string; isIntermediate?: boolean; turnId?: string }
-  | { type: 'tool_start'; sessionId: string; toolName: string; toolUseId: string; toolInput: Record<string, unknown>; turnId?: string }
-  | { type: 'tool_result'; sessionId: string; toolUseId: string; toolName: string; result: string; turnId?: string }
+  | { type: 'tool_start'; sessionId: string; toolName: string; toolUseId: string; toolInput: Record<string, unknown>; turnId?: string; parentToolUseId?: string }
+  | { type: 'tool_result'; sessionId: string; toolUseId: string; toolName: string; result: string; turnId?: string; parentToolUseId?: string }
   | { type: 'error'; sessionId: string; error: string }
   | { type: 'typed_error'; sessionId: string; error: TypedError }
   | { type: 'complete'; sessionId: string }
@@ -228,6 +326,10 @@ export type SessionEvent =
   | { type: 'title_generated'; sessionId: string; title: string }
   | { type: 'agent_status'; sessionId: string; status: AgentStatus }
   | { type: 'permission_request'; sessionId: string; request: PermissionRequest }
+  // Plan mode events
+  | { type: 'plan_mode_changed'; sessionId: string; enabled: boolean }
+  | { type: 'plan_review_request'; sessionId: string; request: PlanReviewRequest }
+  | { type: 'ask_question_request'; sessionId: string; request: AskQuestionRequest }
 
 // Options for sendMessage
 export interface SendMessageOptions {
@@ -244,12 +346,18 @@ export const IPC_CHANNELS = {
   RENAME_SESSION: 'sessions:rename',
   SEND_MESSAGE: 'sessions:sendMessage',
   CANCEL_PROCESSING: 'sessions:cancel',
-  ARCHIVE_SESSION: 'sessions:archive',
-  UNARCHIVE_SESSION: 'sessions:unarchive',
   FLAG_SESSION: 'sessions:flag',
   UNFLAG_SESSION: 'sessions:unflag',
   SET_SKIP_PERMISSIONS: 'sessions:setSkipPermissions',
+  SET_TODO_STATE: 'sessions:setTodoState',
+  MARK_SESSION_READ: 'sessions:markRead',
+  MARK_SESSION_UNREAD: 'sessions:markUnread',
   RESPOND_TO_PERMISSION: 'sessions:respondToPermission',
+
+  // Plan mode
+  RESPOND_TO_PLAN_REVIEW: 'sessions:respondToPlanReview',
+  RESPOND_TO_ASK_QUESTION: 'sessions:respondToAskQuestion',
+  SET_PLAN_MODE: 'sessions:setPlanMode',
 
   // Workspace management
   GET_WORKSPACES: 'workspaces:get',
@@ -326,6 +434,7 @@ export const IPC_CHANNELS = {
   // Auth
   LOGOUT: 'auth:logout',
   SHOW_LOGOUT_CONFIRMATION: 'auth:showLogoutConfirmation',
+  SHOW_DELETE_SESSION_CONFIRMATION: 'auth:showDeleteSessionConfirmation',
 
   // Onboarding
   ONBOARDING_GET_AUTH_STATE: 'onboarding:getAuthState',
@@ -349,6 +458,12 @@ export const IPC_CHANNELS = {
   // Settings - Model
   SETTINGS_GET_MODEL: 'settings:getModel',
   SETTINGS_SET_MODEL: 'settings:setModel',
+
+  // Settings - New Session Defaults
+  SETTINGS_GET_DEFAULT_PLAN_MODE: 'settings:getDefaultPlanMode',
+  SETTINGS_SET_DEFAULT_PLAN_MODE: 'settings:setDefaultPlanMode',
+  SETTINGS_GET_DEFAULT_SKIP_PERMISSIONS: 'settings:getDefaultSkipPermissions',
+  SETTINGS_SET_DEFAULT_SKIP_PERMISSIONS: 'settings:setDefaultSkipPermissions',
 
   // User Preferences
   PREFERENCES_READ: 'preferences:read',
@@ -405,7 +520,7 @@ export interface CodePreviewData {
 }
 
 /**
- * Data for terminal preview window (Bash tools)
+ * Data for terminal preview window (Bash/Grep/Glob tools)
  */
 export interface TerminalPreviewData {
   command: string
@@ -414,6 +529,8 @@ export interface TerminalPreviewData {
   description?: string
   /** Exit status if available */
   exitCode?: number
+  /** Tool type for badge display */
+  toolType?: 'bash' | 'grep' | 'glob'
 }
 
 // Re-import types for ElectronAPI
@@ -429,11 +546,17 @@ export interface ElectronAPI {
   renameSession(sessionId: string, name: string): Promise<void>
   sendMessage(sessionId: string, message: string, attachments?: FileAttachment[], storedAttachments?: StoredAttachmentType[], options?: SendMessageOptions): Promise<void>
   cancelProcessing(sessionId: string): Promise<void>
-  archiveSession(sessionId: string): Promise<void>
-  unarchiveSession(sessionId: string): Promise<void>
   flagSession(sessionId: string): Promise<void>
   unflagSession(sessionId: string): Promise<void>
+  setTodoState(sessionId: string, state: TodoState): Promise<void>
+  markSessionRead(sessionId: string): Promise<void>
+  markSessionUnread(sessionId: string): Promise<void>
   respondToPermission(sessionId: string, requestId: string, allowed: boolean, alwaysAllow: boolean): Promise<boolean>
+
+  // Plan mode
+  respondToPlanReview(sessionId: string, requestId: string, response: PlanReviewResponse): Promise<boolean>
+  respondToAskQuestion(sessionId: string, requestId: string, answers: AskQuestionResponse): Promise<boolean>
+  setPlanMode(sessionId: string, enabled: boolean): Promise<void>
 
   // Workspace management
   getWorkspaces(): Promise<Workspace[]>
@@ -509,6 +632,7 @@ export interface ElectronAPI {
 
   // Auth
   showLogoutConfirmation(): Promise<boolean>
+  showDeleteSessionConfirmation(name: string): Promise<boolean>
   logout(): Promise<void>
 
   // Onboarding
@@ -538,6 +662,12 @@ export interface ElectronAPI {
   // Settings - Model
   getModel(): Promise<string | null>
   setModel(model: string): Promise<void>
+
+  // Settings - New Session Defaults
+  getDefaultPlanMode(): Promise<boolean>
+  setDefaultPlanMode(enabled: boolean): Promise<void>
+  getDefaultSkipPermissions(): Promise<boolean>
+  setDefaultSkipPermissions(enabled: boolean): Promise<void>
 
   // User Preferences
   readPreferences(): Promise<{ content: string; exists: boolean }>

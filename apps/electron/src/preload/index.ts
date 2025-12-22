@@ -9,13 +9,22 @@ const api: ElectronAPI = {
   renameSession: (sessionId: string, name: string) => ipcRenderer.invoke(IPC_CHANNELS.RENAME_SESSION, sessionId, name),
   sendMessage: (sessionId: string, message: string, attachments?: FileAttachment[], storedAttachments?: import('../shared/types').StoredAttachment[], options?: import('../shared/types').SendMessageOptions) => ipcRenderer.invoke(IPC_CHANNELS.SEND_MESSAGE, sessionId, message, attachments, storedAttachments, options),
   cancelProcessing: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.CANCEL_PROCESSING, sessionId),
-  archiveSession: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.ARCHIVE_SESSION, sessionId),
-  unarchiveSession: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.UNARCHIVE_SESSION, sessionId),
   flagSession: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.FLAG_SESSION, sessionId),
   unflagSession: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.UNFLAG_SESSION, sessionId),
+  setTodoState: (sessionId: string, state: import('../shared/types').TodoState) => ipcRenderer.invoke(IPC_CHANNELS.SET_TODO_STATE, sessionId, state),
+  markSessionRead: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.MARK_SESSION_READ, sessionId),
+  markSessionUnread: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.MARK_SESSION_UNREAD, sessionId),
   setSkipPermissions: (sessionId: string, enabled: boolean) => ipcRenderer.invoke(IPC_CHANNELS.SET_SKIP_PERMISSIONS, sessionId, enabled),
   respondToPermission: (sessionId: string, requestId: string, allowed: boolean, alwaysAllow: boolean) =>
     ipcRenderer.invoke(IPC_CHANNELS.RESPOND_TO_PERMISSION, sessionId, requestId, allowed, alwaysAllow),
+
+  // Plan mode
+  respondToPlanReview: (sessionId: string, requestId: string, response: import('../shared/types').PlanReviewResponse) =>
+    ipcRenderer.invoke(IPC_CHANNELS.RESPOND_TO_PLAN_REVIEW, sessionId, requestId, response),
+  respondToAskQuestion: (sessionId: string, requestId: string, answers: import('../shared/types').AskQuestionResponse) =>
+    ipcRenderer.invoke(IPC_CHANNELS.RESPOND_TO_ASK_QUESTION, sessionId, requestId, answers),
+  setPlanMode: (sessionId: string, enabled: boolean) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_PLAN_MODE, sessionId, enabled),
 
   // Workspace management
   getWorkspaces: () => ipcRenderer.invoke(IPC_CHANNELS.GET_WORKSPACES),
@@ -150,6 +159,7 @@ const api: ElectronAPI = {
 
   // Auth
   showLogoutConfirmation: () => ipcRenderer.invoke(IPC_CHANNELS.SHOW_LOGOUT_CONFIRMATION),
+  showDeleteSessionConfirmation: (name: string) => ipcRenderer.invoke(IPC_CHANNELS.SHOW_DELETE_SESSION_CONFIRMATION, name),
   logout: () => ipcRenderer.invoke(IPC_CHANNELS.LOGOUT),
 
   // Onboarding
@@ -180,6 +190,12 @@ const api: ElectronAPI = {
   // Settings - Model
   getModel: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET_MODEL),
   setModel: (model: string) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SET_MODEL, model),
+
+  // Settings - New Session Defaults
+  getDefaultPlanMode: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET_DEFAULT_PLAN_MODE),
+  setDefaultPlanMode: (enabled: boolean) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SET_DEFAULT_PLAN_MODE, enabled),
+  getDefaultSkipPermissions: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET_DEFAULT_SKIP_PERMISSIONS),
+  setDefaultSkipPermissions: (enabled: boolean) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SET_DEFAULT_SKIP_PERMISSIONS, enabled),
 
   // User Preferences
   readPreferences: () => ipcRenderer.invoke(IPC_CHANNELS.PREFERENCES_READ),

@@ -67,7 +67,7 @@ export const Messages: React.FC<MessagesProps> = memo(({
     lastResetKeyRef.current = resetKey;
   }
 
-  // Filter out hidden tools (internal state-change tools like EnterCraftAgentsPlanMode)
+  // Filter out hidden tools (internal state-change tools)
   const visibleMessages = messages.filter(m =>
     m.type !== 'tool' || !m.toolName || !shouldHideTool(m.toolName)
   );

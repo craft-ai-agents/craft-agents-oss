@@ -28,6 +28,7 @@ export async function generateSessionTitle(
     const prompt = [
       'Identify the main task the user is trying to accomplish in this conversation.',
       'Reply with ONLY a short task description (2-5 words), action-oriented, starting with a verb.',
+      'Use plain text only - no markdown formatting (no **, `, #, etc.).',
       'Examples: "Fix authentication bug", "Add dark mode", "Refactor API layer", "Explain codebase structure"',
       '',
       'User: ' + userSnippet,

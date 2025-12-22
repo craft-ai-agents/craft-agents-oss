@@ -17,9 +17,8 @@ import type { FileAttachment } from '../utils/files.ts';
 import { debug } from '../utils/debug.ts';
 import { estimateTokens, summarizeLargeResult, TOKEN_LIMIT } from '../utils/summarize.ts';
 import {
-  enterCraftAgentsPlanModeTool,
   exitCraftAgentsPlanModeTool,
-  craftAskUserQuestionTool,
+  craftAgentsPlanModeAskQuestionTool,
   setPlanModeState,
   getPlanModeState,
   enterCraftPlanMode,
@@ -30,14 +29,17 @@ import {
   isReadOnlyApiMethod,
   BLOCKED_IN_PLAN_MODE,
   getCurrentPlanFilePath,
+  setCurrentPlanModeSession,
+  planModeManager,
+  getPlanModeUserMessageContext,
   type PlanReviewResult,
   type PlanQuestion,
-  type SwarmConfig,
 } from './plan-tools.ts';
+import { getPlansDir } from '../config/storage.ts';
 
-// Re-export PlanReviewResult, PlanQuestion, SwarmConfig, and plan mode functions for TUI usage
-export type { PlanReviewResult, PlanQuestion, SwarmConfig } from './plan-tools.ts';
-export { enterCraftPlanMode, exitCraftPlanMode, getCurrentPlanFilePath } from './plan-tools.ts';
+// Re-export PlanReviewResult, PlanQuestion, and plan mode functions for TUI usage
+export type { PlanReviewResult, PlanQuestion } from './plan-tools.ts';
+export { enterCraftPlanMode, exitCraftPlanMode, getCurrentPlanFilePath, planModeManager, setCurrentPlanModeSession } from './plan-tools.ts';
 // Documentation is now served via external HTTP MCP at agents.craft.do/docs/mcp
 
 // Import and re-export AgentEvent from core (single source of truth)
@@ -425,12 +427,12 @@ let cachedPrefToolsServerForBase: ReturnType<typeof createSdkMcpServer> | null =
 let cachedPrefToolsServerForAgent: ReturnType<typeof createSdkMcpServer> | null = null;
 
 function getPreferencesServer(hasActiveAgent: boolean): ReturnType<typeof createSdkMcpServer> {
-  // Base tools always available (preferences + plan mode + ask questions)
+  // Base tools always available (preferences + plan mode tools)
+  // Note: EnterCraftAgentsPlanMode removed - plan mode is entered via UI toggle
   const baseTools = [
     updateUserPreferencesTool,
-    enterCraftAgentsPlanModeTool,
     exitCraftAgentsPlanModeTool,
-    craftAskUserQuestionTool,
+    craftAgentsPlanModeAskQuestionTool,
   ];
 
   if (hasActiveAgent) {
@@ -500,9 +502,6 @@ export class CraftAgent {
   // Callback for Craft plan mode questions - set by TUI to receive question requests
   public onCraftAskQuestion: ((request: { requestId: string; questions: PlanQuestion[] }) => void) | null = null;
 
-  // Callback for swarm launch - set by TUI to handle parallel agent execution
-  public onLaunchSwarm: ((config: SwarmConfig, plan: Plan, planFilePath: string) => Promise<void>) | null = null;
-
   constructor(config: CraftAgentConfig) {
     this.config = config;
     this.isHeadless = config.isHeadless ?? false;
@@ -539,12 +538,6 @@ export class CraftAgent {
         // Forward ask question request to TUI
         this.onCraftAskQuestion?.(request);
       },
-      onLaunchSwarm: async (config, plan, planFilePath) => {
-        // Forward swarm launch request to TUI
-        if (this.onLaunchSwarm) {
-          await this.onLaunchSwarm(config, plan, planFilePath);
-        }
-      },
     });
   }
 
@@ -556,7 +549,7 @@ export class CraftAgent {
   }
 
   /**
-   * Respond to a pending CraftAskUserQuestion request (called by TUI when user answers)
+   * Respond to a pending CraftAgentsPlanModeAskQuestion request (called by TUI when user answers)
    */
   respondToCraftAskQuestion(requestId: string, answers: Record<string, string>): void {
     respondToAskQuestion(requestId, answers);
@@ -836,6 +829,12 @@ export class CraftAgent {
     _isRetry: boolean = false // Internal flag for session expiry retry
   ): AsyncGenerator<AgentEvent> {
     try {
+      // Set this session as the current active session for plan mode tools
+      // This ensures tools use this session's state and callbacks
+      if (this.config.session?.id) {
+        setCurrentPlanModeSession(this.config.session.id);
+      }
+
       // Clear intent map for new turn
       this.toolIntents.clear();
 
@@ -920,15 +919,10 @@ export class CraftAgent {
         systemPrompt: {
           type: 'preset',
           preset: 'claude_code',
-          append: (() => {
-            const prompt = getSystemPrompt(
-              this.activeAgentDefinition ?? undefined,
-              this.temporaryClarifications ?? undefined,
-              this.activePlan ?? undefined
-            );
-            this.onDebug?.(`[chat] planMode: ${this.planMode}, activePlan: ${this.activePlan?.title || 'none'}, state: ${this.activePlan?.state || 'n/a'}`);
-            return prompt;
-          })(),
+          append: getSystemPrompt(
+            this.activeAgentDefinition ?? undefined,
+            this.temporaryClarifications ?? undefined
+          ),
         },
         // Option B: Custom system prompt (uncomment to use instead)
         // systemPrompt: getSystemPrompt(this.activeAgentDefinition ?? undefined),
@@ -955,9 +949,8 @@ export class CraftAgent {
               // ============================================================
               if (this.isHeadless) {
                 const planModeTools = [
-                  'EnterCraftAgentsPlanMode',
                   'ExitCraftAgentsPlanMode',
-                  'CraftAskUserQuestion',
+                  'CraftAgentsPlanModeAskQuestion',
                 ];
                 // Also check MCP-prefixed versions
                 const isPlanModeTool = planModeTools.some(t =>
@@ -977,22 +970,22 @@ export class CraftAgent {
               }
 
               // ============================================================
-              // BLOCK SDK's plan mode tools - redirect to Craft versions
+              // BLOCK SDK's plan mode tools - plan mode is entered via UI
               // ============================================================
               if (input.tool_name === 'EnterPlanMode') {
-                this.onDebug?.('EnterPlanMode blocked - redirecting to EnterCraftAgentsPlanMode');
+                this.onDebug?.('EnterPlanMode blocked - plan mode is entered via UI toggle');
                 return {
                   continue: false,
                   hookSpecificOutput: {
                     hookEventName: 'PreToolUse' as const,
                     decision: 'block',
-                    reason: 'EnterPlanMode is not available. Use EnterCraftAgentsPlanMode instead for Craft-specific plan mode.',
+                    reason: 'EnterPlanMode is not available. Plan mode is controlled via the UI toggle.',
                   },
                 };
               }
 
               if (input.tool_name === 'ExitPlanMode') {
-                this.onDebug?.('ExitPlanMode blocked - redirecting to ExitCraftAgentsPlanMode');
+                this.onDebug?.('ExitPlanMode blocked - use ExitCraftAgentsPlanMode');
                 return {
                   continue: false,
                   hookSpecificOutput: {
@@ -1001,61 +994,6 @@ export class CraftAgent {
                     reason: 'ExitPlanMode is not available. Use ExitCraftAgentsPlanMode instead to present your plan for user approval.',
                   },
                 };
-              }
-
-              // ============================================================
-              // LLM-INITIATED PLAN MODE: Ask user permission before entering
-              // ============================================================
-              if (input.tool_name === 'EnterCraftAgentsPlanMode' ||
-                  input.tool_name.endsWith('__EnterCraftAgentsPlanMode')) {
-                const craftPlanModeCheck = getPlanModeState();
-                this.onDebug?.(`[PreToolUse] EnterCraftAgentsPlanMode: userInitiatedPlanMode=${craftPlanModeCheck.userInitiatedPlanMode}, isActive=${craftPlanModeCheck.isActive}`);
-
-                // If not user-initiated (via SHIFT+TAB or /plan), ask permission
-                if (!craftPlanModeCheck.userInitiatedPlanMode) {
-                  const taskDesc = (input.tool_input as { task?: string })?.task || 'a complex task';
-
-                  this.onDebug?.(`LLM wants to enter plan mode for: ${taskDesc}`);
-
-                  const requestId = `perm-planmode-${input.tool_use_id}`;
-                  const permissionPromise = new Promise<boolean>((resolve) => {
-                    this.pendingPermissions.set(requestId, {
-                      resolve: (allowed) => resolve(allowed),
-                      toolName: input.tool_name,
-                      command: taskDesc,
-                      baseCommand: '',
-                      type: 'plan_mode',
-                    });
-                  });
-
-                  if (this.onPermissionRequest) {
-                    this.onPermissionRequest({
-                      requestId,
-                      toolName: input.tool_name,
-                      command: taskDesc,
-                      description: `Enter Plan Mode for: "${taskDesc}"`,
-                      type: 'plan_mode',
-                    });
-                  } else {
-                    this.pendingPermissions.delete(requestId);
-                    return {
-                      continue: false,
-                      decision: 'block' as const,
-                      reason: 'No permission handler available',
-                    };
-                  }
-
-                  const allowed = await permissionPromise;
-                  if (!allowed) {
-                    this.onDebug?.('User declined plan mode entry');
-                    return {
-                      continue: false,
-                      decision: 'block' as const,
-                      reason: 'User declined Plan Mode. Continue without planning.',
-                    };
-                  }
-                  this.onDebug?.('User approved plan mode entry');
-                }
               }
 
               // ============================================================
@@ -1069,11 +1007,9 @@ export class CraftAgent {
                 // Always allow our own plan mode tools (check both raw and MCP-prefixed names)
                 // Tools from preferences server have format: mcp__preferences__ToolName
                 const isPlanModeTool = input.tool_name === 'ExitCraftAgentsPlanMode' ||
-                  input.tool_name === 'EnterCraftAgentsPlanMode' ||
-                  input.tool_name === 'CraftAskUserQuestion' ||
+                  input.tool_name === 'CraftAgentsPlanModeAskQuestion' ||
                   input.tool_name.endsWith('__ExitCraftAgentsPlanMode') ||
-                  input.tool_name.endsWith('__EnterCraftAgentsPlanMode') ||
-                  input.tool_name.endsWith('__CraftAskUserQuestion');
+                  input.tool_name.endsWith('__CraftAgentsPlanModeAskQuestion');
                 if (isPlanModeTool) {
                   this.onDebug?.(`Allowing plan mode tool: ${input.tool_name}`);
                   return { continue: true };
@@ -1082,6 +1018,12 @@ export class CraftAgent {
                 // Allow read-only file tools (to understand existing context)
                 const readOnlyFileTools = ['Read', 'Glob', 'Grep'];
                 if (readOnlyFileTools.includes(input.tool_name)) {
+                  return { continue: true };
+                }
+
+                // Allow Task tool for research/exploration in plan mode
+                if (input.tool_name === 'Task') {
+                  this.onDebug?.(`Allowing Task tool in Craft plan mode`);
                   return { continue: true };
                 }
 
@@ -1099,7 +1041,7 @@ export class CraftAgent {
                     return {
                       continue: false,
                       decision: 'block' as const,
-                      reason: `This tool is not allowed in plan mode. Use CraftAskUserQuestion to ask the user questions.`,
+                      reason: `This tool is not allowed in plan mode. Use CraftAgentsPlanModeAskQuestion to ask the user questions.`,
                     };
                   }
 
@@ -1137,16 +1079,6 @@ export class CraftAgent {
                   };
                 }
 
-                // Block Task tool (no sub-agent execution during planning)
-                if (input.tool_name === 'Task' || input.tool_name === 'TaskOutput') {
-                  this.onDebug?.(`BLOCKED ${input.tool_name} in Craft plan mode`);
-                  return {
-                    continue: false,
-                    decision: 'block' as const,
-                    reason: `${input.tool_name} is blocked in plan mode. Plan what tasks to run, then call ExitCraftAgentsPlanMode.`,
-                  };
-                }
-
                 // Default: allow other tools (like TodoWrite for planning)
                 this.onDebug?.(`Allowing tool in Craft plan mode: ${input.tool_name}`);
               }
@@ -1160,19 +1092,23 @@ export class CraftAgent {
                 const planModeAllowedTools = new Set([
                   // Read-only file tools (to understand existing code/context)
                   'Read', 'Glob', 'Grep',
+                  // Task tool for research/exploration
+                  'Task',
                   // Web research (allowed but should be used sparingly - see system prompt)
                   'WebFetch', 'WebSearch',
                   // Plan mode tools
                   'ExitPlanMode',
                   // Write is allowed ONLY for plan files (checked below)
                   'Write',
+                  // Craft Agents plan mode tools (in-process SDK tools from plan-tools.ts)
+                  'ExitCraftAgentsPlanMode',
+                  'CraftAgentsPlanModeAskQuestion',
                 ]);
 
                 // NOTE: The following are explicitly NOT allowed during planning:
-                // - Task, TaskOutput: No sub-agent execution during planning
                 // - Bash: No command execution during planning
-                // - AskUserQuestion: Claude should ask in response text, not via tool
-                // - Any MCP tools: No external actions during planning
+                // - AskUserQuestion: Use CraftAgentsPlanModeAskQuestion instead
+                // - Any MCP write tools: No external actions during planning
 
                 // Special handling for Write tool - only allow writing to ~/.claude/plans/
                 if (input.tool_name === 'Write') {
@@ -1482,14 +1418,9 @@ export class CraftAgent {
             }
           }
 
-          // EnterPlanMode and ExitPlanMode - auto-allow
-          // Plan approval happens in conversation AFTER ExitPlanMode returns (via system prompt)
-          if (toolName === 'EnterPlanMode' || toolName === 'ExitPlanMode') {
-            this.onDebug?.(`${toolName} - auto-allowing`);
-            return { behavior: 'allow' as const, updatedInput: input as Record<string, unknown> };
-          }
-
           // Auto-approve MCP tools and other allowed tools
+          // Note: SDK plan mode tools (EnterPlanMode/ExitPlanMode) are now controlled via disallowedTools
+          // When planModeEnabled is false, they will be in disallowedTools and blocked before reaching here
           return { behavior: 'allow' as const, updatedInput: input as Record<string, unknown> };
         },
         // Selectively disable tools - file tools are disabled (use MCP), web/code controlled by settings
@@ -1735,12 +1666,19 @@ export class CraftAgent {
   /**
    * Build a simple text prompt with embedded text file contents (for text-only messages)
    * Prepends date/time context for prompt caching optimization (keeps system prompt static)
+   * Injects plan mode context when plan mode is active
    */
   private buildTextPrompt(text: string, attachments?: FileAttachment[]): string {
     const parts: string[] = [];
 
     // Add date/time context first (moved from system prompt to enable caching)
     parts.push(getDateTimeContext());
+
+    // Add plan mode context if active (injected into user message to preserve caching)
+    const planModeContext = getPlanModeUserMessageContext(this.config.session?.id);
+    if (planModeContext) {
+      parts.push(planModeContext);
+    }
 
     // Add file attachments
     if (attachments) {
@@ -1762,12 +1700,19 @@ export class CraftAgent {
   /**
    * Build an SDK user message with proper content blocks for binary attachments
    * Prepends date/time context for prompt caching optimization (keeps system prompt static)
+   * Injects plan mode context when plan mode is active
    */
   private buildSDKUserMessage(text: string, attachments?: FileAttachment[]): SDKUserMessage {
     const contentBlocks: ContentBlockParam[] = [];
 
     // Add date/time context first (moved from system prompt to enable caching)
     contentBlocks.push({ type: 'text', text: getDateTimeContext() });
+
+    // Add plan mode context if active (injected into user message to preserve caching)
+    const planModeContext = getPlanModeUserMessageContext(this.config.session?.id);
+    if (planModeContext) {
+      contentBlocks.push({ type: 'text', text: planModeContext });
+    }
 
     // Add attachments
     if (attachments) {
@@ -2059,6 +2004,8 @@ export class CraftAgent {
               isError,
               input: toolUse?.input,
               turnId: turnId || undefined,
+              // Include original parent_tool_use_id for parent-child tracking
+              parentToolUseId: message.parent_tool_use_id || undefined,
             });
 
             pendingToolUses.delete(toolUseId);
@@ -2304,6 +2251,16 @@ export class CraftAgent {
     this.onPermissionRequest = null;
     this.onDebug = null;
     this.onAskUserQuestion = null;
+
+    // Clear plan mode callbacks and state for this session
+    this.onPlanModeChange = null;
+    this.onPlanReview = null;
+    this.onCraftAskQuestion = null;
+
+    // Clean up session-specific plan mode state in the manager
+    if (this.sessionId) {
+      planModeManager.cleanupSession(this.sessionId);
+    }
 
     // Clear session
     this.sessionId = null;

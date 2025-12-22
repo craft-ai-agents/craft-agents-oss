@@ -21,11 +21,11 @@ import { AnimatedCollapsibleContent } from "@/components/ui/collapsible"
 import { FileTypeIcon, getFileTypeLabel } from "./AttachmentPreview"
 import { Spinner } from "@/components/ui/loading-indicator"
 import { useFocusZone } from "@/hooks/keyboard"
-import type { Session, Message, FileAttachment, StoredAttachment, PermissionRequest } from "../../../shared/types"
+import type { Session, Message, FileAttachment, StoredAttachment, PermissionRequest, PlanReviewRequest, PlanReviewResponse, AskQuestionRequest, AskQuestionResponse } from "../../../shared/types"
 import { SetupAuthBanner, type BannerState } from "./SetupAuthBanner"
 import { TurnCard } from "./TurnCard"
 import { groupMessagesByTurn, formatTurnAsMarkdown, formatActivityAsMarkdown, type Turn, type AssistantTurn, type UserTurn, type SystemTurn } from "./turn-utils"
-import { InputContainer, type StructuredInputState, type StructuredResponse, type PermissionResponse } from "./input"
+import { InputContainer, type StructuredInputState, type StructuredResponse, type PermissionResponse, type ClarificationResponse, type PlanReviewResponse as StructuredPlanReviewResponse } from "./input"
 
 /** Agent setup state for showing setup indicator in input area */
 interface AgentSetupState {
@@ -54,6 +54,14 @@ interface ChatDisplayProps {
   pendingPermission?: PermissionRequest
   /** Callback to respond to permission request */
   onRespondToPermission?: (sessionId: string, requestId: string, allowed: boolean, alwaysAllow: boolean) => void
+  /** Pending plan review request for this session */
+  pendingPlanReview?: PlanReviewRequest
+  /** Callback to respond to plan review */
+  onRespondToPlanReview?: (sessionId: string, requestId: string, response: PlanReviewResponse) => void
+  /** Pending ask question request for this session */
+  pendingAskQuestion?: AskQuestionRequest
+  /** Callback to respond to ask question */
+  onRespondToAskQuestion?: (sessionId: string, requestId: string, answers: AskQuestionResponse) => void
   /** Agent setup state - when present, shows setup indicator in input area */
   agentSetupState?: AgentSetupState
   // Advanced options
@@ -234,6 +242,10 @@ export function ChatDisplay({
   disabled = false,
   pendingPermission,
   onRespondToPermission,
+  pendingPlanReview,
+  onRespondToPlanReview,
+  pendingAskQuestion,
+  onRespondToAskQuestion,
   agentSetupState,
   // Advanced options
   ultrathinkEnabled = false,
@@ -252,11 +264,10 @@ export function ChatDisplay({
   const messagesEndRef = React.useRef<HTMLDivElement>(null)
   const scrollViewportRef = React.useRef<HTMLDivElement>(null)
   const prevSessionIdRef = React.useRef<string | null>(null)
-  const isAtBottomRef = React.useRef(true)
+  // Sticky-bottom: When true, auto-scroll on content changes. Toggled by user scroll behavior.
+  const isStickToBottomRef = React.useRef(true)
   const internalTextareaRef = React.useRef<HTMLTextAreaElement>(null)
   const textareaRef = externalTextareaRef || internalTextareaRef
-  // Performance: Track pending scroll to avoid redundant scrollIntoView calls
-  const pendingScrollRef = React.useRef<number | null>(null)
 
   // Register as focus zone - when zone gains focus, focus the textarea
   const { zoneRef, isFocused } = useFocusZone({
@@ -279,14 +290,16 @@ export function ChatDisplay({
     window.electronAPI.openPreview(session.id, message.id, message.content)
   }, [session])
 
-  // Track scroll position to determine if user is at bottom
-  // Threshold of 50px allows for small scroll variations
+  // Track scroll position to toggle sticky-bottom behavior
+  // - User scrolls up → unstick (stop auto-scrolling)
+  // - User scrolls back to bottom → re-stick (resume auto-scrolling)
   const handleScroll = React.useCallback(() => {
     const viewport = scrollViewportRef.current
     if (!viewport) return
     const { scrollTop, scrollHeight, clientHeight } = viewport
     const distanceFromBottom = scrollHeight - scrollTop - clientHeight
-    isAtBottomRef.current = distanceFromBottom < 50
+    // 20px threshold for "at bottom" detection
+    isStickToBottomRef.current = distanceFromBottom < 20
   }, [])
 
   // Set up scroll event listener
@@ -297,40 +310,45 @@ export function ChatDisplay({
     return () => viewport.removeEventListener('scroll', handleScroll)
   }, [handleScroll])
 
-  // Auto-scroll to bottom
-  // - Session switch: scroll immediately (no animation delay)
-  // - Streaming updates: use requestAnimationFrame to batch (performance)
+  // Auto-scroll using ResizeObserver - fires AFTER layout is complete
+  // Debounced to wait for layout to settle before scrolling
   React.useEffect(() => {
+    const viewport = scrollViewportRef.current
+    if (!viewport) return
+
     const isSessionSwitch = prevSessionIdRef.current !== session?.id
     prevSessionIdRef.current = session?.id ?? null
 
-    // Always scroll on session switch, otherwise only if user is at bottom
-    if (isSessionSwitch || isAtBottomRef.current) {
-      // Cancel any pending scroll
-      if (pendingScrollRef.current !== null) {
-        cancelAnimationFrame(pendingScrollRef.current)
-        pendingScrollRef.current = null
-      }
-
-      if (isSessionSwitch) {
-        // Session switch: scroll immediately (synchronous) to avoid visible jump
-        messagesEndRef.current?.scrollIntoView({ behavior: 'instant' })
-      } else {
-        // Streaming updates: batch with requestAnimationFrame for performance
-        pendingScrollRef.current = requestAnimationFrame(() => {
-          pendingScrollRef.current = null
-          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-        })
-      }
+    // On session switch: scroll immediately and re-stick to bottom
+    if (isSessionSwitch) {
+      isStickToBottomRef.current = true
+      messagesEndRef.current?.scrollIntoView({ behavior: 'instant' })
     }
 
-    // Cleanup on unmount
+    // Debounced scroll - waits for layout to settle
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null
+
+    const resizeObserver = new ResizeObserver(() => {
+      if (!isStickToBottomRef.current) return
+
+      // Clear pending scroll and wait for layout to settle
+      if (debounceTimer) clearTimeout(debounceTimer)
+      debounceTimer = setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+      }, 200)
+    })
+
+    // Observe the scroll content container (first child of viewport)
+    const content = viewport.firstElementChild
+    if (content) {
+      resizeObserver.observe(content)
+    }
+
     return () => {
-      if (pendingScrollRef.current !== null) {
-        cancelAnimationFrame(pendingScrollRef.current)
-      }
+      resizeObserver.disconnect()
+      if (debounceTimer) clearTimeout(debounceTimer)
     }
-  }, [session?.id, session?.messages])
+  }, [session?.id])
 
   // Handle message submission from InputContainer
   const handleSubmit = async (message: string, attachments?: FileAttachment[]) => {
@@ -344,8 +362,15 @@ export function ChatDisplay({
       }
     }
 
+    // Force stick-to-bottom when user sends a message
+    isStickToBottomRef.current = true
     onSendMessage(message, attachments)
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+
+    // Immediately scroll to bottom after sending - use requestAnimationFrame
+    // to ensure the DOM has updated with the new message
+    requestAnimationFrame(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    })
   }
 
   // Handle stop request from InputContainer
@@ -366,32 +391,89 @@ export function ChatDisplay({
         permResponse.allowed,
         permResponse.alwaysAllow
       )
+    } else if (response.type === 'plan_review' && pendingPlanReview && onRespondToPlanReview) {
+      const planResponse = response as StructuredPlanReviewResponse
+      onRespondToPlanReview(
+        pendingPlanReview.sessionId,
+        pendingPlanReview.requestId,
+        {
+          action: planResponse.action,
+          feedback: planResponse.feedback,
+        }
+      )
+    } else if (response.type === 'clarification' && pendingAskQuestion && onRespondToAskQuestion) {
+      const clarificationResponse = response as ClarificationResponse
+      // Convert selected options to answer format
+      // Currently the UI shows one question at a time (first question)
+      // TODO: Implement multi-question stepper UI to handle all questions in sequence
+      const answers: AskQuestionResponse = {}
+      const question = pendingAskQuestion.questions[0]
+      if (question && !clarificationResponse.skipped) {
+        // Map selected indices to option labels
+        const selectedLabels = clarificationResponse.selectedOptions
+          .map(idx => question.options[idx]?.label)
+          .filter(Boolean)
+          .join(', ')
+        answers[question.question] = selectedLabels
+      }
+      // For questions beyond the first, mark them as skipped (empty string)
+      // This ensures the agent gets a complete response even if UI only showed first question
+      for (let i = 1; i < pendingAskQuestion.questions.length; i++) {
+        const q = pendingAskQuestion.questions[i]
+        if (q) {
+          answers[q.question] = '' // Skipped - user didn't see this question
+        }
+      }
+      onRespondToAskQuestion(
+        pendingAskQuestion.sessionId,
+        pendingAskQuestion.requestId,
+        answers
+      )
     }
-    // TODO: Handle clarification and plan_review responses
   }
 
-  // Build structured input state from pending permission
-  const structuredInput: StructuredInputState | undefined = pendingPermission
-    ? { type: 'permission', data: pendingPermission }
-    : undefined
+  // Build structured input state from pending requests (priority: permission > plan_review > clarification)
+  const structuredInput: StructuredInputState | undefined = React.useMemo(() => {
+    if (pendingPermission) {
+      return { type: 'permission', data: pendingPermission }
+    }
+    if (pendingPlanReview) {
+      return {
+        type: 'plan_review',
+        data: {
+          id: pendingPlanReview.requestId,
+          title: pendingPlanReview.plan.title,
+          summary: pendingPlanReview.plan.summary || '',
+          steps: pendingPlanReview.plan.steps.map(step => ({
+            description: step.description,
+            tools: step.tools,
+          })),
+          questions: pendingPlanReview.questions,
+        },
+      }
+    }
+    if (pendingAskQuestion && pendingAskQuestion.questions.length > 0) {
+      const firstQuestion = pendingAskQuestion.questions[0]
+      return {
+        type: 'clarification',
+        data: {
+          id: pendingAskQuestion.requestId,
+          question: firstQuestion.question,
+          header: firstQuestion.header,
+          options: firstQuestion.options.map(opt => ({
+            label: opt.label,
+            description: opt.description,
+          })),
+          multiSelect: firstQuestion.multiSelect,
+        },
+      }
+    }
+    return undefined
+  }, [pendingPermission, pendingPlanReview, pendingAskQuestion])
 
   // Memoize turn grouping - avoids O(n) iteration on every render/keystroke
   const turns = React.useMemo(() => {
     if (!session) return []
-
-    // Debug: Log when groupMessagesByTurn is called to track memoization invalidation
-    const toolMsgs = session.messages.filter(m => m.role === 'tool')
-    console.log('[ChatDisplay] groupMessagesByTurn called:', {
-      sessionId: session.id,
-      messageCount: session.messages.length,
-      toolMessages: toolMsgs.map(m => ({
-        toolUseId: m.toolUseId,
-        toolName: m.toolName,
-        toolStatus: m.toolStatus,
-        hasResult: m.toolResult !== undefined,
-      })),
-    })
-
     return groupMessagesByTurn(session.messages)
   }, [session?.messages])
 
@@ -451,6 +533,7 @@ export function ChatDisplay({
                         intent={turn.intent}
                         isStreaming={turn.isStreaming}
                         isComplete={turn.isComplete}
+                        todos={turn.todos}
                         onOpenFile={onOpenFile}
                         onOpenUrl={onOpenUrl}
                         onPopOut={(text) => {
@@ -481,18 +564,18 @@ export function ChatDisplay({
                             }
                             // Read tool → Code preview (read mode)
                             else if (activity.toolName === 'Read' && input) {
-                              // Read result may be JSON with file metadata
-                              let filePath = (input.file_path as string) || 'unknown'
+                              // Always use input.file_path as the absolute path for opening files
+                              const filePath = (input.file_path as string) || 'unknown'
                               let content = activity.content || ''
                               let numLines: number | undefined
                               let startLine: number | undefined
                               let totalLines: number | undefined
 
-                              // Try to parse JSON structure from Read tool result
+                              // Try to parse JSON structure from Read tool result for metadata
                               try {
                                 const parsed = JSON.parse(content)
                                 if (parsed.file) {
-                                  filePath = parsed.file.filePath || filePath
+                                  // Use content and metadata from JSON, but keep absolute filePath from input
                                   content = parsed.file.content || ''
                                   numLines = parsed.file.numLines
                                   startLine = parsed.file.startLine
@@ -555,6 +638,7 @@ export function ChatDisplay({
                                 output,
                                 description,
                                 exitCode,
+                                toolType: 'bash',
                               })
                             }
                             // Grep tool → Terminal preview (search results)
@@ -590,6 +674,7 @@ export function ChatDisplay({
                                 command,
                                 output,
                                 description,
+                                toolType: 'grep',
                               })
                             }
                             // Glob tool → Terminal preview (file list)
@@ -623,6 +708,7 @@ export function ChatDisplay({
                                 command,
                                 output,
                                 description,
+                                toolType: 'glob',
                               })
                             }
                             // Default → Markdown preview

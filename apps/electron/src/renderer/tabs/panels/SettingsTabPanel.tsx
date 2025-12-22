@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { useTheme, type FontFamily } from '@/context/ThemeContext'
 import { cn } from '@/lib/utils'
+import { Switch } from '@/components/ui/switch'
 import { Monitor, Sun, Moon, Eye, EyeOff, Check, ExternalLink, CheckCircle2 } from 'lucide-react'
 import { Spinner } from '@/components/ui/loading-indicator'
 import type { Tab } from '../types'
@@ -54,6 +55,35 @@ function SettingRow({ label, children }: SettingRowProps) {
       <div className="flex items-center gap-1 ml-4 shrink-0">
         {children}
       </div>
+    </div>
+  )
+}
+
+// ============================================
+// Toggle Row - setting with switch toggle
+// ============================================
+
+interface ToggleRowProps {
+  label: string
+  description?: string
+  checked: boolean
+  onCheckedChange: (checked: boolean) => void
+}
+
+function ToggleRow({ label, description, checked, onCheckedChange }: ToggleRowProps) {
+  return (
+    <div className="flex items-center justify-between py-1.5">
+      <div className="flex-1 min-w-0">
+        <span className="text-sm">{label}</span>
+        {description && (
+          <span className="text-sm text-muted-foreground ml-1.5">{description}</span>
+        )}
+      </div>
+      <Switch
+        checked={checked}
+        onCheckedChange={onCheckedChange}
+        className="ml-4 shrink-0"
+      />
     </div>
   )
 }
@@ -494,6 +524,51 @@ export default function SettingsTabPanel({
   const [claudeOAuthStatus, setClaudeOAuthStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [claudeOAuthError, setClaudeOAuthError] = useState<string | undefined>()
 
+  // New session defaults state
+  const [defaultPlanMode, setDefaultPlanMode] = useState(false)
+  const [defaultSkipPermissions, setDefaultSkipPermissions] = useState(false)
+
+  // Load new session defaults on mount
+  useEffect(() => {
+    const loadDefaults = async () => {
+      if (!window.electronAPI) return
+      try {
+        const [planMode, skipPerms] = await Promise.all([
+          window.electronAPI.getDefaultPlanMode(),
+          window.electronAPI.getDefaultSkipPermissions(),
+        ])
+        setDefaultPlanMode(planMode)
+        setDefaultSkipPermissions(skipPerms)
+      } catch (error) {
+        console.error('Failed to load session defaults:', error)
+      }
+    }
+    loadDefaults()
+  }, [])
+
+  // Handlers for new session defaults
+  const handleDefaultPlanModeChange = useCallback(async (enabled: boolean) => {
+    if (!window.electronAPI) return
+    setDefaultPlanMode(enabled)
+    try {
+      await window.electronAPI.setDefaultPlanMode(enabled)
+    } catch (error) {
+      console.error('Failed to save default plan mode:', error)
+      setDefaultPlanMode(!enabled) // Revert on error
+    }
+  }, [])
+
+  const handleDefaultSkipPermissionsChange = useCallback(async (enabled: boolean) => {
+    if (!window.electronAPI) return
+    setDefaultSkipPermissions(enabled)
+    try {
+      await window.electronAPI.setDefaultSkipPermissions(enabled)
+    } catch (error) {
+      console.error('Failed to save default skip permissions:', error)
+      setDefaultSkipPermissions(!enabled) // Revert on error
+    }
+  }, [])
+
   // Load current billing method on mount
   useEffect(() => {
     const loadBilling = async () => {
@@ -709,6 +784,25 @@ export default function SettingsTabPanel({
                 onClick={() => onModelChange?.('claude-haiku-4-5-20251001')}
                 label="Haiku 4.5"
                 description="— fast"
+              />
+            </div>
+          </div>
+
+          {/* New Sessions - default settings for new chats */}
+          <div>
+            <SectionHeader>New Sessions</SectionHeader>
+            <div>
+              <ToggleRow
+                label="Plan Mode"
+                description="— start with planning enabled"
+                checked={defaultPlanMode}
+                onCheckedChange={handleDefaultPlanModeChange}
+              />
+              <ToggleRow
+                label="Skip Permissions"
+                description="— auto-approve tool use"
+                checked={defaultSkipPermissions}
+                onCheckedChange={handleDefaultSkipPermissionsChange}
               />
             </div>
           </div>

@@ -97,7 +97,6 @@ export const mockElectronAPI: ElectronAPI = {
       isProcessing: false,
       agentId: agent?.id,
       agentName: agent?.name,
-      isArchived: false,
     }
 
     sessions = [newSession, ...sessions]
@@ -117,22 +116,6 @@ export const mockElectronAPI: ElectronAPI = {
     }
   },
 
-  async archiveSession(sessionId: string): Promise<void> {
-    await sleep(100)
-    const session = sessions.find(s => s.id === sessionId)
-    if (session) {
-      session.isArchived = true
-    }
-  },
-
-  async unarchiveSession(sessionId: string): Promise<void> {
-    await sleep(100)
-    const session = sessions.find(s => s.id === sessionId)
-    if (session) {
-      session.isArchived = false
-    }
-  },
-
   async flagSession(sessionId: string): Promise<void> {
     await sleep(100)
     const session = sessions.find(s => s.id === sessionId)
@@ -146,6 +129,37 @@ export const mockElectronAPI: ElectronAPI = {
     const session = sessions.find(s => s.id === sessionId)
     if (session) {
       session.isFlagged = false
+    }
+  },
+
+  async setTodoState(sessionId: string, state: 'todo' | 'in-progress' | 'needs-review' | 'done' | 'cancelled'): Promise<void> {
+    await sleep(100)
+    const session = sessions.find(s => s.id === sessionId)
+    if (session) {
+      session.todoState = state
+    }
+  },
+
+  async markSessionRead(sessionId: string): Promise<void> {
+    await sleep(50)
+    const session = sessions.find(s => s.id === sessionId)
+    if (session && session.messages.length > 0) {
+      // Find the last final assistant message (role === 'assistant' && !isIntermediate)
+      for (let i = session.messages.length - 1; i >= 0; i--) {
+        const msg = session.messages[i]
+        if (msg.role === 'assistant' && !msg.isIntermediate) {
+          session.lastReadMessageId = msg.id
+          break
+        }
+      }
+    }
+  },
+
+  async markSessionUnread(sessionId: string): Promise<void> {
+    await sleep(50)
+    const session = sessions.find(s => s.id === sessionId)
+    if (session) {
+      session.lastReadMessageId = undefined
     }
   },
 
@@ -488,6 +502,22 @@ console.log(example);
     return true
   },
 
+  // ===== Plan Mode =====
+
+  async respondToPlanReview(_sessionId: string, _requestId: string, response: import('../../shared/types').PlanReviewResponse): Promise<boolean> {
+    console.log('[Mock] respondToPlanReview called:', response.action)
+    return true
+  },
+
+  async respondToAskQuestion(_sessionId: string, _requestId: string, answers: import('../../shared/types').AskQuestionResponse): Promise<boolean> {
+    console.log('[Mock] respondToAskQuestion called:', Object.keys(answers).length, 'answers')
+    return true
+  },
+
+  async setPlanMode(_sessionId: string, enabled: boolean): Promise<void> {
+    console.log('[Mock] setPlanMode called:', enabled)
+  },
+
   // ===== Agent State Management (agent-scoped) =====
 
   async getAgentStatus(_workspaceId: string, _agentId: string): Promise<import('../../shared/types').AgentStatus> {
@@ -581,6 +611,13 @@ console.log(example);
   async showLogoutConfirmation() {
     await sleep(100)
     console.log('[Mock] showLogoutConfirmation called')
+    // In mock mode, always confirm
+    return true
+  },
+
+  async showDeleteSessionConfirmation(name: string) {
+    await sleep(100)
+    console.log('[Mock] showDeleteSessionConfirmation called for:', name)
     // In mock mode, always confirm
     return true
   },
@@ -790,6 +827,32 @@ console.log(example);
     console.log('[Mock] setModel called:', model)
     // Mock: store in localStorage for persistence in browser dev mode
     localStorage.setItem('craft-agent-model', model)
+  },
+
+  // ===== New Session Defaults =====
+
+  async getDefaultPlanMode() {
+    await sleep(50)
+    console.log('[Mock] getDefaultPlanMode called')
+    return localStorage.getItem('craft-agent-default-plan-mode') === 'true'
+  },
+
+  async setDefaultPlanMode(enabled: boolean) {
+    await sleep(50)
+    console.log('[Mock] setDefaultPlanMode called:', enabled)
+    localStorage.setItem('craft-agent-default-plan-mode', String(enabled))
+  },
+
+  async getDefaultSkipPermissions() {
+    await sleep(50)
+    console.log('[Mock] getDefaultSkipPermissions called')
+    return localStorage.getItem('craft-agent-default-skip-permissions') === 'true'
+  },
+
+  async setDefaultSkipPermissions(enabled: boolean) {
+    await sleep(50)
+    console.log('[Mock] setDefaultSkipPermissions called:', enabled)
+    localStorage.setItem('craft-agent-default-skip-permissions', String(enabled))
   },
 
   // ===== User Preferences =====

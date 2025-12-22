@@ -1,6 +1,6 @@
 import type { ComponentEntry } from './types'
 import { useState, useEffect, type ReactNode } from 'react'
-import { TurnCard, type ActivityItem, type ResponseContent } from '@/components/chat/TurnCard'
+import { TurnCard, type ActivityItem, type ResponseContent, type TodoItem } from '@/components/chat/TurnCard'
 
 /** Wrapper with padding for playground preview */
 function PaddedWrapper({ children }: { children: ReactNode }) {
@@ -383,6 +383,70 @@ function generateManyActivities(count: number): ActivityItem[] {
 const manyActivities75 = generateManyActivities(75)
 
 // ============================================================================
+// Sample Todos (for TodoWrite visualization)
+// ============================================================================
+
+/** Empty state - no todos */
+const todosEmpty: TodoItem[] = []
+
+/** All pending - just started planning */
+const todosAllPending: TodoItem[] = [
+  { content: 'Analyze authentication system', status: 'pending', activeForm: 'Analyzing authentication system' },
+  { content: 'Implement token refresh logic', status: 'pending', activeForm: 'Implementing token refresh' },
+  { content: 'Add unit tests for auth flow', status: 'pending', activeForm: 'Adding unit tests' },
+  { content: 'Update API documentation', status: 'pending', activeForm: 'Updating documentation' },
+]
+
+/** In progress - currently working */
+const todosInProgress: TodoItem[] = [
+  { content: 'Analyze authentication system', status: 'completed', activeForm: 'Analyzing authentication system' },
+  { content: 'Implement token refresh logic', status: 'in_progress', activeForm: 'Implementing token refresh' },
+  { content: 'Add unit tests for auth flow', status: 'pending', activeForm: 'Adding unit tests' },
+  { content: 'Update API documentation', status: 'pending', activeForm: 'Updating documentation' },
+]
+
+/** Mixed progress */
+const todosMixed: TodoItem[] = [
+  { content: 'Fix critical security bug', status: 'completed', activeForm: 'Fixing security bug' },
+  { content: 'Implement OAuth 2.0 flow', status: 'in_progress', activeForm: 'Implementing OAuth flow' },
+  { content: 'Add session timeout handling', status: 'pending', activeForm: 'Adding timeout handling' },
+  { content: 'Improve error messages', status: 'pending', activeForm: 'Improving error messages' },
+  { content: 'Add telemetry events', status: 'pending', activeForm: 'Adding telemetry' },
+]
+
+/** Almost done - 1 remaining */
+const todosAlmostDone: TodoItem[] = [
+  { content: 'Research authentication patterns', status: 'completed', activeForm: 'Researching patterns' },
+  { content: 'Implement token validation', status: 'completed', activeForm: 'Implementing validation' },
+  { content: 'Add refresh token rotation', status: 'completed', activeForm: 'Adding token rotation' },
+  { content: 'Run test suite and verify', status: 'in_progress', activeForm: 'Running tests' },
+]
+
+/** All completed - task done */
+const todosAllCompleted: TodoItem[] = [
+  { content: 'Analyze current implementation', status: 'completed', activeForm: 'Analyzing implementation' },
+  { content: 'Implement improvements', status: 'completed', activeForm: 'Implementing improvements' },
+  { content: 'Add comprehensive tests', status: 'completed', activeForm: 'Adding tests' },
+  { content: 'Update documentation', status: 'completed', activeForm: 'Updating docs' },
+]
+
+/** Long task list (stress test) */
+const todosLong: TodoItem[] = [
+  { content: 'Set up project structure', status: 'completed', activeForm: 'Setting up project' },
+  { content: 'Configure build system', status: 'completed', activeForm: 'Configuring build' },
+  { content: 'Install dependencies', status: 'completed', activeForm: 'Installing deps' },
+  { content: 'Create database schema', status: 'completed', activeForm: 'Creating schema' },
+  { content: 'Implement user model', status: 'completed', activeForm: 'Implementing model' },
+  { content: 'Add authentication middleware', status: 'in_progress', activeForm: 'Adding auth middleware' },
+  { content: 'Create API endpoints', status: 'pending', activeForm: 'Creating endpoints' },
+  { content: 'Add input validation', status: 'pending', activeForm: 'Adding validation' },
+  { content: 'Implement error handling', status: 'pending', activeForm: 'Implementing errors' },
+  { content: 'Add rate limiting', status: 'pending', activeForm: 'Adding rate limits' },
+  { content: 'Set up logging', status: 'pending', activeForm: 'Setting up logging' },
+  { content: 'Write unit tests', status: 'pending', activeForm: 'Writing tests' },
+]
+
+// ============================================================================
 // Component Entry
 // ============================================================================
 
@@ -696,6 +760,98 @@ export const turnCardComponents: ComponentEntry[] = [
           isStreaming: true,
           isComplete: false,
           defaultExpanded: true,
+        },
+      },
+      // ========== TodoWrite Variants ==========
+      // Todo: Just started (all pending)
+      {
+        name: 'Todo: Just Started',
+        description: 'TodoWrite with all items pending - just created the plan',
+        props: {
+          activities: [completedGrepActivity],
+          response: undefined,
+          isStreaming: false,
+          isComplete: false,
+          defaultExpanded: true,
+          todos: todosAllPending,
+        },
+      },
+      // Todo: In progress
+      {
+        name: 'Todo: In Progress',
+        description: 'TodoWrite with one item in progress',
+        props: {
+          activities: [completedGrepActivity, completedReadActivity1],
+          response: undefined,
+          isStreaming: true,
+          isComplete: false,
+          defaultExpanded: true,
+          todos: todosInProgress,
+        },
+      },
+      // Todo: Mixed progress
+      {
+        name: 'Todo: Mixed Progress',
+        description: 'TodoWrite with mixed completed/in_progress/pending items',
+        props: {
+          activities: [completedGrepActivity, completedReadActivity1, completedBashActivity],
+          response: shortResponse,
+          isStreaming: false,
+          isComplete: true,
+          defaultExpanded: true,
+          todos: todosMixed,
+        },
+      },
+      // Todo: Almost done
+      {
+        name: 'Todo: Almost Done',
+        description: 'TodoWrite with most items completed, one in progress',
+        props: {
+          activities: [completedGrepActivity, completedReadActivity1],
+          response: undefined,
+          isStreaming: true,
+          isComplete: false,
+          defaultExpanded: true,
+          todos: todosAlmostDone,
+        },
+      },
+      // Todo: All completed
+      {
+        name: 'Todo: All Completed',
+        description: 'TodoWrite with all items done - task complete',
+        props: {
+          activities: [completedGrepActivity, completedReadActivity1, completedBashActivity],
+          response: longResponse,
+          isStreaming: false,
+          isComplete: true,
+          defaultExpanded: true,
+          todos: todosAllCompleted,
+        },
+      },
+      // Todo: Long list (stress test)
+      {
+        name: 'Todo: Long List (12 items)',
+        description: 'TodoWrite stress test with many items',
+        props: {
+          activities: [completedGrepActivity, completedReadActivity1],
+          response: shortResponse,
+          isStreaming: false,
+          isComplete: true,
+          defaultExpanded: true,
+          todos: todosLong,
+        },
+      },
+      // Todo: Only (no activities/response)
+      {
+        name: 'Todo: Standalone',
+        description: 'TodoWrite without activities or response - planning phase only',
+        props: {
+          activities: [],
+          response: undefined,
+          isStreaming: false,
+          isComplete: false,
+          defaultExpanded: true,
+          todos: todosMixed,
         },
       },
     ],

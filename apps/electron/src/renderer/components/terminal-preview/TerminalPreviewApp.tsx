@@ -1,8 +1,10 @@
 import * as React from 'react'
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { Terminal, Copy, Check, ChevronRight } from 'lucide-react'
+import { Terminal, Copy, Check, ChevronRight, Search, FolderSearch } from 'lucide-react'
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { Button } from '@/components/ui/button'
+import { useTheme } from '@/context/ThemeContext'
+import { WindowHeader, WindowHeaderBadge, BADGE_CONFIGS } from '@/components/ui/window-header-badge'
 import type { TerminalPreviewData } from '../../../shared/types'
 
 interface TerminalPreviewAppProps {
@@ -226,46 +228,49 @@ export function TerminalPreviewApp({ sessionId, previewId }: TerminalPreviewAppP
     return parseGrepOutput(data.output)
   }, [isGrepOutput, data?.output])
 
-  // Terminal colors
-  const bgColor = '#1a1a1a'
-  const textColor = '#e4e4e4'
-  const mutedColor = '#888888'
+  const { resolvedMode } = useTheme()
+  const isDark = resolvedMode === 'dark'
+
+  // Theme-aware colors
+  const bgColor = isDark ? '#1e1e1e' : '#ffffff'
+  const textColor = isDark ? '#e4e4e4' : '#1a1a1a'
+  const mutedColor = isDark ? '#888888' : '#666666'
   const promptColor = '#22c55e' // Green for prompt
-  const cmdColor = '#60a5fa' // Blue for command
+  const cmdColor = isDark ? '#60a5fa' : '#2563eb' // Blue for command
+  const toolbarBorder = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)'
+  const codeBg = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)'
+  const outputBg = isDark ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.03)'
+
+  // Tool type badge config
+  const toolConfig = useMemo(() => {
+    const toolType = data?.toolType || 'bash'
+    switch (toolType) {
+      case 'grep':
+        return { Icon: Search, label: 'Grep', ...BADGE_CONFIGS.grep }
+      case 'glob':
+        return { Icon: FolderSearch, label: 'Glob', ...BADGE_CONFIGS.glob }
+      default:
+        return { Icon: Terminal, label: 'Bash', ...BADGE_CONFIGS.bash }
+    }
+  }, [data?.toolType])
 
   return (
     <TooltipProvider delayDuration={0}>
       <div className="h-screen w-screen flex flex-col" style={{ backgroundColor: bgColor, color: textColor }}>
-        {/* Toolbar / Title bar */}
-        <div
-          className="titlebar-drag-region h-[52px] shrink-0 flex items-center justify-between px-4"
-          style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}
-        >
-          {/* Left side - space for traffic lights on macOS */}
-          <div className="w-[70px]" />
-
-          {/* Center - Terminal badge */}
-          <div className="flex items-center gap-2">
-            <div
-              className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium"
-              style={{ backgroundColor: 'rgba(255,255,255,0.1)', color: textColor }}
-            >
-              <Terminal className="w-3.5 h-3.5" />
-              Bash
-            </div>
-            {data?.description && (
-              <span
-                className="text-xs px-2 py-0.5 rounded"
-                style={{ backgroundColor: 'rgba(255,255,255,0.05)', color: mutedColor }}
-              >
-                {data.description}
-              </span>
-            )}
-          </div>
-
-          {/* Right side - placeholder */}
-          <div className="w-[70px]" />
-        </div>
+        <WindowHeader borderColor={toolbarBorder}>
+          <WindowHeaderBadge
+            Icon={toolConfig.Icon}
+            label={toolConfig.label}
+            bgColor={toolConfig.bgColor}
+            textColor={toolConfig.textColor}
+          />
+          {data?.description && (
+            <WindowHeaderBadge
+              label={data.description}
+              {...(isDark ? BADGE_CONFIGS.dimmedDark : BADGE_CONFIGS.dimmedLight)}
+            />
+          )}
+        </WindowHeader>
 
         {/* Error overlay */}
         {error && (
@@ -290,7 +295,7 @@ export function TerminalPreviewApp({ sessionId, previewId }: TerminalPreviewAppP
                       variant="ghost"
                       size="icon"
                       onClick={() => copyToClipboard(data.command, 'command')}
-                      className="h-6 w-6 rounded hover:bg-white/10"
+                      className={`h-6 w-6 rounded ${isDark ? 'hover:bg-white/10' : 'hover:bg-black/5'}`}
                     >
                       {copied === 'command' ? (
                         <Check className="h-3.5 w-3.5 text-green-400" />
@@ -306,7 +311,7 @@ export function TerminalPreviewApp({ sessionId, previewId }: TerminalPreviewAppP
               </div>
               <div
                 className="p-3 rounded-lg overflow-x-auto"
-                style={{ backgroundColor: 'rgba(255,255,255,0.05)' }}
+                style={{ backgroundColor: codeBg }}
               >
                 <code style={{ color: cmdColor }}>{data.command}</code>
               </div>
@@ -336,7 +341,7 @@ export function TerminalPreviewApp({ sessionId, previewId }: TerminalPreviewAppP
                       variant="ghost"
                       size="icon"
                       onClick={() => copyToClipboard(data.output, 'output')}
-                      className="h-6 w-6 rounded hover:bg-white/10"
+                      className={`h-6 w-6 rounded ${isDark ? 'hover:bg-white/10' : 'hover:bg-black/5'}`}
                     >
                       {copied === 'output' ? (
                         <Check className="h-3.5 w-3.5 text-green-400" />
@@ -354,7 +359,7 @@ export function TerminalPreviewApp({ sessionId, previewId }: TerminalPreviewAppP
                 ref={outputRef}
                 className="p-3 rounded-lg overflow-auto"
                 style={{
-                  backgroundColor: 'rgba(0,0,0,0.3)',
+                  backgroundColor: outputBg,
                   color: textColor,
                   maxHeight: 'calc(100vh - 200px)',
                 }}
@@ -375,12 +380,12 @@ export function TerminalPreviewApp({ sessionId, previewId }: TerminalPreviewAppP
                           <span
                             className="select-none pr-3 text-right shrink-0"
                             style={{
-                              color: line.isMatch ? '#22c55e' : '#666666',
+                              color: line.isMatch ? '#22c55e' : mutedColor,
                               minWidth: '3rem',
                             }}
                           >
                             {line.lineNum}
-                            <span style={{ color: line.isMatch ? '#22c55e' : '#444444' }}>
+                            <span style={{ color: line.isMatch ? '#22c55e' : (isDark ? '#444444' : '#cccccc') }}>
                               {line.isMatch ? ':' : '-'}
                             </span>
                           </span>
@@ -388,7 +393,7 @@ export function TerminalPreviewApp({ sessionId, previewId }: TerminalPreviewAppP
                         {/* Content */}
                         <span
                           className="whitespace-pre-wrap break-words"
-                          style={{ color: line.isMatch ? textColor : '#888888' }}
+                          style={{ color: line.isMatch ? textColor : mutedColor }}
                         >
                           {line.content}
                         </span>
