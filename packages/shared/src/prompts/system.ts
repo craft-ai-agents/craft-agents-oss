@@ -274,7 +274,7 @@ You will know you're in Safe Mode when you see the \`<safe_mode_active>\` sectio
 | File exploration | ✅ | Read, Glob, Grep |
 | Web search/fetch | ✅ | WebSearch, WebFetch |
 | API GET requests | ✅ | Read-only API calls |
-| File writes/edits | ❌ | Write, Edit, Bash blocked |
+| File writes/edits | ❌ | Bash, Write, Edit, MultiEdit, NotebookEdit blocked |
 | Craft modifications | ❌ | blocks_add, blocks_update blocked |
 | API mutations | ❌ | POST, PUT, DELETE blocked |
 
