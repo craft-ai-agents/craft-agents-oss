@@ -71,20 +71,30 @@ import { type TodoStateId, DEFAULT_TODO_STATES, getStateColor } from "@/config/t
 
 type ViewMode = 'inbox' | 'archive' | 'flagged' | 'agent' | `state:${TodoStateId}`
 
+/**
+ * ChatProps - Minimal props interface for Chat component
+ *
+ * Most data and callbacks come from ChatContext (provided by ChatProvider).
+ * Only UI-specific state and layout props are passed directly.
+ *
+ * Adding new features:
+ * 1. Add to ChatContextType in context/ChatContext.tsx
+ * 2. Use via useChatContext() hook in child components
+ * 3. NO changes needed to this interface or Chat component
+ */
 interface ChatProps {
+  // Data - all from ChatContext
   workspaces: Workspace[]
   sessions: Session[]
   agents: SubAgentMetadata[]
   isLoadingAgents?: boolean
   activeWorkspaceId: string | null
-  defaultLayout?: number[]
-  defaultCollapsed?: boolean
-  // Model selection
   currentModel: string
-  // Menu bar trigger - increments when menu bar "New Chat" is clicked
-  menuNewChatTrigger?: number
-  onModelChange: (model: string) => void
-  // Callbacks
+  pendingPermissions?: Map<string, PermissionRequest[]>
+  sessionOptions?: Map<string, import('../../hooks/useSessionOptions').SessionOptions>
+  sessionDrafts?: Map<string, string>
+
+  // Callbacks - all forwarded to ChatContext
   onSelectWorkspace: (id: string) => void
   onCreateSession: (workspaceId: string, agentId?: string) => Promise<Session>
   onDeleteSession: (sessionId: string, skipConfirmation?: boolean) => Promise<boolean>
@@ -97,21 +107,21 @@ interface ChatProps {
   onSendMessage: (sessionId: string, message: string, attachments?: FileAttachment[]) => void
   onOpenFile: (path: string) => void
   onOpenUrl: (url: string) => void
+  onModelChange: (model: string) => void
   onOpenSettings: () => void
   onOpenKeyboardShortcuts: () => void
   onOpenStoredUserPreferences: () => void
   onRefreshAgents: () => void
   onLogout: () => void
   onAddWorkspace: () => void
-  // Permission handling (queue to support multiple concurrent requests)
-  pendingPermissions?: Map<string, PermissionRequest[]>
   onRespondToPermission?: (sessionId: string, requestId: string, allowed: boolean, alwaysAllow: boolean) => void
-  // Unified session options (replaces ultrathink, skipPermissions, modes)
-  sessionOptions?: Map<string, import('../../hooks/useSessionOptions').SessionOptions>
   onSessionOptionsChange?: (sessionId: string, updates: import('../../hooks/useSessionOptions').SessionOptionUpdates) => void
-  // Input drafts per session
-  sessionDrafts?: Map<string, string>
   onInputChange?: (sessionId: string, value: string) => void
+
+  // UI-specific props (NOT in context)
+  defaultLayout?: number[]
+  defaultCollapsed?: boolean
+  menuNewChatTrigger?: number
 }
 
 /**
@@ -866,28 +876,44 @@ export function Chat({
   }, [session.selected, setSession, onDeleteSession])
 
   // Create ChatContext value for tab panels
+  // All data and callbacks are available via useChatContext() in child components
   const chatContextValue = React.useMemo<ChatContextType>(() => ({
+    // Data
     sessions,
     workspaces,
     agents,
+    isLoadingAgents,
     activeWorkspaceId,
     currentModel,
     pendingPermissions: pendingPermissions || new Map(),
     sessionDrafts: sessionDrafts || new Map(),
-    // Unified session options
     sessionOptions: sessionOptions || new Map(),
+    // Session callbacks
     onCreateSession,
     onSendMessage,
     onRenameSession,
     onFlagSession,
     onUnflagSession,
     onMarkSessionRead,
+    onMarkSessionUnread,
+    onTodoStateChange,
     onDeleteSession: handleDeleteSession,
     onRespondToPermission,
+    // File/URL handlers
     onOpenFile,
     onOpenUrl,
+    // Model
     onModelChange,
-    // Unified session options callback
+    // Workspace
+    onSelectWorkspace,
+    onAddWorkspace,
+    // App actions
+    onOpenSettings,
+    onOpenKeyboardShortcuts,
+    onOpenStoredUserPreferences,
+    onRefreshAgents,
+    onLogout,
+    // Session options
     onSessionOptionsChange: onSessionOptionsChange || (() => {}),
     onInputChange: onInputChange || (() => {}),
     textareaRef: chatInputRef,
@@ -895,23 +921,33 @@ export function Chat({
     sessions,
     workspaces,
     agents,
+    isLoadingAgents,
     activeWorkspaceId,
     currentModel,
     pendingPermissions,
     sessionOptions,
+    sessionDrafts,
     onCreateSession,
     onSendMessage,
     onRenameSession,
     onFlagSession,
     onUnflagSession,
     onMarkSessionRead,
+    onMarkSessionUnread,
+    onTodoStateChange,
     handleDeleteSession,
     onRespondToPermission,
     onOpenFile,
     onOpenUrl,
     onModelChange,
+    onSelectWorkspace,
+    onAddWorkspace,
+    onOpenSettings,
+    onOpenKeyboardShortcuts,
+    onOpenStoredUserPreferences,
+    onRefreshAgents,
+    onLogout,
     onSessionOptionsChange,
-    sessionDrafts,
     onInputChange,
   ])
 

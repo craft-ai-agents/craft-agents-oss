@@ -15,6 +15,7 @@ import type {
   FileAttachment,
   PermissionRequest,
   Mode,
+  TodoState,
 } from '../../shared/types'
 import type { SessionOptions, SessionOptionUpdates } from '../hooks/useSessionOptions'
 import { defaultSessionOptions } from '../hooks/useSessionOptions'
@@ -24,6 +25,7 @@ export interface ChatContextType {
   sessions: Session[]
   workspaces: Workspace[]
   agents: SubAgentMetadata[]
+  isLoadingAgents?: boolean
   activeWorkspaceId: string | null
   currentModel: string
   pendingPermissions: Map<string, PermissionRequest[]>
@@ -41,6 +43,8 @@ export interface ChatContextType {
   onFlagSession: (sessionId: string) => void
   onUnflagSession: (sessionId: string) => void
   onMarkSessionRead: (sessionId: string) => void
+  onMarkSessionUnread: (sessionId: string) => void
+  onTodoStateChange: (sessionId: string, state: TodoState) => void
   onDeleteSession: (sessionId: string, skipConfirmation?: boolean) => Promise<boolean>
 
   // Permission handling
@@ -57,6 +61,17 @@ export interface ChatContextType {
 
   // Model
   onModelChange: (model: string) => void
+
+  // Workspace
+  onSelectWorkspace: (id: string) => void
+  onAddWorkspace: () => void
+
+  // App actions
+  onOpenSettings: () => void
+  onOpenKeyboardShortcuts: () => void
+  onOpenStoredUserPreferences: () => void
+  onRefreshAgents: () => void
+  onLogout: () => void
 
   // Unified session options callback (replaces onUltrathinkChange, onSkipPermissionsChange, onModeChange)
   onSessionOptionsChange: (sessionId: string, updates: SessionOptionUpdates) => void
