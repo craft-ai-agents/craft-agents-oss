@@ -425,10 +425,29 @@ After calling this tool, you can proceed with executing the plan.`,
       callbacks?.onStateChange?.(updatedState);
       callbacks?.onPlanModeExited?.();
 
+      // Include the plan file path in the response so the agent knows where to read from
+      const currentState = planModeManager.getState(sessionId);
+      const planPath = currentState.planFilePath;
+
+      const instructions = [
+        'Plan mode exited. The user has approved your plan.',
+        '',
+        planPath ? `**Your plan is at:** \`${planPath}\`` : '',
+        '',
+        '**CRITICAL: You must now execute the plan completely.**',
+        '- Read the plan file to refresh your memory of all steps',
+        '- Execute each step in order, using the appropriate tools',
+        '- Do NOT stop until ALL steps are completed',
+        '- Report progress as you complete each step',
+        '- If a step fails, try to resolve it before moving on',
+        '',
+        'BEGIN EXECUTION NOW. Start by reading the plan file.',
+      ].filter(Boolean).join('\n');
+
       return {
         content: [{
           type: 'text' as const,
-          text: 'PLAN_MODE_EXITED',
+          text: instructions,
         }],
       };
     }

@@ -9,7 +9,8 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { TodoStateMenu, DEFAULT_TODO_STATES, getStateColor, type TodoStateId } from "@/components/ui/todo-filter-menu"
+import { TodoStateMenu } from "@/components/ui/todo-filter-menu"
+import { DEFAULT_TODO_STATES, getStateColor, type TodoStateId } from "@/config/todo-states"
 import {
   CircleDashed,
   CircleProgress,

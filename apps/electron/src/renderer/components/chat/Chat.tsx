@@ -67,7 +67,7 @@ import { useFocusContext } from "@/context/FocusContext"
 import { getSessionTitle } from "@/utils/session"
 import { closeTabWithCleanup } from "@/utils/closeTabWithCleanup"
 import type { Session, Workspace, SubAgentMetadata, FileAttachment, PermissionRequest, TodoState } from "../../../shared/types"
-import { type TodoStateId, DEFAULT_TODO_STATES, getStateColor } from "@/components/ui/todo-filter-menu"
+import { type TodoStateId, DEFAULT_TODO_STATES, getStateColor } from "@/config/todo-states"
 
 type ViewMode = 'inbox' | 'archive' | 'flagged' | 'agent' | `state:${TodoStateId}`
 
