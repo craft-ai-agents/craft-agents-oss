@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import type { Session, Workspace, SessionEvent, Message, SubAgentMetadata, FileAttachment, StoredAttachment, PermissionRequest, SetupNeeds, TodoState, Mode } from '../shared/types'
 import type { SessionOptions, SessionOptionUpdates } from './hooks/useSessionOptions'
 import { defaultSessionOptions, mergeSessionOptions } from './hooks/useSessionOptions'
@@ -317,7 +317,7 @@ export default function App() {
         })
 
         // Auto-approve if skipPermissions is enabled for this session
-        if (skipPermissionsSessionsRef.current.has(event.sessionId)) {
+        if (sessionOptionsRef.current.get(event.sessionId)?.skipPermissions) {
           console.log('[App] permission_request: auto-approving (skipPermissions enabled)')
           window.electronAPI.respondToPermission(event.sessionId, event.request.requestId, true, false)
           return
@@ -1032,11 +1032,7 @@ export default function App() {
 
       // Auto-disable ultrathink after sending (single-shot activation)
       if (isUltrathink) {
-        setUltrathinkSessions(prev => {
-          const next = new Set(prev)
-          next.delete(sessionId)
-          return next
-        })
+        handleSessionOptionsChange(sessionId, { ultrathinkEnabled: false })
       }
     } catch (error) {
       console.error('Failed to send message:', error)

@@ -448,6 +448,10 @@ export function Chat({
     onRenameSession,
     onRefreshAgents,
     onOpenSettings,
+    onOpenKeyboardShortcuts,
+    onOpenStoredUserPreferences,
+    onAddWorkspace,
+    onLogout,
   } = contextValue
   const [isSidebarVisible, setIsSidebarVisible] = React.useState(() => {
     const saved = localStorage.getItem('chat-sidebar-visible')
