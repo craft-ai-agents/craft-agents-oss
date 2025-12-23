@@ -5,6 +5,7 @@ import { defaultSessionOptions, mergeSessionOptions } from './hooks/useSessionOp
 import { getToolDisplayName } from '@craft-agent/shared/utils/toolNames'
 import { generateMessageId } from '../shared/types'
 import { Chat } from '@/components/chat/Chat'
+import type { ChatContextType } from '@/context/ChatContext'
 import { OnboardingWizard, ReauthScreen } from '@/components/onboarding'
 import { AddWorkspaceFlow } from '@/components/AddWorkspaceFlow'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -1319,47 +1320,90 @@ export default function App() {
     )
   }
 
+  // Build context value for Chat component
+  // This is memoized to prevent unnecessary re-renders
+  const chatContextValue = useMemo<ChatContextType>(() => ({
+    // Data
+    sessions,
+    workspaces,
+    agents,
+    isLoadingAgents,
+    activeWorkspaceId: windowWorkspaceId,
+    currentModel,
+    pendingPermissions,
+    sessionDrafts,
+    sessionOptions,
+    // Session callbacks
+    onCreateSession: handleCreateSession,
+    onSendMessage: handleSendMessage,
+    onRenameSession: handleRenameSession,
+    onFlagSession: handleFlagSession,
+    onUnflagSession: handleUnflagSession,
+    onMarkSessionRead: handleMarkSessionRead,
+    onMarkSessionUnread: handleMarkSessionUnread,
+    onTodoStateChange: handleTodoStateChange,
+    onDeleteSession: handleDeleteSession,
+    onRespondToPermission: handleRespondToPermission,
+    // File/URL handlers
+    onOpenFile: handleOpenFile,
+    onOpenUrl: handleOpenUrl,
+    // Model
+    onModelChange: handleModelChange,
+    // Workspace
+    onSelectWorkspace: handleSelectWorkspace,
+    onAddWorkspace: handleAddWorkspace,
+    // App actions
+    onOpenSettings: handleOpenSettings,
+    onOpenKeyboardShortcuts: handleOpenKeyboardShortcuts,
+    onOpenStoredUserPreferences: handleOpenStoredUserPreferences,
+    onRefreshAgents: handleRefreshAgents,
+    onLogout: handleLogout,
+    // Session options
+    onSessionOptionsChange: handleSessionOptionsChange,
+    onInputChange: handleInputChange,
+  }), [
+    sessions,
+    workspaces,
+    agents,
+    isLoadingAgents,
+    windowWorkspaceId,
+    currentModel,
+    pendingPermissions,
+    sessionDrafts,
+    sessionOptions,
+    handleCreateSession,
+    handleSendMessage,
+    handleRenameSession,
+    handleFlagSession,
+    handleUnflagSession,
+    handleMarkSessionRead,
+    handleMarkSessionUnread,
+    handleTodoStateChange,
+    handleDeleteSession,
+    handleRespondToPermission,
+    handleOpenFile,
+    handleOpenUrl,
+    handleModelChange,
+    handleSelectWorkspace,
+    handleAddWorkspace,
+    handleOpenSettings,
+    handleOpenKeyboardShortcuts,
+    handleOpenStoredUserPreferences,
+    handleRefreshAgents,
+    handleLogout,
+    handleSessionOptionsChange,
+    handleInputChange,
+  ])
+
   // Ready state - main app
   return (
     <FocusProvider>
       <TooltipProvider>
         <div className="h-full text-foreground">
           <Chat
-            workspaces={workspaces}
-            sessions={sessions}
-            agents={agents}
-            isLoadingAgents={isLoadingAgents}
-            activeWorkspaceId={windowWorkspaceId}
+            contextValue={chatContextValue}
             defaultLayout={[20, 32, 48]}
-            currentModel={currentModel}
             menuNewChatTrigger={menuNewChatTrigger}
-            onModelChange={handleModelChange}
-            onSelectWorkspace={handleSelectWorkspace}
-            onCreateSession={handleCreateSession}
-            onDeleteSession={handleDeleteSession}
-            onFlagSession={handleFlagSession}
-            onUnflagSession={handleUnflagSession}
-            onMarkSessionRead={handleMarkSessionRead}
-            onMarkSessionUnread={handleMarkSessionUnread}
-            onTodoStateChange={handleTodoStateChange}
-            onRenameSession={handleRenameSession}
-            onSendMessage={handleSendMessage}
-            onOpenFile={handleOpenFile}
-            onOpenUrl={handleOpenUrl}
-            onOpenSettings={handleOpenSettings}
-            onOpenKeyboardShortcuts={handleOpenKeyboardShortcuts}
-            onOpenStoredUserPreferences={handleOpenStoredUserPreferences}
-            onRefreshAgents={handleRefreshAgents}
-            onLogout={handleLogout}
-            onAddWorkspace={handleAddWorkspace}
-            pendingPermissions={pendingPermissions}
-            onRespondToPermission={handleRespondToPermission}
-            // Unified session options (replaces ultrathink, skipPermissions, modes)
-            sessionOptions={sessionOptions}
-            onSessionOptionsChange={handleSessionOptionsChange}
-            // Input drafts per session
-            sessionDrafts={sessionDrafts}
-            onInputChange={handleInputChange}
           />
         </div>
       </TooltipProvider>

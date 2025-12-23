@@ -74,51 +74,18 @@ type ViewMode = 'inbox' | 'archive' | 'flagged' | 'agent' | `state:${TodoStateId
 /**
  * ChatProps - Minimal props interface for Chat component
  *
- * Most data and callbacks come from ChatContext (provided by ChatProvider).
- * Only UI-specific state and layout props are passed directly.
+ * Data and callbacks come via contextValue (ChatContextType).
+ * Only UI-specific state is passed as separate props.
  *
  * Adding new features:
  * 1. Add to ChatContextType in context/ChatContext.tsx
- * 2. Use via useChatContext() hook in child components
- * 3. NO changes needed to this interface or Chat component
+ * 2. Update App.tsx to include in contextValue
+ * 3. Use via useChatContext() hook in child components
  */
 interface ChatProps {
-  // Data - all from ChatContext
-  workspaces: Workspace[]
-  sessions: Session[]
-  agents: SubAgentMetadata[]
-  isLoadingAgents?: boolean
-  activeWorkspaceId: string | null
-  currentModel: string
-  pendingPermissions?: Map<string, PermissionRequest[]>
-  sessionOptions?: Map<string, import('../../hooks/useSessionOptions').SessionOptions>
-  sessionDrafts?: Map<string, string>
-
-  // Callbacks - all forwarded to ChatContext
-  onSelectWorkspace: (id: string) => void
-  onCreateSession: (workspaceId: string, agentId?: string) => Promise<Session>
-  onDeleteSession: (sessionId: string, skipConfirmation?: boolean) => Promise<boolean>
-  onFlagSession: (sessionId: string) => void
-  onUnflagSession: (sessionId: string) => void
-  onMarkSessionRead: (sessionId: string) => void
-  onMarkSessionUnread: (sessionId: string) => void
-  onTodoStateChange: (sessionId: string, state: TodoState) => void
-  onRenameSession: (sessionId: string, name: string) => void
-  onSendMessage: (sessionId: string, message: string, attachments?: FileAttachment[]) => void
-  onOpenFile: (path: string) => void
-  onOpenUrl: (url: string) => void
-  onModelChange: (model: string) => void
-  onOpenSettings: () => void
-  onOpenKeyboardShortcuts: () => void
-  onOpenStoredUserPreferences: () => void
-  onRefreshAgents: () => void
-  onLogout: () => void
-  onAddWorkspace: () => void
-  onRespondToPermission?: (sessionId: string, requestId: string, allowed: boolean, alwaysAllow: boolean) => void
-  onSessionOptionsChange?: (sessionId: string, updates: import('../../hooks/useSessionOptions').SessionOptionUpdates) => void
-  onInputChange?: (sessionId: string, value: string) => void
-
-  // UI-specific props (NOT in context)
+  /** All data and callbacks - passed directly to ChatProvider */
+  contextValue: ChatContextType
+  /** UI-specific props */
   defaultLayout?: number[]
   defaultCollapsed?: boolean
   menuNewChatTrigger?: number
@@ -456,43 +423,32 @@ function AgentTree({
  * - 'agent': Shows sessions for a specific agent
  */
 export function Chat({
-  workspaces,
-  sessions,
-  agents,
-  isLoadingAgents = false,
-  activeWorkspaceId,
+  contextValue,
   defaultLayout = [20, 32, 48],
   defaultCollapsed = false,
-  currentModel,
   menuNewChatTrigger,
-  onModelChange,
-  onSelectWorkspace,
-  onCreateSession,
-  onDeleteSession,
-  onFlagSession,
-  onUnflagSession,
-  onMarkSessionRead,
-  onMarkSessionUnread,
-  onTodoStateChange,
-  onRenameSession,
-  onSendMessage,
-  onOpenFile,
-  onOpenUrl,
-  onOpenSettings,
-  onOpenKeyboardShortcuts,
-  onOpenStoredUserPreferences,
-  onRefreshAgents,
-  onLogout,
-  onAddWorkspace,
-  pendingPermissions,
-  onRespondToPermission,
-  // Unified session options
-  sessionOptions,
-  onSessionOptionsChange,
-  // Input drafts per session
-  sessionDrafts,
-  onInputChange,
 }: ChatProps) {
+  // Destructure commonly used values from context
+  const {
+    workspaces,
+    sessions,
+    agents,
+    isLoadingAgents = false,
+    activeWorkspaceId,
+    currentModel,
+    sessionOptions,
+    onSelectWorkspace,
+    onCreateSession,
+    onDeleteSession,
+    onFlagSession,
+    onUnflagSession,
+    onMarkSessionRead,
+    onMarkSessionUnread,
+    onTodoStateChange,
+    onRenameSession,
+    onRefreshAgents,
+    onOpenSettings,
+  } = contextValue
   const [isSidebarVisible, setIsSidebarVisible] = React.useState(() => {
     const saved = localStorage.getItem('chat-sidebar-visible')
     return saved !== null ? saved === 'true' : !defaultCollapsed
@@ -875,81 +831,12 @@ export function Chat({
     return onDeleteSession(sessionId, skipConfirmation)
   }, [session.selected, setSession, onDeleteSession])
 
-  // Create ChatContext value for tab panels
-  // All data and callbacks are available via useChatContext() in child components
+  // Extend context value with local overrides (textareaRef, wrapped onDeleteSession)
   const chatContextValue = React.useMemo<ChatContextType>(() => ({
-    // Data
-    sessions,
-    workspaces,
-    agents,
-    isLoadingAgents,
-    activeWorkspaceId,
-    currentModel,
-    pendingPermissions: pendingPermissions || new Map(),
-    sessionDrafts: sessionDrafts || new Map(),
-    sessionOptions: sessionOptions || new Map(),
-    // Session callbacks
-    onCreateSession,
-    onSendMessage,
-    onRenameSession,
-    onFlagSession,
-    onUnflagSession,
-    onMarkSessionRead,
-    onMarkSessionUnread,
-    onTodoStateChange,
+    ...contextValue,
     onDeleteSession: handleDeleteSession,
-    onRespondToPermission,
-    // File/URL handlers
-    onOpenFile,
-    onOpenUrl,
-    // Model
-    onModelChange,
-    // Workspace
-    onSelectWorkspace,
-    onAddWorkspace,
-    // App actions
-    onOpenSettings,
-    onOpenKeyboardShortcuts,
-    onOpenStoredUserPreferences,
-    onRefreshAgents,
-    onLogout,
-    // Session options
-    onSessionOptionsChange: onSessionOptionsChange || (() => {}),
-    onInputChange: onInputChange || (() => {}),
     textareaRef: chatInputRef,
-  }), [
-    sessions,
-    workspaces,
-    agents,
-    isLoadingAgents,
-    activeWorkspaceId,
-    currentModel,
-    pendingPermissions,
-    sessionOptions,
-    sessionDrafts,
-    onCreateSession,
-    onSendMessage,
-    onRenameSession,
-    onFlagSession,
-    onUnflagSession,
-    onMarkSessionRead,
-    onMarkSessionUnread,
-    onTodoStateChange,
-    handleDeleteSession,
-    onRespondToPermission,
-    onOpenFile,
-    onOpenUrl,
-    onModelChange,
-    onSelectWorkspace,
-    onAddWorkspace,
-    onOpenSettings,
-    onOpenKeyboardShortcuts,
-    onOpenStoredUserPreferences,
-    onRefreshAgents,
-    onLogout,
-    onSessionOptionsChange,
-    onInputChange,
-  ])
+  }), [contextValue, handleDeleteSession])
 
   // Group agents for tree view
   const agentTree = React.useMemo(() => groupAgentsByFolder(agents), [agents])
