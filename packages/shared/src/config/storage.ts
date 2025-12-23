@@ -69,7 +69,7 @@ export interface StoredConfig {
   showCost?: boolean;  // Whether to show cost in status bar (only relevant for API Key auth)
   cumulativeUsage?: CumulativeUsage;  // Global cumulative cost across all workspaces
   // New session defaults
-  defaultPlanMode?: boolean;  // Whether new sessions start with plan mode enabled (default: false)
+  defaultSafeMode?: boolean;  // Whether new sessions start with safe mode enabled (default: false)
   defaultSkipPermissions?: boolean;  // Whether new sessions auto-approve permissions (default: false)
 }
 
@@ -372,15 +372,15 @@ export function setShowCost(show: boolean): void {
 
 // New session defaults getters/setters
 
-export function getDefaultPlanMode(): boolean {
+export function getDefaultSafeMode(): boolean {
   const config = loadStoredConfig();
-  return config?.defaultPlanMode ?? false;
+  return config?.defaultSafeMode ?? false;
 }
 
-export function setDefaultPlanMode(enabled: boolean): void {
+export function setDefaultSafeMode(enabled: boolean): void {
   const config = loadStoredConfig();
   if (!config) return;
-  config.defaultPlanMode = enabled;
+  config.defaultSafeMode = enabled;
   saveConfig(config);
 }
 
@@ -1195,7 +1195,7 @@ export interface Session {
   isFlagged?: boolean;           // Whether this session is flagged
   // Advanced options (persisted per session)
   skipPermissions?: boolean;     // Auto-approve all permission requests
-  planModeEnabled?: boolean;     // Plan mode active for this session
+  safeModeEnabled?: boolean;     // Safe mode active for this session
   // Todo state (user-controlled) - determines inbox vs completed
   todoState?: TodoState;
   // Read/unread tracking - ID of last message user has read
