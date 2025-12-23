@@ -332,7 +332,7 @@ const PlanMessage: React.FC<{ planPath: string }> = memo(({ planPath }) => {
       {/* Footer */}
       <Box marginTop={1}>
         <Text dimColor italic>
-          Respond with feedback, "go ahead" to approve, or "cancel" to exit plan mode.
+          Respond with feedback, "go ahead" to approve, or "cancel" to exit safe mode.
         </Text>
       </Box>
     </Box>

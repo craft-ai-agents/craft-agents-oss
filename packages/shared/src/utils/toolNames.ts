@@ -9,9 +9,6 @@
  * Display names for specific tools that need custom names
  */
 const TOOL_DISPLAY_NAMES: Record<string, string> = {
-  // Plan mode tools
-  'ExitCraftAgentsPlanMode': 'Plan Ready',
-  'CraftAgentsPlanModeAskQuestion': 'Questions',
   // Documentation tools
   'SearchCraftAgents': 'Search Documentation',
 };
@@ -20,7 +17,7 @@ const TOOL_DISPLAY_NAMES: Record<string, string> = {
  * Tools that should be hidden from the UI (purely internal state changes)
  */
 export const HIDDEN_TOOLS = new Set<string>([
-  // EnterCraftAgentsPlanMode was removed - plan mode is now entered via UI toggle
+  // Currently empty - safe mode is toggled via UI, not tools
 ]);
 
 /**
@@ -60,7 +57,7 @@ export function getToolDisplayName(toolName: string): string {
   }
 
   // For MCP tools, also check mapping with just the base tool name
-  // e.g., "mcp__preferences__ExitCraftAgentsPlanMode" -> check "ExitCraftAgentsPlanMode"
+  // e.g., "mcp__craft__blocks_get" -> check "blocks_get"
   if (toolName.startsWith('mcp__')) {
     const parts = toolName.split('__');
     const baseName = parts[parts.length - 1] || toolName;

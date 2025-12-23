@@ -47,19 +47,6 @@ export {
   type ModeState,
   type ModeCallbacks,
   type ModeConfig,
-  // Legacy aliases (deprecated, for backward compatibility)
-  isSafeModeActive,
-  enterSafeMode,
-  exitSafeMode,
-  toggleSafeMode,
-  isToolBlockedInSafeMode,
-  isMcpToolAllowedInSafeMode,
-  isApiCallAllowedInSafeMode,
-  getSafeModeBlockReason,
-  getSafeModeContext,
-  SAFE_MODE_BLOCKED_TOOLS,
-  isReadOnlyMcpTool,
-  isReadOnlyApiMethod,
 } from './mode-manager.ts';
 
 // Export plan review types for electron app (plans can still be submitted via SubmitPlan)

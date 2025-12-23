@@ -126,7 +126,7 @@ export interface PermissionRequest {
   toolName: string;
   command: string;
   description: string;
-  type?: 'bash' | 'plan_mode';  // Type of permission request
+  type?: 'bash' | 'safe_mode';  // Type of permission request
 }
 
 export interface AskUserQuestionRequest {
@@ -1709,7 +1709,7 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
       : null;
 
   // ============================================
-  // Plan Mode Functions
+  // Plan Functions (SubmitPlan workflow)
   // ============================================
 
   /**
@@ -1742,7 +1742,7 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
   }, [session?.id]);
 
   /**
-   * Check if a message should trigger plan mode suggestion
+   * Check if a message should trigger planning suggestion
    */
   const shouldSuggestPlanning = useCallback((message: string): boolean => {
     const agent = agentRef.current;

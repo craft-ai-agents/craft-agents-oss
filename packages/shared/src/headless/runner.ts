@@ -98,8 +98,8 @@ export class HeadlessRunner {
       const toolCalls: ToolCallRecord[] = [];
       let usage: HeadlessResult['usage'];
 
-      // Wrap prompt with headless mode XML tags to signal plan mode should be disabled
-      const wrappedPrompt = `<headless_mode tools_usage="no-interactive-tools" plan_mode="disabled">
+      // Wrap prompt with headless mode XML tags to signal safe mode should be disabled
+      const wrappedPrompt = `<headless_mode tools_usage="no-interactive-tools" safe_mode="disabled">
 ${this.config.prompt}
 </headless_mode>`;
 

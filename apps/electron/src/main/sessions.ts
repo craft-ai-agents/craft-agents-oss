@@ -64,6 +64,10 @@ interface ManagedSession {
   // Map of toolUseId -> parentToolUseId for tracking which parent was active when each tool started
   // This is used to correctly attribute child tools even with concurrent parent tools
   toolToParentMap: Map<string, string>
+  // Parent tool ID captured when text started streaming (first text_delta)
+  // Used by text_complete to assign correct parent - prevents text from being nested
+  // under tools that started after the text began (e.g., "I'll help..." before Task call)
+  pendingTextParent?: string
   // Session name (user-defined or AI-generated)
   name?: string
   // Session metadata
@@ -577,12 +581,13 @@ export class SessionManager {
           pendingTools: new Map(),
           parentToolStack: [],
           toolToParentMap: new Map(),
+          pendingTextParent: undefined,
           name: storedSession.name,
           agentId: storedSession.agentId,
           agentName: storedSession.agentName,
           isFlagged: storedSession.isFlagged ?? false,
           skipPermissions: storedSession.skipPermissions ?? false,
-          activeModes: storedSession.activeModes ?? (storedSession.safeModeEnabled ? ['safe'] : []),
+          activeModes: storedSession.activeModes ?? [],
           sdkSessionId: storedSession.sdkSessionId,
           tokenUsage: storedSession.tokenUsage,
           todoState: storedSession.todoState,
@@ -684,6 +689,7 @@ export class SessionManager {
       pendingTools: new Map(),
       parentToolStack: [],
       toolToParentMap: new Map(),
+      pendingTextParent: undefined,
       agentId,
       agentName,
       isFlagged: false,
@@ -797,19 +803,6 @@ export class SessionManager {
         } catch (error) {
           console.error(`[SessionManager] Failed to read plan file:`, error)
         }
-      }
-
-      managed.agent.onCraftAskQuestion = (request) => {
-        console.log(`[SessionManager] Ask question request for session ${managed.id}:`, request.questions.length, 'questions')
-        this.sendEvent({
-          type: 'ask_question_request',
-          sessionId: managed.id,
-          request: {
-            sessionId: managed.id,
-            requestId: request.requestId,
-            questions: request.questions,
-          }
-        }, managed.workspace.id)
       }
 
       // NOTE: Agent definition is now applied in sendMessage() via AgentStateManager.activate()
@@ -1141,6 +1134,7 @@ export class SessionManager {
         // Clear parent tool tracking (should be empty after normal completion, but ensures clean state)
         managed.parentToolStack = []
         managed.toolToParentMap.clear()
+        managed.pendingTextParent = undefined
         this.sendEvent({ type: 'complete', sessionId }, managed.workspace.id)
       }
       // Always persist (for aborted messages)
@@ -1173,6 +1167,7 @@ export class SessionManager {
     // Clear parent tool tracking (stale entries would corrupt future parent-child tracking)
     managed.parentToolStack = []
     managed.toolToParentMap.clear()
+    managed.pendingTextParent = undefined
 
     // Add interrupted info message to session (for persistence)
     const interruptedMessage: Message = {
@@ -1202,22 +1197,6 @@ export class SessionManager {
       return true
     } else {
       console.warn(`[SessionManager] Cannot respond to permission - no agent for session ${sessionId}`)
-      return false
-    }
-  }
-
-  /**
-   * Respond to a pending ask question request
-   * Returns true if the response was delivered, false if agent/session is gone
-   */
-  respondToAskQuestion(sessionId: string, requestId: string, answers: Record<string, string>): boolean {
-    const managed = this.sessions.get(sessionId)
-    if (managed?.agent) {
-      console.log(`[SessionManager] Ask question response for ${requestId}:`, Object.keys(answers).length, 'answers')
-      managed.agent.respondToCraftAskQuestion(requestId, answers)
-      return true
-    } else {
-      console.warn(`[SessionManager] Cannot respond to ask question - no agent for session ${sessionId}`)
       return false
     }
   }
@@ -1280,7 +1259,13 @@ export class SessionManager {
 
     switch (event.type) {
       case 'text_delta':
-        // AgentEvent uses `text` not `delta`
+        // Capture parent on FIRST delta of a text block (when streamingText is empty)
+        // This ensures text gets the parent that existed when it started, not when it completed
+        if (managed.streamingText === '') {
+          managed.pendingTextParent = managed.parentToolStack.length > 0
+            ? managed.parentToolStack[managed.parentToolStack.length - 1]
+            : undefined
+        }
         managed.streamingText += event.text
         // Queue delta for batched sending (performance: reduces IPC from 50+/sec to ~20/sec)
         this.queueDelta(sessionId, workspaceId, event.text, event.turnId)
@@ -1294,11 +1279,9 @@ export class SessionManager {
         const existingAssistantCount = managed.messages.filter(m => m.role === 'assistant').length
         const shouldGenerateTitle = existingAssistantCount === 0 && !managed.name
 
-        // For intermediate messages (commentary during tool execution), assign the current parent
-        // This enables proper nesting in the tree view - commentary appears under its parent tool
-        const textParentToolUseId = event.isIntermediate && managed.parentToolStack.length > 0
-          ? managed.parentToolStack[managed.parentToolStack.length - 1]
-          : undefined
+        // Use the parent that was active when text STARTED streaming (captured in text_delta)
+        // This prevents text from being nested under tools that started after the text began
+        const textParentToolUseId = event.isIntermediate ? managed.pendingTextParent : undefined
 
         const assistantMessage: Message = {
           id: generateMessageId(),
@@ -1311,6 +1294,7 @@ export class SessionManager {
         }
         managed.messages.push(assistantMessage)
         managed.streamingText = ''
+        managed.pendingTextParent = undefined // Clear for next text block
         this.sendEvent({ type: 'text_complete', sessionId, text: event.text, isIntermediate: event.isIntermediate, turnId: event.turnId, parentToolUseId: textParentToolUseId }, workspaceId)
 
         // Generate title asynchronously after first assistant response
@@ -1404,7 +1388,7 @@ export class SessionManager {
             sessionId,
             toolName: event.toolName,
             toolUseId: event.toolUseId,
-            toolInput: formattedToolInput,
+            toolInput: formattedToolInput ?? {},
             turnId: event.turnId,
             parentToolUseId,
           }, workspaceId)

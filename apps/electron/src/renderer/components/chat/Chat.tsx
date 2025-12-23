@@ -584,7 +584,7 @@ export function Chat({
       { key: '1', cmd: true, action: () => focusZone('sidebar') },
       { key: '2', cmd: true, action: () => focusZone('session-list') },
       { key: '3', cmd: true, action: () => focusZone('chat') },
-      // Tab navigation between zones (disabled when in textarea - Shift+Tab toggles plan mode there)
+      // Tab navigation between zones (disabled when in textarea - Shift+Tab toggles safe mode there)
       { key: 'Tab', action: focusNextZone, when: () => !document.querySelector('[role="dialog"]') },
       { key: 'Tab', shift: true, action: focusPreviousZone, when: () => !document.querySelector('[role="dialog"]') && document.activeElement?.tagName !== 'TEXTAREA' },
       // Panel tab navigation

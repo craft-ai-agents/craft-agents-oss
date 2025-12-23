@@ -478,7 +478,7 @@ interface SessionListProps {
   /** Called to navigate to a specific view (e.g., 'completed', 'inbox') */
   onNavigateToView?: (view: 'inbox' | 'completed' | 'flagged') => void
   /** Unified session options per session (real-time state) */
-  sessionOptions?: Map<string, import('../../../hooks/useSessionOptions').SessionOptions>
+  sessionOptions?: Map<string, import('../../hooks/useSessionOptions').SessionOptions>
   /** Whether search mode is active */
   searchActive?: boolean
   /** Current search query */

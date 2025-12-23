@@ -1257,67 +1257,9 @@ export default function App() {
     onboarding.handleCancel()
   }, [onboarding])
 
-  // Loading state
-  if (appState === 'loading') {
-    return (
-      <div className="h-full flex items-center justify-center bg-background text-foreground">
-        <div className="flex flex-col items-center gap-4">
-          <Spinner className="text-2xl text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">Loading...</p>
-        </div>
-      </div>
-    )
-  }
-
-  // Reauth state - session expired, need to re-login
-  if (appState === 'reauth') {
-    return (
-      <ReauthScreen
-        onLogin={handleReauthLogin}
-        onLogout={handleReauthLogout}
-      />
-    )
-  }
-
-  // Onboarding state
-  if (appState === 'onboarding') {
-    return (
-      <OnboardingWizard
-        state={onboarding.state}
-        spaceCategories={onboarding.spaceCategories}
-        isLoadingSpaces={onboarding.isLoadingSpaces}
-        onCancel={handleOnboardingCancel}
-        onContinue={onboarding.handleContinue}
-        onBack={onboarding.handleBack}
-        onLogin={onboarding.handleLogin}
-        onOpenLoginManually={onboarding.handleOpenLoginManually}
-        onRetryLogin={onboarding.handleRetryLogin}
-        onSelectSpace={onboarding.handleSelectSpace}
-        onSelectBillingMethod={onboarding.handleSelectBillingMethod}
-        onSubmitCredential={onboarding.handleSubmitCredential}
-        onStartOAuth={onboarding.handleStartOAuth}
-        onFinish={onboarding.handleFinish}
-        existingClaudeToken={onboarding.existingClaudeToken}
-        isClaudeCliInstalled={onboarding.isClaudeCliInstalled}
-        onUseExistingClaudeToken={onboarding.handleUseExistingClaudeToken}
-      />
-    )
-  }
-
-  // Add workspace state (separate from onboarding)
-  // Render AddWorkspaceFlow only when visible so the hook mounts/unmounts properly
-  if (appState === 'adding-workspace') {
-    return (
-      <AddWorkspaceFlow
-        onComplete={handleAddWorkspaceComplete}
-        onCancel={handleAddWorkspaceCancel}
-        existingWorkspaceNames={workspaces.map(w => w.name)}
-      />
-    )
-  }
-
   // Build context value for Chat component
   // This is memoized to prevent unnecessary re-renders
+  // IMPORTANT: Must be before early returns to maintain consistent hook order
   const chatContextValue = useMemo<ChatContextType>(() => ({
     // Data
     sessions,
@@ -1390,6 +1332,65 @@ export default function App() {
     handleSessionOptionsChange,
     handleInputChange,
   ])
+
+  // Loading state
+  if (appState === 'loading') {
+    return (
+      <div className="h-full flex items-center justify-center bg-background text-foreground">
+        <div className="flex flex-col items-center gap-4">
+          <Spinner className="text-2xl text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Reauth state - session expired, need to re-login
+  if (appState === 'reauth') {
+    return (
+      <ReauthScreen
+        onLogin={handleReauthLogin}
+        onLogout={handleReauthLogout}
+      />
+    )
+  }
+
+  // Onboarding state
+  if (appState === 'onboarding') {
+    return (
+      <OnboardingWizard
+        state={onboarding.state}
+        spaceCategories={onboarding.spaceCategories}
+        isLoadingSpaces={onboarding.isLoadingSpaces}
+        onCancel={handleOnboardingCancel}
+        onContinue={onboarding.handleContinue}
+        onBack={onboarding.handleBack}
+        onLogin={onboarding.handleLogin}
+        onOpenLoginManually={onboarding.handleOpenLoginManually}
+        onRetryLogin={onboarding.handleRetryLogin}
+        onSelectSpace={onboarding.handleSelectSpace}
+        onSelectBillingMethod={onboarding.handleSelectBillingMethod}
+        onSubmitCredential={onboarding.handleSubmitCredential}
+        onStartOAuth={onboarding.handleStartOAuth}
+        onFinish={onboarding.handleFinish}
+        existingClaudeToken={onboarding.existingClaudeToken}
+        isClaudeCliInstalled={onboarding.isClaudeCliInstalled}
+        onUseExistingClaudeToken={onboarding.handleUseExistingClaudeToken}
+      />
+    )
+  }
+
+  // Add workspace state (separate from onboarding)
+  // Render AddWorkspaceFlow only when visible so the hook mounts/unmounts properly
+  if (appState === 'adding-workspace') {
+    return (
+      <AddWorkspaceFlow
+        onComplete={handleAddWorkspaceComplete}
+        onCancel={handleAddWorkspaceCancel}
+        existingWorkspaceNames={workspaces.map(w => w.name)}
+      />
+    )
+  }
 
   // Ready state - main app
   return (

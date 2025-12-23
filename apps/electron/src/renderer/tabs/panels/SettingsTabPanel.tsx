@@ -555,7 +555,7 @@ export default function SettingsTabPanel({
       // Get current modes, then add or remove 'safe' mode
       const currentModes = await window.electronAPI.getDefaultModes()
       const newModes = enabled
-        ? (currentModes.includes('safe') ? currentModes : [...currentModes, 'safe'] as import('../../shared/types').Mode[])
+        ? (currentModes.includes('safe') ? currentModes : [...currentModes, 'safe'] as import('../../../shared/types').Mode[])
         : currentModes.filter(m => m !== 'safe')
       await window.electronAPI.setDefaultModes(newModes)
     } catch (error) {

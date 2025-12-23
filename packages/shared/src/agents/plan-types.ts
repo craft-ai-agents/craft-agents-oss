@@ -1,8 +1,9 @@
 /**
- * Plan Mode Types
+ * Plan Types
  *
- * Defines the structure for planning mode, which allows Claude to create
- * and refine plans before execution, ensuring alignment on complex tasks.
+ * Defines the structure for plans and plan-related types.
+ * Plans are used for structured task execution with user review.
+ * Safe Mode is a separate UI feature for read-only exploration.
  */
 
 import { randomUUID } from 'crypto';
@@ -206,26 +207,20 @@ export function addRefinementEntry(
   };
 }
 
-// NOTE: Plan mode uses Craft-specific tools (not SDK's EnterPlanMode/ExitPlanMode):
-// 1. User enters plan mode via SHIFT+TAB or /plan start (UI toggle)
-// 2. Plan mode context injected into user messages (not system prompt, for caching)
-// 3. Claude uses CraftAgentsPlanModeAskQuestion to clarify requirements
-// 4. Claude calls ExitCraftAgentsPlanMode with a structured plan
-// 5. User reviews via PlanReview UI (approve/refine/cancel)
-// This provides better UX with interactive question/answer and structured plan review.
-
 // ============================================
-// Plan Mode UI Messages (single source of truth)
+// Safe Mode UI Messages (single source of truth)
 // ============================================
+// Safe Mode is a read-only exploration mode that blocks write operations.
+// User can toggle via SHIFT+TAB or /safe command.
 
-/** Message shown to user when entering plan mode */
-export const PLAN_MODE_ENTER_MESSAGE = 'Plan mode active. Describe what you want to accomplish.';
+/** Message shown to user when entering safe mode */
+export const SAFE_MODE_ENTER_MESSAGE = 'Safe mode active. Read-only exploration enabled.';
 
-/** Message shown to user when exiting plan mode */
-export const PLAN_MODE_EXIT_MESSAGE = 'Exited plan mode.';
+/** Message shown to user when exiting safe mode */
+export const SAFE_MODE_EXIT_MESSAGE = 'Exited safe mode.';
 
-/** System prompt sent to Claude when entering plan mode via Shift+Tab */
-export const PLAN_MODE_ENTER_PROMPT = 'The user has activated planning mode. You are now in plan mode. Wait for the user to describe their task, then use CraftAgentsPlanModeAskQuestion to clarify requirements and ExitCraftAgentsPlanMode to submit your plan for review.';
+/** System prompt sent to Claude when entering safe mode via Shift+Tab */
+export const SAFE_MODE_ENTER_PROMPT = 'The user has activated safe mode. You are now in read-only exploration mode. You can read files, search, and explore the codebase, but write operations (Bash, Write, Edit, API calls) are blocked. Focus on understanding and explaining rather than making changes.';
 
-/** System prompt sent to Claude when exiting plan mode via Shift+Tab */
-export const PLAN_MODE_EXIT_PROMPT = 'The user wants to exit planning mode. Ask how can you help.';
+/** System prompt sent to Claude when exiting safe mode via Shift+Tab */
+export const SAFE_MODE_EXIT_PROMPT = 'The user has exited safe mode. You now have full access to all tools. Ask how you can help.';

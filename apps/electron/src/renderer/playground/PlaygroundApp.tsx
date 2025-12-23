@@ -62,7 +62,7 @@ export function PlaygroundApp() {
     }
   }, [variantsSidebarOpen])
 
-  const selectedComponent = selectedId ? getComponentById(selectedId) : null
+  const selectedComponent = selectedId ? (getComponentById(selectedId) ?? null) : null
 
   // Reset props when component changes
   React.useEffect(() => {

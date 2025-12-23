@@ -230,12 +230,6 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     return sessionManager.respondToPermission(sessionId, requestId, allowed, alwaysAllow)
   })
 
-  // Respond to an ask question request (CraftAgentsPlanModeAskQuestion tool)
-  // Returns true if the response was delivered, false if agent/session is gone
-  ipcMain.handle(IPC_CHANNELS.RESPOND_TO_ASK_QUESTION, async (_event, sessionId: string, requestId: string, answers: Record<string, string>) => {
-    return sessionManager.respondToAskQuestion(sessionId, requestId, answers)
-  })
-
   // Set a mode for a session (generic for any mode type)
   ipcMain.handle(IPC_CHANNELS.SET_MODE, async (_event, sessionId: string, mode: import('../shared/types').Mode, enabled: boolean) => {
     return sessionManager.setMode(sessionId, mode, enabled)

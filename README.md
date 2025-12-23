@@ -88,13 +88,13 @@ bun dev
 | `/tools` | List available Craft MCP tools |
 | `/agent` | List, activate, or deactivate subagents |
 | `/info` | Show active agent info and available tools |
-| `/plan` | Plan mode menu (start, plans, view, approve, cancel) |
+| `/safe` | Toggle safe mode (read-only exploration) |
 | `/setup` | Re-run the configuration wizard |
 | `/clear` | Clear conversation |
 | `/exit` | Exit application |
 | `Ctrl+C` | Interrupt / Exit |
 | `Up/Down` | Navigate command history |
-| `SHIFT+TAB` | Toggle Plan Mode |
+| `SHIFT+TAB` | Toggle Safe Mode |
 
 ## Headless Mode (Non-Interactive)
 
@@ -162,9 +162,9 @@ craft --print "Summarize document" --output-format stream-json
 #         {"type":"complete","result":{...}}
 ```
 
-### Plan Mode Disabled
+### Safe Mode Disabled
 
-In headless mode, plan mode tools (`ExitCraftAgentsPlanMode`, `CraftAgentsPlanModeAskQuestion`) are automatically disabled. The agent executes tasks directly without planning phases, which is appropriate for non-interactive automation.
+In headless mode, safe mode is automatically disabled. The agent has full access to all tools and executes tasks directly, which is appropriate for non-interactive automation.
 
 ### Session Management
 
@@ -186,56 +186,34 @@ craft --print "Step 2" --session my-workflow-123
 | 0 | Success |
 | 1 | Error (auth required, agent not found, execution error) |
 
-## Plan Mode
+## Safe Mode
 
-Plan Mode is a structured approach to handling complex, multi-step tasks. Instead of immediately executing actions, the agent first creates a plan describing **what** it will do, gets user approval, and then executes.
+Safe Mode is a read-only exploration mode that blocks write operations. Use it when you want Claude to analyze, understand, or explain code without making any changes.
 
-### Why Plan Mode?
+### Why Safe Mode?
 
-Without planning, agents often:
-- Execute prematurely before fully understanding requirements
-- Make unnecessary API calls that could have been avoided
-- Lack transparency about intended actions
+Safe Mode is useful when:
+- Exploring unfamiliar codebases
+- Understanding code before making changes
+- Getting explanations without risk of modifications
+- Reviewing plans without executing them
 
-### How It Works
-
-```
-Enter Plan Mode (SHIFT+TAB) → Clarify Requirements → Design Plan → User Review → Execute
-```
-
-1. **Enter Plan Mode**: Press `SHIFT+TAB` or type `/plan start`
-2. **Clarify Requirements**: Agent uses `CraftAgentsPlanModeAskQuestion` for interactive clarification
-3. **Design Plan**: Agent describes steps without executing them
-4. **User Review**: Approve, refine, or cancel via PlanReview UI
-5. **Execute**: After approval, agent executes the plan
-
-### What's Blocked During Planning
+### What's Blocked in Safe Mode
 
 | Blocked | Allowed |
 |---------|---------|
-| API calls (`api_*`) | `CraftAgentsPlanModeAskQuestion` |
-| `Bash`, `Write`, `Edit` | `Read`, `Glob`, `Grep`, `Task` |
-| Craft MCP write tools | `WebSearch`, `WebFetch` (sparingly) |
+| `Bash`, `Write`, `Edit` | `Read`, `Glob`, `Grep` |
+| API calls (`api_*`) | `Task` (research agents) |
+| Craft MCP write tools | `WebSearch`, `WebFetch` |
 
 ### Usage
 
 ```bash
-SHIFT+TAB      # Toggle plan mode
-/plan start    # Enter plan mode
-/plan plans    # View, load, or delete saved plans
-/plan view     # View current plan details
-/plan approve  # Approve and execute current plan
-/plan cancel   # Exit plan mode
+SHIFT+TAB   # Toggle safe mode
+/safe       # Toggle safe mode
 ```
 
-**Plan Selector Controls:**
-- `↑↓` - Navigate plans
-- `Enter` - Load selected plan
-- `Space` - Toggle selection for deletion
-- `D/d` - Delete selected plans (with confirmation)
-- `Esc` - Clear selections or close
-
-The header shows `PLAN` indicator when active.
+The header shows `SAFE` indicator when active.
 
 ## Keyboard Shortcuts
 
@@ -388,7 +366,7 @@ craft-tui-agent/
 └── src/                       # Legacy - being migrated to packages/shared
     ├── agent/
     │   ├── craft-agent.ts     # Claude Agent SDK wrapper
-    │   └── plan-tools.ts      # Plan mode tools
+    │   └── plan-tools.ts      # SubmitPlan tool for plan submission
     ├── agents/
     │   ├── types.ts           # SubAgentDefinition, AgentStatus
     │   ├── plan-types.ts      # Plan, PlanStep interfaces

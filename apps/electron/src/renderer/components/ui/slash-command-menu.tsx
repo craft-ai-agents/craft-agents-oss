@@ -1,13 +1,13 @@
 import * as React from 'react'
 import { Command as CommandPrimitive } from 'cmdk'
-import { Brain, ListTodo, ShieldOff, Check } from 'lucide-react'
+import { Brain, Shield, ShieldOff, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 // ============================================================================
 // Types
 // ============================================================================
 
-export type SlashCommandId = 'plan' | 'ultrathink' | 'skip-permissions'
+export type SlashCommandId = 'safe' | 'ultrathink' | 'skip-permissions'
 
 export interface SlashCommand {
   id: SlashCommandId
@@ -27,11 +27,11 @@ const MENU_ICON_SIZE = 'h-3.5 w-3.5'
 
 export const DEFAULT_SLASH_COMMANDS: SlashCommand[] = [
   {
-    id: 'plan',
-    label: 'Plan Mode',
-    description: 'Enter planning mode for complex tasks',
-    icon: <ListTodo className={MENU_ICON_SIZE} />,
-    activeStyle: 'bg-blue-500/10 text-blue-500 border-blue-500/30',
+    id: 'safe',
+    label: 'Safe Mode',
+    description: 'Read-only exploration mode',
+    icon: <Shield className={MENU_ICON_SIZE} />,
+    activeStyle: 'bg-green-500/10 text-green-500 border-green-500/30',
   },
   {
     id: 'skip-permissions',

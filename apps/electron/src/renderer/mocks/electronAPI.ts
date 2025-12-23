@@ -367,11 +367,6 @@ export const mockElectronAPI: ElectronAPI = {
     }
   },
 
-  onAgentAuthChanged(_callback: (workspaceId: string, agentId: string) => void): () => void {
-    // Mock: no-op - auth changes won't happen in browser mock mode
-    return () => {}
-  },
-
   onAgentStatusChanged(_callback: (workspaceId: string, agentId: string, status: import('../../shared/types').AgentStatus) => void): () => void {
     // Mock: no-op - status changes won't happen in browser mock mode
     return () => {}
@@ -502,12 +497,11 @@ console.log(example);
     return true
   },
 
-  // ===== Mode Management =====
-
-  async respondToAskQuestion(_sessionId: string, _requestId: string, answers: import('../../shared/types').AskQuestionResponse): Promise<boolean> {
-    console.log('[Mock] respondToAskQuestion called:', Object.keys(answers).length, 'answers')
-    return true
+  async setSkipPermissions(_sessionId: string, _enabled: boolean): Promise<void> {
+    console.log('[Mock] setSkipPermissions called')
   },
+
+  // ===== Mode Management =====
 
   async setMode(_sessionId: string, mode: import('../../shared/types').Mode, enabled: boolean): Promise<void> {
     console.log('[Mock] setMode called:', mode, enabled)

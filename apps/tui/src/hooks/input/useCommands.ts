@@ -15,7 +15,7 @@ import { getCurrentVersion } from '@craft-agent/shared/version';
 import type { ModalName } from '../modals/useModalState.ts';
 import type { Message } from '../../components/Messages.tsx';
 import type { SubAgentDefinition } from '@craft-agent/shared/agents';
-import { PLAN_MODE_ENTER_MESSAGE, PLAN_MODE_ENTER_PROMPT } from '@craft-agent/shared/agents';
+import { SAFE_MODE_ENTER_MESSAGE, SAFE_MODE_ENTER_PROMPT } from '@craft-agent/shared/agents';
 
 /**
  * Result of command execution
@@ -469,16 +469,16 @@ export function useCommands(props: UseCommandsProps) {
       }
 
       // ============================================
-      // Plan Commands
+      // Safe Mode Commands
       // ============================================
-      case '/plan': {
+      case '/safe': {
         const subCommand = parts[1] ?? '';
 
-        if (subCommand === 'start') {
+        if (subCommand === '' || subCommand === 'start') {
           if (safeMode) {
             return {
               handled: true,
-              message: { content: 'Already in safe mode. Use /plan cancel to exit first.', type: 'error' },
+              message: { content: 'Already in safe mode. Use /safe cancel to exit first.', type: 'error' },
             };
           }
           // Start Safe Mode (blocks writes during exploration)
@@ -486,10 +486,10 @@ export function useCommands(props: UseCommandsProps) {
           return {
             handled: true,
             message: {
-              content: PLAN_MODE_ENTER_MESSAGE,
+              content: SAFE_MODE_ENTER_MESSAGE,
               type: 'system',
             },
-            sendToAgent: PLAN_MODE_ENTER_PROMPT,
+            sendToAgent: SAFE_MODE_ENTER_PROMPT,
           };
         }
 

@@ -93,7 +93,7 @@ export const MODE_CONFIGS: Record<Mode, ModeConfig> = {
     ],
     readOnlyApiMethods: new Set(['GET']),
     displayName: 'Safe Mode',
-    shortcutHint: 'Ctrl+S',
+    shortcutHint: 'SHIFT+TAB',
   },
 };
 
@@ -404,69 +404,3 @@ The user toggles Safe Mode via the UI (${config.shortcutHint} or badge). You can
 When the user exits Safe Mode, you can proceed with any operations they've requested.`;
 }
 
-// ============================================================
-// Legacy Aliases (for backward compatibility)
-// ============================================================
-
-// These maintain the old API while using the new generic system
-
-/** @deprecated Use isModeActive(sessionId, 'safe') */
-export function isSafeModeActive(sessionId: string): boolean {
-  return isModeActive(sessionId, 'safe');
-}
-
-/** @deprecated Use enterMode(sessionId, 'safe') */
-export function enterSafeMode(sessionId: string): void {
-  enterMode(sessionId, 'safe');
-}
-
-/** @deprecated Use exitMode(sessionId, 'safe') */
-export function exitSafeMode(sessionId: string): void {
-  exitMode(sessionId, 'safe');
-}
-
-/** @deprecated Use toggleMode(sessionId, 'safe') */
-export function toggleSafeMode(sessionId: string): boolean {
-  return toggleMode(sessionId, 'safe');
-}
-
-/** @deprecated Use isToolBlockedInMode(toolName, 'safe') */
-export function isToolBlockedInSafeMode(toolName: string): boolean {
-  return isToolBlockedInMode(toolName, 'safe');
-}
-
-/** @deprecated Use isReadOnlyMcpToolForMode(toolName, 'safe') */
-export function isMcpToolAllowedInSafeMode(toolName: string): boolean {
-  return isReadOnlyMcpToolForMode(toolName, 'safe');
-}
-
-/** @deprecated Use isReadOnlyApiMethodForMode(method, 'safe') */
-export function isApiCallAllowedInSafeMode(method: string): boolean {
-  return isReadOnlyApiMethodForMode(method, 'safe');
-}
-
-/** @deprecated Use getBlockReason(toolName, 'safe') */
-export function getSafeModeBlockReason(toolName: string): string {
-  return getBlockReason(toolName, 'safe');
-}
-
-/** @deprecated Use getModeContext(sessionId) */
-export function getSafeModeContext(sessionId: string): string | null {
-  if (!isModeActive(sessionId, 'safe')) {
-    return null;
-  }
-  return getModeContext(sessionId);
-}
-
-// Legacy exports
-export const SAFE_MODE_BLOCKED_TOOLS = MODE_CONFIGS.safe.blockedTools;
-
-/** @deprecated Use isReadOnlyMcpToolForMode */
-export function isReadOnlyMcpTool(toolName: string): boolean {
-  return isReadOnlyMcpToolForMode(toolName, 'safe');
-}
-
-/** @deprecated Use isReadOnlyApiMethodForMode */
-export function isReadOnlyApiMethod(method: string): boolean {
-  return isReadOnlyApiMethodForMode(method, 'safe');
-}

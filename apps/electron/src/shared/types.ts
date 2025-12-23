@@ -97,7 +97,7 @@ export interface PermissionRequest extends BasePermissionRequest {
 }
 
 // ============================================
-// Plan Mode Types
+// Plan Types (SubmitPlan workflow)
 // ============================================
 
 /**
@@ -123,38 +123,6 @@ export interface Plan {
   createdAt?: number
   updatedAt?: number
 }
-
-/**
- * Question option for CraftAgentsPlanModeAskQuestion
- */
-export interface PlanQuestionOption {
-  label: string
-  description: string
-}
-
-/**
- * Question from CraftAgentsPlanModeAskQuestion tool
- */
-export interface PlanQuestion {
-  question: string
-  header: string
-  options: PlanQuestionOption[]
-  multiSelect: boolean
-}
-
-/**
- * Ask question request from the agent
- */
-export interface AskQuestionRequest {
-  sessionId: string
-  requestId: string
-  questions: PlanQuestion[]
-}
-
-/**
- * Ask question response - maps question index to selected option labels
- */
-export type AskQuestionResponse = Record<string, string>
 
 /**
  * MCP server with auth status for Info dialog
@@ -310,7 +278,6 @@ export type SessionEvent =
   // Mode events (generic for any mode type)
   | { type: 'mode_changed'; sessionId: string; mode: Mode; enabled: boolean }
   | { type: 'plan_submitted'; sessionId: string; message: CoreMessage }
-  | { type: 'ask_question_request'; sessionId: string; request: AskQuestionRequest }
 
 // Options for sendMessage
 export interface SendMessageOptions {
@@ -337,7 +304,6 @@ export const IPC_CHANNELS = {
 
   // Mode management (generic for any mode type)
   SET_MODE: 'sessions:setMode',
-  RESPOND_TO_ASK_QUESTION: 'sessions:respondToAskQuestion',
 
   // Workspace management
   GET_WORKSPACES: 'workspaces:get',
@@ -380,8 +346,6 @@ export const IPC_CHANNELS = {
   // Events from main to renderer
   SESSION_EVENT: 'session:event',
   AGENT_STATUS_CHANGED: 'agent:statusChanged',    // Broadcast: { workspaceId, agentId, status } - complete state including needsSetup/needsAuth
-  /** @deprecated Use AGENT_STATUS_CHANGED instead - broadcastAgentState() sends complete state */
-  AGENT_AUTH_CHANGED: 'agent:authChanged',
 
   // File operations
   READ_FILE: 'file:read',
@@ -562,10 +526,10 @@ export interface ElectronAPI {
   markSessionRead(sessionId: string): Promise<void>
   markSessionUnread(sessionId: string): Promise<void>
   respondToPermission(sessionId: string, requestId: string, allowed: boolean, alwaysAllow: boolean): Promise<boolean>
+  setSkipPermissions(sessionId: string, enabled: boolean): Promise<void>
 
   // Mode management (generic for any mode type)
   setMode(sessionId: string, mode: Mode, enabled: boolean): Promise<void>
-  respondToAskQuestion(sessionId: string, requestId: string, answers: AskQuestionResponse): Promise<boolean>
 
   // Workspace management
   getWorkspaces(): Promise<Workspace[]>
@@ -608,8 +572,6 @@ export interface ElectronAPI {
   onSessionEvent(callback: (event: SessionEvent) => void): () => void
   /** Listens for complete agent state changes (status + needsSetup + needsAuth) */
   onAgentStatusChanged(callback: (workspaceId: string, agentId: string, status: AgentStatus) => void): () => void
-  /** @deprecated Use onAgentStatusChanged instead - broadcastAgentState() sends complete state via AGENT_STATUS_CHANGED */
-  onAgentAuthChanged(callback: (workspaceId: string, agentId: string) => void): () => void
 
   // File operations
   readFile(path: string): Promise<string>

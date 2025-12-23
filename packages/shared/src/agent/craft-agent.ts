@@ -36,11 +36,6 @@ import {
   isReadOnlyMcpToolForMode,
   isReadOnlyApiMethodForMode,
   getBlockReason,
-  // Legacy exports for re-export
-  isSafeModeActive,
-  enterSafeMode,
-  exitSafeMode,
-  toggleSafeMode,
 } from './mode-manager.ts';
 import { getPlansDir } from '../config/storage.ts';
 
@@ -52,11 +47,6 @@ export {
   exitMode,
   toggleMode,
   type Mode,
-  // Legacy aliases (deprecated)
-  isSafeModeActive,
-  enterSafeMode,
-  exitSafeMode,
-  toggleSafeMode,
 } from './mode-manager.ts';
 // Documentation is now served via external HTTP MCP at agents.craft.do/docs/mcp
 
@@ -954,17 +944,23 @@ export class CraftAgent {
                   return { continue: true };
                 }
 
+                // Allow SubmitPlan (can submit plans in any mode)
+                if (input.tool_name === 'SubmitPlan' || input.tool_name.endsWith('__SubmitPlan')) {
+                  return { continue: true };
+                }
+
                 // Block destructive tools (Write, Edit, Bash, etc.)
                 // Exception: Allow Write/Edit to the plans folder for SubmitPlan to work
                 if (isToolBlockedInMode(input.tool_name, 'safe')) {
                   // Check if this is Write/Edit targeting the plans folder
+                  // Uses closure sessionId (stable) instead of this.sessionId (SDK session ID, can change)
                   const isPlansFolderWrite = (input.tool_name === 'Write' || input.tool_name === 'Edit' || input.tool_name === 'MultiEdit')
-                    && this.sessionId
+                    && sessionId
                     && (() => {
                       const toolInput = input.tool_input as Record<string, unknown>;
                       const filePath = toolInput.file_path as string | undefined;
                       if (!filePath) return false;
-                      const plansDir = getPlansDir(this.sessionId!);
+                      const plansDir = getPlansDir(sessionId);
                       // Normalize paths and check if file is within plans directory
                       const normalizedPath = filePath.replace(/\\/g, '/');
                       const normalizedPlansDir = plansDir.replace(/\\/g, '/');
@@ -1035,8 +1031,10 @@ export class CraftAgent {
                   };
                 }
 
-                // Default: allow other tools
+                // Default: allow other tools not explicitly handled above
+                // This includes tools like SubmitPlan, LSP, etc. that don't need blocking
                 this.onDebug?.(`Allowing tool in safe mode: ${input.tool_name}`);
+                return { continue: true };
               }
 
               // Built-in SDK tools (don't extract _intent from these)

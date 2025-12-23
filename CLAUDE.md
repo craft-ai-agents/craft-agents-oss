@@ -114,7 +114,7 @@ This package (`@craft-agent/shared`) contains the shared business logic used by 
 packages/shared/src/
 ├── agent/
 │   ├── craft-agent.ts        # Claude Agent SDK wrapper
-│   └── plan-tools.ts         # Plan mode tools and state management
+│   └── plan-tools.ts         # SubmitPlan tool and plan callbacks
 ├── agents/
 │   ├── types.ts              # SubAgentDefinition, ApiConfig, AgentStatus interfaces
 │   ├── plan-types.ts         # Plan, PlanStep, PlanState interfaces
@@ -165,7 +165,7 @@ packages/
 │       └── utils/            # Shared utilities (debug stub)
 └── shared/                   # @craft-agent/shared - Core business logic
     └── src/
-        ├── agent/            # CraftAgent, plan-tools
+        ├── agent/            # CraftAgent, SubmitPlan tool
         ├── agents/           # SubAgent management, extraction
         ├── auth/             # OAuth, credentials
         ├── config/           # Storage, preferences
@@ -379,15 +379,13 @@ interface HeadlessConfig {
 }
 ```
 
-**Plan mode disabled in headless:**
+**Safe mode disabled in headless:**
 When `isHeadless: true` is passed to CraftAgent:
 1. Prompts are wrapped in `<headless_mode>` XML tags to signal intent
-2. PreToolUse hook blocks plan mode tools:
-   - `ExitCraftAgentsPlanMode`
-   - `CraftAgentsPlanModeAskQuestion`
-3. Agent executes tasks directly without planning phases
+2. Safe mode restrictions are disabled - agent has full tool access
+3. Agent executes tasks directly without restrictions
 
-This defense-in-depth approach ensures plan mode is never triggered in automation contexts.
+This ensures automation workflows have full capabilities.
 
 **Permission handling:**
 - `deny-all` (default): Block all bash commands
@@ -549,89 +547,50 @@ Includes:
 - Session failures clear and start fresh
 - Replayed messages skipped via `isReplay` flag
 
-### Plan Mode (`packages/shared/src/agent/plan-tools.ts`)
+### Safe Mode
 
-Plan Mode is a structured approach for complex multi-step tasks. Instead of immediately executing actions, the agent first creates a plan, gets user approval, then executes.
+Safe Mode is a read-only exploration mode that blocks write operations. Use it when you want Claude to analyze, understand, or explain code without making any changes.
 
 **Key Files:**
-- `packages/shared/src/agent/plan-tools.ts` - Custom plan mode tools and state management
-- `packages/shared/src/agents/plan-types.ts` - Plan, PlanStep, PlanState interfaces
-- `apps/tui/src/components/PlanReview.tsx` - User approval UI
+- `packages/shared/src/agents/plan-types.ts` - Safe mode message constants
 - `apps/tui/src/components/TodoList.tsx` - Task visualization
 
-**Custom Tools (in-process MCP):**
-- `ExitCraftAgentsPlanMode` - Exits with structured plan for user review
-- `CraftAgentsPlanModeAskQuestion` - Interactive clarification during planning
-
-**CraftAgentsPlanModeAskQuestion "Other" Option:**
-Every question automatically includes an "Other" option at the end, allowing users to provide custom text responses instead of selecting from predefined options.
-
-- Navigate to "Other" with arrow keys or number key (last number)
-- Press Space or Enter to select and start typing custom response
-- Type response, then Enter to confirm or Esc to cancel editing
-- Selected text shows in green: `(●) 4. Other: my custom answer`
-- Works with both single-select and multi-select questions
-
-**State Management:**
-```typescript
-interface CraftPlanModeState {
-  isActive: boolean;
-  plan: Plan | null;
-  onStateChange?: (state: CraftPlanModeState) => void;
-}
-
-// Global state accessed via:
-setPlanModeState(state)  // Set by CraftAgent
-getPlanModeState()       // Read by PreToolUse hook
-enterCraftPlanMode()     // Programmatic entry (SHIFT+TAB)
-exitCraftPlanMode()      // Programmatic exit
-```
-
 **PreToolUse Hook Blocking:**
-When plan mode is active, the hook blocks external operations:
+When safe mode is active, the hook blocks external operations:
 ```typescript
-// BLOCKED in plan mode:
+// BLOCKED in safe mode:
 - api_* tools (all REST API calls)
 - Bash, Write, Edit
 - MCP write tools (blocks_add, blocks_update, etc.)
 
-// ALLOWED in plan mode:
+// ALLOWED in safe mode:
 - Read, Glob, Grep (local file exploration)
 - Task (for research/exploration)
 - WebFetch, WebSearch (use sparingly - quick lookups only)
 - MCP read tools (blocks_get, document_search, etc.)
-- CraftAgentsPlanModeAskQuestion
 - TodoWrite
 ```
 
 **UI Integration:**
-- SHIFT+TAB toggles plan mode (uses `enterCraftPlanMode()`/`exitCraftPlanMode()`)
-- `/plan` slash commands: `start`, `plans`, `view`, `approve`, `cancel`
-- Header shows `PLAN` indicator when active (dark green bg, white text)
-- TodoList component displays task progress from TodoWrite calls
-- PlanSelector provides unified view for loading/deleting saved plans
-
-**Plan Selector (`PlanSelector.tsx`):**
-- `↑↓` - Navigate plan list
-- `Enter` - Load selected plan as attachment
-- `Space` - Toggle selection for multi-delete
-- `D/d` - Delete selected plans (shows Y/N confirmation)
-- `Esc` - Clear selections first, then close modal
+- SHIFT+TAB toggles safe mode
+- `/safe` command toggles safe mode
+- Header shows `SAFE` indicator when active (green bg)
 
 **Flow:**
-1. User presses SHIFT+TAB or types `/plan start` (toggles plan mode via UI)
-2. Plan mode context injected into user messages (not system prompt, for caching)
-3. Agent can read files, query MCP, ask questions via `CraftAgentsPlanModeAskQuestion`
-4. Agent calls `ExitCraftAgentsPlanMode` with structured plan
-5. User reviews via PlanReview component (approve/refine/cancel)
-6. On approval, plan executes with full tool access
+1. User presses SHIFT+TAB or types `/safe` (toggles safe mode via UI)
+2. Safe mode context injected into user messages
+3. Agent can read files, query MCP, but write operations are blocked
+4. User exits safe mode via SHIFT+TAB or `/safe` to enable writes
 
-**Why we block SDK's EnterPlanMode/ExitPlanMode:**
-- SDK's plan mode is generic; ours is Craft-specific
-- We allow read-only MCP operations during planning
-- We block ALL external API calls (not just writes)
-- Better integration with Craft's UI components (PlanReview, CraftAgentsPlanModeAskQuestion)
-- SDK tools are blocked via `disallowedTools` and PreToolUse hook redirects to Craft versions
+### SubmitPlan Tool (`packages/shared/src/agent/plan-tools.ts`)
+
+The SubmitPlan tool allows Claude to submit structured plans for user review. This is separate from Safe Mode - plans can be created at any time.
+
+**Usage:**
+1. Claude writes plan to a markdown file using Write tool
+2. Claude calls SubmitPlan with the file path
+3. Plan is displayed to user in formatted view
+4. User can approve or provide feedback
 
 ### Token Counting
 - Tracks: input tokens, output tokens, cache creation, cache read

@@ -175,7 +175,7 @@ export function FreeFormInput({
   // Build active commands list for slash command menu
   const activeCommands = React.useMemo(() => {
     const active: SlashCommandId[] = []
-    if (safeModeEnabled) active.push('plan')  // 'plan' command ID maps to safe mode
+    if (safeModeEnabled) active.push('safe')
     if (ultrathinkEnabled) active.push('ultrathink')
     if (skipPermissions) active.push('skip-permissions')
     return active
@@ -183,7 +183,7 @@ export function FreeFormInput({
 
   // Handle slash command selection
   const handleSlashCommand = React.useCallback((commandId: SlashCommandId) => {
-    if (commandId === 'plan') onSafeModeChange?.(!safeModeEnabled)  // 'plan' command ID maps to safe mode
+    if (commandId === 'safe') onSafeModeChange?.(!safeModeEnabled)
     else if (commandId === 'ultrathink') onUltrathinkChange?.(!ultrathinkEnabled)
     else if (commandId === 'skip-permissions') onSkipPermissionsChange?.(!skipPermissions)
   }, [safeModeEnabled, ultrathinkEnabled, skipPermissions, onSafeModeChange, onUltrathinkChange, onSkipPermissionsChange])

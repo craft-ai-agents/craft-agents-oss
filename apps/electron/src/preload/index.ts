@@ -21,8 +21,6 @@ const api: ElectronAPI = {
   // Mode management (generic for any mode type)
   setMode: (sessionId: string, mode: import('../shared/types').Mode, enabled: boolean) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_MODE, sessionId, mode, enabled),
-  respondToAskQuestion: (sessionId: string, requestId: string, answers: import('../shared/types').AskQuestionResponse) =>
-    ipcRenderer.invoke(IPC_CHANNELS.RESPOND_TO_ASK_QUESTION, sessionId, requestId, answers),
 
   // Workspace management
   getWorkspaces: () => ipcRenderer.invoke(IPC_CHANNELS.GET_WORKSPACES),
@@ -79,16 +77,6 @@ const api: ElectronAPI = {
     ipcRenderer.on(IPC_CHANNELS.AGENT_STATUS_CHANGED, handler)
     return () => {
       ipcRenderer.removeListener(IPC_CHANNELS.AGENT_STATUS_CHANGED, handler)
-    }
-  },
-  // @deprecated Use onAgentStatusChanged instead - broadcastAgentState() sends complete state
-  onAgentAuthChanged: (callback: (workspaceId: string, agentId: string) => void) => {
-    const handler = (_event: Electron.IpcRendererEvent, workspaceId: string, agentId: string) => {
-      callback(workspaceId, agentId)
-    }
-    ipcRenderer.on(IPC_CHANNELS.AGENT_AUTH_CHANGED, handler)
-    return () => {
-      ipcRenderer.removeListener(IPC_CHANNELS.AGENT_AUTH_CHANGED, handler)
     }
   },
 

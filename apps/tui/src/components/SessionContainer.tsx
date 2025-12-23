@@ -36,10 +36,10 @@ import {
 } from '../hooks/index.ts';
 import { isShiftTab } from '../keyboard/index.ts';
 import {
-  PLAN_MODE_ENTER_MESSAGE,
-  PLAN_MODE_EXIT_MESSAGE,
-  PLAN_MODE_ENTER_PROMPT,
-  PLAN_MODE_EXIT_PROMPT,
+  SAFE_MODE_ENTER_MESSAGE,
+  SAFE_MODE_EXIT_MESSAGE,
+  SAFE_MODE_ENTER_PROMPT,
+  SAFE_MODE_EXIT_PROMPT,
 } from '@craft-agent/shared/agents';
 import { isModeActive } from '@craft-agent/shared/agent';
 import { useGlobalContext } from '../context/GlobalContext.tsx';
@@ -456,10 +456,10 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
 
     switch (action.type) {
       case 'start':
-        // Start Craft Agents plan mode (same as /plan start and SHIFT+TAB)
+        // Start Craft Agents safe mode (same as /safe and SHIFT+TAB)
         startCraftPlanning();
-        addLocalMessage(PLAN_MODE_ENTER_MESSAGE, 'system');
-        sendMessage(PLAN_MODE_ENTER_PROMPT);
+        addLocalMessage(SAFE_MODE_ENTER_MESSAGE, 'system');
+        sendMessage(SAFE_MODE_ENTER_PROMPT);
         break;
       case 'plans':
         // Open unified plan selector (list/load/delete)
@@ -662,8 +662,8 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
     }
 
     if (pendingPermission) {
-      if (pendingPermission.type === 'plan_mode') {
-        // Plan mode permission: Y/N only (no "Always" option)
+      if (pendingPermission.type === 'safe_mode') {
+        // Safe mode permission: Y/N only (no "Always" option)
         if (input.toLowerCase() === 'y') {
           respondToPermission(true, false);
           return;
@@ -694,16 +694,16 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
       if (internalSafeMode) {
         // Exit Safe Mode
         exitSafeModeAction();
-        addLocalMessage(PLAN_MODE_EXIT_MESSAGE, 'system');
+        addLocalMessage(SAFE_MODE_EXIT_MESSAGE, 'system');
         // Only send exit prompt if not already processing
         if (!isProcessing) {
-          sendMessage(PLAN_MODE_EXIT_PROMPT);
+          sendMessage(SAFE_MODE_EXIT_PROMPT);
         }
       } else if (!isProcessing) {
         // Enter Safe Mode
         startSafeMode();
-        addLocalMessage(PLAN_MODE_ENTER_MESSAGE, 'system');
-        sendMessage(PLAN_MODE_ENTER_PROMPT);
+        addLocalMessage(SAFE_MODE_ENTER_MESSAGE, 'system');
+        sendMessage(SAFE_MODE_ENTER_PROMPT);
       }
       return;
     }
@@ -957,9 +957,9 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
         {pendingPermission && (
           <Box flexDirection="column" borderStyle="round" borderColor="yellow" paddingX={1} marginBottom={1}>
             <Text color="yellow" bold>⚠ Permission Required</Text>
-            {pendingPermission.type === 'plan_mode' ? (
+            {pendingPermission.type === 'safe_mode' ? (
               <>
-                <Text>Craft Agents wants to enter <Text color="cyan" bold>Plan Mode</Text></Text>
+                <Text>Craft Agents wants to enter <Text color="green" bold>Safe Mode</Text></Text>
                 <Text dimColor>Task: {pendingPermission.command}</Text>
                 <Box marginTop={1}>
                   <Text>Allow? </Text>

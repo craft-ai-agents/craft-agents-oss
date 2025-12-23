@@ -428,7 +428,13 @@ function ActivityRow({ activity, onOpenDetails, isLastChild }: ActivityRowProps)
     return (
       <div className="flex items-stretch">
         <TreeViewConnector depth={depth} isLastChild={isLastChild} />
-        <div className={cn("group/row flex items-center gap-2 py-0.5 text-foreground/75 flex-1 min-w-0", SIZE_CONFIG.fontSize)}>
+        <div
+          className={cn(
+            "group/row flex items-center gap-2 py-0.5 text-foreground/75 flex-1 min-w-0",
+            SIZE_CONFIG.fontSize
+          )}
+          onClick={onOpenDetails && isComplete ? onOpenDetails : undefined}
+        >
           {isThinking ? (
             <div className={cn(SIZE_CONFIG.iconSize, "flex items-center justify-center shrink-0")}>
               <Spinner className={SIZE_CONFIG.spinnerSize} />
@@ -436,7 +442,7 @@ function ActivityRow({ activity, onOpenDetails, isLastChild }: ActivityRowProps)
           ) : (
             <MessageCircleDashed className={cn(SIZE_CONFIG.iconSize, "shrink-0")} />
           )}
-          <span className="truncate flex-1">{displayContent}</span>
+          <span className={cn("truncate flex-1", onOpenDetails && isComplete && "group-hover/row:underline")}>{displayContent}</span>
           {/* Open details button */}
           {onOpenDetails && isComplete && (
             <div
@@ -481,10 +487,16 @@ function ActivityRow({ activity, onOpenDetails, isLastChild }: ActivityRowProps)
   return (
     <div className="flex items-stretch">
       <TreeViewConnector depth={depth} isLastChild={isLastChild} />
-      <div className={cn("group/row flex items-center gap-2 py-0.5 text-muted-foreground flex-1 min-w-0", SIZE_CONFIG.fontSize)}>
+      <div
+        className={cn(
+          "group/row flex items-center gap-2 py-0.5 text-muted-foreground flex-1 min-w-0",
+          SIZE_CONFIG.fontSize
+        )}
+        onClick={onOpenDetails && isComplete ? onOpenDetails : undefined}
+      >
         <ActivityStatusIcon status={activity.status} />
-        {/* Tool name (always shown, darker) */}
-        <span className="font-medium shrink-0">{toolName}</span>
+        {/* Tool name (always shown, darker) - underlined when clickable */}
+        <span className={cn("font-medium shrink-0", onOpenDetails && isComplete && "group-hover/row:underline")}>{toolName}</span>
         {/* Description if available (darker, after interpunct) - truncates to leave room for details button */}
         {description && (
           <>
