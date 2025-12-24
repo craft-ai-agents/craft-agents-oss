@@ -136,7 +136,7 @@ export function TabContent({ className }: TabContentProps) {
   }
 
   return (
-    <div className={className}>
+    <div className={cn('relative', className)}>
       {/* Render all tabs that have been visited, hide inactive ones */}
       {/* Use currentTabIds for extra safety - ensures we never render deleted tabs */}
       {tabs.filter(tab => renderedTabIds.has(tab.id) && currentTabIds.has(tab.id)).map(tab => {
@@ -149,7 +149,7 @@ export function TabContent({ className }: TabContentProps) {
             key={tab.id}
             className={cn(
               'h-full',
-              isActive ? 'block' : 'hidden'
+              !isActive && 'invisible absolute inset-0'
             )}
           >
             <TabErrorBoundary tabId={tab.id} onClose={() => closeTab(tab.id)}>

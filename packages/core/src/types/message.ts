@@ -69,6 +69,7 @@ export interface Message {
   toolStatus?: ToolStatus;
   toolDuration?: number;
   toolIntent?: string;
+  toolDisplayName?: string;
   // Parent tool ID for nested tool calls (e.g., child tools inside Task subagent)
   parentToolUseId?: string;
   // Stored attachments for user messages (persistent, no base64)
@@ -115,6 +116,7 @@ export interface StoredMessage {
   toolStatus?: ToolStatus;
   toolDuration?: number;
   toolIntent?: string;
+  toolDisplayName?: string;
   // Parent tool ID for nested tool calls (persisted for session restore)
   parentToolUseId?: string;
   isError?: boolean;
@@ -223,7 +225,7 @@ export interface PermissionRequest {
   toolName: string;
   command: string;
   description: string;
-  type?: 'bash' | 'plan_mode';  // Type of permission request
+  type?: 'bash' | 'safe_mode';  // Type of permission request
 }
 
 /**
@@ -247,13 +249,14 @@ export type AgentEvent =
   | { type: 'info'; message: string }
   | { type: 'text_delta'; text: string; turnId?: string }
   | { type: 'text_complete'; text: string; isIntermediate?: boolean; turnId?: string }
-  | { type: 'tool_start'; toolName: string; toolUseId: string; input: Record<string, unknown>; intent?: string; turnId?: string; parentToolUseId?: string }
+  | { type: 'tool_start'; toolName: string; toolUseId: string; input: Record<string, unknown>; intent?: string; displayName?: string; turnId?: string; parentToolUseId?: string }
   | { type: 'tool_result'; toolUseId: string; result: string; isError: boolean; input?: Record<string, unknown>; turnId?: string; parentToolUseId?: string }
   | { type: 'permission_request'; requestId: string; toolName: string; command: string; description: string }
   | { type: 'ask_user'; requestId: string; questions: Question[] }
   | { type: 'error'; message: string }
   | { type: 'typed_error'; error: TypedError }
-  | { type: 'complete'; usage?: AgentEventUsage };
+  | { type: 'complete'; usage?: AgentEventUsage }
+  | { type: 'working_directory_changed'; workingDirectory: string };
 
 /**
  * Generate a unique message ID

@@ -10,8 +10,10 @@ import {
   setGlobalPermissionHandler,
   resolveGlobalPermission,
   clearGlobalPermissions,
-  enterCraftPlanMode,
-  exitCraftPlanMode,
+  enterMode,
+  exitMode,
+  isModeActive,
+  type Mode,
 } from '@craft-agent/shared/agent';
 import { parseSDKErrorText, isSDKErrorText, type AgentError } from '@craft-agent/shared/agent';
 import type { UpdateInstructionsContext, UpdateInstructionsProgressEvent } from '@craft-agent/shared/agents';
@@ -49,6 +51,7 @@ import { CraftOAuth, getMcpBaseUrl } from '@craft-agent/shared/auth';
 import { debug } from '@craft-agent/shared/utils';
 import { containsUltrathink, stripUltrathink } from '../../utils/gradient.ts';
 import { useAgentState } from './useAgentState.ts';
+import { useSafeMode } from './useModeState.ts';
 
 // MCP auth request for sub-agent servers
 export interface PendingMcpAuthRequest {
@@ -124,7 +127,7 @@ export interface PermissionRequest {
   toolName: string;
   command: string;
   description: string;
-  type?: 'bash' | 'plan_mode';  // Type of permission request
+  type?: 'bash' | 'safe_mode';  // Type of permission request
 }
 
 export interface AskUserQuestionRequest {
@@ -176,15 +179,17 @@ export interface UseAgentResult {
   completeApiAuth: (success: boolean) => Promise<void>;
   cancelApiAuth: () => void;
   triggerApiAuth: () => void;  // For reauth command
-  // Plan mode
+  // Plan/Safe mode
   activePlan: Plan | null;
-  planMode: boolean;
+  safeMode: boolean;
   cancelPlan: () => void;
   approvePlan: () => void;
   shouldSuggestPlanning: (message: string) => boolean;
-  // Craft Agents plan mode toggle (for SHIFT+TAB)
-  startCraftPlanning: () => void;
-  cancelCraftPlanning: () => void;
+  // Generic mode toggle API
+  setMode: (mode: Mode, enabled: boolean) => void;
+  // Legacy mode toggle aliases (deprecated - use setMode instead)
+  startSafeMode: () => void;
+  exitSafeModeAction: () => void;
   // Todos (from TodoWrite tool)
   todos: TodoItem[];
   // Ultrathink mode (extended thinking)
@@ -232,9 +237,10 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
   // Ultrathink mode (extended thinking)
   const [isUltrathink, setIsUltrathink] = useState(false);
 
-  // Plan mode state
+  // Safe mode state - uses useSyncExternalStore for direct Mode Manager integration
+  // No more React state duplication - Mode Manager is the single source of truth
+  const safeMode = useSafeMode(session?.id);
   const [activePlan, setActivePlan] = useState<Plan | null>(null);
-  const [planMode, setPlanMode] = useState(false);
   // Todos (from TodoWrite tool)
   const [todos, setTodos] = useState<TodoItem[]>([]);
 
@@ -610,11 +616,7 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
       agentRef.current.onDebug = (message) => {
         debug('[SDK]', message);
       };
-      // Set up plan mode change callback to sync React state
-      agentRef.current.onPlanModeChange = (mode) => {
-        debug('[SDK] Plan mode changed:', mode);
-        setPlanMode(mode);
-      };
+      // Note: onSafeModeChange callback removed - useSafeMode hook subscribes directly to Mode Manager
       // Set up plan submitted callback - injects plan as a message
       agentRef.current.onPlanSubmitted = (planPath) => {
         debug('[SDK] Plan submitted:', planPath);
@@ -625,32 +627,6 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
             id: `plan-${Date.now()}`,
             type: 'plan',
             content: planPath,  // The path to the plan file
-            timestamp: Date.now(),
-          },
-        ]);
-      };
-      // Set up plan mode entered callback - shows system message when LLM enters plan mode
-      agentRef.current.onPlanModeEntered = () => {
-        debug('[SDK] Plan mode entered by LLM');
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `system-${Date.now()}`,
-            type: 'system',
-            content: 'Entered plan mode',
-            timestamp: Date.now(),
-          },
-        ]);
-      };
-      // Set up plan mode exited callback - shows system message when LLM exits plan mode
-      agentRef.current.onPlanModeExited = () => {
-        debug('[SDK] Plan mode exited by LLM');
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `system-${Date.now()}`,
-            type: 'system',
-            content: 'Exited plan mode',
             timestamp: Date.now(),
           },
         ]);
@@ -710,25 +686,23 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
     }
   }, [pendingQuestion]);
 
-  // Start Craft Agents plan mode (for SHIFT+TAB)
-  const startCraftPlanning = useCallback(() => {
+  // Generic mode toggle API - works with any mode type
+  const setMode = useCallback((mode: Mode, enabled: boolean) => {
     if (!session?.id) {
-      debug('[startCraftPlanning] No session ID, cannot enter plan mode');
+      debug(`[setMode] No session ID, cannot ${enabled ? 'enter' : 'exit'} ${mode} mode`);
       return;
     }
-    debug('[startCraftPlanning] Entering Craft Agents plan mode for session:', session.id);
-    enterCraftPlanMode(session.id);
+    debug(`[setMode] ${enabled ? 'Entering' : 'Exiting'} ${mode} mode for session:`, session.id);
+    if (enabled) {
+      enterMode(session.id, mode);
+    } else {
+      exitMode(session.id, mode);
+    }
   }, [session?.id]);
 
-  // Cancel Craft Agents plan mode (for SHIFT+TAB)
-  const cancelCraftPlanning = useCallback(() => {
-    if (!session?.id) {
-      debug('[cancelCraftPlanning] No session ID, cannot exit plan mode');
-      return;
-    }
-    debug('[cancelCraftPlanning] Exiting Craft Agents plan mode for session:', session.id);
-    exitCraftPlanMode(session.id);
-  }, [session?.id]);
+  // Legacy aliases for backward compatibility (use setMode instead)
+  const startSafeMode = useCallback(() => setMode('safe', true), [setMode]);
+  const exitSafeModeAction = useCallback(() => setMode('safe', false), [setMode]);
 
   const dismissTypedError = useCallback(() => {
     setTypedError(null);
@@ -772,24 +746,9 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
       ]);
     }
 
-    // If in plan mode and plan has no context, set the user's input as the plan context
-    // Use agent's internal state (always current) instead of React state (might be stale)
-    const agentPlan = agent.getActivePlan();
-    const agentPlanMode = agent.isInPlanMode();
-    debug('[sendMessage] agentPlanMode:', agentPlanMode, 'agentPlan:', agentPlan?.title || 'none', 'agentPlan.context:', agentPlan?.context || 'empty');
-
-    if (agentPlanMode && agentPlan && !agentPlan.context) {
-      const updatedPlan: Plan = {
-        ...agentPlan,
-        context: input,
-        title: input.substring(0, 50) + (input.length > 50 ? '...' : ''),
-        updatedAt: Date.now(),
-      };
-      setActivePlan(updatedPlan);
-      agent.setActivePlan(updatedPlan);
-      saveWorkspacePlan(workspace.id, updatedPlan);
-      debug('[sendMessage] Updated plan context:', input.substring(0, 50));
-    }
+    // Log safe mode status
+    const agentSafeMode = agent.isInSafeMode();
+    debug('[sendMessage] safeMode:', agentSafeMode);
 
     setIsProcessing(true);
     setProcessingStartTime(Date.now());
@@ -1122,7 +1081,7 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
       setStatus('');
       setHasExecutingTool(false);
     }
-  }, [getAgent, isProcessing, planMode, activePlan, workspace.id]);
+  }, [getAgent, isProcessing, safeMode, activePlan, workspace.id]);
 
   // Keep sendMessageRef updated
   useEffect(() => {
@@ -1160,9 +1119,9 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
     setStreamingText('');
     setStatus('');
 
-    // Clear plan mode state to avoid being stuck
+    // Clear safe mode state to avoid being stuck
     if (session?.id) {
-      exitCraftPlanMode(session.id);
+      exitMode(session.id, 'safe');
     }
 
     setMessages((prev) => [
@@ -1748,44 +1707,40 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
       : null;
 
   // ============================================
-  // Plan Mode Functions
+  // Plan Functions (SubmitPlan workflow)
   // ============================================
 
   /**
    * Cancel the current plan
    */
   const cancelPlan = useCallback(() => {
-    const agent = agentRef.current;
-    if (agent) {
-      agent.clearPlan();
-    }
-
     setActivePlan(null);
-    setPlanMode(false);
+
+    // Exit safe mode via mode manager
+    if (session?.id) {
+      exitMode(session.id, 'safe');
+    }
 
     // Clear from storage
     clearWorkspacePlan(workspace.id);
 
     debug('[cancelPlan] Plan cancelled');
-  }, [workspace.id]);
+  }, [workspace.id, session?.id]);
 
   /**
-   * Approve the current plan and exit plan mode
+   * Approve the current plan and exit safe mode
    * This allows Claude to execute the planned actions
    */
   const approvePlan = useCallback(() => {
-    const agent = agentRef.current;
-    if (agent) {
-      agent.exitPlanMode();
+    if (session?.id) {
+      exitMode(session.id, 'safe');
     }
 
-    setPlanMode(false);
-
-    debug('[approvePlan] Plan approved, exiting plan mode');
-  }, []);
+    debug('[approvePlan] Plan approved, exiting safe mode');
+  }, [session?.id]);
 
   /**
-   * Check if a message should trigger plan mode suggestion
+   * Check if a message should trigger planning suggestion
    */
   const shouldSuggestPlanning = useCallback((message: string): boolean => {
     const agent = agentRef.current;
@@ -1835,15 +1790,17 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
     completeApiAuth,
     cancelApiAuth,
     triggerApiAuth,
-    // Plan mode
+    // Safe mode (read-only exploration)
     activePlan,
-    planMode,
+    safeMode,
     cancelPlan,
     approvePlan,
     shouldSuggestPlanning,
-    // Craft Agents plan mode toggle (for SHIFT+TAB)
-    startCraftPlanning,
-    cancelCraftPlanning,
+    // Generic mode toggle API
+    setMode,
+    // Legacy mode toggle aliases (deprecated - use setMode instead)
+    startSafeMode,
+    exitSafeModeAction,
     // Todos (from TodoWrite tool)
     todos,
     // Ultrathink mode (extended thinking)

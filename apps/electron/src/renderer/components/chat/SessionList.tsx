@@ -227,8 +227,8 @@ interface SessionItemProps {
   onDelete: (sessionId: string, skipConfirmation?: boolean) => Promise<boolean>
   onSelect: (forceNewTab: boolean) => void
   onOpenInNewTab: () => void
-  /** Whether plan mode is enabled for this session (from real-time state) */
-  isPlanModeEnabled?: boolean
+  /** Whether safe mode is enabled for this session (from real-time state) */
+  isSafeModeEnabled?: boolean
   /** Current search query for highlighting matches */
   searchQuery?: string
 }
@@ -253,7 +253,7 @@ function SessionItem({
   onDelete,
   onSelect,
   onOpenInNewTab,
-  isPlanModeEnabled,
+  isSafeModeEnabled,
   searchQuery,
 }: SessionItemProps) {
   const [menuOpen, setMenuOpen] = useState(false)
@@ -355,9 +355,9 @@ function SessionItem({
               {item.isFlagged && (
                 <Flag className="h-[10px] w-[10px] text-amber-500 fill-amber-500 shrink-0" />
               )}
-              {isPlanModeEnabled && (
+              {isSafeModeEnabled && (
                 <span className="shrink-0 px-1.5 py-0.5 text-[10px] font-medium rounded bg-emerald-500/10 text-emerald-600">
-                  Plan
+                  Safe
                 </span>
               )}
               <span className="truncate">
@@ -477,8 +477,8 @@ interface SessionListProps {
   onSessionSelect?: (session: Session, options: { forceNewTab: boolean }) => void
   /** Called to navigate to a specific view (e.g., 'completed', 'inbox') */
   onNavigateToView?: (view: 'inbox' | 'completed' | 'flagged') => void
-  /** Set of session IDs with plan mode enabled (real-time state) */
-  planModeSessions?: Set<string>
+  /** Unified session options per session (real-time state) */
+  sessionOptions?: Map<string, import('../../hooks/useSessionOptions').SessionOptions>
   /** Whether search mode is active */
   searchActive?: boolean
   /** Current search query */
@@ -513,7 +513,7 @@ export function SessionList({
   onFocusChatInput,
   onSessionSelect,
   onNavigateToView,
-  planModeSessions,
+  sessionOptions,
   searchActive,
   searchQuery = '',
   onSearchChange,
@@ -825,7 +825,7 @@ export function SessionList({
                       // Open in new tab without changing selection
                       onSessionSelect?.(item, { forceNewTab: true })
                     }}
-                    isPlanModeEnabled={planModeSessions?.has(item.id)}
+                    isSafeModeEnabled={sessionOptions?.get(item.id)?.activeModes?.includes('safe')}
                     searchQuery={searchQuery}
                   />
                 )

@@ -15,7 +15,8 @@ import { getCurrentVersion } from '@craft-agent/shared/version';
 import type { ModalName } from '../modals/useModalState.ts';
 import type { Message } from '../../components/Messages.tsx';
 import type { SubAgentDefinition } from '@craft-agent/shared/agents';
-import { PLAN_MODE_ENTER_MESSAGE, PLAN_MODE_ENTER_PROMPT } from '@craft-agent/shared/agents';
+import { SAFE_MODE_ENTER_MESSAGE, SAFE_MODE_ENTER_PROMPT } from '@craft-agent/shared/agents';
+import type { Mode } from '@craft-agent/shared/agent';
 
 /**
  * Result of command execution
@@ -67,13 +68,15 @@ export interface UseCommandsProps {
   refreshAgents: () => Promise<string[] | { error: string }>;
   fetchTools: () => Promise<ToolGroup[]>;
 
-  // Plan mode operations
-  planMode: boolean;
+  // Safe mode operations (read-only exploration)
+  safeMode: boolean;
   approvePlan: () => void;
   cancelPlan: () => void;
-  // Craft Agents plan mode (uses CraftAgentsPlanModeAskQuestion, blocks API calls during planning)
-  startCraftPlanning: () => void;
-  cancelCraftPlanning: () => void;
+  // Generic mode toggle API
+  setMode: (mode: Mode, enabled: boolean) => void;
+  // Legacy mode toggle aliases (deprecated - use setMode instead)
+  startSafeMode: () => void;
+  exitSafeModeAction: () => void;
 
   // Exit handler
   exitApp: () => void;
@@ -120,11 +123,12 @@ export function useCommands(props: UseCommandsProps) {
     resetAgent,
     refreshAgents,
     fetchTools,
-    planMode,
+    safeMode,
     approvePlan,
     cancelPlan,
-    startCraftPlanning,
-    cancelCraftPlanning,
+    setMode,
+    startSafeMode,
+    exitSafeModeAction,
     exitApp,
   } = props;
 
@@ -469,27 +473,27 @@ export function useCommands(props: UseCommandsProps) {
       }
 
       // ============================================
-      // Plan Commands
+      // Safe Mode Commands
       // ============================================
-      case '/plan': {
+      case '/safe': {
         const subCommand = parts[1] ?? '';
 
-        if (subCommand === 'start') {
-          if (planMode) {
+        if (subCommand === '' || subCommand === 'start') {
+          if (safeMode) {
             return {
               handled: true,
-              message: { content: 'Already in plan mode. Use /plan cancel to exit first.', type: 'error' },
+              message: { content: 'Already in safe mode. Use /safe cancel to exit first.', type: 'error' },
             };
           }
-          // Start Craft Agents plan mode (blocks API calls, uses CraftAgentsPlanModeAskQuestion)
-          startCraftPlanning();
+          // Start Safe Mode (blocks writes during exploration)
+          setMode('safe', true);
           return {
             handled: true,
             message: {
-              content: PLAN_MODE_ENTER_MESSAGE,
+              content: SAFE_MODE_ENTER_MESSAGE,
               type: 'system',
             },
-            sendToAgent: PLAN_MODE_ENTER_PROMPT,
+            sendToAgent: SAFE_MODE_ENTER_PROMPT,
           };
         }
 
@@ -560,10 +564,10 @@ export function useCommands(props: UseCommandsProps) {
         }
 
         if (subCommand === 'approve') {
-          if (!planMode) {
+          if (!safeMode) {
             return {
               handled: true,
-              message: { content: 'No active plan mode. Plan approval happens after SubmitPlan is called.', type: 'system' },
+              message: { content: 'No active safe mode. Plan approval happens after SubmitPlan is called.', type: 'system' },
             };
           }
           approvePlan();
@@ -574,16 +578,16 @@ export function useCommands(props: UseCommandsProps) {
         }
 
         if (subCommand === 'cancel') {
-          if (!planMode) {
+          if (!safeMode) {
             return {
               handled: true,
-              message: { content: 'No active plan to cancel.', type: 'error' },
+              message: { content: 'No active safe mode to cancel.', type: 'error' },
             };
           }
-          cancelCraftPlanning();
+          setMode('safe', false);
           return {
             handled: true,
-            message: { content: 'Plan cancelled. Returned to normal mode.', type: 'system' },
+            message: { content: 'Safe mode cancelled. Returned to normal mode.', type: 'system' },
           };
         }
 
@@ -793,11 +797,10 @@ export function useCommands(props: UseCommandsProps) {
     resetAgent,
     refreshAgents,
     fetchTools,
-    planMode,
+    safeMode,
     approvePlan,
     cancelPlan,
-    startCraftPlanning,
-    cancelCraftPlanning,
+    setMode,
     exitApp,
   ]);
 

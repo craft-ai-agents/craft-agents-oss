@@ -1,7 +1,7 @@
 import { app } from 'electron'
 import { join } from 'path'
 import { rm, readFile } from 'fs/promises'
-import { CraftAgent, type AgentEvent, enterCraftPlanMode, exitCraftPlanMode } from '@craft-agent/shared/agent'
+import { CraftAgent, type AgentEvent, enterMode, exitMode, type Mode, isModeActive } from '@craft-agent/shared/agent'
 import type { WindowManager } from './window-manager'
 import {
   loadStoredConfig,
@@ -10,8 +10,9 @@ import {
   getWorkspaceAccessTokenAsync,
   updateSessionMetadata,
   getSessionAttachmentsPath,
-  getDefaultPlanMode,
+  getDefaultModes,
   getDefaultSkipPermissions,
+  getDefaultWorkingDirectory,
   type Workspace,
   // Session persistence functions
   listSessions as listStoredSessions,
@@ -42,8 +43,8 @@ import { DEFAULT_MODEL } from '@craft-agent/shared/config'
  * Feature flags for agent behavior
  */
 export const AGENT_FLAGS = {
-  /** Enable plan mode tools (ExitCraftAgentsPlanMode, CraftAgentsPlanModeAskQuestion) */
-  planModeEnabled: true,
+  /** Default modes enabled for new sessions */
+  defaultModesEnabled: true,
 } as const
 
 interface ManagedSession {
@@ -64,6 +65,10 @@ interface ManagedSession {
   // Map of toolUseId -> parentToolUseId for tracking which parent was active when each tool started
   // This is used to correctly attribute child tools even with concurrent parent tools
   toolToParentMap: Map<string, string>
+  // Parent tool ID captured when text started streaming (first text_delta)
+  // Used by text_complete to assign correct parent - prevents text from being nested
+  // under tools that started after the text began (e.g., "I'll help..." before Task call)
+  pendingTextParent?: string
   // Session name (user-defined or AI-generated)
   name?: string
   // Session metadata
@@ -72,7 +77,8 @@ interface ManagedSession {
   isFlagged: boolean
   // Advanced options (persisted per session)
   skipPermissions: boolean
-  planModeEnabled?: boolean
+  /** Active operational modes for this session */
+  activeModes: Mode[]
   // SDK session ID for conversation continuity
   sdkSessionId?: string
   // Track whether agent was successfully activated via AgentStateManager
@@ -91,6 +97,8 @@ interface ManagedSession {
   todoState?: 'todo' | 'in-progress' | 'needs-review' | 'done' | 'cancelled'
   // Read/unread tracking - ID of last message user has read
   lastReadMessageId?: string
+  // Working directory for this session (used by agent for bash commands)
+  workingDirectory?: string
 }
 
 // Convert runtime Message to StoredMessage for persistence
@@ -576,16 +584,18 @@ export class SessionManager {
           pendingTools: new Map(),
           parentToolStack: [],
           toolToParentMap: new Map(),
+          pendingTextParent: undefined,
           name: storedSession.name,
           agentId: storedSession.agentId,
           agentName: storedSession.agentName,
           isFlagged: storedSession.isFlagged ?? false,
           skipPermissions: storedSession.skipPermissions ?? false,
-          planModeEnabled: storedSession.planModeEnabled ?? false,
+          activeModes: storedSession.activeModes ?? [],
           sdkSessionId: storedSession.sdkSessionId,
           tokenUsage: storedSession.tokenUsage,
           todoState: storedSession.todoState,
           lastReadMessageId: storedSession.lastReadMessageId,
+          workingDirectory: storedSession.workingDirectory ?? getDefaultWorkingDirectory(),
         }
 
         this.sessions.set(storedSession.id, managed)
@@ -615,8 +625,9 @@ export class SessionManager {
         agentName: managed.agentName,
         isFlagged: managed.isFlagged,
         skipPermissions: managed.skipPermissions,
-        planModeEnabled: managed.planModeEnabled,
+        activeModes: managed.activeModes,
         todoState: managed.todoState,
+        workingDirectory: managed.workingDirectory,
         messages: persistableMessages.map(messageToStored),
         tokenUsage: managed.tokenUsage ?? {
           inputTokens: 0,
@@ -652,9 +663,10 @@ export class SessionManager {
         agentName: m.agentName,
         isFlagged: m.isFlagged,
         skipPermissions: m.skipPermissions,
-        planModeEnabled: m.planModeEnabled,
+        activeModes: m.activeModes,
         todoState: m.todoState,
         lastReadMessageId: m.lastReadMessageId,
+        workingDirectory: m.workingDirectory,
       }))
       .sort((a, b) => b.lastMessageAt - a.lastMessageAt)
   }
@@ -667,7 +679,8 @@ export class SessionManager {
 
     // Get new session defaults from settings
     const defaultSkipPerms = getDefaultSkipPermissions()
-    const defaultPlanMode = getDefaultPlanMode()
+    const defaultModes = getDefaultModes()
+    const defaultWorkingDir = getDefaultWorkingDirectory()
 
     // Use storage layer to create and persist the session
     const storedSession = createStoredSession(workspaceId)
@@ -683,16 +696,19 @@ export class SessionManager {
       pendingTools: new Map(),
       parentToolStack: [],
       toolToParentMap: new Map(),
+      pendingTextParent: undefined,
       agentId,
       agentName,
       isFlagged: false,
       skipPermissions: defaultSkipPerms,
+      activeModes: defaultModes,
+      workingDirectory: defaultWorkingDir,
     }
 
     this.sessions.set(storedSession.id, managed)
 
     // Persist with agent info or if defaults are set
-    if (agentId || agentName || defaultSkipPerms) {
+    if (agentId || agentName || defaultSkipPerms || defaultModes.length > 0) {
       this.persistSession(managed)
     }
 
@@ -707,8 +723,9 @@ export class SessionManager {
       agentName,
       isFlagged: false,
       skipPermissions: defaultSkipPerms,
-      planModeEnabled: defaultPlanMode,
+      activeModes: defaultModes,
       todoState: undefined,  // User-controlled, defaults to undefined (treated as 'todo')
+      workingDirectory: defaultWorkingDir,
     }
   }
 
@@ -722,7 +739,7 @@ export class SessionManager {
       managed.agent = new CraftAgent({
         workspace: managed.workspace,
         model: config?.model,
-        isHeadless: !AGENT_FLAGS.planModeEnabled,
+        isHeadless: !AGENT_FLAGS.defaultModesEnabled,
         // Always pass session object - id is required for plan mode callbacks
         // sdkSessionId is optional and used for conversation resumption
         session: {
@@ -731,6 +748,7 @@ export class SessionManager {
           sdkSessionId: managed.sdkSessionId,
           createdAt: managed.lastMessageAt,
           lastUsedAt: managed.lastMessageAt,
+          workingDirectory: managed.workingDirectory,
         },
       })
       console.log(`[SessionManager] Created agent for session ${managed.id}${managed.sdkSessionId ? ' (resuming)' : ''}`)
@@ -748,13 +766,21 @@ export class SessionManager {
         }, managed.workspace.id)
       }
 
-      // Set up plan mode handlers
-      managed.agent.onPlanModeChange = (enabled) => {
-        console.log(`[SessionManager] Plan mode changed for session ${managed.id}:`, enabled)
-        managed.planModeEnabled = enabled
+      // Set up mode change handlers (safe mode, and future modes)
+      managed.agent.onSafeModeChange = (enabled) => {
+        console.log(`[SessionManager] Mode 'safe' changed for session ${managed.id}:`, enabled)
+        // Update activeModes array
+        if (enabled) {
+          if (!managed.activeModes.includes('safe')) {
+            managed.activeModes = [...managed.activeModes, 'safe']
+          }
+        } else {
+          managed.activeModes = managed.activeModes.filter(m => m !== 'safe')
+        }
         this.sendEvent({
-          type: 'plan_mode_changed',
+          type: 'mode_changed',
           sessionId: managed.id,
+          mode: 'safe',
           enabled,
         }, managed.workspace.id)
       }
@@ -789,27 +815,26 @@ export class SessionManager {
         }
       }
 
-      managed.agent.onCraftAskQuestion = (request) => {
-        console.log(`[SessionManager] Ask question request for session ${managed.id}:`, request.questions.length, 'questions')
+      // Wire up onWorkingDirectoryChange to sync cwd changes (e.g., from Bash cd)
+      managed.agent.onWorkingDirectoryChange = (path) => {
+        console.log(`[SessionManager] Working directory changed for session ${managed.id}:`, path)
+        managed.workingDirectory = path
+        this.persistSession(managed)
         this.sendEvent({
-          type: 'ask_question_request',
+          type: 'working_directory_changed',
           sessionId: managed.id,
-          request: {
-            sessionId: managed.id,
-            requestId: request.requestId,
-            questions: request.questions,
-          }
+          workingDirectory: path
         }, managed.workspace.id)
       }
 
       // NOTE: Agent definition is now applied in sendMessage() via AgentStateManager.activate()
       // This ensures proper state machine flow: extraction → auth checks → activation
 
-      // Apply session-scoped plan mode state to the newly created agent
+      // Apply session-scoped active modes to the newly created agent
       // This ensures the UI toggle state is reflected in the agent before first message
-      if (managed.planModeEnabled) {
-        managed.agent.enterPlanMode()
-        console.log(`[SessionManager] Applied plan mode to agent for session ${managed.id}`)
+      for (const mode of managed.activeModes) {
+        enterMode(managed.id, mode)
+        console.log(`[SessionManager] Applied mode '${mode}' to agent for session ${managed.id}`)
       }
     }
     return managed.agent
@@ -904,6 +929,23 @@ export class SessionManager {
       this.persistSession(managed)
       // Notify renderer of the name change
       this.sendEvent({ type: 'title_generated', sessionId, title: name }, managed.workspace.id)
+    }
+  }
+
+  /**
+   * Update the working directory for a session
+   */
+  updateWorkingDirectory(sessionId: string, path: string): void {
+    const managed = this.sessions.get(sessionId)
+    if (managed) {
+      managed.workingDirectory = path
+      // Also update the agent's session config if agent exists
+      if (managed.agent) {
+        managed.agent.updateWorkingDirectory(path)
+      }
+      this.persistSession(managed)
+      // Notify renderer of the working directory change
+      this.sendEvent({ type: 'working_directory_changed', sessionId, workingDirectory: path }, managed.workspace.id)
     }
   }
 
@@ -1131,6 +1173,7 @@ export class SessionManager {
         // Clear parent tool tracking (should be empty after normal completion, but ensures clean state)
         managed.parentToolStack = []
         managed.toolToParentMap.clear()
+        managed.pendingTextParent = undefined
         this.sendEvent({ type: 'complete', sessionId }, managed.workspace.id)
       }
       // Always persist (for aborted messages)
@@ -1163,6 +1206,7 @@ export class SessionManager {
     // Clear parent tool tracking (stale entries would corrupt future parent-child tracking)
     managed.parentToolStack = []
     managed.toolToParentMap.clear()
+    managed.pendingTextParent = undefined
 
     // Add interrupted info message to session (for persistence)
     const interruptedMessage: Message = {
@@ -1197,47 +1241,31 @@ export class SessionManager {
   }
 
   /**
-   * Respond to a pending ask question request
-   * Returns true if the response was delivered, false if agent/session is gone
+   * Set a mode for a session (generic for any mode type)
    */
-  respondToAskQuestion(sessionId: string, requestId: string, answers: Record<string, string>): boolean {
-    const managed = this.sessions.get(sessionId)
-    if (managed?.agent) {
-      console.log(`[SessionManager] Ask question response for ${requestId}:`, Object.keys(answers).length, 'answers')
-      managed.agent.respondToCraftAskQuestion(requestId, answers)
-      return true
-    } else {
-      console.warn(`[SessionManager] Cannot respond to ask question - no agent for session ${sessionId}`)
-      return false
-    }
-  }
-
-  /**
-   * Set plan mode for a session
-   */
-  setPlanMode(sessionId: string, enabled: boolean): void {
+  setMode(sessionId: string, mode: Mode, enabled: boolean): void {
     const managed = this.sessions.get(sessionId)
     if (managed) {
-      managed.planModeEnabled = enabled
-
-      // Update the plan mode state for this specific session
+      // Update activeModes array
       if (enabled) {
-        enterCraftPlanMode(sessionId)
+        if (!managed.activeModes.includes(mode)) {
+          managed.activeModes = [...managed.activeModes, mode]
+        }
       } else {
-        exitCraftPlanMode(sessionId)
+        managed.activeModes = managed.activeModes.filter(m => m !== mode)
       }
 
-      // If we have an agent, update its plan mode state
-      if (managed.agent) {
-        if (enabled) {
-          managed.agent.enterPlanMode()
-        } else {
-          managed.agent.exitPlanMode()
-        }
+      // Update the mode state for this specific session via mode manager
+      if (enabled) {
+        enterMode(sessionId, mode)
+      } else {
+        exitMode(sessionId, mode)
       }
+
       this.sendEvent({
-        type: 'plan_mode_changed',
+        type: 'mode_changed',
         sessionId: managed.id,
+        mode,
         enabled,
       }, managed.workspace.id)
       // Persist to disk
@@ -1270,7 +1298,13 @@ export class SessionManager {
 
     switch (event.type) {
       case 'text_delta':
-        // AgentEvent uses `text` not `delta`
+        // Capture parent on FIRST delta of a text block (when streamingText is empty)
+        // This ensures text gets the parent that existed when it started, not when it completed
+        if (managed.streamingText === '') {
+          managed.pendingTextParent = managed.parentToolStack.length > 0
+            ? managed.parentToolStack[managed.parentToolStack.length - 1]
+            : undefined
+        }
         managed.streamingText += event.text
         // Queue delta for batched sending (performance: reduces IPC from 50+/sec to ~20/sec)
         this.queueDelta(sessionId, workspaceId, event.text, event.turnId)
@@ -1284,11 +1318,9 @@ export class SessionManager {
         const existingAssistantCount = managed.messages.filter(m => m.role === 'assistant').length
         const shouldGenerateTitle = existingAssistantCount === 0 && !managed.name
 
-        // For intermediate messages (commentary during tool execution), assign the current parent
-        // This enables proper nesting in the tree view - commentary appears under its parent tool
-        const textParentToolUseId = event.isIntermediate && managed.parentToolStack.length > 0
-          ? managed.parentToolStack[managed.parentToolStack.length - 1]
-          : undefined
+        // Use the parent that was active when text STARTED streaming (captured in text_delta)
+        // This prevents text from being nested under tools that started after the text began
+        const textParentToolUseId = event.isIntermediate ? managed.pendingTextParent : undefined
 
         const assistantMessage: Message = {
           id: generateMessageId(),
@@ -1301,6 +1333,7 @@ export class SessionManager {
         }
         managed.messages.push(assistantMessage)
         managed.streamingText = ''
+        managed.pendingTextParent = undefined // Clear for next text block
         this.sendEvent({ type: 'text_complete', sessionId, text: event.text, isIntermediate: event.isIntermediate, turnId: event.turnId, parentToolUseId: textParentToolUseId }, workspaceId)
 
         // Generate title asynchronously after first assistant response
@@ -1381,6 +1414,8 @@ export class SessionManager {
             toolUseId: event.toolUseId,
             toolInput: formattedToolInput,
             toolStatus: 'pending',
+            toolIntent: event.intent,
+            toolDisplayName: event.displayName,
             turnId: event.turnId,
             parentToolUseId,
           }
@@ -1394,7 +1429,9 @@ export class SessionManager {
             sessionId,
             toolName: event.toolName,
             toolUseId: event.toolUseId,
-            toolInput: formattedToolInput,
+            toolInput: formattedToolInput ?? {},
+            toolIntent: event.intent,
+            toolDisplayName: event.displayName,
             turnId: event.turnId,
             parentToolUseId,
           }, workspaceId)
@@ -1550,6 +1587,9 @@ export class SessionManager {
         // Complete event from CraftAgent - actual 'complete' sent to renderer
         // comes from the finally block in sendMessage, not here
         break
+
+      // Note: working_directory_changed is handled via onWorkingDirectoryChange callback,
+      // not through processEvent, so no case needed here
     }
   }
 

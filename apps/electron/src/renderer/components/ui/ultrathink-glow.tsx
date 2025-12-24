@@ -34,34 +34,35 @@ export function UltrathinkGlow({ enabled, width = 600, height = 120 }: Ultrathin
           exit={{ opacity: 0 }}
           transition={{ duration: 0.3 }}
         >
-          <PulsingBorder
-            style={{
+          {/* PulsingBorder accepts more props than its type definition exports */}
+          {React.createElement(PulsingBorder as React.ComponentType<Record<string, unknown>>, {
+            style: {
               position: 'absolute',
               top: 0,
               left: 0,
               width: '100%',
               height: '100%',
-            }}
-            colorCount={3}
-            color1="#0dc1fd"
-            color2="#d915ef"
-            color3="#ff3f2ecc"
-            colorBack="#00000000"
-            roundness={roundness}
-            thickness={0.015}
-            softness={0.5}
-            intensity={0.15}
-            bloom={0.15}
-            spotSize={0.5}
-            spots={4}
-            pulse={0.2}
-            smoke={0.2}
-            smokeSize={0.0}
-            speed={0.96}
-            scale={1.0}
-            rotation={0}
-            offsetX={0}
-          />
+            },
+            colorCount: 3,
+            color1: "#0dc1fd",
+            color2: "#d915ef",
+            color3: "#ff3f2ecc",
+            colorBack: "#00000000",
+            roundness,
+            thickness: 0.015,
+            softness: 0.5,
+            intensity: 0.15,
+            bloom: 0.15,
+            spotSize: 0.5,
+            spots: 4,
+            pulse: 0.2,
+            smoke: 0.2,
+            smokeSize: 0.0,
+            speed: 0.96,
+            scale: 1.0,
+            rotation: 0,
+            offsetX: 0,
+          })}
         </motion.div>
       )}
     </AnimatePresence>

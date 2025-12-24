@@ -367,11 +367,6 @@ export const mockElectronAPI: ElectronAPI = {
     }
   },
 
-  onAgentAuthChanged(_callback: (workspaceId: string, agentId: string) => void): () => void {
-    // Mock: no-op - auth changes won't happen in browser mock mode
-    return () => {}
-  },
-
   onAgentStatusChanged(_callback: (workspaceId: string, agentId: string, status: import('../../shared/types').AgentStatus) => void): () => void {
     // Mock: no-op - status changes won't happen in browser mock mode
     return () => {}
@@ -502,15 +497,14 @@ console.log(example);
     return true
   },
 
-  // ===== Plan Mode =====
-
-  async respondToAskQuestion(_sessionId: string, _requestId: string, answers: import('../../shared/types').AskQuestionResponse): Promise<boolean> {
-    console.log('[Mock] respondToAskQuestion called:', Object.keys(answers).length, 'answers')
-    return true
+  async setSkipPermissions(_sessionId: string, _enabled: boolean): Promise<void> {
+    console.log('[Mock] setSkipPermissions called')
   },
 
-  async setPlanMode(_sessionId: string, enabled: boolean): Promise<void> {
-    console.log('[Mock] setPlanMode called:', enabled)
+  // ===== Mode Management =====
+
+  async setMode(_sessionId: string, mode: import('../../shared/types').Mode, enabled: boolean): Promise<void> {
+    console.log('[Mock] setMode called:', mode, enabled)
   },
 
   // ===== Agent State Management (agent-scoped) =====
@@ -576,6 +570,11 @@ console.log(example);
   onMenuNewChat(callback: () => void): () => void {
     // Mock: no-op in browser mode
     console.log('[Mock] onMenuNewChat registered')
+    return () => {}
+  },
+
+  onMenuNewChatTab(callback: () => void): () => void {
+    console.log('[Mock] onMenuNewChatTab registered')
     return () => {}
   },
 
@@ -826,16 +825,20 @@ console.log(example);
 
   // ===== New Session Defaults =====
 
-  async getDefaultPlanMode() {
+  async getDefaultModes(): Promise<import('../../shared/types').Mode[]> {
     await sleep(50)
-    console.log('[Mock] getDefaultPlanMode called')
-    return localStorage.getItem('craft-agent-default-plan-mode') === 'true'
+    console.log('[Mock] getDefaultModes called')
+    const stored = localStorage.getItem('craft-agent-default-modes')
+    if (stored) {
+      try { return JSON.parse(stored) } catch { return [] }
+    }
+    return []
   },
 
-  async setDefaultPlanMode(enabled: boolean) {
+  async setDefaultModes(modes: import('../../shared/types').Mode[]) {
     await sleep(50)
-    console.log('[Mock] setDefaultPlanMode called:', enabled)
-    localStorage.setItem('craft-agent-default-plan-mode', String(enabled))
+    console.log('[Mock] setDefaultModes called:', modes)
+    localStorage.setItem('craft-agent-default-modes', JSON.stringify(modes))
   },
 
   async getDefaultSkipPermissions() {

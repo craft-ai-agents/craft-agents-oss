@@ -72,7 +72,7 @@ export function LeftSidebar({ links, isCollapsed, getItemProps, focusedItemId }:
                 // Already a React element or primitive ReactNode
                 return (
                   <span className={cn("h-3.5 w-3.5 shrink-0 flex items-center justify-center", link.iconColor || "text-muted-foreground")}>
-                    {link.icon}
+                    {link.icon as React.ReactNode}
                   </span>
                 )
               })()}

@@ -6,6 +6,7 @@ import { getCredentialManager } from '../credentials/index.ts';
 import { isOpusModel } from './models.ts';
 import type { StoredAttachment } from '@craft-agent/core/types';
 import type { Plan } from '../agents/plan-types.ts';
+import type { Mode } from '../agent/mode-manager.ts';
 
 /**
  * OAuth credentials from a fresh authentication flow.
@@ -69,8 +70,9 @@ export interface StoredConfig {
   showCost?: boolean;  // Whether to show cost in status bar (only relevant for API Key auth)
   cumulativeUsage?: CumulativeUsage;  // Global cumulative cost across all workspaces
   // New session defaults
-  defaultPlanMode?: boolean;  // Whether new sessions start with plan mode enabled (default: false)
+  defaultModes?: Mode[];  // Modes enabled by default for new sessions (e.g., ['safe'])
   defaultSkipPermissions?: boolean;  // Whether new sessions auto-approve permissions (default: false)
+  defaultWorkingDirectory?: string;  // Default working directory for new sessions
 }
 
 const CONFIG_DIR = join(homedir(), '.craft-agent');
@@ -372,15 +374,19 @@ export function setShowCost(show: boolean): void {
 
 // New session defaults getters/setters
 
-export function getDefaultPlanMode(): boolean {
+export function getDefaultModes(): Mode[] {
   const config = loadStoredConfig();
-  return config?.defaultPlanMode ?? false;
+  // Backward compatibility: if old defaultSafeMode exists, convert it
+  if (config?.defaultModes === undefined && (config as { defaultSafeMode?: boolean })?.defaultSafeMode) {
+    return ['safe'];
+  }
+  return config?.defaultModes ?? [];
 }
 
-export function setDefaultPlanMode(enabled: boolean): void {
+export function setDefaultModes(modes: Mode[]): void {
   const config = loadStoredConfig();
   if (!config) return;
-  config.defaultPlanMode = enabled;
+  config.defaultModes = modes;
   saveConfig(config);
 }
 
@@ -393,6 +399,18 @@ export function setDefaultSkipPermissions(enabled: boolean): void {
   const config = loadStoredConfig();
   if (!config) return;
   config.defaultSkipPermissions = enabled;
+  saveConfig(config);
+}
+
+export function getDefaultWorkingDirectory(): string {
+  const config = loadStoredConfig();
+  return config?.defaultWorkingDirectory ?? homedir();
+}
+
+export function setDefaultWorkingDirectory(path: string): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+  config.defaultWorkingDirectory = path;
   saveConfig(config);
 }
 
@@ -730,6 +748,8 @@ export interface StoredMessage {
   errorDetails?: string[];
   errorOriginal?: string;
   errorCanRetry?: boolean;
+  /** Whether this user message was sent with ultrathink (extended thinking) enabled */
+  ultrathink?: boolean;
 }
 
 export interface WorkspaceConversation {
@@ -1195,11 +1215,13 @@ export interface Session {
   isFlagged?: boolean;           // Whether this session is flagged
   // Advanced options (persisted per session)
   skipPermissions?: boolean;     // Auto-approve all permission requests
-  planModeEnabled?: boolean;     // Plan mode active for this session
+  activeModes?: Mode[];          // Active modes for this session (e.g., ['safe'])
   // Todo state (user-controlled) - determines inbox vs completed
   todoState?: TodoState;
   // Read/unread tracking - ID of last message user has read
   lastReadMessageId?: string;
+  // Working directory for this session (used by agent for bash commands)
+  workingDirectory?: string;
 }
 
 // Stored session with conversation data

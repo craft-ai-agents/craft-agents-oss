@@ -10,7 +10,7 @@ import { AlertCircle, Bot } from 'lucide-react'
 import { ChatDisplay } from '@/components/chat/ChatDisplay'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/loading-indicator'
-import { useChatContext, usePendingPermission } from '@/context/ChatContext'
+import { useChatContext, usePendingPermission, useSessionOptionsFor } from '@/context/ChatContext'
 import { useAgentState } from '../../hooks/useAgentState'
 import type { Tab, ChatTab } from '../types'
 import { useTabs } from '../useTabs'
@@ -31,17 +31,17 @@ export default function ChatTabPanel({ tab }: ChatTabPanelProps) {
     onRespondToPermission,
     onMarkSessionRead,
     textareaRef,
-    // Advanced options (all session-scoped)
-    ultrathinkSessions,
-    skipPermissionsSessions,
-    planModeSessions,
-    onUltrathinkChange,
-    onSkipPermissionsChange,
-    onPlanModeChange,
     // Input drafts
     sessionDrafts,
     onInputChange,
   } = useChatContext()
+
+  // Use the unified session options hook for clean access
+  const {
+    options: sessionOpts,
+    setOption,
+    setMode,
+  } = useSessionOptionsFor(chatTab.sessionId)
 
   const { closeTab, openAgentSetupTab } = useTabs()
 
@@ -75,6 +75,16 @@ export default function ChatTabPanel({ tab }: ChatTabPanelProps) {
   const handleInputChange = React.useCallback((value: string) => {
     onInputChange(chatTab.sessionId, value)
   }, [chatTab.sessionId, onInputChange])
+
+  // Working directory for this session
+  const workingDirectory = session?.workingDirectory
+  const handleWorkingDirectoryChange = React.useCallback(async (path: string) => {
+    if (!session) return
+    // Update session's working directory
+    await window.electronAPI.updateSessionWorkingDirectory(session.id, path)
+    // Also update global default for future sessions
+    await window.electronAPI.setDefaultWorkingDirectory(path)
+  }, [session])
 
   // Handle file opens - optionally open in tab instead of external app
   const handleOpenFile = React.useCallback(
@@ -183,16 +193,19 @@ export default function ChatTabPanel({ tab }: ChatTabPanelProps) {
       pendingPermission={pendingPermission}
       onRespondToPermission={onRespondToPermission}
       agentSetupState={agentSetupState}
-      // Advanced options (all session-scoped)
-      ultrathinkEnabled={ultrathinkSessions.has(chatTab.sessionId)}
-      onUltrathinkChange={(enabled) => onUltrathinkChange(chatTab.sessionId, enabled)}
-      skipPermissions={skipPermissionsSessions.has(chatTab.sessionId)}
-      onSkipPermissionsChange={(enabled) => onSkipPermissionsChange(chatTab.sessionId, enabled)}
-      planModeEnabled={planModeSessions.has(chatTab.sessionId)}
-      onPlanModeChange={(enabled) => onPlanModeChange(chatTab.sessionId, enabled)}
+      // Advanced options - using unified session options hook
+      ultrathinkEnabled={sessionOpts.ultrathinkEnabled}
+      onUltrathinkChange={(enabled) => setOption('ultrathinkEnabled', enabled)}
+      skipPermissions={sessionOpts.skipPermissions}
+      onSkipPermissionsChange={(enabled) => setOption('skipPermissions', enabled)}
+      safeModeEnabled={sessionOpts.activeModes.includes('safe')}
+      onSafeModeChange={(enabled) => setMode('safe', enabled)}
       // Input draft preservation
       inputValue={inputValue}
       onInputChange={handleInputChange}
+      // Working directory (per session)
+      workingDirectory={workingDirectory}
+      onWorkingDirectoryChange={handleWorkingDirectoryChange}
     />
   )
 }

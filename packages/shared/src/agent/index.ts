@@ -1,30 +1,54 @@
 export * from './craft-agent.ts';
 export * from './errors.ts';
 export * from './options.ts';
-// Export plan-tools - now with factory functions for session-scoped tools
+
+// Export plan-tools - SubmitPlan is universal (agent can use anytime)
 export {
-  // Tool factories (create session-scoped tools)
+  // Tool factory (creates session-scoped SubmitPlan tool)
   createSubmitPlanTool,
-  createEnterPlanModeTool,
-  createExitPlanModeTool,
-  // State management (all require explicit sessionId)
-  setPlanModeState,
-  getPlanModeStateForSession,
-  enterCraftPlanMode,
-  exitCraftPlanMode,
-  getPlanFilePath,
-  getPlanModeUserMessageContext,
-  getPlanModeExitContext,
+  // Plan file management
   getSessionPlansDir,
-  // Utilities
-  isReadOnlyMcpTool,
-  isReadOnlyApiMethod,
-  BLOCKED_IN_PLAN_MODE,
-  // Callback registry
-  registerAgentCallbacks,
-  unregisterAgentCallbacks,
+  getLastPlanFilePath,
+  setLastPlanFilePath,
+  clearPlanFileState,
+  isPathInPlansDir,
+  // Callback registry for plan submission notifications
+  registerPlanCallbacks,
+  unregisterPlanCallbacks,
   // Types
-  type CraftPlanModeState,
+  type PlanCallbacks,
 } from './plan-tools.ts';
-// Export plan review types for electron app
+
+// Export mode-manager - Centralized mode management
+export {
+  // Generic Mode API
+  isModeActive,
+  enterMode,
+  exitMode,
+  toggleMode,
+  getActiveModes,
+  getModeState,
+  initializeModeState,
+  cleanupModeState,
+  // Tool blocking (centralized)
+  shouldAllowToolInMode,
+  blockWithReason,
+  getBlockReason,
+  // Session state (lightweight per-message injection)
+  getSessionState,
+  formatSessionState,
+  // Mode context for user messages (deprecated - use formatSessionState)
+  getModeContext,
+  // Mode configurations
+  MODE_CONFIGS,
+  // Mode manager singleton (for advanced use cases)
+  modeManager,
+  // Types
+  type Mode,
+  type ModeState,
+  type ModeCallbacks,
+  type ModeConfig,
+} from './mode-manager.ts';
+
+// Export plan review types for electron app (plans can still be submitted via SubmitPlan)
 export type { PlanReviewRequest, PlanReviewResult } from '../agents/plan-types.ts';

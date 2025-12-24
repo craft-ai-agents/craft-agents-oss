@@ -38,6 +38,11 @@ export function createApplicationMenu(): void {
           accelerator: 'CmdOrCtrl+N',
           click: () => sendToRenderer(IPC_CHANNELS.MENU_NEW_CHAT)
         },
+        {
+          label: 'New Chat in New Tab',
+          accelerator: 'CmdOrCtrl+T',
+          click: () => sendToRenderer(IPC_CHANNELS.MENU_NEW_CHAT_TAB)
+        },
         { type: 'separator' as const },
         isMac ? { role: 'close' as const } : { role: 'quit' as const }
       ]

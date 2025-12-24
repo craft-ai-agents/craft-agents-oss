@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button'
 import { useTheme, type FontFamily } from '@/context/ThemeContext'
 import { cn } from '@/lib/utils'
 import { Switch } from '@/components/ui/switch'
-import { Monitor, Sun, Moon, Eye, EyeOff, Check, ExternalLink, CheckCircle2 } from 'lucide-react'
+import { Monitor, Sun, Moon, Eye, EyeOff, Check, ExternalLink, CheckCircle2, Folder } from 'lucide-react'
 import { Spinner } from '@/components/ui/loading-indicator'
 import type { Tab } from '../types'
 import type { AuthType } from '../../../shared/types'
@@ -525,20 +525,24 @@ export default function SettingsTabPanel({
   const [claudeOAuthError, setClaudeOAuthError] = useState<string | undefined>()
 
   // New session defaults state
-  const [defaultPlanMode, setDefaultPlanMode] = useState(false)
+  const [defaultSafeMode, setDefaultSafeMode] = useState(false)
   const [defaultSkipPermissions, setDefaultSkipPermissions] = useState(false)
+  const [defaultWorkingDirectory, setDefaultWorkingDirectory] = useState('')
 
   // Load new session defaults on mount
   useEffect(() => {
     const loadDefaults = async () => {
       if (!window.electronAPI) return
       try {
-        const [planMode, skipPerms] = await Promise.all([
-          window.electronAPI.getDefaultPlanMode(),
+        const [modes, skipPerms, workingDir] = await Promise.all([
+          window.electronAPI.getDefaultModes(),
           window.electronAPI.getDefaultSkipPermissions(),
+          window.electronAPI.getDefaultWorkingDirectory(),
         ])
-        setDefaultPlanMode(planMode)
+        // Check if 'safe' mode is in the default modes array
+        setDefaultSafeMode(modes.includes('safe'))
         setDefaultSkipPermissions(skipPerms)
+        setDefaultWorkingDirectory(workingDir)
       } catch (error) {
         console.error('Failed to load session defaults:', error)
       }
@@ -547,14 +551,19 @@ export default function SettingsTabPanel({
   }, [])
 
   // Handlers for new session defaults
-  const handleDefaultPlanModeChange = useCallback(async (enabled: boolean) => {
+  const handleDefaultSafeModeChange = useCallback(async (enabled: boolean) => {
     if (!window.electronAPI) return
-    setDefaultPlanMode(enabled)
+    setDefaultSafeMode(enabled)
     try {
-      await window.electronAPI.setDefaultPlanMode(enabled)
+      // Get current modes, then add or remove 'safe' mode
+      const currentModes = await window.electronAPI.getDefaultModes()
+      const newModes = enabled
+        ? (currentModes.includes('safe') ? currentModes : [...currentModes, 'safe'] as import('../../../shared/types').Mode[])
+        : currentModes.filter(m => m !== 'safe')
+      await window.electronAPI.setDefaultModes(newModes)
     } catch (error) {
-      console.error('Failed to save default plan mode:', error)
-      setDefaultPlanMode(!enabled) // Revert on error
+      console.error('Failed to save default safe mode:', error)
+      setDefaultSafeMode(!enabled) // Revert on error
     }
   }, [])
 
@@ -566,6 +575,19 @@ export default function SettingsTabPanel({
     } catch (error) {
       console.error('Failed to save default skip permissions:', error)
       setDefaultSkipPermissions(!enabled) // Revert on error
+    }
+  }, [])
+
+  const handleChangeWorkingDirectory = useCallback(async () => {
+    if (!window.electronAPI) return
+    try {
+      const selectedPath = await window.electronAPI.openFolderDialog()
+      if (selectedPath) {
+        setDefaultWorkingDirectory(selectedPath)
+        await window.electronAPI.setDefaultWorkingDirectory(selectedPath)
+      }
+    } catch (error) {
+      console.error('Failed to change working directory:', error)
     }
   }, [])
 
@@ -793,10 +815,10 @@ export default function SettingsTabPanel({
             <SectionHeader>New Sessions</SectionHeader>
             <div>
               <ToggleRow
-                label="Plan Mode"
-                description="— start with planning enabled"
-                checked={defaultPlanMode}
-                onCheckedChange={handleDefaultPlanModeChange}
+                label="Safe Mode"
+                description="— start with safe mode enabled"
+                checked={defaultSafeMode}
+                onCheckedChange={handleDefaultSafeModeChange}
               />
               <ToggleRow
                 label="Skip Permissions"
@@ -804,6 +826,27 @@ export default function SettingsTabPanel({
                 checked={defaultSkipPermissions}
                 onCheckedChange={handleDefaultSkipPermissionsChange}
               />
+            </div>
+          </div>
+
+          {/* Working Directory - folder selector */}
+          <div>
+            <SectionHeader>Working Directory</SectionHeader>
+            <div className="space-y-1">
+              <button
+                type="button"
+                onClick={handleChangeWorkingDirectory}
+                className="w-full flex items-center gap-2 py-1.5 text-left transition-colors rounded hover:bg-foreground/[0.02]"
+              >
+                <Folder className="size-4 text-muted-foreground shrink-0" />
+                <span className="text-sm font-medium truncate">
+                  {defaultWorkingDirectory ? defaultWorkingDirectory.split('/').pop() : 'Home'}
+                </span>
+                <span className="text-xs text-muted-foreground ml-auto shrink-0">Change...</span>
+              </button>
+              <p className="text-xs text-muted-foreground truncate pl-6">
+                {defaultWorkingDirectory || '~'}
+              </p>
             </div>
           </div>
 

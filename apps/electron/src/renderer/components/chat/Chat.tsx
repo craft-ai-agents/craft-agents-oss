@@ -71,51 +71,25 @@ import { type TodoStateId, DEFAULT_TODO_STATES, getStateColor } from "@/config/t
 
 type ViewMode = 'inbox' | 'archive' | 'flagged' | 'agent' | `state:${TodoStateId}`
 
+/**
+ * ChatProps - Minimal props interface for Chat component
+ *
+ * Data and callbacks come via contextValue (ChatContextType).
+ * Only UI-specific state is passed as separate props.
+ *
+ * Adding new features:
+ * 1. Add to ChatContextType in context/ChatContext.tsx
+ * 2. Update App.tsx to include in contextValue
+ * 3. Use via useChatContext() hook in child components
+ */
 interface ChatProps {
-  workspaces: Workspace[]
-  sessions: Session[]
-  agents: SubAgentMetadata[]
-  isLoadingAgents?: boolean
-  activeWorkspaceId: string | null
+  /** All data and callbacks - passed directly to ChatProvider */
+  contextValue: ChatContextType
+  /** UI-specific props */
   defaultLayout?: number[]
   defaultCollapsed?: boolean
-  // Model selection
-  currentModel: string
-  // Menu bar trigger - increments when menu bar "New Chat" is clicked
   menuNewChatTrigger?: number
-  onModelChange: (model: string) => void
-  // Callbacks
-  onSelectWorkspace: (id: string) => void
-  onCreateSession: (workspaceId: string, agentId?: string) => Promise<Session>
-  onDeleteSession: (sessionId: string, skipConfirmation?: boolean) => Promise<boolean>
-  onFlagSession: (sessionId: string) => void
-  onUnflagSession: (sessionId: string) => void
-  onMarkSessionRead: (sessionId: string) => void
-  onMarkSessionUnread: (sessionId: string) => void
-  onTodoStateChange: (sessionId: string, state: TodoState) => void
-  onRenameSession: (sessionId: string, name: string) => void
-  onSendMessage: (sessionId: string, message: string, attachments?: FileAttachment[]) => void
-  onOpenFile: (path: string) => void
-  onOpenUrl: (url: string) => void
-  onOpenSettings: () => void
-  onOpenKeyboardShortcuts: () => void
-  onOpenStoredUserPreferences: () => void
-  onRefreshAgents: () => void
-  onLogout: () => void
-  onAddWorkspace: () => void
-  // Permission handling (queue to support multiple concurrent requests)
-  pendingPermissions?: Map<string, PermissionRequest[]>
-  onRespondToPermission?: (sessionId: string, requestId: string, allowed: boolean, alwaysAllow: boolean) => void
-  // Advanced options (all session-scoped)
-  ultrathinkSessions?: Set<string>
-  onUltrathinkChange?: (sessionId: string, enabled: boolean) => void
-  skipPermissionsSessions?: Set<string>
-  onSkipPermissionsChange?: (sessionId: string, enabled: boolean) => void
-  planModeSessions?: Set<string>
-  onPlanModeChange?: (sessionId: string, enabled: boolean) => void
-  // Input drafts per session
-  sessionDrafts?: Map<string, string>
-  onInputChange?: (sessionId: string, value: string) => void
+  menuNewChatTabTrigger?: number
 }
 
 /**
@@ -450,47 +424,37 @@ function AgentTree({
  * - 'agent': Shows sessions for a specific agent
  */
 export function Chat({
-  workspaces,
-  sessions,
-  agents,
-  isLoadingAgents = false,
-  activeWorkspaceId,
+  contextValue,
   defaultLayout = [20, 32, 48],
   defaultCollapsed = false,
-  currentModel,
   menuNewChatTrigger,
-  onModelChange,
-  onSelectWorkspace,
-  onCreateSession,
-  onDeleteSession,
-  onFlagSession,
-  onUnflagSession,
-  onMarkSessionRead,
-  onMarkSessionUnread,
-  onTodoStateChange,
-  onRenameSession,
-  onSendMessage,
-  onOpenFile,
-  onOpenUrl,
-  onOpenSettings,
-  onOpenKeyboardShortcuts,
-  onOpenStoredUserPreferences,
-  onRefreshAgents,
-  onLogout,
-  onAddWorkspace,
-  pendingPermissions,
-  onRespondToPermission,
-  // Advanced options (all session-scoped)
-  ultrathinkSessions,
-  onUltrathinkChange,
-  skipPermissionsSessions,
-  onSkipPermissionsChange,
-  planModeSessions,
-  onPlanModeChange,
-  // Input drafts per session
-  sessionDrafts,
-  onInputChange,
+  menuNewChatTabTrigger,
 }: ChatProps) {
+  // Destructure commonly used values from context
+  const {
+    workspaces,
+    sessions,
+    agents,
+    isLoadingAgents = false,
+    activeWorkspaceId,
+    currentModel,
+    sessionOptions,
+    onSelectWorkspace,
+    onCreateSession,
+    onDeleteSession,
+    onFlagSession,
+    onUnflagSession,
+    onMarkSessionRead,
+    onMarkSessionUnread,
+    onTodoStateChange,
+    onRenameSession,
+    onRefreshAgents,
+    onOpenSettings,
+    onOpenKeyboardShortcuts,
+    onOpenStoredUserPreferences,
+    onAddWorkspace,
+    onLogout,
+  } = contextValue
   const [isSidebarVisible, setIsSidebarVisible] = React.useState(() => {
     const saved = localStorage.getItem('chat-sidebar-visible')
     return saved !== null ? saved === 'true' : !defaultCollapsed
@@ -622,7 +586,7 @@ export function Chat({
       { key: '1', cmd: true, action: () => focusZone('sidebar') },
       { key: '2', cmd: true, action: () => focusZone('session-list') },
       { key: '3', cmd: true, action: () => focusZone('chat') },
-      // Tab navigation between zones (disabled when in textarea - Shift+Tab toggles plan mode there)
+      // Tab navigation between zones (disabled when in textarea - Shift+Tab toggles safe mode there)
       { key: 'Tab', action: focusNextZone, when: () => !document.querySelector('[role="dialog"]') },
       { key: 'Tab', shift: true, action: focusPreviousZone, when: () => !document.querySelector('[role="dialog"]') && document.activeElement?.tagName !== 'TEXTAREA' },
       // Panel tab navigation
@@ -642,6 +606,8 @@ export function Chat({
       { key: 'b', cmd: true, action: () => setIsSidebarVisible(v => !v) },
       // New chat (context-aware: uses selected agent if in agent view)
       { key: 'n', cmd: true, action: () => handleNewChat(true) },
+      // New chat in new tab
+      { key: 't', cmd: true, action: () => handleNewChatInNewTab() },
       // Settings
       { key: ',', cmd: true, action: onOpenSettings },
     ],
@@ -873,63 +839,12 @@ export function Chat({
     return onDeleteSession(sessionId, skipConfirmation)
   }, [session.selected, setSession, onDeleteSession])
 
-  // Create ChatContext value for tab panels
+  // Extend context value with local overrides (textareaRef, wrapped onDeleteSession)
   const chatContextValue = React.useMemo<ChatContextType>(() => ({
-    sessions,
-    workspaces,
-    agents,
-    activeWorkspaceId,
-    currentModel,
-    pendingPermissions: pendingPermissions || new Map(),
-    sessionDrafts: sessionDrafts || new Map(),
-    // Advanced options (all session-scoped)
-    ultrathinkSessions: ultrathinkSessions || new Set(),
-    skipPermissionsSessions: skipPermissionsSessions || new Set(),
-    planModeSessions: planModeSessions || new Set(),
-    onCreateSession,
-    onSendMessage,
-    onRenameSession,
-    onFlagSession,
-    onUnflagSession,
-    onMarkSessionRead,
+    ...contextValue,
     onDeleteSession: handleDeleteSession,
-    onRespondToPermission,
-    onOpenFile,
-    onOpenUrl,
-    onModelChange,
-    // Advanced options callbacks
-    onUltrathinkChange: onUltrathinkChange || (() => {}),
-    onSkipPermissionsChange: onSkipPermissionsChange || (() => {}),
-    onPlanModeChange: onPlanModeChange || (() => {}),
-    onInputChange: onInputChange || (() => {}),
     textareaRef: chatInputRef,
-  }), [
-    sessions,
-    workspaces,
-    agents,
-    activeWorkspaceId,
-    currentModel,
-    pendingPermissions,
-    ultrathinkSessions,
-    skipPermissionsSessions,
-    planModeSessions,
-    onCreateSession,
-    onSendMessage,
-    onRenameSession,
-    onFlagSession,
-    onUnflagSession,
-    onMarkSessionRead,
-    handleDeleteSession,
-    onRespondToPermission,
-    onOpenFile,
-    onOpenUrl,
-    onModelChange,
-    onUltrathinkChange,
-    onSkipPermissionsChange,
-    onPlanModeChange,
-    sessionDrafts,
-    onInputChange,
-  ])
+  }), [contextValue, handleDeleteSession])
 
   // Group agents for tree view
   const agentTree = React.useMemo(() => groupAgentsByFolder(agents), [agents])
@@ -1117,6 +1032,15 @@ export function Chat({
     setSession({ selected: newSession.id })
   }, [activeWorkspace, viewMode, selectedAgentId, onCreateSession, setSession])
 
+  // Create a new chat in a new tab (CMD+T)
+  const handleNewChatInNewTab = useCallback(async () => {
+    if (!activeWorkspace) return
+
+    const agentId = viewMode === 'agent' ? selectedAgentId || undefined : undefined
+    const newSession = await onCreateSession(activeWorkspace.id, agentId)
+    openChatTab(newSession.id, activeWorkspace.id, 'New Chat', agentId, { forceNew: true })
+  }, [activeWorkspace, viewMode, selectedAgentId, onCreateSession, openChatTab])
+
   // Respond to menu bar "New Chat" trigger
   const menuTriggerRef = useRef(menuNewChatTrigger)
   useEffect(() => {
@@ -1125,6 +1049,15 @@ export function Chat({
     menuTriggerRef.current = menuNewChatTrigger
     handleNewChat(true)
   }, [menuNewChatTrigger, handleNewChat])
+
+  // Respond to menu bar "New Chat in New Tab" trigger
+  const menuTabTriggerRef = useRef(menuNewChatTabTrigger)
+  useEffect(() => {
+    // Skip initial render
+    if (menuTabTriggerRef.current === menuNewChatTabTrigger) return
+    menuTabTriggerRef.current = menuNewChatTabTrigger
+    handleNewChatInNewTab()
+  }, [menuNewChatTabTrigger, handleNewChatInNewTab])
 
   // Handle agent context menu actions
   const handleAgentAction = useCallback(async (action: AgentAction) => {
@@ -1875,7 +1808,7 @@ export function Chat({
                   setViewMode('flagged')
                 }
               }}
-              planModeSessions={planModeSessions}
+              sessionOptions={sessionOptions}
               searchActive={searchActive}
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}

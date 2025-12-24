@@ -1,8 +1,11 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react'
-import type { Session, Workspace, SessionEvent, Message, SubAgentMetadata, FileAttachment, StoredAttachment, PermissionRequest, SetupNeeds, TodoState } from '../shared/types'
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import type { Session, Workspace, SessionEvent, Message, SubAgentMetadata, FileAttachment, StoredAttachment, PermissionRequest, SetupNeeds, TodoState, Mode } from '../shared/types'
+import type { SessionOptions, SessionOptionUpdates } from './hooks/useSessionOptions'
+import { defaultSessionOptions, mergeSessionOptions } from './hooks/useSessionOptions'
 import { getToolDisplayName } from '@craft-agent/shared/utils/toolNames'
 import { generateMessageId } from '../shared/types'
 import { Chat } from '@/components/chat/Chat'
+import type { ChatContextType } from '@/context/ChatContext'
 import { OnboardingWizard, ReauthScreen } from '@/components/onboarding'
 import { AddWorkspaceFlow } from '@/components/AddWorkspaceFlow'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -31,27 +34,24 @@ export default function App() {
   const [windowMode, setWindowMode] = useState<string | null>(null)
   const [currentModel, setCurrentModel] = useState(DEFAULT_MODEL)
   const [menuNewChatTrigger, setMenuNewChatTrigger] = useState(0)
+  const [menuNewChatTabTrigger, setMenuNewChatTabTrigger] = useState(0)
   // Permission requests per session (queue to handle multiple concurrent requests)
   const [pendingPermissions, setPendingPermissions] = useState<Map<string, PermissionRequest[]>>(new Map())
   // Draft input text per session (preserved across mode switches and conversation changes)
   const [sessionDrafts, setSessionDrafts] = useState<Map<string, string>>(new Map())
-  // Advanced options (all session-scoped)
-  // Ultrathink per session (session-scoped, single-shot per message)
-  const [ultrathinkSessions, setUltrathinkSessions] = useState<Set<string>>(new Set())
-  // Skip permissions per session (session-scoped, not global)
-  const [skipPermissionsSessions, setSkipPermissionsSessions] = useState<Set<string>>(new Set())
-  // Plan mode per session (session-scoped)
-  const [planModeSessions, setPlanModeSessions] = useState<Set<string>>(new Set())
+  // Unified session options - replaces ultrathinkSessions, skipPermissionsSessions, sessionModes
+  // All session-scoped options in one place (ultrathink, skipPermissions, activeModes, etc.)
+  const [sessionOptions, setSessionOptions] = useState<Map<string, SessionOptions>>(new Map())
 
   // Queue for tool_result events that arrive before their tool_start (out-of-order handling)
   // Using ref to avoid stale closure issues in the useEffect event handler
   const orphanedToolResultsRef = useRef<Map<string, { result: string; toolName: string; turnId?: string; parentToolUseId?: string }>>(new Map())
-  // Ref for skipPermissionsSessions to access current value in event handlers without re-registering
-  const skipPermissionsSessionsRef = useRef(skipPermissionsSessions)
+  // Ref for sessionOptions to access current value in event handlers without re-registering
+  const sessionOptionsRef = useRef(sessionOptions)
   // Keep ref in sync with state
   useEffect(() => {
-    skipPermissionsSessionsRef.current = skipPermissionsSessions
-  }, [skipPermissionsSessions])
+    sessionOptionsRef.current = sessionOptions
+  }, [sessionOptions])
 
   // Performance: Throttle streaming text state updates to reduce React re-renders
   // Accumulates deltas in ref, flushes to state every 200ms (or immediately on complete)
@@ -263,16 +263,20 @@ export default function App() {
     window.electronAPI.getWorkspaces().then(setWorkspaces)
     window.electronAPI.getSessions().then((loadedSessions) => {
       setSessions(loadedSessions)
-      // Initialize skipPermissionsSessions from session data
-      const skipSessions = new Set(
-        loadedSessions.filter(s => s.skipPermissions).map(s => s.id)
-      )
-      setSkipPermissionsSessions(skipSessions)
-      // Initialize planModeSessions from session data
-      const planSessions = new Set(
-        loadedSessions.filter(s => s.planModeEnabled).map(s => s.id)
-      )
-      setPlanModeSessions(planSessions)
+      // Initialize unified sessionOptions from session data
+      const optionsMap = new Map<string, SessionOptions>()
+      for (const s of loadedSessions) {
+        // Only store non-default options to keep the map lean
+        const hasOptions = s.skipPermissions || (s.activeModes && s.activeModes.length > 0)
+        if (hasOptions) {
+          optionsMap.set(s.id, {
+            ultrathinkEnabled: false, // ultrathink is single-shot, never persisted
+            skipPermissions: s.skipPermissions ?? false,
+            activeModes: s.activeModes ?? [],
+          })
+        }
+      }
+      setSessionOptions(optionsMap)
     })
     // Load stored model preference
     window.electronAPI.getModel().then((storedModel) => {
@@ -314,7 +318,7 @@ export default function App() {
         })
 
         // Auto-approve if skipPermissions is enabled for this session
-        if (skipPermissionsSessionsRef.current.has(event.sessionId)) {
+        if (sessionOptionsRef.current.get(event.sessionId)?.skipPermissions) {
           console.log('[App] permission_request: auto-approving (skipPermissions enabled)')
           window.electronAPI.respondToPermission(event.sessionId, event.request.requestId, true, false)
           return
@@ -329,16 +333,20 @@ export default function App() {
         return
       }
 
-      // Handle plan mode events
-      if (event.type === 'plan_mode_changed') {
-        console.log('[App] plan_mode_changed:', event.sessionId, event.enabled)
-        setPlanModeSessions(prev => {
-          const next = new Set(prev)
+      // Handle mode change events (generic for any mode type)
+      if (event.type === 'mode_changed') {
+        console.log('[App] mode_changed:', event.sessionId, event.mode, event.enabled)
+        setSessionOptions(prev => {
+          const next = new Map(prev)
+          const current = next.get(event.sessionId) ?? defaultSessionOptions
+          const currentModes = current.activeModes
+          let newModes: Mode[]
           if (event.enabled) {
-            next.add(event.sessionId)
+            newModes = currentModes.includes(event.mode) ? currentModes : [...currentModes, event.mode]
           } else {
-            next.delete(event.sessionId)
+            newModes = currentModes.filter(m => m !== event.mode)
           }
+          next.set(event.sessionId, { ...current, activeModes: newModes })
           return next
         })
         return
@@ -513,7 +521,13 @@ export default function App() {
                   // isProcessing already true from user message send, stays true until 'complete'
                   messages: session.messages.map((m, i) =>
                     i === existingIndex
-                      ? { ...m, toolInput: event.toolInput, parentToolUseId: event.parentToolUseId || m.parentToolUseId }
+                      ? {
+                          ...m,
+                          toolInput: event.toolInput,
+                          toolIntent: event.toolIntent || m.toolIntent,
+                          toolDisplayName: event.toolDisplayName || m.toolDisplayName,
+                          parentToolUseId: event.parentToolUseId || m.parentToolUseId,
+                        }
                       : m
                   )
                 }
@@ -541,6 +555,8 @@ export default function App() {
                       toolInput: event.toolInput,
                       toolResult: queuedResult.result,
                       toolStatus: 'completed',  // Already complete!
+                      toolIntent: event.toolIntent,
+                      toolDisplayName: event.toolDisplayName,
                       turnId: event.turnId,
                       parentToolUseId: event.parentToolUseId || queuedResult.parentToolUseId,  // Preserve hierarchy from either source
                     }
@@ -562,6 +578,8 @@ export default function App() {
                     toolName: event.toolName,
                     toolUseId: event.toolUseId,
                     toolInput: event.toolInput,
+                    toolIntent: event.toolIntent,
+                    toolDisplayName: event.toolDisplayName,
                     turnId: event.turnId,
                     parentToolUseId: event.parentToolUseId,  // Preserve hierarchy
                   }
@@ -771,6 +789,9 @@ export default function App() {
             case 'title_generated':
               return { ...session, name: event.title }
 
+            case 'working_directory_changed':
+              return { ...session, workingDirectory: event.workingDirectory }
+
             default:
               return session
           }
@@ -804,6 +825,9 @@ export default function App() {
     const unsubNewChat = window.electronAPI.onMenuNewChat(() => {
       setMenuNewChatTrigger(n => n + 1)
     })
+    const unsubNewChatTab = window.electronAPI.onMenuNewChatTab(() => {
+      setMenuNewChatTabTrigger(n => n + 1)
+    })
     const unsubSettings = window.electronAPI.onMenuOpenSettings(() => {
       handleOpenSettings()
     })
@@ -817,6 +841,7 @@ export default function App() {
 
     return () => {
       unsubNewChat()
+      unsubNewChatTab()
       unsubSettings()
       unsubShortcuts()
       unsubHelp()
@@ -831,12 +856,18 @@ export default function App() {
     const session = await window.electronAPI.createSession(workspaceId, agentId, agentName)
     setSessions(prev => [session, ...prev])
 
-    // Apply session defaults to the UI state
-    if (session.skipPermissions) {
-      setSkipPermissionsSessions(prev => new Set([...prev, session.id]))
-    }
-    if (session.planModeEnabled) {
-      setPlanModeSessions(prev => new Set([...prev, session.id]))
+    // Apply session defaults to the unified sessionOptions
+    const hasDefaults = session.skipPermissions || (session.activeModes && session.activeModes.length > 0)
+    if (hasDefaults) {
+      setSessionOptions(prev => {
+        const next = new Map(prev)
+        next.set(session.id, {
+          ultrathinkEnabled: false,
+          skipPermissions: session.skipPermissions ?? false,
+          activeModes: session.activeModes ?? [],
+        })
+        return next
+      })
     }
 
     return session
@@ -994,7 +1025,7 @@ export default function App() {
       }
 
       // Step 3: Check if ultrathink is enabled for this session
-      const isUltrathink = ultrathinkSessions.has(sessionId)
+      const isUltrathink = sessionOptions.get(sessionId)?.ultrathinkEnabled ?? false
 
       // Step 4: Create user message with StoredAttachments (for UI display)
       const userMessage: Message = {
@@ -1019,11 +1050,7 @@ export default function App() {
 
       // Auto-disable ultrathink after sending (single-shot activation)
       if (isUltrathink) {
-        setUltrathinkSessions(prev => {
-          const next = new Set(prev)
-          next.delete(sessionId)
-          return next
-        })
+        handleSessionOptionsChange(sessionId, { ultrathinkEnabled: false })
       }
     } catch (error) {
       console.error('Failed to send message:', error)
@@ -1045,7 +1072,7 @@ export default function App() {
           : s
       ))
     }
-  }, [ultrathinkSessions])
+  }, [sessionOptions])
 
   const handleRefreshAgents = useCallback(async () => {
     if (windowWorkspaceId) {
@@ -1065,45 +1092,38 @@ export default function App() {
     window.electronAPI.setModel(model)
   }, [])
 
-  const handleUltrathinkChange = useCallback((sessionId: string, enabled: boolean) => {
-    setUltrathinkSessions(prev => {
-      const next = new Set(prev)
-      if (enabled) {
-        next.add(sessionId)
-      } else {
-        next.delete(sessionId)
-      }
+  /**
+   * Unified handler for all session option changes.
+   * Handles persistence and backend sync for each option type.
+   */
+  const handleSessionOptionsChange = useCallback((sessionId: string, updates: SessionOptionUpdates) => {
+    setSessionOptions(prev => {
+      const next = new Map(prev)
+      const current = next.get(sessionId) ?? defaultSessionOptions
+      next.set(sessionId, mergeSessionOptions(current, updates))
       return next
     })
-  }, [])
 
-  const handleSkipPermissionsChange = useCallback((sessionId: string, enabled: boolean) => {
-    setSkipPermissionsSessions(prev => {
-      const next = new Set(prev)
-      if (enabled) {
-        next.add(sessionId)
-      } else {
-        next.delete(sessionId)
+    // Handle persistence/backend for specific options
+    if (updates.skipPermissions !== undefined) {
+      window.electronAPI.setSkipPermissions(sessionId, updates.skipPermissions)
+    }
+    if (updates.activeModes !== undefined) {
+      // Sync mode changes with backend (compare to get added/removed modes)
+      const current = sessionOptions.get(sessionId)?.activeModes ?? []
+      for (const mode of updates.activeModes) {
+        if (!current.includes(mode)) {
+          window.electronAPI.setMode(sessionId, mode, true)
+        }
       }
-      return next
-    })
-    // Persist to backend
-    window.electronAPI.setSkipPermissions(sessionId, enabled)
-  }, [])
-
-  const handlePlanModeChange = useCallback((sessionId: string, enabled: boolean) => {
-    setPlanModeSessions(prev => {
-      const next = new Set(prev)
-      if (enabled) {
-        next.add(sessionId)
-      } else {
-        next.delete(sessionId)
+      for (const mode of current) {
+        if (!updates.activeModes.includes(mode)) {
+          window.electronAPI.setMode(sessionId, mode, false)
+        }
       }
-      return next
-    })
-    // Persist to backend and update agent state
-    window.electronAPI.setPlanMode(sessionId, enabled)
-  }, [])
+    }
+    // ultrathinkEnabled is UI-only (single-shot), no backend persistence needed
+  }, [sessionOptions])
 
   // Handle input draft changes per session with debounced persistence
   const draftSaveTimeoutRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
@@ -1255,6 +1275,82 @@ export default function App() {
     onboarding.handleCancel()
   }, [onboarding])
 
+  // Build context value for Chat component
+  // This is memoized to prevent unnecessary re-renders
+  // IMPORTANT: Must be before early returns to maintain consistent hook order
+  const chatContextValue = useMemo<ChatContextType>(() => ({
+    // Data
+    sessions,
+    workspaces,
+    agents,
+    isLoadingAgents,
+    activeWorkspaceId: windowWorkspaceId,
+    currentModel,
+    pendingPermissions,
+    sessionDrafts,
+    sessionOptions,
+    // Session callbacks
+    onCreateSession: handleCreateSession,
+    onSendMessage: handleSendMessage,
+    onRenameSession: handleRenameSession,
+    onFlagSession: handleFlagSession,
+    onUnflagSession: handleUnflagSession,
+    onMarkSessionRead: handleMarkSessionRead,
+    onMarkSessionUnread: handleMarkSessionUnread,
+    onTodoStateChange: handleTodoStateChange,
+    onDeleteSession: handleDeleteSession,
+    onRespondToPermission: handleRespondToPermission,
+    // File/URL handlers
+    onOpenFile: handleOpenFile,
+    onOpenUrl: handleOpenUrl,
+    // Model
+    onModelChange: handleModelChange,
+    // Workspace
+    onSelectWorkspace: handleSelectWorkspace,
+    onAddWorkspace: handleAddWorkspace,
+    // App actions
+    onOpenSettings: handleOpenSettings,
+    onOpenKeyboardShortcuts: handleOpenKeyboardShortcuts,
+    onOpenStoredUserPreferences: handleOpenStoredUserPreferences,
+    onRefreshAgents: handleRefreshAgents,
+    onLogout: handleLogout,
+    // Session options
+    onSessionOptionsChange: handleSessionOptionsChange,
+    onInputChange: handleInputChange,
+  }), [
+    sessions,
+    workspaces,
+    agents,
+    isLoadingAgents,
+    windowWorkspaceId,
+    currentModel,
+    pendingPermissions,
+    sessionDrafts,
+    sessionOptions,
+    handleCreateSession,
+    handleSendMessage,
+    handleRenameSession,
+    handleFlagSession,
+    handleUnflagSession,
+    handleMarkSessionRead,
+    handleMarkSessionUnread,
+    handleTodoStateChange,
+    handleDeleteSession,
+    handleRespondToPermission,
+    handleOpenFile,
+    handleOpenUrl,
+    handleModelChange,
+    handleSelectWorkspace,
+    handleAddWorkspace,
+    handleOpenSettings,
+    handleOpenKeyboardShortcuts,
+    handleOpenStoredUserPreferences,
+    handleRefreshAgents,
+    handleLogout,
+    handleSessionOptionsChange,
+    handleInputChange,
+  ])
+
   // Loading state
   if (appState === 'loading') {
     return (
@@ -1320,45 +1416,10 @@ export default function App() {
       <TooltipProvider>
         <div className="h-full text-foreground">
           <Chat
-            workspaces={workspaces}
-            sessions={sessions}
-            agents={agents}
-            isLoadingAgents={isLoadingAgents}
-            activeWorkspaceId={windowWorkspaceId}
+            contextValue={chatContextValue}
             defaultLayout={[20, 32, 48]}
-            currentModel={currentModel}
             menuNewChatTrigger={menuNewChatTrigger}
-            onModelChange={handleModelChange}
-            onSelectWorkspace={handleSelectWorkspace}
-            onCreateSession={handleCreateSession}
-            onDeleteSession={handleDeleteSession}
-            onFlagSession={handleFlagSession}
-            onUnflagSession={handleUnflagSession}
-            onMarkSessionRead={handleMarkSessionRead}
-            onMarkSessionUnread={handleMarkSessionUnread}
-            onTodoStateChange={handleTodoStateChange}
-            onRenameSession={handleRenameSession}
-            onSendMessage={handleSendMessage}
-            onOpenFile={handleOpenFile}
-            onOpenUrl={handleOpenUrl}
-            onOpenSettings={handleOpenSettings}
-            onOpenKeyboardShortcuts={handleOpenKeyboardShortcuts}
-            onOpenStoredUserPreferences={handleOpenStoredUserPreferences}
-            onRefreshAgents={handleRefreshAgents}
-            onLogout={handleLogout}
-            onAddWorkspace={handleAddWorkspace}
-            pendingPermissions={pendingPermissions}
-            onRespondToPermission={handleRespondToPermission}
-            // Advanced options (all session-scoped)
-            ultrathinkSessions={ultrathinkSessions}
-            onUltrathinkChange={handleUltrathinkChange}
-            skipPermissionsSessions={skipPermissionsSessions}
-            onSkipPermissionsChange={handleSkipPermissionsChange}
-            planModeSessions={planModeSessions}
-            onPlanModeChange={handlePlanModeChange}
-            // Input drafts per session
-            sessionDrafts={sessionDrafts}
-            onInputChange={handleInputChange}
+            menuNewChatTabTrigger={menuNewChatTabTrigger}
           />
         </div>
       </TooltipProvider>

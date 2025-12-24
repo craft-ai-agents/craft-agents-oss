@@ -5,6 +5,7 @@ import {
   Square,
   ChevronDown,
   SquareSlash,
+  Terminal,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -49,8 +50,8 @@ export interface FreeFormInputProps {
   onUltrathinkChange?: (enabled: boolean) => void
   skipPermissions?: boolean
   onSkipPermissionsChange?: (enabled: boolean) => void
-  planModeEnabled?: boolean
-  onPlanModeChange?: (enabled: boolean) => void
+  safeModeEnabled?: boolean
+  onSafeModeChange?: (enabled: boolean) => void
   // Controlled input value (for persisting across mode switches and conversation changes)
   /** Current input value - if provided, component becomes controlled */
   inputValue?: string
@@ -62,6 +63,10 @@ export interface FreeFormInputProps {
   onHeightChange?: (height: number) => void
   /** Callback when focus state changes */
   onFocusChange?: (focused: boolean) => void
+  /** Current working directory path */
+  workingDirectory?: string
+  /** Callback when working directory changes */
+  onWorkingDirectoryChange?: (path: string) => void
 }
 
 /**
@@ -87,13 +92,15 @@ export function FreeFormInput({
   onUltrathinkChange,
   skipPermissions = false,
   onSkipPermissionsChange,
-  planModeEnabled = false,
-  onPlanModeChange,
+  safeModeEnabled = false,
+  onSafeModeChange,
   inputValue,
   onInputChange,
   unstyled = false,
   onHeightChange,
   onFocusChange,
+  workingDirectory,
+  onWorkingDirectoryChange,
 }: FreeFormInputProps) {
   // Performance optimization: Always use internal state for typing to avoid parent re-renders
   // Sync FROM parent on mount/change (for restoring drafts)
@@ -175,18 +182,18 @@ export function FreeFormInput({
   // Build active commands list for slash command menu
   const activeCommands = React.useMemo(() => {
     const active: SlashCommandId[] = []
-    if (planModeEnabled) active.push('plan')
+    if (safeModeEnabled) active.push('safe')
     if (ultrathinkEnabled) active.push('ultrathink')
     if (skipPermissions) active.push('skip-permissions')
     return active
-  }, [planModeEnabled, ultrathinkEnabled, skipPermissions])
+  }, [safeModeEnabled, ultrathinkEnabled, skipPermissions])
 
   // Handle slash command selection
   const handleSlashCommand = React.useCallback((commandId: SlashCommandId) => {
-    if (commandId === 'plan') onPlanModeChange?.(!planModeEnabled)
+    if (commandId === 'safe') onSafeModeChange?.(!safeModeEnabled)
     else if (commandId === 'ultrathink') onUltrathinkChange?.(!ultrathinkEnabled)
     else if (commandId === 'skip-permissions') onSkipPermissionsChange?.(!skipPermissions)
-  }, [planModeEnabled, ultrathinkEnabled, skipPermissions, onPlanModeChange, onUltrathinkChange, onSkipPermissionsChange])
+  }, [safeModeEnabled, ultrathinkEnabled, skipPermissions, onSafeModeChange, onUltrathinkChange, onSkipPermissionsChange])
 
   // Inline slash command hook
   const inlineSlash = useInlineSlashCommand({
@@ -355,10 +362,10 @@ export function FreeFormInput({
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    // Shift+Tab toggles plan mode
+    // Shift+Tab toggles safe mode
     if (e.key === 'Tab' && e.shiftKey) {
       e.preventDefault()
-      onPlanModeChange?.(!planModeEnabled)
+      onSafeModeChange?.(!safeModeEnabled)
       return
     }
 
@@ -551,6 +558,28 @@ export function FreeFormInput({
               ))}
             </StyledDropdownMenuContent>
           </DropdownMenu>
+
+          {/* Working Directory Selector */}
+          {workingDirectory && onWorkingDirectoryChange && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 px-1.5 gap-0.5 text-[13px] shrink-0 rounded-[6px] hover:bg-foreground/5 max-w-[160px]"
+              onClick={async () => {
+                if (!window.electronAPI) return
+                const selectedPath = await window.electronAPI.openFolderDialog()
+                if (selectedPath) {
+                  onWorkingDirectoryChange(selectedPath)
+                }
+              }}
+              title={workingDirectory}
+            >
+              <Terminal className="opacity-50 shrink-0" style={{ width: 12, height: 12 }} />
+              <span className="truncate">{workingDirectory.split('/').pop() || 'Home'}</span>
+              <ChevronDown className="opacity-50 shrink-0" style={{ width: 12, height: 12 }} />
+            </Button>
+          )}
 
           {/* Spacer */}
           <div className="flex-1" />

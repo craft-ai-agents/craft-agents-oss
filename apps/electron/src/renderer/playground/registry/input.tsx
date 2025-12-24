@@ -32,7 +32,7 @@ interface FreeFormInputPlaygroundProps {
   currentModel: string
   ultrathinkEnabled?: boolean
   skipPermissions?: boolean
-  planModeEnabled?: boolean
+  safeModeEnabled?: boolean
   inputValue?: string
   onInputChange?: (value: string) => void
   unstyled?: boolean
@@ -45,7 +45,7 @@ function FreeFormInputPlayground({
   currentModel,
   ultrathinkEnabled = false,
   skipPermissions = false,
-  planModeEnabled = false,
+  safeModeEnabled = false,
   inputValue,
   onInputChange,
   unstyled = false,
@@ -54,12 +54,12 @@ function FreeFormInputPlayground({
   const [model, setModel] = React.useState(currentModel)
   const [ultrathink, setUltrathink] = React.useState(ultrathinkEnabled)
   const [skipPerms, setSkipPerms] = React.useState(skipPermissions)
-  const [planMode, setPlanMode] = React.useState(planModeEnabled)
+  const [safeMode, setSafeMode] = React.useState(safeModeEnabled)
 
   React.useEffect(() => setModel(currentModel), [currentModel])
   React.useEffect(() => setUltrathink(ultrathinkEnabled), [ultrathinkEnabled])
   React.useEffect(() => setSkipPerms(skipPermissions), [skipPermissions])
-  React.useEffect(() => setPlanMode(planModeEnabled), [planModeEnabled])
+  React.useEffect(() => setSafeMode(safeModeEnabled), [safeModeEnabled])
 
   return (
     <FreeFormInput
@@ -72,8 +72,8 @@ function FreeFormInputPlayground({
       onUltrathinkChange={setUltrathink}
       skipPermissions={skipPerms}
       onSkipPermissionsChange={setSkipPerms}
-      planModeEnabled={planMode}
-      onPlanModeChange={setPlanMode}
+      safeModeEnabled={safeMode}
+      onSafeModeChange={setSafeMode}
       inputValue={inputValue}
       onInputChange={onInputChange}
       onSubmit={() => {}} // No-op for playground
@@ -394,8 +394,8 @@ export const inputComponents: ComponentEntry[] = [
         defaultValue: 'claude-sonnet-4-20250514',
       },
       {
-        name: 'planModeEnabled',
-        description: 'Plan mode badge active',
+        name: 'safeModeEnabled',
+        description: 'Safe mode badge active',
         control: { type: 'boolean' },
         defaultValue: false,
       },
@@ -414,7 +414,7 @@ export const inputComponents: ComponentEntry[] = [
     ],
     variants: [
       { name: 'Default', props: { currentModel: 'claude-sonnet-4-20250514' } },
-      { name: 'With Badges', props: { currentModel: 'claude-sonnet-4-20250514', planModeEnabled: true, ultrathinkEnabled: true } },
+      { name: 'With Badges', props: { currentModel: 'claude-sonnet-4-20250514', safeModeEnabled: true, ultrathinkEnabled: true } },
       { name: 'Processing', props: { currentModel: 'claude-sonnet-4-20250514', isProcessing: true } },
       { name: 'Disabled', props: { currentModel: 'claude-sonnet-4-20250514', disabled: true } },
     ],

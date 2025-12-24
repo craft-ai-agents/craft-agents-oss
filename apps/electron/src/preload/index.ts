@@ -17,12 +17,12 @@ const api: ElectronAPI = {
   setSkipPermissions: (sessionId: string, enabled: boolean) => ipcRenderer.invoke(IPC_CHANNELS.SET_SKIP_PERMISSIONS, sessionId, enabled),
   respondToPermission: (sessionId: string, requestId: string, allowed: boolean, alwaysAllow: boolean) =>
     ipcRenderer.invoke(IPC_CHANNELS.RESPOND_TO_PERMISSION, sessionId, requestId, allowed, alwaysAllow),
+  updateSessionWorkingDirectory: (sessionId: string, path: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.UPDATE_WORKING_DIRECTORY, sessionId, path),
 
-  // Plan mode
-  respondToAskQuestion: (sessionId: string, requestId: string, answers: import('../shared/types').AskQuestionResponse) =>
-    ipcRenderer.invoke(IPC_CHANNELS.RESPOND_TO_ASK_QUESTION, sessionId, requestId, answers),
-  setPlanMode: (sessionId: string, enabled: boolean) =>
-    ipcRenderer.invoke(IPC_CHANNELS.SET_PLAN_MODE, sessionId, enabled),
+  // Mode management (generic for any mode type)
+  setMode: (sessionId: string, mode: import('../shared/types').Mode, enabled: boolean) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_MODE, sessionId, mode, enabled),
 
   // Workspace management
   getWorkspaces: () => ipcRenderer.invoke(IPC_CHANNELS.GET_WORKSPACES),
@@ -81,16 +81,6 @@ const api: ElectronAPI = {
       ipcRenderer.removeListener(IPC_CHANNELS.AGENT_STATUS_CHANGED, handler)
     }
   },
-  // @deprecated Use onAgentStatusChanged instead - broadcastAgentState() sends complete state
-  onAgentAuthChanged: (callback: (workspaceId: string, agentId: string) => void) => {
-    const handler = (_event: Electron.IpcRendererEvent, workspaceId: string, agentId: string) => {
-      callback(workspaceId, agentId)
-    }
-    ipcRenderer.on(IPC_CHANNELS.AGENT_AUTH_CHANGED, handler)
-    return () => {
-      ipcRenderer.removeListener(IPC_CHANNELS.AGENT_AUTH_CHANGED, handler)
-    }
-  },
 
   // File operations
   readFile: (path: string) => ipcRenderer.invoke(IPC_CHANNELS.READ_FILE, path),
@@ -129,6 +119,11 @@ const api: ElectronAPI = {
     const handler = () => callback()
     ipcRenderer.on(IPC_CHANNELS.MENU_NEW_CHAT, handler)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.MENU_NEW_CHAT, handler)
+  },
+  onMenuNewChatTab: (callback: () => void) => {
+    const handler = () => callback()
+    ipcRenderer.on(IPC_CHANNELS.MENU_NEW_CHAT_TAB, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.MENU_NEW_CHAT_TAB, handler)
   },
   onMenuOpenSettings: (callback: () => void) => {
     const handler = () => callback()
@@ -190,10 +185,15 @@ const api: ElectronAPI = {
   setModel: (model: string) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SET_MODEL, model),
 
   // Settings - New Session Defaults
-  getDefaultPlanMode: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET_DEFAULT_PLAN_MODE),
-  setDefaultPlanMode: (enabled: boolean) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SET_DEFAULT_PLAN_MODE, enabled),
+  getDefaultModes: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET_DEFAULT_MODES),
+  setDefaultModes: (modes: import('../shared/types').Mode[]) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SET_DEFAULT_MODES, modes),
   getDefaultSkipPermissions: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET_DEFAULT_SKIP_PERMISSIONS),
   setDefaultSkipPermissions: (enabled: boolean) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SET_DEFAULT_SKIP_PERMISSIONS, enabled),
+  getDefaultWorkingDirectory: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET_DEFAULT_WORKING_DIR),
+  setDefaultWorkingDirectory: (path: string) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SET_DEFAULT_WORKING_DIR, path),
+
+  // Folder dialog
+  openFolderDialog: () => ipcRenderer.invoke(IPC_CHANNELS.OPEN_FOLDER_DIALOG),
 
   // User Preferences
   readPreferences: () => ipcRenderer.invoke(IPC_CHANNELS.PREFERENCES_READ),

@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Overview
 
 `@craft-agent/shared` is the core business logic package for Craft Agent. It contains:
-- Agent implementation (CraftAgent, plan-tools)
+- Agent implementation (CraftAgent, SubmitPlan tool)
 - Authentication (OAuth, credentials)
 - Configuration (storage, preferences)
 - MCP client and validation
@@ -31,7 +31,7 @@ import { debug } from '@craft-agent/shared/utils';
 
 ```
 src/
-├── agent/              # CraftAgent, plan-tools, errors
+├── agent/              # CraftAgent, SubmitPlan tool, errors
 ├── agents/             # Subagent management, extraction, cache
 ├── auth/               # OAuth, balance, craft-token, state
 ├── clients/            # External API clients (Craft API)
@@ -55,7 +55,7 @@ The main agent class that wraps the Claude Agent SDK. Handles:
 - MCP server connections
 - Tool permissions via PreToolUse hook
 - Large result summarization via PostToolUse hook
-- Plan mode integration
+- Safe mode integration
 - Session continuity
 
 ### Credentials (`src/credentials/`)

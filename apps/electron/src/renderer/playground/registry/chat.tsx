@@ -479,7 +479,7 @@ function PermissionInputToggle({ autoToggle = false, autoToggleInterval = 3000, 
             duration: 0.2,
             ease: [0.4, 0, 0.2, 1],
           }}
-          onSubmit={(e) => {
+          onSubmit={(e: React.FormEvent) => {
             e.preventDefault()
             console.log('[Playground] Submit:', input)
           }}

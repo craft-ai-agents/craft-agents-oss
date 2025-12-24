@@ -82,6 +82,7 @@ function messageToActivity(message: Message, existingActivities: ActivityItem[] 
     toolInput: message.toolInput,
     content: message.toolResult || message.content,
     intent: message.toolIntent,
+    displayName: message.toolDisplayName,  // LLM-generated human-friendly name
     timestamp: message.timestamp,
     error: message.isError ? message.content : undefined,
     // parentId: The toolUseId of the parent tool (e.g., Task subagent).
