@@ -15,7 +15,7 @@ import { registerOnboardingHandlers } from './onboarding'
 import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type AgentActivateOptions, type AuthType, type BillingMethodInfo, type SendMessageOptions, type DiffPreviewData, type CodePreviewData, type TerminalPreviewData } from '../shared/types'
 import { readFileAttachment } from '@craft-agent/shared/utils'
 import { getAiCreditTopUpUrl } from '@craft-agent/shared/auth'
-import { getSessionAttachmentsPath, getAuthType, setAuthType, getPreferencesPath, getModel, setModel, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getDefaultModes, setDefaultModes, getDefaultSkipPermissions, setDefaultSkipPermissions, getDefaultWorkingDirectory, setDefaultWorkingDirectory } from '@craft-agent/shared/config'
+import { getSessionAttachmentsPath, getAuthType, setAuthType, getPreferencesPath, getModel, setModel, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getDefaultModes, setDefaultModes, getDefaultSkipPermissions, setDefaultSkipPermissions, getDefaultWorkingDirectory, setDefaultWorkingDirectory, getConnections, saveConnection, deleteConnection, getConnectionsByIds, type ConnectionConfig } from '@craft-agent/shared/config'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { MarkItDown } from 'markitdown-js'
 
@@ -912,6 +912,144 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // Get data for a terminal preview (called from terminal preview window on mount)
   ipcMain.handle(IPC_CHANNELS.TERMINAL_PREVIEW_GET_DATA, async (_event, sessionId: string, previewId: string) => {
     return terminalPreviewWindowManager.getData(sessionId, previewId)
+  })
+
+  // ============================================================
+  // Connections
+  // ============================================================
+
+  // Start MCP OAuth flow for a connection
+  ipcMain.handle(IPC_CHANNELS.CONNECTIONS_START_MCP_OAUTH, async (_event, config: {
+    name: string
+    url: string
+    clientId?: string
+    clientSecret?: string
+  }) => {
+    try {
+      const { CraftOAuth, getMcpBaseUrl } = await import('@craft-agent/shared/auth/oauth')
+
+      const oauth = new CraftOAuth(
+        { mcpBaseUrl: getMcpBaseUrl(config.url) },
+        {
+          onStatus: (message) => console.log(`[OAuth] ${config.name}: ${message}`),
+          onError: (error) => console.error(`[OAuth] ${config.name} error: ${error}`),
+        }
+      )
+
+      const { tokens, clientId } = await oauth.authenticate()
+
+      console.log(`[IPC] MCP OAuth complete for connection: ${config.name}`)
+      return {
+        success: true,
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        expiresAt: tokens.expiresAt,
+        clientId,
+      }
+    } catch (error) {
+      console.error(`[IPC] MCP OAuth failed for connection ${config.name}:`, error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'OAuth authentication failed',
+      }
+    }
+  })
+
+  // Start Gmail OAuth flow
+  ipcMain.handle(IPC_CHANNELS.CONNECTIONS_START_GMAIL_OAUTH, async () => {
+    try {
+      const { startGmailOAuth } = await import('@craft-agent/shared/auth')
+      const result = await startGmailOAuth('electron')
+
+      if (result.success) {
+        console.log(`[IPC] Gmail OAuth complete for: ${result.email}`)
+      } else {
+        console.error(`[IPC] Gmail OAuth failed: ${result.error}`)
+      }
+
+      return result
+    } catch (error) {
+      console.error('[IPC] Gmail OAuth failed:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Gmail OAuth authentication failed',
+      }
+    }
+  })
+
+  // Get all connections
+  ipcMain.handle(IPC_CHANNELS.CONNECTIONS_GET, async () => {
+    return getConnections()
+  })
+
+  // Save a connection (create or update)
+  ipcMain.handle(IPC_CHANNELS.CONNECTIONS_SAVE, async (_event, connection: ConnectionConfig) => {
+    const { getCredentialManager } = await import('@craft-agent/shared/credentials')
+    const manager = getCredentialManager()
+
+    // Store MCP OAuth tokens if present (including refresh token and expiry for auto-refresh)
+    if (connection.mcpAccessToken) {
+      await manager.set(
+        { type: 'connection_oauth', connectionId: connection.id },
+        {
+          value: connection.mcpAccessToken,
+          refreshToken: connection.mcpRefreshToken,
+          expiresAt: connection.mcpExpiresAt,
+          clientId: connection.mcpClientId,
+        }
+      )
+      console.log(`[IPC] Stored MCP OAuth tokens for connection: ${connection.id}`)
+    }
+
+    // Store Gmail OAuth tokens if present
+    if (connection.gmailAccessToken) {
+      await manager.set(
+        { type: 'gmail_oauth', connectionId: connection.id },
+        {
+          value: connection.gmailAccessToken,
+          refreshToken: connection.gmailRefreshToken,
+          expiresAt: connection.gmailExpiresAt,
+        }
+      )
+      console.log(`[IPC] Stored Gmail OAuth tokens for connection: ${connection.id}`)
+    }
+
+    // Strip tokens before persisting to disk (they're now in CredentialManager)
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { mcpAccessToken, mcpRefreshToken, mcpExpiresAt, gmailAccessToken, gmailRefreshToken, gmailExpiresAt, ...connectionToSave } = connection
+    saveConnection(connectionToSave as ConnectionConfig)
+  })
+
+  // Delete a connection
+  ipcMain.handle(IPC_CHANNELS.CONNECTIONS_DELETE, async (_event, connectionId: string) => {
+    // Delete stored tokens from CredentialManager
+    try {
+      const { getCredentialManager } = await import('@craft-agent/shared/credentials')
+      const manager = getCredentialManager()
+      // Try to delete both MCP and Gmail OAuth tokens
+      await manager.delete({ type: 'connection_oauth', connectionId }).catch(() => {})
+      await manager.delete({ type: 'gmail_oauth', connectionId }).catch(() => {})
+      console.log(`[IPC] Deleted tokens for connection: ${connectionId}`)
+    } catch (error) {
+      // Ignore errors - tokens may not exist
+      console.log(`[IPC] No tokens to delete for connection: ${connectionId}`)
+    }
+    // Delete the connection config
+    deleteConnection(connectionId)
+  })
+
+  // ============================================================
+  // Session Connections
+  // ============================================================
+
+  // Set connections for a session (triggers session restart)
+  ipcMain.handle(IPC_CHANNELS.SESSION_SET_CONNECTIONS, async (_event, sessionId: string, connectionIds: string[]) => {
+    await sessionManager.setSessionConnections(sessionId, connectionIds)
+  })
+
+  // Get connections for a session
+  ipcMain.handle(IPC_CHANNELS.SESSION_GET_CONNECTIONS, async (_event, sessionId: string) => {
+    return sessionManager.getSessionConnections(sessionId)
   })
 
   // Register onboarding handlers

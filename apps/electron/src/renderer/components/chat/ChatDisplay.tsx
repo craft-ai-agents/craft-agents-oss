@@ -21,7 +21,7 @@ import { AnimatedCollapsibleContent } from "@/components/ui/collapsible"
 import { FileTypeIcon, getFileTypeLabel } from "./AttachmentPreview"
 import { Spinner } from "@/components/ui/loading-indicator"
 import { useFocusZone } from "@/hooks/keyboard"
-import type { Session, Message, FileAttachment, StoredAttachment, PermissionRequest } from "../../../shared/types"
+import type { Session, Message, FileAttachment, StoredAttachment, PermissionRequest, ConnectionConfig } from "../../../shared/types"
 import { SetupAuthBanner, type BannerState } from "./SetupAuthBanner"
 import { TurnCard } from "./TurnCard"
 import { PlanCard } from "./PlanCard"
@@ -72,6 +72,11 @@ interface ChatDisplayProps {
   inputValue?: string
   /** Callback when input value changes */
   onInputChange?: (value: string) => void
+  // Connection selection
+  /** Available connections (enabled only) */
+  connections?: ConnectionConfig[]
+  /** Callback when connection selection changes */
+  onConnectionsChange?: (ids: string[]) => void
   // Working directory (per session)
   /** Current working directory for this session */
   workingDirectory?: string
@@ -251,6 +256,9 @@ export function ChatDisplay({
   // Input value preservation
   inputValue,
   onInputChange,
+  // Connections
+  connections,
+  onConnectionsChange,
   // Working directory
   workingDirectory,
   onWorkingDirectoryChange,
@@ -769,6 +777,9 @@ export function ChatDisplay({
                 onStructuredResponse={handleStructuredResponse}
                 inputValue={inputValue}
                 onInputChange={onInputChange}
+                connections={connections}
+                selectedConnectionIds={session.selectedConnectionIds}
+                onConnectionsChange={onConnectionsChange}
                 workingDirectory={workingDirectory}
                 onWorkingDirectoryChange={onWorkingDirectoryChange}
               />

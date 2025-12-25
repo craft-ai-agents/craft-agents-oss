@@ -2,6 +2,7 @@ export * from './agent-state.ts';
 export * from './api-tools.ts';
 export * from './cache.ts';
 export * from './extractor.ts';
+export * from './gmail-tools.ts';
 export * from './instruction-updater.ts';
 export * from './manager.ts';
 export * from './parser.ts';

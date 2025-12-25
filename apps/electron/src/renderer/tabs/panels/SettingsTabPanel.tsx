@@ -12,6 +12,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { useTheme, type FontFamily } from '@/context/ThemeContext'
+import { useChatContext } from '@/context/ChatContext'
 import { cn } from '@/lib/utils'
 import { Switch } from '@/components/ui/switch'
 import { Monitor, Sun, Moon, Eye, EyeOff, Check, ExternalLink, CheckCircle2, Folder } from 'lucide-react'
@@ -501,11 +502,16 @@ function ClaudeOAuth({
 export default function SettingsTabPanel({
   tab: _tab,
   authType: propAuthType,
-  model = 'claude-sonnet-4-5-20250929',
+  model: propModel,
   onAuthTypeChange,
-  onModelChange,
+  onModelChange: propOnModelChange,
 }: SettingsTabPanelProps) {
   const { mode, setMode, font, setFont } = useTheme()
+
+  // Get model and onModelChange from context (primary) or props (playground fallback)
+  const chatContext = useChatContext()
+  const model = propModel ?? chatContext.currentModel ?? 'claude-sonnet-4-5-20250929'
+  const onModelChange = propOnModelChange ?? chatContext.onModelChange
 
   // Billing state
   const [authType, setAuthType] = useState<AuthType>(propAuthType ?? 'craft_credits') // Actually saved auth type

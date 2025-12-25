@@ -19,6 +19,11 @@ import {
   ListFilter,
   Check,
   Search,
+  Plus,
+  Plug,
+  Pencil,
+  Trash2,
+  Mail,
 } from "lucide-react"
 import { McpIcon } from "../icons/McpIcon"
 import {
@@ -31,6 +36,8 @@ import {
 import { Spinner } from "@/components/ui/loading-indicator"
 import { AvatarGroup } from "@/components/ui/avatar-group"
 import { ServiceLogo } from "@/components/ui/service-logo"
+import { getLogoUrl } from '@craft-agent/shared/utils/logo'
+import { getConnectionLogoUrl, getConnectionFallbackIcon } from "@/utils/connection-types"
 import { AppMenu } from "../AppMenu"
 import { PanelLeftRounded } from "../icons/PanelLeftRounded"
 import { SquarePenRounded } from "../icons/SquarePenRounded"
@@ -46,6 +53,7 @@ import {
   StyledDropdownMenuSeparator,
 } from "@/components/ui/styled-dropdown"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Switch } from "@/components/ui/switch"
 import { FadingText } from "@/components/ui/fading-text"
 import {
   Collapsible,
@@ -67,7 +75,8 @@ import { useFocusZone, useGlobalShortcuts } from "@/hooks/keyboard"
 import { useFocusContext } from "@/context/FocusContext"
 import { getSessionTitle } from "@/utils/session"
 import { closeTabWithCleanup } from "@/utils/closeTabWithCleanup"
-import type { Session, Workspace, SubAgentMetadata, FileAttachment, PermissionRequest, TodoState } from "../../../shared/types"
+import type { Session, Workspace, SubAgentMetadata, FileAttachment, PermissionRequest, TodoState, ConnectionConfig } from "../../../shared/types"
+import { AddConnectionDialog } from "../connections/AddConnectionDialog"
 import { type TodoStateId, DEFAULT_TODO_STATES, getStateColor } from "@/config/todo-states"
 import * as storage from "@/lib/local-storage"
 
@@ -541,6 +550,158 @@ export function Chat({
     return storage.get(storage.KEYS.agentsCollapsed, false)
   })
 
+  // Connections state
+  const [connections, setConnections] = React.useState<ConnectionConfig[]>([])
+  const [isConnectionsCollapsed, setIsConnectionsCollapsed] = React.useState(false)
+  const [isAddConnectionOpen, setIsAddConnectionOpen] = React.useState(false)
+  const [editingConnection, setEditingConnection] = React.useState<ConnectionConfig | null>(null)
+
+  // Load connections from backend on mount
+  React.useEffect(() => {
+    window.electronAPI.getConnections().then((loaded) => {
+      setConnections(loaded || [])
+    }).catch(err => {
+      console.error('[Chat] Failed to load connections:', err)
+    })
+  }, [])
+
+  const handleToggleConnection = React.useCallback(async (id: string, enabled: boolean) => {
+    const conn = connections.find(c => c.id === id)
+    if (!conn) return
+
+    // If enabling an MCP connection that needs OAuth, re-authenticate
+    if (enabled && conn.type === 'mcp' && conn.mcpUrl) {
+      try {
+        const result = await window.electronAPI.startConnectionMcpOAuth({
+          name: conn.name,
+          url: conn.mcpUrl,
+          clientId: conn.mcpClientId || undefined,
+          clientSecret: conn.mcpClientSecret || undefined,
+        })
+
+        if (!result.success) {
+          // OAuth failed or was cancelled - don't enable
+          return
+        }
+
+        // Update connection with new token and enable it
+        const updatedConn = {
+          ...conn,
+          enabled: true,
+          mcpAccessToken: result.accessToken,
+          mcpRefreshToken: result.refreshToken,
+          mcpExpiresAt: result.expiresAt,
+          mcpClientId: result.clientId || conn.mcpClientId,
+          isAuthenticated: true,
+        }
+        setConnections(prev => prev.map(c => c.id === id ? updatedConn : c))
+        await window.electronAPI.saveConnection(updatedConn)
+      } catch (error) {
+        console.error('OAuth failed:', error)
+        // Don't enable on error
+      }
+    } else {
+      // For API connections or when disabling, just toggle
+      setConnections(prev => prev.map(c => c.id === id ? { ...c, enabled } : c))
+      await window.electronAPI.saveConnection({ ...conn, enabled })
+    }
+  }, [connections])
+
+  const handleAddConnection = React.useCallback(async (config: Omit<ConnectionConfig, 'id' | 'enabled'>) => {
+    const newConnection: ConnectionConfig = {
+      ...config,
+      id: crypto.randomUUID(),
+      enabled: true,
+    }
+    // Optimistic update
+    setConnections(prev => [...prev, newConnection])
+    // Persist to backend
+    await window.electronAPI.saveConnection(newConnection)
+  }, [])
+
+  const handleEditConnection = React.useCallback(async (id: string, config: Omit<ConnectionConfig, 'id' | 'enabled'>) => {
+    const existing = connections.find(c => c.id === id)
+    if (!existing) return
+    const updated = { ...existing, ...config }
+    // Optimistic update
+    setConnections(prev => prev.map(c => c.id === id ? updated : c))
+    // Persist to backend
+    await window.electronAPI.saveConnection(updated)
+  }, [connections])
+
+  const handleDeleteConnection = React.useCallback(async (id: string) => {
+    // Optimistic update
+    setConnections(prev => prev.filter(c => c.id !== id))
+    // Persist to backend
+    await window.electronAPI.deleteConnection(id)
+  }, [])
+
+  // Handle session connection selection changes (triggers session restart)
+  const handleSessionConnectionsChange = React.useCallback(async (sessionId: string, connectionIds: string[]) => {
+    try {
+      await window.electronAPI.setSessionConnections(sessionId, connectionIds)
+      // Session will emit a 'session_restarted' event that updates the session state
+    } catch (err) {
+      console.error('[Chat] Failed to set session connections:', err)
+    }
+  }, [])
+
+  const handleOpenEditConnection = React.useCallback((conn: ConnectionConfig) => {
+    setEditingConnection(conn)
+    setIsAddConnectionOpen(true)
+  }, [])
+
+  // Handle adding Gmail connection
+  const handleAddGmail = React.useCallback(async () => {
+    try {
+      const result = await window.electronAPI.startGmailOAuth()
+      if (!result.success) {
+        console.error('[Chat] Gmail OAuth failed:', result.error)
+        return
+      }
+
+      // Check if this Gmail account is already connected
+      const existingGmail = connections.find(
+        conn => conn.type === 'gmail' && conn.gmailEmail === result.email
+      )
+
+      if (existingGmail) {
+        // Update existing connection with fresh tokens (re-auth flow)
+        const updatedConfig: ConnectionConfig = {
+          ...existingGmail,
+          gmailAccessToken: result.accessToken,
+          gmailRefreshToken: result.refreshToken,
+          gmailExpiresAt: result.expiresAt,
+          isAuthenticated: true,
+        }
+        setConnections(prev => prev.map(c => c.id === existingGmail.id ? updatedConfig : c))
+        await window.electronAPI.saveConnection(updatedConfig)
+        console.log('[Chat] Gmail connection re-authenticated:', result.email)
+        return
+      }
+
+      // Create new Gmail connection config
+      const config: ConnectionConfig = {
+        id: crypto.randomUUID(),
+        name: result.email ? `Gmail (${result.email})` : 'Gmail',
+        type: 'gmail',
+        enabled: true,
+        gmailEmail: result.email,
+        gmailAccessToken: result.accessToken,
+        gmailRefreshToken: result.refreshToken,
+        gmailExpiresAt: result.expiresAt,
+        isAuthenticated: true,
+      }
+
+      // Save connection (tokens stored in CredentialManager)
+      setConnections(prev => [...prev, config])
+      await window.electronAPI.saveConnection(config)
+      console.log('[Chat] Gmail connection added:', config.name)
+    } catch (error) {
+      console.error('[Chat] Failed to add Gmail connection:', error)
+    }
+  }, [connections])
+
   const activeWorkspace = workspaces.find(w => w.id === activeWorkspaceId)
 
   // Tab system
@@ -831,12 +992,20 @@ export function Chat({
     return onDeleteSession(sessionId, skipConfirmation)
   }, [session.selected, setSession, onDeleteSession])
 
-  // Extend context value with local overrides (textareaRef, wrapped onDeleteSession)
+  // Compute enabled connections for context
+  const enabledConnections = React.useMemo(() =>
+    connections.filter(c => c.enabled),
+    [connections]
+  )
+
+  // Extend context value with local overrides (textareaRef, wrapped onDeleteSession, connections)
   const chatContextValue = React.useMemo<ChatContextType>(() => ({
     ...contextValue,
     onDeleteSession: handleDeleteSession,
     textareaRef: chatInputRef,
-  }), [contextValue, handleDeleteSession])
+    enabledConnections,
+    onSessionConnectionsChange: handleSessionConnectionsChange,
+  }), [contextValue, handleDeleteSession, enabledConnections, handleSessionConnectionsChange])
 
   // Group agents for tree view
   const agentTree = React.useMemo(() => groupAgentsByFolder(agents), [agents])
@@ -1490,27 +1659,122 @@ export function Chat({
                     />
                   </AnimatedCollapsibleContent>
                 </Collapsible>
+                {/* Connections Section */}
+                <div className="pt-0.5">
+                  <Collapsible open={!isConnectionsCollapsed} onOpenChange={() => setIsConnectionsCollapsed(v => !v)}>
+                    {/* Header with three-dot menu */}
+                    <div className="flex items-center justify-between pl-4 pr-2 py-2 shrink-0">
+                      <CollapsibleTrigger className="flex items-center gap-2 group">
+                        <motion.div
+                          animate={{ rotate: isConnectionsCollapsed ? -90 : 0 }}
+                          transition={collapsibleSpring}
+                        >
+                          <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                        </motion.div>
+                        <span className="text-xs font-medium text-muted-foreground select-none">Connections</span>
+                      </CollapsibleTrigger>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button className="p-1 rounded hover:bg-foreground/5 data-[state=open]:bg-foreground/5 text-muted-foreground hover:text-foreground">
+                            <MoreHorizontal className="h-3.5 w-3.5" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <StyledDropdownMenuContent align="end" minWidth="min-w-0">
+                          <StyledDropdownMenuItem onClick={handleAddGmail}>
+                            {(() => {
+                              const GmailIcon = getConnectionFallbackIcon('gmail')
+                              return (
+                                <ServiceLogo
+                                  logo={getLogoUrl(getConnectionLogoUrl({ type: 'gmail' } as ConnectionConfig))}
+                                  name="Gmail"
+                                  fallbackIcon={<GmailIcon className="h-3.5 w-3.5" />}
+                                  className="h-3.5 w-3.5"
+                                />
+                              )
+                            })()}
+                            Add Gmail
+                          </StyledDropdownMenuItem>
+                          <StyledDropdownMenuSeparator />
+                          <StyledDropdownMenuItem onClick={() => setIsAddConnectionOpen(true)}>
+                            <Plus />
+                            Add connection
+                          </StyledDropdownMenuItem>
+                        </StyledDropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                    {/* Connection List */}
+                    <AnimatedCollapsibleContent isOpen={!isConnectionsCollapsed}>
+                      <nav className="grid gap-0.5 px-2 pb-1">
+                        {connections.map(conn => {
+                          const FallbackIcon = getConnectionFallbackIcon(conn.type)
+                          return (
+                          <div key={conn.id} className="flex items-center justify-between py-[7px] px-2 rounded-md hover:bg-foreground/5 group/conn">
+                            <div className="flex items-center gap-2">
+                              <ServiceLogo
+                                logo={getLogoUrl(getConnectionLogoUrl(conn))}
+                                name={conn.name}
+                                fallbackIcon={<FallbackIcon className="h-3.5 w-3.5" />}
+                                className="h-3.5 w-3.5"
+                              />
+                              <span className="text-[13px]">{conn.name}</span>
+                              <button
+                                onClick={() => handleOpenEditConnection(conn)}
+                                className="p-0.5 rounded opacity-0 group-hover/conn:opacity-100 hover:bg-foreground/10 text-muted-foreground hover:text-foreground transition-opacity"
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteConnection(conn.id)}
+                                className="p-0.5 rounded opacity-0 group-hover/conn:opacity-100 hover:bg-foreground/10 text-muted-foreground hover:text-destructive transition-opacity"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            </div>
+                            <Switch
+                              checked={conn.enabled}
+                              onCheckedChange={(checked) => handleToggleConnection(conn.id, checked)}
+                              className="scale-75"
+                            />
+                          </div>
+                        )})}
+                      </nav>
+                    </AnimatedCollapsibleContent>
+                  </Collapsible>
+                </div>
                 {/* Agent Tree: Hierarchical list of agents - Collapsible */}
                 <Collapsible
                   open={!agentsCollapsed}
                   onOpenChange={(open) => setAgentsCollapsed(!open)}
                   className={cn("group/agents flex-1 min-h-0 flex flex-col overflow-hidden pt-0.5", agentsCollapsed && "mb-2")}
                 >
-                  {/* Agents Section Header */}
-                  <CollapsibleTrigger asChild>
-                    <button className="group flex items-center justify-between w-full pl-4 pr-3.5 py-2 shrink-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-medium text-muted-foreground select-none">Agents</span>
-                        {isLoadingAgents && agents.length > 0 && (
-                          <Spinner className="text-xs text-muted-foreground" />
-                        )}
-                      </div>
+                  {/* Agents Section Header with menu */}
+                  <div className="flex items-center justify-between pl-4 pr-2 py-2 shrink-0">
+                    <CollapsibleTrigger className="flex items-center gap-2 group">
                       <ChevronDown className={cn(
-                        "h-3.5 w-3.5 text-muted-foreground/50 opacity-0 group-hover:opacity-100 transition-all duration-200",
+                        "h-3 w-3 text-muted-foreground transition-transform",
                         agentsCollapsed && "-rotate-90"
                       )} />
-                    </button>
-                  </CollapsibleTrigger>
+                      <span className="text-xs font-medium text-muted-foreground select-none">Agents</span>
+                      {isLoadingAgents && agents.length > 0 && (
+                        <Spinner className="text-xs text-muted-foreground" />
+                      )}
+                    </CollapsibleTrigger>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          className="p-1 rounded hover:bg-foreground/5 data-[state=open]:bg-foreground/5 text-muted-foreground hover:text-foreground"
+                        >
+                          <MoreHorizontal className="h-3.5 w-3.5" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <StyledDropdownMenuContent align="end" minWidth="min-w-0">
+                        <StyledDropdownMenuItem onClick={onRefreshAgents}>
+                          <RotateCw />
+                          Refresh
+                        </StyledDropdownMenuItem>
+                      </StyledDropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                   {/* Scrollable Agent Tree */}
                   <AnimatedCollapsibleContent isOpen={!agentsCollapsed} className="flex-1 min-h-0">
                     <ScrollArea className="h-full">
@@ -1860,6 +2124,18 @@ export function Chat({
       </div>
 
       </TooltipProvider>
+
+      {/* Add Connection Dialog */}
+      <AddConnectionDialog
+        open={isAddConnectionOpen}
+        onOpenChange={(open) => {
+          setIsAddConnectionOpen(open)
+          if (!open) setEditingConnection(null)
+        }}
+        onAdd={handleAddConnection}
+        editConnection={editingConnection}
+        onEdit={handleEditConnection}
+      />
     </ChatProvider>
   )
 }

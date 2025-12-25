@@ -34,6 +34,9 @@ export default function ChatTabPanel({ tab }: ChatTabPanelProps) {
     // Input drafts
     sessionDrafts,
     onInputChange,
+    // Connections
+    enabledConnections,
+    onSessionConnectionsChange,
   } = useChatContext()
 
   // Use the unified session options hook for clean access
@@ -203,6 +206,9 @@ export default function ChatTabPanel({ tab }: ChatTabPanelProps) {
       // Input draft preservation
       inputValue={inputValue}
       onInputChange={handleInputChange}
+      // Connections
+      connections={enabledConnections}
+      onConnectionsChange={(ids) => onSessionConnectionsChange?.(chatTab.sessionId, ids)}
       // Working directory (per session)
       workingDirectory={workingDirectory}
       onWorkingDirectoryChange={handleWorkingDirectoryChange}

@@ -473,6 +473,10 @@ export class CraftAgent {
   private agentMcpServers: Record<string, { type: 'http' | 'sse'; url: string; headers?: Record<string, string> }> = {};
   // In-process MCP servers for API integrations (created from ApiConfig)
   private agentApiServers: Record<string, ReturnType<typeof createSdkMcpServer>> = {};
+  // Pre-built connection server configs (user-defined connections, separate from agent)
+  private connectionMcpServers: Record<string, { type: 'http' | 'sse'; url: string; headers?: Record<string, string> }> = {};
+  // In-process MCP servers for connection API integrations
+  private connectionApiServers: Record<string, ReturnType<typeof createSdkMcpServer>> = {};
   // Temporary clarifications (not yet saved to Craft document)
   private temporaryClarifications: string | null = null;
   // Map tool_use_id → explicit intent from _intent field (for summarization and UI display)
@@ -820,6 +824,8 @@ export class CraftAgent {
       const agentApiServers = this.getAgentApiServers();
       debug('[chat] agentMcpServers:', agentMcpServers);
       debug('[chat] agentApiServers:', agentApiServers);
+      debug('[chat] connectionMcpServers:', this.connectionMcpServers);
+      debug('[chat] connectionApiServers:', this.connectionApiServers);
 
       const hasActiveAgent = this.activeAgentDefinition !== null;
       const mcpServers: Options['mcpServers'] = {
@@ -841,6 +847,9 @@ export class CraftAgent {
         ...agentMcpServers,
         // Add in-process API servers (REST APIs converted to MCP tools)
         ...agentApiServers,
+        // Add user-defined connection servers (MCP and API)
+        ...this.connectionMcpServers,
+        ...this.connectionApiServers,
       };
 
       // Debug: log active agent before building system prompt
@@ -2138,6 +2147,20 @@ export class CraftAgent {
     this.activeAgentDefinition = definition;
     this.agentMcpServers = mcpServers ?? {};
     this.agentApiServers = apiServers ?? {};
+  }
+
+  /**
+   * Set connection servers (user-defined connections, separate from agent)
+   * These are MCP servers and API tools added via the connection selector UI
+   * @param mcpServers Pre-built MCP server configs with auth headers
+   * @param apiServers In-process MCP servers for REST APIs
+   */
+  setConnectionServers(
+    mcpServers: Record<string, { type: 'http' | 'sse'; url: string; headers?: Record<string, string> }>,
+    apiServers: Record<string, ReturnType<typeof createSdkMcpServer>>
+  ): void {
+    this.connectionMcpServers = mcpServers;
+    this.connectionApiServers = apiServers;
   }
 
   /**

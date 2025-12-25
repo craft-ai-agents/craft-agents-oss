@@ -406,6 +406,22 @@ process.env.ANTHROPIC_API_KEY = apiKey
 
 **Vite** (renderer): Standard React build with Tailwind CSS v4.
 
+### Gmail OAuth Environment Variables
+
+To enable the "Add Gmail" connection feature, set these environment variables before building:
+
+```bash
+export GMAIL_OAUTH_CLIENT_ID=your-client-id.apps.googleusercontent.com
+export GMAIL_OAUTH_CLIENT_SECRET=your-client-secret
+bun run electron:build
+```
+
+Get credentials from [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → Credentials → Create OAuth Client ID (Desktop app).
+
+**Required scopes:** `gmail.readonly`, `userinfo.email`
+
+These are baked into `dist/main.cjs` at build time via esbuild `--define` flags in `package.json`.
+
 ## Theming
 
 The app supports a **two-layer theming system** using CSS custom properties:

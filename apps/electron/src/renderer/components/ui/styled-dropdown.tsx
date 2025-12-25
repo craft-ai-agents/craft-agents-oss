@@ -43,7 +43,7 @@ export const StyledDropdownMenuContent = React.forwardRef<
   <DropdownMenuContent
     ref={ref}
     className={cn(
-      "w-fit font-sans whitespace-nowrap text-xs bg-background/80 backdrop-blur-xl backdrop-saturate-150 flex flex-col gap-0.5 border-0 shadow-modal-small",
+      "w-fit font-sans whitespace-nowrap text-xs bg-background/80 backdrop-blur-xl backdrop-saturate-150 flex flex-col gap-0.5 border-0 shadow-modal-small p-1",
       light ? "light" : "dark",
       minWidth,
       className

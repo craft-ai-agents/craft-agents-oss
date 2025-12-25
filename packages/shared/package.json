@@ -19,6 +19,7 @@
     "./subscription": "./src/subscription/index.ts",
     "./utils": "./src/utils/index.ts",
     "./utils/toolNames": "./src/utils/toolNames.ts",
+    "./utils/logo": "./src/utils/logo.ts",
     "./validation": "./src/validation/index.ts",
     "./version": "./src/version/index.ts",
     "./branding": "./src/branding.ts",

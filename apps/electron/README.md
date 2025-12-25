@@ -137,9 +137,32 @@ This means:
 - SDK's runtime path resolution breaks (see #1)
 - Native modules would need explicit externalization
 
+## Environment Variables
+
+### Gmail OAuth (Optional)
+
+To enable the "Add Gmail" connection feature, set these environment variables before building:
+
+```bash
+export GMAIL_OAUTH_CLIENT_ID=your-client-id.apps.googleusercontent.com
+export GMAIL_OAUTH_CLIENT_SECRET=your-client-secret
+```
+
+Get these from [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → Credentials → Create OAuth Client ID (Desktop app).
+
+**Required OAuth consent screen scopes:**
+- `https://www.googleapis.com/auth/gmail.readonly`
+- `https://www.googleapis.com/auth/userinfo.email`
+
+These values are baked into the build at compile time via esbuild `--define` flags.
+
 ## Build Process
 
 ```bash
+# Build with Gmail OAuth support
+GMAIL_OAUTH_CLIENT_ID=... GMAIL_OAUTH_CLIENT_SECRET=... bun run electron:build
+
+# Or set in shell profile and just run:
 bun run electron:build:main      # Bundle main process (esbuild)
 bun run electron:build:preload   # Bundle preload script (esbuild)
 bun run electron:build:renderer  # Bundle React app (Vite)

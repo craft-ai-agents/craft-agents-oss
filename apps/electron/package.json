@@ -11,7 +11,7 @@
     "node": ">=18.0.0"
   },
   "scripts": {
-    "build:main": "esbuild src/main/index.ts --bundle --platform=node --format=cjs --outfile=dist/main.cjs --external:electron",
+    "build:main": "source ../../.env 2>/dev/null || true; esbuild src/main/index.ts --bundle --platform=node --format=cjs --outfile=dist/main.cjs --external:electron --define:process.env.GMAIL_OAUTH_CLIENT_ID=\\\"${GMAIL_OAUTH_CLIENT_ID:-}\\\" --define:process.env.GMAIL_OAUTH_CLIENT_SECRET=\\\"${GMAIL_OAUTH_CLIENT_SECRET:-}\\\"",
     "build:preload": "esbuild src/preload/index.ts --bundle --platform=node --format=cjs --outfile=dist/preload.cjs --external:electron",
     "build:renderer": "vite build",
     "build:resources": "cp -r resources dist/",

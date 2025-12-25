@@ -377,6 +377,21 @@ export default function App() {
         })
       }
 
+      // Handle session_restarted event - update session's selectedConnectionIds and clear messages
+      if (event.type === 'session_restarted') {
+        console.log('[App] session_restarted:', event.sessionId, event.selectedConnectionIds)
+        setSessions(prev => prev.map(session => {
+          if (session.id !== event.sessionId) return session
+          return {
+            ...session,
+            messages: [],
+            selectedConnectionIds: event.selectedConnectionIds,
+            isProcessing: false,
+          }
+        }))
+        return
+      }
+
       // Performance: Handle text_delta with throttled updates
       // Accumulates deltas in ref, only triggers React state update every 100ms
       if (event.type === 'text_delta') {

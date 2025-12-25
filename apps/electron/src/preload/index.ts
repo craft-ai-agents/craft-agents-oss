@@ -230,6 +230,22 @@ const api: ElectronAPI = {
   setDraft: (sessionId: string, text: string) => ipcRenderer.invoke(IPC_CHANNELS.DRAFTS_SET, sessionId, text),
   deleteDraft: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.DRAFTS_DELETE, sessionId),
   getAllDrafts: () => ipcRenderer.invoke(IPC_CHANNELS.DRAFTS_GET_ALL),
+
+  // Connections
+  startConnectionMcpOAuth: (config: { name: string; url: string; clientId?: string; clientSecret?: string }) =>
+    ipcRenderer.invoke(IPC_CHANNELS.CONNECTIONS_START_MCP_OAUTH, config),
+  startGmailOAuth: () => ipcRenderer.invoke(IPC_CHANNELS.CONNECTIONS_START_GMAIL_OAUTH),
+  getConnections: () => ipcRenderer.invoke(IPC_CHANNELS.CONNECTIONS_GET),
+  saveConnection: (connection: import('../shared/types').ConnectionConfig) =>
+    ipcRenderer.invoke(IPC_CHANNELS.CONNECTIONS_SAVE, connection),
+  deleteConnection: (connectionId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.CONNECTIONS_DELETE, connectionId),
+
+  // Session connections
+  setSessionConnections: (sessionId: string, connectionIds: string[]) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SESSION_SET_CONNECTIONS, sessionId, connectionIds),
+  getSessionConnections: (sessionId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SESSION_GET_CONNECTIONS, sessionId),
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)

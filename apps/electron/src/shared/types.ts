@@ -47,8 +47,8 @@ export type {
 
 // Import and re-export auth types for onboarding
 import type { AuthState, SetupNeeds } from '@craft-agent/shared/auth';
-import type { AuthType } from '@craft-agent/shared/config';
-export type { AuthState, SetupNeeds, AuthType };
+import type { AuthType, ConnectionConfig, ConnectionType } from '@craft-agent/shared/config';
+export type { AuthState, SetupNeeds, AuthType, ConnectionConfig, ConnectionType };
 export { generateMessageId } from '@craft-agent/core/types';
 
 /**
@@ -257,8 +257,28 @@ export interface Session {
   todoState?: TodoState
   // Read/unread tracking - ID of last message user has read
   lastReadMessageId?: string
+  // Per-session connection selection
+  selectedConnectionIds?: string[]
   // Working directory for this session (used by agent for bash commands)
   workingDirectory?: string
+}
+
+// AskUserQuestion types (matches shared/agent/craft-agent.ts)
+export interface QuestionOption {
+  label: string;
+  description: string;
+}
+
+export interface Question {
+  question: string;
+  header: string;
+  options: QuestionOption[];
+  multiSelect: boolean;
+}
+
+export interface AskQuestionRequest {
+  requestId: string;
+  questions: Question[];
 }
 
 // Events sent from main to renderer
@@ -281,6 +301,9 @@ export type SessionEvent =
   // Mode events (generic for any mode type)
   | { type: 'mode_changed'; sessionId: string; mode: Mode; enabled: boolean }
   | { type: 'plan_submitted'; sessionId: string; message: CoreMessage }
+  | { type: 'ask_question_request'; sessionId: string; request: AskQuestionRequest }
+  // Connection events
+  | { type: 'session_restarted'; sessionId: string; selectedConnectionIds: string[] }
 
 // Options for sendMessage
 export interface SendMessageOptions {
@@ -428,6 +451,17 @@ export const IPC_CHANNELS = {
   DRAFTS_SET: 'drafts:set',
   DRAFTS_DELETE: 'drafts:delete',
   DRAFTS_GET_ALL: 'drafts:getAll',
+
+  // Connections
+  CONNECTIONS_START_MCP_OAUTH: 'connections:startMcpOAuth',
+  CONNECTIONS_START_GMAIL_OAUTH: 'connections:startGmailOAuth',
+  CONNECTIONS_GET: 'connections:get',
+  CONNECTIONS_SAVE: 'connections:save',
+  CONNECTIONS_DELETE: 'connections:delete',
+
+  // Session connections
+  SESSION_SET_CONNECTIONS: 'sessions:setConnections',
+  SESSION_GET_CONNECTIONS: 'sessions:getConnections',
 
   // Markdown preview window
   MARKDOWN_PREVIEW_OPEN: 'markdownPreview:open',
@@ -683,6 +717,22 @@ export interface ElectronAPI {
   setDraft(sessionId: string, text: string): Promise<void>
   deleteDraft(sessionId: string): Promise<void>
   getAllDrafts(): Promise<Record<string, string>>
+
+  // Connections
+  startConnectionMcpOAuth(config: {
+    name: string
+    url: string
+    clientId?: string
+    clientSecret?: string
+  }): Promise<{ success: boolean; error?: string; accessToken?: string; refreshToken?: string; expiresAt?: number; clientId?: string }>
+  startGmailOAuth(): Promise<{ success: boolean; error?: string; accessToken?: string; refreshToken?: string; expiresAt?: number; email?: string }>
+  getConnections(): Promise<ConnectionConfig[]>
+  saveConnection(connection: ConnectionConfig): Promise<void>
+  deleteConnection(connectionId: string): Promise<void>
+
+  // Session connections
+  setSessionConnections(sessionId: string, connectionIds: string[]): Promise<void>
+  getSessionConnections(sessionId: string): Promise<string[]>
 }
 
 /**
@@ -711,6 +761,12 @@ export interface DeepLinkNavigation {
   action?: string
   actionParams?: Record<string, string>
 }
+
+// ============================================
+// Connection Types
+// ============================================
+
+// Note: ConnectionType and ConnectionConfig are re-exported from @craft-agent/shared/config above
 
 declare global {
   interface Window {

@@ -24,7 +24,9 @@ export type CredentialType =
   | 'workspace_oauth'
   | 'workspace_bearer'
   | 'mcp_oauth'
-  | 'api_key';
+  | 'api_key'
+  | 'connection_oauth'  // User-defined connection OAuth tokens
+  | 'gmail_oauth';      // Gmail OAuth tokens
 
 /** Valid credential types for validation */
 const VALID_CREDENTIAL_TYPES: readonly CredentialType[] = [
@@ -35,6 +37,8 @@ const VALID_CREDENTIAL_TYPES: readonly CredentialType[] = [
   'workspace_bearer',
   'mcp_oauth',
   'api_key',
+  'connection_oauth',
+  'gmail_oauth',
 ] as const;
 
 /** Check if a string is a valid CredentialType */
@@ -51,6 +55,8 @@ export interface CredentialId {
   agentId?: string;
   /** Server name or API name */
   name?: string;
+  /** For connection-scoped credentials (user-defined connections) */
+  connectionId?: string;
 }
 
 /**
@@ -84,6 +90,12 @@ const CREDENTIAL_DELIMITER = '::';
 export function credentialIdToAccount(id: CredentialId): string {
   const parts: string[] = [id.type];
 
+  // Connection-scoped credentials: connection_oauth::{connectionId}
+  if (id.connectionId) {
+    parts.push(id.connectionId);
+    return parts.join(CREDENTIAL_DELIMITER);
+  }
+
   if (id.workspaceId) {
     parts.push(id.workspaceId);
     if (id.agentId) {
@@ -110,6 +122,11 @@ export function accountToCredentialId(account: string): CredentialId | null {
   }
 
   const type = typeStr;
+
+  // Connection-scoped: connection_oauth::{connectionId}
+  if (type === 'connection_oauth' && parts.length === 2) {
+    return { type, connectionId: parts[1] };
+  }
 
   if (parts.length === 2 && parts[1] === 'global') {
     return { type };
