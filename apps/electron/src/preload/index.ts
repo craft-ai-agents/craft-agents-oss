@@ -17,6 +17,8 @@ const api: ElectronAPI = {
   setSkipPermissions: (sessionId: string, enabled: boolean) => ipcRenderer.invoke(IPC_CHANNELS.SET_SKIP_PERMISSIONS, sessionId, enabled),
   respondToPermission: (sessionId: string, requestId: string, allowed: boolean, alwaysAllow: boolean) =>
     ipcRenderer.invoke(IPC_CHANNELS.RESPOND_TO_PERMISSION, sessionId, requestId, allowed, alwaysAllow),
+  respondToCredential: (sessionId: string, requestId: string, response: import('../shared/types').CredentialResponse) =>
+    ipcRenderer.invoke(IPC_CHANNELS.RESPOND_TO_CREDENTIAL, sessionId, requestId, response),
   updateSessionWorkingDirectory: (sessionId: string, path: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.UPDATE_WORKING_DIRECTORY, sessionId, path),
 

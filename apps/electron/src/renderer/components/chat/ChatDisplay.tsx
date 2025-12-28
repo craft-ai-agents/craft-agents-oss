@@ -21,7 +21,7 @@ import { AnimatedCollapsibleContent } from "@/components/ui/collapsible"
 import { FileTypeIcon, getFileTypeLabel } from "./AttachmentPreview"
 import { Spinner } from "@/components/ui/loading-indicator"
 import { useFocusZone } from "@/hooks/keyboard"
-import type { Session, Message, FileAttachment, StoredAttachment, PermissionRequest, LoadedSource } from "../../../shared/types"
+import type { Session, Message, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, LoadedSource } from "../../../shared/types"
 import { SetupAuthBanner, type BannerState } from "./SetupAuthBanner"
 import { TurnCard } from "./TurnCard"
 import { PlanCard } from "./PlanCard"
@@ -55,6 +55,10 @@ interface ChatDisplayProps {
   pendingPermission?: PermissionRequest
   /** Callback to respond to permission request */
   onRespondToPermission?: (sessionId: string, requestId: string, allowed: boolean, alwaysAllow: boolean) => void
+  /** Pending credential request for this session */
+  pendingCredential?: CredentialRequest
+  /** Callback to respond to credential request */
+  onRespondToCredential?: (sessionId: string, requestId: string, response: CredentialResponse) => void
   /** Agent setup state - when present, shows setup indicator in input area */
   agentSetupState?: AgentSetupState
   // Advanced options
@@ -249,6 +253,8 @@ export function ChatDisplay({
   disabled = false,
   pendingPermission,
   onRespondToPermission,
+  pendingCredential,
+  onRespondToCredential,
   agentSetupState,
   // Advanced options
   ultrathinkEnabled = false,
@@ -394,7 +400,7 @@ export function ChatDisplay({
     })
   }
 
-  // Handle structured input responses (permissions)
+  // Handle structured input responses (permissions and credentials)
   const handleStructuredResponse = (response: StructuredResponse) => {
     if (response.type === 'permission' && pendingPermission && onRespondToPermission) {
       const permResponse = response as PermissionResponse
@@ -404,16 +410,26 @@ export function ChatDisplay({
         permResponse.allowed,
         permResponse.alwaysAllow
       )
+    } else if (response.type === 'credential' && pendingCredential && onRespondToCredential) {
+      const credResponse = response as CredentialResponse
+      onRespondToCredential(
+        pendingCredential.sessionId,
+        pendingCredential.requestId,
+        credResponse
+      )
     }
   }
 
-  // Build structured input state from pending requests
+  // Build structured input state from pending requests (permissions take priority)
   const structuredInput: StructuredInputState | undefined = React.useMemo(() => {
     if (pendingPermission) {
       return { type: 'permission', data: pendingPermission }
     }
+    if (pendingCredential) {
+      return { type: 'credential', data: pendingCredential }
+    }
     return undefined
-  }, [pendingPermission])
+  }, [pendingPermission, pendingCredential])
 
   // Memoize turn grouping - avoids O(n) iteration on every render/keystroke
   const turns = React.useMemo(() => {

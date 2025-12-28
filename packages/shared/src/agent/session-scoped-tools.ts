@@ -57,6 +57,41 @@ import { CraftOAuth, type OAuthConfig, type OAuthCallbacks } from '../auth/oauth
 // ============================================================
 
 /**
+ * Credential input modes for different auth types
+ */
+export type CredentialInputMode = 'bearer' | 'basic' | 'header' | 'query';
+
+/**
+ * Credential request from agent - triggers secure input UI
+ */
+export interface CredentialRequest {
+  requestId: string;
+  sessionId: string;
+  sourceSlug: string;
+  sourceName: string;
+  mode: CredentialInputMode;
+  labels?: {
+    credential?: string;
+    username?: string;
+    password?: string;
+  };
+  description?: string;
+  hint?: string;
+  headerName?: string;
+}
+
+/**
+ * Credential response from user
+ */
+export interface CredentialResponse {
+  type: 'credential';
+  value?: string;
+  username?: string;
+  password?: string;
+  cancelled: boolean;
+}
+
+/**
  * Callbacks for session-scoped tool operations.
  * These are registered per-session and invoked by tools.
  */
@@ -71,6 +106,8 @@ export interface SessionScopedToolCallbacks {
   onOAuthSuccess?: (sourceSlug: string) => void;
   /** Called when OAuth flow fails */
   onOAuthError?: (sourceSlug: string, error: string) => void;
+  /** Called when credential input is needed - returns promise that resolves with user response */
+  onCredentialRequest?: (request: CredentialRequest) => Promise<CredentialResponse>;
 }
 
 /**
@@ -1745,6 +1782,157 @@ export function createSourceDeleteTool(sessionId: string, workspaceSlug: string)
 }
 
 // ============================================================
+// Credential Prompt Tool
+// ============================================================
+
+/**
+ * Create a session-scoped credential_prompt tool.
+ * Prompts the user to enter credentials for a source via the secure input UI.
+ */
+export function createCredentialPromptTool(sessionId: string, workspaceSlug: string) {
+  return tool(
+    'credential_prompt',
+    `Prompt the user to enter credentials for a source.
+
+Use this when a source requires authentication that isn't OAuth.
+The user will see a secure input UI with appropriate fields based on the auth mode.
+
+**Auth Modes:**
+- \`bearer\`: Single token field (Bearer Token, API Key)
+- \`basic\`: Username and Password fields
+- \`header\`: API Key with custom header name shown
+- \`query\`: API Key for query parameter auth
+
+**After user enters credentials:**
+- Credentials are securely stored in the encrypted credential store
+- Source is marked as authenticated
+- Returns success or cancellation status
+
+**Example usage:**
+\`\`\`
+credential_prompt({
+  sourceSlug: "my-api",
+  mode: "bearer",
+  labels: { credential: "API Key" },
+  description: "Enter your API key from the dashboard",
+  hint: "Find it at https://example.com/settings/api"
+})
+\`\`\``,
+    {
+      sourceSlug: z.string().describe('The slug of the source to authenticate'),
+      mode: z.enum(['bearer', 'basic', 'header', 'query']).describe('Type of credential input'),
+      labels: z.object({
+        credential: z.string().optional().describe('Label for primary credential field'),
+        username: z.string().optional().describe('Label for username field (basic auth)'),
+        password: z.string().optional().describe('Label for password field (basic auth)'),
+      }).optional().describe('Custom field labels'),
+      description: z.string().optional().describe('Description shown to user'),
+      hint: z.string().optional().describe('Hint about where to find credentials'),
+    },
+    async (args) => {
+      debug('[credential_prompt] Prompting for credentials:', args.sourceSlug, args.mode);
+
+      try {
+        // Load source to get name and validate
+        const source = loadSourceConfig(workspaceSlug, args.sourceSlug);
+        if (!source) {
+          return {
+            content: [{
+              type: 'text' as const,
+              text: `Source '${args.sourceSlug}' not found. Check that the folder exists in ~/.craft-agent/workspaces/${workspaceSlug}/sources/`,
+            }],
+            isError: true,
+          };
+        }
+
+        // Get callbacks
+        const callbacks = getSessionScopedToolCallbacks(sessionId);
+        if (!callbacks?.onCredentialRequest) {
+          return {
+            content: [{
+              type: 'text' as const,
+              text: 'Error: No credential input handler available. This tool requires a UI to prompt for credentials.',
+            }],
+            isError: true,
+          };
+        }
+
+        // Build request
+        const request: CredentialRequest = {
+          requestId: crypto.randomUUID(),
+          sessionId,
+          sourceSlug: args.sourceSlug,
+          sourceName: source.name,
+          mode: args.mode,
+          labels: args.labels,
+          description: args.description,
+          hint: args.hint,
+          headerName: source.api?.headerName,
+        };
+
+        // Wait for user response
+        const response = await callbacks.onCredentialRequest(request);
+
+        if (response.cancelled) {
+          return {
+            content: [{
+              type: 'text' as const,
+              text: `User cancelled credential input for '${source.name}'.`,
+            }],
+            isError: false,
+          };
+        }
+
+        // Store credentials based on mode
+        const credManager = getCredentialManager();
+
+        if (args.mode === 'basic') {
+          // Encode basic auth as base64 (username:password)
+          const encoded = Buffer.from(`${response.username}:${response.password}`).toString('base64');
+          await credManager.set(
+            { type: 'source_basic', workspaceSlug, sourceSlug: args.sourceSlug },
+            { value: encoded }
+          );
+        } else if (args.mode === 'bearer') {
+          await credManager.set(
+            { type: 'source_bearer', workspaceSlug, sourceSlug: args.sourceSlug },
+            { value: response.value! }
+          );
+        } else {
+          // header or query - stored as API key
+          await credManager.set(
+            { type: 'source_apikey', workspaceSlug, sourceSlug: args.sourceSlug },
+            { value: response.value! }
+          );
+        }
+
+        // Mark source as authenticated
+        source.isAuthenticated = true;
+        source.updatedAt = Date.now();
+        saveSourceConfig(workspaceSlug, source);
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `Credentials saved for '${source.name}'. The source is now authenticated.`,
+          }],
+          isError: false,
+        };
+      } catch (error) {
+        debug('[credential_prompt] Error:', error);
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `Error prompting for credentials: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          }],
+          isError: true,
+        };
+      }
+    }
+  );
+}
+
+// ============================================================
 // Session-Scoped Tools Provider
 // ============================================================
 
@@ -1782,6 +1970,7 @@ export function getSessionScopedTools(sessionId: string, workspaceSlug: string):
         // Source tools (workspace-scoped)
         createSourceTestTool(sessionId, workspaceSlug),
         createOAuthTriggerTool(sessionId, workspaceSlug),
+        createCredentialPromptTool(sessionId, workspaceSlug),
         createSourceCacheUpdateTool(sessionId, workspaceSlug),
         createSourceCacheReadTool(sessionId, workspaceSlug),
         createSourceGuideAppendTool(sessionId, workspaceSlug),

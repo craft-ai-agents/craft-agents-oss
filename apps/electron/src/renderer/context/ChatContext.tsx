@@ -15,6 +15,8 @@ import type {
   SubAgentMetadata,
   FileAttachment,
   PermissionRequest,
+  CredentialRequest,
+  CredentialResponse,
   Mode,
   TodoState,
   LoadedSource,
@@ -32,6 +34,7 @@ export interface ChatContextType {
   activeWorkspaceId: string | null
   currentModel: string
   pendingPermissions: Map<string, PermissionRequest[]>
+  pendingCredentials: Map<string, CredentialRequest[]>
   /** Get draft input text for a session - reads from ref without triggering re-renders */
   getDraft: (sessionId: string) => string
   /** All enabled sources for this workspace - provided by Chat component */
@@ -58,6 +61,13 @@ export interface ChatContextType {
     requestId: string,
     allowed: boolean,
     alwaysAllow: boolean
+  ) => void
+
+  // Credential handling
+  onRespondToCredential?: (
+    sessionId: string,
+    requestId: string,
+    response: CredentialResponse
   ) => void
 
   // File/URL handlers - these can open in tabs or external apps
@@ -145,6 +155,14 @@ export function useActiveWorkspace(): Workspace | null {
 export function usePendingPermission(sessionId: string): PermissionRequest | undefined {
   const { pendingPermissions } = useChatContext()
   return pendingPermissions.get(sessionId)?.[0]
+}
+
+/**
+ * Get pending credential request for a session (first in queue)
+ */
+export function usePendingCredential(sessionId: string): CredentialRequest | undefined {
+  const { pendingCredentials } = useChatContext()
+  return pendingCredentials.get(sessionId)?.[0]
 }
 
 /**

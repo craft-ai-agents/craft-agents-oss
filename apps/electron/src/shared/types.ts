@@ -101,6 +101,63 @@ export interface PermissionRequest extends BasePermissionRequest {
 }
 
 // ============================================
+// Credential Input Types (Secure Auth UI)
+// ============================================
+
+/**
+ * Credential input modes for different auth types
+ */
+export type CredentialInputMode =
+  | 'bearer'      // Single token field (Bearer Token, API Key)
+  | 'basic'       // Username + Password fields
+  | 'header'      // API Key with custom header name
+  | 'query'       // API Key for query parameter
+
+/**
+ * Credential request from agent - triggers secure input UI
+ */
+export interface CredentialRequest {
+  requestId: string
+  sessionId: string
+  /** Source slug to associate credentials with */
+  sourceSlug: string
+  /** Display name for the source/service */
+  sourceName: string
+  /** What type of credential input to show */
+  mode: CredentialInputMode
+  /** Custom labels for fields */
+  labels?: {
+    /** Label for primary credential field (default: "API Key" or "Bearer Token") */
+    credential?: string
+    /** Label for username field in basic auth (default: "Username") */
+    username?: string
+    /** Label for password field in basic auth (default: "Password") */
+    password?: string
+  }
+  /** Optional description/instructions */
+  description?: string
+  /** Optional hint about where to find the credential */
+  hint?: string
+  /** For header auth - the header name being used */
+  headerName?: string
+}
+
+/**
+ * Credential response from user
+ */
+export interface CredentialResponse {
+  type: 'credential'
+  /** Single value for bearer/header/query modes */
+  value?: string
+  /** Username for basic auth */
+  username?: string
+  /** Password for basic auth */
+  password?: string
+  /** Whether user cancelled */
+  cancelled: boolean
+}
+
+// ============================================
 // Plan Types (SubmitPlan workflow)
 // ============================================
 
@@ -307,6 +364,7 @@ export type SessionEvent =
   | { type: 'working_directory_changed'; sessionId: string; workingDirectory: string }
   | { type: 'agent_status'; sessionId: string; status: AgentStatus }
   | { type: 'permission_request'; sessionId: string; request: PermissionRequest }
+  | { type: 'credential_request'; sessionId: string; request: CredentialRequest }
   // Mode events (generic for any mode type)
   | { type: 'mode_changed'; sessionId: string; mode: Mode; enabled: boolean }
   | { type: 'plan_submitted'; sessionId: string; message: CoreMessage }
@@ -336,6 +394,7 @@ export const IPC_CHANNELS = {
   MARK_SESSION_READ: 'sessions:markRead',
   MARK_SESSION_UNREAD: 'sessions:markUnread',
   RESPOND_TO_PERMISSION: 'sessions:respondToPermission',
+  RESPOND_TO_CREDENTIAL: 'sessions:respondToCredential',
   UPDATE_WORKING_DIRECTORY: 'sessions:updateWorkingDirectory',
 
   // Mode management (generic for any mode type)
@@ -582,6 +641,7 @@ export interface ElectronAPI {
   markSessionRead(sessionId: string): Promise<void>
   markSessionUnread(sessionId: string): Promise<void>
   respondToPermission(sessionId: string, requestId: string, allowed: boolean, alwaysAllow: boolean): Promise<boolean>
+  respondToCredential(sessionId: string, requestId: string, response: CredentialResponse): Promise<boolean>
   setSkipPermissions(sessionId: string, enabled: boolean): Promise<void>
   updateSessionWorkingDirectory(sessionId: string, path: string): Promise<void>
 

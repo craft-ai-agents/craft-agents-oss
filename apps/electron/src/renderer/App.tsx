@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useSetAtom, useStore } from 'jotai'
-import type { Session, Workspace, SessionEvent, Message, SubAgentMetadata, FileAttachment, StoredAttachment, PermissionRequest, SetupNeeds, TodoState, Mode } from '../shared/types'
+import type { Session, Workspace, SessionEvent, Message, SubAgentMetadata, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, SetupNeeds, TodoState, Mode } from '../shared/types'
 import type { SessionOptions, SessionOptionUpdates } from './hooks/useSessionOptions'
 import { defaultSessionOptions, mergeSessionOptions } from './hooks/useSessionOptions'
 import { generateMessageId } from '../shared/types'
@@ -63,6 +63,8 @@ export default function App() {
   const [menuNewChatTabTrigger, setMenuNewChatTabTrigger] = useState(0)
   // Permission requests per session (queue to handle multiple concurrent requests)
   const [pendingPermissions, setPendingPermissions] = useState<Map<string, PermissionRequest[]>>(new Map())
+  // Credential requests per session (queue to handle multiple concurrent requests)
+  const [pendingCredentials, setPendingCredentials] = useState<Map<string, CredentialRequest[]>>(new Map())
   // Draft input text per session (preserved across mode switches and conversation changes)
   // Using ref instead of state to avoid re-renders during typing - drafts are only
   // needed for initial value restoration and disk persistence, not reactive updates
@@ -321,10 +323,20 @@ export default function App() {
             console.log('[App] ask_question_request:', effect.sessionId, effect.request)
             break
           }
+          case 'credential_request': {
+            console.log('[App] credential_request:', sessionId, effect.request.mode)
+            setPendingCredentials(prevCreds => {
+              const next = new Map(prevCreds)
+              const existingQueue = next.get(sessionId) || []
+              next.set(sessionId, [...existingQueue, effect.request])
+              return next
+            })
+            break
+          }
         }
       }
 
-      // Clear pending permissions on complete
+      // Clear pending permissions and credentials on complete
       if (eventType === 'complete') {
         setPendingPermissions(prevPerms => {
           if (prevPerms.has(sessionId)) {
@@ -333,6 +345,14 @@ export default function App() {
             return next
           }
           return prevPerms
+        })
+        setPendingCredentials(prevCreds => {
+          if (prevCreds.has(sessionId)) {
+            const next = new Map(prevCreds)
+            next.delete(sessionId)
+            return next
+          }
+          return prevCreds
         })
       }
     }
@@ -789,6 +809,46 @@ export default function App() {
     }
   }, [])
 
+  const handleRespondToCredential = useCallback(async (sessionId: string, requestId: string, response: CredentialResponse) => {
+    console.log('[App] handleRespondToCredential called:', { sessionId, requestId, cancelled: response.cancelled })
+
+    const success = await window.electronAPI.respondToCredential(sessionId, requestId, response)
+    console.log('[App] handleRespondToCredential IPC result:', { success })
+
+    if (success) {
+      // Remove only the first credential from the queue (the one we just responded to)
+      setPendingCredentials(prev => {
+        const next = new Map(prev)
+        const queue = next.get(sessionId) || []
+        const remainingQueue = queue.slice(1) // Remove first item
+        console.log('[App] handleRespondToCredential: clearing credential from queue, remaining:', remainingQueue.length)
+        if (remainingQueue.length === 0) {
+          next.delete(sessionId)
+        } else {
+          next.set(sessionId, remainingQueue)
+        }
+        return next
+      })
+      // Force sessions state refresh to ensure React processes any pending updates
+      console.log('[App] handleRespondToCredential: forcing sessions state refresh')
+      setSessions(prev => [...prev])
+    } else {
+      // Response failed (agent/session gone) - clear the credential anyway
+      // to avoid UI being stuck with stale credential request
+      setPendingCredentials(prev => {
+        const next = new Map(prev)
+        const queue = next.get(sessionId) || []
+        const remainingQueue = queue.slice(1)
+        if (remainingQueue.length === 0) {
+          next.delete(sessionId)
+        } else {
+          next.set(sessionId, remainingQueue)
+        }
+        return next
+      })
+    }
+  }, [])
+
   const handleOpenFile = useCallback(async (path: string) => {
     try {
       await window.electronAPI.openFile(path)
@@ -875,6 +935,7 @@ export default function App() {
     activeWorkspaceId: windowWorkspaceId,
     currentModel,
     pendingPermissions,
+    pendingCredentials,
     getDraft,
     sessionOptions,
     // Session callbacks
@@ -888,6 +949,7 @@ export default function App() {
     onTodoStateChange: handleTodoStateChange,
     onDeleteSession: handleDeleteSession,
     onRespondToPermission: handleRespondToPermission,
+    onRespondToCredential: handleRespondToCredential,
     // File/URL handlers
     onOpenFile: handleOpenFile,
     onOpenUrl: handleOpenUrl,
@@ -913,6 +975,7 @@ export default function App() {
     windowWorkspaceId,
     currentModel,
     pendingPermissions,
+    pendingCredentials,
     getDraft,
     sessionOptions,
     handleCreateSession,
@@ -925,6 +988,7 @@ export default function App() {
     handleTodoStateChange,
     handleDeleteSession,
     handleRespondToPermission,
+    handleRespondToCredential,
     handleOpenFile,
     handleOpenUrl,
     handleModelChange,

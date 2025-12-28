@@ -20,6 +20,9 @@ export {
   unregisterSessionScopedToolCallbacks,
   // Types
   type SessionScopedToolCallbacks,
+  type CredentialRequest,
+  type CredentialResponse,
+  type CredentialInputMode,
 } from './session-scoped-tools.ts';
 
 // Export mode-manager - Centralized mode management

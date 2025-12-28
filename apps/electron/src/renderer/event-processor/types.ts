@@ -5,7 +5,7 @@
  * All agent events flow through a single pure function for consistent state transitions.
  */
 
-import type { Session, Message, PermissionRequest, TypedError, Mode, AskQuestionRequest } from '../../shared/types'
+import type { Session, Message, PermissionRequest, CredentialRequest, TypedError, Mode, AskQuestionRequest } from '../../shared/types'
 
 /**
  * Streaming state for a session - replaces streamingTextRef
@@ -201,6 +201,15 @@ export interface AskQuestionRequestEvent {
   request: AskQuestionRequest
 }
 
+/**
+ * Credential request event - prompts user for credentials
+ */
+export interface CredentialRequestEvent {
+  type: 'credential_request'
+  sessionId: string
+  request: CredentialRequest
+}
+
 
 /**
  * Union of all agent events
@@ -214,6 +223,7 @@ export type AgentEvent =
   | ErrorEvent
   | TypedErrorEvent
   | PermissionRequestEvent
+  | CredentialRequestEvent
   | SourcesChangedEvent
   | PlanSubmittedEvent
   | StatusEvent
@@ -229,6 +239,7 @@ export type AgentEvent =
  */
 export type Effect =
   | { type: 'permission_request'; request: PermissionRequest }
+  | { type: 'credential_request'; request: CredentialRequest }
   | { type: 'generate_title'; sessionId: string; userMessage: string }
   | { type: 'mode_changed'; sessionId: string; mode: Mode; enabled: boolean }
   | { type: 'ask_question_request'; sessionId: string; request: AskQuestionRequest }

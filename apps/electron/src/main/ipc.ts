@@ -232,6 +232,12 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     return sessionManager.respondToPermission(sessionId, requestId, allowed, alwaysAllow)
   })
 
+  // Respond to a credential request (secure auth input)
+  // Returns true if the response was delivered, false if agent/session is gone
+  ipcMain.handle(IPC_CHANNELS.RESPOND_TO_CREDENTIAL, async (_event, sessionId: string, requestId: string, response: import('../shared/types').CredentialResponse) => {
+    return sessionManager.respondToCredential(sessionId, requestId, response)
+  })
+
   // Set a mode for a session (generic for any mode type)
   ipcMain.handle(IPC_CHANNELS.SET_MODE, async (_event, sessionId: string, mode: import('../shared/types').Mode, enabled: boolean) => {
     return sessionManager.setMode(sessionId, mode, enabled)

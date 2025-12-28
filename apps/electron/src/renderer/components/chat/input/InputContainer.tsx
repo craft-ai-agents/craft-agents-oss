@@ -23,6 +23,7 @@ const TRANSITION_EASE = [0.4, 0, 0.2, 1] as const
 const FALLBACK_HEIGHTS: Record<InputMode | string, number> = {
   freeform: 114,
   permission: 200,
+  credential: 240,  // Taller for form fields + hint
 }
 
 /**

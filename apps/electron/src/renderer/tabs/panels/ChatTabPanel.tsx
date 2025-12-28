@@ -10,7 +10,7 @@ import { AlertCircle, Bot } from 'lucide-react'
 import { ChatDisplay } from '@/components/chat/ChatDisplay'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/loading-indicator'
-import { useChatContext, usePendingPermission, useSessionOptionsFor, useSession } from '@/context/ChatContext'
+import { useChatContext, usePendingPermission, usePendingCredential, useSessionOptionsFor, useSession } from '@/context/ChatContext'
 import { useAgentState } from '../../hooks/useAgentState'
 import type { Tab, ChatTab } from '../types'
 import { useTabs } from '../useTabs'
@@ -28,6 +28,7 @@ export default function ChatTabPanel({ tab }: ChatTabPanelProps) {
     onOpenUrl,
     onModelChange,
     onRespondToPermission,
+    onRespondToCredential,
     onMarkSessionRead,
     textareaRef,
     // Input drafts
@@ -67,8 +68,9 @@ export default function ChatTabPanel({ tab }: ChatTabPanelProps) {
     session ? (chatTab.agentId || null) : null
   )
 
-  // Get pending permission for this session
+  // Get pending permission and credential for this session
   const pendingPermission = usePendingPermission(chatTab.sessionId)
+  const pendingCredential = usePendingCredential(chatTab.sessionId)
 
   // Get initial draft value for this session (only on mount/session change)
   // Using useMemo to call getter only once - subsequent typing is handled by FreeFormInput's internal state
@@ -196,6 +198,8 @@ export default function ChatTabPanel({ tab }: ChatTabPanelProps) {
       textareaRef={textareaRef}
       pendingPermission={pendingPermission}
       onRespondToPermission={onRespondToPermission}
+      pendingCredential={pendingCredential}
+      onRespondToCredential={onRespondToCredential}
       agentSetupState={agentSetupState}
       // Advanced options - using unified session options hook
       ultrathinkEnabled={sessionOpts.ultrathinkEnabled}

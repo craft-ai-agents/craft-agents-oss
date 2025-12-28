@@ -196,6 +196,8 @@ export class SessionManager {
   // Config watcher for live updates (sources, agents, etc.)
   private configWatcher: ConfigWatcher | null = null
   private currentWatchedWorkspaceSlug: string | null = null
+  // Pending credential request resolvers (keyed by requestId)
+  private pendingCredentialResolvers: Map<string, (response: import('../shared/types').CredentialResponse) => void> = new Map()
 
   setWindowManager(wm: WindowManager): void {
     this.windowManager = wm
@@ -757,6 +759,25 @@ export class SessionManager {
             sessionId: managed.id,
           }
         }, managed.workspace.id)
+      }
+
+      // Set up credential request handler to forward requests to renderer and await response
+      managed.agent.onCredentialRequest = (request) => {
+        console.log(`[SessionManager] Credential request for session ${managed.id}:`, request.sourceSlug)
+        return new Promise<import('../shared/types').CredentialResponse>((resolve) => {
+          // Store the resolver to be called when renderer responds
+          this.pendingCredentialResolvers.set(request.requestId, resolve)
+
+          // Send event to renderer to show credential input UI
+          this.sendEvent({
+            type: 'credential_request',
+            sessionId: managed.id,
+            request: {
+              ...request,
+              sessionId: managed.id,
+            }
+          }, managed.workspace.id)
+        })
       }
 
       // Set up mode change handlers (safe mode, and future modes)
@@ -1338,6 +1359,23 @@ export class SessionManager {
       return true
     } else {
       console.warn(`[SessionManager] Cannot respond to permission - no agent for session ${sessionId}`)
+      return false
+    }
+  }
+
+  /**
+   * Respond to a pending credential request
+   * Returns true if the response was delivered, false if no pending request found
+   */
+  respondToCredential(sessionId: string, requestId: string, response: import('../shared/types').CredentialResponse): boolean {
+    const resolver = this.pendingCredentialResolvers.get(requestId)
+    if (resolver) {
+      console.log(`[SessionManager] Credential response for ${requestId}: cancelled=${response.cancelled}`)
+      resolver(response)
+      this.pendingCredentialResolvers.delete(requestId)
+      return true
+    } else {
+      console.warn(`[SessionManager] Cannot respond to credential - no pending request for ${requestId}`)
       return false
     }
   }
