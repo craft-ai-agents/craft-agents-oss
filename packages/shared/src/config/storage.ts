@@ -24,13 +24,18 @@ export interface OAuthCredentials {
   tokenType: string;
 }
 
+// How MCP server should be authenticated
+export type McpAuthType = 'workspace_oauth' | 'workspace_bearer' | 'public';
+
 export interface Workspace {
   id: string;
   name: string;
-  slug?: string;       // URL-safe folder name for workspace-scoped storage (defaults to id if not set)
+  slug?: string;           // URL-safe folder name for workspace-scoped storage (defaults to id if not set)
   createdAt: number;
-  sessionId?: string;  // SDK session ID for conversation continuity
-  iconUrl?: string;    // Space icon URL from Craft profile
+  sessionId?: string;      // SDK session ID for conversation continuity
+  iconUrl?: string;        // Space icon URL from Craft profile
+  mcpUrl?: string;         // MCP server URL for this workspace
+  mcpAuthType?: McpAuthType;  // How the MCP server authenticates (defaults to workspace_oauth)
 }
 
 /**

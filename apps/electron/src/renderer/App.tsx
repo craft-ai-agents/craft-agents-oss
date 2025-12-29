@@ -269,6 +269,18 @@ export default function App() {
     }
   }, [windowWorkspaceId])
 
+  // Subscribe to agents changed events (when agents are created/synced/deleted via chat)
+  useEffect(() => {
+    const cleanup = window.electronAPI.onAgentsChanged(() => {
+      if (windowWorkspaceId) {
+        console.log('[App] Agents changed, refreshing list')
+        window.electronAPI.getAgents(windowWorkspaceId)
+          .then(setAgents)
+      }
+    })
+    return cleanup
+  }, [windowWorkspaceId])
+
   // Listen for session events - uses centralized event processor for consistent state transitions
   //
   // SOURCE OF TRUTH LOGIC:
@@ -685,6 +697,16 @@ export default function App() {
     if (windowWorkspaceId) {
       setIsLoadingAgents(true)
       try {
+        // First sync from Craft (downloads new/updated agents from Craft "Agents" folder)
+        const syncResult = await window.electronAPI.syncAgentsFromCraft(windowWorkspaceId)
+        if (syncResult.errors.length > 0) {
+          console.warn('[App] Agent sync errors:', syncResult.errors)
+        }
+        if (syncResult.created.length > 0 || syncResult.updated.length > 0) {
+          console.log(`[App] Synced agents from Craft: ${syncResult.created.length} created, ${syncResult.updated.length} updated`)
+        }
+
+        // Then reload local agents (includes newly synced ones)
         const refreshedAgents = await window.electronAPI.refreshAgents(windowWorkspaceId)
         setAgents(refreshedAgents)
       } finally {

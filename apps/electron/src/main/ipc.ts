@@ -542,6 +542,25 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   })
 
   // ============================================================
+  // Agent Sync (Craft Discovery)
+  // ============================================================
+
+  // Sync agents from connected Craft Space
+  ipcMain.handle(IPC_CHANNELS.SYNC_AGENTS_FROM_CRAFT, async (_event, workspaceId: string, options?: { documentIds?: string[]; forceUpdate?: boolean }) => {
+    return agentService.syncAgentsFromCraft(workspaceId, options)
+  })
+
+  // Discover all agents (local + Craft)
+  ipcMain.handle(IPC_CHANNELS.DISCOVER_ALL_AGENTS, async (_event, workspaceId: string) => {
+    return agentService.discoverAllAgents(workspaceId)
+  })
+
+  // Get sync status for all agents
+  ipcMain.handle(IPC_CHANNELS.GET_AGENTS_SYNC_STATUS, async (_event, workspaceId: string) => {
+    return agentService.getAgentsSyncStatus(workspaceId)
+  })
+
+  // ============================================================
   // Agent State Management (agent-scoped, unified state machine)
   // ============================================================
 
@@ -1043,6 +1062,44 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     }
 
     console.log(`[IPC] Saved credentials for source: ${sourceSlug}`)
+  })
+
+  // Get agent-scoped sources
+  ipcMain.handle(IPC_CHANNELS.SOURCES_GET_AGENT, async (_event, workspaceSlug: string, agentSlug: string) => {
+    const { loadAgentSources } = await import('@craft-agent/shared/sources')
+    return loadAgentSources(workspaceSlug, agentSlug)
+  })
+
+  // Promote agent source to workspace (copy)
+  ipcMain.handle(IPC_CHANNELS.SOURCES_PROMOTE, async (_event, workspaceSlug: string, agentSlug: string, sourceSlug: string) => {
+    const { loadAgentSource, createSource, loadSource } = await import('@craft-agent/shared/sources')
+
+    // Load the agent-scoped source
+    const agentSource = loadAgentSource(workspaceSlug, agentSlug, sourceSlug)
+    if (!agentSource) {
+      throw new Error(`Agent source not found: ${sourceSlug}`)
+    }
+
+    // Check if source already exists at workspace level
+    const existingWorkspaceSource = loadSource(workspaceSlug, sourceSlug)
+    if (existingWorkspaceSource) {
+      throw new Error(`Source already exists at workspace level: ${sourceSlug}`)
+    }
+
+    // Copy to workspace sources
+    const newConfig = createSource(workspaceSlug, {
+      name: agentSource.config.name,
+      provider: agentSource.config.provider,
+      type: agentSource.config.type,
+      mcp: agentSource.config.mcp,
+      api: agentSource.config.api,
+      local: agentSource.config.local,
+      iconUrl: agentSource.config.iconUrl,
+      enabled: agentSource.config.enabled,
+    })
+
+    console.log(`[IPC] Promoted source ${sourceSlug} from agent ${agentSlug} to workspace`)
+    return newConfig
   })
 
   // ============================================================

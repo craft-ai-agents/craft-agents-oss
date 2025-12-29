@@ -4,7 +4,7 @@
  * Manages the state machine for the onboarding wizard.
  * Handles Craft OAuth, space selection, MCP setup, and billing configuration.
  */
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import type {
   OnboardingState,
   OnboardingStep,
@@ -112,6 +112,10 @@ export function useOnboarding({
 
   // Selected MCP link
   const [selectedMcpLink, setSelectedMcpLink] = useState<CraftMcpLink | null>(null)
+  // Ref to keep latest value for use in callbacks (avoids stale closure issues)
+  // Updated synchronously during render, not in useEffect, to ensure it's available immediately
+  const selectedMcpLinkRef = useRef<CraftMcpLink | null>(null)
+  selectedMcpLinkRef.current = selectedMcpLink
 
   // MCP OAuth credentials
   const [mcpCredentials, setMcpCredentials] = useState<{
@@ -169,6 +173,143 @@ export function useOnboarding({
 
     return categories
   }, [])
+
+  // Save configuration - MUST be defined before handleContinue to avoid stale closure
+  const handleSaveConfig = useCallback(async (credential?: string) => {
+    const callId = Math.random().toString(36).slice(2, 8)
+    console.log(`[Onboarding:Renderer] handleSaveConfig called (${callId})`, {
+      hasCredential: !!credential,
+      credentialLength: credential?.length,
+      billingMethod: state.billingMethod,
+      isExistingUser: state.isExistingUser,
+      selectedSpaceName: state.selectedSpaceName,
+      selectedSpaceIconUrl: state.selectedSpaceIconUrl,
+      hasMcpLink: !!selectedMcpLink,
+      mcpUrl: selectedMcpLink?.mcpUrl,
+      hasMcpCredentials: !!mcpCredentials,
+    })
+
+    if (!state.billingMethod) {
+      console.log('[Onboarding:Renderer] No billing method, returning early')
+      return
+    }
+
+    setState(s => ({ ...s, completionStatus: 'saving' }))
+    console.log('[Onboarding:Renderer] Set completionStatus to saving')
+
+    try {
+      // For existing users (updating billing only), don't create a new workspace
+      if (state.isExistingUser && !state.selectedSpaceName) {
+        console.log('[Onboarding:Renderer] Existing user path - updating billing only')
+        const authType = billingMethodToAuthType(state.billingMethod)
+        console.log('[Onboarding:Renderer] Calling saveOnboardingConfig (billing only)', { authType })
+
+        const result = await window.electronAPI.saveOnboardingConfig({
+          authType,
+          credential,
+          // No workspace - tells backend to only update billing
+        })
+        console.log('[Onboarding:Renderer] saveOnboardingConfig result:', result)
+
+        if (result.success) {
+          console.log('[Onboarding:Renderer] Save successful, setting completionStatus to complete')
+          setState(s => ({ ...s, completionStatus: 'complete' }))
+        } else {
+          console.error('[Onboarding:Renderer] Save failed:', result.error)
+          setState(s => ({
+            ...s,
+            completionStatus: 'saving',
+            errorMessage: result.error || 'Failed to save configuration',
+          }))
+        }
+        return
+      }
+
+      // Creating a new workspace - space name is required
+      if (!state.selectedSpaceName) {
+        console.error('[Onboarding:Renderer] Cannot save config: space name is missing')
+        setState(s => ({
+          ...s,
+          completionStatus: 'saving',
+          errorMessage: 'Space name is required. Please restart onboarding.',
+        }))
+        return
+      }
+      const workspaceName = state.selectedSpaceName
+      // Use ref to get latest value (avoids stale closure from handleContinue)
+      console.log(`[Onboarding:Renderer] (${callId}) selectedMcpLinkRef.current:`, selectedMcpLinkRef.current)
+      console.log(`[Onboarding:Renderer] (${callId}) selectedMcpLink state:`, selectedMcpLink)
+      const mcpUrl = selectedMcpLinkRef.current?.mcpUrl || ''
+      console.log(`[Onboarding:Renderer] (${callId}) New workspace path`, { workspaceName, mcpUrl })
+
+      // Track MCP credentials - use OAuth result directly, not state (avoids stale closure)
+      let mcpCredsToSave: { accessToken: string; clientId?: string } | undefined = mcpCredentials || undefined
+
+      // If MCP server requires OAuth and we don't have credentials, run OAuth
+      if (mcpUrl && !mcpCredentials) {
+        console.log('[Onboarding:Renderer] Attempting MCP OAuth for:', mcpUrl)
+        // Try to start MCP OAuth if the server requires it
+        try {
+          console.log('[Onboarding:Renderer] Calling startWorkspaceMcpOAuth...')
+          const mcpResult = await window.electronAPI.startWorkspaceMcpOAuth(mcpUrl)
+          console.log('[Onboarding:Renderer] MCP OAuth result:', mcpResult)
+          if (mcpResult.success && mcpResult.accessToken) {
+            // Use result directly for saving, not state
+            mcpCredsToSave = {
+              accessToken: mcpResult.accessToken,
+              clientId: mcpResult.clientId,
+            }
+            setMcpCredentials(mcpCredsToSave)
+            console.log('[Onboarding:Renderer] MCP credentials saved')
+          }
+        } catch (mcpError) {
+          // MCP OAuth failed or not required, continue without MCP credentials
+          console.log('[Onboarding:Renderer] MCP OAuth not required or failed:', mcpError)
+        }
+      } else {
+        console.log('[Onboarding:Renderer] Skipping MCP OAuth', { mcpUrl: !!mcpUrl, hasMcpCredentials: !!mcpCredentials })
+      }
+
+      const authType = billingMethodToAuthType(state.billingMethod)
+      console.log(`[Onboarding:Renderer] Calling saveOnboardingConfig (${callId})`, {
+        authType,
+        workspaceName,
+        mcpUrl,
+        hasCredential: !!credential,
+        hasMcpCredentials: !!mcpCredsToSave,
+      })
+
+      const result = await window.electronAPI.saveOnboardingConfig({
+        authType,
+        workspace: {
+          name: workspaceName,
+          iconUrl: state.selectedSpaceIconUrl ?? undefined,
+          mcpUrl: mcpUrl || undefined,
+        },
+        credential,
+        mcpCredentials: mcpCredsToSave,
+      })
+      console.log('[Onboarding:Renderer] saveOnboardingConfig result:', result)
+
+      if (result.success) {
+        console.log('[Onboarding:Renderer] Save successful, setting completionStatus to complete')
+        setState(s => ({ ...s, completionStatus: 'complete' }))
+      } else {
+        console.error('[Onboarding:Renderer] Save failed:', result.error)
+        setState(s => ({
+          ...s,
+          completionStatus: 'saving',
+          errorMessage: result.error || 'Failed to save configuration',
+        }))
+      }
+    } catch (error) {
+      console.error('[Onboarding:Renderer] handleSaveConfig error:', error)
+      setState(s => ({
+        ...s,
+        errorMessage: error instanceof Error ? error.message : 'Failed to save configuration',
+      }))
+    }
+  }, [state.billingMethod, state.selectedSpaceName, state.selectedSpaceIconUrl, state.isExistingUser, selectedMcpLink, mcpCredentials])
 
   // Continue to next step
   const handleContinue = useCallback(async () => {
@@ -238,7 +379,7 @@ export function useOnboarding({
         onComplete()
         break
     }
-  }, [state, craftToken, onComplete])
+  }, [state, craftToken, onComplete, handleSaveConfig])
 
   // Go back to previous step
   const handleBack = useCallback(() => {
@@ -373,7 +514,7 @@ export function useOnboarding({
         errorMessage: error instanceof Error ? error.message : 'Validation failed',
       }))
     }
-  }, [state.billingMethod])
+  }, [state.billingMethod, handleSaveConfig])
 
   // Claude OAuth state
   const [existingClaudeToken, setExistingClaudeToken] = useState<string | null>(null)
@@ -423,7 +564,7 @@ export function useOnboarding({
         errorMessage: error instanceof Error ? error.message : 'Failed to save token',
       }))
     }
-  }, [existingClaudeToken])
+  }, [existingClaudeToken, handleSaveConfig])
 
   // Start Claude OAuth (run claude setup-token)
   const handleStartOAuth = useCallback(async () => {
@@ -466,133 +607,7 @@ export function useOnboarding({
         errorMessage: error instanceof Error ? error.message : 'OAuth failed',
       }))
     }
-  }, [isClaudeCliInstalled])
-
-  // Save configuration
-  const handleSaveConfig = useCallback(async (credential?: string) => {
-    console.log('[Onboarding:Renderer] handleSaveConfig called', {
-      hasCredential: !!credential,
-      credentialLength: credential?.length,
-      billingMethod: state.billingMethod,
-      isExistingUser: state.isExistingUser,
-      selectedSpaceName: state.selectedSpaceName,
-      selectedSpaceIconUrl: state.selectedSpaceIconUrl,
-      hasMcpLink: !!selectedMcpLink,
-      mcpUrl: selectedMcpLink?.mcpUrl,
-      hasMcpCredentials: !!mcpCredentials,
-    })
-
-    if (!state.billingMethod) {
-      console.log('[Onboarding:Renderer] No billing method, returning early')
-      return
-    }
-
-    setState(s => ({ ...s, completionStatus: 'saving' }))
-    console.log('[Onboarding:Renderer] Set completionStatus to saving')
-
-    try {
-      // For existing users (updating billing only), don't create a new workspace
-      if (state.isExistingUser && !state.selectedSpaceName) {
-        console.log('[Onboarding:Renderer] Existing user path - updating billing only')
-        const authType = billingMethodToAuthType(state.billingMethod)
-        console.log('[Onboarding:Renderer] Calling saveOnboardingConfig (billing only)', { authType })
-
-        const result = await window.electronAPI.saveOnboardingConfig({
-          authType,
-          credential,
-          // No workspace - tells backend to only update billing
-        })
-        console.log('[Onboarding:Renderer] saveOnboardingConfig result:', result)
-
-        if (result.success) {
-          console.log('[Onboarding:Renderer] Save successful, setting completionStatus to complete')
-          setState(s => ({ ...s, completionStatus: 'complete' }))
-        } else {
-          console.error('[Onboarding:Renderer] Save failed:', result.error)
-          setState(s => ({
-            ...s,
-            completionStatus: 'saving',
-            errorMessage: result.error || 'Failed to save configuration',
-          }))
-        }
-        return
-      }
-
-      // Creating a new workspace - space name is required
-      if (!state.selectedSpaceName) {
-        console.error('[Onboarding:Renderer] Cannot save config: space name is missing')
-        setState(s => ({
-          ...s,
-          completionStatus: 'saving',
-          errorMessage: 'Space name is required. Please restart onboarding.',
-        }))
-        return
-      }
-      const workspaceName = state.selectedSpaceName
-      const mcpUrl = selectedMcpLink?.mcpUrl || ''
-      console.log('[Onboarding:Renderer] New workspace path', { workspaceName, mcpUrl })
-
-      // If MCP server requires OAuth and we don't have credentials, run OAuth
-      if (mcpUrl && !mcpCredentials) {
-        console.log('[Onboarding:Renderer] Attempting MCP OAuth for:', mcpUrl)
-        // Try to start MCP OAuth if the server requires it
-        try {
-          console.log('[Onboarding:Renderer] Calling startWorkspaceMcpOAuth...')
-          const mcpResult = await window.electronAPI.startWorkspaceMcpOAuth(mcpUrl)
-          console.log('[Onboarding:Renderer] MCP OAuth result:', mcpResult)
-          if (mcpResult.success && mcpResult.accessToken) {
-            setMcpCredentials({
-              accessToken: mcpResult.accessToken,
-              clientId: mcpResult.clientId,
-            })
-            console.log('[Onboarding:Renderer] MCP credentials saved')
-          }
-        } catch (mcpError) {
-          // MCP OAuth failed or not required, continue without MCP credentials
-          console.log('[Onboarding:Renderer] MCP OAuth not required or failed:', mcpError)
-        }
-      } else {
-        console.log('[Onboarding:Renderer] Skipping MCP OAuth', { mcpUrl: !!mcpUrl, hasMcpCredentials: !!mcpCredentials })
-      }
-
-      const authType = billingMethodToAuthType(state.billingMethod)
-      console.log('[Onboarding:Renderer] Calling saveOnboardingConfig (new workspace)', {
-        authType,
-        workspaceName,
-        hasCredential: !!credential,
-        hasMcpCredentials: !!mcpCredentials,
-      })
-
-      const result = await window.electronAPI.saveOnboardingConfig({
-        authType,
-        workspace: {
-          name: workspaceName,
-          iconUrl: state.selectedSpaceIconUrl ?? undefined,
-        },
-        credential,
-        mcpCredentials: mcpCredentials || undefined,
-      })
-      console.log('[Onboarding:Renderer] saveOnboardingConfig result:', result)
-
-      if (result.success) {
-        console.log('[Onboarding:Renderer] Save successful, setting completionStatus to complete')
-        setState(s => ({ ...s, completionStatus: 'complete' }))
-      } else {
-        console.error('[Onboarding:Renderer] Save failed:', result.error)
-        setState(s => ({
-          ...s,
-          completionStatus: 'saving',
-          errorMessage: result.error || 'Failed to save configuration',
-        }))
-      }
-    } catch (error) {
-      console.error('[Onboarding:Renderer] handleSaveConfig error:', error)
-      setState(s => ({
-        ...s,
-        errorMessage: error instanceof Error ? error.message : 'Failed to save configuration',
-      }))
-    }
-  }, [state.billingMethod, state.selectedSpaceName, state.selectedSpaceIconUrl, state.isExistingUser, selectedMcpLink, mcpCredentials])
+  }, [isClaudeCliInstalled, handleSaveConfig])
 
   // Finish onboarding
   const handleFinish = useCallback(() => {

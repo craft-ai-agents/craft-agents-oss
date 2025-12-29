@@ -29,6 +29,7 @@ import {
   deleteAgent,
   resolveAgentSources,
 } from './folder-storage.ts';
+import { createAgentSyncService, type SyncResult, type SyncOptions } from './sync-service.ts';
 
 /**
  * FolderAgentManager - manages agents from filesystem
@@ -373,6 +374,89 @@ export class FolderAgentManager {
       config.updatedAt = Date.now();
       saveAgentConfig(this.workspaceSlug, config);
     }
+  }
+
+  // ============================================================
+  // Craft Sync Methods
+  // ============================================================
+
+  /**
+   * Sync agents from connected Craft Space
+   *
+   * Discovers agents from the "Agents" folder in the connected Craft Space
+   * and creates/updates local agent definitions.
+   */
+  async syncFromCraft(options?: SyncOptions): Promise<SyncResult> {
+    const syncService = createAgentSyncService(this.workspaceSlug);
+    return syncService.syncFromCraft(options);
+  }
+
+  /**
+   * Discover all agents (local + Craft)
+   *
+   * Returns local agents and discovers agents from Craft Space.
+   * Does not sync - just returns what's available.
+   */
+  async discoverAllAgents(): Promise<{
+    local: LoadedAgent[];
+    craft: Array<{ name: string; documentId: string; synced: boolean }>;
+    errors: string[];
+  }> {
+    const result: {
+      local: LoadedAgent[];
+      craft: Array<{ name: string; documentId: string; synced: boolean }>;
+      errors: string[];
+    } = {
+      local: this.getAvailableAgents(),
+      craft: [],
+      errors: [],
+    };
+
+    try {
+      // Build set of synced document IDs
+      const syncedDocIds = new Set<string>();
+      for (const agent of result.local) {
+        if (agent.config.source?.type === 'craft' && agent.config.source.documentId) {
+          syncedDocIds.add(agent.config.source.documentId);
+        }
+      }
+
+      // Discover from Craft
+      const { createCraftDiscoveryForWorkspace } = await import('./craft-discovery.ts');
+      const discovery = await createCraftDiscoveryForWorkspace(this.workspaceSlug);
+
+      if (discovery) {
+        const discoveryResult = await discovery.discoverAgents();
+
+        for (const agent of discoveryResult.agents) {
+          result.craft.push({
+            name: agent.name,
+            documentId: agent.craftDocumentId,
+            synced: syncedDocIds.has(agent.craftDocumentId),
+          });
+        }
+
+        for (const error of discoveryResult.errors) {
+          result.errors.push(error.error);
+        }
+      }
+    } catch (error) {
+      result.errors.push(error instanceof Error ? error.message : String(error));
+    }
+
+    return result;
+  }
+
+  /**
+   * Get sync status for all agents
+   */
+  getAgentsSyncStatus(): Array<{
+    slug: string;
+    name: string;
+    status: 'synced' | 'modified' | 'local-only' | 'not-found';
+  }> {
+    const syncService = createAgentSyncService(this.workspaceSlug);
+    return syncService.getAgentsSyncStatus();
   }
 }
 

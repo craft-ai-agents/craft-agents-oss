@@ -30,6 +30,9 @@ export {
   loadAgentSourceConfig,
   saveSourceConfig,
   saveAgentSourceConfig,
+  // Agent-aware loading/saving (checks agent folder first, then workspace)
+  loadSourceConfigWithFallback,
+  saveSourceConfigWithContext,
   // Guide operations
   loadSourceGuide,
   loadAgentSourceGuide,
@@ -51,10 +54,13 @@ export {
   createSource,
   deleteSource,
   sourceExists,
+  // Workspace Craft source auto-creation
+  ensureWorkspaceCraftSource,
   // Parsing utilities
   parseGuideMarkdown,
 } from './storage.ts';
+export type { SourceWithContext } from './storage.ts';
 
 // Service
-export { SourceService, createSourceService } from './service.ts';
+export { SourceService, createSourceService, getSourcesNeedingAuth } from './service.ts';
 export type { McpServerConfig, BuiltServers } from './service.ts';

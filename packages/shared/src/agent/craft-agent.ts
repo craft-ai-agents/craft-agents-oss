@@ -613,6 +613,9 @@ export class CraftAgent {
   // Callback when a source is activated for the current session (added to enabled sources)
   public onSourceActivated: ((sourceSlug: string) => Promise<void>) | null = null;
 
+  // Callback when agents are created/synced/deleted via session tools - triggers reload
+  public onAgentsChanged: (() => Promise<void>) | null = null;
+
   constructor(config: CraftAgentConfig) {
     this.config = config;
     this.isHeadless = config.isHeadless ?? false;
@@ -667,6 +670,12 @@ export class CraftAgent {
         this.onDebug?.(`[CraftAgent] onSourceActivated received: ${sourceSlug}`);
         if (this.onSourceActivated) {
           await this.onSourceActivated(sourceSlug);
+        }
+      },
+      onAgentsChanged: async () => {
+        this.onDebug?.('[CraftAgent] onAgentsChanged received - notifying listener');
+        if (this.onAgentsChanged) {
+          await this.onAgentsChanged();
         }
       },
     });
@@ -971,10 +980,12 @@ export class CraftAgent {
       debug('[chat] sourceApiServers:', this.sourceApiServers);
 
       const hasActiveAgent = this.activeAgentDefinition !== null;
+      const activeAgentSlug = this.activeAgentDefinition?.slug;
       const mcpServers: Options['mcpServers'] = {
         preferences: getPreferencesServer(hasActiveAgent),
         // Session-scoped tools (SubmitPlan, change_working_directory, etc.)
-        session: getSessionScopedTools(sessionId, this.workspaceSlug),
+        // Pass activeAgentSlug so source_create defaults to agent-scoped when in agent context
+        session: getSessionScopedTools(sessionId, this.workspaceSlug, activeAgentSlug),
         // External docs MCP server (public, no auth required)
         // Provides Craft Agent documentation for agents, MCP servers, APIs, and setup
         docs: {
@@ -2448,11 +2459,45 @@ export class CraftAgent {
   setActiveAgentDefinition(
     definition: SubAgentDefinition | null,
     mcpServers?: Record<string, { type: 'http' | 'sse'; url: string; headers?: Record<string, string> }>,
-    apiServers?: Record<string, ReturnType<typeof createSdkMcpServer>>
+    apiServers?: Record<string, ReturnType<typeof createSdkMcpServer>>,
+    sourcesNeedingAuth?: LoadedSource[]
   ): void {
-    this.activeAgentDefinition = definition;
+    // If sources need auth, inject setup instructions into the agent
+    if (definition && sourcesNeedingAuth && sourcesNeedingAuth.length > 0) {
+      const setupInstructions = this.buildSourceSetupInstructions(sourcesNeedingAuth);
+      const augmentedInstructions = definition.instructions
+        ? definition.instructions + '\n\n' + setupInstructions
+        : setupInstructions;
+
+      this.activeAgentDefinition = {
+        ...definition,
+        instructions: augmentedInstructions,
+      };
+      this.onDebug?.(`[CraftAgent] Injected setup instructions for ${sourcesNeedingAuth.length} source(s)`);
+    } else {
+      this.activeAgentDefinition = definition;
+    }
+
     this.agentMcpServers = mcpServers ?? {};
     this.agentApiServers = apiServers ?? {};
+  }
+
+  /**
+   * Build instructions for helping users set up sources that need authentication.
+   * These instructions are appended to the agent's instructions when sources need auth.
+   */
+  private buildSourceSetupInstructions(sources: LoadedSource[]): string {
+    const sourceNames = sources.map(s => s.config.name).join(', ');
+
+    return `## Source Authentication Assistance
+
+Some of your sources need authentication before they can be used (${sourceNames}). You have access to these tools:
+- \`oauth_trigger\`: Start OAuth authentication for MCP sources (opens browser)
+- \`credential_prompt\`: Prompt user for API keys/tokens via secure input UI
+- \`gmail_oauth_trigger\`: Start Google OAuth for Gmail sources
+- \`source_test\`: Test if a source connection works
+
+When you see <setup_required> in a message, help the user authenticate those sources before proceeding with their actual request. After successful authentication, the source tools will become available.`;
   }
 
   /**

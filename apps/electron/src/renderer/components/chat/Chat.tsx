@@ -39,7 +39,7 @@ import { SquarePenRounded } from "../icons/SquarePenRounded"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { TooltipProvider } from "@/components/ui/tooltip"
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip"
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -184,6 +184,16 @@ interface AgentTreeProps {
   agentStatus?: Map<string, SidebarAgentStatus>
   /** Agent service logos for ready agents */
   agentLogos?: Map<string, SidebarServiceLogos>
+  /** Double-click handler for starting setup conversation */
+  onAgentDoubleClick?: (agent: SubAgentMetadata) => void
+  /** Agent-scoped sources, keyed by agent slug */
+  agentSources?: Map<string, LoadedSource[]>
+  /** Expanded agent sources (set of agent slugs that have sources expanded) */
+  expandedAgentSources?: Set<string>
+  /** Toggle agent sources expansion */
+  onToggleAgentSources?: (agentSlug: string) => void
+  /** Promote agent source to workspace */
+  onPromoteSource?: (agentSlug: string, sourceSlug: string) => void
 }
 
 // Union type for sorting agents and folders together alphabetically
@@ -221,6 +231,11 @@ function AgentTree({
   getItemProps,
   agentStatus,
   agentLogos,
+  onAgentDoubleClick,
+  agentSources,
+  expandedAgentSources,
+  onToggleAgentSources,
+  onPromoteSource,
 }: AgentTreeProps) {
   // Track which agent has an open context menu
   const [openMenuAgentId, setOpenMenuAgentId] = React.useState<string | null>(null)
@@ -258,6 +273,7 @@ function AgentTree({
       <button
         {...itemProps}
         onClick={() => onSelectAgent(agent.id, agent.name)}
+        onDoubleClick={() => onAgentDoubleClick?.(agent)}
         className={cn(
           "flex w-full items-center gap-2 overflow-hidden rounded-[6px] py-[6px] px-2 text-[13px] select-none outline-none",
           "focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
@@ -315,6 +331,11 @@ function AgentTree({
       </button>
     )
 
+    // Get agent sources for this agent (agent.id is the slug for folder-based agents)
+    const sources = agentSources?.get(agent.id) || []
+    const hasAgentSources = sources.length > 0
+    const isSourcesExpanded = expandedAgentSources?.has(agent.id) || false
+
     return (
       <li key={agent.id} className="min-w-0">
         {onAgentAction ? (
@@ -328,6 +349,55 @@ function AgentTree({
           </AgentContextMenu>
         ) : (
           agentButton
+        )}
+        {/* Agent-scoped sources */}
+        {hasAgentSources && (
+          <div className="ml-2">
+            <button
+              className="flex items-center gap-1.5 w-full pl-4 pr-2 py-1 text-[11px] text-muted-foreground hover:text-foreground hover:bg-foreground/5 rounded-md transition-colors"
+              onClick={(e) => {
+                e.stopPropagation()
+                onToggleAgentSources?.(agent.id)
+              }}
+            >
+              <ChevronRight className={cn(
+                "h-3 w-3 transition-transform",
+                isSourcesExpanded && "rotate-90"
+              )} />
+              <span>{sources.length} source{sources.length !== 1 ? 's' : ''}</span>
+            </button>
+            <AnimatedCollapsibleContent isOpen={isSourcesExpanded}>
+              <div className="ml-6 pl-3 border-l border-foreground/10 space-y-0.5 py-0.5">
+                {sources.map((source) => (
+                  <div
+                    key={source.config.slug}
+                    className="group/source flex items-center gap-2 px-2 py-1 rounded-md hover:bg-foreground/5"
+                  >
+                    <SourceAvatar source={source} size="xs" />
+                    <span className="text-[12px] text-foreground/80 truncate flex-1">
+                      {source.config.name}
+                    </span>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onPromoteSource?.(agent.id, source.config.slug)
+                          }}
+                          className="p-0.5 rounded hover:bg-foreground/10 text-muted-foreground hover:text-foreground opacity-0 group-hover/source:opacity-100 transition-opacity"
+                        >
+                          <Plus className="h-3 w-3" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="right" sideOffset={4}>
+                        Add to sources
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                ))}
+              </div>
+            </AnimatedCollapsibleContent>
+          </div>
         )}
       </li>
     )
@@ -352,6 +422,11 @@ function AgentTree({
       getItemProps={getItemProps}
       agentStatus={agentStatus}
       agentLogos={agentLogos}
+      onAgentDoubleClick={onAgentDoubleClick}
+      agentSources={agentSources}
+      expandedAgentSources={expandedAgentSources}
+      onToggleAgentSources={onToggleAgentSources}
+      onPromoteSource={onPromoteSource}
     />
   )
 
@@ -456,6 +531,7 @@ export function Chat({
     onOpenStoredUserPreferences,
     onAddWorkspace,
     onLogout,
+    onSendMessage,
   } = contextValue
   const [isSidebarVisible, setIsSidebarVisible] = React.useState(() => {
     return storage.get(storage.KEYS.sidebarVisible, !defaultCollapsed)
@@ -544,8 +620,13 @@ export function Chat({
     return storage.get(storage.KEYS.sourcesCollapsed, false)
   })
 
-  // Sources state
+  // Sources state (workspace-scoped)
   const [sources, setSources] = React.useState<LoadedSource[]>([])
+
+  // Agent-scoped sources, keyed by agent slug
+  const [agentSources, setAgentSources] = React.useState<Map<string, LoadedSource[]>>(new Map())
+  // Track which agents have their sources expanded
+  const [expandedAgentSources, setExpandedAgentSources] = React.useState<Set<string>>(new Set())
 
   // Load sources from backend on mount
   React.useEffect(() => {
@@ -557,14 +638,91 @@ export function Chat({
     })
   }, [activeWorkspaceId])
 
+  // Load agent-scoped sources for all agents
+  React.useEffect(() => {
+    if (!activeWorkspaceId || agents.length === 0) return
+
+    const loadAgentSources = async () => {
+      const newAgentSources = new Map<string, LoadedSource[]>()
+
+      for (const agent of agents) {
+        try {
+          // agent.id is the slug for folder-based agents
+          const agentSourceList = await window.electronAPI.getAgentSources(activeWorkspaceId, agent.id)
+          if (agentSourceList && agentSourceList.length > 0) {
+            newAgentSources.set(agent.id, agentSourceList)
+          }
+        } catch (err) {
+          console.error(`[Chat] Failed to load sources for agent ${agent.id}:`, err)
+        }
+      }
+
+      setAgentSources(newAgentSources)
+    }
+
+    loadAgentSources()
+  }, [activeWorkspaceId, agents])
+
   // Subscribe to live source updates (when sources are added/removed via agent)
   React.useEffect(() => {
-    const cleanup = window.electronAPI.onSourcesChanged((updatedSources) => {
+    const cleanup = window.electronAPI.onSourcesChanged(async (updatedSources) => {
       console.log('[Chat] Sources changed, updating sidebar:', updatedSources.length)
       setSources(updatedSources || [])
+
+      // Also reload agent-scoped sources when workspace sources change
+      // (agent sources may have been created or promoted)
+      if (activeWorkspaceId && agents.length > 0) {
+        const newAgentSources = new Map<string, LoadedSource[]>()
+        for (const agent of agents) {
+          try {
+            const agentSourceList = await window.electronAPI.getAgentSources(activeWorkspaceId, agent.id)
+            if (agentSourceList && agentSourceList.length > 0) {
+              newAgentSources.set(agent.id, agentSourceList)
+            }
+          } catch (err) {
+            // Ignore errors for individual agents
+          }
+        }
+        setAgentSources(newAgentSources)
+      }
     })
     return cleanup
+  }, [activeWorkspaceId, agents])
+
+  // Toggle agent sources expansion
+  const handleToggleAgentSources = React.useCallback((agentSlug: string) => {
+    setExpandedAgentSources(prev => {
+      const next = new Set(prev)
+      if (next.has(agentSlug)) {
+        next.delete(agentSlug)
+      } else {
+        next.add(agentSlug)
+      }
+      return next
+    })
   }, [])
+
+  // Promote agent source to workspace
+  const handlePromoteSource = React.useCallback(async (agentSlug: string, sourceSlug: string) => {
+    if (!activeWorkspaceId) return
+    try {
+      await window.electronAPI.promoteSource(activeWorkspaceId, agentSlug, sourceSlug)
+      // Reload both workspace and agent sources
+      const [updatedWorkspaceSources, updatedAgentSources] = await Promise.all([
+        window.electronAPI.getSources(activeWorkspaceId),
+        window.electronAPI.getAgentSources(activeWorkspaceId, agentSlug),
+      ])
+      setSources(updatedWorkspaceSources || [])
+      setAgentSources(prev => {
+        const next = new Map(prev)
+        next.set(agentSlug, updatedAgentSources || [])
+        return next
+      })
+      console.log(`[Chat] Promoted source ${sourceSlug} from agent ${agentSlug} to workspace`)
+    } catch (err) {
+      console.error(`[Chat] Failed to promote source:`, err)
+    }
+  }, [activeWorkspaceId])
 
   // Handle session source selection changes
   const handleSessionSourcesChange = React.useCallback(async (sessionId: string, sourceSlugs: string[]) => {
@@ -1152,14 +1310,15 @@ export function Chat({
       openChatTab(newSession.id, activeWorkspace.id, sessionName, agentId, { forceNew: true })
 
       // Send the delete prompt after a short delay to ensure the chat is mounted
-      setTimeout(async () => {
-        await window.electronAPI.sendMessage(newSession.id, `Delete ${sourceName} source.`, [], [], {})
+      // Use onSendMessage to properly add the user message to the UI
+      setTimeout(() => {
+        onSendMessage(newSession.id, `Delete ${sourceName} source.`, [])
       }, 100)
     } catch (error) {
       console.error('[Chat] Failed to delete source:', error)
       toast.error('Failed to start source deletion')
     }
-  }, [activeWorkspace, onCreateSession, openChatTab])
+  }, [activeWorkspace, onCreateSession, openChatTab, onSendMessage])
 
   // Respond to menu bar "New Chat" trigger
   const menuTriggerRef = useRef(menuNewChatTrigger)
@@ -1211,6 +1370,20 @@ export function Chat({
         break
     }
   }, [activeWorkspaceId, openAgentInfoTab, onCreateSession, setSession])
+
+  // Handle double-click on agent: create new conversation with setup message
+  const handleAgentDoubleClick = useCallback(async (agent: SubAgentMetadata) => {
+    if (!activeWorkspaceId) return
+
+    // Create a new conversation with this agent
+    setSelectedAgentId(agent.id)
+    setViewMode('agent')
+    const newSession = await onCreateSession(activeWorkspaceId, agent.id)
+    setSession({ selected: newSession.id })
+
+    // Send setup message
+    await onSendMessage(newSession.id, 'Please set up this agent', [])
+  }, [activeWorkspaceId, onCreateSession, onSendMessage, setSession])
 
   // Unified sidebar items: nav buttons + tree items
   // This creates one continuous navigable list for the entire sidebar
@@ -1749,6 +1922,11 @@ export function Chat({
                               getItemProps={getSidebarItemProps}
                               agentStatus={agentStatus}
                               agentLogos={agentLogos}
+                              onAgentDoubleClick={handleAgentDoubleClick}
+                              agentSources={agentSources}
+                              expandedAgentSources={expandedAgentSources}
+                              onToggleAgentSources={handleToggleAgentSources}
+                              onPromoteSource={handlePromoteSource}
                             />
                           )}
                         </motion.div>

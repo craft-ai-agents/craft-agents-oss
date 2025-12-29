@@ -364,3 +364,32 @@ export class SourceService {
 export function createSourceService(workspaceSlug: string): SourceService {
   return new SourceService(workspaceSlug);
 }
+
+/**
+ * Get sources from a list that need authentication
+ * Returns sources that are enabled, require auth, and are not yet authenticated
+ */
+export function getSourcesNeedingAuth(sources: LoadedSource[]): LoadedSource[] {
+  return sources.filter((source) => {
+    if (!source.config.enabled) return false;
+
+    const mcp = source.config.mcp;
+    const api = source.config.api;
+
+    // MCP sources with oauth/bearer auth
+    if (source.config.type === 'mcp' && mcp) {
+      if (mcp.authType !== 'none' && !source.config.isAuthenticated) {
+        return true;
+      }
+    }
+
+    // API sources with auth requirements
+    if (source.config.type === 'api' && api) {
+      if (api.authType !== 'none' && api.authType !== undefined && !source.config.isAuthenticated) {
+        return true;
+      }
+    }
+
+    return false;
+  });
+}

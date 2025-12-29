@@ -3,6 +3,10 @@ export * from './folder-types.ts';
 export * from './folder-storage.ts';
 export { FolderAgentManager, createFolderAgentManager } from './folder-manager.ts';
 
+// Craft discovery and sync
+export * from './craft-discovery.ts';
+export * from './sync-service.ts';
+
 // Built-in agents
 export * from './builtin-agents.ts';
 

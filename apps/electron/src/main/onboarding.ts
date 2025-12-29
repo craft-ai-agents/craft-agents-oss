@@ -268,7 +268,7 @@ export function registerOnboardingHandlers(sessionManager: SessionManager): void
   // Save onboarding configuration
   ipcMain.handle(IPC_CHANNELS.ONBOARDING_SAVE_CONFIG, async (_event, config: {
     authType?: AuthType  // Optional - if not provided, preserves existing auth type
-    workspace?: { name: string; iconUrl?: string }  // Optional - if not provided, only updates billing
+    workspace?: { name: string; iconUrl?: string; mcpUrl?: string }  // Optional - if not provided, only updates billing
     credential?: string
     mcpCredentials?: { accessToken: string; clientId?: string }
   }): Promise<OnboardingSaveResult> => {
@@ -276,6 +276,7 @@ export function registerOnboardingHandlers(sessionManager: SessionManager): void
       authType: config.authType,
       hasWorkspace: !!config.workspace,
       workspaceName: config.workspace?.name,
+      mcpUrl: config.workspace?.mcpUrl,
       hasCredential: !!config.credential,
       credentialLength: config.credential?.length,
       hasMcpCredentials: !!config.mcpCredentials,
@@ -338,6 +339,7 @@ export function registerOnboardingHandlers(sessionManager: SessionManager): void
           name: config.workspace.name,
           createdAt: existingWorkspace?.createdAt ?? Date.now(), // Preserve original creation time
           iconUrl: config.workspace.iconUrl,
+          mcpUrl: config.workspace.mcpUrl,
         }
         console.log('[Onboarding:Main] Workspace config:', workspace, existingWorkspace ? '(updating existing)' : '(new)')
 

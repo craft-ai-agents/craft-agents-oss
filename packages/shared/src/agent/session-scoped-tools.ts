@@ -48,6 +48,9 @@ import {
   updateSourceCache,
   setNestedValue,
   sourceExists,
+  loadSourceConfigWithFallback,
+  saveSourceConfigWithContext,
+  type SourceWithContext,
 } from '../sources/storage.ts';
 import type { FolderSourceConfig, SourceGuide } from '../sources/types.ts';
 import { CraftOAuth, getMcpBaseUrl, type OAuthConfig, type OAuthCallbacks } from '../auth/oauth.ts';
@@ -113,6 +116,8 @@ export interface SessionScopedToolCallbacks {
   onSourcesChanged?: () => Promise<void>;
   /** Called to activate a source for the current session (adds to enabled sources) */
   onSourceActivated?: (sourceSlug: string) => Promise<void>;
+  /** Called when agents change (created/synced/deleted) - triggers reload of agent list */
+  onAgentsChanged?: () => Promise<void>;
 }
 
 /**
@@ -801,7 +806,7 @@ async function testApiSource(
  * Create a session-scoped source_test tool.
  * Tests if an MCP or API source is reachable.
  */
-export function createSourceTestTool(sessionId: string, workspaceSlug: string) {
+export function createSourceTestTool(sessionId: string, workspaceSlug: string, activeAgentSlug?: string) {
   return tool(
     'source_test',
     `Test a source to verify it's reachable and working.
@@ -825,9 +830,9 @@ export function createSourceTestTool(sessionId: string, workspaceSlug: string) {
       debug('[source_test] Testing source:', args.sourceSlug);
 
       try {
-        // Load the source config
-        const source = loadSourceConfig(workspaceSlug, args.sourceSlug);
-        if (!source) {
+        // Load the source config (checks agent folder first if activeAgentSlug set, then workspace)
+        const sourceResult = loadSourceConfigWithFallback(workspaceSlug, args.sourceSlug, activeAgentSlug);
+        if (!sourceResult) {
           return {
             content: [{
               type: 'text' as const,
@@ -836,6 +841,8 @@ export function createSourceTestTool(sessionId: string, workspaceSlug: string) {
             isError: true,
           };
         }
+        const source = sourceResult.config;
+        const sourceContext = { isAgentScoped: sourceResult.isAgentScoped, agentSlug: sourceResult.agentSlug };
 
         // Handle API sources
         if (source.type === 'api') {
@@ -843,7 +850,7 @@ export function createSourceTestTool(sessionId: string, workspaceSlug: string) {
 
           // Update the source's lastTestedAt timestamp
           source.lastTestedAt = Date.now();
-          saveSourceConfig(workspaceSlug, source);
+          saveSourceConfigWithContext(workspaceSlug, source, sourceContext);
 
           if (result.success) {
             return {
@@ -944,7 +951,7 @@ export function createSourceTestTool(sessionId: string, workspaceSlug: string) {
 
         // Update the source's lastTestedAt timestamp
         source.lastTestedAt = Date.now();
-        saveSourceConfig(workspaceSlug, source);
+        saveSourceConfigWithContext(workspaceSlug, source, sourceContext);
 
         if (result.success) {
           const lines: string[] = [
@@ -1028,7 +1035,7 @@ export function createSourceTestTool(sessionId: string, workspaceSlug: string) {
  * Create a session-scoped oauth_trigger tool.
  * Initiates OAuth authentication for an MCP source.
  */
-export function createOAuthTriggerTool(sessionId: string, workspaceSlug: string) {
+export function createOAuthTriggerTool(sessionId: string, workspaceSlug: string, activeAgentSlug?: string) {
   return tool(
     'oauth_trigger',
     `Start OAuth authentication for an MCP source.
@@ -1058,9 +1065,9 @@ A browser window will open for the user to complete authentication.
       debug('[oauth_trigger] Starting OAuth for source:', args.sourceSlug);
 
       try {
-        // Load the source config
-        const source = loadSourceConfig(workspaceSlug, args.sourceSlug);
-        if (!source) {
+        // Load the source config (checks agent folder first if activeAgentSlug set, then workspace)
+        const sourceResult = loadSourceConfigWithFallback(workspaceSlug, args.sourceSlug, activeAgentSlug);
+        if (!sourceResult) {
           return {
             content: [{
               type: 'text' as const,
@@ -1069,6 +1076,8 @@ A browser window will open for the user to complete authentication.
             isError: true,
           };
         }
+        const source = sourceResult.config;
+        const sourceContext = { isAgentScoped: sourceResult.isAgentScoped, agentSlug: sourceResult.agentSlug };
 
         if (source.type !== 'mcp') {
           return {
@@ -1157,7 +1166,7 @@ A browser window will open for the user to complete authentication.
         // Update source status
         source.isAuthenticated = true;
         source.updatedAt = Date.now();
-        saveSourceConfig(workspaceSlug, source);
+        saveSourceConfigWithContext(workspaceSlug, source, sourceContext);
 
         // Notify success callback
         callbacks?.onOAuthSuccess?.(args.sourceSlug);
@@ -1207,7 +1216,7 @@ A browser window will open for the user to complete authentication.
  * Create a session-scoped gmail_oauth_trigger tool.
  * Initiates Gmail OAuth authentication for a Gmail source.
  */
-export function createGmailOAuthTriggerTool(sessionId: string, workspaceSlug: string) {
+export function createGmailOAuthTriggerTool(sessionId: string, workspaceSlug: string, activeAgentSlug?: string) {
   return tool(
     'gmail_oauth_trigger',
     `Trigger Gmail OAuth authentication flow.
@@ -1229,9 +1238,9 @@ After successful authentication, the tokens are stored and the source is marked 
       debug('[gmail_oauth_trigger] Starting Gmail OAuth for source:', args.sourceSlug);
 
       try {
-        // Load the source config
-        const source = loadSourceConfig(workspaceSlug, args.sourceSlug);
-        if (!source) {
+        // Load the source config (checks agent folder first if activeAgentSlug set, then workspace)
+        const sourceResult = loadSourceConfigWithFallback(workspaceSlug, args.sourceSlug, activeAgentSlug);
+        if (!sourceResult) {
           return {
             content: [{
               type: 'text' as const,
@@ -1240,6 +1249,8 @@ After successful authentication, the tokens are stored and the source is marked 
             isError: true,
           };
         }
+        const source = sourceResult.config;
+        const sourceContext = { isAgentScoped: sourceResult.isAgentScoped, agentSlug: sourceResult.agentSlug };
 
         // Verify this is a Gmail source
         if (source.provider !== 'gmail') {
@@ -1296,7 +1307,7 @@ After successful authentication, the tokens are stored and the source is marked 
         // Update source status with email info
         source.isAuthenticated = true;
         source.updatedAt = Date.now();
-        saveSourceConfig(workspaceSlug, source);
+        saveSourceConfigWithContext(workspaceSlug, source, sourceContext);
 
         // Notify success callback
         const callbacks = getSessionScopedToolCallbacks(sessionId);
@@ -1683,28 +1694,40 @@ Use this to see what sources are available before creating or modifying them.`,
 }
 
 /**
- * Create a new source in the workspace.
+ * Create a new source in the workspace or scoped to an agent.
+ * When called in an agent context (activeAgentSlug is set), sources are agent-scoped by default.
  */
-export function createSourceCreateTool(sessionId: string, workspaceSlug: string) {
+export function createSourceCreateTool(sessionId: string, workspaceSlug: string, activeAgentSlug?: string) {
+  const scopeDescription = activeAgentSlug
+    ? `By default, sources are scoped to the current agent (\`${activeAgentSlug}\`).
+To create a workspace-scoped source instead, explicitly set \`scope: "workspace"\`.`
+    : `By default, sources are workspace-scoped (available to all agents).
+To create an agent-scoped source, provide an \`agentSlug\`.`;
+
   return tool(
     'source_create',
-    `Create a new source in the workspace.
+    `Create a new source in the workspace or scoped to a specific agent.
 
 **Source Types:**
 - \`mcp\`: Model Context Protocol server
 - \`api\`: REST API
 - \`local\`: Local filesystem
 
+**Scoping:**
+${scopeDescription}
+
 **MCP Auth Types:** oauth, bearer, none
 **API Auth Types:** bearer, header, query, basic, oauth, none
 
 **Examples:**
-- MCP with OAuth: \`{ name: "Linear", provider: "linear", type: "mcp", mcp: { url: "https://mcp.linear.app", authType: "oauth" } }\`
-- API with bearer: \`{ name: "My API", provider: "custom", type: "api", api: { baseUrl: "https://api.example.com", authType: "bearer" } }\``,
+- Workspace MCP: \`{ name: "Linear", provider: "linear", type: "mcp", mcpUrl: "https://mcp.linear.app", mcpAuthType: "oauth", scope: "workspace" }\`
+- Agent-scoped API: \`{ name: "Exa", provider: "exa", type: "api", apiBaseUrl: "https://api.exa.ai", apiAuthType: "header", apiHeaderName: "x-api-key" }\``,
     {
       name: z.string().describe('Human-readable name for the source'),
       provider: z.string().describe('Provider identifier (e.g., "linear", "github", "custom")'),
       type: z.enum(['mcp', 'api', 'local']).describe('Source type'),
+      scope: z.enum(['agent', 'workspace']).optional().describe('Where to store the source: "agent" (under active agent) or "workspace" (global)'),
+      agentSlug: z.string().optional().describe('Override: specific agent to scope source to (defaults to active agent if in agent context)'),
       mcpUrl: z.string().optional().describe('MCP server URL (required for type=mcp)'),
       mcpAuthType: z.enum(['oauth', 'bearer', 'none']).optional().describe('MCP auth type (default: none)'),
       apiBaseUrl: z.string().optional().describe('API base URL (required for type=api)'),
@@ -1715,10 +1738,10 @@ export function createSourceCreateTool(sessionId: string, workspaceSlug: string)
       enabled: z.boolean().optional().describe('Whether source is enabled (default: true)'),
     },
     async (args) => {
-      debug('[source_create] Creating source:', args.name);
+      debug('[source_create] Creating source:', args.name, 'agentSlug:', args.agentSlug);
 
       try {
-        const { createSource } = await import('../sources/storage.ts');
+        const { createSource, createAgentSource } = await import('../sources/storage.ts');
 
         // Build the source input
         const input: {
@@ -1787,7 +1810,18 @@ export function createSourceCreateTool(sessionId: string, workspaceSlug: string)
           };
         }
 
-        const config = createSource(workspaceSlug, input);
+        // Determine effective agent slug for scoping:
+        // 1. If explicit agentSlug provided, use it
+        // 2. If scope is 'workspace', no agent scoping
+        // 3. Otherwise, default to activeAgentSlug (if in agent context)
+        const effectiveAgentSlug = args.agentSlug ?? (args.scope === 'workspace' ? undefined : activeAgentSlug);
+
+        // Create source: agent-scoped or workspace-scoped
+        const config = effectiveAgentSlug
+          ? createAgentSource(workspaceSlug, effectiveAgentSlug, input)
+          : createSource(workspaceSlug, input);
+
+        debug('[source_create] Created source:', args.name, 'effectiveAgentSlug:', effectiveAgentSlug);
 
         // Get callbacks
         const callbacks = getSessionScopedToolCallbacks(sessionId);
@@ -1818,12 +1852,18 @@ export function createSourceCreateTool(sessionId: string, workspaceSlug: string)
           ? '\n\nUse `oauth_trigger` to authenticate this source.'
           : args.type === 'mcp' && args.mcpAuthType === 'bearer'
           ? '\n\nA bearer token will need to be configured for authentication.'
+          : args.type === 'api' && args.apiAuthType && args.apiAuthType !== 'none'
+          ? '\n\nUse `credential_prompt` to provide credentials for this API.'
           : '';
+
+        const scopeNote = effectiveAgentSlug
+          ? `\nScope: Agent (${effectiveAgentSlug})`
+          : '\nScope: Workspace';
 
         return {
           content: [{
             type: 'text' as const,
-            text: `**Source created successfully**\n\nName: ${config.name}\nSlug: ${config.slug}\nType: ${config.type}\nProvider: ${config.provider}${authNote}`,
+            text: `**Source created successfully**\n\nName: ${config.name}\nSlug: ${config.slug}\nType: ${config.type}\nProvider: ${config.provider}${scopeNote}${authNote}`,
           }],
           isError: false,
         };
@@ -1844,7 +1884,7 @@ export function createSourceCreateTool(sessionId: string, workspaceSlug: string)
 /**
  * Update an existing source in the workspace.
  */
-export function createSourceUpdateTool(sessionId: string, workspaceSlug: string) {
+export function createSourceUpdateTool(sessionId: string, workspaceSlug: string, activeAgentSlug?: string) {
   return tool(
     'source_update',
     `Update an existing source's configuration.
@@ -1864,8 +1904,9 @@ Only the provided fields will be updated; others remain unchanged.`,
       debug('[source_update] Updating source:', args.sourceSlug);
 
       try {
-        const config = loadSourceConfig(workspaceSlug, args.sourceSlug);
-        if (!config) {
+        // Load source (checks agent folder first if activeAgentSlug set, then workspace)
+        const sourceResult = loadSourceConfigWithFallback(workspaceSlug, args.sourceSlug, activeAgentSlug);
+        if (!sourceResult) {
           return {
             content: [{
               type: 'text' as const,
@@ -1874,6 +1915,8 @@ Only the provided fields will be updated; others remain unchanged.`,
             isError: true,
           };
         }
+        const config = sourceResult.config;
+        const sourceContext = { isAgentScoped: sourceResult.isAgentScoped, agentSlug: sourceResult.agentSlug };
 
         // Update fields
         if (args.name !== undefined) config.name = args.name;
@@ -1891,7 +1934,7 @@ Only the provided fields will be updated; others remain unchanged.`,
 
         if (args.iconUrl !== undefined) config.iconUrl = args.iconUrl;
 
-        saveSourceConfig(workspaceSlug, config);
+        saveSourceConfigWithContext(workspaceSlug, config, sourceContext);
 
         return {
           content: [{
@@ -1981,7 +2024,7 @@ export function createSourceDeleteTool(sessionId: string, workspaceSlug: string)
  * Create a session-scoped credential_prompt tool.
  * Prompts the user to enter credentials for a source via the secure input UI.
  */
-export function createCredentialPromptTool(sessionId: string, workspaceSlug: string) {
+export function createCredentialPromptTool(sessionId: string, workspaceSlug: string, activeAgentSlug?: string) {
   return tool(
     'credential_prompt',
     `Prompt the user to enter credentials for a source.
@@ -2025,9 +2068,9 @@ credential_prompt({
       debug('[credential_prompt] Prompting for credentials:', args.sourceSlug, args.mode);
 
       try {
-        // Load source to get name and validate
-        const source = loadSourceConfig(workspaceSlug, args.sourceSlug);
-        if (!source) {
+        // Load source to get name and validate (checks agent folder first if activeAgentSlug set, then workspace)
+        const sourceResult = loadSourceConfigWithFallback(workspaceSlug, args.sourceSlug, activeAgentSlug);
+        if (!sourceResult) {
           return {
             content: [{
               type: 'text' as const,
@@ -2036,6 +2079,8 @@ credential_prompt({
             isError: true,
           };
         }
+        const source = sourceResult.config;
+        const sourceContext = { isAgentScoped: sourceResult.isAgentScoped, agentSlug: sourceResult.agentSlug };
 
         // Get callbacks
         const callbacks = getSessionScopedToolCallbacks(sessionId);
@@ -2101,7 +2146,7 @@ credential_prompt({
         // Mark source as authenticated
         source.isAuthenticated = true;
         source.updatedAt = Date.now();
-        saveSourceConfig(workspaceSlug, source);
+        saveSourceConfigWithContext(workspaceSlug, source, sourceContext);
 
         // Activate the source for this session
         try {
@@ -2140,6 +2185,308 @@ credential_prompt({
 }
 
 // ============================================================
+// Agent Tools
+// ============================================================
+
+/**
+ * List all agents in the workspace.
+ */
+export function createAgentListTool(sessionId: string, workspaceSlug: string) {
+  return tool(
+    'agent_list',
+    `List all agents in the workspace.
+
+Returns a list of all agents with their name, slug, enabled status, and source info.
+Use this to discover what agents are available before creating or syncing.`,
+    {},
+    async () => {
+      debug('[agent_list] Listing agents in workspace:', workspaceSlug);
+
+      try {
+        const { loadWorkspaceAgents } = await import('../agents/folder-storage.ts');
+        const agents = loadWorkspaceAgents(workspaceSlug);
+
+        if (agents.length === 0) {
+          return {
+            content: [{
+              type: 'text' as const,
+              text: 'No agents found in this workspace.\n\nUse `agent_create` to create a new agent, or `agent_sync` to sync agents from a Craft Space.',
+            }],
+            isError: false,
+          };
+        }
+
+        const agentList = agents.map(a => {
+          const sourceInfo = a.config.source?.type === 'craft'
+            ? ` (from Craft: ${a.config.source.documentId})`
+            : a.config.source?.type === 'local'
+            ? ' (local)'
+            : '';
+          return `- **${a.config.name}** (\`${a.config.slug}\`)${a.config.enabled ? '' : ' [disabled]'}${sourceInfo}`;
+        }).join('\n');
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `**Agents in workspace (${agents.length}):**\n\n${agentList}`,
+          }],
+          isError: false,
+        };
+      } catch (error) {
+        debug('[agent_list] Error:', error);
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `Error listing agents: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          }],
+          isError: true,
+        };
+      }
+    }
+  );
+}
+
+/**
+ * Create a new agent in the workspace.
+ */
+export function createAgentCreateTool(sessionId: string, workspaceSlug: string) {
+  return tool(
+    'agent_create',
+    `Create a new agent in the workspace.
+
+An agent is a specialized configuration with custom instructions. After creation:
+- The agent appears in the agent list
+- Users can activate it to use its specialized capabilities
+- The agent can have sources attached for MCP servers and APIs
+
+**Example:**
+\`\`\`
+agent_create({
+  name: "Research Assistant",
+  instructions: "You are a research assistant that helps with deep research tasks...",
+  useSources: ["exa-search", "web-archive"]
+})
+\`\`\``,
+    {
+      name: z.string().describe('Display name for the agent'),
+      instructions: z.string().describe('Agent instructions (markdown). Describe what the agent does and how it should behave.'),
+      useSources: z.array(z.string()).optional().describe('List of workspace source slugs to attach to this agent'),
+      enabled: z.boolean().optional().describe('Whether agent is enabled (default: true)'),
+    },
+    async (args) => {
+      debug('[agent_create] Creating agent:', args.name);
+
+      try {
+        const { createAgent } = await import('../agents/folder-storage.ts');
+
+        const config = createAgent(workspaceSlug, {
+          name: args.name,
+          instructions: args.instructions,
+          useSources: args.useSources,
+          enabled: args.enabled ?? true,
+        });
+
+        // Trigger agents reload callback
+        const callbacks = getSessionScopedToolCallbacks(sessionId);
+        try {
+          await callbacks?.onAgentsChanged?.();
+        } catch (err) {
+          console.log('[agent_create] onAgentsChanged callback error:', err);
+        }
+
+        const sourcesNote = args.useSources?.length
+          ? `\nAttached sources: ${args.useSources.join(', ')}`
+          : '';
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `**Agent created successfully**\n\nName: ${config.name}\nSlug: ${config.slug}\nEnabled: ${config.enabled}${sourcesNote}`,
+          }],
+          isError: false,
+        };
+      } catch (error) {
+        debug('[agent_create] Error:', error);
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `Error creating agent: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          }],
+          isError: true,
+        };
+      }
+    }
+  );
+}
+
+/**
+ * Sync agents from a Craft Space.
+ */
+export function createAgentSyncTool(sessionId: string, workspaceSlug: string) {
+  return tool(
+    'agent_sync',
+    `Sync agents from a Craft Space's "Agents" folder.
+
+This discovers documents in the "Agents" folder of the connected Craft Space and creates/updates local agents from them.
+
+**How it works:**
+1. Uses the workspace's Craft source (auto-created from workspace MCP URL)
+2. Finds the "Agents" folder in the Craft Space
+3. For each document in that folder:
+   - Document title becomes the agent name
+   - Document content becomes the agent instructions
+4. Creates new local agents or updates existing ones
+
+**Prerequisites:**
+- The workspace must have a Craft source configured (auto-created if workspace has MCP URL)
+- The Craft Space must have an "Agents" folder at the root level
+
+**Example:**
+\`\`\`
+agent_sync({})  // Sync all agents from Craft
+agent_sync({ forceUpdate: true })  // Force update even if unchanged
+\`\`\``,
+    {
+      forceUpdate: z.boolean().optional().describe('Force update even if content unchanged (default: false)'),
+    },
+    async (args) => {
+      debug('[agent_sync] Syncing agents from Craft');
+
+      try {
+        const { AgentSyncService } = await import('../agents/sync-service.ts');
+
+        const syncService = new AgentSyncService(workspaceSlug);
+        const result = await syncService.syncFromCraft({
+          forceUpdate: args.forceUpdate,
+        });
+
+        if (!result.folderFound) {
+          return {
+            content: [{
+              type: 'text' as const,
+              text: `**No "Agents" folder found in Craft Space**
+
+To sync agents from Craft:
+1. Create a folder named "Agents" in your Craft Space root
+2. Add documents to that folder - each document becomes an agent
+3. Document title = agent name, document content = instructions
+
+Alternatively, use \`agent_create\` to create agents locally.`,
+            }],
+            isError: false,
+          };
+        }
+
+        // Trigger agents reload callback
+        const callbacks = getSessionScopedToolCallbacks(sessionId);
+        try {
+          await callbacks?.onAgentsChanged?.();
+        } catch (err) {
+          console.log('[agent_sync] onAgentsChanged callback error:', err);
+        }
+
+        const summary = [];
+        if (result.created.length > 0) {
+          summary.push(`Created: ${result.created.map(a => a.name).join(', ')}`);
+        }
+        if (result.updated.length > 0) {
+          summary.push(`Updated: ${result.updated.map(a => a.name).join(', ')}`);
+        }
+        if (result.unchanged.length > 0) {
+          summary.push(`Unchanged: ${result.unchanged.length} agent(s)`);
+        }
+        if (result.errors.length > 0) {
+          summary.push(`Errors: ${result.errors.map(e => e.error).join(', ')}`);
+        }
+
+        const totalAgents = result.created.length + result.updated.length + result.unchanged.length;
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `**Sync complete**
+
+Discovered: ${result.discoveredCount} document(s) in Agents folder
+Total agents: ${totalAgents}
+
+${summary.join('\n')}`,
+          }],
+          isError: result.errors.length > 0 && totalAgents === 0,
+        };
+      } catch (error) {
+        debug('[agent_sync] Error:', error);
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `Error syncing agents: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          }],
+          isError: true,
+        };
+      }
+    }
+  );
+}
+
+/**
+ * Delete an agent from the workspace.
+ */
+export function createAgentDeleteTool(sessionId: string, workspaceSlug: string) {
+  return tool(
+    'agent_delete',
+    `Delete an agent from the workspace.
+
+**Warning:** This permanently removes the agent and any agent-scoped sources.`,
+    {
+      agentSlug: z.string().describe('The slug of the agent to delete'),
+    },
+    async (args) => {
+      debug('[agent_delete] Deleting agent:', args.agentSlug);
+
+      try {
+        const { deleteAgent, agentExists } = await import('../agents/folder-storage.ts');
+
+        if (!agentExists(workspaceSlug, args.agentSlug)) {
+          return {
+            content: [{
+              type: 'text' as const,
+              text: `Agent '${args.agentSlug}' not found.`,
+            }],
+            isError: true,
+          };
+        }
+
+        deleteAgent(workspaceSlug, args.agentSlug);
+
+        // Trigger agents reload callback
+        const callbacks = getSessionScopedToolCallbacks(sessionId);
+        try {
+          await callbacks?.onAgentsChanged?.();
+        } catch (err) {
+          console.log('[agent_delete] onAgentsChanged callback error:', err);
+        }
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `**Agent '${args.agentSlug}' deleted successfully**`,
+          }],
+          isError: false,
+        };
+      } catch (error) {
+        debug('[agent_delete] Error:', error);
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `Error deleting agent: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          }],
+          isError: true,
+        };
+      }
+    }
+  );
+}
+
+// ============================================================
 // Session-Scoped Tools Provider
 // ============================================================
 
@@ -2154,13 +2501,15 @@ const sessionScopedToolsCache = new Map<string, ReturnType<typeof createSdkMcpSe
  *
  * @param sessionId - Unique session identifier
  * @param workspaceSlug - Workspace slug for source-scoped operations
+ * @param activeAgentSlug - Optional active agent slug (sources default to agent scope when set)
  */
-export function getSessionScopedTools(sessionId: string, workspaceSlug: string): ReturnType<typeof createSdkMcpServer> {
-  // Include workspaceSlug in cache key to handle workspace changes
-  const cacheKey = `${sessionId}::${workspaceSlug}`;
+export function getSessionScopedTools(sessionId: string, workspaceSlug: string, activeAgentSlug?: string): ReturnType<typeof createSdkMcpServer> {
+  // Include workspaceSlug and activeAgentSlug in cache key
+  // When agent changes, we need fresh tools with the new context
+  const cacheKey = `${sessionId}::${workspaceSlug}::${activeAgentSlug ?? ''}`;
   let cached = sessionScopedToolsCache.get(cacheKey);
   if (!cached) {
-    // Create session-scoped tools that capture the sessionId and workspaceSlug in their closures
+    // Create session-scoped tools that capture the sessionId, workspaceSlug, and activeAgentSlug in their closures
     cached = createSdkMcpServer({
       name: 'session',
       version: '1.0.0',
@@ -2174,23 +2523,28 @@ export function getSessionScopedTools(sessionId: string, workspaceSlug: string):
         createSecretListTool(sessionId),
         // Config validation tool
         createConfigValidateTool(sessionId, workspaceSlug),
-        // Source tools (workspace-scoped)
-        createSourceTestTool(sessionId, workspaceSlug),
-        createOAuthTriggerTool(sessionId, workspaceSlug),
-        createGmailOAuthTriggerTool(sessionId, workspaceSlug),
-        createCredentialPromptTool(sessionId, workspaceSlug),
+        // Source tools (agent-aware: checks agent folder first, then workspace)
+        createSourceTestTool(sessionId, workspaceSlug, activeAgentSlug),
+        createOAuthTriggerTool(sessionId, workspaceSlug, activeAgentSlug),
+        createGmailOAuthTriggerTool(sessionId, workspaceSlug, activeAgentSlug),
+        createCredentialPromptTool(sessionId, workspaceSlug, activeAgentSlug),
         createSourceCacheUpdateTool(sessionId, workspaceSlug),
         createSourceCacheReadTool(sessionId, workspaceSlug),
         createSourceGuideAppendTool(sessionId, workspaceSlug),
         // Source CRUD tools
         createSourceListTool(sessionId, workspaceSlug),
-        createSourceCreateTool(sessionId, workspaceSlug),
-        createSourceUpdateTool(sessionId, workspaceSlug),
+        createSourceCreateTool(sessionId, workspaceSlug, activeAgentSlug),
+        createSourceUpdateTool(sessionId, workspaceSlug, activeAgentSlug),
         createSourceDeleteTool(sessionId, workspaceSlug),
+        // Agent tools
+        createAgentListTool(sessionId, workspaceSlug),
+        createAgentCreateTool(sessionId, workspaceSlug),
+        createAgentSyncTool(sessionId, workspaceSlug),
+        createAgentDeleteTool(sessionId, workspaceSlug),
       ],
     });
     sessionScopedToolsCache.set(cacheKey, cached);
-    debug(`[SessionScopedTools] Created tools provider for session ${sessionId} in workspace ${workspaceSlug}`);
+    debug(`[SessionScopedTools] Created tools provider for session ${sessionId} in workspace ${workspaceSlug}${activeAgentSlug ? ` with agent ${activeAgentSlug}` : ''}`);
   }
   return cached;
 }

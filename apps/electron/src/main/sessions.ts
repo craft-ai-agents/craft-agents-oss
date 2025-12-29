@@ -31,11 +31,12 @@ import {
   type SessionMetadata,
   type TodoState,
 } from '@craft-agent/shared/sessions'
-import { loadWorkspaceSources, getSourcesBySlugs, type LoadedSource, createSourceService, type McpServerConfig } from '@craft-agent/shared/sources'
+import { loadWorkspaceSources, getSourcesBySlugs, type LoadedSource, createSourceService, type McpServerConfig, ensureWorkspaceCraftSource, getSourcesNeedingAuth } from '@craft-agent/shared/sources'
 import { ConfigWatcher, type ConfigWatcherCallbacks } from '@craft-agent/shared/config'
 import { getAuthState } from '@craft-agent/shared/auth'
 import { setAnthropicOptionsEnv, setPathToClaudeCodeExecutable, setInterceptorPath } from '@craft-agent/shared/agent'
 import { getCraftToken } from '@craft-agent/shared/auth'
+import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { CraftMcpClient } from '@craft-agent/shared/mcp'
 import { FolderAgentManager } from '@craft-agent/shared/agents'
 import type { SubAgentDefinition, AgentStatus, AgentActivateOptions } from '@craft-agent/shared/agents'
@@ -110,6 +111,10 @@ interface ManagedSession {
   sourceApiServers?: Record<string, ReturnType<typeof createSdkMcpServer>>
   // Working directory for this session (used by agent for bash commands)
   workingDirectory?: string
+  // Sources that need credentials (detected at session creation)
+  sourcesNeedingAuth?: LoadedSource[]
+  // Whether auto-setup context has been triggered (prevents multiple triggers)
+  autoSetupTriggered?: boolean
 }
 
 // Convert runtime Message to StoredMessage for persistence
@@ -196,9 +201,8 @@ export class SessionManager {
   // Delta batching for performance - reduces IPC events from 50+/sec to ~20/sec
   private pendingDeltas: Map<string, PendingDelta> = new Map()
   private deltaFlushTimers: Map<string, NodeJS.Timeout> = new Map()
-  // Config watcher for live updates (sources, agents, etc.)
-  private configWatcher: ConfigWatcher | null = null
-  private currentWatchedWorkspaceSlug: string | null = null
+  // Config watchers for live updates (sources, agents, etc.) - one per workspace
+  private configWatchers: Map<string, ConfigWatcher> = new Map()
   // Pending credential request resolvers (keyed by requestId)
   private pendingCredentialResolvers: Map<string, (response: import('../shared/types').CredentialResponse) => void> = new Map()
 
@@ -210,23 +214,34 @@ export class SessionManager {
    * Set up ConfigWatcher for a workspace to broadcast live updates
    * (sources added/removed, guide.md changes, etc.)
    * Public so ipc.ts can call it when sources are first requested
+   * Supports multiple workspaces simultaneously
    */
   setupConfigWatcher(workspaceSlug: string): void {
-    // Clean up existing watcher if switching workspaces
-    if (this.configWatcher && this.currentWatchedWorkspaceSlug !== workspaceSlug) {
-      this.configWatcher.stop()
-      this.configWatcher = null
-    }
-
-    if (this.configWatcher) {
+    // Check if already watching this workspace
+    if (this.configWatchers.has(workspaceSlug)) {
       return // Already watching this workspace
     }
 
     console.log(`[SessionManager] Setting up ConfigWatcher for workspace: ${workspaceSlug}`)
 
+    // Ensure Craft source exists if workspace has MCP URL
+    // Find the workspace to get its mcpUrl
+    const workspaces = getWorkspaces()
+    const workspace = workspaces.find(w => getWorkspaceSlug(w) === workspaceSlug)
+    if (workspace?.mcpUrl) {
+      const craftSource = ensureWorkspaceCraftSource(workspaceSlug, workspace.mcpUrl)
+      if (craftSource) {
+        console.log(`[SessionManager] Ensured Craft source exists: ${craftSource.slug}`)
+        // Copy workspace OAuth credentials to Craft source if not already present
+        this.ensureCraftSourceCredentials(workspace, workspaceSlug).catch(err => {
+          console.error(`[SessionManager] Error copying credentials to Craft source:`, err)
+        })
+      }
+    }
+
     const callbacks: ConfigWatcherCallbacks = {
       onSourcesListChange: (sources: LoadedSource[]) => {
-        console.log(`[SessionManager] Sources changed, broadcasting update (${sources.length} sources)`)
+        console.log(`[SessionManager] Sources changed in ${workspaceSlug}, broadcasting update (${sources.length} sources)`)
         this.broadcastSourcesChanged(sources)
       },
       onSourceChange: (slug: string, source: LoadedSource | null) => {
@@ -243,9 +258,9 @@ export class SessionManager {
       },
     }
 
-    this.configWatcher = new ConfigWatcher(workspaceSlug, callbacks)
-    this.configWatcher.start()
-    this.currentWatchedWorkspaceSlug = workspaceSlug
+    const watcher = new ConfigWatcher(workspaceSlug, callbacks)
+    watcher.start()
+    this.configWatchers.set(workspaceSlug, watcher)
   }
 
   /**
@@ -255,6 +270,57 @@ export class SessionManager {
     if (!this.windowManager) return
 
     this.windowManager.broadcastToAll(IPC_CHANNELS.SOURCES_CHANGED, sources)
+  }
+
+  /**
+   * Broadcast agents changed event to all windows
+   */
+  private broadcastAgentsChanged(): void {
+    if (!this.windowManager) return
+
+    this.windowManager.broadcastToAll(IPC_CHANNELS.AGENTS_CHANGED)
+  }
+
+  /**
+   * Ensure Craft source has credentials copied from workspace OAuth
+   * This is called when the Craft source is created from workspace MCP URL
+   */
+  private async ensureCraftSourceCredentials(workspace: Workspace, workspaceSlug: string): Promise<void> {
+    const credManager = getCredentialManager()
+    await credManager.initialize()
+
+    // Check if source already has credentials
+    const existingCred = await credManager.get({
+      type: 'source_oauth',
+      workspaceSlug,
+      sourceSlug: 'craft',
+    })
+
+    if (existingCred?.value) {
+      console.log(`[SessionManager] Craft source already has credentials`)
+      return
+    }
+
+    // Get workspace OAuth credentials
+    const workspaceOAuth = await credManager.getWorkspaceOAuth(workspace.id)
+    if (!workspaceOAuth?.accessToken) {
+      console.log(`[SessionManager] No workspace OAuth to copy to Craft source`)
+      return
+    }
+
+    // Copy workspace OAuth to source OAuth
+    console.log(`[SessionManager] Copying workspace OAuth to Craft source credentials`)
+    await credManager.set(
+      { type: 'source_oauth', workspaceSlug, sourceSlug: 'craft' },
+      {
+        value: workspaceOAuth.accessToken,
+        refreshToken: workspaceOAuth.refreshToken,
+        expiresAt: workspaceOAuth.expiresAt,
+        clientId: workspaceOAuth.clientId,
+        tokenType: workspaceOAuth.tokenType,
+      }
+    )
+    console.log(`[SessionManager] Craft source credentials copied successfully`)
   }
 
   /**
@@ -594,6 +660,25 @@ export class SessionManager {
     }
   }
 
+  /**
+   * Build setup context for sources that need authentication.
+   * This is prepended to the first user message to prompt the agent to help with source setup.
+   */
+  private buildSetupContext(sources: LoadedSource[]): string {
+    const sourceList = sources.map(s => {
+      const authType = s.config.mcp?.authType || s.config.api?.authType || 'unknown'
+      return `- ${s.config.name} (${s.config.type}, ${authType} auth)`
+    }).join('\n')
+
+    return `<setup_required>
+The following sources need authentication before they can be used:
+${sourceList}
+
+Please help me set up authentication for these sources first, then proceed with my request.
+Use oauth_trigger for OAuth sources, credential_prompt for API key/bearer token sources.
+</setup_required>`
+  }
+
   // Persist a session to disk
   private persistSession(managed: ManagedSession): void {
     try {
@@ -674,6 +759,20 @@ export class SessionManager {
     const defaultWorkingDir = getDefaultWorkingDirectory()
     const workspaceSlug = getWorkspaceSlug(workspace)
 
+    // Check if agent's sources need authentication
+    let sourcesNeedingAuth: LoadedSource[] = []
+    if (agentId) {
+      const folderAgentManager = this.getFolderAgentManager(workspaceSlug)
+      const loadedAgent = folderAgentManager.getAgentBySlug(agentId)
+      if (loadedAgent) {
+        sourcesNeedingAuth = getSourcesNeedingAuth(loadedAgent.sources)
+        if (sourcesNeedingAuth.length > 0) {
+          console.log(`[SessionManager] Agent '${agentId}' has ${sourcesNeedingAuth.length} source(s) needing auth:`,
+            sourcesNeedingAuth.map(s => s.config.slug).join(', '))
+        }
+      }
+    }
+
     // Use storage layer to create and persist the session
     const storedSession = createStoredSession(workspaceSlug, {
       agentSlug: agentId,
@@ -701,6 +800,9 @@ export class SessionManager {
       skipPermissions: defaultSkipPerms,
       activeModes: defaultModes,
       workingDirectory: defaultWorkingDir,
+      // Auto-setup tracking
+      sourcesNeedingAuth: sourcesNeedingAuth.length > 0 ? sourcesNeedingAuth : undefined,
+      autoSetupTriggered: false,
     }
 
     this.sessions.set(storedSession.id, managed)
@@ -917,6 +1019,13 @@ export class SessionManager {
         this.persistSession(managed)
 
         console.log(`[SessionManager] Source '${sourceSlug}' activated. Now ${managed.enabledSourceSlugs.length} sources enabled.`)
+      }
+
+      // Wire up onAgentsChanged to notify renderer when agents are created/synced/deleted
+      managed.agent.onAgentsChanged = async () => {
+        console.log(`[SessionManager] Agents changed for session ${managed.id} - broadcasting to all windows`)
+        // Broadcast to all windows to refresh agents list
+        this.broadcastAgentsChanged()
       }
 
       // NOTE: Agent definition is now applied in sendMessage() via AgentStateManager.activate()
@@ -1248,7 +1357,8 @@ export class SessionManager {
             try {
               const mcpServers = await stateManager.buildMcpServerConfig()
               const apiServers = await stateManager.buildApiServers()
-              agent.setActiveAgentDefinition(definition, mcpServers, apiServers)
+              // Pass sources needing auth to inject setup instructions into the agent
+              agent.setActiveAgentDefinition(definition, mcpServers, apiServers, managed.sourcesNeedingAuth)
               managed.agentActivated = true
               console.log(`[SessionManager] Applied agent definition "${definition.name}" to session ${sessionId}`)
             } catch (error) {
@@ -1288,6 +1398,14 @@ export class SessionManager {
         agent.setSourceServers(managed.sourceMcpServers || {}, managed.sourceApiServers || {})
         console.log(`[SessionManager] Applied ${mcpCount} MCP + ${apiCount} API sources to session ${sessionId} (${allSources.length} total)`)
       }
+    }
+
+    // Auto-setup: prepend setup context on first message if sources need auth
+    if (!managed.autoSetupTriggered && managed.sourcesNeedingAuth?.length) {
+      managed.autoSetupTriggered = true
+      const setupContext = this.buildSetupContext(managed.sourcesNeedingAuth)
+      message = setupContext + '\n\n' + message
+      console.log(`[SessionManager] Prepended setup context for ${managed.sourcesNeedingAuth.length} source(s) needing auth`)
     }
 
     try {

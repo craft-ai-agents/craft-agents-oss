@@ -287,6 +287,23 @@ export function saveSourceGuide(
 }
 
 /**
+ * Save agent-scoped source guide.md
+ */
+export function saveAgentSourceGuide(
+  workspaceSlug: string,
+  agentSlug: string,
+  sourceSlug: string,
+  guide: SourceGuide
+): void {
+  const dir = getAgentSourcePath(workspaceSlug, agentSlug, sourceSlug);
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
+
+  writeFileSync(join(dir, 'guide.md'), guide.raw);
+}
+
+/**
  * Update cache in guide.md frontmatter
  */
 export function updateSourceCache(
@@ -599,6 +616,290 @@ export function deleteSource(workspaceSlug: string, sourceSlug: string): void {
  */
 export function sourceExists(workspaceSlug: string, sourceSlug: string): boolean {
   return existsSync(join(getSourcePath(workspaceSlug, sourceSlug), 'config.json'));
+}
+
+// ============================================================
+// Agent-Scoped Source Operations
+// ============================================================
+
+/**
+ * Generate URL-safe slug for agent-scoped source
+ */
+export function generateAgentSourceSlug(
+  workspaceSlug: string,
+  agentSlug: string,
+  name: string
+): string {
+  let slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .substring(0, 50);
+
+  // Ensure slug is not empty
+  if (!slug) {
+    slug = 'source';
+  }
+
+  // Check for existing slugs in agent's sources folder
+  const sourcesDir = join(getWorkspaceAgentsPath(workspaceSlug), agentSlug, 'sources');
+  const existingSlugs = new Set<string>();
+  if (existsSync(sourcesDir)) {
+    const entries = readdirSync(sourcesDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        existingSlugs.add(entry.name);
+      }
+    }
+  }
+
+  if (!existingSlugs.has(slug)) {
+    return slug;
+  }
+
+  // Find next available number
+  let counter = 2;
+  while (existingSlugs.has(`${slug}-${counter}`)) {
+    counter++;
+  }
+
+  return `${slug}-${counter}`;
+}
+
+/**
+ * Create a new agent-scoped source
+ */
+export function createAgentSource(
+  workspaceSlug: string,
+  agentSlug: string,
+  input: CreateSourceInput
+): FolderSourceConfig {
+  const slug = generateAgentSourceSlug(workspaceSlug, agentSlug, input.name);
+  const now = Date.now();
+
+  const config: FolderSourceConfig = {
+    id: `src_${randomUUID().slice(0, 8)}`,
+    name: input.name,
+    slug,
+    enabled: input.enabled ?? true,
+    provider: input.provider,
+    type: input.type,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  // Add type-specific config
+  switch (input.type) {
+    case 'mcp':
+      if (input.mcp) {
+        config.mcp = input.mcp;
+      }
+      break;
+    case 'api':
+      if (input.api) {
+        config.api = input.api;
+      }
+      break;
+    case 'local':
+      if (input.local) {
+        config.local = input.local;
+      }
+      break;
+  }
+
+  // Add icon URL if provided
+  if (input.iconUrl) {
+    config.iconUrl = input.iconUrl;
+  }
+
+  saveAgentSourceConfig(workspaceSlug, agentSlug, config);
+
+  // Create default guide.md
+  const guideContent = `# ${input.name}
+
+## Guidelines
+
+(Add usage guidelines here)
+
+## Context
+
+(Add context about this source)
+`;
+  saveAgentSourceGuide(workspaceSlug, agentSlug, slug, { raw: guideContent });
+
+  return config;
+}
+
+/**
+ * Delete an agent-scoped source
+ */
+export function deleteAgentSource(
+  workspaceSlug: string,
+  agentSlug: string,
+  sourceSlug: string
+): void {
+  const dir = getAgentSourcePath(workspaceSlug, agentSlug, sourceSlug);
+  if (existsSync(dir)) {
+    rmSync(dir, { recursive: true });
+  }
+}
+
+/**
+ * Check if an agent-scoped source exists
+ */
+export function agentSourceExists(
+  workspaceSlug: string,
+  agentSlug: string,
+  sourceSlug: string
+): boolean {
+  return existsSync(join(getAgentSourcePath(workspaceSlug, agentSlug, sourceSlug), 'config.json'));
+}
+
+// ============================================================
+// Workspace Craft Source Auto-Creation
+// ============================================================
+
+/**
+ * Ensure a Craft source exists for a workspace that has an MCP URL.
+ * This creates a source from the workspace's MCP connection if one doesn't already exist.
+ *
+ * @param workspaceSlug - Workspace slug
+ * @param mcpUrl - Workspace MCP URL (from config)
+ * @returns The existing or newly created Craft source config, or null if no mcpUrl
+ */
+export function ensureWorkspaceCraftSource(
+  workspaceSlug: string,
+  mcpUrl: string | undefined
+): FolderSourceConfig | null {
+  if (!mcpUrl) {
+    return null;
+  }
+
+  // Check if a "craft" source already exists
+  if (sourceExists(workspaceSlug, 'craft')) {
+    return loadSourceConfig(workspaceSlug, 'craft');
+  }
+
+  // Also check for any source with provider="craft" or matching URL
+  const sources = loadWorkspaceSources(workspaceSlug);
+  const existingCraftSource = sources.find(
+    (s) =>
+      s.config.type === 'mcp' &&
+      (s.config.provider === 'craft' ||
+        s.config.mcp?.url === mcpUrl ||
+        s.config.slug === 'craft')
+  );
+
+  if (existingCraftSource) {
+    return existingCraftSource.config;
+  }
+
+  // Create a new Craft source from workspace MCP URL
+  debug('[ensureWorkspaceCraftSource] Creating Craft source from workspace MCP URL:', mcpUrl);
+
+  const now = Date.now();
+  const config: FolderSourceConfig = {
+    id: `src_${randomUUID().slice(0, 8)}`,
+    name: 'Craft',
+    slug: 'craft',
+    enabled: true,
+    provider: 'craft',
+    type: 'mcp',
+    mcp: {
+      url: mcpUrl,
+      authType: 'oauth', // Workspace MCP uses OAuth
+    },
+    iconUrl: 'https://craft.do',
+    tagline: 'Connected Craft Space for documents and agents.',
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  saveSourceConfig(workspaceSlug, config);
+
+  // Create guide.md
+  const guideContent = `# Craft
+
+Your connected Craft Space. Access documents, blocks, and smart folders.
+
+## Available Tools
+
+This MCP source provides access to Craft documents:
+- **folders_list** - List folders in the Space
+- **documents_list** - List documents in a folder
+- **document_search** - Search documents by content
+- **blocks_get** - Read document content
+- **blocks_add** - Create new content
+- **blocks_update** - Edit existing content
+`;
+  saveSourceGuide(workspaceSlug, 'craft', { raw: guideContent });
+
+  debug('[ensureWorkspaceCraftSource] Created Craft source:', config.slug);
+  return config;
+}
+
+// ============================================================
+// Agent-Aware Source Loading/Saving
+// ============================================================
+
+/**
+ * Result of loading a source with agent context
+ */
+export interface SourceWithContext {
+  config: FolderSourceConfig;
+  /** Whether this source is agent-scoped (vs workspace-scoped) */
+  isAgentScoped: boolean;
+  /** Agent slug if this is an agent-scoped source */
+  agentSlug?: string;
+}
+
+/**
+ * Load source config, checking agent folder first (if activeAgentSlug provided), then workspace.
+ * Returns null if not found in either location.
+ */
+export function loadSourceConfigWithFallback(
+  workspaceSlug: string,
+  sourceSlug: string,
+  activeAgentSlug?: string
+): SourceWithContext | null {
+  // If active agent context, check agent folder first
+  if (activeAgentSlug) {
+    const agentConfig = loadAgentSourceConfig(workspaceSlug, activeAgentSlug, sourceSlug);
+    if (agentConfig) {
+      return {
+        config: agentConfig,
+        isAgentScoped: true,
+        agentSlug: activeAgentSlug,
+      };
+    }
+  }
+
+  // Fall back to workspace folder
+  const workspaceConfig = loadSourceConfig(workspaceSlug, sourceSlug);
+  if (workspaceConfig) {
+    return {
+      config: workspaceConfig,
+      isAgentScoped: false,
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Save source config back to the correct location based on context.
+ */
+export function saveSourceConfigWithContext(
+  workspaceSlug: string,
+  config: FolderSourceConfig,
+  context: { isAgentScoped: boolean; agentSlug?: string },
+  options?: SaveSourceConfigOptions
+): void {
+  if (context.isAgentScoped && context.agentSlug) {
+    saveAgentSourceConfig(workspaceSlug, context.agentSlug, config, options);
+  } else {
+    saveSourceConfig(workspaceSlug, config, options);
+  }
 }
 
 // ============================================================

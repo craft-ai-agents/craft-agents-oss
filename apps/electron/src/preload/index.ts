@@ -54,6 +54,11 @@ const api: ElectronAPI = {
   saveApiCredentials: (workspaceId: string, agentId: string, apiName: string, credential: string) => ipcRenderer.invoke(IPC_CHANNELS.SAVE_API_CREDENTIALS, workspaceId, agentId, apiName, credential),
   validateMcpConnection: (serverUrl: string, accessToken?: string) => ipcRenderer.invoke(IPC_CHANNELS.VALIDATE_MCP_CONNECTION, serverUrl, accessToken),
 
+  // Agent sync (Craft discovery)
+  syncAgentsFromCraft: (workspaceId: string, options?: { documentIds?: string[]; forceUpdate?: boolean }) => ipcRenderer.invoke(IPC_CHANNELS.SYNC_AGENTS_FROM_CRAFT, workspaceId, options),
+  discoverAllAgents: (workspaceId: string) => ipcRenderer.invoke(IPC_CHANNELS.DISCOVER_ALL_AGENTS, workspaceId),
+  getAgentsSyncStatus: (workspaceId: string) => ipcRenderer.invoke(IPC_CHANNELS.GET_AGENTS_SYNC_STATUS, workspaceId),
+
   // Agent state management (unified state machine, agent-scoped)
   getAgentStatus: (workspaceId: string, agentId: string) => ipcRenderer.invoke(IPC_CHANNELS.AGENT_GET_STATUS, workspaceId, agentId),
   activateAgent: (workspaceId: string, agentId: string, options?: AgentActivateOptions) => ipcRenderer.invoke(IPC_CHANNELS.AGENT_ACTIVATE, workspaceId, agentId, options),
@@ -168,7 +173,7 @@ const api: ElectronAPI = {
   startWorkspaceMcpOAuth: (mcpUrl: string) => ipcRenderer.invoke(IPC_CHANNELS.ONBOARDING_START_MCP_OAUTH, mcpUrl),
   saveOnboardingConfig: (config: {
     authType?: AuthType
-    workspace?: { name: string; iconUrl?: string }
+    workspace?: { name: string; iconUrl?: string; mcpUrl?: string }
     credential?: string
     mcpCredentials?: { accessToken: string; clientId?: string }
   }) => ipcRenderer.invoke(IPC_CHANNELS.ONBOARDING_SAVE_CONFIG, config),
@@ -244,6 +249,11 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.SOURCES_START_OAUTH, workspaceSlug, sourceSlug),
   saveSourceCredentials: (workspaceSlug: string, sourceSlug: string, credential: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SOURCES_SAVE_CREDENTIALS, workspaceSlug, sourceSlug, credential),
+  // Agent-scoped sources
+  getAgentSources: (workspaceSlug: string, agentSlug: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SOURCES_GET_AGENT, workspaceSlug, agentSlug),
+  promoteSource: (workspaceSlug: string, agentSlug: string, sourceSlug: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SOURCES_PROMOTE, workspaceSlug, agentSlug, sourceSlug),
 
   // Session sources
   setSessionSources: (sessionId: string, sourceSlugs: string[]) =>
@@ -259,6 +269,17 @@ const api: ElectronAPI = {
     ipcRenderer.on(IPC_CHANNELS.SOURCES_CHANGED, handler)
     return () => {
       ipcRenderer.removeListener(IPC_CHANNELS.SOURCES_CHANGED, handler)
+    }
+  },
+
+  // Agents change listener (live updates when agents are created/synced/deleted)
+  onAgentsChanged: (callback: () => void) => {
+    const handler = () => {
+      callback()
+    }
+    ipcRenderer.on(IPC_CHANNELS.AGENTS_CHANGED, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.AGENTS_CHANGED, handler)
     }
   },
 }

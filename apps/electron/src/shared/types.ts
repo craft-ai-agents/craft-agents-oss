@@ -428,6 +428,11 @@ export const IPC_CHANNELS = {
   SAVE_API_CREDENTIALS: 'agents:saveApiCredentials',
   VALIDATE_MCP_CONNECTION: 'agents:validateMcpConnection',
 
+  // Agent sync (Craft discovery)
+  SYNC_AGENTS_FROM_CRAFT: 'agents:syncFromCraft',
+  DISCOVER_ALL_AGENTS: 'agents:discoverAll',
+  GET_AGENTS_SYNC_STATUS: 'agents:getSyncStatus',
+
   // Agent state management (unified state machine, agent-scoped by workspaceId:agentId)
   AGENT_GET_STATUS: 'agent:getStatus',           // (workspaceId, agentId) → AgentStatus
   AGENT_ACTIVATE: 'agent:activate',               // (workspaceId, agentId, options?) → AgentStatus
@@ -441,6 +446,7 @@ export const IPC_CHANNELS = {
   // Events from main to renderer
   SESSION_EVENT: 'session:event',
   AGENT_STATUS_CHANGED: 'agent:statusChanged',    // Broadcast: { workspaceId, agentId, status } - complete state including needsSetup/needsAuth
+  AGENTS_CHANGED: 'agents:changed',               // Broadcast: agents list changed (created/synced/deleted) - triggers sidebar refresh
 
   // File operations
   READ_FILE: 'file:read',
@@ -520,13 +526,16 @@ export const IPC_CHANNELS = {
   DRAFTS_DELETE: 'drafts:delete',
   DRAFTS_GET_ALL: 'drafts:getAll',
 
-  // Sources
+  // Sources (workspace-scoped)
   SOURCES_GET: 'sources:get',
   SOURCES_CREATE: 'sources:create',
   SOURCES_DELETE: 'sources:delete',
   SOURCES_START_OAUTH: 'sources:startOAuth',
   SOURCES_SAVE_CREDENTIALS: 'sources:saveCredentials',
   SOURCES_CHANGED: 'sources:changed',
+  // Agent-scoped sources
+  SOURCES_GET_AGENT: 'sources:getAgent',
+  SOURCES_PROMOTE: 'sources:promote',
 
   // Session sources
   SESSION_SET_SOURCES: 'sessions:setSources',
@@ -686,6 +695,16 @@ export interface ElectronAPI {
   resetAgentState(workspaceId: string, agentId: string): Promise<void>
   markAgentActive(workspaceId: string, agentId: string): Promise<void>
 
+  // Agent sync (from Craft)
+  syncAgentsFromCraft(workspaceId: string, options?: { documentIds?: string[]; forceUpdate?: boolean }): Promise<{
+    created: string[]
+    updated: string[]
+    unchanged: string[]
+    errors: Array<{ slug: string; name: string; action: string; error: string }>
+    folderFound: boolean
+    discoveredCount: number
+  }>
+
   // Event listeners
   onSessionEvent(callback: (event: SessionEvent) => void): () => void
   /** Listens for complete agent state changes (status + needsSetup + needsAuth) */
@@ -735,7 +754,7 @@ export interface ElectronAPI {
   startWorkspaceMcpOAuth(mcpUrl: string): Promise<OAuthResult & { accessToken?: string; clientId?: string }>
   saveOnboardingConfig(config: {
     authType?: AuthType  // Optional - if not provided, preserves existing auth type (for add workspace)
-    workspace?: { name: string; iconUrl?: string }  // Optional - if not provided, only updates billing
+    workspace?: { name: string; iconUrl?: string; mcpUrl?: string }  // Optional - if not provided, only updates billing
     credential?: string  // API key or OAuth token based on authType
     mcpCredentials?: { accessToken: string; clientId?: string }  // MCP OAuth credentials
   }): Promise<OnboardingSaveResult>
@@ -793,10 +812,12 @@ export interface ElectronAPI {
 
   // Sources
   getSources(workspaceSlug: string): Promise<LoadedSource[]>
+  getAgentSources(workspaceSlug: string, agentSlug: string): Promise<LoadedSource[]>
   createSource(workspaceSlug: string, config: Partial<FolderSourceConfig>): Promise<FolderSourceConfig>
   deleteSource(workspaceSlug: string, sourceSlug: string): Promise<void>
   startSourceOAuth(workspaceSlug: string, sourceSlug: string): Promise<{ success: boolean; error?: string; accessToken?: string }>
   saveSourceCredentials(workspaceSlug: string, sourceSlug: string, credential: string): Promise<void>
+  promoteSource(workspaceSlug: string, agentSlug: string, sourceSlug: string): Promise<void>
 
   // Session sources
   setSessionSources(sessionId: string, sourceSlugs: string[]): Promise<void>
@@ -804,6 +825,9 @@ export interface ElectronAPI {
 
   // Sources change listener (live updates when sources are added/removed)
   onSourcesChanged(callback: (sources: LoadedSource[]) => void): () => void
+
+  // Agents change listener (live updates when agents are created/synced/deleted)
+  onAgentsChanged(callback: () => void): () => void
 }
 
 /**

@@ -7,7 +7,7 @@ import { getWorkspaceByNameOrId, loadStoredConfig, getWorkspaceSlug, type Worksp
 import { DEFAULT_MODEL } from '@craft-agent/shared/config'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { CraftMcpClient } from '@craft-agent/shared/mcp'
-import { FolderAgentManager, type LoadedAgent, ensureBuiltinAgent as ensureBuiltin } from '@craft-agent/shared/agents'
+import { FolderAgentManager, type LoadedAgent, ensureBuiltinAgent as ensureBuiltin, type SyncResult, type SyncOptions } from '@craft-agent/shared/agents'
 import type { SubAgentMetadata, SubAgentDefinition, McpServerConfig, ApiConfig } from '@craft-agent/shared/agents'
 import { CraftOAuth, getMcpBaseUrl } from '@craft-agent/shared/auth'
 import { validateMcpConnection } from '@craft-agent/shared/mcp'
@@ -364,6 +364,152 @@ export class AgentService {
         success: false,
         error: error instanceof Error ? error.message : 'Validation failed'
       }
+    }
+  }
+
+  // ============================================================
+  // Craft Sync Methods
+  // ============================================================
+
+  /**
+   * Sync agents from connected Craft Space
+   */
+  async syncAgentsFromCraft(workspaceId: string, options?: SyncOptions): Promise<SyncResult> {
+    console.log('[AgentService] syncAgentsFromCraft called for workspace:', workspaceId)
+    try {
+      const workspace = getWorkspaceByNameOrId(workspaceId)
+      if (!workspace) {
+        throw new Error(`Workspace not found: ${workspaceId}`)
+      }
+
+      const workspaceSlug = getWorkspaceSlug(workspace)
+      console.log('[AgentService] Workspace slug:', workspaceSlug)
+      const agentManager = this.getAgentManager(workspaceSlug)
+
+      // Get workspace MCP URL and auth token (stored at runtime but not in type)
+      const wsWithMcp = workspace as Workspace & { mcpUrl?: string; mcpAuthType?: string }
+      let mcpUrl = wsWithMcp.mcpUrl
+      let mcpAccessToken: string | undefined
+
+      console.log('[AgentService] MCP URL:', mcpUrl)
+      console.log('[AgentService] MCP Auth Type:', wsWithMcp.mcpAuthType)
+
+      if (mcpUrl) {
+        // Get workspace credentials if needed
+        if (wsWithMcp.mcpAuthType !== 'public') {
+          try {
+            const credManager = getCredentialManager()
+            await credManager.initialize()
+            const oauthCreds = await credManager.getWorkspaceOAuth(workspaceId)
+            if (oauthCreds?.accessToken) {
+              mcpAccessToken = oauthCreds.accessToken
+              console.log('[AgentService] Got OAuth token')
+            } else {
+              const bearerCreds = await credManager.getWorkspaceBearer(workspaceId)
+              if (bearerCreds) {
+                mcpAccessToken = bearerCreds
+                console.log('[AgentService] Got bearer token')
+              }
+            }
+          } catch (e) {
+            console.warn('[AgentService] Failed to get workspace credentials:', e)
+          }
+        } else {
+          console.log('[AgentService] Public workspace, no auth needed')
+        }
+      } else {
+        console.log('[AgentService] No MCP URL found for workspace')
+      }
+
+      // Pass MCP URL to sync if available
+      const syncOptions: SyncOptions = {
+        ...options,
+        mcpUrl,
+        mcpAccessToken,
+      }
+
+      console.log('[AgentService] Starting sync with options:', { mcpUrl: !!mcpUrl, hasToken: !!mcpAccessToken })
+      const result = await agentManager.syncFromCraft(syncOptions)
+
+      console.log('[AgentService] Sync result:', {
+        folderFound: result.folderFound,
+        discoveredCount: result.discoveredCount,
+        created: result.created.length,
+        updated: result.updated.length,
+        unchanged: result.unchanged.length,
+        errors: result.errors.length,
+      })
+
+      if (result.errors.length > 0) {
+        console.log('[AgentService] Sync errors:', result.errors)
+      }
+
+      // Reload to pick up new agents
+      agentManager.reload()
+
+      return result
+    } catch (error) {
+      console.error('[AgentService] Sync failed:', error)
+      return {
+        created: [],
+        updated: [],
+        unchanged: [],
+        errors: [{ slug: 'sync', name: 'Sync', action: 'error', error: error instanceof Error ? error.message : String(error) }],
+        folderFound: false,
+        discoveredCount: 0,
+      }
+    }
+  }
+
+  /**
+   * Discover all agents (local + Craft)
+   */
+  async discoverAllAgents(workspaceId: string): Promise<{
+    local: SubAgentMetadata[];
+    craft: Array<{ name: string; documentId: string; synced: boolean }>;
+    errors: string[];
+  }> {
+    try {
+      const workspaceSlug = this.getWorkspaceSlugFromId(workspaceId)
+      const agentManager = this.getAgentManager(workspaceSlug)
+      const discovery = await agentManager.discoverAllAgents()
+
+      return {
+        local: discovery.local.map((agent: LoadedAgent) => ({
+          id: agent.config.slug,
+          name: agent.config.name,
+          documentId: agent.config.slug,
+          workspaceId: workspaceId,
+          createdAt: agent.config.createdAt,
+        })),
+        craft: discovery.craft,
+        errors: discovery.errors,
+      }
+    } catch (error) {
+      console.error('[AgentService] Discovery failed:', error)
+      return {
+        local: [],
+        craft: [],
+        errors: [error instanceof Error ? error.message : String(error)],
+      }
+    }
+  }
+
+  /**
+   * Get sync status for all agents
+   */
+  async getAgentsSyncStatus(workspaceId: string): Promise<Array<{
+    slug: string;
+    name: string;
+    status: 'synced' | 'modified' | 'local-only' | 'not-found';
+  }>> {
+    try {
+      const workspaceSlug = this.getWorkspaceSlugFromId(workspaceId)
+      const agentManager = this.getAgentManager(workspaceSlug)
+      return agentManager.getAgentsSyncStatus()
+    } catch (error) {
+      console.error('[AgentService] Get sync status failed:', error)
+      return []
     }
   }
 }

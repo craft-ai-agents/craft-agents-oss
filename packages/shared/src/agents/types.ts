@@ -35,6 +35,8 @@ export interface SubAgentMetadata {
  *   └── MCP Servers (optional - configs in code blocks)
  */
 export interface SubAgentDefinition {
+  /** Agent slug (URL-safe identifier) */
+  slug?: string;
   /** Agent name (from document title) */
   name: string;
   /** Content of Instructions subpage */
