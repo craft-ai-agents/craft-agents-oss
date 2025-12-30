@@ -745,7 +745,7 @@ Returns structured validation results with errors, warnings, and suggestions.
 async function testApiSource(
   source: FolderSourceConfig,
   workspaceSlug: string
-): Promise<{ success: boolean; status?: number; error?: string }> {
+): Promise<{ success: boolean; status?: number; error?: string; credentialType?: string }> {
   if (!source.api?.baseUrl) {
     return { success: false, error: 'No API URL configured' };
   }
@@ -755,23 +755,42 @@ async function testApiSource(
       'Accept': 'application/json',
     };
 
-    // Get credentials if needed
+    let credentialType: string | undefined;
+    let credValue: string | undefined;
+
+    // Get credentials if needed - try multiple credential types
     if (source.api.authType && source.api.authType !== 'none') {
       const credentialManager = getCredentialManager();
-      // Try different source credential types based on auth type
-      const credType = source.api.authType === 'oauth' ? 'source_oauth' : 'source_bearer';
-      const cred = await credentialManager.get({
-        type: credType,
-        workspaceSlug,
-        sourceSlug: source.slug,
-      });
+      const baseId = { workspaceSlug, sourceSlug: source.slug };
 
-      if (cred?.value) {
-        if (source.api.authType === 'bearer') {
+      // Try credential types in order of preference
+      const credTypesToTry: Array<'source_oauth' | 'source_bearer' | 'source_apikey' | 'source_basic'> = [
+        'source_oauth',
+        'source_bearer',
+        'source_apikey',
+        'source_basic',
+      ];
+
+      for (const credType of credTypesToTry) {
+        const cred = await credentialManager.get({ type: credType, ...baseId });
+        if (cred?.value) {
+          credValue = cred.value;
+          credentialType = credType;
+          debug(`[testApiSource] Found credential type ${credType} for ${source.slug}`);
+          break;
+        }
+      }
+
+      if (credValue) {
+        // Apply credential based on authType config
+        if (source.api.authType === 'bearer' || source.api.authType === 'oauth') {
           const scheme = source.api.authScheme || 'Bearer';
-          headers['Authorization'] = `${scheme} ${cred.value}`;
+          headers['Authorization'] = `${scheme} ${credValue}`;
         } else if (source.api.authType === 'header' && source.api.headerName) {
-          headers[source.api.headerName] = cred.value;
+          headers[source.api.headerName] = credValue;
+        } else if (source.api.authType === 'basic') {
+          // Basic auth - credValue should already be base64 encoded
+          headers['Authorization'] = `Basic ${credValue}`;
         }
         // Query param auth would need URL modification, skip for now
       }
@@ -790,11 +809,12 @@ async function testApiSource(
       return {
         success: response.ok,
         status: response.status,
-        error: response.ok ? undefined : `HTTP ${response.status} - Authentication may be required`
+        error: response.ok ? undefined : `HTTP ${response.status} - Authentication may be required`,
+        credentialType,
       };
     }
 
-    return { success: false, status: response.status, error: `HTTP ${response.status}` };
+    return { success: false, status: response.status, error: `HTTP ${response.status}`, credentialType };
   } catch (error) {
     return {
       success: false,
@@ -861,10 +881,44 @@ export function createSourceTestTool(sessionId: string, workspaceSlug: string, a
           saveSourceConfigWithContext(workspaceSlug, source, sourceContext);
 
           if (result.success) {
+            const lines: string[] = [
+              `**API Source '${args.sourceSlug}' is working**`,
+              '',
+              `URL: ${source.api?.baseUrl}`,
+              `Status: ${result.status}`,
+            ];
+
+            if (result.credentialType) {
+              lines.push(`Credential: ${result.credentialType}`);
+            }
+
+            // Verify the source can be built for session use
+            const sourceService = createSourceService(workspaceSlug);
+            const loadedSource: LoadedSource = {
+              config: source,
+              guide: null,
+              folderPath: '', // Not needed for credential lookup
+              workspaceSlug,
+              agentSlug: sourceContext.agentSlug,
+            };
+            const apiServer = await sourceService.buildApiServer(loadedSource);
+
+            if (!apiServer) {
+              lines.push('');
+              lines.push('⚠️ **Warning**: API is reachable, but session credential lookup failed.');
+              lines.push('The source may not work in this session. Try re-authenticating with the correct auth type.');
+              if (source.api?.authType) {
+                lines.push(`Current authType: ${source.api.authType}`);
+              }
+            } else {
+              lines.push('');
+              lines.push('✓ Source is ready for session use.');
+            }
+
             return {
               content: [{
                 type: 'text' as const,
-                text: `**API Source '${args.sourceSlug}' is working**\n\nURL: ${source.api?.baseUrl}\nStatus: ${result.status}`,
+                text: lines.join('\n'),
               }],
               isError: false,
             };
