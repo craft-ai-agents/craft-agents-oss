@@ -276,6 +276,12 @@ Brief description of what this plan accomplishes.
         debug('[SubmitPlan] No callback registered for session');
       }
 
+      // Automatically set status to needs_review when plan is submitted
+      if (callbacks?.onStatusChange) {
+        await callbacks.onStatusChange('needs_review');
+        debug('[SubmitPlan] Status set to needs_review');
+      }
+
       return {
         content: [{
           type: 'text' as const,
@@ -2385,6 +2391,11 @@ credential_prompt({
           hint: args.hint,
           headerName: source.api?.headerName,
         };
+
+        // Automatically set status to needs_review when waiting for credentials
+        if (callbacks?.onStatusChange) {
+          await callbacks.onStatusChange('needs_review');
+        }
 
         // Wait for user response
         const response = await callbacks.onCredentialRequest(request);
