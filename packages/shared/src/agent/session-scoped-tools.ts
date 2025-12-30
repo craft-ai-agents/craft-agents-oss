@@ -52,7 +52,8 @@ import {
   saveSourceConfigWithContext,
   type SourceWithContext,
 } from '../sources/storage.ts';
-import type { FolderSourceConfig, SourceGuide } from '../sources/types.ts';
+import type { FolderSourceConfig, SourceGuide, LoadedSource } from '../sources/types.ts';
+import { createSourceService } from '../sources/service.ts';
 import { CraftOAuth, getMcpBaseUrl, type OAuthConfig, type OAuthCallbacks } from '../auth/oauth.ts';
 import { startGmailOAuth } from '../auth/gmail-oauth.ts';
 
@@ -996,6 +997,30 @@ export function createSourceTestTool(sessionId: string, workspaceSlug: string, a
             if (result.tools.length > 5) {
               lines.push(`  ... and ${result.tools.length - 5} more`);
             }
+          }
+
+          // Verify the source can be built for session use
+          // This checks if credentials are properly configured for the session's credential lookup
+          const sourceService = createSourceService(workspaceSlug);
+          const loadedSource: LoadedSource = {
+            config: source,
+            guide: null,
+            folderPath: '', // Not needed for credential lookup
+            workspaceSlug,
+            agentSlug: sourceContext.agentSlug,
+          };
+          const mcpConfig = await sourceService.buildMcpServerConfig(loadedSource);
+
+          if (!mcpConfig) {
+            lines.push('');
+            lines.push('⚠️ **Warning**: MCP server is reachable, but session credential lookup failed.');
+            lines.push('The source may not work in this session. Try re-authenticating with the correct auth type.');
+            if (source.mcp?.authType) {
+              lines.push(`Current authType: ${source.mcp.authType}`);
+            }
+          } else {
+            lines.push('');
+            lines.push('✓ Source is ready for session use.');
           }
 
           return {
