@@ -261,9 +261,9 @@ export class SourceService {
     // This handles cases where authType doesn't match the stored credential type
     if (source.config.type === 'mcp' && source.config.mcp?.authType !== 'none') {
       const baseId = {
-        workspaceSlug: source.workspaceSlug,
-        sourceSlug: source.config.slug,
-        ...(source.agentSlug && { agentSlug: source.agentSlug }),
+        workspaceId: source.workspaceSlug,
+        sourceId: source.config.slug,
+        ...(source.agentSlug && { agentId: source.agentSlug }),
       };
 
       // Try OAuth first
@@ -351,9 +351,9 @@ export class SourceService {
 
       return {
         type,
-        workspaceSlug: source.workspaceSlug,
-        agentSlug: source.agentSlug,
-        sourceSlug: source.config.slug,
+        workspaceId: source.workspaceSlug,
+        agentId: source.agentSlug,
+        sourceId: source.config.slug,
       };
     }
 
@@ -380,8 +380,8 @@ export class SourceService {
 
     return {
       type,
-      workspaceSlug: source.workspaceSlug,
-      sourceSlug: source.config.slug,
+      workspaceId: source.workspaceSlug,
+      sourceId: source.config.slug,
     };
   }
 

@@ -761,7 +761,7 @@ async function testApiSource(
     // Get credentials if needed - try multiple credential types
     if (source.api.authType && source.api.authType !== 'none') {
       const credentialManager = getCredentialManager();
-      const baseId = { workspaceSlug, sourceSlug: source.slug };
+      const baseId = { workspaceId: workspaceSlug, sourceId: source.slug };
 
       // Try credential types in order of preference
       const credTypesToTry: Array<'source_oauth' | 'source_bearer' | 'source_apikey' | 'source_basic'> = [
@@ -2390,18 +2390,18 @@ credential_prompt({
           // Encode basic auth as base64 (username:password)
           const encoded = Buffer.from(`${response.username}:${response.password}`).toString('base64');
           await credManager.set(
-            { type: 'source_basic', workspaceSlug, sourceSlug: args.sourceSlug },
+            { type: 'source_basic', workspaceId: workspaceSlug, sourceId: args.sourceSlug },
             { value: encoded }
           );
         } else if (args.mode === 'bearer') {
           await credManager.set(
-            { type: 'source_bearer', workspaceSlug, sourceSlug: args.sourceSlug },
+            { type: 'source_bearer', workspaceId: workspaceSlug, sourceId: args.sourceSlug },
             { value: response.value! }
           );
         } else {
           // header or query - stored as API key
           await credManager.set(
-            { type: 'source_apikey', workspaceSlug, sourceSlug: args.sourceSlug },
+            { type: 'source_apikey', workspaceId: workspaceSlug, sourceId: args.sourceSlug },
             { value: response.value! }
           );
         }

@@ -222,7 +222,7 @@ export class CredentialManager {
     clientId?: string;
     tokenType?: string;
   } | null> {
-    const cred = await this.get({ type: 'workspace_oauth', workspaceSlug: workspaceId });
+    const cred = await this.get({ type: 'workspace_oauth', workspaceId });
     if (!cred) return null;
 
     return {
@@ -246,7 +246,7 @@ export class CredentialManager {
     }
   ): Promise<void> {
     await this.set(
-      { type: 'workspace_oauth', workspaceSlug: workspaceId },
+      { type: 'workspace_oauth', workspaceId },
       {
         value: credentials.accessToken,
         refreshToken: credentials.refreshToken,
@@ -259,13 +259,13 @@ export class CredentialManager {
 
   /** Get workspace bearer token */
   async getWorkspaceBearer(workspaceId: string): Promise<string | null> {
-    const cred = await this.get({ type: 'workspace_bearer', workspaceSlug: workspaceId });
+    const cred = await this.get({ type: 'workspace_bearer', workspaceId });
     return cred?.value || null;
   }
 
   /** Set workspace bearer token */
   async setWorkspaceBearer(workspaceId: string, token: string): Promise<void> {
-    await this.set({ type: 'workspace_bearer', workspaceSlug: workspaceId }, { value: token });
+    await this.set({ type: 'workspace_bearer', workspaceId }, { value: token });
   }
 
   /** Get MCP server OAuth credentials for an agent */
@@ -281,8 +281,8 @@ export class CredentialManager {
   } | null> {
     const cred = await this.get({
       type: 'mcp_oauth',
-      workspaceSlug: workspaceId,
-      agentSlug: agentId,
+      workspaceId,
+      agentId,
       name: serverName,
     });
     if (!cred) return null;
@@ -308,7 +308,7 @@ export class CredentialManager {
     }
   ): Promise<void> {
     await this.set(
-      { type: 'mcp_oauth', workspaceSlug: workspaceId, agentSlug: agentId, name: serverName },
+      { type: 'mcp_oauth', workspaceId, agentId, name: serverName },
       {
         value: credentials.accessToken,
         refreshToken: credentials.refreshToken,
@@ -326,8 +326,8 @@ export class CredentialManager {
   ): Promise<string | null> {
     const cred = await this.get({
       type: 'api_key',
-      workspaceSlug: workspaceId,
-      agentSlug: agentId,
+      workspaceId,
+      agentId,
       name: apiName,
     });
     return cred?.value || null;
@@ -341,7 +341,7 @@ export class CredentialManager {
     apiKey: string
   ): Promise<void> {
     await this.set(
-      { type: 'api_key', workspaceSlug: workspaceId, agentSlug: agentId, name: apiName },
+      { type: 'api_key', workspaceId, agentId, name: apiName },
       { value: apiKey }
     );
   }
@@ -349,11 +349,11 @@ export class CredentialManager {
   /** Delete all credentials for a workspace (including all agent credentials) */
   async deleteWorkspaceCredentials(workspaceId: string): Promise<void> {
     // Delete workspace-level credentials
-    await this.delete({ type: 'workspace_oauth', workspaceSlug: workspaceId });
-    await this.delete({ type: 'workspace_bearer', workspaceSlug: workspaceId });
+    await this.delete({ type: 'workspace_oauth', workspaceId });
+    await this.delete({ type: 'workspace_bearer', workspaceId });
 
     // Delete all agent credentials for this workspace
-    const allCreds = await this.list({ workspaceSlug: workspaceId });
+    const allCreds = await this.list({ workspaceId });
     for (const cred of allCreds) {
       await this.delete(cred);
     }
@@ -373,18 +373,18 @@ export class CredentialManager {
     // If names provided, delete only those
     if (serverNames && serverNames.length > 0) {
       for (const name of serverNames) {
-        await this.delete({ type: 'mcp_oauth', workspaceSlug: workspaceId, agentSlug: agentId, name });
+        await this.delete({ type: 'mcp_oauth', workspaceId, agentId, name });
       }
     }
     if (apiNames && apiNames.length > 0) {
       for (const name of apiNames) {
-        await this.delete({ type: 'api_key', workspaceSlug: workspaceId, agentSlug: agentId, name });
+        await this.delete({ type: 'api_key', workspaceId, agentId, name });
       }
     }
 
     // If no names provided, find and delete all credentials for this agent
     if (!serverNames && !apiNames) {
-      const allCredentials = await this.list({ workspaceSlug: workspaceId, agentSlug: agentId });
+      const allCredentials = await this.list({ workspaceId, agentId });
       for (const id of allCredentials) {
         await this.delete(id);
       }
