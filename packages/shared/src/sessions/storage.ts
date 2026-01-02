@@ -31,6 +31,8 @@ import type {
   TodoState,
 } from './types.ts';
 import type { Plan } from '../agents/plan-types.ts';
+import { validateSessionStatus } from '../statuses/validation.ts';
+import { getStatusCategory } from '../statuses/storage.ts';
 
 // Re-export types for convenience
 export type { SessionConfig } from './types.ts';
@@ -328,7 +330,6 @@ function extractSessionMetadata(session: StoredSession, workspaceRootPath: strin
     const planCount = listPlanFiles(workspaceRootPath, session.id).length;
 
     // Validate todoState against workspace status config (use actual path)
-    const { validateSessionStatus } = require('../statuses/validation.ts');
     const validatedTodoState = validateSessionStatus(workspaceRootPath, session.todoState);
 
     // If validation changed the status, auto-save corrected value
@@ -509,8 +510,6 @@ export function listFlaggedSessions(workspaceRootPath: string): SessionMetadata[
  * Includes done, cancelled, and any custom "closed" statuses
  */
 export function listCompletedSessions(workspaceRootPath: string): SessionMetadata[] {
-  const { getStatusCategory } = require('../statuses/storage.ts');
-
   return listSessions(workspaceRootPath).filter(s => {
     const category = getStatusCategory(workspaceRootPath, s.todoState || 'todo');
     return category === 'closed';
@@ -522,8 +521,6 @@ export function listCompletedSessions(workspaceRootPath: string): SessionMetadat
  * Includes todo, in-progress, needs-review, and any custom "open" statuses
  */
 export function listInboxSessions(workspaceRootPath: string): SessionMetadata[] {
-  const { getStatusCategory } = require('../statuses/storage.ts');
-
   return listSessions(workspaceRootPath).filter(s => {
     const category = getStatusCategory(workspaceRootPath, s.todoState || 'todo');
     return category === 'open';

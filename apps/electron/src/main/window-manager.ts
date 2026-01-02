@@ -55,7 +55,12 @@ export class WindowManager {
         preload: join(__dirname, 'preload.cjs'),
         contextIsolation: true,
         nodeIntegration: false,
-        sandbox: false, // Allow preload to access Node.js APIs like 'os'
+        // SECURITY NOTE: Sandbox is disabled to allow preload script access to process.versions
+        // for the getVersions() API (returns node/chrome/electron versions).
+        // This is a minimal exposure since contextIsolation is enabled and nodeIntegration
+        // is disabled - the preload only exposes safe, read-only version data via IPC.
+        // If sandbox is re-enabled, process.versions becomes undefined.
+        sandbox: false,
         webviewTag: true // Enable webview for browser panel
       }
     })

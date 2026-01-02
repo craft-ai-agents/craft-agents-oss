@@ -105,12 +105,20 @@ export class PortableCredentialBackend implements CredentialBackend {
   }
 
   /**
-   * Check if the provided password is correct by attempting to decrypt.
-   * Returns true if decrypt succeeds, false otherwise.
+   * Verify that the provided password can access the credentials file.
+   *
+   * @returns true if:
+   *   - No credentials file exists yet (any password is valid for new files)
+   *   - The password successfully decrypts an existing file
+   * @returns false if:
+   *   - A credentials file exists but the password is incorrect
+   *
+   * Note: For new workspaces without a credentials file, this always returns true
+   * because the provided password will be used to create the new encrypted file.
    */
   async verifyPassword(): Promise<boolean> {
     if (!this.hasCredentialsFile()) {
-      // No file yet - password can't be verified but is acceptable
+      // No file yet - any password is valid for creating a new file
       return true;
     }
 

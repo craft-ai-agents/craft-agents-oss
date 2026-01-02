@@ -863,10 +863,17 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   })
 
   // Update a workspace setting
+  // Valid keys: 'model', 'enabledSourceSlugs', 'permissionMode', 'workingDirectory', 'credentialStrategy'
   ipcMain.handle(IPC_CHANNELS.WORKSPACE_SETTINGS_UPDATE, async (_event, workspaceId: string, key: string, value: unknown) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) {
       throw new Error(`Workspace not found: ${workspaceId}`)
+    }
+
+    // Validate key is a known workspace setting
+    const validKeys = ['model', 'enabledSourceSlugs', 'permissionMode', 'workingDirectory', 'credentialStrategy']
+    if (!validKeys.includes(key)) {
+      throw new Error(`Invalid workspace setting key: ${key}. Valid keys: ${validKeys.join(', ')}`)
     }
 
     const { loadWorkspaceConfig, saveWorkspaceConfig } = await import('@craft-agent/shared/workspaces')
@@ -876,6 +883,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     }
 
     // Update the setting in defaults
+    // Type assertion is safe here because we've validated the key above
     config.defaults = config.defaults || {}
     ;(config.defaults as Record<string, unknown>)[key] = value
 

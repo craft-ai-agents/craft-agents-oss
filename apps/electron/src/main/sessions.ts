@@ -1481,12 +1481,21 @@ Use oauth_trigger for OAuth sources, credential_prompt for API key/bearer token 
 
     console.log(`[SessionManager] Killing shell ${shellId} for session: ${sessionId}`)
 
-    // Send a message to the agent asking it to kill the shell
-    // The model will use the KillShell tool to terminate the background shell
+    // Background shells are managed by the Claude Agent SDK. The only way to terminate
+    // them is by having the agent invoke the KillShell tool. We send a direct instruction
+    // to the agent asking it to terminate the shell.
+    //
+    // NOTE: This approach relies on the model correctly understanding and executing the
+    // request. In practice, the model reliably invokes KillShell when given a specific
+    // shell ID. However, there's no guaranteed way to force termination from outside
+    // the agent's tool calling loop.
+    //
+    // TODO: Consider adding a direct SDK API for shell termination if this becomes
+    // unreliable in practice.
     try {
       await this.sendMessage(
         sessionId,
-        `Please kill the background shell with ID: ${shellId}`,
+        `Use the KillShell tool to terminate shell ID: ${shellId}`,
         []
       )
       return { success: true }
@@ -1499,20 +1508,34 @@ Use oauth_trigger for OAuth sources, credential_prompt for API key/bearer token 
 
   /**
    * Get output from a background task or shell
+   *
+   * NOT YET IMPLEMENTED - This is a placeholder.
+   *
+   * Background task output retrieval requires infrastructure that doesn't exist yet:
+   * 1. Storing shell output streams as they come in (tool_result events only have final output)
+   * 2. Associating outputs with task/shell IDs in a queryable store
+   * 3. Handling the BashOutput tool results for ongoing shells
+   *
+   * Current workaround: Users can view task output in the main chat panel where
+   * tool results are displayed inline with the conversation.
+   *
    * @param taskId - The task or shell ID
-   * @returns Task output string or null if not found
+   * @returns Placeholder message explaining the limitation
    */
   async getTaskOutput(taskId: string): Promise<string | null> {
-    console.log(`[SessionManager] Getting output for task: ${taskId}`)
+    console.log(`[SessionManager] Getting output for task: ${taskId} (not implemented)`)
 
-    // TODO: Implement proper task output retrieval
-    // This would require:
-    // 1. Tracking shell output as it comes in via tool_result events
-    // 2. Storing completed task outputs in memory or on disk
-    // 3. Using SDK's TaskOutput tool for agent tasks
-    //
-    // For now, return a placeholder message
-    return 'Output retrieval for background tasks is not yet implemented.\n\nTo view task output, check the main chat panel where tool results are displayed.'
+    // This functionality requires a dedicated output tracking system.
+    // The SDK manages shells internally but doesn't expose an API for querying
+    // their output history outside of tool_result events.
+    return `Background task output retrieval is not yet implemented.
+
+Task ID: ${taskId}
+
+To view this task's output:
+• Check the main chat panel where tool results are displayed
+• Look for the tool_result message associated with this task
+• For ongoing shells, the agent can use BashOutput to check status`
   }
 
   /**

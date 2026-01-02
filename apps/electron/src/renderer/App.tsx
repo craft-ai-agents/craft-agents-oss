@@ -26,8 +26,71 @@ import {
   sessionAtomFamily,
   backgroundTasksAtomFamily,
 } from '@/atoms/sessions'
+import { getDefaultStore } from 'jotai'
 
 type AppState = 'loading' | 'onboarding' | 'reauth' | 'ready'
+
+/** Type for the Jotai store returned by useStore() */
+type JotaiStore = ReturnType<typeof getDefaultStore>
+
+/**
+ * Helper to handle background task events from the agent.
+ * Updates the backgroundTasksAtomFamily based on event type.
+ * Extracted to avoid code duplication between streaming and non-streaming paths.
+ */
+function handleBackgroundTaskEvent(
+  store: JotaiStore,
+  sessionId: string,
+  event: { type: string },
+  agentEvent: Record<string, unknown>
+): void {
+  const backgroundTasksAtom = backgroundTasksAtomFamily(sessionId)
+
+  if (event.type === 'task_backgrounded' && 'taskId' in agentEvent && 'toolUseId' in agentEvent) {
+    const currentTasks = store.get(backgroundTasksAtom)
+    const exists = currentTasks.some(t => t.toolUseId === agentEvent.toolUseId)
+    if (!exists) {
+      store.set(backgroundTasksAtom, [
+        ...currentTasks,
+        {
+          id: agentEvent.taskId as string,
+          type: 'agent' as const,
+          toolUseId: agentEvent.toolUseId as string,
+          startTime: Date.now(),
+          elapsedSeconds: 0,
+          intent: agentEvent.intent as string | undefined,
+        },
+      ])
+    }
+  } else if (event.type === 'shell_backgrounded' && 'shellId' in agentEvent && 'toolUseId' in agentEvent) {
+    const currentTasks = store.get(backgroundTasksAtom)
+    const exists = currentTasks.some(t => t.toolUseId === agentEvent.toolUseId)
+    if (!exists) {
+      store.set(backgroundTasksAtom, [
+        ...currentTasks,
+        {
+          id: agentEvent.shellId as string,
+          type: 'shell' as const,
+          toolUseId: agentEvent.toolUseId as string,
+          startTime: Date.now(),
+          elapsedSeconds: 0,
+          intent: agentEvent.intent as string | undefined,
+        },
+      ])
+    }
+  } else if (event.type === 'task_progress' && 'toolUseId' in agentEvent && 'elapsedSeconds' in agentEvent) {
+    const currentTasks = store.get(backgroundTasksAtom)
+    store.set(backgroundTasksAtom, currentTasks.map(t =>
+      t.toolUseId === agentEvent.toolUseId
+        ? { ...t, elapsedSeconds: agentEvent.elapsedSeconds as number }
+        : t
+    ))
+  } else if (event.type === 'tool_result' && 'toolUseId' in agentEvent) {
+    // Remove task when it completes
+    const currentTasks = store.get(backgroundTasksAtom)
+    store.set(backgroundTasksAtom, currentTasks.filter(t => t.toolUseId !== agentEvent.toolUseId))
+  }
+}
 
 export default function App() {
   // App state: loading -> check auth -> onboarding or ready
@@ -346,51 +409,7 @@ export default function App() {
         handleEffects(effects, sessionId, event.type)
 
         // Handle background task events
-        const backgroundTasksAtom = backgroundTasksAtomFamily(sessionId)
-        if (event.type === 'task_backgrounded' && 'taskId' in agentEvent && 'toolUseId' in agentEvent) {
-          const currentTasks = store.get(backgroundTasksAtom)
-          const exists = currentTasks.some(t => t.toolUseId === agentEvent.toolUseId)
-          if (!exists) {
-            store.set(backgroundTasksAtom, [
-              ...currentTasks,
-              {
-                id: agentEvent.taskId,
-                type: 'agent' as const,
-                toolUseId: agentEvent.toolUseId,
-                startTime: Date.now(),
-                elapsedSeconds: 0,
-                intent: agentEvent.intent,
-              },
-            ])
-          }
-        } else if (event.type === 'shell_backgrounded' && 'shellId' in agentEvent && 'toolUseId' in agentEvent) {
-          const currentTasks = store.get(backgroundTasksAtom)
-          const exists = currentTasks.some(t => t.toolUseId === agentEvent.toolUseId)
-          if (!exists) {
-            store.set(backgroundTasksAtom, [
-              ...currentTasks,
-              {
-                id: agentEvent.shellId,
-                type: 'shell' as const,
-                toolUseId: agentEvent.toolUseId,
-                startTime: Date.now(),
-                elapsedSeconds: 0,
-                intent: agentEvent.intent,
-              },
-            ])
-          }
-        } else if (event.type === 'task_progress' && 'toolUseId' in agentEvent && 'elapsedSeconds' in agentEvent) {
-          const currentTasks = store.get(backgroundTasksAtom)
-          store.set(backgroundTasksAtom, currentTasks.map(t =>
-            t.toolUseId === agentEvent.toolUseId
-              ? { ...t, elapsedSeconds: agentEvent.elapsedSeconds }
-              : t
-          ))
-        } else if (event.type === 'tool_result' && 'toolUseId' in agentEvent) {
-          // Remove task when it completes
-          const currentTasks = store.get(backgroundTasksAtom)
-          store.set(backgroundTasksAtom, currentTasks.filter(t => t.toolUseId !== agentEvent.toolUseId))
-        }
+        handleBackgroundTaskEvent(store, sessionId, event, agentEvent as Record<string, unknown>)
 
         // For handoff events, also sync to React state
         // This reconciles React state with all the streaming updates
@@ -421,51 +440,7 @@ export default function App() {
         handleEffects(effects, sessionId, event.type)
 
         // Handle background task events
-        const backgroundTasksAtom = backgroundTasksAtomFamily(sessionId)
-        if (event.type === 'task_backgrounded' && 'taskId' in agentEvent && 'toolUseId' in agentEvent) {
-          const currentTasks = store.get(backgroundTasksAtom)
-          const exists = currentTasks.some(t => t.toolUseId === agentEvent.toolUseId)
-          if (!exists) {
-            store.set(backgroundTasksAtom, [
-              ...currentTasks,
-              {
-                id: agentEvent.taskId,
-                type: 'agent' as const,
-                toolUseId: agentEvent.toolUseId,
-                startTime: Date.now(),
-                elapsedSeconds: 0,
-                intent: agentEvent.intent,
-              },
-            ])
-          }
-        } else if (event.type === 'shell_backgrounded' && 'shellId' in agentEvent && 'toolUseId' in agentEvent) {
-          const currentTasks = store.get(backgroundTasksAtom)
-          const exists = currentTasks.some(t => t.toolUseId === agentEvent.toolUseId)
-          if (!exists) {
-            store.set(backgroundTasksAtom, [
-              ...currentTasks,
-              {
-                id: agentEvent.shellId,
-                type: 'shell' as const,
-                toolUseId: agentEvent.toolUseId,
-                startTime: Date.now(),
-                elapsedSeconds: 0,
-                intent: agentEvent.intent,
-              },
-            ])
-          }
-        } else if (event.type === 'task_progress' && 'toolUseId' in agentEvent && 'elapsedSeconds' in agentEvent) {
-          const currentTasks = store.get(backgroundTasksAtom)
-          store.set(backgroundTasksAtom, currentTasks.map(t =>
-            t.toolUseId === agentEvent.toolUseId
-              ? { ...t, elapsedSeconds: agentEvent.elapsedSeconds }
-              : t
-          ))
-        } else if (event.type === 'tool_result' && 'toolUseId' in agentEvent) {
-          // Remove task when it completes
-          const currentTasks = store.get(backgroundTasksAtom)
-          store.set(backgroundTasksAtom, currentTasks.filter(t => t.toolUseId !== agentEvent.toolUseId))
-        }
+        handleBackgroundTaskEvent(store, sessionId, event, agentEvent as Record<string, unknown>)
 
         // If session didn't exist before, add it
         if (!currentSession) {
