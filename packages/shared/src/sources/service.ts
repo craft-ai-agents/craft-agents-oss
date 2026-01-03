@@ -13,6 +13,7 @@ import { createGmailServer } from '../agents/gmail-tools.ts';
 import { createApiServer, type ApiCredential, type BasicAuthCredential } from '../agents/api-tools.ts';
 import type { ApiConfig } from '../agents/types.ts';
 import { createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
+import { CraftOAuth } from '../auth/oauth.ts';
 
 /**
  * MCP server configuration compatible with Claude Agent SDK
@@ -268,10 +269,11 @@ export class SourceService {
 
       // Try OAuth first
       const oauthType = source.agentSlug ? 'agent_source_oauth' : 'source_oauth';
-      const oauthCreds = await manager.get({ type: oauthType, ...baseId } as CredentialId);
+      const credentialId = { type: oauthType, ...baseId } as CredentialId;
+      const oauthCreds = await manager.get(credentialId);
       if (oauthCreds?.value) {
         debug(`[SourceService] Found ${oauthType} token for ${source.config.slug}`);
-        return this.checkTokenExpiry(source.config.slug, oauthCreds);
+        return this.checkAndRefreshToken(source, credentialId, oauthCreds);
       }
 
       // Fall back to bearer
@@ -292,24 +294,78 @@ export class SourceService {
 
     if (!creds?.value) return null;
 
-    return this.checkTokenExpiry(source.config.slug, creds);
+    return this.checkAndRefreshToken(source, credentialId, creds);
   }
 
   /**
-   * Check if token needs refresh and return value if still valid
+   * Check if token needs refresh and attempt automatic refresh if possible.
+   * Returns the token value if valid (possibly after refresh), or null if expired and can't refresh.
    */
-  private checkTokenExpiry(sourceSlug: string, creds: { value: string; expiresAt?: number }): string | null {
-    // Check if refresh needed (within 5 min of expiry)
-    if (creds.expiresAt && creds.expiresAt < Date.now() + 5 * 60 * 1000) {
-      debug(`[SourceService] Token for ${sourceSlug} needs refresh`);
-      // Token refresh is handled by the OAuth flow, not here
-      // The UI should detect expired tokens and trigger re-auth
-      if (creds.expiresAt < Date.now()) {
-        return null; // Token is expired
-      }
+  private async checkAndRefreshToken(
+    source: LoadedSource,
+    credentialId: CredentialId,
+    creds: StoredCredential
+  ): Promise<string | null> {
+    // If no expiry set, assume token is valid
+    if (!creds.expiresAt) {
+      return creds.value;
     }
 
-    return creds.value;
+    const now = Date.now();
+    const fiveMinutesFromNow = now + 5 * 60 * 1000;
+
+    // Token is not expiring soon - return as is
+    if (creds.expiresAt > fiveMinutesFromNow) {
+      return creds.value;
+    }
+
+    debug(`[SourceService] Token for ${source.config.slug} expires soon or is expired, attempting refresh`);
+
+    // Check if we can refresh (need refresh token, client ID, and MCP URL)
+    const mcpUrl = source.config.mcp?.url;
+    if (creds.refreshToken && creds.clientId && mcpUrl) {
+      try {
+        const oauth = new CraftOAuth(
+          { mcpBaseUrl: mcpUrl },
+          {
+            onStatus: (msg) => debug(`[SourceService] OAuth refresh: ${msg}`),
+            onError: (err) => debug(`[SourceService] OAuth refresh error: ${err}`),
+          }
+        );
+
+        debug(`[SourceService] Refreshing token for ${source.config.slug}...`);
+        const newTokens = await oauth.refreshAccessToken(creds.refreshToken, creds.clientId);
+
+        // Update stored credentials with new tokens
+        const manager = getCredentialManager();
+        const updatedCreds: StoredCredential = {
+          value: newTokens.accessToken,
+          refreshToken: newTokens.refreshToken || creds.refreshToken,
+          expiresAt: newTokens.expiresAt,
+          clientId: creds.clientId,
+          tokenType: newTokens.tokenType,
+        };
+        await manager.set(credentialId, updatedCreds);
+
+        debug(`[SourceService] Token refreshed successfully for ${source.config.slug}`);
+        return newTokens.accessToken;
+      } catch (error) {
+        debug(`[SourceService] Failed to refresh token for ${source.config.slug}: ${error}`);
+        // Fall through to expiry check below
+      }
+    } else {
+      debug(`[SourceService] Cannot refresh token for ${source.config.slug} - missing refresh token, client ID, or MCP URL`);
+    }
+
+    // If token is not yet expired, return it (even though it's expiring soon)
+    if (creds.expiresAt > now) {
+      debug(`[SourceService] Token for ${source.config.slug} is still valid (but expiring soon)`);
+      return creds.value;
+    }
+
+    // Token is expired and we couldn't refresh
+    debug(`[SourceService] Token for ${source.config.slug} is expired and could not be refreshed`);
+    return null;
   }
 
   /**
