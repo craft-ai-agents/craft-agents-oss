@@ -231,6 +231,37 @@ export class WindowManager {
   }
 
   /**
+   * Get the currently focused window
+   */
+  getFocusedWindow(): BrowserWindow | null {
+    const focused = BrowserWindow.getFocusedWindow()
+    if (focused && !focused.isDestroyed()) {
+      return focused
+    }
+    return null
+  }
+
+  /**
+   * Get the last active window (most recently used)
+   * Falls back to any available window if none focused
+   */
+  getLastActiveWindow(): BrowserWindow | null {
+    // First try focused window
+    const focused = this.getFocusedWindow()
+    if (focused) {
+      return focused
+    }
+
+    // Fall back to any available window
+    const allWindows = this.getAllWindows()
+    if (allWindows.length > 0) {
+      return allWindows[0].window
+    }
+
+    return null
+  }
+
+  /**
    * Send IPC message to all windows
    */
   broadcastToAll(channel: string, ...args: unknown[]): void {

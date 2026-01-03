@@ -398,9 +398,10 @@ export function ChatDisplay({
   }
 
   // Handle stop request from InputContainer
-  const handleStop = () => {
+  // silent=true when redirecting (sending new message), silent=false when user clicks Stop button
+  const handleStop = (silent = false) => {
     if (!session?.isProcessing) return
-    window.electronAPI.cancelProcessing(session.id).catch(error => {
+    window.electronAPI.cancelProcessing(session.id, silent).catch(error => {
       console.error('[ChatDisplay] Failed to cancel processing:', error)
     })
   }
@@ -826,6 +827,7 @@ export function ChatDisplay({
                   tasks={backgroundTasks}
                   sessionId={session.id}
                   onKillTask={(taskId) => killTask(taskId, backgroundTasks.find(t => t.id === taskId)?.type ?? 'shell')}
+                  onInsertMessage={onInputChange}
                 />
                 <InputContainer
                   placeholder={`Message ${session.agentName || session.workspaceName || 'Chat'}...`}

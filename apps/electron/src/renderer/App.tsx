@@ -18,6 +18,8 @@ import { useGlobalShortcuts } from '@/hooks/keyboard'
 import { useOnboarding } from '@/hooks/useOnboarding'
 import { useDeepLinkNavigation } from '@/hooks/useDeepLinkNavigation'
 import { useTabs } from '@/tabs'
+import { NavigationProvider } from '@/contexts/NavigationContext'
+import { navigate, routes } from './lib/navigate'
 import { Spinner } from '@/components/ui/loading-indicator'
 import { DEFAULT_MODEL } from '@config/models'
 import {
@@ -251,19 +253,8 @@ export default function App() {
     initialize()
   }, [])
 
-  // Tab system
-  const { openSettingsTab, openShortcutsTab, openPreferencesTab, closeChatTabBySession } = useTabs()
-
-  // Global shortcut: Cmd+/ to show keyboard shortcuts
-  useGlobalShortcuts({
-    shortcuts: [
-      {
-        key: '/',
-        cmd: true,
-        action: openShortcutsTab,
-      },
-    ],
-  })
+  // Tab system - only closeChatTabBySession is needed, navigation uses navigate()
+  const { closeChatTabBySession } = useTabs()
 
   // Load workspaces, sessions, model, and drafts when app is ready
   useEffect(() => {
@@ -512,7 +503,7 @@ export default function App() {
       handleOpenSettings()
     })
     const unsubShortcuts = window.electronAPI.onMenuKeyboardShortcuts(() => {
-      openShortcutsTab()
+      navigate(routes.tab.shortcuts())
     })
     const unsubHelp = window.electronAPI.onMenuOpenHelp(() => {
       // Open help documentation URL
@@ -526,7 +517,7 @@ export default function App() {
       unsubShortcuts()
       unsubHelp()
     }
-  }, [openShortcutsTab])
+  }, [])
 
   const handleCreateSession = useCallback(async (workspaceId: string, agentId?: string): Promise<Session> => {
     // Find agent if provided - prefer displayName for human-readable title
@@ -930,16 +921,16 @@ export default function App() {
   }, [])
 
   const handleOpenSettings = useCallback(() => {
-    openSettingsTab()
-  }, [openSettingsTab])
+    navigate(routes.tab.settings())
+  }, [])
 
   const handleOpenKeyboardShortcuts = useCallback(() => {
-    openShortcutsTab()
-  }, [openShortcutsTab])
+    navigate(routes.tab.shortcuts())
+  }, [])
 
   const handleOpenStoredUserPreferences = useCallback(() => {
-    openPreferencesTab()
-  }, [openPreferencesTab])
+    navigate(routes.tab.preferences())
+  }, [])
 
   // Show reset confirmation dialog
   const handleReset = useCallback(() => {
@@ -1148,19 +1139,26 @@ export default function App() {
   return (
     <FocusProvider>
       <TooltipProvider>
-        <div className="h-full text-foreground">
-          <Chat
-            contextValue={chatContextValue}
-            defaultLayout={[20, 32, 48]}
-            menuNewChatTrigger={menuNewChatTrigger}
-            menuNewChatTabTrigger={menuNewChatTabTrigger}
-          />
-          <ResetConfirmationDialog
-            open={showResetDialog}
-            onConfirm={executeReset}
-            onCancel={() => setShowResetDialog(false)}
-          />
-        </div>
+        <NavigationProvider
+          workspaceId={windowWorkspaceId}
+          onCreateSession={handleCreateSession}
+          onInputChange={handleInputChange}
+          isReady={appState === 'ready'}
+        >
+          <div className="h-full text-foreground">
+            <Chat
+              contextValue={chatContextValue}
+              defaultLayout={[20, 32, 48]}
+              menuNewChatTrigger={menuNewChatTrigger}
+              menuNewChatTabTrigger={menuNewChatTabTrigger}
+            />
+            <ResetConfirmationDialog
+              open={showResetDialog}
+              onConfirm={executeReset}
+              onCancel={() => setShowResetDialog(false)}
+            />
+          </div>
+        </NavigationProvider>
       </TooltipProvider>
     </FocusProvider>
   )

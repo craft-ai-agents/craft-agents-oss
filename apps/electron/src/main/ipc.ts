@@ -214,8 +214,8 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   })
 
   // Cancel processing
-  ipcMain.handle(IPC_CHANNELS.CANCEL_PROCESSING, async (_event, sessionId: string) => {
-    return sessionManager.cancelProcessing(sessionId)
+  ipcMain.handle(IPC_CHANNELS.CANCEL_PROCESSING, async (_event, sessionId: string, silent?: boolean) => {
+    return sessionManager.cancelProcessing(sessionId, silent)
   })
 
   // Kill background shell

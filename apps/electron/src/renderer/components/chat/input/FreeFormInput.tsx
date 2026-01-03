@@ -45,8 +45,8 @@ export interface FreeFormInputProps {
   isProcessing?: boolean
   /** Callback when message is submitted */
   onSubmit: (message: string, attachments?: FileAttachment[]) => void
-  /** Callback to stop processing */
-  onStop?: () => void
+  /** Callback to stop processing. Pass silent=true to skip "Response interrupted" message */
+  onStop?: (silent?: boolean) => void
   /** External ref for the textarea */
   textareaRef?: React.RefObject<HTMLTextAreaElement>
   /** Current model ID */
@@ -125,6 +125,14 @@ export function FreeFormInput({
   const [input, setInput] = React.useState(inputValue ?? '')
   const [attachments, setAttachments] = React.useState<FileAttachment[]>([])
 
+  // Message queue for handling rapid stop+send sequences
+  // When user presses Enter while processing, we queue the message and stop
+  // Once processing stops, we auto-submit queued messages in order
+  const [messageQueue, setMessageQueue] = React.useState<Array<{
+    text: string
+    attachments?: FileAttachment[]
+  }>>([])
+
   // Optimistic state for source selection - updates UI immediately before IPC round-trip completes
   const [optimisticSourceSlugs, setOptimisticSourceSlugs] = React.useState(enabledSourceSlugs)
 
@@ -178,6 +186,17 @@ export function FreeFormInput({
       }
     }
   }, [onInputChange])
+
+  // Process message queue - submits when not processing
+  // All messages go through the queue for consistent handling
+  React.useEffect(() => {
+    if (!isProcessing && !disabled && messageQueue.length > 0) {
+      // Submit the first queued message
+      const [nextMessage, ...remaining] = messageQueue
+      setMessageQueue(remaining)
+      onSubmit(nextMessage.text, nextMessage.attachments)
+    }
+  }, [isProcessing, disabled, messageQueue, onSubmit])
 
   const [isDraggingOver, setIsDraggingOver] = React.useState(false)
   const [loadingCount, setLoadingCount] = React.useState(0)
@@ -488,22 +507,31 @@ export function FreeFormInput({
     }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  // Queue a message for submission - all messages go through the queue
+  const queueMessage = React.useCallback(() => {
     const hasContent = input.trim() || attachments.length > 0
-    if (!hasContent || disabled) return
+    if (!hasContent || disabled) return false
 
-    onSubmit(input.trim(), attachments.length > 0 ? attachments : undefined)
+    setMessageQueue(prev => [...prev, {
+      text: input.trim(),
+      attachments: attachments.length > 0 ? attachments : undefined
+    }])
     setInput('')
     setAttachments([])
     // Clear draft immediately (cancel any pending debounced sync)
     if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current)
     onInputChange?.('')
     prevInputValueRef.current = ''
+    return true
+  }, [input, attachments, disabled, onInputChange])
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    queueMessage()
   }
 
-  const handleStop = () => {
-    onStop?.()
+  const handleStop = (silent = false) => {
+    onStop?.(silent)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -532,21 +560,23 @@ export function FreeFormInput({
 
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      // If processing, first Return stops - second Return sends
-      if (isProcessing) {
-        handleStop()
-        return
+      // Queue message (will auto-send when not processing)
+      // Only stop if we actually queued content - empty Enter while processing does nothing
+      // Use silent=true to skip "Response interrupted" message (this is a redirect, not an interrupt)
+      const queued = queueMessage()
+      if (queued && isProcessing) {
+        handleStop(true)
       }
-      handleSubmit(e)
     }
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault()
-      // Cmd/Ctrl+Enter also stops first if processing
-      if (isProcessing) {
-        handleStop()
-        return
+      // Queue message (will auto-send when not processing)
+      // Only stop if we actually queued content
+      // Use silent=true to skip "Response interrupted" message
+      const queued = queueMessage()
+      if (queued && isProcessing) {
+        handleStop(true)
       }
-      handleSubmit(e)
     }
     if (e.key === 'Escape') {
       textareaRef.current?.blur()
@@ -970,7 +1000,7 @@ export function FreeFormInput({
               size="icon"
               variant="secondary"
               className="h-7 w-7 rounded-full shrink-0 hover:bg-foreground/15 active:bg-foreground/20"
-              onClick={handleStop}
+              onClick={() => handleStop(false)}
             >
               <Square className="h-3 w-3 fill-current" />
             </Button>

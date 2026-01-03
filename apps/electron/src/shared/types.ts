@@ -376,7 +376,7 @@ export type SessionEvent =
   | { type: 'error'; sessionId: string; error: string }
   | { type: 'typed_error'; sessionId: string; error: TypedError }
   | { type: 'complete'; sessionId: string }
-  | { type: 'interrupted'; sessionId: string; message: Message }
+  | { type: 'interrupted'; sessionId: string; message?: Message }
   | { type: 'status'; sessionId: string; message: string; statusType?: 'compacting' }
   | { type: 'info'; sessionId: string; message: string; statusType?: 'compaction_complete'; level?: 'info' | 'warning' | 'error' | 'success' }
   | { type: 'title_generated'; sessionId: string; title: string }
@@ -732,7 +732,7 @@ export interface ElectronAPI {
   deleteSession(sessionId: string): Promise<void>
   renameSession(sessionId: string, name: string): Promise<void>
   sendMessage(sessionId: string, message: string, attachments?: FileAttachment[], storedAttachments?: StoredAttachmentType[], options?: SendMessageOptions): Promise<void>
-  cancelProcessing(sessionId: string): Promise<void>
+  cancelProcessing(sessionId: string, silent?: boolean): Promise<void>
   killShell(sessionId: string, shellId: string): Promise<{ success: boolean; error?: string }>
   getTaskOutput(taskId: string): Promise<string | null>
   flagSession(sessionId: string): Promise<void>
@@ -983,6 +983,8 @@ export interface DeepLinkNavigation {
   tabParams?: Record<string, string>
   action?: string
   actionParams?: Record<string, string>
+  sidebar?: string
+  sidebarParams?: Record<string, string>
 }
 
 declare global {

@@ -32,6 +32,8 @@ export interface ActiveTasksBarProps {
   sessionId: string
   /** Callback when kill button is clicked */
   onKillTask?: (taskId: string) => void
+  /** Callback to insert message into input field */
+  onInsertMessage?: (text: string) => void
   /** Additional class name */
   className?: string
 }
@@ -59,7 +61,7 @@ function shortenId(id: string): string {
  * Styled to match ActiveOptionBadges for visual consistency
  * Only renders when there are active tasks
  */
-export function ActiveTasksBar({ tasks, sessionId, onKillTask, className }: ActiveTasksBarProps) {
+export function ActiveTasksBar({ tasks, sessionId, onKillTask, onInsertMessage, className }: ActiveTasksBarProps) {
   // Don't render if no tasks
   if (tasks.length === 0) return null
 
@@ -71,6 +73,7 @@ export function ActiveTasksBar({ tasks, sessionId, onKillTask, className }: Acti
           task={task}
           sessionId={sessionId}
           onKillTask={onKillTask || (() => {})}
+          onInsertMessage={onInsertMessage}
           className={className}
         />
       ))}

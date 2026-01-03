@@ -20,6 +20,7 @@ apps/electron/
 │   │   ├── ipc.ts         # IPC handler registration
 │   │   ├── menu.ts        # Application menu (File, Edit, View, Help)
 │   │   ├── sessions.ts    # Session management, CraftAgent integration
+│   │   ├── deep-link.ts   # Deep link URL parsing and handling
 │   │   ├── agent-service.ts # Agent listing, caching, auth checking
 │   │   └── sources-service.ts # Source and authentication service
 │   ├── preload/           # Context bridge (main ↔ renderer)
@@ -30,11 +31,17 @@ apps/electron/
 │   │   │   ├── chat/      # Chat UI (ChatInput, ChatDisplay, PermissionBanner)
 │   │   │   ├── markdown/  # Markdown renderer with Shiki
 │   │   │   └── ui/        # shadcn/ui components (incl. source-avatar.tsx)
+│   │   ├── contexts/
+│   │   │   └── NavigationContext.tsx  # Type-safe routing and navigation
+│   │   ├── lib/
+│   │   │   └── navigate.ts  # Global navigate() function
 │   │   ├── hooks/
 │   │   │   └── useAgentState.ts  # Agent activation state machine
 │   │   └── playground/    # Component development playground
 │   └── shared/
-│       └── types.ts       # Shared TypeScript interfaces
+│       ├── types.ts       # Shared TypeScript interfaces
+│       ├── routes.ts      # Type-safe route definitions
+│       └── route-parser.ts # Route string parsing
 ├── dist/                  # Build output
 └── resources/             # App icons
 ```
@@ -206,6 +213,43 @@ DevTools opens automatically (configured in `index.ts`). Remove `mainWindow.webC
 - **Agent state machine** - useAgentState hook manages activation flow
 - **Application menu** - Standard macOS/Windows menus with keyboard shortcuts
 - **Component playground** - Development tool for testing UI components in isolation
+- **Type-safe navigation** - Unified routing system for tabs, actions, and deep links
+
+## Navigation System
+
+The app uses a type-safe routing system for all internal navigation and deep links.
+
+### Quick Start
+
+```typescript
+import { navigate, routes } from '@/lib/navigate'
+
+// Tab routes
+navigate(routes.tab.settings())           // Open settings
+navigate(routes.tab.chat('session123'))   // Open chat
+navigate(routes.tab.agentInfo('claude'))  // Open agent info
+
+// Action routes
+navigate(routes.action.newChat({ agentId: 'claude' }))  // New chat with agent
+navigate(routes.action.deleteSession('id'))             // Delete session
+
+// Sidebar routes
+navigate(routes.sidebar.inbox())          // Show inbox
+navigate(routes.sidebar.flagged())        // Show flagged
+```
+
+### Deep Links
+
+External apps can navigate using `craftagents://` URLs:
+
+```
+craftagents://tab/settings
+craftagents://tab/chat/session123
+craftagents://action/new-chat?agentId=claude
+craftagents://workspace/{id}/tab/agent-info/my-agent
+```
+
+See `CLAUDE.md` for complete route reference.
 
 ## File Overview
 
@@ -215,10 +259,13 @@ DevTools opens automatically (configured in `index.ts`). Remove `mainWindow.webC
 | `main/sessions.ts` | CraftAgent wrapper, event processing, subagent integration |
 | `main/ipc.ts` | IPC channel handlers (sessions, files, shell) |
 | `main/menu.ts` | Application menu (File, Edit, View, Help) |
+| `main/deep-link.ts` | Deep link URL parsing and handling |
 | `main/agent-service.ts` | Agent listing, caching, auth checking |
 | `main/sources-service.ts` | Source loading and authentication service |
 | `preload/index.ts` | Context bridge API |
 | `renderer/App.tsx` | React root, state management |
+| `renderer/contexts/NavigationContext.tsx` | Type-safe routing and navigation handler |
+| `renderer/lib/navigate.ts` | Global navigate() function |
 | `renderer/hooks/useAgentState.ts` | Agent activation state machine (IPC-based) |
 | `renderer/hooks/useBackgroundTasks.ts` | Background task tracking |
 | `renderer/hooks/useStatuses.ts` | Workspace status configuration |
@@ -232,3 +279,5 @@ DevTools opens automatically (configured in `index.ts`). Remove `mainWindow.webC
 | `renderer/components/ui/source-avatar.tsx` | Unified source icon component |
 | `renderer/playground/` | Component development playground |
 | `shared/types.ts` | IPC channels, Message/Session/FileAttachment types |
+| `shared/routes.ts` | Type-safe route definitions and builders |
+| `shared/route-parser.ts` | Route string parsing utilities |

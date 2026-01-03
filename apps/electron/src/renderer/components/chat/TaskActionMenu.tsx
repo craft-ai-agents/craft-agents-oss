@@ -37,6 +37,8 @@ export interface TaskActionMenuProps {
   sessionId: string
   /** Callback when kill button is clicked */
   onKillTask: (taskId: string) => void
+  /** Callback to insert message into input field */
+  onInsertMessage?: (text: string) => void
   /** Additional class name */
   className?: string
 }
@@ -49,7 +51,7 @@ export interface TaskActionMenuProps {
  * - Stop Task: Kills shell tasks (agent tasks show warning)
  * - Copy Task ID: Copies ID to clipboard
  */
-export function TaskActionMenu({ task, sessionId, onKillTask, className }: TaskActionMenuProps) {
+export function TaskActionMenu({ task, sessionId, onKillTask, onInsertMessage, className }: TaskActionMenuProps) {
   const [open, setOpen] = React.useState(false)
 
   // Local timer for shell tasks (since they don't get task_progress events)
@@ -95,14 +97,15 @@ export function TaskActionMenu({ task, sessionId, onKillTask, className }: TaskA
     }
   }
 
-  const handleStopTask = async () => {
-    try {
-      await onKillTask(task.id)
-      setOpen(false)
-      toast.success('Task stopped')
-    } catch (err) {
-      toast.error('Failed to stop task')
+  const handleStopTask = () => {
+    const killCommand = `Kill background shell ${task.id}`
+    if (onInsertMessage) {
+      onInsertMessage(killCommand)
     }
+    setOpen(false)
+    toast.info('Command added to input', {
+      description: 'Press Enter to send'
+    })
   }
 
 
@@ -154,11 +157,11 @@ export function TaskActionMenu({ task, sessionId, onKillTask, className }: TaskA
           View Output
         </StyledDropdownMenuItem>
 
-        {/* Stop Task - Only show for shell tasks */}
+        {/* Stop Task - Only show for shell tasks (inserts kill command into input) */}
         {task.type === 'shell' && (
           <>
             <StyledDropdownMenuSeparator />
-            <StyledDropdownMenuItem onClick={handleStopTask} variant="destructive">
+            <StyledDropdownMenuItem onClick={handleStopTask}>
               <Square />
               Stop Task
             </StyledDropdownMenuItem>

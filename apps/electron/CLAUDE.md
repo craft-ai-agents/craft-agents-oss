@@ -429,10 +429,13 @@ const config = await window.electronAPI.getSourcePermissionsConfig(workspaceId, 
 │   │   │   ├── terminal-preview/ # Terminal preview window
 │   │   │   └── ui/        # shadcn/ui components
 │   │   ├── config/        # Renderer configuration (todo-states, etc.)
-│   │   ├── context/
-│   │   │   ├── NavigationContext.tsx  # Agent selection
+│   │   ├── contexts/
+│   │   │   ├── NavigationContext.tsx  # Type-safe routing and navigation
 │   │   │   ├── ChatContext.tsx        # Chat state and session management
 │   │   │   └── ThemeContext.tsx       # Theme state management
+│   │   ├── lib/
+│   │   │   ├── navigate.ts      # Global navigate() function
+│   │   │   └── utils.ts         # Utility functions
 │   │   ├── event-processor/ # Event streaming and processing
 │   │   │   ├── processor.ts   # Event processor logic
 │   │   │   ├── helpers.ts     # Processing helpers
@@ -442,11 +445,9 @@ const config = await window.electronAPI.getSourcePermissionsConfig(workspaceId, 
 │   │   │   ├── useBackgroundTasks.ts # Background task tracking
 │   │   │   ├── useStatuses.ts    # Workspace status configuration
 │   │   │   ├── useTheme.ts       # Cascading theme resolution
-│   │   │   ├── useDeepLinkNavigation.ts  # Deep link tab navigation
 │   │   │   ├── useSession.ts     # Session hook for isolated access
 │   │   │   ├── useOnboarding.ts  # Onboarding flow management
 │   │   │   └── keyboard/         # Keyboard handling hooks
-│   │   ├── lib/           # Utility functions (utils.ts, local-storage.ts)
 │   │   ├── tabs/          # Tab system management
 │   │   ├── utils/         # Additional utilities
 │   │   └── playground/    # Component development playground
@@ -455,7 +456,9 @@ const config = await window.electronAPI.getSourcePermissionsConfig(workspaceId, 
 │   │       ├── PropsPanel.tsx        # Dynamic props editor
 │   │       └── registry/             # Component registry (chat, icons, markdown)
 │   └── shared/
-│       └── types.ts       # IPC channels, Message/Session/FileAttachment types
+│       ├── types.ts       # IPC channels, Message/Session/FileAttachment types
+│       ├── routes.ts      # Type-safe route definitions and builders
+│       └── route-parser.ts # Route string parsing utilities
 ├── dist/                  # Build output
 └── resources/             # App icons
 ```
@@ -527,42 +530,127 @@ The app uses Electron's IPC for main ↔ renderer communication:
 
 **Event streaming pattern:** `sendMessage` returns immediately. Results stream via `SESSION_EVENT` channel.
 
+### Navigation System
+
+The app uses a **type-safe routing system** for all internal navigation and deep links. All navigation goes through typed route builders instead of hardcoded strings.
+
+**Key Files:**
+```
+src/shared/routes.ts           # Route definitions and builders
+src/shared/route-parser.ts     # Parse route strings into structured objects
+src/renderer/lib/navigate.ts   # navigate() function and deep link utilities
+src/renderer/contexts/NavigationContext.tsx  # React context for navigation
+```
+
+#### Route Types
+
+| Type | Purpose | Example |
+|------|---------|---------|
+| **tab** | Open tabs in the tab bar | `tab/settings`, `tab/chat/abc123` |
+| **action** | Trigger actions | `action/new-chat?agentId=claude` |
+| **sidebar** | Navigate sidebar | `sidebar/inbox`, `sidebar/agent/my-agent` |
+
+#### Using Routes
+
+```typescript
+import { navigate, routes } from '@/lib/navigate'
+
+// Tab routes
+navigate(routes.tab.settings())           // Open settings tab
+navigate(routes.tab.chat('session123'))   // Open chat tab
+navigate(routes.tab.agentInfo('claude'))  // Open agent info tab
+navigate(routes.tab.sourceInfo('github')) // Open source info tab
+navigate(routes.tab.file('/path/to.ts'))  // Open file viewer tab
+navigate(routes.tab.browser('https://...')) // Open browser tab
+
+// Action routes
+navigate(routes.action.newChat())                         // New chat
+navigate(routes.action.newChat({ agentId: 'claude' }))    // New chat with agent
+navigate(routes.action.newChat({ input: 'Hello!' }))      // New chat with pre-filled input
+navigate(routes.action.renameSession('id', 'New Name'))   // Rename session
+navigate(routes.action.deleteSession('id'))               // Delete session
+navigate(routes.action.flagSession('id'))                 // Flag session
+navigate(routes.action.oauth('github'))                   // Start OAuth flow
+navigate(routes.action.setPermissionMode('id', 'safe'))   // Set permission mode
+
+// Sidebar routes
+navigate(routes.sidebar.inbox())           // Show inbox
+navigate(routes.sidebar.archive())         // Show archive
+navigate(routes.sidebar.flagged())         // Show flagged
+navigate(routes.sidebar.sources())         // Show sources panel
+navigate(routes.sidebar.agent('claude'))   // Filter by agent
+navigate(routes.sidebar.todoState('done')) // Filter by todo state
+```
+
+#### React Hook Usage
+
+```typescript
+import { useNavigation, routes } from '@/contexts/NavigationContext'
+
+function MyComponent() {
+  const { navigate, isReady } = useNavigation()
+
+  return (
+    <button onClick={() => navigate(routes.tab.settings())}>
+      Settings
+    </button>
+  )
+}
+```
+
+#### Global Navigation (Outside React)
+
+The `navigate()` function from `@/lib/navigate` works anywhere - it dispatches a custom event that `NavigationContext` listens for:
+
+```typescript
+import { navigate, routes } from '@/lib/navigate'
+
+// Can be called from anywhere, even outside React components
+navigate(routes.action.newChat({ agentId: 'claude' }))
+```
+
+#### Building Deep Links
+
+```typescript
+import { buildDeepLink, routes } from '@/lib/navigate'
+
+// Without workspace (uses current)
+buildDeepLink(routes.tab.settings())
+// → 'craftagents://tab/settings'
+
+// With workspace
+buildDeepLink(routes.tab.chat('abc'), 'workspace123')
+// → 'craftagents://workspace/workspace123/tab/chat/abc'
+```
+
 ### Deep Links
 
-The app registers the `craftagents://` URL scheme for deep linking to specific tabs.
+The app registers the `craftagents://` URL scheme for external deep linking.
 
 **URL Format:**
 ```
+craftagents://tab/{tabType}[/{id}][?params]
+craftagents://action/{actionName}[/{id}][?params]
 craftagents://workspace/{workspaceId}/tab/{tabType}[/{id}][?params]
-craftagents://workspace/{workspaceId}/action/{actionName}[?params]
+craftagents://workspace/{workspaceId}/action/{actionName}[/{id}][?params]
 ```
 
 **Examples:**
 | Use Case | URL |
 |----------|-----|
-| Chat session | `craftagents://workspace/ws123/tab/chat/session456` |
+| Settings | `craftagents://tab/settings` |
+| Chat session | `craftagents://tab/chat/session456` |
 | Agent info | `craftagents://workspace/ws123/tab/agent-info/my-agent` |
-| Source info | `craftagents://workspace/ws123/tab/source-info/my-source` |
-| Settings | `craftagents://workspace/ws123/tab/settings` |
-| Shortcuts | `craftagents://workspace/ws123/tab/shortcuts` |
-| Preferences | `craftagents://workspace/ws123/tab/preferences` |
-| File | `craftagents://workspace/ws123/tab/file?path=/path/to/file.txt` |
-| New chat | `craftagents://workspace/ws123/action/new-chat?agentId=my-agent` |
-
-**Key Files:**
-- `main/deep-link.ts` - URL parsing and handling
-- `main/index.ts` - Protocol registration, `app.on('open-url')` handler
-- `renderer/hooks/useDeepLinkNavigation.ts` - React hook for navigation
-- `preload/index.ts` - `onDeepLinkNavigate` listener
+| New chat | `craftagents://action/new-chat?agentId=my-agent&input=Hello` |
+| File | `craftagents://tab/file?path=/path/to/file.txt` |
 
 **Flow:**
 1. User clicks `craftagents://` URL or app launched with URL
-2. Main process parses URL via `parseDeepLink()`
+2. Main process parses URL via `parseDeepLink()` in `main/deep-link.ts`
 3. `handleDeepLink()` focuses/creates workspace window
 4. Sends `DEEP_LINK_NAVIGATE` IPC to renderer
-5. `useDeepLinkNavigation` hook receives event
-6. Calls appropriate `useTabs()` method (e.g., `openAgentInfoTab`)
-7. Tab system deduplicates (activates existing tab if ID matches)
+5. `NavigationContext` receives event and calls `navigate()` with parsed route
+6. Route is dispatched to appropriate handler (tab/action/sidebar)
 
 **Cold Start:** If app isn't running, URL is stored in `pendingDeepLink` and processed after `app.whenReady()`.
 

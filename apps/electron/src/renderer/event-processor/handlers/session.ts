@@ -233,6 +233,8 @@ export function handleInfo(
 
 /**
  * Handle interrupted - agent was interrupted
+ * When message is provided, it's a user-initiated stop (shows "Response interrupted")
+ * When message is omitted, it's a silent redirect (user sent new message while processing)
  */
 export function handleInterrupted(
   state: SessionState,
@@ -247,12 +249,17 @@ export function handleInterrupted(
       : m
   )
 
+  // Only add the "Response interrupted" message if provided (not a silent redirect)
+  const messages = event.message
+    ? [...messagesWithInterruptedTools, event.message]
+    : messagesWithInterruptedTools
+
   return {
     state: {
       session: {
         ...session,
         isProcessing: false,
-        messages: [...messagesWithInterruptedTools, event.message],
+        messages,
         currentStatus: undefined,  // Clear any lingering status
       },
       streaming: null,

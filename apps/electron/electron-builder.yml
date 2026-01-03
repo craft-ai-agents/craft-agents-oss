@@ -13,6 +13,8 @@ files:
   - "!dist/renderer/src/**"
   - "!**/*.map"
   - package.json
+  # Exclude node_modules - everything is bundled by esbuild/vite
+  - "!node_modules/**/*"
 
 extraMetadata:
   main: dist/main.cjs

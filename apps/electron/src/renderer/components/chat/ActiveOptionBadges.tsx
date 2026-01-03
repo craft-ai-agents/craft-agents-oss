@@ -42,6 +42,8 @@ export interface ActiveOptionBadgesProps {
   sessionId?: string
   /** Callback when kill button is clicked on a task */
   onKillTask?: (taskId: string) => void
+  /** Callback to insert message into input field */
+  onInsertMessage?: (text: string) => void
   /** Additional CSS classes */
   className?: string
 }
@@ -54,6 +56,7 @@ export function ActiveOptionBadges({
   tasks = [],
   sessionId,
   onKillTask,
+  onInsertMessage,
   className,
 }: ActiveOptionBadgesProps) {
   // Only render if badges or tasks are active
@@ -89,7 +92,7 @@ export function ActiveOptionBadges({
       )}
 
       {/* Background Tasks */}
-      {sessionId && <ActiveTasksBar tasks={tasks} sessionId={sessionId} onKillTask={onKillTask} />}
+      {sessionId && <ActiveTasksBar tasks={tasks} sessionId={sessionId} onKillTask={onKillTask} onInsertMessage={onInsertMessage} />}
     </div>
   )
 }

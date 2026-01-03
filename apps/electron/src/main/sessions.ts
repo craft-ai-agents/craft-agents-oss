@@ -1532,13 +1532,13 @@ Use oauth_trigger for OAuth sources, credential_prompt for API key/bearer token 
     }
   }
 
-  async cancelProcessing(sessionId: string): Promise<void> {
+  async cancelProcessing(sessionId: string, silent = false): Promise<void> {
     const managed = this.sessions.get(sessionId)
     if (!managed?.isProcessing) {
       return // Not processing, nothing to cancel
     }
 
-    console.log('[SessionManager] Cancelling processing for session:', sessionId)
+    console.log('[SessionManager] Cancelling processing for session:', sessionId, silent ? '(silent)' : '')
 
     // Call agent.interrupt() directly like TUI does - this signals the SDK
     if (managed.agent) {
@@ -1559,17 +1559,21 @@ Use oauth_trigger for OAuth sources, credential_prompt for API key/bearer token 
     managed.toolToParentMap.clear()
     managed.pendingTextParent = undefined
 
-    // Add interrupted info message to session (for persistence)
-    const interruptedMessage: Message = {
-      id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-      role: 'info',
-      content: 'Response interrupted',
-      timestamp: Date.now(),
+    // Only show "Response interrupted" message when user explicitly clicked Stop
+    // Silent mode is used when redirecting (sending new message while processing)
+    if (!silent) {
+      const interruptedMessage: Message = {
+        id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+        role: 'info',
+        content: 'Response interrupted',
+        timestamp: Date.now(),
+      }
+      managed.messages.push(interruptedMessage)
+      this.sendEvent({ type: 'interrupted', sessionId, message: interruptedMessage }, managed.workspace.id)
+    } else {
+      // Still send interrupted event but without the message (for UI state update)
+      this.sendEvent({ type: 'interrupted', sessionId }, managed.workspace.id)
     }
-    managed.messages.push(interruptedMessage)
-
-    // Send interrupted event with message for renderer
-    this.sendEvent({ type: 'interrupted', sessionId, message: interruptedMessage }, managed.workspace.id)
 
     // Persist session
     this.persistSession(managed)
