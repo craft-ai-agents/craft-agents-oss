@@ -58,6 +58,29 @@ export {
 } from './storage.ts';
 export type { SourceWithContext } from './storage.ts';
 
-// Service
-export { SourceService, createSourceService, getSourcesNeedingAuth } from './service.ts';
-export type { McpServerConfig, BuiltServers } from './service.ts';
+// Service (legacy - use SourceCredentialManager + SourceServerBuilder instead)
+export { SourceService, createSourceService } from './service.ts';
+
+// Credential Manager (unified credential operations)
+export {
+  SourceCredentialManager,
+  getSourceCredentialManager,
+  getSourcesNeedingAuth,
+} from './credential-manager.ts';
+export type {
+  AuthResult,
+  ApiCredential,
+  BasicAuthCredential,
+} from './credential-manager.ts';
+
+// Server Builder (builds MCP/API servers from sources)
+export {
+  SourceServerBuilder,
+  getSourceServerBuilder,
+  normalizeMcpUrl,
+} from './server-builder.ts';
+export type {
+  McpServerConfig,
+  SourceWithCredential,
+  BuiltServers,
+} from './server-builder.ts';

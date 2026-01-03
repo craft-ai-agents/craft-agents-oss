@@ -1169,44 +1169,28 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       if (!workspace) {
         return { success: false, error: `Workspace not found: ${workspaceId}` }
       }
-      const { loadSourceConfig } = await import('@craft-agent/shared/sources')
-      const { CraftOAuth, getMcpBaseUrl } = await import('@craft-agent/shared/auth/oauth')
-      const { getCredentialManager } = await import('@craft-agent/shared/credentials')
-      const { basename } = await import('path')
+      const { loadSource, getSourceCredentialManager } = await import('@craft-agent/shared/sources')
 
-      const config = loadSourceConfig(workspace.rootPath, sourceSlug)
-      if (!config || config.type !== 'mcp' || !config.mcp?.url) {
+      const source = loadSource(workspace.rootPath, sourceSlug)
+      if (!source || source.config.type !== 'mcp' || !source.config.mcp?.url) {
         return { success: false, error: 'Source not found or not an MCP source' }
       }
 
-      const oauth = new CraftOAuth(
-        { mcpBaseUrl: getMcpBaseUrl(config.mcp.url) },
-        {
-          onStatus: (message) => console.log(`[OAuth] ${config.name}: ${message}`),
-          onError: (error) => console.error(`[OAuth] ${config.name} error: ${error}`),
-        }
-      )
+      const credManager = getSourceCredentialManager()
+      const result = await credManager.authenticate(source, {
+        onStatus: (message) => console.log(`[OAuth] ${source.config.name}: ${message}`),
+        onError: (error) => console.error(`[OAuth] ${source.config.name} error: ${error}`),
+      })
 
-      const { tokens, clientId } = await oauth.authenticate()
+      if (!result.success) {
+        return { success: false, error: result.error }
+      }
 
-      // Store credentials using folder name as credential workspace key
-      const credentialWorkspaceId = basename(workspace.rootPath)
-      const manager = getCredentialManager()
-      await manager.set(
-        { type: 'source_oauth', workspaceId: credentialWorkspaceId, sourceId: sourceSlug },
-        {
-          value: tokens.accessToken,
-          refreshToken: tokens.refreshToken,
-          expiresAt: tokens.expiresAt,
-          clientId,
-        }
-      )
+      // Get token to return to caller
+      const token = await credManager.getToken(source)
 
       console.log(`[IPC] Source OAuth complete: ${sourceSlug}`)
-      return {
-        success: true,
-        accessToken: tokens.accessToken,
-      }
+      return { success: true, accessToken: token }
     } catch (error) {
       console.error(`[IPC] Source OAuth failed:`, error)
       return {
@@ -1220,31 +1204,16 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   ipcMain.handle(IPC_CHANNELS.SOURCES_SAVE_CREDENTIALS, async (_event, workspaceId: string, sourceSlug: string, credential: string) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
-    const { loadSourceConfig } = await import('@craft-agent/shared/sources')
-    const { getCredentialManager } = await import('@craft-agent/shared/credentials')
-    const { basename } = await import('path')
+    const { loadSource, getSourceCredentialManager } = await import('@craft-agent/shared/sources')
 
-    const config = loadSourceConfig(workspace.rootPath, sourceSlug)
-    if (!config) {
+    const source = loadSource(workspace.rootPath, sourceSlug)
+    if (!source) {
       throw new Error(`Source not found: ${sourceSlug}`)
     }
 
-    // Use folder name as credential workspace key
-    const credentialWorkspaceId = basename(workspace.rootPath)
-    const manager = getCredentialManager()
-
-    // Determine credential type based on source config
-    if (config.type === 'mcp' && config.mcp?.authType === 'bearer') {
-      await manager.set(
-        { type: 'source_bearer', workspaceId: credentialWorkspaceId, sourceId: sourceSlug },
-        { value: credential }
-      )
-    } else if (config.type === 'api') {
-      await manager.set(
-        { type: 'source_apikey', workspaceId: credentialWorkspaceId, sourceId: sourceSlug },
-        { value: credential }
-      )
-    }
+    // SourceCredentialManager handles credential type resolution
+    const credManager = getSourceCredentialManager()
+    await credManager.save(source, { value: credential })
 
     console.log(`[IPC] Saved credentials for source: ${sourceSlug}`)
   })
