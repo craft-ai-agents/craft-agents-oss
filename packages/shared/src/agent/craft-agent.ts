@@ -36,6 +36,7 @@ import {
   formatSessionState,
   shouldAllowToolInMode,
   blockWithReason,
+  isApiEndpointAllowed,
   type PermissionMode,
   PERMISSION_MODE_CONFIG,
   SAFE_MODE_CONFIG,
@@ -1427,7 +1428,13 @@ export class CraftAgent {
                 if (method !== 'GET') {
                   const apiDescription = `${method} ${path || ''}`;
 
-                  // Check if this API pattern is already allowed
+                  // Check if this API endpoint is whitelisted in permissions.json
+                  if (isApiEndpointAllowed(method, path, permissionsContext)) {
+                    this.onDebug?.(`Auto-allowing API "${apiDescription}" (whitelisted in permissions.json)`);
+                    return { continue: true };
+                  }
+
+                  // Check if this API pattern is already allowed (session whitelist)
                   if (this.alwaysAllowedCommands.has(apiDescription)) {
                     this.onDebug?.(`Auto-allowing API "${apiDescription}" (previously approved)`);
                     return { continue: true };

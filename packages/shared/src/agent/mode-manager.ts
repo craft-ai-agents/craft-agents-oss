@@ -523,6 +523,33 @@ function isApiCallAllowedWithConfig(method: string, path: string | undefined, co
 }
 
 /**
+ * Check if an API endpoint is allowed based on permissions context.
+ * Used in 'ask' mode to auto-allow whitelisted API endpoints from permissions.json.
+ *
+ * @param method - HTTP method (GET, POST, etc.)
+ * @param path - API endpoint path
+ * @param permissionsContext - Context for loading custom permissions
+ * @returns true if endpoint is allowed (GET or matches allowedApiEndpoints rules)
+ */
+export function isApiEndpointAllowed(
+  method: string,
+  path: string | undefined,
+  permissionsContext?: PermissionsContext
+): boolean {
+  let config: ToolCheckConfig;
+
+  if (permissionsContext) {
+    // Lazy import to avoid circular dependency
+    const { permissionsConfigCache } = require('./permissions-config.ts');
+    config = permissionsConfigCache.getMergedConfig(permissionsContext);
+  } else {
+    config = SAFE_MODE_CONFIG;
+  }
+
+  return isApiCallAllowedWithConfig(method, path, config);
+}
+
+/**
  * Tools that are always allowed in any mode (read-only by nature)
  */
 const ALWAYS_ALLOWED_TOOLS = new Set([
