@@ -140,7 +140,39 @@ Folder-based agents at `~/.craft-agent/workspaces/{ws}/agents/{agent}/`:
 └── guide.md         # Usage documentation
 ```
 
-**Source types:** `mcp` (HTTP/SSE), `api` (REST with flexible tool), `local`
+**Source types:** `mcp` (HTTP/SSE/stdio), `api` (REST with flexible tool), `local`
+
+**MCP Source Config (`config.json`):**
+```typescript
+// HTTP/SSE transport (remote servers)
+{
+  "type": "mcp",
+  "mcp": {
+    "transport": "http",  // or "sse", default: "http"
+    "url": "https://example.com/mcp",
+    "authType": "oauth"   // "oauth" | "bearer" | "none"
+  }
+}
+
+// Stdio transport (local subprocess servers)
+{
+  "type": "mcp",
+  "mcp": {
+    "transport": "stdio",
+    "command": "npx",
+    "args": ["@anthropic-ai/mcp-server-filesystem", "/path/to/dir"],
+    "env": { "CUSTOM_VAR": "value" }  // optional
+  }
+}
+```
+
+**Local MCP Server Control:**
+- **Workspace config:** `localMcpServers.enabled` in workspace `config.json`
+- **Environment override:** `CRAFT_LOCAL_MCP_ENABLED=true|false`
+- **Resolution order:** ENV > workspace config > default (true)
+- **UI:** Settings → Advanced → Local MCP Servers toggle
+
+When disabled, stdio sources show "Disabled" status in UI and are excluded from agent sessions.
 
 **API Tools (`api-tools.ts`):** `createApiServer()` creates single `api_{name}` tool accepting `{ path, method, params }`. Auth types: `none`, `header`, `bearer`, `query`, `basic`.
 
