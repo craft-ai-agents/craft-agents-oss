@@ -39,7 +39,8 @@ export function getDefaultOptions(): Partial<Options> {
             env: {
                 ...process.env,
                 ... optionsEnv,
-                CRAFT_DEBUG: process.argv.includes('--debug') ? '1' : '0',
+                // Propagate debug mode from argv flag OR existing env var
+                CRAFT_DEBUG: (process.argv.includes('--debug') || process.env.CRAFT_DEBUG === '1') ? '1' : '0',
             }
         };
         // Add interceptor preload if path is set (needed for Craft gateway redirect)
@@ -64,7 +65,8 @@ export function getDefaultOptions(): Partial<Options> {
                 ...process.env,
                 BUN_BE_BUN: '1',
                 ... optionsEnv,
-                CRAFT_DEBUG: process.argv.includes('--debug') ? '1' : '0',
+                // Propagate debug mode from argv flag OR existing env var
+                CRAFT_DEBUG: (process.argv.includes('--debug') || process.env.CRAFT_DEBUG === '1') ? '1' : '0',
             }
         }
     }
@@ -72,7 +74,8 @@ export function getDefaultOptions(): Partial<Options> {
         env: {
             ... process.env,
             ... optionsEnv,
-            CRAFT_DEBUG: process.argv.includes('--debug') ? '1' : '0',
+            // Propagate debug mode from argv flag OR existing env var
+            CRAFT_DEBUG: (process.argv.includes('--debug') || process.env.CRAFT_DEBUG === '1') ? '1' : '0',
         }
     };
 }

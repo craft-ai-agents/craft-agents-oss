@@ -2,7 +2,8 @@ import { appendFileSync } from 'fs';
 
 const LOG_FILE = '/tmp/craft-debug.log';
 
-let debugEnabled = false;
+// Check CRAFT_DEBUG env var at module load (for SDK subprocess)
+let debugEnabled = process.env.CRAFT_DEBUG === '1';
 
 /**
  * Runtime environment detection

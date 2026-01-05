@@ -19,6 +19,11 @@ import log, { isDebugMode, mainLog, getLogFilePath } from './logger'
 // Initialize electron-log for renderer process support
 log.initialize()
 
+// Set CRAFT_DEBUG env var so SDK subprocess inherits debug mode
+if (isDebugMode) {
+  process.env.CRAFT_DEBUG = '1'
+}
+
 // Custom URL scheme for deeplinks (e.g., craftagents://auth-complete)
 const DEEPLINK_SCHEME = 'craftagents'
 
