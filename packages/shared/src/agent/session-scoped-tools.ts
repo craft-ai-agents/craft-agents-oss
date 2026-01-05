@@ -540,34 +540,60 @@ async function testApiSource(
     let credentialType: string | undefined;
     let credValue: string | undefined;
 
-    // Get credentials if needed - determine correct credential type based on authType
+    // Get credentials if needed
     if (requiresAuth) {
-      const credentialManager = getCredentialManager();
       // Extract workspace ID from root path for credential lookups
       const wsId = basename(workspaceId);
 
-      // Determine the correct credential type based on source.api.authType
-      // This matches the logic in SourceCredentialManager.getCredentialId()
-      let credType: 'source_oauth' | 'source_bearer' | 'source_apikey' | 'source_basic';
       if (source.api.authType === 'oauth') {
-        credType = 'source_oauth';
-      } else if (source.api.authType === 'bearer') {
-        credType = 'source_bearer';
-      } else if (source.api.authType === 'basic') {
-        credType = 'source_basic';
-      } else {
-        // 'header', 'query', or other → stored as apikey
-        credType = 'source_apikey';
-      }
+        // Use SourceCredentialManager for OAuth - handles expiry checking and refresh
+        const sourceCredManager = getSourceCredentialManager();
+        const loadedSource: LoadedSource = {
+          config: source,
+          guide: null,
+          folderPath: '',
+          workspaceId: wsId,
+        };
 
-      debug(`[testApiSource] Looking up credentials for source=${source.slug}, authType=${source.api.authType}, credType=${credType}`);
-      const cred = await credentialManager.get({ type: credType, workspaceId: wsId, sourceId: source.slug });
-      if (cred?.value) {
-        credValue = cred.value;
-        credentialType = credType;
-        debug(`[testApiSource] Found credential for ${source.slug}`);
+        // getToken() returns null if expired
+        let token = await sourceCredManager.getToken(loadedSource);
+
+        if (!token) {
+          // Try refresh if token is expired/missing
+          debug(`[testApiSource] OAuth token expired or missing for ${source.slug}, attempting refresh`);
+          token = await sourceCredManager.refresh(loadedSource);
+        }
+
+        if (token) {
+          credValue = token;
+          credentialType = 'source_oauth';
+          debug(`[testApiSource] Found valid OAuth token for ${source.slug}`);
+        } else {
+          debug(`[testApiSource] No valid OAuth token for ${source.slug}`);
+        }
       } else {
-        debug(`[testApiSource] No credential found for ${source.slug}`);
+        // For non-OAuth auth types, use direct credential lookup
+        const credentialManager = getCredentialManager();
+
+        let credType: 'source_bearer' | 'source_apikey' | 'source_basic';
+        if (source.api.authType === 'bearer') {
+          credType = 'source_bearer';
+        } else if (source.api.authType === 'basic') {
+          credType = 'source_basic';
+        } else {
+          // 'header', 'query', or other → stored as apikey
+          credType = 'source_apikey';
+        }
+
+        debug(`[testApiSource] Looking up credentials for source=${source.slug}, authType=${source.api.authType}, credType=${credType}`);
+        const cred = await credentialManager.get({ type: credType, workspaceId: wsId, sourceId: source.slug });
+        if (cred?.value) {
+          credValue = cred.value;
+          credentialType = credType;
+          debug(`[testApiSource] Found credential for ${source.slug}`);
+        } else {
+          debug(`[testApiSource] No credential found for ${source.slug}`);
+        }
       }
 
       if (credValue) {
