@@ -1285,7 +1285,7 @@ After successful authentication, the tokens are stored and the source is marked 
           return {
             content: [{
               type: 'text' as const,
-              text: `Source '${args.sourceSlug}' is not configured as a Gmail source. ${hint}`,
+              text: `Source '${args.sourceSlug}' is not configured as a Gmail source. ${hint}\n\nCurrent config: ${JSON.stringify(source, null, 2)}`,
             }],
             isError: true,
           };
