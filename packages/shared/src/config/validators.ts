@@ -363,8 +363,10 @@ export const FolderSourceConfigSchema = z.object({
   local: LocalSourceConfigSchema.optional(),
   isAuthenticated: z.boolean().optional(),
   lastTestedAt: z.number().int().min(0).optional(),
-  createdAt: z.number().int().min(0),
-  updatedAt: z.number().int().min(0),
+  // Timestamps are optional - manually created configs may not have them
+  // Storage functions add these automatically when saving
+  createdAt: z.number().int().min(0).optional(),
+  updatedAt: z.number().int().min(0).optional(),
 }).refine(
   (data) => {
     // Ensure correct config block exists for type

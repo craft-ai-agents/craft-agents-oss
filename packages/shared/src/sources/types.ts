@@ -179,9 +179,9 @@ export interface FolderSourceConfig {
   connectionError?: string; // Error message if status is 'failed'
   lastTestedAt?: number;
 
-  // Metadata
-  createdAt: number;
-  updatedAt: number;
+  // Metadata (optional - manually created configs may not have them)
+  createdAt?: number;
+  updatedAt?: number;
 }
 
 /**
