@@ -46,6 +46,18 @@ function sanitizeFilename(name: string): string {
 }
 
 /**
+ * Get workspace by ID or name, throwing if not found.
+ * Use this when a workspace must exist for the operation to proceed.
+ */
+function getWorkspaceOrThrow(workspaceId: string): Workspace {
+  const workspace = getWorkspaceByNameOrId(workspaceId)
+  if (!workspace) {
+    throw new Error(`Workspace not found: ${workspaceId}`)
+  }
+  return workspace
+}
+
+/**
  * Validates that a file path is within allowed directories to prevent path traversal attacks.
  * Allowed directories: user's home directory and /tmp
  */
@@ -235,36 +247,6 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     }
   })
 
-  // Flag a session
-  ipcMain.handle(IPC_CHANNELS.FLAG_SESSION, async (_event, sessionId: string) => {
-    return sessionManager.flagSession(sessionId)
-  })
-
-  // Unflag a session
-  ipcMain.handle(IPC_CHANNELS.UNFLAG_SESSION, async (_event, sessionId: string) => {
-    return sessionManager.unflagSession(sessionId)
-  })
-
-  // Set todo state for a session
-  ipcMain.handle(IPC_CHANNELS.SET_TODO_STATE, async (_event, sessionId: string, state: 'todo' | 'in-progress' | 'needs-review' | 'done' | 'cancelled') => {
-    return sessionManager.setTodoState(sessionId, state)
-  })
-
-  // Mark session as read (set lastReadMessageId to last message)
-  ipcMain.handle(IPC_CHANNELS.MARK_SESSION_READ, async (_event, sessionId: string) => {
-    return sessionManager.markSessionRead(sessionId)
-  })
-
-  // Mark session as unread (clear lastReadMessageId)
-  ipcMain.handle(IPC_CHANNELS.MARK_SESSION_UNREAD, async (_event, sessionId: string) => {
-    return sessionManager.markSessionUnread(sessionId)
-  })
-
-  // Rename a session
-  ipcMain.handle(IPC_CHANNELS.RENAME_SESSION, async (_event, sessionId: string, name: string) => {
-    return sessionManager.renameSession(sessionId, name)
-  })
-
   // Respond to a permission request (bash command approval)
   // Returns true if the response was delivered, false if agent/session is gone
   ipcMain.handle(IPC_CHANNELS.RESPOND_TO_PERMISSION, async (_event, sessionId: string, requestId: string, allowed: boolean, alwaysAllow: boolean) => {
@@ -277,21 +259,46 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     return sessionManager.respondToCredential(sessionId, requestId, response)
   })
 
-  // Set the permission mode for a session ('safe', 'ask', 'allow-all')
-  ipcMain.handle(IPC_CHANNELS.SET_PERMISSION_MODE, async (_event, sessionId: string, mode: import('../shared/types').PermissionMode) => {
-    return sessionManager.setSessionPermissionMode(sessionId, mode)
-  })
+  // ==========================================================================
+  // Consolidated Command Handlers
+  // ==========================================================================
 
-  // Update working directory for a session
-  ipcMain.handle(IPC_CHANNELS.UPDATE_WORKING_DIRECTORY, async (_event, sessionId: string, path: string) => {
-    return sessionManager.updateWorkingDirectory(sessionId, path)
-  })
-
-  // Show session folder in Finder
-  ipcMain.handle(IPC_CHANNELS.SHOW_SESSION_IN_FINDER, async (_event, sessionId: string) => {
-    const sessionPath = sessionManager.getSessionPath(sessionId)
-    if (sessionPath) {
-      shell.showItemInFolder(sessionPath)
+  // Session commands - consolidated handler for session operations
+  ipcMain.handle(IPC_CHANNELS.SESSION_COMMAND, async (
+    _event,
+    sessionId: string,
+    command: import('../shared/types').SessionCommand
+  ) => {
+    switch (command.type) {
+      case 'flag':
+        return sessionManager.flagSession(sessionId)
+      case 'unflag':
+        return sessionManager.unflagSession(sessionId)
+      case 'rename':
+        return sessionManager.renameSession(sessionId, command.name)
+      case 'setTodoState':
+        return sessionManager.setTodoState(sessionId, command.state)
+      case 'markRead':
+        return sessionManager.markSessionRead(sessionId)
+      case 'markUnread':
+        return sessionManager.markSessionUnread(sessionId)
+      case 'setPermissionMode':
+        return sessionManager.setSessionPermissionMode(sessionId, command.mode)
+      case 'updateWorkingDirectory':
+        return sessionManager.updateWorkingDirectory(sessionId, command.dir)
+      case 'setSources':
+        return sessionManager.setSessionSources(sessionId, command.sourceSlugs)
+      case 'showInFinder': {
+        const sessionPath = sessionManager.getSessionPath(sessionId)
+        if (sessionPath) {
+          shell.showItemInFolder(sessionPath)
+        }
+        return
+      }
+      default: {
+        const _exhaustive: never = command
+        throw new Error(`Unknown session command: ${JSON.stringify(command)}`)
+      }
     }
   })
 
@@ -528,11 +535,6 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // Check if an agent needs authentication
   ipcMain.handle(IPC_CHANNELS.CHECK_AGENT_AUTH, async (_event, workspaceId: string, agentId: string) => {
     return agentService.checkAgentAuthStatus(workspaceId, agentId)
-  })
-
-  // Get detailed setup status (distinguishes setup needed vs auth needed)
-  ipcMain.handle(IPC_CHANNELS.GET_AGENT_SETUP_STATUS, async (_event, workspaceId: string, agentId: string) => {
-    return agentService.getAgentSetupStatus(workspaceId, agentId)
   })
 
   // Get auth status for all MCP servers and APIs (for Info dialog)
@@ -833,32 +835,6 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     ipcLog.info(`Model updated to: ${model}`)
   })
 
-  // ============================================================
-  // Settings - New Session Defaults
-  // ============================================================
-
-  // Get default permission mode for new sessions
-  ipcMain.handle(IPC_CHANNELS.SETTINGS_GET_DEFAULT_PERMISSION_MODE, async (): Promise<import('../shared/types').PermissionMode> => {
-    return getDefaultPermissionMode()
-  })
-
-  // Set default permission mode for new sessions
-  ipcMain.handle(IPC_CHANNELS.SETTINGS_SET_DEFAULT_PERMISSION_MODE, async (_event, mode: import('../shared/types').PermissionMode) => {
-    setDefaultPermissionMode(mode)
-    ipcLog.info(`Default permission mode updated to:`, mode)
-  })
-
-  // Get default working directory for new sessions
-  ipcMain.handle(IPC_CHANNELS.SETTINGS_GET_DEFAULT_WORKING_DIR, async (): Promise<string> => {
-    return getDefaultWorkingDirectory()
-  })
-
-  // Set default working directory for new sessions
-  ipcMain.handle(IPC_CHANNELS.SETTINGS_SET_DEFAULT_WORKING_DIR, async (_event, path: string) => {
-    setDefaultWorkingDirectory(path)
-    ipcLog.info(`Default working directory updated to: ${path}`)
-  })
-
   // Open native folder dialog for selecting working directory
   ipcMain.handle(IPC_CHANNELS.OPEN_FOLDER_DIALOG, async () => {
     const result = await dialog.showOpenDialog({
@@ -897,10 +873,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // Update a workspace setting
   // Valid keys: 'name', 'model', 'enabledSourceSlugs', 'permissionMode', 'workingDirectory', 'credentialStrategy', 'localMcpEnabled'
   ipcMain.handle(IPC_CHANNELS.WORKSPACE_SETTINGS_UPDATE, async (_event, workspaceId: string, key: string, value: unknown) => {
-    const workspace = getWorkspaceByNameOrId(workspaceId)
-    if (!workspace) {
-      throw new Error(`Workspace not found: ${workspaceId}`)
-    }
+    const workspace = getWorkspaceOrThrow(workspaceId)
 
     // Validate key is a known workspace setting
     const validKeys = ['name', 'model', 'enabledSourceSlugs', 'permissionMode', 'workingDirectory', 'credentialStrategy', 'localMcpEnabled']
@@ -1367,20 +1340,6 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       }
       return { success: false, error: errorMessage }
     }
-  })
-
-  // ============================================================
-  // Session Sources
-  // ============================================================
-
-  // Set sources for a session (applies MCP servers to agent)
-  ipcMain.handle(IPC_CHANNELS.SESSION_SET_SOURCES, async (_event, sessionId: string, sourceSlugs: string[]) => {
-    await sessionManager.setSessionSources(sessionId, sourceSlugs)
-  })
-
-  // Get sources for a session
-  ipcMain.handle(IPC_CHANNELS.SESSION_GET_SOURCES, async (_event, sessionId: string) => {
-    return sessionManager.getSessionSources(sessionId)
   })
 
   // ============================================================

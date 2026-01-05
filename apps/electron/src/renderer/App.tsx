@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useTheme } from '@/hooks/useTheme'
 import type { ThemeOverrides } from '@config/theme'
 import { useSetAtom, useStore } from 'jotai'
-import type { Session, Workspace, SessionEvent, Message, SubAgentMetadata, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, SetupNeeds, TodoState } from '../shared/types'
+import type { Session, Workspace, SessionEvent, Message, SubAgentMetadata, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, SetupNeeds, TodoState, NewChatActionParams } from '../shared/types'
 import type { SessionOptions, SessionOptionUpdates } from './hooks/useSessionOptions'
 import { defaultSessionOptions, mergeSessionOptions } from './hooks/useSessionOptions'
 import { generateMessageId } from '../shared/types'
@@ -16,7 +16,6 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { FocusProvider } from '@/context/FocusContext'
 import { useGlobalShortcuts } from '@/hooks/keyboard'
 import { useOnboarding } from '@/hooks/useOnboarding'
-import { useDeepLinkNavigation } from '@/hooks/useDeepLinkNavigation'
 import { useTabs } from '@/tabs'
 import { NavigationProvider } from '@/contexts/NavigationContext'
 import { navigate, routes } from './lib/navigate'
@@ -136,6 +135,20 @@ export default function App() {
   useEffect(() => {
     syncSessionsToAtoms(sessions)
   }, [sessions, syncSessionsToAtoms])
+
+  // Helper to update a session by ID with partial fields
+  // Reduces boilerplate: setSessions(prev => prev.map(s => s.id === id ? {...s, field: value} : s))
+  const updateSessionById = useCallback((
+    sessionId: string,
+    updates: Partial<Session> | ((session: Session) => Partial<Session>)
+  ) => {
+    setSessions(prev => prev.map(s => {
+      if (s.id !== sessionId) return s
+      const partialUpdates = typeof updates === 'function' ? updates(s) : updates
+      return { ...s, ...partialUpdates }
+    }))
+  }, [])
+
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [agents, setAgents] = useState<SubAgentMetadata[]>([])
   const [isLoadingAgents, setIsLoadingAgents] = useState(false)
@@ -253,8 +266,8 @@ export default function App() {
     initialize()
   }, [])
 
-  // Tab system - only closeChatTabBySession is needed, navigation uses navigate()
-  const { closeChatTabBySession } = useTabs()
+  // Tab system - closeChatTabBySession for deletion, openChatTab for new chat
+  const { closeChatTabBySession, openChatTab } = useTabs()
 
   // Load workspaces, sessions, model, and drafts when app is ready
   useEffect(() => {
@@ -570,53 +583,41 @@ export default function App() {
     return true
   }, [closeChatTabBySession, sessions, removeSession])
 
-  const handleFlagSession = useCallback(async (sessionId: string) => {
-    await window.electronAPI.flagSession(sessionId)
-    setSessions(prev => prev.map(s =>
-      s.id === sessionId ? { ...s, isFlagged: true } : s
-    ))
-  }, [])
+  const handleFlagSession = useCallback((sessionId: string) => {
+    updateSessionById(sessionId, { isFlagged: true })
+    window.electronAPI.sessionCommand(sessionId, { type: 'flag' })
+  }, [updateSessionById])
 
-  const handleUnflagSession = useCallback(async (sessionId: string) => {
-    await window.electronAPI.unflagSession(sessionId)
-    setSessions(prev => prev.map(s =>
-      s.id === sessionId ? { ...s, isFlagged: false } : s
-    ))
-  }, [])
+  const handleUnflagSession = useCallback((sessionId: string) => {
+    updateSessionById(sessionId, { isFlagged: false })
+    window.electronAPI.sessionCommand(sessionId, { type: 'unflag' })
+  }, [updateSessionById])
 
-  const handleMarkSessionRead = useCallback(async (sessionId: string) => {
-    await window.electronAPI.markSessionRead(sessionId)
+  const handleMarkSessionRead = useCallback((sessionId: string) => {
     // Find the session and compute the last final assistant message ID
-    setSessions(prev => prev.map(s => {
-      if (s.id !== sessionId) return s
+    updateSessionById(sessionId, (s) => {
       const lastFinalId = s.messages.findLast(
         m => m.role === 'assistant' && !m.isIntermediate
       )?.id
-      return lastFinalId ? { ...s, lastReadMessageId: lastFinalId } : s
-    }))
-  }, [])
+      return lastFinalId ? { lastReadMessageId: lastFinalId } : {}
+    })
+    window.electronAPI.sessionCommand(sessionId, { type: 'markRead' })
+  }, [updateSessionById])
 
-  const handleMarkSessionUnread = useCallback(async (sessionId: string) => {
-    await window.electronAPI.markSessionUnread(sessionId)
-    setSessions(prev => prev.map(s =>
-      s.id === sessionId ? { ...s, lastReadMessageId: undefined } : s
-    ))
-  }, [])
+  const handleMarkSessionUnread = useCallback((sessionId: string) => {
+    updateSessionById(sessionId, { lastReadMessageId: undefined })
+    window.electronAPI.sessionCommand(sessionId, { type: 'markUnread' })
+  }, [updateSessionById])
 
-  const handleTodoStateChange = useCallback(async (sessionId: string, state: TodoState) => {
-    await window.electronAPI.setTodoState(sessionId, state)
-    setSessions(prev => prev.map(s =>
-      s.id === sessionId ? { ...s, todoState: state } : s
-    ))
-  }, [])
+  const handleTodoStateChange = useCallback((sessionId: string, state: TodoState) => {
+    updateSessionById(sessionId, { todoState: state })
+    window.electronAPI.sessionCommand(sessionId, { type: 'setTodoState', state })
+  }, [updateSessionById])
 
-  const handleRenameSession = useCallback(async (sessionId: string, name: string) => {
-    await window.electronAPI.renameSession(sessionId, name)
-    // Update state immediately (don't rely on event timing)
-    setSessions(prev => prev.map(s =>
-      s.id === sessionId ? { ...s, name } : s
-    ))
-  }, [])
+  const handleRenameSession = useCallback((sessionId: string, name: string) => {
+    updateSessionById(sessionId, { name })
+    window.electronAPI.sessionCommand(sessionId, { type: 'rename', name })
+  }, [updateSessionById])
 
   const handleSendMessage = useCallback(async (sessionId: string, message: string, attachments?: FileAttachment[]) => {
     try {
@@ -775,7 +776,7 @@ export default function App() {
     // Handle persistence/backend for specific options
     if (updates.permissionMode !== undefined) {
       // Sync permission mode change with backend
-      window.electronAPI.setPermissionMode(sessionId, updates.permissionMode)
+      window.electronAPI.sessionCommand(sessionId, { type: 'setPermissionMode', mode: updates.permissionMode })
     }
     // ultrathinkEnabled is UI-only (single-shot), no backend persistence needed
   }, [sessionOptions])
@@ -817,14 +818,33 @@ export default function App() {
     draftSaveTimeoutRef.current.set(sessionId, timeout)
   }, [])
 
-  // Deep link navigation - handles craftagents:// URLs
-  // Must be after handleCreateSession and handleInputChange are defined
-  const { openNewChat } = useDeepLinkNavigation({
-    workspaceId: windowWorkspaceId,
-    onCreateSession: handleCreateSession,
-    onInputChange: handleInputChange,
-    isReady: appState === 'ready',
-  })
+  // Open new chat - creates session and opens tab
+  // Used by components via ChatContext and for programmatic navigation
+  const openNewChat = useCallback(async (params: NewChatActionParams = {}) => {
+    if (!windowWorkspaceId) {
+      console.warn('[App] Cannot open new chat: no workspace ID')
+      return
+    }
+
+    const session = await handleCreateSession(windowWorkspaceId, params.agentId)
+
+    if (params.name) {
+      await window.electronAPI.sessionCommand(session.id, { type: 'rename', name: params.name })
+    }
+
+    openChatTab(
+      session.id,
+      windowWorkspaceId,
+      params.name || session.name || 'New Chat',
+      params.agentId,
+      { forceNew: true }
+    )
+
+    // Pre-fill input if provided (after a small delay to ensure tab is mounted)
+    if (params.input) {
+      setTimeout(() => handleInputChange(session.id, params.input!), 100)
+    }
+  }, [windowWorkspaceId, handleCreateSession, openChatTab, handleInputChange])
 
   const handleRespondToPermission = useCallback(async (sessionId: string, requestId: string, allowed: boolean, alwaysAllow: boolean) => {
     console.log('[App] handleRespondToPermission called:', { sessionId, requestId, allowed, alwaysAllow })

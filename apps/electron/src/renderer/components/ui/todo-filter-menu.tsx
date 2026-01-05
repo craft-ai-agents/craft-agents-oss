@@ -1,17 +1,12 @@
 import * as React from 'react'
 import { Command as CommandPrimitive } from 'cmdk'
-import { cn } from '@/lib/utils'
+import { cn, isHexColor } from '@/lib/utils'
 import {
   type TodoStateId,
   type TodoState,
   getStateIcon,
   getStateColor,
 } from '@/config/todo-states'
-
-/** Check if a string is a hex color code (e.g., #3B82F6) */
-function isHexColor(str: string | undefined): boolean {
-  return !!str && /^#[0-9A-Fa-f]{6}$/.test(str)
-}
 
 // Re-export types for backwards compatibility
 export { type TodoStateId, type TodoState, getStateIcon, getStateColor }

@@ -160,7 +160,7 @@ export function NavigationProvider({
 
           // Rename session if name provided
           if (parsed.params.name) {
-            await window.electronAPI.renameSession(session.id, parsed.params.name)
+            await window.electronAPI.sessionCommand(session.id, { type: 'rename', name: parsed.params.name })
           }
 
           openChatTab(
@@ -182,7 +182,7 @@ export function NavigationProvider({
 
         case 'rename-session':
           if (parsed.id && parsed.params.name) {
-            await window.electronAPI.renameSession(parsed.id, parsed.params.name)
+            await window.electronAPI.sessionCommand(parsed.id, { type: 'rename', name: parsed.params.name })
           }
           break
 
@@ -194,13 +194,13 @@ export function NavigationProvider({
 
         case 'flag-session':
           if (parsed.id) {
-            await window.electronAPI.flagSession(parsed.id)
+            await window.electronAPI.sessionCommand(parsed.id, { type: 'flag' })
           }
           break
 
         case 'unflag-session':
           if (parsed.id) {
-            await window.electronAPI.unflagSession(parsed.id)
+            await window.electronAPI.sessionCommand(parsed.id, { type: 'unflag' })
           }
           break
 
@@ -237,9 +237,9 @@ export function NavigationProvider({
 
         case 'set-mode':
           if (parsed.id && parsed.params.mode) {
-            await window.electronAPI.setPermissionMode(
+            await window.electronAPI.sessionCommand(
               parsed.id,
-              parsed.params.mode as 'safe' | 'ask' | 'allow-all'
+              { type: 'setPermissionMode', mode: parsed.params.mode as 'safe' | 'ask' | 'allow-all' }
             )
           }
           break

@@ -36,7 +36,7 @@ import { SourceAvatar } from "@/components/ui/source-avatar"
 import { AppMenu } from "../AppMenu"
 import { PanelLeftRounded } from "../icons/PanelLeftRounded"
 import { SquarePenRounded } from "../icons/SquarePenRounded"
-import { cn } from "@/lib/utils"
+import { cn, isHexColor } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip"
@@ -85,11 +85,6 @@ import {
   parseSidebarModeKey,
 } from "./sidebar-types"
 import { SourcesListPanel } from "./SourcesListPanel"
-
-/** Check if a string is a hex color code (e.g., #3B82F6) */
-function isHexColor(str: string | undefined): boolean {
-  return !!str && /^#[0-9A-Fa-f]{6}$/.test(str)
-}
 
 /**
  * ChatProps - Minimal props interface for Chat component
@@ -799,7 +794,7 @@ export function Chat({
   // Handle session source selection changes
   const handleSessionSourcesChange = React.useCallback(async (sessionId: string, sourceSlugs: string[]) => {
     try {
-      await window.electronAPI.setSessionSources(sessionId, sourceSlugs)
+      await window.electronAPI.sessionCommand(sessionId, { type: 'setSources', sourceSlugs })
       // Session will emit a 'sources_changed' event that updates the session state
     } catch (err) {
       console.error('[Chat] Failed to set session sources:', err)
@@ -1436,7 +1431,7 @@ export function Chat({
       // Create a new session with this agent and set the name
       const sessionName = `Delete ${sourceName} from sources`
       const newSession = await onCreateSession(activeWorkspace.id, agentId)
-      await window.electronAPI.renameSession(newSession.id, sessionName)
+      await window.electronAPI.sessionCommand(newSession.id, { type: 'rename', name: sessionName })
       openChatTab(newSession.id, activeWorkspace.id, sessionName, agentId, { forceNew: true })
 
       // Send the delete prompt after a short delay to ensure the chat is mounted

@@ -9,6 +9,7 @@ import { useTheme } from '@/context/ThemeContext'
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { DropdownMenu, DropdownMenuTrigger, StyledDropdownMenuContent, StyledDropdownMenuItem } from '@/components/ui/styled-dropdown'
 import { WindowHeader, WindowHeaderBadge, BADGE_CONFIGS } from '@/components/ui/window-header-badge'
+import { getLanguageFromPath, formatFilePath } from '@/lib/file-utils'
 import type { MultiFileDiffData, FileChange } from '../../../shared/types'
 
 // Configure loader to use local monaco-editor package (not CDN)
@@ -17,53 +18,6 @@ loader.config({ monaco })
 interface MultiFileDiffAppProps {
   sessionId: string
   turnId: string
-}
-
-/**
- * Get language for Monaco from file extension
- */
-function getLanguageFromPath(filePath: string): string {
-  const ext = filePath.split('.').pop()?.toLowerCase()
-  const languageMap: Record<string, string> = {
-    ts: 'typescript',
-    tsx: 'typescript',
-    js: 'javascript',
-    jsx: 'javascript',
-    json: 'json',
-    md: 'markdown',
-    py: 'python',
-    rb: 'ruby',
-    rs: 'rust',
-    go: 'go',
-    java: 'java',
-    kt: 'kotlin',
-    swift: 'swift',
-    css: 'css',
-    scss: 'scss',
-    less: 'less',
-    html: 'html',
-    xml: 'xml',
-    yaml: 'yaml',
-    yml: 'yaml',
-    sh: 'shell',
-    bash: 'shell',
-    sql: 'sql',
-    graphql: 'graphql',
-    dockerfile: 'dockerfile',
-    toml: 'toml',
-  }
-  return languageMap[ext || ''] || 'plaintext'
-}
-
-/**
- * Format file path for display (shorter, relative-like paths)
- */
-function formatFilePath(filePath: string): string {
-  const homeMatch = filePath.match(/^\/Users\/[^/]+\/(.+)$/)
-  if (homeMatch) {
-    return `~/${homeMatch[1]}`
-  }
-  return filePath
 }
 
 /**

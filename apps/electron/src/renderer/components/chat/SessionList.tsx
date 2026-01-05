@@ -3,12 +3,7 @@ import { formatDistanceToNow, isToday, isYesterday, format, startOfDay } from "d
 import { Trash2, Pencil, MoreHorizontal, ExternalLink, Flag, FlagOff, MailOpen, Search, X, FolderOpen } from "lucide-react"
 import { toast } from "sonner"
 
-import { cn } from "@/lib/utils"
-
-/** Check if a string is a hex color code (e.g., #3B82F6) */
-function isHexColor(str: string | undefined): boolean {
-  return !!str && /^#[0-9A-Fa-f]{6}$/.test(str)
-}
+import { cn, isHexColor } from "@/lib/utils"
 import { Spinner } from "@/components/ui/loading-indicator"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
@@ -378,7 +373,7 @@ function SessionItem({
                 <ExternalLink />
                 Open in new tab
               </StyledDropdownMenuItem>
-              <StyledDropdownMenuItem onClick={() => window.electronAPI.showSessionInFinder(item.id)}>
+              <StyledDropdownMenuItem onClick={() => window.electronAPI.sessionCommand(item.id, { type: 'showInFinder' })}>
                 <FolderOpen />
                 View in Finder
               </StyledDropdownMenuItem>

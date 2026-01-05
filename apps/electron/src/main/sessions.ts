@@ -1057,10 +1057,21 @@ Use oauth_trigger for OAuth sources, credential_prompt for API key/bearer token 
       }
 
       // Wire up onWorkingDirectoryChange to sync cwd changes (e.g., from Bash cd)
-      managed.agent.onWorkingDirectoryChange = (path) => {
+      //
+      // CRITICAL: Working directory determines where the SDK stores/finds session files.
+      // The SDK uses `~/.claude/projects/{encoded-cwd}/{session-id}.jsonl` for session data.
+      // If the app crashes/force-quits before persisting workingDirectory, on restart we'll
+      // look in the wrong folder and the session won't resume properly ("No conversation found").
+      //
+      // Solution: Use async handler with immediate flush to ensure workingDirectory is
+      // persisted to disk before any potential crash. The debounced queue alone isn't
+      // sufficient since force-quit can happen before the debounce timer fires.
+      managed.agent.onWorkingDirectoryChange = async (path) => {
         sessionLog.info(`Working directory changed for session ${managed.id}:`, path)
         managed.workingDirectory = path
         this.persistSession(managed)
+        // Force immediate flush - bypasses debounce to ensure crash safety
+        await sessionPersistenceQueue.flush(managed.id)
         this.sendEvent({
           type: 'working_directory_changed',
           sessionId: managed.id,

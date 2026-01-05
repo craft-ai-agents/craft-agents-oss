@@ -20,9 +20,9 @@ import type {
   PermissionMode,
   TodoState,
   LoadedSource,
+  NewChatActionParams,
 } from '../../shared/types'
 import type { SessionOptions, SessionOptionUpdates } from '../hooks/useSessionOptions'
-import type { NewChatActionParams } from '../hooks/useDeepLinkNavigation'
 import { defaultSessionOptions } from '../hooks/useSessionOptions'
 import { sessionAtomFamily } from '../atoms/sessions'
 

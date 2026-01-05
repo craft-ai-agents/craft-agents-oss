@@ -7,6 +7,7 @@ import { PencilLine, XCircle } from 'lucide-react'
 import { useTheme } from '@/context/ThemeContext'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { WindowHeader, WindowHeaderBadge, BADGE_CONFIGS } from '@/components/ui/window-header-badge'
+import { getLanguageFromPath, formatFilePath } from '@/lib/file-utils'
 import type { DiffPreviewData } from '../../../shared/types'
 
 // Configure loader to use local monaco-editor package (not CDN)
@@ -60,52 +61,6 @@ export function DiffPreviewApp({ sessionId, diffId }: DiffPreviewAppProps) {
     requestAnimationFrame(() => {
       setIsEditorReady(true)
     })
-  }, [])
-
-  // Detect language from file extension
-  const getLanguage = useCallback((filePath: string, explicit?: string): string => {
-    if (explicit) return explicit
-
-    const ext = filePath.split('.').pop()?.toLowerCase()
-    const languageMap: Record<string, string> = {
-      ts: 'typescript',
-      tsx: 'typescript',
-      js: 'javascript',
-      jsx: 'javascript',
-      json: 'json',
-      md: 'markdown',
-      py: 'python',
-      rb: 'ruby',
-      rs: 'rust',
-      go: 'go',
-      java: 'java',
-      kt: 'kotlin',
-      swift: 'swift',
-      css: 'css',
-      scss: 'scss',
-      less: 'less',
-      html: 'html',
-      xml: 'xml',
-      yaml: 'yaml',
-      yml: 'yaml',
-      sh: 'shell',
-      bash: 'shell',
-      sql: 'sql',
-      graphql: 'graphql',
-      dockerfile: 'dockerfile',
-      toml: 'toml',
-    }
-    return languageMap[ext || ''] || 'plaintext'
-  }, [])
-
-  // Format file path for display (show relative path if possible)
-  const formatFilePath = useCallback((filePath: string): string => {
-    // Try to show a shorter path by finding common patterns
-    const homeMatch = filePath.match(/^\/Users\/[^/]+\/(.+)$/)
-    if (homeMatch) {
-      return `~/${homeMatch[1]}`
-    }
-    return filePath
   }, [])
 
   // Monaco theme backgrounds
@@ -167,7 +122,7 @@ export function DiffPreviewApp({ sessionId, diffId }: DiffPreviewAppProps) {
           >
             <DiffEditor
               height="100%"
-              language={getLanguage(data.filePath, data.language)}
+              language={getLanguageFromPath(data.filePath, data.language)}
               theme={resolvedMode === 'dark' ? 'vs-dark' : 'vs'}
               original={data.original}
               modified={data.modified}

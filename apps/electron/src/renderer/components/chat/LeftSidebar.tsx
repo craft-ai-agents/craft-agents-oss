@@ -1,12 +1,7 @@
 import type { LucideIcon } from "lucide-react"
 import * as React from "react"
 
-import { cn } from "@/lib/utils"
-
-/** Check if a string is a hex color code (e.g., #3B82F6) */
-function isHexColor(str: string | undefined): boolean {
-  return !!str && /^#[0-9A-Fa-f]{6}$/.test(str)
-}
+import { cn, isHexColor } from "@/lib/utils"
 
 export interface LinkItem {
   id: string            // Unique ID for navigation (e.g., 'nav:inbox')

@@ -6,28 +6,18 @@ const api: ElectronAPI = {
   getSessions: () => ipcRenderer.invoke(IPC_CHANNELS.GET_SESSIONS),
   createSession: (workspaceId: string, agentId?: string, agentName?: string) => ipcRenderer.invoke(IPC_CHANNELS.CREATE_SESSION, workspaceId, agentId, agentName),
   deleteSession: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.DELETE_SESSION, sessionId),
-  renameSession: (sessionId: string, name: string) => ipcRenderer.invoke(IPC_CHANNELS.RENAME_SESSION, sessionId, name),
   sendMessage: (sessionId: string, message: string, attachments?: FileAttachment[], storedAttachments?: import('../shared/types').StoredAttachment[], options?: import('../shared/types').SendMessageOptions) => ipcRenderer.invoke(IPC_CHANNELS.SEND_MESSAGE, sessionId, message, attachments, storedAttachments, options),
   cancelProcessing: (sessionId: string, silent?: boolean) => ipcRenderer.invoke(IPC_CHANNELS.CANCEL_PROCESSING, sessionId, silent),
   killShell: (sessionId: string, shellId: string) => ipcRenderer.invoke(IPC_CHANNELS.KILL_SHELL, sessionId, shellId),
   getTaskOutput: (taskId: string) => ipcRenderer.invoke(IPC_CHANNELS.GET_TASK_OUTPUT, taskId),
-  flagSession: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.FLAG_SESSION, sessionId),
-  unflagSession: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.UNFLAG_SESSION, sessionId),
-  setTodoState: (sessionId: string, state: import('../shared/types').TodoState) => ipcRenderer.invoke(IPC_CHANNELS.SET_TODO_STATE, sessionId, state),
-  markSessionRead: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.MARK_SESSION_READ, sessionId),
-  markSessionUnread: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.MARK_SESSION_UNREAD, sessionId),
   respondToPermission: (sessionId: string, requestId: string, allowed: boolean, alwaysAllow: boolean) =>
     ipcRenderer.invoke(IPC_CHANNELS.RESPOND_TO_PERMISSION, sessionId, requestId, allowed, alwaysAllow),
   respondToCredential: (sessionId: string, requestId: string, response: import('../shared/types').CredentialResponse) =>
     ipcRenderer.invoke(IPC_CHANNELS.RESPOND_TO_CREDENTIAL, sessionId, requestId, response),
-  updateSessionWorkingDirectory: (sessionId: string, path: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.UPDATE_WORKING_DIRECTORY, sessionId, path),
-  showSessionInFinder: (sessionId: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.SHOW_SESSION_IN_FINDER, sessionId),
 
-  // Permission mode management ('safe', 'ask', 'allow-all')
-  setPermissionMode: (sessionId: string, mode: import('../shared/types').PermissionMode) =>
-    ipcRenderer.invoke(IPC_CHANNELS.SET_PERMISSION_MODE, sessionId, mode),
+  // Consolidated session command handler
+  sessionCommand: (sessionId: string, command: import('../shared/types').SessionCommand) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SESSION_COMMAND, sessionId, command),
 
   // Workspace management
   getWorkspaces: () => ipcRenderer.invoke(IPC_CHANNELS.GET_WORKSPACES),
@@ -45,7 +35,6 @@ const api: ElectronAPI = {
   getAgents: (workspaceId: string) => ipcRenderer.invoke(IPC_CHANNELS.GET_AGENTS, workspaceId),
   refreshAgents: (workspaceId: string) => ipcRenderer.invoke(IPC_CHANNELS.REFRESH_AGENTS, workspaceId),
   checkAgentAuth: (workspaceId: string, agentId: string) => ipcRenderer.invoke(IPC_CHANNELS.CHECK_AGENT_AUTH, workspaceId, agentId),
-  getAgentSetupStatus: (workspaceId: string, agentId: string) => ipcRenderer.invoke(IPC_CHANNELS.GET_AGENT_SETUP_STATUS, workspaceId, agentId),
   getAgentAuthStatus: (workspaceId: string, agentId: string) => ipcRenderer.invoke(IPC_CHANNELS.GET_AGENT_AUTH_STATUS, workspaceId, agentId),
   getAgentDefinition: (workspaceId: string, agentId: string) => ipcRenderer.invoke(IPC_CHANNELS.GET_AGENT_DEFINITION, workspaceId, agentId),
   reloadAgent: (workspaceId: string, agentId: string) => ipcRenderer.invoke(IPC_CHANNELS.RELOAD_AGENT, workspaceId, agentId),
@@ -191,12 +180,6 @@ const api: ElectronAPI = {
   getModel: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET_MODEL),
   setModel: (model: string) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SET_MODEL, model),
 
-  // Settings - New Session Defaults (legacy global settings, kept for backwards compatibility)
-  getDefaultPermissionMode: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET_DEFAULT_PERMISSION_MODE),
-  setDefaultPermissionMode: (mode: import('../shared/types').PermissionMode) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SET_DEFAULT_PERMISSION_MODE, mode),
-  getDefaultWorkingDirectory: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET_DEFAULT_WORKING_DIR),
-  setDefaultWorkingDirectory: (path: string) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SET_DEFAULT_WORKING_DIR, path),
-
   // Workspace Settings (per-workspace configuration)
   getWorkspaceSettings: (workspaceId: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.WORKSPACE_SETTINGS_GET, workspaceId),
@@ -290,12 +273,6 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.WORKSPACE_READ_IMAGE, workspaceId, relativePath),
   writeWorkspaceImage: (workspaceId: string, relativePath: string, base64: string, mimeType: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.WORKSPACE_WRITE_IMAGE, workspaceId, relativePath, base64, mimeType),
-
-  // Session sources
-  setSessionSources: (sessionId: string, sourceSlugs: string[]) =>
-    ipcRenderer.invoke(IPC_CHANNELS.SESSION_SET_SOURCES, sessionId, sourceSlugs),
-  getSessionSources: (sessionId: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.SESSION_GET_SOURCES, sessionId),
 
   // Sources change listener (live updates when sources are added/removed)
   onSourcesChanged: (callback: (sources: import('@craft-agent/shared/sources').LoadedSource[]) => void) => {

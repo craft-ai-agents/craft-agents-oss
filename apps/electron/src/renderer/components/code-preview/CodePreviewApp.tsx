@@ -7,6 +7,7 @@ import { BookOpen, PenLine, XCircle } from 'lucide-react'
 import { useTheme } from '@/context/ThemeContext'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { WindowHeader, WindowHeaderBadge, BADGE_CONFIGS } from '@/components/ui/window-header-badge'
+import { getLanguageFromPath, formatFilePath } from '@/lib/file-utils'
 import type { CodePreviewData } from '../../../shared/types'
 
 // Configure loader to use local monaco-editor package (not CDN)
@@ -60,55 +61,6 @@ export function CodePreviewApp({ sessionId, previewId }: CodePreviewAppProps) {
     requestAnimationFrame(() => {
       setIsEditorReady(true)
     })
-  }, [])
-
-  // Detect language from file extension
-  const getLanguage = useCallback((filePath: string, explicit?: string): string => {
-    if (explicit) return explicit
-
-    const ext = filePath.split('.').pop()?.toLowerCase()
-    const languageMap: Record<string, string> = {
-      ts: 'typescript',
-      tsx: 'typescript',
-      js: 'javascript',
-      jsx: 'javascript',
-      json: 'json',
-      md: 'markdown',
-      py: 'python',
-      rb: 'ruby',
-      rs: 'rust',
-      go: 'go',
-      java: 'java',
-      kt: 'kotlin',
-      swift: 'swift',
-      css: 'css',
-      scss: 'scss',
-      less: 'less',
-      html: 'html',
-      xml: 'xml',
-      yaml: 'yaml',
-      yml: 'yaml',
-      sh: 'shell',
-      bash: 'shell',
-      sql: 'sql',
-      graphql: 'graphql',
-      dockerfile: 'dockerfile',
-      toml: 'toml',
-      c: 'c',
-      cpp: 'cpp',
-      h: 'c',
-      hpp: 'cpp',
-    }
-    return languageMap[ext || ''] || 'plaintext'
-  }, [])
-
-  // Format file path for display (show relative path if possible)
-  const formatFilePath = useCallback((filePath: string): string => {
-    const homeMatch = filePath.match(/^\/Users\/[^/]+\/(.+)$/)
-    if (homeMatch) {
-      return `~/${homeMatch[1]}`
-    }
-    return filePath
   }, [])
 
   // Monaco theme backgrounds
@@ -182,7 +134,7 @@ export function CodePreviewApp({ sessionId, previewId }: CodePreviewAppProps) {
           >
             <Editor
               height="100%"
-              language={getLanguage(data.filePath, data.language)}
+              language={getLanguageFromPath(data.filePath, data.language)}
               theme={resolvedMode === 'dark' ? 'vs-dark' : 'vs'}
               value={data.content}
               onMount={handleEditorMount}

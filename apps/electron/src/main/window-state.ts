@@ -37,13 +37,7 @@ export function loadWindowState(): WindowState | null {
       return null
     }
 
-    const content = readFileSync(WINDOW_STATE_FILE, 'utf-8').trim()
-
-    // Handle empty or whitespace-only files (treat same as "file doesn't exist")
-    if (!content) {
-      return null
-    }
-
+    const content = readFileSync(WINDOW_STATE_FILE, 'utf-8')
     const state = JSON.parse(content) as WindowState
 
     // Validate structure

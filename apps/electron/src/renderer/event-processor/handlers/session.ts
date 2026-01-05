@@ -23,6 +23,7 @@ import type {
   PermissionModeChangedEvent,
   AskQuestionRequestEvent,
   UserMessageEvent,
+  AgentStatusEvent,
 } from '../types'
 import type { Message } from '../../../shared/types'
 import { generateMessageId, appendMessage } from '../helpers'
@@ -243,17 +244,24 @@ export function handleInterrupted(
 ): ProcessResult {
   const { session } = state
 
-  // Fail-safe: Mark any running tools as interrupted
-  const messagesWithInterruptedTools = session.messages.map(m =>
-    m.role === 'tool' && m.toolResult === undefined && m.toolStatus !== 'completed' && m.toolStatus !== 'error'
-      ? { ...m, toolStatus: 'error' as const, toolResult: 'Interrupted', isError: true }
-      : m
-  )
+  // Clear transient streaming state (isPending, isStreaming) and mark running tools as interrupted
+  // These fields are not persisted, so this matches the state after a reload
+  const updatedMessages = session.messages.map(m => {
+    // Mark running tools as interrupted
+    if (m.role === 'tool' && m.toolResult === undefined && m.toolStatus !== 'completed' && m.toolStatus !== 'error') {
+      return { ...m, toolStatus: 'error' as const, toolResult: 'Interrupted', isError: true }
+    }
+    // Clear pending state on assistant messages (transient streaming state)
+    if (m.role === 'assistant' && m.isPending) {
+      return { ...m, isPending: false, isStreaming: false }
+    }
+    return m
+  })
 
   // Only add the "Response interrupted" message if provided (not a silent redirect)
   const messages = event.message
-    ? [...messagesWithInterruptedTools, event.message]
-    : messagesWithInterruptedTools
+    ? [...updatedMessages, event.message]
+    : updatedMessages
 
   return {
     state: {
@@ -466,6 +474,28 @@ export function handlePlanSubmitted(
   return {
     state: {
       session: appendMessage(session, event.message),
+      streaming,
+    },
+    effects: [],
+  }
+}
+
+/**
+ * Handle agent_status - update agent status on session
+ * This is informational; the actual agent state is managed by useAgentState hook
+ */
+export function handleAgentStatus(
+  state: SessionState,
+  event: AgentStatusEvent
+): ProcessResult {
+  const { session, streaming } = state
+
+  return {
+    state: {
+      session: {
+        ...session,
+        agentStatus: event.status,
+      },
       streaming,
     },
     effects: [],

@@ -115,9 +115,7 @@ export default function ChatTabPanel({ tab }: ChatTabPanelProps) {
   const handleWorkingDirectoryChange = React.useCallback(async (path: string) => {
     if (!session) return
     // Update session's working directory
-    await window.electronAPI.updateSessionWorkingDirectory(session.id, path)
-    // Also update global default for future sessions
-    await window.electronAPI.setDefaultWorkingDirectory(path)
+    await window.electronAPI.sessionCommand(session.id, { type: 'updateWorkingDirectory', dir: path })
   }, [session])
 
   // Handle file opens - optionally open in tab instead of external app

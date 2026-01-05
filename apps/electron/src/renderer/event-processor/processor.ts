@@ -31,6 +31,7 @@ import {
   handlePermissionModeChanged,
   handleAskQuestionRequest,
   handleUserMessage,
+  handleAgentStatus,
 } from './handlers/session'
 
 /**
@@ -132,6 +133,9 @@ export function processEvent(
 
     case 'user_message':
       return handleUserMessage(state, event)
+
+    case 'agent_status':
+      return handleAgentStatus(state, event)
 
     default: {
       // Unknown event type - return state unchanged but as new reference

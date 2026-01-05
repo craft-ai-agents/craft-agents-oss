@@ -345,6 +345,8 @@ export interface Session {
     message: string
     statusType?: string
   }
+  // Agent status (idle, extracting, ready, active, etc.)
+  agentStatus?: AgentStatus
 }
 
 // AskUserQuestion types (matches shared/agent/craft-agent.ts)
@@ -403,29 +405,53 @@ export interface SendMessageOptions {
   ultrathinkEnabled?: boolean
 }
 
+// =============================================================================
+// IPC Command Pattern Types
+// =============================================================================
+
+/**
+ * SessionCommand - Consolidated session operations
+ * Replaces individual IPC calls: flag, unflag, rename, setTodoState, etc.
+ */
+export type SessionCommand =
+  | { type: 'flag' }
+  | { type: 'unflag' }
+  | { type: 'rename'; name: string }
+  | { type: 'setTodoState'; state: TodoState }
+  | { type: 'markRead' }
+  | { type: 'markUnread' }
+  | { type: 'setPermissionMode'; mode: PermissionMode }
+  | { type: 'updateWorkingDirectory'; dir: string }
+  | { type: 'setSources'; sourceSlugs: string[] }
+  | { type: 'showInFinder' }
+
+/**
+ * Parameters for opening a new chat session
+ */
+export interface NewChatActionParams {
+  /** Agent ID to use for the new chat */
+  agentId?: string
+  /** Text to pre-fill in the input (not sent automatically) */
+  input?: string
+  /** Session name */
+  name?: string
+}
+
 // IPC channel names
 export const IPC_CHANNELS = {
   // Session management
   GET_SESSIONS: 'sessions:get',
   CREATE_SESSION: 'sessions:create',
   DELETE_SESSION: 'sessions:delete',
-  RENAME_SESSION: 'sessions:rename',
   SEND_MESSAGE: 'sessions:sendMessage',
   CANCEL_PROCESSING: 'sessions:cancel',
   KILL_SHELL: 'sessions:killShell',
   GET_TASK_OUTPUT: 'tasks:getOutput',
-  FLAG_SESSION: 'sessions:flag',
-  UNFLAG_SESSION: 'sessions:unflag',
-  SET_TODO_STATE: 'sessions:setTodoState',
-  MARK_SESSION_READ: 'sessions:markRead',
-  MARK_SESSION_UNREAD: 'sessions:markUnread',
   RESPOND_TO_PERMISSION: 'sessions:respondToPermission',
   RESPOND_TO_CREDENTIAL: 'sessions:respondToCredential',
-  UPDATE_WORKING_DIRECTORY: 'sessions:updateWorkingDirectory',
-  SHOW_SESSION_IN_FINDER: 'sessions:showInFinder',
 
-  // Permission mode management ('safe', 'ask', 'allow-all')
-  SET_PERMISSION_MODE: 'sessions:setPermissionMode',
+  // Consolidated session command
+  SESSION_COMMAND: 'sessions:command',
 
   // Workspace management
   GET_WORKSPACES: 'workspaces:get',
@@ -442,7 +468,6 @@ export const IPC_CHANNELS = {
   GET_AGENTS: 'agents:get',
   REFRESH_AGENTS: 'agents:refresh',
   CHECK_AGENT_AUTH: 'agents:checkAuth',
-  GET_AGENT_SETUP_STATUS: 'agents:getSetupStatus',
   GET_AGENT_AUTH_STATUS: 'agents:getAuthStatus',
   GET_AGENT_DEFINITION: 'agents:getDefinition',
   RELOAD_AGENT: 'agents:reloadAgent',
@@ -527,12 +552,6 @@ export const IPC_CHANNELS = {
   SETTINGS_GET_MODEL: 'settings:getModel',
   SETTINGS_SET_MODEL: 'settings:setModel',
 
-  // Settings - New Session Defaults
-  SETTINGS_GET_DEFAULT_PERMISSION_MODE: 'settings:getDefaultPermissionMode',
-  SETTINGS_SET_DEFAULT_PERMISSION_MODE: 'settings:setDefaultPermissionMode',
-  SETTINGS_GET_DEFAULT_WORKING_DIR: 'settings:getDefaultWorkingDir',
-  SETTINGS_SET_DEFAULT_WORKING_DIR: 'settings:setDefaultWorkingDir',
-
   // Folder dialog (for selecting working directory)
   OPEN_FOLDER_DIALOG: 'dialog:openFolder',
 
@@ -556,10 +575,6 @@ export const IPC_CHANNELS = {
   // Agent-scoped sources
   SOURCES_GET_AGENT: 'sources:getAgent',
   SOURCES_PROMOTE: 'sources:promote',
-
-  // Session sources
-  SESSION_SET_SOURCES: 'sessions:setSources',
-  SESSION_GET_SOURCES: 'sessions:getSources',
 
   // Source permissions config
   SOURCES_GET_PERMISSIONS: 'sources:getPermissions',
@@ -732,23 +747,15 @@ export interface ElectronAPI {
   getSessions(): Promise<Session[]>
   createSession(workspaceId: string, agentId?: string, agentName?: string): Promise<Session>
   deleteSession(sessionId: string): Promise<void>
-  renameSession(sessionId: string, name: string): Promise<void>
   sendMessage(sessionId: string, message: string, attachments?: FileAttachment[], storedAttachments?: StoredAttachmentType[], options?: SendMessageOptions): Promise<void>
   cancelProcessing(sessionId: string, silent?: boolean): Promise<void>
   killShell(sessionId: string, shellId: string): Promise<{ success: boolean; error?: string }>
   getTaskOutput(taskId: string): Promise<string | null>
-  flagSession(sessionId: string): Promise<void>
-  unflagSession(sessionId: string): Promise<void>
-  setTodoState(sessionId: string, state: TodoState): Promise<void>
-  markSessionRead(sessionId: string): Promise<void>
-  markSessionUnread(sessionId: string): Promise<void>
   respondToPermission(sessionId: string, requestId: string, allowed: boolean, alwaysAllow: boolean): Promise<boolean>
   respondToCredential(sessionId: string, requestId: string, response: CredentialResponse): Promise<boolean>
-  updateSessionWorkingDirectory(sessionId: string, path: string): Promise<void>
-  showSessionInFinder(sessionId: string): Promise<void>
 
-  // Permission mode management ('safe', 'ask', 'allow-all')
-  setPermissionMode(sessionId: string, mode: PermissionMode): Promise<void>
+  // Consolidated session command handler
+  sessionCommand(sessionId: string, command: SessionCommand): Promise<void>
 
   // Workspace management
   getWorkspaces(): Promise<Workspace[]>
@@ -765,7 +772,6 @@ export interface ElectronAPI {
   getAgents(workspaceId: string): Promise<SubAgentMetadata[]>
   refreshAgents(workspaceId: string): Promise<SubAgentMetadata[]>
   checkAgentAuth(workspaceId: string, agentId: string): Promise<{ needsAuth: boolean; reason?: string }>
-  getAgentSetupStatus(workspaceId: string, agentId: string): Promise<AgentSetupStatus>
   getAgentAuthStatus(workspaceId: string, agentId: string): Promise<AgentAuthStatus>
   getAgentDefinition(workspaceId: string, agentId: string): Promise<SubAgentDefinition | null>
   reloadAgent(workspaceId: string, agentId: string): Promise<boolean>
@@ -855,12 +861,6 @@ export interface ElectronAPI {
   getModel(): Promise<string | null>
   setModel(model: string): Promise<void>
 
-  // Settings - New Session Defaults
-  getDefaultPermissionMode(): Promise<PermissionMode>
-  setDefaultPermissionMode(mode: PermissionMode): Promise<void>
-  getDefaultWorkingDirectory(): Promise<string>
-  setDefaultWorkingDirectory(path: string): Promise<void>
-
   // Workspace Settings (per-workspace configuration)
   getWorkspaceSettings(workspaceId: string): Promise<WorkspaceSettings | null>
   updateWorkspaceSetting<K extends keyof WorkspaceSettings>(workspaceId: string, key: K, value: WorkspaceSettings[K]): Promise<void>
@@ -913,10 +913,6 @@ export interface ElectronAPI {
   promoteSource(workspaceId: string, agentSlug: string, sourceSlug: string): Promise<void>
   getSourcePermissionsConfig(workspaceId: string, sourceSlug: string): Promise<import('@craft-agent/shared/agent').PermissionsConfigFile | null>
   getMcpTools(workspaceId: string, sourceSlug: string): Promise<McpToolsResult>
-
-  // Session sources
-  setSessionSources(sessionId: string, sourceSlugs: string[]): Promise<void>
-  getSessionSources(sessionId: string): Promise<string[]>
 
   // Sources change listener (live updates when sources are added/removed)
   onSourcesChanged(callback: (sources: LoadedSource[]) => void): () => void

@@ -5,7 +5,7 @@
  * All agent events flow through a single pure function for consistent state transitions.
  */
 
-import type { Session, Message, PermissionRequest, CredentialRequest, TypedError, PermissionMode, AskQuestionRequest, TodoState } from '../../shared/types'
+import type { Session, Message, PermissionRequest, CredentialRequest, TypedError, PermissionMode, AskQuestionRequest, TodoState, AgentStatus } from '../../shared/types'
 
 /**
  * Streaming state for a session - replaces streamingTextRef
@@ -269,6 +269,15 @@ export interface UserMessageEvent {
 }
 
 /**
+ * Agent status event - updates agent state (idle, extracting, ready, etc.)
+ */
+export interface AgentStatusEvent {
+  type: 'agent_status'
+  sessionId: string
+  status: AgentStatus
+}
+
+/**
  * Union of all agent events
  */
 export type AgentEvent =
@@ -295,6 +304,7 @@ export type AgentEvent =
   | ShellBackgroundedEvent
   | TaskProgressEvent
   | UserMessageEvent
+  | AgentStatusEvent
 
 /**
  * Side effects that need to be handled outside the pure processor

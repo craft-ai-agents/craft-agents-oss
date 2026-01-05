@@ -184,7 +184,7 @@ interface TabHeaderActionsProps {
 function TabHeaderActions({ tab, onOpenRename }: TabHeaderActionsProps) {
   const { closeTab } = useCloseTab()
   const { closeTab: rawCloseTab } = useTabs()
-  const { sessions, onDeleteSession } = useChatContext()
+  const { sessions, onDeleteSession, onTodoStateChange } = useChatContext()
 
   // Get session for chat tab
   const session = tab.type === 'chat'
@@ -211,11 +211,11 @@ function TabHeaderActions({ tab, onOpenRename }: TabHeaderActionsProps) {
     }
   }, [session, onOpenRename])
 
-  const handleComplete = React.useCallback(async () => {
+  const handleComplete = React.useCallback(() => {
     if (session) {
-      await window.electronAPI.setTodoState(session.id, 'done')
+      onTodoStateChange(session.id, 'done')
     }
-  }, [session])
+  }, [session, onTodoStateChange])
 
   const handleDelete = React.useCallback(() => {
     if (session) {
