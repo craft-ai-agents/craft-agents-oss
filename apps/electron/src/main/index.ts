@@ -1,22 +1,37 @@
-import { app, BrowserWindow, shell, nativeTheme } from 'electron'
+import { app, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { existsSync } from 'fs'
 import { SessionManager } from './sessions'
 import { registerIpcHandlers } from './ipc'
 import { createApplicationMenu } from './menu'
-import { IPC_CHANNELS } from '../shared/types'
+import { WindowManager } from './window-manager'
+import { PreviewWindowManager } from './preview-window'
+import { DiffPreviewWindowManager } from './diff-preview-window'
+import { CodePreviewWindowManager } from './code-preview-window'
+import { TerminalPreviewWindowManager } from './terminal-preview-window'
+import { MultiFileDiffWindowManager } from './multi-file-diff-window'
+import { loadWindowState, saveWindowState } from './window-state'
+import { getWorkspaces } from '@craft-agent/shared/config'
+import { initializeDocs } from '@craft-agent/shared/docs'
+import { handleDeepLink } from './deep-link'
+import log, { isDebugMode, mainLog, getLogFilePath } from './logger'
 
-// Check if running in development mode
-const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
-
-// Vite dev server URL for hot reload
-const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL
+// Initialize electron-log for renderer process support
+log.initialize()
 
 // Custom URL scheme for deeplinks (e.g., craftagents://auth-complete)
 const DEEPLINK_SCHEME = 'craftagents'
 
-let mainWindow: BrowserWindow | null = null
+let windowManager: WindowManager | null = null
 let sessionManager: SessionManager | null = null
+let previewWindowManager: PreviewWindowManager | null = null
+let diffPreviewWindowManager: DiffPreviewWindowManager | null = null
+let codePreviewWindowManager: CodePreviewWindowManager | null = null
+let terminalPreviewWindowManager: TerminalPreviewWindowManager | null = null
+let multiFileDiffWindowManager: MultiFileDiffWindowManager | null = null
+
+// Store pending deep link if app not ready yet (cold start)
+let pendingDeepLink: string | null = null
 
 // Register as default protocol client for craftagents:// URLs
 // This must be done before app.whenReady() on some platforms
@@ -33,12 +48,15 @@ if (process.defaultApp) {
 // Handle deeplink on macOS (when app is already running)
 app.on('open-url', (event, url) => {
   event.preventDefault()
-  console.log('[Main] Received deeplink:', url)
+  mainLog.info('Received deeplink:', url)
 
-  // Bring the app to focus
-  if (mainWindow) {
-    if (mainWindow.isMinimized()) mainWindow.restore()
-    mainWindow.focus()
+  if (windowManager) {
+    handleDeepLink(url, windowManager).catch(err => {
+      mainLog.error('Failed to handle deep link:', err)
+    })
+  } else {
+    // App not ready - store for later
+    pendingDeepLink = url
   }
 })
 
@@ -51,101 +69,63 @@ if (!gotTheLock) {
     // Someone tried to run a second instance, we should focus our window.
     // On Windows/Linux, the deeplink is in commandLine
     const url = commandLine.find(arg => arg.startsWith(`${DEEPLINK_SCHEME}://`))
-    if (url) {
-      console.log('[Main] Received deeplink from second instance:', url)
-    }
-
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore()
-      mainWindow.focus()
+    if (url && windowManager) {
+      mainLog.info('Received deeplink from second instance:', url)
+      handleDeepLink(url, windowManager).catch(err => {
+        mainLog.error('Failed to handle deep link:', err)
+      })
+    } else if (windowManager) {
+      // No deep link - just focus the first window
+      const windows = windowManager.getAllWindows()
+      if (windows.length > 0) {
+        const win = windows[0].window
+        if (win.isMinimized()) win.restore()
+        win.focus()
+      }
     }
   })
 }
 
-function createWindow(): void {
-  // Load platform-specific app icon
-  const getIconPath = () => {
-    const resourcesDir = join(__dirname, '../resources')
-    if (process.platform === 'darwin') {
-      return join(resourcesDir, 'icon.icns')
-    } else if (process.platform === 'win32') {
-      return join(resourcesDir, 'icon.ico')
-    } else {
-      return join(resourcesDir, 'icon.png')
+// Helper to create initial windows on startup
+async function createInitialWindows(): Promise<void> {
+  if (!windowManager) return
+
+  // Load saved window state
+  const savedState = loadWindowState()
+  const workspaces = getWorkspaces()
+
+  if (workspaces.length === 0) {
+    // No workspaces configured - create window without workspace (will show onboarding)
+    windowManager.createWindow('')
+    return
+  }
+
+  if (savedState?.openWorkspaceIds.length) {
+    // Restore windows from saved state
+    // Filter to only workspaces that still exist
+    const validWorkspaceIds = savedState.openWorkspaceIds.filter(
+      wsId => workspaces.some(ws => ws.id === wsId)
+    )
+
+    if (validWorkspaceIds.length > 0) {
+      for (const wsId of validWorkspaceIds) {
+        windowManager.createWindow(wsId)
+      }
+      mainLog.info(`Restored ${validWorkspaceIds.length} window(s) from saved state`)
+      return
     }
   }
 
-  const iconPath = getIconPath()
-  const iconExists = existsSync(iconPath)
-
-  if (!iconExists) {
-    console.warn('[Main] App icon not found at:', iconPath)
-  }
-
-  mainWindow = new BrowserWindow({
-    width: 1400,
-    height: 900,
-    minWidth: 800,
-    minHeight: 600,
-    title: '',
-    icon: iconExists ? iconPath : undefined,
-    titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 18, y: 18 },
-    vibrancy: 'under-window',
-    visualEffectState: 'active',
-    webPreferences: {
-      preload: join(__dirname, 'preload.cjs'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      webviewTag: true // Enable webview for browser panel
-    }
-  })
-
-  // Open external links in default browser
-  mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
-    return { action: 'deny' }
-  })
-
-  // Handle navigation in webviews to external URLs
-  mainWindow.webContents.on('will-navigate', (event, url) => {
-    // Allow navigation within the app, but open external URLs in browser
-    if (!url.startsWith('file://')) {
-      event.preventDefault()
-      shell.openExternal(url)
-    }
-  })
-
-  // Load the renderer - from Vite dev server in dev mode, or file in production
-  if (VITE_DEV_SERVER_URL) {
-    mainWindow.loadURL(VITE_DEV_SERVER_URL)
-  } else {
-    mainWindow.loadFile(join(__dirname, 'renderer/index.html'))
-  }
-
-  // Open DevTools only in development mode
-  if (isDev) {
-    mainWindow.webContents.openDevTools()
-  }
-
-  // Handle window close
-  mainWindow.on('closed', () => {
-    mainWindow = null
-  })
-
-  // Update session manager with new window reference
-  if (sessionManager) {
-    sessionManager.setMainWindow(mainWindow)
-  }
-
-  // Listen for system theme changes and notify renderer
-  nativeTheme.on('updated', () => {
-    mainWindow?.webContents.send(IPC_CHANNELS.SYSTEM_THEME_CHANGED, nativeTheme.shouldUseDarkColors)
-  })
+  // Default: open window for first workspace
+  windowManager.createWindow(workspaces[0].id)
+  mainLog.info(`Created window for first workspace: ${workspaces[0].name}`)
 }
 
 app.whenReady().then(async () => {
   app.setName('Craft Agents')
+
+  // Initialize bundled docs
+  initializeDocs()
 
   // Create the application menu
   createApplicationMenu()
@@ -159,28 +139,69 @@ app.whenReady().then(async () => {
   }
 
   try {
-    // Initialize session manager first
+    // Initialize window manager
+    windowManager = new WindowManager()
+
+    // Initialize preview window manager
+    previewWindowManager = new PreviewWindowManager()
+    previewWindowManager.setWindowManager(windowManager)
+
+    // Initialize diff preview window manager
+    diffPreviewWindowManager = new DiffPreviewWindowManager()
+
+    // Initialize code preview window manager
+    codePreviewWindowManager = new CodePreviewWindowManager()
+
+    // Initialize terminal preview window manager
+    terminalPreviewWindowManager = new TerminalPreviewWindowManager()
+
+    // Initialize multi-file diff window manager
+    multiFileDiffWindowManager = new MultiFileDiffWindowManager()
+
+    // Initialize session manager
     sessionManager = new SessionManager()
+    sessionManager.setWindowManager(windowManager)
 
     // Register IPC handlers (must happen before window creation)
-    registerIpcHandlers(sessionManager)
+    registerIpcHandlers(sessionManager, windowManager, previewWindowManager, diffPreviewWindowManager, codePreviewWindowManager, terminalPreviewWindowManager, multiFileDiffWindowManager)
 
-    // Create the main window
-    createWindow()
+    // Create initial windows (restores from saved state or opens first workspace)
+    await createInitialWindows()
 
     // Initialize auth (must happen after window creation for error reporting)
     await sessionManager.initialize()
 
-    console.log('[Main] App initialized successfully')
+    // Process pending deep link from cold start
+    if (pendingDeepLink) {
+      mainLog.info('Processing pending deep link:', pendingDeepLink)
+      await handleDeepLink(pendingDeepLink, windowManager)
+      pendingDeepLink = null
+    }
+
+    mainLog.info('App initialized successfully')
+    if (isDebugMode) {
+      mainLog.info('Debug mode enabled - logs at:', getLogFilePath())
+    }
   } catch (error) {
-    console.error('[Main] Failed to initialize app:', error)
+    mainLog.error('Failed to initialize app:', error)
     // Continue anyway - the app will show errors in the UI
   }
 
   // macOS: Re-create window when dock icon is clicked
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow()
+    if (!windowManager?.hasWindows()) {
+      // Open first workspace or last focused
+      const workspaces = getWorkspaces()
+      if (workspaces.length > 0 && windowManager) {
+        const savedState = loadWindowState()
+        const wsId = savedState?.lastFocusedWorkspaceId || workspaces[0].id
+        // Verify workspace still exists
+        if (workspaces.some(ws => ws.id === wsId)) {
+          windowManager.createWindow(wsId)
+        } else {
+          windowManager.createWindow(workspaces[0].id)
+        }
+      }
     }
   })
 })
@@ -192,11 +213,53 @@ app.on('window-all-closed', () => {
   }
 })
 
+// Track if we're in the process of quitting (to avoid re-entry)
+let isQuitting = false
+
+// Save window state and clean up resources before quitting
+app.on('before-quit', async (event) => {
+  // Avoid re-entry when we call app.exit()
+  if (isQuitting) return
+  isQuitting = true
+
+  if (windowManager) {
+    const openWorkspaceIds = windowManager.getOpenWorkspaceIds()
+    // Get the focused window's workspace as last focused
+    const focusedWindow = BrowserWindow.getFocusedWindow()
+    let lastFocusedWorkspaceId: string | undefined
+    if (focusedWindow) {
+      lastFocusedWorkspaceId = windowManager.getWorkspaceForWindow(focusedWindow.webContents.id) ?? undefined
+    }
+
+    saveWindowState({
+      openWorkspaceIds,
+      lastFocusedWorkspaceId,
+    })
+    mainLog.info('Saved window state:', openWorkspaceIds.length, 'workspaces')
+  }
+
+  // Flush all pending session writes before quitting
+  if (sessionManager) {
+    // Prevent quit until sessions are flushed
+    event.preventDefault()
+    try {
+      await sessionManager.flushAllSessions()
+      mainLog.info('Flushed all pending session writes')
+    } catch (error) {
+      mainLog.error('Failed to flush sessions:', error)
+    }
+    // Clean up SessionManager resources (file watchers, timers, etc.)
+    sessionManager.cleanup()
+    // Now actually quit
+    app.exit(0)
+  }
+})
+
 // Handle uncaught exceptions to prevent crashes
 process.on('uncaughtException', (error) => {
-  console.error('[Main] Uncaught exception:', error)
+  mainLog.error('Uncaught exception:', error)
 })
 
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('[Main] Unhandled rejection at:', promise, 'reason:', reason)
+  mainLog.error('Unhandled rejection at:', promise, 'reason:', reason)
 })

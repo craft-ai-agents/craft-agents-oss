@@ -29,11 +29,11 @@ interface StepIconProps {
 const iconVariantStyles: Record<StepIconVariant, { container: string; icon: string }> = {
   primary: {
     container: '',
-    icon: 'text-primary',
+    icon: 'text-foreground',
   },
   success: {
     container: '',
-    icon: 'text-green-500',
+    icon: 'text-success',
   },
   error: {
     container: '',
@@ -41,7 +41,7 @@ const iconVariantStyles: Record<StepIconVariant, { container: string; icon: stri
   },
   loading: {
     container: '',
-    icon: 'text-primary',
+    icon: 'text-foreground',
   },
   none: {
     container: '',
@@ -131,6 +131,10 @@ interface StepFormLayoutProps {
   actions?: React.ReactNode
   /** Form content */
   children?: React.ReactNode
+  /** Whether children should grow to fill available space (for scrollable content) */
+  grow?: boolean
+  /** Whether to fill parent height without max-height limit */
+  fillHeight?: boolean
   className?: string
 }
 
@@ -151,12 +155,19 @@ export function StepFormLayout({
   description,
   actions,
   children,
+  grow = false,
+  fillHeight = false,
   className
 }: StepFormLayoutProps) {
   return (
-    <div className={cn("flex w-[28rem] flex-col items-center", className)}>
+    <div className={cn(
+      "flex w-[28rem] flex-col items-center",
+      grow && !fillHeight && "h-full max-h-[600px]",
+      fillHeight && "h-full",
+      className
+    )}>
       {iconElement && (
-        <div className="mb-6">
+        <div className="mb-6 shrink-0">
           {iconElement}
         </div>
       )}
@@ -166,16 +177,21 @@ export function StepFormLayout({
         </StepIcon>
       )}
 
-      <StepHeader title={title} description={description} />
+      <div className="shrink-0">
+        <StepHeader title={title} description={description} />
+      </div>
 
       {children && (
-        <div className="mt-8 w-full">
+        <div className={cn(
+          "mt-6 w-full",
+          (grow || fillHeight) && "flex-1 min-h-0"
+        )}>
           {children}
         </div>
       )}
 
       {actions && (
-        <StepActions variant="flex" className="mt-8 w-full">
+        <StepActions variant="flex" className="mt-6 w-full shrink-0">
           {actions}
         </StepActions>
       )}

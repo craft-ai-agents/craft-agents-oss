@@ -1,22 +1,30 @@
 import type { ComponentEntry, CategoryGroup, Category } from './types'
 import { onboardingComponents } from './onboarding'
-import { agentSetupComponents } from './agent-setup'
 import { chatComponents } from './chat'
+import { turnCardComponents } from './turn-card'
+import { messagesComponents } from './messages'
+import { inputComponents } from './input'
+import { slashCommandComponents } from './slash-command'
 import { markdownComponents } from './markdown'
 import { iconComponents } from './icons'
+import { settingsComponents } from './settings'
 
 export * from './types'
 
 export const componentRegistry: ComponentEntry[] = [
   ...onboardingComponents,
-  ...agentSetupComponents,
   ...chatComponents,
+  ...turnCardComponents,
+  ...messagesComponents,
+  ...inputComponents,
+  ...slashCommandComponents,
   ...markdownComponents,
   ...iconComponents,
+  ...settingsComponents,
 ]
 
 export function getCategories(): CategoryGroup[] {
-  const categoryOrder: Category[] = ['Onboarding', 'Agent Setup', 'Chat', 'Markdown', 'Icons']
+  const categoryOrder: Category[] = ['Onboarding', 'Chat', 'Turn Cards', 'Chat Messages', 'Chat Inputs', 'Markdown', 'Icons', 'Settings']
   const categoryMap = new Map<Category, ComponentEntry[]>()
 
   for (const entry of componentRegistry) {

@@ -2,7 +2,12 @@
  * useOnboarding Hook
  *
  * Manages the state machine for the onboarding wizard.
- * Handles Craft OAuth, space selection, MCP setup, and billing configuration.
+ * Simplified billing-only flow:
+ * 1. Welcome
+ * 2. Billing Method (Craft Credits / API Key / Claude OAuth)
+ * 3. Craft Login (only if Craft Credits selected)
+ * 4. Credentials (only if API Key or Claude OAuth selected)
+ * 5. Complete
  */
 import { useState, useCallback, useEffect } from 'react'
 import type {
@@ -11,10 +16,8 @@ import type {
   LoginStatus,
   CredentialStatus,
   BillingMethod,
-  SpaceCategory,
-  CraftSpace,
 } from '@/components/onboarding'
-import type { CraftMcpLink, AuthType, SetupNeeds, CraftSpace as ApiCraftSpace } from '../../shared/types'
+import type { AuthType, SetupNeeds } from '../../shared/types'
 
 interface UseOnboardingOptions {
   /** Called when onboarding is complete */
@@ -26,20 +29,15 @@ interface UseOnboardingOptions {
 interface UseOnboardingReturn {
   // State
   state: OnboardingState
-  spaceCategories: SpaceCategory[]
-  isLoadingSpaces: boolean
 
   // Wizard actions
   handleContinue: () => void
   handleBack: () => void
 
-  // Craft OAuth
+  // Craft OAuth (for Craft Credits billing)
   handleLogin: () => void
   handleOpenLoginManually: () => void
   handleRetryLogin: () => void
-
-  // Space selection
-  handleSelectSpace: (spaceId: string, spaceName: string) => void
 
   // Billing
   handleSelectBillingMethod: (method: BillingMethod) => void
@@ -74,152 +72,73 @@ export function useOnboarding({
   onComplete,
   initialSetupNeeds,
 }: UseOnboardingOptions): UseOnboardingReturn {
-  // Determine initial step based on setup needs
-  const getInitialStep = (): OnboardingStep => {
-    if (!initialSetupNeeds) return 'welcome'
-    if (initialSetupNeeds.needsCraftAuth) return 'welcome'
-    if (initialSetupNeeds.needsBillingConfig) return 'welcome'
-    if (initialSetupNeeds.needsCredentials) return 'welcome'
-    return 'welcome'
-  }
-
   // Main wizard state
   const [state, setState] = useState<OnboardingState>({
-    step: getInitialStep(),
+    step: 'welcome',
     loginStatus: 'idle',
     credentialStatus: 'idle',
     completionStatus: 'saving',
-    selectedSpaceId: null,
-    selectedSpaceName: null,
     billingMethod: null,
-    isExistingUser: !initialSetupNeeds?.needsCraftAuth, // Has Craft auth + workspace, just needs billing
+    isExistingUser: (initialSetupNeeds?.needsBillingConfig && !initialSetupNeeds?.needsCraftAuth) ?? false,
   })
 
-  // Space categories for selection
-  const [spaceCategories, setSpaceCategories] = useState<SpaceCategory[]>([])
-  const [isLoadingSpaces, setIsLoadingSpaces] = useState(false)
-
-  // Craft token and profile (temporary, saved on completion)
-  const [craftToken, setCraftToken] = useState<string | null>(null)
-  const [craftProfile, setCraftProfile] = useState<{
-    userId: string
-    firstName: string
-    lastName: string
-    spaces: ApiCraftSpace[]
-    teams: Array<{ id: string; name: string; isPrivate: boolean; role: string; tier?: string | null }>
-  } | null>(null)
-
-  // Selected MCP link
-  const [selectedMcpLink, setSelectedMcpLink] = useState<CraftMcpLink | null>(null)
-
-  // MCP OAuth credentials
-  const [mcpCredentials, setMcpCredentials] = useState<{
-    accessToken: string
-    clientId?: string
-  } | null>(null)
-
-  // Categorize spaces into groups (converts from API spaces to UI spaces with type)
-  const categorizeSpaces = useCallback((spaces: ApiCraftSpace[], teams: Array<{ id: string; name: string; isPrivate: boolean; role: string }>, userId: string) => {
-    const personalSpace = spaces.find(s => s.id === userId)
-    const teamSpaces = spaces.filter(s => s.id !== userId && s.teamId)
-    const otherSpaces = spaces.filter(s => s.id !== userId && !s.teamId)
-
-    const categories: SpaceCategory[] = []
-
-    if (personalSpace) {
-      categories.push({
-        name: 'Recommended',
-        spaces: [{
-          id: personalSpace.id,
-          name: personalSpace.name,
-          type: 'personal',
-        }],
-      })
+  // Save configuration
+  const handleSaveConfig = useCallback(async (credential?: string) => {
+    if (!state.billingMethod) {
+      console.log('[Onboarding] No billing method, returning early')
+      return
     }
 
-    if (teamSpaces.length > 0) {
-      categories.push({
-        name: 'Your Spaces',
-        spaces: teamSpaces.map(s => ({
-          id: s.id,
-          name: s.name,
-          type: 'team' as const,
-        })),
-      })
-    }
+    setState(s => ({ ...s, completionStatus: 'saving' }))
 
-    if (otherSpaces.length > 0) {
-      categories.push({
-        name: 'Other Spaces',
-        spaces: otherSpaces.map(s => ({
-          id: s.id,
-          name: s.name,
-          type: 'shared' as const,
-        })),
-      })
-    }
+    try {
+      const authType = billingMethodToAuthType(state.billingMethod)
+      console.log('[Onboarding] Saving config with authType:', authType)
 
-    return categories
-  }, [])
+      const result = await window.electronAPI.saveOnboardingConfig({
+        authType,
+        credential,
+      })
+
+      if (result.success) {
+        console.log('[Onboarding] Save successful')
+        setState(s => ({ ...s, completionStatus: 'complete' }))
+      } else {
+        console.error('[Onboarding] Save failed:', result.error)
+        setState(s => ({
+          ...s,
+          completionStatus: 'saving',
+          errorMessage: result.error || 'Failed to save configuration',
+        }))
+      }
+    } catch (error) {
+      console.error('[Onboarding] handleSaveConfig error:', error)
+      setState(s => ({
+        ...s,
+        errorMessage: error instanceof Error ? error.message : 'Failed to save configuration',
+      }))
+    }
+  }, [state.billingMethod])
 
   // Continue to next step
   const handleContinue = useCallback(async () => {
     switch (state.step) {
       case 'welcome':
-        if (state.isExistingUser) {
-          // Skip to billing method for existing users
-          setState(s => ({ ...s, step: 'billing-method' }))
-        } else {
+        setState(s => ({ ...s, step: 'billing-method' }))
+        break
+
+      case 'billing-method':
+        if (state.billingMethod === 'craft_credits') {
+          // Need Craft OAuth for billing
           setState(s => ({ ...s, step: 'craft-login' }))
+        } else {
+          // API Key or Claude OAuth - go to credentials
+          setState(s => ({ ...s, step: 'credentials' }))
         }
         break
 
       case 'craft-login':
         // Auto-continues on successful login
-        break
-
-      case 'select-space':
-        if (state.selectedSpaceId && craftToken) {
-          // Fetch or create MCP link for the selected space
-          setIsLoadingSpaces(true)
-          try {
-            const links = await window.electronAPI.getMcpLinks(state.selectedSpaceId, craftToken)
-            const existingLink = links.find(l => l.mcpUrl)
-
-            let mcpLink: typeof existingLink
-            if (existingLink) {
-              mcpLink = existingLink
-              setSelectedMcpLink(existingLink)
-            } else {
-              // Create new MCP link
-              const newLink = await window.electronAPI.createMcpLink(state.selectedSpaceId, craftToken)
-              mcpLink = newLink
-              setSelectedMcpLink(newLink)
-            }
-
-            // Go to billing method selection
-            setState(s => ({ ...s, step: 'billing-method' }))
-          } catch (error) {
-            console.error('Failed to setup MCP link:', error)
-            setState(s => ({
-              ...s,
-              errorMessage: 'Failed to setup workspace connection',
-            }))
-          } finally {
-            setIsLoadingSpaces(false)
-          }
-        }
-        break
-
-      case 'billing-method':
-        if (state.billingMethod === 'craft_credits') {
-          // No credentials needed, go to completion
-          setState(s => ({ ...s, step: 'complete' }))
-          // Trigger save
-          handleSaveConfig()
-        } else {
-          setState(s => ({ ...s, step: 'credentials' }))
-        }
         break
 
       case 'credentials':
@@ -230,58 +149,39 @@ export function useOnboarding({
         onComplete()
         break
     }
-  }, [state, craftToken, onComplete])
+  }, [state.step, state.billingMethod, onComplete])
 
   // Go back to previous step
   const handleBack = useCallback(() => {
     switch (state.step) {
-      case 'craft-login':
-        setState(s => ({ ...s, step: 'welcome', loginStatus: 'idle', errorMessage: undefined }))
-        break
-      case 'select-space':
-        setState(s => ({ ...s, step: 'craft-login', selectedSpaceId: null, selectedSpaceName: null }))
-        break
       case 'billing-method':
-        if (state.isExistingUser) {
-          setState(s => ({ ...s, step: 'welcome' }))
-        } else {
-          setState(s => ({ ...s, step: 'select-space' }))
-        }
+        setState(s => ({ ...s, step: 'welcome' }))
+        break
+      case 'craft-login':
+        setState(s => ({ ...s, step: 'billing-method', loginStatus: 'idle', errorMessage: undefined }))
         break
       case 'credentials':
         setState(s => ({ ...s, step: 'billing-method', credentialStatus: 'idle', errorMessage: undefined }))
         break
     }
-  }, [state.step, state.isExistingUser])
+  }, [state.step])
 
-  // Start Craft OAuth
+  // Start Craft OAuth (for Craft Credits billing)
   const handleLogin = useCallback(async () => {
     setState(s => ({ ...s, loginStatus: 'waiting', errorMessage: undefined }))
 
     try {
       const result = await window.electronAPI.startCraftOAuth()
 
-      if (result.success && result.token && result.profile) {
-        setCraftToken(result.token)
-        setCraftProfile(result.profile)
+      if (result.success && result.token) {
+        setState(s => ({ ...s, loginStatus: 'success' }))
 
-        // Categorize and set spaces
-        const categories = categorizeSpaces(
-          result.profile.spaces,
-          result.profile.teams,
-          result.profile.userId
-        )
-        setSpaceCategories(categories)
+        // Save config and go to completion
+        await handleSaveConfig()
 
-        setState(s => ({
-          ...s,
-          loginStatus: 'success',
-        }))
-
-        // Auto-advance to space selection after brief success state
         setTimeout(() => {
-          setState(s => ({ ...s, step: 'select-space' }))
-        }, 1000)
+          setState(s => ({ ...s, step: 'complete' }))
+        }, 500)
       } else {
         setState(s => ({
           ...s,
@@ -296,11 +196,10 @@ export function useOnboarding({
         errorMessage: error instanceof Error ? error.message : 'Authentication failed',
       }))
     }
-  }, [categorizeSpaces])
+  }, [handleSaveConfig])
 
   // Open login page manually (if auto-open failed)
   const handleOpenLoginManually = useCallback(() => {
-    // Re-trigger the OAuth flow
     handleLogin()
   }, [handleLogin])
 
@@ -309,15 +208,6 @@ export function useOnboarding({
     setState(s => ({ ...s, loginStatus: 'idle', errorMessage: undefined }))
     handleLogin()
   }, [handleLogin])
-
-  // Select a space
-  const handleSelectSpace = useCallback((spaceId: string, spaceName: string) => {
-    setState(s => ({
-      ...s,
-      selectedSpaceId: spaceId,
-      selectedSpaceName: spaceName,
-    }))
-  }, [])
 
   // Select billing method
   const handleSelectBillingMethod = useCallback((method: BillingMethod) => {
@@ -329,8 +219,6 @@ export function useOnboarding({
     setState(s => ({ ...s, credentialStatus: 'validating', errorMessage: undefined }))
 
     try {
-      // For API key, we just validate it's not empty
-      // TODO: Could add actual API key validation here
       if (!credential.trim()) {
         setState(s => ({
           ...s,
@@ -340,7 +228,6 @@ export function useOnboarding({
         return
       }
 
-      // Save config and complete
       await handleSaveConfig(credential)
 
       setState(s => ({
@@ -355,7 +242,7 @@ export function useOnboarding({
         errorMessage: error instanceof Error ? error.message : 'Validation failed',
       }))
     }
-  }, [])
+  }, [handleSaveConfig])
 
   // Claude OAuth state
   const [existingClaudeToken, setExistingClaudeToken] = useState<string | null>(null)
@@ -390,7 +277,6 @@ export function useOnboarding({
     setState(s => ({ ...s, credentialStatus: 'validating', errorMessage: undefined }))
 
     try {
-      // Save config with the existing token
       await handleSaveConfig(existingClaudeToken)
 
       setState(s => ({
@@ -405,7 +291,7 @@ export function useOnboarding({
         errorMessage: error instanceof Error ? error.message : 'Failed to save token',
       }))
     }
-  }, [existingClaudeToken])
+  }, [existingClaudeToken, handleSaveConfig])
 
   // Start Claude OAuth (run claude setup-token)
   const handleStartOAuth = useCallback(async () => {
@@ -421,12 +307,10 @@ export function useOnboarding({
         return
       }
 
-      // Run claude setup-token (opens browser for OAuth)
       const result = await window.electronAPI.runClaudeSetupToken()
 
       if (result.success && result.token) {
         setExistingClaudeToken(result.token)
-        // Save config with the token
         await handleSaveConfig(result.token)
 
         setState(s => ({
@@ -448,93 +332,7 @@ export function useOnboarding({
         errorMessage: error instanceof Error ? error.message : 'OAuth failed',
       }))
     }
-  }, [isClaudeCliInstalled])
-
-  // Save configuration
-  const handleSaveConfig = useCallback(async (credential?: string) => {
-    if (!state.billingMethod) return
-
-    setState(s => ({ ...s, completionStatus: 'saving' }))
-
-    try {
-      // For existing users (updating billing only), don't create a new workspace
-      if (state.isExistingUser && !state.selectedSpaceName) {
-        // Just update billing config, no workspace changes
-        const result = await window.electronAPI.saveOnboardingConfig({
-          authType: billingMethodToAuthType(state.billingMethod),
-          credential,
-          // No workspace - tells backend to only update billing
-        })
-
-        if (result.success) {
-          setState(s => ({ ...s, completionStatus: 'complete' }))
-        } else {
-          setState(s => ({
-            ...s,
-            completionStatus: 'saving',
-            errorMessage: result.error || 'Failed to save configuration',
-          }))
-        }
-        return
-      }
-
-      // Creating a new workspace - space name is required
-      if (!state.selectedSpaceName) {
-        console.error('[Onboarding] Cannot save config: space name is missing')
-        setState(s => ({
-          ...s,
-          completionStatus: 'saving',
-          errorMessage: 'Space name is required. Please restart onboarding.',
-        }))
-        return
-      }
-      const workspaceName = state.selectedSpaceName
-      const mcpUrl = selectedMcpLink?.mcpUrl || ''
-
-      // If MCP server requires OAuth and we don't have credentials, run OAuth
-      if (mcpUrl && !mcpCredentials) {
-        // Try to start MCP OAuth if the server requires it
-        try {
-          const mcpResult = await window.electronAPI.startWorkspaceMcpOAuth(mcpUrl)
-          if (mcpResult.success && mcpResult.accessToken) {
-            setMcpCredentials({
-              accessToken: mcpResult.accessToken,
-              clientId: mcpResult.clientId,
-            })
-          }
-        } catch {
-          // MCP OAuth failed or not required, continue without MCP credentials
-          console.log('MCP OAuth not required or failed')
-        }
-      }
-
-      const result = await window.electronAPI.saveOnboardingConfig({
-        authType: billingMethodToAuthType(state.billingMethod),
-        workspace: {
-          name: workspaceName,
-          mcpUrl,
-        },
-        credential,
-        mcpCredentials: mcpCredentials || undefined,
-      })
-
-      if (result.success) {
-        setState(s => ({ ...s, completionStatus: 'complete' }))
-      } else {
-        setState(s => ({
-          ...s,
-          completionStatus: 'saving',
-          errorMessage: result.error || 'Failed to save configuration',
-        }))
-      }
-    } catch (error) {
-      console.error('Failed to save config:', error)
-      setState(s => ({
-        ...s,
-        errorMessage: error instanceof Error ? error.message : 'Failed to save configuration',
-      }))
-    }
-  }, [state.billingMethod, state.selectedSpaceName, state.isExistingUser, selectedMcpLink, mcpCredentials])
+  }, [isClaudeCliInstalled, handleSaveConfig])
 
   // Finish onboarding
   const handleFinish = useCallback(() => {
@@ -543,8 +341,6 @@ export function useOnboarding({
 
   // Cancel onboarding
   const handleCancel = useCallback(() => {
-    // Could show a confirmation dialog here
-    // For now, just go back to welcome
     setState(s => ({ ...s, step: 'welcome' }))
   }, [])
 
@@ -555,17 +351,10 @@ export function useOnboarding({
       loginStatus: 'idle',
       credentialStatus: 'idle',
       completionStatus: 'saving',
-      selectedSpaceId: null,
-      selectedSpaceName: null,
       billingMethod: null,
       isExistingUser: false,
       errorMessage: undefined,
     })
-    setSpaceCategories([])
-    setCraftToken(null)
-    setCraftProfile(null)
-    setSelectedMcpLink(null)
-    setMcpCredentials(null)
     setExistingClaudeToken(null)
     setIsClaudeCliInstalled(false)
     setClaudeOAuthChecked(false)
@@ -573,14 +362,11 @@ export function useOnboarding({
 
   return {
     state,
-    spaceCategories,
-    isLoadingSpaces,
     handleContinue,
     handleBack,
     handleLogin,
     handleOpenLoginManually,
     handleRetryLogin,
-    handleSelectSpace,
     handleSelectBillingMethod,
     handleSubmitCredential,
     handleStartOAuth,

@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { cn } from '@/lib/utils'
 import type { ComponentEntry } from './registry'
+import { TooltipProvider } from '@/components/ui/tooltip'
 
 type BackgroundStyle = 'default' | 'light' | 'dark' | 'checkered'
 
@@ -13,10 +14,29 @@ const MIN_WIDTH = 100
 const MIN_HEIGHT = 100
 const DEFAULT_WIDTH = 800
 const DEFAULT_HEIGHT = 600
+const STORAGE_KEY = 'playground-preview-size'
+
+function loadSavedSize(): { width: number; height: number } {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY)
+    if (saved) {
+      const parsed = JSON.parse(saved)
+      if (typeof parsed.width === 'number' && typeof parsed.height === 'number') {
+        return {
+          width: Math.max(MIN_WIDTH, parsed.width),
+          height: Math.max(MIN_HEIGHT, parsed.height),
+        }
+      }
+    }
+  } catch {
+    // Ignore parse errors
+  }
+  return { width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT }
+}
 
 export function ComponentPreview({ component, props }: ComponentPreviewProps) {
   const [bgStyle, setBgStyle] = React.useState<BackgroundStyle>('default')
-  const [size, setSize] = React.useState({ width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT })
+  const [size, setSize] = React.useState(loadSavedSize)
   const containerRef = React.useRef<HTMLDivElement>(null)
   const isDraggingRef = React.useRef<'right' | 'bottom' | 'corner' | null>(null)
   const startPosRef = React.useRef({ x: 0, y: 0 })
@@ -73,6 +93,13 @@ export function ComponentPreview({ component, props }: ComponentPreviewProps) {
     }
 
     const handleMouseUp = () => {
+      if (isDraggingRef.current) {
+        // Save size to localStorage when drag ends
+        setSize(currentSize => {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(currentSize))
+          return currentSize
+        })
+      }
       isDraggingRef.current = null
     }
 
@@ -88,8 +115,9 @@ export function ComponentPreview({ component, props }: ComponentPreviewProps) {
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-        <div>
+      <div className="border-b border-border">
+        {/* Title and description row */}
+        <div className="px-4 pt-3 pb-2">
           <h2 className="text-lg font-semibold text-foreground font-sans">
             {component.name}
           </h2>
@@ -98,37 +126,43 @@ export function ComponentPreview({ component, props }: ComponentPreviewProps) {
           </p>
         </div>
 
-        <div className="flex items-center gap-4">
-          {/* Size display */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground font-mono">
-              {Math.round(size.width)} × {Math.round(size.height)}
-            </span>
-            <button
-              onClick={() => setSize({ width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT })}
-              className="px-2 py-1 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-foreground/5 transition-colors"
-            >
-              Reset
-            </button>
-          </div>
-
-          {/* Background style selector */}
-          <div className="flex items-center gap-1">
-            <span className="text-xs text-muted-foreground mr-2">Background:</span>
-            {(['default', 'light', 'dark', 'checkered'] as BackgroundStyle[]).map(style => (
+        {/* Controls row */}
+        <div className="flex items-center justify-between px-4 pb-3">
+          <div className="flex items-center gap-4">
+            {/* Size display */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground font-mono">
+                {Math.round(size.width)} × {Math.round(size.height)}
+              </span>
               <button
-                key={style}
-                onClick={() => setBgStyle(style)}
-                className={cn(
-                  'px-2 py-1 rounded text-xs transition-colors',
-                  bgStyle === style
-                    ? 'bg-foreground/10 text-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                )}
+                onClick={() => {
+                  setSize({ width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT })
+                  localStorage.removeItem(STORAGE_KEY)
+                }}
+                className="px-2 py-1 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-foreground/5 transition-colors"
               >
-                {style.charAt(0).toUpperCase() + style.slice(1)}
+                Reset
               </button>
-            ))}
+            </div>
+
+            {/* Background style selector */}
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-muted-foreground mr-2">Background:</span>
+              {(['default', 'light', 'dark', 'checkered'] as BackgroundStyle[]).map(style => (
+                <button
+                  key={style}
+                  onClick={() => setBgStyle(style)}
+                  className={cn(
+                    'px-2 py-1 rounded text-xs transition-colors',
+                    bgStyle === style
+                      ? 'bg-foreground/10 text-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  {style.charAt(0).toUpperCase() + style.slice(1)}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -144,32 +178,35 @@ export function ComponentPreview({ component, props }: ComponentPreviewProps) {
           {/* Component preview box */}
           <div
             className={cn(
-              'w-full h-full rounded-lg border border-border overflow-auto',
-              component.layout !== 'top' && 'flex items-center justify-center',
+              'w-full h-full rounded-lg border border-border',
+              component.layout === 'full' ? 'overflow-hidden' : 'overflow-auto',
+              component.layout === 'centered' || !component.layout ? 'flex items-center justify-center' : '',
               bgClasses[bgStyle]
             )}
           >
-            <Wrapper>
-              <Component {...mergedProps} />
-            </Wrapper>
+            <TooltipProvider>
+              <Wrapper>
+                <Component {...mergedProps} />
+              </Wrapper>
+            </TooltipProvider>
           </div>
 
           {/* Right resize handle */}
           <div
             onMouseDown={(e) => handleMouseDown(e, 'right')}
-            className="absolute top-0 -right-1 w-2 h-full cursor-ew-resize hover:bg-primary/20 active:bg-primary/30 transition-colors"
+            className="absolute top-0 -right-1 w-2 h-full cursor-ew-resize hover:bg-foreground/20 active:bg-foreground/30 transition-colors"
           />
 
           {/* Bottom resize handle */}
           <div
             onMouseDown={(e) => handleMouseDown(e, 'bottom')}
-            className="absolute -bottom-1 left-0 h-2 w-full cursor-ns-resize hover:bg-primary/20 active:bg-primary/30 transition-colors"
+            className="absolute -bottom-1 left-0 h-2 w-full cursor-ns-resize hover:bg-foreground/20 active:bg-foreground/30 transition-colors"
           />
 
           {/* Corner resize handle */}
           <div
             onMouseDown={(e) => handleMouseDown(e, 'corner')}
-            className="absolute -bottom-1 -right-1 w-3 h-3 cursor-nwse-resize hover:bg-primary/30 active:bg-primary/40 transition-colors rounded-br"
+            className="absolute -bottom-1 -right-1 w-3 h-3 cursor-nwse-resize hover:bg-foreground/30 active:bg-foreground/40 transition-colors rounded-br"
           />
         </div>
       </div>

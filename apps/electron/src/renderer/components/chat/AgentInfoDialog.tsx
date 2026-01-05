@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
-import { Bot, Server, Wrench, AlertCircle, CheckCircle2 } from "lucide-react"
+import { Bot, Wrench, AlertCircle, CheckCircle2, ChevronRight, Lock } from "lucide-react"
+import { McpIcon } from "@/components/icons/McpIcon"
 import { Spinner } from "@/components/ui/loading-indicator"
 import {
   Dialog,
@@ -11,6 +12,11 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
 import type { SubAgentMetadata, SubAgentDefinition, AgentAuthStatus } from "../../../shared/types"
 
 interface AgentInfoDialogProps {
@@ -97,13 +103,11 @@ export function AgentInfoDialog({
               {definition.capabilities && definition.capabilities.length > 0 && (
                 <div>
                   <h4 className="text-sm font-medium mb-2">Capabilities</h4>
-                  <div className="flex flex-wrap gap-1">
+                  <ul className="text-sm space-y-1.5 list-disc pl-5">
                     {definition.capabilities.map((cap, i) => (
-                      <Badge key={i} variant="secondary" className="text-xs">
-                        {cap}
-                      </Badge>
+                      <li key={i}>{cap}</li>
                     ))}
-                  </div>
+                  </ul>
                 </div>
               )}
 
@@ -114,7 +118,7 @@ export function AgentInfoDialog({
                   <ul className="text-sm text-muted-foreground space-y-1">
                     {definition.info.map((msg, i) => (
                       <li key={i} className="flex items-start gap-2">
-                        <span className="text-blue-500 shrink-0">i</span>
+                        <span className="text-accent shrink-0">i</span>
                         <span>{msg}</span>
                       </li>
                     ))}
@@ -127,7 +131,7 @@ export function AgentInfoDialog({
               {/* MCP Servers */}
               <div>
                 <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
-                  <Server className="h-4 w-4" />
+                  <McpIcon className="h-4 w-4" />
                   MCP Servers
                 </h4>
                 {authStatus?.mcpServers && authStatus.mcpServers.length > 0 ? (
@@ -137,20 +141,39 @@ export function AgentInfoDialog({
                         <div className="font-medium">{server.name}</div>
                         <div className="text-xs text-muted-foreground truncate">{server.url}</div>
                         {server.tools && server.tools.length > 0 && (
-                          <div className="mt-1 text-xs text-muted-foreground">
-                            Tools: {server.tools.join(', ')}
-                          </div>
+                          <Collapsible className="mt-2 mb-3">
+                            <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors group">
+                              <ChevronRight className="h-3 w-3 transition-transform group-data-[state=open]:rotate-90" />
+                              <span>{server.tools.length} tool{server.tools.length !== 1 ? 's' : ''}</span>
+                            </CollapsibleTrigger>
+                            <CollapsibleContent className="mt-2">
+                              <div className="flex flex-wrap gap-1.5">
+                                {server.tools.map((tool, j) => (
+                                  <Badge
+                                    key={j}
+                                    variant="secondary"
+                                    className="text-xs font-mono font-normal bg-foreground/5"
+                                  >
+                                    {tool}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </CollapsibleContent>
+                          </Collapsible>
                         )}
                         {server.requiresAuth && (
                           <div className="flex items-center gap-1.5 mt-1">
-                            <Badge variant="outline" className="text-xs">Requires Auth</Badge>
+                            <Badge variant="outline" className="text-xs">
+                              <Lock className="h-3 w-3 mr-1" />
+                              Requires Auth
+                            </Badge>
                             {server.hasAuth ? (
-                              <Badge variant="outline" className="text-xs border-green-500/30 text-green-600 dark:text-green-400">
+                              <Badge variant="outline" className="text-xs border-success/30 text-success">
                                 <CheckCircle2 className="h-3 w-3 mr-1" />
                                 Authenticated
                               </Badge>
                             ) : (
-                              <Badge variant="outline" className="text-xs border-amber-500/30 text-amber-600 dark:text-amber-400">
+                              <Badge variant="outline" className="text-xs border-info/30 text-info">
                                 <AlertCircle className="h-3 w-3 mr-1" />
                                 Not authenticated
                               </Badge>
@@ -198,12 +221,12 @@ export function AgentInfoDialog({
                                   Auth: {api.auth.type}
                                 </Badge>
                                 {api.hasAuth ? (
-                                  <Badge variant="outline" className="text-xs border-green-500/30 text-green-600 dark:text-green-400">
+                                  <Badge variant="outline" className="text-xs border-success/30 text-success">
                                     <CheckCircle2 className="h-3 w-3 mr-1" />
                                     Configured
                                   </Badge>
                                 ) : (
-                                  <Badge variant="outline" className="text-xs border-amber-500/30 text-amber-600 dark:text-amber-400">
+                                  <Badge variant="outline" className="text-xs border-info/30 text-info">
                                     <AlertCircle className="h-3 w-3 mr-1" />
                                     Not configured
                                   </Badge>

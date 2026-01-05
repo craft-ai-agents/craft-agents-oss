@@ -7,29 +7,54 @@
  */
 
 import * as React from 'react'
-import { createContext, useContext } from 'react'
+import { createContext, useContext, useCallback } from 'react'
+import { useAtomValue } from 'jotai'
 import type {
   Session,
   Workspace,
   SubAgentMetadata,
   FileAttachment,
   PermissionRequest,
+  CredentialRequest,
+  CredentialResponse,
+  PermissionMode,
+  TodoState,
+  LoadedSource,
 } from '../../shared/types'
+import type { SessionOptions, SessionOptionUpdates } from '../hooks/useSessionOptions'
+import type { NewChatActionParams } from '../hooks/useDeepLinkNavigation'
+import { defaultSessionOptions } from '../hooks/useSessionOptions'
+import { sessionAtomFamily } from '../atoms/sessions'
 
 export interface ChatContextType {
   // Data
   sessions: Session[]
   workspaces: Workspace[]
   agents: SubAgentMetadata[]
+  isLoadingAgents?: boolean
   activeWorkspaceId: string | null
   currentModel: string
   pendingPermissions: Map<string, PermissionRequest[]>
+  pendingCredentials: Map<string, CredentialRequest[]>
+  /** Get draft input text for a session - reads from ref without triggering re-renders */
+  getDraft: (sessionId: string) => string
+  /** All enabled sources for this workspace - provided by Chat component */
+  enabledSources?: LoadedSource[]
+
+  // Unified session options (replaces ultrathinkSessions and sessionModes)
+  /** All session-scoped options in one map. Use useSessionOptionsFor() hook for easy access. */
+  sessionOptions: Map<string, SessionOptions>
 
   // Session callbacks
+  onCreateSession: (workspaceId: string, agentId?: string) => Promise<Session>
   onSendMessage: (sessionId: string, message: string, attachments?: FileAttachment[]) => void
   onRenameSession: (sessionId: string, name: string) => void
-  onArchiveSession: (sessionId: string) => void
-  onDeleteSession: (sessionId: string) => void
+  onFlagSession: (sessionId: string) => void
+  onUnflagSession: (sessionId: string) => void
+  onMarkSessionRead: (sessionId: string) => void
+  onMarkSessionUnread: (sessionId: string) => void
+  onTodoStateChange: (sessionId: string, state: TodoState) => void
+  onDeleteSession: (sessionId: string, skipConfirmation?: boolean) => Promise<boolean>
 
   // Permission handling
   onRespondToPermission?: (
@@ -39,6 +64,13 @@ export interface ChatContextType {
     alwaysAllow: boolean
   ) => void
 
+  // Credential handling
+  onRespondToCredential?: (
+    sessionId: string,
+    requestId: string,
+    response: CredentialResponse
+  ) => void
+
   // File/URL handlers - these can open in tabs or external apps
   onOpenFile: (path: string) => void
   onOpenUrl: (url: string) => void
@@ -46,8 +78,31 @@ export interface ChatContextType {
   // Model
   onModelChange: (model: string) => void
 
+  // Workspace
+  onSelectWorkspace: (id: string, openInNewWindow?: boolean) => void
+  onRefreshWorkspaces?: () => void
+
+  // App actions
+  onOpenSettings: () => void
+  onOpenKeyboardShortcuts: () => void
+  onOpenStoredUserPreferences: () => void
+  onRefreshAgents: () => void
+  onReset: () => void
+
+  // Unified session options callback (replaces onUltrathinkChange, onSkipPermissionsChange, onModeChange)
+  onSessionOptionsChange: (sessionId: string, updates: SessionOptionUpdates) => void
+
+  // Input draft callback
+  onInputChange: (sessionId: string, value: string) => void
+
+  // Source selection callback (per-session) - provided by Chat component
+  onSessionSourcesChange?: (sessionId: string, sourceSlugs: string[]) => void
+
   // Chat input ref (for focusing)
   textareaRef?: React.RefObject<HTMLTextAreaElement>
+
+  // Open a new chat with optional agent, name, and pre-filled input
+  openNewChat?: (params?: NewChatActionParams) => Promise<void>
 }
 
 const ChatContext = createContext<ChatContextType | null>(null)
@@ -71,9 +126,20 @@ export function useChatContext(): ChatContextType {
 }
 
 /**
- * Get a specific session by ID
+ * Get a specific session by ID using per-session atoms
+ * This hook only re-renders when the specific session changes,
+ * not when other sessions change (solves streaming isolation)
  */
 export function useSession(sessionId: string): Session | null {
+  // Use per-session atom for isolated updates
+  return useAtomValue(sessionAtomFamily(sessionId))
+}
+
+/**
+ * Get a specific session by ID from sessions array (legacy)
+ * @deprecated Use useSession() instead for better performance
+ */
+export function useSessionLegacy(sessionId: string): Session | null {
   const { sessions } = useChatContext()
   return sessions.find((s) => s.id === sessionId) || null
 }
@@ -94,3 +160,66 @@ export function usePendingPermission(sessionId: string): PermissionRequest | und
   const { pendingPermissions } = useChatContext()
   return pendingPermissions.get(sessionId)?.[0]
 }
+
+/**
+ * Get pending credential request for a session (first in queue)
+ */
+export function usePendingCredential(sessionId: string): CredentialRequest | undefined {
+  const { pendingCredentials } = useChatContext()
+  return pendingCredentials.get(sessionId)?.[0]
+}
+
+/**
+ * Hook to get and update session options for a specific session.
+ * This is the primary way components should access session options.
+ *
+ * Usage:
+ *   const { options, setPermissionMode, toggleUltrathink } = useSessionOptionsFor(sessionId)
+ *   if (options.ultrathinkEnabled) { ... }
+ *   setPermissionMode('safe')
+ */
+export function useSessionOptionsFor(sessionId: string): {
+  options: SessionOptions
+  setOption: <K extends keyof SessionOptions>(key: K, value: SessionOptions[K]) => void
+  setOptions: (updates: SessionOptionUpdates) => void
+  toggleUltrathink: () => void
+  setPermissionMode: (mode: PermissionMode) => void
+  isSafeModeActive: () => boolean
+} {
+  const { sessionOptions, onSessionOptionsChange } = useChatContext()
+
+  const options = sessionOptions.get(sessionId) ?? defaultSessionOptions
+
+  const setOption = useCallback(<K extends keyof SessionOptions>(
+    key: K,
+    value: SessionOptions[K]
+  ) => {
+    onSessionOptionsChange(sessionId, { [key]: value })
+  }, [sessionId, onSessionOptionsChange])
+
+  const setOptions = useCallback((updates: SessionOptionUpdates) => {
+    onSessionOptionsChange(sessionId, updates)
+  }, [sessionId, onSessionOptionsChange])
+
+  const toggleUltrathink = useCallback(() => {
+    setOption('ultrathinkEnabled', !options.ultrathinkEnabled)
+  }, [options.ultrathinkEnabled, setOption])
+
+  const setPermissionMode = useCallback((mode: PermissionMode) => {
+    setOption('permissionMode', mode)
+  }, [setOption])
+
+  const isSafeModeActive = useCallback(() => {
+    return options.permissionMode === 'safe'
+  }, [options.permissionMode])
+
+  return {
+    options,
+    setOption,
+    setOptions,
+    toggleUltrathink,
+    setPermissionMode,
+    isSafeModeActive,
+  }
+}
+

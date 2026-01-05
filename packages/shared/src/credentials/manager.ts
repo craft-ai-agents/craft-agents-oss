@@ -13,7 +13,10 @@ import type { CredentialBackend } from './backends/types.ts';
 import type { CredentialId, CredentialType, StoredCredential } from './types.ts';
 import { SecureStorageBackend } from './backends/secure-storage.ts';
 import { EnvironmentBackend } from './backends/env.ts';
+import { PortableCredentialBackend, workspaceHasPortableCredentials } from './backends/portable.ts';
+import { shouldUsePortableStorage } from './metadata.ts';
 import { debug } from '../utils/debug.ts';
+import type { CredentialStrategy } from '../workspaces/types.ts';
 
 export class CredentialManager {
   private backends: CredentialBackend[] = [];
@@ -396,6 +399,290 @@ export class CredentialManager {
     if (!credential.expiresAt) return false;
     // Consider expired if within 5 minutes of expiry
     return Date.now() > credential.expiresAt - 5 * 60 * 1000;
+  }
+
+  // ============================================================
+  // Workspace-Aware Methods (Portable Credentials Support)
+  // ============================================================
+
+  /** Cache of portable backends by workspace path */
+  private portableBackends = new Map<string, PortableCredentialBackend>();
+
+  /**
+   * Get or create a portable credential backend for a workspace.
+   * Returns null if no password provided.
+   */
+  private getPortableBackend(
+    workspaceRootPath: string,
+    password?: string
+  ): PortableCredentialBackend | null {
+    if (!password) return null;
+
+    // Check cache
+    const cached = this.portableBackends.get(workspaceRootPath);
+    if (cached) return cached;
+
+    // Create new backend
+    const backend = new PortableCredentialBackend(workspaceRootPath, password);
+    this.portableBackends.set(workspaceRootPath, backend);
+    return backend;
+  }
+
+  /**
+   * Clear the cached portable backend for a workspace.
+   * Call this when the user logs out or changes password.
+   */
+  clearPortableBackendCache(workspaceRootPath?: string): void {
+    if (workspaceRootPath) {
+      this.portableBackends.delete(workspaceRootPath);
+    } else {
+      this.portableBackends.clear();
+    }
+  }
+
+  /**
+   * Get a credential considering workspace credential strategy.
+   *
+   * For workspace-scoped credentials (API keys, bearer tokens):
+   * - If strategy is 'portable' and password provided, uses workspace portable file
+   * - Otherwise falls back to global storage
+   *
+   * For non-workspace-scoped credentials (OAuth, global keys):
+   * - Always uses global storage regardless of strategy
+   *
+   * @param id - Credential identifier
+   * @param options - Workspace context for portable credential support
+   */
+  async getForWorkspace(
+    id: CredentialId,
+    options?: {
+      workspaceRootPath?: string;
+      strategy?: CredentialStrategy;
+      password?: string;
+    }
+  ): Promise<StoredCredential | null> {
+    // Check if this credential should use portable storage
+    const usePortable =
+      options?.strategy === 'portable' &&
+      options?.workspaceRootPath &&
+      shouldUsePortableStorage(id);
+
+    if (usePortable && options.password) {
+      const portableBackend = this.getPortableBackend(
+        options.workspaceRootPath!,
+        options.password
+      );
+
+      if (portableBackend) {
+        const cred = await portableBackend.get(id);
+        if (cred) {
+          debug(`[CredentialManager] Found ${id.type} in portable storage`);
+          return cred;
+        }
+      }
+    }
+
+    // Fall back to global storage
+    return this.get(id);
+  }
+
+  /**
+   * Set a credential considering workspace credential strategy.
+   *
+   * For workspace-scoped credentials (API keys, bearer tokens):
+   * - If strategy is 'portable' and password provided, stores in workspace portable file
+   * - Otherwise stores in global storage
+   *
+   * For non-workspace-scoped credentials (OAuth, global keys):
+   * - Always uses global storage regardless of strategy
+   *
+   * @param id - Credential identifier
+   * @param credential - Credential value to store
+   * @param options - Workspace context for portable credential support
+   */
+  async setForWorkspace(
+    id: CredentialId,
+    credential: StoredCredential,
+    options?: {
+      workspaceRootPath?: string;
+      strategy?: CredentialStrategy;
+      password?: string;
+    }
+  ): Promise<void> {
+    // Check if this credential should use portable storage
+    const usePortable =
+      options?.strategy === 'portable' &&
+      options?.workspaceRootPath &&
+      shouldUsePortableStorage(id);
+
+    if (usePortable && options.password) {
+      const portableBackend = this.getPortableBackend(
+        options.workspaceRootPath!,
+        options.password
+      );
+
+      if (portableBackend) {
+        await portableBackend.set(id, credential);
+        debug(`[CredentialManager] Saved ${id.type} to portable storage`);
+        return;
+      }
+    }
+
+    // Fall back to global storage
+    await this.set(id, credential);
+  }
+
+  /**
+   * Delete a credential considering workspace credential strategy.
+   */
+  async deleteForWorkspace(
+    id: CredentialId,
+    options?: {
+      workspaceRootPath?: string;
+      strategy?: CredentialStrategy;
+      password?: string;
+    }
+  ): Promise<boolean> {
+    let deleted = false;
+
+    // Check if this credential should use portable storage
+    const usePortable =
+      options?.strategy === 'portable' &&
+      options?.workspaceRootPath &&
+      shouldUsePortableStorage(id);
+
+    if (usePortable && options.password) {
+      const portableBackend = this.getPortableBackend(
+        options.workspaceRootPath!,
+        options.password
+      );
+
+      if (portableBackend) {
+        deleted = await portableBackend.delete(id);
+        if (deleted) {
+          debug(`[CredentialManager] Deleted ${id.type} from portable storage`);
+        }
+      }
+    }
+
+    // Also try to delete from global storage (in case it was moved)
+    const globalDeleted = await this.delete(id);
+    return deleted || globalDeleted;
+  }
+
+  /**
+   * List credentials in workspace portable storage.
+   */
+  async listPortableCredentials(
+    workspaceRootPath: string,
+    password: string,
+    filter?: Partial<CredentialId>
+  ): Promise<CredentialId[]> {
+    const portableBackend = this.getPortableBackend(workspaceRootPath, password);
+    if (!portableBackend) return [];
+
+    return portableBackend.list(filter);
+  }
+
+  /**
+   * Verify a password for a workspace's portable credentials file.
+   * Returns true if the password can decrypt the file (or if no file exists yet).
+   */
+  async verifyPortablePassword(
+    workspaceRootPath: string,
+    password: string
+  ): Promise<boolean> {
+    const backend = new PortableCredentialBackend(workspaceRootPath, password);
+    return backend.verifyPassword();
+  }
+
+  /**
+   * Check if a workspace has portable credentials configured.
+   * (Has a credentials.enc file in the workspace folder)
+   */
+  workspaceHasPortableCredentials(workspaceRootPath: string): boolean {
+    return workspaceHasPortableCredentials(workspaceRootPath);
+  }
+
+  /**
+   * Migrate credentials from global storage to workspace portable storage.
+   * Useful when user switches from 'local' to 'portable' strategy.
+   *
+   * @returns Number of credentials migrated
+   */
+  async migrateToPortable(
+    workspaceId: string,
+    workspaceRootPath: string,
+    password: string
+  ): Promise<number> {
+    await this.ensureInitialized();
+
+    const portableBackend = this.getPortableBackend(workspaceRootPath, password);
+    if (!portableBackend) return 0;
+
+    // Find all workspace-scoped credentials for this workspace
+    const allCreds = await this.list({ workspaceId });
+    let migrated = 0;
+
+    for (const id of allCreds) {
+      // Only migrate credentials that should use portable storage
+      if (!shouldUsePortableStorage(id)) continue;
+
+      // Get from global storage
+      const cred = await this.get(id);
+      if (!cred) continue;
+
+      // Store in portable storage
+      await portableBackend.set(id, cred);
+
+      // Delete from global storage
+      await this.delete(id);
+
+      migrated++;
+      debug(`[CredentialManager] Migrated ${id.type} to portable storage`);
+    }
+
+    return migrated;
+  }
+
+  /**
+   * Migrate credentials from workspace portable storage back to global storage.
+   * Useful when user switches from 'portable' to 'local' strategy.
+   *
+   * @returns Number of credentials migrated
+   */
+  async migrateFromPortable(
+    workspaceRootPath: string,
+    password: string
+  ): Promise<number> {
+    await this.ensureInitialized();
+
+    const portableBackend = this.getPortableBackend(workspaceRootPath, password);
+    if (!portableBackend) return 0;
+
+    // List all credentials in portable storage
+    const portableCreds = await portableBackend.list();
+    let migrated = 0;
+
+    for (const id of portableCreds) {
+      // Get from portable storage
+      const cred = await portableBackend.get(id);
+      if (!cred) continue;
+
+      // Store in global storage
+      await this.set(id, cred);
+
+      // Delete from portable storage
+      await portableBackend.delete(id);
+
+      migrated++;
+      debug(`[CredentialManager] Migrated ${id.type} from portable to global storage`);
+    }
+
+    // Clear the portable backend cache
+    this.clearPortableBackendCache(workspaceRootPath);
+
+    return migrated;
   }
 }
 

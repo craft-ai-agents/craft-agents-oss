@@ -3,11 +3,11 @@ import { Box, Text } from 'ink';
 import { formatDuration, truncateText } from '../utils/markdown.ts';
 import { AnimatedSpinner } from './Spinner.tsx';
 import { useElapsedTime } from '../hooks/index.ts';
-import { getToolDisplayName } from '../utils/toolNames.ts';
+import { getToolDisplayName } from '@craft-agent/shared/utils';
 
 export interface ToolCallProps {
   toolName: string;
-  status: 'pending' | 'executing' | 'completed' | 'error';
+  status: 'pending' | 'executing' | 'completed' | 'error' | 'backgrounded';
   input?: Record<string, unknown>;
   intent?: string;  // Explicit intent from **Doing:** marker or Bash description
   result?: string;
@@ -15,6 +15,9 @@ export interface ToolCallProps {
   duration?: number;
   startTime?: number;
   compact?: boolean;
+  taskId?: string;          // For background Task
+  shellId?: string;         // For background Bash
+  elapsedSeconds?: number;  // Live elapsed time for background tasks
 }
 
 // Format input params as clean, readable text
@@ -79,6 +82,9 @@ export const ToolCall: React.FC<ToolCallProps> = memo(({
   duration,
   startTime,
   compact = true,
+  taskId,
+  shellId,
+  elapsedSeconds,
 }) => {
   const [expanded, setExpanded] = useState(false);
 
@@ -99,6 +105,8 @@ export const ToolCall: React.FC<ToolCallProps> = memo(({
         return { icon: '✓', color: 'green' as const };
       case 'error':
         return { icon: '✗', color: 'red' as const };
+      case 'backgrounded':
+        return { icon: '⟳', color: 'cyan' as const };
     }
   };
 
@@ -106,10 +114,20 @@ export const ToolCall: React.FC<ToolCallProps> = memo(({
 
   // Format for display - prefer intent, then custom display, then formatted params
   const customDisplay = getCustomToolDisplay(toolName, input);
-  // Use intent as the display description if available (most user-friendly)
-  const displayDescription = intent
-    ? truncateText(intent, 70)
-    : customDisplay?.params ?? formatInputParams(input);
+
+  // For background tasks, show task/shell ID with elapsed time
+  let displayDescription: string;
+  if (taskId) {
+    displayDescription = `Task ID: ${taskId}${elapsedSeconds ? `, ${formatDuration(elapsedSeconds * 1000)} elapsed` : ''}`;
+  } else if (shellId) {
+    displayDescription = `Shell ID: ${shellId}${elapsedSeconds ? `, ${formatDuration(elapsedSeconds * 1000)} elapsed` : ''}`;
+  } else {
+    // Use intent as the display description if available (most user-friendly)
+    displayDescription = intent
+      ? truncateText(intent, 70)
+      : customDisplay?.params ?? formatInputParams(input);
+  }
+
   // Use custom name if available, otherwise use friendly display name
   const displayName = customDisplay?.name ?? getToolDisplayName(toolName);
 

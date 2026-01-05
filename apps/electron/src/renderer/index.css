@@ -1,84 +1,82 @@
 @import "tailwindcss";
-@import "tw-animate-css";
 @plugin "@tailwindcss/typography";
 
 /* Tell Tailwind where to scan for utility classes */
 @source "../**/*.{tsx,ts,jsx,js}";
 
 /* =============================================================================
-   DEFAULT THEME - Craft Documentation Style (oklch)
+   CRAFT AGENT THEME - 6 Color System
 
-   Colors inspired by https://agents.craft.do/docs
-   - Light: neutral gray background (#f9fafb / rgb 249 250 251)
-   - Dark: deep blue-black background (#0e0d12)
-   - Purple accent (#8B5CF6) used very sparingly for highlights
-   - Primary/secondary colors are neutral for general UI elements
-   - Use --highlight only for special emphasis (active states, important badges)
+   Base colors:
+   - background: Light/dark surface
+   - foreground: Text and icons
+   - accent: Brand purple (highlights, Auto mode)
+   - info: Amber (warnings, Ask mode)
+   - success: Green (connected, checkmarks)
+   - destructive: Red (errors, failed)
 
-   To add a custom theme, create selectors like:
-   [data-theme="ocean"] { --primary: oklch(0.6 0.15 230); }
-   .dark[data-theme="ocean"] { --primary: oklch(0.7 0.12 230); }
+   Variants:
+   - /50 = 50% alpha (transparency) - for borders, hovers, overlays
+   - -50 = 50% mix toward background (solid) - for Explore mode
+
+   Example: bg-foreground/10, text-accent, bg-foreground-60
 ============================================================================= */
 
-/* Light Mode - Craft Documentation Theme
-   Background: #f9fafb (neutral light gray)
-   Text: #1b191e (dark gray)
-   Accent: #8B5CF6 (purple - used very sparingly)
-*/
+/* Light Mode */
 :root {
+  /* === 6 BASE COLORS === */
   --background: oklch(0.98 0.003 265);
   --foreground: oklch(0.185 0.01 270);
-  --card: oklch(0.98 0.003 265);
-  --card-foreground: oklch(0.185 0.01 270);
-  --popover: oklch(0.97 0.003 265);
-  --popover-foreground: oklch(0.185 0.01 270);
-  --primary: oklch(0.25 0.01 270);
-  --primary-foreground: oklch(0.98 0.003 265);
-  --secondary: oklch(0.955 0.003 265);
-  --secondary-foreground: oklch(0.25 0.01 270);
-  --muted: oklch(0.955 0.003 265);
-  --muted-foreground: oklch(0.55 0.005 265);
-  --accent: oklch(0.945 0.005 265);
-  --accent-foreground: oklch(0.25 0.01 270);
-  --destructive: oklch(0.5830 0.2387 28.4765);
-  --destructive-foreground: oklch(0.98 0.003 265);
-  --border: oklch(0.91 0.003 265);
-  --input: oklch(0.91 0.003 265);
-  --ring: oklch(0.185 0.01 270 / 0.3);
+  --foreground-rgb: 38, 36, 42;             /* RGB for shadow borders */
+  --accent: oklch(0.58 0.22 293);           /* purple - brand, Auto mode */
+  --accent-rgb: 104, 78, 133;               /* darkened RGB for shadow-tinted (70% of accent) */
+  --info: oklch(0.75 0.16 70);              /* amber - warnings, Ask mode */
+  --success: oklch(0.55 0.17 145);          /* green - connected, checkmarks */
+  --destructive: oklch(0.58 0.24 28);       /* red - errors, failed */
+
+  /* === MIX VARIANTS (solid interpolation toward background) === */
+  /* Use -5, -10, -20, ..., -90, -95 for solid colors (e.g., separators, Explore mode) */
+  --foreground-5: color-mix(in oklch, var(--foreground) 5%, var(--background));
+  --foreground-10: color-mix(in oklch, var(--foreground) 10%, var(--background));
+  --foreground-20: color-mix(in oklch, var(--foreground) 20%, var(--background));
+  --foreground-30: color-mix(in oklch, var(--foreground) 30%, var(--background));
+  --foreground-40: color-mix(in oklch, var(--foreground) 40%, var(--background));
+  --foreground-50: color-mix(in oklch, var(--foreground) 50%, var(--background));
+  --foreground-60: color-mix(in oklch, var(--foreground) 60%, var(--background));
+  --foreground-70: color-mix(in oklch, var(--foreground) 70%, var(--background));
+  --foreground-80: color-mix(in oklch, var(--foreground) 80%, var(--background));
+  --foreground-90: color-mix(in oklch, var(--foreground) 90%, var(--background));
+  --foreground-95: color-mix(in oklch, var(--foreground) 95%, var(--background));
+
+  /* === SHADCN COMPATIBILITY (derived from 6 base colors) === */
+  /* These variables exist for shadcn/ui component updates */
+  --secondary: oklch(from var(--foreground) l c h / 0.05);
+  --secondary-foreground: var(--foreground);
+  --muted: oklch(from var(--foreground) l c h / 0.05);
+  --muted-foreground: var(--foreground-50);
+  --card: var(--background);
+  --card-foreground: var(--foreground);
+  --popover: var(--background);
+  --popover-foreground: var(--foreground);
+  --border: oklch(from var(--foreground) l c h / 0.05);
+  --input: oklch(from var(--foreground) l c h / 0.1);
+  --ring: oklch(from var(--foreground) l c h / 0.25);
   --ring-width: 1px;
   --ring-offset: 0px;
-  --chart-1: oklch(0.58 0.22 293);
-  --chart-2: oklch(0.50 0.18 293);
-  --chart-3: oklch(0.65 0.20 293);
-  --chart-4: oklch(0.45 0.15 293);
-  --chart-5: oklch(0.70 0.18 293);
-  --sidebar: oklch(0.98 0.003 265 / 0.6);
-  --sidebar-foreground: oklch(0.185 0.01 270);
-  --sidebar-primary: oklch(0.25 0.01 270);
-  --sidebar-primary-foreground: oklch(0.98 0.003 265);
-  --sidebar-accent: oklch(0.945 0.005 265 / 0.5);
-  --sidebar-accent-foreground: oklch(0.25 0.01 270);
-  --sidebar-border: oklch(0.91 0.003 265 / 0.5);
-  --sidebar-ring: oklch(0.185 0.01 270 / 0.3);
-
-  /* Highlight - the vibrant purple accent, use VERY sparingly */
-  --highlight: oklch(0.58 0.22 293);
-  --highlight-foreground: oklch(0.98 0.003 265);
-  --highlight-muted: oklch(0.58 0.22 293 / 0.15);
 
   /* Markdown list markers */
-  --md-bullets: oklch(0.45 0.005 265);
-  --md-counters: oklch(0.45 0.005 265);
+  --md-bullets: var(--foreground-50);
+  --md-counters: var(--foreground-50);
 
-  /* Onboarding step styling - change these to update all steps globally */
-  --step-icon-size: 4rem;           /* size-16 */
-  --step-icon-inner-size: 2rem;     /* size-8 */
-  --step-icon-radius: 1rem;         /* rounded-2xl */
-  --step-title-size: 1.5rem;        /* text-2xl */
-  --step-description-max-width: 24rem; /* max-w-sm */
-  --step-actions-gap: 0.75rem;      /* gap-3 */
-  --step-content-gap: 1.5rem;       /* mt-6 */
-  --step-actions-margin: 2rem;      /* mt-8 */
+  /* Onboarding step styling */
+  --step-icon-size: 4rem;
+  --step-icon-inner-size: 2rem;
+  --step-icon-radius: 1rem;
+  --step-title-size: 1.5rem;
+  --step-description-max-width: 24rem;
+  --step-actions-gap: 0.75rem;
+  --step-content-gap: 1.5rem;
+  --step-actions-margin: 2rem;
 
   /* Fonts */
   --font-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -92,138 +90,96 @@
   --spacing: 0.25rem;
   --tracking-normal: 0em;
 
-  /* Shadows (disabled) */
-  --shadow-x: 0px;
-  --shadow-y: 1px;
-  --shadow-blur: 0px;
-  --shadow-spread: 0px;
-  --shadow-opacity: 0;
-  --shadow-color: hsl(0 0% 0%);
-  --shadow-2xs: 0px 1px 0px 0px hsl(0 0% 0% / 0.00);
-  --shadow-xs: 0px 1px 0px 0px hsl(0 0% 0% / 0.00);
-  --shadow-sm: 0px 1px 0px 0px hsl(0 0% 0% / 0.00), 0px 1px 2px -1px hsl(0 0% 0% / 0.00);
-  --shadow: 0px 1px 0px 0px hsl(0 0% 0% / 0.00), 0px 1px 2px -1px hsl(0 0% 0% / 0.00);
-  --shadow-md: 0px 1px 0px 0px hsl(0 0% 0% / 0.00), 0px 2px 4px -1px hsl(0 0% 0% / 0.00);
-  --shadow-lg: 0px 1px 0px 0px hsl(0 0% 0% / 0.00), 0px 4px 6px -1px hsl(0 0% 0% / 0.00);
-  --shadow-xl: 0px 1px 0px 0px hsl(0 0% 0% / 0.00), 0px 8px 10px -1px hsl(0 0% 0% / 0.00);
-  --shadow-2xl: 0px 1px 0px 0px hsl(0 0% 0% / 0.00);
 }
 
-/* Dark Mode - Craft Documentation Theme
-   Background: #0e0d12 (very dark blue-black)
-   Text: light with purple tint
-   Accent: #8B5CF6 / #A78BFA (purple - used very sparingly)
-*/
+/* Dark Mode */
 .dark {
-  --background: oklch(0.127 0.012 290);
-  --foreground: oklch(0.92 0.008 300);
-  --card: oklch(0.16 0.012 290);
-  --card-foreground: oklch(0.92 0.008 300);
-  --popover: oklch(0.18 0.012 290);
-  --popover-foreground: oklch(0.92 0.008 300);
-  --primary: oklch(0.88 0.008 300);
-  --primary-foreground: oklch(0.15 0.012 290);
-  --secondary: oklch(0.20 0.012 290);
-  --secondary-foreground: oklch(0.88 0.008 300);
-  --muted: oklch(0.20 0.012 290);
-  --muted-foreground: oklch(0.58 0.008 290);
-  --accent: oklch(0.24 0.015 290);
-  --accent-foreground: oklch(0.88 0.008 300);
-  --destructive: oklch(0.7022 0.1892 22.2279);
-  --destructive-foreground: oklch(0.15 0.012 290);
-  --border: oklch(0.26 0.012 290);
-  --input: oklch(0.30 0.012 290);
-  --ring: oklch(0.92 0.008 300 / 0.3);
-  --ring-width: 1px;
-  --ring-offset: 0px;
-  --chart-1: oklch(0.65 0.20 293);
-  --chart-2: oklch(0.55 0.18 293);
-  --chart-3: oklch(0.70 0.18 293);
-  --chart-4: oklch(0.50 0.15 293);
-  --chart-5: oklch(0.75 0.16 293);
-  --sidebar: oklch(0.127 0.012 290 / 0.6);
-  --sidebar-foreground: oklch(0.92 0.008 300);
-  --sidebar-primary: oklch(0.88 0.008 300);
-  --sidebar-primary-foreground: oklch(0.15 0.012 290);
-  --sidebar-accent: oklch(0.24 0.015 290 / 0.5);
-  --sidebar-accent-foreground: oklch(0.88 0.008 300);
-  --sidebar-border: oklch(0.92 0.008 300 / 0.1);
-  --sidebar-ring: oklch(0.92 0.008 300 / 0.3);
+  /* === 6 BASE COLORS === */
+  --background: oklch(0.2 0.005 270);
+  --foreground: oklch(0.92 0.005 270);
+  --foreground-rgb: 227, 226, 229;           /* RGB for shadow borders */
+  --accent: oklch(0.65 0.20 293);            /* brighter purple in dark */
+  --accent-rgb: 118, 92, 147;                /* darkened RGB for shadow-tinted (70% of accent) */
+  --info: oklch(0.70 0.16 70);               /* amber */
+  --success: oklch(0.60 0.17 145);           /* green */
+  --destructive: oklch(0.70 0.19 22);        /* brighter red in dark */
 
-  /* Highlight - the vibrant purple accent, use VERY sparingly */
-  --highlight: oklch(0.65 0.20 293);
-  --highlight-foreground: oklch(0.98 0.005 300);
-  --highlight-muted: oklch(0.65 0.20 293 / 0.15);
+  /* === MIX VARIANTS === */
+  --foreground-5: color-mix(in oklch, var(--foreground) 5%, var(--background));
+  --foreground-10: color-mix(in oklch, var(--foreground) 10%, var(--background));
+  --foreground-20: color-mix(in oklch, var(--foreground) 20%, var(--background));
+  --foreground-30: color-mix(in oklch, var(--foreground) 30%, var(--background));
+  --foreground-40: color-mix(in oklch, var(--foreground) 40%, var(--background));
+  --foreground-50: color-mix(in oklch, var(--foreground) 50%, var(--background));
+  --foreground-60: color-mix(in oklch, var(--foreground) 60%, var(--background));
+  --foreground-70: color-mix(in oklch, var(--foreground) 70%, var(--background));
+  --foreground-80: color-mix(in oklch, var(--foreground) 80%, var(--background));
+  --foreground-90: color-mix(in oklch, var(--foreground) 90%, var(--background));
+  --foreground-95: color-mix(in oklch, var(--foreground) 95%, var(--background));
+
+  /* === SHADCN COMPATIBILITY (derived from 6 base colors) === */
+  --secondary: oklch(from var(--foreground) l c h / 0.05);
+  --secondary-foreground: var(--foreground);
+  --muted: oklch(from var(--foreground) l c h / 0.05);
+  --muted-foreground: var(--foreground-50);
+  --card: var(--background);
+  --card-foreground: var(--foreground);
+  --popover: var(--background);
+  --popover-foreground: var(--foreground);
+  --border: oklch(from var(--foreground) l c h / 0.05);
+  --input: oklch(from var(--foreground) l c h / 0.1);
+  --ring: oklch(from var(--foreground) l c h / 0.25);
 
   /* Markdown list markers */
-  --md-bullets: oklch(0.55 0.008 290);
-  --md-counters: oklch(0.55 0.008 290);
+  --md-bullets: var(--foreground-50);
+  --md-counters: var(--foreground-50);
+}
 
-  /* Fonts (same as light) */
-  --font-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-serif: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+/* System Font - Uses native system fonts for a more platform-native look
+   - macOS: SF Pro (San Francisco)
+   - Windows: Segoe UI
+   - Linux: System default sans-serif */
+html[data-font="system"] {
+  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-default: var(--font-sans);
-
-  /* Layout (same as light) */
-  --radius: 0rem;
-  --spacing: 0.25rem;
-  --tracking-normal: 0em;
-
-  /* Shadows (disabled) */
-  --shadow-x: 0px;
-  --shadow-y: 1px;
-  --shadow-blur: 0px;
-  --shadow-spread: 0px;
-  --shadow-opacity: 0;
-  --shadow-color: hsl(0 0% 0%);
-  --shadow-2xs: 0px 1px 0px 0px hsl(0 0% 0% / 0.00);
-  --shadow-xs: 0px 1px 0px 0px hsl(0 0% 0% / 0.00);
-  --shadow-sm: 0px 1px 0px 0px hsl(0 0% 0% / 0.00), 0px 1px 2px -1px hsl(0 0% 0% / 0.00);
-  --shadow: 0px 1px 0px 0px hsl(0 0% 0% / 0.00), 0px 1px 2px -1px hsl(0 0% 0% / 0.00);
-  --shadow-md: 0px 1px 0px 0px hsl(0 0% 0% / 0.00), 0px 2px 4px -1px hsl(0 0% 0% / 0.00);
-  --shadow-lg: 0px 1px 0px 0px hsl(0 0% 0% / 0.00), 0px 4px 6px -1px hsl(0 0% 0% / 0.00);
-  --shadow-xl: 0px 1px 0px 0px hsl(0 0% 0% / 0.00), 0px 8px 10px -1px hsl(0 0% 0% / 0.00);
-  --shadow-2xl: 0px 1px 0px 0px hsl(0 0% 0% / 0.00);
 }
 
 /* Theme integration for Tailwind v4 */
 @theme inline {
+  /* === 6 BASE COLORS === */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-accent: var(--accent);
+  --color-info: var(--info);
+  --color-success: var(--success);
+  --color-destructive: var(--destructive);
+
+  /* === MIX VARIANTS (solid interpolation) === */
+  --color-foreground-5: var(--foreground-5);
+  --color-foreground-10: var(--foreground-10);
+  --color-foreground-20: var(--foreground-20);
+  --color-foreground-30: var(--foreground-30);
+  --color-foreground-40: var(--foreground-40);
+  --color-foreground-50: var(--foreground-50);
+  --color-foreground-60: var(--foreground-60);
+  --color-foreground-70: var(--foreground-70);
+  --color-foreground-80: var(--foreground-80);
+  --color-foreground-90: var(--foreground-90);
+  --color-foreground-95: var(--foreground-95);
+
+  /* === LEGACY COMPATIBILITY === */
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-foreground: var(--background);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-highlight: var(--highlight);
-  --color-highlight-foreground: var(--highlight-foreground);
-  --color-highlight-muted: var(--highlight-muted);
   --color-md-bullets: var(--md-bullets);
   --color-md-counters: var(--md-counters);
 
@@ -231,10 +187,6 @@
   --font-mono: var(--font-mono);
   --font-serif: var(--font-serif);
 
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
 
   --shadow-2xs: var(--shadow-2xs);
   --shadow-xs: var(--shadow-xs);
@@ -305,6 +257,99 @@
     --tw-ring-shadow: var(--tw-ring-inset) 0 0 0 calc(var(--ring-width) + var(--tw-ring-offset-width)) var(--tw-ring-color);
     box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000);
   }
+
+  /* Hide scrollbar but keep scrolling */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Custom shadow utilities
+     Border layer (0px 0px 0px 1px) uses foreground color for theme adaptation
+     Blur/spread layers use black for consistent depth */
+  .shadow-minimal {
+    box-shadow:
+      rgba(0, 0, 0, 0) 0px 0px 0px 0px,
+      rgba(0, 0, 0, 0) 0px 0px 0px 0px,
+      rgba(var(--foreground-rgb), 0.06) 0px 0px 0px 1px,
+      rgba(0, 0, 0, 0.06) 0px 1px 1px -0.5px,
+      rgba(0, 0, 0, 0.06) 0px 3px 3px -1.5px;
+  }
+
+  .shadow-middle {
+    box-shadow:
+      rgba(0, 0, 0, 0) 0px 0px 0px 0px,
+      rgba(0, 0, 0, 0) 0px 0px 0px 0px,
+      rgba(var(--foreground-rgb), 0.06) 0px 0px 0px 1px,
+      rgba(0, 0, 0, 0.06) 0px 1px 1px -0.5px,
+      rgba(0, 0, 0, 0.06) 0px 3px 3px -1.5px,
+      rgba(0, 0, 0, 0.06) 0px 6px 6px -3px;
+  }
+
+  /* Tinted shadow using CSS variable - use with style={{ '--shadow-color': 'r, g, b' }} */
+  .shadow-tinted {
+    --shadow-color: 0, 0, 0;
+    box-shadow:
+      rgba(var(--shadow-color), 0) 0px 0px 0px 0px,
+      rgba(var(--shadow-color), 0) 0px 0px 0px 0px,
+      rgba(var(--shadow-color), 0.12) 0px 0px 0px 1px,
+      rgba(var(--shadow-color), 0.08) 0px 1px 1px -0.5px,
+      rgba(var(--shadow-color), 0.06) 0px 3px 3px -1.5px,
+      rgba(var(--shadow-color), 0.04) 0px 6px 6px -3px;
+  }
+
+  .shadow-strong {
+    box-shadow:
+      rgba(0, 0, 0, 0) 0px 0px 0px 0px,
+      rgba(0, 0, 0, 0) 0px 0px 0px 0px,
+      rgba(var(--foreground-rgb), 0.06) 0px 0px 0px 1px,
+      rgba(0, 0, 0, 0.06) 0px 1px 1px -0.5px,
+      rgba(0, 0, 0, 0.06) 0px 3px 3px -1.5px,
+      rgba(0, 0, 0, 0.06) 0px 6px 6px -3px,
+      rgba(0, 0, 0, 0.04) 0px 12px 12px -6px,
+      rgba(0, 0, 0, 0.04) 0px 24px 24px -12px;
+  }
+
+  .shadow-modal-small {
+    box-shadow:
+      rgba(0, 0, 0, 0) 0px 0px 0px 0px,
+      rgba(0, 0, 0, 0) 0px 0px 0px 0px,
+      rgba(var(--foreground-rgb), 0.06) 0px 0px 0px 1px,
+      rgba(0, 0, 0, 0.04) 0px 1px 1px -0.5px,
+      rgba(0, 0, 0, 0.04) 0px 3px 3px 0px,
+      rgba(0, 0, 0, 0.02) 0px 6px 6px 0px,
+      rgba(0, 0, 0, 0.02) 0px 12px 12px 0px,
+      rgba(0, 0, 0, 0.02) 0px 24px 24px 0px;
+  }
+
+  /* =============================================================================
+     UNIFIED POPOVER STYLING
+
+     Use this class for all dropdowns, popovers, dialogs, and floating menus
+     to ensure consistent appearance across the app. Matches the vibrancy style:
+     - Semi-transparent dark background with blur
+     - 8px corner radius
+     - Layered shadow (shadow-modal-small)
+     - No visible border
+  ============================================================================= */
+  .popover-styled {
+    background: var(--background);
+    color: var(--foreground);
+    border-radius: 8px;
+    border: none;
+    box-shadow:
+      rgba(0, 0, 0, 0) 0px 0px 0px 0px,
+      rgba(0, 0, 0, 0) 0px 0px 0px 0px,
+      rgba(var(--foreground-rgb), 0.06) 0px 0px 0px 1px,
+      rgba(0, 0, 0, 0.04) 0px 1px 1px -0.5px,
+      rgba(0, 0, 0, 0.04) 0px 3px 3px 0px,
+      rgba(0, 0, 0, 0.02) 0px 6px 6px 0px,
+      rgba(0, 0, 0, 0.02) 0px 12px 12px 0px,
+      rgba(0, 0, 0, 0.02) 0px 24px 24px 0px;
+  }
 }
 
 /* Draggable title bar region for transparent window */
@@ -370,6 +415,13 @@
   animation: none !important;
 }
 
+/* Fix ScrollArea internal div preventing content shrink
+   Radix injects a div with min-width: 100%; display: table; which prevents shrinking */
+[data-radix-scroll-area-viewport] > div {
+  min-width: 0 !important;
+  display: block !important;
+}
+
 /* =============================================================================
    ONBOARDING STEP STYLES
 
@@ -403,7 +455,7 @@
   }
 
   .feature-bullet {
-    background-color: var(--primary);
+    background-color: var(--foreground);
   }
 }
 
@@ -438,40 +490,41 @@
 }
 
 /* =============================================================================
-   LOADING INDICATOR - ULTRATHINK GRADIENT
+   SESSION LIST - SEPARATOR VISIBILITY
 
-   Animated gradient text effect for ultrathink mode.
-   Gradient: cyan → blue → magenta → blue → cyan (symmetrical)
+   Hide separators when session items are hovered or selected.
+   Uses :has() to target adjacent sibling separators.
 ============================================================================= */
 
-@keyframes ultrathink-shimmer {
-  0% {
-    background-position: 0% 50%;
-  }
-  100% {
-    background-position: 200% 50%;
-  }
+/* Hide own separator when item is hovered or selected */
+.session-item:hover > .session-separator,
+.session-item[data-selected] > .session-separator {
+  opacity: 0;
 }
 
-.ultrathink-gradient {
-  background: linear-gradient(
-    90deg,
-    #00ffff,
-    #00d7ff,
-    #00afff,
-    #af00ff,
-    #ff00ff,
-    #ff00ff,
-    #af00ff,
-    #00afff,
-    #00d7ff,
-    #00ffff
-  );
-  background-size: 200% 100%;
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  animation: ultrathink-shimmer 2s linear infinite;
+/* Hide next item's separator when current item is hovered or selected */
+.session-item:hover + .session-item > .session-separator,
+.session-item[data-selected] + .session-item > .session-separator {
+  opacity: 0;
+}
+
+/* =============================================================================
+   SOURCES LIST - SEPARATOR VISIBILITY
+
+   Hide separators when source items are hovered or selected.
+   Same logic as session list.
+============================================================================= */
+
+/* Hide own separator when item is hovered or selected */
+.source-item:hover > .source-separator,
+.source-item[data-selected] > .source-separator {
+  opacity: 0;
+}
+
+/* Hide next item's separator when current item is hovered or selected */
+.source-item:hover + .source-item > .source-separator,
+.source-item[data-selected] + .source-item > .source-separator {
+  opacity: 0;
 }
 
 /* =============================================================================
@@ -496,6 +549,7 @@
 .spinner-cube {
   background-color: currentColor;
   animation: spinner-grid 1.3s infinite ease-in-out;
+  transform: scale3d(0.5, 0.5, 1);
 }
 
 .spinner-cube:nth-child(1) { animation-delay: 0.2s; }
@@ -510,9 +564,58 @@
 
 @keyframes spinner-grid {
   0%, 70%, 100% {
-    transform: scale3d(1, 1, 1);
+    transform: scale3d(0.5, 0.5, 1);
   }
   35% {
     transform: scale3d(0, 0, 1);
   }
+}
+
+/* Toast animation - scale and fade in */
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: scale(0.75);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* =============================================================================
+   SHIMMER ANIMATION FOR OPTIMISTIC UI
+
+   Subtle shimmer effect for messages awaiting backend confirmation.
+   Uses a gradient sweep to indicate pending state without being distracting.
+============================================================================= */
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.animate-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    oklch(from var(--foreground) l c h / 0.06) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  pointer-events: none;
+  border-radius: inherit;
 }

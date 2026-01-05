@@ -9,12 +9,13 @@ import { SUMMARIZATION_MODEL } from '../config/models.ts';
 import { debug } from './debug.ts';
 
 /**
- * Generate a short title (3-6 words) for a conversation based on the first exchange.
+ * Generate a task-focused title (2-5 words) for a conversation based on the first exchange.
+ * Extracts what the user is trying to accomplish, framing conversations as tasks.
  * Uses SDK query() which handles all auth types via getDefaultOptions().
  *
  * @param userMessage - The user's first message
  * @param assistantResponse - The assistant's first response
- * @returns Generated title, or null if generation fails
+ * @returns Generated task title, or null if generation fails
  */
 export async function generateSessionTitle(
   userMessage: string,
@@ -25,14 +26,16 @@ export async function generateSessionTitle(
     const assistantSnippet = assistantResponse.slice(0, 500);
 
     const prompt = [
-      'Generate a short title (3-6 words) for this conversation.',
-      'Reply with ONLY the title text, no quotes, no punctuation at the end.',
+      'Identify the main task the user is trying to accomplish in this conversation.',
+      'Reply with ONLY a short task description (2-5 words), action-oriented, starting with a verb.',
+      'Use plain text only - no markdown formatting (no **, `, #, etc.).',
+      'Examples: "Fix authentication bug", "Add dark mode", "Refactor API layer", "Explain codebase structure"',
       '',
       'User: ' + userSnippet,
       '',
       'Assistant: ' + assistantSnippet,
       '',
-      'Title:',
+      'Task:',
     ].join('\n');
 
     const options = {

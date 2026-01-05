@@ -82,7 +82,7 @@ export const iconComponents: ComponentEntry[] = [
     variants: [
       { name: 'Default', props: { className: 'h-5 w-5' } },
       { name: 'Large', props: { className: 'h-8 w-8' } },
-      { name: 'Primary', props: { className: 'h-5 w-5 text-primary' } },
+      { name: 'Primary', props: { className: 'h-5 w-5 text-foreground' } },
     ],
   },
 ]

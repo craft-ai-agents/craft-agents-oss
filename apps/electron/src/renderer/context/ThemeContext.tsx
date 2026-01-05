@@ -1,20 +1,23 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
+import * as storage from '@/lib/local-storage'
 
 export type ThemeMode = 'light' | 'dark' | 'system'
+export type FontFamily = 'inter' | 'system'
 
 interface ThemeContextType {
   mode: ThemeMode
   resolvedMode: 'light' | 'dark'
   colorTheme: string
+  font: FontFamily
   setMode: (mode: ThemeMode) => void
   setColorTheme: (theme: string) => void
+  setFont: (font: FontFamily) => void
 }
-
-const STORAGE_KEY = 'craft-agent-theme'
 
 interface StoredTheme {
   mode: ThemeMode
   colorTheme: string
+  font?: FontFamily
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined)
@@ -23,6 +26,7 @@ interface ThemeProviderProps {
   children: ReactNode
   defaultMode?: ThemeMode
   defaultColorTheme?: string
+  defaultFont?: FontFamily
 }
 
 function getSystemPreference(): 'light' | 'dark' {
@@ -38,27 +42,14 @@ function getSystemPreference(): 'light' | 'dark' {
 
 function loadStoredTheme(): StoredTheme | null {
   if (typeof window === 'undefined') return null
-
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored) {
-      return JSON.parse(stored) as StoredTheme
-    }
-  } catch (e) {
-    console.warn('[ThemeContext] Failed to load stored theme:', e)
-  }
-  return null
+  return storage.get<StoredTheme | null>(storage.KEYS.theme, null)
 }
 
 function saveTheme(theme: StoredTheme): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(theme))
-  } catch (e) {
-    console.warn('[ThemeContext] Failed to save theme:', e)
-  }
+  storage.set(storage.KEYS.theme, theme)
 }
 
-function applyThemeToDOM(resolvedMode: 'light' | 'dark', colorTheme: string): void {
+function applyThemeToDOM(resolvedMode: 'light' | 'dark', colorTheme: string, mode: ThemeMode, font: FontFamily): void {
   const root = document.documentElement
 
   // Apply mode
@@ -71,26 +62,43 @@ function applyThemeToDOM(resolvedMode: 'light' | 'dark', colorTheme: string): vo
   } else {
     delete root.dataset.theme
   }
+
+  // Mark as theme override when user explicitly sets light/dark (not system)
+  // This increases sidebar opacity to reduce color bleed
+  if (mode !== 'system') {
+    root.dataset.themeOverride = 'true'
+  } else {
+    delete root.dataset.themeOverride
+  }
+
+  // Apply font
+  if (font === 'system') {
+    root.dataset.font = 'system'
+  } else {
+    delete root.dataset.font
+  }
 }
 
 export function ThemeProvider({
   children,
   defaultMode = 'system',
-  defaultColorTheme = 'default'
+  defaultColorTheme = 'default',
+  defaultFont = 'inter'
 }: ThemeProviderProps) {
   const stored = loadStoredTheme()
 
   const [mode, setModeState] = useState<ThemeMode>(stored?.mode ?? defaultMode)
   const [colorTheme, setColorThemeState] = useState<string>(stored?.colorTheme ?? defaultColorTheme)
+  const [font, setFontState] = useState<FontFamily>(stored?.font ?? defaultFont)
   const [systemPreference, setSystemPreference] = useState<'light' | 'dark'>(getSystemPreference)
 
   // Resolve the actual mode to apply
   const resolvedMode = mode === 'system' ? systemPreference : mode
 
-  // Apply theme to DOM whenever resolved mode or color theme changes
+  // Apply theme to DOM whenever resolved mode, color theme, mode, or font changes
   useEffect(() => {
-    applyThemeToDOM(resolvedMode, colorTheme)
-  }, [resolvedMode, colorTheme])
+    applyThemeToDOM(resolvedMode, colorTheme, mode, font)
+  }, [resolvedMode, colorTheme, mode, font])
 
   // Listen for system preference changes
   useEffect(() => {
@@ -125,13 +133,18 @@ export function ThemeProvider({
 
   const setMode = useCallback((newMode: ThemeMode) => {
     setModeState(newMode)
-    saveTheme({ mode: newMode, colorTheme })
-  }, [colorTheme])
+    saveTheme({ mode: newMode, colorTheme, font })
+  }, [colorTheme, font])
 
   const setColorTheme = useCallback((newTheme: string) => {
     setColorThemeState(newTheme)
-    saveTheme({ mode, colorTheme: newTheme })
-  }, [mode])
+    saveTheme({ mode, colorTheme: newTheme, font })
+  }, [mode, font])
+
+  const setFont = useCallback((newFont: FontFamily) => {
+    setFontState(newFont)
+    saveTheme({ mode, colorTheme, font: newFont })
+  }, [mode, colorTheme])
 
   return (
     <ThemeContext.Provider
@@ -139,8 +152,10 @@ export function ThemeProvider({
         mode,
         resolvedMode,
         colorTheme,
+        font,
         setMode,
-        setColorTheme
+        setColorTheme,
+        setFont
       }}
     >
       {children}

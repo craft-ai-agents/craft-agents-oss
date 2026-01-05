@@ -2,45 +2,78 @@ import { query, createSdkMcpServer, tool, AbortError, type Query, type SDKMessag
 import { getDefaultOptions } from './options.ts';
 import type { ContentBlockParam } from '@anthropic-ai/sdk/resources';
 import { z } from 'zod';
-import { getSystemPrompt, getDateTimeContext } from '../prompts/system.ts';
+import { getSystemPrompt, getDateTimeContext, getWorkingDirectoryContext } from '../prompts/system.ts';
 import type { SubAgentDefinition } from '../agents/types.ts';
-import type { Plan } from '../agents/plan-types.ts';
+// Plan types are used by UI components; not needed in craft-agent.ts since Safe Mode is user-controlled
 import { parseError, type AgentError } from './errors.ts';
 import { runErrorDiagnostics } from './diagnostics.ts';
 import { updateAgentInstructions as agenticUpdateInstructions, type UpdateInstructionsContext, type UpdateInstructionsResult, type UpdateInstructionsProgressEvent } from '../agents/instruction-updater.ts';
-import { getWorkspaceAccessTokenAsync, isWorkspaceTokenExpiredAsync, updateWorkspaceOAuthTokensAsync, shouldUseExtendedCacheTtl, loadStoredConfig, getSafeMode, type Workspace, type Session } from '../config/storage.ts';
+import { shouldUseExtendedCacheTtl, loadStoredConfig, getDefaultPermissionMode, type Workspace } from '../config/storage.ts';
+import { isLocalMcpEnabled } from '../workspaces/storage.ts';
+import { loadPlanFromPath, type SessionConfig as Session } from '../sessions/storage.ts';
 import { DEFAULT_MODEL } from '../config/models.ts';
 import { getCredentialManager } from '../credentials/index.ts';
-import { updatePreferences, loadPreferences, type UserPreferences } from '../config/preferences.ts';
-import { CraftOAuth, getMcpBaseUrl } from '../auth/oauth.ts';
+import { updatePreferences, loadPreferences, formatPreferencesForPrompt, type UserPreferences } from '../config/preferences.ts';
 import type { FileAttachment } from '../utils/files.ts';
 import { debug } from '../utils/debug.ts';
 import { estimateTokens, summarizeLargeResult, TOKEN_LIMIT } from '../utils/summarize.ts';
 import {
-  enterCraftAgentsPlanModeTool,
-  exitCraftAgentsPlanModeTool,
-  craftAskUserQuestionTool,
-  setPlanModeState,
-  getPlanModeState,
-  enterCraftPlanMode,
-  exitCraftPlanMode,
-  respondToPlanReview,
-  respondToAskQuestion,
-  isReadOnlyMcpTool,
-  isReadOnlyApiMethod,
-  isSafeModeProtectedTool,
-  getSafeModeDescription,
-  BLOCKED_IN_PLAN_MODE,
-  getCurrentPlanFilePath,
-  type PlanReviewResult,
-  type PlanQuestion,
-  type SwarmConfig,
-} from './plan-tools.ts';
+  getSessionPlansDir,
+  getLastPlanFilePath,
+  clearPlanFileState,
+  registerSessionScopedToolCallbacks,
+  unregisterSessionScopedToolCallbacks,
+  getSessionScopedTools,
+  cleanupSessionScopedTools,
+  type CredentialRequest,
+  type CredentialResponse,
+} from './session-scoped-tools.ts';
+import {
+  getPermissionMode,
+  setPermissionMode,
+  cyclePermissionMode,
+  initializeModeState,
+  cleanupModeState,
+  formatSessionState,
+  shouldAllowToolInMode,
+  blockWithReason,
+  isApiEndpointAllowed,
+  type PermissionMode,
+  PERMISSION_MODE_CONFIG,
+  SAFE_MODE_CONFIG,
+} from './mode-manager.ts';
+import type { PermissionsContext } from './permissions-config.ts';
+import { getSessionPlansPath } from '../sessions/storage.ts';
+import { expandPath } from '../utils/paths.ts';
+import {
+  ConfigWatcher,
+  createConfigWatcher,
+  type ConfigWatcherCallbacks,
+} from '../config/watcher.ts';
+import type { ValidationIssue } from '../config/validators.ts';
+import type { LoadedSource } from '../sources/types.ts';
+import type { LoadedAgent } from '../agents/folder-types.ts';
 
-// Re-export PlanReviewResult, PlanQuestion, SwarmConfig, and plan mode functions for TUI usage
-export type { PlanReviewResult, PlanQuestion, SwarmConfig } from './plan-tools.ts';
-export { enterCraftPlanMode, exitCraftPlanMode, getCurrentPlanFilePath } from './plan-tools.ts';
+// Re-export permission mode functions for TUI/Electron usage
+export {
+  // Permission mode API
+  getPermissionMode,
+  setPermissionMode,
+  cyclePermissionMode,
+  subscribeModeChanges,
+  type PermissionMode,
+  PERMISSION_MODE_ORDER,
+  PERMISSION_MODE_CONFIG,
+} from './mode-manager.ts';
 // Documentation is now served via external HTTP MCP at agents.craft.do/docs/mcp
+
+// Import and re-export AgentEvent from core (single source of truth)
+import type { AgentEvent } from '@craft-agent/core/types';
+export type { AgentEvent };
+
+// Re-export types for UI components
+export type { LoadedSource } from '../sources/types.ts';
+export type { LoadedAgent } from '../agents/folder-types.ts';
 
 export interface CraftAgentConfig {
   workspace: Workspace;
@@ -48,21 +81,12 @@ export interface CraftAgentConfig {
   mcpToken?: string;           // Override token (for testing)
   model?: string;
   onSdkSessionIdUpdate?: (sdkSessionId: string) => void;  // Callback when SDK session ID is captured
-  isHeadless?: boolean;        // Running in headless mode (disables plan mode tools)
+  isHeadless?: boolean;        // Running in headless mode (disables interactive tools)
+  debugMode?: {                // Debug mode configuration (when running in dev)
+    enabled: boolean;          // Whether debug mode is active
+    logFilePath?: string;      // Path to the log file for querying
+  };
 }
-
-// Message types for streaming - kept for TUI compatibility
-export type AgentEvent =
-  | { type: 'status'; message: string }
-  | { type: 'text_delta'; text: string }
-  | { type: 'text_complete'; text: string }
-  | { type: 'tool_start'; toolName: string; toolUseId: string; input: Record<string, unknown>; intent?: string }
-  | { type: 'tool_result'; toolUseId: string; result: string; isError: boolean; input?: Record<string, unknown> }
-  | { type: 'permission_request'; requestId: string; toolName: string; command: string; description: string }
-  | { type: 'ask_user'; requestId: string; questions: Question[] }
-  | { type: 'error'; message: string }
-  | { type: 'typed_error'; error: AgentError }
-  | { type: 'complete'; usage?: { inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheCreationTokens?: number; costUsd?: number } };
 
 // Permission request tracking
 interface PendingPermission {
@@ -70,8 +94,7 @@ interface PendingPermission {
   toolName: string;
   command: string;
   baseCommand: string;
-  type?: 'bash' | 'plan_mode' | 'safe_mode';  // Type of permission request
-  mcpInput?: Record<string, unknown>;  // For safe_mode: the tool input
+  type?: 'bash' | 'safe_mode';  // Type of permission request
 }
 
 // Dangerous commands that should always require permission (never auto-allow)
@@ -83,6 +106,48 @@ const DANGEROUS_COMMANDS = new Set([
   'curl', 'wget', 'ssh', 'scp', 'rsync',
   'git push', 'git reset', 'git rebase', 'git checkout',
 ]);
+
+/**
+ * Detects internal SDK errors that should NOT be shown to users.
+ *
+ * ## Why This Exists
+ *
+ * The Claude Agent SDK runs as a subprocess and handles various internal operations
+ * like telemetry, event logging, and analytics. When these internal systems fail
+ * (e.g., network issues, rate limits, server errors), the SDK propagates these
+ * errors through its event stream.
+ *
+ * These errors are NOT user-actionable - they're internal SDK plumbing that users
+ * cannot fix or do anything about. Showing them in the UI:
+ * 1. Confuses users with technical jargon ("1P event logging", "export failed")
+ * 2. Makes the app appear broken when it's actually functioning normally
+ * 3. Pollutes the conversation history with irrelevant error messages
+ *
+ * ## Known Internal Error Patterns
+ *
+ * - "1P event logging: X events failed to export" - Anthropic's first-party
+ *   telemetry system failed to send usage/analytics data. Does not affect
+ *   the actual AI conversation.
+ *
+ * - "Failed to export N events" - Generic export failure, usually telemetry.
+ *
+ * ## Maintenance Note
+ *
+ * When new internal SDK errors are discovered appearing in the UI, add them
+ * to the patterns array below. Always log filtered errors to debug so they
+ * can still be investigated when troubleshooting with --debug flag.
+ */
+function isInternalSDKError(message: string): boolean {
+  // Patterns that indicate internal SDK errors (not user-facing issues)
+  const internalErrorPatterns = [
+    '1p event logging',       // Anthropic's first-party telemetry system
+    'events failed to export', // Telemetry export failures
+    'failed to export',       // Generic export failures (case variations)
+  ];
+
+  const lowerMsg = message.toLowerCase();
+  return internalErrorPatterns.some((pattern) => lowerMsg.includes(pattern));
+}
 
 // AskUserQuestion types
 export interface QuestionOption {
@@ -431,42 +496,42 @@ Example bad content:
   }
 );
 
-// Create the preferences MCP server dynamically based on whether an agent is active
-// Cached servers for performance (recreated when agent state changes)
+// Cached MCP servers for performance (recreated when agent state changes)
 let cachedPrefToolsServerForBase: ReturnType<typeof createSdkMcpServer> | null = null;
 let cachedPrefToolsServerForAgent: ReturnType<typeof createSdkMcpServer> | null = null;
 
+// Preferences MCP server - user preferences and agent instruction tools
 function getPreferencesServer(hasActiveAgent: boolean): ReturnType<typeof createSdkMcpServer> {
-  // Base tools always available (preferences + plan mode + ask questions)
-  const baseTools = [
-    updateUserPreferencesTool,
-    enterCraftAgentsPlanModeTool,
-    exitCraftAgentsPlanModeTool,
-    craftAskUserQuestionTool,
-  ];
-
   if (hasActiveAgent) {
-    // Agent is active - include all tools including agent-specific ones
+    // Agent is active - include agent-specific tools
     if (!cachedPrefToolsServerForAgent) {
       cachedPrefToolsServerForAgent = createSdkMcpServer({
         name: 'preferences',
         version: '1.0.0',
-        tools: [...baseTools, reloadAgentInstructionsTool, updateAgentInstructionsTool],
+        tools: [updateUserPreferencesTool, reloadAgentInstructionsTool, updateAgentInstructionsTool],
       });
     }
     return cachedPrefToolsServerForAgent;
   } else {
-    // No agent - only include base tools
+    // No agent - only user preferences
     if (!cachedPrefToolsServerForBase) {
       cachedPrefToolsServerForBase = createSdkMcpServer({
         name: 'preferences',
         version: '1.0.0',
-        tools: baseTools,
+        tools: [updateUserPreferencesTool],
       });
     }
     return cachedPrefToolsServerForBase;
   }
 }
+
+/**
+ * SDK-compatible MCP server configuration.
+ * Supports HTTP/SSE (remote) and stdio (local subprocess) transports.
+ */
+export type SdkMcpServerConfig =
+  | { type: 'http' | 'sse'; url: string; headers?: Record<string, string> }
+  | { type: 'stdio'; command: string; args?: string[]; env?: Record<string, string> };
 
 export class CraftAgent {
   private config: CraftAgentConfig;
@@ -479,23 +544,60 @@ export class CraftAgent {
   private alwaysAllowedDomains: Set<string> = new Set(); // Domains allowed for curl/wget (session-scoped)
   private activeAgentDefinition: SubAgentDefinition | null = null;
   // Pre-built MCP server configs for the active agent (includes auth headers)
-  private agentMcpServers: Record<string, { type: 'http' | 'sse'; url: string; headers?: Record<string, string> }> = {};
+  // Supports both HTTP/SSE and stdio transports
+  private agentMcpServers: Record<string, SdkMcpServerConfig> = {};
   // In-process MCP servers for API integrations (created from ApiConfig)
   private agentApiServers: Record<string, ReturnType<typeof createSdkMcpServer>> = {};
+  // Pre-built source server configs (user-defined sources, separate from agent)
+  // Supports both HTTP/SSE and stdio transports
+  private sourceMcpServers: Record<string, SdkMcpServerConfig> = {};
+  // In-process MCP servers for source API integrations
+  private sourceApiServers: Record<string, ReturnType<typeof createSdkMcpServer>> = {};
+  // Set of active source server names (for blocking disabled sources)
+  private activeSourceServerNames: Set<string> = new Set();
+  // Set of intended active source slugs (what UI shows as active, may differ from activeSourceServerNames if build fails)
+  private intendedActiveSlugs: Set<string> = new Set();
+  // Full list of all sources in workspace (for context injection)
+  private allSources: LoadedSource[] = [];
+  // Sources already introduced to agent this session (for incremental context)
+  private knownSourceSlugs: Set<string> = new Set();
   // Temporary clarifications (not yet saved to Craft document)
   private temporaryClarifications: string | null = null;
   // Map tool_use_id → explicit intent from _intent field (for summarization and UI display)
   private toolIntents: Map<string, string> = new Map();
-  // Plan mode state
-  private activePlan: Plan | null = null;
-  private planMode: boolean = false;
+  // Map tool_use_id → display name from _displayName field (for UI tool name display)
+  private toolDisplayNames: Map<string, string> = new Map();
+  // Safe mode state - user-controlled read-only exploration mode
+  private safeMode: boolean = false;
   // SDK tools list (captured from init message)
   private sdkTools: string[] = [];
   // Ultrathink mode - when enabled, sets maxThinkingTokens for extended reasoning
   private ultrathinkMode: boolean = false;
+  // Config file watcher for hot-reloading source changes
+  private configWatcher: ConfigWatcher | null = null;
+  // Pinned system prompt components (captured on first chat, used for consistency after compaction)
+  private pinnedPreferencesPrompt: string | null = null;
+  private pinnedAgentDefinition: SubAgentDefinition | null = null;
+  // Captured stderr from SDK subprocess (for error diagnostics when process exits with code 1)
+  private lastStderrOutput: string[] = [];
+
+  /**
+   * Get the session ID for mode operations.
+   * Returns a temp ID if no session is configured (shouldn't happen in practice).
+   */
+  private get modeSessionId(): string {
+    return this.config.session?.id || `temp-${Date.now()}`;
+  }
+
+  /**
+   * Get the workspace root path for workspace-scoped operations.
+   */
+  private get workspaceRootPath(): string {
+    return this.config.workspace.rootPath;
+  }
 
   // Callback for permission requests - set by TUI to receive permission prompts
-  public onPermissionRequest: ((request: { requestId: string; toolName: string; command: string; description: string; type?: 'bash' | 'plan_mode' | 'safe_mode'; mcpInput?: Record<string, unknown> }) => void) | null = null;
+  public onPermissionRequest: ((request: { requestId: string; toolName: string; command: string; description: string; type?: 'bash' }) => void) | null = null;
 
   // Debug callback for status messages
   public onDebug: ((message: string) => void) | null = null;
@@ -503,17 +605,34 @@ export class CraftAgent {
   // Callback for AskUserQuestion tool - set by TUI to receive question prompts
   public onAskUserQuestion: ((request: { requestId: string; questions: Question[] }) => void) | null = null;
 
-  // Callback for plan mode changes - set by TUI to sync React state
-  public onPlanModeChange: ((planMode: boolean) => void) | null = null;
+  /** Callback when permission mode changes */
+  public onPermissionModeChange: ((mode: PermissionMode) => void) | null = null;
 
-  // Callback for plan review - set by TUI to receive plan review requests
-  public onPlanReview: ((request: { requestId: string; plan: Plan; questions: string[] }) => void) | null = null;
+  // Callback when a plan is submitted - set by TUI to display plan message
+  public onPlanSubmitted: ((planPath: string) => void) | null = null;
 
-  // Callback for Craft plan mode questions - set by TUI to receive question requests
-  public onCraftAskQuestion: ((request: { requestId: string; questions: PlanQuestion[] }) => void) | null = null;
+  // Callback when working directory changes (e.g., Bash cd command)
+  public onWorkingDirectoryChange: ((path: string) => void) | null = null;
 
-  // Callback for swarm launch - set by TUI to handle parallel agent execution
-  public onLaunchSwarm: ((config: SwarmConfig, plan: Plan, planFilePath: string) => Promise<void>) | null = null;
+  // Callback when credential input is needed - set by Electron/TUI to show secure input UI
+  // Returns a promise that resolves with the user's response
+  public onCredentialRequest: ((request: CredentialRequest) => Promise<CredentialResponse>) | null = null;
+
+  // Callback when a source config changes (hot-reload from file watcher)
+  public onSourceChange: ((slug: string, source: LoadedSource | null) => void) | null = null;
+
+  // Callback when the sources list changes (add/remove)
+  public onSourcesListChange: ((sources: LoadedSource[]) => void) | null = null;
+
+  // Callback when an agent changes
+  public onAgentChange: ((slug: string, agent: LoadedAgent | null) => void) | null = null;
+
+  // Callback when the agents list changes
+  public onAgentsListChange: ((agents: LoadedAgent[]) => void) | null = null;
+
+  // Callback when config file validation fails
+  public onConfigValidationError: ((file: string, errors: ValidationIssue[]) => void) | null = null;
+
 
   constructor(config: CraftAgentConfig) {
     this.config = config;
@@ -524,54 +643,126 @@ export class CraftAgent {
       this.sessionId = config.session.sdkSessionId;
     }
 
-    // Preserve existing plan mode state if already set (e.g., by SHIFT+TAB before agent created)
-    const existingState = getPlanModeState();
+    // Initialize permission mode state with callbacks
+    const sessionId = this.modeSessionId;
+    // Get initial mode: from session, or from global default
+    const initialMode: PermissionMode = config.session?.permissionMode ?? getDefaultPermissionMode();
 
-    // Initialize Craft Agents plan mode state with callbacks
-    // Preserve isActive and userInitiatedPlanMode if already set
-    setPlanModeState({
-      isActive: existingState.isActive,
-      userInitiatedPlanMode: existingState.userInitiatedPlanMode,
-      sessionId: config.session?.id || null,  // Session ID for plan storage
-      plan: existingState.plan,
-      planFilePath: existingState.planFilePath,
-      taskDescription: existingState.taskDescription,
+    initializeModeState(sessionId, initialMode, {
       onStateChange: (state) => {
-        // Sync plan state with agent
-        this.planMode = state.isActive;
-        this.activePlan = state.plan;
-        // Notify TUI of plan mode changes
-        this.onPlanModeChange?.(state.isActive);
-      },
-      onPlanReviewRequest: (request) => {
-        // Forward plan review request to TUI
-        this.onPlanReview?.(request);
-      },
-      onAskUserQuestion: (request) => {
-        // Forward ask question request to TUI
-        this.onCraftAskQuestion?.(request);
-      },
-      onLaunchSwarm: async (config, plan, planFilePath) => {
-        // Forward swarm launch request to TUI
-        if (this.onLaunchSwarm) {
-          await this.onLaunchSwarm(config, plan, planFilePath);
-        }
+        // Sync permission mode state with agent
+        this.safeMode = state.permissionMode === 'safe';
+        // Notify UI of permission mode changes
+        this.onPermissionModeChange?.(state.permissionMode);
       },
     });
+
+    // Register session-scoped tool callbacks
+    registerSessionScopedToolCallbacks(sessionId, {
+      onPlanSubmitted: (planPath) => {
+        this.onDebug?.(`[CraftAgent] onPlanSubmitted received: ${planPath}`);
+        this.onPlanSubmitted?.(planPath);
+      },
+      onWorkingDirectoryChange: (path) => {
+        this.onDebug?.(`[CraftAgent] onWorkingDirectoryChange received: ${path}`);
+        if (this.config.session) {
+          this.config.session.workingDirectory = path;
+        }
+        this.onWorkingDirectoryChange?.(path);
+      },
+      onCredentialRequest: async (request) => {
+        this.onDebug?.(`[CraftAgent] onCredentialRequest received: ${request.sourceSlug}`);
+        if (this.onCredentialRequest) {
+          return this.onCredentialRequest(request);
+        }
+        // No handler registered - return cancelled
+        return { type: 'credential', cancelled: true };
+      },
+    });
+
+    // Start config watcher for hot-reloading source changes
+    // Only start in non-headless mode to avoid overhead in batch/script scenarios
+    if (!this.isHeadless) {
+      this.startConfigWatcher();
+    }
   }
 
   /**
-   * Respond to a pending plan review (called by TUI when user makes a choice)
+   * Start the config file watcher for hot-reloading changes.
    */
-  respondToPlanReview(requestId: string, result: PlanReviewResult): void {
-    respondToPlanReview(requestId, result);
+  private startConfigWatcher(): void {
+    if (this.configWatcher) {
+      return; // Already running
+    }
+
+    this.configWatcher = createConfigWatcher(this.workspaceRootPath, {
+      onSourceChange: (slug, source) => {
+        debug('[CraftAgent] Source changed:', slug, source ? 'updated' : 'deleted');
+        this.onSourceChange?.(slug, source);
+      },
+      onSourcesListChange: (sources) => {
+        debug('[CraftAgent] Sources list changed:', sources.length);
+        this.onSourcesListChange?.(sources);
+      },
+      onAgentChange: (slug, agent) => {
+        debug('[CraftAgent] Agent changed:', slug, agent ? 'updated' : 'deleted');
+        this.onAgentChange?.(slug, agent);
+      },
+      onAgentsListChange: (agents) => {
+        debug('[CraftAgent] Agents list changed:', agents.length);
+        this.onAgentsListChange?.(agents);
+      },
+      onValidationError: (file, result) => {
+        debug('[CraftAgent] Config validation error:', file, result.errors);
+        this.onConfigValidationError?.(file, result.errors);
+      },
+      onError: (file, error) => {
+        debug('[CraftAgent] Config file error:', file, error.message);
+      },
+    });
+
+    debug('[CraftAgent] Config watcher started');
   }
 
   /**
-   * Respond to a pending CraftAskUserQuestion request (called by TUI when user answers)
+   * Stop the config file watcher.
    */
-  respondToCraftAskQuestion(requestId: string, answers: Record<string, string>): void {
-    respondToAskQuestion(requestId, answers);
+  private stopConfigWatcher(): void {
+    if (this.configWatcher) {
+      this.configWatcher.stop();
+      this.configWatcher = null;
+      debug('[CraftAgent] Config watcher stopped');
+    }
+  }
+
+  /**
+   * Handle a source config update from the file watcher.
+   * Updates internal MCP/API server state when a source changes.
+   */
+  private handleSourceUpdate(slug: string, source: LoadedSource | null): void {
+    if (!source) {
+      // Source was deleted - remove from active servers
+      delete this.sourceMcpServers[slug];
+      delete this.sourceApiServers[slug];
+      this.activeSourceServerNames.delete(slug);
+      debug('[CraftAgent] Removed source:', slug);
+      return;
+    }
+
+    // Source was updated - check if we need to update server state
+    if (!source.config.enabled) {
+      // Disabled - remove from active servers
+      delete this.sourceMcpServers[slug];
+      delete this.sourceApiServers[slug];
+      this.activeSourceServerNames.delete(slug);
+      debug('[CraftAgent] Disabled source:', slug);
+    } else {
+      // Enabled - add to active servers (will be rebuilt on next query)
+      this.activeSourceServerNames.add(slug);
+      debug('[CraftAgent] Enabled source:', slug);
+      // Note: Actual MCP/API server configs are rebuilt in getOptions()
+      // This just marks the source as active for the next run
+    }
   }
 
   /**
@@ -660,60 +851,20 @@ export class CraftAgent {
       this.pendingQuestions.delete(requestId);
     }
   }
-
   // ============================================
-  // Plan Mode Methods
+  // Safe Mode Methods
   // ============================================
 
   /**
-   * Enter plan mode - Claude will create a plan without executing tools
+   * Check if currently in safe mode (read-only exploration)
+   * Uses modeManager as single source of truth.
    */
-  enterPlanMode(): void {
-    this.planMode = true;
-    this.onDebug?.('Entered plan mode');
+  isInSafeMode(): boolean {
+    return getPermissionMode(this.modeSessionId) === 'safe';
   }
 
   /**
-   * Exit plan mode - Resume normal execution
-   */
-  exitPlanMode(): void {
-    this.planMode = false;
-    this.onDebug?.('Exited plan mode');
-  }
-
-  /**
-   * Check if currently in plan mode
-   */
-  isInPlanMode(): boolean {
-    return this.planMode;
-  }
-
-  /**
-   * Set the active plan
-   */
-  setActivePlan(plan: Plan | null): void {
-    this.activePlan = plan;
-    this.onDebug?.(`Set active plan: ${plan?.title || 'none'}`);
-  }
-
-  /**
-   * Get the active plan
-   */
-  getActivePlan(): Plan | null {
-    return this.activePlan;
-  }
-
-  /**
-   * Clear the active plan and exit plan mode
-   */
-  clearPlan(): void {
-    this.activePlan = null;
-    this.planMode = false;
-    this.onDebug?.('Cleared plan and exited plan mode');
-  }
-
-  /**
-   * Check if a task should trigger plan mode (heuristic)
+   * Check if a task should trigger planning (heuristic)
    * Returns true for complex tasks that would benefit from planning
    */
   shouldSuggestPlanning(userMessage: string): boolean {
@@ -800,56 +951,9 @@ export class CraftAgent {
   }
 
   private async getToken(): Promise<string | null> {
-    if (this.config.mcpToken) {
-      return this.config.mcpToken;
-    }
-
-    const workspace = this.config.workspace;
-
-    // Get token from credential store (handles bearer token, OAuth, and legacy config fallback)
-    const { authType, token } = await getWorkspaceAccessTokenAsync(workspace.id);
-    if (!token && authType !== 'public') {
-      throw new Error('No authentication credentials found for workspace. Please re-add the workspace.');
-    }
-
-    // Check if token is expired and needs refresh
-    const isExpired = await isWorkspaceTokenExpiredAsync(workspace.id);
-    if (isExpired) {
-      // Get full OAuth credentials from credential store for refresh
-      const manager = getCredentialManager();
-      const oauthCreds = await manager.getWorkspaceOAuth(workspace.id);
-
-      if (oauthCreds?.refreshToken && oauthCreds?.clientId) {
-        try {
-          const oauth = new CraftOAuth(
-            { mcpBaseUrl: getMcpBaseUrl(workspace.mcpUrl) },
-            { onStatus: () => {}, onError: () => {} }
-          );
-
-          const newTokens = await oauth.refreshAccessToken(
-            oauthCreds.refreshToken,
-            oauthCreds.clientId
-          );
-
-          // Save refreshed tokens to credential store
-          await updateWorkspaceOAuthTokensAsync(
-            workspace.id,
-            newTokens.accessToken,
-            newTokens.refreshToken,
-            newTokens.expiresAt,
-            oauthCreds.clientId,
-            newTokens.tokenType
-          );
-
-          return newTokens.accessToken;
-        } catch {
-          // Refresh failed, return existing token (may still work)
-          return token;
-        }
-      }
-    }
-
-    return token;
+    // Only return token if explicitly provided via config
+    // Sources handle their own authentication
+    return this.config.mcpToken ?? null;
   }
 
   async *chat(
@@ -858,8 +962,39 @@ export class CraftAgent {
     _isRetry: boolean = false // Internal flag for session expiry retry
   ): AsyncGenerator<AgentEvent> {
     try {
-      // Clear intent map for new turn
+      const sessionId = this.config.session?.id || `temp-${Date.now()}`;
+
+      // Clear intent and display name maps for new turn
       this.toolIntents.clear();
+      this.toolDisplayNames.clear();
+
+      // Pin system prompt components on first chat() call for consistency after compaction
+      // The SDK's resume mechanism expects system prompt consistency within a session
+      const currentPreferencesPrompt = formatPreferencesForPrompt();
+      const currentAgentSlug = this.activeAgentDefinition?.slug ?? null;
+
+      if (this.pinnedPreferencesPrompt === null) {
+        // First chat in this session - pin current values
+        this.pinnedPreferencesPrompt = currentPreferencesPrompt;
+        this.pinnedAgentDefinition = this.activeAgentDefinition;
+        debug('[chat] Pinned system prompt components for session consistency');
+      } else {
+        // Detect drift: warn user if context has changed since session started
+        const preferencesDrifted = currentPreferencesPrompt !== this.pinnedPreferencesPrompt;
+        const agentDrifted = currentAgentSlug !== (this.pinnedAgentDefinition?.slug ?? null);
+
+        if (preferencesDrifted || agentDrifted) {
+          const driftReasons: string[] = [];
+          if (preferencesDrifted) driftReasons.push('preferences');
+          if (agentDrifted) driftReasons.push('agent');
+
+          yield {
+            type: 'info',
+            message: `Note: Your ${driftReasons.join(' and ')} changed since this session started. Start a new session to apply changes.`,
+          };
+          debug(`[chat] Detected drift in: ${driftReasons.join(', ')}`);
+        }
+      }
 
       // Check if we have binary attachments that need the AsyncIterable interface
       const hasBinaryAttachments = attachments?.some(a => a.type === 'image' || a.type === 'pdf');
@@ -871,45 +1006,40 @@ export class CraftAgent {
         return;
       }
 
-      // Block SDK's plan mode tools in favor of our Craft-specific ones
+      // Block SDK's plan mode tools (we don't use them - safe mode is user-controlled)
       const disallowedTools: string[] = ['EnterPlanMode', 'ExitPlanMode'];
 
-      // Build MCP servers config - always use HTTP (SDK handles connections efficiently)
-      const token = await this.getToken();
-
-      let mcpUrl = this.config.workspace.mcpUrl;
-      mcpUrl = mcpUrl.replace(/\/+$/, '');
-      if (!mcpUrl.endsWith('/mcp')) {
-        mcpUrl = mcpUrl.replace(/\/sse$/, '/mcp');
-        if (!mcpUrl.endsWith('/mcp')) {
-          mcpUrl = mcpUrl + '/mcp';
-        }
-      }
-
-      const agentMcpServers = this.getAgentMcpServers();
+      // Build MCP servers config - always use HTTP (SDK handles sources efficiently)
+      // Filter out stdio servers if local MCP is disabled
+      const agentMcpResult = this.getAgentMcpServersFiltered();
+      const sourceMcpResult = this.getSourceMcpServersFiltered();
       const agentApiServers = this.getAgentApiServers();
-      // Only log keys - SDK MCP servers contain cyclic references and can't be serialized
-      debug('[chat] agentMcpServers:', Object.keys(agentMcpServers));
-      debug('[chat] agentApiServers:', Object.keys(agentApiServers));
+
+      debug('[chat] agentMcpServers:', agentMcpResult.servers);
+      debug('[chat] agentApiServers:', agentApiServers);
+      debug('[chat] sourceMcpServers:', sourceMcpResult.servers);
+      debug('[chat] sourceApiServers:', this.sourceApiServers);
 
       const hasActiveAgent = this.activeAgentDefinition !== null;
+      const activeAgentSlug = this.activeAgentDefinition?.slug;
       const mcpServers: Options['mcpServers'] = {
-        craft: {
-          type: 'http',
-          url: mcpUrl,
-          ...(token ? { headers: { Authorization: `Bearer ${token}` } } : {}),
-        },
         preferences: getPreferencesServer(hasActiveAgent),
+        // Session-scoped tools (SubmitPlan, source_test, agent_create, etc.)
+        session: getSessionScopedTools(sessionId, this.workspaceRootPath, activeAgentSlug),
         // External docs MCP server (public, no auth required)
         // Provides Craft Agent documentation for agents, MCP servers, APIs, and setup
         docs: {
           type: 'http',
           url: 'https://agents.craft.do/docs/mcp',
         },
-        // Add agent-specific MCP servers if an agent is active
-        ...agentMcpServers,
+        // Add agent-specific MCP servers if an agent is active (filtered by local MCP setting)
+        ...agentMcpResult.servers,
         // Add in-process API servers (REST APIs converted to MCP tools)
         ...agentApiServers,
+        // Add user-defined source servers (MCP and API, filtered by local MCP setting)
+        // Note: Craft MCP server is now added via sources system
+        ...sourceMcpResult.servers,
+        ...this.sourceApiServers,
       };
 
       // Debug: log active agent before building system prompt
@@ -931,37 +1061,54 @@ export class CraftAgent {
         return 64000; // Opus and Sonnet
       };
 
+      // NOTE: Parent-child tracking for subagents is documented below (search for
+      // "PARENT-CHILD TOOL TRACKING"). The SDK's parent_tool_use_id is authoritative.
+
+      // Clear stderr buffer at start of each query
+      this.lastStderrOutput = [];
+
       const options: Options = {
         ...getDefaultOptions(),
         model,
+        // Capture stderr from SDK subprocess for error diagnostics
+        // This helps identify why sessions fail with "process exited with code 1"
+        stderr: (data: string) => {
+          // Log to both debug file AND console for visibility
+          debug('[SDK stderr]', data);
+          console.error('[SDK stderr]', data);
+          // Keep last 20 lines to avoid unbounded memory growth
+          this.lastStderrOutput.push(data);
+          if (this.lastStderrOutput.length > 20) {
+            this.lastStderrOutput.shift();
+          }
+        },
         // Enable extended prompt cache TTL (1 hour instead of 5 minutes) when configured
         // The actual TTL injection happens in src/cache-ttl-interceptor.ts
         ...(useExtendedCache ? { betas: ['extended-cache-ttl-2025-04-11'] as any } : {}),
         // Extended thinking: set tokens based on model when ultrathink mode is active, otherwise 0
         maxThinkingTokens: this.ultrathinkMode ? getUltrathinkTokens(model) : 0,
         // Option A: Append to Claude Code's system prompt (recommended by docs)
+        // Use pinned values for consistency after compaction (SDK expects stable system prompt)
         systemPrompt: {
           type: 'preset',
           preset: 'claude_code',
-          append: (() => {
-            const prompt = getSystemPrompt(
-              this.activeAgentDefinition ?? undefined,
-              this.temporaryClarifications ?? undefined,
-              this.activePlan ?? undefined
-            );
-            this.onDebug?.(`[chat] planMode: ${this.planMode}, activePlan: ${this.activePlan?.title || 'none'}, state: ${this.activePlan?.state || 'n/a'}`);
-            return prompt;
-          })(),
+          append: getSystemPrompt(
+            this.pinnedAgentDefinition ?? undefined,
+            this.temporaryClarifications ?? undefined,
+            this.pinnedPreferencesPrompt ?? undefined,
+            this.config.debugMode
+          ),
         },
         // Option B: Custom system prompt (uncomment to use instead)
         // systemPrompt: getSystemPrompt(this.activeAgentDefinition ?? undefined),
-        cwd: process.cwd(),
+        cwd: this.config.session?.workingDirectory ?? process.cwd(),
         includePartialMessages: true,
         // Enable the full Claude Code toolset (includes AskUserQuestion)
         tools: { type: 'preset', preset: 'claude_code' },
-        // Note: permissionMode: 'plan' is "not currently supported" in SDK
-        // We enforce plan mode restrictions via PreToolUse hook instead
-        permissionMode: 'default',
+        // Bypass SDK's built-in permission system - we handle all permissions via PreToolUse hook
+        // This allows Safe Mode to properly allow read-only bash commands without SDK interference
+        permissionMode: 'bypassPermissions',
+        allowDangerouslySkipPermissions: true,
         // Use PreToolUse hook to intercept tool calls (plan mode blocking happens here)
         hooks: {
           PreToolUse: [{
@@ -971,267 +1118,156 @@ export class CraftAgent {
                 return { continue: true };
               }
 
-              this.onDebug?.(`PreToolUse hook: ${input.tool_name} (planMode=${this.planMode})`);
+              // Get current permission mode (single source of truth)
+              const permissionMode = getPermissionMode(sessionId);
+              this.onDebug?.(`PreToolUse hook: ${input.tool_name} (permissionMode=${permissionMode})`);
 
               // ============================================================
-              // BLOCK PLAN MODE TOOLS IN HEADLESS MODE
+              // PERMISSION MODE HANDLING
+              // - 'safe': Block writes entirely (read-only mode)
+              // - 'ask': Prompt for dangerous operations
+              // - 'allow-all': Everything allowed, no prompts
               // ============================================================
-              if (this.isHeadless) {
-                const planModeTools = [
-                  'EnterCraftAgentsPlanMode',
-                  'ExitCraftAgentsPlanMode',
-                  'CraftAskUserQuestion',
-                ];
-                // Also check MCP-prefixed versions
-                const isPlanModeTool = planModeTools.some(t =>
-                  input.tool_name === t || input.tool_name.endsWith(`__${t}`)
+
+              // Build permissions context for loading custom permissions.json files
+              const permissionsContext: PermissionsContext = {
+                workspaceRootPath: this.workspaceRootPath,
+                activeSourceSlugs: Array.from(this.activeSourceServerNames),
+                activeAgentSlug: this.activeAgentDefinition?.slug,
+              };
+
+              // In 'allow-all' mode, still check for explicitly blocked tools
+              if (permissionMode === 'allow-all') {
+                const plansFolderPath = sessionId ? getSessionPlansPath(this.workspaceRootPath, sessionId) : undefined;
+                const result = shouldAllowToolInMode(
+                  input.tool_name,
+                  input.tool_input,
+                  'allow-all',
+                  { plansFolderPath, permissionsContext }
                 );
 
-                if (isPlanModeTool) {
+                if (!result.allowed) {
+                  // Tool is explicitly blocked in permissions.json
+                  this.onDebug?.(`Allow-all mode: blocking explicitly blocked tool ${input.tool_name}`);
+                  return blockWithReason(result.reason);
+                }
+
+                this.onDebug?.(`Allow-all mode: allowing ${input.tool_name}`);
+                // Fall through to source blocking and other checks below
+              }
+
+              // In 'ask' mode, still check for explicitly blocked tools
+              if (permissionMode === 'ask') {
+                const plansFolderPath = sessionId ? getSessionPlansPath(this.workspaceRootPath, sessionId) : undefined;
+                const result = shouldAllowToolInMode(
+                  input.tool_name,
+                  input.tool_input,
+                  'ask',
+                  { plansFolderPath, permissionsContext }
+                );
+
+                if (!result.allowed) {
+                  // Tool is explicitly blocked in permissions.json
+                  this.onDebug?.(`Ask mode: blocking explicitly blocked tool ${input.tool_name}`);
+                  return blockWithReason(result.reason);
+                }
+                // Don't return here - fall through to other checks (like prompting for permission)
+              }
+
+              // In 'safe' mode, check against read-only allowlist
+              if (permissionMode === 'safe') {
+                const plansFolderPath = sessionId ? getSessionPlansPath(this.workspaceRootPath, sessionId) : undefined;
+                const result = shouldAllowToolInMode(
+                  input.tool_name,
+                  input.tool_input,
+                  'safe',
+                  { plansFolderPath, permissionsContext }
+                );
+
+                if (!result.allowed) {
+                  // In safe mode, always block without prompting
+                  this.onDebug?.(`Safe mode: blocking ${input.tool_name}`);
+                  return blockWithReason(result.reason);
+                }
+
+                this.onDebug?.(`Allowed in safe mode: ${input.tool_name}`);
+                // Fall through to source blocking and other checks below
+              }
+
+              // ============================================================
+              // SOURCE BLOCKING: Block tools from disabled sources
+              // Sources can be disabled mid-conversation, so we check
+              // against the current active source set on each tool call
+              // ============================================================
+              if (input.tool_name.startsWith('mcp__')) {
+                // Extract server name from tool name (mcp__<server>__<tool>)
+                const parts = input.tool_name.split('__');
+                const serverName = parts[1];
+                if (parts.length >= 3 && serverName) {
+                  // Built-in MCP servers that are always available (session-scoped tools)
+                  const builtInMcpServers = new Set(['preferences', 'session', 'docs']);
+
+                  // Check if this is a source server (not built-in, not agent server)
+                  if (!builtInMcpServers.has(serverName)) {
+                    // Check if this is an agent server (from active agent definition)
+                    const isAgentServer = Object.keys(this.agentMcpServers).includes(serverName) ||
+                                          Object.keys(this.agentApiServers).includes(serverName);
+
+                    // If not an agent server, it must be a source server
+                    if (!isAgentServer) {
+                      const isActive = this.activeSourceServerNames.has(serverName);
+                      if (!isActive) {
+                        this.onDebug?.(`BLOCKED source tool: ${input.tool_name} (source "${serverName}" is no longer available)`);
+                        return {
+                          continue: false,
+                          decision: 'block' as const,
+                          reason: `Source "${serverName}" is no longer available. The source may have been disabled or its credentials expired. Please check the source status and re-enable it if needed.`,
+                        };
+                      }
+                    }
+                  }
+                }
+              }
+
+              // ============================================================
+              // PATH EXPANSION: Expand ~ in file paths for SDK file tools
+              // Node.js fs doesn't expand ~ so we must do it ourselves
+              // ============================================================
+              const filePathTools = new Set(['Read', 'Write', 'Edit', 'MultiEdit', 'Glob', 'Grep', 'NotebookEdit']);
+              if (filePathTools.has(input.tool_name)) {
+                const toolInput = input.tool_input as Record<string, unknown>;
+                let updatedInput: Record<string, unknown> | null = null;
+
+                // Expand file_path if present and starts with ~
+                if (typeof toolInput.file_path === 'string' && toolInput.file_path.startsWith('~')) {
+                  const expandedPath = expandPath(toolInput.file_path);
+                  this.onDebug?.(`Expanding path: ${toolInput.file_path} → ${expandedPath}`);
+                  updatedInput = { ...toolInput, file_path: expandedPath };
+                }
+
+                // Expand notebook_path if present and starts with ~
+                if (typeof toolInput.notebook_path === 'string' && toolInput.notebook_path.startsWith('~')) {
+                  const expandedPath = expandPath(toolInput.notebook_path);
+                  this.onDebug?.(`Expanding notebook path: ${toolInput.notebook_path} → ${expandedPath}`);
+                  updatedInput = { ...(updatedInput || toolInput), notebook_path: expandedPath };
+                }
+
+                // Expand path if present and starts with ~ (for Glob, Grep)
+                if (typeof toolInput.path === 'string' && toolInput.path.startsWith('~')) {
+                  const expandedPath = expandPath(toolInput.path);
+                  this.onDebug?.(`Expanding search path: ${toolInput.path} → ${expandedPath}`);
+                  updatedInput = { ...(updatedInput || toolInput), path: expandedPath };
+                }
+
+                // If any path was expanded, return updated input
+                if (updatedInput) {
                   return {
-                    continue: false,
+                    continue: true,
                     hookSpecificOutput: {
                       hookEventName: 'PreToolUse' as const,
-                      decision: 'block',
-                      reason: 'Plan mode tools are not available in headless mode. Execute tasks directly without planning.',
+                      updatedInput,
                     },
                   };
-                }
-              }
-
-              // ============================================================
-              // BLOCK SDK's plan mode tools - redirect to Craft versions
-              // ============================================================
-              if (input.tool_name === 'EnterPlanMode') {
-                this.onDebug?.('EnterPlanMode blocked - redirecting to EnterCraftAgentsPlanMode');
-                return {
-                  continue: false,
-                  hookSpecificOutput: {
-                    hookEventName: 'PreToolUse' as const,
-                    decision: 'block',
-                    reason: 'EnterPlanMode is not available. Use EnterCraftAgentsPlanMode instead for Craft-specific plan mode.',
-                  },
-                };
-              }
-
-              if (input.tool_name === 'ExitPlanMode') {
-                this.onDebug?.('ExitPlanMode blocked - redirecting to ExitCraftAgentsPlanMode');
-                return {
-                  continue: false,
-                  hookSpecificOutput: {
-                    hookEventName: 'PreToolUse' as const,
-                    decision: 'block',
-                    reason: 'ExitPlanMode is not available. Use ExitCraftAgentsPlanMode instead to present your plan for user approval.',
-                  },
-                };
-              }
-
-              // ============================================================
-              // LLM-INITIATED PLAN MODE: Ask user permission before entering
-              // ============================================================
-              if (input.tool_name === 'EnterCraftAgentsPlanMode' ||
-                  input.tool_name.endsWith('__EnterCraftAgentsPlanMode')) {
-                const craftPlanModeCheck = getPlanModeState();
-                this.onDebug?.(`[PreToolUse] EnterCraftAgentsPlanMode: userInitiatedPlanMode=${craftPlanModeCheck.userInitiatedPlanMode}, isActive=${craftPlanModeCheck.isActive}`);
-
-                // If not user-initiated (via SHIFT+TAB or /plan), ask permission
-                if (!craftPlanModeCheck.userInitiatedPlanMode) {
-                  const taskDesc = (input.tool_input as { task?: string })?.task || 'a complex task';
-
-                  this.onDebug?.(`LLM wants to enter plan mode for: ${taskDesc}`);
-
-                  const requestId = `perm-planmode-${input.tool_use_id}`;
-                  const permissionPromise = new Promise<boolean>((resolve) => {
-                    this.pendingPermissions.set(requestId, {
-                      resolve: (allowed) => resolve(allowed),
-                      toolName: input.tool_name,
-                      command: taskDesc,
-                      baseCommand: '',
-                      type: 'plan_mode',
-                    });
-                  });
-
-                  if (this.onPermissionRequest) {
-                    this.onPermissionRequest({
-                      requestId,
-                      toolName: input.tool_name,
-                      command: taskDesc,
-                      description: `Enter Plan Mode for: "${taskDesc}"`,
-                      type: 'plan_mode',
-                    });
-                  } else {
-                    this.pendingPermissions.delete(requestId);
-                    return {
-                      continue: false,
-                      decision: 'block' as const,
-                      reason: 'No permission handler available',
-                    };
-                  }
-
-                  const allowed = await permissionPromise;
-                  if (!allowed) {
-                    this.onDebug?.('User declined plan mode entry');
-                    return {
-                      continue: false,
-                      decision: 'block' as const,
-                      reason: 'User declined Plan Mode. Continue without planning.',
-                    };
-                  }
-                  this.onDebug?.('User approved plan mode entry');
-                }
-              }
-
-              // ============================================================
-              // CRAFT AGENTS PLAN MODE: Allow read-only MCP/API operations
-              // This is our custom plan mode, separate from SDK's plan mode
-              // ============================================================
-              const craftPlanMode = getPlanModeState();
-              if (craftPlanMode.isActive) {
-                this.onDebug?.(`Craft plan mode active, checking tool: ${input.tool_name}`);
-
-                // Always allow our own plan mode tools (check both raw and MCP-prefixed names)
-                // Tools from preferences server have format: mcp__preferences__ToolName
-                const isPlanModeTool = input.tool_name === 'ExitCraftAgentsPlanMode' ||
-                  input.tool_name === 'EnterCraftAgentsPlanMode' ||
-                  input.tool_name === 'CraftAskUserQuestion' ||
-                  input.tool_name.endsWith('__ExitCraftAgentsPlanMode') ||
-                  input.tool_name.endsWith('__EnterCraftAgentsPlanMode') ||
-                  input.tool_name.endsWith('__CraftAskUserQuestion');
-                if (isPlanModeTool) {
-                  this.onDebug?.(`Allowing plan mode tool: ${input.tool_name}`);
-                  return { continue: true };
-                }
-
-                // Allow read-only file tools (to understand existing context)
-                const readOnlyFileTools = ['Read', 'Glob', 'Grep'];
-                if (readOnlyFileTools.includes(input.tool_name)) {
-                  return { continue: true };
-                }
-
-                // Allow read-only MCP tools (blocks_read, spaces_list, etc.)
-                // But NOT our preferences server tools (those are handled above)
-                if (input.tool_name.startsWith('mcp__')) {
-                  // Skip preferences server - those tools should be explicitly handled above
-                  if (input.tool_name.startsWith('mcp__preferences__')) {
-                    // Allow update_user_preferences in plan mode (it's just storing user info)
-                    if (input.tool_name.endsWith('__update_user_preferences')) {
-                      return { continue: true };
-                    }
-                    // Block other preferences tools not explicitly allowed
-                    this.onDebug?.(`BLOCKED preferences tool in Craft plan mode: ${input.tool_name}`);
-                    return {
-                      continue: false,
-                      decision: 'block' as const,
-                      reason: `This tool is not allowed in plan mode. Use CraftAskUserQuestion to ask the user questions.`,
-                    };
-                  }
-
-                  if (isReadOnlyMcpTool(input.tool_name)) {
-                    this.onDebug?.(`Allowing read-only MCP tool in Craft plan mode: ${input.tool_name}`);
-                    return { continue: true };
-                  }
-                  // Block write MCP operations
-                  this.onDebug?.(`BLOCKED MCP write in Craft plan mode: ${input.tool_name}`);
-                  return {
-                    continue: false,
-                    decision: 'block' as const,
-                    reason: `MCP write operations are blocked in plan mode. Call ExitCraftAgentsPlanMode to present your plan first.`,
-                  };
-                }
-
-                // BLOCK ALL API calls in plan mode
-                // In plan mode, Claude should PLAN what API calls to make, not execute them
-                if (input.tool_name.startsWith('api_')) {
-                  this.onDebug?.(`BLOCKED API call in Craft plan mode: ${input.tool_name}`);
-                  return {
-                    continue: false,
-                    decision: 'block' as const,
-                    reason: `API calls are blocked in plan mode. Plan WHAT you will call, then call ExitCraftAgentsPlanMode. The actual API calls happen after plan approval.`,
-                  };
-                }
-
-                // Block destructive tools
-                if (BLOCKED_IN_PLAN_MODE.includes(input.tool_name)) {
-                  this.onDebug?.(`BLOCKED in Craft plan mode: ${input.tool_name}`);
-                  return {
-                    continue: false,
-                    decision: 'block' as const,
-                    reason: `${input.tool_name} is blocked in plan mode. Call ExitCraftAgentsPlanMode to present your plan first.`,
-                  };
-                }
-
-                // Block Task tool (no sub-agent execution during planning)
-                if (input.tool_name === 'Task' || input.tool_name === 'TaskOutput') {
-                  this.onDebug?.(`BLOCKED ${input.tool_name} in Craft plan mode`);
-                  return {
-                    continue: false,
-                    decision: 'block' as const,
-                    reason: `${input.tool_name} is blocked in plan mode. Plan what tasks to run, then call ExitCraftAgentsPlanMode.`,
-                  };
-                }
-
-                // Default: allow other tools (like TodoWrite for planning)
-                this.onDebug?.(`Allowing tool in Craft plan mode: ${input.tool_name}`);
-              }
-
-              // PLAN MODE: Block non-read-only tools during planning
-              // SDK's permissionMode: 'plan' is not currently supported, so we enforce it here
-              // ExitPlanMode is allowed and handled natively by the SDK (shows permission prompt)
-              if (this.planMode) {
-                // Tools allowed during plan mode - restricted but with research capability
-                // In plan mode, Claude should ONLY create a plan document, not execute actions
-                const planModeAllowedTools = new Set([
-                  // Read-only file tools (to understand existing code/context)
-                  'Read', 'Glob', 'Grep',
-                  // Web research (allowed but should be used sparingly - see system prompt)
-                  'WebFetch', 'WebSearch',
-                  // MCP tool discovery (read-only, helps plan which tools to use)
-                  'MCPSearch',
-                  // Plan mode tools
-                  'ExitPlanMode',
-                  // Write is allowed ONLY for plan files (checked below)
-                  'Write',
-                ]);
-
-                // NOTE: The following are explicitly NOT allowed during planning:
-                // - Task, TaskOutput: No sub-agent execution during planning
-                // - Bash: No command execution during planning
-                // - AskUserQuestion: Claude should ask in response text, not via tool
-                // - MCP tools (mcp__*): No external actions during planning (MCPSearch allowed for discovery)
-
-                // Special handling for Write tool - only allow writing to ~/.claude/plans/
-                if (input.tool_name === 'Write') {
-                  const toolInput = input.tool_input as Record<string, unknown>;
-                  const filePath = toolInput.file_path as string | undefined;
-                  const homeDir = process.env.HOME || '';
-                  const planDir = `${homeDir}/.claude/plans/`;
-
-                  // Allow writes to ~/.claude/plans/ (SDK's plan directory)
-                  if (!filePath || !filePath.startsWith(planDir)) {
-                    this.onDebug?.(`BLOCKED Write in plan mode: ${filePath} (must be in ${planDir})`);
-                    return {
-                      continue: false,
-                      decision: 'block' as const,
-                      reason: `Write is only allowed to ${planDir} during planning. Use an absolute path like "${planDir}my-plan.md". After writing, call ExitPlanMode.`,
-                    };
-                  }
-                  // Allow writing to plan files
-                  this.onDebug?.(`Allowing Write to plan file: ${filePath}`);
-                }
-
-                if (!planModeAllowedTools.has(input.tool_name)) {
-                  this.onDebug?.(`BLOCKED in plan mode: ${input.tool_name}`);
-                  return {
-                    continue: false,
-                    decision: 'block' as const,
-                    reason: `Tool "${input.tool_name}" is not allowed during planning. In plan mode, only read-only tools are permitted. Write your plan to .claude/plans/, then call ExitPlanMode to get user approval before executing.`,
-                  };
-                }
-
-                // ExitPlanMode is allowed during plan mode - SDK will present plan for approval
-                // Plan mode will be exited when we detect ExitPlanMode completion in tool results
-                if (input.tool_name === 'ExitPlanMode') {
-                  this.onDebug?.('ExitPlanMode called - SDK will present plan for approval');
                 }
               }
 
@@ -1240,22 +1276,28 @@ export class CraftAgent {
                 'Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep',
                 'WebFetch', 'WebSearch', 'Task', 'TaskOutput', 'AskUserQuestion',
                 'TodoWrite', 'MultiEdit', 'NotebookEdit', 'KillShell',
-                'EnterPlanMode', 'ExitPlanMode', 'Skill', 'SlashCommand',
+                'SubmitPlan', 'Skill', 'SlashCommand',
               ]);
 
-              // Handle MCP tools: extract _intent and check Safe Mode
+              // Extract _intent and _displayName from MCP tool inputs (not built-in SDK tools)
               if (!builtInTools.has(input.tool_name)) {
                 const toolInput = input.tool_input as Record<string, unknown>;
                 const intent = toolInput._intent as string | undefined;
+                const displayName = toolInput._displayName as string | undefined;
 
-                // Store intent for UI display and summarization
+                // Store metadata if present
                 if (intent) {
                   this.toolIntents.set(input.tool_use_id, intent);
                   this.onDebug?.(`Extracted intent for ${input.tool_use_id}: ${intent}`);
                 }
+                if (displayName) {
+                  this.toolDisplayNames.set(input.tool_use_id, displayName);
+                  this.onDebug?.(`Extracted displayName for ${input.tool_use_id}: ${displayName}`);
+                }
 
-                // Strip _intent before forwarding to MCP server
-                const { _intent, ...cleanInput } = toolInput;
+                // Strip metadata fields before forwarding to MCP server
+                if (intent || displayName) {
+                  const { _intent, _displayName, ...cleanInput } = toolInput;
 
                 // Safe Mode: Require permission for protected MCP operations
                 if (getSafeMode() && isSafeModeProtectedTool(input.tool_name)) {
@@ -1323,8 +1365,158 @@ export class CraftAgent {
                 }
               }
 
-              // For Bash, check if we need permission
-              if (input.tool_name === 'Bash') {
+              // ============================================================
+              // ASK MODE: Prompt for permission on dangerous operations
+              // In 'safe' mode, these are blocked by shouldAllowToolInMode above
+              // In 'allow-all' mode, permission checks are skipped entirely
+              // ============================================================
+
+              // Helper to request permission and wait for response
+              const requestPermission = async (
+                toolUseId: string,
+                toolName: string,
+                command: string,
+                baseCommand: string,
+                description: string
+              ): Promise<{ allowed: boolean }> => {
+                const requestId = `perm-${toolUseId}`;
+                debug(`[PreToolUse] Requesting permission for ${toolName}: ${command}`);
+
+                const permissionPromise = new Promise<boolean>((resolve) => {
+                  this.pendingPermissions.set(requestId, {
+                    resolve,
+                    toolName,
+                    command,
+                    baseCommand,
+                  });
+                });
+
+                if (this.onPermissionRequest) {
+                  this.onPermissionRequest({
+                    requestId,
+                    toolName,
+                    command,
+                    description,
+                  });
+                } else {
+                  this.pendingPermissions.delete(requestId);
+                  return { allowed: false };
+                }
+
+                const allowed = await permissionPromise;
+                return { allowed };
+              };
+
+              // For file write operations in 'ask' mode, prompt for permission
+              const fileWriteTools = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
+              if (fileWriteTools.has(input.tool_name) && permissionMode === 'ask') {
+                const toolInput = input.tool_input as Record<string, unknown>;
+                const filePath = (toolInput.file_path as string) || (toolInput.notebook_path as string) || 'unknown';
+
+                // Check if this tool type is already allowed for this session
+                if (this.alwaysAllowedCommands.has(input.tool_name)) {
+                  this.onDebug?.(`Auto-allowing "${input.tool_name}" (previously approved)`);
+                  return { continue: true };
+                }
+
+                const result = await requestPermission(
+                  input.tool_use_id,
+                  input.tool_name,
+                  filePath,
+                  input.tool_name,
+                  `${input.tool_name}: ${filePath}`
+                );
+
+                if (!result.allowed) {
+                  return {
+                    continue: false,
+                    decision: 'block' as const,
+                    reason: 'User denied permission',
+                  };
+                }
+              }
+
+              // For MCP mutation tools in 'ask' mode, prompt for permission
+              if (input.tool_name.startsWith('mcp__') && permissionMode === 'ask') {
+                // Check if this is a mutation tool by testing against safe mode's read-only patterns
+                const plansFolderPath = sessionId ? getSessionPlansPath(this.workspaceRootPath, sessionId) : undefined;
+                const safeModeResult = shouldAllowToolInMode(
+                  input.tool_name,
+                  input.tool_input,
+                  'safe',
+                  { plansFolderPath }
+                );
+
+                // If it would be blocked in safe mode, it's a mutation and needs permission
+                if (!safeModeResult.allowed) {
+                  const serverAndTool = input.tool_name.replace('mcp__', '').replace(/__/g, '/');
+
+                  // Check if this tool is already allowed for this session
+                  if (this.alwaysAllowedCommands.has(input.tool_name)) {
+                    this.onDebug?.(`Auto-allowing "${input.tool_name}" (previously approved)`);
+                    return { continue: true };
+                  }
+
+                  const result = await requestPermission(
+                    input.tool_use_id,
+                    'MCP Tool',
+                    serverAndTool,
+                    input.tool_name,
+                    `MCP: ${serverAndTool}`
+                  );
+
+                  if (!result.allowed) {
+                    return {
+                      continue: false,
+                      decision: 'block' as const,
+                      reason: 'User denied permission',
+                    };
+                  }
+                }
+              }
+
+              // For API mutation calls in 'ask' mode, prompt for permission
+              if (input.tool_name.startsWith('api_') && permissionMode === 'ask') {
+                const toolInput = input.tool_input as Record<string, unknown>;
+                const method = ((toolInput?.method as string) || 'GET').toUpperCase();
+                const path = toolInput?.path as string | undefined;
+
+                // Only prompt for mutation methods (not GET)
+                if (method !== 'GET') {
+                  const apiDescription = `${method} ${path || ''}`;
+
+                  // Check if this API endpoint is whitelisted in permissions.json
+                  if (isApiEndpointAllowed(method, path, permissionsContext)) {
+                    this.onDebug?.(`Auto-allowing API "${apiDescription}" (whitelisted in permissions.json)`);
+                    return { continue: true };
+                  }
+
+                  // Check if this API pattern is already allowed (session whitelist)
+                  if (this.alwaysAllowedCommands.has(apiDescription)) {
+                    this.onDebug?.(`Auto-allowing API "${apiDescription}" (previously approved)`);
+                    return { continue: true };
+                  }
+
+                  const result = await requestPermission(
+                    input.tool_use_id,
+                    'API Call',
+                    apiDescription,
+                    apiDescription,
+                    `API: ${apiDescription}`
+                  );
+
+                  if (!result.allowed) {
+                    return {
+                      continue: false,
+                      decision: 'block' as const,
+                      reason: 'User denied permission',
+                    };
+                  }
+                }
+              }
+
+              // For Bash in 'ask' mode, check if we need permission
+              if (input.tool_name === 'Bash' && permissionMode === 'ask') {
                 // Extract command and base command
                 let command: unknown;
                 if (typeof input.tool_input === 'object' && input.tool_input !== null) {
@@ -1339,6 +1531,13 @@ export class CraftAgent {
                 }
                 const commandStr = String(command);
                 const baseCommand = this.getBaseCommand(commandStr);
+
+                // Auto-allow read-only commands (same ones allowed in Explore mode)
+                const isReadOnly = SAFE_MODE_CONFIG.readOnlyBashPatterns.some(pattern => pattern.test(commandStr.trim()));
+                if (isReadOnly) {
+                  this.onDebug?.(`Auto-allowing read-only command: ${baseCommand}`);
+                  return { continue: true };
+                }
 
                 // Check if this base command is already allowed (and not dangerous)
                 if (this.alwaysAllowedCommands.has(baseCommand) && !this.isDangerousCommand(baseCommand)) {
@@ -1405,35 +1604,24 @@ export class CraftAgent {
                 return { continue: true };
               }
 
-              // CRITICAL: Override ExitPlanMode result to prevent auto-execution
-              // SDK returns "User has approved your plan. You can now start coding."
-              // But we want Claude to present the plan and wait for explicit user approval
-              if (input.tool_name === 'ExitPlanMode') {
-                this.onDebug?.('PostToolUse: Overriding ExitPlanMode result to require user approval');
-                let planContent: string;
-                if (typeof input.tool_response === 'string') {
-                  planContent = input.tool_response;
-                } else {
-                  try {
-                    planContent = JSON.stringify(input.tool_response);
-                  } catch (e) {
-                    this.onDebug?.(`[CYCLIC STRUCTURE] in PostToolUse ExitPlanMode tool_response, type: ${typeof input.tool_response}, error: ${e}`);
-                    planContent = '[non-serializable response]';
-                  }
+              // Note: EnterPlanMode/ExitPlanMode are disallowed (line ~811) since Safe Mode is user-controlled.
+              // The agent uses SubmitPlan (universal) to submit plans at any time.
+
+              // ─────────────────────────────────────────────────────────────────────
+              // WORKING DIRECTORY SYNC: Detect when Bash cd changes the cwd
+              // The SDK tracks cwd internally and passes it to hooks. When it changes,
+              // we update our session config and notify the callback so the UI stays in sync.
+              // ─────────────────────────────────────────────────────────────────────
+              if (input.cwd && this.config.session?.workingDirectory !== input.cwd) {
+                this.onDebug?.(`PostToolUse: cwd changed to ${input.cwd}`);
+
+                // Update internal state
+                if (this.config.session) {
+                  this.config.session.workingDirectory = input.cwd;
                 }
 
-                return {
-                  continue: true,
-                  hookSpecificOutput: {
-                    hookEventName: 'PostToolUse' as const,
-                    updatedMCPToolOutput: `Plan submitted for review. The plan content is:\n\n${planContent}\n\n` +
-                      `⚠️ IMPORTANT: Do NOT start executing yet! You must:\n` +
-                      `1. Display the FULL plan content above to the user\n` +
-                      `2. Ask: "**Do you approve this plan?** (yes/no)"\n` +
-                      `3. WAIT for explicit user approval before taking ANY action\n` +
-                      `4. Only proceed when user says "yes", "approve", "go ahead", etc.`,
-                  },
-                };
+                // Notify callback so UI can update the folder selector
+                this.onWorkingDirectoryChange?.(input.cwd);
               }
 
               // Skip built-in SDK tools (they have their own context management)
@@ -1441,7 +1629,7 @@ export class CraftAgent {
                 'Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep',
                 'WebFetch', 'WebSearch', 'Task', 'AskUserQuestion',
                 'TodoWrite', 'MultiEdit', 'NotebookEdit', 'KillShell',
-                'EnterPlanMode', 'Skill', 'SlashCommand',
+                'SubmitPlan', 'Skill', 'SlashCommand',
               ]);
 
               // Skip in-process MCP tools (preferences, agent management)
@@ -1512,9 +1700,27 @@ export class CraftAgent {
                   };
                 }
               } finally {
-                // Always clean up stored intent for MCP tools to prevent memory leak
+                // Always clean up stored metadata for MCP tools to prevent memory leak
                 this.toolIntents.delete(input.tool_use_id);
+                this.toolDisplayNames.delete(input.tool_use_id);
               }
+            }],
+          }],
+          // ═══════════════════════════════════════════════════════════════════════════
+          // SUBAGENT HOOKS: Logging only - parent tracking uses SDK's parent_tool_use_id
+          // ═══════════════════════════════════════════════════════════════════════════
+          SubagentStart: [{
+            hooks: [async (input, _hookToolUseID) => {
+              const typedInput = input as { agent_id?: string; agent_type?: string };
+              console.log(`[CraftAgent] SubagentStart: agent_id=${typedInput.agent_id}, type=${typedInput.agent_type}`);
+              return { continue: true };
+            }],
+          }],
+          SubagentStop: [{
+            hooks: [async (input, _toolUseID) => {
+              const typedInput = input as { agent_id?: string };
+              console.log(`[CraftAgent] SubagentStop: agent_id=${typedInput.agent_id}`);
+              return { continue: true };
             }],
           }],
         },
@@ -1579,14 +1785,9 @@ export class CraftAgent {
             }
           }
 
-          // EnterPlanMode and ExitPlanMode - auto-allow
-          // Plan approval happens in conversation AFTER ExitPlanMode returns (via system prompt)
-          if (toolName === 'EnterPlanMode' || toolName === 'ExitPlanMode') {
-            this.onDebug?.(`${toolName} - auto-allowing`);
-            return { behavior: 'allow' as const, updatedInput: input as Record<string, unknown> };
-          }
-
           // Auto-approve MCP tools and other allowed tools
+          // Note: SDK plan mode tools (EnterPlanMode/ExitPlanMode) are blocked via disallowedTools
+          // We use safe mode instead, which is user-controlled via UI (not agent-controlled)
           return { behavior: 'allow' as const, updatedInput: input as Record<string, unknown> };
         },
         // Selectively disable tools - file tools are disabled (use MCP), web/code controlled by settings
@@ -1595,6 +1796,15 @@ export class CraftAgent {
 
       // Track whether we're trying to resume a session (for error handling)
       const wasResuming = !_isRetry && !!this.sessionId;
+
+      // Log resume attempt for debugging session failures
+      if (wasResuming) {
+        console.error(`[CraftAgent] Attempting to resume SDK session: ${this.sessionId}`);
+        debug(`[CraftAgent] Attempting to resume SDK session: ${this.sessionId}`);
+      } else {
+        console.error(`[CraftAgent] Starting fresh SDK session (no resume)`);
+        debug(`[CraftAgent] Starting fresh SDK session (no resume)`);
+      }
 
       // Create the query - use AsyncIterable for messages with binary attachments
       if (hasBinaryAttachments) {
@@ -1614,9 +1824,81 @@ export class CraftAgent {
       // SDK emits tool_use in both stream_event (partial) and assistant (complete) messages
       // Track emitted tool_starts to avoid duplicate UI updates
       const emittedToolStarts = new Set<string>();
+      // Track tool IDs that have been matched to results (but not yet deleted from pendingToolUses)
+      // This prevents the FIFO fallback from matching multiple results to the same tool
+      const matchedToolIds = new Set<string>();
+
+      // ═══════════════════════════════════════════════════════════════════════════
+      // PARENT-CHILD TOOL TRACKING (for Task/TaskOutput subagent tools)
+      // ═══════════════════════════════════════════════════════════════════════════
+      //
+      // PURPOSE: Track which tools are children of which parent (Task/TaskOutput)
+      // for correct UI hierarchy display and result matching.
+      //
+      // ─────────────────────────────────────────────────────────────────────────────
+      // HOW IT WORKS: SDK's parent_tool_use_id
+      // ─────────────────────────────────────────────────────────────────────────────
+      //
+      // The Claude Agent SDK provides `parent_tool_use_id` on ALL message types:
+      // - SDKAssistantMessage, SDKPartialAssistantMessage, SDKToolProgressMessage, SDKUserMessage
+      //
+      // For tools running INSIDE a subagent (Task), this field points to the parent Task's ID.
+      // This is the AUTHORITATIVE source for parent-child relationships.
+      //
+      // ─────────────────────────────────────────────────────────────────────────────
+      // PARENT ASSIGNMENT PATHS (at tool_start time)
+      // ─────────────────────────────────────────────────────────────────────────────
+      //
+      // 1. SINGLE PARENT: When only one Task is active, assign child to it (unambiguous)
+      //    → Log: "CHILD REGISTERED (assistant/single-parent)"
+      //
+      // 2. MULTIPLE PARENTS + SDK PARENT: Use SDK's parent_tool_use_id (authoritative)
+      //    → Log: "CHILD REGISTERED (assistant/sdk-parent)" or "(stream/sdk-parent)"
+      //
+      // 3. FIFO FALLBACK: If SDK doesn't provide parent (edge case), use first active parent
+      //    → Log: "CHILD REGISTERED (assistant/fifo-fallback)" or "(stream/fifo-fallback)"
+      //    → This should rarely happen now that we use SDK's parent_tool_use_id
+      //
+      // ─────────────────────────────────────────────────────────────────────────────
+      // RESULT MATCHING (at tool_result time)
+      // ─────────────────────────────────────────────────────────────────────────────
+      //
+      // When a tool_result arrives with parent_tool_use_id pointing to a PARENT tool:
+      // - The result is for a CHILD of that parent, not the parent itself
+      // - Match to children in FIFO order using parentToChildren map
+      // - This handles: Task(A) → Grep, Read → results come back with parent=A
+      //
+      // ─────────────────────────────────────────────────────────────────────────────
+      // DATA STRUCTURES
+      // ─────────────────────────────────────────────────────────────────────────────
+      //
+      // PARENT_TOOL_NAMES: Tools that can spawn children (Task, TaskOutput)
+      // activeParentTools: Set of currently running parent tool IDs
+      // parentToChildren:  Map<parentId, childIds[]> - ordered for FIFO result matching
+      // childToParent:     Map<childId, parentId> - for UI hierarchy lookup
+      //
+      // ─────────────────────────────────────────────────────────────────────────────
+      // RELATED CODE
+      // ─────────────────────────────────────────────────────────────────────────────
+      //
+      // - SubagentStart/SubagentStop hooks (line ~1345): Logging only, not for mapping
+      // - apps/electron/src/main/sessions.ts: Similar tracking at session manager level
+      //   (uses parentToolStack as fallback, but prefers event.parentToolUseId from here)
+      //
+      // ═══════════════════════════════════════════════════════════════════════════
+      // Only Task is a parent tool (spawns subagent children)
+      // TaskOutput just retrieves results from background tasks - it doesn't spawn children
+      const PARENT_TOOL_NAMES = ['Task'];
+      const activeParentTools = new Set<string>();                    // Currently running parent tool IDs
+      const parentToChildren = new Map<string, string[]>();           // parentId → [childIds...] (FIFO order)
+      const childToParent = new Map<string, string>();                // childId → parentId (for hierarchy)
 
       // Process SDK messages and convert to AgentEvents
       let receivedComplete = false;
+      // Track text waiting for stop_reason from message_delta
+      let pendingTextForStopReason: string | null = null;
+      // Track current turn ID from message_start (correlation ID for grouping events)
+      let currentTurnId: string | null = null;
       try {
         for await (const message of this.currentQuery) {
           // Capture session ID for conversation continuity
@@ -1626,7 +1908,17 @@ export class CraftAgent {
             this.config.onSdkSessionIdUpdate?.(message.session_id);
           }
 
-          const events = this.convertSDKMessage(message, pendingToolUses, emittedToolStarts);
+          const events = this.convertSDKMessage(
+            message,
+            pendingToolUses,
+            emittedToolStarts,
+            matchedToolIds,
+            { PARENT_TOOL_NAMES, activeParentTools, parentToChildren, childToParent },
+            pendingTextForStopReason,
+            (text) => { pendingTextForStopReason = text; },
+            currentTurnId,
+            (id) => { currentTurnId = id; }
+          );
           for (const event of events) {
             if (event.type === 'complete') {
               receivedComplete = true;
@@ -1635,11 +1927,22 @@ export class CraftAgent {
           }
         }
 
+        // Defensive: flush any pending text that wasn't emitted
+        // This can happen if the SDK sends an assistant message with text but skips the
+        // message_delta event that normally triggers text_complete (e.g., in some ultrathink scenarios)
+        if (pendingTextForStopReason) {
+          yield { type: 'text_complete', text: pendingTextForStopReason, isIntermediate: false, turnId: currentTurnId || undefined };
+          pendingTextForStopReason = null;
+        }
+
         // Defensive: emit complete if SDK didn't send result message
         if (!receivedComplete) {
           yield { type: 'complete' };
         }
       } catch (sdkError) {
+        // Debug: log inner catch trigger (stderr to avoid SDK JSON pollution)
+        console.error(`[CraftAgent] INNER CATCH triggered: ${sdkError instanceof Error ? sdkError.message : String(sdkError)}`);
+
         // Handle user interruption
         if (sdkError instanceof AbortError) {
           yield { type: 'status', message: 'Interrupted' };
@@ -1709,13 +2012,37 @@ export class CraftAgent {
         // The SDK's internal Claude Code process exits with code 1 for various API errors
         const isProcessError = errorMsg.includes('process exited with code');
         if (isProcessError) {
+          // Include captured stderr in diagnostics - this is often where the real error is
+          const stderrContext = this.lastStderrOutput.length > 0
+            ? this.lastStderrOutput.join('\n')
+            : undefined;
+          if (stderrContext) {
+            debug('[SDK process error] Captured stderr:', stderrContext);
+          }
+
+          // Check for expired session error - SDK session no longer exists server-side
+          // This happens when sessions expire (TTL) or are cleaned up by Anthropic
+          const isSessionExpired = stderrContext?.includes('No conversation found with session ID');
+          if (isSessionExpired && wasResuming && !_isRetry) {
+            console.error('[CraftAgent] SDK session expired server-side, clearing and retrying fresh');
+            debug('[CraftAgent] SDK session expired server-side, clearing and retrying fresh');
+            this.sessionId = null;
+            // Clear pinned state so retry captures fresh values
+            this.pinnedPreferencesPrompt = null;
+            this.pinnedAgentDefinition = null;
+            // Use 'info' instead of 'status' to show message without spinner
+            yield { type: 'info', message: 'Session expired, starting fresh...' };
+            // Recursively call with isRetry=true (yield* delegates all events)
+            yield* this.chat(userMessage, attachments, true);
+            return;
+          }
+
           // Run diagnostics to identify specific cause (2s timeout)
           const storedConfig = loadStoredConfig();
           const diagnostics = await runErrorDiagnostics({
             authType: storedConfig?.authType,
             workspaceId: this.config.workspace?.id,
-            mcpUrl: this.config.workspace?.mcpUrl,
-            rawError: rawErrorMsg,
+            rawError: stderrContext || rawErrorMsg,
           });
 
           // Get recovery actions based on diagnostic code
@@ -1744,11 +2071,14 @@ export class CraftAgent {
               code: diagnostics.code,
               title: diagnostics.title,
               message: diagnostics.message,
-              details: diagnostics.details,
+              // Include stderr in details if we captured any useful output
+              details: stderrContext
+                ? [...(diagnostics.details || []), `SDK stderr: ${stderrContext}`]
+                : diagnostics.details,
               actions,
               canRetry: diagnostics.code !== 'credits_exhausted' && diagnostics.code !== 'invalid_credentials',
               retryDelayMs: 1000,
-              originalError: rawErrorMsg,
+              originalError: stderrContext || rawErrorMsg,
             },
           };
           yield { type: 'complete' };
@@ -1758,6 +2088,9 @@ export class CraftAgent {
         // Session-related retry: only if we were resuming and haven't retried yet
         if (wasResuming && !_isRetry) {
           this.sessionId = null;
+          // Clear pinned state so retry captures fresh values
+          this.pinnedPreferencesPrompt = null;
+          this.pinnedAgentDefinition = null;
 
           // Provide context-aware message (conservative: only match explicit session/resume terms)
           const isSessionError =
@@ -1768,7 +2101,8 @@ export class CraftAgent {
             ? 'Conversation sync failed, starting fresh...'
             : 'Request failed, retrying without history...';
 
-          yield { type: 'status', message: statusMessage };
+          // Use 'info' instead of 'status' to show message without spinner
+          yield { type: 'info', message: statusMessage };
           // Recursively call with isRetry=true (yield* delegates all events)
           yield* this.chat(userMessage, attachments, true);
           return;
@@ -1777,12 +2111,45 @@ export class CraftAgent {
         // Retry also failed, or wasn't resuming - show generic error
         // (Auth, billing, and rate limit errors are handled above)
         const rawMessage = sdkError instanceof Error ? sdkError.message : String(sdkError);
+
+        // Filter out internal SDK errors that shouldn't be shown to users.
+        // These are internal SDK plumbing errors (telemetry, analytics, etc.) that:
+        // 1. Users cannot fix or take action on
+        // 2. Don't affect the actual AI conversation functionality
+        // 3. Would only confuse users with technical internal error messages
+        //
+        // We still log them to debug for troubleshooting purposes.
+        // See isInternalSDKError() for detailed documentation on what gets filtered.
+        if (isInternalSDKError(rawMessage)) {
+          debug(`[CraftAgent] Filtered internal SDK error: ${rawMessage}`);
+          // Don't emit error event - silently complete
+          // The agent can still function normally despite these internal failures
+          yield { type: 'complete' };
+          return;
+        }
+
         yield { type: 'error', message: rawMessage };
         yield { type: 'complete' };
         return;
       }
 
     } catch (error) {
+      // Debug: log outer catch trigger (stderr to avoid SDK JSON pollution)
+      console.error(`[CraftAgent] OUTER CATCH triggered: ${error instanceof Error ? error.message : String(error)}`);
+      console.error(`[CraftAgent] Error stack: ${error instanceof Error ? error.stack : 'no stack'}`);
+
+      // Extract error message for filtering check
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      // Filter out internal SDK errors that shouldn't be shown to users.
+      // See isInternalSDKError() for detailed documentation on what gets filtered.
+      if (isInternalSDKError(errorMessage)) {
+        debug(`[CraftAgent] Filtered internal SDK error (outer catch): ${errorMessage}`);
+        // Don't emit error event - silently complete
+        yield { type: 'complete' };
+        return;
+      }
+
       // Check if this is a recognizable error type
       const typedError = parseError(error);
       if (typedError.code !== 'unknown_error') {
@@ -1790,7 +2157,6 @@ export class CraftAgent {
         yield { type: 'typed_error', error: typedError };
       } else {
         // Unknown error - show raw message
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         yield { type: 'error', message: errorMessage };
       }
       // emit complete even on error so TUI knows we're done
@@ -1803,8 +2169,115 @@ export class CraftAgent {
   }
 
   /**
+   * Format source state as a lightweight XML block for injection into user messages.
+   * Shows active sources, inactive sources, and introduces new sources with taglines.
+   * New sources (not seen before this session) include descriptions to help agent understand usage.
+   *
+   * Active sources are determined by intendedActiveSlugs (what UI shows as active).
+   * If a source is intended-active but has no working tools (build failed), we note the issue.
+   */
+  private formatSourceState(): string {
+    // Use intended active slugs (what UI shows) rather than just what built successfully
+    const activeSlugs = [...this.intendedActiveSlugs].sort();
+
+    // Find inactive sources (in allSources but not intended-active)
+    const inactiveSources = this.allSources.filter(
+      (s) => !this.intendedActiveSlugs.has(s.config.slug)
+    );
+
+    // Find sources not yet seen this session
+    const unseenSources = this.allSources.filter(
+      (s) => !this.knownSourceSlugs.has(s.config.slug)
+    );
+
+    // Check if this is the first message (no sources known yet)
+    const isFirstMessage = this.knownSourceSlugs.size === 0;
+
+    // Mark all current sources as known for next message
+    this.allSources.forEach((s) => this.knownSourceSlugs.add(s.config.slug));
+
+    // Build output parts
+    const parts: string[] = [];
+
+    // Active sources line - include warning for sources with failed builds
+    if (activeSlugs.length > 0) {
+      const activeWithStatus = activeSlugs.map((slug) => {
+        const hasWorkingTools = this.activeSourceServerNames.has(slug);
+        return hasWorkingTools ? slug : `${slug} (no tools)`;
+      });
+      parts.push(`Active: ${activeWithStatus.join(', ')}`);
+    } else {
+      parts.push('Active: none');
+    }
+
+    // Inactive sources with reason
+    if (inactiveSources.length > 0) {
+      const inactiveList = inactiveSources.map((s) => {
+        const reason = !s.config.enabled
+          ? 'disabled'
+          : !s.config.isAuthenticated
+            ? 'needs auth'
+            : 'inactive';
+        return `${s.config.slug} (${reason})`;
+      });
+      parts.push(`Inactive: ${inactiveList.join(', ')}`);
+    }
+
+    // Source descriptions (shown once per session when first introduced)
+    if (unseenSources.length > 0) {
+      parts.push('');
+      // Only show "New:" header for mid-conversation additions, not first message
+      if (!isFirstMessage) {
+        parts.push('New:');
+      }
+      for (const s of unseenSources) {
+        const tagline = s.config.tagline || s.config.provider;
+        parts.push(`- ${s.config.slug}: ${tagline}`);
+      }
+    }
+
+    let output = `<sources>\n${parts.join('\n')}\n</sources>`;
+
+    // Inject service knowledge for active sources (from bundled guides)
+    // Only inject for sources not yet seen this session to avoid repetition
+    if (unseenSources.length > 0) {
+      const { getSourceKnowledge } = require('../docs/source-guides.ts');
+      for (const s of unseenSources) {
+        // Only inject for active sources
+        if (this.intendedActiveSlugs.has(s.config.slug)) {
+          const knowledge = getSourceKnowledge(s.config);
+          if (knowledge) {
+            output += `\n\n<source_context source="${s.config.slug}">\n${knowledge}\n</source_context>`;
+          }
+        }
+      }
+    }
+
+    return output;
+  }
+
+  /**
+   * Format workspace capabilities for prompt injection.
+   * Informs the agent about what features are available in this workspace.
+   */
+  private formatWorkspaceCapabilities(): string {
+    const capabilities: string[] = [];
+
+    // Check local MCP server capability
+    const localMcpEnabled = isLocalMcpEnabled(this.workspaceRootPath);
+    if (localMcpEnabled) {
+      capabilities.push('local-mcp: enabled (stdio subprocess servers supported)');
+    } else {
+      capabilities.push('local-mcp: disabled (only HTTP/SSE servers)');
+    }
+
+    return `<workspace_capabilities>\n${capabilities.join('\n')}\n</workspace_capabilities>`;
+  }
+
+  /**
    * Build a simple text prompt with embedded text file contents (for text-only messages)
    * Prepends date/time context for prompt caching optimization (keeps system prompt static)
+   * Injects session state (including mode state) for every message
    */
   private buildTextPrompt(text: string, attachments?: FileAttachment[]): string {
     const parts: string[] = [];
@@ -1812,11 +2285,30 @@ export class CraftAgent {
     // Add date/time context first (moved from system prompt to enable caching)
     parts.push(getDateTimeContext());
 
-    // Add file attachments
+    // Add session state (always includes all modes with true/false state)
+    // This lightweight format replaces the verbose mode context
+    // Include plans folder path so agent knows where to write plans in safe mode
+    const plansFolderPath = getSessionPlansPath(this.workspaceRootPath, this.modeSessionId);
+    parts.push(formatSessionState(this.modeSessionId, { plansFolderPath }));
+
+    // Add source state (always included to inform agent about available sources)
+    parts.push(this.formatSourceState());
+
+    // Add workspace capabilities (local MCP enabled/disabled, etc.)
+    parts.push(this.formatWorkspaceCapabilities());
+
+    // Add working directory context if set
+    const workingDirContext = getWorkingDirectoryContext(this.config.session?.workingDirectory);
+    if (workingDirContext) {
+      parts.push(workingDirContext);
+    }
+
+    // Add file attachments with stored path info
     if (attachments) {
       for (const attachment of attachments) {
         if (attachment.type === 'text' && attachment.text) {
-          parts.push(`[File: ${attachment.name}]\n\`\`\`\n${attachment.text}\n\`\`\``);
+          const pathInfo = attachment.storedPath ? `\n[Stored at: ${attachment.storedPath}]` : '';
+          parts.push(`[File: ${attachment.name}]${pathInfo}\n\`\`\`\n${attachment.text}\n\`\`\``);
         }
       }
     }
@@ -1832,6 +2324,7 @@ export class CraftAgent {
   /**
    * Build an SDK user message with proper content blocks for binary attachments
    * Prepends date/time context for prompt caching optimization (keeps system prompt static)
+   * Injects session state (including mode state) for every message
    */
   private buildSDKUserMessage(text: string, attachments?: FileAttachment[]): SDKUserMessage {
     const contentBlocks: ContentBlockParam[] = [];
@@ -1839,9 +2332,40 @@ export class CraftAgent {
     // Add date/time context first (moved from system prompt to enable caching)
     contentBlocks.push({ type: 'text', text: getDateTimeContext() });
 
-    // Add attachments
+    // Add session state (always includes all modes with true/false state)
+    // This lightweight format replaces the verbose mode context
+    // Include plans folder path so agent knows where to write plans in safe mode
+    const plansFolderPath = getSessionPlansPath(this.workspaceRootPath, this.modeSessionId);
+    contentBlocks.push({ type: 'text', text: formatSessionState(this.modeSessionId, { plansFolderPath }) });
+
+    // Add source state (always included to inform agent about available sources)
+    contentBlocks.push({ type: 'text', text: this.formatSourceState() });
+
+    // Add workspace capabilities (local MCP enabled/disabled, etc.)
+    contentBlocks.push({ type: 'text', text: this.formatWorkspaceCapabilities() });
+
+    // Add working directory context if set
+    const workingDirContext = getWorkingDirectoryContext(this.config.session?.workingDirectory);
+    if (workingDirContext) {
+      contentBlocks.push({ type: 'text', text: workingDirContext });
+    }
+
+    // Add attachments with stored path info
     if (attachments) {
       for (const attachment of attachments) {
+        // Add path info text block so the agent knows where the file is stored
+        // This enables the agent to use the Read tool to access text/office files
+        if (attachment.storedPath) {
+          let pathInfo = `[Attached file: ${attachment.name}]\n[Stored at: ${attachment.storedPath}]`;
+          if (attachment.markdownPath) {
+            pathInfo += `\n[Markdown version: ${attachment.markdownPath}]`;
+          }
+          contentBlocks.push({
+            type: 'text',
+            text: pathInfo,
+          });
+        }
+
         if (attachment.type === 'image' && attachment.base64) {
           const mediaType = this.mapImageMediaType(attachment.mimeType);
           if (mediaType) {
@@ -1868,6 +2392,10 @@ export class CraftAgent {
           // - Avoid context overflow for large files
           // - Enable citation support (char_location)
           // - Consistent handling with PDFs
+          // Include stored path in title for reference
+          const titleWithPath = attachment.storedPath
+            ? `${attachment.name} (stored at: ${attachment.storedPath})`
+            : attachment.name;
           contentBlocks.push({
             type: 'document',
             source: {
@@ -1875,7 +2403,7 @@ export class CraftAgent {
               media_type: 'text/plain',
               data: attachment.text,
             },
-            title: attachment.name,
+            title: titleWithPath,
           });
         }
       }
@@ -1914,7 +2442,18 @@ export class CraftAgent {
   private convertSDKMessage(
     message: SDKMessage,
     pendingToolUses: Map<string, { name: string; input: Record<string, unknown> }>,
-    emittedToolStarts: Set<string>
+    emittedToolStarts: Set<string>,
+    matchedToolIds: Set<string>,
+    parentChildTracking: {
+      PARENT_TOOL_NAMES: string[];
+      activeParentTools: Set<string>;
+      parentToChildren: Map<string, string[]>;
+      childToParent: Map<string, string>;
+    },
+    pendingText: string | null,
+    setPendingText: (text: string | null) => void,
+    turnId: string | null,
+    setTurnId: (id: string | null) => void
   ): AgentEvent[] {
     const events: AgentEvent[] = [];
 
@@ -1941,16 +2480,17 @@ export class CraftAgent {
           if (block.type === 'text') {
             textContent += block.text;
           } else if (block.type === 'tool_use') {
-            // Extract intent from the tool_use input (_intent field) for UI display
-            // Note: PreToolUse hook also extracts and stores intent for summarization
+            // Extract intent and displayName from the tool_use input for UI display
+            // Note: PreToolUse hook also extracts and stores these for summarization
             // We only extract here for emitting in tool_start events (UI display)
             const toolInput = block.input as Record<string, unknown>;
             let intent: string | undefined = toolInput._intent as string | undefined;
+            const displayName: string | undefined = toolInput._displayName as string | undefined;
 
-            // Debug: log tool input to see if _intent is present
-            debug(`[convertSDKMessage] tool_use ${block.name}: _intent=${intent}, input keys=${Object.keys(toolInput).join(', ')}`);
+            // Debug: log tool input to see if metadata is present
+            debug(`[convertSDKMessage] tool_use ${block.name}: _intent=${intent}, _displayName=${displayName}, input keys=${Object.keys(toolInput).join(', ')}`);
 
-            // For Bash, use its description field instead
+            // For Bash, use its description field instead of intent
             if (!intent && block.name === 'Bash') {
               const bashInput = block.input as { description?: string };
               intent = bashInput.description;
@@ -1963,12 +2503,53 @@ export class CraftAgent {
                 name: block.name,
                 input: block.input as Record<string, unknown>,
               });
+
+              // Register tool in parent-child hierarchy (see main docs above)
+              const { PARENT_TOOL_NAMES, activeParentTools, parentToChildren, childToParent } = parentChildTracking;
+              const isParentTool = PARENT_TOOL_NAMES.includes(block.name);
+
+              let parentToolUseId: string | undefined;
+              if (isParentTool) {
+                // This is a parent tool (Task, TaskOutput) - it can spawn children
+                activeParentTools.add(block.id);
+                parentToChildren.set(block.id, []);
+                this.onDebug?.(`Parent tool started: ${block.name} (${block.id})`);
+              } else if (activeParentTools.size === 1) {
+                // Single active parent - unambiguous, assign directly
+                const parentId = Array.from(activeParentTools)[0]!;
+                parentToChildren.get(parentId)?.push(block.id);
+                childToParent.set(block.id, parentId);
+                parentToolUseId = parentId;
+                console.log(`[CraftAgent] CHILD REGISTERED (assistant/single-parent): ${block.name} (${block.id}) under parent ${parentId}`);
+              } else if (activeParentTools.size > 1) {
+                // Multiple active parents - use SDK's parent_tool_use_id (authoritative source)
+                // Messages from subagent context include parent_tool_use_id pointing to the Task
+                const sdkParentId = (message as { parent_tool_use_id?: string | null }).parent_tool_use_id;
+                if (sdkParentId && activeParentTools.has(sdkParentId)) {
+                  parentToChildren.get(sdkParentId)?.push(block.id);
+                  childToParent.set(block.id, sdkParentId);
+                  parentToolUseId = sdkParentId;
+                  console.log(`[CraftAgent] CHILD REGISTERED (assistant/sdk-parent): ${block.name} (${block.id}) → Task (${sdkParentId})`);
+                } else {
+                  // Fallback: FIFO if SDK doesn't provide parent
+                  const parentId = Array.from(activeParentTools)[0]!;
+                  parentToChildren.get(parentId)?.push(block.id);
+                  childToParent.set(block.id, parentId);
+                  parentToolUseId = parentId;
+                  console.log(`[CraftAgent] CHILD REGISTERED (assistant/fifo-fallback): ${block.name} (${block.id}) → ${parentId} (sdk_parent=${sdkParentId})`);
+                }
+              }
+              // else: no active parents - tool is top-level, no parent needed
+
               events.push({
                 type: 'tool_start',
                 toolName: block.name,
                 toolUseId: block.id,
                 input: block.input as Record<string, unknown>,
                 intent,
+                displayName,
+                turnId: turnId || undefined,
+                parentToolUseId, // Include parent for hierarchy tracking
               });
             } else {
               // Update input if we have more complete data now
@@ -1982,13 +2563,15 @@ export class CraftAgent {
                   name: block.name,
                   input: newInput,
                 });
-                // Emit another tool_start with the full input and intent
+                // Emit another tool_start with the full input, intent, and displayName
                 events.push({
                   type: 'tool_start',
                   toolName: block.name,
                   toolUseId: block.id,
                   input: newInput,
                   intent,
+                  displayName,
+                  turnId: turnId || undefined,
                 });
               }
             }
@@ -1996,7 +2579,10 @@ export class CraftAgent {
         }
 
         if (textContent) {
-          events.push({ type: 'text_complete', text: textContent });
+          // Don't emit text_complete yet - wait for message_delta to get actual stop_reason
+          // The assistant message arrives with stop_reason: null during streaming
+          // The actual stop_reason comes in the message_delta event
+          setPendingText(textContent);
         }
         break;
       }
@@ -2008,8 +2594,25 @@ export class CraftAgent {
         if (this.onDebug && event.type !== 'content_block_delta') {
           this.onDebug(`stream_event: ${event.type}, content_type=${(event as any).content_block?.type || (event as any).delta?.type || 'n/a'}`);
         }
+        // Capture turn ID from message_start (arrives before any content events)
+        // This ID correlates all events in an assistant turn
+        if (event.type === 'message_start') {
+          const messageId = (event as any).message?.id;
+          if (messageId) {
+            setTurnId(messageId);
+          }
+        }
+        // message_delta contains the actual stop_reason - emit pending text now
+        if (event.type === 'message_delta') {
+          const stopReason = (event as any).delta?.stop_reason;
+          if (pendingText) {
+            const isIntermediate = stopReason === 'tool_use';
+            events.push({ type: 'text_complete', text: pendingText, isIntermediate, turnId: turnId || undefined });
+            setPendingText(null);
+          }
+        }
         if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-          events.push({ type: 'text_delta', text: event.delta.text });
+          events.push({ type: 'text_delta', text: event.delta.text, turnId: turnId || undefined });
         } else if (event.type === 'content_block_start' && event.content_block.type === 'tool_use') {
           const toolBlock = event.content_block;
           // Only emit if not already emitted
@@ -2019,11 +2622,64 @@ export class CraftAgent {
               name: toolBlock.name,
               input: {},
             });
+
+            // Register tool in parent-child hierarchy (see main docs above)
+            // Must happen here (stream_event) because it arrives before assistant message
+            const { PARENT_TOOL_NAMES, activeParentTools, parentToChildren, childToParent } = parentChildTracking;
+            const isParentTool = PARENT_TOOL_NAMES.includes(toolBlock.name);
+
+            // SDK provides parent_tool_use_id on stream events for tools running inside Task
+            // This is the authoritative source - use it when available
+            const sdkParentId = message.parent_tool_use_id;
+
+            // Debug: log what SDK provides for parent tracking
+            console.log(`[CraftAgent] TOOL START: ${toolBlock.name} (${toolBlock.id}), sdk_parent=${sdkParentId}, activeParents=[${Array.from(activeParentTools).join(',')}]`);
+
+            let parentToolUseId: string | undefined;
+            if (isParentTool) {
+              // This is a parent tool (Task, TaskOutput) - it can spawn children
+              activeParentTools.add(toolBlock.id);
+              parentToChildren.set(toolBlock.id, []);
+              console.log(`[CraftAgent] PARENT REGISTERED (stream): ${toolBlock.name} (${toolBlock.id})`);
+            } else if (sdkParentId && activeParentTools.has(sdkParentId)) {
+              // SDK provides correct parent for subagent tools - use it
+              parentToolUseId = sdkParentId;
+              parentToChildren.get(sdkParentId)?.push(toolBlock.id);
+              childToParent.set(toolBlock.id, sdkParentId);
+              console.log(`[CraftAgent] CHILD REGISTERED (stream/sdk): ${toolBlock.name} (${toolBlock.id}) under parent ${sdkParentId}`);
+            } else if (activeParentTools.size === 1) {
+              // Single active parent - unambiguous, assign directly
+              const parentId = Array.from(activeParentTools)[0]!;
+              parentToChildren.get(parentId)?.push(toolBlock.id);
+              childToParent.set(toolBlock.id, parentId);
+              parentToolUseId = parentId;
+              console.log(`[CraftAgent] CHILD REGISTERED (stream/single-parent): ${toolBlock.name} (${toolBlock.id}) under parent ${parentId}`);
+            } else if (activeParentTools.size > 1) {
+              // Multiple active parents - use SDK's parent_tool_use_id (authoritative source)
+              // sdkParentId is already extracted above from message.parent_tool_use_id
+              if (sdkParentId && activeParentTools.has(sdkParentId)) {
+                parentToChildren.get(sdkParentId)?.push(toolBlock.id);
+                childToParent.set(toolBlock.id, sdkParentId);
+                parentToolUseId = sdkParentId;
+                console.log(`[CraftAgent] CHILD REGISTERED (stream/sdk-parent): ${toolBlock.name} (${toolBlock.id}) → Task (${sdkParentId})`);
+              } else {
+                // Fallback: FIFO if SDK doesn't provide parent
+                const parentId = Array.from(activeParentTools)[0]!;
+                parentToChildren.get(parentId)?.push(toolBlock.id);
+                childToParent.set(toolBlock.id, parentId);
+                parentToolUseId = parentId;
+                console.log(`[CraftAgent] CHILD REGISTERED (stream/fifo-fallback): ${toolBlock.name} (${toolBlock.id}) → ${parentId} (sdk_parent=${sdkParentId})`);
+              }
+            }
+            // else: no active parents - tool is top-level, no parent needed
+
             events.push({
               type: 'tool_start',
               toolName: toolBlock.name,
               toolUseId: toolBlock.id,
               input: {},
+              turnId: turnId || undefined,
+              parentToolUseId,
             });
           }
         }
@@ -2042,22 +2698,94 @@ export class CraftAgent {
           this.onDebug(`User message for tool ${message.parent_tool_use_id}: hasResult=${hasResult}, pendingTools=${pendingToolUses.size}`);
         }
 
-        // User message (including tool results)
-        // For in-process MCP tools, parent_tool_use_id may be null
-        // In that case, match with the oldest pending tool
+        // ─────────────────────────────────────────────────────────────────────────
+        // TOOL RESULT MATCHING
+        // ─────────────────────────────────────────────────────────────────────────
+        // Three cases to handle:
+        //
+        // Case 1: parent_tool_use_id is a PARENT tool (Task, TaskOutput)
+        //   → Result is for a CHILD of that parent, match using FIFO
+        //
+        // Case 2: parent_tool_use_id is a regular tool ID
+        //   → Result is for that tool directly
+        //
+        // Case 3: parent_tool_use_id is null (in-process MCP tools)
+        //   → Use FIFO fallback with matchedToolIds to avoid double-matching
+        // ─────────────────────────────────────────────────────────────────────────
         if (message.tool_use_result !== undefined) {
           let toolUseId = message.parent_tool_use_id;
           let toolUse: { name: string; input: Record<string, unknown> } | undefined;
 
-          if (toolUseId) {
-            toolUse = pendingToolUses.get(toolUseId);
+          const { activeParentTools, parentToChildren, childToParent } = parentChildTracking;
+
+          if (toolUseId && activeParentTools.has(toolUseId)) {
+            // Case 1: parent_tool_use_id points to a PARENT tool (Task, TaskOutput)
+            // This result is for a CHILD of that parent, not the parent itself
+            // Match to the first unmatched child in FIFO order
+            const children = parentToChildren.get(toolUseId);
+            console.log(`[CraftAgent] RESULT MATCHING: parent=${toolUseId}, children.length=${children?.length || 0}`);
+            if (children && children.length > 0) {
+              const firstChild = children.shift()!; // Remove first child (FIFO)
+              console.log(`[CraftAgent] MATCHED TO CHILD: ${firstChild}`);
+              this.onDebug?.(`Matched child result: parent=${toolUseId}, child=${firstChild}`);
+              toolUseId = firstChild;
+              toolUse = pendingToolUses.get(toolUseId);
+              // Clean up child-to-parent mapping
+              childToParent.delete(firstChild);
+            } else {
+              // No more children in FIFO queue. But check if there are late-registered
+              // children in childToParent that haven't received results yet.
+              // This handles the race condition where children start after results arrive.
+              const pendingChildId = Array.from(childToParent.entries())
+                .find(([_, parentId]) => parentId === toolUseId)?.[0];
+
+              if (pendingChildId) {
+                // Match to a pending late-started child
+                console.log(`[CraftAgent] MATCHED TO LATE CHILD: ${pendingChildId} (parent=${toolUseId})`);
+                this.onDebug?.(`Matched late child result: parent=${toolUseId}, child=${pendingChildId}`);
+                toolUseId = pendingChildId;
+                toolUse = pendingToolUses.get(toolUseId);
+                childToParent.delete(pendingChildId);
+              } else {
+                // Truly no more children - this is the parent's own result
+                console.log(`[CraftAgent] NO CHILDREN LEFT - treating as parent's own result: ${toolUseId}`);
+                this.onDebug?.(`Parent tool completing: ${toolUseId} (no more children)`);
+                toolUse = pendingToolUses.get(toolUseId);
+                // Clean up parent tracking
+                activeParentTools.delete(toolUseId);
+                parentToChildren.delete(toolUseId);
+              }
+            }
+          } else if (toolUseId) {
+            // Case 2: parent_tool_use_id points to a tool we don't recognize as a parent
+            // This could be: (a) a regular tool's own result, or
+            // (b) a child result for a parent that already completed
+            // First check if this is a child result for a completed parent
+            const pendingChildId = Array.from(childToParent.entries())
+              .find(([_, parentId]) => parentId === toolUseId)?.[0];
+
+            if (pendingChildId) {
+              // This is a child result for a completed parent - match to the pending child
+              console.log(`[CraftAgent] MATCHED TO ORPHANED CHILD: ${pendingChildId} (parent=${toolUseId})`);
+              this.onDebug?.(`Matched orphaned child result: parent=${toolUseId}, child=${pendingChildId}`);
+              toolUseId = pendingChildId;
+              toolUse = pendingToolUses.get(toolUseId);
+              childToParent.delete(pendingChildId);
+            } else {
+              // Regular tool result - parent_tool_use_id is the tool's own ID
+              toolUse = pendingToolUses.get(toolUseId);
+            }
           } else if (pendingToolUses.size > 0) {
-            // parent_tool_use_id is null - match with first pending tool (FIFO order)
-            // Map iteration is in insertion order per ES6 spec
-            const firstEntry = pendingToolUses.entries().next().value;
-            if (firstEntry) {
-              [toolUseId, toolUse] = firstEntry;
-              this.onDebug?.(`Matched null parent_tool_use_id to pending tool: ${toolUseId} (${toolUse.name})`);
+            // Case 3: parent_tool_use_id is null (in-process MCP tools)
+            // Match with first pending tool not yet matched (FIFO)
+            for (const [id, use] of pendingToolUses.entries()) {
+              if (!matchedToolIds.has(id)) {
+                toolUseId = id;
+                toolUse = use;
+                matchedToolIds.add(id);
+                this.onDebug?.(`Matched null parent_tool_use_id to pending tool: ${toolUseId} (${toolUse.name})`);
+                break;
+              }
             }
           }
 
@@ -2074,24 +2802,6 @@ export class CraftAgent {
               }
             }
 
-            // Detect EnterPlanMode result - SDK handles this internally without PreToolUse
-            // We detect it from the result content or tool name
-            if (toolUse?.name === 'EnterPlanMode' || resultStr.includes('Entered plan mode')) {
-              this.onDebug?.('Detected EnterPlanMode result - entering plan mode');
-              this.planMode = true;
-              // Emit callback so UI can update React state
-              this.onPlanModeChange?.(true);
-            }
-
-            // Detect ExitPlanMode result - exit plan mode
-            // The SDK's ExitPlanMode presents the plan for approval, then normal conversation resumes
-            // Claude will wait for user approval before executing (per system prompt guidance)
-            if (toolUse?.name === 'ExitPlanMode') {
-              this.onDebug?.('Detected ExitPlanMode result - exiting plan mode, plan presented for approval');
-              this.planMode = false;
-              this.onPlanModeChange?.(false);
-            }
-
             // Check if result indicates an error
             const isError = this.isToolResultError(message.tool_use_result);
 
@@ -2101,24 +2811,134 @@ export class CraftAgent {
               result: resultStr,
               isError,
               input: toolUse?.input,
+              turnId: turnId || undefined,
+              // Include original parent_tool_use_id for parent-child tracking
+              parentToolUseId: message.parent_tool_use_id || undefined,
             });
 
+            // Detect background task start - Task tool with agent_id in result
+            if (toolUse?.name === 'Task' && !isError && resultStr) {
+              const agentIdMatch = resultStr.match(/agentId:\s*([a-zA-Z0-9_-]+)/);
+              if (agentIdMatch && agentIdMatch[1]) {
+                const taskId = agentIdMatch[1];
+                // Extract intent from tool input if available
+                const intentValue = toolUse.input._intent;
+                const event: AgentEvent = intentValue && typeof intentValue === 'string'
+                  ? {
+                      type: 'task_backgrounded',
+                      toolUseId,
+                      taskId,
+                      intent: intentValue,
+                      turnId: turnId || undefined,
+                    }
+                  : {
+                      type: 'task_backgrounded',
+                      toolUseId,
+                      taskId,
+                      turnId: turnId || undefined,
+                    };
+                events.push(event);
+              }
+            }
+
+            // Detect background shell start - Bash tool with shell_id or backgroundTaskId in result
+            if (toolUse?.name === 'Bash' && !isError && resultStr) {
+              // Match both old format (shell_id: xxx) and new JSON format ("backgroundTaskId": "xxx")
+              const shellIdMatch = resultStr.match(/shell_id:\s*([a-zA-Z0-9_-]+)/)
+                || resultStr.match(/"backgroundTaskId":\s*"([a-zA-Z0-9_-]+)"/);
+              if (shellIdMatch && shellIdMatch[1]) {
+                const shellId = shellIdMatch[1];
+                // Extract intent from tool input if available
+                const intentValue = (typeof toolUse.input._intent === 'string' && toolUse.input._intent)
+                  || (typeof toolUse.input.description === 'string' && toolUse.input.description)
+                  || undefined;
+                const event: AgentEvent = intentValue
+                  ? {
+                      type: 'shell_backgrounded',
+                      toolUseId,
+                      shellId,
+                      intent: intentValue,
+                      turnId: turnId || undefined,
+                    }
+                  : {
+                      type: 'shell_backgrounded',
+                      toolUseId,
+                      shellId,
+                      turnId: turnId || undefined,
+                    };
+                events.push(event);
+              }
+            }
+
             pendingToolUses.delete(toolUseId);
+            matchedToolIds.delete(toolUseId);
           }
         }
         break;
       }
 
       case 'tool_progress': {
-        // Debug: log tool_progress structure to understand when tools complete
-        if (this.onDebug) {
-          const progress = message as any;
-          this.onDebug(`tool_progress: tool_use_id=${progress.tool_use_id}, content_type=${progress.content?.type}, is_error=${progress.is_error}`);
+        // tool_progress events are emitted for subagent child tools
+        // These contain the correct parent_tool_use_id for tracking hierarchy
+        const progress = message as {
+          tool_use_id: string;
+          tool_name: string;
+          parent_tool_use_id: string | null;
+          elapsed_time_seconds?: number;
+        };
+
+        // Debug: log tool_progress structure
+        console.log(`[CraftAgent] tool_progress: tool=${progress.tool_name} (${progress.tool_use_id}), parent=${progress.parent_tool_use_id}, elapsed=${progress.elapsed_time_seconds}`);
+
+        // Forward elapsed time to UI for live progress updates
+        // Use parent_tool_use_id if this is a child tool, so progress updates the parent Task
+        if (progress.elapsed_time_seconds !== undefined) {
+          events.push({
+            type: 'task_progress',
+            toolUseId: progress.parent_tool_use_id || progress.tool_use_id,
+            elapsedSeconds: progress.elapsed_time_seconds,
+            turnId: turnId || undefined,
+          });
+        }
+
+        // Check if this is a child tool we haven't seen yet
+        if (!emittedToolStarts.has(progress.tool_use_id)) {
+          emittedToolStarts.add(progress.tool_use_id);
+          pendingToolUses.set(progress.tool_use_id, {
+            name: progress.tool_name,
+            input: {},
+          });
+
+          // Track parent-child relationship using SDK's parent_tool_use_id (authoritative source)
+          const { PARENT_TOOL_NAMES, activeParentTools, parentToChildren, childToParent } = parentChildTracking;
+          const isParentTool = PARENT_TOOL_NAMES.includes(progress.tool_name);
+
+          let parentToolUseId: string | undefined;
+          if (!isParentTool && progress.parent_tool_use_id && activeParentTools.has(progress.parent_tool_use_id)) {
+            // This is a child tool with correct parent from SDK
+            parentToolUseId = progress.parent_tool_use_id;
+            parentToChildren.get(progress.parent_tool_use_id)?.push(progress.tool_use_id);
+            childToParent.set(progress.tool_use_id, progress.parent_tool_use_id);
+            console.log(`[CraftAgent] CHILD REGISTERED (tool_progress/sdk): ${progress.tool_name} (${progress.tool_use_id}) → ${progress.parent_tool_use_id}`);
+          }
+
+          // Emit tool_start for this child tool
+          events.push({
+            type: 'tool_start',
+            toolName: progress.tool_name,
+            toolUseId: progress.tool_use_id,
+            input: {},
+            turnId: turnId || undefined,
+            parentToolUseId,
+          });
         }
         break;
       }
 
       case 'result': {
+        // Debug: log result message details (stderr to avoid SDK JSON pollution)
+        console.error(`[CraftAgent] result message: subtype=${message.subtype}, errors=${'errors' in message ? JSON.stringify((message as any).errors) : 'none'}`);
+
         // Build usage info with all token types
         // Total input = input_tokens + cache_creation + cache_read
         const cacheRead = message.usage.cache_read_input_tokens ?? 0;
@@ -2152,8 +2972,8 @@ export class CraftAgent {
           }
         } else if (message.subtype === 'compact_boundary') {
           events.push({
-            type: 'status',
-            message: `Compacted conversation (was ${message.compact_metadata.pre_tokens} tokens)`,
+            type: 'info',
+            message: 'Compacted Conversation',
           });
         } else if (message.subtype === 'status' && message.status === 'compacting') {
           events.push({ type: 'status', message: 'Compacting conversation...' });
@@ -2219,6 +3039,9 @@ export class CraftAgent {
   clearHistory(): void {
     // Clear session to start fresh conversation
     this.sessionId = null;
+    // Clear pinned state so next chat() will capture fresh values
+    this.pinnedPreferencesPrompt = null;
+    this.pinnedAgentDefinition = null;
   }
 
   interrupt(): void {
@@ -2248,14 +3071,10 @@ export class CraftAgent {
     return this.config.workspace;
   }
 
-  setWorkspace(workspace: Workspace, restoreSession: boolean = false): void {
+  setWorkspace(workspace: Workspace): void {
     this.config.workspace = workspace;
-    // Either restore the saved session ID from workspace or start fresh
-    if (restoreSession && workspace.sessionId) {
-      this.sessionId = workspace.sessionId;
-    } else {
-      this.sessionId = null;
-    }
+    // Clear session when switching workspaces - caller should set session separately if needed
+    this.sessionId = null;
     // Note: MCP proxy needs to be reinitialized by the caller (useAgent hook)
   }
 
@@ -2265,6 +3084,16 @@ export class CraftAgent {
 
   setSessionId(sessionId: string | null): void {
     this.sessionId = sessionId;
+  }
+
+  /**
+   * Update the working directory for this agent's session.
+   * Called when user changes the working directory in the UI.
+   */
+  updateWorkingDirectory(path: string): void {
+    if (this.config.session) {
+      this.config.session.workingDirectory = path;
+    }
   }
 
   getActiveAgentDefinition(): SubAgentDefinition | null {
@@ -2279,12 +3108,111 @@ export class CraftAgent {
    */
   setActiveAgentDefinition(
     definition: SubAgentDefinition | null,
-    mcpServers?: Record<string, { type: 'http' | 'sse'; url: string; headers?: Record<string, string> }>,
-    apiServers?: Record<string, ReturnType<typeof createSdkMcpServer>>
+    mcpServers?: Record<string, SdkMcpServerConfig>,
+    apiServers?: Record<string, ReturnType<typeof createSdkMcpServer>>,
+    sourcesNeedingAuth?: LoadedSource[]
   ): void {
-    this.activeAgentDefinition = definition;
+    // If sources need auth, inject setup instructions into the agent
+    if (definition && sourcesNeedingAuth && sourcesNeedingAuth.length > 0) {
+      const setupInstructions = this.buildSourceSetupInstructions(sourcesNeedingAuth);
+      const augmentedInstructions = definition.instructions
+        ? definition.instructions + '\n\n' + setupInstructions
+        : setupInstructions;
+
+      this.activeAgentDefinition = {
+        ...definition,
+        instructions: augmentedInstructions,
+      };
+      this.onDebug?.(`[CraftAgent] Injected setup instructions for ${sourcesNeedingAuth.length} source(s)`);
+    } else {
+      this.activeAgentDefinition = definition;
+    }
+
     this.agentMcpServers = mcpServers ?? {};
     this.agentApiServers = apiServers ?? {};
+  }
+
+  /**
+   * Build instructions for helping users set up sources that need authentication.
+   * These instructions are appended to the agent's instructions when sources need auth.
+   */
+  private buildSourceSetupInstructions(sources: LoadedSource[]): string {
+    const sourceNames = sources.map(s => s.config.name).join(', ');
+
+    return `## Source Authentication Assistance
+
+Some of your sources need authentication before they can be used (${sourceNames}). You have access to these tools:
+- \`source_oauth_trigger\`: Start OAuth authentication for MCP sources (opens browser)
+- \`source_credential_prompt\`: Prompt user for API keys/tokens via secure input UI
+- \`source_gmail_oauth_trigger\`: Start Google OAuth for Gmail sources
+- \`source_test\`: Test if a source connection works
+
+When you see <setup_required> in a message, help the user authenticate those sources before proceeding with their actual request. After successful authentication, the source tools will become available.`;
+  }
+
+  /**
+   * Set source servers (user-defined sources, separate from agent)
+   * These are MCP servers and API tools added via the source selector UI
+   * @param mcpServers Pre-built MCP server configs with auth headers
+   * @param apiServers In-process MCP servers for REST APIs
+   * @param intendedSlugs Optional list of source slugs that should be considered active
+   *                      (what the UI shows as active, even if build failed)
+   */
+  setSourceServers(
+    mcpServers: Record<string, SdkMcpServerConfig>,
+    apiServers: Record<string, ReturnType<typeof createSdkMcpServer>>,
+    intendedSlugs?: string[]
+  ): void {
+    this.sourceMcpServers = mcpServers;
+    this.sourceApiServers = apiServers;
+
+    // Update the set of active source server names for tool blocking
+    this.activeSourceServerNames = new Set([
+      ...Object.keys(mcpServers),
+      ...Object.keys(apiServers),
+    ]);
+
+    // Update intended active slugs (defaults to what actually built if not specified)
+    this.intendedActiveSlugs = new Set(intendedSlugs ?? [...this.activeSourceServerNames]);
+
+    this.onDebug?.(`Active source servers: ${[...this.activeSourceServerNames].join(', ') || 'none'}`);
+    if (intendedSlugs && intendedSlugs.length !== this.activeSourceServerNames.size) {
+      const failed = intendedSlugs.filter(s => !this.activeSourceServerNames.has(s));
+      if (failed.length > 0) {
+        this.onDebug?.(`Sources with failed builds: ${failed.join(', ')}`);
+      }
+    }
+  }
+
+  /**
+   * Check if a source server is currently active (enabled and authenticated)
+   * Used by PreToolUse hook to block tools from disabled sources
+   */
+  isSourceServerActive(serverName: string): boolean {
+    return this.activeSourceServerNames.has(serverName);
+  }
+
+  /**
+   * Get the set of active source server names
+   * Used to inform the agent about available sources
+   */
+  getActiveSourceServerNames(): Set<string> {
+    return this.activeSourceServerNames;
+  }
+
+  /**
+   * Set all sources in the workspace (for context injection)
+   * Called by Electron/TUI to provide full source list including disabled sources
+   */
+  setAllSources(sources: LoadedSource[]): void {
+    this.allSources = sources;
+  }
+
+  /**
+   * Get all sources in the workspace
+   */
+  getAllSources(): LoadedSource[] {
+    return this.allSources;
   }
 
   /**
@@ -2299,9 +3227,50 @@ export class CraftAgent {
    * Get SDK-compatible MCP server config for the active agent's custom MCP servers
    * Returns the pre-built config that was set via setActiveAgentDefinition()
    * The config is built by SubAgentManager.buildMcpServerConfig() which handles auth
+   *
+   * Filters out stdio servers if local MCP is disabled for the workspace.
+   * @returns Object with filtered servers and names of any skipped stdio servers
    */
-  private getAgentMcpServers(): Record<string, { type: 'http' | 'sse'; url: string; headers?: Record<string, string> }> {
-    return this.agentMcpServers;
+  private getAgentMcpServersFiltered(): { servers: Record<string, SdkMcpServerConfig>; skipped: string[] } {
+    return this.filterMcpServersByLocalEnabled(this.agentMcpServers);
+  }
+
+  /**
+   * Get filtered source MCP servers based on local MCP setting
+   * @returns Object with filtered servers and names of any skipped stdio servers
+   */
+  private getSourceMcpServersFiltered(): { servers: Record<string, SdkMcpServerConfig>; skipped: string[] } {
+    return this.filterMcpServersByLocalEnabled(this.sourceMcpServers);
+  }
+
+  /**
+   * Filter MCP servers based on whether local (stdio) MCP is enabled for this workspace.
+   * When local MCP is disabled, stdio servers are filtered out.
+   *
+   * @returns Object with filtered servers and names of any skipped stdio servers
+   */
+  private filterMcpServersByLocalEnabled(
+    servers: Record<string, SdkMcpServerConfig>
+  ): { servers: Record<string, SdkMcpServerConfig>; skipped: string[] } {
+    const localEnabled = isLocalMcpEnabled(this.workspaceRootPath);
+
+    if (localEnabled) {
+      // Local MCP is enabled, return all servers
+      return { servers, skipped: [] };
+    }
+
+    // Local MCP is disabled, filter out stdio servers
+    const filtered: Record<string, SdkMcpServerConfig> = {};
+    const skipped: string[] = [];
+    for (const [name, config] of Object.entries(servers)) {
+      if (config.type !== 'stdio') {
+        filtered[name] = config;
+      } else {
+        debug(`[filterMcpServers] Filtering out stdio server "${name}" (local MCP disabled)`);
+        skipped.push(name);
+      }
+    }
+    return { servers: filtered, skipped };
   }
 
   /**
@@ -2339,10 +3308,30 @@ export class CraftAgent {
     this.agentApiServers = {};
     this.temporaryClarifications = null;
 
+    // Clear pinned system prompt state
+    this.pinnedPreferencesPrompt = null;
+    this.pinnedAgentDefinition = null;
+
     // Clear callbacks
     this.onPermissionRequest = null;
     this.onDebug = null;
     this.onAskUserQuestion = null;
+    this.onPlanSubmitted = null;
+    this.onSourceChange = null;
+    this.onSourcesListChange = null;
+    this.onAgentChange = null;
+    this.onAgentsListChange = null;
+    this.onConfigValidationError = null;
+
+    // Stop config watcher
+    this.stopConfigWatcher();
+
+    // Clean up session-specific state
+    const configSessionId = this.config.session?.id;
+    if (configSessionId) {
+      cleanupModeState(configSessionId);
+      cleanupSessionScopedTools(configSessionId);
+    }
 
     // Clear session
     this.sessionId = null;

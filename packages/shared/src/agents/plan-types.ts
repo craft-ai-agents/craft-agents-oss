@@ -1,8 +1,9 @@
 /**
- * Plan Mode Types
+ * Plan Types
  *
- * Defines the structure for planning mode, which allows Claude to create
- * and refine plans before execution, ensuring alignment on complex tasks.
+ * Defines the structure for plans and plan-related types.
+ * Plans are used for structured task execution with user review.
+ * Safe Mode is a separate UI feature for read-only exploration.
  */
 
 import { randomUUID } from 'crypto';
@@ -124,6 +125,27 @@ export interface PlanSuggestion {
 }
 
 /**
+ * Request sent to UI when a plan is ready for review
+ */
+export interface PlanReviewRequest {
+  /** Unique identifier for this review request */
+  requestId: string;
+  /** The plan to review */
+  plan: Plan;
+  /** Optional questions from Claude that need user input */
+  questions?: string[];
+}
+
+/**
+ * Result of a plan review from the user
+ */
+export type PlanReviewResult =
+  | { action: 'approve'; modifiedPlan?: Plan }
+  | { action: 'refine'; feedback: string }
+  | { action: 'saveOnly'; modifiedPlan?: Plan }
+  | { action: 'cancel' };
+
+/**
  * Helper to create a new plan
  */
 export function createPlan(title: string, context: string): Plan {
@@ -185,25 +207,24 @@ export function addRefinementEntry(
   };
 }
 
-// NOTE: Plan mode uses Craft-specific tools (not SDK's EnterPlanMode/ExitPlanMode):
-// 1. User enters plan mode via SHIFT+TAB or /plan start
-// 2. Claude uses CraftAskUserQuestion to clarify requirements
-// 3. Claude calls ExitCraftAgentsPlanMode with a structured plan
-// 4. User reviews via PlanReview UI (approve/refine/cancel)
-// This provides better UX with interactive question/answer and structured plan review.
-
 // ============================================
-// Plan Mode UI Messages (single source of truth)
+// Permission Mode UI Messages (single source of truth)
 // ============================================
+// Permission modes control tool execution behavior.
+// User can cycle via SHIFT+TAB: Safe → Ask → Allow All → Safe
 
-/** Message shown to user when entering plan mode */
-export const PLAN_MODE_ENTER_MESSAGE = 'Plan mode active. Describe what you want to accomplish.';
+import type { PermissionMode } from '../agent/mode-manager.ts';
 
-/** Message shown to user when exiting plan mode */
-export const PLAN_MODE_EXIT_MESSAGE = 'Exited plan mode.';
+/** User-visible messages for each permission mode */
+export const PERMISSION_MODE_MESSAGES: Record<PermissionMode, string> = {
+  'safe': 'Safe mode active. Read-only exploration enabled.',
+  'ask': 'Ask mode active. Prompts for dangerous operations.',
+  'allow-all': 'Allow-all mode active. All operations permitted.',
+};
 
-/** System prompt sent to Claude when entering plan mode via Shift+Tab */
-export const PLAN_MODE_ENTER_PROMPT = 'The user wants to enter planning mode. Call the EnterCraftAgentsPlanMode tool to enter plan mode, then wait for the user to describe their task.';
-
-/** System prompt sent to Claude when exiting plan mode via Shift+Tab */
-export const PLAN_MODE_EXIT_PROMPT = 'The user wants to exit planning mode. Ask how can you help.';
+/** System prompts sent to Claude when mode changes */
+export const PERMISSION_MODE_PROMPTS: Record<PermissionMode, string> = {
+  'safe': 'The user has switched to Safe mode (read-only). You can read files, search, and explore the codebase, but write operations (Bash, Write, Edit, API calls) are blocked. Focus on understanding and explaining rather than making changes.',
+  'ask': 'The user has switched to Ask mode. Most operations are allowed, but dangerous bash commands will prompt for user approval. You have access to write operations.',
+  'allow-all': 'The user has switched to Allow-all mode. All operations are permitted without prompts. Use with care.',
+};

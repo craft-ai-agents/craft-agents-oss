@@ -4,14 +4,12 @@
 
 // Workspace and config types
 export type {
-  McpAuthType,
   Workspace,
   AuthType,
   OAuthCredentials,
   TokenDisplayMode,
   CumulativeUsage,
   StoredConfig,
-  WorkspaceAuthStatus,
 } from './workspace.ts';
 
 // Session types
@@ -19,6 +17,7 @@ export type {
   Session,
   StoredSession,
   SessionMetadata,
+  SessionStatus,
 } from './session.ts';
 
 // Message types
@@ -31,6 +30,8 @@ export type {
   Message,
   StoredMessage,
   TokenUsage,
+  AgentEventUsage,
+  RecoveryAction,
   TypedError,
   Question,
   PermissionRequest,
@@ -44,7 +45,6 @@ export type {
   SubAgentDefinition,
   McpServerConfig,
   ApiConfig,
-  Concern,
   ActiveAgentState,
   CachedSubAgent,
   AgentRegistry,

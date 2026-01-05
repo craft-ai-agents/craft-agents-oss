@@ -19,14 +19,12 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { AgentStateManager } from '@craft-agent/shared/agents';
-import { SubAgentManager } from '@craft-agent/shared/agents';
+import { AgentStateManager, FolderAgentManager } from '@craft-agent/shared/agents';
 import type {
   AgentStatus,
   SubAgentDefinition,
   McpServerConfig,
   ApiConfig,
-  Concern,
   AgentActivateOptions,
 } from '@craft-agent/shared/agents';
 import { createApiServer } from '@craft-agent/shared/agents';
@@ -39,7 +37,6 @@ export interface UseAgentStateResult {
   // Convenience booleans for status checking
   isIdle: boolean;
   isExtracting: boolean;
-  isNeedsReview: boolean;
   isNeedsMcpAuth: boolean;
   isNeedsApiAuth: boolean;
   isReady: boolean;
@@ -53,15 +50,12 @@ export interface UseAgentStateResult {
   extractionMessage: string | null;
   errorMessage: string | null;
 
-  // Pending auth/review data (derived from status)
-  pendingConcerns: Concern[] | null;
+  // Pending auth data (derived from status)
   pendingMcpServers: McpServerConfig[] | null;
   pendingApis: ApiConfig[] | null;
 
   // Actions
   activate: (agentId: string, options?: AgentActivateOptions) => Promise<AgentStatus>;
-  continueAfterReview: (answers: Record<string, string>) => Promise<AgentStatus>;
-  skipReview: () => Promise<AgentStatus>;
   continueAfterMcpAuth: () => Promise<AgentStatus>;
   continueAfterApiAuth: () => Promise<AgentStatus>;
   deactivate: () => Promise<void>;
@@ -84,22 +78,22 @@ export interface UseAgentStateResult {
 
 export function useAgentState(
   workspaceId: string,
-  subAgentManager: SubAgentManager | null
+  folderAgentManager: FolderAgentManager | null
 ): UseAgentStateResult {
   const [status, setStatus] = useState<AgentStatus>({ status: 'idle' });
   const [isLoading, setIsLoading] = useState(false);
   const managerRef = useRef<AgentStateManager | null>(null);
 
-  // Create/update manager when workspace or subAgentManager changes
+  // Create/update manager when workspace or folderAgentManager changes
   useEffect(() => {
-    if (!subAgentManager) {
+    if (!folderAgentManager) {
       managerRef.current = null;
       setStatus({ status: 'idle' });
       return;
     }
 
     debug('[useAgentState] Creating AgentStateManager for workspace:', workspaceId);
-    const manager = new AgentStateManager(workspaceId, subAgentManager);
+    const manager = new AgentStateManager(workspaceId, folderAgentManager);
     managerRef.current = manager;
 
     // Subscribe to status changes
@@ -116,12 +110,11 @@ export function useAgentState(
       unsubscribe();
       managerRef.current = null;
     };
-  }, [workspaceId, subAgentManager]);
+  }, [workspaceId, folderAgentManager]);
 
   // Derive convenience booleans from status
   const isIdle = status.status === 'idle';
   const isExtracting = status.status === 'extracting';
-  const isNeedsReview = status.status === 'needs_review';
   const isNeedsMcpAuth = status.status === 'needs_mcp_auth';
   const isNeedsApiAuth = status.status === 'needs_api_auth';
   const isReady = status.status === 'ready';
@@ -138,7 +131,6 @@ export function useAgentState(
   const extractionMessage = status.status === 'extracting' ? status.message : null;
   const errorMessage = status.status === 'error' ? status.error : null;
 
-  const pendingConcerns = status.status === 'needs_review' ? status.concerns : null;
   const pendingMcpServers = status.status === 'needs_mcp_auth' ? status.servers : null;
   const pendingApis = status.status === 'needs_api_auth' ? status.apis : null;
 
@@ -158,35 +150,6 @@ export function useAgentState(
     },
     []
   );
-
-  const continueAfterReview = useCallback(
-    async (answers: Record<string, string>): Promise<AgentStatus> => {
-      if (!managerRef.current) {
-        debug('[useAgentState.continueAfterReview] No manager available');
-        return status;
-      }
-      setIsLoading(true);
-      try {
-        return await managerRef.current.continueAfterReview(answers);
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [status]
-  );
-
-  const skipReview = useCallback(async (): Promise<AgentStatus> => {
-    if (!managerRef.current) {
-      debug('[useAgentState.skipReview] No manager available');
-      return status;
-    }
-    setIsLoading(true);
-    try {
-      return await managerRef.current.continueAfterReview({});
-    } finally {
-      setIsLoading(false);
-    }
-  }, [status]);
 
   const continueAfterMcpAuth = useCallback(async (): Promise<AgentStatus> => {
     if (!managerRef.current) {
@@ -277,7 +240,6 @@ export function useAgentState(
     status,
     isIdle,
     isExtracting,
-    isNeedsReview,
     isNeedsMcpAuth,
     isNeedsApiAuth,
     isReady,
@@ -288,12 +250,9 @@ export function useAgentState(
     agentName,
     extractionMessage,
     errorMessage,
-    pendingConcerns,
     pendingMcpServers,
     pendingApis,
     activate,
-    continueAfterReview,
-    skipReview,
     continueAfterMcpAuth,
     continueAfterApiAuth,
     deactivate,

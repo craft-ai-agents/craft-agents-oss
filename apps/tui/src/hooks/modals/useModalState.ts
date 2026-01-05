@@ -9,7 +9,6 @@ export type ModalName =
   | 'help'
   | 'agentMenu'
   | 'workspaceSelector'
-  | 'workspaceAdd'
   | 'workspaceRename'
   | 'apiKeyChange'
   | 'claudeMaxAuth'

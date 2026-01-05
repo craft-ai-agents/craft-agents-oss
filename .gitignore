@@ -6,6 +6,8 @@ out
 dist
 *.tgz
 .build
+apps/electron/release
+apps/electron/build
 
 # code coverage
 coverage
@@ -36,3 +38,9 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # Claude Code local settings (user-specific)
 .claude/settings.local.json
+
+# Accidental literal tilde directories (Node.js doesn't expand ~)
+~/
+
+# Lock files from other package managers
+pnpm-lock.yaml

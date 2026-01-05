@@ -13,6 +13,11 @@ import type {
   StoredAttachment as CoreStoredAttachment,
 } from '@craft-agent/core/types';
 
+// Import mode types from dedicated subpath export (avoids pulling in SDK)
+import type { PermissionMode } from '@craft-agent/shared/agent/modes';
+export type { PermissionMode };
+export { PERMISSION_MODE_CONFIG } from '@craft-agent/shared/agent/modes';
+
 export type {
   CoreMessage as Message,
   CoreMessageRole as MessageRole,
@@ -25,13 +30,14 @@ export type {
 };
 
 // Import and re-export agent types for Info dialog
+// Use types-only subpath to avoid pulling in debug.ts (Node.js fs dependency)
 import type {
   SubAgentDefinition,
   McpServerConfig,
   ApiConfig,
   AgentStatus,
   AgentActivateOptions,
-} from '@craft-agent/shared/agents';
+} from '@craft-agent/shared/agents/types';
 
 export type {
   SubAgentDefinition,
@@ -42,9 +48,14 @@ export type {
 };
 
 // Import and re-export auth types for onboarding
-import type { AuthState, SetupNeeds } from '@craft-agent/shared/auth';
-import type { AuthType } from '@craft-agent/shared/config';
+// Use types-only subpaths to avoid pulling in Node.js dependencies
+import type { AuthState, SetupNeeds } from '@craft-agent/shared/auth/types';
+import type { AuthType } from '@craft-agent/shared/config/types';
 export type { AuthState, SetupNeeds, AuthType };
+
+// Import source types for session source selection
+import type { LoadedSource, FolderSourceConfig, SourceConnectionStatus } from '@craft-agent/shared/sources/types';
+export type { LoadedSource, FolderSourceConfig, SourceConnectionStatus };
 export { generateMessageId } from '@craft-agent/core/types';
 
 /**
@@ -73,10 +84,28 @@ export interface McpValidationResult {
 }
 
 /**
- * Agent setup status - indicates if agent needs setup or auth
+ * MCP tool with safe mode permission status
+ */
+export interface McpToolWithPermission {
+  name: string
+  description?: string
+  allowed: boolean  // true if allowed in safe mode, false if requires permission
+}
+
+/**
+ * Result of fetching MCP tools with permission status
+ */
+export interface McpToolsResult {
+  success: boolean
+  error?: string
+  tools?: McpToolWithPermission[]
+}
+
+/**
+ * Agent activation status - indicates if agent needs activation or auth
  */
 export interface AgentSetupStatus {
-  needsSetup: boolean  // Agent definition has never been extracted
+  needsSetup: boolean  // Agent definition has never been extracted (needs activation)
   needsAuth: boolean   // Definition exists but credentials are missing
   reason?: string
 }
@@ -92,6 +121,91 @@ export interface PermissionRequest extends BasePermissionRequest {
   sessionId: string
 }
 
+// ============================================
+// Credential Input Types (Secure Auth UI)
+// ============================================
+
+/**
+ * Credential input modes for different auth types
+ */
+export type CredentialInputMode =
+  | 'bearer'      // Single token field (Bearer Token, API Key)
+  | 'basic'       // Username + Password fields
+  | 'header'      // API Key with custom header name
+  | 'query'       // API Key for query parameter
+
+/**
+ * Credential request from agent - triggers secure input UI
+ */
+export interface CredentialRequest {
+  requestId: string
+  sessionId: string
+  /** Source slug to associate credentials with */
+  sourceSlug: string
+  /** Display name for the source/service */
+  sourceName: string
+  /** What type of credential input to show */
+  mode: CredentialInputMode
+  /** Custom labels for fields */
+  labels?: {
+    /** Label for primary credential field (default: "API Key" or "Bearer Token") */
+    credential?: string
+    /** Label for username field in basic auth (default: "Username") */
+    username?: string
+    /** Label for password field in basic auth (default: "Password") */
+    password?: string
+  }
+  /** Optional description/instructions */
+  description?: string
+  /** Optional hint about where to find the credential */
+  hint?: string
+  /** For header auth - the header name being used */
+  headerName?: string
+}
+
+/**
+ * Credential response from user
+ */
+export interface CredentialResponse {
+  type: 'credential'
+  /** Single value for bearer/header/query modes */
+  value?: string
+  /** Username for basic auth */
+  username?: string
+  /** Password for basic auth */
+  password?: string
+  /** Whether user cancelled */
+  cancelled: boolean
+}
+
+// ============================================
+// Plan Types (SubmitPlan workflow)
+// ============================================
+
+/**
+ * Step in a plan
+ */
+export interface PlanStep {
+  id: string
+  description: string
+  tools?: string[]
+  status?: 'pending' | 'in_progress' | 'completed' | 'failed' | 'skipped'
+}
+
+/**
+ * Plan from the agent
+ */
+export interface Plan {
+  id: string
+  title: string
+  summary?: string
+  steps: PlanStep[]
+  questions?: string[]
+  state?: 'creating' | 'refining' | 'ready' | 'executing' | 'completed' | 'cancelled'
+  createdAt?: number
+  updatedAt?: number
+}
+
 /**
  * MCP server with auth status for Info dialog
  */
@@ -101,6 +215,7 @@ export interface McpServerWithAuthStatus {
   requiresAuth?: boolean
   hasAuth: boolean  // Whether credentials have been provided
   tools?: string[]
+  logo?: string  // Local logo filename (e.g., "craft.png")
 }
 
 /**
@@ -111,6 +226,7 @@ export interface ApiWithAuthStatus {
   baseUrl: string
   auth?: { type: string; credentialLabel?: string; secretLabel?: string }
   hasAuth: boolean  // Whether credentials have been provided
+  logo?: string  // Local logo filename (e.g., "exa.png")
 }
 
 /**
@@ -132,17 +248,7 @@ export interface CraftSpace {
   id: string
   name: string
   teamId?: string | null
-}
-
-/**
- * MCP link from a Craft space
- */
-export interface CraftMcpLink {
-  linkId: string
-  name: string
-  mcpUrl?: string
-  scope: string
-  enabled: boolean
+  iconUrl?: string | null
 }
 
 /**
@@ -192,6 +298,25 @@ import type { Message } from '@craft-agent/core/types';
  * Electron-specific Session type (includes runtime state)
  * Extends core Session with messages array and processing state
  */
+/**
+ * Todo state for sessions (user-controlled, never automatic)
+ *
+ * Dynamic status ID referencing workspace status config.
+ * Validated at runtime via validateSessionStatus().
+ * Falls back to 'todo' if status doesn't exist.
+ *
+ * Built-in status IDs (for reference):
+ * - 'todo': Not started
+ * - 'in-progress': Currently working on
+ * - 'needs-review': Awaiting review
+ * - 'done': Completed successfully
+ * - 'cancelled': Cancelled/abandoned
+ */
+export type TodoState = string
+
+// Helper type for TypeScript consumers
+export type BuiltInStatusId = 'todo' | 'in-progress' | 'needs-review' | 'done' | 'cancelled'
+
 export interface Session {
   id: string
   workspaceId: string
@@ -200,25 +325,83 @@ export interface Session {
   lastMessageAt: number
   messages: Message[]
   isProcessing: boolean
-  // Inbox/Archive features (from core SessionMetadata)
+  // Session metadata
   agentId?: string
   agentName?: string
-  isArchived?: boolean
+  isFlagged?: boolean
+  // Advanced options (persisted per session)
+  /** Permission mode for this session ('safe', 'ask', 'allow-all') */
+  permissionMode?: PermissionMode
+  // Todo state (user-controlled) - determines inbox vs completed
+  todoState?: TodoState
+  // Read/unread tracking - ID of last message user has read
+  lastReadMessageId?: string
+  // Per-session source selection (source slugs)
+  enabledSourceSlugs?: string[]
+  // Working directory for this session (used by agent for bash commands)
+  workingDirectory?: string
+  // Current status for ProcessingIndicator (e.g., compacting)
+  currentStatus?: {
+    message: string
+    statusType?: string
+  }
+}
+
+// AskUserQuestion types (matches shared/agent/craft-agent.ts)
+export interface QuestionOption {
+  label: string;
+  description: string;
+}
+
+export interface Question {
+  question: string;
+  header: string;
+  options: QuestionOption[];
+  multiSelect: boolean;
+}
+
+export interface AskQuestionRequest {
+  requestId: string;
+  questions: Question[];
 }
 
 // Events sent from main to renderer
+// turnId: Correlation ID from the API's message.id, groups all events in an assistant turn
 export type SessionEvent =
-  | { type: 'text_delta'; sessionId: string; delta: string }
-  | { type: 'text_complete'; sessionId: string; text: string }
-  | { type: 'tool_start'; sessionId: string; toolName: string; toolUseId: string; toolInput: Record<string, unknown> }
-  | { type: 'tool_result'; sessionId: string; toolUseId: string; toolName: string; result: string }
+  | { type: 'text_delta'; sessionId: string; delta: string; turnId?: string }
+  | { type: 'text_complete'; sessionId: string; text: string; isIntermediate?: boolean; turnId?: string; parentToolUseId?: string }
+  | { type: 'tool_start'; sessionId: string; toolName: string; toolUseId: string; toolInput: Record<string, unknown>; toolIntent?: string; toolDisplayName?: string; turnId?: string; parentToolUseId?: string }
+  | { type: 'tool_result'; sessionId: string; toolUseId: string; toolName: string; result: string; turnId?: string; parentToolUseId?: string; isError?: boolean }
+  | { type: 'parent_update'; sessionId: string; toolUseId: string; parentToolUseId: string }
   | { type: 'error'; sessionId: string; error: string }
   | { type: 'typed_error'; sessionId: string; error: TypedError }
   | { type: 'complete'; sessionId: string }
-  | { type: 'status'; sessionId: string; message: string }
+  | { type: 'interrupted'; sessionId: string; message?: Message }
+  | { type: 'status'; sessionId: string; message: string; statusType?: 'compacting' }
+  | { type: 'info'; sessionId: string; message: string; statusType?: 'compaction_complete'; level?: 'info' | 'warning' | 'error' | 'success' }
   | { type: 'title_generated'; sessionId: string; title: string }
+  | { type: 'working_directory_changed'; sessionId: string; workingDirectory: string }
   | { type: 'agent_status'; sessionId: string; status: AgentStatus }
   | { type: 'permission_request'; sessionId: string; request: PermissionRequest }
+  | { type: 'credential_request'; sessionId: string; request: CredentialRequest }
+  // Permission mode events
+  | { type: 'permission_mode_changed'; sessionId: string; permissionMode: PermissionMode }
+  | { type: 'plan_submitted'; sessionId: string; message: CoreMessage }
+  | { type: 'ask_question_request'; sessionId: string; request: AskQuestionRequest }
+  // Source events
+  | { type: 'sources_changed'; sessionId: string; enabledSourceSlugs: string[] }
+  // Background task/shell events
+  | { type: 'task_backgrounded'; sessionId: string; toolUseId: string; taskId: string; intent?: string; turnId?: string }
+  | { type: 'shell_backgrounded'; sessionId: string; toolUseId: string; shellId: string; intent?: string; turnId?: string }
+  | { type: 'task_progress'; sessionId: string; toolUseId: string; elapsedSeconds: number; turnId?: string }
+  // User message events (for optimistic UI with backend as source of truth)
+  | { type: 'user_message'; sessionId: string; message: Message; status: 'accepted' | 'queued' | 'processing' }
+
+// Options for sendMessage
+export interface SendMessageOptions {
+  /** Enable ultrathink mode for extended reasoning */
+  ultrathinkEnabled?: boolean
+}
 
 // IPC channel names
 export const IPC_CHANNELS = {
@@ -229,12 +412,31 @@ export const IPC_CHANNELS = {
   RENAME_SESSION: 'sessions:rename',
   SEND_MESSAGE: 'sessions:sendMessage',
   CANCEL_PROCESSING: 'sessions:cancel',
-  ARCHIVE_SESSION: 'sessions:archive',
-  UNARCHIVE_SESSION: 'sessions:unarchive',
+  KILL_SHELL: 'sessions:killShell',
+  GET_TASK_OUTPUT: 'tasks:getOutput',
+  FLAG_SESSION: 'sessions:flag',
+  UNFLAG_SESSION: 'sessions:unflag',
+  SET_TODO_STATE: 'sessions:setTodoState',
+  MARK_SESSION_READ: 'sessions:markRead',
+  MARK_SESSION_UNREAD: 'sessions:markUnread',
   RESPOND_TO_PERMISSION: 'sessions:respondToPermission',
+  RESPOND_TO_CREDENTIAL: 'sessions:respondToCredential',
+  UPDATE_WORKING_DIRECTORY: 'sessions:updateWorkingDirectory',
+  SHOW_SESSION_IN_FINDER: 'sessions:showInFinder',
+
+  // Permission mode management ('safe', 'ask', 'allow-all')
+  SET_PERMISSION_MODE: 'sessions:setPermissionMode',
 
   // Workspace management
   GET_WORKSPACES: 'workspaces:get',
+  CREATE_WORKSPACE: 'workspaces:create',
+
+  // Window management
+  GET_WINDOW_WORKSPACE: 'window:getWorkspace',
+  GET_WINDOW_MODE: 'window:getMode',
+  OPEN_WORKSPACE: 'window:openWorkspace',
+  SWITCH_WORKSPACE: 'window:switchWorkspace',
+  CLOSE_WINDOW: 'window:close',
 
   // Agent management
   GET_AGENTS: 'agents:get',
@@ -245,6 +447,7 @@ export const IPC_CHANNELS = {
   GET_AGENT_DEFINITION: 'agents:getDefinition',
   RELOAD_AGENT: 'agents:reloadAgent',
   RESET_AGENT: 'agents:resetAgent',
+  ENSURE_BUILTIN_AGENT: 'agents:ensureBuiltinAgent',
 
   // Agent authentication
   GET_AGENT_AUTH_REQUIREMENTS: 'agents:getAuthRequirements',
@@ -253,19 +456,20 @@ export const IPC_CHANNELS = {
   SAVE_API_CREDENTIALS: 'agents:saveApiCredentials',
   VALIDATE_MCP_CONNECTION: 'agents:validateMcpConnection',
 
-  // Agent state management (unified state machine)
-  AGENT_GET_STATUS: 'agent:getStatus',
-  AGENT_ACTIVATE: 'agent:activate',
-  AGENT_CONTINUE_REVIEW: 'agent:continueReview',
-  AGENT_CONTINUE_MCP_AUTH: 'agent:continueMcpAuth',
-  AGENT_CONTINUE_API_AUTH: 'agent:continueApiAuth',
-  AGENT_DEACTIVATE: 'agent:deactivate',
-  AGENT_RELOAD: 'agent:reload',
-  AGENT_RESET: 'agent:reset',
-  AGENT_MARK_ACTIVE: 'agent:markActive',
+  // Agent state management (unified state machine, agent-scoped by workspaceId:agentId)
+  AGENT_GET_STATUS: 'agent:getStatus',           // (workspaceId, agentId) → AgentStatus
+  AGENT_ACTIVATE: 'agent:activate',               // (workspaceId, agentId, options?) → AgentStatus
+  AGENT_CONTINUE_MCP_AUTH: 'agent:continueMcpAuth', // (workspaceId, agentId) → AgentStatus
+  AGENT_CONTINUE_API_AUTH: 'agent:continueApiAuth', // (workspaceId, agentId) → AgentStatus
+  AGENT_DEACTIVATE: 'agent:deactivate',           // (workspaceId, agentId) → void
+  AGENT_RELOAD: 'agent:reload',                   // (workspaceId, agentId) → AgentStatus
+  AGENT_RESET: 'agent:reset',                     // (workspaceId, agentId) → void
+  AGENT_MARK_ACTIVE: 'agent:markActive',          // (workspaceId, agentId) → void
 
   // Events from main to renderer
   SESSION_EVENT: 'session:event',
+  AGENT_STATUS_CHANGED: 'agent:statusChanged',    // Broadcast: { workspaceId, agentId, status } - complete state including needsSetup/needsAuth
+  AGENTS_CHANGED: 'agents:changed',               // Broadcast: agents list changed (created/synced/deleted) - triggers sidebar refresh
 
   // File operations
   READ_FILE: 'file:read',
@@ -280,27 +484,32 @@ export const IPC_CHANNELS = {
 
   // System
   GET_VERSIONS: 'system:versions',
+  GET_HOME_DIR: 'system:homeDir',
 
   // Shell operations (open external URLs/files)
   OPEN_URL: 'shell:openUrl',
   OPEN_FILE: 'shell:openFile',
+  SHOW_IN_FOLDER: 'shell:showInFolder',
 
   // Menu actions (main → renderer)
   MENU_NEW_CHAT: 'menu:newChat',
+  MENU_NEW_CHAT_TAB: 'menu:newChatTab',
   MENU_OPEN_SETTINGS: 'menu:openSettings',
   MENU_KEYBOARD_SHORTCUTS: 'menu:keyboardShortcuts',
   MENU_OPEN_HELP: 'menu:openHelp',
 
+  // Deep link navigation (main → renderer)
+  DEEP_LINK_NAVIGATE: 'deeplink:navigate',
+
   // Auth
   LOGOUT: 'auth:logout',
   SHOW_LOGOUT_CONFIRMATION: 'auth:showLogoutConfirmation',
+  SHOW_DELETE_SESSION_CONFIRMATION: 'auth:showDeleteSessionConfirmation',
 
   // Onboarding
   ONBOARDING_GET_AUTH_STATE: 'onboarding:getAuthState',
   ONBOARDING_START_CRAFT_OAUTH: 'onboarding:startCraftOAuth',
   ONBOARDING_GET_CRAFT_PROFILE: 'onboarding:getCraftProfile',
-  ONBOARDING_GET_MCP_LINKS: 'onboarding:getMcpLinks',
-  ONBOARDING_CREATE_MCP_LINK: 'onboarding:createMcpLink',
   ONBOARDING_VALIDATE_MCP: 'onboarding:validateMcp',
   ONBOARDING_START_MCP_OAUTH: 'onboarding:startMcpOAuth',
   ONBOARDING_SAVE_CONFIG: 'onboarding:saveConfig',
@@ -312,7 +521,206 @@ export const IPC_CHANNELS = {
   // Settings - Billing
   SETTINGS_GET_BILLING_METHOD: 'settings:getBillingMethod',
   SETTINGS_UPDATE_BILLING_METHOD: 'settings:updateBillingMethod',
+  SETTINGS_GET_CREDITS_URL: 'settings:getCreditsUrl',
+
+  // Settings - Model
+  SETTINGS_GET_MODEL: 'settings:getModel',
+  SETTINGS_SET_MODEL: 'settings:setModel',
+
+  // Settings - New Session Defaults
+  SETTINGS_GET_DEFAULT_PERMISSION_MODE: 'settings:getDefaultPermissionMode',
+  SETTINGS_SET_DEFAULT_PERMISSION_MODE: 'settings:setDefaultPermissionMode',
+  SETTINGS_GET_DEFAULT_WORKING_DIR: 'settings:getDefaultWorkingDir',
+  SETTINGS_SET_DEFAULT_WORKING_DIR: 'settings:setDefaultWorkingDir',
+
+  // Folder dialog (for selecting working directory)
+  OPEN_FOLDER_DIALOG: 'dialog:openFolder',
+
+  // User Preferences
+  PREFERENCES_READ: 'preferences:read',
+  PREFERENCES_WRITE: 'preferences:write',
+
+  // Session Drafts (input text persisted across app restarts)
+  DRAFTS_GET: 'drafts:get',
+  DRAFTS_SET: 'drafts:set',
+  DRAFTS_DELETE: 'drafts:delete',
+  DRAFTS_GET_ALL: 'drafts:getAll',
+
+  // Sources (workspace-scoped)
+  SOURCES_GET: 'sources:get',
+  SOURCES_CREATE: 'sources:create',
+  SOURCES_DELETE: 'sources:delete',
+  SOURCES_START_OAUTH: 'sources:startOAuth',
+  SOURCES_SAVE_CREDENTIALS: 'sources:saveCredentials',
+  SOURCES_CHANGED: 'sources:changed',
+  // Agent-scoped sources
+  SOURCES_GET_AGENT: 'sources:getAgent',
+  SOURCES_PROMOTE: 'sources:promote',
+
+  // Session sources
+  SESSION_SET_SOURCES: 'sessions:setSources',
+  SESSION_GET_SOURCES: 'sessions:getSources',
+
+  // Source permissions config
+  SOURCES_GET_PERMISSIONS: 'sources:getPermissions',
+  // MCP tools listing
+  SOURCES_GET_MCP_TOOLS: 'sources:getMcpTools',
+
+  // Status management (workspace-scoped)
+  STATUSES_LIST: 'statuses:list',
+  STATUSES_CHANGED: 'statuses:changed',  // Broadcast event
+
+  // Theme management (cascading: app → workspace → agent)
+  THEME_APP_CHANGED: 'theme:appChanged',        // Broadcast event
+  THEME_WORKSPACE_CHANGED: 'theme:workspaceChanged',  // Broadcast event
+  THEME_AGENT_CHANGED: 'theme:agentChanged',    // Broadcast event
+
+  // Generic workspace image loading/saving (for icons, etc.)
+  WORKSPACE_READ_IMAGE: 'workspace:readImage',
+  WORKSPACE_WRITE_IMAGE: 'workspace:writeImage',
+
+  // Markdown preview window
+  MARKDOWN_PREVIEW_OPEN: 'markdownPreview:open',
+  MARKDOWN_PREVIEW_GET_DATA: 'markdownPreview:getData',
+  MARKDOWN_PREVIEW_SAVE: 'markdownPreview:save',
+  MARKDOWN_PREVIEW_FILE_SAVED: 'markdownPreview:fileSaved', // Broadcast: { filePath: string }
+
+  // Diff preview window
+  DIFF_PREVIEW_OPEN: 'diffPreview:open',
+  DIFF_PREVIEW_GET_DATA: 'diffPreview:getData',
+
+  // Code preview window (Read/Write tools)
+  CODE_PREVIEW_OPEN: 'codePreview:open',
+  CODE_PREVIEW_GET_DATA: 'codePreview:getData',
+
+  // Terminal preview window (Bash tools)
+  TERMINAL_PREVIEW_OPEN: 'terminalPreview:open',
+  TERMINAL_PREVIEW_GET_DATA: 'terminalPreview:getData',
+
+  // Multi-file diff window (all edits/writes in a turn)
+  MULTI_FILE_DIFF_OPEN: 'multiFileDiff:open',
+  MULTI_FILE_DIFF_GET_DATA: 'multiFileDiff:getData',
+  MULTI_FILE_DIFF_READ_FILE: 'multiFileDiff:readFile',
+
+  // Workspace settings (per-workspace configuration)
+  WORKSPACE_SETTINGS_GET: 'workspaceSettings:get',
+  WORKSPACE_SETTINGS_UPDATE: 'workspaceSettings:update',
+  WORKSPACE_SETTINGS_ENABLE_PORTABLE: 'workspaceSettings:enablePortable',
+  WORKSPACE_SETTINGS_DISABLE_PORTABLE: 'workspaceSettings:disablePortable',
+
+  // Theme (cascading: app → workspace → agent)
+  THEME_GET_APP: 'theme:getApp',
+  THEME_GET_WORKSPACE: 'theme:getWorkspace',
+  THEME_GET_AGENT: 'theme:getAgent',
 } as const
+
+/**
+ * Data for diff preview window
+ */
+export interface DiffPreviewData {
+  filePath: string
+  original: string
+  modified: string
+  language?: string
+  /** Error message if the edit failed */
+  error?: string
+}
+
+/**
+ * Data for code preview window (Read/Write tools)
+ */
+export interface CodePreviewData {
+  filePath: string
+  content: string
+  language?: string
+  /** 'read' for Read tool, 'write' for Write tool */
+  mode: 'read' | 'write'
+  /** File metadata from Read tool */
+  numLines?: number
+  startLine?: number
+  totalLines?: number
+  /** Error message if the write failed */
+  error?: string
+}
+
+/**
+ * Data for terminal preview window (Bash/Grep/Glob tools)
+ */
+export interface TerminalPreviewData {
+  command: string
+  output: string
+  /** Optional description of what the command does */
+  description?: string
+  /** Exit status if available */
+  exitCode?: number
+  /** Tool type for badge display */
+  toolType?: 'bash' | 'grep' | 'glob'
+}
+
+/**
+ * A single file change (Edit or Write) for the session diff view
+ */
+export interface FileChange {
+  /** Unique ID for this change */
+  id: string
+  /** Absolute file path */
+  filePath: string
+  /** Tool type: Edit or Write */
+  toolType: 'Edit' | 'Write'
+  /** For Edit: the old_string; For Write: empty or previous content if available */
+  original: string
+  /** For Edit: the new_string; For Write: the written content */
+  modified: string
+  /** Error message if the operation failed */
+  error?: string
+}
+
+/**
+ * Data for multi-file diff window - shows all edits/writes in a turn
+ */
+export interface MultiFileDiffData {
+  /** Session ID for context */
+  sessionId: string
+  /** Turn ID for context */
+  turnId: string
+  /** All file changes in this turn */
+  changes: FileChange[]
+  /** If true (default), group changes by file. If false, show each change separately */
+  consolidated?: boolean
+  /** ID of the change to auto-focus (only used when consolidated=false) */
+  focusedChangeId?: string
+}
+
+/**
+ * Data for markdown preview window
+ * - readOnly mode: view-only, no save button
+ * - readWrite mode: editable with save functionality (requires filePath)
+ */
+export type MarkdownPreviewData =
+  | {
+      /** Read-only mode - content from memory (no save) */
+      mode: 'readOnly'
+      /** Raw markdown content to display */
+      content: string
+      /** Optional title for the window */
+      title?: string
+    }
+  | {
+      /** Read-only mode - content from file (no save) */
+      mode: 'readOnly'
+      /** File path to read content from */
+      filePath: string
+      /** Optional title for the window */
+      title?: string
+    }
+  | {
+      /** Read-write mode - editable with save to file */
+      mode: 'readWrite'
+      /** File path to read from and save to */
+      filePath: string
+      /** Optional title for the window */
+      title?: string
+    }
 
 // Re-import types for ElectronAPI
 import type { Workspace, SessionMetadata, StoredAttachment as StoredAttachmentType } from '@craft-agent/core/types';
@@ -325,14 +733,33 @@ export interface ElectronAPI {
   createSession(workspaceId: string, agentId?: string, agentName?: string): Promise<Session>
   deleteSession(sessionId: string): Promise<void>
   renameSession(sessionId: string, name: string): Promise<void>
-  sendMessage(sessionId: string, message: string, attachments?: FileAttachment[], storedAttachments?: StoredAttachmentType[]): Promise<void>
-  cancelProcessing(sessionId: string): Promise<void>
-  archiveSession(sessionId: string): Promise<void>
-  unarchiveSession(sessionId: string): Promise<void>
+  sendMessage(sessionId: string, message: string, attachments?: FileAttachment[], storedAttachments?: StoredAttachmentType[], options?: SendMessageOptions): Promise<void>
+  cancelProcessing(sessionId: string, silent?: boolean): Promise<void>
+  killShell(sessionId: string, shellId: string): Promise<{ success: boolean; error?: string }>
+  getTaskOutput(taskId: string): Promise<string | null>
+  flagSession(sessionId: string): Promise<void>
+  unflagSession(sessionId: string): Promise<void>
+  setTodoState(sessionId: string, state: TodoState): Promise<void>
+  markSessionRead(sessionId: string): Promise<void>
+  markSessionUnread(sessionId: string): Promise<void>
   respondToPermission(sessionId: string, requestId: string, allowed: boolean, alwaysAllow: boolean): Promise<boolean>
+  respondToCredential(sessionId: string, requestId: string, response: CredentialResponse): Promise<boolean>
+  updateSessionWorkingDirectory(sessionId: string, path: string): Promise<void>
+  showSessionInFinder(sessionId: string): Promise<void>
+
+  // Permission mode management ('safe', 'ask', 'allow-all')
+  setPermissionMode(sessionId: string, mode: PermissionMode): Promise<void>
 
   // Workspace management
   getWorkspaces(): Promise<Workspace[]>
+  createWorkspace(folderPath: string, name: string): Promise<Workspace>
+
+  // Window management
+  getWindowWorkspace(): Promise<string | null>
+  getWindowMode(): Promise<string | null>
+  openWorkspace(workspaceId: string): Promise<void>
+  switchWorkspace(workspaceId: string): Promise<void>
+  closeWindow(): Promise<void>
 
   // Agent management
   getAgents(workspaceId: string): Promise<SubAgentMetadata[]>
@@ -343,6 +770,7 @@ export interface ElectronAPI {
   getAgentDefinition(workspaceId: string, agentId: string): Promise<SubAgentDefinition | null>
   reloadAgent(workspaceId: string, agentId: string): Promise<boolean>
   resetAgent(workspaceId: string, agentId: string): Promise<boolean>
+  ensureBuiltinAgent(workspaceId: string, slug: string): Promise<string | null>
 
   // Agent authentication
   getAgentAuthRequirements(workspaceId: string, agentId: string): Promise<AgentAuthRequirements>
@@ -351,19 +779,20 @@ export interface ElectronAPI {
   saveApiCredentials(workspaceId: string, agentId: string, apiName: string, credential: string): Promise<void>
   validateMcpConnection(serverUrl: string, accessToken?: string): Promise<McpValidationResult>
 
-  // Agent state management (unified state machine)
-  getAgentStatus(sessionId: string): Promise<AgentStatus>
-  activateAgent(sessionId: string, agentId: string, options?: AgentActivateOptions): Promise<AgentStatus>
-  continueAfterReview(sessionId: string, answers: Record<string, string>): Promise<AgentStatus>
-  continueAfterMcpAuth(sessionId: string): Promise<AgentStatus>
-  continueAfterApiAuth(sessionId: string): Promise<AgentStatus>
-  deactivateAgent(sessionId: string): Promise<void>
-  reloadAgentState(sessionId: string): Promise<AgentStatus>
-  resetAgentState(sessionId: string): Promise<void>
-  markAgentActive(sessionId: string): Promise<void>
+  // Agent state management (unified state machine, agent-scoped)
+  getAgentStatus(workspaceId: string, agentId: string): Promise<AgentStatus>
+  activateAgent(workspaceId: string, agentId: string, options?: AgentActivateOptions): Promise<AgentStatus>
+  continueAfterMcpAuth(workspaceId: string, agentId: string): Promise<AgentStatus>
+  continueAfterApiAuth(workspaceId: string, agentId: string): Promise<AgentStatus>
+  deactivateAgent(workspaceId: string, agentId: string): Promise<void>
+  reloadAgentState(workspaceId: string, agentId: string): Promise<AgentStatus>
+  resetAgentState(workspaceId: string, agentId: string): Promise<void>
+  markAgentActive(workspaceId: string, agentId: string): Promise<void>
 
-  // Event listener
+  // Event listeners
   onSessionEvent(callback: (event: SessionEvent) => void): () => void
+  /** Listens for complete agent state changes (status + needsSetup + needsAuth) */
+  onAgentStatusChanged(callback: (workspaceId: string, agentId: string, status: AgentStatus) => void): () => void
 
   // File operations
   readFile(path: string): Promise<string>
@@ -378,19 +807,26 @@ export interface ElectronAPI {
 
   // System
   getVersions(): { node: string; chrome: string; electron: string }
+  getHomeDir(): Promise<string>
 
   // Shell operations
   openUrl(url: string): Promise<void>
   openFile(path: string): Promise<void>
+  showInFolder(path: string): Promise<void>
 
   // Menu event listeners
   onMenuNewChat(callback: () => void): () => void
+  onMenuNewChatTab(callback: () => void): () => void
   onMenuOpenSettings(callback: () => void): () => void
   onMenuKeyboardShortcuts(callback: () => void): () => void
   onMenuOpenHelp(callback: () => void): () => void
 
+  // Deep link navigation listener
+  onDeepLinkNavigate(callback: (nav: DeepLinkNavigation) => void): () => void
+
   // Auth
   showLogoutConfirmation(): Promise<boolean>
+  showDeleteSessionConfirmation(name: string): Promise<boolean>
   logout(): Promise<void>
 
   // Onboarding
@@ -398,12 +834,10 @@ export interface ElectronAPI {
   getSetupNeeds(): Promise<SetupNeeds>
   startCraftOAuth(): Promise<CraftOAuthResult>
   getCraftProfile(): Promise<CraftOAuthResult>  // Get profile using existing stored token
-  getMcpLinks(spaceId: string, authToken: string): Promise<CraftMcpLink[]>
-  createMcpLink(spaceId: string, authToken: string): Promise<CraftMcpLink>
   startWorkspaceMcpOAuth(mcpUrl: string): Promise<OAuthResult & { accessToken?: string; clientId?: string }>
   saveOnboardingConfig(config: {
     authType?: AuthType  // Optional - if not provided, preserves existing auth type (for add workspace)
-    workspace?: { name: string; mcpUrl: string }  // Optional - if not provided, only updates billing
+    workspace?: { name: string; iconUrl?: string; mcpUrl?: string }  // Optional - if not provided, only updates billing
     credential?: string  // API key or OAuth token based on authType
     mcpCredentials?: { accessToken: string; clientId?: string }  // MCP OAuth credentials
   }): Promise<OnboardingSaveResult>
@@ -415,6 +849,99 @@ export interface ElectronAPI {
   // Settings - Billing
   getBillingMethod(): Promise<BillingMethodInfo>
   updateBillingMethod(authType: AuthType, credential?: string): Promise<void>
+  getCreditsUrl(): Promise<string | null>
+
+  // Settings - Model
+  getModel(): Promise<string | null>
+  setModel(model: string): Promise<void>
+
+  // Settings - New Session Defaults
+  getDefaultPermissionMode(): Promise<PermissionMode>
+  setDefaultPermissionMode(mode: PermissionMode): Promise<void>
+  getDefaultWorkingDirectory(): Promise<string>
+  setDefaultWorkingDirectory(path: string): Promise<void>
+
+  // Workspace Settings (per-workspace configuration)
+  getWorkspaceSettings(workspaceId: string): Promise<WorkspaceSettings | null>
+  updateWorkspaceSetting<K extends keyof WorkspaceSettings>(workspaceId: string, key: K, value: WorkspaceSettings[K]): Promise<void>
+  enablePortableCredentials(workspaceId: string, password: string): Promise<void>
+  disablePortableCredentials(workspaceId: string, password: string): Promise<void>
+
+  // Folder dialog
+  openFolderDialog(): Promise<string | null>
+
+  // User Preferences
+  readPreferences(): Promise<{ content: string; exists: boolean }>
+  writePreferences(content: string): Promise<{ success: boolean; error?: string }>
+
+  // Markdown preview window
+  openMarkdownPreview(previewId: string, data: MarkdownPreviewData): Promise<void>
+  getMarkdownPreviewData(previewId: string): Promise<{ data: MarkdownPreviewData; content: string } | null>
+  saveMarkdownPreview(previewId: string, content: string): Promise<void>
+  onMarkdownFileSaved(callback: (data: { filePath: string }) => void): () => void
+
+  // Diff preview window
+  openDiffPreview(sessionId: string, diffId: string, data: DiffPreviewData): Promise<void>
+  getDiffPreviewData(sessionId: string, diffId: string): Promise<DiffPreviewData | null>
+
+  // Code preview window (Read/Write tools)
+  openCodePreview(sessionId: string, previewId: string, data: CodePreviewData): Promise<void>
+  getCodePreviewData(sessionId: string, previewId: string): Promise<CodePreviewData | null>
+
+  // Terminal preview window (Bash tools)
+  openTerminalPreview(sessionId: string, previewId: string, data: TerminalPreviewData): Promise<void>
+  getTerminalPreviewData(sessionId: string, previewId: string): Promise<TerminalPreviewData | null>
+
+  // Multi-file diff window (all edits/writes in a turn)
+  openMultiFileDiff(sessionId: string, turnId: string, data: MultiFileDiffData): Promise<void>
+  getMultiFileDiffData(sessionId: string, turnId: string): Promise<MultiFileDiffData | null>
+  readFileForDiff(filePath: string): Promise<string | null>
+
+  // Session Drafts (persisted input text)
+  getDraft(sessionId: string): Promise<string | null>
+  setDraft(sessionId: string, text: string): Promise<void>
+  deleteDraft(sessionId: string): Promise<void>
+  getAllDrafts(): Promise<Record<string, string>>
+
+  // Sources
+  getSources(workspaceId: string): Promise<LoadedSource[]>
+  getAgentSources(workspaceId: string, agentSlug: string): Promise<LoadedSource[]>
+  createSource(workspaceId: string, config: Partial<FolderSourceConfig>): Promise<FolderSourceConfig>
+  deleteSource(workspaceId: string, sourceSlug: string): Promise<void>
+  startSourceOAuth(workspaceId: string, sourceSlug: string): Promise<{ success: boolean; error?: string; accessToken?: string }>
+  saveSourceCredentials(workspaceId: string, sourceSlug: string, credential: string): Promise<void>
+  promoteSource(workspaceId: string, agentSlug: string, sourceSlug: string): Promise<void>
+  getSourcePermissionsConfig(workspaceId: string, sourceSlug: string): Promise<import('@craft-agent/shared/agent').PermissionsConfigFile | null>
+  getMcpTools(workspaceId: string, sourceSlug: string): Promise<McpToolsResult>
+
+  // Session sources
+  setSessionSources(sessionId: string, sourceSlugs: string[]): Promise<void>
+  getSessionSources(sessionId: string): Promise<string[]>
+
+  // Sources change listener (live updates when sources are added/removed)
+  onSourcesChanged(callback: (sources: LoadedSource[]) => void): () => void
+
+  // Statuses (workspace-scoped)
+  listStatuses(workspaceId: string): Promise<import('@craft-agent/shared/statuses').StatusConfig[]>
+  // Statuses change listener (live updates when statuses config or icon files change)
+  onStatusesChanged(callback: (workspaceId: string) => void): () => void
+
+  // Generic workspace image loading/saving (returns data URL for images, raw string for SVG)
+  readWorkspaceImage(workspaceId: string, relativePath: string): Promise<string>
+  writeWorkspaceImage(workspaceId: string, relativePath: string, base64: string, mimeType: string): Promise<void>
+
+  // Agents change listener (live updates when agents are created/synced/deleted)
+  onAgentsChanged(callback: () => void): () => void
+
+  // Theme (cascading: app → workspace → agent)
+  getAppTheme(): Promise<import('@config/theme').ThemeOverrides | null>
+  getWorkspaceTheme(workspaceId: string): Promise<import('@config/theme').ThemeOverrides | null>
+  getAgentTheme(workspaceId: string, agentSlug: string): Promise<import('@config/theme').ThemeOverrides | null>
+
+  // Theme change listeners (live updates when theme.json files change)
+  onAppThemeChange(callback: (theme: import('@config/theme').ThemeOverrides | null) => void): () => void
+  onWorkspaceThemeChange(callback: (theme: import('@config/theme').ThemeOverrides | null) => void): () => void
+  onAgentThemeChange(callback: (agentSlug: string, theme: import('@config/theme').ThemeOverrides | null) => void): () => void
 }
 
 /**
@@ -432,6 +959,36 @@ export interface ClaudeOAuthResult {
 export interface BillingMethodInfo {
   authType: AuthType
   hasCredential: boolean
+}
+
+/**
+ * Credential storage strategy for workspaces
+ */
+export type CredentialStrategy = 'local' | 'portable'
+
+/**
+ * Per-workspace settings
+ */
+export interface WorkspaceSettings {
+  name?: string
+  model?: string
+  permissionMode?: PermissionMode
+  workingDirectory?: string
+  credentialStrategy?: CredentialStrategy
+  /** Whether local (stdio) MCP servers are enabled */
+  localMcpEnabled?: boolean
+}
+
+/**
+ * Navigation payload for deep links (main → renderer)
+ */
+export interface DeepLinkNavigation {
+  tabType?: string
+  tabParams?: Record<string, string>
+  action?: string
+  actionParams?: Record<string, string>
+  sidebar?: string
+  sidebarParams?: Record<string, string>
 }
 
 declare global {

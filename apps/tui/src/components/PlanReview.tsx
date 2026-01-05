@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useMemo, memo } from 'react';
 import { Box, Text, useInput } from 'ink';
 import type { Plan, PlanStep } from '@craft-agent/shared/agents';
-import { savePlanToFile } from '@craft-agent/shared/config';
+import { savePlanToFile } from '@craft-agent/shared/sessions';
 
 /**
  * Step action in the interactive plan review (like git interactive rebase)
@@ -25,6 +25,7 @@ const BOTTOM_ACTIONS: { key: BottomAction; label: string; shortcut: string }[] =
 
 export interface PlanReviewProps {
   plan: Plan;
+  workspaceId: string;
   sessionId: string;
   questions?: string[];
   /** Accept: Save plan and execute */
@@ -39,6 +40,7 @@ export interface PlanReviewProps {
 
 export const PlanReview: React.FC<PlanReviewProps> = memo(({
   plan,
+  workspaceId,
   sessionId,
   questions = [],
   onApprove,
@@ -246,19 +248,19 @@ export const PlanReview: React.FC<PlanReviewProps> = memo(({
     } else {
       // No changes - save plan to file and approve
       const modifiedPlan = buildModifiedPlan();
-      const savedPath = savePlanToFile(sessionId, modifiedPlan);
+      const savedPath = savePlanToFile(workspaceId, sessionId, modifiedPlan);
       onApprove(modifiedPlan, savedPath);
     }
-  }, [plan, stepActions, stepRefinements, checkMissingRefinements, hasModifications, onApprove, onRefine, buildModifiedPlan, sessionId]);
+  }, [plan, stepActions, stepRefinements, checkMissingRefinements, hasModifications, onApprove, onRefine, buildModifiedPlan, workspaceId, sessionId]);
 
   // Handle Save Plan action (save + cancel, don't execute)
   const handleSaveOnly = useCallback(() => {
     if (checkMissingRefinements()) return;
 
     const modifiedPlan = buildModifiedPlan();
-    const savedPath = savePlanToFile(sessionId, modifiedPlan);
+    const savedPath = savePlanToFile(workspaceId, sessionId, modifiedPlan);
     onSaveOnly(modifiedPlan, savedPath);
-  }, [checkMissingRefinements, buildModifiedPlan, onSaveOnly, sessionId]);
+  }, [checkMissingRefinements, buildModifiedPlan, onSaveOnly, workspaceId, sessionId]);
 
   // Execute the selected bottom action
   const executeBottomAction = useCallback(() => {

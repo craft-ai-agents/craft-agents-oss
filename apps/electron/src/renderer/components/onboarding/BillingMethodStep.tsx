@@ -79,7 +79,7 @@ export function BillingMethodStep({
                 "flex w-full items-start gap-4 rounded-xl border p-4 text-left transition-all",
                 "hover:bg-foreground/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 isSelected
-                  ? "border-primary bg-primary/5"
+                  ? "border-foreground bg-foreground/5"
                   : "border-border"
               )}
             >
@@ -87,7 +87,7 @@ export function BillingMethodStep({
               <div
                 className={cn(
                   "flex size-10 shrink-0 items-center justify-center rounded-lg",
-                  isSelected ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+                  isSelected ? "bg-foreground/10 text-foreground" : "bg-muted text-muted-foreground"
                 )}
               >
                 {option.icon}
@@ -98,7 +98,7 @@ export function BillingMethodStep({
                 <div className="flex items-center gap-2">
                   <span className="font-medium text-sm">{option.name}</span>
                   {option.recommended && (
-                    <span className="bg-primary/5 px-2 py-0.5 text-[11px] font-medium text-primary/70">
+                    <span className="bg-foreground/5 px-2 py-0.5 text-[11px] font-medium text-foreground/70">
                       Recommended
                     </span>
                   )}
@@ -113,7 +113,7 @@ export function BillingMethodStep({
                 className={cn(
                   "flex size-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors",
                   isSelected
-                    ? "border-primary bg-primary text-primary-foreground"
+                    ? "border-foreground bg-foreground text-background"
                     : "border-muted-foreground/20"
                 )}
               >

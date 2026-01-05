@@ -5,11 +5,11 @@ import type { AuthType, TokenDisplayMode } from '@craft-agent/shared/config';
 import { AnimatedSpinner } from './Spinner.tsx';
 import { DEFAULT_MODEL, getModelDisplayName } from '@craft-agent/shared/config';
 import { CRAFT_LOGO } from '@craft-agent/shared/branding';
+import { PERMISSION_MODE_CONFIG, type PermissionMode } from '@craft-agent/shared/agent';
 
 export interface HeaderProps {
   connected: boolean;
   model?: string;
-  mcpUrl?: string;
   workspaceName?: string;
   contextTokens?: number;
   inputTokens?: number;
@@ -22,7 +22,9 @@ export interface HeaderProps {
   showCost?: boolean;
   showClock?: boolean;
   version?: string;
-  planMode?: boolean;
+  /** Current permission mode ('safe', 'ask', 'allow-all') */
+  permissionMode?: PermissionMode;
+  /** @deprecated Use permissionMode instead */
   safeMode?: boolean;
   /** Show "Press Ctrl+C again to exit" warning */
   exitWarning?: boolean;
@@ -33,7 +35,6 @@ export interface HeaderProps {
 export const Header: React.FC<HeaderProps> = memo(({
   connected,
   model = DEFAULT_MODEL,
-  mcpUrl,
   workspaceName,
   contextTokens = 0,
   inputTokens = 0,
@@ -46,41 +47,19 @@ export const Header: React.FC<HeaderProps> = memo(({
   showCost = true,
   showClock = false,
   version,
-  planMode = false,
+  permissionMode,
   safeMode = false,
   exitWarning = false,
   planToggleWarning = false,
 }) => {
-  // Live clock state - updates every second when enabled
-  const [currentTime, setCurrentTime] = useState(() => new Date());
+  // Resolve permission mode: prefer explicit prop, fallback to legacy safeMode
+  const resolvedMode: PermissionMode = permissionMode ?? (safeMode ? 'safe' : 'ask');
+  const modeConfig = PERMISSION_MODE_CONFIG[resolvedMode];
 
-  useEffect(() => {
-    if (!showClock) return;
-    const interval = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [showClock]);
-
-  // Format time with timezone abbreviation
-  const clockDisplay = useMemo(() => {
-    if (!showClock) return '';
-    const timeStr = currentTime.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true,
-    });
-    // Get timezone abbreviation
-    const tzAbbr = currentTime.toLocaleTimeString('en-US', { timeZoneName: 'short' }).split(' ').pop();
-    return `${timeStr} ${tzAbbr}`;
-  }, [showClock, currentTime]);
+  // Use the mode's muted color for terminal background display
+  const modeBackgroundColor = useMemo(() => modeConfig.colors.muted, [modeConfig.colors.muted]);
   // Map model IDs to friendly names
   const modelDisplay = useMemo(() => getModelDisplayName(model), [model]);
-
-  // Extract MCP server name from URL
-  const mcpDisplay = useMemo(() => mcpUrl
-    ? mcpUrl.replace(/^https?:\/\//, '').split('/')[0]
-    : 'Not connected', [mcpUrl]);
 
   // Format cost from SDK (already in USD) - round to 2 decimal places
   const costDisplay = useMemo(() => {
@@ -134,27 +113,12 @@ export const Header: React.FC<HeaderProps> = memo(({
         ) : (
           <Text color="magenta" bold>craft</Text>
         )}
-        {planMode && (
-          <>
-            <Text dimColor> </Text>
-            <Text backgroundColor="#006400" color="white" bold> PLAN </Text>
-          </>
-        )}
-        {safeMode && (
-          <>
-            <Text dimColor> </Text>
-            <Text backgroundColor="#8B008B" color="white" bold> 🛡 SAFE </Text>
-          </>
-        )}
-
-        {/* MCP connection status */}
+        <Text dimColor> </Text>
+        <Text backgroundColor={modeBackgroundColor} color="white" bold> {modeConfig.shortName.toUpperCase()} </Text>
         <Text dimColor> | </Text>
         <Text color={connected ? 'green' : 'red'}>
           {connected ? '●' : '○'}
         </Text>
-        <Text dimColor> {mcpDisplay}</Text>
-
-        {/* Auth type */}
         <Text dimColor> | </Text>
         <Text color={authType === 'api_key' ? 'blue' : authType === 'craft_credits' ? 'magenta' : 'green'}>{authDisplay}</Text>
 

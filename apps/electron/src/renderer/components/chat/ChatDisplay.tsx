@@ -1,33 +1,48 @@
 import * as React from "react"
 import { useEffect } from "react"
 import {
-  MessageSquare,
-  Sparkles,
+  AlertTriangle,
+  CheckCircle2,
   ChevronDown,
   ChevronRight,
-  Paperclip,
-  ArrowUp,
-  Bot,
-  AlertTriangle,
+  CircleAlert,
+  ExternalLink,
+  Info,
+  ListTodo,
+  X,
 } from "lucide-react"
+import { motion, AnimatePresence } from "motion/react"
 
-import { Button } from "@/components/ui/button"
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  StyledDropdownMenuContent,
-  StyledDropdownMenuItem,
-} from "@/components/ui/styled-dropdown"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
-import { Markdown, CollapsibleMarkdownProvider, type RenderMode } from "@/components/markdown"
+import { Markdown, CollapsibleMarkdownProvider, StreamingMarkdown, type RenderMode } from "@/components/markdown"
 import { AnimatedCollapsibleContent } from "@/components/ui/collapsible"
-import { AttachmentPreview, FileTypeIcon, getFileTypeLabel } from "./AttachmentPreview"
-import { LoadingIndicator } from "@/components/ui/loading-indicator"
+import { FileTypeIcon, getFileTypeLabel } from "./AttachmentPreview"
+import { Spinner } from "@/components/ui/loading-indicator"
 import { useFocusZone } from "@/hooks/keyboard"
-import type { Session, Message, FileAttachment, StoredAttachment, PermissionRequest } from "../../../shared/types"
-import { PermissionBanner } from "./PermissionBanner"
-import { MODELS, getModelDisplayName } from "@config/models"
+import type { Session, Message, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, LoadedSource, FileChange, MultiFileDiffData } from "../../../shared/types"
+import type { PermissionMode } from "@craft-agent/shared/agent/modes"
+import { SetupAuthBanner, type BannerState } from "./SetupAuthBanner"
+import { TurnCard } from "./TurnCard"
+import { PlanCard } from "./PlanCard"
+import { ActiveOptionBadges } from "./ActiveOptionBadges"
+import { groupMessagesByTurn, formatTurnAsMarkdown, formatActivityAsMarkdown, type Turn, type AssistantTurn, type UserTurn, type SystemTurn, type PlanTurn } from "./turn-utils"
+import { InputContainer, type StructuredInputState, type StructuredResponse, type PermissionResponse } from "./input"
+import { useBackgroundTasks } from "@/hooks/useBackgroundTasks"
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover"
+import { SlashCommandMenu, DEFAULT_SLASH_COMMANDS, type SlashCommandId } from "@/components/ui/slash-command-menu"
+import { CONTENT_MAX_WIDTH_CLASS } from "@/config/layout"
+
+/** Agent setup state for showing setup indicator in input area */
+interface AgentSetupState {
+  /** Banner state matching SetupAuthBanner */
+  state: BannerState
+  agentName?: string
+  /** Optional reason/message to display */
+  reason?: string
+  /** Action callback (activate, retry, authenticate) */
+  onAction: () => void
+}
 
 interface ChatDisplayProps {
   session: Session | null
@@ -39,12 +54,184 @@ interface ChatDisplayProps {
   onModelChange: (model: string) => void
   /** Ref for the textarea, used for external focus control */
   textareaRef?: React.RefObject<HTMLTextAreaElement>
-  /** When true, disables input (e.g., when agent needs setup) */
+  /** When true, disables input (e.g., when agent needs activation) */
   disabled?: boolean
   /** Pending permission request for this session */
   pendingPermission?: PermissionRequest
   /** Callback to respond to permission request */
   onRespondToPermission?: (sessionId: string, requestId: string, allowed: boolean, alwaysAllow: boolean) => void
+  /** Pending credential request for this session */
+  pendingCredential?: CredentialRequest
+  /** Callback to respond to credential request */
+  onRespondToCredential?: (sessionId: string, requestId: string, response: CredentialResponse) => void
+  /** Agent setup state - when present, shows setup indicator in input area */
+  agentSetupState?: AgentSetupState
+  // Advanced options
+  /** Enable ultrathink mode for extended reasoning */
+  ultrathinkEnabled?: boolean
+  onUltrathinkChange?: (enabled: boolean) => void
+  /** Current permission mode */
+  permissionMode?: PermissionMode
+  onPermissionModeChange?: (mode: PermissionMode) => void
+  // Input value preservation (controlled from parent)
+  /** Current input value - preserved across mode switches and conversation changes */
+  inputValue?: string
+  /** Callback when input value changes */
+  onInputChange?: (value: string) => void
+  // Source selection
+  /** Available sources (enabled only) */
+  sources?: LoadedSource[]
+  /** Callback when source selection changes */
+  onSourcesChange?: (slugs: string[]) => void
+  // Working directory (per session)
+  /** Current working directory for this session */
+  workingDirectory?: string
+  /** Callback when working directory changes */
+  onWorkingDirectoryChange?: (path: string) => void
+}
+
+/**
+ * Processing status messages - cycles through these randomly
+ * Inspired by Claude Code's playful status messages
+ */
+const PROCESSING_MESSAGES = [
+  'Thinking...',
+  'Pondering...',
+  'Contemplating...',
+  'Reasoning...',
+  'Processing...',
+  'Computing...',
+  'Considering...',
+  'Reflecting...',
+  'Deliberating...',
+  'Cogitating...',
+  'Ruminating...',
+  'Musing...',
+  'Working on it...',
+  'On it...',
+  'Crunching...',
+  'Brewing...',
+  'Connecting dots...',
+  'Mulling it over...',
+  'Deep in thought...',
+  'Hmm...',
+  'Let me see...',
+  'One moment...',
+  'Hold on...',
+  'Bear with me...',
+  'Just a sec...',
+  'Hang tight...',
+  'Getting there...',
+  'Almost...',
+  'Working...',
+  'Busy busy...',
+  'Whirring...',
+  'Churning...',
+  'Percolating...',
+  'Simmering...',
+  'Cooking...',
+  'Baking...',
+  'Stirring...',
+  'Spinning up...',
+  'Warming up...',
+  'Revving...',
+  'Buzzing...',
+  'Humming...',
+  'Ticking...',
+  'Clicking...',
+  'Whizzing...',
+  'Zooming...',
+  'Zipping...',
+  'Chugging...',
+  'Trucking...',
+  'Rolling...',
+]
+
+/**
+ * Format elapsed time: "45s" under a minute, "1:02" for 1+ minutes
+ */
+function formatElapsed(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  const remainingSeconds = seconds % 60
+  return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`
+}
+
+interface ProcessingIndicatorProps {
+  /** Start timestamp (persists across remounts) */
+  startTime?: number
+  /** Override cycling messages with explicit status (e.g., "Compacting...") */
+  statusMessage?: string
+}
+
+/**
+ * ProcessingIndicator - Shows cycling status messages with elapsed time
+ * Matches TurnCard header layout for visual continuity
+ */
+function ProcessingIndicator({ startTime, statusMessage }: ProcessingIndicatorProps) {
+  const [elapsed, setElapsed] = React.useState(0)
+  const [messageIndex, setMessageIndex] = React.useState(() =>
+    Math.floor(Math.random() * PROCESSING_MESSAGES.length)
+  )
+
+  // Update elapsed time every second using provided startTime
+  React.useEffect(() => {
+    const start = startTime || Date.now()
+    // Set initial elapsed immediately
+    setElapsed(Math.floor((Date.now() - start) / 1000))
+
+    const interval = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - start) / 1000))
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [startTime])
+
+  // Cycle through messages every 10 seconds (only when not showing status)
+  React.useEffect(() => {
+    if (statusMessage) return  // Don't cycle when showing status
+    const interval = setInterval(() => {
+      setMessageIndex(prev => {
+        // Pick a random different message
+        let next = Math.floor(Math.random() * PROCESSING_MESSAGES.length)
+        while (next === prev && PROCESSING_MESSAGES.length > 1) {
+          next = Math.floor(Math.random() * PROCESSING_MESSAGES.length)
+        }
+        return next
+      })
+    }, 10000)
+    return () => clearInterval(interval)
+  }, [statusMessage])
+
+  // Use status message if provided, otherwise cycle through default messages
+  const displayMessage = statusMessage || PROCESSING_MESSAGES[messageIndex]
+
+  return (
+    <div className="flex items-center gap-2 px-3 py-1 -mb-1 text-[13px] text-muted-foreground">
+      {/* Spinner in same location as TurnCard chevron */}
+      <div className="w-3 h-3 flex items-center justify-center shrink-0">
+        <Spinner className="text-[10px]" />
+      </div>
+      {/* Label with crossfade animation on content change only */}
+      <span className="relative h-5 flex items-center">
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.span
+            key={displayMessage}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.4, ease: 'easeInOut' }}
+          >
+            {displayMessage}
+          </motion.span>
+        </AnimatePresence>
+        {elapsed >= 1 && (
+          <span className="text-muted-foreground/60 ml-1">
+            {formatElapsed(elapsed)}
+          </span>
+        )}
+      </span>
+    </div>
+  )
 }
 
 /**
@@ -68,18 +255,34 @@ export function ChatDisplay({
   disabled = false,
   pendingPermission,
   onRespondToPermission,
+  pendingCredential,
+  onRespondToCredential,
+  agentSetupState,
+  // Advanced options
+  ultrathinkEnabled = false,
+  onUltrathinkChange,
+  permissionMode = 'ask',
+  onPermissionModeChange,
+  // Input value preservation
+  inputValue,
+  onInputChange,
+  // Sources
+  sources,
+  onSourcesChange,
+  // Working directory
+  workingDirectory,
+  onWorkingDirectoryChange,
 }: ChatDisplayProps) {
-  // Input is disabled when explicitly disabled prop is true OR session is processing
-  const isInputDisabled = disabled || session?.isProcessing
-  const [input, setInput] = React.useState("")
-  const [attachments, setAttachments] = React.useState<FileAttachment[]>([])
-  const [isDraggingOver, setIsDraggingOver] = React.useState(false)
-  const [loadingCount, setLoadingCount] = React.useState(0)
+  // Input is only disabled when explicitly disabled (e.g., agent needs activation)
+  // User can type during streaming - submitting will stop the stream and send
+  const isInputDisabled = disabled
   const messagesEndRef = React.useRef<HTMLDivElement>(null)
+  const scrollViewportRef = React.useRef<HTMLDivElement>(null)
   const prevSessionIdRef = React.useRef<string | null>(null)
+  // Sticky-bottom: When true, auto-scroll on content changes. Toggled by user scroll behavior.
+  const isStickToBottomRef = React.useRef(true)
   const internalTextareaRef = React.useRef<HTMLTextAreaElement>(null)
   const textareaRef = externalTextareaRef || internalTextareaRef
-  const dragCounterRef = React.useRef(0)
 
   // Register as focus zone - when zone gains focus, focus the textarea
   const { zoneRef, isFocused } = useFocusZone({
@@ -89,6 +292,11 @@ export function ChatDisplay({
     },
   })
 
+  // Background tasks management
+  const { tasks: backgroundTasks, killTask } = useBackgroundTasks({
+    sessionId: session?.id ?? ''
+  })
+
   // Focus textarea when zone gains focus
   useEffect(() => {
     if (isFocused && session) {
@@ -96,329 +304,548 @@ export function ChatDisplay({
     }
   }, [isFocused, session])
 
-  // File attachment handlers
-  const handleAttachClick = async () => {
-    console.log('[ChatDisplay] Attach button clicked')
-    if (isInputDisabled) {
-      console.log('[ChatDisplay] Input is disabled, ignoring click')
-      return
-    }
-    try {
-      console.log('[ChatDisplay] Opening file dialog...')
-      const paths = await window.electronAPI.openFileDialog()
-      console.log('[ChatDisplay] File dialog returned:', paths)
-      for (const path of paths) {
-        const attachment = await window.electronAPI.readFileAttachment(path)
-        console.log('[ChatDisplay] Read attachment:', attachment?.name)
-        if (attachment) {
-          setAttachments(prev => [...prev, attachment])
-        }
-      }
-    } catch (error) {
-      console.error('[ChatDisplay] Failed to attach files:', error)
-    }
-  }
-
-  const handleRemoveAttachment = (index: number) => {
-    setAttachments(prev => prev.filter((_, i) => i !== index))
-  }
-
-  // Drag and drop handlers
-  // Uses a counter to properly track enter/leave events with nested elements
-  const handleDragEnter = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    dragCounterRef.current++
-    if (e.dataTransfer.types.includes('Files')) {
-      setIsDraggingOver(true)
-    }
-  }
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    dragCounterRef.current--
-    if (dragCounterRef.current === 0) {
-      setIsDraggingOver(false)
-    }
-  }
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-  }
-
-  // Helper to read a File using FileReader API (for when Electron's file.path isn't available)
-  const readFileAsAttachment = async (file: File): Promise<FileAttachment | null> => {
-    return new Promise((resolve) => {
-      const reader = new FileReader()
-      reader.onload = async () => {
-        const result = reader.result as ArrayBuffer
-        const base64 = btoa(
-          new Uint8Array(result).reduce((data, byte) => data + String.fromCharCode(byte), '')
-        )
-
-        // Determine type from MIME
-        let type: FileAttachment['type'] = 'unknown'
-        if (file.type.startsWith('image/')) type = 'image'
-        else if (file.type === 'application/pdf') type = 'pdf'
-        else if (file.type.includes('text') || file.name.match(/\.(txt|md|json|js|ts|tsx|py|css|html)$/i)) type = 'text'
-        else if (file.type.includes('officedocument') || file.name.match(/\.(docx?|xlsx?|pptx?)$/i)) type = 'office'
-
-        const mimeType = file.type || 'application/octet-stream'
-
-        // Generate thumbnail via IPC (uses Quick Look on macOS)
-        let thumbnailBase64: string | undefined
-        try {
-          const thumb = await window.electronAPI.generateThumbnail(base64, mimeType)
-          if (thumb) {
-            thumbnailBase64 = thumb
-          }
-        } catch (err) {
-          console.log('[ChatDisplay] Thumbnail generation failed:', err)
-        }
-
-        resolve({
-          type,
-          path: file.name, // Use name as path since we don't have the real path
-          name: file.name,
-          mimeType,
-          base64,
-          size: file.size,
-          thumbnailBase64,
-        })
-      }
-      reader.onerror = () => resolve(null)
-      reader.readAsArrayBuffer(file)
+  // Pop-out handler - opens message in a new preview window (read-only)
+  const handlePopOut = React.useCallback((message: Message) => {
+    if (!session) return
+    window.electronAPI.openMarkdownPreview(`${session.id}:${message.id}`, {
+      mode: 'readOnly',
+      content: message.content,
+      title: 'Message Preview',
     })
-  }
+  }, [session])
 
-  const handleDrop = async (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    dragCounterRef.current = 0
-    setIsDraggingOver(false)
-    if (isInputDisabled) return
+  // Track scroll position to toggle sticky-bottom behavior
+  // - User scrolls up → unstick (stop auto-scrolling)
+  // - User scrolls back to bottom → re-stick (resume auto-scrolling)
+  const handleScroll = React.useCallback(() => {
+    const viewport = scrollViewportRef.current
+    if (!viewport) return
+    const { scrollTop, scrollHeight, clientHeight } = viewport
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight
+    // 20px threshold for "at bottom" detection
+    isStickToBottomRef.current = distanceFromBottom < 20
+  }, [])
 
-    const files = Array.from(e.dataTransfer.files)
-    console.log('[ChatDisplay] Dropped files:', files.map(f => ({ name: f.name, path: (f as any).path })))
-
-    // Show loading indicators for all files
-    setLoadingCount(files.length)
-
-    for (const file of files) {
-      // In Electron, dropped files have a path property - try it first
-      const filePath = (file as File & { path?: string }).path
-      if (filePath) {
-        try {
-          const attachment = await window.electronAPI.readFileAttachment(filePath)
-          if (attachment) {
-            setAttachments(prev => [...prev, attachment])
-            setLoadingCount(prev => prev - 1)
-            continue
-          }
-        } catch (error) {
-          console.error('[ChatDisplay] Failed to read via IPC:', error)
-        }
-      }
-
-      // Fallback: read file directly using FileReader API
-      console.log('[ChatDisplay] Using FileReader fallback for:', file.name)
-      try {
-        const attachment = await readFileAsAttachment(file)
-        if (attachment) {
-          setAttachments(prev => [...prev, attachment])
-        }
-      } catch (error) {
-        console.error('[ChatDisplay] Failed to read dropped file:', error)
-      }
-      setLoadingCount(prev => prev - 1)
-    }
-  }
-
-  // Clear attachments when session changes
+  // Set up scroll event listener
   React.useEffect(() => {
-    setAttachments([])
-  }, [session?.id])
+    const viewport = scrollViewportRef.current
+    if (!viewport) return
+    viewport.addEventListener('scroll', handleScroll)
+    return () => viewport.removeEventListener('scroll', handleScroll)
+  }, [handleScroll])
 
-  // Auto-scroll to bottom
-  // - Instant scroll on session switch
-  // - Smooth scroll on new messages in same session
+  // Auto-scroll using ResizeObserver - fires AFTER layout is complete
+  // Debounced to wait for layout to settle before scrolling
   React.useEffect(() => {
+    const viewport = scrollViewportRef.current
+    if (!viewport) return
+
     const isSessionSwitch = prevSessionIdRef.current !== session?.id
     prevSessionIdRef.current = session?.id ?? null
 
-    messagesEndRef.current?.scrollIntoView({
-      behavior: isSessionSwitch ? 'instant' : 'smooth'
+    // On session switch: scroll immediately and re-stick to bottom
+    if (isSessionSwitch) {
+      isStickToBottomRef.current = true
+      messagesEndRef.current?.scrollIntoView({ behavior: 'instant' })
+    }
+
+    // Debounced scroll - waits for layout to settle
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null
+
+    const resizeObserver = new ResizeObserver(() => {
+      if (!isStickToBottomRef.current) return
+
+      // Clear pending scroll and wait for layout to settle
+      if (debounceTimer) clearTimeout(debounceTimer)
+      debounceTimer = setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+      }, 200)
     })
-  }, [session?.id, session?.messages])
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    const hasContent = input.trim() || attachments.length > 0
-    if (!hasContent || isInputDisabled) return
-    onSendMessage(input.trim(), attachments.length > 0 ? attachments : undefined)
-    setInput("")
-    setAttachments([])
+    // Observe the scroll content container (first child of viewport)
+    const content = viewport.firstElementChild
+    if (content) {
+      resizeObserver.observe(content)
+    }
+
+    return () => {
+      resizeObserver.disconnect()
+      if (debounceTimer) clearTimeout(debounceTimer)
+    }
+  }, [session?.id])
+
+  // Handle message submission from InputContainer
+  // Backend handles interruption and queueing if currently processing
+  const handleSubmit = (message: string, attachments?: FileAttachment[]) => {
+    // Force stick-to-bottom when user sends a message
+    isStickToBottomRef.current = true
+    onSendMessage(message, attachments)
+
+    // Immediately scroll to bottom after sending - use requestAnimationFrame
+    // to ensure the DOM has updated with the new message
+    requestAnimationFrame(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    })
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    // Enter (without shift) or Cmd+Enter to submit
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      handleSubmit(e)
-    }
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-      e.preventDefault()
-      handleSubmit(e)
-    }
-    // Escape to blur textarea
-    if (e.key === 'Escape') {
-      textareaRef.current?.blur()
+  // Handle stop request from InputContainer
+  // silent=true when redirecting (sending new message), silent=false when user clicks Stop button
+  const handleStop = (silent = false) => {
+    if (!session?.isProcessing) return
+    window.electronAPI.cancelProcessing(session.id, silent).catch(error => {
+      console.error('[ChatDisplay] Failed to cancel processing:', error)
+    })
+  }
+
+  // Handle structured input responses (permissions and credentials)
+  const handleStructuredResponse = (response: StructuredResponse) => {
+    if (response.type === 'permission' && pendingPermission && onRespondToPermission) {
+      const permResponse = response as PermissionResponse
+      onRespondToPermission(
+        pendingPermission.sessionId,
+        pendingPermission.requestId,
+        permResponse.allowed,
+        permResponse.alwaysAllow
+      )
+    } else if (response.type === 'credential' && pendingCredential && onRespondToCredential) {
+      const credResponse = response as CredentialResponse
+      onRespondToCredential(
+        pendingCredential.sessionId,
+        pendingCredential.requestId,
+        credResponse
+      )
     }
   }
+
+  // Build structured input state from pending requests (permissions take priority)
+  const structuredInput: StructuredInputState | undefined = React.useMemo(() => {
+    if (pendingPermission) {
+      return { type: 'permission', data: pendingPermission }
+    }
+    if (pendingCredential) {
+      return { type: 'credential', data: pendingCredential }
+    }
+    return undefined
+  }, [pendingPermission, pendingCredential])
+
+  // Memoize turn grouping - avoids O(n) iteration on every render/keystroke
+  const turns = React.useMemo(() => {
+    if (!session) return []
+    return groupMessagesByTurn(session.messages)
+  }, [session?.messages])
 
   return (
     <div ref={zoneRef} className="flex h-full flex-col min-w-0" data-focus-zone="chat">
       {session ? (
         <div className="flex flex-1 flex-col min-h-0 min-w-0">
           {/* === MESSAGES AREA: Scrollable list of message bubbles === */}
-          <ScrollArea className="flex-1 min-w-0 font-mono">
-            <div className="px-5 py-4 space-y-4 min-w-0">
+          <div className="relative flex-1 min-h-0">
+            {/* Top fade gradient - absolutely positioned overlay */}
+            <div className="absolute top-0 left-0 right-2 h-8 z-10 bg-gradient-to-b from-background to-transparent pointer-events-none" />
+            <ScrollArea className="h-full min-w-0" viewportRef={scrollViewportRef}>
+            <div className={cn(CONTENT_MAX_WIDTH_CLASS, "mx-auto px-5 py-8 space-y-2.5 min-w-0")}>
               {session.messages.length === 0 ? (
                 /* Empty State: Welcome message for new sessions */
                 <div className="flex flex-col items-center justify-center h-64 text-muted-foreground px-8">
-                  <div className="size-14 rounded-xl bg-muted flex items-center justify-center mb-3">
-                    {session.agentName ? (
-                      <Bot className="size-7 text-muted-foreground/50" />
-                    ) : (
-                      <MessageSquare className="size-7 text-muted-foreground/50" />
-                    )}
-                  </div>
-                  <p className="text-sm font-medium text-foreground">
+                  <p className="text-sm font-medium">
                     {session.agentName ? `Chat with ${session.agentName}` : `Welcome to ${session.workspaceName}`}
                   </p>
                   <p className="text-xs mt-1 text-center">Start a conversation by typing a message below.</p>
                 </div>
               ) : (
-                /* Message List */
-                session.messages.map(message => (
-                  <MessageBubble
-                    key={message.id}
-                    message={message}
-                    onOpenFile={onOpenFile}
-                    onOpenUrl={onOpenUrl}
-                  />
-                ))
+                /* Turn-based Message Display - memoized to avoid re-grouping on every render */
+                (() => {
+                  return turns.map((turn, index) => {
+                    // User turns - render with MemoizedMessageBubble
+                    // Extra top margin creates visual separation after AI responses
+                    if (turn.type === 'user') {
+                      return (
+                        <div key={`user-${turn.message.id}`} className="pt-3">
+                          <MemoizedMessageBubble
+                            message={turn.message}
+                            onOpenFile={onOpenFile}
+                            onOpenUrl={onOpenUrl}
+                          />
+                        </div>
+                      )
+                    }
+
+                    // System turns (error, status, info, warning) - render with MemoizedMessageBubble
+                    if (turn.type === 'system') {
+                      return (
+                        <MemoizedMessageBubble
+                          key={`system-${turn.message.id}`}
+                          message={turn.message}
+                          onOpenFile={onOpenFile}
+                          onOpenUrl={onOpenUrl}
+                        />
+                      )
+                    }
+
+                    // Plan turns - render with PlanCard for inline plan review
+                    if (turn.type === 'plan') {
+                      // Check if any subsequent turn is a user message (hide footer if so)
+                      const hasUserResponse = turns.slice(index + 1).some(t => t.type === 'user')
+                      return (
+                        <PlanCard
+                          key={`plan-${turn.message.id}`}
+                          message={turn.message}
+                          sessionId={session?.id}
+                          onOpenFile={onOpenFile}
+                          onOpenUrl={onOpenUrl}
+                          onPopOut={(text) => {
+                            if (session) {
+                              window.electronAPI.openMarkdownPreview(`${session.id}:plan-${turn.message.id}`, {
+                                mode: 'readOnly',
+                                content: text,
+                                title: 'Plan Preview',
+                              })
+                            }
+                          }}
+                          hasUserResponse={hasUserResponse}
+                        />
+                      )
+                    }
+
+                    // Assistant turns - render with TurnCard (buffered streaming)
+                    return (
+                      <TurnCard
+                        key={`turn-${turn.turnId}`}
+                        sessionId={session.id}
+                        turnId={turn.turnId}
+                        activities={turn.activities}
+                        response={turn.response}
+                        intent={turn.intent}
+                        isStreaming={turn.isStreaming}
+                        isComplete={turn.isComplete}
+                        todos={turn.todos}
+                        onOpenFile={onOpenFile}
+                        onOpenUrl={onOpenUrl}
+                        onPopOut={(text) => {
+                          if (session) {
+                            window.electronAPI.openMarkdownPreview(`${session.id}:${turn.turnId}`, {
+                              mode: 'readOnly',
+                              content: text,
+                              title: 'Response Preview',
+                            })
+                          }
+                        }}
+                        onOpenDetails={() => {
+                          if (session) {
+                            const markdown = formatTurnAsMarkdown(turn)
+                            window.electronAPI.openMarkdownPreview(`${session.id}:details-${turn.turnId}`, {
+                              mode: 'readOnly',
+                              content: markdown,
+                              title: 'Turn Details',
+                            })
+                          }
+                        }}
+                        onOpenActivityDetails={(activity) => {
+                          if (session) {
+                            const input = activity.toolInput as Record<string, unknown> | undefined
+
+                            // Edit/Write tool → Multi-file diff (ungrouped, focused on this change)
+                            if ((activity.toolName === 'Edit' || activity.toolName === 'Write') && input) {
+                              // Collect all Edit/Write activities from this turn
+                              const changes: FileChange[] = []
+                              for (const a of turn.activities) {
+                                const actInput = a.toolInput as Record<string, unknown> | undefined
+                                if (a.toolName === 'Edit' && actInput) {
+                                  changes.push({
+                                    id: a.id,
+                                    filePath: (actInput.file_path as string) || 'unknown',
+                                    toolType: 'Edit',
+                                    original: (actInput.old_string as string) || '',
+                                    modified: (actInput.new_string as string) || '',
+                                    error: a.error || undefined,
+                                  })
+                                } else if (a.toolName === 'Write' && actInput) {
+                                  changes.push({
+                                    id: a.id,
+                                    filePath: (actInput.file_path as string) || 'unknown',
+                                    toolType: 'Write',
+                                    original: '',
+                                    modified: (actInput.content as string) || '',
+                                    error: a.error || undefined,
+                                  })
+                                }
+                              }
+
+                              if (changes.length > 0) {
+                                const diffData: MultiFileDiffData = {
+                                  sessionId: session.id,
+                                  turnId: turn.turnId,
+                                  changes,
+                                  consolidated: false, // Ungrouped mode
+                                  focusedChangeId: activity.id, // Focus on clicked activity
+                                }
+                                window.electronAPI.openMultiFileDiff(session.id, turn.turnId, diffData)
+                              }
+                            }
+                            // Read tool → Code preview (read mode)
+                            else if (activity.toolName === 'Read' && input) {
+                              // Always use input.file_path as the absolute path for opening files
+                              const filePath = (input.file_path as string) || 'unknown'
+                              let content = activity.content || ''
+                              let numLines: number | undefined
+                              let startLine: number | undefined
+                              let totalLines: number | undefined
+
+                              // Try to parse JSON structure from Read tool result for metadata
+                              try {
+                                const parsed = JSON.parse(content)
+                                if (parsed.file) {
+                                  // Use content and metadata from JSON, but keep absolute filePath from input
+                                  content = parsed.file.content || ''
+                                  numLines = parsed.file.numLines
+                                  startLine = parsed.file.startLine
+                                  totalLines = parsed.file.totalLines
+                                }
+                              } catch {
+                                // Not JSON, use as plain text
+                              }
+
+                              window.electronAPI.openCodePreview(session.id, `code-${activity.id}`, {
+                                filePath,
+                                content,
+                                mode: 'read',
+                                numLines,
+                                startLine,
+                                totalLines,
+                              })
+                            }
+                            // Bash tool → Terminal preview
+                            else if (activity.toolName === 'Bash' && input) {
+                              const command = (input.command as string) || ''
+                              const description = (input.description as string) || undefined
+                              // Parse exit code and output from JSON result
+                              let exitCode: number | undefined
+                              let output = activity.content || ''
+
+                              // Try to parse JSON structure from Bash tool result
+                              try {
+                                const parsed = JSON.parse(output)
+                                if (parsed.stdout !== undefined || parsed.stderr !== undefined) {
+                                  // Combine stdout and stderr, preserving formatting
+                                  const stdout = parsed.stdout || ''
+                                  const stderr = parsed.stderr || ''
+                                  output = stdout + (stderr ? `\n${stderr}` : '')
+                                  // exitCode might not be in the result, check interrupted flag
+                                  if (parsed.interrupted) {
+                                    exitCode = 130 // Standard SIGINT exit code
+                                  }
+                                }
+                              } catch {
+                                // Not JSON, parse exit code from text if present
+                                const exitMatch = output.match(/Exit code: (\d+)/)
+                                if (exitMatch) {
+                                  exitCode = parseInt(exitMatch[1], 10)
+                                }
+                              }
+
+                              window.electronAPI.openTerminalPreview(session.id, `terminal-${activity.id}`, {
+                                command,
+                                output,
+                                description,
+                                exitCode,
+                                toolType: 'bash',
+                              })
+                            }
+                            // Grep tool → Terminal preview (search results)
+                            else if (activity.toolName === 'Grep' && input) {
+                              const pattern = (input.pattern as string) || ''
+                              const searchPath = (input.path as string) || '.'
+                              const outputMode = (input.output_mode as string) || 'files_with_matches'
+                              const rawOutput = activity.content || ''
+
+                              // Try to parse JSON structure from Grep tool result
+                              let output = rawOutput
+                              let description = `Search for "${pattern}"`
+                              try {
+                                const parsed = JSON.parse(rawOutput)
+                                if (parsed.content !== undefined) {
+                                  output = parsed.content || ''
+                                  // Add file count info if available
+                                  if (parsed.numFiles !== undefined) {
+                                    description = `Search for "${pattern}" (${parsed.numFiles} files, ${parsed.numLines || 0} lines)`
+                                  }
+                                } else if (parsed.filenames) {
+                                  // files_with_matches mode returns filenames array
+                                  output = parsed.filenames.join('\n')
+                                  description = `Search for "${pattern}" (${parsed.filenames.length} files)`
+                                }
+                              } catch {
+                                // Not JSON, use as plain text
+                              }
+
+                              const command = `grep "${pattern}" ${searchPath} --${outputMode}`
+
+                              window.electronAPI.openTerminalPreview(session.id, `terminal-${activity.id}`, {
+                                command,
+                                output,
+                                description,
+                                toolType: 'grep',
+                              })
+                            }
+                            // Glob tool → Terminal preview (file list)
+                            else if (activity.toolName === 'Glob' && input) {
+                              const pattern = (input.pattern as string) || '*'
+                              const searchPath = (input.path as string) || '.'
+                              const rawOutput = activity.content || ''
+
+                              // Try to parse JSON structure from Glob tool result
+                              let output = rawOutput
+                              let description = `Find files matching "${pattern}"`
+                              try {
+                                const parsed = JSON.parse(rawOutput)
+                                if (parsed.filenames && Array.isArray(parsed.filenames)) {
+                                  // Standard Glob result format: { filenames: [...], numFiles, durationMs, truncated }
+                                  output = parsed.filenames.join('\n')
+                                  const truncatedNote = parsed.truncated ? ' (truncated)' : ''
+                                  description = `Find files matching "${pattern}" (${parsed.numFiles || parsed.filenames.length} files${truncatedNote})`
+                                } else if (Array.isArray(parsed)) {
+                                  // Simple array format
+                                  output = parsed.join('\n')
+                                  description = `Find files matching "${pattern}" (${parsed.length} matches)`
+                                }
+                              } catch {
+                                // Not JSON, use as plain text
+                              }
+
+                              const command = `glob "${pattern}" in ${searchPath}`
+
+                              window.electronAPI.openTerminalPreview(session.id, `terminal-${activity.id}`, {
+                                command,
+                                output,
+                                description,
+                                toolType: 'glob',
+                              })
+                            }
+                            // Default → Markdown preview
+                            else {
+                              const markdown = formatActivityAsMarkdown(activity)
+                              window.electronAPI.openMarkdownPreview(`${session.id}:activity-${activity.id}`, {
+                                mode: 'readOnly',
+                                content: markdown,
+                                title: 'Activity Details',
+                              })
+                            }
+                          }
+                        }}
+                        hasEditOrWriteActivities={turn.activities.some(a =>
+                          a.toolName === 'Edit' || a.toolName === 'Write'
+                        )}
+                        onOpenMultiFileDiff={() => {
+                          if (session) {
+                            // Collect all Edit/Write activities from this turn
+                            const changes: FileChange[] = []
+                            for (const a of turn.activities) {
+                              const input = a.toolInput as Record<string, unknown> | undefined
+                              if (a.toolName === 'Edit' && input) {
+                                changes.push({
+                                  id: a.id,
+                                  filePath: (input.file_path as string) || 'unknown',
+                                  toolType: 'Edit',
+                                  original: (input.old_string as string) || '',
+                                  modified: (input.new_string as string) || '',
+                                  error: a.error || undefined,
+                                })
+                              } else if (a.toolName === 'Write' && input) {
+                                changes.push({
+                                  id: a.id,
+                                  filePath: (input.file_path as string) || 'unknown',
+                                  toolType: 'Write',
+                                  original: '',
+                                  modified: (input.content as string) || '',
+                                  error: a.error || undefined,
+                                })
+                              }
+                            }
+
+                            if (changes.length > 0) {
+                              const diffData: MultiFileDiffData = {
+                                sessionId: session.id,
+                                turnId: turn.turnId,
+                                changes,
+                              }
+                              window.electronAPI.openMultiFileDiff(session.id, turn.turnId, diffData)
+                            }
+                          }
+                        }}
+                      />
+                    )
+                  })
+                })()
               )}
+              {/* Processing Indicator - always visible while processing */}
+              {session.isProcessing && (() => {
+                // Find the last user message timestamp for accurate elapsed time
+                const lastUserMsg = [...session.messages].reverse().find(m => m.role === 'user')
+                return (
+                  <ProcessingIndicator
+                    startTime={lastUserMsg?.timestamp}
+                    statusMessage={session.currentStatus?.message}
+                  />
+                )
+              })()}
               {/* Scroll Anchor: For auto-scroll to bottom */}
               <div ref={messagesEndRef} />
             </div>
           </ScrollArea>
+            {/* Bottom fade gradient - absolutely positioned overlay */}
+            <div className="absolute bottom-0 left-0 right-2 h-8 z-10 bg-gradient-to-t from-background to-transparent pointer-events-none" />
+          </div>
 
-          {/* Fade gradient - overlays bottom of scroll area */}
-          <div className="h-8 -mt-8 bg-gradient-to-t from-background to-transparent pointer-events-none" />
-
-          {/* Permission Banner - shows when agent needs approval for a command */}
-          {pendingPermission && onRespondToPermission && (
-            <PermissionBanner
-              request={pendingPermission}
-              onRespond={(allowed, alwaysAllow) =>
-                onRespondToPermission(pendingPermission.sessionId, pendingPermission.requestId, allowed, alwaysAllow)
-              }
-            />
-          )}
-
-          {/* === INPUT CONTAINER: Textarea + Bottom row with controls === */}
-          <div className="px-4 pb-4 font-mono">
-            <form onSubmit={handleSubmit}>
-              <div
-                className={cn(
-                  "rounded-xl border bg-background overflow-hidden transition-all",
-                  isDraggingOver && "ring-2 ring-primary ring-offset-2 ring-offset-background bg-primary/5"
-                )}
-                onDragEnter={handleDragEnter}
-                onDragLeave={handleDragLeave}
-                onDragOver={handleDragOver}
-                onDrop={handleDrop}
-              >
-                {/* Attachment Preview - ChatGPT-style bubbles above textarea */}
-                <AttachmentPreview
-                  attachments={attachments}
-                  onRemove={handleRemoveAttachment}
-                  disabled={isInputDisabled}
-                  loadingCount={loadingCount}
+          {/* === INPUT CONTAINER: FreeForm or Structured Input === */}
+          <div className={cn(CONTENT_MAX_WIDTH_CLASS, "mx-auto w-full px-4 pb-4 mt-1")}>
+            {/* Agent Setup Banner - shown instead of input when agent needs setup */}
+            {agentSetupState && agentSetupState.state !== 'hidden' && !pendingPermission ? (
+              <SetupAuthBanner
+                state={agentSetupState.state}
+                agentName={agentSetupState.agentName}
+                reason={agentSetupState.reason}
+                onAction={agentSetupState.onAction}
+                variant="inputAreaCover"
+              />
+            ) : (
+              <>
+                {/* Active option badges and tasks - positioned above input */}
+                <ActiveOptionBadges
+                  ultrathinkEnabled={ultrathinkEnabled}
+                  onUltrathinkChange={onUltrathinkChange}
+                  permissionMode={permissionMode}
+                  onPermissionModeChange={onPermissionModeChange}
+                  tasks={backgroundTasks}
+                  sessionId={session.id}
+                  onKillTask={(taskId) => killTask(taskId, backgroundTasks.find(t => t.id === taskId)?.type ?? 'shell')}
+                  onInsertMessage={onInputChange}
                 />
-
-                {/* Textarea - 4 lines minimum height */}
-                <textarea
-                  ref={textareaRef}
-                  className="w-full min-h-[100px] px-4 py-3 bg-transparent outline-none text-sm placeholder:text-muted-foreground resize-none focus-visible:ring-0"
-                  placeholder={`Message ${session.workspaceName || 'Chat'}...`}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  onDragOver={handleDragOver}
-                  onDrop={handleDrop}
-                  disabled={isInputDisabled}
-                  rows={3}
-                />
-
-                {/* Bottom Row: Attach, Model selector, Send */}
-                <div className="flex items-center gap-1 px-2 py-2 border-t border-border/50">
-                  {/* Attach File Button */}
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 shrink-0"
-                    onClick={handleAttachClick}
-                    disabled={isInputDisabled}
-                  >
-                    <Paperclip className="h-4 w-4" />
-                  </Button>
-
-                  {/* Model Selector Dropdown */}
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 gap-1 text-xs shrink-0 hover:bg-foreground/5 data-[state=open]:bg-foreground/5"
-                      >
-                        <Sparkles className="h-3.5 w-3.5" />
-                        {getModelDisplayName(currentModel)}
-                        <ChevronDown className="h-3 w-3 opacity-50" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <StyledDropdownMenuContent side="top" align="start" sideOffset={8}>
-                      {MODELS.map((model) => (
-                        <StyledDropdownMenuItem
-                          key={model.id}
-                          onClick={() => onModelChange(model.id)}
-                          className={cn(currentModel === model.id && "bg-foreground/10")}
-                        >
-                          {model.name}
-                        </StyledDropdownMenuItem>
-                      ))}
-                    </StyledDropdownMenuContent>
-                  </DropdownMenu>
-
-                  {/* Spacer */}
-                  <div className="flex-1" />
-
-                  {/* Send Button */}
-                  <Button
-                    type="submit"
-                    size="icon"
-                    className="h-7 w-7 rounded-full shrink-0"
-                    disabled={(!input.trim() && attachments.length === 0) || isInputDisabled}
-                  >
-                    <ArrowUp className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            </form>
+                <InputContainer
+                  placeholder={`Message ${session.agentName || session.workspaceName || 'Chat'}...`}
+                disabled={isInputDisabled}
+                isProcessing={session.isProcessing}
+                onSubmit={handleSubmit}
+                onStop={handleStop}
+                textareaRef={textareaRef}
+                currentModel={currentModel}
+                onModelChange={onModelChange}
+                ultrathinkEnabled={ultrathinkEnabled}
+                onUltrathinkChange={onUltrathinkChange}
+                permissionMode={permissionMode}
+                onPermissionModeChange={onPermissionModeChange}
+                structuredInput={structuredInput}
+                onStructuredResponse={handleStructuredResponse}
+                inputValue={inputValue}
+                onInputChange={onInputChange}
+                sources={sources}
+                enabledSourceSlugs={session.enabledSourceSlugs}
+                onSourcesChange={onSourcesChange}
+                workingDirectory={workingDirectory}
+                onWorkingDirectoryChange={onWorkingDirectoryChange}
+                sessionId={session.id}
+              />
+              </>
+            )}
           </div>
         </div>
       ) : null}
@@ -430,11 +857,12 @@ export function ChatDisplay({
  * MessageBubble - Renders a single message based on its role
  *
  * Message Roles & Styles:
- * - user:      Right-aligned, blue (bg-primary), white text
+ * - user:      Right-aligned, blue (bg-foreground), white text
  * - assistant: Left-aligned, gray (bg-muted), markdown rendered with clickable links
- * - tool:      Left-aligned, bordered card with tool name header + result preview (max 500 chars)
  * - error:     Left-aligned, red border/bg, warning icon + error message
  * - status:    Centered pill badge with pulsing dot (e.g., "Thinking...")
+ *
+ * Note: Tool messages are rendered by TurnCard, not MessageBubble
  */
 interface MessageBubbleProps {
   message: Message
@@ -445,6 +873,10 @@ interface MessageBubbleProps {
    * @default 'minimal'
    */
   renderMode?: RenderMode
+  /**
+   * Callback to pop out message into a separate window
+   */
+  onPopOut?: (message: Message) => void
 }
 
 /**
@@ -456,11 +888,9 @@ function ErrorMessage({ message }: { message: Message }) {
 
   return (
     <div className="flex justify-start">
-      <div className="max-w-[80%] bg-destructive/10 border border-destructive/20 rounded-lg pl-5 pr-4 py-2 break-words">
-        {/* Error Header: Warning icon + title */}
-        <div className="flex items-center gap-2 text-xs text-destructive mb-1 font-semibold">
-          <AlertTriangle className="w-4 h-4" />
-          <span>{message.errorTitle || 'Error'}</span>
+      <div className="max-w-[80%] bg-destructive/10 rounded-[8px] pl-5 pr-4 pt-2 pb-2.5 break-words">
+        <div className="text-xs text-destructive/50 mb-0.5 font-semibold">
+          {message.errorTitle || 'Error'}
         </div>
         <p className="text-sm text-destructive">{message.content}</p>
 
@@ -492,13 +922,21 @@ function ErrorMessage({ message }: { message: Message }) {
   )
 }
 
-function MessageBubble({ message, onOpenFile, onOpenUrl, renderMode = 'minimal' }: MessageBubbleProps) {
+function MessageBubble({
+  message,
+  onOpenFile,
+  onOpenUrl,
+  renderMode = 'minimal',
+  onPopOut,
+}: MessageBubbleProps) {
   // === USER MESSAGE: Right-aligned blue bubble with attachments above ===
   if (message.role === 'user') {
     const hasAttachments = message.attachments && message.attachments.length > 0
+    const isPending = message.isPending
+    const isQueued = message.isQueued
 
     return (
-      <div className="flex flex-col items-end gap-1">
+      <div className="flex flex-col items-end gap-3 w-full">
         {/* Attachment preview row - stored attachments with thumbnails */}
         {hasAttachments && (
           <div className="flex gap-2 justify-end max-w-[80%] flex-wrap">
@@ -515,7 +953,7 @@ function MessageBubble({ message, onOpenFile, onOpenUrl, renderMode = 'minimal' 
                 >
                   {isImage ? (
                     /* IMAGE: Square thumbnail only */
-                    <div className="h-14 w-14 rounded-lg overflow-hidden border bg-muted">
+                    <div className="h-14 w-14 rounded-[8px] overflow-hidden bg-background shadow-minimal">
                       {hasThumbnail ? (
                         <img
                           src={`data:image/png;base64,${att.thumbnailBase64}`}
@@ -530,8 +968,8 @@ function MessageBubble({ message, onOpenFile, onOpenUrl, renderMode = 'minimal' 
                     </div>
                   ) : (
                     /* DOCUMENT: Bubble with thumbnail/icon + 2-line text */
-                    <div className="flex items-center gap-2.5 rounded-xl border bg-muted/50 pl-1.5 pr-3 py-1.5">
-                      <div className="h-11 w-11 rounded-lg overflow-hidden bg-muted flex items-center justify-center shrink-0">
+                    <div className="flex items-center gap-2.5 rounded-[8px] bg-foreground/5 pl-1.5 pr-3 py-1.5">
+                      <div className="h-11 w-8 rounded-[6px] overflow-hidden bg-background shadow-minimal flex items-center justify-center shrink-0">
                         {hasThumbnail ? (
                           <img
                             src={`data:image/png;base64,${att.thumbnailBase64}`}
@@ -558,16 +996,26 @@ function MessageBubble({ message, onOpenFile, onOpenUrl, renderMode = 'minimal' 
           </div>
         )}
         {/* Text content bubble */}
-        <div className="max-w-[80%] bg-primary text-primary-foreground rounded-lg px-4 py-1 break-words min-w-0">
+        <div
+          className={`max-w-[80%] bg-foreground/5 rounded-[16px] px-4 py-1 break-words min-w-0 select-text ${
+            isPending ? 'animate-shimmer' : ''
+          }`}
+        >
           <Markdown
             mode="minimal"
             onUrlClick={onOpenUrl}
             onFileClick={onOpenFile}
-            className="text-sm [&_a]:text-primary-foreground [&_a]:underline [&_code]:bg-primary-foreground/20 [&_code]:text-primary-foreground"
+            className="text-sm [&_a]:underline [&_code]:bg-foreground/10"
           >
             {message.content}
           </Markdown>
         </div>
+        {/* Queued badge */}
+        {isQueued && (
+          <span className="text-[10px] text-muted-foreground bg-foreground/5 px-2 py-0.5 rounded-full">
+            queued
+          </span>
+        )}
       </div>
     )
   }
@@ -575,66 +1023,41 @@ function MessageBubble({ message, onOpenFile, onOpenUrl, renderMode = 'minimal' 
   // === ASSISTANT MESSAGE: Left-aligned gray bubble with markdown rendering ===
   if (message.role === 'assistant') {
     return (
-      <div className="flex justify-start">
-        <div className="max-w-[80%] bg-muted rounded-lg pl-6 pr-4 py-3 break-words min-w-0">
-          <CollapsibleMarkdownProvider>
-            <Markdown
+      <div className="flex justify-start group">
+        <div className="relative max-w-[90%] bg-background shadow-minimal rounded-[8px] pl-6 pr-4 py-3 break-words min-w-0 select-text">
+          {/* Pop-out button - visible on hover */}
+          {onPopOut && !message.isStreaming && (
+            <button
+              onClick={() => onPopOut(message)}
+              className="absolute top-2 right-2 p-1.5 rounded-md opacity-0 group-hover:opacity-100 transition-opacity hover:bg-foreground/5"
+              title="Open in new window"
+            >
+              <ExternalLink className="w-4 h-4 text-muted-foreground hover:text-foreground" />
+            </button>
+          )}
+          {/* Use StreamingMarkdown for block-level memoization during streaming */}
+          {message.isStreaming ? (
+            <StreamingMarkdown
+              content={message.content}
+              isStreaming={true}
               mode={renderMode}
               onUrlClick={onOpenUrl}
               onFileClick={onOpenFile}
-              id={message.id}
-              className="text-sm"
-              collapsible
-            >
-              {message.content}
-            </Markdown>
-          </CollapsibleMarkdownProvider>
-          {/* Streaming Cursor: Pulsing bar while response is being generated */}
-          {message.isStreaming && (
-            <span className="inline-block w-2 h-4 bg-primary ml-1 animate-pulse rounded-sm" />
+            />
+          ) : (
+            <CollapsibleMarkdownProvider>
+              <Markdown
+                mode={renderMode}
+                onUrlClick={onOpenUrl}
+                onFileClick={onOpenFile}
+                id={message.id}
+                className="text-sm"
+                collapsible
+              >
+                {message.content}
+              </Markdown>
+            </CollapsibleMarkdownProvider>
           )}
-        </div>
-      </div>
-    )
-  }
-
-  // === TOOL MESSAGE: Bordered card with header + result preview ===
-  if (message.role === 'tool') {
-    return (
-      <div className="flex justify-start">
-        <div className="max-w-[85%] border rounded-lg overflow-hidden">
-          {/* Tool Header: Gear icon + tool name */}
-          <div className="flex items-center gap-2 pl-4 pr-3 py-2 bg-muted/50 border-b">
-            <div className="p-1 rounded bg-primary/10 text-primary">
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-            </div>
-            <span className="text-xs font-semibold uppercase tracking-wide">{message.toolName}</span>
-          </div>
-          {/* Tool Result: Shows preview (max 500 chars) or "Running..." spinner */}
-          <div className="pl-4 pr-3 py-2 min-w-0">
-            {(() => {
-              // Check both toolResult and content for backwards compat with old persisted sessions
-              const result = message.toolResult || message.content
-              if (result) {
-                return (
-                  <pre className="text-xs text-muted-foreground max-h-48 overflow-y-auto font-mono bg-muted/30 p-2 rounded whitespace-pre-wrap break-words">
-                    {result.slice(0, 500)}
-                    {result.length > 500 && '...'}
-                  </pre>
-                )
-              }
-              /* Running Indicator: Braille spinner + "Running..." text */
-              return (
-                <LoadingIndicator
-                  label="Running..."
-                  className="text-sm text-muted-foreground"
-                />
-              )
-            })()}
-          </div>
         </div>
       </div>
     )
@@ -645,31 +1068,49 @@ function MessageBubble({ message, onOpenFile, onOpenUrl, renderMode = 'minimal' 
     return <ErrorMessage message={message} />
   }
 
-  // === STATUS MESSAGE: Left-aligned with braille spinner (TUI-style) ===
+  // === STATUS MESSAGE: Matches ProcessingIndicator layout for visual consistency ===
   if (message.role === 'status') {
     return (
-      <div className="flex justify-start pl-1">
-        <LoadingIndicator
-          label={message.content}
-          className="text-sm"
-        />
+      <div className="flex items-center gap-2 px-3 py-1 -mb-1 text-[13px] text-muted-foreground">
+        {/* Spinner in same location as TurnCard chevron */}
+        <div className="w-3 h-3 flex items-center justify-center shrink-0">
+          <Spinner className="text-[10px]" />
+        </div>
+        <span>{message.content}</span>
       </div>
     )
   }
 
-  // === WARNING MESSAGE: Amber bordered bubble with warning icon ===
+  // === INFO MESSAGE: Icon and color based on level ===
+  if (message.role === 'info') {
+    const level = message.infoLevel || 'info'
+    const config = {
+      info: { icon: Info, className: 'text-muted-foreground' },
+      warning: { icon: AlertTriangle, className: 'text-info' },
+      error: { icon: CircleAlert, className: 'text-destructive' },
+      success: { icon: CheckCircle2, className: 'text-success' },
+    }[level]
+    const Icon = config.icon
+
+    return (
+      <div className={cn('flex items-center gap-2 px-3 py-1 text-[13px]', config.className)}>
+        <div className="w-3 h-3 flex items-center justify-center shrink-0">
+          <Icon className="w-3 h-3" />
+        </div>
+        <span>{message.content}</span>
+      </div>
+    )
+  }
+
+  // === WARNING MESSAGE: Info themed bubble ===
   if (message.role === 'warning') {
     return (
       <div className="flex justify-start">
-        <div className="max-w-[80%] bg-amber-500/10 border border-amber-500/20 rounded-lg pl-5 pr-4 py-2 break-words">
-          {/* Warning Header: Triangle icon + "Warning" label */}
-          <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-500 mb-1 font-semibold">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-            <span>Warning</span>
+        <div className="max-w-[80%] bg-info/10 rounded-[8px] pl-5 pr-4 pt-2 pb-2.5 break-words">
+          <div className="text-xs text-info/50 mb-0.5 font-semibold">
+            Warning
           </div>
-          <p className="text-sm text-amber-700 dark:text-amber-400">{message.content}</p>
+          <p className="text-sm text-info">{message.content}</p>
         </div>
       </div>
     )
@@ -677,3 +1118,23 @@ function MessageBubble({ message, onOpenFile, onOpenUrl, renderMode = 'minimal' 
 
   return null
 }
+
+/**
+ * MemoizedMessageBubble - Prevents re-renders of non-streaming messages
+ *
+ * During streaming, the entire message list gets updated on each delta.
+ * This wrapper skips re-renders for messages that haven't changed,
+ * significantly improving performance for long conversations.
+ */
+const MemoizedMessageBubble = React.memo(MessageBubble, (prev, next) => {
+  // Always re-render streaming messages (content is changing)
+  if (prev.message.isStreaming || next.message.isStreaming) {
+    return false
+  }
+  // Skip re-render if key props unchanged
+  return (
+    prev.message.id === next.message.id &&
+    prev.message.content === next.message.content &&
+    prev.message.role === next.message.role
+  )
+})

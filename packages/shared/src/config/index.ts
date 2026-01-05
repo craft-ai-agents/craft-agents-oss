@@ -1,3 +1,8 @@
 export * from './models.ts';
 export * from './preferences.ts';
 export * from './storage.ts';
+export {
+  ConfigWatcher,
+  createConfigWatcher,
+  type ConfigWatcherCallbacks,
+} from './watcher.ts';

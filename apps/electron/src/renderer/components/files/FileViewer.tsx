@@ -72,7 +72,7 @@ export function FileViewer({ path }: FileViewerProps) {
               <p className="text-xs">{error}</p>
             </div>
           ) : (
-            <pre className="text-sm whitespace-pre-wrap font-mono leading-relaxed selection:bg-primary/20">
+            <pre className="text-sm whitespace-pre-wrap font-mono leading-relaxed selection:bg-foreground/20">
               {content}
             </pre>
           )}

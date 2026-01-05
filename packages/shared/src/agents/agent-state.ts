@@ -1,9 +1,8 @@
 /**
  * AgentStateManager - Unified agent activation state machine
  *
- * Manages the activation lifecycle for sub-agents, handling:
- * - Extraction from Craft documents
- * - Review of concerns
+ * Manages the activation lifecycle for folder-based agents, handling:
+ * - Loading from agent folders
  * - MCP server authentication
  * - API authentication
  * - Final activation with CraftAgent
@@ -12,6 +11,21 @@
  */
 
 import { EventEmitter } from 'events';
+import { FolderAgentManager } from './folder-manager.ts';
+import type { AgentDefinition } from './folder-types.ts';
+import type {
+  SubAgentDefinition,
+  McpServerConfig,
+  ApiConfig,
+  AgentStatus,
+  AgentActivateOptions,
+  AgentActivationProgress,
+} from './types.ts';
+import type { SdkMcpServerConfig } from '../agent/craft-agent.ts';
+import { debug } from '../utils/debug.ts';
+import { createApiServer } from './api-tools.ts';
+import { getCredentialManager } from '../credentials/index.ts';
+import type { CredentialId, CredentialType } from '../credentials/types.ts';
 
 /**
  * Type-safe EventEmitter wrapper
@@ -40,19 +54,6 @@ class TypedEventEmitter<TEvents> {
     return this;
   }
 }
-import { SubAgentManager } from './manager.ts';
-import type {
-  SubAgentDefinition,
-  McpServerConfig,
-  ApiConfig,
-  AgentStatus,
-  AgentActivateOptions,
-  AgentActivationProgress,
-} from './types.ts';
-import type { ExtractionProgressEvent } from './extractor.ts';
-import { clearDefinition, clearAgentCredentialsAsync } from './cache.ts';
-import { debug } from '../utils/debug.ts';
-import { createApiServer } from './api-tools.ts';
 
 /**
  * Events emitted by AgentStateManager
@@ -70,14 +71,14 @@ export interface AgentStateEvents {
  * AgentStateManager orchestrates the agent activation flow.
  *
  * State transitions:
- * idle → extracting → [needs_review] → [needs_mcp_auth] → [needs_api_auth] → ready → active
+ * idle → extracting → [needs_mcp_auth] → [needs_api_auth] → ready → active
  *
  * The flow pauses at needs_* states waiting for user input.
  * Call continueAfter*() methods to resume the flow.
  */
 export class AgentStateManager extends TypedEventEmitter<AgentStateEvents> {
   private workspaceId: string;
-  private subAgentManager: SubAgentManager;
+  private agentManager: FolderAgentManager;
   private currentStatus: AgentStatus = { status: 'idle' };
 
   // Pending state for multi-step flows
@@ -88,10 +89,10 @@ export class AgentStateManager extends TypedEventEmitter<AgentStateEvents> {
   // Lock to prevent concurrent activation calls
   private isActivating = false;
 
-  constructor(workspaceId: string, subAgentManager: SubAgentManager) {
+  constructor(workspaceId: string, agentManager: FolderAgentManager) {
     super();
     this.workspaceId = workspaceId;
-    this.subAgentManager = subAgentManager;
+    this.agentManager = agentManager;
   }
 
   /**
@@ -142,10 +143,10 @@ export class AgentStateManager extends TypedEventEmitter<AgentStateEvents> {
    *
    * Returns when:
    * - Activation completes successfully (status = 'ready')
-   * - User input is needed (status = 'needs_review' | 'needs_mcp_auth' | 'needs_api_auth')
+   * - User input is needed (status = 'needs_mcp_auth' | 'needs_api_auth')
    * - An error occurs (status = 'error')
    *
-   * @param agentId - Agent ID to activate
+   * @param agentId - Agent ID (slug) to activate
    * @param options - Activation options
    * @returns The final status after activation attempt
    */
@@ -160,11 +161,10 @@ export class AgentStateManager extends TypedEventEmitter<AgentStateEvents> {
     debug('[AgentStateManager.activate] Starting activation for:', agentId);
 
     try {
-      // Get agent metadata to get the name
-      const agents = await this.subAgentManager.getAvailableAgents();
-      const agent = agents.find((a) => a.id === agentId);
+      // Load agent definition from folder
+      const agentDef = this.agentManager.getAgentDefinition(agentId);
 
-      if (!agent) {
+      if (!agentDef) {
         const errorStatus: AgentStatus = {
           status: 'error',
           agentId,
@@ -176,91 +176,35 @@ export class AgentStateManager extends TypedEventEmitter<AgentStateEvents> {
       }
 
       this.pendingAgentId = agentId;
-      this.pendingAgentName = agent.name;
-
-      // Check if extraction is needed
-      const needsExtraction = options?.forceExtraction || this.subAgentManager.needsFreshExtraction(agentId);
-      debug('[AgentStateManager.activate] needsExtraction:', needsExtraction);
+      this.pendingAgentName = agentDef.name;
 
       // Set extracting status
       this.setStatus({
         status: 'extracting',
         agentId,
-        agentName: agent.name,
-        message: needsExtraction ? 'Loading agent instructions...' : 'Loading cached definition...',
+        agentName: agentDef.name,
+        message: 'Loading agent definition...',
       });
 
-      // Get definition (from cache or extract)
-      const definition = await this.subAgentManager.getDefinition(agentId, (event: ExtractionProgressEvent) => {
-        // Update progress
-        this.emit('progress', {
-          type: 'extraction_progress',
-          message: event.message,
-        });
-        // Also update the extracting status message
-        if (this.currentStatus.status === 'extracting') {
-          this.setStatus({
-            status: 'extracting',
-            agentId,
-            agentName: agent.name,
-            message: event.message,
-          });
-        }
-      });
-
-      if (!definition) {
-        const errorStatus: AgentStatus = {
-          status: 'error',
-          agentId,
-          agentName: agent.name,
-          error: 'Failed to load agent definition',
-        };
-        this.setStatus(errorStatus);
-        return errorStatus;
-      }
-
+      // Add slug to AgentDefinition for SubAgentDefinition compatibility
+      const definition: SubAgentDefinition = { ...agentDef, slug: agentId };
       this.pendingDefinition = definition;
 
-      // Set active agent in SubAgentManager for credential lookups
-      this.subAgentManager.setActiveAgentId(agentId);
-
-      // Check for concerns (needs review)
-      if (definition.concerns?.length && !options?.skipReview) {
-        debug('[AgentStateManager.activate] Agent has concerns, needs review');
-        const reviewStatus: AgentStatus = {
-          status: 'needs_review',
-          agentId,
-          agentName: agent.name,
-          definition,
-          concerns: definition.concerns,
-        };
-        this.setStatus(reviewStatus);
-        return reviewStatus;
-      }
-
       // Continue to auth checks
-      return this.checkAuthAndProceed(agentId, agent.name, definition);
+      return this.checkAuthAndProceed(agentId, agentDef.name, definition);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStatus: AgentStatus = {
+        status: 'error',
+        agentId,
+        agentName: this.pendingAgentName || 'unknown',
+        error: `Activation failed: ${errorMessage}`,
+      };
+      this.setStatus(errorStatus);
+      return errorStatus;
     } finally {
       this.isActivating = false;
     }
-  }
-
-  /**
-   * Continue activation after user completes review
-   * @param _answers - Map of question -> answer from user (stored elsewhere, not used here)
-   */
-  async continueAfterReview(_answers: Record<string, string>): Promise<AgentStatus> {
-    debug('[AgentStateManager.continueAfterReview] Resuming after review');
-
-    if (this.currentStatus.status !== 'needs_review') {
-      debug('[AgentStateManager.continueAfterReview] Invalid state:', this.currentStatus.status);
-      return this.currentStatus;
-    }
-
-    const { agentId, agentName, definition } = this.currentStatus;
-
-    // Continue to auth checks
-    return this.checkAuthAndProceed(agentId, agentName, definition);
   }
 
   /**
@@ -278,7 +222,7 @@ export class AgentStateManager extends TypedEventEmitter<AgentStateEvents> {
     const { agentId, agentName, definition } = this.currentStatus;
 
     // Check if APIs need auth
-    const apisNeedingAuth = await this.subAgentManager.getApisNeedingAuth(definition, agentId);
+    const apisNeedingAuth = await this.getApisNeedingAuthInternal(definition, agentId);
     if (apisNeedingAuth.length > 0) {
       debug('[AgentStateManager.continueAfterMcpAuth] APIs need auth:', apisNeedingAuth.length);
       const apiAuthStatus: AgentStatus = {
@@ -341,8 +285,6 @@ export class AgentStateManager extends TypedEventEmitter<AgentStateEvents> {
    */
   deactivate(): void {
     debug('[AgentStateManager.deactivate] Deactivating agent');
-    this.subAgentManager.deactivateAgent();
-    this.subAgentManager.clearApiServerCache();
     this.pendingAgentId = null;
     this.pendingAgentName = null;
     this.pendingDefinition = null;
@@ -350,8 +292,7 @@ export class AgentStateManager extends TypedEventEmitter<AgentStateEvents> {
   }
 
   /**
-   * Reload current agent (clear cache, re-extract)
-   * Preserves credentials
+   * Reload current agent
    */
   async reload(): Promise<AgentStatus> {
     const agentId = this.getAgentId();
@@ -362,19 +303,15 @@ export class AgentStateManager extends TypedEventEmitter<AgentStateEvents> {
 
     debug('[AgentStateManager.reload] Reloading agent:', agentId);
 
-    // Clear definition cache (preserves credentials)
-    clearDefinition(this.workspaceId, agentId);
+    // Reload agents from disk
+    this.agentManager.reload();
 
-    // Clear API server cache
-    this.subAgentManager.clearApiServerCache();
-
-    // Re-activate with force extraction
+    // Re-activate
     return this.activate(agentId, { forceExtraction: true });
   }
 
   /**
-   * Reset current agent (clear cache AND credentials)
-   * Returns to idle state
+   * Reset current agent, return to idle
    */
   async reset(): Promise<void> {
     const agentId = this.getAgentId();
@@ -384,17 +321,6 @@ export class AgentStateManager extends TypedEventEmitter<AgentStateEvents> {
     }
 
     debug('[AgentStateManager.reset] Resetting agent:', agentId);
-
-    // Clear definition cache
-    clearDefinition(this.workspaceId, agentId);
-
-    // Clear all credentials for this agent
-    await clearAgentCredentialsAsync(this.workspaceId, agentId);
-
-    // Clear API server cache
-    this.subAgentManager.clearApiServerCache();
-
-    // Deactivate
     this.deactivate();
   }
 
@@ -407,7 +333,7 @@ export class AgentStateManager extends TypedEventEmitter<AgentStateEvents> {
     if (!definition || !agentId) {
       return [];
     }
-    return this.subAgentManager.getMcpServersNeedingAuth(definition, agentId);
+    return this.getMcpServersNeedingAuthInternal(definition, agentId);
   }
 
   /**
@@ -419,33 +345,95 @@ export class AgentStateManager extends TypedEventEmitter<AgentStateEvents> {
     if (!definition || !agentId) {
       return [];
     }
-    return this.subAgentManager.getApisNeedingAuth(definition, agentId);
+    return this.getApisNeedingAuthInternal(definition, agentId);
   }
 
   /**
    * Build MCP server config for CraftAgent
    * Called when status is 'ready' to get final config
+   * Fetches credentials from the credential store for authenticated servers
+   * Supports both HTTP/SSE and stdio transports
    */
-  async buildMcpServerConfig(): Promise<
-    Record<string, { type: 'http' | 'sse'; url: string; headers?: Record<string, string> }>
-  > {
+  async buildMcpServerConfig(): Promise<Record<string, SdkMcpServerConfig>> {
     const definition = this.getDefinition();
     if (!definition) {
       return {};
     }
-    return this.subAgentManager.buildMcpServerConfig(definition);
+
+    const result: Record<string, SdkMcpServerConfig> = {};
+
+    for (const server of definition.mcpServers || []) {
+      const transport = server.transport || 'http';
+
+      if (transport === 'stdio') {
+        // Stdio server - local subprocess, no auth headers
+        if (!server.command) {
+          debug(`[buildMcpServerConfig] Skipping stdio server "${server.name}" - no command specified`);
+          continue;
+        }
+        result[server.name] = {
+          type: 'stdio',
+          command: server.command,
+          args: server.args,
+          env: server.env,
+        };
+      } else {
+        // HTTP/SSE server
+        if (!server.url) {
+          debug(`[buildMcpServerConfig] Skipping HTTP server "${server.name}" - no URL specified`);
+          continue;
+        }
+        const config: SdkMcpServerConfig = {
+          type: transport === 'sse' ? 'sse' : 'http',
+          url: server.url,
+        };
+
+        // Add authorization header if server requires auth
+        if (server.requiresAuth) {
+          // Try OAuth first, then bearer token (agent-scoped first, then global)
+          let token = await this.getSourceCredential(server.name, 'oauth', server.agentSlug);
+          if (!token) {
+            token = await this.getSourceCredential(server.name, 'bearer', server.agentSlug);
+          }
+          if (token) {
+            (config as { type: 'http' | 'sse'; url: string; headers?: Record<string, string> }).headers = {
+              Authorization: `Bearer ${token}`,
+            };
+          }
+        }
+
+        result[server.name] = config;
+      }
+    }
+
+    return result;
   }
 
   /**
    * Build API servers for CraftAgent
    * Called when status is 'ready' to get final config
+   * Fetches credentials from the credential store for authenticated APIs
    */
   async buildApiServers(): Promise<Record<string, ReturnType<typeof createApiServer>>> {
     const definition = this.getDefinition();
     if (!definition) {
       return {};
     }
-    return this.subAgentManager.buildApiServers(definition);
+
+    const result: Record<string, ReturnType<typeof createApiServer>> = {};
+
+    for (const api of definition.apis || []) {
+      // Get credential based on auth type (agent-scoped first, then global)
+      let credential = '';
+      if (api.auth && api.auth.type !== 'none') {
+        const credType = this.apiAuthToCredentialType(api.auth.type);
+        const credValue = await this.getSourceCredential(api.name, credType, api.agentSlug);
+        credential = credValue || '';
+      }
+      result[api.name] = createApiServer(api, credential);
+    }
+
+    return result;
   }
 
   // ============================================================
@@ -470,7 +458,7 @@ export class AgentStateManager extends TypedEventEmitter<AgentStateEvents> {
     definition: SubAgentDefinition
   ): Promise<AgentStatus> {
     // Check MCP servers needing auth
-    const mcpNeedingAuth = await this.subAgentManager.getMcpServersNeedingAuth(definition, agentId);
+    const mcpNeedingAuth = await this.getMcpServersNeedingAuthInternal(definition, agentId);
     if (mcpNeedingAuth.length > 0) {
       debug('[AgentStateManager.checkAuthAndProceed] MCP servers need auth:', mcpNeedingAuth.length);
       const mcpAuthStatus: AgentStatus = {
@@ -485,7 +473,7 @@ export class AgentStateManager extends TypedEventEmitter<AgentStateEvents> {
     }
 
     // Check APIs needing auth
-    const apisNeedingAuth = await this.subAgentManager.getApisNeedingAuth(definition, agentId);
+    const apisNeedingAuth = await this.getApisNeedingAuthInternal(definition, agentId);
     if (apisNeedingAuth.length > 0) {
       debug('[AgentStateManager.checkAuthAndProceed] APIs need auth:', apisNeedingAuth.length);
       const apiAuthStatus: AgentStatus = {
@@ -501,6 +489,162 @@ export class AgentStateManager extends TypedEventEmitter<AgentStateEvents> {
 
     // No auth needed, move to ready
     return this.transitionToReady(agentId, agentName, definition);
+  }
+
+  /**
+   * Get MCP servers that need authentication
+   * Checks credential store to see if we already have credentials
+   */
+  private async getMcpServersNeedingAuthInternal(
+    definition: SubAgentDefinition,
+    agentId: string
+  ): Promise<McpServerConfig[]> {
+    const serversNeedingAuth: McpServerConfig[] = [];
+
+    for (const server of definition.mcpServers || []) {
+      if (!server.requiresAuth) continue;
+
+      // Check if we have credentials for this source (agent-scoped first, then global)
+      const hasCredential = await this.hasSourceCredential(server.name, 'oauth', server.agentSlug);
+      if (!hasCredential) {
+        // Also check bearer token
+        const hasBearer = await this.hasSourceCredential(server.name, 'bearer', server.agentSlug);
+        if (!hasBearer) {
+          serversNeedingAuth.push(server);
+        }
+      }
+    }
+
+    return serversNeedingAuth;
+  }
+
+  /**
+   * Get APIs that need authentication
+   * Checks credential store to see if we already have credentials
+   */
+  private async getApisNeedingAuthInternal(
+    definition: SubAgentDefinition,
+    agentId: string
+  ): Promise<ApiConfig[]> {
+    const apisNeedingAuth: ApiConfig[] = [];
+
+    for (const api of definition.apis || []) {
+      if (!api.auth || api.auth.type === 'none') continue;
+
+      // Determine which credential type to check based on auth type (agent-scoped first, then global)
+      const credType = this.apiAuthToCredentialType(api.auth.type);
+      const hasCredential = await this.hasSourceCredential(api.name, credType, api.agentSlug);
+      if (!hasCredential) {
+        apisNeedingAuth.push(api);
+      }
+    }
+
+    return apisNeedingAuth;
+  }
+
+  /**
+   * Check if a credential exists for a source.
+   * Checks agent-scoped credentials first (if agentSlug provided), then falls back to global.
+   */
+  private async hasSourceCredential(
+    sourceSlug: string,
+    credType: 'oauth' | 'bearer' | 'apikey' | 'basic',
+    agentSlug?: string
+  ): Promise<boolean> {
+    const credentialManager = getCredentialManager();
+
+    // Try agent-scoped credential first if agentSlug provided
+    if (agentSlug) {
+      const agentCredentialId: CredentialId = {
+        type: `agent_source_${credType}` as CredentialType,
+        workspaceId: this.workspaceId,
+        agentId: agentSlug,
+        sourceId: sourceSlug,
+      };
+      try {
+        const credential = await credentialManager.get(agentCredentialId);
+        if (credential !== null && credential.value !== '') {
+          return true;
+        }
+      } catch {
+        // Fall through to workspace-level lookup
+      }
+    }
+
+    // Fall back to workspace-scoped source credential
+    const workspaceCredentialId: CredentialId = {
+      type: `source_${credType}` as CredentialType,
+      workspaceId: this.workspaceId,
+      sourceId: sourceSlug,
+    };
+
+    try {
+      const credential = await credentialManager.get(workspaceCredentialId);
+      return credential !== null && credential.value !== '';
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Get credential value for a source.
+   * Checks agent-scoped credentials first (if agentSlug provided), then falls back to global.
+   */
+  private async getSourceCredential(
+    sourceSlug: string,
+    credType: 'oauth' | 'bearer' | 'apikey' | 'basic',
+    agentSlug?: string
+  ): Promise<string | null> {
+    const credentialManager = getCredentialManager();
+
+    // Try agent-scoped credential first if agentSlug provided
+    if (agentSlug) {
+      const agentCredentialId: CredentialId = {
+        type: `agent_source_${credType}` as CredentialType,
+        workspaceId: this.workspaceId,
+        agentId: agentSlug,
+        sourceId: sourceSlug,
+      };
+      try {
+        const credential = await credentialManager.get(agentCredentialId);
+        if (credential?.value) {
+          return credential.value;
+        }
+      } catch {
+        // Fall through to global lookup
+      }
+    }
+
+    // Fall back to workspace source credential
+    const workspaceCredentialId: CredentialId = {
+      type: `source_${credType}` as CredentialType,
+      workspaceId: this.workspaceId,
+      sourceId: sourceSlug,
+    };
+
+    try {
+      const credential = await credentialManager.get(workspaceCredentialId);
+      return credential?.value ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Map API auth type to credential type suffix
+   */
+  private apiAuthToCredentialType(authType: string): 'oauth' | 'bearer' | 'apikey' | 'basic' {
+    switch (authType) {
+      case 'bearer':
+        return 'bearer';
+      case 'header':
+      case 'query':
+        return 'apikey';
+      case 'basic':
+        return 'basic';
+      default:
+        return 'bearer';
+    }
   }
 
   /**

@@ -7,19 +7,13 @@ import { ModelSelector } from './ModelSelector.tsx';
 import { MODELS } from '@craft-agent/shared/config';
 import { AgentMenu, type AgentAction } from './AgentMenu.tsx';
 import { WorkspaceSelector } from './WorkspaceSelector.tsx';
-import { WorkspaceAdd } from './WorkspaceAdd.tsx';
 import { WorkspaceRename } from './WorkspaceRename.tsx';
 import { ApiKeyChange } from './ApiKeyChange.tsx';
 import { ClaudeMaxAuth } from './ClaudeMaxAuth.tsx';
 import { CraftCreditsAuth } from './CraftCreditsAuth.tsx';
 import { AskUserQuestion } from './AskUserQuestion.tsx';
-import { PlanReview } from './PlanReview.tsx';
 import { TodoList } from './TodoList.tsx';
-import { McpAuth } from './McpAuth.tsx';
 import { ApiAuth } from './ApiAuth.tsx';
-import { AgentReview } from './AgentReview.tsx';
-import { CredentialsViewer } from './CredentialsViewer.tsx';
-import { ReauthSelector } from './ReauthSelector.tsx';
 import { PlanMenu, type PlanAction } from './PlanMenu.tsx';
 import { PlanSelector, type PlanFile } from './PlanSelector.tsx';
 import { SessionMenu } from './SessionMenu.tsx';
@@ -42,12 +36,10 @@ import {
 } from '../hooks/index.ts';
 import { isShiftTab, isClearScreen, isExit, isSafeModeToggle } from '../keyboard/index.ts';
 import {
-  PLAN_MODE_ENTER_MESSAGE,
-  PLAN_MODE_EXIT_MESSAGE,
-  PLAN_MODE_ENTER_PROMPT,
-  PLAN_MODE_EXIT_PROMPT,
+  PERMISSION_MODE_MESSAGES,
+  PERMISSION_MODE_PROMPTS,
 } from '@craft-agent/shared/agents';
-import { getPlanModeState } from '@craft-agent/shared/agent';
+import { getPermissionMode, type PermissionMode } from '@craft-agent/shared/agent';
 import { useGlobalContext } from '../context/GlobalContext.tsx';
 import {
   getWorkspaces,
@@ -55,18 +47,17 @@ import {
   clearAllConfig,
   getTokenDisplay,
   getShowCost,
-  getShowClock,
-  getSafeMode,
-  setSafeMode,
+  type TokenDisplayMode,
+} from '@craft-agent/shared/config';
+import {
   loadSession,
   listPlanFiles,
   deletePlanFile,
   listSessions,
   getOrCreateSessionById,
-  type TokenDisplayMode,
-  type Session,
+  type SessionConfig,
   type SessionMetadata,
-} from '@craft-agent/shared/config';
+} from '@craft-agent/shared/sessions';
 import { processInputWithFiles, readClipboard, readFileAttachment, type FileAttachment } from '@craft-agent/shared/utils';
 import { debug } from '@craft-agent/shared/utils';
 import type { CraftAgentConfig } from '@craft-agent/shared/agent';
@@ -75,7 +66,7 @@ import { checkAndUpdate } from '@craft-agent/shared/version';
 
 export interface SessionContainerProps {
   config: CraftAgentConfig;
-  session: Session;  // Current session (primary isolation boundary)
+  session: SessionConfig;  // Current session (primary isolation boundary)
   onRequestSetup?: () => void;
   initialAgent?: string;
   initialPrompt?: string;
@@ -173,27 +164,16 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
     completeApiAuth,
     cancelApiAuth,
     triggerApiAuth,
-    // Credential operations for active agent
-    getAgentCredential,
-    saveAgentCredential,
-    clearAgentCredentials,
-    // Review mode
-    pendingReview,
-    completeReview,
-    skipReview,
-    // Plan mode
+    // Permission mode (safe/ask/allow-all)
+    permissionMode,
+    cycleMode,
+    setSessionPermissionMode,
+    // Legacy safe mode flag (deprecated - use permissionMode instead)
+    safeMode,
+    // Plan handling
     activePlan,
-    planMode,
     cancelPlan,
     approvePlan,
-    // Craft Agents plan mode UI interactions
-    pendingPlanReview,
-    respondToPlanReview,
-    pendingCraftQuestion,
-    respondToCraftQuestion,
-    // Craft Agents plan mode toggle (for SHIFT+TAB)
-    startCraftPlanning,
-    cancelCraftPlanning,
     // Todos (from TodoWrite tool)
     todos,
     // Ultrathink mode
@@ -251,7 +231,7 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
   // Only show welcome banner on truly new sessions (no prior messages)
   // This prevents duplicate banners when switching to workspaces with existing sessions
   const [showWelcome, setShowWelcome] = useState(() => {
-    const storedSession = loadSession(session.id);
+    const storedSession = loadSession(session.workspaceRootPath, session.id);
     return !storedSession?.messages?.length;
   });
   const [staticResetKey, setStaticResetKey] = useState(0);
@@ -361,7 +341,6 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
       initialPromptPendingRef.current &&
       !pendingMcpAuth &&
       !pendingApiAuth &&
-      !pendingReview &&
       activeAgentName
     ) {
       debug('[SessionContainer] Auth completed, sending pending initial prompt');
@@ -369,7 +348,7 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
       initialPromptPendingRef.current = null;
       sendMessage(prompt);
     }
-  }, [pendingMcpAuth, pendingApiAuth, pendingReview, activeAgentName, sendMessage]);
+  }, [pendingMcpAuth, pendingApiAuth, activeAgentName, sendMessage]);
 
   // Handle terminal resize
   const handleTerminalResize = useCallback(() => {
@@ -411,11 +390,10 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
     resetAgent,
     refreshAgents,
     fetchTools,
-    planMode,
+    safeMode,
     approvePlan,
     cancelPlan,
-    startCraftPlanning,
-    cancelCraftPlanning,
+    setSessionPermissionMode,
     exitApp,
     setSafeModeSetting,
   });
@@ -515,10 +493,10 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
 
     switch (action.type) {
       case 'start':
-        // Start Craft Agents plan mode (same as /plan start and SHIFT+TAB)
-        startCraftPlanning();
-        addLocalMessage(PLAN_MODE_ENTER_MESSAGE, 'system');
-        sendMessage(PLAN_MODE_ENTER_PROMPT);
+        // Start Craft Agents safe mode (same as /safe and SHIFT+TAB)
+        setSessionPermissionMode('safe');
+        addLocalMessage(PERMISSION_MODE_MESSAGES['safe'], 'system');
+        sendMessage(PERMISSION_MODE_PROMPTS['safe']);
         break;
       case 'plans':
         // Open unified plan selector (list/load/delete)
@@ -545,7 +523,7 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
         }
         break;
     }
-  }, [activePlan, approvePlan, cancelPlan, closeModal, openModal, addLocalMessage, sendMessage, startCraftPlanning]);
+  }, [activePlan, approvePlan, cancelPlan, closeModal, openModal, addLocalMessage, sendMessage, setSessionPermissionMode]);
 
   // Plan selector handler - loads selected plan as attachment
   const handlePlanSelect = useCallback((plan: PlanFile) => {
@@ -569,7 +547,7 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
     closeModal();
     let deleted = 0;
     for (const plan of plans) {
-      if (deletePlanFile(session.id, plan.name)) {
+      if (deletePlanFile(session.workspaceRootPath, session.id, plan.name)) {
         deleted++;
       }
     }
@@ -578,14 +556,14 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
     } else {
       addLocalMessage('Failed to delete plans.', 'error');
     }
-  }, [closeModal, addLocalMessage, session.id]);
+  }, [closeModal, addLocalMessage, session.id, session.workspaceRootPath]);
 
   // Session menu handler - resumes selected session
   const handleSessionSelect = useCallback((selectedSession: SessionMetadata) => {
-    const fullSession = getOrCreateSessionById(selectedSession.id, workspace.id);
+    const fullSession = getOrCreateSessionById(workspace.rootPath, selectedSession.id);
     setSession(fullSession);
     closeModal();
-  }, [workspace.id, setSession, closeModal]);
+  }, [workspace.rootPath, setSession, closeModal]);
 
   const handlePaste = useCallback(() => {
     try {
@@ -729,51 +707,27 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
     }
 
     if (pendingPermission) {
-      if (pendingPermission.type === 'plan_mode' || pendingPermission.type === 'safe_mode') {
-        // Plan mode and Safe Mode permission: Y/N only (no "Always" option)
-        if (input.toLowerCase() === 'y') {
-          respondToPermission(true, false);
-          return;
-        } else if (input.toLowerCase() === 'n') {
-          respondToPermission(false, false);
-          return;
-        }
-      } else {
-        // Bash permission: Y/N/A
-        if (input.toLowerCase() === 'y') {
-          respondToPermission(true, false);
-          return;
-        } else if (input.toLowerCase() === 'n') {
-          respondToPermission(false, false);
-          return;
-        } else if (input.toLowerCase() === 'a') {
-          respondToPermission(true, true);
-          return;
-        }
+      // Permission request: Y/N/A
+      if (input.toLowerCase() === 'y') {
+        respondToPermission(true, false);
+        return;
+      } else if (input.toLowerCase() === 'n') {
+        respondToPermission(false, false);
+        return;
+      } else if (input.toLowerCase() === 'a') {
+        respondToPermission(true, true);
+        return;
       }
     }
 
-    // SHIFT+TAB: Toggle Craft Agents plan mode
-    // Use synchronous internal state (getPlanModeState) instead of async React state (planMode)
-    // to avoid race conditions when toggling quickly
+    // SHIFT+TAB: Cycle Permission Mode (safe → ask → allow-all → safe)
     if (isShiftTab(input, key)) {
-      // Block toggle during processing and show warning
-      if (isProcessing) {
-        setShowPlanToggleWarning(true);
-        return;
-      }
-
-      const internalPlanMode = getPlanModeState().isActive;
-      if (internalPlanMode) {
-        // Exit Craft Agents plan mode (cancel without calling ExitCraftAgentsPlanMode)
-        cancelCraftPlanning();
-        addLocalMessage(PLAN_MODE_EXIT_MESSAGE, 'system');
-        sendMessage(PLAN_MODE_EXIT_PROMPT);
-      } else {
-        // Enter Craft Agents plan mode
-        startCraftPlanning();
-        addLocalMessage(PLAN_MODE_ENTER_MESSAGE, 'system');
-        sendMessage(PLAN_MODE_ENTER_PROMPT);
+      // Cycle to the next mode
+      const newMode = cycleMode();
+      // Show mode change message and send prompt to Claude
+      addLocalMessage(PERMISSION_MODE_MESSAGES[newMode], 'system');
+      if (!isProcessing) {
+        sendMessage(PERMISSION_MODE_PROMPTS[newMode]);
       }
       return;
     }
@@ -801,7 +755,7 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
     }
 
     if (input === '\x03' || (key.ctrl && input === 'c')) {
-      debug('[SessionContainer] main useInput Ctrl+C detected:', { pendingPermission: !!pendingPermission, isProcessing, hasOpenModal, pendingQuestion: !!pendingQuestion, pendingMcpAuth: !!pendingMcpAuth, pendingApiAuth: !!pendingApiAuth, pendingReview: !!pendingReview });
+      debug('[SessionContainer] main useInput Ctrl+C detected:', { pendingPermission: !!pendingPermission, isProcessing, hasOpenModal, pendingQuestion: !!pendingQuestion, pendingMcpAuth: !!pendingMcpAuth, pendingApiAuth: !!pendingApiAuth });
       if (pendingPermission) {
         debug('[SessionContainer] Denying permission');
         respondToPermission(false, false);
@@ -810,7 +764,7 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
         interrupt();
       } else {
         // Only handle if Input is not rendered (Input handles its own Ctrl+C)
-        const inputIsRendered = !hasOpenModal && !pendingPermission && !pendingQuestion && !pendingMcpAuth && !pendingApiAuth && !pendingReview;
+        const inputIsRendered = !hasOpenModal && !pendingPermission && !pendingQuestion && !pendingMcpAuth && !pendingApiAuth;
         debug('[SessionContainer] inputIsRendered:', inputIsRendered);
         if (!inputIsRendered) {
           // Double-press logic for modals/overlays
@@ -840,8 +794,8 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
         closeModal();
       } else if (pendingPermission) {
         respondToPermission(false, false);
-      } else if (pendingPlanReview || pendingQuestion || pendingCraftQuestion) {
-        // These components handle Escape themselves - don't also interrupt
+      } else if (pendingQuestion) {
+        // AskUserQuestion handles Escape itself - don't also interrupt
         return;
       } else if (isProcessing) {
         interrupt();
@@ -939,7 +893,7 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
       {/* Plan selector overlay */}
       {isOpen('planSelector') && (
         <PlanSelector
-          plans={listPlanFiles(session.id)}
+          plans={listPlanFiles(session.workspaceRootPath, session.id)}
           onSelect={handlePlanSelect}
           onDelete={handlePlanDelete}
           onCancel={closeModal}
@@ -978,7 +932,7 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
       {/* Session menu overlay */}
       {isOpen('sessionMenu') && (
         <SessionMenu
-          sessions={listSessions(workspace.id)}
+          sessions={listSessions(workspace.rootPath)}
           currentSessionId={session.id}
           onSelect={handleSessionSelect}
           onCancel={closeModal}
@@ -992,18 +946,8 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
           currentWorkspaceId={workspace.id}
           onSelect={workspaceHandlers.handleWorkspaceSelect}
           onCancel={workspaceHandlers.handleWorkspaceCancel}
-          onAdd={workspaceHandlers.handleWorkspaceAddOpen}
           onRename={workspaceHandlers.handleWorkspaceRenameOpen}
           onRemove={workspaceHandlers.handleWorkspaceRemove}
-        />
-      )}
-
-      {/* Workspace add wizard */}
-      {isOpen('workspaceAdd') && (
-        <WorkspaceAdd
-          onComplete={workspaceHandlers.handleWorkspaceAddComplete}
-          onCancel={workspaceHandlers.handleWorkspaceAddCancel}
-          onErrorAction={handleErrorAction}
         />
       )}
 
@@ -1088,17 +1032,6 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
         </Box>
       )}
 
-      {/* MCP server authentication for sub-agents */}
-      {pendingMcpAuth && (
-        <McpAuth
-          servers={pendingMcpAuth.servers}
-          workspaceId={workspace.id}
-          agentId={pendingMcpAuth.agentId}
-          onComplete={completeMcpAuth}
-          onCancel={cancelMcpAuth}
-        />
-      )}
-
       {/* API key authentication for REST API integrations */}
       {pendingApiAuth && (
         <ApiAuth
@@ -1108,18 +1041,6 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
           onComplete={completeApiAuth}
           onCancel={cancelApiAuth}
         />
-      )}
-
-      {/* Agent review */}
-      {pendingReview && (
-        <Box marginTop={1} paddingX={1}>
-          <AgentReview
-            agentName={pendingReview.agentName}
-            concerns={pendingReview.concerns}
-            onSubmit={completeReview}
-            onSkip={skipReview}
-          />
-        </Box>
       )}
 
       {/* Input + Status bar + Header together at bottom */}
@@ -1135,47 +1056,19 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
 
         {/* Permission prompt */}
         {pendingPermission && (
-          <Box flexDirection="column" borderStyle="round" borderColor={pendingPermission.type === 'safe_mode' ? 'magenta' : 'yellow'} paddingX={1} marginBottom={1}>
-            <Text color={pendingPermission.type === 'safe_mode' ? 'magenta' : 'yellow'} bold>
-              {pendingPermission.type === 'safe_mode' ? '🛡 Safe Mode' : '⚠ Permission Required'}
-            </Text>
-            {pendingPermission.type === 'plan_mode' ? (
-              <>
-                <Text>Craft Agents wants to enter <Text color="cyan" bold>Plan Mode</Text></Text>
-                <Text dimColor>Task: {pendingPermission.command}</Text>
-                <Box marginTop={1}>
-                  <Text>Allow? </Text>
-                  <Text color="green" bold>[Y]es</Text>
-                  <Text> / </Text>
-                  <Text color="red" bold>[N]o</Text>
-                </Box>
-              </>
-            ) : pendingPermission.type === 'safe_mode' ? (
-              <>
-                <Text>Protected operation: <Text color="magenta" bold>{pendingPermission.command}</Text></Text>
-                <Text dimColor>Tool: {pendingPermission.toolName.replace(/^mcp__\w+__/, '')}</Text>
-                <Box marginTop={1}>
-                  <Text>Allow this operation? </Text>
-                  <Text color="green" bold>[Y]es</Text>
-                  <Text> / </Text>
-                  <Text color="red" bold>[N]o</Text>
-                </Box>
-              </>
-            ) : (
-              <>
-                <Text>Tool: <Text color="cyan">{pendingPermission.toolName}</Text></Text>
-                <Text dimColor>Command: <Text>{pendingPermission.command}</Text></Text>
-                <Box marginTop={1}>
-                  <Text>Allow? </Text>
-                  <Text color="green" bold>[Y]es</Text>
-                  <Text> / </Text>
-                  <Text color="red" bold>[N]o</Text>
-                  <Text> / </Text>
-                  <Text color="blue" bold>[A]lways</Text>
-                  <Text dimColor> (for this command)</Text>
-                </Box>
-              </>
-            )}
+          <Box flexDirection="column" borderStyle="round" borderColor="yellow" paddingX={1} marginBottom={1}>
+            <Text color="yellow" bold>⚠ Permission Required</Text>
+            <Text>Tool: <Text color="cyan">{pendingPermission.toolName}</Text></Text>
+            <Text dimColor>Command: <Text>{pendingPermission.command}</Text></Text>
+            <Box marginTop={1}>
+              <Text>Allow? </Text>
+              <Text color="green" bold>[Y]es</Text>
+              <Text> / </Text>
+              <Text color="red" bold>[N]o</Text>
+              <Text> / </Text>
+              <Text color="blue" bold>[A]lways</Text>
+              <Text dimColor> (for this command)</Text>
+            </Box>
           </Box>
         )}
 
@@ -1189,32 +1082,7 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
           </Box>
         )}
 
-        {/* CraftAskUserQuestion prompt (Craft Agents plan mode) */}
-        {pendingCraftQuestion && (
-          <Box marginBottom={1}>
-            <AskUserQuestion
-              questions={pendingCraftQuestion.questions}
-              onSubmit={respondToCraftQuestion}
-            />
-          </Box>
-        )}
-
-        {/* PlanReview prompt (Craft Agents plan mode) */}
-        {pendingPlanReview && (
-          <Box marginBottom={1}>
-            <PlanReview
-              plan={pendingPlanReview.plan}
-              sessionId={session.id}
-              questions={pendingPlanReview.questions}
-              onApprove={(modifiedPlan, savedPath) => respondToPlanReview({ action: 'approve', modifiedPlan, savedPath })}
-              onRefine={(feedback) => respondToPlanReview({ action: 'refine', feedback })}
-              onSaveOnly={(modifiedPlan, savedPath) => respondToPlanReview({ action: 'saveOnly', modifiedPlan, savedPath })}
-              onCancel={() => respondToPlanReview({ action: 'cancel' })}
-            />
-          </Box>
-        )}
-
-        {!hasOpenModal && !pendingPermission && !pendingQuestion && !pendingCraftQuestion && !pendingPlanReview && !pendingMcpAuth && !pendingApiAuth && !pendingReview && (
+        {!hasOpenModal && !pendingPermission && !pendingQuestion && !pendingMcpAuth && !pendingApiAuth && (
           <Input
             onSubmit={handleSubmit}
             onPaste={handlePaste}
@@ -1234,7 +1102,6 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
         <Header
           connected={connected}
           model={model}
-          mcpUrl={workspace.mcpUrl}
           workspaceName={workspace.name}
           contextTokens={tokenUsage.contextTokens}
           inputTokens={tokenUsage.inputTokens}
@@ -1247,8 +1114,7 @@ export const SessionContainer: React.FC<SessionContainerProps> = ({
           showCost={showCostSetting}
           showClock={showClockSetting}
           version={getCurrentVersion()}
-          planMode={planMode}
-          safeMode={safeModeSetting}
+          permissionMode={permissionMode}
           exitWarning={showExitWarning}
           planToggleWarning={showPlanToggleWarning}
         />

@@ -1,9 +1,7 @@
-import { useState } from "react"
 import { cn } from "@/lib/utils"
 import { StepIndicator, type OnboardingStep } from "./StepIndicator"
 import { WelcomeStep } from "./WelcomeStep"
 import { CraftLoginStep, type LoginStatus } from "./CraftLoginStep"
-import { SpaceSelectionStep, type SpaceCategory } from "./SpaceSelectionStep"
 import { BillingMethodStep, type BillingMethod } from "./BillingMethodStep"
 import { CredentialsStep, type CredentialStatus } from "./CredentialsStep"
 import { CompletionStep } from "./CompletionStep"
@@ -13,8 +11,6 @@ export interface OnboardingState {
   loginStatus: LoginStatus
   credentialStatus: CredentialStatus
   completionStatus: 'saving' | 'complete'
-  selectedSpaceId: string | null
-  selectedSpaceName: string | null
   billingMethod: BillingMethod | null
   isExistingUser: boolean
   errorMessage?: string
@@ -23,10 +19,6 @@ export interface OnboardingState {
 interface OnboardingWizardProps {
   /** Current state of the wizard */
   state: OnboardingState
-  /** Available spaces grouped by category */
-  spaceCategories: SpaceCategory[]
-  /** Whether spaces are loading */
-  isLoadingSpaces?: boolean
 
   // Event handlers
   onCancel?: () => void
@@ -35,7 +27,6 @@ interface OnboardingWizardProps {
   onLogin: () => void
   onOpenLoginManually?: () => void
   onRetryLogin?: () => void
-  onSelectSpace: (spaceId: string, spaceName: string) => void
   onSelectBillingMethod: (method: BillingMethod) => void
   onSubmitCredential: (credential: string) => void
   onStartOAuth?: () => void
@@ -54,23 +45,19 @@ interface OnboardingWizardProps {
  *
  * Manages the step-by-step flow for setting up Craft Agent:
  * 1. Welcome
- * 2. Craft Login (OAuth)
- * 3. Space Selection
- * 4. Billing Method
- * 5. Credentials (if needed)
- * 6. Completion
+ * 2. Billing Method (choose: Craft Credits / API Key / Claude OAuth)
+ * 3. Craft Login (only if Craft Credits selected)
+ * 4. Credentials (only if API Key or Claude OAuth selected)
+ * 5. Completion
  */
 export function OnboardingWizard({
   state,
-  spaceCategories,
-  isLoadingSpaces = false,
   onCancel,
   onContinue,
   onBack,
   onLogin,
   onOpenLoginManually,
   onRetryLogin,
-  onSelectSpace,
   onSelectBillingMethod,
   onSubmitCredential,
   onStartOAuth,
@@ -91,6 +78,16 @@ export function OnboardingWizard({
           />
         )
 
+      case 'billing-method':
+        return (
+          <BillingMethodStep
+            selectedMethod={state.billingMethod}
+            onSelect={onSelectBillingMethod}
+            onContinue={onContinue}
+            onBack={onBack}
+          />
+        )
+
       case 'craft-login':
         return (
           <CraftLoginStep
@@ -100,28 +97,6 @@ export function OnboardingWizard({
             onOpenManually={onOpenLoginManually}
             onBack={onBack}
             onRetry={onRetryLogin}
-          />
-        )
-
-      case 'select-space':
-        return (
-          <SpaceSelectionStep
-            categories={spaceCategories}
-            selectedSpaceId={state.selectedSpaceId}
-            isLoading={isLoadingSpaces}
-            onSelect={onSelectSpace}
-            onContinue={onContinue}
-            onBack={onBack}
-          />
-        )
-
-      case 'billing-method':
-        return (
-          <BillingMethodStep
-            selectedMethod={state.billingMethod}
-            onSelect={onSelectBillingMethod}
-            onContinue={onContinue}
-            onBack={onBack}
           />
         )
 
@@ -144,7 +119,6 @@ export function OnboardingWizard({
         return (
           <CompletionStep
             status={state.completionStatus}
-            spaceName={state.selectedSpaceName ?? undefined}
             onFinish={onFinish}
           />
         )

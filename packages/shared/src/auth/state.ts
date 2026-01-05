@@ -8,7 +8,7 @@
  */
 
 import { getCredentialManager } from '../credentials/index.ts';
-import { loadStoredConfig, getActiveWorkspace, checkWorkspaceAuthStatus, type AuthType, type Workspace, type WorkspaceAuthStatus } from '../config/storage.ts';
+import { loadStoredConfig, getActiveWorkspace, type AuthType, type Workspace } from '../config/storage.ts';
 
 // ============================================
 // Types
@@ -37,14 +37,14 @@ export interface AuthState {
   workspace: {
     hasWorkspace: boolean;
     active: Workspace | null;
-    /** MCP authentication status for the active workspace */
-    mcpAuth?: WorkspaceAuthStatus;
   };
 }
 
 export interface SetupNeeds {
-  /** No Craft token or workspace → show craft-login + space selection */
+  /** No Craft token AND no workspace → show full onboarding (new user) */
   needsCraftAuth: boolean;
+  /** Has workspace but token expired/missing → show simple re-login screen */
+  needsReauth: boolean;
   /** No billing type configured → show billing picker */
   needsBillingConfig: boolean;
   /** Billing type set but missing credentials → show credential entry */
@@ -80,12 +80,6 @@ export async function getAuthState(): Promise<AuthState> {
     hasCredentials = !!claudeOAuth;
   }
 
-  // Get MCP auth status for active workspace
-  let mcpAuth: WorkspaceAuthStatus | undefined;
-  if (activeWorkspace) {
-    mcpAuth = await checkWorkspaceAuthStatus(activeWorkspace.id);
-  }
-
   return {
     craft: {
       hasToken: !!craftToken,
@@ -100,7 +94,6 @@ export async function getAuthState(): Promise<AuthState> {
     workspace: {
       hasWorkspace: !!activeWorkspace,
       active: activeWorkspace,
-      mcpAuth,
     },
   };
 }
@@ -109,19 +102,33 @@ export async function getAuthState(): Promise<AuthState> {
  * Derive what setup steps are needed based on current auth state
  */
 export function getSetupNeeds(state: AuthState): SetupNeeds {
-  // Need Craft auth if missing token OR missing workspace
-  const needsCraftAuth = !state.craft.hasToken || !state.workspace.hasWorkspace;
+  // Craft OAuth is only required for:
+  // 1. New users (no workspace) who need to select a space during onboarding
+  // 2. Users with craft_credits billing (Craft handles the billing)
+  //
+  // Users with api_key or oauth_token billing do NOT need Craft auth.
+  const needsCraftAuth = !state.craft.hasToken && !state.workspace.hasWorkspace;
+
+  // Reauth is only needed if:
+  // - User has craft_credits billing AND token expired AND has a workspace
+  // Users with api_key or oauth_token should never see the reauth screen.
+  const needsReauth = state.billing.type === 'craft_credits'
+    && !state.craft.hasToken
+    && state.workspace.hasWorkspace;
 
   // Need billing config if no billing type is set
   const needsBillingConfig = state.billing.type === null;
 
   // Need credentials if billing type is set but credentials are missing
+  // Note: For craft_credits, hasCredentials depends on Craft token, so if needsReauth is true,
+  // needsCredentials would also be true. We handle this by checking needsReauth first in the UI.
   const needsCredentials = state.billing.type !== null && !state.billing.hasCredentials;
 
   return {
     needsCraftAuth,
+    needsReauth,
     needsBillingConfig,
     needsCredentials,
-    isFullyConfigured: !needsCraftAuth && !needsBillingConfig && !needsCredentials,
+    isFullyConfigured: !needsCraftAuth && !needsReauth && !needsBillingConfig && !needsCredentials,
   };
 }

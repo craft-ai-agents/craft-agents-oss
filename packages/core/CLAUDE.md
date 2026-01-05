@@ -59,7 +59,7 @@ packages/core/
 | `MessageRole` | `user`, `assistant`, `tool`, `error`, `status`, `system`, `info`, `warning` |
 | `ToolStatus` | `pending`, `executing`, `completed`, `error` |
 | `TokenUsage` | Input/output/cache token counts and cost |
-| `AgentEvent` | Events from CraftAgent during chat |
+| `AgentEvent` | Events from CraftAgent during chat (incl. task_backgrounded, shell_backgrounded, task_progress) |
 | `TypedError` | Structured error with code, title, canRetry |
 | `Question` | AskUserQuestion tool format |
 

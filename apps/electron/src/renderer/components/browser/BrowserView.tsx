@@ -7,10 +7,12 @@ interface BrowserViewProps {
   url: string | null
 }
 
-// Check if running in browser mode (no Electron)
+// Check if running in browser mode (no Electron webview support)
 const isBrowserMode = () => {
   try {
-    return window.electronAPI?.getVersions?.()?.electron === 'browser-mock'
+    // In Electron, getVersions returns actual version strings
+    // In browser, electronAPI may not exist or getVersions returns undefined
+    return !window.electronAPI?.getVersions?.()?.electron
   } catch {
     return true
   }

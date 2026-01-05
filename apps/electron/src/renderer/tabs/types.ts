@@ -10,9 +10,10 @@ export type TabType =
   | 'settings'
   | 'shortcuts'
   | 'agent-info'
-  | 'agent-setup'
   | 'file'
   | 'browser'
+  | 'preferences'
+  | 'source-info'
 
 /**
  * Base interface for all tab types
@@ -42,6 +43,8 @@ export interface ChatTab extends TabBase {
 
 /**
  * Settings tab - singleton for app configuration
+ * Contains both global settings (Appearance, Billing) and
+ * workspace settings (Model, Permission Mode, Working Directory, Credential Strategy)
  */
 export interface SettingsTab extends TabBase {
   type: 'settings'
@@ -64,15 +67,6 @@ export interface AgentInfoTab extends TabBase {
 }
 
 /**
- * Agent setup tab - multi-step auth flow
- */
-export interface AgentSetupTab extends TabBase {
-  type: 'agent-setup'
-  agentId: string
-  workspaceId: string
-}
-
-/**
  * File viewer tab - displays file contents
  */
 export interface FileTab extends TabBase {
@@ -89,6 +83,24 @@ export interface BrowserTab extends TabBase {
 }
 
 /**
+ * Preferences tab - edits user preferences file (singleton)
+ */
+export interface PreferencesTab extends TabBase {
+  type: 'preferences'
+}
+
+/**
+ * Source info tab - displays source details (view-only)
+ */
+export interface SourceInfoTab extends TabBase {
+  type: 'source-info'
+  sourceSlug: string
+  workspaceId: string
+  /** If this is an agent-scoped source */
+  agentSlug?: string
+}
+
+/**
  * Union type of all tab types
  */
 export type Tab =
@@ -96,9 +108,10 @@ export type Tab =
   | SettingsTab
   | ShortcutsTab
   | AgentInfoTab
-  | AgentSetupTab
   | FileTab
   | BrowserTab
+  | PreferencesTab
+  | SourceInfoTab
 
 /**
  * Tab state stored in Jotai atom
@@ -116,6 +129,8 @@ export interface TabState {
 export interface OpenChatTabOptions {
   /** Force opening a new tab even if session already has one */
   forceNew?: boolean
+  /** Pre-fill the chat input with this text (not sent automatically) */
+  initialInput?: string
 }
 
 /**
@@ -153,11 +168,6 @@ export const TAB_DEFINITIONS: Record<TabType, TabDefinition> = {
     singleton: false,
     defaultClosable: true,
   },
-  'agent-setup': {
-    type: 'agent-setup',
-    singleton: false,
-    defaultClosable: true,
-  },
   file: {
     type: 'file',
     singleton: false,
@@ -165,6 +175,16 @@ export const TAB_DEFINITIONS: Record<TabType, TabDefinition> = {
   },
   browser: {
     type: 'browser',
+    singleton: false,
+    defaultClosable: true,
+  },
+  preferences: {
+    type: 'preferences',
+    singleton: true,
+    defaultClosable: true,
+  },
+  'source-info': {
+    type: 'source-info',
     singleton: false,
     defaultClosable: true,
   },

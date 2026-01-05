@@ -20,7 +20,9 @@ apps/electron/
 │   │   ├── ipc.ts         # IPC handler registration
 │   │   ├── menu.ts        # Application menu (File, Edit, View, Help)
 │   │   ├── sessions.ts    # Session management, CraftAgent integration
-│   │   └── agent-service.ts # Agent listing, caching, auth checking
+│   │   ├── deep-link.ts   # Deep link URL parsing and handling
+│   │   ├── agent-service.ts # Agent listing, caching, auth checking
+│   │   └── sources-service.ts # Source and authentication service
 │   ├── preload/           # Context bridge (main ↔ renderer)
 │   │   └── index.ts       # Exposes electronAPI to renderer
 │   ├── renderer/          # React UI
@@ -28,12 +30,18 @@ apps/electron/
 │   │   ├── components/
 │   │   │   ├── chat/      # Chat UI (ChatInput, ChatDisplay, PermissionBanner)
 │   │   │   ├── markdown/  # Markdown renderer with Shiki
-│   │   │   └── ui/        # shadcn/ui components
+│   │   │   └── ui/        # shadcn/ui components (incl. source-avatar.tsx)
+│   │   ├── contexts/
+│   │   │   └── NavigationContext.tsx  # Type-safe routing and navigation
+│   │   ├── lib/
+│   │   │   └── navigate.ts  # Global navigate() function
 │   │   ├── hooks/
 │   │   │   └── useAgentState.ts  # Agent activation state machine
 │   │   └── playground/    # Component development playground
 │   └── shared/
-│       └── types.ts       # Shared TypeScript interfaces
+│       ├── types.ts       # Shared TypeScript interfaces
+│       ├── routes.ts      # Type-safe route definitions
+│       └── route-parser.ts # Route string parsing
 ├── dist/                  # Build output
 └── resources/             # App icons
 ```
@@ -137,6 +145,37 @@ This means:
 - SDK's runtime path resolution breaks (see #1)
 - Native modules would need explicit externalization
 
+## Environment Variables
+
+### Gmail OAuth (via 1Password CLI)
+
+Gmail OAuth credentials are synced from 1Password to a local `.env` file.
+
+**One-time setup:**
+```bash
+# 1. Install 1Password CLI
+brew install 1password-cli
+
+# 2. Enable CLI integration: 1Password app → Settings → Developer → CLI Integration
+
+# 3. Sync secrets (requires Touch ID once)
+bun run sync-secrets
+```
+
+**That's it!** Now `bun run electron:dev` and `bun run electron:start` work without prompts.
+
+**How it works:**
+- `.env.1password` contains `op://` references to the `Dev_Craft_Agents` vault
+- `bun run sync-secrets` resolves references → writes `.env` (gitignored)
+- Secrets are baked into the build at compile time via esbuild `--define` flags
+
+**Creating your own OAuth credentials:**
+1. Go to [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → Credentials
+2. Create OAuth Client ID (Desktop app type)
+3. Enable required scopes in OAuth consent screen:
+   - `https://www.googleapis.com/auth/gmail.readonly`
+   - `https://www.googleapis.com/auth/userinfo.email`
+
 ## Build Process
 
 ```bash
@@ -166,10 +205,51 @@ DevTools opens automatically (configured in `index.ts`). Remove `mainWindow.webC
 - **AI-generated titles** - Sessions get automatic titles after first exchange
 - **Subagent support** - Load and apply agent definitions from Craft documents
 - **Shell integration** - Open URLs in browser, open files in default apps
-- **Permission handling** - PermissionBanner component for bash command approval
-- **Agent state machine** - useAgentState hook manages activation flow (extracting → review → auth → active)
+- **Permission modes** - Three-level permission system (Explore, Ask to Edit, Auto)
+- **Background tasks** - Run long-running tasks in background with progress tracking
+- **Multi-file diff** - VS Code-style window for viewing all file changes in a turn
+- **Dynamic statuses** - Workspace-customizable session workflow states
+- **Theme system** - Cascading themes (app → workspace → agent)
+- **Agent state machine** - useAgentState hook manages activation flow
 - **Application menu** - Standard macOS/Windows menus with keyboard shortcuts
 - **Component playground** - Development tool for testing UI components in isolation
+- **Type-safe navigation** - Unified routing system for tabs, actions, and deep links
+
+## Navigation System
+
+The app uses a type-safe routing system for all internal navigation and deep links.
+
+### Quick Start
+
+```typescript
+import { navigate, routes } from '@/lib/navigate'
+
+// Tab routes
+navigate(routes.tab.settings())           // Open settings
+navigate(routes.tab.chat('session123'))   // Open chat
+navigate(routes.tab.agentInfo('claude'))  // Open agent info
+
+// Action routes
+navigate(routes.action.newChat({ agentId: 'claude' }))  // New chat with agent
+navigate(routes.action.deleteSession('id'))             // Delete session
+
+// Sidebar routes
+navigate(routes.sidebar.inbox())          // Show inbox
+navigate(routes.sidebar.flagged())        // Show flagged
+```
+
+### Deep Links
+
+External apps can navigate using `craftagents://` URLs:
+
+```
+craftagents://tab/settings
+craftagents://tab/chat/session123
+craftagents://action/new-chat?agentId=claude
+craftagents://workspace/{id}/tab/agent-info/my-agent
+```
+
+See `CLAUDE.md` for complete route reference.
 
 ## File Overview
 
@@ -179,15 +259,25 @@ DevTools opens automatically (configured in `index.ts`). Remove `mainWindow.webC
 | `main/sessions.ts` | CraftAgent wrapper, event processing, subagent integration |
 | `main/ipc.ts` | IPC channel handlers (sessions, files, shell) |
 | `main/menu.ts` | Application menu (File, Edit, View, Help) |
+| `main/deep-link.ts` | Deep link URL parsing and handling |
 | `main/agent-service.ts` | Agent listing, caching, auth checking |
+| `main/sources-service.ts` | Source loading and authentication service |
 | `preload/index.ts` | Context bridge API |
 | `renderer/App.tsx` | React root, state management |
+| `renderer/contexts/NavigationContext.tsx` | Type-safe routing and navigation handler |
+| `renderer/lib/navigate.ts` | Global navigate() function |
 | `renderer/hooks/useAgentState.ts` | Agent activation state machine (IPC-based) |
+| `renderer/hooks/useBackgroundTasks.ts` | Background task tracking |
+| `renderer/hooks/useStatuses.ts` | Workspace status configuration |
+| `renderer/hooks/useTheme.ts` | Cascading theme resolution |
 | `renderer/components/chat/Chat.tsx` | Main chat layout with resizable panels |
 | `renderer/components/chat/ChatInput.tsx` | Message input with file attachments |
 | `renderer/components/chat/ChatDisplay.tsx` | Message list with markdown rendering |
 | `renderer/components/chat/PermissionBanner.tsx` | Bash command approval UI |
 | `renderer/components/chat/SessionList.tsx` | Session sidebar with rename support |
 | `renderer/components/chat/AttachmentPreview.tsx` | File attachment bubbles |
+| `renderer/components/ui/source-avatar.tsx` | Unified source icon component |
 | `renderer/playground/` | Component development playground |
 | `shared/types.ts` | IPC channels, Message/Session/FileAttachment types |
+| `shared/routes.ts` | Type-safe route definitions and builders |
+| `shared/route-parser.ts` | Route string parsing utilities |

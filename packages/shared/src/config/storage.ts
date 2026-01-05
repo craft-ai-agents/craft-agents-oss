@@ -1,11 +1,21 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, readdirSync, unlinkSync, statSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, statSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
-import { randomUUID } from 'crypto';
 import { getCredentialManager } from '../credentials/index.ts';
 import { isOpusModel } from './models.ts';
+import { getOrCreateLatestSession, type SessionConfig } from '../sessions/index.ts';
+import {
+  discoverWorkspacesInDefaultLocation,
+  loadWorkspaceConfig,
+  createWorkspaceAtPath,
+  isValidWorkspace,
+} from '../workspaces/storage.ts';
+import { findIconInDir } from '../sources/storage.ts';
+import { initializeDocs } from '../docs/index.ts';
+import { expandPath, toPortablePath } from '../utils/paths.ts';
 import type { StoredAttachment } from '@craft-agent/core/types';
 import type { Plan } from '../agents/plan-types.ts';
+import type { PermissionMode } from '../agent/mode-manager.ts';
 
 /**
  * OAuth credentials from a fresh authentication flow.
@@ -23,25 +33,18 @@ export interface OAuthCredentials {
   tokenType: string;
 }
 
-/**
- * How the workspace's MCP server should be authenticated.
- * - 'workspace_oauth': Has OAuth credentials (workspace_oauth::{workspaceId})
- * - 'workspace_bearer': Uses bearer token (workspace_bearer::{workspaceId})
- * - 'public': Truly public, no auth needed
- *
- * Note: Craft OAuth (craft_oauth::global) is ONLY for Craft API (spaces, MCP link management).
- * It should NEVER be used for MCP server authentication - MCP servers have their own OAuth.
- */
+// How MCP server should be authenticated
 export type McpAuthType = 'workspace_oauth' | 'workspace_bearer' | 'public';
 
 export interface Workspace {
   id: string;
-  name: string;
-  mcpUrl: string;
-  mcpAuthType?: McpAuthType;  // Explicit MCP auth type (defaults to workspace_oauth)
-  isPublic?: boolean;         // DEPRECATED: Use mcpAuthType instead
+  name: string;            // Read from workspace folder config (not stored in global config)
+  rootPath: string;        // Absolute path to workspace folder (e.g., ~/Projects/my-app/craft-agent)
   createdAt: number;
-  sessionId?: string;  // SDK session ID for conversation continuity
+  lastAccessedAt?: number; // For sorting recent workspaces
+  iconUrl?: string;
+  mcpUrl?: string;
+  mcpAuthType?: McpAuthType;
 }
 
 export type AuthType = 'api_key' | 'oauth_token' | 'craft_credits';
@@ -69,7 +72,9 @@ export interface StoredConfig {
   showCost?: boolean;  // Whether to show cost in status bar (only relevant for API Key auth)
   showClock?: boolean;  // Whether to show clock with timezone in header
   cumulativeUsage?: CumulativeUsage;  // Global cumulative cost across all workspaces
-  safeMode?: boolean;  // Safe Mode: require approval for destructive MCP operations (delete, update, move)
+  // New session defaults
+  defaultPermissionMode?: PermissionMode;  // Default permission mode for new sessions ('safe', 'ask', 'allow-all')
+  defaultWorkingDirectory?: string;  // Default working directory for new sessions
 }
 
 const CONFIG_DIR = join(homedir(), '.craft-agent');
@@ -79,6 +84,8 @@ export function ensureConfigDir(): void {
   if (!existsSync(CONFIG_DIR)) {
     mkdirSync(CONFIG_DIR, { recursive: true });
   }
+  // Initialize bundled docs (creates ~/.craft-agent/docs/ with sources.md, agents.md, permissions.md)
+  initializeDocs();
 }
 
 export function loadStoredConfig(): StoredConfig | null {
@@ -89,9 +96,17 @@ export function loadStoredConfig(): StoredConfig | null {
     const content = readFileSync(CONFIG_FILE, 'utf-8');
     const config = JSON.parse(content) as StoredConfig;
 
-    // Must have workspaces array (legacy single-workspace configs not supported)
-    if (!Array.isArray(config.workspaces) || config.workspaces.length === 0) {
+    // Must have workspaces array
+    if (!Array.isArray(config.workspaces)) {
       return null;
+    }
+
+    // Expand path variables (~ and ${HOME}) for portability
+    for (const workspace of config.workspaces) {
+      workspace.rootPath = expandPath(workspace.rootPath);
+    }
+    if (config.defaultWorkingDirectory) {
+      config.defaultWorkingDirectory = expandPath(config.defaultWorkingDirectory);
     }
 
     // Validate active workspace exists
@@ -99,6 +114,13 @@ export function loadStoredConfig(): StoredConfig | null {
     if (!activeWorkspace) {
       // Default to first workspace
       config.activeWorkspaceId = config.workspaces[0]?.id || null;
+    }
+
+    // Ensure workspace folder structure exists for all workspaces
+    for (const workspace of config.workspaces) {
+      if (!isValidWorkspace(workspace.rootPath)) {
+        createWorkspaceAtPath(workspace.rootPath, workspace.name);
+      }
     }
 
     return config;
@@ -147,163 +169,24 @@ export async function getClaudeOAuthToken(): Promise<string | null> {
   return manager.getClaudeOAuth();
 }
 
-// Check if workspace OAuth token needs refresh (with 5 minute buffer)
-export async function isWorkspaceTokenExpiredAsync(workspaceId: string): Promise<boolean> {
-  const manager = getCredentialManager();
-  const oauth = await manager.getWorkspaceOAuth(workspaceId);
-  if (!oauth?.expiresAt) {
-    return false;
-  }
-  const bufferMs = 5 * 60 * 1000; // 5 minutes
-  return Date.now() + bufferMs >= oauth.expiresAt;
-}
-
-
-/**
- * Determine the MCP auth type for a workspace.
- * Uses explicit mcpAuthType if set, otherwise infers from legacy isPublic flag.
- */
-function getWorkspaceMcpAuthType(workspace: Workspace): McpAuthType {
-  if (workspace.mcpAuthType) {
-    return workspace.mcpAuthType;
-  }
-  // Legacy: isPublic was sometimes misused, but treat it as 'public' for backwards compat
-  if (workspace.isPublic) {
-    return 'public';
-  }
-  // Default: most workspaces need OAuth
-  return 'workspace_oauth';
-}
-
-/**
- * Get access token for a specific workspace from credential store.
- *
- * IMPORTANT: This function does NOT fall back to craft_oauth!
- * Craft OAuth is for the Craft API (managing spaces, MCP links).
- * MCP servers require their own workspace-specific authentication.
- */
-export async function getWorkspaceAccessTokenAsync(workspaceId: string): Promise<{ authType: McpAuthType; token: string | null }> {
-  const config = loadStoredConfig();
-  const workspace = config?.workspaces.find(w => w.id === workspaceId);
-
-  if (!workspace) {
-    return { authType: 'public', token: null };
-  }
-
-  const manager = getCredentialManager();
-  const authType = getWorkspaceMcpAuthType(workspace);
-
-  switch (authType) {
-    case 'workspace_oauth': {
-      const oauth = await manager.getWorkspaceOAuth(workspaceId);
-      // Return token if found, null otherwise (no fallback to craft_oauth!)
-      return { authType, token: oauth?.accessToken ?? null };
-    }
-
-    case 'workspace_bearer': {
-      const bearer = await manager.getWorkspaceBearer(workspaceId);
-      return { authType, token: bearer ?? null };
-    }
-
-    case 'public':
-      return { authType: 'public', token: null };
-
-    default:
-      return { authType: 'public', token: null };
-  }
-}
-
-/**
- * Auth status for a workspace's MCP connection.
- * Used by UI to show appropriate feedback when auth is missing.
- */
-export interface WorkspaceAuthStatus {
-  authType: McpAuthType;
-  hasToken: boolean;
-  needsAuth: boolean;
-  message?: string;
-}
-
-/**
- * Check if a workspace has the required MCP authentication configured.
- * Returns status with needsAuth=true if credentials are missing.
- */
-export async function checkWorkspaceAuthStatus(workspaceId: string): Promise<WorkspaceAuthStatus> {
-  const config = loadStoredConfig();
-  const workspace = config?.workspaces.find(w => w.id === workspaceId);
-
-  if (!workspace) {
-    return {
-      authType: 'workspace_oauth',
-      hasToken: false,
-      needsAuth: true,
-      message: 'Workspace not found'
-    };
-  }
-
-  const manager = getCredentialManager();
-  const authType = getWorkspaceMcpAuthType(workspace);
-
-  switch (authType) {
-    case 'workspace_oauth': {
-      const oauth = await manager.getWorkspaceOAuth(workspaceId);
-      const hasToken = !!oauth?.accessToken;
-      return {
-        authType,
-        hasToken,
-        needsAuth: !hasToken,
-        message: hasToken ? undefined : 'MCP authentication required'
-      };
-    }
-
-    case 'workspace_bearer': {
-      const bearer = await manager.getWorkspaceBearer(workspaceId);
-      const hasToken = !!bearer;
-      return {
-        authType,
-        hasToken,
-        needsAuth: !hasToken,
-        message: hasToken ? undefined : 'Bearer token required'
-      };
-    }
-
-    case 'public':
-      return { authType, hasToken: true, needsAuth: false };
-
-    default:
-      return {
-        authType: 'workspace_oauth',
-        hasToken: false,
-        needsAuth: true,
-        message: 'Unknown auth configuration'
-      };
-  }
-}
-
-
-// Update OAuth tokens for a specific workspace (saves to credential store)
-export async function updateWorkspaceOAuthTokensAsync(
-  workspaceId: string,
-  accessToken: string,
-  refreshToken?: string,
-  expiresAt?: number,
-  clientId?: string,
-  tokenType?: string
-): Promise<void> {
-  const manager = getCredentialManager();
-  await manager.setWorkspaceOAuth(workspaceId, {
-    accessToken,
-    refreshToken,
-    expiresAt,
-    clientId,
-    tokenType,
-  });
-}
 
 
 export function saveConfig(config: StoredConfig): void {
   ensureConfigDir();
-  writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf-8');
+
+  // Convert paths to portable form (~ prefix) for cross-machine compatibility
+  const storageConfig: StoredConfig = {
+    ...config,
+    workspaces: config.workspaces.map(ws => ({
+      ...ws,
+      rootPath: toPortablePath(ws.rootPath),
+    })),
+    defaultWorkingDirectory: config.defaultWorkingDirectory
+      ? toPortablePath(config.defaultWorkingDirectory)
+      : undefined,
+  };
+
+  writeFileSync(CONFIG_FILE, JSON.stringify(storageConfig, null, 2), 'utf-8');
 }
 
 export async function updateApiKey(newApiKey: string): Promise<boolean> {
@@ -332,6 +215,18 @@ export function setAuthType(authType: AuthType): void {
   saveConfig(config);
 }
 
+export function getModel(): string | null {
+  const config = loadStoredConfig();
+  return config?.model ?? null;
+}
+
+export function setModel(model: string): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+  config.model = model;
+  saveConfig(config);
+}
+
 export function getTokenDisplay(): TokenDisplayMode {
   const config = loadStoredConfig();
   return config?.tokenDisplay || 'hidden';
@@ -357,29 +252,36 @@ export function setShowCost(show: boolean): void {
   saveConfig(config);
 }
 
-export function getShowClock(): boolean {
+// New session defaults getters/setters
+
+/**
+ * Get the default permission mode for new sessions.
+ * Defaults to 'safe' if not set.
+ */
+export function getDefaultPermissionMode(): PermissionMode {
   const config = loadStoredConfig();
-  // Default to false if not set
-  return config?.showClock === true;
+  return config?.defaultPermissionMode ?? 'ask';
 }
 
-export function setShowClock(show: boolean): void {
+/**
+ * Set the default permission mode for new sessions.
+ */
+export function setDefaultPermissionMode(mode: PermissionMode): void {
   const config = loadStoredConfig();
   if (!config) return;
-  config.showClock = show;
+  config.defaultPermissionMode = mode;
   saveConfig(config);
 }
 
-export function getSafeMode(): boolean {
+export function getDefaultWorkingDirectory(): string {
   const config = loadStoredConfig();
-  // Default to false (off) - Safe Mode is opt-in
-  return config?.safeMode === true;
+  return config?.defaultWorkingDirectory ?? homedir();
 }
 
-export function setSafeMode(enabled: boolean): void {
+export function setDefaultWorkingDirectory(path: string): void {
   const config = loadStoredConfig();
   if (!config) return;
-  config.safeMode = enabled;
+  config.defaultWorkingDirectory = path;
   saveConfig(config);
 }
 
@@ -457,13 +359,55 @@ export async function clearAllConfig(): Promise<void> {
 // Workspace Management Functions
 // ============================================
 
+/**
+ * Generate a unique workspace ID.
+ * Uses a random UUID-like format.
+ */
 export function generateWorkspaceId(): string {
-  return randomUUID();
+  // Generate random bytes and format as UUID-like string (8-4-4-4-12)
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  const hex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+}
+
+/**
+ * Find workspace icon file at workspace_root/icon.*
+ * Returns absolute path to icon file if found, null otherwise
+ */
+export function findWorkspaceIcon(rootPath: string): string | null {
+  return findIconInDir(rootPath);
 }
 
 export function getWorkspaces(): Workspace[] {
   const config = loadStoredConfig();
-  return config?.workspaces || [];
+  const workspaces = config?.workspaces || [];
+
+  // Resolve workspace names from folder config and local icons
+  return workspaces.map(w => {
+    // Read name from workspace folder config (single source of truth)
+    const wsConfig = loadWorkspaceConfig(w.rootPath);
+    const name = wsConfig?.name || w.rootPath.split('/').pop() || 'Untitled';
+
+    // If workspace has a stored iconUrl that's a remote URL, use it
+    // Otherwise check for local icon file
+    let iconUrl = w.iconUrl;
+    if (!iconUrl || (!iconUrl.startsWith('http://') && !iconUrl.startsWith('https://'))) {
+      const localIcon = findWorkspaceIcon(w.rootPath);
+      if (localIcon) {
+        // Convert absolute path to file:// URL for Electron renderer
+        // Append mtime as cache-buster so UI refreshes when icon changes
+        try {
+          const mtime = statSync(localIcon).mtimeMs;
+          iconUrl = `file://${localIcon}?t=${mtime}`;
+        } catch {
+          iconUrl = `file://${localIcon}`;
+        }
+      }
+    }
+
+    return { ...w, name, iconUrl };
+  });
 }
 
 export function getActiveWorkspace(): Workspace | null {
@@ -498,73 +442,54 @@ export function setActiveWorkspace(workspaceId: string): void {
 }
 
 /**
- * Atomically switch to a different workspace.
- * Performs a single config write with both workspace and session updates.
+ * Atomically switch to a workspace and load/create a session.
+ * This prevents race conditions by doing both operations together.
  *
- * This prevents race conditions where multiple saves could leave config
- * in an inconsistent state if the process crashes mid-switch.
- *
- * @returns The workspace and session to use, or null if workspace not found
+ * @param workspaceId The ID of the workspace to switch to
+ * @returns The workspace and session, or null if workspace not found
  */
-export function switchWorkspaceAtomic(workspaceId: string): { workspace: Workspace; session: Session } | null {
+export function switchWorkspaceAtomic(workspaceId: string): { workspace: Workspace; session: SessionConfig } | null {
   const config = loadStoredConfig();
   if (!config) return null;
 
   const workspace = config.workspaces.find(w => w.id === workspaceId);
   if (!workspace) return null;
 
-  // Get or create session for the workspace
-  const sessions = listSessions(workspaceId);
-  let session: Session;
+  // Get or create the latest session for this workspace
+  const session = getOrCreateLatestSession(workspace.rootPath);
 
-  if (sessions.length > 0 && sessions[0]) {
-    // Use existing session
-    const latest = sessions[0];
-    session = {
-      id: latest.id,
-      sdkSessionId: latest.sdkSessionId,
-      workspaceId: latest.workspaceId,
-      name: latest.name,
-      createdAt: latest.createdAt,
-      lastUsedAt: latest.lastUsedAt,
-    };
-  } else {
-    // Create new session (saves session file but not config)
-    const now = Date.now();
-    session = {
-      id: generateSessionId(),
-      workspaceId,
-      createdAt: now,
-      lastUsedAt: now,
-    };
-
-    // Save empty session file
-    const storedSession: StoredSession = {
-      ...session,
-      messages: [],
-      tokenUsage: {
-        inputTokens: 0,
-        outputTokens: 0,
-        totalTokens: 0,
-        contextTokens: 0,
-        costUsd: 0,
-      },
-    };
-    saveSession(storedSession);
-  }
-
-  // Single atomic write for both workspace and session
+  // Update active workspace in config
   config.activeWorkspaceId = workspaceId;
-  config.activeSessionId = session.id;
+  workspace.lastAccessedAt = Date.now();
   saveConfig(config);
 
   return { workspace, session };
 }
 
+/**
+ * Add a workspace to the global config.
+ * @param workspace - Workspace data (must include rootPath)
+ */
 export function addWorkspace(workspace: Omit<Workspace, 'id' | 'createdAt'>): Workspace {
   const config = loadStoredConfig();
   if (!config) {
     throw new Error('No config found');
+  }
+
+  // Check if workspace with same rootPath already exists
+  const existing = config.workspaces.find(w => w.rootPath === workspace.rootPath);
+  if (existing) {
+    // Update existing workspace with new settings
+    const updated: Workspace = {
+      ...existing,
+      ...workspace,
+      id: existing.id,
+      createdAt: existing.createdAt,
+    };
+    const existingIndex = config.workspaces.indexOf(existing);
+    config.workspaces[existingIndex] = updated;
+    saveConfig(config);
+    return updated;
   }
 
   const newWorkspace: Workspace = {
@@ -572,6 +497,11 @@ export function addWorkspace(workspace: Omit<Workspace, 'id' | 'createdAt'>): Wo
     id: generateWorkspaceId(),
     createdAt: Date.now(),
   };
+
+  // Create workspace folder structure if it doesn't exist
+  if (!isValidWorkspace(newWorkspace.rootPath)) {
+    createWorkspaceAtPath(newWorkspace.rootPath, newWorkspace.name);
+  }
 
   config.workspaces.push(newWorkspace);
 
@@ -582,6 +512,46 @@ export function addWorkspace(workspace: Omit<Workspace, 'id' | 'createdAt'>): Wo
 
   saveConfig(config);
   return newWorkspace;
+}
+
+/**
+ * Sync workspaces by discovering workspaces in the default location
+ * that aren't already tracked in the global config.
+ * Call this on app startup.
+ */
+export function syncWorkspaces(): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+
+  const discoveredPaths = discoverWorkspacesInDefaultLocation();
+  const trackedPaths = new Set(config.workspaces.map(w => w.rootPath));
+
+  let added = false;
+  for (const rootPath of discoveredPaths) {
+    if (trackedPaths.has(rootPath)) continue;
+
+    // Load the workspace config to get name
+    const wsConfig = loadWorkspaceConfig(rootPath);
+    if (!wsConfig) continue;
+
+    const newWorkspace: Workspace = {
+      id: wsConfig.id || generateWorkspaceId(),
+      name: wsConfig.name,
+      rootPath,
+      createdAt: wsConfig.createdAt || Date.now(),
+    };
+
+    config.workspaces.push(newWorkspace);
+    added = true;
+  }
+
+  if (added) {
+    // If no active workspace, set to first
+    if (!config.activeWorkspaceId && config.workspaces.length > 0) {
+      config.activeWorkspaceId = config.workspaces[0]!.id;
+    }
+    saveConfig(config);
+  }
 }
 
 export async function removeWorkspace(workspaceId: string): Promise<boolean> {
@@ -607,17 +577,8 @@ export async function removeWorkspace(workspaceId: string): Promise<boolean> {
   return true;
 }
 
-export function renameWorkspace(workspaceId: string, newName: string): boolean {
-  const config = loadStoredConfig();
-  if (!config) return false;
-
-  const workspace = config.workspaces.find(w => w.id === workspaceId);
-  if (!workspace) return false;
-
-  workspace.name = newName.trim();
-  saveConfig(config);
-  return true;
-}
+// Note: renameWorkspace() was removed - workspace names are now stored only in folder config
+// Use updateWorkspaceSetting('name', ...) to rename workspaces via the folder config
 
 // ============================================
 // Workspace Conversation Persistence
@@ -633,22 +594,6 @@ function ensureWorkspaceDir(workspaceId: string): string {
   return dir;
 }
 
-// Update workspace session ID
-export function updateWorkspaceSessionId(workspaceId: string, sessionId: string | null): void {
-  const config = loadStoredConfig();
-  if (!config) return;
-
-  const workspace = config.workspaces.find(w => w.id === workspaceId);
-  if (!workspace) return;
-
-  if (sessionId) {
-    workspace.sessionId = sessionId;
-  } else {
-    delete workspace.sessionId;
-  }
-
-  saveConfig(config);
-}
 
 // Re-export StoredAttachment for convenience (imported at top of file)
 export type { StoredAttachment };
@@ -656,16 +601,36 @@ export type { StoredAttachment };
 // Stored message format (simplified for persistence)
 export interface StoredMessage {
   id: string;
-  type: 'user' | 'assistant' | 'tool' | 'error' | 'status' | 'system' | 'info' | 'warning';
+  type: 'user' | 'assistant' | 'tool' | 'error' | 'status' | 'system' | 'info' | 'warning' | 'plan';
   content: string;
   timestamp?: number;
   toolName?: string;
   toolInput?: Record<string, unknown>;
   toolStatus?: 'pending' | 'executing' | 'completed' | 'error';
   toolDuration?: number;
+  /** Tool intent description (from MCP _intent field) */
+  toolIntent?: string;
   isError?: boolean;
   /** Stored attachments for user messages (persisted to disk) */
   attachments?: StoredAttachment[];
+  /** Tool use ID for deduplication (SDK sends duplicate tool_start events) */
+  toolUseId?: string;
+  /** Tool result content (for tool messages) */
+  toolResult?: string;
+  /** Parent tool use ID for nested tool calls (e.g., child tools inside Task subagent) */
+  parentToolUseId?: string;
+  /** Whether this is an intermediate assistant message (commentary between tool calls) */
+  isIntermediate?: boolean;
+  /** Turn ID for grouping messages in TurnCard after reload */
+  turnId?: string;
+  /** Error display fields for typed errors */
+  errorCode?: string;
+  errorTitle?: string;
+  errorDetails?: string[];
+  errorOriginal?: string;
+  errorCanRetry?: boolean;
+  /** Whether this user message was sent with ultrathink (extended thinking) enabled */
+  ultrathink?: boolean;
 }
 
 export interface WorkspaceConversation {
@@ -757,9 +722,6 @@ export function clearWorkspaceConversation(workspaceId: string): void {
     writeFileSync(filePath, '{}', 'utf-8');
   }
 
-  // Also clear session ID
-  updateWorkspaceSessionId(workspaceId, null);
-
   // Also clear any active plan (plans are session-scoped)
   clearWorkspacePlan(workspaceId);
 }
@@ -810,697 +772,159 @@ export function clearWorkspacePlan(workspaceId: string): void {
 }
 
 // ============================================
-// Plan File Storage (Session-scoped)
+// Session Input Drafts
+// Persists input text per session across app restarts
 // ============================================
-// Plans are stored as markdown files in ~/.craft-agent/sessions/{sessionId}/plans/
-// with descriptive names based on plan title for display in GUI.
 
-/**
- * Get the plans directory for a session.
- * Structure: ~/.craft-agent/sessions/{sessionId}/plans/
- */
-function getSessionPlansDir(sessionId: string): string {
-  return join(CONFIG_DIR, 'sessions', sessionId, 'plans');
+const DRAFTS_FILE = join(CONFIG_DIR, 'drafts.json');
+
+interface DraftsData {
+  drafts: Record<string, string>;
+  updatedAt: number;
 }
 
 /**
- * Generate a plan file name from the plan title.
- * Keeps spaces for readability in GUI, sanitizes dangerous filesystem characters.
- * Includes ==PLAN== prefix for clear identification in file lists.
- * Adds timestamp suffix to ensure uniqueness.
+ * Load all drafts from disk
  */
-function generatePlanFileName(plan: Plan): string {
-  // Start with title or fallback
-  let name = plan.title || plan.context?.substring(0, 50) || 'Untitled';
-
-  // Remove or replace dangerous filesystem characters
-  // Keep: letters, numbers, spaces, hyphens, underscores
-  // Remove: / \ : * ? " < > | and control characters
-  name = name
-    .replace(/[/\\:*?"<>|]/g, '')  // Remove dangerous chars
-    .replace(/[\x00-\x1f\x7f]/g, '')  // Remove control chars
-    .replace(/\s+/g, ' ')  // Normalize multiple spaces to single
-    .trim();
-
-  // Truncate if too long (max 50 chars for the base name)
-  if (name.length > 50) {
-    name = name.substring(0, 50).trim();
-  }
-
-  // Add timestamp for uniqueness (format: YYYYMMDD-HHmmss)
-  const now = new Date();
-  const timestamp = now.toISOString()
-    .replace(/[-:]/g, '')
-    .replace('T', '-')
-    .substring(0, 15);  // YYYYMMDD-HHmmss
-
-  return `==PLAN== ${name} (${timestamp})`;
-}
-
-/**
- * Ensure the plans directory exists for a session
- */
-function ensurePlansDir(sessionId: string): string {
-  const plansDir = getSessionPlansDir(sessionId);
-  if (!existsSync(plansDir)) {
-    mkdirSync(plansDir, { recursive: true });
-  }
-  return plansDir;
-}
-
-/**
- * Format a plan as markdown for file storage
- */
-export function formatPlanAsMarkdown(plan: Plan): string {
-  const lines: string[] = [];
-
-  lines.push(`# ${plan.title}`);
-  lines.push('');
-  lines.push(`**Status:** ${plan.state}`);
-  lines.push(`**Created:** ${new Date(plan.createdAt).toISOString()}`);
-  if (plan.updatedAt !== plan.createdAt) {
-    lines.push(`**Updated:** ${new Date(plan.updatedAt).toISOString()}`);
-  }
-  lines.push('');
-
-  if (plan.context) {
-    lines.push('## Summary');
-    lines.push('');
-    lines.push(plan.context);
-    lines.push('');
-  }
-
-  lines.push('## Steps');
-  lines.push('');
-  for (const step of plan.steps) {
-    const checkbox = step.status === 'completed' ? '[x]' : '[ ]';
-    const status = step.status === 'in_progress' ? ' *(in progress)*' : '';
-    lines.push(`- ${checkbox} ${step.description}${status}`);
-    if (step.details) {
-      lines.push(`  - Tools: ${step.details}`);
-    }
-  }
-  lines.push('');
-
-  if (plan.refinementHistory && plan.refinementHistory.length > 0) {
-    lines.push('## Refinement History');
-    lines.push('');
-    for (const entry of plan.refinementHistory) {
-      lines.push(`### Round ${entry.round}`);
-      lines.push(`**Feedback:** ${entry.feedback}`);
-      if (entry.questions && entry.questions.length > 0) {
-        lines.push(`**Questions:** ${entry.questions.join(', ')}`);
-      }
-      lines.push('');
-    }
-  }
-
-  return lines.join('\n');
-}
-
-/**
- * Parse a markdown plan file back to a Plan object.
- * Note: This is a best-effort parse; some metadata may be lost.
- */
-export function parsePlanFromMarkdown(content: string, planId: string): Plan | null {
+function loadDraftsData(): DraftsData {
   try {
-    const lines = content.split('\n');
-
-    // Extract title (first # heading)
-    const titleLine = lines.find(l => l.startsWith('# '));
-    const title = titleLine ? titleLine.substring(2).trim() : 'Untitled Plan';
-
-    // Extract status
-    const statusLine = lines.find(l => l.startsWith('**Status:**'));
-    const stateStr = statusLine ? statusLine.replace('**Status:**', '').trim() : 'ready';
-    const state = (['creating', 'refining', 'ready', 'executing', 'completed', 'cancelled'].includes(stateStr)
-      ? stateStr
-      : 'ready') as Plan['state'];
-
-    // Extract summary
-    const summaryIdx = lines.findIndex(l => l === '## Summary');
-    const stepsIdx = lines.findIndex(l => l === '## Steps');
-    let context = '';
-    if (summaryIdx !== -1 && stepsIdx !== -1) {
-      context = lines.slice(summaryIdx + 2, stepsIdx).join('\n').trim();
+    if (!existsSync(DRAFTS_FILE)) {
+      return { drafts: {}, updatedAt: 0 };
     }
-
-    // Extract steps
-    const steps: Plan['steps'] = [];
-    if (stepsIdx !== -1) {
-      for (let i = stepsIdx + 2; i < lines.length; i++) {
-        const line = lines[i];
-        if (!line || line.startsWith('##')) break;
-        if (line.startsWith('- [')) {
-          const isCompleted = line.startsWith('- [x]');
-          const isInProgress = line.includes('*(in progress)*');
-          const description = line
-            .replace(/^- \[[ x]\] /, '')
-            .replace(' *(in progress)*', '')
-            .trim();
-          steps.push({
-            id: `step-${steps.length + 1}`,
-            description,
-            status: isCompleted ? 'completed' : isInProgress ? 'in_progress' : 'pending',
-          });
-        }
-      }
-    }
-
-    return {
-      id: planId,
-      title,
-      state,
-      context,
-      steps,
-      refinementRound: 0,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
+    const content = readFileSync(DRAFTS_FILE, 'utf-8');
+    return JSON.parse(content) as DraftsData;
   } catch {
-    return null;
+    return { drafts: {}, updatedAt: 0 };
   }
 }
 
 /**
- * Save a plan to a markdown file within a session's plans directory.
- * Returns the file path.
- *
- * If fileName is not provided, generates a descriptive name from the plan title.
- * File names include spaces for readability in GUI attachments.
+ * Save drafts to disk
  */
-export function savePlanToFile(sessionId: string, plan: Plan, fileName?: string): string {
-  const plansDir = ensurePlansDir(sessionId);
-
-  const name = fileName || generatePlanFileName(plan);
-  const filePath = join(plansDir, `${name}.md`);
-  const content = formatPlanAsMarkdown(plan);
-
-  writeFileSync(filePath, content, 'utf-8');
-  return filePath;
+function saveDraftsData(data: DraftsData): void {
+  ensureConfigDir();
+  data.updatedAt = Date.now();
+  writeFileSync(DRAFTS_FILE, JSON.stringify(data, null, 2), 'utf-8');
 }
 
 /**
- * Load a plan from a markdown file by name (without .md extension).
+ * Get draft text for a session
  */
-export function loadPlanFromFile(sessionId: string, fileName: string): Plan | null {
-  const plansDir = getSessionPlansDir(sessionId);
-  const filePath = join(plansDir, `${fileName}.md`);
-  if (!existsSync(filePath)) {
-    return null;
-  }
-
-  try {
-    const content = readFileSync(filePath, 'utf-8');
-    return parsePlanFromMarkdown(content, fileName);
-  } catch {
-    return null;
-  }
+export function getSessionDraft(sessionId: string): string | null {
+  const data = loadDraftsData();
+  return data.drafts[sessionId] ?? null;
 }
 
 /**
- * Load a plan from a full file path.
+ * Set draft text for a session
+ * Pass empty string to clear the draft
  */
-export function loadPlanFromPath(filePath: string): Plan | null {
-  if (!existsSync(filePath)) {
-    return null;
+export function setSessionDraft(sessionId: string, text: string): void {
+  const data = loadDraftsData();
+  if (text) {
+    data.drafts[sessionId] = text;
+  } else {
+    delete data.drafts[sessionId];
   }
-
-  try {
-    const content = readFileSync(filePath, 'utf-8');
-    const fileName = filePath.split('/').pop()?.replace('.md', '') || 'unknown';
-    return parsePlanFromMarkdown(content, fileName);
-  } catch {
-    return null;
-  }
+  saveDraftsData(data);
 }
 
 /**
- * List all plan files in a session's plans directory.
- * Returns array of { name, path, modifiedAt }.
+ * Delete draft for a session
  */
-export function listPlanFiles(sessionId: string): Array<{ name: string; path: string; modifiedAt: number }> {
-  const plansDir = ensurePlansDir(sessionId);
-
-  try {
-    const files = readdirSync(plansDir)
-      .filter(f => f.endsWith('.md'))
-      .map(f => {
-        const filePath = join(plansDir, f);
-        const stats = existsSync(filePath) ? statSync(filePath) : null;
-        return {
-          name: f.replace('.md', ''),
-          path: filePath,
-          modifiedAt: stats?.mtimeMs || 0,
-        };
-      })
-      .sort((a, b) => b.modifiedAt - a.modifiedAt);
-
-    return files;
-  } catch {
-    return [];
-  }
+export function deleteSessionDraft(sessionId: string): void {
+  const data = loadDraftsData();
+  delete data.drafts[sessionId];
+  saveDraftsData(data);
 }
 
 /**
- * Delete a plan file by name within a session.
+ * Get all drafts as a record
  */
-export function deletePlanFile(sessionId: string, fileName: string): boolean {
-  const plansDir = getSessionPlansDir(sessionId);
-  const filePath = join(plansDir, `${fileName}.md`);
-  if (existsSync(filePath)) {
-    unlinkSync(filePath);
-    return true;
-  }
-  return false;
-}
-
-/**
- * Get the most recent plan file for a session (for resuming).
- */
-export function getMostRecentPlanFile(sessionId: string): { name: string; path: string } | null {
-  const files = listPlanFiles(sessionId);
-  return files.length > 0 ? files[0]! : null;
-}
-
-/**
- * Get the plans directory path for a session.
- */
-export function getPlansDir(sessionId: string): string {
-  return ensurePlansDir(sessionId);
+export function getAllSessionDrafts(): Record<string, string> {
+  const data = loadDraftsData();
+  return data.drafts;
 }
 
 // ============================================
-// Session Storage (Primary Scope)
+// Theme Storage (Cascading: app → workspace → agent)
 // ============================================
-// Sessions are the primary isolation boundary. Each session maps 1:1
-// with a CraftAgent instance and SDK conversation.
 
-const SESSIONS_DIR = join(CONFIG_DIR, 'sessions');
+import type { ThemeOverrides } from './theme.ts';
 
-function ensureSessionsDir(): string {
-  if (!existsSync(SESSIONS_DIR)) {
-    mkdirSync(SESSIONS_DIR, { recursive: true });
-  }
-  return SESSIONS_DIR;
-}
+const APP_THEME_FILE = join(CONFIG_DIR, 'theme.json');
 
 /**
- * Get the attachments directory path for a session.
- * Files are stored at: ~/.craft-agent/sessions/{sessionId}/attachments/
+ * Load app-level theme overrides
  */
-export function getSessionAttachmentsPath(sessionId: string): string {
-  return join(SESSIONS_DIR, sessionId, 'attachments');
-}
-
-/**
- * Get the config directory path (~/.craft-agent)
- */
-export function getConfigDir(): string {
-  return CONFIG_DIR;
-}
-
-// Session token usage (reuse WorkspaceConversation structure)
-export type SessionTokenUsage = WorkspaceConversation['tokenUsage'];
-
-// Session represents a conversation scope (SDK session = our scope boundary)
-export interface Session {
-  id: string;                    // Our UUID (stable, known immediately)
-  sdkSessionId?: string;         // SDK session ID (captured after first message)
-  workspaceId: string;           // Which workspace this session belongs to
-  name?: string;                 // Optional user-defined name
-  createdAt: number;
-  lastUsedAt: number;
-  // Inbox/Archive/Agent features
-  agentId?: string;              // Assigned agent ID (for filtering)
-  agentName?: string;            // Cached agent name for display
-  isArchived?: boolean;          // Whether this session is archived
-}
-
-// Stored session with conversation data
-export interface StoredSession extends Session {
-  messages: StoredMessage[];
-  tokenUsage: SessionTokenUsage;
-}
-
-// Generate a UUID for session IDs
-function generateSessionId(): string {
-  return randomUUID();
-}
-
-// Create a new session for a workspace
-export function createSession(workspaceId: string, name?: string): Session {
-  const now = Date.now();
-  const session: Session = {
-    id: generateSessionId(),
-    workspaceId,
-    name,
-    createdAt: now,
-    lastUsedAt: now,
-  };
-
-  // Save empty session file
-  const storedSession: StoredSession = {
-    ...session,
-    messages: [],
-    tokenUsage: {
-      inputTokens: 0,
-      outputTokens: 0,
-      totalTokens: 0,
-      contextTokens: 0,
-      costUsd: 0,
-    },
-  };
-  saveSession(storedSession);
-
-  // Update active session in config
-  const config = loadStoredConfig();
-  if (config) {
-    config.activeSessionId = session.id;
-    saveConfig(config);
-  }
-
-  return session;
-}
-
-// Get or create a session with a specific ID
-// Used for --session <id> flag to allow user-defined session IDs
-export function getOrCreateSessionById(sessionId: string, workspaceId: string): Session {
-  // Try to load existing session
-  const existing = loadSession(sessionId);
-  if (existing) {
-    return {
-      id: existing.id,
-      sdkSessionId: existing.sdkSessionId,
-      workspaceId: existing.workspaceId,
-      name: existing.name,
-      createdAt: existing.createdAt,
-      lastUsedAt: existing.lastUsedAt,
-    };
-  }
-
-  // Create new session with the specified ID
-  const now = Date.now();
-  const session: Session = {
-    id: sessionId,
-    workspaceId,
-    createdAt: now,
-    lastUsedAt: now,
-  };
-
-  // Save empty session file
-  const storedSession: StoredSession = {
-    ...session,
-    messages: [],
-    tokenUsage: {
-      inputTokens: 0,
-      outputTokens: 0,
-      totalTokens: 0,
-      contextTokens: 0,
-      costUsd: 0,
-    },
-  };
-  saveSession(storedSession);
-
-  return session;
-}
-
-// Save session (conversation data + metadata)
-export function saveSession(session: StoredSession): void {
-  ensureSessionsDir();
-  const filePath = join(SESSIONS_DIR, `${session.id}.json`);
-  session.lastUsedAt = Date.now();
+export function loadAppTheme(): ThemeOverrides | null {
   try {
-    writeFileSync(filePath, JSON.stringify(session, null, 2), 'utf-8');
-  } catch (e) {
-    // Handle cyclic structures or other serialization errors
-    console.error(`[storage] [CYCLIC STRUCTURE] Failed to save session ${session.id}:`, e);
-    console.error(`[storage] Session has ${session.messages.length} messages, types: ${session.messages.map(m => m.type).join(', ')}`);
-    // Try to save a minimal version with sanitized messages
-    try {
-      const minimalSession = {
-        ...session,
-        messages: session.messages.map((m, i) => {
-          // Safely serialize toolInput which could have complex objects
-          let safeToolInput = m.toolInput;
-          if (m.toolInput) {
-            try {
-              JSON.stringify(m.toolInput);
-            } catch (inputErr) {
-              console.error(`[storage] [CYCLIC STRUCTURE] in session message ${i} toolInput (tool: ${m.toolName}), keys: ${Object.keys(m.toolInput).join(', ')}, error: ${inputErr}`);
-              safeToolInput = { error: '[non-serializable input]' };
-            }
-          }
-          return { ...m, toolInput: safeToolInput };
-        }),
-      };
-      writeFileSync(filePath, JSON.stringify(minimalSession, null, 2), 'utf-8');
-      console.error(`[storage] Saved sanitized session ${session.id} successfully`);
-    } catch (e2) {
-      // If even minimal save fails, just log and continue
-      console.error(`[storage] Failed to save even minimal session ${session.id}:`, e2);
-    }
-  }
-}
-
-// Load session by ID
-export function loadSession(sessionId: string): StoredSession | null {
-  const filePath = join(SESSIONS_DIR, `${sessionId}.json`);
-  try {
-    if (!existsSync(filePath)) {
+    if (!existsSync(APP_THEME_FILE)) {
       return null;
     }
-    const content = readFileSync(filePath, 'utf-8');
-    return JSON.parse(content) as StoredSession;
+    const content = readFileSync(APP_THEME_FILE, 'utf-8');
+    return JSON.parse(content) as ThemeOverrides;
   } catch {
     return null;
   }
 }
 
-// Get session metadata (without loading full messages)
-export interface SessionMetadata {
-  id: string;
-  workspaceId: string;
-  name?: string;
-  createdAt: number;
-  lastUsedAt: number;
-  messageCount: number;
-  preview?: string;  // Preview of first user message
-  sdkSessionId?: string;
-  // Inbox/Archive/Agent features
-  agentId?: string;        // Assigned agent ID (for filtering)
-  agentName?: string;      // Cached agent name for display (e.g., "work/coder")
-  isArchived?: boolean;    // Whether this session is archived
-  agents?: string[];  // Distinct agent names used in this session
-  planCount?: number;  // Number of plan files for this session
-}
-
-// List sessions, optionally filtered by workspace
-export function listSessions(workspaceId?: string): SessionMetadata[] {
-  ensureSessionsDir();
-
-  const files = readdirSync(SESSIONS_DIR).filter(f => f.endsWith('.json'));
-  const sessions: SessionMetadata[] = [];
-
-  for (const file of files) {
-    try {
-      const content = readFileSync(join(SESSIONS_DIR, file), 'utf-8');
-      const session = JSON.parse(content) as StoredSession;
-
-      if (!workspaceId || session.workspaceId === workspaceId) {
-        // Find first user message for preview
-        const firstUserMessage = session.messages?.find(m => m.type === 'user');
-        const preview = firstUserMessage?.content?.replace(/\n/g, ' ').substring(0, 150);
-
-        // Extract distinct agent names from "Now chatting with @<name>" messages
-        const agentPattern = /Now chatting with @(\S+)/g;
-        const agents = new Set<string>();
-        for (const msg of session.messages ?? []) {
-          if (msg.content) {
-            let match;
-            while ((match = agentPattern.exec(msg.content)) !== null) {
-              if (match[1]) {
-                agents.add(match[1]);
-              }
-            }
-          }
-        }
-
-        // Count plan files for this session
-        const planCount = listPlanFiles(session.id).length;
-
-        sessions.push({
-          id: session.id,
-          workspaceId: session.workspaceId,
-          name: session.name,
-          createdAt: session.createdAt,
-          lastUsedAt: session.lastUsedAt,
-          messageCount: session.messages?.length ?? 0,
-          preview,
-          sdkSessionId: session.sdkSessionId,
-          agentId: session.agentId,
-          agentName: session.agentName,
-          isArchived: session.isArchived,
-          agents: agents.size > 0 ? Array.from(agents) : undefined,
-          planCount: planCount > 0 ? planCount : undefined,
-        });
-      }
-    } catch {
-      // Skip invalid files
-    }
-  }
-
-  // Sort by lastUsedAt descending (most recent first)
-  return sessions.sort((a, b) => b.lastUsedAt - a.lastUsedAt);
-}
-
-// Delete session
-export function deleteSession(sessionId: string): boolean {
-  const filePath = join(SESSIONS_DIR, `${sessionId}.json`);
-  try {
-    if (existsSync(filePath)) {
-      unlinkSync(filePath);
-
-      // If this was the active session, clear it
-      const config = loadStoredConfig();
-      if (config && config.activeSessionId === sessionId) {
-        config.activeSessionId = null;
-        saveConfig(config);
-      }
-      return true;
-    }
-    return false;
-  } catch {
-    return false;
-  }
-}
-
-// Get or create the latest session for a workspace
-export function getOrCreateLatestSession(workspaceId: string): Session {
-  const sessions = listSessions(workspaceId);
-  if (sessions.length > 0 && sessions[0]) {
-    // Return metadata as Session (full data loaded separately if needed)
-    const latest = sessions[0];
-    return {
-      id: latest.id,
-      sdkSessionId: latest.sdkSessionId,
-      workspaceId: latest.workspaceId,
-      name: latest.name,
-      createdAt: latest.createdAt,
-      lastUsedAt: latest.lastUsedAt,
-    };
-  }
-  // No sessions exist - create one
-  return createSession(workspaceId);
-}
-
-// Update active session ID in config
-export function setActiveSession(sessionId: string | null): void {
-  const config = loadStoredConfig();
-  if (!config) return;
-  config.activeSessionId = sessionId;
-  saveConfig(config);
-}
-
-// Get active session ID from config
-export function getActiveSessionId(): string | null {
-  const config = loadStoredConfig();
-  return config?.activeSessionId ?? null;
-}
-
-// Update SDK session ID for a session (called after first message)
-export function updateSessionSdkId(sessionId: string, sdkSessionId: string): void {
-  const session = loadSession(sessionId);
-  if (session) {
-    session.sdkSessionId = sdkSessionId;
-    saveSession(session);
-  }
-}
-
-// Update session metadata (agentId, agentName, isArchived, name)
-export function updateSessionMetadata(
-  sessionId: string,
-  updates: Partial<Pick<Session, 'agentId' | 'agentName' | 'isArchived' | 'name'>>
-): void {
-  const session = loadSession(sessionId);
-  if (session) {
-    if (updates.agentId !== undefined) session.agentId = updates.agentId;
-    if (updates.agentName !== undefined) session.agentName = updates.agentName;
-    if (updates.isArchived !== undefined) session.isArchived = updates.isArchived;
-    if (updates.name !== undefined) session.name = updates.name;
-    saveSession(session);
-  }
-}
-
-// Archive a session
-export function archiveSession(sessionId: string): void {
-  updateSessionMetadata(sessionId, { isArchived: true });
-}
-
-// Unarchive a session
-export function unarchiveSession(sessionId: string): void {
-  updateSessionMetadata(sessionId, { isArchived: false });
-}
-
-// Assign agent to a session
-export function assignAgentToSession(sessionId: string, agentId: string, agentName?: string): void {
-  updateSessionMetadata(sessionId, { agentId, agentName });
-}
-
-// List archived sessions for a workspace
-export function listArchivedSessions(workspaceId?: string): SessionMetadata[] {
-  return listSessions(workspaceId).filter(s => s.isArchived === true);
-}
-
-// List non-archived sessions (inbox) for a workspace
-export function listInboxSessions(workspaceId?: string): SessionMetadata[] {
-  return listSessions(workspaceId).filter(s => !s.isArchived);
-}
-
-// List sessions by agent for a workspace
-export function listSessionsByAgent(workspaceId: string, agentId: string): SessionMetadata[] {
-  return listSessions(workspaceId).filter(s => s.agentId === agentId);
+/**
+ * Save app-level theme overrides
+ */
+export function saveAppTheme(theme: ThemeOverrides): void {
+  ensureConfigDir();
+  writeFileSync(APP_THEME_FILE, JSON.stringify(theme, null, 2), 'utf-8');
 }
 
 /**
- * Clear all messages and token usage from a session.
- * Used by /clear command to reset conversation without creating a new session.
- * Preserves session ID and metadata, clears conversation data and SDK session.
+ * Load workspace-level theme overrides
  */
-export function clearSessionMessages(sessionId: string): boolean {
-  const session = loadSession(sessionId);
-  if (!session) return false;
-
-  session.messages = [];
-  session.tokenUsage = {
-    inputTokens: 0,
-    outputTokens: 0,
-    totalTokens: 0,
-    contextTokens: 0,
-    costUsd: 0,
-  };
-  // Clear SDK session ID so next message starts fresh conversation with Claude
-  session.sdkSessionId = undefined;
-
-  saveSession(session);
-  return true;
-}
-
-// Clean up old workspace-based conversations (replaced by session-based storage)
-// Called once on startup to remove stale data
-export function cleanupLegacyConversations(): void {
+export function loadWorkspaceTheme(workspaceRootPath: string): ThemeOverrides | null {
   try {
-    if (!existsSync(WORKSPACES_DIR)) return;
-
-    const workspaceDirs = readdirSync(WORKSPACES_DIR);
-    for (const dir of workspaceDirs) {
-      const conversationPath = join(WORKSPACES_DIR, dir, 'conversation.json');
-      if (existsSync(conversationPath)) {
-        unlinkSync(conversationPath);
-      }
+    const themePath = join(workspaceRootPath, 'theme.json');
+    if (!existsSync(themePath)) {
+      return null;
     }
+    const content = readFileSync(themePath, 'utf-8');
+    return JSON.parse(content) as ThemeOverrides;
   } catch {
-    // Ignore cleanup errors - non-critical
+    return null;
   }
 }
 
+/**
+ * Save workspace-level theme overrides
+ */
+export function saveWorkspaceTheme(workspaceRootPath: string, theme: ThemeOverrides): void {
+  const themePath = join(workspaceRootPath, 'theme.json');
+  writeFileSync(themePath, JSON.stringify(theme, null, 2), 'utf-8');
+}
+
+/**
+ * Load agent-level theme overrides
+ */
+export function loadAgentTheme(workspaceRootPath: string, agentSlug: string): ThemeOverrides | null {
+  try {
+    const themePath = join(workspaceRootPath, 'agents', agentSlug, 'theme.json');
+    if (!existsSync(themePath)) {
+      return null;
+    }
+    const content = readFileSync(themePath, 'utf-8');
+    return JSON.parse(content) as ThemeOverrides;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Save agent-level theme overrides
+ */
+export function saveAgentTheme(workspaceRootPath: string, agentSlug: string, theme: ThemeOverrides): void {
+  const agentDir = join(workspaceRootPath, 'agents', agentSlug);
+  if (!existsSync(agentDir)) {
+    mkdirSync(agentDir, { recursive: true });
+  }
+  const themePath = join(agentDir, 'theme.json');
+  writeFileSync(themePath, JSON.stringify(theme, null, 2), 'utf-8');
+}

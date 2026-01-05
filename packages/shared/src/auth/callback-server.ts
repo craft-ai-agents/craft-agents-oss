@@ -623,7 +623,7 @@ export async function createCallbackServer(options?: CreateCallbackServerOptions
   });
 
   await new Promise<void>((resolve, reject) => {
-    server?.on('error', (error) => {
+    server?.once('error', (error) => {
       reject(error instanceof Error ? error : new Error(String(error)));
       rejectCallback?.(error instanceof Error ? error : new Error(String(error)));
     });
