@@ -64,6 +64,24 @@ import type { GoogleService } from '../sources/types.ts';
 import { DOC_REFS } from '../docs/index.ts';
 
 // ============================================================
+// Helper Functions
+// ============================================================
+
+/**
+ * Infer Google service from API baseUrl
+ * Returns undefined if URL doesn't match a known Google API pattern
+ */
+function inferGoogleServiceFromUrl(baseUrl: string | undefined): GoogleService | undefined {
+  if (!baseUrl) return undefined;
+  const url = baseUrl.toLowerCase();
+
+  if (url.includes('calendar.googleapis.com') || url.includes('/calendar/')) return 'calendar';
+  if (url.includes('drive.googleapis.com') || url.includes('/drive/')) return 'drive';
+  if (url.includes('gmail.googleapis.com') || url.includes('/gmail/')) return 'gmail';
+  return undefined;
+}
+
+// ============================================================
 // Session-Scoped Tool Callbacks
 // ============================================================
 
@@ -1358,8 +1376,17 @@ After successful authentication, the tokens are stored and the source is marked 
           // Use predefined service scopes
           service = api.googleService;
         } else {
-          // Default to Gmail for backwards compatibility
-          service = 'gmail';
+          // Infer from baseUrl
+          service = inferGoogleServiceFromUrl(api?.baseUrl);
+          if (!service) {
+            return {
+              content: [{
+                type: 'text' as const,
+                text: `Cannot determine Google service for source '${args.sourceSlug}'. Set googleService ('gmail', 'calendar', or 'drive') in api config, or use a recognizable baseUrl like 'https://gmail.googleapis.com'.`,
+              }],
+              isError: true,
+            };
+          }
         }
 
         const serviceName = service || 'Google API';

@@ -327,13 +327,18 @@ Google APIs use Google OAuth with baked-in credentials. All Google services use 
 1. Create the source config at \`sources/google-calendar/config.json\`:
    \`\`\`json
    {
+     "id": "src_google_calendar",
+     "name": "Google Calendar",
+     "slug": "google-calendar",
+     "enabled": true,
      "provider": "google",
      "type": "api",
      "api": {
        "baseUrl": "https://www.googleapis.com/calendar/v3",
        "authType": "oauth",
        "googleService": "calendar"
-     }
+     },
+     "iconUrl": "https://calendar.google.com"
    }
    \`\`\`
 
@@ -344,13 +349,18 @@ Google APIs use Google OAuth with baked-in credentials. All Google services use 
 1. Create the source config at \`sources/google-drive/config.json\`:
    \`\`\`json
    {
+     "id": "src_google_drive",
+     "name": "Google Drive",
+     "slug": "google-drive",
+     "enabled": true,
      "provider": "google",
      "type": "api",
      "api": {
        "baseUrl": "https://www.googleapis.com/drive/v3",
        "authType": "oauth",
        "googleService": "drive"
-     }
+     },
+     "iconUrl": "https://drive.google.com"
    }
    \`\`\`
 

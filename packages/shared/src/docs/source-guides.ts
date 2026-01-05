@@ -605,13 +605,18 @@ Combine operators with spaces: \`from:john@example.com after:2024/01/01 has:atta
 **Recommended config.json:**
 \`\`\`json
 {
-  "type": "api",
+  "id": "src_gmail",
+  "name": "Gmail",
+  "slug": "gmail",
+  "enabled": true,
   "provider": "google",
+  "type": "api",
   "api": {
     "baseUrl": "https://gmail.googleapis.com",
     "authType": "oauth",
     "googleService": "gmail"
-  }
+  },
+  "iconUrl": "https://mail.google.com"
 }
 \`\`\`
 
@@ -676,13 +681,18 @@ This source provides a single flexible \`api_google-calendar\` tool that accepts
 **Required config.json:**
 \`\`\`json
 {
-  "type": "api",
+  "id": "src_google_calendar",
+  "name": "Google Calendar",
+  "slug": "google-calendar",
+  "enabled": true,
   "provider": "google",
+  "type": "api",
   "api": {
     "baseUrl": "https://www.googleapis.com/calendar/v3",
     "authType": "oauth",
     "googleService": "calendar"
-  }
+  },
+  "iconUrl": "https://calendar.google.com"
 }
 \`\`\`
 
@@ -743,13 +753,18 @@ Use the \`q\` parameter:
 **Required config.json:**
 \`\`\`json
 {
-  "type": "api",
+  "id": "src_google_drive",
+  "name": "Google Drive",
+  "slug": "google-drive",
+  "enabled": true,
   "provider": "google",
+  "type": "api",
   "api": {
     "baseUrl": "https://www.googleapis.com/drive/v3",
     "authType": "oauth",
     "googleService": "drive"
-  }
+  },
+  "iconUrl": "https://drive.google.com"
 }
 \`\`\`
 

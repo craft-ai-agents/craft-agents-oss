@@ -903,17 +903,7 @@ export class CraftAgent {
   ): Promise<{ allowed: boolean; updatedInput: Record<string, unknown> }> {
     // Bash commands require permission
     if (toolName === 'Bash') {
-      let command: string;
-      if (typeof input.command === 'string') {
-        command = input.command;
-      } else {
-        try {
-          command = JSON.stringify(input);
-        } catch (e) {
-          this.onDebug?.(`[CYCLIC STRUCTURE] in checkToolPermission Bash input, keys: ${Object.keys(input).join(', ')}, error: ${e}`);
-          command = '[non-serializable input]';
-        }
-      }
+      const command = typeof input.command === 'string' ? input.command : JSON.stringify(input);
       const baseCommand = command.trim().split(/\s+/)[0] || command;
       const requestId = `perm-${toolUseId}`;
 
@@ -1299,62 +1289,7 @@ export class CraftAgent {
                 if (intent || displayName) {
                   const { _intent, _displayName, ...cleanInput } = toolInput;
 
-                // Safe Mode: Require permission for protected MCP operations
-                if (getSafeMode() && isSafeModeProtectedTool(input.tool_name)) {
-                  const description = getSafeModeDescription(input.tool_name, cleanInput);
-                  const requestId = `safe-${input.tool_use_id}`;
-                  this.onDebug?.(`[Safe Mode] Requesting permission for ${input.tool_name}: ${description}`);
-
-                  const permissionPromise = new Promise<boolean>((resolve) => {
-                    this.pendingPermissions.set(requestId, {
-                      resolve: (allowed) => resolve(allowed),
-                      toolName: input.tool_name,
-                      command: description,
-                      baseCommand: '',
-                      type: 'safe_mode',
-                      mcpInput: cleanInput,
-                    });
-                  });
-
-                  if (this.onPermissionRequest) {
-                    this.onPermissionRequest({
-                      requestId,
-                      toolName: input.tool_name,
-                      command: description,
-                      description: `Safe Mode: ${description}`,
-                      type: 'safe_mode',
-                      mcpInput: cleanInput,
-                    });
-                  } else {
-                    // No permission handler - block the operation
-                    this.pendingPermissions.delete(requestId);
-                    return {
-                      continue: false,
-                      hookSpecificOutput: {
-                        hookEventName: 'PreToolUse' as const,
-                        decision: 'block',
-                        reason: 'Safe Mode: No permission handler available',
-                      },
-                    };
-                  }
-
-                  const allowed = await permissionPromise;
-                  if (!allowed) {
-                    this.onDebug?.('[Safe Mode] User denied permission');
-                    return {
-                      continue: false,
-                      hookSpecificOutput: {
-                        hookEventName: 'PreToolUse' as const,
-                        decision: 'block',
-                        reason: 'Safe Mode: User denied permission for this operation',
-                      },
-                    };
-                  }
-                  this.onDebug?.('[Safe Mode] User approved operation');
-                }
-
-                // Return with updatedInput if we had _intent (or Safe Mode check passed)
-                if (intent) {
+                  // Return with updatedInput - SDK will use this instead of original
                   return {
                     continue: true,
                     hookSpecificOutput: {
@@ -1518,17 +1453,9 @@ export class CraftAgent {
               // For Bash in 'ask' mode, check if we need permission
               if (input.tool_name === 'Bash' && permissionMode === 'ask') {
                 // Extract command and base command
-                let command: unknown;
-                if (typeof input.tool_input === 'object' && input.tool_input !== null) {
-                  command = (input.tool_input as Record<string, unknown>).command;
-                } else {
-                  try {
-                    command = JSON.stringify(input.tool_input);
-                  } catch (e) {
-                    this.onDebug?.(`[CYCLIC STRUCTURE] in PreToolUse Bash tool_input, type: ${typeof input.tool_input}, error: ${e}`);
-                    command = '[non-serializable input]';
-                  }
-                }
+                const command = typeof input.tool_input === 'object' && input.tool_input !== null
+                  ? (input.tool_input as Record<string, unknown>).command
+                  : JSON.stringify(input.tool_input);
                 const commandStr = String(command);
                 const baseCommand = this.getBaseCommand(commandStr);
 
