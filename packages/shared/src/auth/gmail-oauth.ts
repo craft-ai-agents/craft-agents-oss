@@ -19,9 +19,10 @@ import { createCallbackServer, type AppType } from './callback-server.ts';
 const GMAIL_CLIENT_ID = process.env.GMAIL_OAUTH_CLIENT_ID || '';
 const GMAIL_CLIENT_SECRET = process.env.GMAIL_OAUTH_CLIENT_SECRET || '';
 
-// Gmail OAuth scopes - read-only access to inbox
+// Gmail OAuth scopes - modify access for trash/labels, compose for drafts
 const GMAIL_SCOPES = [
-  'https://www.googleapis.com/auth/gmail.readonly',
+  'https://www.googleapis.com/auth/gmail.modify',   // Read, trash, labels, mark read/unread
+  'https://www.googleapis.com/auth/gmail.compose',  // Create and send drafts
   'https://www.googleapis.com/auth/userinfo.email',
 ];
 
