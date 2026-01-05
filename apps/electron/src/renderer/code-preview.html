@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https: file:; connect-src 'self' https:; font-src 'self' https://fonts.gstatic.com;">
+  <title>Code Preview</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body style="margin: 0; background-color: #ffffff;">
+  <script>
+    // Match system theme for initial background
+    if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      document.body.style.backgroundColor = '#1e1e1e';
+    }
+  </script>
+  <div id="root"></div>
+  <script type="module" src="./code-preview-main.tsx"></script>
+</body>
+</html>

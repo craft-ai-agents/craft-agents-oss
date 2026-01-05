@@ -1,4 +1,4 @@
-import { exists, mkdir, chmod, symlink, unlink, lstat } from "fs/promises";
+import { mkdir, chmod, symlink, unlink, lstat, access } from "fs/promises";
 import { PassThrough, pipeline } from "stream";
 import { promisify } from "util";
 import { getLatestVersion, getManifest } from "./manifest";
@@ -26,7 +26,9 @@ export async function downloadArchive(params: { url: string, sha256: string }): 
 }
 
 export async function ensureDirectory(path: string): Promise<void> {
-  if (!await exists(path)) {
+  try {
+    await access(path);
+  } catch {
     await mkdir(path, { recursive: true });
   }
 }

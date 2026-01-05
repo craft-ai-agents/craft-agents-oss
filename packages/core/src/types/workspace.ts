@@ -2,25 +2,13 @@
  * Workspace and authentication types
  */
 
-/**
- * How the workspace's MCP server should be authenticated.
- * - 'workspace_oauth': Has OAuth credentials (workspace_oauth::{workspaceId})
- * - 'workspace_bearer': Uses bearer token (workspace_bearer::{workspaceId})
- * - 'public': Truly public, no auth needed
- *
- * Note: Craft OAuth (craft_oauth::global) is ONLY for Craft API (spaces, MCP link management).
- * It should NEVER be used for MCP server authentication - MCP servers have their own OAuth.
- */
-export type McpAuthType = 'workspace_oauth' | 'workspace_bearer' | 'public';
-
 export interface Workspace {
   id: string;
   name: string;
-  mcpUrl: string;
-  mcpAuthType?: McpAuthType;  // Explicit MCP auth type (defaults to workspace_oauth)
-  isPublic?: boolean;         // DEPRECATED: Use mcpAuthType instead
+  slug?: string;       // URL-safe folder name for workspace-scoped storage (defaults to id if not set)
   createdAt: number;
   sessionId?: string;  // SDK session ID for conversation continuity
+  iconUrl?: string;    // Space icon URL from Craft profile
 }
 
 export type AuthType = 'api_key' | 'oauth_token' | 'craft_credits';
@@ -61,13 +49,3 @@ export interface StoredConfig {
   cumulativeUsage?: CumulativeUsage;  // Global cumulative cost
 }
 
-/**
- * Auth status for a workspace's MCP connection.
- * Used by UI to show appropriate feedback when auth is missing.
- */
-export interface WorkspaceAuthStatus {
-  authType: McpAuthType;
-  hasToken: boolean;
-  needsAuth: boolean;
-  message?: string;
-}

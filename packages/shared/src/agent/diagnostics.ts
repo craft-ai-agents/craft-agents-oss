@@ -5,13 +5,17 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { getAiCreditsBalance } from '../auth/balance.ts';
-import { isWorkspaceTokenExpiredAsync, loadStoredConfig, getAnthropicApiKey, getClaudeOAuthToken, type AuthType } from '../config/storage.ts';
+import { getLastApiError } from '../cache-ttl-interceptor.ts';
+import { loadStoredConfig, getAnthropicApiKey, getClaudeOAuthToken, type AuthType } from '../config/storage.ts';
 import { getCredentialManager } from '../credentials/index.ts';
+import { setAnthropicOptionsEnv } from './options.ts';
 
 export type DiagnosticCode =
   | 'credits_exhausted'
+  | 'insufficient_credits'  // HTTP 402 from Anthropic API
   | 'token_expired'
   | 'invalid_credentials'
+  | 'rate_limited'          // HTTP 429 from Anthropic API
   | 'mcp_unreachable'
   | 'service_unavailable'
   | 'unknown_error';
@@ -27,7 +31,6 @@ export interface DiagnosticResult {
 interface DiagnosticConfig {
   authType?: AuthType;
   workspaceId?: string;
-  mcpUrl?: string;
   rawError: string;
 }
 
@@ -43,6 +46,131 @@ interface CheckResult {
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, defaultValue: T): Promise<T> {
   const timeoutPromise = new Promise<T>((resolve) => setTimeout(() => resolve(defaultValue), timeoutMs));
   return Promise.race([promise, timeoutPromise]);
+}
+
+/**
+ * Check if a recent API error was captured during the failed request.
+ * This is the most accurate source of truth for API failures since it
+ * captures the actual HTTP status code before the SDK wraps it.
+ */
+async function checkCapturedApiError(): Promise<CheckResult> {
+  const apiError = getLastApiError();
+
+  if (!apiError) {
+    return { ok: true, detail: '✓ API error: None captured' };
+  }
+
+  // HTTP 402 - Payment Required / Insufficient Credits
+  if (apiError.status === 402) {
+    return {
+      ok: false,
+      detail: `✗ API error: 402 ${apiError.message}`,
+      failCode: 'insufficient_credits',
+      failTitle: 'Payment Required',
+      failMessage: apiError.message || 'Your Anthropic API account requires payment or has insufficient credits.',
+    };
+  }
+
+  // HTTP 401 - Unauthorized / Invalid Credentials
+  if (apiError.status === 401) {
+    return {
+      ok: false,
+      detail: `✗ API error: 401 ${apiError.message}`,
+      failCode: 'invalid_credentials',
+      failTitle: 'Invalid Credentials',
+      failMessage: apiError.message || 'Your API credentials are invalid or expired.',
+    };
+  }
+
+  // HTTP 429 - Rate Limited
+  if (apiError.status === 429) {
+    return {
+      ok: false,
+      detail: `✗ API error: 429 ${apiError.message}`,
+      failCode: 'rate_limited',
+      failTitle: 'Rate Limited',
+      failMessage: 'Too many requests. Please wait a moment before trying again.',
+    };
+  }
+
+  // HTTP 5xx - Service Error
+  if (apiError.status >= 500) {
+    return {
+      ok: false,
+      detail: `✗ API error: ${apiError.status} ${apiError.message}`,
+      failCode: 'service_unavailable',
+      failTitle: 'Anthropic Service Error',
+      failMessage: `The Anthropic API returned an error (${apiError.status}). This is usually temporary.`,
+    };
+  }
+
+  // Other 4xx errors - report but don't fail (might be expected)
+  // Include the message so users can see what actually went wrong
+  return { ok: true, detail: `✓ API error: ${apiError.status} - ${apiError.message}` };
+}
+
+/**
+ * Check if Anthropic API is reachable.
+ * Uses a simple HEAD request to check connectivity without authentication.
+ */
+async function checkAnthropicAvailability(): Promise<CheckResult> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+    try {
+      // Simple connectivity check to Anthropic's API endpoint
+      // HEAD request doesn't require auth and checks if service is up
+      const response = await fetch('https://api.anthropic.com/v1/models', {
+        method: 'HEAD',
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      // Any response means the service is reachable
+      // 401/403 = reachable but auth required (expected without key)
+      // 5xx = service issues
+      if (response.status >= 500) {
+        return {
+          ok: false,
+          detail: `✗ Anthropic API: Service error (${response.status})`,
+          failCode: 'service_unavailable',
+          failTitle: 'Anthropic Service Error',
+          failMessage: 'The Anthropic API is experiencing issues. Please try again later.',
+        };
+      }
+
+      return { ok: true, detail: `✓ Anthropic API: Reachable (${response.status})` };
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+
+      if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+        return {
+          ok: false,
+          detail: '✗ Anthropic API: Timeout',
+          failCode: 'service_unavailable',
+          failTitle: 'Anthropic API Unreachable',
+          failMessage: 'Cannot connect to the Anthropic API. Check your internet connection.',
+        };
+      }
+
+      const msg = fetchError instanceof Error ? fetchError.message : String(fetchError);
+      if (msg.includes('ECONNREFUSED') || msg.includes('ENOTFOUND') || msg.includes('fetch failed')) {
+        return {
+          ok: false,
+          detail: `✗ Anthropic API: Unreachable (${msg})`,
+          failCode: 'service_unavailable',
+          failTitle: 'Anthropic API Unreachable',
+          failMessage: 'Cannot connect to the Anthropic API. Check your internet connection.',
+        };
+      }
+
+      return { ok: true, detail: `✓ Anthropic API: Unknown (${msg})` };
+    }
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    return { ok: true, detail: `✓ Anthropic API: Check failed (${msg})` };
+  }
 }
 
 /** Check Craft credits balance */
@@ -68,24 +196,11 @@ async function checkCredits(): Promise<CheckResult> {
   }
 }
 
-/** Check workspace token expiry */
-async function checkWorkspaceToken(workspaceId: string): Promise<CheckResult> {
-  try {
-    const isExpired = await isWorkspaceTokenExpiredAsync(workspaceId);
-    if (isExpired) {
-      return {
-        ok: false,
-        detail: '✗ Workspace token: Expired',
-        failCode: 'token_expired',
-        failTitle: 'Workspace Session Expired',
-        failMessage: 'Your workspace authentication has expired. Please re-authenticate the workspace.',
-      };
-    }
-    return { ok: true, detail: '✓ Workspace token: Valid' };
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    return { ok: true, detail: `✓ Workspace token: Check failed (${msg})` };
-  }
+/** Check workspace token expiry - placeholder, always returns valid */
+async function checkWorkspaceToken(_workspaceId: string): Promise<CheckResult> {
+  // Token expiry checking was removed in a refactoring
+  // For now, just assume tokens are valid - the actual API call will fail if expired
+  return { ok: true, detail: '✓ Workspace token: Present' };
 }
 
 /**
@@ -226,7 +341,7 @@ async function checkMcpConnectivity(mcpUrl: string): Promise<CheckResult> {
   }
 }
 
-/** Check if Craft token is present (for craft_credits auth) */
+/** Check if Craft token is present and valid (for craft_credits auth) */
 async function checkCraftToken(): Promise<CheckResult> {
   try {
     const manager = getCredentialManager();
@@ -240,16 +355,61 @@ async function checkCraftToken(): Promise<CheckResult> {
         failMessage: 'Your Craft authentication is missing. Please log in again.',
       };
     }
-    return { ok: true, detail: '✓ Craft token: Present' };
+
+    // Actually validate the token by calling a lightweight API endpoint
+    const { CraftApi } = await import('../clients/craftApi.ts');
+    const craftApi = new CraftApi();
+
+    try {
+      await craftApi.getProfile(token);
+      return { ok: true, detail: '✓ Craft token: Valid' };
+    } catch (validationError) {
+      const validationMsg = validationError instanceof Error ? validationError.message : String(validationError);
+
+      // 401/403 = Token is invalid or expired - try to refresh
+      if (validationMsg.includes('401') || validationMsg.includes('403') || validationMsg.includes('Unauthorized') || validationMsg.includes('Forbidden')) {
+        try {
+          // Try to refresh the token
+          const newToken = await craftApi.renewSession(token);
+
+          // Validate the new token
+          await craftApi.getProfile(newToken);
+
+          // Save the refreshed token
+          await manager.setCraftOAuth(newToken);
+
+          // Update SDK options so next chat uses the new token
+          setAnthropicOptionsEnv({
+            USE_CRAFT_AI_GATEWAY: 'true',
+            CRAFT_API_GATEWAY_TOKEN: newToken,
+          });
+
+          return { ok: true, detail: '✓ Craft token: Refreshed' };
+        } catch (refreshError) {
+          // Refresh failed - token is too old or invalid
+          return {
+            ok: false,
+            detail: '✗ Craft token: Expired (refresh failed)',
+            failCode: 'invalid_credentials',
+            failTitle: 'Craft Session Expired',
+            failMessage: 'Your Craft session has expired and could not be refreshed. Please log in again.',
+          };
+        }
+      }
+
+      // Other validation errors - just note, don't fail
+      return { ok: true, detail: `✓ Craft token: Present (validation skipped: ${validationMsg.slice(0, 30)})` };
+    }
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    return { ok: true, detail: `✓ Craft token: Check failed (${msg})` };
+    // Network errors - just note, don't fail
+    return { ok: true, detail: `✓ Craft token: Check failed (${msg.slice(0, 30)})` };
   }
 }
 
 /**
- * Validate the Craft AI gateway by making a test request.
- * The gateway uses the Anthropic API format but authenticates via Craft token.
+ * Validate the Craft AI gateway by making a simple connectivity test.
+ * Uses a HEAD request to check if the gateway is reachable.
  */
 async function validateCraftGateway(): Promise<CheckResult> {
   try {
@@ -260,87 +420,78 @@ async function validateCraftGateway(): Promise<CheckResult> {
       return { ok: true, detail: '✓ Craft gateway: Skipped (no token)' };
     }
 
-    // Test the gateway by making a models.list() request through it
-    const client = new Anthropic({
-      apiKey: 'craft-credits-placeholder', // Required by SDK but ignored by gateway
-      baseURL: 'https://gateway.craft.do/v1',
-      defaultHeaders: {
-        'X-Craft-Token': token, // token is already the access token string
-      },
-    });
+    // Simple connectivity test - HEAD request to gateway
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
 
-    const result = await client.models.list();
-    const modelCount = result.data?.length ?? 0;
-    return {
-      ok: true,
-      detail: `✓ Craft gateway: Valid (${modelCount} models)`,
-    };
+    try {
+      const response = await fetch('https://gateway.craft.do/v1', {
+        method: 'HEAD',
+        headers: {
+          'X-Craft-Token': token,
+        },
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      // Any response means gateway is reachable
+      return { ok: true, detail: `✓ Craft gateway: Reachable (${response.status})` };
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+
+      if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+        return { ok: true, detail: '✓ Craft gateway: Timeout (4s)' };
+      }
+
+      const fetchMsg = fetchError instanceof Error ? fetchError.message : String(fetchError);
+      return { ok: true, detail: `✓ Craft gateway: Skipped (${fetchMsg.slice(0, 40)})` };
+    }
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-
-    // 401/403 = Authentication failed
-    if (msg.includes('401') || msg.includes('403') || msg.includes('Unauthorized') || msg.includes('Forbidden')) {
-      return {
-        ok: false,
-        detail: '✗ Craft gateway: Authentication failed',
-        failCode: 'invalid_credentials',
-        failTitle: 'Craft Authentication Failed',
-        failMessage: 'Your Craft session may have expired. Please log in again.',
-      };
-    }
-
-    // Network error or gateway down - don't fail, just note it
-    return {
-      ok: true,
-      detail: `✓ Craft gateway: Skipped (${msg.slice(0, 50)})`,
-    };
+    return { ok: true, detail: `✓ Craft gateway: Check failed (${msg.slice(0, 40)})` };
   }
 }
 
 /**
  * Run error diagnostics to identify the specific cause of a failure.
- * All checks run in parallel with timeouts (3s for API validation, 2s for others).
+ * All checks run in parallel with 5s timeouts.
  */
 export async function runErrorDiagnostics(config: DiagnosticConfig): Promise<DiagnosticResult> {
-  const { authType, workspaceId, mcpUrl, rawError } = config;
+  const { authType, workspaceId, rawError } = config;
   const details: string[] = [];
   const defaultResult: CheckResult = { ok: true, detail: '? Check: Timeout' };
 
   // Build list of checks to run based on config
   const checks: Promise<CheckResult>[] = [];
 
-  // 1. Credits and gateway validation (only for craft_credits)
+  // 0. FIRST: Check captured API error (most accurate source of truth)
+  // This captures the actual HTTP status code from the failed request
+  checks.push(withTimeout(checkCapturedApiError(), 1000, defaultResult));
+
+  // 1. Anthropic API availability check (for api_key and oauth_token)
+  if (authType === 'api_key' || authType === 'oauth_token') {
+    checks.push(withTimeout(checkAnthropicAvailability(), 4000, defaultResult));
+  }
+
+  // 2. Credits and gateway validation (only for craft_credits)
   if (authType === 'craft_credits') {
-    checks.push(withTimeout(checkCredits(), 2000, defaultResult));
-    checks.push(withTimeout(checkCraftToken(), 2000, defaultResult));
-    checks.push(withTimeout(validateCraftGateway(), 3000, defaultResult)); // 3s for API call
+    checks.push(withTimeout(checkCredits(), 5000, defaultResult));
+    checks.push(withTimeout(checkCraftToken(), 5000, defaultResult));
+    checks.push(withTimeout(validateCraftGateway(), 5000, defaultResult));
   }
 
-  // 2. API key check with validation (only for api_key auth)
+  // 3. API key check with validation (only for api_key auth)
   if (authType === 'api_key') {
-    checks.push(withTimeout(checkApiKey(), 3000, defaultResult)); // 3s for API call
+    checks.push(withTimeout(checkApiKey(), 5000, defaultResult));
   }
 
-  // 3. OAuth token check (only for oauth_token auth)
+  // 4. OAuth token check (only for oauth_token auth)
   if (authType === 'oauth_token') {
-    checks.push(withTimeout(checkOAuthToken(), 2000, defaultResult));
+    checks.push(withTimeout(checkOAuthToken(), 5000, defaultResult));
   }
 
-  // 4. Workspace token check (if workspace is configured with OAuth)
-  if (workspaceId) {
-    const storedConfig = loadStoredConfig();
-    const workspace = storedConfig?.workspaces.find(w => w.id === workspaceId);
-    const mcpAuthType = workspace?.mcpAuthType ?? 'workspace_oauth';
-
-    if (mcpAuthType === 'workspace_oauth') {
-      checks.push(withTimeout(checkWorkspaceToken(workspaceId), 2000, defaultResult));
-    }
-  }
-
-  // 5. MCP connectivity check (if URL provided)
-  if (mcpUrl) {
-    checks.push(withTimeout(checkMcpConnectivity(mcpUrl), 3000, defaultResult));
-  }
+  // 5. Workspace token check is no longer needed
+  // Workspaces now use sources for MCP authentication
 
   // Run all checks in parallel
   const results = await Promise.all(checks);

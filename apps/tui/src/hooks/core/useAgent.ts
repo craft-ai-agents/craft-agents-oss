@@ -3,9 +3,6 @@ import {
   CraftAgent,
   type CraftAgentConfig,
   type Question,
-  type PlanReviewResult,
-  type PlanQuestion,
-  type SwarmConfig,
   setUpdateAgentInstructionsContextProvider,
   setUpdateAgentInstructionsResultCallback,
   setUpdateAgentInstructionsProgressCallback,
@@ -13,8 +10,10 @@ import {
   setGlobalPermissionHandler,
   resolveGlobalPermission,
   clearGlobalPermissions,
-  enterCraftPlanMode,
-  exitCraftPlanMode,
+  setPermissionMode,
+  getPermissionMode,
+  cyclePermissionMode,
+  type PermissionMode,
 } from '@craft-agent/shared/agent';
 import { parseSDKErrorText, isSDKErrorText, type AgentError } from '@craft-agent/shared/agent';
 import type { UpdateInstructionsContext, UpdateInstructionsProgressEvent } from '@craft-agent/shared/agents';
@@ -23,43 +22,59 @@ import type { TodoItem } from '../../components/TodoList.tsx';
 import type { FileAttachment } from '@craft-agent/shared/utils';
 import { setTerminalProgressIndeterminate, clearTerminalProgress } from '../../utils/terminalProgress.ts';
 import {
-  getWorkspaceAccessTokenAsync,
-  isWorkspaceTokenExpiredAsync,
-  updateWorkspaceOAuthTokensAsync,
-  checkWorkspaceAuthStatus,
   loadStoredConfig,
   saveConfig,
-  loadSession,
-  saveSession,
-  updateSessionSdkId,
-  type Workspace,
-  type Session,
-  type StoredMessage,
-  type StoredSession,
   saveWorkspacePlan,
   loadWorkspacePlan,
   clearWorkspacePlan,
+  type Workspace,
 } from '@craft-agent/shared/config';
-import { DEFAULT_MODEL } from '@craft-agent/shared/config';
-import { getCredentialManager } from '@craft-agent/shared/credentials';
-import { CraftMcpClient } from '@craft-agent/shared/mcp';
-import { SubAgentManager } from '@craft-agent/shared/agents';
-import type { SubAgentDefinition, McpServerConfig, ApiConfig, Concern } from '@craft-agent/shared/agents';
-import type { ExtractionProgressEvent } from '@craft-agent/shared/agents';
-import type { Plan } from '@craft-agent/shared/agents';
 import {
-  invalidateDefinition,
-  loadRegistry,
-  clearAgentCredentialsAsync,
-  getServerCredentialsAsync,
-  getApiKeyCredentialAsync,
-  saveServerCredentialsAsync,
-  saveApiKeyCredentialAsync,
-} from '@craft-agent/shared/agents';
-import { CraftOAuth, getMcpBaseUrl } from '@craft-agent/shared/auth';
+  loadSession,
+  saveSession,
+  updateSessionSdkId,
+  type SessionConfig,
+  type StoredMessage,
+  type StoredSession,
+} from '@craft-agent/shared/sessions';
+import { DEFAULT_MODEL } from '@craft-agent/shared/config';
+import { FolderAgentManager } from '@craft-agent/shared/agents';
+import type { SubAgentDefinition, McpServerConfig, ApiConfig } from '@craft-agent/shared/agents';
+import type { Plan } from '@craft-agent/shared/agents';
 import { debug } from '@craft-agent/shared/utils';
+import { loadWorkspaceSources, getSourceCredentialManager, getSourceServerBuilder, type SourceWithCredential, type LoadedSource } from '@craft-agent/shared/sources';
 import { containsUltrathink, stripUltrathink } from '../../utils/gradient.ts';
 import { useAgentState } from './useAgentState.ts';
+import { useSafeMode, usePermissionMode } from './useModeState.ts';
+
+/**
+ * Build MCP and API servers from sources using the new unified modules.
+ */
+async function buildServersFromSources(sources: LoadedSource[]) {
+  const credManager = getSourceCredentialManager();
+  const serverBuilder = getSourceServerBuilder();
+
+  const sourcesWithCreds: SourceWithCredential[] = await Promise.all(
+    sources.map(async (source) => ({
+      source,
+      token: await credManager.getToken(source),
+      credential: await credManager.getApiCredential(source),
+    }))
+  );
+
+  const getTokenForSource = (source: LoadedSource) => {
+    if (source.config.provider === 'gmail' || source.config.api?.authType === 'oauth') {
+      return async () => {
+        const token = await credManager.getToken(source);
+        if (!token) throw new Error(`No token for ${source.config.slug}`);
+        return token;
+      };
+    }
+    return undefined;
+  };
+
+  return serverBuilder.buildAll(sourcesWithCreds, getTokenForSource);
+}
 
 // MCP auth request for sub-agent servers
 export interface PendingMcpAuthRequest {
@@ -75,23 +90,6 @@ export interface PendingApiAuthRequest {
   agentId: string;
   agentName: string;
   definition: SubAgentDefinition;
-}
-
-// Pending clarifications (for saving to Craft document)
-export interface PendingClarifications {
-  agentName: string;
-  agentId: string;
-  definition: SubAgentDefinition;
-  answers: Record<string, string>;
-  refinementRound: number;
-}
-
-// Pending review request (concerns from extraction that need user input)
-export interface PendingReviewRequest {
-  agentId: string;
-  agentName: string;
-  definition: SubAgentDefinition;
-  concerns: Concern[];
 }
 
 // Helper to convert Message to StoredMessage for persistence
@@ -152,8 +150,7 @@ export interface PermissionRequest {
   toolName: string;
   command: string;
   description: string;
-  type?: 'bash' | 'plan_mode' | 'safe_mode';  // Type of permission request
-  mcpInput?: Record<string, unknown>;  // For safe_mode: the tool input
+  type?: 'bash';  // Type of permission request
 }
 
 export interface AskUserQuestionRequest {
@@ -161,18 +158,6 @@ export interface AskUserQuestionRequest {
   questions: Question[];
 }
 
-// Pending plan review request (from Craft Agents plan mode)
-export interface PendingPlanReviewRequest {
-  requestId: string;
-  plan: Plan;
-  questions: string[];
-}
-
-// Pending CraftAskUserQuestion request (from Craft Agents plan mode)
-export interface PendingCraftQuestionRequest {
-  requestId: string;
-  questions: PlanQuestion[];
-}
 
 export interface UseAgentResult {
   messages: Message[];
@@ -219,28 +204,16 @@ export interface UseAgentResult {
   completeApiAuth: (success: boolean) => Promise<void>;
   cancelApiAuth: () => void;
   triggerApiAuth: () => void;  // For reauth command
-  // Credential operations for active agent (encapsulates workspaceId/agentId)
-  getAgentCredential: (type: 'mcp' | 'api', name: string) => Promise<string | null>;
-  saveAgentCredential: (type: 'mcp' | 'api', name: string, value: string) => Promise<void>;
-  clearAgentCredentials: (mcpNames: string[], apiNames: string[]) => Promise<void>;
-  // Review mode (concerns from extraction that need user input)
-  pendingReview: PendingReviewRequest | null;
-  completeReview: (answers: Record<string, string>) => Promise<void>;
-  skipReview: () => Promise<void>;
-  // Plan mode
+  // Plan/Safe mode
   activePlan: Plan | null;
-  planMode: boolean;
+  safeMode: boolean;
   cancelPlan: () => void;
   approvePlan: () => void;
   shouldSuggestPlanning: (message: string) => boolean;
-  // Craft Agents plan mode UI interactions
-  pendingPlanReview: PendingPlanReviewRequest | null;
-  respondToPlanReview: (result: PlanReviewResult) => void;
-  pendingCraftQuestion: PendingCraftQuestionRequest | null;
-  respondToCraftQuestion: (answers: Record<string, string>) => void;
-  // Craft Agents plan mode toggle (for SHIFT+TAB)
-  startCraftPlanning: () => void;
-  cancelCraftPlanning: () => void;
+  // Permission mode control
+  permissionMode: PermissionMode;
+  cycleMode: () => PermissionMode;
+  setSessionPermissionMode: (mode: PermissionMode) => void;
   // Todos (from TodoWrite tool)
   todos: TodoItem[];
   // Ultrathink mode (extended thinking)
@@ -278,30 +251,28 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
   // Sub-agent state - discovery only (activation state delegated to useAgentState)
   const [availableAgents, setAvailableAgents] = useState<string[]>([]);
   const [agentsLoading, setAgentsLoading] = useState(false);
-  // SubAgentManager as state (not ref) so useAgentState can react to it
-  const [subAgentManager, setSubAgentManager] = useState<SubAgentManager | null>(null);
+  // FolderAgentManager as state (not ref) so useAgentState can react to it
+  const [folderAgentManager, setFolderAgentManager] = useState<FolderAgentManager | null>(null);
 
   // Delegate agent activation state to useAgentState hook
-  // This manages pendingMcpAuth, pendingApiAuth, pendingReview internally
-  const agentState = useAgentState(workspace.id, subAgentManager);
+  // This manages pendingMcpAuth, pendingApiAuth internally
+  const agentState = useAgentState(workspace.id, folderAgentManager);
 
   // Ultrathink mode (extended thinking)
   const [isUltrathink, setIsUltrathink] = useState(false);
 
-  // Plan mode state
+  // Permission mode state - uses useSyncExternalStore for direct Mode Manager integration
+  // No more React state duplication - Mode Manager is the single source of truth
+  const permissionMode = usePermissionMode(session?.id);
+  const safeMode = permissionMode === 'safe'; // Legacy compatibility
   const [activePlan, setActivePlan] = useState<Plan | null>(null);
-  const [planMode, setPlanMode] = useState(false);
-  // Craft Agents plan mode UI state
-  const [pendingPlanReview, setPendingPlanReview] = useState<PendingPlanReviewRequest | null>(null);
-  const [pendingCraftQuestion, setPendingCraftQuestion] = useState<PendingCraftQuestionRequest | null>(null);
   // Todos (from TodoWrite tool)
   const [todos, setTodos] = useState<TodoItem[]>([]);
 
 
   const agentRef = useRef<CraftAgent | null>(null);
   // Keep ref for backward compatibility with existing code that uses agentManagerRef.current
-  const agentManagerRef = useRef<SubAgentManager | null>(null);
-  const mcpClientRef = useRef<CraftMcpClient | null>(null);
+  const agentManagerRef = useRef<FolderAgentManager | null>(null);
   const toolStartTimeRef = useRef<Map<string, number>>(new Map());
   const streamingBufferRef = useRef<string>('');
   const lastStreamingUpdateRef = useRef<number>(0);
@@ -329,7 +300,7 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
     // Load conversation from session storage (primary scope)
     if (!session) return;
 
-    const savedSession = loadSession(session.id);
+    const savedSession = loadSession(session.workspaceRootPath, session.id);
     if (savedSession && savedSession.messages && savedSession.messages.length > 0) {
       // Only restore if conversation was edited within the last 5 minutes
       const fiveMinutesMs = 5 * 60 * 1000;
@@ -373,7 +344,7 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
       const updatedSession: StoredSession = {
         id: session.id,
         sdkSessionId: agentRef.current?.getSessionId() ?? session.sdkSessionId,
-        workspaceId: session.workspaceId,
+        workspaceRootPath: session.workspaceRootPath,
         name: session.name,
         createdAt: session.createdAt,
         lastUsedAt: Date.now(),
@@ -402,7 +373,7 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
         debug('[useAgent] SDK session check:', sdkSessionId, 'current:', session.sdkSessionId, 'hasCallback:', !!config.onSdkSessionIdUpdate);
         if (sdkSessionId && sdkSessionId !== session.sdkSessionId) {
           debug('[useAgent] Updating SDK session ID:', sdkSessionId);
-          updateSessionSdkId(session.id, sdkSessionId);
+          updateSessionSdkId(session.workspaceRootPath, session.id, sdkSessionId);
           // Propagate to React state so UI stays in sync
           config.onSdkSessionIdUpdate?.(sdkSessionId);
         }
@@ -432,152 +403,30 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
     };
   }, []);
 
-  // Helper to get MCP token for current workspace
-  const getMcpToken = useCallback(async (): Promise<string | null> => {
-    // Get token from credential store (handles bearer token, OAuth, and legacy config fallback)
-    const { authType, token } = await getWorkspaceAccessTokenAsync(workspace.id);
-    if (!token) {
-      if (authType !== 'public') {
-        throw new Error('No authentication credentials found for workspace. Please re-add the workspace.');
-      }
-      return null;
-    }
-
-    // Check if token is expired and refresh if needed (only for OAuth tokens)
-    const isExpired = authType === 'workspace_oauth' ? await isWorkspaceTokenExpiredAsync(workspace.id) : false;
-    if (isExpired) {
-      // Get full OAuth credentials from credential store for refresh
-      const manager = getCredentialManager();
-      const oauthCreds = await manager.getWorkspaceOAuth(workspace.id);
-
-      if (oauthCreds?.refreshToken && oauthCreds?.clientId) {
-        try {
-          const oauth = new CraftOAuth(
-            { mcpBaseUrl: getMcpBaseUrl(workspace.mcpUrl) },
-            { onStatus: () => {}, onError: () => {} }
-          );
-
-          const newTokens = await oauth.refreshAccessToken(
-            oauthCreds.refreshToken,
-            oauthCreds.clientId
-          );
-
-          // Save refreshed tokens to credential store
-          await updateWorkspaceOAuthTokensAsync(
-            workspace.id,
-            newTokens.accessToken,
-            newTokens.refreshToken,
-            newTokens.expiresAt,
-            oauthCreds.clientId,
-            newTokens.tokenType
-          );
-
-          return newTokens.accessToken;
-        } catch {
-          // Refresh failed, return existing token (may still work)
-          return token;
-        }
-      }
-    }
-
-    return token;
-  }, [workspace.id, workspace.isPublic, workspace.mcpUrl]);
-
-  // Initialize MCP client and agent manager for current workspace
+  // Initialize agent manager for current workspace
   // Only re-run when workspace ID changes (not on every workspace state update)
   useEffect(() => {
     let cancelled = false;
 
-    // Load cached agents immediately (before async discovery)
-    const cachedRegistry = loadRegistry(workspace.id);
-    if (cachedRegistry && cachedRegistry.agents.length > 0) {
-      const cachedNames = cachedRegistry.agents.map(a => a.name);
-      debug('[useAgent] Loaded cached agents:', cachedNames);
-      setAvailableAgents(cachedNames);
+    // Create folder-based agent manager (reads from disk)
+    const manager = new FolderAgentManager(workspace.rootPath);
+    agentManagerRef.current = manager;
+    if (!cancelled) {
+      setFolderAgentManager(manager);
     }
 
-    const initializeAgentManager = async () => {
-      setAgentsLoading(true);
-      try {
-        // Check MCP auth status before attempting connection
-        const authStatus = await checkWorkspaceAuthStatus(workspace.id);
-        if (authStatus.needsAuth) {
-          // MCP authentication is required but missing - log and skip initialization
-          // This will cause connection to fail with a clear error when user tries to use agent
-          debug('[useAgent] MCP auth needed:', authStatus.message);
-          setError(`MCP authentication required. ${authStatus.message || 'Please re-authenticate.'}`);
-          setConnected(false);
-          setAgentsLoading(false);
-          return;
-        }
-
-        // Build MCP URL
-        let mcpUrl = workspace.mcpUrl;
-        mcpUrl = mcpUrl.replace(/\/+$/, '');
-        if (!mcpUrl.endsWith('/mcp')) {
-          mcpUrl = mcpUrl.replace(/\/sse$/, '/mcp');
-          if (!mcpUrl.endsWith('/mcp')) {
-            mcpUrl = mcpUrl + '/mcp';
-          }
-        }
-
-        // Get token from credential store
-        const token = await getMcpToken();
-
-        // Create MCP client
-        const client = new CraftMcpClient({
-          url: mcpUrl,
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        });
-
-        // Connect
-        await client.connect();
-
-        if (cancelled) {
-          await client.close();
-          return;
-        }
-
-        mcpClientRef.current = client;
-
-        // Create agent manager with MCP config for agentic extraction
-        const manager = new SubAgentManager(workspace.id, client, {
-          model: config.model || DEFAULT_MODEL,
-          mcpUrl,
-          mcpToken: token || undefined,
-        });
-        agentManagerRef.current = manager;
-        // Also set state so useAgentState can react to it
-        if (!cancelled) {
-          setSubAgentManager(manager);
-        }
-
-        // Discover agents
-        const agents = await manager.discoverAgents();
-        if (!cancelled) {
-          setAvailableAgents(agents.map(a => a.name));
-        }
-      } catch (err) {
-        // Log to debug file - viewable with `craft --debug`
-        debug('Failed to initialize agent manager:', err);
-      } finally {
-        if (!cancelled) {
-          setAgentsLoading(false);
-        }
-      }
-    };
-
-    initializeAgentManager();
+    // Load available agents from disk immediately
+    const agents = manager.getAvailableAgents();
+    if (!cancelled) {
+      setAvailableAgents(agents.map(a => a.config.name));
+      setAgentsLoading(false);
+      debug('[useAgent] Loaded agents from disk:', agents.map(a => a.config.name));
+    }
 
     return () => {
       cancelled = true;
-      // Clean up MCP client on unmount or workspace change
-      if (mcpClientRef.current) {
-        mcpClientRef.current.close().catch(() => {});
-        mcpClientRef.current = null;
-      }
       agentManagerRef.current = null;
-      setSubAgentManager(null);
+      setFolderAgentManager(null);
       // Clear agent instructions callbacks
       setUpdateAgentInstructionsContextProvider(null);
       setUpdateAgentInstructionsResultCallback(null);
@@ -589,7 +438,7 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
       // Don't clear availableAgents here - it causes race condition with token refresh
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspace.id, workspace.mcpUrl, workspace.isPublic, getMcpToken]);
+  }, [workspace.id]);
 
   // Subscribe to agentState extraction progress for UI messages
   // Track extraction message ID and start time for progress updates
@@ -675,43 +524,48 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
       agentRef.current.onDebug = (message) => {
         debug('[SDK]', message);
       };
-      // Set up plan mode change callback to sync React state
-      agentRef.current.onPlanModeChange = (mode) => {
-        debug('[SDK] Plan mode changed:', mode);
-        setPlanMode(mode);
-      };
-      // Set up Craft Agents plan review callback
-      agentRef.current.onPlanReview = (request) => {
-        debug('[SDK] Plan review requested:', request.requestId);
-        setPendingPlanReview(request);
-      };
-      // Set up Craft Agents ask question callback
-      agentRef.current.onCraftAskQuestion = (request) => {
-        debug('[SDK] Craft ask question requested:', request.requestId);
-        setPendingCraftQuestion(request);
-      };
-      // Set up swarm launch callback
-      agentRef.current.onLaunchSwarm = async (swarmConfig, plan, planFilePath) => {
-        debug('[SDK] Swarm launch requested:', swarmConfig.teammateCount, 'teammates for plan:', plan.title);
-        // For now, just log the swarm request - actual parallel agent spawning will be implemented
-        // when we have the Task tool infrastructure ready
+      // Note: onSafeModeChange callback removed - useSafeMode hook subscribes directly to Mode Manager
+      // Set up plan submitted callback - injects plan as a message
+      agentRef.current.onPlanSubmitted = (planPath) => {
+        debug('[SDK] Plan submitted:', planPath);
+        // Add plan message to the conversation
         setMessages((prev) => [
           ...prev,
           {
-            id: `swarm-${Date.now()}`,
-            type: 'info',
-            content: `🚀 Launching swarm with ${swarmConfig.teammateCount} parallel agents for plan: ${plan.title}\nPlan file: ${planFilePath}`,
+            id: `plan-${Date.now()}`,
+            type: 'plan',
+            content: planPath,  // The path to the plan file
             timestamp: Date.now(),
           },
         ]);
-        // TODO: Implement actual parallel agent spawning using Task tool pattern
-        // For now, this serves as a placeholder that logs the intent
       };
+      // Set up source change callback - rebuilds servers when sources change on disk
+      // This is triggered by CraftAgent's internal ConfigWatcher
+      agentRef.current.onSourceChange = async (slug: string, source: import('@craft-agent/shared/sources').LoadedSource | null) => {
+        if (!config.workspace) return;
+        debug('[useAgent] onSourceChange:', slug, source ? 'updated' : 'deleted');
+
+        // Reload all sources and rebuild servers
+        const allSources = loadWorkspaceSources(config.workspace.rootPath);
+        agentRef.current?.setAllSources(allSources);
+
+        const enabledSources = allSources.filter(s => s.config.enabled && s.config.isAuthenticated);
+        const { mcpServers, apiServers } = await buildServersFromSources(enabledSources);
+        agentRef.current?.setSourceServers(mcpServers, apiServers);
+
+        debug('[useAgent] Sources reloaded:', Object.keys(mcpServers).length, 'MCP,', Object.keys(apiServers).length, 'API');
+      };
+
       // Sync current model to the newly created agent
       agentRef.current.setModel(config.model || DEFAULT_MODEL);
       // Restore SDK session ID from session if available (for conversation continuity)
       if (session?.sdkSessionId) {
         agentRef.current.setSessionId(session.sdkSessionId);
+      }
+      // Set all sources for context (agent sees full list with descriptions)
+      if (config.workspace) {
+        const allSources = loadWorkspaceSources(config.workspace.rootPath);
+        agentRef.current.setAllSources(allSources);
       }
     }
 
@@ -762,38 +616,21 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
     }
   }, [pendingQuestion]);
 
-  // Respond to Craft Agents plan review
-  const respondToPlanReview = useCallback((result: PlanReviewResult) => {
-    if (pendingPlanReview && agentRef.current) {
-      debug('[respondToPlanReview] Responding with:', result);
-      agentRef.current.respondToPlanReview(pendingPlanReview.requestId, result);
-      setPendingPlanReview(null);
+  // Cycle through permission modes: safe → ask → allow-all → safe
+  const cycleMode = useCallback((): PermissionMode => {
+    if (!session?.id) {
+      debug(`[cycleMode] No session ID, cannot cycle mode`);
+      return 'safe';
     }
-  }, [pendingPlanReview]);
+    debug(`[cycleMode] Cycling permission mode for session:`, session.id);
+    return cyclePermissionMode(session.id);
+  }, [session?.id]);
 
-  // Respond to Craft Agents CraftAskUserQuestion
-  const respondToCraftQuestion = useCallback((answers: Record<string, string>) => {
-    if (pendingCraftQuestion && agentRef.current) {
-      debug('[respondToCraftQuestion] Responding with:', Object.keys(answers));
-      agentRef.current.respondToCraftAskQuestion(pendingCraftQuestion.requestId, answers);
-      setPendingCraftQuestion(null);
-    }
-  }, [pendingCraftQuestion]);
-
-  // Start Craft Agents plan mode (for SHIFT+TAB)
-  const startCraftPlanning = useCallback(() => {
-    debug('[startCraftPlanning] Entering Craft Agents plan mode');
-    enterCraftPlanMode();
-  }, []);
-
-  // Cancel Craft Agents plan mode (for SHIFT+TAB)
-  const cancelCraftPlanning = useCallback(() => {
-    debug('[cancelCraftPlanning] Exiting Craft Agents plan mode');
-    exitCraftPlanMode();
-    // Also clear any pending UI states
-    setPendingPlanReview(null);
-    setPendingCraftQuestion(null);
-  }, []);
+  // Set a specific permission mode
+  const setSessionPermissionMode = useCallback((mode: PermissionMode) => {
+    if (!session?.id) return;
+    setPermissionMode(session.id, mode);
+  }, [session?.id]);
 
   const dismissTypedError = useCallback(() => {
     setTypedError(null);
@@ -837,24 +674,9 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
       ]);
     }
 
-    // If in plan mode and plan has no context, set the user's input as the plan context
-    // Use agent's internal state (always current) instead of React state (might be stale)
-    const agentPlan = agent.getActivePlan();
-    const agentPlanMode = agent.isInPlanMode();
-    debug('[sendMessage] agentPlanMode:', agentPlanMode, 'agentPlan:', agentPlan?.title || 'none', 'agentPlan.context:', agentPlan?.context || 'empty');
-
-    if (agentPlanMode && agentPlan && !agentPlan.context) {
-      const updatedPlan: Plan = {
-        ...agentPlan,
-        context: input,
-        title: input.substring(0, 50) + (input.length > 50 ? '...' : ''),
-        updatedAt: Date.now(),
-      };
-      setActivePlan(updatedPlan);
-      agent.setActivePlan(updatedPlan);
-      saveWorkspacePlan(workspace.id, updatedPlan);
-      debug('[sendMessage] Updated plan context:', input.substring(0, 50));
-    }
+    // Log safe mode status
+    const agentSafeMode = agent.isInSafeMode();
+    debug('[sendMessage] safeMode:', agentSafeMode);
 
     setIsProcessing(true);
     setProcessingStartTime(Date.now());
@@ -955,8 +777,8 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
               break;
             }
 
-            // Plan mode: Claude calls ExitCraftAgentsPlanMode when ready, which triggers onPlanReady callback
-            // No text parsing needed here - the ExitCraftAgentsPlanMode tool handles everything via PlanReview UI
+            // Plan mode: Claude writes plan to file and calls SubmitPlan, which triggers onPlanSubmitted callback
+            // The plan is rendered as a special message type in the conversation
 
             // Normal assistant message
             if (assistantText.trim()) {
@@ -1111,6 +933,49 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
             // If ref is set, error was already set in text_complete handler
             break;
 
+          case 'task_backgrounded':
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === `tool-${event.toolUseId}`
+                  ? {
+                      ...m,
+                      toolStatus: 'backgrounded',
+                      taskId: event.taskId,
+                      isBackground: true,
+                    }
+                  : m
+              )
+            );
+            break;
+
+          case 'shell_backgrounded':
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === `tool-${event.toolUseId}`
+                  ? {
+                      ...m,
+                      toolStatus: 'backgrounded',
+                      shellId: event.shellId,
+                      isBackground: true,
+                    }
+                  : m
+              )
+            );
+            break;
+
+          case 'task_progress':
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === `tool-${event.toolUseId}`
+                  ? {
+                      ...m,
+                      elapsedSeconds: event.elapsedSeconds,
+                    }
+                  : m
+              )
+            );
+            break;
+
           case 'complete':
             if (event.usage) {
               setTokenUsage((prev) => ({
@@ -1187,7 +1052,7 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
       setStatus('');
       setHasExecutingTool(false);
     }
-  }, [getAgent, isProcessing, planMode, activePlan, workspace.id]);
+  }, [getAgent, isProcessing, safeMode, activePlan, workspace.id]);
 
   // Keep sendMessageRef updated
   useEffect(() => {
@@ -1225,10 +1090,10 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
     setStreamingText('');
     setStatus('');
 
-    // Clear plan mode state to avoid being stuck
-    exitCraftPlanMode();
-    setPendingPlanReview(null);
-    setPendingCraftQuestion(null);
+    // Clear safe mode state to avoid being stuck
+    if (session?.id) {
+      setPermissionMode(session.id, 'ask');
+    }
 
     setMessages((prev) => [
       ...prev,
@@ -1239,7 +1104,7 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
         timestamp: Date.now(),
       },
     ]);
-  }, []);
+  }, [session?.id]);
 
   // Sync model changes to CraftAgent (GlobalContext is source of truth)
   // When model changes in GlobalContext → config.model updates → update agent
@@ -1279,25 +1144,18 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
         const storedSession = loadSession(currentSession.id);
         const wasIntentionallyCleared = storedSession && storedSession.messages.length === 0;
 
-        if (!wasIntentionallyCleared) {
-          const persistableMessages = currentMessages.filter(
-            m => m.type !== 'error' && m.type !== 'status' && m.type !== 'system' && !isSDKErrorMessage(m)
-          );
-          const storedMessages = persistableMessages.map(messageToStoredMessage);
-
-          // Save to session storage
-          const updatedSession: StoredSession = {
-            id: currentSession.id,
-            sdkSessionId: sdkSessionId ?? currentSession.sdkSessionId,
-            workspaceId: currentSession.workspaceId,
-            name: currentSession.name,
-            createdAt: currentSession.createdAt,
-            lastUsedAt: Date.now(),
-            messages: storedMessages,
-            tokenUsage: tokenUsageRef.current,
-          };
-          saveSession(updatedSession);
-        }
+        // Save to session storage
+        const updatedSession: StoredSession = {
+          id: currentSession.id,
+          sdkSessionId: sdkSessionId ?? currentSession.sdkSessionId,
+          workspaceRootPath: currentSession.workspaceRootPath,
+          name: currentSession.name,
+          createdAt: currentSession.createdAt,
+          lastUsedAt: Date.now(),
+          messages: storedMessages,
+          tokenUsage: tokenUsageRef.current,
+        };
+        saveSession(updatedSession);
       }
 
       // Dispose the agent instance (clears all instance state)
@@ -1321,8 +1179,8 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
   // isFirstTimeSetup: true when extraction happened (show info), false when switching to cached agent
   const activationComplete = useCallback((
     definition: SubAgentDefinition,
-    mcpServers: Awaited<ReturnType<SubAgentManager['buildMcpServerConfig']>>,
-    apiServers: Awaited<ReturnType<SubAgentManager['buildApiServers']>>,
+    mcpServers: Record<string, { type: 'http' | 'sse'; url: string; headers?: Record<string, string> }>,
+    apiServers: Record<string, ReturnType<typeof import('@craft-agent/shared/agents').createApiServer>>,
     agentName: string,
     isFirstTimeSetup: boolean,
     agentId: string,
@@ -1330,20 +1188,9 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
     const agent = getAgent();
     agent.setActiveAgentDefinition(definition, mcpServers, apiServers);
 
-    // Get the document ID from the registry
-    const registry = loadRegistry(workspace.id);
-    const agentMeta = registry?.agents.find(a => a.id === agentId);
-    const documentId = agentMeta?.documentId || '';
-
-    // Build MCP URL for the context
-    let mcpUrl = workspace.mcpUrl;
-    mcpUrl = mcpUrl.replace(/\/+$/, '');
-    if (!mcpUrl.endsWith('/mcp')) {
-      mcpUrl = mcpUrl.replace(/\/sse$/, '/mcp');
-      if (!mcpUrl.endsWith('/mcp')) {
-        mcpUrl = mcpUrl + '/mcp';
-      }
-    }
+    // For folder-based agents, the agent slug is the agentId
+    // No document ID needed (agents are stored on disk, not in Craft documents)
+    const documentId = '';
 
     // Store context for update instructions callbacks
     activeAgentContextRef.current = {
@@ -1351,7 +1198,6 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
       instructionsBlockId: definition.instructionsBlockId,
       currentInstructions: definition.instructions,
       agentName: definition.name,
-      mcpUrl,
       workspaceId: workspace.id,
       model: config.model || DEFAULT_MODEL,
     };
@@ -1361,12 +1207,12 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
       return activeAgentContextRef.current;
     });
 
-    // Set result callback - invalidates cache on success
+    // Set result callback - FolderAgentManager reads from disk so no cache invalidation needed
     setUpdateAgentInstructionsResultCallback(async (success: boolean) => {
       if (success && agentManagerRef.current) {
-        // Invalidate cache so next reload gets fresh content
-        invalidateDefinition(workspace.id, agentId);
-        debug('[activationComplete] Cache invalidated after instructions update');
+        // Agent manager reads from disk - reload will get fresh content automatically
+        agentManagerRef.current.reload();
+        debug('[activationComplete] Agent manager reloaded after instructions update');
       }
     });
 
@@ -1405,14 +1251,14 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
       return false;
     }
 
-    // Get the agent ID from the name
-    const agents = await agentManagerRef.current.getAvailableAgents();
-    const agentMeta = agents.find(a => a.name.toLowerCase() === name.toLowerCase());
+    // Get the agent by name (FolderAgentManager returns LoadedAgent[])
+    const agents = agentManagerRef.current.getAvailableAgents();
+    const agentMeta = agents.find(a => a.config.name.toLowerCase() === name.toLowerCase());
     if (!agentMeta) {
       debug('[useAgent.activateAgent] Agent not found:', name);
       return false;
     }
-    const agentId = agentMeta.id;
+    const agentId = agentMeta.config.slug;
 
     // Delegate to agentState - handles extraction, review, and auth checks
     const resultStatus = await agentState.activate(agentId);
@@ -1431,7 +1277,6 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
         agentState.markActive();
         return true;
       }
-      case 'needs_review':
       case 'needs_mcp_auth':
       case 'needs_api_auth':
         // Waiting for user input - return pending
@@ -1485,8 +1330,7 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
     }
 
     // 'pending_auth' states mean reload is proceeding but waiting for user input
-    if (resultStatus.status === 'needs_review' ||
-        resultStatus.status === 'needs_mcp_auth' ||
+    if (resultStatus.status === 'needs_mcp_auth' ||
         resultStatus.status === 'needs_api_auth') {
       return true; // Proceeding with auth flow
     }
@@ -1586,62 +1430,83 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
   // Trigger auth flow manually (for /auth command)
   // Note: This manually triggers MCP auth check on the active agent
   const triggerMcpAuth = useCallback(async () => {
-    if (!agentManagerRef.current || !agentState.activeDefinition) {
+    if (!agentState.activeDefinition) {
       setMessages(prev => [...prev, {
         id: `auth-error-${Date.now()}`,
         type: 'system',
-        content: 'No active agent or no MCP servers configured.',
+        content: 'No active agent. Use @agent to activate one first.',
         timestamp: Date.now(),
       }]);
       return;
     }
 
-    const serversNeedingAuth = await agentManagerRef.current.getMcpServersNeedingAuth(agentState.activeDefinition);
-    if (serversNeedingAuth.length === 0) {
+    // Check if agent has any MCP servers configured
+    const mcpServers = agentState.activeDefinition.mcpServers || [];
+    if (mcpServers.length === 0) {
       setMessages(prev => [...prev, {
         id: `auth-ok-${Date.now()}`,
         type: 'system',
-        content: 'All MCP servers are already authenticated.',
+        content: 'This agent has no MCP servers configured.',
         timestamp: Date.now(),
       }]);
       return;
     }
 
     // Re-trigger activation to go through auth flow
-    // This will transition to needs_mcp_auth state
+    // This will check auth status and transition to needs_mcp_auth if needed
     const agentId = agentState.agentId;
     if (agentId) {
-      await agentState.activate(agentId);
+      const result = await agentState.activate(agentId);
+      if (result.status === 'ready') {
+        setMessages(prev => [...prev, {
+          id: `auth-ok-${Date.now()}`,
+          type: 'system',
+          content: 'All MCP servers are already authenticated.',
+          timestamp: Date.now(),
+        }]);
+      }
+      // If result is needs_mcp_auth, UI will show auth modal automatically
     }
   }, [agentState]);
 
   // Trigger API auth flow manually (for reauth command)
   const triggerApiAuth = useCallback(async () => {
-    if (!agentManagerRef.current || !agentState.activeDefinition) {
+    if (!agentState.activeDefinition) {
       setMessages(prev => [...prev, {
         id: `api-auth-error-${Date.now()}`,
         type: 'system',
-        content: 'No active agent or no APIs configured.',
+        content: 'No active agent. Use @agent to activate one first.',
         timestamp: Date.now(),
       }]);
       return;
     }
 
-    const apisNeedingAuth = await agentManagerRef.current.getApisNeedingAuth(agentState.activeDefinition);
-    if (apisNeedingAuth.length === 0) {
+    // Check if agent has any APIs configured
+    const apis = agentState.activeDefinition.apis || [];
+    if (apis.length === 0) {
       setMessages(prev => [...prev, {
         id: `api-auth-ok-${Date.now()}`,
         type: 'system',
-        content: 'All APIs are already authenticated.',
+        content: 'This agent has no APIs configured.',
         timestamp: Date.now(),
       }]);
       return;
     }
 
     // Re-trigger activation to go through auth flow
+    // This will check auth status and transition to needs_api_auth if needed
     const agentId = agentState.agentId;
     if (agentId) {
-      await agentState.activate(agentId);
+      const result = await agentState.activate(agentId);
+      if (result.status === 'ready') {
+        setMessages(prev => [...prev, {
+          id: `api-auth-ok-${Date.now()}`,
+          type: 'system',
+          content: 'All APIs are already authenticated.',
+          timestamp: Date.now(),
+        }]);
+      }
+      // If result is needs_api_auth, UI will show auth modal automatically
     }
   }, [agentState]);
 
@@ -1723,166 +1588,25 @@ export function useAgent(config: CraftAgentConfig): UseAgentResult {
     }]);
   }, [deactivateAgent]);
 
-  // Save clarifications to Craft document - sends HIDDEN message to agent
-  // Accepts clarifications directly to avoid React state timing issues
-  const saveClarificationsWithData = useCallback(async (clarifications: PendingClarifications) => {
-    debug('[saveClarifications] Sending hidden save request to agent');
-
-    // Clear temporary clarifications - they'll be saved permanently
-    const agent = getAgent();
-    agent.setTemporaryClarifications(null);
-
-    // Build clarifications text
-    const clarificationsText = Object.entries(clarifications.answers)
-      .map(([question, answer]) => `Q: ${question}\nA: ${answer}`)
-      .join('\n\n');
-
-    // Get document ID from the registry
-    const registry = loadRegistry(workspace.id);
-    const agentMeta = registry?.agents.find(a => a.id === clarifications.agentId);
-    const documentId = agentMeta?.documentId;
-    const blockId = clarifications.definition.instructionsBlockId;
-
-    // Build save prompt (NOT shown in UI due to hideUserMessage option)
-    const savePrompt = `Update your Instructions document in Craft with these clarifications. This is important:
-
-1. First, use blocks_get to read the current instructions content
-2. Find any open questions or concerns in the instructions that these clarifications answer
-3. REPLACE those questions/concerns with the actual answers - don't just append
-4. Use blocks_update to save the complete updated instructions
-
-Document ID: ${documentId || 'unknown'}
-Instructions Block ID: ${blockId || 'unknown'}
-
-Clarifications (answers to questions in your instructions):
-${clarificationsText}
-
-The goal is to have clean, actionable instructions without unanswered questions. Remove the questions and integrate the answers naturally into the relevant sections.`;
-
-    try {
-      // Use sendMessage with hideUserMessage - reuses all event handling logic
-      await sendMessageRef.current?.(savePrompt, undefined, { hideUserMessage: true });
-
-      // After save completes, reload the agent to use updated instructions
-      if (reloadAgentRef.current) {
-        await reloadAgentRef.current();
-      }
-    } catch (err) {
-      setMessages(prev => [...prev, {
-        id: `save-error-${Date.now()}`,
-        type: 'error',
-        content: `Failed to save clarifications: ${err instanceof Error ? err.message : 'Unknown error'}`,
-        timestamp: Date.now(),
-      }]);
-    }
-  }, [getAgent, workspace.id]);
-
-  // Complete review - user answered the concerns, save and finish activation
-  const completeReview = useCallback(async (answers: Record<string, string>) => {
-    if (!agentState.isNeedsReview) return;
-
-    debug('[completeReview] User answered concerns, saving to document');
-
-    // Derive pending review data directly from agentState to avoid circular reference
-    // (pendingReview is defined later in this hook)
-    const currentStatus = agentState.status;
-    if (currentStatus.status !== 'needs_review') return;
-
-    const clarifications: PendingClarifications = {
-      agentName: currentStatus.agentName,
-      agentId: currentStatus.agentId,
-      definition: currentStatus.definition,
-      answers,
-      refinementRound: 0,
-    };
-
-    // Continue the activation flow - delegate to agentState
-    debug('[completeReview] Continuing after review with agentState');
-    const resultStatus = await agentState.continueAfterReview(answers);
-    debug('[completeReview] agentState.continueAfterReview returned:', resultStatus.status);
-
-    // Handle result status
-    if (resultStatus.status === 'ready') {
-      // All checks passed - complete activation
-      const definition = resultStatus.definition;
-      const mcpServers = await agentState.buildMcpServerConfig();
-      const apiServers = await agentState.buildApiServers();
-      const agentId = agentState.agentId!;
-      const agentName = agentState.agentName!;
-      activationComplete(definition, mcpServers, apiServers, agentName, true, agentId);
-      agentState.markActive();
-    }
-    // If needs_mcp_auth or needs_api_auth, UI will automatically show auth
-
-    // Save clarifications to Craft document (after continuing the flow)
-    await saveClarificationsWithData(clarifications);
-  }, [agentState, saveClarificationsWithData, activationComplete]);
-
-  // Skip review - user wants to skip clarifications and continue with activation
-  const skipReview = useCallback(async () => {
-    if (!agentState.isNeedsReview) return;
-
-    debug('[skipReview] User skipped clarifications');
-
-    // Delegate to agentState - continues to auth checks
-    const resultStatus = await agentState.skipReview();
-    debug('[skipReview] agentState.skipReview returned:', resultStatus.status);
-
-    // Handle result status
-    if (resultStatus.status === 'ready') {
-      // All checks passed - complete activation
-      const definition = resultStatus.definition;
-      const mcpServers = await agentState.buildMcpServerConfig();
-      const apiServers = await agentState.buildApiServers();
-      const agentId = agentState.agentId!;
-      const agentName = agentState.agentName!;
-      activationComplete(definition, mcpServers, apiServers, agentName, true, agentId);
-      agentState.markActive();
-    }
-    // If needs_mcp_auth or needs_api_auth, UI will automatically show auth
-  }, [agentState, activationComplete]);
-
   const refreshAgents = useCallback(async (): Promise<string[] | { error: string }> => {
     try {
-      // Build MCP URL
-      let mcpUrl = workspace.mcpUrl;
-      mcpUrl = mcpUrl.replace(/\/+$/, '');
-      if (!mcpUrl.endsWith('/mcp')) {
-        mcpUrl = mcpUrl.replace(/\/sse$/, '/mcp');
-        if (!mcpUrl.endsWith('/mcp')) {
-          mcpUrl = mcpUrl + '/mcp';
-        }
+      // FolderAgentManager reads from disk - just reload and get agents
+      if (agentManagerRef.current) {
+        agentManagerRef.current.reload();
+        const agents = agentManagerRef.current.getAvailableAgents();
+        const names = agents.map(a => a.config.name);
+        setAvailableAgents(names);
+        debug('[refreshAgents] Reloaded agents:', names);
+        return names;
       }
 
-      // ALWAYS get fresh token (with automatic refresh if expired)
-      const token = await getMcpToken();
-
-      // Close existing client if any
-      if (mcpClientRef.current) {
-        await mcpClientRef.current.close().catch(() => {});
-      }
-
-      // Create NEW MCP client with fresh token
-      const client = new CraftMcpClient({
-        url: mcpUrl,
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      });
-
-      await client.connect();
-      mcpClientRef.current = client;
-
-      // Create NEW agent manager with MCP config for agentic extraction
-      const manager = new SubAgentManager(workspace.id, client, {
-        model: config.model || DEFAULT_MODEL,
-        mcpUrl,
-        mcpToken: token || undefined,
-      });
+      // Create new manager if none exists
+      const manager = new FolderAgentManager(workspace.rootPath);
       agentManagerRef.current = manager;
-      setSubAgentManager(manager);
+      setFolderAgentManager(manager);
 
-      // Discover agents
-      const agents = await manager.refreshAgents();
-      const names = agents.map(a => a.name);
+      const agents = manager.getAvailableAgents();
+      const names = agents.map(a => a.config.name);
       setAvailableAgents(names);
       debug('[refreshAgents] Found agents:', names);
       return names;
@@ -1891,7 +1615,7 @@ The goal is to have clean, actionable instructions without unanswered questions.
       debug('[refreshAgents] ERROR:', message);
       return { error: `Failed to refresh agents: ${message}` };
     }
-  }, [workspace, getMcpToken]);
+  }, [workspace]);
 
   // Fetch all available tools (SDK + Craft MCP + active agent's MCP servers + APIs)
   const fetchTools = useCallback(async (): Promise<{ name: string; tools: { name: string; description?: string }[] }[]> => {
@@ -1910,32 +1634,19 @@ The goal is to have clean, actionable instructions without unanswered questions.
       }
     }
 
-    // 2. Craft MCP tools
-    if (mcpClientRef.current) {
-      try {
-        const craftTools = await mcpClientRef.current.listTools();
+    // 2. Active agent's MCP servers (tools available after agent activation)
+    // Note: FolderAgentManager doesn't have active MCP connections - CraftAgent manages those
+    // We show configured servers; actual tools are available via SDK after first conversation
+    if (activeAgentDefinition) {
+      const mcpServers = activeAgentDefinition.mcpServers || [];
+      for (const server of mcpServers) {
         result.push({
-          name: 'Craft',
-          tools: craftTools.map(t => ({ name: t.name, description: t.description })),
+          name: server.name,
+          tools: [{ name: '(tools available after connection)', description: `MCP server: ${server.url}` }],
         });
-      } catch (err) {
-        debug('[fetchTools] Failed to fetch Craft tools:', err);
-      }
-    }
-
-    // 3. Active agent's MCP server tools
-    if (activeAgentDefinition && agentManagerRef.current) {
-      const agentServers = await agentManagerRef.current.fetchMcpServerTools(activeAgentDefinition);
-      for (const server of agentServers) {
-        if (server.tools && server.tools.length > 0) {
-          result.push({
-            name: server.name,
-            tools: server.tools.map(name => ({ name })),
-          });
-        }
       }
 
-      // 4. Active agent's API tools (prefixed with api_ to avoid collisions)
+      // 3. Active agent's API tools (prefixed with api_ to avoid collisions)
       if (activeAgentDefinition.apis) {
         for (const api of activeAgentDefinition.apis) {
           // Each API has one flexible tool prefixed with api_
@@ -1958,8 +1669,8 @@ The goal is to have clean, actionable instructions without unanswered questions.
   const activeAgentName = agentState.agentName;
   const activeAgentMcpServers = agentState.activeDefinition?.mcpServers ?? [];
 
-  // Derive pending auth/review states from useAgentState for backward compatibility
-  // These match the legacy PendingMcpAuthRequest, PendingApiAuthRequest, PendingReviewRequest interfaces
+  // Derive pending auth states from useAgentState for backward compatibility
+  // These match the legacy PendingMcpAuthRequest, PendingApiAuthRequest interfaces
   // Use status discriminator for proper type narrowing instead of type assertions
   const agentStatus = agentState.status;
 
@@ -1983,55 +1694,41 @@ The goal is to have clean, actionable instructions without unanswered questions.
         }
       : null;
 
-  const pendingReview: PendingReviewRequest | null =
-    agentStatus.status === 'needs_review'
-      ? {
-          agentId: agentStatus.agentId,
-          agentName: agentStatus.agentName,
-          definition: agentStatus.definition,
-          concerns: agentStatus.concerns,
-        }
-      : null;
-
   // ============================================
-  // Plan Mode Functions
+  // Plan Functions (SubmitPlan workflow)
   // ============================================
 
   /**
    * Cancel the current plan
    */
   const cancelPlan = useCallback(() => {
-    const agent = agentRef.current;
-    if (agent) {
-      agent.clearPlan();
-    }
-
     setActivePlan(null);
-    setPlanMode(false);
+
+    // Exit safe mode via mode manager
+    if (session?.id) {
+      setPermissionMode(session.id, 'ask');
+    }
 
     // Clear from storage
     clearWorkspacePlan(workspace.id);
 
     debug('[cancelPlan] Plan cancelled');
-  }, [workspace.id]);
+  }, [workspace.id, session?.id]);
 
   /**
-   * Approve the current plan and exit plan mode
+   * Approve the current plan and exit safe mode
    * This allows Claude to execute the planned actions
    */
   const approvePlan = useCallback(() => {
-    const agent = agentRef.current;
-    if (agent) {
-      agent.exitPlanMode();
+    if (session?.id) {
+      setPermissionMode(session.id, 'ask');
     }
 
-    setPlanMode(false);
-
-    debug('[approvePlan] Plan approved, exiting plan mode');
-  }, []);
+    debug('[approvePlan] Plan approved, exiting safe mode');
+  }, [session?.id]);
 
   /**
-   * Check if a message should trigger plan mode suggestion
+   * Check if a message should trigger planning suggestion
    */
   const shouldSuggestPlanning = useCallback((message: string): boolean => {
     const agent = agentRef.current;
@@ -2082,28 +1779,17 @@ The goal is to have clean, actionable instructions without unanswered questions.
     completeApiAuth,
     cancelApiAuth,
     triggerApiAuth,
-    // Credential operations for active agent
-    getAgentCredential,
-    saveAgentCredential,
-    clearAgentCredentials,
-    // Review mode (derived from useAgentState)
-    pendingReview,
-    completeReview,
-    skipReview,
-    // Plan mode
+    // Permission mode (safe/ask/allow-all)
+    permissionMode,
+    cycleMode,
+    setSessionPermissionMode,
+    // Legacy safe mode flag (deprecated - use permissionMode instead)
+    safeMode,
+    // Plan handling
     activePlan,
-    planMode,
     cancelPlan,
     approvePlan,
     shouldSuggestPlanning,
-    // Craft Agents plan mode UI interactions
-    pendingPlanReview,
-    respondToPlanReview,
-    pendingCraftQuestion,
-    respondToCraftQuestion,
-    // Craft Agents plan mode toggle (for SHIFT+TAB)
-    startCraftPlanning,
-    cancelCraftPlanning,
     // Todos (from TodoWrite tool)
     todos,
     // Ultrathink mode (extended thinking)

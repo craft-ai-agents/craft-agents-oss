@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
-import type { SessionMetadata } from '@craft-agent/shared/config';
+import type { SessionMetadata } from '@craft-agent/shared/sessions';
 
 export interface SessionMenuProps {
   sessions: SessionMetadata[];

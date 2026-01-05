@@ -8,7 +8,7 @@ const TOOL_STATUS: Record<string, ToolStatusInfo> = {
   WebSearch: { message: 'Searching the web' },
   WebFetch: { message: 'Fetching webpage' },
   Bash: { message: 'Running command' },
-  BashOutput: { message: 'Reading output' },
+  TaskOutput: { message: 'Reading output' },
   Read: { message: 'Reading file' },
   Edit: { message: 'Editing file' },
   Write: { message: 'Writing file' },

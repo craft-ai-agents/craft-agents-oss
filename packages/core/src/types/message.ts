@@ -13,12 +13,13 @@ export type MessageRole =
   | 'status'
   | 'system'
   | 'info'
-  | 'warning';
+  | 'warning'
+  | 'plan';
 
 /**
  * Tool execution status
  */
-export type ToolStatus = 'pending' | 'executing' | 'completed' | 'error';
+export type ToolStatus = 'pending' | 'executing' | 'completed' | 'error' | 'backgrounded';
 
 /**
  * Attachment type categories
@@ -68,35 +69,85 @@ export interface Message {
   toolStatus?: ToolStatus;
   toolDuration?: number;
   toolIntent?: string;
+  toolDisplayName?: string;
+  // Parent tool ID for nested tool calls (e.g., child tools inside Task subagent)
+  parentToolUseId?: string;
+  // Background task fields
+  taskId?: string;          // For Task with run_in_background
+  shellId?: string;         // For Bash with run_in_background
+  elapsedSeconds?: number;  // Live progress updates
+  isBackground?: boolean;   // Flag for UI differentiation
   // Stored attachments for user messages (persistent, no base64)
   attachments?: StoredAttachment[];
   isError?: boolean;
   isStreaming?: boolean;
+  // Pending: streaming text where we don't yet know if it's intermediate
+  // Set to true when text_delta creates message, false when text_complete arrives
+  // Also used for optimistic user messages before backend confirmation
+  isPending?: boolean;
+  // Queued: user message that is waiting to be processed (sent during ongoing response)
+  isQueued?: boolean;
+  // Intermediate text (commentary between tool calls, not final response)
+  isIntermediate?: boolean;
+  // Turn ID: Correlation ID from the API's message.id, groups all messages in an assistant turn
+  turnId?: string;
+  // Status type for special status messages (e.g., compacting)
+  statusType?: 'compacting' | 'compaction_complete';
+  // Info level for info messages (determines icon/color)
+  infoLevel?: 'info' | 'warning' | 'error' | 'success';
   // Error-specific fields (for typed errors with diagnostics)
   errorCode?: string;
   errorTitle?: string;
   errorDetails?: string[];
   errorOriginal?: string;
   errorCanRetry?: boolean;
+  // Ultrathink mode - indicates this user message was sent with extended thinking
+  ultrathink?: boolean;
+  // Plan-specific fields (for role='plan')
+  planPath?: string;  // Path to the plan markdown file
 }
 
 /**
  * Stored message format (persistence)
- * Excludes transient fields like isStreaming
- * Note: For tool messages, the result is stored in `content` (not duplicated in toolResult)
+ * Excludes only transient fields (isStreaming)
  */
 export interface StoredMessage {
   id: string;
   type: MessageRole;
   content: string;
   timestamp?: number;
+  // Tool-specific fields
   toolName?: string;
+  toolUseId?: string;
   toolInput?: Record<string, unknown>;
+  toolResult?: string;
   toolStatus?: ToolStatus;
   toolDuration?: number;
+  toolIntent?: string;
+  toolDisplayName?: string;
+  // Parent tool ID for nested tool calls (persisted for session restore)
+  parentToolUseId?: string;
+  // Background task fields (persisted)
+  taskId?: string;
+  shellId?: string;
+  elapsedSeconds?: number;
+  isBackground?: boolean;
   isError?: boolean;
   /** Stored attachments for user messages (persisted to disk) */
   attachments?: StoredAttachment[];
+  // Turn grouping - critical for TurnCard rendering after reload
+  isIntermediate?: boolean;
+  turnId?: string;
+  // Error display fields
+  errorCode?: string;
+  errorTitle?: string;
+  errorDetails?: string[];
+  errorOriginal?: string;
+  errorCanRetry?: boolean;
+  // Ultrathink mode - indicates this user message was sent with extended thinking
+  ultrathink?: boolean;
+  // Plan-specific fields (for role='plan')
+  planPath?: string;
 }
 
 /**
@@ -113,13 +164,53 @@ export interface TokenUsage {
 }
 
 /**
+ * Recovery action for typed errors
+ */
+export interface RecoveryAction {
+  /** Keyboard shortcut (single letter) */
+  key: string;
+  /** Description of the action */
+  label: string;
+  /** Slash command to execute (e.g., '/credits') */
+  command?: string;
+  /** Custom action type for special handling */
+  action?: 'retry' | 'settings' | 'credits' | 'reauth';
+}
+
+/**
+ * Error codes for typed errors - must match AgentError.code in shared/agent/errors.ts
+ */
+export type ErrorCode =
+  | 'insufficient_credits'
+  | 'credits_exhausted'
+  | 'invalid_api_key'
+  | 'invalid_credentials'
+  | 'expired_oauth_token'
+  | 'token_expired'
+  | 'rate_limited'
+  | 'service_error'
+  | 'service_unavailable'
+  | 'network_error'
+  | 'mcp_auth_required'
+  | 'mcp_unreachable'
+  | 'unknown_error';
+
+/**
  * Typed error from agent
  */
 export interface TypedError {
-  code: string;
+  /** Error code for programmatic handling */
+  code: ErrorCode;
+  /** User-friendly title */
   title: string;
+  /** Detailed message explaining what went wrong */
   message: string;
+  /** Suggested recovery actions */
+  actions: RecoveryAction[];
+  /** Whether auto-retry is possible */
   canRetry: boolean;
+  /** Retry delay in ms (if canRetry is true) */
+  retryDelayMs?: number;
   /** Diagnostic check results for debugging (e.g., "✓ Credits: 150") */
   details?: string[];
   /** Original error message for debugging */
@@ -147,23 +238,42 @@ export interface PermissionRequest {
   toolName: string;
   command: string;
   description: string;
-  type?: 'bash' | 'plan_mode';  // Type of permission request
+  type?: 'bash';  // Type of permission request
+}
+
+/**
+ * Usage data emitted by CraftAgent in 'complete' events
+ * Note: This is a subset of TokenUsage - totalTokens/contextTokens are computed by consumers
+ */
+export interface AgentEventUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
+  costUsd?: number;
 }
 
 /**
  * Events emitted by CraftAgent during chat
+ * turnId: Correlation ID from the API's message.id, groups all events in an assistant turn
  */
 export type AgentEvent =
   | { type: 'status'; message: string }
-  | { type: 'text_delta'; text: string }
-  | { type: 'text_complete'; text: string }
-  | { type: 'tool_start'; toolName: string; toolUseId: string; input: Record<string, unknown>; intent?: string }
-  | { type: 'tool_result'; toolUseId: string; result: string; isError: boolean; input?: Record<string, unknown> }
+  | { type: 'info'; message: string }
+  | { type: 'text_delta'; text: string; turnId?: string }
+  | { type: 'text_complete'; text: string; isIntermediate?: boolean; turnId?: string }
+  | { type: 'tool_start'; toolName: string; toolUseId: string; input: Record<string, unknown>; intent?: string; displayName?: string; turnId?: string; parentToolUseId?: string }
+  | { type: 'tool_result'; toolUseId: string; result: string; isError: boolean; input?: Record<string, unknown>; turnId?: string; parentToolUseId?: string }
+  | { type: 'parent_update'; toolUseId: string; parentToolUseId: string }
   | { type: 'permission_request'; requestId: string; toolName: string; command: string; description: string }
   | { type: 'ask_user'; requestId: string; questions: Question[] }
   | { type: 'error'; message: string }
   | { type: 'typed_error'; error: TypedError }
-  | { type: 'complete'; usage?: TokenUsage };
+  | { type: 'complete'; usage?: AgentEventUsage }
+  | { type: 'working_directory_changed'; workingDirectory: string }
+  | { type: 'task_backgrounded'; toolUseId: string; taskId: string; intent?: string; turnId?: string }
+  | { type: 'shell_backgrounded'; toolUseId: string; shellId: string; intent?: string; turnId?: string }
+  | { type: 'task_progress'; toolUseId: string; elapsedSeconds: number; turnId?: string };
 
 /**
  * Generate a unique message ID

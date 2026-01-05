@@ -6,7 +6,7 @@
  */
 
 import * as React from 'react'
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import {
   ExternalLink,
   Copy,
@@ -15,6 +15,7 @@ import {
   Pencil,
   Archive,
   Trash2,
+  FileDiff,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -34,20 +35,24 @@ import {
   StyledDropdownMenuItem,
   StyledDropdownMenuSeparator,
 } from '@/components/ui/styled-dropdown'
+import { Separator } from '@/components/ui/separator'
 import { useChatContext } from '@/context/ChatContext'
+import { useCloseTab } from '@/hooks/useCloseTab'
 import { getSessionTitle } from '@/utils/session'
 import { TabBar } from './TabBar'
 import { TabContent } from './TabContent'
 import { useTabs } from './useTabs'
 import type { Tab, FileTab, BrowserTab, ChatTab } from './types'
+import type { FileChange, MultiFileDiffData } from '../../shared/types'
 
 interface TabContainerProps {
   className?: string
 }
 
 export function TabContainer({ className }: TabContainerProps) {
-  const { activeTab, tabs } = useTabs()
+  const { activeTab, isTabBarVisible } = useTabs()
   const { sessions } = useChatContext()
+  const { closeTab } = useCloseTab()
 
   // Rename dialog state
   const [renameDialogOpen, setRenameDialogOpen] = useState(false)
@@ -78,14 +83,16 @@ export function TabContainer({ className }: TabContainerProps) {
       case 'browser':
         return (tab as BrowserTab).url
       case 'agent-info':
-      case 'agent-setup':
-        return `@${(tab as { agentId: string }).agentId}`
+        return 'Agent'
       case 'shortcuts':
         return 'Reference'
       case 'settings':
         return 'Preferences'
       case 'chat': {
         const session = getChatSession(tab)
+        if (session?.agentName) {
+          return `@${session.agentName}`
+        }
         return session?.workspaceName || 'Conversation'
       }
       default:
@@ -119,8 +126,10 @@ export function TabContainer({ className }: TabContainerProps) {
           onOpenRename={handleOpenRename}
         />
       )}
+      {/* Separator only when tab bar is hidden */}
+      {!isTabBarVisible && <Separator />}
       {/* Tab bar - below header, only when multiple tabs */}
-      <TabBar />
+      <TabBar onClose={closeTab} />
       {/* Content */}
       <TabContent className="flex-1 overflow-hidden" />
 
@@ -146,8 +155,8 @@ interface TabHeaderProps {
 
 function TabHeader({ title, subtitle, tab, showAgentBadge, onOpenRename }: TabHeaderProps) {
   return (
-    <div className="flex h-[50px] shrink-0 items-center pl-5 pr-2 min-w-0 gap-3 relative z-50 titlebar-no-drag">
-      <div className="flex-1 min-w-0 flex flex-col justify-center">
+    <div className="flex h-[50px] shrink-0 items-center pl-5 pr-2 min-w-0 gap-3 relative z-50">
+      <div className="flex-1 min-w-0 flex flex-col justify-center select-none">
         <div className="flex items-center gap-2">
           <h1 className="text-sm font-semibold truncate font-sans leading-tight">{title}</h1>
           {showAgentBadge && (
@@ -156,7 +165,9 @@ function TabHeader({ title, subtitle, tab, showAgentBadge, onOpenRename }: TabHe
         </div>
         <p className="text-[11px] opacity-50 font-sans leading-tight truncate">{subtitle}</p>
       </div>
-      <TabHeaderActions tab={tab} onOpenRename={onOpenRename} />
+      <div className="titlebar-no-drag">
+        <TabHeaderActions tab={tab} onOpenRename={onOpenRename} />
+      </div>
     </div>
   )
 }
@@ -171,8 +182,9 @@ interface TabHeaderActionsProps {
  * Contains type-specific actions + Close tab at the bottom
  */
 function TabHeaderActions({ tab, onOpenRename }: TabHeaderActionsProps) {
-  const { closeTab } = useTabs()
-  const { sessions, onArchiveSession, onDeleteSession } = useChatContext()
+  const { closeTab } = useCloseTab()
+  const { closeTab: rawCloseTab } = useTabs()
+  const { sessions, onDeleteSession } = useChatContext()
 
   // Get session for chat tab
   const session = tab.type === 'chat'
@@ -199,17 +211,63 @@ function TabHeaderActions({ tab, onOpenRename }: TabHeaderActionsProps) {
     }
   }, [session, onOpenRename])
 
-  const handleArchive = React.useCallback(() => {
+  const handleComplete = React.useCallback(async () => {
     if (session) {
-      onArchiveSession(session.id)
+      await window.electronAPI.setTodoState(session.id, 'done')
     }
-  }, [session, onArchiveSession])
+  }, [session])
 
   const handleDelete = React.useCallback(() => {
     if (session) {
+      // Close the tab immediately to prevent race conditions
+      // (the session removal from state happens async, tab must close first)
+      rawCloseTab(tab.id)
       onDeleteSession(session.id)
     }
-  }, [session, onDeleteSession])
+  }, [session, onDeleteSession, rawCloseTab, tab.id])
+
+  // Collect all Edit/Write activities from the session and open session diff view
+  const handleViewAllChanges = React.useCallback(() => {
+    if (!session) return
+
+    // Collect all successful Edit/Write tool messages from session
+    const changes: FileChange[] = []
+    for (const m of session.messages) {
+      if (m.role !== 'tool' || m.isError) continue
+      const input = m.toolInput as Record<string, unknown> | undefined
+      if (m.toolName === 'Edit' && input) {
+        changes.push({
+          id: m.id,
+          filePath: (input.file_path as string) || 'unknown',
+          toolType: 'Edit',
+          original: (input.old_string as string) || '',
+          modified: (input.new_string as string) || '',
+        })
+      } else if (m.toolName === 'Write' && input) {
+        changes.push({
+          id: m.id,
+          filePath: (input.file_path as string) || 'unknown',
+          toolType: 'Write',
+          original: '',
+          modified: (input.content as string) || '',
+        })
+      }
+    }
+
+    if (changes.length > 0) {
+      const diffData: MultiFileDiffData = {
+        sessionId: session.id,
+        turnId: 'session', // Use 'session' as a special turnId for session-level view
+        changes,
+      }
+      window.electronAPI.openMultiFileDiff(session.id, 'session', diffData)
+    }
+  }, [session])
+
+  // Check if session has any Edit/Write activities
+  const hasChanges = session?.messages.some(
+    m => m.role === 'tool' && (m.toolName === 'Edit' || m.toolName === 'Write')
+  ) ?? false
 
   const handleClose = React.useCallback(() => {
     closeTab(tab.id)
@@ -242,11 +300,17 @@ function TabHeaderActions({ tab, onOpenRename }: TabHeaderActionsProps) {
               <Pencil />
               Rename
             </StyledDropdownMenuItem>
+            {hasChanges && (
+              <StyledDropdownMenuItem onClick={handleViewAllChanges}>
+                <FileDiff />
+                View All Changes
+              </StyledDropdownMenuItem>
+            )}
             <StyledDropdownMenuSeparator />
-            {!session.isArchived && (
-              <StyledDropdownMenuItem onClick={handleArchive}>
+            {session.todoState !== 'done' && session.todoState !== 'cancelled' && (
+              <StyledDropdownMenuItem onClick={handleComplete}>
                 <Archive />
-                Archive
+                Mark Done
               </StyledDropdownMenuItem>
             )}
             <StyledDropdownMenuItem onClick={handleDelete} variant="destructive">
@@ -307,6 +371,17 @@ interface RenameDialogProps {
 function RenameDialog({ open, onOpenChange, sessionId, name, onNameChange }: RenameDialogProps) {
   const { onRenameSession } = useChatContext()
   const { updateChatTabLabel } = useTabs()
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  // Focus input after dialog opens (avoids Radix Dialog focus race condition)
+  useEffect(() => {
+    if (open) {
+      const timer = setTimeout(() => {
+        inputRef.current?.focus()
+      }, 0)
+      return () => clearTimeout(timer)
+    }
+  }, [open])
 
   const handleSubmit = () => {
     if (sessionId && name.trim()) {
@@ -325,6 +400,7 @@ function RenameDialog({ open, onOpenChange, sessionId, name, onNameChange }: Ren
         </DialogHeader>
         <div className="py-4">
           <Input
+            ref={inputRef}
             value={name}
             onChange={(e) => onNameChange(e.target.value)}
             placeholder="Enter a name..."
@@ -333,7 +409,6 @@ function RenameDialog({ open, onOpenChange, sessionId, name, onNameChange }: Ren
                 handleSubmit()
               }
             }}
-            autoFocus
           />
         </div>
         <DialogFooter>

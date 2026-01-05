@@ -11,7 +11,6 @@ export type {
   SettingsTab,
   ShortcutsTab,
   AgentInfoTab,
-  AgentSetupTab,
   FileTab,
   BrowserTab,
   TabState,

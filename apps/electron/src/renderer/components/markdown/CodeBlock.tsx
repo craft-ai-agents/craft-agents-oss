@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { codeToHtml, bundledLanguages, type BundledLanguage } from 'shiki'
 import { cn } from '@/lib/utils'
+import { useTheme } from '@/context/ThemeContext'
 
 interface CodeBlockProps {
   code: string
@@ -150,7 +151,7 @@ export function CodeBlock({ code, language = 'text', className, mode = 'full' }:
 
     return (
       <div
-        className={cn('font-mono text-sm [&_pre]:!bg-transparent [&_pre]:!p-0 [&_code]:!bg-transparent', className)}
+        className={cn('font-mono text-sm [&_pre]:!bg-transparent [&_pre]:!p-0 [&_pre]:whitespace-pre-wrap [&_pre]:break-all [&_code]:!bg-transparent', className)}
         dangerouslySetInnerHTML={{ __html: highlighted }}
       />
     )
@@ -158,7 +159,7 @@ export function CodeBlock({ code, language = 'text', className, mode = 'full' }:
 
   // Full mode: rich styling with header and copy button
   return (
-    <div className={cn('relative group rounded-md overflow-hidden border bg-muted/30', className)}>
+    <div className={cn('relative group rounded-[8px] overflow-hidden border bg-muted/30', className)}>
       {/* Language label + copy button */}
       <div className="flex items-center justify-between px-3 py-1.5 bg-muted/50 border-b text-xs">
         <span className="text-muted-foreground font-medium uppercase tracking-wide">
@@ -170,7 +171,7 @@ export function CodeBlock({ code, language = 'text', className, mode = 'full' }:
           aria-label="Copy code"
         >
           {copied ? (
-            <svg className="w-4 h-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-4 h-4 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
           ) : (
@@ -184,12 +185,12 @@ export function CodeBlock({ code, language = 'text', className, mode = 'full' }:
       {/* Code content */}
       <div className="p-3 overflow-x-auto">
         {isLoading || !highlighted ? (
-          <pre className="font-mono text-sm whitespace-pre-wrap">
+          <pre className="font-mono text-sm whitespace-pre-wrap break-all">
             <code>{code}</code>
           </pre>
         ) : (
           <div
-            className="font-mono text-sm [&_pre]:!bg-transparent [&_pre]:!m-0 [&_pre]:!p-0 [&_code]:!bg-transparent"
+            className="font-mono text-sm [&_pre]:!bg-transparent [&_pre]:!m-0 [&_pre]:!p-0 [&_pre]:whitespace-pre-wrap [&_pre]:break-all [&_code]:!bg-transparent"
             dangerouslySetInnerHTML={{ __html: highlighted }}
           />
         )}

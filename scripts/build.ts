@@ -4,12 +4,12 @@ import { create } from 'tar';
 import { readFileSync, mkdirSync, existsSync, rmSync } from 'fs';
 import { join, dirname } from 'path';
 import { createHash } from 'crypto';
+import { getAppVersion } from './sync-version';
 
-const CRAFT_AGENT_CLI_VERSION = process.argv[2];
-if (!CRAFT_AGENT_CLI_VERSION) {
-  console.error('Version is required');
-  process.exit(1);
-}
+// Use provided version or fall back to APP_VERSION
+const CRAFT_AGENT_CLI_VERSION = process.argv[2] || getAppVersion();
+console.log(`Using version: ${CRAFT_AGENT_CLI_VERSION}`);
+console.log('');
 
 const CRAFT_AGENT_CLI_BUILD_DATE = new Date().toISOString();
 const CRAFT_AGENT_CLI_BUILD_TIMESTAMP = Date.now();

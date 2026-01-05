@@ -2,7 +2,7 @@ import type { Session } from "../../shared/types"
 
 /**
  * Get display title for a session.
- * Priority: custom name > first user message > agent name > "New conversation"
+ * Priority: custom name > first user message > agent name > "New chat"
  */
 export function getSessionTitle(session: Session): string {
   if (session.name) {
@@ -17,10 +17,10 @@ export function getSessionTitle(session: Session): string {
       : trimmed
   }
 
-  // For agent sessions, show the agent name instead of generic "New conversation"
+  // For agent sessions, show the agent name instead of generic "New chat"
   if (session.agentName) {
     return session.agentName
   }
 
-  return 'New conversation'
+  return 'New chat'
 }

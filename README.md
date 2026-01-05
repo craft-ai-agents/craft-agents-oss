@@ -8,6 +8,11 @@ A Claude Code-like agent for Craft documents using the Anthropic SDK and Craft M
 - **Craft MCP Integration**: Access to 32+ Craft document tools (blocks, collections, search, tasks)
 - **Subagents**: Define specialized agents in Craft documents with custom instructions, MCP servers, and REST APIs
 - **Dynamic API Integration**: Automatically extract REST APIs from documentation and create flexible tools
+- **Permission Modes**: Three-level system (Explore, Ask to Edit, Auto) with customizable rules
+- **Background Tasks**: Run long-running operations in the background with progress tracking
+- **Dynamic Status System**: Workspace-customizable session workflow states (Todo, In Progress, etc.)
+- **Theme System**: Cascading themes at app, workspace, and agent levels
+- **Multi-File Diff**: VS Code-style window for viewing all file changes in a turn (Electron)
 - **Rich Terminal UI**: Built with Ink (React for CLIs)
 - **Ultrathink Mode**: Type "ultrathink" in your message for extended thinking
 - **Command History**: Navigate previous inputs with arrow keys
@@ -88,7 +93,7 @@ bun dev
 | `/tools` | List available Craft MCP tools |
 | `/agent` | List, activate, or deactivate subagents |
 | `/info` | Show active agent info and available tools |
-| `/plan` | Plan mode menu (start, plans, view, approve, cancel) |
+| `/safe` | Toggle Explore mode (read-only) |
 | `/setup` | Re-run the configuration wizard |
 | `/safemode` | Toggle Safe Mode (require approval for delete/update/move) |
 | `/clear` | Clear conversation (keeps session, starts fresh with Claude) |
@@ -100,7 +105,7 @@ bun dev
 | `Ctrl+L` | Clear conversation (same as `/clear`) |
 | `Ctrl+S` | Toggle Safe Mode (same as `/safemode`) |
 | `Up/Down` | Navigate command history |
-| `SHIFT+TAB` | Toggle Plan Mode |
+| `SHIFT+TAB` | Cycle permission modes |
 
 ## Headless Mode (Non-Interactive)
 
@@ -168,9 +173,9 @@ craft --print "Summarize document" --output-format stream-json
 #         {"type":"complete","result":{...}}
 ```
 
-### Plan Mode Disabled
+### Permission Policy in Headless Mode
 
-In headless mode, plan mode tools (`EnterCraftAgentsPlanMode`, `ExitCraftAgentsPlanMode`, `CraftAskUserQuestion`) are automatically disabled. The agent executes tasks directly without planning phases, which is appropriate for non-interactive automation.
+In headless mode, the permission system uses `--permission-policy` instead of interactive mode selection. Use `allow-all` for full automation or `allow-safe` for read-only operations.
 
 ### Session Management
 
@@ -192,57 +197,46 @@ craft --print "Step 2" --session my-workflow-123
 | 0 | Success |
 | 1 | Error (auth required, agent not found, execution error) |
 
-## Plan Mode
+## Permission Modes
 
-Plan Mode is a structured approach to handling complex, multi-step tasks. Instead of immediately executing actions, the agent first creates a plan describing **what** it will do, gets user approval, and then executes.
+Three-level permission system that controls what operations Claude can perform:
 
-### Why Plan Mode?
+| Mode | Display Name | Behavior |
+|------|--------------|----------|
+| `'safe'` | Explore | Read-only, blocks all write operations |
+| `'ask'` | Ask to Edit | Prompts for bash commands (default) |
+| `'allow-all'` | Auto | Auto-approves all commands |
 
-Without planning, agents often:
-- Execute prematurely before fully understanding requirements
-- Make unnecessary API calls that could have been avoided
-- Lack transparency about intended actions
+### When to Use Each Mode
 
-### How It Works
+- **Explore (safe)**: Exploring unfamiliar codebases, understanding code, reviewing plans
+- **Ask to Edit (ask)**: Normal development with approval for sensitive commands
+- **Auto (allow-all)**: Trusted automation, running tests, builds
 
-```
-Enter Plan Mode (SHIFT+TAB) → Clarify Requirements → Design Plan → User Review → Execute
-```
-
-1. **Enter Plan Mode**: Press `SHIFT+TAB` or type `/plan start`
-2. **Clarify Requirements**: Agent uses `CraftAskUserQuestion` for interactive clarification
-3. **Design Plan**: Agent describes steps without executing them
-4. **User Review**: Approve, refine, or cancel via PlanReview UI
-5. **Execute**: After approval, agent executes the plan
-
-### What's Blocked During Planning
+### What's Blocked in Explore Mode
 
 | Blocked | Allowed |
 |---------|---------|
-| API calls (`api_*`) | `CraftAskUserQuestion` |
 | `Bash`, `Write`, `Edit` | `Read`, `Glob`, `Grep` |
-| Craft MCP write tools | `WebSearch`, `WebFetch` (sparingly) |
-| `Task`, `TaskOutput` | Craft MCP read tools |
+| API calls (`api_*`) | `Task` (research agents) |
+| Craft MCP write tools | `WebSearch`, `WebFetch`, `TodoWrite` |
 
 ### Usage
 
 ```bash
-SHIFT+TAB      # Toggle plan mode
-/plan start    # Enter plan mode
-/plan plans    # View, load, or delete saved plans
-/plan view     # View current plan details
-/plan approve  # Approve and execute current plan
-/plan cancel   # Exit plan mode
+SHIFT+TAB   # Cycle through modes
+/safe       # Toggle explore mode
 ```
 
-**Plan Selector Controls:**
-- `↑↓` - Navigate plans
-- `Enter` - Load selected plan
-- `Space` - Toggle selection for deletion
-- `D/d` - Delete selected plans (with confirmation)
-- `Esc` - Clear selections or close
+The header shows the current mode indicator.
 
-The header shows `PLAN` indicator when active.
+### Customizable Permissions
+
+Each workspace, source, and agent can have a `permissions.json` file with custom rules:
+- `blockedTools` - Additional tools to block
+- `allowedBashPatterns` - Regex patterns for safe bash commands
+- `allowedMcpPatterns` - Regex patterns for allowed MCP tools
+- `allowedWritePaths` - Glob patterns for writable directories
 
 ## Safe Mode
 
@@ -327,11 +321,15 @@ Subagents are specialized agents defined in Craft documents. They extend the bas
 
 Create a Craft document with an "Instructions" section containing the agent's system prompt. You can also include:
 
-**MCP Servers** (HTTP/HTTPS only):
+**MCP Servers** (HTTP, SSE, or stdio):
 ```yaml
 servers:
   - name: myserver
     url: https://example.com/mcp
+  - name: filesystem
+    transport: stdio
+    command: npx
+    args: ["-y", "@anthropic/mcp-server-filesystem"]
 ```
 
 **REST APIs** (detected from various sources):
@@ -417,27 +415,18 @@ craft-tui-agent/
 │           ├── hooks/         # useAgent, useAgentState, useCommands
 │           ├── keyboard/      # Keyboard handling
 │           └── utils/         # Terminal utilities
-├── packages/
-│   ├── core/                  # Shared types (Workspace, Session, Message)
-│   └── shared/                # Shared business logic (agent, auth, storage)
-└── src/                       # Legacy - being migrated to packages/shared
-    ├── agent/
-    │   ├── craft-agent.ts     # Claude Agent SDK wrapper
-    │   └── plan-tools.ts      # Plan mode tools
-    ├── agents/
-    │   ├── types.ts           # SubAgentDefinition, AgentStatus
-    │   ├── plan-types.ts      # Plan, PlanStep interfaces
-    │   ├── agent-state.ts     # AgentStateManager - activation state machine
-    │   ├── manager.ts         # SubAgentManager
-    │   ├── extractor.ts       # Extract agent definitions from docs
-    │   └── api-tools.ts       # Dynamic REST API tools
-    ├── credentials/
-    │   ├── manager.ts         # Credential management
-    │   └── backends/          # AES-256-GCM encrypted storage
-    ├── config/
-    │   └── storage.ts         # Persistent config (~/.craft-agent/)
-    └── prompts/
-        └── system.ts          # System prompt
+└── packages/
+    ├── core/                  # Shared types (Workspace, Session, Message)
+    └── shared/                # Shared business logic
+        └── src/
+            ├── agent/         # CraftAgent, session-scoped-tools, permissions
+            ├── agents/        # Agent management, API tools
+            ├── auth/          # OAuth, tokens, state
+            ├── config/        # Storage, preferences, themes
+            ├── credentials/   # AES-256-GCM encrypted storage
+            ├── sessions/      # Session persistence
+            ├── sources/       # MCP, API, local sources
+            └── statuses/      # Dynamic status system
 ```
 
 ## Development
@@ -452,6 +441,34 @@ bun dev
 # Debug logging (writes to /tmp/craft-debug.log)
 craft --debug
 ```
+
+### Development Secrets (1Password)
+
+Development secrets (Gmail OAuth, etc.) are synced from 1Password to a local `.env` file. This keeps secrets out of the repo while making setup easy.
+
+**One-time setup:**
+
+```bash
+# 1. Install 1Password CLI
+brew install 1password-cli
+
+# 2. Enable CLI integration: 1Password app → Settings → Developer → CLI Integration
+
+# 3. Sync secrets to .env (requires Touch ID / 1Password unlock once)
+bun run sync-secrets
+```
+
+**That's it!** Now `bun run electron:dev` and `bun run electron:start` work without prompts.
+
+**When to re-sync:**
+- After cloning the repo
+- When secrets are rotated in 1Password
+- When new secrets are added to `.env.1password`
+
+**How it works:**
+- `.env.1password` contains `op://` references (safe to commit)
+- `bun run sync-secrets` resolves references → writes `.env` (gitignored)
+- Build scripts source `.env` automatically
 
 ### Debugging
 
@@ -629,7 +646,7 @@ Session transcripts are stored by the Claude Agent SDK at:
 - **Runtime**: [Bun](https://bun.sh/)
 - **AI**: [@anthropic-ai/claude-agent-sdk](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk)
 - **TUI**: [Ink](https://github.com/vadimdemedes/ink) (React for CLIs)
-- **MCP**: HTTP transport via Agent SDK
+- **MCP**: HTTP, SSE, and stdio transports via Agent SDK
 - **Credentials**: AES-256-GCM encrypted file storage
 
 ## License

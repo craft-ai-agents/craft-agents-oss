@@ -5,8 +5,9 @@ Terminal User Interface for Craft Agent - an interactive CLI for managing Craft 
 ## Features
 
 - Streaming AI responses with real-time display
-- Tool execution visualization
+- Tool execution visualization with background task support
 - Multi-workspace support with session persistence
+- Permission modes (Explore, Ask to Edit, Auto)
 - @mention system for activating sub-agents
 - Keyboard shortcuts and command history
 - File drag-and-drop support

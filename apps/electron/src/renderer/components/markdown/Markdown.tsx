@@ -1,5 +1,6 @@
 import * as React from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
+import rehypeRaw from 'rehype-raw'
 import remarkGfm from 'remark-gfm'
 import { cn } from '@/lib/utils'
 import { CodeBlock, InlineCode } from './CodeBlock'
@@ -110,7 +111,7 @@ function createComponents(
         <a
           href={href}
           onClick={handleClick}
-          className="text-primary hover:underline cursor-pointer"
+          className="text-foreground hover:underline cursor-pointer"
         >
           {children}
         </a>
@@ -153,10 +154,10 @@ function createComponents(
         const match = /language-(\w+)/.exec(className || '')
         const isBlock = 'node' in props && props.node?.position?.start.line !== props.node?.position?.end.line
 
-        // Block code - use CodeBlock with minimal mode
+        // Block code - use CodeBlock with full mode
         if (match || isBlock) {
           const code = String(children).replace(/\n$/, '')
-          return <CodeBlock code={code} language={match?.[1]} mode="minimal" />
+          return <CodeBlock code={code} language={match?.[1]} mode="full" className="my-1" />
         }
 
         // Inline code
@@ -216,7 +217,7 @@ function createComponents(
 
       if (match || isBlock) {
         const code = String(children).replace(/\n$/, '')
-        return <CodeBlock code={code} language={match?.[1]} mode="full" />
+        return <CodeBlock code={code} language={match?.[1]} mode="full" className="my-1" />
       }
 
       return <InlineCode>{children}</InlineCode>
@@ -266,7 +267,7 @@ function createComponents(
     ),
     // Styled blockquotes
     blockquote: ({ children }) => (
-      <blockquote className="border-l-4 border-primary/30 bg-muted/30 pl-4 pr-3 py-2 my-3 rounded-r-md">
+      <blockquote className="border-l-4 border-foreground/30 bg-muted/30 pl-4 pr-3 py-2 my-3 rounded-r-md">
         {children}
       </blockquote>
     ),
@@ -336,6 +337,7 @@ export function Markdown({
     <div className={cn('markdown-content', className)}>
       <ReactMarkdown
         remarkPlugins={remarkPlugins}
+        rehypePlugins={[rehypeRaw]}
         components={components}
       >
         {processedContent}

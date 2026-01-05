@@ -1,4 +1,8 @@
 #!/usr/bin/env bun
+
+// Mark as TUI environment before any imports (for debug utility routing)
+process.env.CRAFT_TUI = '1';
+
 import React, { useState, useCallback, useEffect } from 'react';
 import { render } from 'ink';
 import { createHash } from 'crypto';
@@ -13,17 +17,15 @@ import {
   setActiveWorkspace,
   getAnthropicApiKey,
   getClaudeOAuthToken,
-  listSessions,
-  loadSession,
-  createSession,
-  getOrCreateLatestSession,
-  setActiveSession,
-  cleanupLegacyConversations,
   type StoredConfig,
   type Workspace,
   type AuthType,
-  type Session,
 } from '@craft-agent/shared/config';
+import { getDefaultWorkspacesDir } from '@craft-agent/shared/workspaces';
+import {
+  listSessions,
+  type SessionConfig,
+} from '@craft-agent/shared/sessions';
 import { getAuthState, getSetupNeeds, type AuthState, type SetupNeeds } from '@craft-agent/shared/auth';
 import type { CraftAgentConfig } from '@craft-agent/shared/agent';
 import { debug, enableDebug } from '@craft-agent/shared/utils';
@@ -51,13 +53,15 @@ function isUrl(value: string): boolean {
 
 /**
  * Create a temporary workspace from a URL
+ * Note: MCP servers are now configured via sources system.
+ * This creates a minimal workspace - sources must be configured separately.
  */
 function createUrlWorkspace(url: string): Workspace {
+  const id = generateUrlWorkspaceId(url);
   return {
-    id: generateUrlWorkspaceId(url),
+    id,
     name: url, // Show URL as name in header
-    mcpUrl: url,
-    isPublic: true,
+    rootPath: `${getDefaultWorkspacesDir()}/${id}`, // Use default location for URL workspaces
     createdAt: Date.now(),
   };
 }
@@ -370,11 +374,16 @@ async function main() {
 
   // Handle --list-sessions command
   if (cli.flags.listSessions) {
-    const workspaceId = cli.flags.workspace
-      ? getWorkspaceByNameOrId(cli.flags.workspace)?.id
-      : getActiveWorkspace()?.id;
+    const workspace = cli.flags.workspace
+      ? getWorkspaceByNameOrId(cli.flags.workspace)
+      : getActiveWorkspace();
 
-    const sessions = listSessions(workspaceId);
+    if (!workspace) {
+      console.error('No workspace configured. Run `craft` first to set up.');
+      process.exit(1);
+    }
+
+    const sessions = listSessions(workspace.rootPath);
 
     if (sessions.length === 0) {
       console.log('No sessions found.');
@@ -384,10 +393,9 @@ async function main() {
         const date = new Date(session.lastUsedAt).toLocaleString();
         const messageCount = session.messageCount;
         const preview = session.preview || '(empty)';
-        const workspaceName = getWorkspaces().find(w => w.id === session.workspaceId)?.name || session.workspaceId;
 
         console.log(`  ${session.id}`);
-        console.log(`    Workspace: ${workspaceName}`);
+        console.log(`    Workspace: ${workspace.name}`);
         console.log(`    Last used: ${date}`);
         console.log(`    Messages: ${messageCount}`);
         console.log(`    Preview: ${preview.substring(0, 60)}${preview.length > 60 ? '...' : ''}`);
@@ -502,9 +510,6 @@ async function main() {
   // ========================================
   // INTERACTIVE MODE (TUI)
   // ========================================
-
-  // Clean up legacy workspace-based conversations (now using session-based storage)
-  cleanupLegacyConversations();
 
   // Clear screen and move cursor to top-left
   process.stdout.write('\x1b[2J\x1b[H');

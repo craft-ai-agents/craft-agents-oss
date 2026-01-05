@@ -4,8 +4,8 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to build (e.g., 1.0.0)'
-        required: true
+        description: 'Version to build (leave empty to use APP_VERSION from code)'
+        required: false
         type: string
       isLatest:
         description: 'Also upload to /latest folder'
@@ -41,8 +41,15 @@ jobs:
       - name: Install dependencies
         run: bun install
 
+      - name: Sync versions
+        run: bun run scripts/sync-version.ts
+
       - name: Build
         run: bun run scripts/build.ts ${{ inputs.version }}
+
+      - name: Get version from manifest
+        id: version
+        run: echo "version=$(jq -r .version .build/upload/manifest.json)" >> $GITHUB_OUTPUT
 
       - name: Upload to S3
         env:
@@ -65,8 +72,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           # Create the release with auto-generated notes
-          gh release create "v${{ inputs.version }}" \
-            --title "v${{ inputs.version }}" \
+          VERSION="${{ steps.version.outputs.version }}"
+          gh release create "v${VERSION}" \
+            --title "v${VERSION}" \
             --generate-notes \
             .build/upload/*.tar.gz \
             .build/upload/manifest.json

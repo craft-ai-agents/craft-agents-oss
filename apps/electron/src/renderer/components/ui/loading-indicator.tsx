@@ -4,13 +4,14 @@ import { cn } from "@/lib/utils"
 /**
  * Format duration in human-readable form
  * @param ms Duration in milliseconds
+ * @returns "45s" for under a minute, "1:02" for 1+ minutes
  */
 function formatDuration(ms: number): string {
   const seconds = Math.floor(ms / 1000)
   if (seconds < 60) return `${seconds}s`
   const minutes = Math.floor(seconds / 60)
   const remainingSeconds = seconds % 60
-  return `${minutes}m ${remainingSeconds}s`
+  return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`
 }
 
 export interface SpinnerProps {
@@ -65,10 +66,10 @@ export interface LoadingIndicatorProps {
   animated?: boolean
   /** Show elapsed time (pass start timestamp or true to auto-track) */
   showElapsed?: boolean | number
-  /** Ultrathink mode - shows gradient animated text */
-  ultrathink?: boolean
   /** Additional className for the container */
   className?: string
+  /** Additional className for the spinner (e.g., "text-xs" to make it smaller) */
+  spinnerClassName?: string
 }
 
 /**
@@ -80,29 +81,16 @@ export interface LoadingIndicatorProps {
  * - Animated 3x3 dot grid spinner (CSS-only)
  * - Optional label text
  * - Optional elapsed time display
- * - Ultrathink mode with gradient animation
  */
 export function LoadingIndicator({
   label,
   animated = true,
   showElapsed = false,
-  ultrathink = false,
   className,
+  spinnerClassName,
 }: LoadingIndicatorProps) {
-  const [gradientOffset, setGradientOffset] = React.useState(0)
   const [elapsed, setElapsed] = React.useState(0)
   const startTimeRef = React.useRef<number | null>(null)
-
-  // Gradient animation for ultrathink
-  React.useEffect(() => {
-    if (!ultrathink || !animated) return
-
-    const interval = setInterval(() => {
-      setGradientOffset((prev) => (prev + 1) % 10)
-    }, 120)
-
-    return () => clearInterval(interval)
-  }, [ultrathink, animated])
 
   // Elapsed time tracking
   React.useEffect(() => {
@@ -124,28 +112,19 @@ export function LoadingIndicator({
     return () => clearInterval(interval)
   }, [showElapsed])
 
-  // Display label
-  const displayLabel = ultrathink ? 'Deep thinking...' : label
-
   return (
     <span className={cn("inline-flex items-center gap-2", className)}>
       {/* Spinner */}
       {animated ? (
-        <Spinner className={ultrathink ? "text-fuchsia-500" : undefined} />
+        <Spinner className={spinnerClassName} />
       ) : (
         <span className="inline-flex items-center justify-center w-[1em] h-[1em]">●</span>
       )}
 
-      {/* Label with optional ultrathink gradient */}
-      {displayLabel && (
-        <span
-          className={cn(
-            "text-muted-foreground",
-            ultrathink && "ultrathink-gradient"
-          )}
-          style={ultrathink ? { '--gradient-offset': gradientOffset } as React.CSSProperties : undefined}
-        >
-          {displayLabel}
+      {/* Label */}
+      {label && (
+        <span className="text-muted-foreground">
+          {label}
         </span>
       )}
 

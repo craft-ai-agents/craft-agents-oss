@@ -26,3 +26,17 @@ export { CredentialManager, getCredentialManager } from './manager.ts';
 export type { CredentialId, CredentialType, StoredCredential } from './types.ts';
 export { credentialIdToAccount, accountToCredentialId } from './types.ts';
 export type { CredentialBackend } from './backends/types.ts';
+
+// Portable credentials support
+export {
+  isWorkspaceScoped,
+  shouldUsePortableStorage,
+  getCredentialCategory,
+  getCredentialDescription,
+  CREDENTIAL_METADATA,
+} from './metadata.ts';
+export type { CredentialCategory, CredentialMetadata } from './metadata.ts';
+export {
+  PortableCredentialBackend,
+  workspaceHasPortableCredentials,
+} from './backends/portable.ts';

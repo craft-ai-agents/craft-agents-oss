@@ -1,24 +1,30 @@
 import React, { memo, useRef } from 'react';
 import { Box, Text, Static } from 'ink';
+import { existsSync, readFileSync } from 'fs';
 import { ToolCall } from './ToolCall.tsx';
 import { ThinkingIndicator } from './Spinner.tsx';
 import { WelcomeBanner } from './Header.tsx';
 import { useElapsedTime } from '../hooks/index.ts';
 import { renderMarkdown } from '../utils/markdown.ts';
-import { shouldHideTool } from '../utils/toolNames.ts';
+import { shouldHideTool } from '@craft-agent/shared/utils';
 
 export interface Message {
   id: string;
-  type: 'user' | 'assistant' | 'tool' | 'error' | 'status' | 'system' | 'info' | 'warning';
+  type: 'user' | 'assistant' | 'tool' | 'error' | 'status' | 'system' | 'info' | 'warning' | 'plan';
   content: string;
   toolName?: string;
   toolInput?: Record<string, unknown>;
   toolIntent?: string;  // Explicit intent from **Doing:** marker or Bash description
-  toolStatus?: 'pending' | 'executing' | 'completed' | 'error';
+  toolStatus?: 'pending' | 'executing' | 'completed' | 'error' | 'backgrounded';
   toolDuration?: number;
   isError?: boolean;
   isStreaming?: boolean;
   timestamp?: number;
+  // Background task/shell properties
+  taskId?: string;
+  shellId?: string;
+  elapsedSeconds?: number;
+  isBackground?: boolean;
 }
 
 export interface MessagesProps {
@@ -67,7 +73,7 @@ export const Messages: React.FC<MessagesProps> = memo(({
     lastResetKeyRef.current = resetKey;
   }
 
-  // Filter out hidden tools (internal state-change tools like EnterCraftAgentsPlanMode)
+  // Filter out hidden tools (internal state-change tools)
   const visibleMessages = messages.filter(m =>
     m.type !== 'tool' || !m.toolName || !shouldHideTool(m.toolName)
   );
@@ -188,6 +194,9 @@ const MessageItem: React.FC<MessageItemProps> = memo(({ message, compact = true 
           isError={message.isError}
           duration={message.toolDuration}
           startTime={message.timestamp}
+          taskId={message.taskId}
+          shellId={message.shellId}
+          elapsedSeconds={message.elapsedSeconds}
           compact={compact}
         />
       );
@@ -204,6 +213,9 @@ const MessageItem: React.FC<MessageItemProps> = memo(({ message, compact = true 
 
     case 'warning':
       return <WarningMessage content={message.content} />;
+
+    case 'plan':
+      return <PlanMessage planPath={message.content} />;
 
     default:
       return null;
@@ -281,6 +293,56 @@ const WarningMessage: React.FC<{ content: string }> = memo(({ content }) => {
     <Box marginTop={1}>
       <Text color="yellow" bold>⚠ </Text>
       <Text color="yellow">{content}</Text>
+    </Box>
+  );
+});
+
+// Plan message - reads markdown from file and renders it with special styling
+const PlanMessage: React.FC<{ planPath: string }> = memo(({ planPath }) => {
+  // Read plan file content
+  let content = '';
+  let error: string | null = null;
+
+  if (existsSync(planPath)) {
+    try {
+      content = readFileSync(planPath, 'utf-8');
+    } catch (e) {
+      error = `Failed to read plan: ${e instanceof Error ? e.message : 'Unknown error'}`;
+    }
+  } else {
+    error = `Plan file not found: ${planPath}`;
+  }
+
+  if (error) {
+    return (
+      <Box marginTop={1} marginBottom={1}>
+        <Box borderStyle="round" borderColor="red" paddingX={1}>
+          <Text color="red">{error}</Text>
+        </Box>
+      </Box>
+    );
+  }
+
+  const rendered = renderMarkdown(content);
+
+  return (
+    <Box flexDirection="column" marginTop={1} marginBottom={1}>
+      {/* Header */}
+      <Box>
+        <Text color="magenta" bold>📋 PLAN</Text>
+      </Box>
+
+      {/* Plan content */}
+      <Box marginTop={1} paddingLeft={2} borderStyle="single" borderColor="magenta" paddingX={1}>
+        <Text>{rendered}</Text>
+      </Box>
+
+      {/* Footer */}
+      <Box marginTop={1}>
+        <Text dimColor italic>
+          Respond with feedback, "go ahead" to approve, or "cancel" to exit safe mode.
+        </Text>
+      </Box>
     </Box>
   );
 });

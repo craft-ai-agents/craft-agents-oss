@@ -1,12 +1,12 @@
 /**
  * useAgentState - React hook for agent activation state management (Electron)
  *
- * Provides the same interface as the TUI useAgentState hook but communicates
- * via IPC with the main process where AgentStateManager lives.
+ * Agent-scoped: One state per (workspaceId, agentId) pair.
+ * This is the single source of truth for agent activation state.
  *
  * Usage:
  * ```tsx
- * const agentState = useAgentState(sessionId);
+ * const agentState = useAgentState(workspaceId, agentId);
  *
  * // Check status
  * if (agentState.isNeedsMcpAuth) {
@@ -14,11 +14,11 @@
  * }
  *
  * // Trigger activation
- * await agentState.activate(agentId);
+ * await agentState.activate();
  * ```
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import type {
   AgentStatus,
   AgentActivateOptions,
@@ -27,8 +27,35 @@ import type {
   SubAgentDefinition,
   McpServerConfig,
   ApiConfig,
-  Concern,
-} from '@craft-agent/shared/agents'
+} from '@craft-agent/shared/agents/types'
+import type { BannerState } from '../components/chat/SetupAuthBanner'
+
+// Renderer-side cache for agent status to prevent banner flash on session switch
+// When switching to a previously-active agent, we use cached status immediately
+// while the IPC call validates/refreshes the actual state
+const AGENT_STATUS_CACHE_MAX_SIZE = 100
+const agentStatusCache = new Map<string, AgentStatus>()
+const getCacheKey = (ws: string, agent: string) => `${ws}:${agent}`
+
+/**
+ * Set a value in the cache with LRU eviction.
+ * Removes oldest entries when cache exceeds max size.
+ */
+function setCacheWithLRU(key: string, value: AgentStatus): void {
+  // Delete and re-add to move to end (most recently used)
+  agentStatusCache.delete(key)
+  agentStatusCache.set(key, value)
+
+  // Evict oldest entries if over limit
+  while (agentStatusCache.size > AGENT_STATUS_CACHE_MAX_SIZE) {
+    const oldestKey = agentStatusCache.keys().next().value
+    if (oldestKey !== undefined) {
+      agentStatusCache.delete(oldestKey)
+    } else {
+      break
+    }
+  }
+}
 
 export interface UseAgentStateResult {
   // Current status (discriminated union)
@@ -37,12 +64,16 @@ export interface UseAgentStateResult {
   // Convenience booleans for status checking
   isIdle: boolean
   isExtracting: boolean
-  isNeedsReview: boolean
   isNeedsMcpAuth: boolean
   isNeedsApiAuth: boolean
   isReady: boolean
   isActive: boolean
   isError: boolean
+
+  // Idle state setup info (from centralized status)
+  needsSetup: boolean
+  needsAuth: boolean
+  idleReason: string | null
 
   // Current data (derived from status, type-safe)
   activeDefinition: SubAgentDefinition | null
@@ -51,54 +82,94 @@ export interface UseAgentStateResult {
   extractionMessage: string | null
   errorMessage: string | null
 
-  // Pending auth/review data (derived from status)
-  pendingConcerns: Concern[] | null
+  // Pending auth data (derived from status)
   pendingMcpServers: McpServerConfig[] | null
   pendingApis: ApiConfig[] | null
 
-  // Actions
-  activate: (agentId: string, options?: AgentActivateOptions) => Promise<AgentStatus>
-  continueAfterReview: (answers: Record<string, string>) => Promise<AgentStatus>
-  skipReview: () => Promise<AgentStatus>
+  // Actions (no agentId param needed - it's in the hook signature)
+  activate: (options?: AgentActivateOptions) => Promise<AgentStatus>
   continueAfterMcpAuth: () => Promise<AgentStatus>
   continueAfterApiAuth: () => Promise<AgentStatus>
-  deactivate: () => Promise<void>
+  deactivate: () => void
   reload: () => Promise<AgentStatus>
   reset: () => Promise<void>
-  markActive: () => Promise<void>
+  markActive: () => void
 
   // Loading state for async operations
   isLoading: boolean
+
+  // Derived banner state (centralized mapping for all components)
+  bannerState: BannerState
+  bannerReason: string | null
 }
 
-export function useAgentState(sessionId: string | null): UseAgentStateResult {
+/**
+ * Hook for managing agent activation state.
+ * Agent-scoped: keyed by (workspaceId, agentId).
+ *
+ * @param workspaceId - The workspace ID (or null if not selected)
+ * @param agentId - The agent ID (or null if not selected)
+ */
+export function useAgentState(workspaceId: string | null, agentId: string | null): UseAgentStateResult {
   const [status, setStatus] = useState<AgentStatus>({ status: 'idle' })
   const [isLoading, setIsLoading] = useState(false)
 
-  // Subscribe to agent_status events from main process
+  // Subscribe to agent status changes from main process
   useEffect(() => {
-    if (!sessionId) {
+    if (!workspaceId || !agentId) {
       setStatus({ status: 'idle' })
       return
     }
 
-    // Get initial status
-    window.electronAPI.getAgentStatus(sessionId).then(setStatus).catch(console.error)
+    // Track if effect is still active to prevent stale updates
+    let isActive = true
+    const cacheKey = getCacheKey(workspaceId, agentId)
 
-    // Listen for status updates via session events
-    const cleanup = window.electronAPI.onSessionEvent((event) => {
-      if (event.type === 'agent_status' && event.sessionId === sessionId) {
-        setStatus(event.status)
+    // Check cache first - use immediately if agent was previously active/ready
+    // This prevents the banner flash during IPC round-trip
+    const cached = agentStatusCache.get(cacheKey)
+    if (cached && (cached.status === 'active' || cached.status === 'ready')) {
+      setStatus(cached)
+    }
+
+    // Still fetch fresh status (may have changed)
+    window.electronAPI.getAgentStatus(workspaceId, agentId)
+      .then(status => {
+        if (isActive) {
+          setStatus(status)
+          // Only cache good statuses, clear for everything else
+          if (status.status === 'active' || status.status === 'ready') {
+            setCacheWithLRU(cacheKey, status)
+          } else {
+            agentStatusCache.delete(cacheKey)
+          }
+        }
+      })
+      .catch(console.error)
+
+    // Listen for status updates via AGENT_STATUS_CHANGED broadcast
+    const cleanup = window.electronAPI.onAgentStatusChanged((ws, agent, newStatus) => {
+      if (isActive && ws === workspaceId && agent === agentId) {
+        setStatus(newStatus)
+        // Only cache good statuses, clear for everything else
+        if (newStatus.status === 'active' || newStatus.status === 'ready') {
+          setCacheWithLRU(cacheKey, newStatus)
+        } else {
+          // Clear cache for idle, error, extracting, needs_mcp_auth, needs_api_auth
+          agentStatusCache.delete(cacheKey)
+        }
       }
     })
 
-    return cleanup
-  }, [sessionId])
+    return () => {
+      isActive = false
+      cleanup()
+    }
+  }, [workspaceId, agentId])
 
   // Derive convenience booleans from status
   const isIdle = status.status === 'idle'
   const isExtracting = status.status === 'extracting'
-  const isNeedsReview = status.status === 'needs_review'
   const isNeedsMcpAuth = status.status === 'needs_mcp_auth'
   const isNeedsApiAuth = status.status === 'needs_api_auth'
   const isReady = status.status === 'ready'
@@ -109,141 +180,185 @@ export function useAgentState(sessionId: string | null): UseAgentStateResult {
   const activeDefinition =
     status.status === 'ready' || status.status === 'active' ? status.definition : null
 
-  const agentId = 'agentId' in status ? status.agentId : null
-  const agentName = 'agentName' in status ? status.agentName : null
+  const derivedAgentId = 'agentId' in status ? status.agentId : null
+  const derivedAgentName = 'agentName' in status ? status.agentName : null
 
   const extractionMessage = status.status === 'extracting' ? status.message : null
   const errorMessage = status.status === 'error' ? status.error : null
 
-  const pendingConcerns = status.status === 'needs_review' ? status.concerns : null
   const pendingMcpServers = status.status === 'needs_mcp_auth' ? status.servers : null
   const pendingApis = status.status === 'needs_api_auth' ? status.apis : null
 
-  // Actions
+  // Idle state setup info (from centralized status)
+  const needsSetup = status.status === 'idle' && status.needsSetup === true
+  const needsAuth = status.status === 'idle' && status.needsAuth === true
+  const idleReason = status.status === 'idle' ? status.reason ?? null : null
+
+  // Centralized banner state derivation (single source of truth for all components)
+  // For folder-based agents, needsSetup is always false - they're ready immediately
+  const bannerState = useMemo((): BannerState => {
+    switch (status.status) {
+      case 'idle':
+        // Only show auth banner if sources need authentication
+        if (status.needsAuth) {
+          return 'mcp_auth'
+        }
+        // Folder-based agents are ready immediately - no activation needed
+        return 'hidden'
+      case 'extracting':
+        // Legacy state - shouldn't happen with folder-based agents
+        return 'hidden'
+      case 'needs_mcp_auth':
+        return 'mcp_auth'
+      case 'needs_api_auth':
+        return 'api_auth'
+      case 'ready':
+      case 'active':
+        return 'hidden'
+      case 'error':
+        return 'error'
+      default:
+        return 'hidden'
+    }
+  }, [status])
+
+  const bannerReason = useMemo((): string | null => {
+    switch (status.status) {
+      case 'idle':
+        return status.reason ?? null
+      case 'extracting':
+        return extractionMessage
+      case 'error':
+        return errorMessage
+      default:
+        return null
+    }
+  }, [status, extractionMessage, errorMessage])
+
+  // Helper to update cache based on status result
+  const updateCache = useCallback((result: AgentStatus) => {
+    if (!workspaceId || !agentId) return
+    const cacheKey = getCacheKey(workspaceId, agentId)
+    if (result.status === 'active' || result.status === 'ready') {
+      setCacheWithLRU(cacheKey, result)
+    } else {
+      agentStatusCache.delete(cacheKey)
+    }
+  }, [workspaceId, agentId])
+
+  // Actions - now use (workspaceId, agentId) from hook params
   const activate = useCallback(
-    async (agentIdToActivate: string, options?: AgentActivateOptions): Promise<AgentStatus> => {
-      if (!sessionId) {
+    async (options?: AgentActivateOptions): Promise<AgentStatus> => {
+      if (!workspaceId || !agentId) {
         return { status: 'idle' }
       }
       setIsLoading(true)
       try {
-        const result = await window.electronAPI.activateAgent(sessionId, agentIdToActivate, options)
+        const result = await window.electronAPI.activateAgent(workspaceId, agentId, options)
         setStatus(result)
+        updateCache(result)
         return result
       } finally {
         setIsLoading(false)
       }
     },
-    [sessionId]
+    [workspaceId, agentId, updateCache]
   )
-
-  const continueAfterReview = useCallback(
-    async (answers: Record<string, string>): Promise<AgentStatus> => {
-      if (!sessionId) {
-        return status
-      }
-      setIsLoading(true)
-      try {
-        const result = await window.electronAPI.continueAfterReview(sessionId, answers)
-        setStatus(result)
-        return result
-      } finally {
-        setIsLoading(false)
-      }
-    },
-    [sessionId, status]
-  )
-
-  const skipReview = useCallback(async (): Promise<AgentStatus> => {
-    return continueAfterReview({})
-  }, [continueAfterReview])
 
   const continueAfterMcpAuth = useCallback(async (): Promise<AgentStatus> => {
-    if (!sessionId) {
+    if (!workspaceId || !agentId) {
       return status
     }
     setIsLoading(true)
     try {
-      const result = await window.electronAPI.continueAfterMcpAuth(sessionId)
+      const result = await window.electronAPI.continueAfterMcpAuth(workspaceId, agentId)
       setStatus(result)
+      updateCache(result)
       return result
     } finally {
       setIsLoading(false)
     }
-  }, [sessionId, status])
+  }, [workspaceId, agentId, status, updateCache])
 
   const continueAfterApiAuth = useCallback(async (): Promise<AgentStatus> => {
-    if (!sessionId) {
+    if (!workspaceId || !agentId) {
       return status
     }
     setIsLoading(true)
     try {
-      const result = await window.electronAPI.continueAfterApiAuth(sessionId)
+      const result = await window.electronAPI.continueAfterApiAuth(workspaceId, agentId)
       setStatus(result)
+      updateCache(result)
       return result
     } finally {
       setIsLoading(false)
     }
-  }, [sessionId, status])
+  }, [workspaceId, agentId, status, updateCache])
 
-  const deactivate = useCallback(async (): Promise<void> => {
-    if (!sessionId) {
+  const deactivate = useCallback((): void => {
+    if (!workspaceId || !agentId) {
       return
     }
-    await window.electronAPI.deactivateAgent(sessionId)
+    // Clear cache to prevent stale state on next activation
+    agentStatusCache.delete(getCacheKey(workspaceId, agentId))
+    window.electronAPI.deactivateAgent(workspaceId, agentId)
     setStatus({ status: 'idle' })
-  }, [sessionId])
+  }, [workspaceId, agentId])
 
   const reload = useCallback(async (): Promise<AgentStatus> => {
-    if (!sessionId) {
+    if (!workspaceId || !agentId) {
       return status
     }
+    // Clear cache first - reload will re-extract and may result in different state
+    agentStatusCache.delete(getCacheKey(workspaceId, agentId))
     setIsLoading(true)
     try {
-      const result = await window.electronAPI.reloadAgentState(sessionId)
+      const result = await window.electronAPI.reloadAgentState(workspaceId, agentId)
       setStatus(result)
+      updateCache(result)
       return result
     } finally {
       setIsLoading(false)
     }
-  }, [sessionId, status])
+  }, [workspaceId, agentId, status, updateCache])
 
   const reset = useCallback(async (): Promise<void> => {
-    if (!sessionId) {
+    if (!workspaceId || !agentId) {
       return
     }
-    await window.electronAPI.resetAgentState(sessionId)
+    // Clear cache since reset clears definition and credentials
+    agentStatusCache.delete(getCacheKey(workspaceId, agentId))
+    await window.electronAPI.resetAgentState(workspaceId, agentId)
     setStatus({ status: 'idle' })
-  }, [sessionId])
+  }, [workspaceId, agentId])
 
-  const markActive = useCallback(async (): Promise<void> => {
-    if (!sessionId) {
+  const markActive = useCallback((): void => {
+    if (!workspaceId || !agentId) {
       return
     }
-    await window.electronAPI.markAgentActive(sessionId)
-  }, [sessionId])
+    window.electronAPI.markAgentActive(workspaceId, agentId)
+  }, [workspaceId, agentId])
 
   return {
     status,
     isIdle,
     isExtracting,
-    isNeedsReview,
     isNeedsMcpAuth,
     isNeedsApiAuth,
     isReady,
     isActive,
     isError,
+    needsSetup,
+    needsAuth,
+    idleReason,
     activeDefinition,
-    agentId,
-    agentName,
+    agentId: derivedAgentId,
+    agentName: derivedAgentName,
     extractionMessage,
     errorMessage,
-    pendingConcerns,
     pendingMcpServers,
     pendingApis,
     activate,
-    continueAfterReview,
-    skipReview,
     continueAfterMcpAuth,
     continueAfterApiAuth,
     deactivate,
@@ -251,5 +366,7 @@ export function useAgentState(sessionId: string | null): UseAgentStateResult {
     reset,
     markActive,
     isLoading,
+    bannerState,
+    bannerReason,
   }
 }

@@ -1,28 +1,18 @@
 import { useState, useCallback } from 'react'
+import * as storage from '@/lib/local-storage'
 
 export function useResizablePanels(key: string, defaultSizes: number[]) {
   const [layout, setLayout] = useState<number[]>(() => {
-    try {
-      const saved = localStorage.getItem(`panel-layout:${key}`)
-      if (saved) {
-        const parsed = JSON.parse(saved)
-        if (Array.isArray(parsed) && parsed.length === defaultSizes.length) {
-          return parsed
-        }
-      }
-    } catch {
-      // Ignore parsing errors
+    const saved = storage.get<number[]>(storage.KEYS.panelLayout, [], key)
+    if (saved.length === defaultSizes.length) {
+      return saved
     }
     return defaultSizes
   })
 
   const onLayoutChange = useCallback((sizes: number[]) => {
     setLayout(sizes)
-    try {
-      localStorage.setItem(`panel-layout:${key}`, JSON.stringify(sizes))
-    } catch {
-      // Ignore storage errors
-    }
+    storage.set(storage.KEYS.panelLayout, sizes, key)
   }, [key])
 
   return { layout, onLayoutChange }

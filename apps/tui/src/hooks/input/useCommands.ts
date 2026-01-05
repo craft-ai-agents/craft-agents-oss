@@ -1,25 +1,16 @@
 import { useCallback } from 'react';
 import { homedir } from 'os';
-import { MODELS } from '@craft-agent/shared/config';
-import {
-  getWorkspaces,
-  removeWorkspace,
-  listPlanFiles,
-  getSafeMode,
-  setSafeMode,
-  type Workspace,
-  type Session,
-} from '@craft-agent/shared/config';
+import { basename, resolve } from 'path';
+import { MODELS, getWorkspaces, removeWorkspace, addWorkspace, setActiveWorkspace, type Workspace } from '@craft-agent/shared/config';
 import { formatPreferencesDisplay } from '@craft-agent/shared/config';
+import { listPlanFiles, type SessionConfig } from '@craft-agent/shared/sessions';
 import { resolveCommand } from '../../utils/filtering.ts';
 import { readClipboard, readFileAttachment, type FileAttachment } from '@craft-agent/shared/utils';
 import { getCurrentVersion } from '@craft-agent/shared/version';
 import type { ModalName } from '../modals/useModalState.ts';
 import type { Message } from '../../components/Messages.tsx';
 import type { SubAgentDefinition } from '@craft-agent/shared/agents';
-import { PLAN_MODE_ENTER_MESSAGE, PLAN_MODE_ENTER_PROMPT } from '@craft-agent/shared/agents';
-import type { TokenUsage } from '../core/useAgent.ts';
-import { formatContextDisplay } from '../../utils/context-formatter.ts';
+import { PERMISSION_MODE_MESSAGES, PERMISSION_MODE_PROMPTS } from '@craft-agent/shared/agents';
 
 /**
  * Result of command execution
@@ -47,14 +38,11 @@ export interface ToolGroup {
 export interface UseCommandsProps {
   // Global context
   workspace: Workspace;
-  session: Session;
+  session: SessionConfig;
   model: string;
   setModel: (model: string) => void;
   setWorkspace: (workspace: Workspace) => void;
-  startNewSession: () => Session;
-  /** Clears messages and token usage in current session, resets UI state */
-  resetSession: () => void;
-  tokenUsage: TokenUsage;
+  startNewSession: () => SessionConfig;
 
   // Modal control
   openModal: (name: ModalName) => void;
@@ -74,13 +62,12 @@ export interface UseCommandsProps {
   refreshAgents: () => Promise<string[] | { error: string }>;
   fetchTools: () => Promise<ToolGroup[]>;
 
-  // Plan mode operations
-  planMode: boolean;
+  // Safe mode operations (read-only exploration)
+  safeMode: boolean;
   approvePlan: () => void;
   cancelPlan: () => void;
-  // Craft Agents plan mode (uses CraftAskUserQuestion, blocks API calls during planning)
-  startCraftPlanning: () => void;
-  cancelCraftPlanning: () => void;
+  // Permission mode control
+  setSessionPermissionMode: (mode: import('@craft-agent/shared/agent').PermissionMode) => void;
 
   // Exit handler
   exitApp: () => void;
@@ -132,11 +119,10 @@ export function useCommands(props: UseCommandsProps) {
     resetAgent,
     refreshAgents,
     fetchTools,
-    planMode,
+    safeMode,
     approvePlan,
     cancelPlan,
-    startCraftPlanning,
-    cancelCraftPlanning,
+    setSessionPermissionMode,
     exitApp,
     setSafeModeSetting,
   } = props;
@@ -439,14 +425,40 @@ export function useCommands(props: UseCommandsProps) {
         const subCommand = parts[1];
         const workspaces = getWorkspaces();
 
-        if (subCommand === 'add') {
-          openModal('workspaceAdd');
-          return { handled: true };
-        }
-
         if (subCommand === 'rename') {
           openModal('workspaceRename');
           return { handled: true };
+        }
+
+        if (subCommand === 'add' || subCommand === 'new' || subCommand === 'create') {
+          // Get folder path from args, or use current directory
+          const folderPathArg = parts.slice(2).join(' ');
+          const folderPath = folderPathArg ? resolve(folderPathArg) : process.cwd();
+          const name = basename(folderPath);
+
+          try {
+            // Create workspace at {folderPath}/.craft-agent/
+            const rootPath = `${folderPath}/.craft-agent`;
+            const newWorkspace = addWorkspace({ name, rootPath });
+            setActiveWorkspace(newWorkspace.id);
+            setWorkspace(newWorkspace);
+
+            return {
+              handled: true,
+              message: {
+                content: `Created workspace "${name}" at ${rootPath}`,
+                type: 'system',
+              },
+            };
+          } catch (error) {
+            return {
+              handled: true,
+              message: {
+                content: `Failed to create workspace: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                type: 'error',
+              },
+            };
+          }
         }
 
         if (subCommand === 'remove') {
@@ -526,27 +538,27 @@ export function useCommands(props: UseCommandsProps) {
       }
 
       // ============================================
-      // Plan Commands
+      // Safe Mode Commands
       // ============================================
-      case '/plan': {
+      case '/safe': {
         const subCommand = parts[1] ?? '';
 
-        if (subCommand === 'start') {
-          if (planMode) {
+        if (subCommand === '' || subCommand === 'start') {
+          if (safeMode) {
             return {
               handled: true,
-              message: { content: 'Already in plan mode. Use /plan cancel to exit first.', type: 'error' },
+              message: { content: 'Already in safe mode. Use /safe cancel to exit first.', type: 'error' },
             };
           }
-          // Start Craft Agents plan mode (blocks API calls, uses CraftAskUserQuestion)
-          startCraftPlanning();
+          // Start Safe Mode (blocks writes during exploration)
+          setSessionPermissionMode('safe');
           return {
             handled: true,
             message: {
-              content: PLAN_MODE_ENTER_MESSAGE,
+              content: PERMISSION_MODE_MESSAGES['safe'],
               type: 'system',
             },
-            sendToAgent: PLAN_MODE_ENTER_PROMPT,
+            sendToAgent: PERMISSION_MODE_PROMPTS['safe'],
           };
         }
 
@@ -564,7 +576,7 @@ export function useCommands(props: UseCommandsProps) {
             return { handled: true };
           }
 
-          const planFiles = listPlanFiles(session.id);
+          const planFiles = listPlanFiles(session.workspaceRootPath, session.id);
           if (planFiles.length === 0) {
             return {
               handled: true,
@@ -616,17 +628,31 @@ export function useCommands(props: UseCommandsProps) {
           return { handled: true };
         }
 
-        if (subCommand === 'cancel') {
-          if (!planMode) {
+        if (subCommand === 'approve') {
+          if (!safeMode) {
             return {
               handled: true,
-              message: { content: 'No active plan to cancel.', type: 'error' },
+              message: { content: 'No active safe mode. Plan approval happens after SubmitPlan is called.', type: 'system' },
             };
           }
-          cancelCraftPlanning();
+          approvePlan();
           return {
             handled: true,
-            message: { content: 'Plan cancelled. Returned to normal mode.', type: 'system' },
+            message: { content: 'Plan approved. Execution starting...', type: 'system' },
+          };
+        }
+
+        if (subCommand === 'cancel') {
+          if (!safeMode) {
+            return {
+              handled: true,
+              message: { content: 'No active safe mode to cancel.', type: 'error' },
+            };
+          }
+          setSessionPermissionMode('ask');
+          return {
+            handled: true,
+            message: { content: 'Safe mode cancelled. Returned to normal mode.', type: 'system' },
           };
         }
 
@@ -838,11 +864,10 @@ export function useCommands(props: UseCommandsProps) {
     resetAgent,
     refreshAgents,
     fetchTools,
-    planMode,
+    safeMode,
     approvePlan,
     cancelPlan,
-    startCraftPlanning,
-    cancelCraftPlanning,
+    setSessionPermissionMode,
     exitApp,
     setSafeModeSetting,
   ]);

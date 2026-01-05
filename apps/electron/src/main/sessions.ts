@@ -1,37 +1,90 @@
-import { BrowserWindow, app } from 'electron'
+import { app } from 'electron'
 import { join } from 'path'
-import { rm } from 'fs/promises'
-import { CraftAgent, type AgentEvent } from '@craft-agent/shared/agent'
+import { rm, readFile } from 'fs/promises'
+import { CraftAgent, type AgentEvent, setPermissionMode, type PermissionMode, unregisterSessionScopedToolCallbacks } from '@craft-agent/shared/agent'
+import { sessionLog, isDebugMode, getLogFilePath } from './logger'
+import { createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk'
+import type { WindowManager } from './window-manager'
 import {
   loadStoredConfig,
   getWorkspaces,
   getWorkspaceByNameOrId,
-  getWorkspaceAccessTokenAsync,
-  updateSessionMetadata,
-  getSessionAttachmentsPath,
+  getDefaultPermissionMode,
+  getDefaultWorkingDirectory,
   type Workspace,
+} from '@craft-agent/shared/config'
+import {
   // Session persistence functions
   listSessions as listStoredSessions,
   loadSession as loadStoredSession,
   saveSession as saveStoredSession,
   createSession as createStoredSession,
   deleteSession as deleteStoredSession,
-  archiveSession as archiveStoredSession,
-  unarchiveSession as unarchiveStoredSession,
+  flagSession as flagStoredSession,
+  unflagSession as unflagStoredSession,
+  setSessionTodoState as setStoredSessionTodoState,
+  updateSessionMetadata,
+  getSessionAttachmentsPath,
+  getSessionPath as getSessionStoragePath,
+  sessionPersistenceQueue,
   type StoredSession,
   type StoredMessage,
   type SessionMetadata,
-} from '@craft-agent/shared/config'
+  type TodoState,
+} from '@craft-agent/shared/sessions'
+import { loadWorkspaceSources, getSourcesBySlugs, type LoadedSource, type McpServerConfig, getSourcesNeedingAuth, getSourceCredentialManager, getSourceServerBuilder, type SourceWithCredential } from '@craft-agent/shared/sources'
+import { ConfigWatcher, type ConfigWatcherCallbacks } from '@craft-agent/shared/config'
 import { getAuthState } from '@craft-agent/shared/auth'
-import { setAnthropicOptionsEnv, setPathToClaudeCodeExecutable } from '@craft-agent/shared/agent'
+import { setAnthropicOptionsEnv, setPathToClaudeCodeExecutable, setInterceptorPath } from '@craft-agent/shared/agent'
 import { getCraftToken } from '@craft-agent/shared/auth'
+import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { CraftMcpClient } from '@craft-agent/shared/mcp'
-import { SubAgentManager, type SubAgentManagerConfig } from '@craft-agent/shared/agents'
+import { FolderAgentManager } from '@craft-agent/shared/agents'
 import type { SubAgentDefinition, AgentStatus, AgentActivateOptions } from '@craft-agent/shared/agents'
 import { AgentStateManager } from '@craft-agent/shared/agents'
-import { type Session, type Message, type SessionEvent, type FileAttachment, type StoredAttachment, IPC_CHANNELS, generateMessageId } from '../shared/types'
-import { generateSessionTitle } from '@craft-agent/shared/utils'
+import { type Session, type Message, type SessionEvent, type FileAttachment, type StoredAttachment, type SendMessageOptions, IPC_CHANNELS, generateMessageId } from '../shared/types'
+import { generateSessionTitle, formatPathsToRelative, formatToolInputPaths } from '@craft-agent/shared/utils'
 import { DEFAULT_MODEL } from '@craft-agent/shared/config'
+
+/**
+ * Feature flags for agent behavior
+ */
+export const AGENT_FLAGS = {
+  /** Default modes enabled for new sessions */
+  defaultModesEnabled: true,
+} as const
+
+/**
+ * Build MCP and API servers from sources using the new unified modules.
+ * Handles credential loading and server building in one step.
+ */
+async function buildServersFromSources(sources: LoadedSource[]) {
+  const credManager = getSourceCredentialManager()
+  const serverBuilder = getSourceServerBuilder()
+
+  // Load credentials for all sources
+  const sourcesWithCreds: SourceWithCredential[] = await Promise.all(
+    sources.map(async (source) => ({
+      source,
+      token: await credManager.getToken(source),
+      credential: await credManager.getApiCredential(source),
+    }))
+  )
+
+  // Build token getter for OAuth sources (Gmail, etc.)
+  const getTokenForSource = (source: LoadedSource) => {
+    if (source.config.provider === 'gmail' || source.config.api?.authType === 'oauth') {
+      return async () => {
+        const token = await credManager.getToken(source)
+        if (!token) throw new Error(`No token for ${source.config.slug}`)
+        return token
+      }
+    }
+    return undefined
+  }
+
+  return serverBuilder.buildAll(sourcesWithCreds, getTokenForSource)
+}
 
 interface ManagedSession {
   id: string
@@ -44,14 +97,29 @@ interface ManagedSession {
   abortController?: AbortController
   // Track tool_use_id -> toolName mapping (since tool_result only has toolUseId)
   pendingTools: Map<string, string>
+  // Stack of parent tool IDs for nested tool calls (e.g., Task spawning Read/Grep)
+  // Using a stack handles concurrent parent tools correctly - each child tool
+  // gets associated with the most recent parent that started before it
+  parentToolStack: string[]
+  // Map of toolUseId -> parentToolUseId for tracking which parent was active when each tool started
+  // This is used to correctly attribute child tools even with concurrent parent tools
+  toolToParentMap: Map<string, string>
+  // Parent tool ID captured when text started streaming (first text_delta)
+  // Used by text_complete to assign correct parent - prevents text from being nested
+  // under tools that started after the text began (e.g., "I'll help..." before Task call)
+  pendingTextParent?: string
   // Session name (user-defined or AI-generated)
   name?: string
-  // Inbox/Archive features
+  // Session metadata
   agentId?: string
   agentName?: string
-  isArchived: boolean
+  isFlagged: boolean
+  /** Permission mode for this session ('safe', 'ask', 'allow-all') */
+  permissionMode?: PermissionMode
   // SDK session ID for conversation continuity
   sdkSessionId?: string
+  // Track whether agent was successfully activated via AgentStateManager
+  agentActivated?: boolean
   // Token usage for display
   tokenUsage?: {
     inputTokens: number
@@ -62,22 +130,64 @@ interface ManagedSession {
     cacheReadTokens?: number
     cacheCreationTokens?: number
   }
+  // Todo state (user-controlled) - determines inbox vs done
+  // Dynamic status ID referencing workspace status config
+  todoState?: string
+  // Read/unread tracking - ID of last message user has read
+  lastReadMessageId?: string
+  // Per-session source selection (slugs of enabled sources)
+  enabledSourceSlugs?: string[]
+  // Built source server configs (applied to CraftAgent)
+  sourceMcpServers?: Record<string, McpServerConfig>
+  // Built API servers (Gmail, etc.) - in-process MCP servers
+  sourceApiServers?: Record<string, ReturnType<typeof createSdkMcpServer>>
+  // Working directory for this session (used by agent for bash commands)
+  workingDirectory?: string
+  // Sources that need credentials (detected at session creation)
+  sourcesNeedingAuth?: LoadedSource[]
+  // Whether auto-setup context has been triggered (prevents multiple triggers)
+  autoSetupTriggered?: boolean
+  // Message queue for handling new messages while processing
+  // When a message arrives during processing, we interrupt and queue
+  messageQueue: Array<{
+    message: string
+    attachments?: FileAttachment[]
+    storedAttachments?: StoredAttachment[]
+    options?: SendMessageOptions
+    messageId?: string  // Pre-generated ID for matching with UI
+  }>
 }
 
 // Convert runtime Message to StoredMessage for persistence
-// Note: For tool messages, result is stored in `content` (not duplicated in toolResult)
+// Only excludes transient field: isStreaming
 function messageToStored(msg: Message): StoredMessage {
   return {
     id: msg.id,
     type: msg.role,  // Message uses 'role', StoredMessage uses 'type'
     content: msg.content,
     timestamp: msg.timestamp,
+    // Tool fields
     toolName: msg.toolName,
+    toolUseId: msg.toolUseId,
     toolInput: msg.toolInput,
+    toolResult: msg.toolResult,
     toolStatus: msg.toolStatus,
     toolDuration: msg.toolDuration,
+    toolIntent: msg.toolIntent,
+    parentToolUseId: msg.parentToolUseId,
     isError: msg.isError,
     attachments: msg.attachments,
+    // Turn grouping
+    isIntermediate: msg.isIntermediate,
+    turnId: msg.turnId,
+    // Error display
+    errorCode: msg.errorCode,
+    errorTitle: msg.errorTitle,
+    errorDetails: msg.errorDetails,
+    errorOriginal: msg.errorOriginal,
+    errorCanRetry: msg.errorCanRetry,
+    // Ultrathink
+    ultrathink: msg.ultrathink,
   }
 }
 
@@ -88,96 +198,233 @@ function storedToMessage(stored: StoredMessage): Message {
     role: stored.type,  // StoredMessage uses 'type', Message uses 'role'
     content: stored.content,
     timestamp: stored.timestamp ?? Date.now(),
+    // Tool fields
     toolName: stored.toolName,
+    toolUseId: stored.toolUseId,
     toolInput: stored.toolInput,
+    toolResult: stored.toolResult,
     toolStatus: stored.toolStatus,
     toolDuration: stored.toolDuration,
+    toolIntent: stored.toolIntent,
+    parentToolUseId: stored.parentToolUseId,
     isError: stored.isError,
     attachments: stored.attachments,
+    // Turn grouping
+    isIntermediate: stored.isIntermediate,
+    turnId: stored.turnId,
+    // Error display
+    errorCode: stored.errorCode,
+    errorTitle: stored.errorTitle,
+    errorDetails: stored.errorDetails,
+    errorOriginal: stored.errorOriginal,
+    errorCanRetry: stored.errorCanRetry,
+    // Ultrathink
+    ultrathink: stored.ultrathink,
   }
+}
+
+// Performance: Batch IPC delta events to reduce renderer load
+const DELTA_BATCH_INTERVAL_MS = 50  // Flush batched deltas every 50ms
+
+interface PendingDelta {
+  delta: string
+  turnId?: string
 }
 
 export class SessionManager {
   private sessions: Map<string, ManagedSession> = new Map()
-  private mainWindow: BrowserWindow | null = null
-  // Cache SubAgentManager per workspace (reused across sessions)
-  private agentManagers: Map<string, SubAgentManager> = new Map()
-  // Track in-flight SubAgentManager initialization to prevent duplicate connections
-  private pendingAgentManagers: Map<string, Promise<SubAgentManager | null>> = new Map()
-  // Cache AgentStateManager per session (for unified state machine)
+  private windowManager: WindowManager | null = null
+  // Workspace-scoped FolderAgentManager cache (reads agents from disk)
+  private folderAgentManagers: Map<string, FolderAgentManager> = new Map()
+  // Cache AgentStateManager per agent (agent-scoped: workspaceId:agentId)
+  // This is the single source of truth for agent activation state
   private agentStateManagers: Map<string, AgentStateManager> = new Map()
+  // Delta batching for performance - reduces IPC events from 50+/sec to ~20/sec
+  private pendingDeltas: Map<string, PendingDelta> = new Map()
+  private deltaFlushTimers: Map<string, NodeJS.Timeout> = new Map()
+  // Config watchers for live updates (sources, agents, etc.) - one per workspace
+  private configWatchers: Map<string, ConfigWatcher> = new Map()
+  // Pending credential request resolvers (keyed by requestId)
+  private pendingCredentialResolvers: Map<string, (response: import('../shared/types').CredentialResponse) => void> = new Map()
 
-  setMainWindow(window: BrowserWindow): void {
-    this.mainWindow = window
+  setWindowManager(wm: WindowManager): void {
+    this.windowManager = wm
   }
 
   /**
-   * Get or create a SubAgentManager for a workspace
-   * The manager is cached and reused across sessions for the same workspace
+   * Set up ConfigWatcher for a workspace to broadcast live updates
+   * (sources added/removed, guide.md changes, etc.)
+   * Public so ipc.ts can call it when sources are first requested
+   * Supports multiple workspaces simultaneously
    */
-  private async getAgentManager(workspace: Workspace): Promise<SubAgentManager | null> {
-    // Check cache first
-    if (this.agentManagers.has(workspace.id)) {
-      return this.agentManagers.get(workspace.id)!
+  setupConfigWatcher(workspaceRootPath: string): void {
+    // Check if already watching this workspace
+    if (this.configWatchers.has(workspaceRootPath)) {
+      return // Already watching this workspace
     }
 
-    // Check if initialization is already in progress
-    if (this.pendingAgentManagers.has(workspace.id)) {
-      return this.pendingAgentManagers.get(workspace.id)!
+    sessionLog.info(`Setting up ConfigWatcher for workspace: ${workspaceRootPath}`)
+
+    const callbacks: ConfigWatcherCallbacks = {
+      onSourcesListChange: async (sources: LoadedSource[]) => {
+        sessionLog.info(`Sources list changed in ${workspaceRootPath} (${sources.length} sources)`)
+        // Broadcast to UI
+        this.broadcastSourcesChanged(sources)
+        // Reload sources for all sessions in this workspace
+        for (const [_, managed] of this.sessions) {
+          if (managed.workspace.rootPath === workspaceRootPath) {
+            await this.reloadSessionSources(managed)
+          }
+        }
+      },
+      onSourceChange: async (slug: string, source: LoadedSource | null) => {
+        sessionLog.info(`Source '${slug}' changed:`, source ? 'updated' : 'deleted')
+        // Broadcast updated list to UI
+        const sources = loadWorkspaceSources(workspaceRootPath)
+        this.broadcastSourcesChanged(sources)
+        // Reload sources for all sessions in this workspace
+        for (const [_, managed] of this.sessions) {
+          if (managed.workspace.rootPath === workspaceRootPath) {
+            await this.reloadSessionSources(managed)
+          }
+        }
+      },
+      onSourceGuideChange: (sourceSlug: string) => {
+        sessionLog.info(`Source guide changed: ${sourceSlug}`)
+        // Broadcast the updated sources list so sidebar picks up guide changes
+        // Note: Guide changes don't require session source reload (no server changes)
+        const sources = loadWorkspaceSources(workspaceRootPath)
+        this.broadcastSourcesChanged(sources)
+      },
+      onAgentsListChange: () => {
+        sessionLog.info(`Agents list changed in ${workspaceRootPath}`)
+        this.broadcastAgentsChanged()
+      },
+      onAgentChange: () => {
+        sessionLog.info(`Agent changed in ${workspaceRootPath}`)
+        this.broadcastAgentsChanged()
+      },
+      onStatusConfigChange: (workspaceId: string) => {
+        sessionLog.info(`Status config changed in ${workspaceId}`)
+        this.broadcastStatusesChanged(workspaceId)
+      },
+      onStatusIconChange: (workspaceId: string, iconFilename: string) => {
+        sessionLog.info(`Status icon changed: ${iconFilename} in ${workspaceId}`)
+        this.broadcastStatusesChanged(workspaceId)
+      },
+      onAppThemeChange: (theme) => {
+        sessionLog.info(`App theme changed`)
+        this.broadcastAppThemeChanged(theme)
+      },
+      onWorkspaceThemeChange: (theme) => {
+        sessionLog.info(`Workspace theme changed in ${workspaceRootPath}`)
+        this.broadcastWorkspaceThemeChanged(theme)
+      },
+      onAgentThemeChange: (agentSlug, theme) => {
+        sessionLog.info(`Agent theme changed: ${agentSlug}`)
+        this.broadcastAgentThemeChanged(agentSlug, theme)
+      },
     }
 
-    // Create and track the initialization promise
-    const initPromise = this.initializeAgentManager(workspace)
-    this.pendingAgentManagers.set(workspace.id, initPromise)
-
-    try {
-      return await initPromise
-    } finally {
-      this.pendingAgentManagers.delete(workspace.id)
-    }
+    const watcher = new ConfigWatcher(workspaceRootPath, callbacks)
+    watcher.start()
+    this.configWatchers.set(workspaceRootPath, watcher)
   }
 
   /**
-   * Internal method to initialize a SubAgentManager
-   * Separated from getAgentManager to support pending promise tracking
+   * Broadcast sources changed event to all windows
    */
-  private async initializeAgentManager(workspace: Workspace): Promise<SubAgentManager | null> {
-    try {
-      // Get MCP token for the workspace (returns { authType, token })
-      const { token: mcpToken } = await getWorkspaceAccessTokenAsync(workspace.id)
+  private broadcastSourcesChanged(sources: LoadedSource[]): void {
+    if (!this.windowManager) return
 
-      if (!mcpToken) {
-        console.warn(`[SessionManager] No MCP token for workspace ${workspace.id}, cannot create agent manager`)
-        return null
-      }
+    this.windowManager.broadcastToAll(IPC_CHANNELS.SOURCES_CHANGED, sources)
+  }
 
-      // Create MCP client for this workspace
-      const mcpClient = new CraftMcpClient({
-        url: workspace.mcpUrl,
-        headers: { Authorization: `Bearer ${mcpToken}` },
-      })
+  /**
+   * Broadcast agents changed event to all windows
+   */
+  private broadcastAgentsChanged(): void {
+    if (!this.windowManager) return
 
-      // Connect to MCP server
-      await mcpClient.connect()
+    this.windowManager.broadcastToAll(IPC_CHANNELS.AGENTS_CHANGED)
+  }
 
-      // Get config
-      const config = loadStoredConfig()
-      const managerConfig: SubAgentManagerConfig = {
-        model: config?.model || DEFAULT_MODEL,
-        mcpUrl: workspace.mcpUrl,
-        mcpToken,
-      }
+  /**
+   * Broadcast statuses changed event to all windows
+   */
+  private broadcastStatusesChanged(workspaceId: string): void {
+    if (!this.windowManager) return
+    sessionLog.info(`Broadcasting statuses changed for ${workspaceId}`)
+    this.windowManager.broadcastToAll(IPC_CHANNELS.STATUSES_CHANGED, workspaceId)
+  }
 
-      // Create and cache the manager
-      const manager = new SubAgentManager(workspace.id, mcpClient, managerConfig)
-      this.agentManagers.set(workspace.id, manager)
+  /**
+   * Broadcast app theme changed event to all windows
+   */
+  private broadcastAppThemeChanged(theme: import('@craft-agent/shared/config').ThemeOverrides | null): void {
+    if (!this.windowManager) return
+    sessionLog.info(`Broadcasting app theme changed`)
+    this.windowManager.broadcastToAll(IPC_CHANNELS.THEME_APP_CHANGED, theme)
+  }
 
-      console.log(`[SessionManager] Created agent manager for workspace ${workspace.id}`)
-      return manager
-    } catch (error) {
-      console.error(`[SessionManager] Failed to create agent manager for workspace ${workspace.id}:`, error)
-      return null
+  /**
+   * Broadcast workspace theme changed event to all windows
+   */
+  private broadcastWorkspaceThemeChanged(theme: import('@craft-agent/shared/config').ThemeOverrides | null): void {
+    if (!this.windowManager) return
+    sessionLog.info(`Broadcasting workspace theme changed`)
+    this.windowManager.broadcastToAll(IPC_CHANNELS.THEME_WORKSPACE_CHANGED, theme)
+  }
+
+  /**
+   * Broadcast agent theme changed event to all windows
+   */
+  private broadcastAgentThemeChanged(agentSlug: string, theme: import('@craft-agent/shared/config').ThemeOverrides | null): void {
+    if (!this.windowManager) return
+    sessionLog.info(`Broadcasting agent theme changed for ${agentSlug}`)
+    this.windowManager.broadcastToAll(IPC_CHANNELS.THEME_AGENT_CHANGED, agentSlug, theme)
+  }
+
+  /**
+   * Reload sources for a specific session.
+   * Called by ConfigWatcher when source files change on disk.
+   */
+  private async reloadSessionSources(managed: ManagedSession): Promise<void> {
+    if (!managed.agent) return
+
+    const workspaceRootPath = managed.workspace.rootPath
+    sessionLog.info(`Reloading sources for session ${managed.id}`)
+
+    // Reload all sources from disk
+    const allSources = loadWorkspaceSources(workspaceRootPath)
+    managed.agent.setAllSources(allSources)
+
+    // Rebuild MCP and API servers for session's enabled sources
+    const enabledSlugs = managed.enabledSourceSlugs || []
+    const enabledSources = allSources.filter(s =>
+      enabledSlugs.includes(s.config.slug) && s.config.enabled && s.config.isAuthenticated
+    )
+    const { mcpServers, apiServers } = await buildServersFromSources(enabledSources)
+    managed.sourceMcpServers = mcpServers
+    managed.sourceApiServers = apiServers
+    // Pass intended slugs so agent shows sources as active even if build failed
+    const intendedSlugs = enabledSources.map(s => s.config.slug)
+    managed.agent.setSourceServers(mcpServers, apiServers, intendedSlugs)
+
+    sessionLog.info(`Sources reloaded for session ${managed.id}: ${Object.keys(mcpServers).length} MCP, ${Object.keys(apiServers).length} API`)
+  }
+
+  /**
+   * Get the folder-based agent manager for a workspace
+   * Agents are loaded from disk on demand
+   */
+  private getFolderAgentManager(workspaceRootPath: string): FolderAgentManager {
+    let manager = this.folderAgentManagers.get(workspaceRootPath)
+    if (!manager) {
+      manager = new FolderAgentManager(workspaceRootPath)
+      this.folderAgentManagers.set(workspaceRootPath, manager)
     }
+    return manager
   }
 
   /**
@@ -185,103 +432,144 @@ export class SessionManager {
    * Used when activating an agent for a session
    */
   private async loadAgentDefinition(agentId: string, workspace: Workspace): Promise<SubAgentDefinition | null> {
-    const manager = await this.getAgentManager(workspace)
-    if (!manager) {
-      console.warn(`[SessionManager] No agent manager for workspace ${workspace.id}`)
-      return null
-    }
-
     try {
-      const definition = await manager.getDefinition(agentId)
+      const workspaceRootPath = workspace.rootPath
+      const manager = this.getFolderAgentManager(workspaceRootPath)
+      const definition = manager.getAgentDefinition(agentId)
       if (definition) {
-        console.log(`[SessionManager] Loaded agent definition: ${definition.name}`)
+        sessionLog.info(`Loaded agent definition: ${definition.name}`)
       }
       return definition
     } catch (error) {
-      console.error(`[SessionManager] Failed to load agent definition ${agentId}:`, error)
+      sessionLog.error(`Failed to load agent definition ${agentId}:`, error)
       return null
     }
   }
 
   /**
-   * Get or create an AgentStateManager for a session
-   * The manager is cached per session and handles agent activation state
+   * Get an AgentStateManager for an agent (agent-scoped)
+   * Returns undefined if not yet created
    */
-  async getAgentStateManager(sessionId: string): Promise<AgentStateManager | null> {
+  getAgentStateManager(workspaceId: string, agentId: string): AgentStateManager | undefined {
+    const key = `${workspaceId}:${agentId}`
+    return this.agentStateManagers.get(key)
+  }
+
+  /**
+   * Get or create an AgentStateManager for an agent (agent-scoped)
+   * The manager is cached per (workspaceId, agentId) and is the single source of truth
+   */
+  async getOrCreateAgentStateManager(workspaceId: string, agentId: string): Promise<AgentStateManager | null> {
+    const key = `${workspaceId}:${agentId}`
+
     // Check cache first
-    if (this.agentStateManagers.has(sessionId)) {
-      return this.agentStateManagers.get(sessionId)!
+    if (this.agentStateManagers.has(key)) {
+      return this.agentStateManagers.get(key)!
     }
 
-    const managed = this.sessions.get(sessionId)
-    if (!managed) {
-      console.warn(`[SessionManager] Session ${sessionId} not found`)
+    sessionLog.info(`Creating AgentStateManager for workspace="${workspaceId}", agent="${agentId}"`)
+
+    // Get workspace to get the slug for folder-based agent manager
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) {
+      sessionLog.error(`Workspace not found: ${workspaceId}`)
       return null
     }
+    const workspaceRootPath = workspace.rootPath
+    const folderAgentManager = this.getFolderAgentManager(workspaceRootPath)
 
-    const subAgentManager = await this.getAgentManager(managed.workspace)
-    if (!subAgentManager) {
-      console.warn(`[SessionManager] Could not create SubAgentManager for session ${sessionId}`)
-      return null
-    }
+    // Create AgentStateManager with folder-based agent manager
+    const stateManager = new AgentStateManager(workspaceId, folderAgentManager)
 
-    // Create AgentStateManager
-    const stateManager = new AgentStateManager(managed.workspace.id, subAgentManager)
-
-    // Subscribe to status changes and forward to renderer
-    stateManager.on('status', (status) => {
-      this.sendEvent({ type: 'agent_status', sessionId, status })
+    // Subscribe to status changes and broadcast complete state to all windows
+    // Uses broadcastAgentState() to include needsSetup/needsAuth/reason
+    stateManager.on('status', async () => {
+      await this.broadcastAgentState(workspaceId, agentId)
     })
 
     // Cache it
-    this.agentStateManagers.set(sessionId, stateManager)
-    console.log(`[SessionManager] Created AgentStateManager for session ${sessionId}`)
+    this.agentStateManagers.set(key, stateManager)
+    sessionLog.info(`Created AgentStateManager for agent ${agentId} in workspace ${workspaceId}`)
 
     return stateManager
   }
 
   /**
-   * Get current agent status for a session
+   * Broadcast complete agent state to all windows
+   * Single source of truth - call this after ANY agent state change
+   * Computes full state: status + needsSetup + needsAuth + reason
    */
-  async getAgentStatus(sessionId: string): Promise<AgentStatus> {
-    const stateManager = await this.getAgentStateManager(sessionId)
-    if (!stateManager) {
-      return { status: 'idle' }
+  async broadcastAgentState(workspaceId: string, agentId: string): Promise<void> {
+    if (!this.windowManager) return
+
+    // Get current status from state manager
+    const stateManager = this.getAgentStateManager(workspaceId, agentId)
+    const status = stateManager?.getStatus() ?? { status: 'idle' as const }
+
+    // Compute setup requirements
+    const { agentService } = await import('./agent-service')
+    const setupStatus = await agentService.getAgentSetupStatus(workspaceId, agentId)
+
+    // Build complete state
+    const completeState = {
+      ...status,
+      needsSetup: setupStatus.needsSetup,
+      needsAuth: setupStatus.needsAuth,
+      reason: setupStatus.reason,
     }
-    return stateManager.getStatus()
+
+    // Broadcast to all windows
+    this.windowManager.broadcastToAll(IPC_CHANNELS.AGENT_STATUS_CHANGED, workspaceId, agentId, completeState)
+    sessionLog.info(`Broadcast agent state: ${status.status}, needsSetup=${setupStatus.needsSetup}, needsAuth=${setupStatus.needsAuth} for ${agentId}`)
+  }
+
+
+  /**
+   * Get current agent status (agent-scoped)
+   * For folder-based agents, they're ready immediately (no activation needed)
+   */
+  async getAgentStatus(workspaceId: string, agentId: string): Promise<AgentStatus> {
+    const stateManager = this.getAgentStateManager(workspaceId, agentId)
+    if (stateManager) {
+      return stateManager.getStatus()
+    }
+
+    // Check if sources need authentication
+    const { agentService } = await import('./agent-service')
+    const setupStatus = await agentService.getAgentSetupStatus(workspaceId, agentId)
+
+    // Return status with auth info (needsSetup is always false for folder agents)
+    return {
+      status: 'idle',
+      needsSetup: false,
+      needsAuth: setupStatus.needsAuth,
+      reason: setupStatus.reason
+    }
   }
 
   /**
-   * Activate an agent for a session
+   * Activate an agent (agent-scoped)
    */
-  async activateAgentForSession(
-    sessionId: string,
+  async activateAgent(
+    workspaceId: string,
     agentId: string,
     options?: AgentActivateOptions
   ): Promise<AgentStatus> {
-    const stateManager = await this.getAgentStateManager(sessionId)
+    sessionLog.info(`activateAgent called: workspaceId="${workspaceId}", agentId="${agentId}"`)
+
+    const stateManager = await this.getOrCreateAgentStateManager(workspaceId, agentId)
     if (!stateManager) {
-      return { status: 'error', agentId, agentName: 'unknown', error: 'Could not create state manager' }
+      sessionLog.error(`Failed to create state manager for workspace="${workspaceId}", agent="${agentId}"`)
+      return { status: 'error', agentId, agentName: agentId || 'unknown', error: 'Could not create state manager' }
     }
     return stateManager.activate(agentId, options)
   }
 
   /**
-   * Continue after review step
+   * Continue after MCP auth step (agent-scoped)
    */
-  async continueAfterReview(sessionId: string, answers: Record<string, string>): Promise<AgentStatus> {
-    const stateManager = await this.getAgentStateManager(sessionId)
-    if (!stateManager) {
-      return { status: 'idle' }
-    }
-    return stateManager.continueAfterReview(answers)
-  }
-
-  /**
-   * Continue after MCP auth step
-   */
-  async continueAfterMcpAuth(sessionId: string): Promise<AgentStatus> {
-    const stateManager = await this.getAgentStateManager(sessionId)
+  async continueAfterMcpAuth(workspaceId: string, agentId: string): Promise<AgentStatus> {
+    const stateManager = this.getAgentStateManager(workspaceId, agentId)
     if (!stateManager) {
       return { status: 'idle' }
     }
@@ -289,10 +577,10 @@ export class SessionManager {
   }
 
   /**
-   * Continue after API auth step
+   * Continue after API auth step (agent-scoped)
    */
-  async continueAfterApiAuth(sessionId: string): Promise<AgentStatus> {
-    const stateManager = await this.getAgentStateManager(sessionId)
+  async continueAfterApiAuth(workspaceId: string, agentId: string): Promise<AgentStatus> {
+    const stateManager = this.getAgentStateManager(workspaceId, agentId)
     if (!stateManager) {
       return { status: 'idle' }
     }
@@ -300,20 +588,20 @@ export class SessionManager {
   }
 
   /**
-   * Deactivate agent for a session
+   * Deactivate agent (agent-scoped)
    */
-  async deactivateAgentForSession(sessionId: string): Promise<void> {
-    const stateManager = await this.getAgentStateManager(sessionId)
+  deactivateAgent(workspaceId: string, agentId: string): void {
+    const stateManager = this.getAgentStateManager(workspaceId, agentId)
     if (stateManager) {
       stateManager.deactivate()
     }
   }
 
   /**
-   * Reload agent for a session
+   * Reload agent (agent-scoped)
    */
-  async reloadAgentForSession(sessionId: string): Promise<AgentStatus> {
-    const stateManager = await this.getAgentStateManager(sessionId)
+  async reloadAgent(workspaceId: string, agentId: string): Promise<AgentStatus> {
+    const stateManager = this.getAgentStateManager(workspaceId, agentId)
     if (!stateManager) {
       return { status: 'idle' }
     }
@@ -321,38 +609,35 @@ export class SessionManager {
   }
 
   /**
-   * Reset agent for a session (clear definition and credentials)
+   * Reset agent (clear definition and credentials) (agent-scoped)
    */
-  async resetAgentForSession(sessionId: string): Promise<void> {
-    const stateManager = await this.getAgentStateManager(sessionId)
+  async resetAgent(workspaceId: string, agentId: string): Promise<void> {
+    const stateManager = this.getAgentStateManager(workspaceId, agentId)
     if (stateManager) {
       await stateManager.reset()
     }
   }
 
   /**
-   * Mark agent as active for a session
+   * Mark agent as active (agent-scoped)
    */
-  async markAgentActive(sessionId: string): Promise<void> {
-    const stateManager = await this.getAgentStateManager(sessionId)
+  markAgentActive(workspaceId: string, agentId: string): void {
+    const stateManager = this.getAgentStateManager(workspaceId, agentId)
     if (stateManager) {
       stateManager.markActive()
     }
   }
 
-  async initialize(): Promise<void> {
-    // Set path to Claude Code executable (cli.js from SDK)
-    // This is critical because the bundled SDK can't auto-detect the path
-    const cliPath = join(process.cwd(), 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'cli.js')
-    console.log('[SessionManager] Setting pathToClaudeCodeExecutable:', cliPath)
-    setPathToClaudeCodeExecutable(cliPath)
-
-    // Set up authentication environment variables (critical for SDK to work)
+  /**
+   * Reinitialize authentication environment variables
+   * Call this after onboarding or settings changes to pick up new credentials
+   */
+  async reinitializeAuth(): Promise<void> {
     try {
       const authState = await getAuthState()
       const { billing } = authState
 
-      console.log('[SessionManager] Initializing with billing type:', billing.type)
+      sessionLog.info('Reinitializing auth with billing type:', billing.type)
 
       if (billing.type === 'craft_credits') {
         const token = await getCraftToken()
@@ -362,27 +647,45 @@ export class SessionManager {
         })
         // Set placeholder API key so SDK starts
         process.env.ANTHROPIC_API_KEY = 'craft-credits-placeholder'
-        console.log('[SessionManager] Set Craft API Gateway Token')
+        sessionLog.info('Set Craft API Gateway Token')
       } else if (billing.type === 'oauth_token' && billing.claudeOAuthToken) {
         // Use Claude Max subscription via OAuth token
         process.env.CLAUDE_CODE_OAUTH_TOKEN = billing.claudeOAuthToken
         delete process.env.ANTHROPIC_API_KEY
         delete process.env.USE_CRAFT_AI_GATEWAY
         delete process.env.CRAFT_API_GATEWAY_TOKEN
-        console.log('[SessionManager] Set Claude Max OAuth Token')
+        sessionLog.info('Set Claude Max OAuth Token')
       } else if (billing.apiKey) {
         // Use API key (pay-as-you-go)
         process.env.ANTHROPIC_API_KEY = billing.apiKey
         delete process.env.CLAUDE_CODE_OAUTH_TOKEN
         delete process.env.USE_CRAFT_AI_GATEWAY
         delete process.env.CRAFT_API_GATEWAY_TOKEN
-        console.log('[SessionManager] Set Anthropic API Key')
+        sessionLog.info('Set Anthropic API Key')
       } else {
-        console.error('[SessionManager] No authentication configured!')
+        sessionLog.error('No authentication configured!')
       }
     } catch (error) {
-      console.error('[SessionManager] Failed to initialize auth:', error)
+      sessionLog.error('Failed to reinitialize auth:', error)
+      throw error
     }
+  }
+
+  async initialize(): Promise<void> {
+    // Set path to Claude Code executable (cli.js from SDK)
+    // This is critical because the bundled SDK can't auto-detect the path
+    const cliPath = join(process.cwd(), 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'cli.js')
+    sessionLog.info('Setting pathToClaudeCodeExecutable:', cliPath)
+    setPathToClaudeCodeExecutable(cliPath)
+
+    // Set path to cache-ttl-interceptor for SDK subprocess
+    // This interceptor redirects requests to the Craft gateway when using Craft credits
+    const interceptorPath = join(process.cwd(), 'packages', 'shared', 'src', 'cache-ttl-interceptor.ts')
+    sessionLog.info('Setting interceptorPath:', interceptorPath)
+    setInterceptorPath(interceptorPath)
+
+    // Set up authentication environment variables (critical for SDK to work)
+    await this.reinitializeAuth()
 
     // Load existing sessions from disk
     this.loadSessionsFromDisk()
@@ -392,55 +695,82 @@ export class SessionManager {
   private loadSessionsFromDisk(): void {
     try {
       const workspaces = getWorkspaces()
-      const allSessionMetadata = listStoredSessions()  // Get all sessions across workspaces
+      let totalSessions = 0
 
-      console.log(`[SessionManager] Found ${allSessionMetadata.length} sessions on disk`)
+      // Iterate over each workspace and load its sessions
+      for (const workspace of workspaces) {
+        const workspaceRootPath = workspace.rootPath
+        const sessionMetadata = listStoredSessions(workspaceRootPath)
 
-      for (const meta of allSessionMetadata) {
-        // Find the workspace for this session
-        const workspace = workspaces.find(w => w.id === meta.workspaceId)
-        if (!workspace) {
-          console.warn(`[SessionManager] Skipping session ${meta.id}: workspace ${meta.workspaceId} not found`)
-          continue
+        for (const meta of sessionMetadata) {
+          // Load full session data
+          const storedSession = loadStoredSession(workspaceRootPath, meta.id)
+          if (!storedSession) {
+            sessionLog.warn(`Skipping session ${meta.id}: could not load from disk`)
+            continue
+          }
+
+          // Convert stored messages to runtime messages
+          const messages = (storedSession.messages || []).map(storedToMessage)
+
+          // Create managed session (agent is lazy-loaded on first message)
+          const managed: ManagedSession = {
+            id: storedSession.id,
+            workspace,
+            agent: null,  // Lazy-load agent when needed
+            messages,
+            isProcessing: false,
+            lastMessageAt: storedSession.lastUsedAt,
+            streamingText: '',
+            pendingTools: new Map(),
+            parentToolStack: [],
+            toolToParentMap: new Map(),
+            pendingTextParent: undefined,
+            name: storedSession.name,
+            agentId: storedSession.agentSlug,
+            agentName: storedSession.agentName,
+            isFlagged: storedSession.isFlagged ?? false,
+            permissionMode: storedSession.permissionMode,
+            sdkSessionId: storedSession.sdkSessionId,
+            tokenUsage: storedSession.tokenUsage,
+            todoState: storedSession.todoState,
+            lastReadMessageId: storedSession.lastReadMessageId,
+            enabledSourceSlugs: storedSession.enabledSourceSlugs,
+            workingDirectory: storedSession.workingDirectory ?? getDefaultWorkingDirectory(),
+            messageQueue: [],
+          }
+
+          this.sessions.set(storedSession.id, managed)
+          totalSessions++
         }
-
-        // Load full session data
-        const storedSession = loadStoredSession(meta.id)
-        if (!storedSession) {
-          console.warn(`[SessionManager] Skipping session ${meta.id}: could not load from disk`)
-          continue
-        }
-
-        // Convert stored messages to runtime messages
-        const messages = (storedSession.messages || []).map(storedToMessage)
-
-        // Create managed session (agent is lazy-loaded on first message)
-        const managed: ManagedSession = {
-          id: storedSession.id,
-          workspace,
-          agent: null,  // Lazy-load agent when needed
-          messages,
-          isProcessing: false,
-          lastMessageAt: storedSession.lastUsedAt,
-          streamingText: '',
-          pendingTools: new Map(),
-          name: storedSession.name,
-          agentId: storedSession.agentId,
-          agentName: storedSession.agentName,
-          isArchived: storedSession.isArchived ?? false,
-          sdkSessionId: storedSession.sdkSessionId,
-          tokenUsage: storedSession.tokenUsage,
-        }
-
-        this.sessions.set(storedSession.id, managed)
-        console.log(`[SessionManager] Loaded session ${storedSession.id} with ${messages.length} messages`)
       }
+
+      sessionLog.info(`Loaded ${totalSessions} sessions from disk`)
     } catch (error) {
-      console.error('[SessionManager] Failed to load sessions from disk:', error)
+      sessionLog.error('Failed to load sessions from disk:', error)
     }
   }
 
-  // Persist a session to disk
+  /**
+   * Build setup context for sources that need authentication.
+   * This is prepended to the first user message to prompt the agent to help with source setup.
+   */
+  private buildSetupContext(sources: LoadedSource[]): string {
+    const sourceList = sources.map(s => {
+      const authType = s.config.mcp?.authType || s.config.api?.authType || 'unknown'
+      return `- ${s.config.name} (${s.config.type}, ${authType} auth)`
+    }).join('\n')
+
+    return `<setup_required>
+The following sources need authentication before they can be used:
+${sourceList}
+
+Please help me set up authentication for these sources first, then proceed with my request.
+Use oauth_trigger for OAuth sources, credential_prompt for API key/bearer token sources.
+</setup_required>`
+  }
+
+  // Persist a session to disk (async with debouncing)
   private persistSession(managed: ManagedSession): void {
     try {
       // Filter out transient messages (error, status, system) that shouldn't be persisted
@@ -448,16 +778,21 @@ export class SessionManager {
         m.role !== 'error' && m.role !== 'status' && m.role !== 'system'
       )
 
+      const workspaceRootPath = managed.workspace.rootPath
       const storedSession: StoredSession = {
         id: managed.id,
-        workspaceId: managed.workspace.id,
+        workspaceRootPath,
         name: managed.name,
         createdAt: managed.lastMessageAt,  // Approximate, will be overwritten if already exists
         lastUsedAt: Date.now(),
         sdkSessionId: managed.sdkSessionId,
-        agentId: managed.agentId,
+        agentSlug: managed.agentId,  // agentId in ManagedSession is actually the slug
         agentName: managed.agentName,
-        isArchived: managed.isArchived,
+        isFlagged: managed.isFlagged,
+        permissionMode: managed.permissionMode,
+        todoState: managed.todoState,
+        enabledSourceSlugs: managed.enabledSourceSlugs,
+        workingDirectory: managed.workingDirectory,
         messages: persistableMessages.map(messageToStored),
         tokenUsage: managed.tokenUsage ?? {
           inputTokens: 0,
@@ -468,11 +803,21 @@ export class SessionManager {
         },
       }
 
-      saveStoredSession(storedSession)
-      console.log(`[SessionManager] Persisted session ${managed.id}`)
+      // Queue for async persistence with debouncing
+      sessionPersistenceQueue.enqueue(storedSession)
     } catch (error) {
-      console.error(`[SessionManager] Failed to persist session ${managed.id}:`, error)
+      sessionLog.error(`Failed to queue session ${managed.id} for persistence:`, error)
     }
+  }
+
+  // Flush a specific session immediately (call on session close/switch)
+  async flushSession(sessionId: string): Promise<void> {
+    await sessionPersistenceQueue.flush(sessionId)
+  }
+
+  // Flush all pending sessions (call on app quit)
+  async flushAllSessions(): Promise<void> {
+    await sessionPersistenceQueue.flushAll()
   }
 
   getWorkspaces(): Workspace[] {
@@ -491,9 +836,23 @@ export class SessionManager {
         isProcessing: m.isProcessing,
         agentId: m.agentId,
         agentName: m.agentName,
-        isArchived: m.isArchived
+        isFlagged: m.isFlagged,
+        permissionMode: m.permissionMode,
+        todoState: m.todoState,
+        lastReadMessageId: m.lastReadMessageId,
+        workingDirectory: m.workingDirectory,
+        enabledSourceSlugs: m.enabledSourceSlugs,
       }))
       .sort((a, b) => b.lastMessageAt - a.lastMessageAt)
+  }
+
+  /**
+   * Get the filesystem path to a session's folder
+   */
+  getSessionPath(sessionId: string): string | null {
+    const managed = this.sessions.get(sessionId)
+    if (!managed) return null
+    return getSessionStoragePath(managed.workspace.rootPath, sessionId)
   }
 
   async createSession(workspaceId: string, agentId?: string, agentName?: string): Promise<Session> {
@@ -502,8 +861,32 @@ export class SessionManager {
       throw new Error(`Workspace ${workspaceId} not found`)
     }
 
+    // Get new session defaults from settings
+    const defaultPermissionMode = getDefaultPermissionMode()
+    const defaultWorkingDir = getDefaultWorkingDirectory()
+    const workspaceRootPath = workspace.rootPath
+
+    // Check if agent's sources need authentication
+    let sourcesNeedingAuth: LoadedSource[] = []
+    if (agentId) {
+      const folderAgentManager = this.getFolderAgentManager(workspaceRootPath)
+      const loadedAgent = folderAgentManager.getAgentBySlug(agentId)
+      if (loadedAgent) {
+        sourcesNeedingAuth = getSourcesNeedingAuth(loadedAgent.sources)
+        if (sourcesNeedingAuth.length > 0) {
+          sessionLog.info(`Agent '${agentId}' has ${sourcesNeedingAuth.length} source(s) needing auth:`,
+            sourcesNeedingAuth.map(s => s.config.slug).join(', '))
+        }
+      }
+    }
+
     // Use storage layer to create and persist the session
-    const storedSession = createStoredSession(workspaceId)
+    const storedSession = createStoredSession(workspaceRootPath, {
+      agentSlug: agentId,
+      agentName,
+      permissionMode: defaultPermissionMode,
+      workingDirectory: defaultWorkingDir,
+    })
 
     const managed: ManagedSession = {
       id: storedSession.id,
@@ -514,15 +897,24 @@ export class SessionManager {
       lastMessageAt: storedSession.lastUsedAt,
       streamingText: '',
       pendingTools: new Map(),
+      parentToolStack: [],
+      toolToParentMap: new Map(),
+      pendingTextParent: undefined,
       agentId,
       agentName,
-      isArchived: false
+      isFlagged: false,
+      permissionMode: defaultPermissionMode,
+      workingDirectory: defaultWorkingDir,
+      // Auto-setup tracking
+      sourcesNeedingAuth: sourcesNeedingAuth.length > 0 ? sourcesNeedingAuth : undefined,
+      autoSetupTriggered: false,
+      messageQueue: [],
     }
 
     this.sessions.set(storedSession.id, managed)
 
-    // Persist with agent info if provided
-    if (agentId || agentName) {
+    // Persist with agent info or if non-default permission mode is set
+    if (agentId || agentName || defaultPermissionMode !== 'ask') {
       this.persistSession(managed)
     }
 
@@ -535,13 +927,16 @@ export class SessionManager {
       isProcessing: false,
       agentId,
       agentName,
-      isArchived: false
+      isFlagged: false,
+      permissionMode: defaultPermissionMode,
+      todoState: undefined,  // User-controlled, defaults to undefined (treated as 'todo')
+      workingDirectory: defaultWorkingDir,
     }
   }
 
   /**
    * Get or create agent for a session (lazy loading)
-   * If session has an agentId, loads and applies the agent definition
+   * NOTE: Agent definition is applied in sendMessage() via AgentStateManager
    */
   private async getOrCreateAgent(managed: ManagedSession): Promise<CraftAgent> {
     if (!managed.agent) {
@@ -549,20 +944,28 @@ export class SessionManager {
       managed.agent = new CraftAgent({
         workspace: managed.workspace,
         model: config?.model,
-        // Pass session object for conversation resumption (SDK uses sdkSessionId to resume)
-        session: managed.sdkSessionId ? {
+        isHeadless: !AGENT_FLAGS.defaultModesEnabled,
+        // Always pass session object - id is required for plan mode callbacks
+        // sdkSessionId is optional and used for conversation resumption
+        session: {
           id: managed.id,
-          workspaceId: managed.workspace.id,
+          workspaceRootPath: managed.workspace.rootPath,
           sdkSessionId: managed.sdkSessionId,
           createdAt: managed.lastMessageAt,
           lastUsedAt: managed.lastMessageAt,
+          workingDirectory: managed.workingDirectory,
+        },
+        // Debug mode - enables log file path injection into system prompt
+        debugMode: isDebugMode ? {
+          enabled: true,
+          logFilePath: getLogFilePath(),
         } : undefined,
       })
-      console.log(`[SessionManager] Created agent for session ${managed.id}${managed.sdkSessionId ? ' (resuming)' : ''}`)
+      sessionLog.info(`Created agent for session ${managed.id}${managed.sdkSessionId ? ' (resuming)' : ''}`)
 
       // Set up permission handler to forward requests to renderer
       managed.agent.onPermissionRequest = (request) => {
-        console.log(`[SessionManager] Permission request for session ${managed.id}:`, request.command)
+        sessionLog.info(`Permission request for session ${managed.id}:`, request.command)
         this.sendEvent({
           type: 'permission_request',
           sessionId: managed.id,
@@ -570,52 +973,260 @@ export class SessionManager {
             ...request,
             sessionId: managed.id,
           }
+        }, managed.workspace.id)
+      }
+
+      // Set up credential request handler to forward requests to renderer and await response
+      managed.agent.onCredentialRequest = (request) => {
+        sessionLog.info(`Credential request for session ${managed.id}:`, request.sourceSlug)
+        return new Promise<import('../shared/types').CredentialResponse>((resolve) => {
+          // Store the resolver to be called when renderer responds
+          this.pendingCredentialResolvers.set(request.requestId, resolve)
+
+          // Send event to renderer to show credential input UI
+          this.sendEvent({
+            type: 'credential_request',
+            sessionId: managed.id,
+            request: {
+              ...request,
+              sessionId: managed.id,
+            }
+          }, managed.workspace.id)
         })
       }
 
-      // If session has an agent, load and apply the definition
-      if (managed.agentId) {
-        const definition = await this.loadAgentDefinition(managed.agentId, managed.workspace)
-        if (definition) {
-          // Get the agent manager to build server configs
-          const manager = await this.getAgentManager(managed.workspace)
-          if (manager) {
-            try {
-              // Set the active agent so credential lookups work
-              manager.setActiveAgentId(managed.agentId)
+      // Set up mode change handlers
+      managed.agent.onPermissionModeChange = (mode) => {
+        sessionLog.info(`Permission mode changed for session ${managed.id}:`, mode)
+        managed.permissionMode = mode
+        this.sendEvent({
+          type: 'permission_mode_changed',
+          sessionId: managed.id,
+          permissionMode: managed.permissionMode,
+        }, managed.workspace.id)
+      }
 
-              // Build MCP server configs with auth
-              const mcpServers = await manager.buildMcpServerConfig(definition)
-              // Build API servers (in-process MCP servers for REST APIs)
-              const apiServers = await manager.buildApiServers(definition)
+      // Wire up onPlanSubmitted to add plan message to conversation
+      managed.agent.onPlanSubmitted = async (planPath) => {
+        sessionLog.info(`Plan submitted for session ${managed.id}:`, planPath)
+        try {
+          // Read the plan file content
+          const planContent = await readFile(planPath, 'utf-8')
 
-              // Apply definition to the agent
-              managed.agent.setActiveAgentDefinition(definition, mcpServers, apiServers)
-              console.log(`[SessionManager] Applied agent definition "${definition.name}" to session ${managed.id}`)
-            } catch (error) {
-              console.error(`[SessionManager] Failed to build agent configs for ${managed.agentId}:`, error)
-              // Continue without agent configs - will use base agent
-            }
+          // Create a plan message
+          const planMessage = {
+            id: `plan-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            role: 'plan' as const,
+            content: planContent,
+            timestamp: Date.now(),
+            planPath,
           }
+
+          // Add to session messages
+          managed.messages.push(planMessage)
+
+          // Send event to renderer
+          this.sendEvent({
+            type: 'plan_submitted',
+            sessionId: managed.id,
+            message: planMessage,
+          }, managed.workspace.id)
+
+          // Interrupt execution - plan presentation is a stopping point
+          // The user needs to review and respond before continuing
+          if (managed.isProcessing && managed.agent) {
+            sessionLog.info(`Interrupting after plan submission for session ${managed.id}`)
+            managed.agent.interrupt()
+            managed.isProcessing = false
+            managed.abortController = undefined
+
+            // Clear parent tool tracking (stale entries would corrupt future tracking)
+            managed.parentToolStack = []
+            managed.toolToParentMap.clear()
+            managed.pendingTextParent = undefined
+
+            // Send complete event so renderer knows processing stopped
+            this.sendEvent({ type: 'complete', sessionId: managed.id }, managed.workspace.id)
+
+            // Persist session state
+            this.persistSession(managed)
+          }
+        } catch (error) {
+          sessionLog.error(`Failed to read plan file:`, error)
         }
+      }
+
+      // Wire up onWorkingDirectoryChange to sync cwd changes (e.g., from Bash cd)
+      managed.agent.onWorkingDirectoryChange = (path) => {
+        sessionLog.info(`Working directory changed for session ${managed.id}:`, path)
+        managed.workingDirectory = path
+        this.persistSession(managed)
+        this.sendEvent({
+          type: 'working_directory_changed',
+          sessionId: managed.id,
+          workingDirectory: path
+        }, managed.workspace.id)
+      }
+
+      // NOTE: Source and agent reloading is now handled by ConfigWatcher callbacks
+      // which detect filesystem changes and update all affected sessions.
+      // See setupConfigWatcher() for the full reload logic.
+
+      // NOTE: Agent definition is now applied in sendMessage() via AgentStateManager.activate()
+      // This ensures proper state machine flow: extraction → auth checks → activation
+
+      // Apply session-scoped permission mode to the newly created agent
+      // This ensures the UI toggle state is reflected in the agent before first message
+      if (managed.permissionMode) {
+        setPermissionMode(managed.id, managed.permissionMode)
+        sessionLog.info(`Applied permission mode '${managed.permissionMode}' to agent for session ${managed.id}`)
       }
     }
     return managed.agent
   }
 
-  async archiveSession(sessionId: string): Promise<void> {
+  async flagSession(sessionId: string): Promise<void> {
     const managed = this.sessions.get(sessionId)
     if (managed) {
-      managed.isArchived = true
-      archiveStoredSession(sessionId)
+      managed.isFlagged = true
+      const workspaceRootPath = managed.workspace.rootPath
+      flagStoredSession(workspaceRootPath, sessionId)
     }
   }
 
-  async unarchiveSession(sessionId: string): Promise<void> {
+  async unflagSession(sessionId: string): Promise<void> {
     const managed = this.sessions.get(sessionId)
     if (managed) {
-      managed.isArchived = false
-      unarchiveStoredSession(sessionId)
+      managed.isFlagged = false
+      const workspaceRootPath = managed.workspace.rootPath
+      unflagStoredSession(workspaceRootPath, sessionId)
+    }
+  }
+
+  async setTodoState(sessionId: string, todoState: TodoState): Promise<void> {
+    const managed = this.sessions.get(sessionId)
+    if (managed) {
+      managed.todoState = todoState
+      const workspaceRootPath = managed.workspace.rootPath
+      setStoredSessionTodoState(workspaceRootPath, sessionId, todoState)
+    }
+  }
+
+  // ============================================
+  // Session Sources
+  // ============================================
+
+  /**
+   * Update session's enabled sources
+   * Builds MCP server configs from sources and applies to agent
+   */
+  async setSessionSources(sessionId: string, sourceSlugs: string[]): Promise<void> {
+    const managed = this.sessions.get(sessionId)
+    if (!managed) {
+      throw new Error(`Session not found: ${sessionId}`)
+    }
+
+    const workspaceRootPath = managed.workspace.rootPath
+    sessionLog.info(`Setting sources for session ${sessionId}:`, sourceSlugs)
+
+    // Store the selection
+    managed.enabledSourceSlugs = sourceSlugs
+
+    // Build server configs from selected sources
+    const sources = getSourcesBySlugs(workspaceRootPath, sourceSlugs)
+    const { mcpServers, apiServers, errors } = await buildServersFromSources(sources)
+
+    if (errors.length > 0) {
+      sessionLog.warn(`Source build errors:`, errors)
+    }
+
+    // Store the built configs
+    managed.sourceMcpServers = mcpServers
+    managed.sourceApiServers = apiServers
+
+    // IMMEDIATELY update the agent's source servers if agent exists
+    // This ensures tool availability is updated mid-conversation
+    if (managed.agent) {
+      // Set all sources for context (agent sees full list with descriptions)
+      const allSources = loadWorkspaceSources(workspaceRootPath)
+      managed.agent.setAllSources(allSources)
+      // Set active source servers (tools are only available from these)
+      // Pass intended slugs so agent shows sources as active even if build failed
+      const intendedSlugs = sources.filter(s => s.config.enabled && s.config.isAuthenticated).map(s => s.config.slug)
+      managed.agent.setSourceServers(mcpServers, apiServers, intendedSlugs)
+      sessionLog.info(`Applied ${Object.keys(mcpServers).length} MCP + ${Object.keys(apiServers).length} API sources to active agent (${allSources.length} total)`)
+    }
+
+    // Persist the session with updated sources
+    this.persistSession(managed)
+
+    // Notify renderer of the source change
+    this.sendEvent({
+      type: 'sources_changed',
+      sessionId,
+      enabledSourceSlugs: sourceSlugs,
+    }, managed.workspace.id)
+
+    sessionLog.info(`Session ${sessionId} sources updated: ${sourceSlugs.length} sources`)
+  }
+
+  /**
+   * Get the enabled source slugs for a session
+   */
+  getSessionSources(sessionId: string): string[] {
+    const managed = this.sessions.get(sessionId)
+    return managed?.enabledSourceSlugs ?? []
+  }
+
+  /**
+   * Get the last final assistant message ID from a list of messages
+   * A "final" message is one where:
+   * - role === 'assistant' AND
+   * - isIntermediate !== true (not commentary between tool calls)
+   * Returns undefined if no final assistant message exists
+   */
+  private getLastFinalAssistantMessageId(messages: Message[]): string | undefined {
+    // Iterate backwards to find the most recent final assistant message
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i]
+      if (msg.role === 'assistant' && !msg.isIntermediate) {
+        return msg.id
+      }
+    }
+    return undefined
+  }
+
+  /**
+   * Mark a session as read by setting lastReadMessageId to the last final assistant message
+   * Called when user navigates to a session
+   */
+  markSessionRead(sessionId: string): void {
+    const managed = this.sessions.get(sessionId)
+    if (managed && managed.messages.length > 0) {
+      const lastFinalId = this.getLastFinalAssistantMessageId(managed.messages)
+      if (!lastFinalId) return  // No final assistant message yet
+
+      // Only update if actually changed (avoid unnecessary persistence)
+      if (managed.lastReadMessageId !== lastFinalId) {
+        managed.lastReadMessageId = lastFinalId
+        // Persist to disk
+        const workspaceRootPath = managed.workspace.rootPath
+        updateSessionMetadata(workspaceRootPath, sessionId, { lastReadMessageId: lastFinalId })
+      }
+    }
+  }
+
+  /**
+   * Mark a session as unread by clearing the lastReadMessageId
+   * Called when user manually marks a session as unread
+   */
+  markSessionUnread(sessionId: string): void {
+    const managed = this.sessions.get(sessionId)
+    if (managed) {
+      managed.lastReadMessageId = undefined
+      // Persist to disk (undefined will clear the field)
+      const workspaceRootPath = managed.workspace.rootPath
+      updateSessionMetadata(workspaceRootPath, sessionId, { lastReadMessageId: undefined })
     }
   }
 
@@ -625,89 +1236,316 @@ export class SessionManager {
       managed.name = name
       this.persistSession(managed)
       // Notify renderer of the name change
-      this.sendEvent({ type: 'title_generated', sessionId, title: name })
+      this.sendEvent({ type: 'title_generated', sessionId, title: name }, managed.workspace.id)
     }
+  }
+
+  /**
+   * Update the working directory for a session
+   */
+  updateWorkingDirectory(sessionId: string, path: string): void {
+    const managed = this.sessions.get(sessionId)
+    if (managed) {
+      managed.workingDirectory = path
+      // Also update the agent's session config if agent exists
+      if (managed.agent) {
+        managed.agent.updateWorkingDirectory(path)
+      }
+      this.persistSession(managed)
+      // Notify renderer of the working directory change
+      this.sendEvent({ type: 'working_directory_changed', sessionId, workingDirectory: path }, managed.workspace.id)
+    }
+  }
+
+  /**
+   * Update the content of a specific message in a session
+   * Used by preview window to save edited content back to the original message
+   */
+  updateMessageContent(sessionId: string, messageId: string, content: string): void {
+    const managed = this.sessions.get(sessionId)
+    if (!managed) {
+      sessionLog.warn(`Cannot update message: session ${sessionId} not found`)
+      return
+    }
+
+    const message = managed.messages.find(m => m.id === messageId)
+    if (!message) {
+      sessionLog.warn(`Cannot update message: message ${messageId} not found in session ${sessionId}`)
+      return
+    }
+
+    // Update the message content
+    message.content = content
+    // Persist the updated session
+    this.persistSession(managed)
+    sessionLog.info(`Updated message ${messageId} content in session ${sessionId}`)
   }
 
   async deleteSession(sessionId: string): Promise<void> {
     const managed = this.sessions.get(sessionId)
-    if (managed) {
-      // If processing is in progress, abort and wait for cleanup
-      if (managed.isProcessing && managed.abortController) {
-        managed.abortController.abort()
-        // Brief wait for abort to propagate and in-flight operations to settle
-        await new Promise(resolve => setTimeout(resolve, 100))
-      }
-      this.sessions.delete(sessionId)
+    if (!managed) {
+      sessionLog.warn(`Cannot delete session: ${sessionId} not found`)
+      return
     }
 
-    // Clean up AgentStateManager to prevent memory leaks
-    const stateManager = this.agentStateManagers.get(sessionId)
-    if (stateManager) {
-      stateManager.removeAllListeners()
-      this.agentStateManagers.delete(sessionId)
+    // Get workspace slug before deleting
+    const workspaceRootPath = managed.workspace.rootPath
+
+    // If processing is in progress, abort and wait for cleanup
+    if (managed.isProcessing && managed.abortController) {
+      managed.abortController.abort()
+      // Brief wait for abort to propagate and in-flight operations to settle
+      await new Promise(resolve => setTimeout(resolve, 100))
     }
+
+    // Clean up delta flush timers to prevent orphaned timers
+    const timer = this.deltaFlushTimers.get(sessionId)
+    if (timer) {
+      clearTimeout(timer)
+      this.deltaFlushTimers.delete(sessionId)
+    }
+    this.pendingDeltas.delete(sessionId)
+
+    // Cancel any pending persistence write (session is being deleted, no need to save)
+    sessionPersistenceQueue.cancel(sessionId)
+
+    // Clean up session-scoped tool callbacks to prevent memory accumulation
+    unregisterSessionScopedToolCallbacks(sessionId)
+
+    this.sessions.delete(sessionId)
+
+    // Note: We don't clean up AgentStateManager here because it's agent-scoped,
+    // not session-scoped. It will be reused by other sessions with the same agent.
 
     // Delete from disk too
-    deleteStoredSession(sessionId)
+    deleteStoredSession(workspaceRootPath, sessionId)
 
-    // Clean up attachments directory
-    try {
-      const attachmentsDir = getSessionAttachmentsPath(sessionId)
-      await rm(attachmentsDir, { recursive: true, force: true })
-      console.log(`[SessionManager] Cleaned up attachments for session ${sessionId}`)
-    } catch (error) {
-      // Ignore errors - directory might not exist
-      console.log(`[SessionManager] No attachments to clean up for session ${sessionId}`)
-    }
+    // Clean up attachments directory (handled by deleteStoredSession for workspace-scoped storage)
+    sessionLog.info(`Deleted session ${sessionId}`)
   }
 
-  async sendMessage(sessionId: string, message: string, attachments?: FileAttachment[], storedAttachments?: StoredAttachment[]): Promise<void> {
+  async sendMessage(sessionId: string, message: string, attachments?: FileAttachment[], storedAttachments?: StoredAttachment[], options?: SendMessageOptions, existingMessageId?: string): Promise<void> {
     const managed = this.sessions.get(sessionId)
     if (!managed) {
       throw new Error(`Session ${sessionId} not found`)
     }
 
+    // If currently processing, interrupt and queue the new message
     if (managed.isProcessing) {
-      throw new Error('Session is already processing')
+      sessionLog.info(`Session ${sessionId} is processing, interrupting and queueing message`)
+
+      // Interrupt current processing
+      managed.agent?.interrupt()
+      managed.abortController?.abort()
+
+      // Create user message for queued state (so UI can show it)
+      const queuedMessage: Message = {
+        id: generateMessageId(),
+        role: 'user',
+        content: message,
+        timestamp: Date.now(),
+        attachments: storedAttachments,
+      }
+
+      // Add to messages immediately so it's persisted
+      managed.messages.push(queuedMessage)
+
+      // Queue the message info (with the generated ID for later matching)
+      managed.messageQueue.push({ message, attachments, storedAttachments, options, messageId: queuedMessage.id })
+
+      // Emit user_message event so UI can show queued state
+      this.sendEvent({
+        type: 'user_message',
+        sessionId,
+        message: queuedMessage,
+        status: 'queued'
+      }, managed.workspace.id)
+
+      return
     }
 
     // Add user message with stored attachments for persistence
-    const userMessage: Message = {
-      id: generateMessageId(),
-      role: 'user',
-      content: message,
-      timestamp: Date.now(),
-      attachments: storedAttachments, // Include for persistence (has thumbnailBase64)
+    // Skip if existingMessageId is provided (message was already created when queued)
+    let userMessage: Message
+    if (existingMessageId) {
+      // Find existing message (already added when queued)
+      userMessage = managed.messages.find(m => m.id === existingMessageId)!
+      if (!userMessage) {
+        throw new Error(`Existing message ${existingMessageId} not found`)
+      }
+    } else {
+      // Create new message
+      userMessage = {
+        id: generateMessageId(),
+        role: 'user',
+        content: message,
+        timestamp: Date.now(),
+        attachments: storedAttachments, // Include for persistence (has thumbnailBase64)
+      }
+      managed.messages.push(userMessage)
+
+      // Emit user_message event so UI can confirm the optimistic message
+      this.sendEvent({
+        type: 'user_message',
+        sessionId,
+        message: userMessage,
+        status: 'accepted'
+      }, managed.workspace.id)
     }
-    managed.messages.push(userMessage)
+
     managed.lastMessageAt = Date.now()
     managed.isProcessing = true
     managed.streamingText = ''
     managed.abortController = new AbortController()
 
-    // Get or create the agent (lazy loading, applies agent definition if present)
+    // Capture the abort controller reference to detect if a new request supersedes this one
+    // This prevents the finally block from clobbering state when a follow-up message arrives
+    const myAbortController = managed.abortController
+
+    // Get or create the agent (lazy loading)
     const agent = await this.getOrCreateAgent(managed)
 
+    // If session has an agent that hasn't been activated yet, activate via AgentStateManager
+    // This is the source of truth for agent state - ensures proper extraction, auth handling, etc.
+    if (managed.agentId && !managed.agentActivated) {
+      sessionLog.info(`Activating agent ${managed.agentId} for session ${sessionId}`)
+
+      // Emit extracting status so UI knows we're loading
+      this.sendEvent({
+        type: 'agent_status',
+        sessionId,
+        status: { status: 'extracting', agentId: managed.agentId, agentName: managed.agentName || managed.agentId, message: 'Loading agent...' }
+      }, managed.workspace.id)
+
+      // Get or create agent-scoped state manager
+      const stateManager = await this.getOrCreateAgentStateManager(managed.workspace.id, managed.agentId)
+      if (stateManager) {
+        // Check current status - may already be activated from setup wizard
+        let status = stateManager.getStatus()
+
+        // Only activate if not already activated (could be ready/active from setup wizard)
+        if (status.status === 'idle') {
+          // Activate via state machine (handles registry population, extraction, auth checks)
+          status = await stateManager.activate(managed.agentId)
+        }
+        sessionLog.info(`Agent activation result: ${status.status}`)
+
+        // Emit final status
+        this.sendEvent({ type: 'agent_status', sessionId, status }, managed.workspace.id)
+
+        if (status.status === 'error') {
+          // Activation failed - emit error and abort message sending
+          this.sendEvent({ type: 'error', sessionId, error: `Agent activation failed: ${status.error}` }, managed.workspace.id)
+          managed.isProcessing = false
+          managed.abortController = undefined
+          this.sendEvent({ type: 'complete', sessionId }, managed.workspace.id)
+          return
+        }
+
+        // If needs auth, abort and let UI handle it
+        if (status.status === 'needs_mcp_auth' || status.status === 'needs_api_auth') {
+          const authType = status.status === 'needs_mcp_auth' ? 'MCP server' : 'API'
+          this.sendEvent({ type: 'error', sessionId, error: `Agent requires ${authType} authentication. Please configure credentials first.` }, managed.workspace.id)
+          managed.isProcessing = false
+          managed.abortController = undefined
+          this.sendEvent({ type: 'complete', sessionId }, managed.workspace.id)
+          return
+        }
+
+        // Agent activated successfully - apply definition to CraftAgent
+        if (status.status === 'active' || status.status === 'ready') {
+          const definition = status.definition
+          if (definition) {
+            try {
+              const mcpServers = await stateManager.buildMcpServerConfig()
+              const apiServers = await stateManager.buildApiServers()
+              // Pass sources needing auth to inject setup instructions into the agent
+              agent.setActiveAgentDefinition(definition, mcpServers, apiServers, managed.sourcesNeedingAuth)
+              managed.agentActivated = true
+              sessionLog.info(`Applied agent definition "${definition.name}" to session ${sessionId}`)
+            } catch (error) {
+              sessionLog.error(`Failed to build agent configs for ${managed.agentId}:`, error)
+              this.sendEvent({ type: 'error', sessionId, error: `Failed to configure agent: ${error instanceof Error ? error.message : String(error)}` }, managed.workspace.id)
+            }
+          }
+        }
+      } else {
+        sessionLog.warn(`Could not create AgentStateManager for session ${sessionId}`)
+      }
+    }
+
+    // Always set all sources for context (even if none are enabled)
+    const workspaceRootPath = managed.workspace.rootPath
+    const allSources = loadWorkspaceSources(workspaceRootPath)
+    agent.setAllSources(allSources)
+
+    // Apply source servers if any are enabled
+    if (managed.enabledSourceSlugs?.length) {
+      // Build server configs if not already built
+      const sources = getSourcesBySlugs(workspaceRootPath, managed.enabledSourceSlugs)
+      if (!managed.sourceMcpServers) {
+        const { mcpServers, apiServers, errors } = await buildServersFromSources(sources)
+        if (errors.length > 0) {
+          sessionLog.warn(`Source build errors:`, errors)
+        }
+        managed.sourceMcpServers = mcpServers
+        managed.sourceApiServers = apiServers
+      }
+
+      // Apply source servers to the agent
+      const mcpCount = Object.keys(managed.sourceMcpServers || {}).length
+      const apiCount = Object.keys(managed.sourceApiServers || {}).length
+      if (mcpCount > 0 || apiCount > 0 || managed.enabledSourceSlugs.length > 0) {
+        // Pass intended slugs so agent shows sources as active even if build failed
+        const intendedSlugs = sources.filter(s => s.config.enabled && s.config.isAuthenticated).map(s => s.config.slug)
+        agent.setSourceServers(managed.sourceMcpServers || {}, managed.sourceApiServers || {}, intendedSlugs)
+        sessionLog.info(`Applied ${mcpCount} MCP + ${apiCount} API sources to session ${sessionId} (${allSources.length} total)`)
+      }
+    }
+
+    // Auto-setup: prepend setup context on first message if sources need auth
+    if (!managed.autoSetupTriggered && managed.sourcesNeedingAuth?.length) {
+      managed.autoSetupTriggered = true
+      const setupContext = this.buildSetupContext(managed.sourcesNeedingAuth)
+      message = setupContext + '\n\n' + message
+      sessionLog.info(`Prepended setup context for ${managed.sourcesNeedingAuth.length} source(s) needing auth`)
+    }
+
     try {
-      console.log('[SessionManager] Starting chat for session:', sessionId)
-      console.log('[SessionManager] Workspace:', JSON.stringify(managed.workspace, null, 2))
-      console.log('[SessionManager] Message:', message)
-      console.log('[SessionManager] Agent model:', agent.getModel())
-      console.log('[SessionManager] process.cwd():', process.cwd())
+      sessionLog.info('Starting chat for session:', sessionId)
+      sessionLog.info('Workspace:', JSON.stringify(managed.workspace, null, 2))
+      sessionLog.info('Message:', message)
+      sessionLog.info('Agent model:', agent.getModel())
+      sessionLog.info('process.cwd():', process.cwd())
+
+      // Set ultrathink mode if enabled (single-shot - resets after query)
+      if (options?.ultrathinkEnabled) {
+        sessionLog.info('Ultrathink mode ENABLED')
+        agent.setUltrathinkMode(true)
+      }
 
       // Process the message through the agent
-      console.log('[SessionManager] Calling agent.chat()...')
+      sessionLog.info('Calling agent.chat()...')
       if (attachments?.length) {
-        console.log('[SessionManager] Attachments:', attachments.length)
+        sessionLog.info('Attachments:', attachments.length)
       }
       const chatIterator = agent.chat(message, attachments)
-      console.log('[SessionManager] Got chat iterator, starting iteration...')
+      sessionLog.info('Got chat iterator, starting iteration...')
 
       for await (const event of chatIterator) {
-        console.log('[SessionManager] Got event:', event.type)
-        if (managed.abortController?.signal.aborted) {
-          console.log('[SessionManager] Aborted')
+        // Log events (skip noisy text_delta)
+        if (event.type !== 'text_delta') {
+          if (event.type === 'tool_start') {
+            sessionLog.info(`tool_start: ${event.toolName} (${event.toolUseId})`)
+          } else if (event.type === 'tool_result') {
+            sessionLog.info(`tool_result: ${event.toolUseId} isError=${event.isError}`)
+          } else {
+            sessionLog.info('Got event:', event.type)
+          }
+        }
+        // Check if cancelled - break immediately (interrupted event already sent by cancelProcessing)
+        if (managed.abortController?.signal.aborted || !managed.isProcessing) {
+          sessionLog.info('Aborted, breaking out of event loop')
           break
         }
         this.processEvent(managed, event)
@@ -717,35 +1555,168 @@ export class SessionManager {
           const sdkId = agent.getSessionId()
           if (sdkId) {
             managed.sdkSessionId = sdkId
-            console.log(`[SessionManager] Captured SDK session ID: ${sdkId}`)
+            sessionLog.info(`Captured SDK session ID: ${sdkId}`)
           }
         }
       }
-      console.log('[SessionManager] Chat completed')
+
+      sessionLog.info('Chat completed')
     } catch (error) {
-      console.error('[SessionManager] Error in chat:', error)
-      console.error('[SessionManager] Error message:', error instanceof Error ? error.message : String(error))
-      console.error('[SessionManager] Error stack:', error instanceof Error ? error.stack : 'No stack')
+      sessionLog.error('Error in chat:', error)
+      sessionLog.error('Error message:', error instanceof Error ? error.message : String(error))
+      sessionLog.error('Error stack:', error instanceof Error ? error.stack : 'No stack')
       this.sendEvent({
         type: 'error',
         sessionId,
         error: error instanceof Error ? error.message : 'Unknown error'
-      })
+      }, managed.workspace.id)
     } finally {
-      managed.isProcessing = false
-      managed.abortController = undefined
-      this.sendEvent({ type: 'complete', sessionId })
+      // Only clean up state if WE are still the active request
+      // This prevents race conditions when a follow-up message supersedes this one
+      if (managed.abortController === myAbortController) {
+        managed.isProcessing = false
+        managed.abortController = undefined
+        // Clear parent tool tracking (should be empty after normal completion, but ensures clean state)
+        managed.parentToolStack = []
+        managed.toolToParentMap.clear()
+        managed.pendingTextParent = undefined
 
-      // Persist session to disk after each message exchange
+        // Check if there are queued messages to process
+        if (managed.messageQueue.length > 0) {
+          const next = managed.messageQueue.shift()!
+          sessionLog.info(`Processing queued message for session ${sessionId}`)
+
+          // Emit user_message with 'processing' status so UI can update
+          if (next.messageId) {
+            // Find the message that was already added to managed.messages when queued
+            const existingMessage = managed.messages.find(m => m.id === next.messageId)
+            if (existingMessage) {
+              this.sendEvent({
+                type: 'user_message',
+                sessionId,
+                message: existingMessage,
+                status: 'processing'
+              }, managed.workspace.id)
+            }
+          }
+
+          // Defer to next tick to allow current query cleanup to complete
+          // This prevents race conditions with SDK session resume after interrupt
+          setImmediate(() => {
+            this.sendMessage(sessionId, next.message, next.attachments, next.storedAttachments, next.options, next.messageId)
+              .catch(err => {
+                sessionLog.error('Error processing queued message:', err)
+                this.sendEvent({ type: 'error', sessionId, error: err instanceof Error ? err.message : 'Unknown error' }, managed.workspace.id)
+                this.sendEvent({ type: 'complete', sessionId }, managed.workspace.id)
+              })
+          })
+        } else {
+          // No queued messages - send complete event
+          this.sendEvent({ type: 'complete', sessionId }, managed.workspace.id)
+        }
+      }
+      // Always persist (for aborted messages)
       this.persistSession(managed)
     }
   }
 
-  async cancelProcessing(sessionId: string): Promise<void> {
+  async cancelProcessing(sessionId: string, silent = false): Promise<void> {
     const managed = this.sessions.get(sessionId)
-    if (managed?.abortController) {
+    if (!managed?.isProcessing) {
+      return // Not processing, nothing to cancel
+    }
+
+    sessionLog.info('Cancelling processing for session:', sessionId, silent ? '(silent)' : '')
+
+    // Call agent.interrupt() directly like TUI does - this signals the SDK
+    if (managed.agent) {
+      managed.agent.interrupt()
+    }
+
+    // Also abort the controller as backup
+    if (managed.abortController) {
       managed.abortController.abort()
     }
+
+    // Set state immediately (no polling) - just like TUI's interruptedRef pattern
+    managed.isProcessing = false
+    managed.abortController = undefined
+
+    // Clear parent tool tracking (stale entries would corrupt future parent-child tracking)
+    managed.parentToolStack = []
+    managed.toolToParentMap.clear()
+    managed.pendingTextParent = undefined
+
+    // Only show "Response interrupted" message when user explicitly clicked Stop
+    // Silent mode is used when redirecting (sending new message while processing)
+    if (!silent) {
+      const interruptedMessage: Message = {
+        id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+        role: 'info',
+        content: 'Response interrupted',
+        timestamp: Date.now(),
+      }
+      managed.messages.push(interruptedMessage)
+      this.sendEvent({ type: 'interrupted', sessionId, message: interruptedMessage }, managed.workspace.id)
+    } else {
+      // Still send interrupted event but without the message (for UI state update)
+      this.sendEvent({ type: 'interrupted', sessionId }, managed.workspace.id)
+    }
+
+    // Persist session
+    this.persistSession(managed)
+  }
+
+  async killShell(sessionId: string, shellId: string): Promise<{ success: boolean; error?: string }> {
+    const managed = this.sessions.get(sessionId)
+    if (!managed) {
+      return { success: false, error: 'Session not found' }
+    }
+
+    sessionLog.info(`Hiding shell ${shellId} for session: ${sessionId}`)
+
+    // Background shells are managed by the Claude Agent SDK. There's no direct API
+    // to terminate them from outside the agent's tool calling loop.
+    //
+    // Rather than sending a visible message to the LLM (which creates poor UX),
+    // we simply acknowledge the request and let the UI remove the task badge.
+    // The shell may continue running in the background until it completes naturally.
+    //
+    // TODO: Consider adding a direct SDK API for shell termination if this becomes
+    // a problem in practice.
+    return { success: true }
+  }
+
+  /**
+   * Get output from a background task or shell
+   *
+   * NOT YET IMPLEMENTED - This is a placeholder.
+   *
+   * Background task output retrieval requires infrastructure that doesn't exist yet:
+   * 1. Storing shell output streams as they come in (tool_result events only have final output)
+   * 2. Associating outputs with task/shell IDs in a queryable store
+   * 3. Handling the BashOutput tool results for ongoing shells
+   *
+   * Current workaround: Users can view task output in the main chat panel where
+   * tool results are displayed inline with the conversation.
+   *
+   * @param taskId - The task or shell ID
+   * @returns Placeholder message explaining the limitation
+   */
+  async getTaskOutput(taskId: string): Promise<string | null> {
+    sessionLog.info(`Getting output for task: ${taskId} (not implemented)`)
+
+    // This functionality requires a dedicated output tracking system.
+    // The SDK manages shells internally but doesn't expose an API for querying
+    // their output history outside of tool_result events.
+    return `Background task output retrieval is not yet implemented.
+
+Task ID: ${taskId}
+
+To view this task's output:
+• Check the main chat panel where tool results are displayed
+• Look for the tool_result message associated with this task
+• For ongoing shells, the agent can use BashOutput to check status`
   }
 
   /**
@@ -755,12 +1726,51 @@ export class SessionManager {
   respondToPermission(sessionId: string, requestId: string, allowed: boolean, alwaysAllow: boolean): boolean {
     const managed = this.sessions.get(sessionId)
     if (managed?.agent) {
-      console.log(`[SessionManager] Permission response for ${requestId}: allowed=${allowed}, alwaysAllow=${alwaysAllow}`)
+      sessionLog.info(`Permission response for ${requestId}: allowed=${allowed}, alwaysAllow=${alwaysAllow}`)
       managed.agent.respondToPermission(requestId, allowed, alwaysAllow)
       return true
     } else {
-      console.warn(`[SessionManager] Cannot respond to permission - no agent for session ${sessionId}`)
+      sessionLog.warn(`Cannot respond to permission - no agent for session ${sessionId}`)
       return false
+    }
+  }
+
+  /**
+   * Respond to a pending credential request
+   * Returns true if the response was delivered, false if no pending request found
+   */
+  respondToCredential(sessionId: string, requestId: string, response: import('../shared/types').CredentialResponse): boolean {
+    const resolver = this.pendingCredentialResolvers.get(requestId)
+    if (resolver) {
+      sessionLog.info(`Credential response for ${requestId}: cancelled=${response.cancelled}`)
+      resolver(response)
+      this.pendingCredentialResolvers.delete(requestId)
+      return true
+    } else {
+      sessionLog.warn(`Cannot respond to credential - no pending request for ${requestId}`)
+      return false
+    }
+  }
+
+  /**
+   * Set the permission mode for a session ('safe', 'ask', 'allow-all')
+   */
+  setSessionPermissionMode(sessionId: string, mode: PermissionMode): void {
+    const managed = this.sessions.get(sessionId)
+    if (managed) {
+      // Update permission mode
+      managed.permissionMode = mode
+
+      // Update the mode state for this specific session via mode manager
+      setPermissionMode(sessionId, mode)
+
+      this.sendEvent({
+        type: 'permission_mode_changed',
+        sessionId: managed.id,
+        permissionMode: mode,
+      }, managed.workspace.id)
+      // Persist to disk
+      this.persistSession(managed)
     }
   }
 
@@ -775,38 +1785,57 @@ export class SessionManager {
         managed.name = title
         this.persistSession(managed)
         // Notify renderer of the generated title
-        this.sendEvent({ type: 'title_generated', sessionId: managed.id, title })
-        console.log(`[SessionManager] Generated title for session ${managed.id}: "${title}"`)
+        this.sendEvent({ type: 'title_generated', sessionId: managed.id, title }, managed.workspace.id)
+        sessionLog.info(`Generated title for session ${managed.id}: "${title}"`)
       }
     } catch (error) {
-      console.error(`[SessionManager] Failed to generate title for session ${managed.id}:`, error)
+      sessionLog.error(`Failed to generate title for session ${managed.id}:`, error)
     }
   }
 
   private processEvent(managed: ManagedSession, event: AgentEvent): void {
     const sessionId = managed.id
+    const workspaceId = managed.workspace.id
 
     switch (event.type) {
       case 'text_delta':
-        // AgentEvent uses `text` not `delta`
+        // Capture parent on FIRST delta of a text block (when streamingText is empty)
+        // This ensures text gets the parent that existed when it started, not when it completed
+        if (managed.streamingText === '') {
+          managed.pendingTextParent = managed.parentToolStack.length > 0
+            ? managed.parentToolStack[managed.parentToolStack.length - 1]
+            : undefined
+        }
         managed.streamingText += event.text
-        this.sendEvent({ type: 'text_delta', sessionId, delta: event.text })
+        // Queue delta for batched sending (performance: reduces IPC from 50+/sec to ~20/sec)
+        this.queueDelta(sessionId, workspaceId, event.text, event.turnId)
         break
 
-      case 'text_complete':
+      case 'text_complete': {
+        // Flush any pending deltas before sending complete (ensures renderer has all content)
+        this.flushDelta(sessionId, workspaceId)
+
         // Check if this is the first assistant message and no name exists yet
         const existingAssistantCount = managed.messages.filter(m => m.role === 'assistant').length
         const shouldGenerateTitle = existingAssistantCount === 0 && !managed.name
+
+        // Use the parent that was active when text STARTED streaming (captured in text_delta)
+        // This prevents text from being nested under tools that started after the text began
+        const textParentToolUseId = event.isIntermediate ? managed.pendingTextParent : undefined
 
         const assistantMessage: Message = {
           id: generateMessageId(),
           role: 'assistant',
           content: event.text,
-          timestamp: Date.now()
+          timestamp: Date.now(),
+          isIntermediate: event.isIntermediate,
+          turnId: event.turnId,
+          parentToolUseId: textParentToolUseId,
         }
         managed.messages.push(assistantMessage)
         managed.streamingText = ''
-        this.sendEvent({ type: 'text_complete', sessionId, text: event.text })
+        managed.pendingTextParent = undefined // Clear for next text block
+        this.sendEvent({ type: 'text_complete', sessionId, text: event.text, isIntermediate: event.isIntermediate, turnId: event.turnId, parentToolUseId: textParentToolUseId }, workspaceId)
 
         // Generate title asynchronously after first assistant response
         if (shouldGenerateTitle) {
@@ -815,72 +1844,244 @@ export class SessionManager {
             this.generateTitle(managed, firstUserMsg.content, event.text)
           }
         }
-        break
 
-      case 'tool_start':
+        // Persist session after complete message to prevent data loss on quit
+        this.persistSession(managed)
+        break
+      }
+
+      case 'tool_start': {
         // Track tool_use_id -> toolName mapping for later use in tool_result
         managed.pendingTools.set(event.toolUseId, event.toolName)
 
-        // Add tool message immediately (will be updated on tool_result)
-        // This ensures tool calls are persisted even if they don't complete
-        const toolStartMessage: Message = {
-          id: generateMessageId(),
-          role: 'tool',
-          content: `Running ${event.toolName}...`,
-          timestamp: Date.now(),
-          toolName: event.toolName,
-          toolUseId: event.toolUseId,
-          toolInput: event.input,
-          toolStatus: 'pending'
+        // Format tool input paths to relative for better readability
+        const formattedToolInput = formatToolInputPaths(event.input)
+
+        // Check if a message with this toolUseId already exists FIRST
+        // SDK sends two events per tool: first from stream_event (empty input),
+        // second from assistant message (complete input)
+        const existingStartMsg = managed.messages.find(m => m.toolUseId === event.toolUseId)
+        const isDuplicateEvent = !!existingStartMsg
+
+        // Track parent-child relationships for nested tool calls
+        // Parent tools spawn child tools (e.g., Task runs Read, Grep, etc.)
+        // Include Task (subagents) and TaskOutput (retrieves task results)
+        const PARENT_TOOLS = ['Task', 'TaskOutput']
+        const isParentTool = PARENT_TOOLS.includes(event.toolName)
+
+        // Use parentToolUseId from the event - CraftAgent computes this correctly
+        // using the SDK's parent_tool_use_id (authoritative for parallel Tasks)
+        // Only fall back to stack heuristic if event doesn't provide parent
+        let parentToolUseId: string | undefined
+        if (isParentTool) {
+          // Parent tools don't have a parent themselves
+          parentToolUseId = undefined
+        } else if (event.parentToolUseId) {
+          // CraftAgent provided the correct parent from SDK - use it
+          parentToolUseId = event.parentToolUseId
+        } else if (managed.parentToolStack.length > 0) {
+          // Fallback: use stack heuristic for edge cases
+          parentToolUseId = managed.parentToolStack[managed.parentToolStack.length - 1]
         }
-        managed.messages.push(toolStartMessage)
 
-        this.sendEvent({
-          type: 'tool_start',
-          sessionId,
-          toolName: event.toolName,
-          toolUseId: event.toolUseId,
-          toolInput: event.input
-        })
+        // If this is a parent tool, push it onto the stack
+        // IMPORTANT: Only push on first event, not duplicate events (SDK sends two tool_start per tool)
+        if (isParentTool && !isDuplicateEvent) {
+          managed.parentToolStack.push(event.toolUseId)
+          sessionLog.info(`PARENT STACK PUSH: ${event.toolName} (${event.toolUseId}), stack=${JSON.stringify(managed.parentToolStack)}`)
+        }
+
+        // Store the parent assignment for this tool (only on first event)
+        // This allows us to look up the correct parent later even with concurrent parent tools
+        if (!isDuplicateEvent && parentToolUseId) {
+          managed.toolToParentMap.set(event.toolUseId, parentToolUseId)
+        }
+
+        // Track if we need to send an event to the renderer
+        // Send on: first occurrence OR when we have new input data to update
+        let shouldSendEvent = !isDuplicateEvent
+
+        if (existingStartMsg) {
+          // Update existing message with complete input (second event has full input)
+          if (formattedToolInput && Object.keys(formattedToolInput).length > 0) {
+            const hadInputBefore = existingStartMsg.toolInput && Object.keys(existingStartMsg.toolInput).length > 0
+            existingStartMsg.toolInput = formattedToolInput
+            // Send update event if we're adding input that wasn't there before
+            if (!hadInputBefore) {
+              shouldSendEvent = true
+            }
+          }
+          // Also set parent if not already set
+          if (parentToolUseId && !existingStartMsg.parentToolUseId) {
+            existingStartMsg.parentToolUseId = parentToolUseId
+          }
+        } else {
+          // Add tool message immediately (will be updated on tool_result)
+          // This ensures tool calls are persisted even if they don't complete
+          const toolStartMessage: Message = {
+            id: generateMessageId(),
+            role: 'tool',
+            content: `Running ${event.toolName}...`,
+            timestamp: Date.now(),
+            toolName: event.toolName,
+            toolUseId: event.toolUseId,
+            toolInput: formattedToolInput,
+            toolStatus: 'pending',
+            toolIntent: event.intent,
+            toolDisplayName: event.displayName,
+            turnId: event.turnId,
+            parentToolUseId,
+          }
+          managed.messages.push(toolStartMessage)
+        }
+
+        // Send event to renderer on first occurrence OR when input data is updated
+        if (shouldSendEvent) {
+          this.sendEvent({
+            type: 'tool_start',
+            sessionId,
+            toolName: event.toolName,
+            toolUseId: event.toolUseId,
+            toolInput: formattedToolInput ?? {},
+            toolIntent: event.intent,
+            toolDisplayName: event.displayName,
+            turnId: event.turnId,
+            parentToolUseId,
+          }, workspaceId)
+        }
         break
+      }
 
-      case 'tool_result':
+      case 'tool_result': {
         // AgentEvent tool_result only has toolUseId, look up the toolName
         const toolName = managed.pendingTools.get(event.toolUseId) || 'unknown'
         managed.pendingTools.delete(event.toolUseId)
 
+        // Parent tool names for defensive cleanup
+        const PARENT_TOOLS = ['Task', 'TaskOutput']
+
+        // Remove this tool from parent stack if it's there (parent tool completing)
+        const stackIndex = managed.parentToolStack.indexOf(event.toolUseId)
+        if (stackIndex !== -1) {
+          managed.parentToolStack.splice(stackIndex, 1)
+          sessionLog.info(`PARENT STACK POP: ${event.toolUseId}, stack=${JSON.stringify(managed.parentToolStack)}`)
+        } else if (PARENT_TOOLS.includes(toolName)) {
+          // Only log/warn for parent tools that SHOULD have been on the stack
+          // Non-parent tools (Read, Grep, Bash, etc.) are never on the stack - that's expected
+          sessionLog.warn(`PARENT STACK UNEXPECTED: ${toolName} (${event.toolUseId}) not found, stack=${JSON.stringify(managed.parentToolStack)}`)
+          // Defensive cleanup: try to find and remove by matching tool name in messages
+          const fallbackIdx = managed.parentToolStack.findIndex(id => {
+            const msg = managed.messages.find(m => m.toolUseId === id)
+            return msg?.toolName === toolName
+          })
+          if (fallbackIdx !== -1) {
+            const removedId = managed.parentToolStack.splice(fallbackIdx, 1)[0]
+            sessionLog.info(`PARENT STACK FALLBACK POP: ${removedId} (matched by toolName=${toolName}), stack=${JSON.stringify(managed.parentToolStack)}`)
+          }
+        }
+        // Non-parent tools: silent (expected behavior - they use toolToParentMap for hierarchy)
+
+        // Get the stored parent mapping before cleaning up (for fallback)
+        const storedParentId = managed.toolToParentMap.get(event.toolUseId)
+
+        // Clean up the tool-to-parent mapping for this tool
+        managed.toolToParentMap.delete(event.toolUseId)
+
+        // Format absolute paths to relative paths for better readability
+        const formattedResult = event.result ? formatPathsToRelative(event.result) : ''
+
         // Update existing tool message (created on tool_start) instead of creating new one
         const existingToolMsg = managed.messages.find(m => m.toolUseId === event.toolUseId)
+        // Track if already completed to avoid sending duplicate events
+        const wasAlreadyComplete = existingToolMsg?.toolStatus === 'completed'
+
+        sessionLog.info(`RESULT MATCH: toolUseId=${event.toolUseId}, found=${!!existingToolMsg}, toolName=${existingToolMsg?.toolName || toolName}, wasComplete=${wasAlreadyComplete}`)
+
         if (existingToolMsg) {
-          existingToolMsg.content = event.result || ''
-          existingToolMsg.toolResult = event.result
+          existingToolMsg.content = formattedResult
+          existingToolMsg.toolResult = formattedResult
           existingToolMsg.toolStatus = 'completed'
+          existingToolMsg.isError = event.isError
+          // If message doesn't have parent set, use stored mapping as fallback
+          // Note: SDK's event.parentToolUseId is for result matching, NOT hierarchy
+          if (!existingToolMsg.parentToolUseId && storedParentId) {
+            existingToolMsg.parentToolUseId = storedParentId
+          }
         } else {
           // Fallback: create new message if not found (shouldn't happen normally)
           const toolMessage: Message = {
             id: generateMessageId(),
             role: 'tool',
-            content: event.result || '',
+            content: formattedResult,
             timestamp: Date.now(),
             toolName: toolName,
             toolUseId: event.toolUseId,
-            toolResult: event.result,
-            toolStatus: 'completed'
+            toolResult: formattedResult,
+            toolStatus: 'completed',
+            parentToolUseId: storedParentId,
+            isError: event.isError,
           }
           managed.messages.push(toolMessage)
         }
 
+        // Use stored parent mapping or existing message's parent
+        const finalParentToolUseId = existingToolMsg?.parentToolUseId || storedParentId
+
+        // Only send event to renderer if not already marked complete
+        if (!wasAlreadyComplete) {
+          this.sendEvent({
+            type: 'tool_result',
+            sessionId,
+            toolUseId: event.toolUseId,
+            toolName: toolName,
+            result: formattedResult,
+            turnId: event.turnId,
+            parentToolUseId: finalParentToolUseId,
+            isError: event.isError,
+          }, workspaceId)
+        }
+
+        // Persist session after tool completes to prevent data loss on quit
+        this.persistSession(managed)
+        break
+      }
+
+      case 'parent_update': {
+        // Deferred parent assignment: tool started without parent (multiple active Tasks),
+        // now we know the correct parent from the tool result
+        const existingToolMsg = managed.messages.find(m => m.toolUseId === event.toolUseId)
+        if (existingToolMsg) {
+          sessionLog.info(`PARENT UPDATE: ${event.toolUseId} -> parent ${event.parentToolUseId}`)
+          existingToolMsg.parentToolUseId = event.parentToolUseId
+          // Also update the toolToParentMap for consistency
+          managed.toolToParentMap.set(event.toolUseId, event.parentToolUseId)
+        }
+        // Send event to renderer so it can update UI grouping
         this.sendEvent({
-          type: 'tool_result',
+          type: 'parent_update',
           sessionId,
           toolUseId: event.toolUseId,
-          toolName: toolName,
-          result: event.result || ''
-        })
+          parentToolUseId: event.parentToolUseId,
+        }, workspaceId)
         break
+      }
 
       case 'status':
-        this.sendEvent({ type: 'status', sessionId, message: event.message })
+        this.sendEvent({
+          type: 'status',
+          sessionId,
+          message: event.message,
+          statusType: event.message.includes('Compacting') ? 'compacting' : undefined
+        }, workspaceId)
+        break
+
+      case 'info':
+        this.sendEvent({
+          type: 'info',
+          sessionId,
+          message: event.message,
+          statusType: event.message.startsWith('Compacted') ? 'compaction_complete' : undefined
+        }, workspaceId)
         break
 
       case 'error':
@@ -892,11 +2093,12 @@ export class SessionManager {
           timestamp: Date.now()
         }
         managed.messages.push(errorMessage)
-        this.sendEvent({ type: 'error', sessionId, error: event.message })
+        this.sendEvent({ type: 'error', sessionId, error: event.message }, workspaceId)
         break
 
       case 'typed_error':
         // Typed errors have structured information - send both formats for compatibility
+        sessionLog.info('typed_error:', JSON.stringify(event.error, null, 2))
         const typedErrorMessage: Message = {
           id: generateMessageId(),
           role: 'error',
@@ -912,18 +2114,141 @@ export class SessionManager {
             code: event.error.code,
             title: event.error.title,
             message: event.error.message,
+            actions: event.error.actions,
             canRetry: event.error.canRetry,
             details: event.error.details,
             originalError: event.error.originalError,
           }
-        })
+        }, workspaceId)
         break
+
+      case 'task_backgrounded':
+      case 'shell_backgrounded':
+      case 'task_progress':
+        // Forward background task events directly to renderer
+        this.sendEvent({
+          ...event,
+          sessionId,
+        }, workspaceId)
+        break
+
+      case 'complete':
+        // Complete event from CraftAgent - actual 'complete' sent to renderer
+        // comes from the finally block in sendMessage, not here
+        break
+
+      // Note: working_directory_changed is handled via onWorkingDirectoryChange callback,
+      // not through processEvent, so no case needed here
     }
   }
 
-  private sendEvent(event: SessionEvent): void {
-    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-      this.mainWindow.webContents.send(IPC_CHANNELS.SESSION_EVENT, event)
+  private sendEvent(event: SessionEvent, workspaceId?: string): void {
+    if (!this.windowManager) {
+      sessionLog.warn('Cannot send event - no window manager')
+      return
     }
+
+    // Route to the window for this workspace
+    const window = workspaceId
+      ? this.windowManager.getWindowByWorkspace(workspaceId)
+      : null
+
+    if (!window) {
+      sessionLog.warn(`Cannot send ${event.type} event - no window for workspace ${workspaceId}`)
+      return
+    }
+
+    if (window.isDestroyed()) {
+      sessionLog.warn(`Cannot send ${event.type} event - window destroyed for workspace ${workspaceId}`)
+      return
+    }
+
+    try {
+      window.webContents.send(IPC_CHANNELS.SESSION_EVENT, event)
+    } catch (error) {
+      sessionLog.error(`Failed to send ${event.type} event:`, error)
+    }
+  }
+
+  /**
+   * Queue a text delta for batched sending (performance optimization)
+   * Instead of sending 50+ IPC events per second, batches deltas and flushes every 50ms
+   */
+  private queueDelta(sessionId: string, workspaceId: string, delta: string, turnId?: string): void {
+    const existing = this.pendingDeltas.get(sessionId)
+    if (existing) {
+      // Append to existing batch
+      existing.delta += delta
+      // Keep the latest turnId (should be the same, but just in case)
+      if (turnId) existing.turnId = turnId
+    } else {
+      // Start new batch
+      this.pendingDeltas.set(sessionId, { delta, turnId })
+    }
+
+    // Schedule flush if not already scheduled
+    if (!this.deltaFlushTimers.has(sessionId)) {
+      const timer = setTimeout(() => {
+        this.flushDelta(sessionId, workspaceId)
+      }, DELTA_BATCH_INTERVAL_MS)
+      this.deltaFlushTimers.set(sessionId, timer)
+    }
+  }
+
+  /**
+   * Flush any pending deltas for a session (sends batched IPC event)
+   * Called on timer or when streaming ends (text_complete)
+   */
+  private flushDelta(sessionId: string, workspaceId: string): void {
+    // Clear the timer
+    const timer = this.deltaFlushTimers.get(sessionId)
+    if (timer) {
+      clearTimeout(timer)
+      this.deltaFlushTimers.delete(sessionId)
+    }
+
+    // Send batched delta if any
+    const pending = this.pendingDeltas.get(sessionId)
+    if (pending && pending.delta) {
+      this.sendEvent({
+        type: 'text_delta',
+        sessionId,
+        delta: pending.delta,
+        turnId: pending.turnId
+      }, workspaceId)
+      this.pendingDeltas.delete(sessionId)
+    }
+  }
+
+  /**
+   * Clean up all resources held by the SessionManager.
+   * Should be called on app shutdown to prevent resource leaks.
+   */
+  cleanup(): void {
+    sessionLog.info('Cleaning up resources...')
+
+    // Stop all ConfigWatchers (file system watchers)
+    for (const [path, watcher] of this.configWatchers) {
+      watcher.stop()
+      sessionLog.info(`Stopped config watcher for ${path}`)
+    }
+    this.configWatchers.clear()
+
+    // Clear all pending delta flush timers
+    for (const [sessionId, timer] of this.deltaFlushTimers) {
+      clearTimeout(timer)
+    }
+    this.deltaFlushTimers.clear()
+    this.pendingDeltas.clear()
+
+    // Clear pending credential resolvers (they won't be resolved, but prevents memory leak)
+    this.pendingCredentialResolvers.clear()
+
+    // Clean up session-scoped tool callbacks for all sessions
+    for (const sessionId of this.sessions.keys()) {
+      unregisterSessionScopedToolCallbacks(sessionId)
+    }
+
+    sessionLog.info('Cleanup complete')
   }
 }

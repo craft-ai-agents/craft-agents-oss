@@ -8,16 +8,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is the Electron desktop app for Craft Agent - a GUI alternative to the TUI. It provides a multi-threaded chat interface for interacting with Claude via Craft workspaces.
 
-**Note:** This app reuses the parent `craft-tui-agent` codebase. The main process imports directly from `../../../src/` (the TUI's source). Dependencies are managed in the root `package.json`.
+**Note:** This app reuses the `@craft-agent/shared` package for core business logic. Dependencies are managed in the root `package.json`.
 
 ## UI Components
 
 **Always use shadcn/ui components** for building the UI. Never create custom button, input, or other primitive components - use the existing shadcn components from `@/components/ui/`.
 
 Available components in `src/renderer/components/ui/`:
-- `avatar`, `badge`, `button`, `collapsible`, `dialog`, `dropdown-menu`
+- `avatar`, `avatar-group`, `badge`, `button`, `collapsible`, `source-avatar`, `dialog`, `dropdown-menu`
 - `input`, `kbd`, `label`, `loading-indicator`, `popover`, `resizable`, `scroll-area`
-- `select`, `separator`, `sonner`, `switch`, `tabs`, `textarea`, `tooltip`
+- `select`, `separator`, `service-logo`, `sonner`, `switch`, `tabs`, `textarea`, `tooltip`
 
 To add new shadcn components:
 ```bash
@@ -63,6 +63,60 @@ The spinner is based on [SpinKit Grid](https://github.com/tobiasahlin/SpinKit):
 - Uses `currentColor` (inherits text color)
 - Pure CSS animation (no JS state needed)
 - CSS defined in `index.css` (`.spinner` class)
+
+### Source Avatars
+
+**Always use `SourceAvatar`** for displaying source icons (MCP servers, APIs, Gmail, local sources). Never use `ServiceLogo` directly or create custom avatar implementations.
+
+```tsx
+import { SourceAvatar } from "@/components/ui/source-avatar"
+
+// Pattern 1: Direct props - for subagent MCP servers and APIs
+<SourceAvatar
+  type="mcp"           // 'mcp' | 'api' | 'gmail' | 'local'
+  name="My Server"     // Alt text
+  logoUrl={server.logo} // Google Favicon URL (optional)
+  size="md"            // 'xs' | 'sm' | 'md' | 'lg'
+/>
+
+// Derive logo from service URL (no logoUrl needed)
+<SourceAvatar
+  type="api"
+  name="GitHub API"
+  serviceUrl="https://api.github.com"  // Will generate favicon URL
+  size="lg"
+/>
+
+// Pattern 2: Source object - for LoadedSource objects (sidebar, source lists)
+import type { LoadedSource } from '../../../../shared/types'
+
+<SourceAvatar source={loadedSource} size="sm" />
+
+// In sidebar source lists
+{sources.map((source: LoadedSource) => (
+  <SourceAvatar source={source} size="sm" />
+))}
+```
+
+**Size variants:**
+| Size | Dimensions | Use case |
+|------|------------|----------|
+| `xs` | 14x14 | Inline, compact lists |
+| `sm` | 16x16 | Sidebar source list, dropdowns, avatar groups |
+| `md` | 20x20 | Auth steps, setup flows |
+| `lg` | 24x24 | Info panels, detail views |
+
+**Automatic fallback icons by type:**
+- `mcp` → MCP icon (plug-like)
+- `api` → Globe icon
+- `gmail` → Mail icon
+- `local` → HardDrive icon
+
+**Features:**
+- Consistent ring border styling (`ring-1 ring-border/30`)
+- Smooth crossfade from fallback to loaded image
+- Auto-derives favicon URL from `serviceUrl` or `LoadedSource` config
+- Uses Google Favicon API for logos
 
 ### Keyboard Shortcuts
 
@@ -125,7 +179,24 @@ className="hover:bg-gray-100"          // Doesn't adapt to dark mode
 **Common alpha values:**
 - `/5` (5%) - Subtle hover for buttons, icon buttons, triggers
 - `/10` (10%) - Standard hover for menu items, list items
+- `/30` (30%) - Placeholder text, disabled elements
 - `/50` (50%) - Borders, separators, muted elements
+- `/60` (60%) - Placeholder text hover state
+
+### Text Colors with Alpha
+
+**Always use `foreground/x` for text colors** instead of `text-muted-foreground`. This ensures consistent opacity-based styling.
+
+```tsx
+// Good - foreground with alpha
+className="text-foreground/30"          // Placeholder, disabled
+className="text-foreground/50"          // Muted, secondary
+className="text-foreground/60"          // Hover state for /30
+
+// Bad - semantic color classes
+className="text-muted-foreground"       // Avoid - use foreground/50 instead
+className="text-muted-foreground/50"    // Don't combine muted with alpha
+```
 
 ### Dropdown/Popover Styling
 
@@ -164,6 +235,25 @@ When creating dropdowns or popovers that need consistent styling regardless of t
 - Use `gap-3` for icon-to-text spacing
 - Use `pl-6` on shortcuts for spacing from label (keeps `ml-auto` right alignment)
 - Use `pr-4` on items for right padding
+
+**Destructive actions:**
+- Always use `variant="destructive"` on `StyledDropdownMenuItem` for destructive actions (delete, remove, etc.)
+- The destructive variant automatically applies red color to both the label AND icon
+- Never manually add `className="text-red-500"` - use the variant prop instead
+
+```tsx
+// Good - uses destructive variant
+<StyledDropdownMenuItem variant="destructive" onClick={handleDelete}>
+  <Trash2 />
+  Delete Source
+</StyledDropdownMenuItem>
+
+// Bad - manual color classes
+<StyledDropdownMenuItem className="text-red-500" onClick={handleDelete}>
+  <Trash2 />
+  Delete Source
+</StyledDropdownMenuItem>
+```
 
 ### Toast Notifications
 
@@ -223,8 +313,8 @@ toast.dismiss(toastId)
 // Renderer (via Vite @config alias)
 import { MODELS, DEFAULT_MODEL, getModelDisplayName } from '@config/models'
 
-// Main process (relative path)
-import { DEFAULT_MODEL } from '../../../../src/config/models'
+// Main process (via package import)
+import { DEFAULT_MODEL } from '@craft-agent/shared/config'
 ```
 
 Available exports:
@@ -267,31 +357,108 @@ apps/electron/
 │   │   ├── ipc.ts         # IPC handler registration
 │   │   ├── menu.ts        # Application menu (File, Edit, View, Help menus)
 │   │   ├── sessions.ts    # SessionManager - CraftAgent integration
-│   │   └── agent-service.ts # Agent listing, caching, auth checking
+│   │   ├── deep-link.ts   # Deep link URL parsing and handling
+│   │   ├── agent-service.ts # Agent listing, caching, auth checking
+│   │   ├── sources-service.ts # Source and authentication service
+│   │   ├── onboarding.ts  # Onboarding flow management
+│   │   ├── window-manager.ts # Window lifecycle management
+│   │   ├── window-state.ts # Window state persistence
+│   │   ├── preview-window.ts # Generic preview window base
+│   │   ├── code-preview-window.ts # Code preview functionality
+│   │   ├── diff-preview-window.ts # Diff preview functionality
+│   │   └── terminal-preview-window.ts # Terminal preview
 │   ├── preload/           # Context bridge (main ↔ renderer)
 │   │   └── index.ts       # Exposes electronAPI to renderer (incl. theme APIs)
 │   ├── renderer/          # React UI (browser context)
-│   │   ├── App.tsx        # Main app, session event handling
-│   │   ├── main.tsx       # React entry point, ThemeProvider
-│   │   ├── index.css      # CSS variables (:root, .dark, data-theme)
+```
+
+## ⚠️ Common Mistake: Node.js APIs in Renderer
+
+**NEVER import `@craft-agent/shared` packages directly in the renderer!** The renderer runs in a browser context and doesn't have access to Node.js APIs.
+
+❌ **Wrong** (will fail with errors like `randomUUID is not a function`):
+```tsx
+// In renderer component
+const { loadSourcePermissionsConfig } = await import('@craft-agent/shared/agent')
+const config = loadSourcePermissionsConfig(workspaceId, sourceSlug)
+```
+
+✅ **Correct** (use IPC to call main process):
+```tsx
+// 1. Add IPC channel to shared/types.ts
+export const IPC_CHANNELS = {
+  SOURCES_GET_PERMISSIONS: 'sources:getPermissions',
+  // ...
+}
+
+// 2. Add handler in main/ipc.ts
+ipcMain.handle(IPC_CHANNELS.SOURCES_GET_PERMISSIONS, async (_event, workspaceId: string, sourceSlug: string) => {
+  const { loadSourcePermissionsConfig } = await import('@craft-agent/shared/agent')
+  const workspace = getWorkspaceByNameOrId(workspaceId)
+  return loadSourcePermissionsConfig(workspace.rootPath, sourceSlug)
+})
+
+// 3. Add to preload/index.ts
+contextBridge.exposeInMainWorld('electronAPI', {
+  getSourcePermissionsConfig: (workspaceId: string, sourceSlug: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SOURCES_GET_PERMISSIONS, workspaceId, sourceSlug),
+  // ...
+})
+
+// 4. Use in renderer
+const config = await window.electronAPI.getSourcePermissionsConfig(workspaceId, sourceSlug)
+```
+
+**Why?** The `@craft-agent/shared` package uses Node.js APIs (`crypto`, `fs`, etc.) that aren't available in the browser/renderer context. All business logic must run in the main process and communicate via IPC.
+
+### Directory Structure (continued)
+
+```
+│   │   ├── atoms/         # Jotai atom definitions
+│   │   │   └── sessions.ts # Per-session Jotai atoms for performance isolation
 │   │   ├── components/
 │   │   │   ├── chat/      # Chat UI (Chat, ChatInput, ChatDisplay, SessionList, PermissionBanner)
+│   │   │   ├── code-preview/  # Code preview window component
+│   │   │   ├── diff-preview/  # Diff preview window component
+│   │   │   ├── files/         # File viewer component
 │   │   │   ├── icons/     # Custom SVG icons (PanelLeftRounded, SquarePenRounded)
 │   │   │   ├── markdown/  # Markdown renderer with syntax highlighting
+│   │   │   ├── multi-file-diff/ # Multi-file diff viewer
+│   │   │   ├── onboarding/ # Onboarding flow components
+│   │   │   ├── preview/   # Preview window components (Monaco, TOC)
+│   │   │   ├── terminal-preview/ # Terminal preview window
 │   │   │   └── ui/        # shadcn/ui components
-│   │   ├── context/
-│   │   │   ├── NavigationContext.tsx  # Agent selection
+│   │   ├── config/        # Renderer configuration (todo-states, etc.)
+│   │   ├── contexts/
+│   │   │   ├── NavigationContext.tsx  # Type-safe routing and navigation
+│   │   │   ├── ChatContext.tsx        # Chat state and session management
 │   │   │   └── ThemeContext.tsx       # Theme state management
+│   │   ├── lib/
+│   │   │   ├── navigate.ts      # Global navigate() function
+│   │   │   └── utils.ts         # Utility functions
+│   │   ├── event-processor/ # Event streaming and processing
+│   │   │   ├── processor.ts   # Event processor logic
+│   │   │   ├── helpers.ts     # Processing helpers
+│   │   │   └── handlers/      # Event type handlers
 │   │   ├── hooks/
-│   │   │   └── useAgentState.ts  # Agent activation state machine (IPC-based)
-│   │   ├── mocks/         # Browser dev mode mock APIs
+│   │   │   ├── useAgentState.ts  # Agent activation state machine (IPC-based)
+│   │   │   ├── useBackgroundTasks.ts # Background task tracking
+│   │   │   ├── useStatuses.ts    # Workspace status configuration
+│   │   │   ├── useTheme.ts       # Cascading theme resolution
+│   │   │   ├── useSession.ts     # Session hook for isolated access
+│   │   │   ├── useOnboarding.ts  # Onboarding flow management
+│   │   │   └── keyboard/         # Keyboard handling hooks
+│   │   ├── tabs/          # Tab system management
+│   │   ├── utils/         # Additional utilities
 │   │   └── playground/    # Component development playground
 │   │       ├── PlaygroundApp.tsx     # Main playground component
 │   │       ├── ComponentPreview.tsx  # Component preview display
 │   │       ├── PropsPanel.tsx        # Dynamic props editor
 │   │       └── registry/             # Component registry (chat, icons, markdown)
 │   └── shared/
-│       └── types.ts       # IPC channels, Message/Session/FileAttachment types
+│       ├── types.ts       # IPC channels, Message/Session/FileAttachment types
+│       ├── routes.ts      # Type-safe route definitions and builders
+│       └── route-parser.ts # Route string parsing utilities
 ├── dist/                  # Build output
 └── resources/             # App icons
 ```
@@ -302,19 +469,190 @@ The app uses Electron's IPC for main ↔ renderer communication:
 
 | Channel | Direction | Purpose |
 |---------|-----------|---------|
+| **Sessions** | | |
 | `sessions:*` | renderer → main | Session CRUD (create, delete, rename, archive) |
 | `sessions:sendMessage` | renderer → main | Send message with optional file attachments |
-| `workspaces:get` | renderer → main | Get configured workspaces |
-| `agents:*` | renderer → main | Get agents, refresh, check auth status |
-| `session:event` | main → renderer | Stream events (text_delta, tool_start, title_generated, etc.) |
+| `sessions:setPermissionMode` | renderer → main | Set permission mode ('safe', 'ask', 'allow-all') |
+| `sessions:flag/unflag` | renderer → main | Flag/unflag session for attention |
+| `sessions:setTodoState` | renderer → main | Set session workflow status |
+| `sessions:markRead/markUnread` | renderer → main | Mark session read status |
+| `sessions:respondToPermission` | renderer → main | Respond to permission request |
+| `sessions:respondToCredential` | renderer → main | Respond to credential request |
+| `sessions:updateWorkingDirectory` | renderer → main | Update session working directory |
+| `sessions:killShell` | renderer → main | Kill a background shell by ID |
+| `tasks:getOutput` | renderer → main | Get output from background task |
+| `session:event` | main → renderer | Stream events (text_delta, tool_start, etc.) |
+| **Files** | | |
 | `file:read` | renderer → main | Read files (path-validated) |
 | `file:openDialog` | renderer → main | Open native file picker |
 | `file:readAttachment` | renderer → main | Read file as FileAttachment |
+| `file:generateThumbnail` | renderer → main | Generate image thumbnail |
+| `file:storeAttachment` | renderer → main | Store file attachment |
+| **Shell** | | |
 | `shell:openUrl` | renderer → main | Open URL in external browser |
 | `shell:openFile` | renderer → main | Open file in default application |
+| **Agents** | | |
+| `agents:list` | renderer → main | List available agents |
+| `agents:refresh` | renderer → main | Refresh agent list |
+| `agents:checkAuth` | renderer → main | Check if agent needs auth |
+| `agents:getDefinition` | renderer → main | Get full agent definition |
+| `agents:changed` | main → renderer | Broadcast agent list changes |
+| **Sources** | | |
+| `sources:get` | renderer → main | Get sources for workspace/agent |
+| `sources:create` | renderer → main | Create new source |
+| `sources:delete` | renderer → main | Delete source |
+| `sources:startOAuth` | renderer → main | Start OAuth flow for source |
+| `sources:saveCredentials` | renderer → main | Save source credentials |
+| `sources:getPermissions` | renderer → main | Get permissions config |
+| `sources:getMcpTools` | renderer → main | Get MCP tools with permissions |
+| `sources:changed` | main → renderer | Broadcast source changes |
+| **Workspace** | | |
+| `workspaces:get` | renderer → main | Get configured workspaces |
+| `workspaceSettings:*` | both | Workspace settings CRUD |
+| `workspace:readImage` | renderer → main | Read workspace image |
+| `workspace:writeImage` | renderer → main | Write workspace image |
+| **Theme** | | |
 | `theme:*` | both | Theme preference sync |
+| `theme:systemChanged` | main → renderer | System theme changed |
+| `theme:appChanged` | main → renderer | App theme changed |
+| **Preview Windows** | | |
+| `codePreview:open/getData` | both | Code preview window |
+| `terminalPreview:open/getData` | both | Terminal preview window |
+| `multiFileDiff:open/getData` | both | Multi-file diff window |
+| **Settings** | | |
+| `settings:getDefaultPermissionMode` | renderer → main | Get default permission mode |
+| `settings:setDefaultPermissionMode` | renderer → main | Set default permission mode |
+| **Statuses** | | |
+| `statuses:list` | renderer → main | Get workspace statuses |
+| `statuses:changed` | main → renderer | Broadcast status changes |
+| **Deep Links** | | |
+| `deeplink:navigate` | main → renderer | Deep link tab navigation |
 
 **Event streaming pattern:** `sendMessage` returns immediately. Results stream via `SESSION_EVENT` channel.
+
+### Navigation System
+
+The app uses a **type-safe routing system** for all internal navigation and deep links. All navigation goes through typed route builders instead of hardcoded strings.
+
+**Key Files:**
+```
+src/shared/routes.ts           # Route definitions and builders
+src/shared/route-parser.ts     # Parse route strings into structured objects
+src/renderer/lib/navigate.ts   # navigate() function and deep link utilities
+src/renderer/contexts/NavigationContext.tsx  # React context for navigation
+```
+
+#### Route Types
+
+| Type | Purpose | Example |
+|------|---------|---------|
+| **tab** | Open tabs in the tab bar | `tab/settings`, `tab/chat/abc123` |
+| **action** | Trigger actions | `action/new-chat?agentId=claude` |
+| **sidebar** | Navigate sidebar | `sidebar/inbox`, `sidebar/agent/my-agent` |
+
+#### Using Routes
+
+```typescript
+import { navigate, routes } from '@/lib/navigate'
+
+// Tab routes
+navigate(routes.tab.settings())           // Open settings tab
+navigate(routes.tab.chat('session123'))   // Open chat tab
+navigate(routes.tab.agentInfo('claude'))  // Open agent info tab
+navigate(routes.tab.sourceInfo('github')) // Open source info tab
+navigate(routes.tab.file('/path/to.ts'))  // Open file viewer tab
+navigate(routes.tab.browser('https://...')) // Open browser tab
+
+// Action routes
+navigate(routes.action.newChat())                         // New chat
+navigate(routes.action.newChat({ agentId: 'claude' }))    // New chat with agent
+navigate(routes.action.newChat({ input: 'Hello!' }))      // New chat with pre-filled input
+navigate(routes.action.renameSession('id', 'New Name'))   // Rename session
+navigate(routes.action.deleteSession('id'))               // Delete session
+navigate(routes.action.flagSession('id'))                 // Flag session
+navigate(routes.action.oauth('github'))                   // Start OAuth flow
+navigate(routes.action.setPermissionMode('id', 'safe'))   // Set permission mode
+
+// Sidebar routes
+navigate(routes.sidebar.inbox())           // Show inbox
+navigate(routes.sidebar.archive())         // Show archive
+navigate(routes.sidebar.flagged())         // Show flagged
+navigate(routes.sidebar.sources())         // Show sources panel
+navigate(routes.sidebar.agent('claude'))   // Filter by agent
+navigate(routes.sidebar.todoState('done')) // Filter by todo state
+```
+
+#### React Hook Usage
+
+```typescript
+import { useNavigation, routes } from '@/contexts/NavigationContext'
+
+function MyComponent() {
+  const { navigate, isReady } = useNavigation()
+
+  return (
+    <button onClick={() => navigate(routes.tab.settings())}>
+      Settings
+    </button>
+  )
+}
+```
+
+#### Global Navigation (Outside React)
+
+The `navigate()` function from `@/lib/navigate` works anywhere - it dispatches a custom event that `NavigationContext` listens for:
+
+```typescript
+import { navigate, routes } from '@/lib/navigate'
+
+// Can be called from anywhere, even outside React components
+navigate(routes.action.newChat({ agentId: 'claude' }))
+```
+
+#### Building Deep Links
+
+```typescript
+import { buildDeepLink, routes } from '@/lib/navigate'
+
+// Without workspace (uses current)
+buildDeepLink(routes.tab.settings())
+// → 'craftagents://tab/settings'
+
+// With workspace
+buildDeepLink(routes.tab.chat('abc'), 'workspace123')
+// → 'craftagents://workspace/workspace123/tab/chat/abc'
+```
+
+### Deep Links
+
+The app registers the `craftagents://` URL scheme for external deep linking.
+
+**URL Format:**
+```
+craftagents://tab/{tabType}[/{id}][?params]
+craftagents://action/{actionName}[/{id}][?params]
+craftagents://workspace/{workspaceId}/tab/{tabType}[/{id}][?params]
+craftagents://workspace/{workspaceId}/action/{actionName}[/{id}][?params]
+```
+
+**Examples:**
+| Use Case | URL |
+|----------|-----|
+| Settings | `craftagents://tab/settings` |
+| Chat session | `craftagents://tab/chat/session456` |
+| Agent info | `craftagents://workspace/ws123/tab/agent-info/my-agent` |
+| New chat | `craftagents://action/new-chat?agentId=my-agent&input=Hello` |
+| File | `craftagents://tab/file?path=/path/to/file.txt` |
+
+**Flow:**
+1. User clicks `craftagents://` URL or app launched with URL
+2. Main process parses URL via `parseDeepLink()` in `main/deep-link.ts`
+3. `handleDeepLink()` focuses/creates workspace window
+4. Sends `DEEP_LINK_NAVIGATE` IPC to renderer
+5. `NavigationContext` receives event and calls `navigate()` with parsed route
+6. Route is dispatched to appropriate handler (tab/action/sidebar)
+
+**Cold Start:** If app isn't running, URL is stored in `pendingDeepLink` and processed after `app.whenReady()`.
 
 ### Key Integration Points
 
@@ -364,6 +702,22 @@ process.env.ANTHROPIC_API_KEY = apiKey
 **esbuild** (main/preload): Only `electron` is externalized. SDK is bundled into main.js.
 
 **Vite** (renderer): Standard React build with Tailwind CSS v4.
+
+### Gmail OAuth Environment Variables
+
+To enable the "Add Gmail" connection feature, set these environment variables before building:
+
+```bash
+export GMAIL_OAUTH_CLIENT_ID=your-client-id.apps.googleusercontent.com
+export GMAIL_OAUTH_CLIENT_SECRET=your-client-secret
+bun run electron:build
+```
+
+Get credentials from [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → Credentials → Create OAuth Client ID (Desktop app).
+
+**Required scopes:** `gmail.readonly`, `userinfo.email`
+
+These are baked into `dist/main.cjs` at build time via esbuild `--define` flags in `package.json`.
 
 ## Theming
 
@@ -484,11 +838,106 @@ const exponentialSpring = {
 
 **Note:** The sidebar uses `width` animation (not `transform`) for proper layout flow, but the content inside is fixed-width so it doesn't reflow during animation.
 
-## Debugging
+## Logging & Debugging
 
-- Console logs print to the terminal running `electron:start`
-- DevTools opens automatically in development mode (`!app.isPackaged`)
-- Key log prefixes: `[Main]`, `[SessionManager]`, `[IPC]`
+### Overview
+
+The Electron app has two logging systems:
+1. **`electron-log`** - Main process scoped loggers (JSON file + console)
+2. **`debug()` utility** - Shared code (auto-routes to console + file in Electron)
+
+**Debug mode:** Automatically enabled when running from source (`!app.isPackaged`)
+
+### Running with Logs
+
+```bash
+# Start Electron in development (debug mode automatic)
+bun run electron:start
+
+# Logs appear in:
+# 1. Terminal console - immediate visibility
+# 2. File: ~/Library/Logs/Craft Agents/main.log - JSON Lines format
+# 3. File: /tmp/craft-debug.log - shared code debug logs
+```
+
+### Main Process Loggers (electron-log)
+
+Import from `src/main/logger.ts`:
+
+```typescript
+import { mainLog, sessionLog, ipcLog, windowLog, agentLog, isDebugMode } from './logger'
+
+mainLog.info('App started')
+sessionLog.info('Session created', { sessionId: 'abc123' })
+ipcLog.debug('Message received', { channel: 'chat' })
+windowLog.warn('Window not found', { windowId: 123 })
+agentLog.error('Agent failed', { error: err.message })
+```
+
+### Shared Code Logger (debug utility)
+
+For code in `@craft-agent/shared` that runs in Electron:
+
+```typescript
+import { debug, createLogger } from '@craft-agent/shared/utils'
+
+// Simple debug
+debug('Processing request', { id: 123 })
+
+// Scoped logger
+const log = createLogger('mcp')
+log.info('Connected to server')
+log.error('Connection failed', error)
+```
+
+The utility auto-detects Electron and outputs to both console and `/tmp/craft-debug.log`.
+
+### Log Scopes Reference
+
+| Scope | Logger | Use For |
+|-------|--------|---------|
+| `main` | `mainLog` | App lifecycle, global events, menu actions |
+| `session` | `sessionLog` | Session CRUD, state changes, persistence |
+| `ipc` | `ipcLog` | Renderer ↔ Main communication |
+| `window` | `windowLog` | Window creation, focus, state, positioning |
+| `agent` | `agentLog` | Claude SDK, tool calls, streaming, events |
+
+### Log Formats
+
+**Console output (readable):**
+```
+2026-01-05T06:30:00.000Z INFO  [session] Session created {"sessionId":"abc123"}
+```
+
+**File output (JSON Lines):**
+```json
+{"timestamp":"2026-01-05T06:30:00.000Z","level":"info","scope":"session","message":["Session created",{"sessionId":"abc123"}]}
+```
+
+### Querying Log Files
+
+```bash
+# Watch electron-log output
+tail -f ~/Library/Logs/Craft\ Agents/main.log
+
+# Watch shared debug output
+tail -f /tmp/craft-debug.log
+
+# Search by scope (electron-log)
+grep '"scope":"session"' ~/Library/Logs/Craft\ Agents/main.log
+
+# Parse with jq
+cat ~/Library/Logs/Craft\ Agents/main.log | jq 'select(.level == "error")'
+```
+
+### Configuration
+
+- **electron-log:** `src/main/logger.ts` - 5MB rotation, disabled in production
+- **debug utility:** `@craft-agent/shared/utils` - auto-routes by environment
+
+### DevTools
+
+Opens automatically in development for renderer debugging (React DevTools, network inspection).
 
 ## Markdown Rendering
 
@@ -535,6 +984,43 @@ if (needsAuth) {
 
 **Caching:** `SubAgentManager` is cached per workspace to avoid re-connecting to MCP servers for each session.
 
+## Session State Architecture
+
+The app uses a **hybrid React/Jotai state management** approach for session data:
+
+**Why hybrid?**
+- React state (`sessions` array in `App.tsx`) is the source of truth
+- Jotai atoms provide per-session isolation for performance
+- Without isolation, streaming in Session A would cause re-renders in Session B
+
+**Key files:**
+- `App.tsx` - React state + auto-sync effect
+- `atoms/sessions.ts` - Per-session Jotai atoms
+- `context/ChatContext.tsx` - `useSession(id)` hook for isolated access
+
+**How it works:**
+```
+setSessions() called (React state update)
+       ↓
+useEffect triggers syncSessionsToAtoms()
+       ↓
+Per-session atoms updated (only changed sessions)
+       ↓
+Components using useSession(id) re-render
+```
+
+**Component subscription patterns:**
+```typescript
+// For session lists - reads from context (React state)
+const { sessions } = useChatContext()
+
+// For chat panels - reads from atom (isolated updates)
+const session = useSession(sessionId)
+```
+
+**Adding new session updates:**
+Just use `setSessions()` - the sync effect handles atom updates automatically. No need to manually update atoms.
+
 ## Session Management
 
 Sessions support naming, archiving, and persistence:
@@ -552,6 +1038,41 @@ Sessions support naming, archiving, and persistence:
 **Archive:**
 - Sessions can be archived/unarchived (moved between Inbox and Archive views)
 - Archived sessions are hidden from main inbox but preserved
+
+## Permission Modes
+
+Sessions use a three-level permission mode system to control tool execution:
+
+| Mode | Behavior | Use Case |
+|------|----------|----------|
+| `'safe'` | Blocks all write operations, never prompts | Read-only exploration, planning |
+| `'ask'` | Prompts user for bash commands (default) | Normal interactive use |
+| `'allow-all'` | Auto-approves all commands | Trusted automation |
+
+**Session-level:**
+```typescript
+// Set permission mode for a session
+await window.electronAPI.setPermissionMode(sessionId, 'safe')
+```
+
+**Default for new sessions:**
+```typescript
+const mode = await window.electronAPI.getDefaultPermissionMode()
+await window.electronAPI.setDefaultPermissionMode('ask')
+```
+
+**Session state:**
+```typescript
+interface Session {
+  permissionMode?: PermissionMode  // Default: 'ask'
+  // ...
+}
+```
+
+**Events:**
+- `permission_mode_changed` event sent when mode changes: `{ sessionId, permissionMode }`
+
+**UI:** The `ChatDisplay` component shows a permission mode badge with dropdown for cycling modes.
 
 ## Shell Operations
 
@@ -592,9 +1113,9 @@ The `useAgentState` hook manages agent activation flow via IPC with the main pro
 
 **State Machine:**
 ```
-idle → extracting → needs_review → needs_mcp_auth → needs_api_auth → ready → active
-                         ↓              ↓                ↓
-                       error          error            error
+idle → extracting → [needs_mcp_auth] → [needs_api_auth] → ready → active
+                          ↓                  ↓
+                        error              error
 ```
 
 **Hook API:**
@@ -604,7 +1125,6 @@ const agentState = useAgentState(workspaceId, agentId)
 // Status checks
 agentState.isIdle           // No agent selected
 agentState.isExtracting     // Loading agent definition
-agentState.isNeedsReview    // Waiting for concern review
 agentState.isNeedsMcpAuth   // Waiting for MCP server OAuth
 agentState.isNeedsApiAuth   // Waiting for API key entry
 agentState.isReady          // Auth complete, ready to activate
@@ -612,7 +1132,6 @@ agentState.isActive         // Agent fully activated
 
 // Actions
 await agentState.activate(agentId)           // Start activation
-await agentState.continueAfterReview(answers) // After user answers concerns
 await agentState.continueAfterMcpAuth()      // After MCP OAuth complete
 await agentState.continueAfterApiAuth()      // After API key entered
 agentState.deactivate()                      // Return to idle
@@ -620,7 +1139,6 @@ agentState.deactivate()                      // Return to idle
 // Derived state
 agentState.activeDefinition   // SubAgentDefinition when active
 agentState.agentName          // Display name
-agentState.pendingConcerns    // Concerns awaiting review
 agentState.pendingMcpServers  // MCP servers needing auth
 agentState.pendingApis        // APIs needing credentials
 ```
@@ -682,6 +1200,69 @@ The `PermissionBanner` component shows bash command approval requests:
 ```
 
 **Styling:** Amber border/background with shield icon, three action buttons.
+
+## Background Tasks
+
+The app supports running long-running tasks (tests, builds, agents) in the background:
+
+**Components:**
+- `ActiveOptionBadges.tsx` - Displays active options including background tasks bar
+- `ActiveTasksBar.tsx` - Shows running tasks with elapsed time and actions
+- `TaskActionMenu.tsx` - Dropdown menu for task actions (view output, stop, copy ID)
+
+**Hook:** `useBackgroundTasks.ts`
+- Per-session task tracking via Jotai atoms
+- Methods: `addTask`, `updateTaskProgress`, `removeTask`, `killTask`
+- Task structure: `{ id, type, toolUseId, startTime, elapsedSeconds, intent }`
+
+**Session events:**
+- `task_backgrounded` - Agent task started in background
+- `shell_backgrounded` - Bash shell backgrounded
+- `task_progress` - Elapsed time updates
+
+**Limitations:**
+- Task output retrieval not yet implemented (check main chat panel)
+- Agent task killing not available (no SDK API)
+
+## Multi-File Diff Window
+
+VS Code-style pop-out window for viewing all file changes in a turn:
+
+**Components:**
+- `MultiFileDiffWindowManager` (`main/multi-file-diff-window.ts`) - Window lifecycle
+- `MultiFileDiffApp.tsx` - React app with sidebar + Monaco DiffEditor
+
+**Features:**
+- Sidebar file tree with change counts
+- Consolidated view (by file) or ungrouped (by operation)
+- Monaco DiffEditor with syntax highlighting
+- Full file context reconstruction
+
+**Types:**
+```typescript
+interface FileChange {
+  id: string
+  filePath: string
+  toolType: 'Edit' | 'Write'
+  original: string
+  modified: string
+}
+```
+
+**Integration:** TurnCard shows "View all file changes" button when turn has Edit/Write activities.
+
+## Dynamic Statuses
+
+Workspace-level customizable session status configuration:
+
+**Hook:** `useStatuses.ts`
+- Loads status config from workspace
+- Auto-refreshes on workspace change
+- Subscribes to live status changes
+
+**Config location:** `~/.craft-agent/workspaces/{id}/statuses/config.json`
+
+**Integration:** `config/todo-states.tsx` loads dynamic statuses instead of hardcoded values.
 
 ## Current Limitations
 

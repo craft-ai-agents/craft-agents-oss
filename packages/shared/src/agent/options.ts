@@ -1,5 +1,5 @@
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
-import { join } from "path";
+import { join, dirname } from "path";
 import { homedir } from "os";
 import { debug } from "../utils/debug";
 
@@ -7,6 +7,7 @@ declare const CRAFT_AGENT_CLI_VERSION: string | undefined;
 
 let optionsEnv: Record<string, string> = {};
 let customPathToClaudeCodeExecutable: string | null = null;
+let customInterceptorPath: string | null = null;
 
 export function setAnthropicOptionsEnv(env: Record<string, string>) {
     optionsEnv = env;
@@ -20,17 +21,33 @@ export function setPathToClaudeCodeExecutable(path: string) {
     customPathToClaudeCodeExecutable = path;
 }
 
+/**
+ * Set the path to the cache-ttl-interceptor for the SDK subprocess.
+ * This interceptor redirects requests to the Craft gateway when using Craft credits.
+ */
+export function setInterceptorPath(path: string) {
+    customInterceptorPath = path;
+}
+
 export function getDefaultOptions(): Partial<Options> {
     // If custom path is set (e.g., for Electron), use it with minimal options
     if (customPathToClaudeCodeExecutable) {
-        return {
+        const options: Partial<Options> = {
             pathToClaudeCodeExecutable: customPathToClaudeCodeExecutable,
+            // Use Bun to run the SDK (required for TypeScript preload)
+            executable: 'bun',
             env: {
                 ...process.env,
                 ... optionsEnv,
                 CRAFT_DEBUG: process.argv.includes('--debug') ? '1' : '0',
             }
         };
+        // Add interceptor preload if path is set (needed for Craft gateway redirect)
+        if (customInterceptorPath) {
+            options.executableArgs = ['--preload', customInterceptorPath];
+            console.error('[Options] Using interceptor preload:', customInterceptorPath);
+        }
+        return options;
     }
 
     if (typeof CRAFT_AGENT_CLI_VERSION !== 'undefined' && CRAFT_AGENT_CLI_VERSION != null) {

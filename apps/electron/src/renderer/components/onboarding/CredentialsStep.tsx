@@ -183,7 +183,7 @@ export function CredentialsStep({
             href="https://console.anthropic.com"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-primary hover:underline"
+            className="text-foreground hover:underline"
           >
             console.anthropic.com
           </a>

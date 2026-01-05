@@ -1,6 +1,6 @@
 {
   "name": "@craft-agent/electron",
-  "version": "1.0.0",
+  "version": "0.2.0",
   "description": "Electron desktop app for Craft Agent - provides a GUI alternative to the TUI",
   "main": "dist/main.cjs",
   "private": true,
@@ -11,7 +11,7 @@
     "node": ">=18.0.0"
   },
   "scripts": {
-    "build:main": "esbuild src/main/index.ts --bundle --platform=node --format=cjs --outfile=dist/main.cjs --external:electron",
+    "build:main": "source ../../.env 2>/dev/null || true; esbuild src/main/index.ts --bundle --platform=node --format=cjs --outfile=dist/main.cjs --external:electron --define:process.env.GMAIL_OAUTH_CLIENT_ID=\\\"${GMAIL_OAUTH_CLIENT_ID:-}\\\" --define:process.env.GMAIL_OAUTH_CLIENT_SECRET=\\\"${GMAIL_OAUTH_CLIENT_SECRET:-}\\\"",
     "build:preload": "esbuild src/preload/index.ts --bundle --platform=node --format=cjs --outfile=dist/preload.cjs --external:electron",
     "build:renderer": "vite build",
     "build:resources": "cp -r resources dist/",
@@ -23,14 +23,22 @@
   "dependencies": {
     "@craft-agent/core": "workspace:*",
     "@craft-agent/shared": "workspace:*",
+    "@monaco-editor/react": "^4.7.0",
+    "@paper-design/shaders-react": "^0.0.68",
     "@radix-ui/react-context-menu": "^2.2.16",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-dropdown-menu": "^2.1.16",
     "@radix-ui/react-label": "^2.1.8",
     "@radix-ui/react-popover": "^1.1.15",
     "@radix-ui/react-switch": "^1.2.6",
+    "cmdk": "^1.1.1",
+    "electron-log": "^5.4.3",
+    "jotai-family": "^1.0.1",
+    "monaco-editor": "^0.55.1",
     "motion": "^12.23.26",
     "next-themes": "^0.4.6",
-    "sonner": "^2.0.7"
+    "remark": "^15.0.1",
+    "sonner": "^2.0.7",
+    "strip-markdown": "^6.0.0"
   }
 }

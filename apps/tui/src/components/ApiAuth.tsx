@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import { Box, Text } from 'ink';
-import { saveApiKeyCredentialAsync } from '@craft-agent/shared/agents';
 import type { ApiConfig } from '@craft-agent/shared/agents';
+import { getCredentialManager } from '@craft-agent/shared/credentials';
 import { debug } from '@craft-agent/shared/utils';
 import { TextInput } from './TextInput.tsx';
 
@@ -84,11 +84,13 @@ export const ApiAuth: React.FC<ApiAuthProps> = ({
         password: value.trim(),
       });
       debug('[ApiAuth] Saving basic auth credential for', api.name);
-      await saveApiKeyCredentialAsync(workspaceId, agentId, api.name, credential);
+      const credMgr = getCredentialManager();
+      await credMgr.setApiKeyForAgent(workspaceId, agentId, api.name, credential);
     } else {
       // Standard API key flow
       debug('[ApiAuth] Saving API key for', api.name);
-      await saveApiKeyCredentialAsync(workspaceId, agentId, api.name, value.trim());
+      const credMgr = getCredentialManager();
+      await credMgr.setApiKeyForAgent(workspaceId, agentId, api.name, value.trim());
     }
 
     setCompletedApis(prev => [...prev, api.name]);

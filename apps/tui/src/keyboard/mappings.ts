@@ -213,7 +213,7 @@ export function isKillToEnd(input: string, key: InkKey): boolean {
 }
 
 /**
- * Shift+Tab - Toggle plan mode
+ * Shift+Tab - Toggle safe mode
  * Terminal sends \x1b[Z (CSI Z) for Shift+Tab
  * Ink delivers: input='[Z' with key.tab=true and key.shift=true (or just input='[Z')
  */

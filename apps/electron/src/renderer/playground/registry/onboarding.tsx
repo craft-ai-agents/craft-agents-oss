@@ -2,46 +2,17 @@ import type { ComponentEntry } from './types'
 import { StepIndicator } from '@/components/onboarding/StepIndicator'
 import { WelcomeStep } from '@/components/onboarding/WelcomeStep'
 import { CraftLoginStep } from '@/components/onboarding/CraftLoginStep'
-import { SpaceSelectionStep } from '@/components/onboarding/SpaceSelectionStep'
 import { BillingMethodStep } from '@/components/onboarding/BillingMethodStep'
 import { CredentialsStep } from '@/components/onboarding/CredentialsStep'
 import { CompletionStep } from '@/components/onboarding/CompletionStep'
 import { OnboardingWizard } from '@/components/onboarding/OnboardingWizard'
-import type { SpaceCategory } from '@/components/onboarding/SpaceSelectionStep'
 import type { OnboardingState } from '@/components/onboarding/OnboardingWizard'
-
-// Sample data for testing
-const sampleSpaceCategories: SpaceCategory[] = [
-  {
-    name: 'Recommended',
-    spaces: [
-      { id: 'personal-1', name: 'Personal Space', type: 'personal' },
-    ],
-  },
-  {
-    name: 'Your Spaces',
-    spaces: [
-      { id: 'team-1', name: 'Engineering Team', type: 'team' },
-      { id: 'team-2', name: 'Design Team', type: 'team' },
-      { id: 'team-3', name: 'Marketing', type: 'team' },
-    ],
-  },
-  {
-    name: 'Other Spaces',
-    spaces: [
-      { id: 'shared-1', name: 'Company Wiki', type: 'shared' },
-      { id: 'shared-2', name: 'Project Docs', type: 'shared' },
-    ],
-  },
-]
 
 const createOnboardingState = (overrides: Partial<OnboardingState> = {}): OnboardingState => ({
   step: 'welcome',
   loginStatus: 'idle',
   credentialStatus: 'idle',
   completionStatus: 'complete',
-  selectedSpaceId: null,
-  selectedSpaceName: null,
   billingMethod: null,
   isExistingUser: false,
   ...overrides,
@@ -64,9 +35,8 @@ export const onboardingComponents: ComponentEntry[] = [
           type: 'select',
           options: [
             { label: 'Welcome', value: 'welcome' },
-            { label: 'Craft Login', value: 'craft-login' },
-            { label: 'Select Space', value: 'select-space' },
             { label: 'Billing Method', value: 'billing-method' },
+            { label: 'Craft Login', value: 'craft-login' },
             { label: 'Credentials', value: 'credentials' },
             { label: 'Complete', value: 'complete' },
           ],
@@ -82,9 +52,8 @@ export const onboardingComponents: ComponentEntry[] = [
     ],
     variants: [
       { name: 'New User - Welcome', props: { currentStep: 'welcome', isExistingUser: false } },
-      { name: 'New User - Login', props: { currentStep: 'craft-login', isExistingUser: false } },
-      { name: 'New User - Select Space', props: { currentStep: 'select-space', isExistingUser: false } },
       { name: 'New User - Billing', props: { currentStep: 'billing-method', isExistingUser: false } },
+      { name: 'New User - Craft Login', props: { currentStep: 'craft-login', isExistingUser: false } },
       { name: 'New User - Credentials', props: { currentStep: 'credentials', isExistingUser: false } },
       { name: 'New User - Complete', props: { currentStep: 'complete', isExistingUser: false } },
       { name: 'Existing User - Welcome', props: { currentStep: 'welcome', isExistingUser: true } },
@@ -119,7 +88,7 @@ export const onboardingComponents: ComponentEntry[] = [
     id: 'craft-login-step',
     name: 'CraftLoginStep',
     category: 'Onboarding',
-    description: 'OAuth login flow with Craft account',
+    description: 'OAuth login flow with Craft account (for Craft Credits billing)',
     component: CraftLoginStep,
     props: [
       {
@@ -154,46 +123,6 @@ export const onboardingComponents: ComponentEntry[] = [
       onOpenManually: noopHandler,
       onBack: noopHandler,
       onRetry: noopHandler,
-    }),
-  },
-  {
-    id: 'space-selection-step',
-    name: 'SpaceSelectionStep',
-    category: 'Onboarding',
-    description: 'Select which Craft space to connect',
-    component: SpaceSelectionStep,
-    props: [
-      {
-        name: 'selectedSpaceId',
-        description: 'Currently selected space ID',
-        control: {
-          type: 'select',
-          options: [
-            { label: 'None', value: '' },
-            { label: 'Personal Space', value: 'personal-1' },
-            { label: 'Engineering Team', value: 'team-1' },
-            { label: 'Design Team', value: 'team-2' },
-          ],
-        },
-        defaultValue: '',
-      },
-      {
-        name: 'isLoading',
-        description: 'Show loading spinner',
-        control: { type: 'boolean' },
-        defaultValue: false,
-      },
-    ],
-    variants: [
-      { name: 'Empty Selection', props: { selectedSpaceId: null, isLoading: false } },
-      { name: 'With Selection', props: { selectedSpaceId: 'team-1', isLoading: false } },
-      { name: 'Loading', props: { selectedSpaceId: null, isLoading: true } },
-    ],
-    mockData: () => ({
-      categories: sampleSpaceCategories,
-      onSelect: (id: string) => console.log('[Playground] Selected space:', id),
-      onContinue: noopHandler,
-      onBack: noopHandler,
     }),
   },
   {
@@ -331,17 +260,10 @@ export const onboardingComponents: ComponentEntry[] = [
         },
         defaultValue: 'complete',
       },
-      {
-        name: 'spaceName',
-        description: 'Name of the connected space',
-        control: { type: 'string', placeholder: 'Space name' },
-        defaultValue: 'Engineering Team',
-      },
     ],
     variants: [
       { name: 'Saving', props: { status: 'saving' } },
-      { name: 'Complete', props: { status: 'complete', spaceName: 'Engineering Team' } },
-      { name: 'Complete (No Space Name)', props: { status: 'complete', spaceName: '' } },
+      { name: 'Complete', props: { status: 'complete' } },
     ],
     mockData: () => ({
       onFinish: noopHandler,
@@ -353,14 +275,7 @@ export const onboardingComponents: ComponentEntry[] = [
     category: 'Onboarding',
     description: 'Full-screen onboarding flow container with all steps',
     component: OnboardingWizard,
-    props: [
-      {
-        name: 'isLoadingSpaces',
-        description: 'Show loading state for spaces',
-        control: { type: 'boolean' },
-        defaultValue: false,
-      },
-    ],
+    props: [],
     variants: [
       {
         name: 'Welcome (New User)',
@@ -375,34 +290,6 @@ export const onboardingComponents: ComponentEntry[] = [
         },
       },
       {
-        name: 'Craft Login - Idle',
-        props: {
-          state: createOnboardingState({ step: 'craft-login', loginStatus: 'idle' }),
-        },
-      },
-      {
-        name: 'Craft Login - Waiting',
-        props: {
-          state: createOnboardingState({ step: 'craft-login', loginStatus: 'waiting' }),
-        },
-      },
-      {
-        name: 'Space Selection',
-        props: {
-          state: createOnboardingState({ step: 'select-space' }),
-        },
-      },
-      {
-        name: 'Space Selection (With Selection)',
-        props: {
-          state: createOnboardingState({
-            step: 'select-space',
-            selectedSpaceId: 'team-1',
-            selectedSpaceName: 'Engineering Team',
-          }),
-        },
-      },
-      {
         name: 'Billing Method',
         props: {
           state: createOnboardingState({ step: 'billing-method' }),
@@ -412,6 +299,18 @@ export const onboardingComponents: ComponentEntry[] = [
         name: 'Billing Method (Selected)',
         props: {
           state: createOnboardingState({ step: 'billing-method', billingMethod: 'craft_credits' }),
+        },
+      },
+      {
+        name: 'Craft Login - Idle',
+        props: {
+          state: createOnboardingState({ step: 'craft-login', loginStatus: 'idle', billingMethod: 'craft_credits' }),
+        },
+      },
+      {
+        name: 'Craft Login - Waiting',
+        props: {
+          state: createOnboardingState({ step: 'craft-login', loginStatus: 'waiting', billingMethod: 'craft_credits' }),
         },
       },
       {
@@ -438,14 +337,12 @@ export const onboardingComponents: ComponentEntry[] = [
           state: createOnboardingState({
             step: 'complete',
             completionStatus: 'complete',
-            selectedSpaceName: 'Engineering Team',
           }),
         },
       },
     ],
     mockData: () => ({
       state: createOnboardingState(),
-      spaceCategories: sampleSpaceCategories,
       className: 'min-h-0 h-full',
       onCancel: noopHandler,
       onContinue: noopHandler,
@@ -453,7 +350,6 @@ export const onboardingComponents: ComponentEntry[] = [
       onLogin: noopHandler,
       onOpenLoginManually: noopHandler,
       onRetryLogin: noopHandler,
-      onSelectSpace: (id: string) => console.log('[Playground] Selected space:', id),
       onSelectBillingMethod: (method: string) => console.log('[Playground] Selected billing:', method),
       onSubmitCredential: (cred: string) => console.log('[Playground] Submitted:', cred),
       onStartOAuth: noopHandler,

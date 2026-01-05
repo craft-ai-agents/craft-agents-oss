@@ -1,13 +1,12 @@
 import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
-import type { Workspace, CumulativeUsage, Session } from '@craft-agent/shared/config';
+import type { Workspace, CumulativeUsage } from '@craft-agent/shared/config';
 import {
   getCumulativeUsage,
   addToCumulativeUsage,
-  createSession,
-  setActiveSession,
   switchWorkspaceAtomic,
   clearSessionMessages,
 } from '@craft-agent/shared/config';
+import { createSession, type SessionConfig } from '@craft-agent/shared/sessions';
 
 /**
  * GlobalContext holds state that PERSISTS across session switches.
@@ -41,11 +40,11 @@ export interface GlobalContextValue {
 
   // Current session (primary isolation boundary)
   // Changing session triggers SessionContainer remount via key={session.id}
-  session: Session;
-  setSession: (session: Session | ((prev: Session) => Session)) => void;
+  session: SessionConfig;
+  setSession: (session: SessionConfig | ((prev: SessionConfig) => SessionConfig)) => void;
 
-  // Start a new session in the current workspace (e.g., /new command)
-  startNewSession: () => Session;
+  // Start a new session in the current workspace (e.g., /clear command)
+  startNewSession: () => SessionConfig;
 
   // Reset current session (clear messages, keep session ID) - for /clear command
   // Increments sessionResetKey to force SessionContainer remount
@@ -66,7 +65,7 @@ export interface GlobalProviderProps {
   children: React.ReactNode;
   initialModel: string;
   initialWorkspace: Workspace;
-  initialSession: Session;
+  initialSession: SessionConfig;
   onModelChange?: (model: string) => void;
 }
 
@@ -88,11 +87,10 @@ export function GlobalProvider({
     onModelChange?.(newModel);
   }, [onModelChange]);
 
-  const setSession = useCallback((sessionOrUpdater: Session | ((prev: Session) => Session)) => {
+  const setSession = useCallback((sessionOrUpdater: SessionConfig | ((prev: SessionConfig) => SessionConfig)) => {
     setSessionState(prev => {
       const newSession = typeof sessionOrUpdater === 'function' ? sessionOrUpdater(prev) : sessionOrUpdater;
-      // Persist active session to storage
-      setActiveSession(newSession.id);
+      // Session persistence is handled by saveSession() in the sessions storage module
       return newSession;
     });
   }, []);
@@ -114,12 +112,11 @@ export function GlobalProvider({
 
   const startNewSession = useCallback(() => {
     // Create a new session in the current workspace
-    // Note: createSession() already saves config with activeSessionId
-    const newSession = createSession(workspace.id);
+    const newSession = createSession(workspace.rootPath);
     // Update state (triggers SessionContainer remount via key)
     setSessionState(newSession);
     return newSession;
-  }, [workspace.id]);
+  }, [workspace.rootPath]);
 
   const resetSession = useCallback(() => {
     // Clear messages in storage (clears SDK session ID for fresh Claude conversation)

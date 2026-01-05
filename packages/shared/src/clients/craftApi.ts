@@ -77,33 +77,6 @@ export class CraftApi {
         });
     }
 
-    async getWorkflowLinks(params: { authToken: string, spaceId: string }) {
-        const { authToken, spaceId } = params;
-        return this.fetch({
-            method: 'GET',
-            path: `/share/v2/spaces/${spaceId}/workflow-links`,
-            authToken,
-            responseParser: async (response) => {
-                return workflowLinksResponseSchema.parse(JSON.parse(response)).items;
-            },
-        });
-    }
-
-    async createSpaceWorkflowLink(params: { authToken: string, spaceId: string, name: string, type: 'mcp', scope: 'fullSpace' }) {
-        const { authToken, spaceId, name, type, scope } = params;
-        return this.fetch({
-            method: 'POST',
-            path: `/share/v2/spaces/${spaceId}/workflow-links`,
-            authToken,
-            body: { type, scope, name },
-            responseParser: async (response) => {
-                return z.object({ 
-                    workflowLink: workflowLinkSchema
-                }).parse(JSON.parse(response)).workflowLink
-            },
-        });
-    }
-
     async renewSession(authToken: string): Promise<string> {
         return this.fetch({
             method: 'POST',
@@ -171,29 +144,16 @@ export class CraftApi {
     }
 }
 
-const workflowLinkSchema = z.object({
-    name: z.string(),
-    scope: z.string(),
-    linkId: z.string(),
-    enabled: z.boolean(),
-    secretLinkId: z.string(),
-    type: z.string(),
-    hasPassword: z.boolean(),
-    protectionType: z.string(),
-    urls: z.object({
-        mcp: z.string().optional(),
-    }),
-});
-
-const workflowLinksResponseSchema = z.object({
-    items: z.array(workflowLinkSchema),
-});
-
 const profileResponseSchema = z.object({
     userId: z.string(),
     firstName: z.string(),
     lastName: z.string(),
-    spaces: z.array(z.object({ id: z.string(), name: z.string(), teamId: z.string().nullable().optional() })),
+    spaces: z.array(z.object({
+        id: z.string(),
+        name: z.string(),
+        teamId: z.string().nullable().optional(),
+        logoUrl: z.string().nullable().optional(),
+    })),
     teams: z.array(z.object({
         id: z.string(),
         isPrivate: z.boolean(),

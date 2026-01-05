@@ -27,11 +27,11 @@ export function CompletionStep({
     <StepFormLayout
       iconElement={isSaving ? (
         <div className="flex size-16 items-center justify-center">
-          <Spinner className="text-2xl text-primary" />
+          <Spinner className="text-2xl text-foreground" />
         </div>
       ) : (
         <div className="flex size-16 items-center justify-center">
-          <CraftAgentsSymbol className="size-10" />
+          <CraftAgentsSymbol className="size-10 text-accent" />
         </div>
       )}
       title={isSaving ? 'Setting up...' : "You're all set!"}

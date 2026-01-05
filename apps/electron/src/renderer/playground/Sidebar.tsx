@@ -9,11 +9,31 @@ interface SidebarProps {
   onSelect: (id: string) => void
 }
 
+const STORAGE_KEY = 'playground-expanded-categories'
+
 export function Sidebar({ categories, selectedId, onSelect }: SidebarProps) {
   const [expandedCategories, setExpandedCategories] = React.useState<Set<string>>(() => {
-    // Expand all categories by default
-    return new Set(categories.map(c => c.name))
+    // Try to restore from localStorage, otherwise collapse all by default
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY)
+      if (stored) {
+        const parsed = JSON.parse(stored) as string[]
+        return new Set(parsed)
+      }
+    } catch {
+      // Ignore parse errors
+    }
+    return new Set<string>()
   })
+
+  // Persist expanded categories to localStorage
+  React.useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify([...expandedCategories]))
+    } catch {
+      // Ignore storage errors
+    }
+  }, [expandedCategories])
 
   const toggleCategory = (name: string) => {
     setExpandedCategories(prev => {
