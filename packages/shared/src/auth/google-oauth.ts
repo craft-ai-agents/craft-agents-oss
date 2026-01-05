@@ -15,22 +15,21 @@ import { URL } from 'url';
 import open from 'open';
 import { randomBytes, createHash } from 'crypto';
 import { createCallbackServer, type AppType } from './callback-server.ts';
+import { type GoogleService } from '../sources/types.ts';
+
+// Re-export GoogleService for backwards compatibility
+export type { GoogleService };
 
 // Google OAuth configuration - must be set via environment variables
 // These are baked into the build at compile time
-// Reuses the same client ID/secret for all Google services
-const GOOGLE_CLIENT_ID = process.env.GMAIL_OAUTH_CLIENT_ID || '';
-const GOOGLE_CLIENT_SECRET = process.env.GMAIL_OAUTH_CLIENT_SECRET || '';
+// Used for all Google services (Gmail, Calendar, Drive, etc.)
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_OAUTH_CLIENT_ID || '';
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_OAUTH_CLIENT_SECRET || '';
 
 // Google OAuth endpoints
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v2/userinfo';
-
-/**
- * Supported Google services with predefined scopes
- */
-export type GoogleService = 'gmail' | 'calendar' | 'drive';
 
 /**
  * Predefined scope sets for common Google services
@@ -242,7 +241,7 @@ export async function startGoogleOAuth(
       return {
         success: false,
         error:
-          'Google OAuth not configured. Set GMAIL_OAUTH_CLIENT_ID and GMAIL_OAUTH_CLIENT_SECRET environment variables.',
+          'Google OAuth not configured. Set GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET environment variables.',
       };
     }
 

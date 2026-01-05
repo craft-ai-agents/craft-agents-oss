@@ -16,8 +16,8 @@ import { createCallbackServer, type AppType } from './callback-server.ts';
 
 // Google OAuth configuration - must be set via environment variables
 // These are baked into the build at compile time
-const GMAIL_CLIENT_ID = process.env.GMAIL_OAUTH_CLIENT_ID || '';
-const GMAIL_CLIENT_SECRET = process.env.GMAIL_OAUTH_CLIENT_SECRET || '';
+const GMAIL_CLIENT_ID = process.env.GOOGLE_OAUTH_CLIENT_ID || '';
+const GMAIL_CLIENT_SECRET = process.env.GOOGLE_OAUTH_CLIENT_SECRET || '';
 
 // Gmail OAuth scopes - modify access for trash/labels, compose for drafts
 const GMAIL_SCOPES = [
@@ -159,7 +159,7 @@ export async function startGmailOAuth(appType: AppType = 'electron'): Promise<Gm
     if (!GMAIL_CLIENT_ID || !GMAIL_CLIENT_SECRET) {
       return {
         success: false,
-        error: 'Gmail OAuth not configured. Set GMAIL_OAUTH_CLIENT_ID and GMAIL_OAUTH_CLIENT_SECRET environment variables.',
+        error: 'Gmail OAuth not configured. Set GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET environment variables.',
       };
     }
 
