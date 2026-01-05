@@ -46,28 +46,16 @@ function buildHeaders(
     ...defaultHeaders,
   };
 
-  // Add custom headers first (can be overridden by auth)
-  if (customHeaders) {
-    for (const [key, value] of Object.entries(customHeaders)) {
-      headers[key] = value;
-    }
-    debug(`[api-tools.buildHeaders] Added custom headers:`, Object.keys(customHeaders));
-  }
-
   // No auth needed for type='none' or missing auth
   if (!auth || auth.type === 'none') {
-    debug(`[api-tools.buildHeaders] No auth needed, final headers:`, Object.keys(headers));
     return headers;
   }
-
-  debug(`[api-tools.buildHeaders] Auth type: ${auth.type}, authScheme: "${auth.authScheme}"`);
 
   // Basic auth requires username:password credential
   if (auth.type === 'basic') {
     if (isBasicAuthCredential(credential)) {
       const encoded = Buffer.from(`${credential.username}:${credential.password}`).toString('base64');
       headers['Authorization'] = `Basic ${encoded}`;
-      debug(`[api-tools.buildHeaders] Set Basic auth header`);
     }
     return headers;
   }
@@ -75,26 +63,17 @@ function buildHeaders(
   // Other types use string credential (API key/token)
   const apiKey = typeof credential === 'string' ? credential : '';
   if (!apiKey) {
-    debug(`[api-tools.buildHeaders] WARNING: No API key available`);
     return headers;
   }
 
-  debug(`[api-tools.buildHeaders] API key length: ${apiKey.length}, first 10 chars: ${apiKey.substring(0, 10)}...`);
-
   if (auth.type === 'header') {
-    const headerName = auth.headerName || 'x-api-key';
-    headers[headerName] = apiKey;
-    debug(`[api-tools.buildHeaders] Set custom header: ${headerName}`);
+    headers[auth.headerName || 'x-api-key'] = apiKey;
   } else if (auth.type === 'bearer') {
-    // If authScheme is explicitly empty string, use just the API key
-    // If undefined, default to "Bearer"
-    const scheme = auth.authScheme === '' ? '' : (auth.authScheme || 'Bearer');
-    headers['Authorization'] = scheme ? `${scheme} ${apiKey}` : apiKey;
-    debug(`[api-tools.buildHeaders] Set Authorization header with scheme: "${scheme}", value starts with: ${headers['Authorization'].substring(0, 20)}...`);
+    const scheme = auth.authScheme || 'Bearer';
+    headers['Authorization'] = `${scheme} ${apiKey}`;
   }
   // Query type is handled in buildUrl
 
-  debug(`[api-tools.buildHeaders] Final headers:`, Object.keys(headers));
   return headers;
 }
 
@@ -181,13 +160,6 @@ export function createApiTool(
 ) {
   const toolName = `api_${config.name}`;
   debug(`[api-tools] Creating flexible tool: ${toolName}`);
-  debug(`[api-tools] Config for ${toolName}:`, {
-    baseUrl: config.baseUrl,
-    authType: config.auth?.type,
-    authScheme: config.auth?.authScheme,
-    customHeaders: config.headers ? Object.keys(config.headers) : [],
-    credentialLength: typeof credential === 'string' ? credential.length : 'BasicAuth',
-  });
 
   const description = buildToolDescription(config);
 
@@ -208,7 +180,6 @@ export function createApiTool(
         const headers = buildHeaders(config.auth, credential, config.defaultHeaders);
 
         debug(`[api-tools] ${config.name}: ${method} ${url}`);
-        debug(`[api-tools] ${config.name} request headers:`, headers);
 
         const fetchOptions: RequestInit = {
           method,

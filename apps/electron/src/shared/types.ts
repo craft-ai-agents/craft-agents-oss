@@ -101,6 +101,15 @@ export interface McpToolsResult {
   tools?: McpToolWithPermission[]
 }
 
+/**
+ * Agent activation status - indicates if agent needs activation or auth
+ */
+export interface AgentSetupStatus {
+  needsSetup: boolean  // Agent definition has never been extracted (needs activation)
+  needsAuth: boolean   // Definition exists but credentials are missing
+  reason?: string
+}
+
 // Re-export permission types from core, extended with sessionId for multi-session context
 export type { PermissionRequest as BasePermissionRequest } from '@craft-agent/core/types';
 import type { PermissionRequest as BasePermissionRequest } from '@craft-agent/core/types';
