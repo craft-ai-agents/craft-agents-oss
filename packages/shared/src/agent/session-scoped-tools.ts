@@ -776,12 +776,23 @@ After creating or editing a source's config.json, run this tool to:
             saveSourceConfigWithContext(workspaceId, source, sourceContext);
             results.push(`**✓ Icon Downloaded** (${cached})`);
           } else {
-            results.push('**⚠ Icon Download Failed** - URL may be invalid');
+            // Download failed - clear invalid URL so we can try auto-fetch
+            source.iconUrl = undefined;
+            saveSourceConfigWithContext(workspaceId, source, sourceContext);
           }
-        } else if (!source.iconUrl) {
-          // No icon - try to auto-fetch from service URL
-          const serviceUrl = source.type === 'api' ? source.api?.baseUrl :
-                            source.type === 'mcp' ? source.mcp?.url : null;
+        }
+
+        // Auto-fetch icon if not set
+        if (!source.iconUrl) {
+          // No icon - try to auto-fetch from service URL or provider domain
+          let serviceUrl = source.type === 'api' ? source.api?.baseUrl :
+                          source.type === 'mcp' ? source.mcp?.url : null;
+
+          // For stdio sources (no URL), try provider name as domain
+          if (!serviceUrl && source.provider) {
+            serviceUrl = `https://${source.provider}.com`;
+          }
+
           if (serviceUrl) {
             const { getHighQualityLogoUrl, cacheIcon } = await import('../utils/logo.ts');
             const logoUrl = await getHighQualityLogoUrl(serviceUrl, source.provider);

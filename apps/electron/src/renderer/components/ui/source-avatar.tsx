@@ -106,7 +106,13 @@ export function getSourceFallbackIcon(type: SourceType): React.ComponentType<{ c
  */
 function deriveServiceFavicon(source: LoadedSource): string | null {
   const config = source.config
-  const url = config.mcp?.url ?? config.api?.baseUrl
+  let url = config.mcp?.url ?? config.api?.baseUrl
+
+  // For stdio sources (no URL), try provider name as domain
+  if (!url && config.provider) {
+    url = `https://${config.provider}.com`
+  }
+
   return url ? getLogoUrl(url, config.provider) : null
 }
 

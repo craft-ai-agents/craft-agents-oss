@@ -515,10 +515,7 @@ export async function validateStdioMcpConnection(
     let errorMessage = error.message;
 
     if (error.message.includes('ENOENT') || error.message.includes('not found')) {
-      errorMessage = `Command not found: "${command}". Make sure it's installed and in your PATH.`;
-      if (command === 'npx') {
-        errorMessage += ' Ensure Node.js is installed.';
-      }
+      errorMessage = `Command not found: "${command}". Install the required dependency and try again.`;
     } else if (error.message.includes('EACCES') || error.message.includes('permission denied')) {
       errorMessage = `Permission denied running "${command}". Check file permissions.`;
     } else if (error.message.includes('Timeout')) {

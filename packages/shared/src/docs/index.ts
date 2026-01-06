@@ -411,6 +411,55 @@ After creating, use \`source_credential_prompt\` with mode "bearer".
 }
 \`\`\`
 
+**Stdio transport (local command):**
+
+For MCP servers that run locally via command line (npx, node, python), use the stdio transport.
+
+Users often provide configs in Claude Desktop / Claude Code format:
+\`\`\`json
+{
+  "mcpServers": {
+    "airbnb": {
+      "command": "npx",
+      "args": ["-y", "@openbnb/mcp-server-airbnb"]
+    }
+  }
+}
+\`\`\`
+
+Convert to native format:
+\`\`\`json
+{
+  "type": "mcp",
+  "name": "Airbnb",
+  "provider": "airbnb",
+  "mcp": {
+    "transport": "stdio",
+    "command": "npx",
+    "args": ["-y", "@openbnb/mcp-server-airbnb"],
+    "authType": "none"
+  }
+}
+\`\`\`
+
+With environment variables:
+\`\`\`json
+{
+  "type": "mcp",
+  "name": "Brave Search",
+  "provider": "brave",
+  "mcp": {
+    "transport": "stdio",
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+    "env": {
+      "BRAVE_API_KEY": "your-api-key"
+    },
+    "authType": "none"
+  }
+}
+\`\`\`
+
 ### API Sources
 
 REST APIs become flexible tools that Claude can call.

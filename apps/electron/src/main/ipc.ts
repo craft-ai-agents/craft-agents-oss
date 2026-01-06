@@ -1284,27 +1284,50 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
         return { success: false, error: 'Source has not been tested yet' }
       }
 
-      // Get access token if needed
-      let accessToken: string | undefined
-      if (source.config.mcp.authType === 'oauth' || source.config.mcp.authType === 'bearer') {
-        const credentialManager = getCredentialManager()
-        const credentialId = source.config.mcp.authType === 'oauth'
-          ? { type: 'source_oauth' as const, workspaceId: source.workspaceId, sourceId: sourceSlug }
-          : { type: 'source_bearer' as const, workspaceId: source.workspaceId, sourceId: sourceSlug }
-        const credential = await credentialManager.get(credentialId)
-        accessToken = credential?.value
+      // Fetch tools based on transport type
+      let tools: Array<{ name: string; description?: string }>
+
+      if (source.config.mcp.transport === 'stdio') {
+        // Stdio transport - spawn process and list tools
+        ipcLog.info(`Fetching MCP tools via stdio: ${source.config.mcp.command}`)
+        const { validateStdioMcpConnection } = await import('@craft-agent/shared/mcp')
+
+        const result = await validateStdioMcpConnection({
+          command: source.config.mcp.command!,
+          args: source.config.mcp.args,
+          env: source.config.mcp.env,
+          timeout: 30000,
+        })
+
+        if (!result.success) {
+          return { success: false, error: result.error || 'Failed to connect to stdio MCP server' }
+        }
+
+        // validateStdioMcpConnection only returns tool names, not descriptions
+        // For now, we'll just use the names
+        tools = (result.tools || []).map(name => ({ name }))
+      } else {
+        // HTTP/SSE transport - use HTTP client
+        let accessToken: string | undefined
+        if (source.config.mcp.authType === 'oauth' || source.config.mcp.authType === 'bearer') {
+          const credentialManager = getCredentialManager()
+          const credentialId = source.config.mcp.authType === 'oauth'
+            ? { type: 'source_oauth' as const, workspaceId: source.workspaceId, sourceId: sourceSlug }
+            : { type: 'source_bearer' as const, workspaceId: source.workspaceId, sourceId: sourceSlug }
+          const credential = await credentialManager.get(credentialId)
+          accessToken = credential?.value
+        }
+
+        ipcLog.info(`Fetching MCP tools from ${source.config.mcp.url}`)
+        const { CraftMcpClient } = await import('@craft-agent/shared/mcp')
+        const client = new CraftMcpClient({
+          url: source.config.mcp.url,
+          headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+        })
+
+        tools = await client.listTools()
+        await client.close()
       }
-
-      // Connect to MCP and list tools
-      ipcLog.info(`Fetching MCP tools from ${source.config.mcp.url}`)
-      const { CraftMcpClient } = await import('@craft-agent/shared/mcp')
-      const client = new CraftMcpClient({
-        url: source.config.mcp.url,
-        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
-      })
-
-      const tools = await client.listTools()
-      await client.close()
 
       // Load permissions patterns
       const { loadSourcePermissionsConfig, permissionsConfigCache } = await import('@craft-agent/shared/agent')
