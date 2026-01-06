@@ -235,10 +235,6 @@ export class FolderAgentManager {
       case 'basic':
         authType = 'basic';
         break;
-      case 'oauth':
-        // OAuth APIs use bearer tokens after auth
-        authType = 'bearer';
-        break;
       case 'none':
       default:
         authType = 'none';

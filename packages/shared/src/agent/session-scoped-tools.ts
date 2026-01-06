@@ -551,8 +551,8 @@ async function testApiSource(
       // Extract workspace ID from root path for credential lookups
       const wsId = basename(workspaceId);
 
-      if (source.api.authType === 'oauth') {
-        // Use SourceCredentialManager for OAuth - handles expiry checking and refresh
+      if (source.provider === 'google') {
+        // Use SourceCredentialManager for Google OAuth - handles expiry checking and refresh
         const sourceCredManager = getSourceCredentialManager();
         const loadedSource: LoadedSource = {
           config: source,
@@ -604,7 +604,7 @@ async function testApiSource(
 
       if (credValue) {
         // Apply credential based on authType config
-        if (source.api.authType === 'bearer' || source.api.authType === 'oauth') {
+        if (source.api.authType === 'bearer' || source.provider === 'google') {
           const scheme = source.api.authScheme || 'Bearer';
           headers['Authorization'] = `${scheme} ${credValue}`;
         } else if (source.api.authType === 'header' && source.api.headerName) {

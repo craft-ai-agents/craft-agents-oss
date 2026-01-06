@@ -331,7 +331,7 @@ const McpSourceConfigSchema = z.object({
 
 const ApiSourceConfigSchema = z.object({
   baseUrl: z.string().url(),
-  authType: z.enum(['bearer', 'header', 'query', 'basic', 'oauth', 'none']),
+  authType: z.enum(['bearer', 'header', 'query', 'basic', 'none']),
   headerName: z.string().optional(),
   queryParam: z.string().optional(),
   authScheme: z.string().optional(),

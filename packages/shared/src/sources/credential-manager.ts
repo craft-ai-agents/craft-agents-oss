@@ -225,8 +225,6 @@ export class SourceCredentialManager {
       // Google APIs always use OAuth
       if (source.config.provider === 'google') {
         type = 'source_oauth';
-      } else if (api?.authType === 'oauth') {
-        type = 'source_oauth';
       } else if (api?.authType === 'bearer') {
         type = 'source_bearer';
       } else if (api?.authType === 'basic') {
@@ -258,7 +256,8 @@ export class SourceCredentialManager {
     }
 
     if (source.config.type === 'api') {
-      if (api?.authType === 'oauth') {
+      // Google APIs always use OAuth
+      if (source.config.provider === 'google') {
         return 'agent_source_oauth';
       } else if (api?.authType === 'bearer') {
         return 'agent_source_bearer';
@@ -329,16 +328,6 @@ export class SourceCredentialManager {
     // MCP OAuth flow
     if (source.config.type === 'mcp' && source.config.mcp?.authType === 'oauth') {
       return this.authenticateMcp(source, cb);
-    }
-
-    // API OAuth flow (non-Google)
-    if (source.config.type === 'api' && source.config.api?.authType === 'oauth') {
-      // For non-Google APIs, we'd need the API's OAuth config
-      // This is a placeholder - specific APIs need custom handling
-      return {
-        success: false,
-        error: 'OAuth for this API type is not yet implemented',
-      };
     }
 
     return {

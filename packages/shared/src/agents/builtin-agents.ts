@@ -113,7 +113,7 @@ Supports any CSS color format: hex, rgb, hsl, oklch (recommended), named colors.
   "provider": "provider-name",
   "type": "mcp" | "api" | "local",
   "mcp": { "url": "https://...", "authType": "oauth" | "bearer" | "none" },
-  "api": { "baseUrl": "https://...", "authType": "bearer" | "header" | "query" | "basic" | "oauth" | "none", "headerName": "X-API-Key" },
+  "api": { "baseUrl": "https://...", "authType": "bearer" | "header" | "query" | "basic" | "none", "headerName": "X-API-Key" },
   "local": { "path": "/absolute/path", "format": "filesystem" | "obsidian" | "git" },
   "iconUrl": "./icon.png",
   "iconSourceUrl": "https://example.com/icon.png"
@@ -305,7 +305,7 @@ Google APIs use Google OAuth with baked-in credentials. All Google services use 
      "type": "api",
      "api": {
        "baseUrl": "https://gmail.googleapis.com",
-       "authType": "oauth",
+       "authType": "bearer",
        "googleService": "gmail"
      },
      "iconUrl": "https://mail.google.com"
@@ -334,7 +334,7 @@ Google APIs use Google OAuth with baked-in credentials. All Google services use 
      "type": "api",
      "api": {
        "baseUrl": "https://www.googleapis.com/calendar/v3",
-       "authType": "oauth",
+       "authType": "bearer",
        "googleService": "calendar"
      },
      "iconUrl": "https://calendar.google.com"
@@ -356,7 +356,7 @@ Google APIs use Google OAuth with baked-in credentials. All Google services use 
      "type": "api",
      "api": {
        "baseUrl": "https://www.googleapis.com/drive/v3",
-       "authType": "oauth",
+       "authType": "bearer",
        "googleService": "drive"
      },
      "iconUrl": "https://drive.google.com"
@@ -378,7 +378,7 @@ Google APIs use Google OAuth with baked-in credentials. All Google services use 
      "type": "api",
      "api": {
        "baseUrl": "https://docs.googleapis.com/v1",
-       "authType": "oauth",
+       "authType": "bearer",
        "googleService": "docs"
      },
      "iconUrl": "https://docs.google.com"
@@ -400,7 +400,7 @@ Google APIs use Google OAuth with baked-in credentials. All Google services use 
      "type": "api",
      "api": {
        "baseUrl": "https://sheets.googleapis.com/v4",
-       "authType": "oauth",
+       "authType": "bearer",
        "googleService": "sheets"
      },
      "iconUrl": "https://sheets.google.com"

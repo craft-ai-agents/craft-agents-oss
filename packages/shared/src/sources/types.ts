@@ -26,7 +26,7 @@ export type McpAuthType = 'oauth' | 'bearer' | 'none';
 /**
  * API authentication types
  */
-export type ApiAuthType = 'bearer' | 'header' | 'query' | 'basic' | 'oauth' | 'none';
+export type ApiAuthType = 'bearer' | 'header' | 'query' | 'basic' | 'none';
 
 /**
  * Google service types for OAuth scope selection
@@ -136,7 +136,7 @@ export interface ApiSourceConfig {
   defaultHeaders?: Record<string, string>; // Headers to include with every request
   testEndpoint?: ApiTestEndpoint; // Endpoint to use for connection testing
 
-  // Google OAuth fields (used when authType is 'oauth' and provider is 'google')
+  // Google OAuth fields (used when provider is 'google')
   googleService?: GoogleService; // Predefined service for scope selection
   googleScopes?: string[]; // Custom scopes (overrides googleService)
 }

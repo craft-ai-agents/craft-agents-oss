@@ -339,7 +339,7 @@ Each source folder contains:
   // For API sources:
   "api": {
     "baseUrl": "https://api.example.com",
-    "authType": "bearer" | "header" | "query" | "basic" | "oauth" | "none",
+    "authType": "bearer" | "header" | "query" | "basic" | "none",
     "headerName": "X-API-Key",      // For header auth
     "queryParam": "api_key",         // For query auth
     "authScheme": "Bearer"           // For bearer auth (default: "Bearer")

@@ -162,18 +162,6 @@ export class SourceServerBuilder {
       return createApiServer(config, '');
     }
 
-    // OAuth APIs (non-Google) - use token getter
-    if (authType === 'oauth') {
-      if (!source.config.isAuthenticated || !getToken) {
-        debug(`[SourceServerBuilder] OAuth API source ${source.config.slug} not authenticated`);
-        return null;
-      }
-      debug(`[SourceServerBuilder] Building OAuth API server for ${source.config.slug}`);
-      const config = this.buildApiConfig(source);
-      // Pass the token getter function for auto-refresh support
-      return createApiServer(config, getToken);
-    }
-
     // API key/bearer/header/query/basic auth - use static credential
     if (!credential) {
       debug(`[SourceServerBuilder] API source ${source.config.slug} needs credentials`);
