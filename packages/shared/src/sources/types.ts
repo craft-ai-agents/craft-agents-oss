@@ -31,7 +31,7 @@ export type ApiAuthType = 'bearer' | 'header' | 'query' | 'basic' | 'oauth' | 'n
 /**
  * Google service types for OAuth scope selection
  */
-export type GoogleService = 'gmail' | 'calendar' | 'drive';
+export type GoogleService = 'gmail' | 'calendar' | 'drive' | 'docs' | 'sheets';
 
 /**
  * Infer Google service from API baseUrl.
@@ -44,6 +44,8 @@ export function inferGoogleServiceFromUrl(baseUrl: string | undefined): GoogleSe
   if (url.includes('calendar.googleapis.com') || url.includes('/calendar/')) return 'calendar';
   if (url.includes('drive.googleapis.com') || url.includes('/drive/')) return 'drive';
   if (url.includes('gmail.googleapis.com') || url.includes('/gmail/')) return 'gmail';
+  if (url.includes('docs.googleapis.com') || url.includes('/documents/')) return 'docs';
+  if (url.includes('sheets.googleapis.com') || url.includes('/spreadsheets/')) return 'sheets';
   return undefined;
 }
 

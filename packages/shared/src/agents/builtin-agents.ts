@@ -113,7 +113,7 @@ Supports any CSS color format: hex, rgb, hsl, oklch (recommended), named colors.
   "provider": "provider-name",
   "type": "mcp" | "api" | "local",
   "mcp": { "url": "https://...", "authType": "oauth" | "bearer" | "none" },
-  "api": { "baseUrl": "https://...", "authType": "bearer" | "header" | "query" | "basic" | "none", "headerName": "X-API-Key" },
+  "api": { "baseUrl": "https://...", "authType": "bearer" | "header" | "query" | "basic" | "oauth" | "none", "headerName": "X-API-Key" },
   "local": { "path": "/absolute/path", "format": "filesystem" | "obsidian" | "git" },
   "iconUrl": "./icon.png",
   "iconSourceUrl": "https://example.com/icon.png"
@@ -288,7 +288,7 @@ When adding a local source, **actively discover** what it is and set the appropr
    - Look for: \`favicon.ico\`, \`logo.png\`, \`logo.svg\` in root or \`public/\` folder
    - If found, copy it to the source folder and use \`iconUrl: "./icon.png"\`
 
-## Google API Setup (Gmail, Calendar, Drive)
+## Google API Setup (Gmail, Calendar, Drive, Docs, Sheets)
 
 Google APIs use Google OAuth with baked-in credentials. All Google services use the same OAuth flow.
 
@@ -360,6 +360,50 @@ Google APIs use Google OAuth with baked-in credentials. All Google services use 
        "googleService": "drive"
      },
      "iconUrl": "https://drive.google.com"
+   }
+   \`\`\`
+
+2. Use \`source_google_oauth_trigger\` to authenticate.
+
+### Google Docs Setup
+
+1. Create the source config at \`sources/google-docs/config.json\`:
+   \`\`\`json
+   {
+     "id": "src_google_docs",
+     "name": "Google Docs",
+     "slug": "google-docs",
+     "enabled": true,
+     "provider": "google",
+     "type": "api",
+     "api": {
+       "baseUrl": "https://docs.googleapis.com/v1",
+       "authType": "oauth",
+       "googleService": "docs"
+     },
+     "iconUrl": "https://docs.google.com"
+   }
+   \`\`\`
+
+2. Use \`source_google_oauth_trigger\` to authenticate.
+
+### Google Sheets Setup
+
+1. Create the source config at \`sources/google-sheets/config.json\`:
+   \`\`\`json
+   {
+     "id": "src_google_sheets",
+     "name": "Google Sheets",
+     "slug": "google-sheets",
+     "enabled": true,
+     "provider": "google",
+     "type": "api",
+     "api": {
+       "baseUrl": "https://sheets.googleapis.com/v4",
+       "authType": "oauth",
+       "googleService": "sheets"
+     },
+     "iconUrl": "https://sheets.google.com"
    }
    \`\`\`
 

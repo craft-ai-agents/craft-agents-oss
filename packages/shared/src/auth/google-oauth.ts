@@ -48,6 +48,14 @@ export const GOOGLE_SERVICE_SCOPES: Record<GoogleService, string[]> = {
     'https://www.googleapis.com/auth/drive', // Full Drive access
     'https://www.googleapis.com/auth/userinfo.email',
   ],
+  docs: [
+    'https://www.googleapis.com/auth/documents', // Full Docs access
+    'https://www.googleapis.com/auth/userinfo.email',
+  ],
+  sheets: [
+    'https://www.googleapis.com/auth/spreadsheets', // Full Sheets access
+    'https://www.googleapis.com/auth/userinfo.email',
+  ],
 };
 
 /**

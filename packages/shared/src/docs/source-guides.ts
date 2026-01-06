@@ -771,6 +771,280 @@ Use the \`q\` parameter:
 Use \`source_google_oauth_trigger\` to start the Google OAuth flow.
 `;
 
+const GOOGLE_DOCS_GUIDE = `---
+domains:
+  - docs.google.com
+  - docs.googleapis.com
+providers:
+  - google-docs
+  - google
+---
+
+# Google Docs
+
+Access and manage Google Docs documents.
+
+## API Reference
+
+This source provides a single flexible \`api_google-docs\` tool that accepts:
+- \`path\`: API endpoint (e.g., "/v1/documents/{documentId}")
+- \`method\`: HTTP method (GET, POST)
+- \`params\`: Request body or query parameters
+
+### Common Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| /v1/documents | POST | Create a new document |
+| /v1/documents/{documentId} | GET | Get document content and structure |
+| /v1/documents/{documentId}:batchUpdate | POST | Update document content |
+
+### Document Structure
+
+Google Docs uses a structured document model:
+- **Body**: Main document content
+- **Paragraphs**: Text blocks with styling
+- **Tables**: Grid-based content
+- **Lists**: Bulleted/numbered items
+- **Headers/Footers**: Page headers and footers
+- **Footnotes**: Reference notes
+
+### batchUpdate Requests
+
+The \`:batchUpdate\` endpoint accepts an array of requests:
+
+\`\`\`json
+{
+  "requests": [
+    {
+      "insertText": {
+        "location": { "index": 1 },
+        "text": "Hello World"
+      }
+    }
+  ]
+}
+\`\`\`
+
+**Common request types:**
+- \`insertText\` - Insert text at a location
+- \`deleteContentRange\` - Delete content in a range
+- \`updateTextStyle\` - Apply text formatting
+- \`insertTable\` - Insert a table
+- \`replaceAllText\` - Find and replace text
+- \`insertInlineImage\` - Insert an image
+
+### Reading Document Content
+
+When getting a document, the response includes:
+- \`documentId\` - Unique document ID
+- \`title\` - Document title
+- \`body\` - Document content structure
+- \`namedStyles\` - Style definitions
+- \`revisionId\` - Current revision
+
+## Guidelines
+
+- **Privacy**: This source accesses Google Docs documents.
+- **Batch updates**: Use \`:batchUpdate\` for efficient multi-operation updates.
+- **Indexes**: Text positions use 1-based indexing (index 1 = start of document).
+- **Read before write**: Get document structure before making targeted edits.
+
+## Rate Limits
+
+- 300 read requests per minute per user
+- 60 write requests per minute per user
+- Batch operations are more efficient than individual requests
+
+<!-- SETUP: This section is ONLY for the setup agent -->
+
+## Setup Hints
+
+### Configuration
+
+**Required config.json:**
+\`\`\`json
+{
+  "id": "src_google_docs",
+  "name": "Google Docs",
+  "slug": "google-docs",
+  "enabled": true,
+  "provider": "google",
+  "type": "api",
+  "api": {
+    "baseUrl": "https://docs.googleapis.com/v1",
+    "authType": "oauth",
+    "googleService": "docs"
+  },
+  "iconUrl": "https://docs.google.com"
+}
+\`\`\`
+
+### Authentication
+Use \`source_google_oauth_trigger\` to start the Google OAuth flow.
+
+### Recommended Questions
+- What types of documents do you work with most?
+- Do you need to create new documents or primarily read/edit existing ones?
+- Are there specific documents or folders you frequently access?
+
+### Permissions for Explore Mode
+\`\`\`json
+{
+  "allowedApiEndpoints": [
+    { "method": "GET", "path": ".*", "comment": "All GET requests are read-only" }
+  ]
+}
+\`\`\`
+`;
+
+const GOOGLE_SHEETS_GUIDE = `---
+domains:
+  - sheets.google.com
+  - sheets.googleapis.com
+providers:
+  - google-sheets
+  - google
+---
+
+# Google Sheets
+
+Access and manage Google Sheets spreadsheets.
+
+## API Reference
+
+This source provides a single flexible \`api_google-sheets\` tool that accepts:
+- \`path\`: API endpoint (e.g., "/v4/spreadsheets/{spreadsheetId}")
+- \`method\`: HTTP method (GET, POST, PUT)
+- \`params\`: Request body or query parameters
+
+### Common Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| /v4/spreadsheets | POST | Create a new spreadsheet |
+| /v4/spreadsheets/{spreadsheetId} | GET | Get spreadsheet metadata and sheets |
+| /v4/spreadsheets/{spreadsheetId}/values/{range} | GET | Read cell values |
+| /v4/spreadsheets/{spreadsheetId}/values/{range} | PUT | Write cell values |
+| /v4/spreadsheets/{spreadsheetId}/values:batchGet | GET | Read multiple ranges |
+| /v4/spreadsheets/{spreadsheetId}/values:batchUpdate | POST | Write multiple ranges |
+| /v4/spreadsheets/{spreadsheetId}:batchUpdate | POST | Batch update spreadsheet |
+
+### A1 Notation
+
+Ranges use A1 notation:
+- \`Sheet1!A1:B10\` - Cells A1 to B10 on Sheet1
+- \`Sheet1!A:A\` - Entire column A on Sheet1
+- \`Sheet1!1:1\` - Entire row 1 on Sheet1
+- \`A1:B10\` - First sheet, cells A1 to B10
+- \`'Sheet Name'!A1:B10\` - Use quotes for sheets with spaces
+
+### Reading Values
+
+GET \`/v4/spreadsheets/{id}/values/{range}\`
+
+Query parameters:
+- \`valueRenderOption\`: FORMATTED_VALUE, UNFORMATTED_VALUE, FORMULA
+- \`dateTimeRenderOption\`: SERIAL_NUMBER, FORMATTED_STRING
+- \`majorDimension\`: ROWS, COLUMNS
+
+### Writing Values
+
+PUT \`/v4/spreadsheets/{id}/values/{range}\`
+
+Query parameters:
+- \`valueInputOption\`: RAW, USER_ENTERED (applies formatting/formulas)
+
+Request body:
+\`\`\`json
+{
+  "values": [
+    ["Row1Col1", "Row1Col2"],
+    ["Row2Col1", "Row2Col2"]
+  ]
+}
+\`\`\`
+
+### Batch Updates
+
+POST \`/v4/spreadsheets/{id}:batchUpdate\`
+
+Request body for structural changes:
+\`\`\`json
+{
+  "requests": [
+    {
+      "addSheet": {
+        "properties": { "title": "New Sheet" }
+      }
+    }
+  ]
+}
+\`\`\`
+
+**Common request types:**
+- \`addSheet\` - Add a new sheet
+- \`deleteSheet\` - Delete a sheet
+- \`updateCells\` - Update cell formatting
+- \`autoResizeDimensions\` - Auto-fit column/row sizes
+- \`mergeCells\` - Merge cell ranges
+- \`addChart\` - Insert a chart
+
+## Guidelines
+
+- **Privacy**: This source accesses Google Sheets spreadsheets.
+- **Value input**: Use \`valueInputOption=USER_ENTERED\` for formulas and dates.
+- **Batch operations**: Use batch endpoints for efficiency with multiple ranges.
+- **Sheet names**: Quote sheet names with spaces in A1 notation.
+
+## Rate Limits
+
+- 300 read requests per minute per user
+- 60 write requests per minute per user
+- Batch operations count as single requests
+
+<!-- SETUP: This section is ONLY for the setup agent -->
+
+## Setup Hints
+
+### Configuration
+
+**Required config.json:**
+\`\`\`json
+{
+  "id": "src_google_sheets",
+  "name": "Google Sheets",
+  "slug": "google-sheets",
+  "enabled": true,
+  "provider": "google",
+  "type": "api",
+  "api": {
+    "baseUrl": "https://sheets.googleapis.com/v4",
+    "authType": "oauth",
+    "googleService": "sheets"
+  },
+  "iconUrl": "https://sheets.google.com"
+}
+\`\`\`
+
+### Authentication
+Use \`source_google_oauth_trigger\` to start the Google OAuth flow.
+
+### Recommended Questions
+- What spreadsheets do you work with most frequently?
+- Do you need to create new spreadsheets or primarily read/edit existing ones?
+- Are there specific sheets or data ranges you access regularly?
+
+### Permissions for Explore Mode
+\`\`\`json
+{
+  "allowedApiEndpoints": [
+    { "method": "GET", "path": ".*", "comment": "All GET requests are read-only" }
+  ]
+}
+\`\`\`
+`;
+
 const FILESYSTEM_GUIDE = `---
 providers:
   - filesystem
@@ -976,6 +1250,8 @@ export const BUNDLED_SOURCE_GUIDES: Record<string, string> = {
   'gmail.com.md': GMAIL_GUIDE,
   'google-calendar.md': GOOGLE_CALENDAR_GUIDE,
   'google-drive.md': GOOGLE_DRIVE_GUIDE,
+  'google-docs.md': GOOGLE_DOCS_GUIDE,
+  'google-sheets.md': GOOGLE_SHEETS_GUIDE,
   'filesystem.md': FILESYSTEM_GUIDE,
   'brave-search.md': BRAVE_SEARCH_GUIDE,
   'memory.md': MEMORY_GUIDE,
