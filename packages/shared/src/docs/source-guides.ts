@@ -1177,6 +1177,146 @@ This is a **local stdio MCP server** that requires a Brave Search API key.
 \`\`\`
 `;
 
+const SLACK_GUIDE = `---
+domains:
+  - slack.com
+  - api.slack.com
+providers:
+  - slack
+---
+
+# Slack
+
+Access Slack workspaces, channels, and messages through the Slack Web API.
+
+## API Reference
+
+This source provides a single flexible \`api_slack\` tool that accepts:
+- \`path\`: API endpoint (e.g., "conversations.list")
+- \`method\`: HTTP method (typically POST for Slack)
+- \`params\`: Request body parameters
+
+### Common Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| conversations.list | POST | List channels, DMs, and groups |
+| conversations.history | POST | Get messages from a channel |
+| conversations.info | POST | Get channel details |
+| chat.postMessage | POST | Send a message |
+| users.list | POST | List workspace users |
+| users.info | POST | Get user details |
+| search.messages | POST | Search messages (requires search scope) |
+| reactions.add | POST | Add emoji reaction |
+| files.list | POST | List files |
+
+### Key Parameters
+
+**conversations.list:**
+- \`types\`: Channel types to include (public_channel, private_channel, mpim, im)
+- \`limit\`: Max results per page (default 100, max 1000)
+- \`cursor\`: Pagination cursor
+
+**conversations.history:**
+- \`channel\`: Channel ID (required)
+- \`limit\`: Max messages (default 100)
+- \`oldest\`: Start of time range (Unix timestamp)
+- \`latest\`: End of time range (Unix timestamp)
+
+**chat.postMessage:**
+- \`channel\`: Channel ID or name (required)
+- \`text\`: Message text
+- \`blocks\`: Block Kit formatted message
+- \`thread_ts\`: Reply in thread
+
+### Response Format
+
+Slack API responses include:
+- \`ok\`: Boolean indicating success
+- \`error\`: Error code if \`ok\` is false
+- Payload specific to each endpoint
+
+## Guidelines
+
+- **Finding channels**: Use \`conversations.list\` to search for channels by name. Always paginate through all results using \`cursor\` - the channel you're looking for may not be in the first page.
+- **Channel IDs**: Use channel IDs (e.g., C01234567) not names for most operations
+- **Rate limits**: Tier 1 (1 req/sec), Tier 2 (20 req/min), Tier 3 (50 req/min) - varies by endpoint
+- **Pagination**: Use \`cursor\` for large result sets, check \`response_metadata.next_cursor\`
+- **Timestamps**: Use Unix timestamps with microseconds (e.g., 1234567890.123456)
+- **Privacy**: Respect user privacy - avoid reading private channels unless explicitly requested
+
+## Rate Limits
+
+Slack uses tiered rate limiting:
+- **Tier 1**: 1 request per second (e.g., chat.postMessage)
+- **Tier 2**: 20 requests per minute (e.g., conversations.list)
+- **Tier 3**: 50 requests per minute (e.g., users.info)
+- **Tier 4**: 100+ requests per minute (bulk operations)
+
+Check \`Retry-After\` header when rate limited.
+
+<!-- SETUP: This section is ONLY for the setup agent -->
+
+## Setup Hints
+
+### Configuration
+
+**Required config.json:**
+\`\`\`json
+{
+  "id": "src_slack",
+  "name": "Slack",
+  "slug": "slack",
+  "enabled": true,
+  "provider": "slack",
+  "type": "api",
+  "api": {
+    "baseUrl": "https://slack.com/api/",
+    "authType": "bearer",
+    "testEndpoint": {
+      "method": "POST",
+      "path": "api.test"
+    }
+  },
+  "iconUrl": "https://slack.com"
+}
+\`\`\`
+
+### Authentication
+Use \`source_oauth_trigger\` with provider "slack" to start the Slack OAuth flow.
+
+### Required Scopes
+Common scopes needed:
+- \`channels:read\` - View basic channel info
+- \`channels:history\` - Read public channel messages
+- \`groups:read\` - View private channels
+- \`groups:history\` - Read private channel messages
+- \`im:read\` - View DM info
+- \`im:history\` - Read DMs
+- \`users:read\` - View users
+- \`chat:write\` - Send messages
+- \`search:read\` - Search messages
+
+### Recommended Questions
+- Which Slack workspace do you want to connect?
+- Do you need access to private channels?
+- Will you need to send messages or just read?
+
+### Permissions for Explore Mode
+\`\`\`json
+{
+  "allowedApiEndpoints": [
+    { "method": "POST", "path": "conversations\\\\.list", "comment": "List channels" },
+    { "method": "POST", "path": "conversations\\\\.history", "comment": "Read messages" },
+    { "method": "POST", "path": "conversations\\\\.info", "comment": "Channel info" },
+    { "method": "POST", "path": "users\\\\.list", "comment": "List users" },
+    { "method": "POST", "path": "users\\\\.info", "comment": "User info" },
+    { "method": "POST", "path": "api\\\\.test", "comment": "Test connection" }
+  ]
+}
+\`\`\`
+`;
+
 const MEMORY_GUIDE = `---
 providers:
   - memory
@@ -1252,6 +1392,7 @@ export const BUNDLED_SOURCE_GUIDES: Record<string, string> = {
   'google-drive.md': GOOGLE_DRIVE_GUIDE,
   'google-docs.md': GOOGLE_DOCS_GUIDE,
   'google-sheets.md': GOOGLE_SHEETS_GUIDE,
+  'slack.com.md': SLACK_GUIDE,
   'filesystem.md': FILESYSTEM_GUIDE,
   'brave-search.md': BRAVE_SEARCH_GUIDE,
   'memory.md': MEMORY_GUIDE,
