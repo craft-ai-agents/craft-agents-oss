@@ -54,6 +54,9 @@ export const AGENT_FLAGS = {
   defaultModesEnabled: true,
 } as const
 
+/** Providers that use OAuth for API authentication */
+const OAUTH_PROVIDERS = ['google', 'slack']
+
 /**
  * Build MCP and API servers from sources using the new unified modules.
  * Handles credential loading and server building in one step.
@@ -73,9 +76,10 @@ async function buildServersFromSources(sources: LoadedSource[]) {
   )
   span.mark('credentials.loaded')
 
-  // Build token getter for OAuth sources (Google APIs, etc.)
+  // Build token getter for OAuth sources (Google, Slack use OAuth)
   const getTokenForSource = (source: LoadedSource) => {
-    if (source.config.provider === 'google' || source.config.api?.authType === 'oauth') {
+    const provider = source.config.provider
+    if (provider && OAUTH_PROVIDERS.includes(provider)) {
       return async () => {
         const token = await credManager.getToken(source)
         if (!token) throw new Error(`No token for ${source.config.slug}`)

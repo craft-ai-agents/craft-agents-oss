@@ -288,7 +288,7 @@ When adding a local source, **actively discover** what it is and set the appropr
    - Look for: \`favicon.ico\`, \`logo.png\`, \`logo.svg\` in root or \`public/\` folder
    - If found, copy it to the source folder and use \`iconUrl: "./icon.png"\`
 
-## Google API Setup (Gmail, Calendar, Drive)
+## Google API Setup (Gmail, Calendar, Drive, Docs, Sheets)
 
 Google APIs use Google OAuth with baked-in credentials. All Google services use the same OAuth flow.
 
@@ -305,7 +305,7 @@ Google APIs use Google OAuth with baked-in credentials. All Google services use 
      "type": "api",
      "api": {
        "baseUrl": "https://gmail.googleapis.com",
-       "authType": "oauth",
+       "authType": "bearer",
        "googleService": "gmail"
      },
      "iconUrl": "https://mail.google.com"
@@ -334,7 +334,7 @@ Google APIs use Google OAuth with baked-in credentials. All Google services use 
      "type": "api",
      "api": {
        "baseUrl": "https://www.googleapis.com/calendar/v3",
-       "authType": "oauth",
+       "authType": "bearer",
        "googleService": "calendar"
      },
      "iconUrl": "https://calendar.google.com"
@@ -356,10 +356,54 @@ Google APIs use Google OAuth with baked-in credentials. All Google services use 
      "type": "api",
      "api": {
        "baseUrl": "https://www.googleapis.com/drive/v3",
-       "authType": "oauth",
+       "authType": "bearer",
        "googleService": "drive"
      },
      "iconUrl": "https://drive.google.com"
+   }
+   \`\`\`
+
+2. Use \`source_google_oauth_trigger\` to authenticate.
+
+### Google Docs Setup
+
+1. Create the source config at \`sources/google-docs/config.json\`:
+   \`\`\`json
+   {
+     "id": "src_google_docs",
+     "name": "Google Docs",
+     "slug": "google-docs",
+     "enabled": true,
+     "provider": "google",
+     "type": "api",
+     "api": {
+       "baseUrl": "https://docs.googleapis.com/v1",
+       "authType": "bearer",
+       "googleService": "docs"
+     },
+     "iconUrl": "https://docs.google.com"
+   }
+   \`\`\`
+
+2. Use \`source_google_oauth_trigger\` to authenticate.
+
+### Google Sheets Setup
+
+1. Create the source config at \`sources/google-sheets/config.json\`:
+   \`\`\`json
+   {
+     "id": "src_google_sheets",
+     "name": "Google Sheets",
+     "slug": "google-sheets",
+     "enabled": true,
+     "provider": "google",
+     "type": "api",
+     "api": {
+       "baseUrl": "https://sheets.googleapis.com/v4",
+       "authType": "bearer",
+       "googleService": "sheets"
+     },
+     "iconUrl": "https://sheets.google.com"
    }
    \`\`\`
 

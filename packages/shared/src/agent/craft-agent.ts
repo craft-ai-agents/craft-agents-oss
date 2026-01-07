@@ -1101,7 +1101,8 @@ export class CraftAgent {
             this.pinnedAgentDefinition ?? undefined,
             this.temporaryClarifications ?? undefined,
             this.pinnedPreferencesPrompt ?? undefined,
-            this.config.debugMode
+            this.config.debugMode,
+            this.workspaceRootPath
           ),
         },
         // Option B: Custom system prompt (uncomment to use instead)

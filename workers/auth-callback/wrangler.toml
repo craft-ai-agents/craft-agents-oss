@@ -1,0 +1,9 @@
+name = "craft-agents-auth-callback"
+main = "index.ts"
+compatibility_date = "2024-01-01"
+
+# Route: handle /auth/* on agents.craft.do
+# This requires agents.craft.do to be proxied through Cloudflare
+routes = [
+  { pattern = "agents.craft.do/auth/*", zone_name = "craftdocs-edge.com" }
+]

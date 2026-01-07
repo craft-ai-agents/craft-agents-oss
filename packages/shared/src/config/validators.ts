@@ -335,6 +335,16 @@ const ApiSourceConfigSchema = z.object({
   headerName: z.string().optional(),
   queryParam: z.string().optional(),
   authScheme: z.string().optional(),
+  testEndpoint: z
+    .object({
+      method: z.enum(['GET', 'POST']),
+      path: z.string(),
+      body: z.record(z.unknown()).optional(),
+      headers: z.record(z.string()).optional(),
+    })
+    .optional(),
+  googleService: z.enum(['gmail', 'calendar', 'drive', 'docs', 'sheets']).optional(),
+  googleScopes: z.array(z.string()).optional(),
 });
 
 const LocalSourceConfigSchema = z.object({

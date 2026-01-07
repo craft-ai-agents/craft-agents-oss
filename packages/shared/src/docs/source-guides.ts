@@ -612,7 +612,7 @@ Combine operators with spaces: \`from:john@example.com after:2024/01/01 has:atta
   "type": "api",
   "api": {
     "baseUrl": "https://gmail.googleapis.com",
-    "authType": "oauth",
+    "authType": "bearer",
     "googleService": "gmail"
   },
   "iconUrl": "https://mail.google.com"
@@ -688,7 +688,7 @@ This source provides a single flexible \`api_google-calendar\` tool that accepts
   "type": "api",
   "api": {
     "baseUrl": "https://www.googleapis.com/calendar/v3",
-    "authType": "oauth",
+    "authType": "bearer",
     "googleService": "calendar"
   },
   "iconUrl": "https://calendar.google.com"
@@ -760,7 +760,7 @@ Use the \`q\` parameter:
   "type": "api",
   "api": {
     "baseUrl": "https://www.googleapis.com/drive/v3",
-    "authType": "oauth",
+    "authType": "bearer",
     "googleService": "drive"
   },
   "iconUrl": "https://drive.google.com"
@@ -769,6 +769,280 @@ Use the \`q\` parameter:
 
 ### Authentication
 Use \`source_google_oauth_trigger\` to start the Google OAuth flow.
+`;
+
+const GOOGLE_DOCS_GUIDE = `---
+domains:
+  - docs.google.com
+  - docs.googleapis.com
+providers:
+  - google-docs
+  - google
+---
+
+# Google Docs
+
+Access and manage Google Docs documents.
+
+## API Reference
+
+This source provides a single flexible \`api_google-docs\` tool that accepts:
+- \`path\`: API endpoint (e.g., "/v1/documents/{documentId}")
+- \`method\`: HTTP method (GET, POST)
+- \`params\`: Request body or query parameters
+
+### Common Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| /v1/documents | POST | Create a new document |
+| /v1/documents/{documentId} | GET | Get document content and structure |
+| /v1/documents/{documentId}:batchUpdate | POST | Update document content |
+
+### Document Structure
+
+Google Docs uses a structured document model:
+- **Body**: Main document content
+- **Paragraphs**: Text blocks with styling
+- **Tables**: Grid-based content
+- **Lists**: Bulleted/numbered items
+- **Headers/Footers**: Page headers and footers
+- **Footnotes**: Reference notes
+
+### batchUpdate Requests
+
+The \`:batchUpdate\` endpoint accepts an array of requests:
+
+\`\`\`json
+{
+  "requests": [
+    {
+      "insertText": {
+        "location": { "index": 1 },
+        "text": "Hello World"
+      }
+    }
+  ]
+}
+\`\`\`
+
+**Common request types:**
+- \`insertText\` - Insert text at a location
+- \`deleteContentRange\` - Delete content in a range
+- \`updateTextStyle\` - Apply text formatting
+- \`insertTable\` - Insert a table
+- \`replaceAllText\` - Find and replace text
+- \`insertInlineImage\` - Insert an image
+
+### Reading Document Content
+
+When getting a document, the response includes:
+- \`documentId\` - Unique document ID
+- \`title\` - Document title
+- \`body\` - Document content structure
+- \`namedStyles\` - Style definitions
+- \`revisionId\` - Current revision
+
+## Guidelines
+
+- **Privacy**: This source accesses Google Docs documents.
+- **Batch updates**: Use \`:batchUpdate\` for efficient multi-operation updates.
+- **Indexes**: Text positions use 1-based indexing (index 1 = start of document).
+- **Read before write**: Get document structure before making targeted edits.
+
+## Rate Limits
+
+- 300 read requests per minute per user
+- 60 write requests per minute per user
+- Batch operations are more efficient than individual requests
+
+<!-- SETUP: This section is ONLY for the setup agent -->
+
+## Setup Hints
+
+### Configuration
+
+**Required config.json:**
+\`\`\`json
+{
+  "id": "src_google_docs",
+  "name": "Google Docs",
+  "slug": "google-docs",
+  "enabled": true,
+  "provider": "google",
+  "type": "api",
+  "api": {
+    "baseUrl": "https://docs.googleapis.com/v1",
+    "authType": "bearer",
+    "googleService": "docs"
+  },
+  "iconUrl": "https://docs.google.com"
+}
+\`\`\`
+
+### Authentication
+Use \`source_google_oauth_trigger\` to start the Google OAuth flow.
+
+### Recommended Questions
+- What types of documents do you work with most?
+- Do you need to create new documents or primarily read/edit existing ones?
+- Are there specific documents or folders you frequently access?
+
+### Permissions for Explore Mode
+\`\`\`json
+{
+  "allowedApiEndpoints": [
+    { "method": "GET", "path": ".*", "comment": "All GET requests are read-only" }
+  ]
+}
+\`\`\`
+`;
+
+const GOOGLE_SHEETS_GUIDE = `---
+domains:
+  - sheets.google.com
+  - sheets.googleapis.com
+providers:
+  - google-sheets
+  - google
+---
+
+# Google Sheets
+
+Access and manage Google Sheets spreadsheets.
+
+## API Reference
+
+This source provides a single flexible \`api_google-sheets\` tool that accepts:
+- \`path\`: API endpoint (e.g., "/v4/spreadsheets/{spreadsheetId}")
+- \`method\`: HTTP method (GET, POST, PUT)
+- \`params\`: Request body or query parameters
+
+### Common Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| /v4/spreadsheets | POST | Create a new spreadsheet |
+| /v4/spreadsheets/{spreadsheetId} | GET | Get spreadsheet metadata and sheets |
+| /v4/spreadsheets/{spreadsheetId}/values/{range} | GET | Read cell values |
+| /v4/spreadsheets/{spreadsheetId}/values/{range} | PUT | Write cell values |
+| /v4/spreadsheets/{spreadsheetId}/values:batchGet | GET | Read multiple ranges |
+| /v4/spreadsheets/{spreadsheetId}/values:batchUpdate | POST | Write multiple ranges |
+| /v4/spreadsheets/{spreadsheetId}:batchUpdate | POST | Batch update spreadsheet |
+
+### A1 Notation
+
+Ranges use A1 notation:
+- \`Sheet1!A1:B10\` - Cells A1 to B10 on Sheet1
+- \`Sheet1!A:A\` - Entire column A on Sheet1
+- \`Sheet1!1:1\` - Entire row 1 on Sheet1
+- \`A1:B10\` - First sheet, cells A1 to B10
+- \`'Sheet Name'!A1:B10\` - Use quotes for sheets with spaces
+
+### Reading Values
+
+GET \`/v4/spreadsheets/{id}/values/{range}\`
+
+Query parameters:
+- \`valueRenderOption\`: FORMATTED_VALUE, UNFORMATTED_VALUE, FORMULA
+- \`dateTimeRenderOption\`: SERIAL_NUMBER, FORMATTED_STRING
+- \`majorDimension\`: ROWS, COLUMNS
+
+### Writing Values
+
+PUT \`/v4/spreadsheets/{id}/values/{range}\`
+
+Query parameters:
+- \`valueInputOption\`: RAW, USER_ENTERED (applies formatting/formulas)
+
+Request body:
+\`\`\`json
+{
+  "values": [
+    ["Row1Col1", "Row1Col2"],
+    ["Row2Col1", "Row2Col2"]
+  ]
+}
+\`\`\`
+
+### Batch Updates
+
+POST \`/v4/spreadsheets/{id}:batchUpdate\`
+
+Request body for structural changes:
+\`\`\`json
+{
+  "requests": [
+    {
+      "addSheet": {
+        "properties": { "title": "New Sheet" }
+      }
+    }
+  ]
+}
+\`\`\`
+
+**Common request types:**
+- \`addSheet\` - Add a new sheet
+- \`deleteSheet\` - Delete a sheet
+- \`updateCells\` - Update cell formatting
+- \`autoResizeDimensions\` - Auto-fit column/row sizes
+- \`mergeCells\` - Merge cell ranges
+- \`addChart\` - Insert a chart
+
+## Guidelines
+
+- **Privacy**: This source accesses Google Sheets spreadsheets.
+- **Value input**: Use \`valueInputOption=USER_ENTERED\` for formulas and dates.
+- **Batch operations**: Use batch endpoints for efficiency with multiple ranges.
+- **Sheet names**: Quote sheet names with spaces in A1 notation.
+
+## Rate Limits
+
+- 300 read requests per minute per user
+- 60 write requests per minute per user
+- Batch operations count as single requests
+
+<!-- SETUP: This section is ONLY for the setup agent -->
+
+## Setup Hints
+
+### Configuration
+
+**Required config.json:**
+\`\`\`json
+{
+  "id": "src_google_sheets",
+  "name": "Google Sheets",
+  "slug": "google-sheets",
+  "enabled": true,
+  "provider": "google",
+  "type": "api",
+  "api": {
+    "baseUrl": "https://sheets.googleapis.com/v4",
+    "authType": "bearer",
+    "googleService": "sheets"
+  },
+  "iconUrl": "https://sheets.google.com"
+}
+\`\`\`
+
+### Authentication
+Use \`source_google_oauth_trigger\` to start the Google OAuth flow.
+
+### Recommended Questions
+- What spreadsheets do you work with most frequently?
+- Do you need to create new spreadsheets or primarily read/edit existing ones?
+- Are there specific sheets or data ranges you access regularly?
+
+### Permissions for Explore Mode
+\`\`\`json
+{
+  "allowedApiEndpoints": [
+    { "method": "GET", "path": ".*", "comment": "All GET requests are read-only" }
+  ]
+}
+\`\`\`
 `;
 
 const FILESYSTEM_GUIDE = `---
@@ -903,6 +1177,150 @@ This is a **local stdio MCP server** that requires a Brave Search API key.
 \`\`\`
 `;
 
+const SLACK_GUIDE = `---
+domains:
+  - slack.com
+  - api.slack.com
+providers:
+  - slack
+---
+
+# Slack
+
+Access Slack workspaces, channels, and messages through the Slack Web API.
+
+## API Reference
+
+This source provides a single flexible \`api_slack\` tool that accepts:
+- \`path\`: API endpoint (e.g., "conversations.list")
+- \`method\`: HTTP method (typically POST for Slack)
+- \`params\`: Request body parameters
+
+### Common Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| search.all | POST | Search channels, messages, files by name/content |
+| conversations.info | GET | Get channel details by ID (**note: GET not POST**) |
+| conversations.list | POST | List channels, DMs, and groups (paginated) |
+| conversations.history | POST | Get messages from a channel |
+| chat.postMessage | POST | Send a message |
+| users.list | POST | List workspace users |
+| users.info | POST | Get user details |
+| search.messages | POST | Search messages (requires search scope) |
+| reactions.add | POST | Add emoji reaction |
+| files.list | POST | List files |
+
+### Key Parameters
+
+**conversations.list:**
+- \`types\`: Channel types to include (public_channel, private_channel, mpim, im)
+- \`limit\`: Max results per page (default 100, max 1000)
+- \`cursor\`: Pagination cursor
+
+**conversations.history:**
+- \`channel\`: Channel ID (required)
+- \`limit\`: Max messages (default 100)
+- \`oldest\`: Start of time range (Unix timestamp)
+- \`latest\`: End of time range (Unix timestamp)
+
+**chat.postMessage:**
+- \`channel\`: Channel ID or name (required)
+- \`text\`: Message text
+- \`blocks\`: Block Kit formatted message
+- \`thread_ts\`: Reply in thread
+
+### Response Format
+
+Slack API responses include:
+- \`ok\`: Boolean indicating success
+- \`error\`: Error code if \`ok\` is false
+- Payload specific to each endpoint
+
+## Guidelines
+
+- **Finding channels by name**: Use \`search.all\` instead of paginating \`conversations.list\`. Much faster since \`conversations.list\` returns ~800+ tokens of metadata per channel, making pagination expensive.
+- **Two-step pattern for channel details**:
+  1. Use \`search.all\` with \`query\` param to find channels by name → get channel ID
+  2. Use \`conversations.info\` (note: **GET** not POST) with the channel ID for full details
+- **Channel IDs**: Use channel IDs (e.g., C01234567) not names for most operations
+- **Rate limits**: Tier 1 (1 req/sec), Tier 2 (20 req/min), Tier 3 (50 req/min) - varies by endpoint
+- **Pagination**: For \`conversations.history\` and other list endpoints, use \`cursor\` and check \`response_metadata.next_cursor\`
+- **Timestamps**: Use Unix timestamps with microseconds (e.g., 1234567890.123456)
+- **Privacy**: Respect user privacy - avoid reading private channels unless explicitly requested
+
+## Rate Limits
+
+Slack uses tiered rate limiting:
+- **Tier 1**: 1 request per second (e.g., chat.postMessage)
+- **Tier 2**: 20 requests per minute (e.g., conversations.list)
+- **Tier 3**: 50 requests per minute (e.g., users.info)
+- **Tier 4**: 100+ requests per minute (bulk operations)
+
+Check \`Retry-After\` header when rate limited.
+
+<!-- SETUP: This section is ONLY for the setup agent -->
+
+## Setup Hints
+
+### Configuration
+
+**Required config.json:**
+\`\`\`json
+{
+  "id": "src_slack",
+  "name": "Slack",
+  "slug": "slack",
+  "enabled": true,
+  "provider": "slack",
+  "type": "api",
+  "api": {
+    "baseUrl": "https://slack.com/api/",
+    "authType": "bearer",
+    "testEndpoint": {
+      "method": "POST",
+      "path": "api.test"
+    }
+  },
+  "iconUrl": "https://slack.com"
+}
+\`\`\`
+
+### Authentication
+Use \`source_oauth_trigger\` with provider "slack" to start the Slack OAuth flow.
+
+### Required Scopes
+Common scopes needed:
+- \`channels:read\` - View basic channel info
+- \`channels:history\` - Read public channel messages
+- \`groups:read\` - View private channels
+- \`groups:history\` - Read private channel messages
+- \`im:read\` - View DM info
+- \`im:history\` - Read DMs
+- \`users:read\` - View users
+- \`chat:write\` - Send messages
+- \`search:read\` - Search messages
+
+### Recommended Questions
+- Which Slack workspace do you want to connect?
+- Do you need access to private channels?
+- Will you need to send messages or just read?
+
+### Permissions for Explore Mode
+\`\`\`json
+{
+  "allowedApiEndpoints": [
+    { "method": "POST", "path": "conversations\\\\.list", "comment": "List channels" },
+    { "method": "POST", "path": "conversations\\\\.history", "comment": "Read messages" },
+    { "method": "POST", "path": "conversations\\\\.info", "comment": "Channel info" },
+    { "method": "POST", "path": "users\\\\.list", "comment": "List users" },
+    { "method": "POST", "path": "users\\\\.info", "comment": "User info" },
+    { "method": "POST", "path": "api\\\\.test", "comment": "Test connection" }
+  ]
+}
+\`\`\`
+`;
+
 const MEMORY_GUIDE = `---
 providers:
   - memory
@@ -976,6 +1394,9 @@ export const BUNDLED_SOURCE_GUIDES: Record<string, string> = {
   'gmail.com.md': GMAIL_GUIDE,
   'google-calendar.md': GOOGLE_CALENDAR_GUIDE,
   'google-drive.md': GOOGLE_DRIVE_GUIDE,
+  'google-docs.md': GOOGLE_DOCS_GUIDE,
+  'google-sheets.md': GOOGLE_SHEETS_GUIDE,
+  'slack.com.md': SLACK_GUIDE,
   'filesystem.md': FILESYSTEM_GUIDE,
   'brave-search.md': BRAVE_SEARCH_GUIDE,
   'memory.md': MEMORY_GUIDE,

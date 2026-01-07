@@ -12,7 +12,13 @@
  * - IPC handlers for credential storage
  */
 
-import { inferGoogleServiceFromUrl, type LoadedSource, type GoogleService } from './types.ts';
+import {
+  inferGoogleServiceFromUrl,
+  inferSlackServiceFromUrl,
+  type LoadedSource,
+  type GoogleService,
+  type SlackService,
+} from './types.ts';
 import type { CredentialId, StoredCredential } from '../credentials/types.ts';
 import { getCredentialManager } from '../credentials/index.ts';
 import { CraftOAuth, getMcpBaseUrl, type OAuthCallbacks, type OAuthTokens } from '../auth/oauth.ts';
@@ -22,6 +28,12 @@ import {
   type GoogleOAuthResult,
   type GoogleOAuthOptions,
 } from '../auth/google-oauth.ts';
+import {
+  startSlackOAuth,
+  refreshSlackToken,
+  type SlackOAuthResult,
+  type SlackOAuthOptions,
+} from '../auth/slack-oauth.ts';
 import { debug } from '../utils/debug.ts';
 
 /**
@@ -222,10 +234,10 @@ export class SourceCredentialManager {
     if (source.config.type === 'mcp') {
       type = mcp?.authType === 'bearer' ? 'source_bearer' : 'source_oauth';
     } else if (source.config.type === 'api') {
-      // Google APIs always use OAuth
-      if (source.config.provider === 'google') {
-        type = 'source_oauth';
-      } else if (api?.authType === 'oauth') {
+      // Google/Slack APIs: OAuth token acquisition is triggered by provider='google'/'slack',
+      // but the token is used as a Bearer token (authType='bearer' in config).
+      // This separates HOW we get credentials (OAuth flow) from HOW we send them (Bearer header).
+      if (source.config.provider === 'google' || source.config.provider === 'slack') {
         type = 'source_oauth';
       } else if (api?.authType === 'bearer') {
         type = 'source_bearer';
@@ -258,7 +270,10 @@ export class SourceCredentialManager {
     }
 
     if (source.config.type === 'api') {
-      if (api?.authType === 'oauth') {
+      // Google/Slack APIs: OAuth token acquisition is triggered by provider='google'/'slack',
+      // but the token is used as a Bearer token (authType='bearer' in config).
+      // This separates HOW we get credentials (OAuth flow) from HOW we send them (Bearer header).
+      if (source.config.provider === 'google' || source.config.provider === 'slack') {
         return 'agent_source_oauth';
       } else if (api?.authType === 'bearer') {
         return 'agent_source_bearer';
@@ -326,19 +341,14 @@ export class SourceCredentialManager {
       return this.authenticateGoogle(source, cb);
     }
 
+    // Slack APIs use Slack OAuth
+    if (source.config.provider === 'slack') {
+      return this.authenticateSlack(source, cb);
+    }
+
     // MCP OAuth flow
     if (source.config.type === 'mcp' && source.config.mcp?.authType === 'oauth') {
       return this.authenticateMcp(source, cb);
-    }
-
-    // API OAuth flow (non-Google)
-    if (source.config.type === 'api' && source.config.api?.authType === 'oauth') {
-      // For non-Google APIs, we'd need the API's OAuth config
-      // This is a placeholder - specific APIs need custom handling
-      return {
-        success: false,
-        error: 'OAuth for this API type is not yet implemented',
-      };
     }
 
     return {
@@ -450,6 +460,67 @@ export class SourceCredentialManager {
   }
 
   /**
+   * Authenticate Slack API source via Slack OAuth
+   *
+   * Supports multiple Slack services via:
+   * - provider: "slack" with slackService field
+   * - provider: "slack" with custom slackBotScopes/slackUserScopes
+   * - Inferred from baseUrl (slack.com → full)
+   */
+  private async authenticateSlack(
+    source: LoadedSource,
+    callbacks: OAuthCallbacks
+  ): Promise<AuthResult> {
+    try {
+      // Determine service/scopes from config
+      const api = source.config.api;
+      let service: SlackService | undefined;
+      let userScopes: string[] | undefined;
+
+      if (api?.slackUserScopes && api.slackUserScopes.length > 0) {
+        // Custom scopes take precedence
+        userScopes = api.slackUserScopes;
+      } else if (api?.slackService) {
+        // Use predefined service scopes
+        service = api.slackService;
+      } else {
+        // Infer from baseUrl (defaults to 'full')
+        service = inferSlackServiceFromUrl(api?.baseUrl) || 'full';
+      }
+
+      const serviceName = service ? `Slack ${service}` : 'Slack';
+      callbacks.onStatus(`Starting ${serviceName} OAuth flow...`);
+
+      const options: SlackOAuthOptions = {
+        service,
+        userScopes,
+        appType: 'electron',
+      };
+
+      const result: SlackOAuthResult = await startSlackOAuth(options);
+
+      if (!result.success) {
+        return { success: false, error: result.error || 'Slack OAuth failed' };
+      }
+
+      // Save the credentials
+      await this.save(source, {
+        value: result.accessToken!,
+        refreshToken: result.refreshToken,
+        expiresAt: result.expiresAt,
+      });
+
+      callbacks.onStatus(`${serviceName} authentication successful`);
+      // Use teamName as the identifier (similar to email for Google)
+      return { success: true, email: result.teamName };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      callbacks.onError(message);
+      return { success: false, error: message };
+    }
+  }
+
+  /**
    * Refresh token for a source
    *
    * Returns the new access token, or null if refresh fails.
@@ -465,6 +536,11 @@ export class SourceCredentialManager {
     // Google API refresh
     if (source.config.provider === 'google') {
       return this.refreshGoogle(source, cred);
+    }
+
+    // Slack API refresh
+    if (source.config.provider === 'slack') {
+      return this.refreshSlack(source, cred);
     }
 
     // MCP refresh
@@ -496,6 +572,31 @@ export class SourceCredentialManager {
       return result.accessToken;
     } catch (error) {
       debug(`[SourceCredentialManager] Google token refresh failed:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Refresh Slack OAuth token
+   */
+  private async refreshSlack(
+    source: LoadedSource,
+    cred: StoredCredential
+  ): Promise<string | null> {
+    try {
+      const result = await refreshSlackToken(cred.refreshToken!, cred.clientId);
+
+      // Update stored credentials
+      await this.save(source, {
+        ...cred,
+        value: result.accessToken,
+        expiresAt: result.expiresAt,
+      });
+
+      debug(`[SourceCredentialManager] Refreshed Slack token for ${source.config.slug}`);
+      return result.accessToken;
+    } catch (error) {
+      debug(`[SourceCredentialManager] Slack token refresh failed:`, error);
       return null;
     }
   }

@@ -155,23 +155,24 @@ export class SourceServerBuilder {
       return createApiServer(config, getToken);
     }
 
+    // Slack APIs - use token getter with auto-refresh
+    if (provider === 'slack') {
+      if (!source.config.isAuthenticated || !getToken) {
+        debug(`[SourceServerBuilder] Slack API source ${source.config.slug} not authenticated`);
+        return null;
+      }
+      debug(`[SourceServerBuilder] Building Slack API server for ${source.config.slug}`);
+      const config = this.buildApiConfig(source);
+      // Pass the token getter function - it will be called before each request
+      // to get a fresh token (with auto-refresh if expired)
+      return createApiServer(config, getToken);
+    }
+
     // Public APIs (no auth) can be used immediately
     if (authType === 'none') {
       debug(`[SourceServerBuilder] Building public API server for ${source.config.slug}`);
       const config = this.buildApiConfig(source);
       return createApiServer(config, '');
-    }
-
-    // OAuth APIs (non-Google) - use token getter
-    if (authType === 'oauth') {
-      if (!source.config.isAuthenticated || !getToken) {
-        debug(`[SourceServerBuilder] OAuth API source ${source.config.slug} not authenticated`);
-        return null;
-      }
-      debug(`[SourceServerBuilder] Building OAuth API server for ${source.config.slug}`);
-      const config = this.buildApiConfig(source);
-      // Pass the token getter function for auto-refresh support
-      return createApiServer(config, getToken);
     }
 
     // API key/bearer/header/query/basic auth - use static credential

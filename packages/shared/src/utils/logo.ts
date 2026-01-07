@@ -5,6 +5,15 @@
  * Browser handles caching - no need to save files locally.
  */
 
+import { debug } from './debug.ts';
+import { homedir } from 'os';
+import { join } from 'path';
+import { existsSync, readFileSync } from 'fs';
+
+// Cache path for persisted provider domains
+const CRAFT_AGENT_DIR = join(homedir(), '.craft-agent');
+const PROVIDER_DOMAINS_CACHE_PATH = join(CRAFT_AGENT_DIR, 'provider-domains.json');
+
 // Google Favicon V2 API - free, reliable, no API key needed
 // Updated URL: Google migrated from /s2/favicons to faviconV2
 const GOOGLE_FAVICON_URL = 'https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&size=';
@@ -14,9 +23,93 @@ const GOOGLE_FAVICON_URL = 'https://t2.gstatic.com/faviconV2?client=SOCIAL&type=
  * Maps provider names to their canonical domain for proper favicon resolution.
  * This fixes issues like api.gmail.com returning a globe icon instead of Gmail logo.
  */
-export const PROVIDER_CANONICAL_DOMAINS: Record<string, string> = {
-  gmail: 'mail.google.com',
+/**
+ * Direct icon URLs for providers that need explicit URLs.
+ * These take precedence over domain-based favicon fetching.
+ */
+export const PROVIDER_ICON_URLS: Record<string, string> = {
+  // Docs and Sheets need direct URLs - their domains return generic Google logo
+  docs: 'https://ssl.gstatic.com/docs/documents/images/kix-favicon7.ico',
+  sheets: 'https://ssl.gstatic.com/docs/spreadsheets/favicon3.ico',
 };
+
+/**
+ * Static canonical domains for known providers (immutable).
+ * Maps provider names to their canonical domain for proper favicon resolution.
+ */
+const STATIC_PROVIDER_DOMAINS: Readonly<Record<string, string>> = Object.freeze({
+  // Google services - map both short names and full slugs
+  'gmail': 'mail.google.com',
+  'google-calendar': 'calendar.google.com',
+  'calendar': 'calendar.google.com',
+  'google-drive': 'drive.google.com',
+  'drive': 'drive.google.com',
+  'google-docs': 'docs.google.com',
+  'google-sheets': 'sheets.google.com',
+  // Common MCP providers - their MCP URLs differ from their main domain
+  'github': 'github.com',
+  'linear': 'linear.app',
+  'slack': 'slack.com',
+  'notion': 'notion.so',
+});
+
+// Re-export browser-safe utility for backward compatibility
+export { deriveServiceUrl } from './service-url.ts';
+
+/**
+ * Cache structure for persisted provider domains
+ */
+interface ProviderDomainsCache {
+  version: 1;
+  domains: Record<string, string>;
+  updatedAt: number;
+}
+
+/**
+ * Load cached provider domains from filesystem
+ */
+function loadProviderDomainsCache(): Record<string, string> {
+  try {
+    if (!existsSync(PROVIDER_DOMAINS_CACHE_PATH)) return {};
+    const content = readFileSync(PROVIDER_DOMAINS_CACHE_PATH, 'utf-8');
+    const cache = JSON.parse(content) as ProviderDomainsCache;
+    return cache.domains || {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Memoized merged provider domains (module-private).
+ * Merges user-cached domains with static domains on first access.
+ */
+let _mergedProviderDomains: Record<string, string> | null = null;
+
+/**
+ * Get canonical domain for a provider.
+ * Merges static domains with user-cached domains (static takes precedence).
+ *
+ * @param provider - Provider name (case-insensitive)
+ * @returns Canonical domain or undefined if not found
+ */
+export function getProviderDomain(provider: string): string | undefined {
+  if (!_mergedProviderDomains) {
+    const cached = loadProviderDomainsCache();
+    _mergedProviderDomains = { ...cached, ...STATIC_PROVIDER_DOMAINS };
+    if (Object.keys(cached).length > 0) {
+      debug(`[logo] Loaded ${Object.keys(cached).length} cached provider domains`);
+    }
+  }
+  return _mergedProviderDomains[provider.toLowerCase()];
+}
+
+/**
+ * Reset the provider domain cache (for testing).
+ * Allows tests to clear cached state between test cases.
+ */
+export function _resetProviderDomainCache(): void {
+  _mergedProviderDomains = null;
+}
 
 /**
  * Extract domain from URL
@@ -186,9 +279,21 @@ function pickBestFavicon(favicons: Array<{href: string, sizes: string | null}>):
  * @param provider - Optional provider name (e.g., 'gmail') to use canonical domain mapping
  */
 export async function getHighQualityLogoUrl(serviceUrl: string, provider?: string): Promise<string | null> {
-  // Check if provider has a canonical domain mapping
+  // Check if provider has a direct icon URL (highest priority)
   if (provider) {
-    const canonicalDomain = PROVIDER_CANONICAL_DOMAINS[provider.toLowerCase()];
+    const directIconUrl = PROVIDER_ICON_URLS[provider.toLowerCase()];
+    if (directIconUrl) {
+      // Validate the hardcoded URL still works (Google changes these periodically)
+      if (await urlExists(directIconUrl)) {
+        return directIconUrl;
+      }
+      // URL is broken - remove from map so we don't retry this session
+      delete PROVIDER_ICON_URLS[provider.toLowerCase()];
+      debug(`[logo] Direct icon URL broken for "${provider}", falling back to favicon API`);
+    }
+
+    // Check if provider has a canonical domain mapping (includes cached domains)
+    const canonicalDomain = getProviderDomain(provider);
     if (canonicalDomain) {
       // Use canonical domain for favicon resolution
       return getHighQualityLogoUrl(`https://${canonicalDomain}`);
@@ -206,27 +311,48 @@ export async function getHighQualityLogoUrl(serviceUrl: string, provider?: strin
   }
 
   const rootDomain = extractRootDomain(fullDomain);
-  const origin = `https://${rootDomain}`;
+  const hasSubdomain = fullDomain !== rootDomain;
 
-  // Step 1: Try high-res favicon paths
-  for (const path of HIGH_RES_FAVICON_PATHS) {
-    const url = `${origin}${path}`;
-    if (await urlExists(url)) {
-      return url;
+  // Helper to try favicon paths on a domain
+  async function tryFaviconPaths(domain: string): Promise<string | null> {
+    const origin = `https://${domain}`;
+
+    // Try high-res favicon paths
+    for (const path of HIGH_RES_FAVICON_PATHS) {
+      const url = `${origin}${path}`;
+      if (await urlExists(url)) {
+        return url;
+      }
+    }
+
+    // Parse HTML <head> for favicon links
+    const favicons = await parseFaviconsFromHtml(origin);
+    if (favicons.length > 0) {
+      const bestFavicon = pickBestFavicon(favicons);
+      if (bestFavicon && await urlExists(bestFavicon)) {
+        return bestFavicon;
+      }
+    }
+
+    return null;
+  }
+
+  // Step 1: Try full domain first (e.g., mail.google.com)
+  if (hasSubdomain) {
+    const result = await tryFaviconPaths(fullDomain);
+    if (result) {
+      return result;
     }
   }
 
-  // Step 2: Parse HTML <head> for favicon links
-  const favicons = await parseFaviconsFromHtml(origin);
-  if (favicons.length > 0) {
-    const bestFavicon = pickBestFavicon(favicons);
-    if (bestFavicon && await urlExists(bestFavicon)) {
-      return bestFavicon;
-    }
+  // Step 2: Try root domain (e.g., google.com)
+  const result = await tryFaviconPaths(rootDomain);
+  if (result) {
+    return result;
   }
 
-  // Step 3: Fall back to Google Favicon V2 API
-  return `${GOOGLE_FAVICON_URL}128&url=https://${rootDomain}`;
+  // Step 3: Fall back to Google Favicon V2 API (uses full domain for better results)
+  return `${GOOGLE_FAVICON_URL}128&url=https://${fullDomain}`;
 }
 
 /**
@@ -238,9 +364,15 @@ export async function getHighQualityLogoUrl(serviceUrl: string, provider?: strin
  * @deprecated Use getHighQualityLogoUrl() when possible for better quality
  */
 export function getLogoUrl(serviceUrl: string, provider?: string): string | null {
-  // Check if provider has a canonical domain mapping
+  // Check if provider has a direct icon URL (highest priority)
   if (provider) {
-    const canonicalDomain = PROVIDER_CANONICAL_DOMAINS[provider.toLowerCase()];
+    const directIconUrl = PROVIDER_ICON_URLS[provider.toLowerCase()];
+    if (directIconUrl) {
+      return directIconUrl;
+    }
+
+    // Check if provider has a canonical domain mapping
+    const canonicalDomain = getProviderDomain(provider);
     if (canonicalDomain) {
       return `${GOOGLE_FAVICON_URL}128&url=https://${canonicalDomain}`;
     }

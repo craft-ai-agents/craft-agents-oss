@@ -649,6 +649,9 @@ export const IPC_CHANNELS = {
   THEME_GET_APP: 'theme:getApp',
   THEME_GET_WORKSPACE: 'theme:getWorkspace',
   THEME_GET_AGENT: 'theme:getAgent',
+
+  // Logo URL resolution (uses Node.js filesystem cache)
+  LOGO_GET_URL: 'logo:getUrl',
 } as const
 
 /**
@@ -1090,6 +1093,9 @@ export interface ElectronAPI {
   onAppThemeChange(callback: (theme: import('@config/theme').ThemeOverrides | null) => void): () => void
   onWorkspaceThemeChange(callback: (theme: import('@config/theme').ThemeOverrides | null) => void): () => void
   onAgentThemeChange(callback: (agentSlug: string, theme: import('@config/theme').ThemeOverrides | null) => void): () => void
+
+  // Logo URL resolution (uses Node.js filesystem cache for provider domains)
+  getLogoUrl(serviceUrl: string, provider?: string): Promise<string | null>
 }
 
 /**

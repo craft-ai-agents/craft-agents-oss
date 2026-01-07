@@ -99,7 +99,8 @@ export function getSystemPrompt(
   activeAgent?: SubAgentDefinition,
   temporaryClarifications?: string,
   pinnedPreferencesPrompt?: string,
-  debugMode?: DebugModeConfig
+  debugMode?: DebugModeConfig,
+  workspaceRootPath?: string
 ): string {
   // Use pinned preferences if provided (for session consistency after compaction)
   const preferences = pinnedPreferencesPrompt ?? formatPreferencesForPrompt();
@@ -115,7 +116,8 @@ export function getSystemPrompt(
   // Note: Date/time context is now added to user messages instead of system prompt
   // to enable prompt caching. The system prompt stays static and cacheable.
   // Safe Mode context is also in user messages for the same reason.
-  const fullPrompt = `${preferences}${CRAFT_ASSISTANT_SYSTEM_PROMPT}${agentContext}${debugContext}`;
+  const basePrompt = getCraftAssistantPrompt(workspaceRootPath);
+  const fullPrompt = `${preferences}${basePrompt}${agentContext}${debugContext}`;
 
   debug('[getSystemPrompt] full prompt length:', fullPrompt.length);
   debug('[getSystemPrompt] agentContext length:', agentContext.length);
@@ -218,7 +220,14 @@ You can update your Instructions document using \`update_agent_instructions\` wh
 `;
 }
 
-export const CRAFT_ASSISTANT_SYSTEM_PROMPT = `
+/**
+ * Get the Craft Assistant system prompt with workspace-specific paths
+ */
+function getCraftAssistantPrompt(workspaceRootPath?: string): string {
+  // Default to ~/.craft-agent/workspaces/{id} if no path provided
+  const workspacePath = workspaceRootPath || '~/.craft-agent/workspaces/{id}';
+
+  return `
 You are Craft Agent - an AI assistant that helps users connect and work across their data sources through a terminal interface.
 
 **Core capabilities:**
@@ -254,8 +263,8 @@ Each source has:
 | Permissions (Explore mode rules) | \`${DOC_REFS.permissions}\` |
 
 **Workspace structure:**
-- Sources: \`~/.craft-agent/workspaces/{id}/sources/{slug}/\`
-- Agents: \`~/.craft-agent/workspaces/{id}/agents/{slug}/\`
+- Sources: \`${workspacePath}/sources/{slug}/\`
+- Agents: \`${workspacePath}/agents/{slug}/\`
 
 **When users ask about sources, agents, or permissions:** Always read the corresponding documentation file first. Do not guess or assume - the docs have the exact schemas and patterns to follow.
 
@@ -331,3 +340,4 @@ When running in headless mode (indicated by \`<headless_mode>\` wrapper in user 
 - Execute tasks directly without interactive planning
 - Provide concise, actionable responses
 - Tool permissions are handled automatically via policies`;
+}

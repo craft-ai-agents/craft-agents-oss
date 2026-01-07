@@ -26,24 +26,76 @@ export type McpAuthType = 'oauth' | 'bearer' | 'none';
 /**
  * API authentication types
  */
-export type ApiAuthType = 'bearer' | 'header' | 'query' | 'basic' | 'oauth' | 'none';
+export type ApiAuthType = 'bearer' | 'header' | 'query' | 'basic' | 'none';
 
 /**
  * Google service types for OAuth scope selection
  */
-export type GoogleService = 'gmail' | 'calendar' | 'drive';
+export type GoogleService = 'gmail' | 'calendar' | 'drive' | 'docs' | 'sheets';
+
+/**
+ * Slack service types for OAuth scope selection
+ */
+export type SlackService = 'messaging' | 'channels' | 'users' | 'files' | 'full';
 
 /**
  * Infer Google service from API baseUrl.
  * Returns undefined if URL doesn't match a known Google API pattern.
+ *
+ * Uses proper URL parsing to avoid false positives from arbitrary path matching.
  */
 export function inferGoogleServiceFromUrl(baseUrl: string | undefined): GoogleService | undefined {
   if (!baseUrl) return undefined;
-  const url = baseUrl.toLowerCase();
 
-  if (url.includes('calendar.googleapis.com') || url.includes('/calendar/')) return 'calendar';
-  if (url.includes('drive.googleapis.com') || url.includes('/drive/')) return 'drive';
-  if (url.includes('gmail.googleapis.com') || url.includes('/gmail/')) return 'gmail';
+  let hostname: string;
+  let pathname: string;
+  try {
+    const parsed = new URL(baseUrl);
+    hostname = parsed.hostname.toLowerCase();
+    pathname = parsed.pathname.toLowerCase();
+  } catch {
+    return undefined;
+  }
+
+  // Match by hostname (most reliable)
+  if (hostname === 'calendar.googleapis.com') return 'calendar';
+  if (hostname === 'drive.googleapis.com') return 'drive';
+  if (hostname === 'gmail.googleapis.com') return 'gmail';
+  if (hostname === 'docs.googleapis.com') return 'docs';
+  if (hostname === 'sheets.googleapis.com') return 'sheets';
+
+  // Fallback: check path patterns only on googleapis.com domains
+  if (hostname === 'www.googleapis.com' || hostname === 'googleapis.com') {
+    if (pathname.startsWith('/calendar/')) return 'calendar';
+    if (pathname.startsWith('/drive/')) return 'drive';
+    if (pathname.startsWith('/gmail/')) return 'gmail';
+    if (pathname.startsWith('/v1/documents') || pathname.startsWith('/documents/')) return 'docs';
+    if (pathname.startsWith('/v4/spreadsheets') || pathname.startsWith('/spreadsheets/')) return 'sheets';
+  }
+
+  return undefined;
+}
+
+/**
+ * Infer Slack service from API baseUrl.
+ * Returns 'full' by default if URL matches Slack API pattern.
+ */
+export function inferSlackServiceFromUrl(baseUrl: string | undefined): SlackService | undefined {
+  if (!baseUrl) return undefined;
+
+  let hostname: string;
+  try {
+    const parsed = new URL(baseUrl);
+    hostname = parsed.hostname.toLowerCase();
+  } catch {
+    return undefined;
+  }
+
+  // Match Slack API hostname
+  if (hostname === 'slack.com' || hostname === 'api.slack.com') {
+    return 'full'; // Default to full service for Slack
+  }
+
   return undefined;
 }
 
@@ -134,9 +186,14 @@ export interface ApiSourceConfig {
   defaultHeaders?: Record<string, string>; // Headers to include with every request
   testEndpoint?: ApiTestEndpoint; // Endpoint to use for connection testing
 
-  // Google OAuth fields (used when authType is 'oauth' and provider is 'google')
+  // Google OAuth fields (used when provider is 'google')
   googleService?: GoogleService; // Predefined service for scope selection
   googleScopes?: string[]; // Custom scopes (overrides googleService)
+
+  // Slack OAuth fields (used when provider is 'slack')
+  // Uses user_scope for user authentication (posts as the user, not a bot)
+  slackService?: SlackService; // Predefined service for scope selection
+  slackUserScopes?: string[]; // Custom user scopes (overrides slackService)
 }
 
 /**

@@ -543,6 +543,7 @@ export function Chat({
     currentModel,
     sessionOptions,
     onSelectWorkspace,
+    onRefreshWorkspaces,
     onCreateSession,
     onDeleteSession,
     onFlagSession,
@@ -2027,6 +2028,7 @@ export function Chat({
                       workspaces={workspaces}
                       activeWorkspaceId={activeWorkspaceId}
                       onSelect={onSelectWorkspace}
+                      onWorkspaceCreated={() => onRefreshWorkspaces?.()}
                     />
                   </div>
                   <Button

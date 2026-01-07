@@ -323,6 +323,10 @@ const api: ElectronAPI = {
   getAgentTheme: (workspaceId: string, agentSlug: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.THEME_GET_AGENT, workspaceId, agentSlug),
 
+  // Logo URL resolution (uses Node.js filesystem cache for provider domains)
+  getLogoUrl: (serviceUrl: string, provider?: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.LOGO_GET_URL, serviceUrl, provider),
+
   // Theme change listeners (live updates when theme.json files change)
   onAppThemeChange: (callback: (theme: import('@craft-agent/shared/config').ThemeOverrides | null) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, theme: import('@craft-agent/shared/config').ThemeOverrides | null) => {

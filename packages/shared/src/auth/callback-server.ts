@@ -1,5 +1,4 @@
-import { debug } from '../utils/debug';
-import { createServer, type Server } from 'http';
+import { createServer as createHttpServer, type Server } from 'http';
 import { URL } from 'url';
 import { CRAFT_LOGO_HTML } from '../branding.ts';
 
@@ -15,7 +14,7 @@ export interface CallbackServer {
   promise: Promise<CallbackPayload>;
   url: string;
   /** Close the callback server. Call this on component unmount to clean up. */
-  close: () => void;
+  close: () => void | Promise<void>;
 }
 
 export type AppType = 'terminal' | 'electron';
@@ -514,7 +513,7 @@ ${autoCloseScript}
 
 async function isPortAvailable(port: number): Promise<boolean> {
   return new Promise((resolve) => {
-    const server = createServer();
+    const server = createHttpServer();
     server.once('error', () => {
       resolve(false);
     });
@@ -545,7 +544,7 @@ export async function createCallbackServer(options?: CreateCallbackServerOptions
   const appType = options?.appType ?? 'terminal';
   const deeplinkUrl = options?.deeplinkUrl;
   const port = await findAvailablePort();
-  
+
   let server: Server | null = null;
   let resolveCallback: ((payload: CallbackPayload) => void) | null = null;
   let rejectCallback: ((error: Error) => void) | null = null;
@@ -555,11 +554,9 @@ export async function createCallbackServer(options?: CreateCallbackServerOptions
     rejectCallback = reject;
   });
 
-  server = createServer(async (req, res) => {
+  const requestHandler = async (req: import('http').IncomingMessage, res: import('http').ServerResponse) => {
     try {
       const url = new URL(req.url || '/', `http://127.0.0.1:${port}`);
-
-      debug('[callback-server] request pathname:', url.pathname);
 
       if (url.pathname !== '/callback') {
         res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -620,7 +617,10 @@ export async function createCallbackServer(options?: CreateCallbackServerOptions
         server = null;
       }
     }
-  });
+  };
+
+  // Create HTTP server
+  server = createHttpServer(requestHandler);
 
   await new Promise<void>((resolve, reject) => {
     server?.once('error', (error) => {
@@ -631,9 +631,12 @@ export async function createCallbackServer(options?: CreateCallbackServerOptions
       resolve();
     });
   });
+
+  const callbackUrl = `http://localhost:${port}`;
+
   return {
     promise: callbackPromise,
-    url: `http://localhost:${port}`,
+    url: callbackUrl,
     close: () => {
       if (server) {
         server.close();

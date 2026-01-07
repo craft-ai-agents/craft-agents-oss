@@ -16,7 +16,8 @@
     "./styles": "./src/styles/index.css"
   },
   "dependencies": {
-    "@craft-agent/core": "workspace:*"
+    "@craft-agent/core": "workspace:*",
+    "unist-util-visit": "^5.0.0"
   },
   "peerDependencies": {
     "@pierre/diffs": ">=0.1.0",

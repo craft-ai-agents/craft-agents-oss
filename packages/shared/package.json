@@ -28,6 +28,7 @@
     "./utils": "./src/utils/index.ts",
     "./utils/toolNames": "./src/utils/toolNames.ts",
     "./utils/logo": "./src/utils/logo.ts",
+    "./utils/service-url": "./src/utils/service-url.ts",
     "./utils/icon": "./src/utils/icon.ts",
     "./validation": "./src/validation/index.ts",
     "./version": "./src/version/index.ts",

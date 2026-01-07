@@ -339,7 +339,7 @@ Each source folder contains:
   // For API sources:
   "api": {
     "baseUrl": "https://api.example.com",
-    "authType": "bearer" | "header" | "query" | "basic" | "oauth" | "none",
+    "authType": "bearer" | "header" | "query" | "basic" | "none",
     "headerName": "X-API-Key",      // For header auth
     "queryParam": "api_key",         // For query auth
     "authScheme": "Bearer"           // For bearer auth (default: "Bearer")
@@ -406,6 +406,55 @@ After creating, use \`source_credential_prompt\` with mode "bearer".
   "provider": "public-mcp",
   "mcp": {
     "url": "https://public-mcp.example.com",
+    "authType": "none"
+  }
+}
+\`\`\`
+
+**Stdio transport (local command):**
+
+For MCP servers that run locally via command line (npx, node, python), use the stdio transport.
+
+Users often provide configs in Claude Desktop / Claude Code format:
+\`\`\`json
+{
+  "mcpServers": {
+    "airbnb": {
+      "command": "npx",
+      "args": ["-y", "@openbnb/mcp-server-airbnb"]
+    }
+  }
+}
+\`\`\`
+
+Convert to native format:
+\`\`\`json
+{
+  "type": "mcp",
+  "name": "Airbnb",
+  "provider": "airbnb",
+  "mcp": {
+    "transport": "stdio",
+    "command": "npx",
+    "args": ["-y", "@openbnb/mcp-server-airbnb"],
+    "authType": "none"
+  }
+}
+\`\`\`
+
+With environment variables:
+\`\`\`json
+{
+  "type": "mcp",
+  "name": "Brave Search",
+  "provider": "brave",
+  "mcp": {
+    "transport": "stdio",
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+    "env": {
+      "BRAVE_API_KEY": "your-api-key"
+    },
     "authType": "none"
   }
 }
@@ -605,6 +654,31 @@ Icons can be specified in several ways:
 3. **Domain for favicon:** \`"iconUrl": "linear.app"\` - Fetches favicon from domain
 
 When using URLs or domains, \`source_test\` will download and cache the icon locally.
+
+## Provider Domain Cache
+
+For favicon resolution, a cache maps provider names to their canonical domains at:
+\`~/.craft-agent/provider-domains.json\`
+
+**Format:**
+\`\`\`json
+{
+  "version": 1,
+  "domains": {
+    "linear": "linear.app",
+    "notion": "notion.so",
+    "brave": "brave.com"
+  },
+  "updatedAt": 1704067200000
+}
+\`\`\`
+
+**When to update:** If a source's favicon appears incorrect (generic globe, wrong icon), add the provider→domain mapping to this file. The app loads this cache on startup.
+
+**Example:** If "acme-mcp" source shows wrong icon, add:
+\`\`\`json
+"acme": "acme.com"
+\`\`\`
 
 ## Common Providers
 

@@ -442,6 +442,26 @@ bun dev
 craft --debug
 ```
 
+### OAuth Environment Variables
+
+To enable Google (Gmail, Calendar, Drive) and Slack sources in local development, set these environment variables in `.env`:
+
+```bash
+# Google OAuth (for Gmail, Calendar, Drive sources)
+GOOGLE_OAUTH_CLIENT_ID=your-client-id.apps.googleusercontent.com
+GOOGLE_OAUTH_CLIENT_SECRET=your-client-secret
+
+# Slack OAuth (for Slack source)
+SLACK_OAUTH_CLIENT_ID=your-slack-client-id
+SLACK_OAUTH_CLIENT_SECRET=your-slack-client-secret
+```
+
+**Getting credentials:**
+- **Google**: [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → Credentials → Create OAuth Client ID (Desktop app)
+- **Slack**: [Slack API](https://api.slack.com/apps) → Create New App → OAuth & Permissions
+
+These are baked into the Electron build via esbuild `--define` flags. Without them, OAuth flows for these sources will fail with "not configured" errors.
+
 ### Development Secrets (1Password)
 
 Development secrets (Gmail OAuth, etc.) are synced from 1Password to a local `.env` file. This keeps secrets out of the repo while making setup easy.

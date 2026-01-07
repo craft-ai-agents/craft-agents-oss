@@ -36,6 +36,9 @@ import type { FileAttachment, LoadedSource } from '../../../../shared/types'
 import type { PermissionMode } from '@craft-agent/shared/agent/modes'
 import { PERMISSION_MODE_ORDER } from '@craft-agent/shared/agent/modes'
 
+// Feature flag: disable custom folder selection in working directory picker
+const ENABLE_CUSTOM_FOLDER_SELECTION = false
+
 export interface FreeFormInputProps {
   /** Placeholder text for the textarea */
   placeholder?: string
@@ -964,7 +967,7 @@ export function FreeFormInput({
           </div>
 
           {/* 5. Working Directory Selector */}
-          {workingDirectory && onWorkingDirectoryChange && (
+          {ENABLE_CUSTOM_FOLDER_SELECTION && workingDirectory && onWorkingDirectoryChange && (
             <WorkingDirectorySelector
               workingDirectory={workingDirectory}
               onWorkingDirectoryChange={onWorkingDirectoryChange}
