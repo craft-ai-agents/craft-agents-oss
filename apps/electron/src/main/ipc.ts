@@ -1544,4 +1544,10 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     const { loadAgentTheme } = await import('@craft-agent/shared/config/storage')
     return loadAgentTheme(workspace.rootPath, agentSlug)
   })
+
+  // Logo URL resolution (uses Node.js filesystem cache for provider domains)
+  ipcMain.handle(IPC_CHANNELS.LOGO_GET_URL, async (_event, serviceUrl: string, provider?: string) => {
+    const { getLogoUrl } = await import('@craft-agent/shared/utils/logo')
+    return getLogoUrl(serviceUrl, provider)
+  })
 }

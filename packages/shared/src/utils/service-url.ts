@@ -1,5 +1,8 @@
 /**
  * Service URL utilities - browser-safe (no Node.js dependencies)
+ *
+ * This module is safe to import in browser/renderer contexts.
+ * For logo URL resolution, use the IPC-based getLogoUrl from the main process.
  */
 
 /**
