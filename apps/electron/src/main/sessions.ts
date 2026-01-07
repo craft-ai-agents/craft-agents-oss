@@ -1,7 +1,7 @@
 import { app } from 'electron'
 import { join } from 'path'
 import { rm, readFile } from 'fs/promises'
-import { CraftAgent, type AgentEvent, setPermissionMode, type PermissionMode, unregisterSessionScopedToolCallbacks } from '@craft-agent/shared/agent'
+import { CraftAgent, type AgentEvent, setPermissionMode, type PermissionMode, unregisterSessionScopedToolCallbacks, AbortReason } from '@craft-agent/shared/agent'
 import { sessionLog, isDebugMode, getLogFilePath } from './logger'
 import { createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk'
 import type { WindowManager } from './window-manager'
@@ -1048,7 +1048,7 @@ Use oauth_trigger for OAuth sources, credential_prompt for API key/bearer token 
           // The user needs to review and respond before continuing
           if (managed.isProcessing && managed.agent) {
             sessionLog.info(`Force-aborting after plan submission for session ${managed.id}`)
-            managed.agent.forceAbort()
+            managed.agent.forceAbort(AbortReason.PlanSubmitted)
             managed.isProcessing = false
             managed.abortController = undefined
 
@@ -1386,7 +1386,7 @@ Use oauth_trigger for OAuth sources, credential_prompt for API key/bearer token 
       // Force-abort via SDK's AbortController - immediately stops processing
       // This sends SIGTERM to subprocess (5s timeout, then SIGKILL)
       // The for-await loop will throw AbortError, caught by our handler
-      managed.agent?.forceAbort()
+      managed.agent?.forceAbort(AbortReason.Redirect)
 
       return
     }
@@ -1621,11 +1621,19 @@ Use oauth_trigger for OAuth sources, credential_prompt for API key/bearer token 
       )
 
       if (isAbortError) {
-        sessionLog.info('Chat aborted (expected when interrupted)')
+        // Extract abort reason (passed to AbortController.abort())
+        const reason = (error as DOMException).cause as AbortReason | undefined
+
+        sessionLog.info(`Chat aborted (reason: ${reason || 'unknown'})`)
         sendSpan.mark('chat.aborted')
+        sendSpan.setMetadata('abort_reason', reason || 'unknown')
         sendSpan.end()
-        // Abort is expected - just call onProcessingStopped with 'interrupted'
-        this.onProcessingStopped(sessionId, 'interrupted')
+
+        // Only show "Interrupted" for user-initiated stops
+        // Plan submissions and redirects handle their own cleanup
+        if (reason === AbortReason.UserStop || reason === undefined) {
+          this.onProcessingStopped(sessionId, 'interrupted')
+        }
       } else {
         sessionLog.error('Error in chat:', error)
         sessionLog.error('Error message:', error instanceof Error ? error.message : String(error))
@@ -1667,7 +1675,7 @@ Use oauth_trigger for OAuth sources, credential_prompt for API key/bearer token 
 
     // Force-abort via AbortController - immediately stops processing
     if (managed.agent) {
-      managed.agent.forceAbort()
+      managed.agent.forceAbort(AbortReason.UserStop)
     }
 
     // Set state immediately - the SDK will send a complete event

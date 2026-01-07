@@ -75,6 +75,19 @@ export type { AgentEvent };
 export type { LoadedSource } from '../sources/types.ts';
 export type { LoadedAgent } from '../agents/folder-types.ts';
 
+/**
+ * Reason for aborting agent execution.
+ * Used to distinguish user-initiated stops from internal aborts.
+ */
+export enum AbortReason {
+  /** User clicked stop button */
+  UserStop = 'user_stop',
+  /** Agent submitted a plan and is awaiting review */
+  PlanSubmitted = 'plan_submitted',
+  /** New message sent while processing (silent redirect) */
+  Redirect = 'redirect',
+}
+
 export interface CraftAgentConfig {
   workspace: Workspace;
   session?: Session;           // Current session (primary isolation boundary)
@@ -537,6 +550,7 @@ export class CraftAgent {
   private config: CraftAgentConfig;
   private currentQuery: Query | null = null;
   private currentQueryAbortController: AbortController | null = null;
+  private lastAbortReason: AbortReason | null = null;
   private sessionId: string | null = null;
   private isHeadless: boolean = false;
   private pendingPermissions: Map<string, PendingPermission> = new Map();
@@ -1898,7 +1912,14 @@ export class CraftAgent {
 
         // Handle user interruption
         if (sdkError instanceof AbortError) {
-          yield { type: 'status', message: 'Interrupted' };
+          const reason = this.lastAbortReason;
+          this.lastAbortReason = null;  // Clear for next time
+
+          // Only emit "Interrupted" status for user-initiated stops
+          // Plan submissions and redirects should be silent
+          if (reason === AbortReason.UserStop) {
+            yield { type: 'status', message: 'Interrupted' };
+          }
           yield { type: 'complete' };
           return;
         }
@@ -3001,10 +3022,13 @@ export class CraftAgent {
    * Force-abort the current query using the SDK's AbortController.
    * This immediately stops processing (SIGTERM/SIGKILL) without waiting for graceful shutdown.
    * Use this when you need instant termination (e.g., queuing a new message).
+   *
+   * @param reason - Why the abort is happening (affects UI feedback)
    */
-  forceAbort(): void {
+  forceAbort(reason: AbortReason = AbortReason.UserStop): void {
+    this.lastAbortReason = reason;
     if (this.currentQueryAbortController) {
-      this.currentQueryAbortController.abort();
+      this.currentQueryAbortController.abort(reason);
       this.currentQueryAbortController = null;
     }
     this.currentQuery = null;

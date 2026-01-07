@@ -1,4 +1,4 @@
-import { ipcMain, nativeTheme, nativeImage, dialog, shell, BrowserWindow } from 'electron'
+import { app, ipcMain, nativeTheme, nativeImage, dialog, shell, BrowserWindow } from 'electron'
 import { readFile, realpath, mkdir, writeFile, unlink, rm } from 'fs/promises'
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { normalize, isAbsolute, join, basename, dirname, resolve } from 'path'
@@ -524,6 +524,11 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // Get user's home directory
   ipcMain.handle(IPC_CHANNELS.GET_HOME_DIR, () => {
     return homedir()
+  })
+
+  // Check if running in debug mode (from source)
+  ipcMain.handle(IPC_CHANNELS.IS_DEBUG_MODE, () => {
+    return !app.isPackaged
   })
 
   // Agent management

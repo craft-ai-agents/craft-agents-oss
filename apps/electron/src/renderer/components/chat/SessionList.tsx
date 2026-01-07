@@ -4,6 +4,7 @@ import { Trash2, Pencil, MoreHorizontal, ExternalLink, Flag, FlagOff, MailOpen, 
 import { toast } from "sonner"
 
 import { cn, isHexColor } from "@/lib/utils"
+import { rendererPerf } from "@/lib/perf"
 import { Spinner } from "@craft-agent/ui"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
@@ -232,6 +233,8 @@ function SessionItem({
   const currentTodoState = getSessionTodoState(item)
 
   const handleClick = (e: React.MouseEvent) => {
+    // Start perf tracking for session switch
+    rendererPerf.startSessionSwitch(item.id)
     // Cmd+Click (Mac) or Ctrl+Click (Windows/Linux) opens in new tab
     const forceNewTab = e.metaKey || e.ctrlKey
     onSelect(forceNewTab)

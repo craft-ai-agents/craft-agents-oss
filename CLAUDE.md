@@ -300,6 +300,8 @@ Tools available within agent sessions with per-session callbacks:
 
 ## Logging & Debugging
 
+**Important:** Prefer logging over `console.log` for debugging. Craft Agent (the AI assistant) can read log files directly, making logs the preferred way to surface debug information during development.
+
 ### Overview
 
 Craft Agent uses a unified `debug()` utility that auto-routes based on environment:
@@ -388,6 +390,7 @@ sessionLog.info('Session started', { sessionId: 'abc123' })
 2. **Use scoped loggers** - `createLogger('module')` for organized output
 3. **Include context** - Pass objects as additional arguments
 4. **Never truncate** - Log full objects, files rotate automatically
+5. **Prefer logging over console.log** - Craft Agent can read log files for debugging assistance
 
 ## Development Secrets (1Password)
 

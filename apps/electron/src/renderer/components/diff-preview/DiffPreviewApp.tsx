@@ -1,18 +1,12 @@
 import * as React from 'react'
 import { useState, useEffect, useCallback } from 'react'
-import { DiffEditor } from '@monaco-editor/react'
-import loader from '@monaco-editor/loader'
-import * as monaco from 'monaco-editor'
 import { PencilLine, XCircle } from 'lucide-react'
 import { useTheme } from '@/context/ThemeContext'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { WindowHeader, WindowHeaderBadge, BADGE_CONFIGS } from '@/components/ui/window-header-badge'
-import { getLanguageFromPath, formatFilePath } from '@/lib/file-utils'
+import { formatFilePath } from '@/lib/file-utils'
+import { ShikiDiffViewer } from '@/components/shiki'
 import type { DiffPreviewData } from '../../../shared/types'
-
-// Configure loader to use local monaco-editor package (not CDN)
-// This is required because CSP blocks external scripts from cdn.jsdelivr.net
-loader.config({ monaco })
 
 interface DiffPreviewAppProps {
   sessionId: string
@@ -20,7 +14,7 @@ interface DiffPreviewAppProps {
 }
 
 /**
- * DiffPreviewApp - Monaco diff editor for viewing file changes
+ * DiffPreviewApp - Shiki-based diff viewer for file changes
  */
 export function DiffPreviewApp({ sessionId, diffId }: DiffPreviewAppProps) {
   const { resolvedMode } = useTheme()
@@ -56,15 +50,13 @@ export function DiffPreviewApp({ sessionId, diffId }: DiffPreviewAppProps) {
     fetchData()
   }, [sessionId, diffId])
 
-  // Monaco mounted callback
-  const handleEditorMount = useCallback(() => {
-    requestAnimationFrame(() => {
-      setIsEditorReady(true)
-    })
+  // Editor ready callback
+  const handleEditorReady = useCallback(() => {
+    setIsEditorReady(true)
   }, [])
 
-  // Monaco theme backgrounds
-  const monacoBackground = resolvedMode === 'dark' ? '#1e1e1e' : '#ffffff'
+  // Theme colors
+  const backgroundColor = resolvedMode === 'dark' ? '#1e1e1e' : '#ffffff'
   const toolbarBorder = resolvedMode === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)'
 
   // Open file in default macOS app
@@ -78,7 +70,7 @@ export function DiffPreviewApp({ sessionId, diffId }: DiffPreviewAppProps) {
 
   return (
     <TooltipProvider delayDuration={0}>
-      <div className="h-screen w-screen flex flex-col" style={{ backgroundColor: monacoBackground }}>
+      <div className="h-screen w-screen flex flex-col" style={{ backgroundColor }}>
         <WindowHeader borderColor={toolbarBorder}>
           {data && (
             <>
@@ -114,65 +106,19 @@ export function DiffPreviewApp({ sessionId, diffId }: DiffPreviewAppProps) {
           </div>
         )}
 
-        {/* Diff Editor with fade-in */}
+        {/* Diff Viewer with fade-in */}
         {data && !error && (
           <div
             className="flex-1 min-h-0 transition-opacity duration-200"
-            style={{ opacity: isEditorReady ? 1 : 0, backgroundColor: monacoBackground }}
+            style={{ opacity: isEditorReady ? 1 : 0, backgroundColor }}
           >
-            <DiffEditor
-              height="100%"
-              language={getLanguageFromPath(data.filePath, data.language)}
-              theme={resolvedMode === 'dark' ? 'vs-dark' : 'vs'}
+            <ShikiDiffViewer
               original={data.original}
               modified={data.modified}
-              onMount={handleEditorMount}
-              loading={null}
-              options={{
-                // Typography
-                fontFamily: '"JetBrains Mono", monospace',
-                fontSize: 13,
-                lineHeight: 1.6,
-
-                // Layout
-                minimap: { enabled: false },
-                scrollBeyondLastLine: false,
-                automaticLayout: true,
-                padding: { top: 16, bottom: 16 },
-
-                // Diff-specific options
-                renderSideBySide: false,
-                enableSplitViewResizing: true,
-                renderOverviewRuler: true,
-
-                // Read-only mode (diffs are for viewing only)
-                readOnly: true,
-
-                // Hide right-side indicators
-                overviewRulerLanes: 3,
-                overviewRulerBorder: false,
-                hideCursorInOverviewRuler: true,
-                renderLineHighlight: 'none',
-
-                // Clean scrollbar
-                scrollbar: {
-                  vertical: 'auto',
-                  horizontal: 'auto',
-                  verticalScrollbarSize: 10,
-                  horizontalScrollbarSize: 10,
-                  useShadows: false,
-                },
-
-                // Show line numbers for context
-                lineNumbers: 'on',
-                lineNumbersMinChars: 4,
-
-                // Disable code-editor features
-                occurrencesHighlight: 'off',
-                selectionHighlight: false,
-                renderWhitespace: 'selection',
-                matchBrackets: 'never',
-              }}
+              filePath={data.filePath}
+              language={data.language}
+              diffStyle="unified"
+              onReady={handleEditorReady}
             />
           </div>
         )}

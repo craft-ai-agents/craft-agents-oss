@@ -549,8 +549,22 @@ export function ChatDisplay({
                             if ((activity.toolName === 'Edit' || activity.toolName === 'Write') && input) {
                               // Collect all Edit/Write activities from this turn
                               const changes: FileChange[] = []
+                              console.log('[DEBUG] onOpenActivityDetails - Edit/Write clicked', {
+                                activityId: activity.id,
+                                toolName: activity.toolName,
+                                toolInput: activity.toolInput,
+                                turnActivities: turn.activities.length,
+                              })
                               for (const a of turn.activities) {
                                 const actInput = a.toolInput as Record<string, unknown> | undefined
+                                console.log('[DEBUG] Processing activity', {
+                                  id: a.id,
+                                  toolName: a.toolName,
+                                  hasToolInput: !!a.toolInput,
+                                  toolInputKeys: a.toolInput ? Object.keys(a.toolInput) : [],
+                                  old_string: a.toolInput?.old_string ? (a.toolInput.old_string as string).slice(0, 100) + '...' : 'N/A',
+                                  new_string: a.toolInput?.new_string ? (a.toolInput.new_string as string).slice(0, 100) + '...' : 'N/A',
+                                })
                                 if (a.toolName === 'Edit' && actInput) {
                                   changes.push({
                                     id: a.id,

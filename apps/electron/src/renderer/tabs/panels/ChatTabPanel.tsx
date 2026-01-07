@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Spinner } from '@craft-agent/ui'
 import { useChatContext, usePendingPermission, usePendingCredential, useSessionOptionsFor, useSession } from '@/context/ChatContext'
 import { useAgentState } from '../../hooks/useAgentState'
+import { rendererPerf } from '@/lib/perf'
 import type { Tab, ChatTab } from '../types'
 import { useTabs } from '../useTabs'
 
@@ -52,6 +53,13 @@ export default function ChatTabPanel({ tab }: ChatTabPanelProps) {
   // Only re-renders when THIS session changes, not when other sessions stream
   const session = useSession(chatTab.sessionId)
 
+  // Perf: Mark when session data is available (useLayoutEffect to fire before end)
+  React.useLayoutEffect(() => {
+    if (session) {
+      rendererPerf.markSessionSwitch(chatTab.sessionId, 'session.loaded')
+    }
+  }, [chatTab.sessionId, session])
+
   // Mark session as read when displayed (not processing)
   // This handles all navigation methods: click, keyboard, tab switch
   React.useEffect(() => {
@@ -67,6 +75,13 @@ export default function ChatTabPanel({ tab }: ChatTabPanelProps) {
     session ? chatTab.workspaceId : null,
     session ? (chatTab.agentId || null) : null
   )
+
+  // Perf: Mark when agent state resolves (useLayoutEffect to fire before end)
+  React.useLayoutEffect(() => {
+    if (agentState.status.status !== 'idle' || !agentState.isLoading) {
+      rendererPerf.markSessionSwitch(chatTab.sessionId, 'agent.status')
+    }
+  }, [chatTab.sessionId, agentState.status.status, agentState.isLoading])
 
   // Get pending permission and credential for this session
   const pendingPermission = usePendingPermission(chatTab.sessionId)
@@ -182,6 +197,18 @@ export default function ChatTabPanel({ tab }: ChatTabPanelProps) {
     }
   }, [session?.agentId, session?.agentName, agentState.bannerState, agentState.bannerReason, agentState.agentName, agentState.reload])
 
+  // Perf: Mark render complete after paint
+  // Using useEffect + rAF to fire after DOM is painted and visible to user
+  React.useEffect(() => {
+    if (session) {
+      // Wait for next frame to ensure paint is complete
+      const rafId = requestAnimationFrame(() => {
+        rendererPerf.endSessionSwitch(chatTab.sessionId)
+      })
+      return () => cancelAnimationFrame(rafId)
+    }
+  }, [chatTab.sessionId, session])
+
   // Handle missing session (deleted while tab was open)
   if (!session) {
     return (
@@ -198,6 +225,9 @@ export default function ChatTabPanel({ tab }: ChatTabPanelProps) {
       </div>
     )
   }
+
+  // Perf: Mark that all data is ready and we're about to render ChatDisplay
+  rendererPerf.markSessionSwitch(chatTab.sessionId, 'data.ready')
 
   return (
     <ChatDisplay

@@ -393,6 +393,12 @@ export function FreeFormInput({
 
         const mimeType = file.type || 'application/octet-stream'
 
+        // For text files, decode the ArrayBuffer as UTF-8 text
+        let text: string | undefined
+        if (type === 'text') {
+          text = new TextDecoder('utf-8').decode(new Uint8Array(result))
+        }
+
         let thumbnailBase64: string | undefined
         if (hasElectronAPI) {
           try {
@@ -409,6 +415,7 @@ export function FreeFormInput({
           name: fileName,
           mimeType,
           base64,
+          text,
           size: file.size,
           thumbnailBase64,
         })

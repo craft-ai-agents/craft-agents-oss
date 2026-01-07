@@ -1,19 +1,14 @@
 import * as React from 'react'
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { DiffEditor } from '@monaco-editor/react'
-import loader from '@monaco-editor/loader'
-import * as monaco from 'monaco-editor'
 import { ChevronDown, FilePlus, PencilLine, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useTheme } from '@/context/ThemeContext'
-import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { DropdownMenu, DropdownMenuTrigger, StyledDropdownMenuContent, StyledDropdownMenuItem } from '@/components/ui/styled-dropdown'
 import { WindowHeader, WindowHeaderBadge, BADGE_CONFIGS } from '@/components/ui/window-header-badge'
-import { getLanguageFromPath, formatFilePath } from '@/lib/file-utils'
+import { formatFilePath } from '@/lib/file-utils'
+import { ShikiDiffViewer } from '@/components/shiki'
 import type { MultiFileDiffData, FileChange } from '../../../shared/types'
-
-// Configure loader to use local monaco-editor package (not CDN)
-loader.config({ monaco })
 
 interface MultiFileDiffAppProps {
   sessionId: string
@@ -142,7 +137,7 @@ function Sidebar({ entries, selectedKey, onSelect }: SidebarProps) {
 }
 
 /**
- * MultiFileDiffApp - Shows all file changes in a turn with VS Code-style file tree + diff viewer
+ * MultiFileDiffApp - Shows all file changes in a turn with file tree + diff viewer
  */
 export function MultiFileDiffApp({ sessionId, turnId }: MultiFileDiffAppProps) {
   const { resolvedMode } = useTheme()
@@ -179,6 +174,20 @@ export function MultiFileDiffApp({ sessionId, turnId }: MultiFileDiffAppProps) {
 
       try {
         const result = await window.electronAPI.getMultiFileDiffData(sessionId, turnId)
+        console.log('[DEBUG] MultiFileDiffApp - received data:', {
+          sessionId,
+          turnId,
+          result,
+          changesCount: result?.changes?.length,
+          firstChange: result?.changes?.[0] ? {
+            id: result.changes[0].id,
+            filePath: result.changes[0].filePath,
+            originalLength: result.changes[0].original?.length,
+            modifiedLength: result.changes[0].modified?.length,
+            originalSnippet: result.changes[0].original?.slice(0, 100),
+            modifiedSnippet: result.changes[0].modified?.slice(0, 100),
+          } : 'N/A',
+        })
         if (!result) {
           setError('Multi-file diff data not found')
           return
@@ -292,17 +301,16 @@ export function MultiFileDiffApp({ sessionId, turnId }: MultiFileDiffAppProps) {
     loadFullFile()
   }, [viewMode, selectedEntry])
 
-  // Monaco mounted callback
-  const handleEditorMount = useCallback(() => {
-    requestAnimationFrame(() => {
-      setIsEditorReady(true)
-    })
+  // Editor ready callback
+  const handleEditorReady = useCallback(() => {
+    setIsEditorReady(true)
   }, [])
 
   // Handle sidebar entry selection
   const handleSelectEntry = useCallback((key: string) => {
     setSelectedKey(key)
     setFullFileContent(null) // Reset full file content when switching entries
+    setIsEditorReady(false) // Reset ready state for new entry
   }, [])
 
   // Open file in default app
@@ -314,11 +322,11 @@ export function MultiFileDiffApp({ sessionId, turnId }: MultiFileDiffAppProps) {
 
   // Theme colors
   const isDark = resolvedMode === 'dark'
-  const monacoBackground = isDark ? '#1e1e1e' : '#ffffff'
+  const backgroundColor = isDark ? '#1e1e1e' : '#ffffff'
   const sidebarBackground = isDark ? '#252526' : '#f3f3f3'
   const toolbarBorder = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)'
 
-  // Determine what to show in the diff editor
+  // Determine what to show in the diff viewer
   const diffOriginal = viewMode === 'full' && fullFileContent
     ? fullFileContent.original
     : combinedDiff.original
@@ -331,7 +339,7 @@ export function MultiFileDiffApp({ sessionId, turnId }: MultiFileDiffAppProps) {
 
   return (
     <TooltipProvider delayDuration={0}>
-      <div className="h-screen w-screen flex flex-col" style={{ backgroundColor: monacoBackground }}>
+      <div className="h-screen w-screen flex flex-col" style={{ backgroundColor }}>
         {/* Header */}
         <WindowHeader borderColor={toolbarBorder}>
           {selectedEntry && (
@@ -401,7 +409,7 @@ export function MultiFileDiffApp({ sessionId, turnId }: MultiFileDiffAppProps) {
           </div>
         )}
 
-        {/* Main content: Sidebar + Editor */}
+        {/* Main content: Sidebar + Diff Viewer */}
         {data && !error && (
           <div className="flex-1 flex min-h-0">
             {/* Sidebar */}
@@ -424,54 +432,20 @@ export function MultiFileDiffApp({ sessionId, turnId }: MultiFileDiffAppProps) {
               </div>
             </div>
 
-            {/* Diff editor */}
+            {/* Diff viewer */}
             <div className="flex-1 min-w-0">
               {selectedEntry ? (
                 <div
-                  className="h-full transition-opacity duration-200"
-                  style={{
-                    opacity: isEditorReady && !isLoadingFullFile ? 1 : 0.3,
-                    backgroundColor: monacoBackground
-                  }}
+                  className="h-full"
+                  style={{ backgroundColor }}
                 >
-                  <DiffEditor
-                    height="100%"
-                    language={getLanguageFromPath(selectedEntry.filePath)}
-                    theme={isDark ? 'vs-dark' : 'vs'}
+                  <ShikiDiffViewer
+                    key={selectedKey} // Force re-mount on entry change
                     original={diffOriginal}
                     modified={diffModified}
-                    onMount={handleEditorMount}
-                    loading={null}
-                    options={{
-                      fontFamily: '"JetBrains Mono", monospace',
-                      fontSize: 13,
-                      lineHeight: 1.6,
-                      minimap: { enabled: false },
-                      scrollBeyondLastLine: false,
-                      automaticLayout: true,
-                      padding: { top: 16, bottom: 16 },
-                      renderSideBySide: false,
-                      enableSplitViewResizing: true,
-                      renderOverviewRuler: true,
-                      readOnly: true,
-                      overviewRulerLanes: 3,
-                      overviewRulerBorder: false,
-                      hideCursorInOverviewRuler: true,
-                      renderLineHighlight: 'none',
-                      scrollbar: {
-                        vertical: 'auto',
-                        horizontal: 'auto',
-                        verticalScrollbarSize: 10,
-                        horizontalScrollbarSize: 10,
-                        useShadows: false,
-                      },
-                      lineNumbers: 'on',
-                      lineNumbersMinChars: 4,
-                      occurrencesHighlight: 'off',
-                      selectionHighlight: false,
-                      renderWhitespace: 'selection',
-                      matchBrackets: 'never',
-                    }}
+                    filePath={selectedEntry.filePath}
+                    diffStyle="unified"
+                    onReady={handleEditorReady}
                   />
                 </div>
               ) : (

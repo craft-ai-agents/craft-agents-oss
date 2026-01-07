@@ -22,6 +22,7 @@ import {
   validateTabsAtom,
   replaceTabAtom,
 } from './atoms'
+import { rendererPerf } from '@/lib/perf'
 import type {
   Tab,
   ChatTab,
@@ -65,6 +66,9 @@ export function useTabs() {
     ) => {
       const { forceNew = false } = options
 
+      // Perf: Mark tab lookup start
+      rendererPerf.markSessionSwitch(sessionId, 'tab.lookup')
+
       // Check if a chat tab for this session already exists
       const existingTab = state.tabs.find(
         (t) => t.type === 'chat' && (t as ChatTab).sessionId === sessionId
@@ -72,6 +76,7 @@ export function useTabs() {
 
       if (existingTab && !forceNew) {
         // Activate existing tab
+        rendererPerf.markSessionSwitch(sessionId, 'tab.activate-existing')
         setActiveTab(existingTab.id)
         return
       }
@@ -95,6 +100,7 @@ export function useTabs() {
             closable: true,
             agentId,
           }
+          rendererPerf.markSessionSwitch(sessionId, 'tab.replace')
           replaceTab({ oldTabId: currentChatTab.id, newTab })
           return
         }
@@ -110,6 +116,7 @@ export function useTabs() {
         closable: true,
         agentId,
       }
+      rendererPerf.markSessionSwitch(sessionId, 'tab.create-new')
       openTab(tab)
     },
     [state.tabs, state.activeTabId, openTab, setActiveTab, replaceTab]

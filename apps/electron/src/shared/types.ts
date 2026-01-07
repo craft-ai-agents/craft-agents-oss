@@ -510,6 +510,7 @@ export const IPC_CHANNELS = {
   // System
   GET_VERSIONS: 'system:versions',
   GET_HOME_DIR: 'system:homeDir',
+  IS_DEBUG_MODE: 'system:isDebugMode',
 
   // Shell operations (open external URLs/files)
   OPEN_URL: 'shell:openUrl',
@@ -814,6 +815,7 @@ export interface ElectronAPI {
   // System
   getVersions(): { node: string; chrome: string; electron: string }
   getHomeDir(): Promise<string>
+  isDebugMode(): Promise<boolean>
 
   // Shell operations
   openUrl(url: string): Promise<void>

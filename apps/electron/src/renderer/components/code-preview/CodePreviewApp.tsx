@@ -1,18 +1,12 @@
 import * as React from 'react'
 import { useState, useEffect, useCallback } from 'react'
-import Editor from '@monaco-editor/react'
-import loader from '@monaco-editor/loader'
-import * as monaco from 'monaco-editor'
 import { BookOpen, PenLine, XCircle } from 'lucide-react'
 import { useTheme } from '@/context/ThemeContext'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { WindowHeader, WindowHeaderBadge, BADGE_CONFIGS } from '@/components/ui/window-header-badge'
-import { getLanguageFromPath, formatFilePath } from '@/lib/file-utils'
+import { formatFilePath } from '@/lib/file-utils'
+import { ShikiCodeViewer } from '@/components/shiki'
 import type { CodePreviewData } from '../../../shared/types'
-
-// Configure loader to use local monaco-editor package (not CDN)
-// This is required because CSP blocks external scripts from cdn.jsdelivr.net
-loader.config({ monaco })
 
 interface CodePreviewAppProps {
   sessionId: string
@@ -20,7 +14,7 @@ interface CodePreviewAppProps {
 }
 
 /**
- * CodePreviewApp - Monaco editor for viewing file content (Read/Write tools)
+ * CodePreviewApp - Shiki-based code viewer for file content (Read/Write tools)
  */
 export function CodePreviewApp({ sessionId, previewId }: CodePreviewAppProps) {
   const { resolvedMode } = useTheme()
@@ -56,15 +50,13 @@ export function CodePreviewApp({ sessionId, previewId }: CodePreviewAppProps) {
     fetchData()
   }, [sessionId, previewId])
 
-  // Monaco mounted callback
-  const handleEditorMount = useCallback(() => {
-    requestAnimationFrame(() => {
-      setIsEditorReady(true)
-    })
+  // Editor ready callback
+  const handleEditorReady = useCallback(() => {
+    setIsEditorReady(true)
   }, [])
 
-  // Monaco theme backgrounds
-  const monacoBackground = resolvedMode === 'dark' ? '#1e1e1e' : '#ffffff'
+  // Theme colors
+  const backgroundColor = resolvedMode === 'dark' ? '#1e1e1e' : '#ffffff'
   const toolbarBorder = resolvedMode === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)'
 
   // Mode badge config
@@ -83,7 +75,7 @@ export function CodePreviewApp({ sessionId, previewId }: CodePreviewAppProps) {
 
   return (
     <TooltipProvider delayDuration={0}>
-      <div className="h-screen w-screen flex flex-col" style={{ backgroundColor: monacoBackground }}>
+      <div className="h-screen w-screen flex flex-col" style={{ backgroundColor }}>
         <WindowHeader borderColor={toolbarBorder}>
           {data && (
             <>
@@ -126,65 +118,18 @@ export function CodePreviewApp({ sessionId, previewId }: CodePreviewAppProps) {
           </div>
         )}
 
-        {/* Code Editor with fade-in */}
+        {/* Code Viewer with fade-in */}
         {data && !error && (
           <div
             className="flex-1 min-h-0 transition-opacity duration-200"
-            style={{ opacity: isEditorReady ? 1 : 0, backgroundColor: monacoBackground }}
+            style={{ opacity: isEditorReady ? 1 : 0, backgroundColor }}
           >
-            <Editor
-              height="100%"
-              language={getLanguageFromPath(data.filePath, data.language)}
-              theme={resolvedMode === 'dark' ? 'vs-dark' : 'vs'}
-              value={data.content}
-              onMount={handleEditorMount}
-              loading={null}
-              options={{
-                // Typography
-                fontFamily: '"JetBrains Mono", monospace',
-                fontSize: 13,
-                lineHeight: 1.6,
-                wordWrap: 'on',
-
-                // Read-only mode
-                readOnly: true,
-
-                // Layout
-                minimap: { enabled: false },
-                scrollBeyondLastLine: false,
-                automaticLayout: true,
-                padding: { top: 16, bottom: 16 },
-
-                // Show line numbers
-                lineNumbers: 'on',
-                lineNumbersMinChars: 4,
-
-                // Hide right-side indicators
-                overviewRulerLanes: 0,
-                overviewRulerBorder: false,
-                hideCursorInOverviewRuler: true,
-                renderLineHighlight: 'none',
-
-                // Clean scrollbar
-                scrollbar: {
-                  vertical: 'auto',
-                  horizontal: 'auto',
-                  verticalScrollbarSize: 10,
-                  horizontalScrollbarSize: 10,
-                  useShadows: false,
-                },
-
-                // Disable code-editor features
-                occurrencesHighlight: 'off',
-                selectionHighlight: false,
-                renderWhitespace: 'selection',
-                matchBrackets: 'never',
-
-                // Disable gutter decorations
-                glyphMargin: false,
-                folding: true,
-                lineDecorationsWidth: 0,
-              }}
+            <ShikiCodeViewer
+              code={data.content}
+              filePath={data.filePath}
+              language={data.language}
+              startLine={data.startLine || 1}
+              onReady={handleEditorReady}
             />
           </div>
         )}

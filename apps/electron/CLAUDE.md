@@ -840,6 +840,8 @@ const exponentialSpring = {
 
 ## Logging & Debugging
 
+**Important:** Prefer logging over `console.log` for debugging. Craft Agent (the AI assistant) can read log files directly via Grep/Read tools, making logs the preferred way to surface debug information during development.
+
 ### Overview
 
 The Electron app has two logging systems:
@@ -934,6 +936,13 @@ cat ~/Library/Logs/Craft\ Agents/main.log | jq 'select(.level == "error")'
 
 - **electron-log:** `src/main/logger.ts` - 5MB rotation, disabled in production
 - **debug utility:** `@craft-agent/shared/utils` - auto-routes by environment
+
+### Best Practices
+
+1. **Prefer logging over console.log** - Craft Agent can read log files for debugging
+2. **Use scoped loggers** - `sessionLog`, `ipcLog`, etc. for organized output
+3. **Include context objects** - Pass structured data as second argument
+4. **Use appropriate log levels** - `debug` for verbose, `info` for important events, `error` for failures
 
 ### DevTools
 
