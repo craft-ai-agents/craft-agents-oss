@@ -299,10 +299,54 @@ function pickBestFavicon(favicons: Array<{href: string, sizes: string | null}>):
 }
 
 /**
+ * Validate provider name is safe for LLM prompt interpolation.
+ * Only allows alphanumeric, hyphens, underscores. 2-50 chars.
+ * Prevents prompt injection attacks.
+ */
+function isValidProviderName(provider: string): boolean {
+  // Must be 2-50 chars, alphanumeric with hyphens/underscores (no leading/trailing special chars)
+  // Also allow single alphanumeric char for edge cases
+  return /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,48}[a-zA-Z0-9]$|^[a-zA-Z0-9]{1,2}$/.test(provider);
+}
+
+/**
+ * Validate domain looks legitimate and safe.
+ * Prevents accepting malicious or internal domains from LLM.
+ */
+function isValidDomain(domain: string): boolean {
+  // Basic domain format: alphanumeric segments separated by dots, 2-63 char TLD
+  // (some new TLDs are longer than 6 chars, e.g., .technology, .international)
+  if (!/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*\.[a-z]{2,63}$/.test(domain)) {
+    return false;
+  }
+
+  // Block obvious bad patterns
+  if (domain.includes('..') || domain.startsWith('-') || domain.endsWith('-')) {
+    return false;
+  }
+
+  // Block localhost and private/internal domains
+  if (domain === 'localhost' || domain.endsWith('.local') || domain.endsWith('.internal')) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
  * Use Haiku to resolve unknown provider names to canonical domains.
  * Only called when static maps don't have the provider.
+ *
+ * Security: Input is validated to prevent prompt injection,
+ * output is validated to prevent accepting malicious domains.
  */
 async function resolveProviderWithHaiku(provider: string): Promise<string | null> {
+  // Input validation - reject suspicious provider names to prevent prompt injection
+  if (!isValidProviderName(provider)) {
+    debug(`[resolveProviderWithHaiku] Rejected invalid provider name: "${provider.slice(0, 50)}"`);
+    return null;
+  }
+
   try {
     const Anthropic = (await import('@anthropic-ai/sdk')).default;
     const client = new Anthropic();
@@ -319,8 +363,9 @@ async function resolveProviderWithHaiku(provider: string): Promise<string | null
     const text = response.content[0]?.type === 'text' ? response.content[0].text : '';
     const domain = text.trim().toLowerCase();
 
-    // Validate it looks like a domain
-    if (domain === 'unknown' || !domain.includes('.') || domain.length > 50) {
+    // Output validation - reject invalid/suspicious domains
+    if (domain === 'unknown' || !isValidDomain(domain)) {
+      debug(`[resolveProviderWithHaiku] Rejected invalid domain: "${domain}" for provider: "${provider}"`);
       return null;
     }
 
