@@ -49,29 +49,8 @@ export const PROVIDER_CANONICAL_DOMAINS: Record<string, string> = {
   notion: 'notion.so',
 };
 
-/**
- * Derive a service URL from source config for favicon resolution.
- * For stdio sources (no URL), falls back to https://{provider}.com
- *
- * This is a pure function that can be used in both Node.js and browser contexts.
- */
-export function deriveServiceUrl(
-  config: {
-    mcp?: { url?: string };
-    api?: { baseUrl?: string; googleService?: string };
-    provider?: string;
-  }
-): string | null {
-  // Get URL from config (API baseUrl takes precedence)
-  let url = config.api?.baseUrl ?? config.mcp?.url ?? null;
-
-  // For stdio sources (no URL), try provider name as domain
-  if (!url && config.provider) {
-    url = `https://${config.provider}.com`;
-  }
-
-  return url;
-}
+// Re-export browser-safe utility for backward compatibility
+export { deriveServiceUrl } from './service-url.ts';
 
 /**
  * Cache structure for persisted provider domains
