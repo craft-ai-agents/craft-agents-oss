@@ -7,7 +7,6 @@ import { randomUUID } from 'crypto'
 import { SessionManager } from './sessions'
 import { ipcLog } from './logger'
 import { WindowManager } from './window-manager'
-import { PreviewWindowManager } from './preview-window'
 import { TerminalPreviewWindowManager } from './terminal-preview-window'
 import { FilePreviewWindowManager } from './file-preview-window'
 import { UnifiedPreviewWindowManager } from './unified-preview-window'
@@ -117,7 +116,7 @@ async function validateFilePath(filePath: string): Promise<string> {
   return realPath
 }
 
-export function registerIpcHandlers(sessionManager: SessionManager, windowManager: WindowManager, previewWindowManager: PreviewWindowManager, terminalPreviewWindowManager: TerminalPreviewWindowManager, filePreviewWindowManager: FilePreviewWindowManager, unifiedPreviewWindowManager: UnifiedPreviewWindowManager): void {
+export function registerIpcHandlers(sessionManager: SessionManager, windowManager: WindowManager, terminalPreviewWindowManager: TerminalPreviewWindowManager, filePreviewWindowManager: FilePreviewWindowManager, unifiedPreviewWindowManager: UnifiedPreviewWindowManager): void {
   // Get all sessions
   ipcMain.handle(IPC_CHANNELS.GET_SESSIONS, async () => {
     const end = perf.start('ipc.getSessions')
@@ -1021,25 +1020,6 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // Get all drafts (for loading on app start)
   ipcMain.handle(IPC_CHANNELS.DRAFTS_GET_ALL, async () => {
     return getAllSessionDrafts()
-  })
-
-  // ============================================================
-  // Markdown Preview Window
-  // ============================================================
-
-  // Open markdown preview window
-  ipcMain.handle(IPC_CHANNELS.MARKDOWN_PREVIEW_OPEN, async (_event, previewId: string, data: import('../shared/types').MarkdownPreviewData) => {
-    await previewWindowManager.openPreview(previewId, data)
-  })
-
-  // Get data for a markdown preview (called from preview window on mount)
-  ipcMain.handle(IPC_CHANNELS.MARKDOWN_PREVIEW_GET_DATA, async (_event, previewId: string) => {
-    return previewWindowManager.getData(previewId)
-  })
-
-  // Save edited content to file (only for readWrite mode)
-  ipcMain.handle(IPC_CHANNELS.MARKDOWN_PREVIEW_SAVE, async (_event, previewId: string, content: string) => {
-    await previewWindowManager.save(previewId, content)
   })
 
   // ============================================================

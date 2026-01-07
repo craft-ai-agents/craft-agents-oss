@@ -198,21 +198,6 @@ const api: ElectronAPI = {
   readPreferences: () => ipcRenderer.invoke(IPC_CHANNELS.PREFERENCES_READ),
   writePreferences: (content: string) => ipcRenderer.invoke(IPC_CHANNELS.PREFERENCES_WRITE, content),
 
-  // Markdown preview window
-  openMarkdownPreview: (previewId: string, data: import('../shared/types').MarkdownPreviewData) =>
-    ipcRenderer.invoke(IPC_CHANNELS.MARKDOWN_PREVIEW_OPEN, previewId, data),
-  getMarkdownPreviewData: (previewId: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.MARKDOWN_PREVIEW_GET_DATA, previewId),
-  saveMarkdownPreview: (previewId: string, content: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.MARKDOWN_PREVIEW_SAVE, previewId, content),
-  onMarkdownFileSaved: (callback: (data: { filePath: string }) => void) => {
-    const handler = (_event: Electron.IpcRendererEvent, data: { filePath: string }) => {
-      callback(data)
-    }
-    ipcRenderer.on(IPC_CHANNELS.MARKDOWN_PREVIEW_FILE_SAVED, handler)
-    return () => ipcRenderer.removeListener(IPC_CHANNELS.MARKDOWN_PREVIEW_FILE_SAVED, handler)
-  },
-
   // Diff preview window
   openDiffPreview: (sessionId: string, diffId: string, data: import('../shared/types').DiffPreviewData) =>
     ipcRenderer.invoke(IPC_CHANNELS.DIFF_PREVIEW_OPEN, sessionId, diffId, data),

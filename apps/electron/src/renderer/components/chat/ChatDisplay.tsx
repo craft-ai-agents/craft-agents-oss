@@ -728,10 +728,15 @@ export function ChatDisplay({
                             // Default → Markdown preview
                             else {
                               const markdown = formatActivityAsMarkdown(activity)
-                              window.electronAPI.openMarkdownPreview(`${session.id}:activity-${activity.id}`, {
-                                mode: 'readOnly',
-                                content: markdown,
-                                title: 'Activity Details',
+                              window.electronAPI.openPreview({
+                                mode: 'markdown',
+                                sessionId: session.id,
+                                previewId: `activity-${activity.id}`,
+                                markdown: {
+                                  mode: 'readOnly',
+                                  content: markdown,
+                                  title: 'Activity Details',
+                                },
                               })
                             }
                           }

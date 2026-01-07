@@ -595,12 +595,6 @@ export const IPC_CHANNELS = {
   WORKSPACE_READ_IMAGE: 'workspace:readImage',
   WORKSPACE_WRITE_IMAGE: 'workspace:writeImage',
 
-  // Markdown preview window
-  MARKDOWN_PREVIEW_OPEN: 'markdownPreview:open',
-  MARKDOWN_PREVIEW_GET_DATA: 'markdownPreview:getData',
-  MARKDOWN_PREVIEW_SAVE: 'markdownPreview:save',
-  MARKDOWN_PREVIEW_FILE_SAVED: 'markdownPreview:fileSaved', // Broadcast: { filePath: string }
-
   // Diff preview window
   DIFF_PREVIEW_OPEN: 'diffPreview:open',
   DIFF_PREVIEW_GET_DATA: 'diffPreview:getData',
@@ -1011,12 +1005,6 @@ export interface ElectronAPI {
   // User Preferences
   readPreferences(): Promise<{ content: string; exists: boolean }>
   writePreferences(content: string): Promise<{ success: boolean; error?: string }>
-
-  // Markdown preview window
-  openMarkdownPreview(previewId: string, data: MarkdownPreviewData): Promise<void>
-  getMarkdownPreviewData(previewId: string): Promise<{ data: MarkdownPreviewData; content: string } | null>
-  saveMarkdownPreview(previewId: string, content: string): Promise<void>
-  onMarkdownFileSaved(callback: (data: { filePath: string }) => void): () => void
 
   // Diff preview window
   openDiffPreview(sessionId: string, diffId: string, data: DiffPreviewData): Promise<void>
