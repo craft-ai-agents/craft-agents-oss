@@ -102,6 +102,15 @@ export interface McpToolsResult {
 }
 
 /**
+ * Result of sharing or revoking a session
+ */
+export interface ShareResult {
+  success: boolean
+  url?: string
+  error?: string
+}
+
+/**
  * Agent activation status - indicates if agent needs activation or auth
  */
 export interface AgentSetupStatus {
@@ -340,6 +349,10 @@ export interface Session {
   enabledSourceSlugs?: string[]
   // Working directory for this session (used by agent for bash commands)
   workingDirectory?: string
+  // Shared viewer URL (if shared via viewer)
+  sharedUrl?: string
+  // Shared session ID in viewer (for revoke)
+  sharedId?: string
   // Current status for ProcessingIndicator (e.g., compacting)
   currentStatus?: {
     message: string
@@ -424,6 +437,8 @@ export type SessionCommand =
   | { type: 'updateWorkingDirectory'; dir: string }
   | { type: 'setSources'; sourceSlugs: string[] }
   | { type: 'showInFinder' }
+  | { type: 'shareToViewer' }
+  | { type: 'revokeShare' }
 
 /**
  * Parameters for opening a new chat session
@@ -886,7 +901,7 @@ export interface ElectronAPI {
   respondToCredential(sessionId: string, requestId: string, response: CredentialResponse): Promise<boolean>
 
   // Consolidated session command handler
-  sessionCommand(sessionId: string, command: SessionCommand): Promise<void>
+  sessionCommand(sessionId: string, command: SessionCommand): Promise<void | ShareResult>
 
   // Workspace management
   getWorkspaces(): Promise<Workspace[]>

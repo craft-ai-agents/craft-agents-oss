@@ -51,7 +51,7 @@ export function App() {
       setError(null)
 
       try {
-        const response = await fetch(`/api/session/${sessionId}`)
+        const response = await fetch(`/s/api/${sessionId}`)
         if (!response.ok) {
           if (response.status === 404) {
             setError('Session not found')

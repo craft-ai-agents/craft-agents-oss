@@ -145,7 +145,7 @@ export function PreviewHeader({
       <div className="w-[70px] shrink-0" />
 
       {/* Center - badges row */}
-      <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+      <div className="flex items-center gap-2 min-w-0">
         {children}
       </div>
 

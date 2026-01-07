@@ -10,7 +10,6 @@ import * as React from 'react'
 import { useMemo } from 'react'
 import { FileCode } from 'lucide-react'
 import { PreviewOverlay } from './PreviewOverlay'
-import { CopyButton } from './CopyButton'
 import { CodeBlock } from '../markdown/CodeBlock'
 
 export interface GenericOverlayProps {
@@ -159,9 +158,6 @@ export function GenericOverlay({
     return detectLanguage(diffMode ? modifiedContent : content)
   }, [language, title, diffMode, modifiedContent, content])
 
-  // Content to copy - in diff mode, copy the modified content
-  const copyContent = diffMode ? modifiedContent : content
-
   return (
     <PreviewOverlay
       isOpen={isOpen}
@@ -172,7 +168,6 @@ export function GenericOverlay({
         variant: 'gray',
       }}
       title={title}
-      headerActions={<CopyButton content={copyContent} />}
     >
       <div className="flex-1 min-h-0 overflow-auto p-4">
         {diffMode ? (

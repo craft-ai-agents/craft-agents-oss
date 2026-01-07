@@ -74,23 +74,11 @@ export function FocusProvider({ children }: { children: React.ReactNode }) {
     return currentZone === id
   }, [currentZone])
 
-  // Track focus changes via focusin events to sync currentZone
-  useEffect(() => {
-    const handleFocusIn = (e: FocusEvent) => {
-      const target = e.target as HTMLElement
-
-      // Find which zone contains the focused element
-      for (const [id, zone] of zonesRef.current.entries()) {
-        if (zone.ref.current?.contains(target)) {
-          setCurrentZone(id)
-          return
-        }
-      }
-    }
-
-    document.addEventListener('focusin', handleFocusIn)
-    return () => document.removeEventListener('focusin', handleFocusIn)
-  }, [])
+  // NOTE: Removed automatic focusin tracking - it caused cascading re-renders
+  // across all mounted tabs (250-780ms per focus change). Focus state now only
+  // changes via explicit focusZone() calls (keyboard shortcuts Cmd+1/2/3, Tab).
+  // Components that need to focus on session change should use session?.id as
+  // the effect dependency instead of isFocused.
 
   const value: FocusContextValue = {
     currentZone,

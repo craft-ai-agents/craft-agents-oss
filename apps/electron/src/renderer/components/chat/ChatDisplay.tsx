@@ -297,12 +297,12 @@ export function ChatDisplay({
     sessionId: session?.id ?? ''
   })
 
-  // Focus textarea when zone gains focus
+  // Focus textarea when session changes (tab switch) or zone gains focus via keyboard
   useEffect(() => {
-    if (isFocused && session) {
+    if (session) {
       textareaRef.current?.focus()
     }
-  }, [isFocused, session])
+  }, [session?.id, isFocused])
 
   // Pop-out handler - opens message in a new preview window (read-only)
   const handlePopOut = React.useCallback((message: Message) => {

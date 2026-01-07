@@ -301,6 +301,10 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
         }
         return
       }
+      case 'shareToViewer':
+        return sessionManager.shareToViewer(sessionId)
+      case 'revokeShare':
+        return sessionManager.revokeShare(sessionId)
       default: {
         const _exhaustive: never = command
         throw new Error(`Unknown session command: ${JSON.stringify(command)}`)

@@ -20,7 +20,12 @@ interface ChatTabPanelProps {
   tab: Tab
 }
 
-export default function ChatTabPanel({ tab }: ChatTabPanelProps) {
+/**
+ * ChatTabPanel is memoized to prevent re-renders when other sessions stream.
+ * The `tab` prop only changes when switching tabs, and all context values
+ * extracted via useChatContext() are stable callbacks/refs.
+ */
+export default React.memo(function ChatTabPanel({ tab }: ChatTabPanelProps) {
   const chatTab = tab as ChatTab
   const {
     currentModel,
@@ -267,4 +272,4 @@ export default function ChatTabPanel({ tab }: ChatTabPanelProps) {
       onWorkingDirectoryChange={handleWorkingDirectoryChange}
     />
   )
-}
+})

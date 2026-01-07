@@ -2,9 +2,9 @@
  * Cloudflare Pages Function for session storage
  *
  * Routes:
- * - POST /api/session - Create new session, upload JSON
- * - GET /api/session/{id} - Fetch session JSON
- * - DELETE /api/session/{id} - Delete session
+ * - POST /s/api - Create new session, upload JSON
+ * - GET /s/api/{id} - Fetch session JSON
+ * - DELETE /s/api/{id} - Delete session
  */
 
 interface Env {
@@ -40,7 +40,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   }
 
   try {
-    // POST /api/session - Create new session
+    // POST /s/api - Create new session
     if (method === 'POST' && pathParts.length === 0) {
       const body = await request.json()
 
@@ -66,7 +66,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       )
     }
 
-    // GET /api/session/{id} - Fetch session
+    // GET /s/api/{id} - Fetch session
     if (method === 'GET' && pathParts.length === 1) {
       const id = pathParts[0]
       const key = `${id}.json`
@@ -86,7 +86,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       })
     }
 
-    // DELETE /api/session/{id} - Delete session
+    // DELETE /s/api/{id} - Delete session
     if (method === 'DELETE' && pathParts.length === 1) {
       const id = pathParts[0]
       const key = `${id}.json`

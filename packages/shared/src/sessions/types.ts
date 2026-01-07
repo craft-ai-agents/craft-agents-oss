@@ -142,4 +142,8 @@ export interface SessionMetadata {
   agents?: string[];
   /** Number of plan files for this session */
   planCount?: number;
+  /** Shared viewer URL (if shared via viewer) */
+  sharedUrl?: string;
+  /** Shared session ID in viewer (for revoke) */
+  sharedId?: string;
 }

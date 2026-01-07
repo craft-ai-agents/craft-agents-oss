@@ -1137,6 +1137,100 @@ Use oauth_trigger for OAuth sources, credential_prompt for API key/bearer token 
   }
 
   // ============================================
+  // Session Sharing
+  // ============================================
+
+  /**
+   * Share session to the web viewer
+   * Uploads session data and returns shareable URL
+   */
+  async shareToViewer(sessionId: string): Promise<import('../shared/types').ShareResult> {
+    const managed = this.sessions.get(sessionId)
+    if (!managed) {
+      return { success: false, error: 'Session not found' }
+    }
+
+    try {
+      // Load session directly from disk (already in correct format)
+      const storedSession = loadStoredSession(managed.workspace.rootPath, sessionId)
+      if (!storedSession) {
+        return { success: false, error: 'Session file not found' }
+      }
+
+      const { VIEWER_URL } = await import('@craft-agent/shared/branding')
+      const response = await fetch(`${VIEWER_URL}/s/api`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(storedSession)
+      })
+
+      if (!response.ok) {
+        sessionLog.error(`Share failed with status ${response.status}`)
+        return { success: false, error: 'Failed to upload session' }
+      }
+
+      const data = await response.json() as { id: string; url: string }
+
+      // Store shared info in session
+      managed.sharedUrl = data.url
+      managed.sharedId = data.id
+      const workspaceRootPath = managed.workspace.rootPath
+      updateSessionMetadata(workspaceRootPath, sessionId, {
+        sharedUrl: data.url,
+        sharedId: data.id,
+      })
+
+      sessionLog.info(`Session ${sessionId} shared at ${data.url}`)
+      return { success: true, url: data.url }
+    } catch (error) {
+      sessionLog.error('Share error:', error)
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    }
+  }
+
+  /**
+   * Revoke a shared session
+   * Deletes from viewer and clears local shared state
+   */
+  async revokeShare(sessionId: string): Promise<import('../shared/types').ShareResult> {
+    const managed = this.sessions.get(sessionId)
+    if (!managed) {
+      return { success: false, error: 'Session not found' }
+    }
+    if (!managed.sharedId) {
+      return { success: false, error: 'Session not shared' }
+    }
+
+    try {
+      const { VIEWER_URL } = await import('@craft-agent/shared/branding')
+      const response = await fetch(
+        `${VIEWER_URL}/s/api/${managed.sharedId}`,
+        { method: 'DELETE' }
+      )
+
+      if (!response.ok) {
+        sessionLog.error(`Revoke failed with status ${response.status}`)
+        return { success: false, error: 'Failed to revoke share' }
+      }
+
+      // Clear shared info
+      delete managed.sharedUrl
+      delete managed.sharedId
+      const workspaceRootPath = managed.workspace.rootPath
+      updateSessionMetadata(workspaceRootPath, sessionId, {
+        sharedUrl: undefined,
+        sharedId: undefined,
+      })
+
+      sessionLog.info(`Session ${sessionId} share revoked`)
+      return { success: true }
+    } catch (error) {
+      sessionLog.error('Revoke error:', error)
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    }
+  }
+
+  // ============================================
   // Session Sources
   // ============================================
 

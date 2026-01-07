@@ -44,7 +44,7 @@ export function UserMessageBubble({
   const hasAttachments = attachments && attachments.length > 0
 
   return (
-    <div className={cn("flex flex-col items-end gap-3 w-full px-4", className)}>
+    <div className={cn("flex flex-col items-end gap-3 w-full", className)}>
       {/* Attachment preview row - stored attachments with thumbnails */}
       {hasAttachments && (
         <div className="flex gap-2 justify-end max-w-[80%] flex-wrap">
@@ -107,7 +107,7 @@ export function UserMessageBubble({
       {/* Text content bubble */}
       <div
         className={cn(
-          "max-w-[80%] bg-foreground/5 rounded-[16px] px-4 py-2 break-words min-w-0 select-text",
+          "max-w-[80%] bg-foreground/5 rounded-[16px] px-5 py-1.5 break-words min-w-0 select-text",
           isPending && "animate-shimmer"
         )}
       >
