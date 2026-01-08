@@ -11,7 +11,7 @@
     "node": ">=18.0.0"
   },
   "scripts": {
-    "build:main": "source ../../.env 2>/dev/null || true; esbuild src/main/index.ts --bundle --platform=node --format=cjs --outfile=dist/main.cjs --external:electron --define:process.env.GOOGLE_OAUTH_CLIENT_ID=\\\"${GOOGLE_OAUTH_CLIENT_ID:-}\\\" --define:process.env.GOOGLE_OAUTH_CLIENT_SECRET=\\\"${GOOGLE_OAUTH_CLIENT_SECRET:-}\\\" --define:process.env.SLACK_OAUTH_CLIENT_ID=\\\"${SLACK_OAUTH_CLIENT_ID:-}\\\" --define:process.env.SLACK_OAUTH_CLIENT_SECRET=\\\"${SLACK_OAUTH_CLIENT_SECRET:-}\\\"",
+    "build:main": "source ../../.env 2>/dev/null || true; esbuild src/main/index.ts --bundle --platform=node --format=cjs --outfile=dist/main.cjs --external:electron --define:process.env.GOOGLE_OAUTH_CLIENT_ID=\\\"${GOOGLE_OAUTH_CLIENT_ID:-}\\\" --define:process.env.GOOGLE_OAUTH_CLIENT_SECRET=\\\"${GOOGLE_OAUTH_CLIENT_SECRET:-}\\\" --define:process.env.SLACK_OAUTH_CLIENT_ID=\\\"${SLACK_OAUTH_CLIENT_ID:-}\\\" --define:process.env.SLACK_OAUTH_CLIENT_SECRET=\\\"${SLACK_OAUTH_CLIENT_SECRET:-}\\\" --define:process.env.MICROSOFT_OAUTH_CLIENT_ID=\\\"${MICROSOFT_OAUTH_CLIENT_ID:-}\\\" --define:process.env.MICROSOFT_OAUTH_CLIENT_SECRET=\\\"${MICROSOFT_OAUTH_CLIENT_SECRET:-}\\\"",
     "build:preload": "esbuild src/preload/index.ts --bundle --platform=node --format=cjs --outfile=dist/preload.cjs --external:electron",
     "build:renderer": "vite build",
     "build:resources": "cp -r resources dist/",

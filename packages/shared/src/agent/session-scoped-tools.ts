@@ -70,7 +70,7 @@ import {
   type MicrosoftOAuthOptions,
   type MicrosoftOAuthResult,
 } from '../auth/microsoft-oauth.ts';
-import { inferGoogleServiceFromUrl, inferSlackServiceFromUrl, inferMicrosoftServiceFromUrl, type GoogleService, type SlackService, type MicrosoftService } from '../sources/types.ts';
+import { inferGoogleServiceFromUrl, inferSlackServiceFromUrl, inferMicrosoftServiceFromUrl, isApiOAuthProvider, type GoogleService, type SlackService, type MicrosoftService } from '../sources/types.ts';
 import { DOC_REFS } from '../docs/index.ts';
 
 // ============================================================
@@ -561,8 +561,8 @@ async function testApiSource(
       // Extract workspace ID from root path for credential lookups
       const wsId = basename(workspaceId);
 
-      if (source.provider === 'google') {
-        // Use SourceCredentialManager for Google OAuth - handles expiry checking and refresh
+      if (isApiOAuthProvider(source.provider)) {
+        // Use SourceCredentialManager for OAuth providers - handles expiry checking and refresh
         const sourceCredManager = getSourceCredentialManager();
         const loadedSource: LoadedSource = {
           config: source,
@@ -614,7 +614,7 @@ async function testApiSource(
 
       if (credValue) {
         // Apply credential based on authType config
-        if (source.api.authType === 'bearer' || source.provider === 'google') {
+        if (source.api.authType === 'bearer' || isApiOAuthProvider(source.provider)) {
           const scheme = source.api.authScheme || 'Bearer';
           headers['Authorization'] = `${scheme} ${credValue}`;
         } else if (source.api.authType === 'header' && source.api.headerName) {

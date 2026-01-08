@@ -10,6 +10,7 @@ export type {
   McpAuthType,
   ApiAuthType,
   KnownProvider,
+  ApiOAuthProvider,
   McpSourceConfig,
   ApiSourceConfig,
   LocalSourceConfig,
@@ -18,6 +19,12 @@ export type {
   SourceGuide,
   LoadedSource,
   CreateSourceInput,
+} from './types.ts';
+
+// Constants and helpers
+export {
+  API_OAUTH_PROVIDERS,
+  isApiOAuthProvider,
 } from './types.ts';
 
 // Storage functions

@@ -42,13 +42,10 @@ import { FolderAgentManager } from '@craft-agent/shared/agents';
 import type { SubAgentDefinition, McpServerConfig, ApiConfig } from '@craft-agent/shared/agents';
 import type { Plan } from '@craft-agent/shared/agents';
 import { debug } from '@craft-agent/shared/utils';
-import { loadWorkspaceSources, getSourceCredentialManager, getSourceServerBuilder, type SourceWithCredential, type LoadedSource } from '@craft-agent/shared/sources';
+import { loadWorkspaceSources, getSourceCredentialManager, getSourceServerBuilder, type SourceWithCredential, type LoadedSource, isApiOAuthProvider } from '@craft-agent/shared/sources';
 import { containsUltrathink, stripUltrathink } from '../../utils/gradient.ts';
 import { useAgentState } from './useAgentState.ts';
 import { useSafeMode, usePermissionMode } from './useModeState.ts';
-
-/** Providers that use OAuth for API authentication */
-const OAUTH_PROVIDERS = ['google', 'slack'];
 
 /**
  * Build MCP and API servers from sources using the new unified modules.
@@ -65,9 +62,10 @@ async function buildServersFromSources(sources: LoadedSource[]) {
     }))
   );
 
+  // Build token getter for OAuth sources (Google, Slack, Microsoft use OAuth)
   const getTokenForSource = (source: LoadedSource) => {
     const provider = source.config.provider;
-    if ((provider && OAUTH_PROVIDERS.includes(provider)) || source.config.api?.authType === 'oauth') {
+    if (isApiOAuthProvider(provider) || source.config.api?.authType === 'oauth') {
       return async () => {
         const token = await credManager.getToken(source);
         if (!token) throw new Error(`No token for ${source.config.slug}`);

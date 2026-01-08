@@ -166,6 +166,20 @@ export type KnownProvider =
   | 'exa'; // Exa search API
 
 /**
+ * API providers that use OAuth for authentication.
+ * These providers store credentials as source_oauth and use SourceCredentialManager.
+ */
+export const API_OAUTH_PROVIDERS = ['google', 'microsoft', 'slack'] as const;
+export type ApiOAuthProvider = typeof API_OAUTH_PROVIDERS[number];
+
+/**
+ * Check if a provider uses OAuth for API authentication
+ */
+export function isApiOAuthProvider(provider: string | undefined): provider is ApiOAuthProvider {
+  return API_OAUTH_PROVIDERS.includes(provider as ApiOAuthProvider);
+}
+
+/**
  * MCP transport type for sources
  * - 'http': HTTP-based MCP server (URL endpoint)
  * - 'sse': Server-Sent Events MCP server (URL endpoint)

@@ -1322,6 +1322,218 @@ Common scopes needed:
 \`\`\`
 `;
 
+const OUTLOOK_GUIDE = `---
+domains:
+  - outlook.live.com
+  - outlook.office.com
+  - graph.microsoft.com
+providers:
+  - microsoft
+  - outlook
+---
+
+# Outlook
+
+Access to Microsoft Outlook email via the Microsoft Graph API.
+
+## Scope
+
+- Read, send, and manage emails
+- Access mail folders (Inbox, Sent, Drafts, etc.)
+- Search messages
+- Manage attachments
+
+## Guidelines
+
+- Use the \`api_outlook\` tool with \`path\`, \`method\`, and optional \`params\`
+- Base URL: \`https://graph.microsoft.com/v1.0\`
+- All paths are relative to the base URL
+
+## Common Endpoints
+
+### List Messages
+\`\`\`
+GET /me/messages
+\`\`\`
+Query params: \`$top\`, \`$skip\`, \`$filter\`, \`$orderby\`, \`$select\`
+
+### Get a Message
+\`\`\`
+GET /me/messages/{id}
+\`\`\`
+
+### Search Messages
+\`\`\`
+GET /me/messages?$search="keyword"
+\`\`\`
+
+### List Mail Folders
+\`\`\`
+GET /me/mailFolders
+\`\`\`
+
+### Send Email
+\`\`\`
+POST /me/sendMail
+Body: { "message": { "subject": "...", "body": { "contentType": "Text", "content": "..." }, "toRecipients": [{ "emailAddress": { "address": "..." } }] } }
+\`\`\`
+
+## Rate Limits
+
+Microsoft Graph has throttling limits. If you receive 429 errors, wait before retrying.
+
+<!-- SETUP: This section is ONLY for the setup agent -->
+
+## Setup Hints
+
+### Configuration
+
+**Required config.json:**
+\`\`\`json
+{
+  "id": "src_outlook",
+  "name": "Outlook",
+  "slug": "outlook",
+  "enabled": true,
+  "provider": "microsoft",
+  "type": "api",
+  "api": {
+    "baseUrl": "https://graph.microsoft.com/v1.0/",
+    "authType": "bearer",
+    "microsoftService": "outlook",
+    "testEndpoint": {
+      "method": "GET",
+      "path": "me/mailFolders?$top=1"
+    }
+  },
+  "iconUrl": "https://outlook.live.com"
+}
+\`\`\`
+
+### Authentication
+Use \`source_microsoft_oauth_trigger\` to start the Microsoft OAuth flow.
+
+### Recommended Questions
+- What kinds of emails do you typically search for?
+- Do you need to send emails or just read?
+
+### Permissions for Explore Mode
+\`\`\`json
+{
+  "allowedApiEndpoints": [
+    { "method": "GET", "path": ".*", "comment": "All GET requests are read-only" }
+  ]
+}
+\`\`\`
+`;
+
+const TEAMS_GUIDE = `---
+providers:
+  - microsoft
+  - teams
+---
+
+# Microsoft Teams
+
+Access to Microsoft Teams via the Microsoft Graph API.
+
+## Scope
+
+- List joined teams and channels
+- Read and send channel messages
+- Access chat messages
+- View team members
+
+## Guidelines
+
+- Use the \`api_teams\` tool with \`path\`, \`method\`, and optional \`params\`
+- Base URL: \`https://graph.microsoft.com/v1.0\`
+- All paths are relative to the base URL
+
+## Common Endpoints
+
+### List Joined Teams
+\`\`\`
+GET /me/joinedTeams
+\`\`\`
+Returns all teams the user is a member of.
+
+### List Channels
+\`\`\`
+GET /teams/{team-id}/channels
+\`\`\`
+
+### Get Channel Messages
+\`\`\`
+GET /teams/{team-id}/channels/{channel-id}/messages
+\`\`\`
+Query params: \`$top\`, \`$skip\`
+
+### Send Channel Message
+\`\`\`
+POST /teams/{team-id}/channels/{channel-id}/messages
+Body: { "body": { "content": "Hello!" } }
+\`\`\`
+
+### List Chats
+\`\`\`
+GET /me/chats
+\`\`\`
+
+### Get Chat Messages
+\`\`\`
+GET /me/chats/{chat-id}/messages
+\`\`\`
+
+## Rate Limits
+
+Microsoft Graph has throttling limits. If you receive 429 errors, wait before retrying.
+
+<!-- SETUP: This section is ONLY for the setup agent -->
+
+## Setup Hints
+
+### Configuration
+
+**Required config.json:**
+\`\`\`json
+{
+  "id": "src_teams",
+  "name": "Microsoft Teams",
+  "slug": "teams",
+  "enabled": true,
+  "provider": "microsoft",
+  "type": "api",
+  "api": {
+    "baseUrl": "https://graph.microsoft.com/v1.0/",
+    "authType": "bearer",
+    "microsoftService": "teams",
+    "testEndpoint": {
+      "method": "GET",
+      "path": "me/joinedTeams?$top=1"
+    }
+  },
+  "iconUrl": "https://teams.microsoft.com"
+}
+\`\`\`
+
+### Authentication
+Use \`source_microsoft_oauth_trigger\` to start the Microsoft OAuth flow.
+
+### Recommended Questions
+- Which teams or channels do you primarily work with?
+- Do you need to send messages or just read?
+
+### Permissions for Explore Mode
+\`\`\`json
+{
+  "allowedApiEndpoints": [
+    { "method": "GET", "path": ".*", "comment": "All GET requests are read-only" }
+  ]
+}
+\`\`\`
+`;
+
 const MEMORY_GUIDE = `---
 providers:
   - memory
@@ -1398,6 +1610,8 @@ export const BUNDLED_SOURCE_GUIDES: Record<string, string> = {
   'google-docs.md': GOOGLE_DOCS_GUIDE,
   'google-sheets.md': GOOGLE_SHEETS_GUIDE,
   'slack.com.md': SLACK_GUIDE,
+  'outlook.com.md': OUTLOOK_GUIDE,
+  'teams.microsoft.com.md': TEAMS_GUIDE,
   'filesystem.md': FILESYSTEM_GUIDE,
   'brave-search.md': BRAVE_SEARCH_GUIDE,
   'memory.md': MEMORY_GUIDE,

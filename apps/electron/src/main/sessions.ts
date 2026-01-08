@@ -32,7 +32,7 @@ import {
   type SessionMetadata,
   type TodoState,
 } from '@craft-agent/shared/sessions'
-import { loadWorkspaceSources, getSourcesBySlugs, type LoadedSource, type McpServerConfig, getSourcesNeedingAuth, getSourceCredentialManager, getSourceServerBuilder, type SourceWithCredential } from '@craft-agent/shared/sources'
+import { loadWorkspaceSources, getSourcesBySlugs, type LoadedSource, type McpServerConfig, getSourcesNeedingAuth, getSourceCredentialManager, getSourceServerBuilder, type SourceWithCredential, isApiOAuthProvider } from '@craft-agent/shared/sources'
 import { ConfigWatcher, type ConfigWatcherCallbacks } from '@craft-agent/shared/config'
 import { getAuthState } from '@craft-agent/shared/auth'
 import { setAnthropicOptionsEnv, setPathToClaudeCodeExecutable, setInterceptorPath } from '@craft-agent/shared/agent'
@@ -54,9 +54,6 @@ export const AGENT_FLAGS = {
   defaultModesEnabled: true,
 } as const
 
-/** Providers that use OAuth for API authentication */
-const OAUTH_PROVIDERS = ['google', 'slack']
-
 /**
  * Build MCP and API servers from sources using the new unified modules.
  * Handles credential loading and server building in one step.
@@ -76,10 +73,10 @@ async function buildServersFromSources(sources: LoadedSource[]) {
   )
   span.mark('credentials.loaded')
 
-  // Build token getter for OAuth sources (Google, Slack use OAuth)
+  // Build token getter for OAuth sources (Google, Slack, Microsoft use OAuth)
   const getTokenForSource = (source: LoadedSource) => {
     const provider = source.config.provider
-    if (provider && OAUTH_PROVIDERS.includes(provider)) {
+    if (isApiOAuthProvider(provider)) {
       return async () => {
         const token = await credManager.getToken(source)
         if (!token) throw new Error(`No token for ${source.config.slug}`)
@@ -684,14 +681,17 @@ export class SessionManager {
 
   async initialize(): Promise<void> {
     // Set path to Claude Code executable (cli.js from SDK)
-    // This is critical because the bundled SDK can't auto-detect the path
-    const cliPath = join(process.cwd(), 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'cli.js')
+    // In packaged app: use app.getAppPath() (points to app.asar)
+    // In development: use process.cwd()
+    const basePath = app.isPackaged ? app.getAppPath() : process.cwd()
+
+    const cliPath = join(basePath, 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'cli.js')
     sessionLog.info('Setting pathToClaudeCodeExecutable:', cliPath)
     setPathToClaudeCodeExecutable(cliPath)
 
     // Set path to cache-ttl-interceptor for SDK subprocess
     // This interceptor redirects requests to the Craft gateway when using Craft credits
-    const interceptorPath = join(process.cwd(), 'packages', 'shared', 'src', 'cache-ttl-interceptor.ts')
+    const interceptorPath = join(basePath, 'packages', 'shared', 'src', 'cache-ttl-interceptor.ts')
     sessionLog.info('Setting interceptorPath:', interceptorPath)
     setInterceptorPath(interceptorPath)
 

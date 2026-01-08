@@ -31,6 +31,8 @@ export const PROVIDER_ICON_URLS: Record<string, string> = {
   // Docs and Sheets need direct URLs - their domains return generic Google logo
   docs: 'https://ssl.gstatic.com/docs/documents/images/kix-favicon7.ico',
   sheets: 'https://ssl.gstatic.com/docs/spreadsheets/favicon3.ico',
+  // SharePoint needs direct URL - sharepoint.com returns generic Microsoft favicon
+  sharepoint: 'https://res.cdn.office.net/files/fabric-cdn-prod_20241209.001/assets/brand-icons/product/svg/sharepoint_48x1.svg',
 };
 
 /**
@@ -46,6 +48,12 @@ const STATIC_PROVIDER_DOMAINS: Readonly<Record<string, string>> = Object.freeze(
   'drive': 'drive.google.com',
   'google-docs': 'docs.google.com',
   'google-sheets': 'sheets.google.com',
+  // Microsoft services
+  'outlook': 'outlook.live.com',
+  'microsoft-calendar': 'outlook.live.com',
+  'onedrive': 'onedrive.live.com',
+  'teams': 'teams.microsoft.com',
+  'sharepoint': 'sharepoint.com',
   // Common MCP providers - their MCP URLs differ from their main domain
   'github': 'github.com',
   'linear': 'linear.app',

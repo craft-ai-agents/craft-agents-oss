@@ -16,6 +16,7 @@ import {
   inferGoogleServiceFromUrl,
   inferSlackServiceFromUrl,
   inferMicrosoftServiceFromUrl,
+  isApiOAuthProvider,
   type LoadedSource,
   type GoogleService,
   type SlackService,
@@ -242,10 +243,9 @@ export class SourceCredentialManager {
     if (source.config.type === 'mcp') {
       type = mcp?.authType === 'bearer' ? 'source_bearer' : 'source_oauth';
     } else if (source.config.type === 'api') {
-      // Google/Slack/Microsoft APIs: OAuth token acquisition is triggered by provider,
-      // but the token is used as a Bearer token (authType='bearer' in config).
+      // OAuth providers (Google/Slack/Microsoft) store credentials as source_oauth.
       // This separates HOW we get credentials (OAuth flow) from HOW we send them (Bearer header).
-      if (source.config.provider === 'google' || source.config.provider === 'slack' || source.config.provider === 'microsoft') {
+      if (isApiOAuthProvider(source.config.provider)) {
         type = 'source_oauth';
       } else if (api?.authType === 'bearer') {
         type = 'source_bearer';
@@ -278,10 +278,9 @@ export class SourceCredentialManager {
     }
 
     if (source.config.type === 'api') {
-      // Google/Slack/Microsoft APIs: OAuth token acquisition is triggered by provider,
-      // but the token is used as a Bearer token (authType='bearer' in config).
+      // OAuth providers (Google/Slack/Microsoft) store credentials as agent_source_oauth.
       // This separates HOW we get credentials (OAuth flow) from HOW we send them (Bearer header).
-      if (source.config.provider === 'google' || source.config.provider === 'slack' || source.config.provider === 'microsoft') {
+      if (isApiOAuthProvider(source.config.provider)) {
         return 'agent_source_oauth';
       } else if (api?.authType === 'bearer') {
         return 'agent_source_bearer';
