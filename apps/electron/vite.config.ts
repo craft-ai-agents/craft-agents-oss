@@ -15,8 +15,6 @@ export default defineConfig({
         main: resolve(__dirname, 'src/renderer/index.html'),
         playground: resolve(__dirname, 'src/renderer/playground.html'),
         preview: resolve(__dirname, 'src/renderer/preview.html'),
-        'terminal-preview': resolve(__dirname, 'src/renderer/terminal-preview.html'),
-        'file-preview': resolve(__dirname, 'src/renderer/file-preview.html'),
       }
     }
   },

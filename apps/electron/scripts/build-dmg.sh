@@ -18,7 +18,12 @@ rm -rf "$ELECTRON_DIR/node_modules/@anthropic-ai"
 rm -rf "$ELECTRON_DIR/packages"
 rm -rf "$ELECTRON_DIR/release"
 
-# 2. Download Bun binary with checksum verification
+# 2. Install dependencies
+echo "Installing dependencies..."
+cd "$ROOT_DIR"
+bun install
+
+# 3. Download Bun binary with checksum verification
 echo "Downloading Bun ${BUN_VERSION} for darwin-${ARCH}..."
 mkdir -p "$ELECTRON_DIR/vendor/bun"
 if [ "$ARCH" = "arm64" ]; then
@@ -46,7 +51,7 @@ unzip -o "$TEMP_DIR/${BUN_DOWNLOAD}.zip" -d "$TEMP_DIR"
 cp "$TEMP_DIR/${BUN_DOWNLOAD}/bun" "$ELECTRON_DIR/vendor/bun/"
 chmod +x "$ELECTRON_DIR/vendor/bun/bun"
 
-# 3. Copy SDK from root node_modules (monorepo hoisting)
+# 4. Copy SDK from root node_modules (monorepo hoisting)
 # Note: The SDK is hoisted to root node_modules by the package manager.
 # We copy it here because electron-packager only sees apps/electron/.
 SDK_SOURCE="$ROOT_DIR/node_modules/@anthropic-ai/claude-agent-sdk"
@@ -59,7 +64,7 @@ echo "Copying SDK..."
 mkdir -p "$ELECTRON_DIR/node_modules/@anthropic-ai"
 cp -r "$SDK_SOURCE" "$ELECTRON_DIR/node_modules/@anthropic-ai/"
 
-# 4. Copy interceptor
+# 5. Copy interceptor
 INTERCEPTOR_SOURCE="$ROOT_DIR/packages/shared/src/cache-ttl-interceptor.ts"
 if [ ! -f "$INTERCEPTOR_SOURCE" ]; then
     echo "ERROR: Interceptor not found at $INTERCEPTOR_SOURCE"
@@ -70,12 +75,12 @@ echo "Copying interceptor..."
 mkdir -p "$ELECTRON_DIR/packages/shared/src"
 cp "$INTERCEPTOR_SOURCE" "$ELECTRON_DIR/packages/shared/src/"
 
-# 5. Build Electron app
+# 6. Build Electron app
 echo "Building Electron app..."
 cd "$ROOT_DIR"
 bun run electron:build
 
-# 6. Package with electron-packager (no ASAR for subprocess compatibility)
+# 7. Package with electron-packager (no ASAR for subprocess compatibility)
 echo "Packaging app..."
 cd "$ELECTRON_DIR"
 npx electron-packager . "Craft Agent" \
@@ -112,7 +117,7 @@ npx electron-packager . "Craft Agent" \
     --ignore="\.spec\." \
     --no-asar
 
-# 7. Create DMG
+# 8. Create DMG
 echo "Creating DMG..."
 DMG_NAME="Craft-Agent-${ARCH}.dmg"
 hdiutil create \
