@@ -1273,6 +1273,54 @@ Workspace-level customizable session status configuration:
 
 **Integration:** `config/todo-states.tsx` loads dynamic statuses instead of hardcoded values.
 
+## Building for macOS Distribution
+
+Build a distributable DMG for macOS using the `build-dmg.sh` script:
+
+```bash
+# From apps/electron directory
+bun run dist:mac          # Build arm64 (Apple Silicon) DMG
+bun run dist:mac:x64      # Build x64 (Intel) DMG
+
+# Or run the script directly
+bash scripts/build-dmg.sh arm64
+bash scripts/build-dmg.sh x64
+```
+
+**What the script does:**
+1. Downloads pinned Bun runtime (v1.3.5) with SHA256 checksum verification
+2. Copies SDK from root `node_modules` (monorepo hoisting workaround)
+3. Copies `cache-ttl-interceptor.ts` for Craft gateway redirect
+4. Builds the Electron app (`bun run electron:build`)
+5. Packages with `electron-packager` (no ASAR for subprocess compatibility)
+6. Creates compressed DMG via `hdiutil`
+
+**Output:** `apps/electron/release/Craft-Agent-{arch}.dmg` (~318MB)
+
+**Requirements:**
+- macOS (uses `hdiutil` for DMG creation)
+- Bun installed (for build step)
+- Run `bun install` from repo root first
+
+**Build artifacts (gitignored):**
+- `vendor/` - Bundled Bun runtime
+- `packages/` - Copied interceptor
+- `release/` - Packaged app and DMG
+- `node_modules/@anthropic-ai/` - Copied SDK
+
+**Architecture:**
+```
+Development:
+  system bun → cli.js (root node_modules) → interceptor (packages/shared)
+
+Packaged DMG:
+  vendor/bun/bun → cli.js (bundled) → interceptor (bundled)
+                      ↑                     ↑
+               app.getAppPath()/...   app.getAppPath()/...
+```
+
+The packaged app uses `app.isPackaged` to detect runtime environment and resolves paths via `app.getAppPath()` instead of `process.cwd()`.
+
 ## Current Limitations
 
-1. Development only - no electron-builder config for distribution
+1. No Windows/Linux distribution builds yet (macOS only)
