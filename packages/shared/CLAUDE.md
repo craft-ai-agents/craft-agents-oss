@@ -100,9 +100,9 @@ Tools available within agent sessions with callback registry:
 
 **Agent management:** `agent_list`, `agent_create`, `agent_delete`
 
-**Utilities:** `SubmitPlan`, `change_working_directory`, `config_validate`
+**Utilities:** `SubmitPlan`, `config_validate`
 
-**Callbacks:** `onPlanSubmitted`, `onWorkingDirectoryChange`, `onOAuthBrowserOpen`, `onOAuthSuccess`, `onOAuthError`, `onCredentialRequest`, `onSourcesChanged`, `onSourceActivated`, `onAgentsChanged`
+**Callbacks:** `onPlanSubmitted`, `onOAuthBrowserOpen`, `onOAuthSuccess`, `onOAuthError`, `onCredentialRequest`, `onSourcesChanged`, `onSourceActivated`, `onAgentsChanged`
 
 ### Dynamic Status System (`src/statuses/`)
 Workspace-level customizable workflow states:

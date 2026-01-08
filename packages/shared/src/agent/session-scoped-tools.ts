@@ -6,7 +6,6 @@
  *
  * Tools included:
  * - SubmitPlan: Submit a plan file for user review/display
- * - change_working_directory: Change the working directory for the session
  * - config_validate: Validate configuration files
  * - source_test: Validate schema, download icons, test connections
  * - source_oauth_trigger: Start OAuth authentication for MCP sources
@@ -20,7 +19,7 @@
 
 import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
-import { existsSync, readFileSync, statSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { basename } from 'path';
 import { getSessionPlansPath } from '../sessions/storage.ts';
 import { debug } from '../utils/debug.ts';
@@ -114,8 +113,6 @@ export interface CredentialResponse {
 export interface SessionScopedToolCallbacks {
   /** Called when a plan is submitted - triggers plan message display in UI */
   onPlanSubmitted?: (planPath: string) => void;
-  /** Called when the working directory changes - syncs with UI and persists */
-  onWorkingDirectoryChange?: (path: string) => void;
   /** Called when OAuth flow needs to open a browser URL - returns promise that resolves when auth completes */
   onOAuthBrowserOpen?: (url: string) => Promise<void>;
   /** Called when OAuth flow completes successfully */
@@ -283,98 +280,6 @@ Brief description of what this plan accomplishes.
         content: [{
           type: 'text' as const,
           text: 'Plan submitted for review. Waiting for user feedback.',
-        }],
-        isError: false,
-      };
-    }
-  );
-}
-
-/**
- * Create a session-scoped change_working_directory tool.
- * The sessionId is captured at creation time.
- *
- * This tool allows the agent to change the working directory for bash commands
- * and file operations.
- */
-export function createChangeWorkingDirectoryTool(sessionId: string) {
-  return tool(
-    'change_working_directory',
-    `Change the working directory for this session.
-
-This changes the directory used for:
-- Bash command execution
-- File operations (Read, Write, Edit, Glob, Grep)
-- Git operations
-
-The change is persisted for the session and reflected in the UI.
-
-Use this when:
-- The user asks to work in a different directory
-- You need to switch context to a different project
-- The current working directory doesn't match the task`,
-    {
-      path: z.string().describe('Absolute path to the new working directory'),
-    },
-    async (args) => {
-      debug('[change_working_directory] Called with path:', args.path);
-      debug('[change_working_directory] sessionId (from closure):', sessionId);
-
-      // Validate the path exists
-      if (!existsSync(args.path)) {
-        return {
-          content: [{
-            type: 'text' as const,
-            text: `Error: Directory does not exist: ${args.path}`,
-          }],
-          isError: true,
-        };
-      }
-
-      // Validate it's a directory
-      try {
-        const stats = statSync(args.path);
-        if (!stats.isDirectory()) {
-          return {
-            content: [{
-              type: 'text' as const,
-              text: `Error: Path is not a directory: ${args.path}`,
-            }],
-            isError: true,
-          };
-        }
-      } catch (error) {
-        return {
-          content: [{
-            type: 'text' as const,
-            text: `Error checking path: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          }],
-          isError: true,
-        };
-      }
-
-      // Get callbacks and notify
-      const callbacks = getSessionScopedToolCallbacks(sessionId);
-      debug('[change_working_directory] Registry callbacks found:', !!callbacks);
-
-      if (callbacks?.onWorkingDirectoryChange) {
-        callbacks.onWorkingDirectoryChange(args.path);
-        debug('[change_working_directory] Callback completed');
-      } else {
-        debug('[change_working_directory] No callback registered for session');
-        return {
-          content: [{
-            type: 'text' as const,
-            text: `Error: Unable to change working directory - no handler registered`,
-          }],
-          isError: true,
-        };
-      }
-
-      return {
-        content: [{
-          type: 'text' as const,
-          text: `Working directory changed to: ${args.path}`,
         }],
         isError: false,
       };
@@ -2003,7 +1908,6 @@ export function getSessionScopedTools(sessionId: string, workspaceId: string, ac
       version: '1.0.0',
       tools: [
         createSubmitPlanTool(sessionId),
-        createChangeWorkingDirectoryTool(sessionId),
         // Config validation tool
         createConfigValidateTool(sessionId, workspaceId),
         // Source tools: test + auth only (CRUD via file editing)

@@ -296,7 +296,7 @@ export function handleTitleGenerated(
 }
 
 /**
- * Handle working_directory_changed - update session working directory
+ * Handle working_directory_changed - update session working directory (user-initiated via UI)
  */
 export function handleWorkingDirectoryChanged(
   state: SessionState,

@@ -181,6 +181,10 @@ export const initializeSessionsAtom = atom(
       .sort((a, b) => (b.lastMessageAt || 0) - (a.lastMessageAt || 0))
       .map(s => s.id)
     set(sessionIdsAtom, ids)
+
+    // Mark all sessions as loaded (they come with full messages from main process)
+    // This prevents unnecessary IPC calls when switching to a session for the first time
+    set(loadedSessionsAtom, new Set(sessions.map(s => s.id)))
   }
 )
 

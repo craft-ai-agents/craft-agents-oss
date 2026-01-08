@@ -626,9 +626,6 @@ export class CraftAgent {
   // Callback when a plan is submitted - set by TUI to display plan message
   public onPlanSubmitted: ((planPath: string) => void) | null = null;
 
-  // Callback when working directory changes (e.g., Bash cd command)
-  public onWorkingDirectoryChange: ((path: string) => void) | null = null;
-
   // Callback when credential input is needed - set by Electron/TUI to show secure input UI
   // Returns a promise that resolves with the user's response
   public onCredentialRequest: ((request: CredentialRequest) => Promise<CredentialResponse>) | null = null;
@@ -677,13 +674,6 @@ export class CraftAgent {
       onPlanSubmitted: (planPath) => {
         this.onDebug?.(`[CraftAgent] onPlanSubmitted received: ${planPath}`);
         this.onPlanSubmitted?.(planPath);
-      },
-      onWorkingDirectoryChange: (path) => {
-        this.onDebug?.(`[CraftAgent] onWorkingDirectoryChange received: ${path}`);
-        if (this.config.session) {
-          this.config.session.workingDirectory = path;
-        }
-        this.onWorkingDirectoryChange?.(path);
       },
       onCredentialRequest: async (request) => {
         this.onDebug?.(`[CraftAgent] onCredentialRequest received: ${request.sourceSlug}`);
@@ -1549,23 +1539,6 @@ export class CraftAgent {
 
               // Note: EnterPlanMode/ExitPlanMode are disallowed (line ~811) since Safe Mode is user-controlled.
               // The agent uses SubmitPlan (universal) to submit plans at any time.
-
-              // ─────────────────────────────────────────────────────────────────────
-              // WORKING DIRECTORY SYNC: Detect when Bash cd changes the cwd
-              // The SDK tracks cwd internally and passes it to hooks. When it changes,
-              // we update our session config and notify the callback so the UI stays in sync.
-              // ─────────────────────────────────────────────────────────────────────
-              if (input.cwd && this.config.session?.workingDirectory !== input.cwd) {
-                this.onDebug?.(`PostToolUse: cwd changed to ${input.cwd}`);
-
-                // Update internal state
-                if (this.config.session) {
-                  this.config.session.workingDirectory = input.cwd;
-                }
-
-                // Notify callback so UI can update the folder selector
-                this.onWorkingDirectoryChange?.(input.cwd);
-              }
 
               // Skip built-in SDK tools (they have their own context management)
               const builtInTools = new Set([

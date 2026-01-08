@@ -12,6 +12,7 @@ import { Chat } from '@/components/chat/Chat'
 import type { ChatContextType } from '@/context/ChatContext'
 import { OnboardingWizard, ReauthScreen } from '@/components/onboarding'
 import { ResetConfirmationDialog } from '@/components/ResetConfirmationDialog'
+import { SplashScreen } from '@/components/SplashScreen'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { FocusProvider } from '@/context/FocusContext'
 import { useGlobalShortcuts } from '@/hooks/keyboard'
@@ -20,7 +21,6 @@ import { useTabs } from '@/tabs'
 import { NavigationProvider } from '@/contexts/NavigationContext'
 import { navigate, routes } from './lib/navigate'
 import { initRendererPerf } from './lib/perf'
-import { Spinner } from '@craft-agent/ui'
 import { DEFAULT_MODEL } from '@config/models'
 import {
   initializeSessionsAtom,
@@ -188,6 +188,35 @@ export default function App() {
   // Reset confirmation dialog
   const [showResetDialog, setShowResetDialog] = useState(false)
 
+  // Splash screen state - tracks when app is fully ready (all data loaded)
+  const [sessionsLoaded, setSessionsLoaded] = useState(false)
+  const [splashMinTimeElapsed, setSplashMinTimeElapsed] = useState(false)
+  const [splashExiting, setSplashExiting] = useState(false)
+  const [splashHidden, setSplashHidden] = useState(false)
+
+  // Start minimum splash timer on mount
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSplashMinTimeElapsed(true)
+    }, 800) // Minimum 800ms to prevent flash on fast loads
+    return () => clearTimeout(timer)
+  }, [])
+
+  // Compute if app is fully ready (all data loaded + minimum time elapsed)
+  const isFullyReady = appState === 'ready' && sessionsLoaded && !isLoadingAgents && splashMinTimeElapsed
+
+  // Trigger splash exit animation when fully ready
+  useEffect(() => {
+    if (isFullyReady && !splashExiting) {
+      setSplashExiting(true)
+    }
+  }, [isFullyReady, splashExiting])
+
+  // Handler for when splash exit animation completes
+  const handleSplashExitComplete = useCallback(() => {
+    setSplashHidden(true)
+  }, [])
+
   // Apply theme via hook (injects CSS variables)
   useTheme({ appTheme, workspaceTheme })
 
@@ -304,6 +333,8 @@ export default function App() {
         }
       }
       setSessionOptions(optionsMap)
+      // Mark sessions as loaded for splash screen
+      setSessionsLoaded(true)
     })
     // Load stored model preference
     window.electronAPI.getModel().then((storedModel) => {
@@ -1119,16 +1150,9 @@ export default function App() {
     openNewChat,
   ])
 
-  // Loading state
+  // Loading state - show splash screen
   if (appState === 'loading') {
-    return (
-      <div className="h-full flex items-center justify-center bg-background text-foreground">
-        <div className="flex flex-col items-center gap-4">
-          <Spinner className="text-2xl text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">Loading...</p>
-        </div>
-      </div>
-    )
+    return <SplashScreen isExiting={false} />
   }
 
   // Reauth state - session expired, need to re-login
@@ -1170,7 +1194,10 @@ export default function App() {
     )
   }
 
-  // Ready state - main app
+  // Show splash until exit animation completes
+  const showSplash = !splashHidden
+
+  // Ready state - main app with splash overlay during data loading
   return (
     <FocusProvider>
       <TooltipProvider>
@@ -1180,6 +1207,15 @@ export default function App() {
           onInputChange={handleInputChange}
           isReady={appState === 'ready'}
         >
+          {/* Splash screen overlay - fades out when fully ready */}
+          {showSplash && (
+            <SplashScreen
+              isExiting={splashExiting}
+              onExitComplete={handleSplashExitComplete}
+            />
+          )}
+
+          {/* Main UI - always rendered, splash fades away to reveal it */}
           <div className="h-full text-foreground">
             <Chat
               contextValue={chatContextValue}

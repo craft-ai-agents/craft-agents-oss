@@ -186,7 +186,7 @@ export interface TitleGeneratedEvent {
 }
 
 /**
- * Working directory changed event
+ * Working directory changed event (user-initiated via UI)
  */
 export interface WorkingDirectoryChangedEvent {
   type: 'working_directory_changed'

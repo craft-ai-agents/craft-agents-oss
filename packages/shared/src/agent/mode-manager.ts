@@ -925,7 +925,6 @@ export function shouldAllowToolInMode(
       // Read-only session tools - always allowed
       const readOnlySessionTools = [
         'mcp__session__SubmitPlan',
-        'mcp__session__change_working_directory',
         'mcp__session__config_validate',
         'mcp__session__source_test',
         'mcp__session__agent_list',

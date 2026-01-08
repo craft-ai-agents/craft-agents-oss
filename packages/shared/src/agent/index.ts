@@ -6,7 +6,6 @@ export * from './options.ts';
 export {
   // Tool factories (creates session-scoped tools)
   createSubmitPlanTool,
-  createChangeWorkingDirectoryTool,
   // Session-scoped tools provider
   getSessionScopedTools,
   cleanupSessionScopedTools,

@@ -76,7 +76,7 @@ export function CommentMargin({
     return () => window.removeEventListener('resize', updateMarginPosition)
   }, [contentRef])
 
-  // Calculate selection position relative to content
+  // Calculate selection position relative to viewport (since margin is fixed)
   useEffect(() => {
     if (!selection || !contentRef.current || !scrollRef.current) {
       setSelectionTop(null)
@@ -84,24 +84,17 @@ export function CommentMargin({
       return
     }
 
-    const contentRect = contentRef.current.getBoundingClientRect()
-    const scrollRect = scrollRef.current.getBoundingClientRect()
-    const scrollTop = scrollRef.current.scrollTop
-
-    // Position relative to the scroll container's top, accounting for scroll
-    // selection.rect.top is viewport-relative, so we subtract scrollRect.top
-    const top = selection.rect.top - scrollRect.top + scrollTop
-    setSelectionTop(top)
+    // Since the margin is position:fixed, we use viewport-relative coordinates directly
+    // selection.rect.top is already viewport-relative
+    setSelectionTop(selection.rect.top)
   }, [selection, contentRef, scrollRef])
 
-  // Calculate comment positions based on their highlights
+  // Calculate comment positions based on their highlights (viewport-relative for fixed positioning)
   useEffect(() => {
     if (!contentRef.current || !scrollRef.current) return
 
     const updatePositions = () => {
       const positions: CommentPosition[] = []
-      const scrollRect = scrollRef.current!.getBoundingClientRect()
-      const scrollTop = scrollRef.current!.scrollTop
 
       for (const comment of comments) {
         // Find the highlight mark for this comment
@@ -110,9 +103,8 @@ export function CommentMargin({
         )
         if (mark) {
           const markRect = mark.getBoundingClientRect()
-          // Position relative to scroll container
-          const top = markRect.top - scrollRect.top + scrollTop
-          positions.push({ comment, top })
+          // Use viewport-relative top directly (margin is fixed)
+          positions.push({ comment, top: markRect.top })
         }
       }
 
@@ -134,7 +126,15 @@ export function CommentMargin({
 
     // Update positions after a short delay (to let highlights render)
     const timer = setTimeout(updatePositions, 100)
-    return () => clearTimeout(timer)
+
+    // Also update on scroll since we use fixed positioning
+    const scrollEl = scrollRef.current
+    scrollEl?.addEventListener('scroll', updatePositions)
+
+    return () => {
+      clearTimeout(timer)
+      scrollEl?.removeEventListener('scroll', updatePositions)
+    }
   }, [comments, contentRef, scrollRef])
 
   // Handle opening the input

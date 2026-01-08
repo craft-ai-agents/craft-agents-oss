@@ -1106,29 +1106,6 @@ Use oauth_trigger for OAuth sources, credential_prompt for API key/bearer token 
         }
       }
 
-      // Wire up onWorkingDirectoryChange to sync cwd changes (e.g., from Bash cd)
-      //
-      // CRITICAL: Working directory determines where the SDK stores/finds session files.
-      // The SDK uses `~/.claude/projects/{encoded-cwd}/{session-id}.jsonl` for session data.
-      // If the app crashes/force-quits before persisting workingDirectory, on restart we'll
-      // look in the wrong folder and the session won't resume properly ("No conversation found").
-      //
-      // Solution: Use async handler with immediate flush to ensure workingDirectory is
-      // persisted to disk before any potential crash. The debounced queue alone isn't
-      // sufficient since force-quit can happen before the debounce timer fires.
-      managed.agent.onWorkingDirectoryChange = async (path) => {
-        sessionLog.info(`Working directory changed for session ${managed.id}:`, path)
-        managed.workingDirectory = path
-        this.persistSession(managed)
-        // Force immediate flush - bypasses debounce to ensure crash safety
-        await sessionPersistenceQueue.flush(managed.id)
-        this.sendEvent({
-          type: 'working_directory_changed',
-          sessionId: managed.id,
-          workingDirectory: path
-        }, managed.workspace.id)
-      }
-
       // NOTE: Source and agent reloading is now handled by ConfigWatcher callbacks
       // which detect filesystem changes and update all affected sessions.
       // See setupConfigWatcher() for the full reload logic.
@@ -2467,8 +2444,8 @@ To view this task's output:
         // comes from the finally block in sendMessage, not here
         break
 
-      // Note: working_directory_changed is handled via onWorkingDirectoryChange callback,
-      // not through processEvent, so no case needed here
+      // Note: working_directory_changed is user-initiated only (via updateWorkingDirectory),
+      // the agent no longer has a change_working_directory tool
     }
   }
 
