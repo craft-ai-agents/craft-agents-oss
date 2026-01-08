@@ -224,16 +224,28 @@ export function generateSlug(name: string): string {
  * Create workspace folder structure at a given path
  * @param rootPath - Absolute path where workspace folder will be created
  * @param name - Display name for the workspace
+ * @param defaults - Optional default settings for new sessions
  * @returns The created WorkspaceConfig
  */
-export function createWorkspaceAtPath(rootPath: string, name: string): WorkspaceConfig {
+export function createWorkspaceAtPath(
+  rootPath: string,
+  name: string,
+  defaults?: WorkspaceConfig['defaults']
+): WorkspaceConfig {
   const now = Date.now();
   const slug = generateSlug(name);
+
+  // Default workingDirectory to rootPath if not specified
+  const workspaceDefaults: WorkspaceConfig['defaults'] = {
+    workingDirectory: rootPath,
+    ...defaults,
+  };
 
   const config: WorkspaceConfig = {
     id: `ws_${randomUUID().slice(0, 8)}`,
     name,
     slug,
+    defaults: workspaceDefaults,
     createdAt: now,
     updatedAt: now,
   };
