@@ -13,10 +13,8 @@ files:
   - "!dist/renderer/src/**"
   - "!**/*.map"
   - package.json
-  # Include SDK for subprocess cli.js
-  - node_modules/@anthropic-ai/claude-agent-sdk/**/*
-  # Include interceptor for cache TTL
-  - packages/shared/src/cache-ttl-interceptor.ts
+  # Exclude node_modules - everything is bundled by esbuild/vite
+  - "!node_modules/**/*"
 
 extraMetadata:
   main: dist/main.cjs
