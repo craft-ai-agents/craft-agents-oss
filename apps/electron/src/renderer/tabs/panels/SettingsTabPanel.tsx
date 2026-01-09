@@ -737,21 +737,28 @@ export default function SettingsTabPanel({
   const [passwordError, setPasswordError] = useState<string | undefined>()
   const [isSubmittingPassword, setIsSubmittingPassword] = useState(false)
 
-  // Load current billing method on mount
+  // Notifications state
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true)
+
+  // Load current billing method and notifications setting on mount
   useEffect(() => {
-    const loadBilling = async () => {
+    const loadSettings = async () => {
       if (!window.electronAPI) return
       try {
-        const billing = await window.electronAPI.getBillingMethod()
+        const [billing, notificationsOn] = await Promise.all([
+          window.electronAPI.getBillingMethod(),
+          window.electronAPI.getNotificationsEnabled(),
+        ])
         setAuthType(billing.authType)
         setHasCredential(billing.hasCredential)
+        setNotificationsEnabled(notificationsOn)
       } catch (error) {
-        console.error('Failed to load billing method:', error)
+        console.error('Failed to load settings:', error)
       } finally {
         setIsLoadingBilling(false)
       }
     }
-    loadBilling()
+    loadSettings()
   }, [])
 
   // Load workspace settings when active workspace changes
@@ -1051,6 +1058,11 @@ export default function SettingsTabPanel({
     [updateWorkspaceSetting]
   )
 
+  const handleNotificationsEnabledChange = useCallback(async (enabled: boolean) => {
+    setNotificationsEnabled(enabled)
+    await window.electronAPI.setNotificationsEnabled(enabled)
+  }, [])
+
   const handleCredentialStrategyChange = useCallback(
     async (newStrategy: CredentialStrategy) => {
       if (newStrategy === credentialStrategy) return
@@ -1098,7 +1110,7 @@ export default function SettingsTabPanel({
 
   return (
     <ScrollArea className="h-full">
-      <div className="px-5 py-4">
+      <div className="px-5 py-7 max-w-3xl mx-auto">
         <div className="space-y-6">
           {/* ========== APP SETTINGS ========== */}
           <GroupHeader>App</GroupHeader>
@@ -1140,6 +1152,17 @@ export default function SettingsTabPanel({
                 label="System"
               />
             </SettingRow>
+          </div>
+
+          {/* Notifications */}
+          <div>
+            <SectionHeader>Notifications</SectionHeader>
+            <ToggleRow
+              label="Desktop notifications"
+              description="Get notified when AI finishes working in a chat."
+              checked={notificationsEnabled}
+              onCheckedChange={handleNotificationsEnabledChange}
+            />
           </div>
 
           {/* Billing - vertical radio list with inline credential entry */}

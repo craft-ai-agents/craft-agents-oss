@@ -8,7 +8,6 @@ import {
   CircleAlert,
   ExternalLink,
   Info,
-  ListTodo,
   X,
 } from "lucide-react"
 import { motion, AnimatePresence } from "motion/react"
@@ -22,7 +21,7 @@ import { useFocusZone } from "@/hooks/keyboard"
 import type { Session, Message, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, LoadedSource, FileChange } from "../../../shared/types"
 import type { PermissionMode } from "@craft-agent/shared/agent/modes"
 import { SetupAuthBanner, type BannerState } from "./SetupAuthBanner"
-import { TurnCard, PlanCard, UserMessageBubble, groupMessagesByTurn, formatTurnAsMarkdown, formatActivityAsMarkdown, type Turn, type AssistantTurn, type UserTurn, type SystemTurn, type PlanTurn } from "@craft-agent/ui"
+import { TurnCard, UserMessageBubble, groupMessagesByTurn, formatTurnAsMarkdown, formatActivityAsMarkdown, type Turn, type AssistantTurn, type UserTurn, type SystemTurn } from "@craft-agent/ui"
 import { ActiveOptionBadges } from "./ActiveOptionBadges"
 import { InputContainer, type StructuredInputState, type StructuredResponse, type PermissionResponse } from "./input"
 import { useBackgroundTasks } from "@/hooks/useBackgroundTasks"
@@ -566,39 +565,8 @@ export function ChatDisplay({
                       )
                     }
 
-                    // Plan turns - render with PlanCard for inline plan review
-                    if (turn.type === 'plan') {
-                      // Check if any subsequent turn is a user message (hide footer if so)
-                      const hasUserResponse = turns.slice(index + 1).some(t => t.type === 'user')
-                      return (
-                        <PlanCard
-                          key={`plan-${turn.message.id}`}
-                          content={turn.message.content}
-                          onAccept={() => {
-                            window.dispatchEvent(new CustomEvent('craft:approve-plan', {
-                              detail: { text: 'Plan approved, please execute.', sessionId: session?.id }
-                            }))
-                          }}
-                          onOpenFile={onOpenFile}
-                          onOpenUrl={onOpenUrl}
-                          onPopOut={(text) => {
-                            if (session) {
-                              window.electronAPI.openPreview({
-                                mode: 'markdown',
-                                sessionId: session.id,
-                                previewId: `plan-${turn.message.id}`,
-                                markdown: {
-                                  mode: 'readOnly',
-                                  content: text,
-                                  title: 'Plan Preview',
-                                },
-                              })
-                            }
-                          }}
-                          hasUserResponse={hasUserResponse}
-                        />
-                      )
-                    }
+                    // Check if any subsequent turn is a user message (for plan footer visibility)
+                    const hasUserResponse = turns.slice(index + 1).some(t => t.type === 'user')
 
                     // Assistant turns - render with TurnCard (buffered streaming)
                     return (
@@ -614,6 +582,12 @@ export function ChatDisplay({
                         todos={turn.todos}
                         onOpenFile={onOpenFile}
                         onOpenUrl={onOpenUrl}
+                        hasUserResponse={hasUserResponse}
+                        onAcceptPlan={() => {
+                          window.dispatchEvent(new CustomEvent('craft:approve-plan', {
+                            detail: { text: 'Plan approved, please execute.', sessionId: session?.id }
+                          }))
+                        }}
                         onPopOut={(text) => {
                           if (session) {
                             window.electronAPI.openPreview({

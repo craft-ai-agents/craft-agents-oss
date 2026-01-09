@@ -11,18 +11,14 @@ import { cn } from "@/lib/utils"
 /**
  * Styled Context Menu Components
  *
- * Pre-styled context menu components matching the AppMenu vibrancy style:
- * - Semi-transparent background with blur (macOS vibrancy effect)
- * - Forced dark mode
- * - Consistent item spacing and hover states
- *
+ * Pre-styled context menu components matching the StyledDropdownMenu style.
  * These wrap the base context-menu components with consistent styling.
  */
 
 // Re-export unchanged components
 export { ContextMenu, ContextMenuTrigger }
 
-// Styled content with vibrancy effect
+// Styled content - matches StyledDropdownMenuContent
 interface StyledContextMenuContentProps
   extends React.ComponentPropsWithoutRef<typeof ContextMenuContent> {
   /** Minimum width - defaults to min-w-40 */
@@ -36,17 +32,16 @@ export const StyledContextMenuContent = React.forwardRef<
   <ContextMenuContent
     ref={ref}
     className={cn(
-      "w-fit font-sans whitespace-nowrap text-xs dark bg-background/80 backdrop-blur-xl backdrop-saturate-150 border-border/50 flex flex-col gap-0.5",
+      "w-fit font-sans whitespace-nowrap text-xs flex flex-col gap-0.5",
       minWidth,
       className
     )}
-    style={{ borderRadius: '8px', boxShadow: '0 8px 24px rgba(0, 0, 0, 0.25)' }}
     {...props}
   />
 ))
 StyledContextMenuContent.displayName = "StyledContextMenuContent"
 
-// Styled menu item with consistent hover states
+// Styled menu item - matches StyledDropdownMenuItem
 interface StyledContextMenuItemProps
   extends React.ComponentPropsWithoutRef<typeof ContextMenuItem> {
   /** Destructive variant - red text */
@@ -60,9 +55,9 @@ export const StyledContextMenuItem = React.forwardRef<
   <ContextMenuItem
     ref={ref}
     className={cn(
-      "gap-3 pr-4 rounded-[4px] hover:bg-foreground/10 focus:bg-foreground/10",
+      "gap-3 pr-4 rounded-[4px] hover:bg-foreground/[0.03] focus:bg-foreground/[0.03]",
       "[&>svg]:h-3.5 [&>svg]:w-3.5 [&>svg]:shrink-0",
-      variant === "destructive" && "text-destructive focus:text-destructive hover:text-destructive",
+      variant === "destructive" && "text-destructive focus:text-destructive hover:text-destructive [&_svg]:!text-destructive",
       className
     )}
     {...props}
@@ -70,7 +65,7 @@ export const StyledContextMenuItem = React.forwardRef<
 ))
 StyledContextMenuItem.displayName = "StyledContextMenuItem"
 
-// Styled separator
+// Styled separator - matches StyledDropdownMenuSeparator
 export const StyledContextMenuSeparator = React.forwardRef<
   React.ComponentRef<typeof ContextMenuSeparator>,
   React.ComponentPropsWithoutRef<typeof ContextMenuSeparator>

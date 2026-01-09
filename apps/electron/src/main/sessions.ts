@@ -1154,6 +1154,8 @@ Use oauth_trigger for OAuth sources, credential_prompt for API key/bearer token 
       managed.isFlagged = true
       const workspaceRootPath = managed.workspace.rootPath
       flagStoredSession(workspaceRootPath, sessionId)
+      // Notify all windows for this workspace
+      this.sendEvent({ type: 'session_flagged', sessionId }, managed.workspace.id)
     }
   }
 
@@ -1163,6 +1165,8 @@ Use oauth_trigger for OAuth sources, credential_prompt for API key/bearer token 
       managed.isFlagged = false
       const workspaceRootPath = managed.workspace.rootPath
       unflagStoredSession(workspaceRootPath, sessionId)
+      // Notify all windows for this workspace
+      this.sendEvent({ type: 'session_unflagged', sessionId }, managed.workspace.id)
     }
   }
 
@@ -1172,6 +1176,8 @@ Use oauth_trigger for OAuth sources, credential_prompt for API key/bearer token 
       managed.todoState = todoState
       const workspaceRootPath = managed.workspace.rootPath
       setStoredSessionTodoState(workspaceRootPath, sessionId, todoState)
+      // Notify all windows for this workspace
+      this.sendEvent({ type: 'todo_state_changed', sessionId, todoState }, managed.workspace.id)
     }
   }
 
@@ -1476,6 +1482,9 @@ Use oauth_trigger for OAuth sources, credential_prompt for API key/bearer token 
 
     // Delete from disk too
     deleteStoredSession(workspaceRootPath, sessionId)
+
+    // Notify all windows for this workspace that the session was deleted
+    this.sendEvent({ type: 'session_deleted', sessionId }, managed.workspace.id)
 
     // Clean up attachments directory (handled by deleteStoredSession for workspace-scoped storage)
     sessionLog.info(`Deleted session ${sessionId}`)
@@ -2479,25 +2488,25 @@ To view this task's output:
       return
     }
 
-    // Route to the window for this workspace
-    const window = workspaceId
-      ? this.windowManager.getWindowByWorkspace(workspaceId)
-      : null
+    // Broadcast to ALL windows for this workspace (main + tab content windows)
+    const windows = workspaceId
+      ? this.windowManager.getAllWindowsForWorkspace(workspaceId)
+      : []
 
-    if (!window) {
-      sessionLog.warn(`Cannot send ${event.type} event - no window for workspace ${workspaceId}`)
+    if (windows.length === 0) {
+      sessionLog.warn(`Cannot send ${event.type} event - no windows for workspace ${workspaceId}`)
       return
     }
 
-    if (window.isDestroyed()) {
-      sessionLog.warn(`Cannot send ${event.type} event - window destroyed for workspace ${workspaceId}`)
-      return
-    }
-
-    try {
-      window.webContents.send(IPC_CHANNELS.SESSION_EVENT, event)
-    } catch (error) {
-      sessionLog.error(`Failed to send ${event.type} event:`, error)
+    // Send event to all windows for this workspace
+    for (const window of windows) {
+      if (!window.isDestroyed()) {
+        try {
+          window.webContents.send(IPC_CHANNELS.SESSION_EVENT, event)
+        } catch (error) {
+          sessionLog.error(`Failed to send ${event.type} event to window:`, error)
+        }
+      }
     }
   }
 

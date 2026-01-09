@@ -99,14 +99,8 @@ export function TaskActionMenu({ task, sessionId, onKillTask, onInsertMessage, c
   }
 
   const handleStopTask = () => {
-    const killCommand = `Kill background shell ${task.id}`
-    if (onInsertMessage) {
-      onInsertMessage(killCommand)
-    }
+    onKillTask(task.id)
     setOpen(false)
-    toast.info('Command added to input', {
-      description: 'Press Enter to send'
-    })
   }
 
 

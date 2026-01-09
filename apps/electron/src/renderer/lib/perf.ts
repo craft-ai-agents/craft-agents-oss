@@ -73,8 +73,8 @@ export function startSessionSwitch(sessionId: string): void {
   }
   pendingSwitches.set(sessionId, metric)
 
-  // Log start
-  perfLog.info(`Session switch started: ${sessionId.slice(0, 8)}...`)
+  // Log the tap immediately (0ms elapsed) - shows the start of the flow
+  perfLog.info(`${sessionId.slice(0, 8)}... session-list.tap: 0.0ms`)
 }
 
 /**

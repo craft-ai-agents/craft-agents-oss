@@ -77,14 +77,7 @@ export interface SystemTurn {
   timestamp: number
 }
 
-/** Represents a plan message for review */
-export interface PlanTurn {
-  type: 'plan'
-  message: Message
-  timestamp: number
-}
-
-export type Turn = AssistantTurn | UserTurn | SystemTurn | PlanTurn
+export type Turn = AssistantTurn | UserTurn | SystemTurn
 
 // ============================================================================
 // Helper Functions
@@ -344,14 +337,30 @@ export function groupMessagesByTurn(messages: Message[]): Turn[] {
       continue
     }
 
-    // Plan messages are standalone (for plan review)
+    // Plan messages are treated as the response of the current turn (like assistant messages)
     if (message.role === 'plan') {
+      if (!currentTurn) {
+        // Edge case: plan without preceding activities
+        currentTurn = {
+          type: 'assistant',
+          turnId: message.turnId || message.id,
+          activities: [],
+          response: undefined,
+          intent: undefined,
+          isStreaming: false,
+          isComplete: false,
+          timestamp: message.timestamp,
+        }
+      }
+      // Set plan as the response (like a final assistant message)
+      currentTurn.response = {
+        text: message.content,
+        isStreaming: false,
+        isPlan: true,
+      }
+      currentTurn.isStreaming = false
+      currentTurn.isComplete = true
       flushCurrentTurn()
-      turns.push({
-        type: 'plan',
-        message,
-        timestamp: message.timestamp,
-      })
       continue
     }
 

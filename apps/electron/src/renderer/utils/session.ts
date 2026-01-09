@@ -33,3 +33,57 @@ export function getSessionTitle(session: Session): string {
 
   return 'New chat'
 }
+
+/**
+ * Get the ID of the last final assistant message (not intermediate)
+ * Used for unread message tracking
+ */
+export function getLastFinalAssistantMessageId(session: Session): string | undefined {
+  for (let i = session.messages.length - 1; i >= 0; i--) {
+    const msg = session.messages[i]
+    if (msg.role === 'assistant' && !msg.isIntermediate) {
+      return msg.id
+    }
+  }
+  return undefined
+}
+
+/**
+ * Check if a session has unread messages
+ * A session is unread if:
+ * - There's a final assistant message AND
+ * - Its ID differs from lastReadMessageId
+ */
+export function hasUnreadMessages(session: Session): boolean {
+  const lastFinalId = getLastFinalAssistantMessageId(session)
+  if (!lastFinalId) return false  // No final assistant message yet
+  return lastFinalId !== session.lastReadMessageId
+}
+
+/**
+ * Count the number of unread final assistant messages
+ * Returns the count of final assistant messages after lastReadMessageId
+ */
+export function countUnreadMessages(session: Session): number {
+  if (!session.lastReadMessageId) {
+    // Never read - count all final assistant messages
+    return session.messages.filter(msg => msg.role === 'assistant' && !msg.isIntermediate).length
+  }
+
+  // Find the index of the last read message
+  const lastReadIndex = session.messages.findIndex(msg => msg.id === session.lastReadMessageId)
+  if (lastReadIndex === -1) {
+    // Last read message not found - count all final assistant messages
+    return session.messages.filter(msg => msg.role === 'assistant' && !msg.isIntermediate).length
+  }
+
+  // Count final assistant messages after the last read index
+  let count = 0
+  for (let i = lastReadIndex + 1; i < session.messages.length; i++) {
+    const msg = session.messages[i]
+    if (msg.role === 'assistant' && !msg.isIntermediate) {
+      count++
+    }
+  }
+  return count
+}

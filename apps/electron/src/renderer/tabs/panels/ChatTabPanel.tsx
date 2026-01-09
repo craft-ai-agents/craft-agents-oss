@@ -28,6 +28,12 @@ interface ChatTabPanelProps {
  */
 export default React.memo(function ChatTabPanel({ tab }: ChatTabPanelProps) {
   const chatTab = tab as ChatTab
+
+  // Diagnostic: mark when panel component runs (before any hooks)
+  React.useLayoutEffect(() => {
+    rendererPerf.markSessionSwitch(chatTab.sessionId, 'panel.mounted')
+  }, [chatTab.sessionId])
+
   const {
     currentModel,
     onSendMessage,

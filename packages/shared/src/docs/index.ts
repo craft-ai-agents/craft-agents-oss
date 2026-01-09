@@ -17,6 +17,9 @@ import { initializeSourceGuides } from './source-guides.ts';
 const CONFIG_DIR = join(homedir(), '.craft-agent');
 const DOCS_DIR = join(CONFIG_DIR, 'docs');
 
+// Track if docs have been initialized this session (prevents re-init on hot reload)
+let docsInitialized = false;
+
 /**
  * Get the docs directory path
  */
@@ -88,10 +91,16 @@ function compareVersions(a: string, b: string): number {
 
 /**
  * Initialize docs directory with bundled documentation.
- * - Debug mode: Always overwrite docs
+ * - Debug mode: Always overwrite docs (once per session)
  * - Production: Only update if bundled version is newer
  */
 export function initializeDocs(): void {
+  // Skip if already initialized this session (prevents re-init on hot reload)
+  if (docsInitialized) {
+    return;
+  }
+  docsInitialized = true;
+
   if (!existsSync(DOCS_DIR)) {
     mkdirSync(DOCS_DIR, { recursive: true });
   }

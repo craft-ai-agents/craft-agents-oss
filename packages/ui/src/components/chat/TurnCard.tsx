@@ -15,6 +15,7 @@ import {
   X,
   Maximize2,
   CircleCheck,
+  ListTodo,
 } from 'lucide-react'
 import * as ReactDOM from 'react-dom'
 import { cn } from '../../lib/utils'
@@ -132,6 +133,8 @@ export interface ResponseContent {
   text: string
   isStreaming: boolean
   streamStartTime?: number
+  /** Whether this response is a plan (renders with plan variant) */
+  isPlan?: boolean
 }
 
 export interface TurnCardProps {
@@ -177,6 +180,12 @@ export interface TurnCardProps {
   todos?: TodoItem[]
   /** Optional render prop for actions menu (Electron provides dropdown) */
   renderActionsMenu?: () => React.ReactNode
+  /** Callback when user accepts the plan (plan responses only) */
+  onAcceptPlan?: () => void
+  /** Whether a user message has been sent after this turn (hides plan approve footer) */
+  hasUserResponse?: boolean
+  /** Callback when user sends feedback via fullscreen commenting */
+  onSendFeedback?: (feedback: string) => void
 }
 
 // ============================================================================
@@ -828,24 +837,39 @@ function ActivityGroupRow({ group, expandedGroups: externalExpandedGroups, onExp
 // Streaming Response Preview Component
 // ============================================================================
 
-interface StreamingResponsePreviewProps {
+export interface ResponseCardProps {
+  /** The content to display (markdown) */
   text: string
+  /** Whether the content is still streaming */
   isStreaming: boolean
   /** When streaming started - used for buffering timeout calculation */
   streamStartTime?: number
+  /** Callback to open file in editor */
   onOpenFile?: (path: string) => void
+  /** Callback to open URL */
   onOpenUrl?: (url: string) => void
   /** Callback to open response in Monaco editor */
   onPopOut?: () => void
   /** Callback when user sends feedback via fullscreen commenting */
   onSendFeedback?: (feedback: string) => void
+  /** Card variant - 'response' for AI messages, 'plan' for plan messages */
+  variant?: 'response' | 'plan'
+  /** Callback when user accepts the plan (plan variant only) */
+  onAccept?: () => void
+  /** Whether a user message has been sent after this plan (hides the approve footer) */
+  hasUserResponse?: boolean
+  /** Whether to show the Accept Plan button (default: true) */
+  showAcceptPlan?: boolean
 }
 
 /**
- * StreamingResponsePreview - Buffered response card with aggressive content gating
+ * ResponseCard - Unified card component for AI responses and plans
  *
- * Implements smart buffering that waits until content is suspected to be
- * meaningful "commentary" before showing:
+ * Variants:
+ * - 'response': Buffered streaming response with smart content gating
+ * - 'plan': Plan message with header and Accept Plan button
+ *
+ * Response variant implements smart buffering:
  * - Waits for 40+ words with structure OR
  * - High-confidence patterns (code blocks, headers, lists) with lower threshold OR
  * - Timeout after 2.5 seconds
@@ -853,13 +877,8 @@ interface StreamingResponsePreviewProps {
  * Performance optimization: Uses throttled static snapshots instead of re-rendering
  * on every character. Content updates every 300ms during streaming, avoiding
  * expensive markdown parsing on every delta.
- *
- * States:
- * - Buffering: Shows nothing (TurnCard shows "Preparing response..." indicator)
- * - Streaming: Shows throttled content with spinner in footer
- * - Completed: Shows final content with checkmark in footer
  */
-function StreamingResponsePreview({
+export function ResponseCard({
   text,
   isStreaming,
   streamStartTime,
@@ -867,7 +886,11 @@ function StreamingResponsePreview({
   onOpenUrl,
   onPopOut,
   onSendFeedback,
-}: StreamingResponsePreviewProps) {
+  variant = 'response',
+  onAccept,
+  hasUserResponse = false,
+  showAcceptPlan = true,
+}: ResponseCardProps) {
   // Throttled content for display - updates every CONTENT_THROTTLE_MS during streaming
   const [displayedText, setDisplayedText] = useState(text)
   const lastUpdateRef = useRef(Date.now())
@@ -927,8 +950,10 @@ function StreamingResponsePreview({
 
   const MAX_HEIGHT = 540
 
-  // Completed response - show with max height and footer
-  if (isCompleted) {
+  // Completed response or plan - show with max height and footer
+  if (isCompleted || variant === 'plan') {
+    const isPlan = variant === 'plan'
+
     return (
       <>
         <div className="bg-background shadow-minimal rounded-[8px] overflow-hidden relative group">
@@ -936,7 +961,7 @@ function StreamingResponsePreview({
           <button
             onClick={() => setIsFullscreen(true)}
             className={cn(
-              "absolute top-3 right-3 p-1 rounded-[6px] transition-all z-10",
+              "absolute top-2 right-2 p-1 rounded-[6px] transition-all z-10",
               "opacity-0 group-hover:opacity-100",
               "bg-background shadow-minimal",
               "text-muted-foreground/50 hover:text-foreground",
@@ -946,6 +971,19 @@ function StreamingResponsePreview({
           >
             <Maximize2 className="w-3.5 h-3.5" />
           </button>
+
+          {/* Plan header - only shown for plan variant */}
+          {isPlan && (
+            <div
+              className={cn(
+                "px-4 py-2 border-b border-border/30 flex items-center gap-2 bg-success/5",
+                SIZE_CONFIG.fontSize
+              )}
+            >
+              <ListTodo className={cn(SIZE_CONFIG.iconSize, "text-success")} />
+              <span className="font-medium text-success">Plan</span>
+            </div>
+          )}
 
           <div
             className="pl-[22px] pr-[16px] py-3 text-sm overflow-y-auto"
@@ -961,29 +999,32 @@ function StreamingResponsePreview({
           </div>
 
           {/* Footer with actions */}
-          <div className={cn("px-4 py-2 border-t border-border/30 flex items-center justify-between bg-muted/20", SIZE_CONFIG.fontSize)}>
-            <button
-              onClick={handleCopy}
-              className={cn(
-                "flex items-center gap-1.5 transition-colors",
-                copied ? "text-success" : "text-muted-foreground hover:text-foreground",
-                "focus:outline-none focus-visible:underline"
-              )}
-            >
-              {copied ? (
-                <>
-                  <Check className={SIZE_CONFIG.iconSize} />
-                  <span>Copied!</span>
-                </>
-              ) : (
-                <>
-                  <Copy className={SIZE_CONFIG.iconSize} />
-                  <span>Copy</span>
-                </>
-              )}
-            </button>
-
+          <div className={cn(
+            "pl-4 pr-2.5 py-2 border-t border-border/30 flex items-center justify-between bg-muted/20",
+            SIZE_CONFIG.fontSize
+          )}>
+            {/* Left side - Copy and View as Markdown */}
             <div className="flex items-center gap-3">
+              <button
+                onClick={handleCopy}
+                className={cn(
+                  "flex items-center gap-1.5 transition-colors",
+                  copied ? "text-success" : "text-muted-foreground hover:text-foreground",
+                  "focus:outline-none focus-visible:underline"
+                )}
+              >
+                {copied ? (
+                  <>
+                    <Check className={SIZE_CONFIG.iconSize} />
+                    <span>Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className={SIZE_CONFIG.iconSize} />
+                    <span>Copy</span>
+                  </>
+                )}
+              </button>
               {onPopOut && (
                 <button
                   onClick={onPopOut}
@@ -998,6 +1039,24 @@ function StreamingResponsePreview({
                 </button>
               )}
             </div>
+
+            {/* Right side - Accept Plan (only shown for plan variant until user responds) */}
+            {isPlan && !hasUserResponse && showAcceptPlan && (
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-muted-foreground">
+                  Type your feedback in chat or
+                </span>
+                <button
+                  type="button"
+                  onClick={onAccept}
+                  className="h-[28px] pl-2.5 pr-2.5 text-xs font-medium rounded-[6px] flex items-center gap-1.5 transition-all bg-success/5 text-success hover:bg-success/10 shadow-tinted"
+                  style={{ '--shadow-color': '34, 136, 82' } as React.CSSProperties}
+                >
+                  <Check className="h-3.5 w-3.5" />
+                  <span>Accept Plan</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1006,6 +1065,7 @@ function StreamingResponsePreview({
           content={text}
           isOpen={isFullscreen}
           onClose={() => setIsFullscreen(false)}
+          variant={isPlan ? 'plan' : undefined}
           onOpenUrl={onOpenUrl}
           onOpenFile={onOpenFile}
           onSendFeedback={onSendFeedback}
@@ -1154,6 +1214,9 @@ export const TurnCard = React.memo(function TurnCard({
   hasEditOrWriteActivities,
   todos,
   renderActionsMenu,
+  onAcceptPlan,
+  hasUserResponse,
+  onSendFeedback,
 }: TurnCardProps) {
   const hasRunning = activities.some(a => a.status === 'running')
 
@@ -1397,13 +1460,17 @@ export const TurnCard = React.memo(function TurnCard({
       {/* Response Section - only shown when not buffering */}
       {response && !isBuffering && (
         <div className={cn("select-text", hasActivities && "mt-2")}>
-          <StreamingResponsePreview
+          <ResponseCard
             text={response.text}
             isStreaming={response.isStreaming}
             streamStartTime={response.streamStartTime}
             onOpenFile={onOpenFile}
             onOpenUrl={onOpenUrl}
             onPopOut={onPopOut ? () => onPopOut(response.text) : undefined}
+            onSendFeedback={onSendFeedback}
+            variant={response.isPlan ? 'plan' : 'response'}
+            onAccept={onAcceptPlan}
+            hasUserResponse={hasUserResponse}
           />
         </div>
       )}

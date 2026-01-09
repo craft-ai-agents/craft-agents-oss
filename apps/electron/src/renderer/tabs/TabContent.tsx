@@ -12,6 +12,7 @@ import { AlertCircle } from 'lucide-react'
 import { Spinner } from '@craft-agent/ui'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { rendererPerf } from '@/lib/perf'
 import { useTabs } from './useTabs'
 import type { Tab, TabType, ChatTab } from './types'
 // Eagerly loaded - chat tabs are the most common, needs instant switching
@@ -121,6 +122,8 @@ export function TabContent({ className }: TabContentProps) {
   // Add active session to rendered set (synchronous, before render)
   if (activeSessionId && !renderedSessionIdsRef.current.has(activeSessionId)) {
     renderedSessionIdsRef.current = new Set([...renderedSessionIdsRef.current, activeSessionId])
+    // Diagnostic: mark when panel is about to render for first time
+    rendererPerf.markSessionSwitch(activeSessionId, 'tab-content.will-render')
   }
 
   // Add active non-chat tab to rendered set

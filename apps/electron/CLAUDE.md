@@ -255,6 +255,44 @@ When creating dropdowns or popovers that need consistent styling regardless of t
 </StyledDropdownMenuItem>
 ```
 
+### Context Menu Styling
+
+**Always use `StyledContextMenu*` components** for right-click context menus. They match the `StyledDropdownMenu*` styling exactly.
+
+```tsx
+import {
+  ContextMenu,
+  ContextMenuTrigger,
+  StyledContextMenuContent,
+  StyledContextMenuItem,
+  StyledContextMenuSeparator,
+} from '@/components/ui/styled-context-menu'
+
+<ContextMenu>
+  <ContextMenuTrigger asChild>
+    <button>Right-click me</button>
+  </ContextMenuTrigger>
+  <StyledContextMenuContent>
+    <StyledContextMenuItem onClick={handleAction}>
+      <ExternalLink className="h-4 w-4" />
+      Open in New Window
+    </StyledContextMenuItem>
+    <StyledContextMenuSeparator />
+    <StyledContextMenuItem onClick={handleDelete} variant="destructive">
+      <Trash2 className="h-4 w-4" />
+      Delete
+    </StyledContextMenuItem>
+  </StyledContextMenuContent>
+</ContextMenu>
+```
+
+**Why styled components?**
+- Base `ContextMenuItem` uses `focus:bg-accent` which looks inconsistent
+- Styled version uses `hover:bg-foreground/[0.03]` matching `StyledDropdownMenuItem`
+- Includes proper icon sizing (`[&>svg]:h-3.5 [&>svg]:w-3.5`)
+
+**Key pattern:** Both `StyledDropdownMenu*` and `StyledContextMenu*` use the same subtle hover (`foreground/[0.03]`). Always use these styled variants for consistency.
+
 ### Toast Notifications
 
 **Always use Sonner** for toast notifications (success, error, info, warning). The `<Toaster />` component is already mounted in `main.tsx`.

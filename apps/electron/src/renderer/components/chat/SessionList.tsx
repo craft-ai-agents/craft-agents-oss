@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react"
 import { formatDistanceToNow, isToday, isYesterday, format, startOfDay } from "date-fns"
-import { Trash2, Pencil, MoreHorizontal, ExternalLink, Flag, FlagOff, MailOpen, Search, X, FolderOpen, Share2, Copy, Link2Off } from "lucide-react"
+import { Trash2, Pencil, MoreHorizontal, Flag, FlagOff, MailOpen, Search, X, FolderOpen, Share2, Copy, Link2Off, AppWindow, Layers, Plus } from "lucide-react"
 import { toast } from "sonner"
 
 import { cn, isHexColor } from "@/lib/utils"
@@ -194,6 +194,7 @@ interface SessionItemProps {
   onDelete: (sessionId: string, skipConfirmation?: boolean) => Promise<boolean>
   onSelect: (forceNewTab: boolean) => void
   onOpenInNewTab: () => void
+  onOpenInNewWindow: () => void
   /** Current permission mode for this session (from real-time state) */
   permissionMode?: PermissionMode
   /** Current search query for highlighting matches */
@@ -222,6 +223,7 @@ function SessionItem({
   onDelete,
   onSelect,
   onOpenInNewTab,
+  onOpenInNewWindow,
   permissionMode,
   searchQuery,
   todoStates,
@@ -372,15 +374,6 @@ function SessionItem({
                 </div>
               </DropdownMenuTrigger>
             <StyledDropdownMenuContent align="end">
-              <StyledDropdownMenuItem onClick={onOpenInNewTab}>
-                <ExternalLink />
-                Open in new tab
-              </StyledDropdownMenuItem>
-              <StyledDropdownMenuItem onClick={() => window.electronAPI.sessionCommand(item.id, { type: 'showInFinder' })}>
-                <FolderOpen />
-                View in Finder
-              </StyledDropdownMenuItem>
-              <StyledDropdownMenuSeparator />
               {/* Share/Revoke based on shared state */}
               {!item.sharedUrl ? (
                 <StyledDropdownMenuItem onClick={async () => {
@@ -481,6 +474,27 @@ function SessionItem({
               <StyledDropdownMenuItem onClick={() => onRenameClick(item.id, getSessionTitle(item))}>
                 <Pencil />
                 Rename
+              </StyledDropdownMenuItem>
+              <StyledDropdownMenuSeparator />
+              <DropdownMenuSub>
+                <StyledDropdownMenuSubTrigger>
+                  <Layers />
+                  Open In...
+                </StyledDropdownMenuSubTrigger>
+                <StyledDropdownMenuSubContent>
+                  <StyledDropdownMenuItem onClick={onOpenInNewWindow}>
+                    <AppWindow />
+                    New Window
+                  </StyledDropdownMenuItem>
+                  <StyledDropdownMenuItem onClick={onOpenInNewTab}>
+                    <Plus />
+                    New Tab
+                  </StyledDropdownMenuItem>
+                </StyledDropdownMenuSubContent>
+              </DropdownMenuSub>
+              <StyledDropdownMenuItem onClick={() => window.electronAPI.sessionCommand(item.id, { type: 'showInFinder' })}>
+                <FolderOpen />
+                View in Finder
               </StyledDropdownMenuItem>
               <StyledDropdownMenuSeparator />
               <StyledDropdownMenuItem onClick={() => onDelete(item.id)} variant="destructive">
@@ -833,6 +847,14 @@ export function SessionList({
                     onOpenInNewTab={() => {
                       // Open in new tab without changing selection
                       onSessionSelect?.(item, { forceNewTab: true })
+                    }}
+                    onOpenInNewWindow={() => {
+                      // Open in new window via IPC
+                      window.electronAPI.openTabContentWindow({
+                        workspaceId: item.workspaceId,
+                        tabType: 'chat',
+                        tabParams: { sessionId: item.id },
+                      })
                     }}
                     permissionMode={sessionOptions?.get(item.id)?.permissionMode}
                     searchQuery={searchQuery}

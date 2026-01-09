@@ -178,6 +178,11 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     windowManager.closeWindow(event.sender.id)
   })
 
+  // Open a tab content window (lightweight window showing only tab content)
+  ipcMain.handle(IPC_CHANNELS.OPEN_TAB_CONTENT_WINDOW, async (_event, params: { workspaceId: string; tabType: string; tabParams?: Record<string, string> }) => {
+    windowManager.createTabContentWindow(params.workspaceId, params.tabType, params.tabParams)
+  })
+
   // Switch workspace in current window (in-window switching)
   ipcMain.handle(IPC_CHANNELS.SWITCH_WORKSPACE, async (event, workspaceId: string) => {
     const end = perf.start('ipc.switchWorkspace', { workspaceId })
@@ -1514,5 +1519,57 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     const result = getLogoUrl(serviceUrl, provider)
     console.log(`[logo] getLogoUrl("${serviceUrl}", "${provider}") => "${result}"`)
     return result
+  })
+
+  // ============================================================
+  // Notifications and Badge
+  // ============================================================
+
+  // Show a notification
+  ipcMain.handle(IPC_CHANNELS.NOTIFICATION_SHOW, async (_event, title: string, body: string, workspaceId: string, sessionId: string) => {
+    const { showNotification } = await import('./notifications')
+    showNotification(title, body, workspaceId, sessionId)
+  })
+
+  // Get notifications enabled setting
+  ipcMain.handle(IPC_CHANNELS.NOTIFICATION_GET_ENABLED, async () => {
+    const { getNotificationsEnabled } = await import('@craft-agent/shared/config/storage')
+    return getNotificationsEnabled()
+  })
+
+  // Set notifications enabled setting (also triggers permission request if enabling)
+  ipcMain.handle(IPC_CHANNELS.NOTIFICATION_SET_ENABLED, async (_event, enabled: boolean) => {
+    const { setNotificationsEnabled } = await import('@craft-agent/shared/config/storage')
+    setNotificationsEnabled(enabled)
+
+    // If enabling, trigger a notification to request macOS permission
+    if (enabled) {
+      const { showNotification } = await import('./notifications')
+      showNotification('Notifications enabled', 'You will be notified when tasks complete.', '', '')
+    }
+  })
+
+  // Update app badge count
+  ipcMain.handle(IPC_CHANNELS.BADGE_UPDATE, async (_event, count: number) => {
+    const { updateBadgeCount } = await import('./notifications')
+    updateBadgeCount(count)
+  })
+
+  // Clear app badge
+  ipcMain.handle(IPC_CHANNELS.BADGE_CLEAR, async () => {
+    const { clearBadgeCount } = await import('./notifications')
+    clearBadgeCount()
+  })
+
+  // Set dock icon with badge (canvas-rendered badge image from renderer)
+  ipcMain.handle(IPC_CHANNELS.BADGE_SET_ICON, async (_event, dataUrl: string) => {
+    const { setDockIconWithBadge } = await import('./notifications')
+    setDockIconWithBadge(dataUrl)
+  })
+
+  // Get window focus state
+  ipcMain.handle(IPC_CHANNELS.WINDOW_GET_FOCUS_STATE, () => {
+    const { isAnyWindowFocused } = require('./notifications')
+    return isAnyWindowFocused()
   })
 }

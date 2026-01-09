@@ -97,6 +97,11 @@ import { SourcesListPanel } from "./SourcesListPanel"
  * 2. Update App.tsx to include in contextValue
  * 3. Use via useChatContext() hook in child components
  */
+import type { Tab } from '@/tabs/types'
+
+/** Window mode - 'main' for full app, 'tab-content' for standalone tab windows */
+type WindowMode = 'main' | 'tab-content'
+
 interface ChatProps {
   /** All data and callbacks - passed directly to ChatProvider */
   contextValue: ChatContextType
@@ -105,6 +110,10 @@ interface ChatProps {
   defaultCollapsed?: boolean
   menuNewChatTrigger?: number
   menuNewChatTabTrigger?: number
+  /** Window mode: 'main' (full UI) or 'tab-content' (tabs only, no sidebar) */
+  windowMode?: WindowMode
+  /** Initial tab for tab-content windows */
+  initialTab?: Tab | null
 }
 
 /**
@@ -532,7 +541,11 @@ export function Chat({
   defaultCollapsed = false,
   menuNewChatTrigger,
   menuNewChatTabTrigger,
+  windowMode = 'main',
+  initialTab,
 }: ChatProps) {
+  // In tab-content mode, we only show the tab container (no sidebar, no session list)
+  const isTabContentMode = windowMode === 'tab-content'
   // Destructure commonly used values from context
   const {
     workspaces,
@@ -1151,9 +1164,11 @@ export function Chat({
 
   // Track if sessions have been loaded at least once
   const sessionsLoadedRef = React.useRef(false)
+  // Track previous session count to detect deletions
+  const prevSessionCountRef = React.useRef(sessions.length)
 
-  // Validate tabs when sessions change (remove stale chat tabs)
-  // Skip validation until sessions are loaded to prevent removing tabs on initial empty state
+  // Validate tabs only when sessions are DELETED (count decreases)
+  // This avoids race conditions when creating new sessions (tab created before sessions state updates)
   React.useEffect(() => {
     // Mark as loaded once we have sessions
     if (sessions.length > 0) {
@@ -1161,10 +1176,15 @@ export function Chat({
     }
     // Only validate after sessions have been loaded at least once
     if (!sessionsLoadedRef.current) {
+      prevSessionCountRef.current = sessions.length
       return
     }
-    const validSessionIds = new Set(sessions.map(s => s.id))
-    validateTabs(validSessionIds)
+    // Only validate when sessions are deleted (count decreased), not when added
+    if (sessions.length < prevSessionCountRef.current) {
+      const validSessionIds = new Set(sessions.map(s => s.id))
+      validateTabs(validSessionIds)
+    }
+    prevSessionCountRef.current = sessions.length
   }, [sessions, validateTabs])
 
   // Wrap delete handler to clear selection when deleting the currently selected session
@@ -1382,8 +1402,10 @@ export function Chat({
 
     const agentId = useCurrentAgent && chatFilter?.kind === 'agent' ? selectedAgentId || undefined : undefined
     const newSession = await onCreateSession(activeWorkspace.id, agentId)
+    // Update selection AND open tab directly (don't rely on effect, as sessionsRef may not have new session yet)
     setSession({ selected: newSession.id })
-  }, [activeWorkspace, chatFilter, selectedAgentId, onCreateSession, setSession])
+    openChatTab(newSession.id, activeWorkspace.id, 'New Chat', agentId)
+  }, [activeWorkspace, chatFilter, selectedAgentId, onCreateSession, setSession, openChatTab])
 
   // Create a new chat in a new tab (CMD+T)
   const handleNewChatInNewTab = useCallback(async () => {
@@ -1746,30 +1768,33 @@ export function Chat({
         */}
         <div className="titlebar-drag-region fixed top-0 left-0 right-0 h-[50px] z-40" />
 
-      {/* Sidebar Toggle Button - fixed position, animated opacity */}
-      <motion.div
-        initial={false}
-        animate={{ opacity: isSidebarVisible ? 0 : 1 }}
-        transition={{ duration: 0.15 }}
-        className="fixed left-[86px] top-[13px] z-[60]"
-        style={{ pointerEvents: isSidebarVisible ? 'none' : 'auto' }}
-      >
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setIsSidebarVisible(true)}
-          className="h-7 w-7 titlebar-no-drag rounded-[4px] hover:bg-foreground/5"
+      {/* Sidebar Toggle Button - fixed position, animated opacity (main mode only) */}
+      {!isTabContentMode && (
+        <motion.div
+          initial={false}
+          animate={{ opacity: isSidebarVisible ? 0 : 1 }}
+          transition={{ duration: 0.15 }}
+          className="fixed left-[86px] top-[13px] z-[60]"
+          style={{ pointerEvents: isSidebarVisible ? 'none' : 'auto' }}
         >
-          <PanelLeftRounded className="!h-5 !w-5 -translate-y-px" />
-        </Button>
-      </motion.div>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setIsSidebarVisible(true)}
+            className="h-7 w-7 titlebar-no-drag rounded-[4px] hover:bg-foreground/5"
+          >
+            <PanelLeftRounded className="!h-5 !w-5 -translate-y-px" />
+          </Button>
+        </motion.div>
+      )}
 
       {/* === OUTER LAYOUT: Sidebar | Main Content === */}
       <div className="h-full flex items-stretch relative">
-        {/* === SIDEBAR (Left) ===
+        {/* === SIDEBAR (Left) - main mode only ===
             Animated width with spring physics for smooth 60-120fps transitions.
             Uses overflow-hidden to clip content during collapse animation.
             Resizable via drag handle on right edge (200-400px range). */}
+        {!isTabContentMode && (
         <motion.div
           initial={false}
           animate={{ width: isSidebarVisible ? sidebarWidth : 0 }}
@@ -2044,10 +2069,10 @@ export function Chat({
             </div>
           </div>
         </motion.div>
+        )}
 
-        {/* Resize Handle - OUTSIDE sidebar so it's not clipped by overflow-hidden
-            Touch area: 12px wide (±6px from edge)
-            Visual: 2px wide gradient centered in touch area */}
+        {/* Sidebar Resize Handle - main mode only */}
+        {!isTabContentMode && (
         <div
           ref={resizeHandleRef}
           onMouseDown={(e) => { e.preventDefault(); setIsResizing('sidebar') }}
@@ -2070,11 +2095,13 @@ export function Chat({
             style={getResizeGradientStyle(sidebarHandleY)}
           />
         </div>
+        )}
 
         {/* === MAIN CONTENT (Right) ===
             Flex layout: Session List | Chat Display */}
         <div className="flex-1 overflow-hidden min-w-0 flex h-full">
-          {/* === SESSION LIST PANEL === */}
+          {/* === SESSION LIST PANEL === (main mode only) */}
+          {!isTabContentMode && (
           <div
             className="h-full flex flex-col min-w-0 bg-background shrink-0"
             style={{ width: sessionListWidth }}
@@ -2314,8 +2341,10 @@ export function Chat({
               </>
             )}
           </div>
+          )}
 
-          {/* Session List Resize Handle */}
+          {/* Session List Resize Handle - main mode only */}
+          {!isTabContentMode && (
           <div
             ref={sessionListHandleRef}
             onMouseDown={(e) => { e.preventDefault(); setIsResizing('session-list') }}
@@ -2339,10 +2368,11 @@ export function Chat({
               />
             </div>
           </div>
+          )}
 
           {/* === TAB CONTAINER PANEL === */}
           <div className="flex-1 overflow-hidden min-w-0 bg-background">
-            <TabContainer />
+            <TabContainer initialTab={initialTab} />
           </div>
         </div>
       </div>

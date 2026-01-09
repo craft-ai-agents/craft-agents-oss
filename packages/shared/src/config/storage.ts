@@ -75,6 +75,8 @@ export interface StoredConfig {
   // New session defaults
   defaultPermissionMode?: PermissionMode;  // Default permission mode for new sessions ('safe', 'ask', 'allow-all')
   // Note: defaultWorkingDirectory is stored per-workspace in workspace config.json, not here
+  // Notifications
+  notificationsEnabled?: boolean;  // Desktop notifications for task completion (default: true)
 }
 
 const CONFIG_DIR = join(homedir(), '.craft-agent');
@@ -264,6 +266,25 @@ export function setDefaultPermissionMode(mode: PermissionMode): void {
   const config = loadStoredConfig();
   if (!config) return;
   config.defaultPermissionMode = mode;
+  saveConfig(config);
+}
+
+/**
+ * Get whether desktop notifications are enabled.
+ * Defaults to true if not set.
+ */
+export function getNotificationsEnabled(): boolean {
+  const config = loadStoredConfig();
+  return config?.notificationsEnabled !== false; // Default to true
+}
+
+/**
+ * Set whether desktop notifications are enabled.
+ */
+export function setNotificationsEnabled(enabled: boolean): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+  config.notificationsEnabled = enabled;
   saveConfig(config);
 }
 

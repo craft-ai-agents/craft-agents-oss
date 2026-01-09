@@ -3,6 +3,7 @@ import { windowLog } from './logger'
 import { join } from 'path'
 import { existsSync } from 'fs'
 import { IPC_CHANNELS } from '../shared/types'
+import type { SavedWindow } from './window-state'
 
 // Vite dev server URL for hot reload
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL
@@ -10,7 +11,8 @@ const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL
 interface ManagedWindow {
   window: BrowserWindow
   workspaceId: string
-  mode?: string
+  mode?: 'main' | 'tab-content'
+  query?: string  // Full query string for restoration (tab-content windows)
 }
 
 export class WindowManager {
@@ -19,9 +21,9 @@ export class WindowManager {
   /**
    * Create a new window for a workspace
    * @param workspaceId - The workspace to open (empty string for onboarding)
-   * @param mode - Optional mode for the window
+   * @param mode - Optional mode for the window ('main' or 'tab-content')
    */
-  createWindow(workspaceId: string, mode?: string): BrowserWindow {
+  createWindow(workspaceId: string, mode?: 'main' | 'tab-content'): BrowserWindow {
     // Load platform-specific app icon
     const getIconPath = () => {
       const resourcesDir = join(__dirname, '../resources')
@@ -46,6 +48,7 @@ export class WindowManager {
       height: 900,
       minWidth: 800,
       minHeight: 600,
+      show: false, // Don't show until ready-to-show event (faster perceived startup)
       title: '',
       icon: iconExists ? iconPath : undefined,
       titleBarStyle: 'hiddenInset',
@@ -64,6 +67,11 @@ export class WindowManager {
         sandbox: false,
         webviewTag: true // Enable webview for browser panel
       }
+    })
+
+    // Show window when first paint is ready (faster perceived startup)
+    window.once('ready-to-show', () => {
+      window.show()
     })
 
     // Open external links in default browser
@@ -122,6 +130,18 @@ export class WindowManager {
     }
     nativeTheme.on('updated', themeHandler)
 
+    // Handle focus/blur to broadcast window focus state
+    window.on('focus', () => {
+      if (!window.isDestroyed()) {
+        window.webContents.send(IPC_CHANNELS.WINDOW_FOCUS_STATE, true)
+      }
+    })
+    window.on('blur', () => {
+      if (!window.isDestroyed()) {
+        window.webContents.send(IPC_CHANNELS.WINDOW_FOCUS_STATE, false)
+      }
+    })
+
     // Handle window close - clean up theme listener first, then internal state
     window.on('closed', () => {
       nativeTheme.removeListener('updated', themeHandler)
@@ -134,7 +154,7 @@ export class WindowManager {
   }
 
   /**
-   * Get window by workspace ID
+   * Get window by workspace ID (returns first match - for backwards compatibility)
    */
   getWindowByWorkspace(workspaceId: string): BrowserWindow | null {
     for (const managed of this.windows.values()) {
@@ -143,6 +163,20 @@ export class WindowManager {
       }
     }
     return null
+  }
+
+  /**
+   * Get ALL windows for a workspace (main window + tab content windows)
+   * Used for broadcasting events to all windows showing the same workspace
+   */
+  getAllWindowsForWorkspace(workspaceId: string): BrowserWindow[] {
+    const windows: BrowserWindow[] = []
+    for (const managed of this.windows.values()) {
+      if (managed.workspaceId === workspaceId && !managed.window.isDestroyed()) {
+        windows.push(managed.window)
+      }
+    }
+    return windows
   }
 
   /**
@@ -156,7 +190,7 @@ export class WindowManager {
   /**
    * Get mode for a window (by webContents.id)
    */
-  getModeForWindow(webContentsId: number): string | null {
+  getModeForWindow(webContentsId: number): 'main' | 'tab-content' | null {
     const managed = this.windows.get(webContentsId)
     return managed?.mode ?? null
   }
@@ -203,6 +237,118 @@ export class WindowManager {
   }
 
   /**
+   * Create a tab content window (lightweight window showing only tab content)
+   * Used for "Open in New Window" functionality
+   * @param workspaceId - The workspace this window belongs to
+   * @param tabType - The type of tab to display (chat, settings, etc.)
+   * @param tabParams - Tab-specific parameters (sessionId, agentId, path, etc.)
+   */
+  createTabContentWindow(workspaceId: string, tabType: string, tabParams?: Record<string, string>): BrowserWindow {
+    // Load platform-specific app icon
+    const getIconPath = () => {
+      const resourcesDir = join(__dirname, '../resources')
+      if (process.platform === 'darwin') {
+        return join(resourcesDir, 'icon.icns')
+      } else if (process.platform === 'win32') {
+        return join(resourcesDir, 'icon.ico')
+      } else {
+        return join(resourcesDir, 'icon.png')
+      }
+    }
+
+    const iconPath = getIconPath()
+    const iconExists = existsSync(iconPath)
+
+    const window = new BrowserWindow({
+      width: 800,
+      height: 600,
+      minWidth: 400,
+      minHeight: 300,
+      show: false,
+      title: '',
+      icon: iconExists ? iconPath : undefined,
+      titleBarStyle: 'hiddenInset',
+      trafficLightPosition: { x: 18, y: 18 },
+      vibrancy: 'under-window',
+      visualEffectState: 'active',
+      webPreferences: {
+        preload: join(__dirname, 'preload.cjs'),
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: false,
+        webviewTag: true
+      }
+    })
+
+    // Show window when ready
+    window.once('ready-to-show', () => {
+      window.show()
+    })
+
+    // Open external links in default browser
+    window.webContents.setWindowOpenHandler((details) => {
+      shell.openExternal(details.url)
+      return { action: 'deny' }
+    })
+
+    // Build query params for tab content window
+    const query: Record<string, string> = {
+      workspaceId,
+      mode: 'tab-content',
+      tabType,
+    }
+    // Add tab params to query string
+    if (tabParams) {
+      for (const [key, value] of Object.entries(tabParams)) {
+        query[key] = value
+      }
+    }
+
+    // Build query string for loading and storage
+    const queryString = new URLSearchParams(query).toString()
+
+    if (VITE_DEV_SERVER_URL) {
+      window.loadURL(`${VITE_DEV_SERVER_URL}?${queryString}`)
+    } else {
+      window.loadFile(join(__dirname, 'renderer/index.html'), { query })
+    }
+
+    // Store the window mapping with query for restoration
+    const webContentsId = window.webContents.id
+    this.windows.set(webContentsId, { window, workspaceId, mode: 'tab-content', query: queryString })
+
+    // Listen for system theme changes
+    const themeHandler = () => {
+      if (!window.isDestroyed()) {
+        window.webContents.send(IPC_CHANNELS.SYSTEM_THEME_CHANGED, nativeTheme.shouldUseDarkColors)
+      }
+    }
+    nativeTheme.on('updated', themeHandler)
+
+    // Handle focus/blur
+    window.on('focus', () => {
+      if (!window.isDestroyed()) {
+        window.webContents.send(IPC_CHANNELS.WINDOW_FOCUS_STATE, true)
+      }
+    })
+    window.on('blur', () => {
+      if (!window.isDestroyed()) {
+        window.webContents.send(IPC_CHANNELS.WINDOW_FOCUS_STATE, false)
+      }
+    })
+
+    // Cleanup on close
+    window.on('closed', () => {
+      nativeTheme.removeListener('updated', themeHandler)
+      this.windows.delete(webContentsId)
+      windowLog.info(`Tab content window closed for workspace ${workspaceId}, tab ${tabType}`)
+    })
+
+    windowLog.info(`Created tab content window for workspace ${workspaceId}, tab ${tabType}`)
+    return window
+  }
+
+  /**
    * Focus existing window for workspace or create new one
    */
   focusOrCreateWindow(workspaceId: string): BrowserWindow {
@@ -219,9 +365,23 @@ export class WindowManager {
 
   /**
    * Get list of workspace IDs that have open windows (for persistence)
+   * @deprecated Use getWindowStates() instead for full window state persistence
    */
   getOpenWorkspaceIds(): string[] {
     return this.getAllWindows().map(m => m.workspaceId)
+  }
+
+  /**
+   * Get window states for persistence (includes bounds, type, and query)
+   * Used by window-state.ts to save/restore windows
+   */
+  getWindowStates(): SavedWindow[] {
+    return this.getAllWindows().map(managed => ({
+      type: (managed.mode === 'tab-content' ? 'tab-content' : 'main') as 'main' | 'tab-content',
+      workspaceId: managed.workspaceId,
+      bounds: managed.window.getBounds(),
+      query: managed.query
+    }))
   }
 
   /**

@@ -31,6 +31,8 @@ const api: ElectronAPI = {
   openWorkspace: (workspaceId: string) => ipcRenderer.invoke(IPC_CHANNELS.OPEN_WORKSPACE, workspaceId),
   switchWorkspace: (workspaceId: string) => ipcRenderer.invoke(IPC_CHANNELS.SWITCH_WORKSPACE, workspaceId),
   closeWindow: () => ipcRenderer.invoke(IPC_CHANNELS.CLOSE_WINDOW),
+  openTabContentWindow: (params: { workspaceId: string; tabType: string; tabParams?: Record<string, string> }) =>
+    ipcRenderer.invoke(IPC_CHANNELS.OPEN_TAB_CONTENT_WINDOW, params),
 
   // Agent management
   getAgents: (workspaceId: string) => ipcRenderer.invoke(IPC_CHANNELS.GET_AGENTS, workspaceId),
@@ -322,6 +324,49 @@ const api: ElectronAPI = {
     ipcRenderer.on(IPC_CHANNELS.THEME_AGENT_CHANGED, handler)
     return () => {
       ipcRenderer.removeListener(IPC_CHANNELS.THEME_AGENT_CHANGED, handler)
+    }
+  },
+
+  // Notifications
+  showNotification: (title: string, body: string, workspaceId: string, sessionId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_SHOW, title, body, workspaceId, sessionId),
+  getNotificationsEnabled: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_GET_ENABLED) as Promise<boolean>,
+  setNotificationsEnabled: (enabled: boolean) =>
+    ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_SET_ENABLED, enabled),
+  updateBadgeCount: (count: number) =>
+    ipcRenderer.invoke(IPC_CHANNELS.BADGE_UPDATE, count),
+  clearBadgeCount: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.BADGE_CLEAR),
+  setDockIconWithBadge: (dataUrl: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.BADGE_SET_ICON, dataUrl),
+  onBadgeDraw: (callback: (data: { count: number; iconDataUrl: string }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: { count: number; iconDataUrl: string }) => {
+      callback(data)
+    }
+    ipcRenderer.on(IPC_CHANNELS.BADGE_DRAW, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.BADGE_DRAW, handler)
+    }
+  },
+  getWindowFocusState: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.WINDOW_GET_FOCUS_STATE),
+  onWindowFocusChange: (callback: (isFocused: boolean) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, isFocused: boolean) => {
+      callback(isFocused)
+    }
+    ipcRenderer.on(IPC_CHANNELS.WINDOW_FOCUS_STATE, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.WINDOW_FOCUS_STATE, handler)
+    }
+  },
+  onNotificationNavigate: (callback: (data: { workspaceId: string; sessionId: string }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: { workspaceId: string; sessionId: string }) => {
+      callback(data)
+    }
+    ipcRenderer.on(IPC_CHANNELS.NOTIFICATION_NAVIGATE, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.NOTIFICATION_NAVIGATE, handler)
     }
   },
 }

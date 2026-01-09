@@ -12,6 +12,7 @@ import { initializeDocs } from '@craft-agent/shared/docs'
 import { handleDeepLink } from './deep-link'
 import log, { isDebugMode, mainLog, getLogFilePath } from './logger'
 import { setPerfEnabled, enableDebug } from '@craft-agent/shared/utils'
+import { initNotificationService, clearBadgeCount, initBadgeIcon } from './notifications'
 
 // Initialize electron-log for renderer process support
 log.initialize()
@@ -93,6 +94,7 @@ async function createInitialWindows(): Promise<void> {
   // Load saved window state
   const savedState = loadWindowState()
   const workspaces = getWorkspaces()
+  const validWorkspaceIds = workspaces.map(ws => ws.id)
 
   if (workspaces.length === 0) {
     // No workspaces configured - create window without workspace (will show onboarding)
@@ -100,18 +102,34 @@ async function createInitialWindows(): Promise<void> {
     return
   }
 
-  if (savedState?.openWorkspaceIds.length) {
+  if (savedState?.windows.length) {
     // Restore windows from saved state
-    // Filter to only workspaces that still exist
-    const validWorkspaceIds = savedState.openWorkspaceIds.filter(
-      wsId => workspaces.some(ws => ws.id === wsId)
-    )
+    let restoredCount = 0
 
-    if (validWorkspaceIds.length > 0) {
-      for (const wsId of validWorkspaceIds) {
-        windowManager.createWindow(wsId)
+    for (const saved of savedState.windows) {
+      // Skip invalid workspaces
+      if (!validWorkspaceIds.includes(saved.workspaceId)) continue
+
+      if (saved.type === 'tab-content' && saved.query) {
+        // Restore tab-content window with full query
+        const params = Object.fromEntries(new URLSearchParams(saved.query))
+        const win = windowManager.createTabContentWindow(
+          saved.workspaceId,
+          params.tabType || 'settings',
+          params
+        )
+        win.setBounds(saved.bounds)
+        restoredCount++
+      } else {
+        // Restore main window
+        const win = windowManager.createWindow(saved.workspaceId)
+        win.setBounds(saved.bounds)
+        restoredCount++
       }
-      mainLog.info(`Restored ${validWorkspaceIds.length} window(s) from saved state`)
+    }
+
+    if (restoredCount > 0) {
+      mainLog.info(`Restored ${restoredCount} window(s) from saved state`)
       return
     }
   }
@@ -135,6 +153,8 @@ app.whenReady().then(async () => {
     const dockIconPath = join(__dirname, '../resources/icon.png')
     if (existsSync(dockIconPath)) {
       app.dock.setIcon(dockIconPath)
+      // Initialize badge icon for canvas-based badge overlay
+      initBadgeIcon(dockIconPath)
     }
   }
 
@@ -149,6 +169,9 @@ app.whenReady().then(async () => {
     // Initialize session manager
     sessionManager = new SessionManager()
     sessionManager.setWindowManager(windowManager)
+
+    // Initialize notification service
+    initNotificationService(windowManager)
 
     // Register IPC handlers (must happen before window creation)
     registerIpcHandlers(sessionManager, windowManager, unifiedPreviewWindowManager)
@@ -211,7 +234,8 @@ app.on('before-quit', async (event) => {
   isQuitting = true
 
   if (windowManager) {
-    const openWorkspaceIds = windowManager.getOpenWorkspaceIds()
+    // Get full window states (includes bounds, type, and query)
+    const windows = windowManager.getWindowStates()
     // Get the focused window's workspace as last focused
     const focusedWindow = BrowserWindow.getFocusedWindow()
     let lastFocusedWorkspaceId: string | undefined
@@ -220,10 +244,10 @@ app.on('before-quit', async (event) => {
     }
 
     saveWindowState({
-      openWorkspaceIds,
+      windows,
       lastFocusedWorkspaceId,
     })
-    mainLog.info('Saved window state:', openWorkspaceIds.length, 'workspaces')
+    mainLog.info('Saved window state:', windows.length, 'windows')
   }
 
   // Flush all pending session writes before quitting

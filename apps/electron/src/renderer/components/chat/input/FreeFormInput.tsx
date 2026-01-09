@@ -224,7 +224,7 @@ export function FreeFormInput({
     return () => window.removeEventListener('craft:insert-text', handleInsertText as EventListener)
   }, [syncToParent, textareaRef])
 
-  // Listen for craft:approve-plan events (used by PlanCard's Accept Plan button)
+  // Listen for craft:approve-plan events (used by ResponseCard's Accept Plan button)
   // This disables safe mode AND submits the message in one action
   // Only process events for this session (sessionId must match)
   React.useEffect(() => {
@@ -530,6 +530,7 @@ export function FreeFormInput({
     // Shift+Tab cycles through permission modes
     if (e.key === 'Tab' && e.shiftKey) {
       e.preventDefault()
+      e.stopPropagation()
       const currentIndex = PERMISSION_MODE_ORDER.indexOf(permissionMode)
       const nextIndex = (currentIndex + 1) % PERMISSION_MODE_ORDER.length
       const nextMode = PERMISSION_MODE_ORDER[nextIndex]

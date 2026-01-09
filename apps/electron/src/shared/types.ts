@@ -414,6 +414,11 @@ export type SessionEvent =
   | { type: 'shell_killed'; sessionId: string; shellId: string }
   // User message events (for optimistic UI with backend as source of truth)
   | { type: 'user_message'; sessionId: string; message: Message; status: 'accepted' | 'queued' | 'processing' }
+  // Session metadata events (for multi-window sync)
+  | { type: 'session_flagged'; sessionId: string }
+  | { type: 'session_unflagged'; sessionId: string }
+  | { type: 'todo_state_changed'; sessionId: string; todoState: TodoState }
+  | { type: 'session_deleted'; sessionId: string }
 
 // Options for sendMessage
 export interface SendMessageOptions {
@@ -482,6 +487,7 @@ export const IPC_CHANNELS = {
   OPEN_WORKSPACE: 'window:openWorkspace',
   SWITCH_WORKSPACE: 'window:switchWorkspace',
   CLOSE_WINDOW: 'window:close',
+  OPEN_TAB_CONTENT_WINDOW: 'window:openTabContent',
 
   // Agent management
   GET_AGENTS: 'agents:get',
@@ -634,6 +640,18 @@ export const IPC_CHANNELS = {
 
   // Logo URL resolution (uses Node.js filesystem cache)
   LOGO_GET_URL: 'logo:getUrl',
+
+  // Notifications
+  NOTIFICATION_SHOW: 'notification:show',
+  NOTIFICATION_NAVIGATE: 'notification:navigate',  // Broadcast: { workspaceId, sessionId }
+  NOTIFICATION_GET_ENABLED: 'notification:getEnabled',
+  NOTIFICATION_SET_ENABLED: 'notification:setEnabled',
+  BADGE_UPDATE: 'badge:update',
+  BADGE_CLEAR: 'badge:clear',
+  BADGE_SET_ICON: 'badge:setIcon',
+  BADGE_DRAW: 'badge:draw',  // Broadcast: { count: number, iconDataUrl: string }
+  WINDOW_FOCUS_STATE: 'window:focusState',  // Broadcast: boolean (isFocused)
+  WINDOW_GET_FOCUS_STATE: 'window:getFocusState',
 } as const
 
 /**
@@ -825,6 +843,7 @@ export interface ElectronAPI {
   openWorkspace(workspaceId: string): Promise<void>
   switchWorkspace(workspaceId: string): Promise<void>
   closeWindow(): Promise<void>
+  openTabContentWindow(params: TabContentWindowParams): Promise<void>
 
   // Agent management
   getAgents(workspaceId: string): Promise<SubAgentMetadata[]>
@@ -984,6 +1003,18 @@ export interface ElectronAPI {
 
   // Logo URL resolution (uses Node.js filesystem cache for provider domains)
   getLogoUrl(serviceUrl: string, provider?: string): Promise<string | null>
+
+  // Notifications
+  showNotification(title: string, body: string, workspaceId: string, sessionId: string): Promise<void>
+  getNotificationsEnabled(): Promise<boolean>
+  setNotificationsEnabled(enabled: boolean): Promise<void>
+  updateBadgeCount(count: number): Promise<void>
+  clearBadgeCount(): Promise<void>
+  setDockIconWithBadge(dataUrl: string): Promise<void>
+  onBadgeDraw(callback: (data: { count: number; iconDataUrl: string }) => void): () => void
+  getWindowFocusState(): Promise<boolean>
+  onWindowFocusChange(callback: (isFocused: boolean) => void): () => void
+  onNotificationNavigate(callback: (data: { workspaceId: string; sessionId: string }) => void): () => void
 }
 
 /**
@@ -1031,6 +1062,16 @@ export interface DeepLinkNavigation {
   actionParams?: Record<string, string>
   sidebar?: string
   sidebarParams?: Record<string, string>
+}
+
+/**
+ * Parameters for opening a tab content window
+ */
+export interface TabContentWindowParams {
+  workspaceId: string
+  tabType: string
+  /** Tab-specific parameters (sessionId, agentId, path, etc.) */
+  tabParams?: Record<string, string>
 }
 
 declare global {

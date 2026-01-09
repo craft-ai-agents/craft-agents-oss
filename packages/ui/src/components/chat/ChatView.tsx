@@ -17,7 +17,6 @@ import { CHAT_LAYOUT, CHAT_CLASSES } from '../../lib/layout'
 import { PlatformProvider, type PlatformActions } from '../../context'
 import { Markdown } from '../markdown'
 import { TurnCard } from './TurnCard'
-import { PlanCard } from './PlanCard'
 import { UserMessageBubble } from './UserMessageBubble'
 import {
   groupMessagesByTurn,
@@ -202,18 +201,6 @@ export function ChatView({
                     key={turn.message.id}
                     content={turn.message.content}
                     type={msgType}
-                  />
-                )
-              }
-
-              if (turn.type === 'plan') {
-                return (
-                  <PlanCard
-                    key={turn.message.id}
-                    content={turn.message.content}
-                    onOpenFile={platformActions.onOpenFile}
-                    onOpenUrl={platformActions.onOpenUrl}
-                    showAcceptPlan={mode !== 'readonly'}
                   />
                 )
               }

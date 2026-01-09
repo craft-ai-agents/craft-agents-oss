@@ -19,6 +19,9 @@ const CONFIG_DIR = join(homedir(), '.craft-agent');
 const DOCS_DIR = join(CONFIG_DIR, 'docs');
 const SOURCE_GUIDES_DIR = join(DOCS_DIR, 'source-guides');
 
+// Track if source guides have been initialized this session (prevents re-init on hot reload)
+let sourceGuidesInitialized = false;
+
 // ============================================================
 // Types
 // ============================================================
@@ -272,6 +275,12 @@ export function getSourceGuidesDir(): string {
  * Initialize source guides directory with bundled guides.
  */
 export function initializeSourceGuides(): void {
+  // Skip if already initialized this session (prevents re-init on hot reload)
+  if (sourceGuidesInitialized) {
+    return;
+  }
+  sourceGuidesInitialized = true;
+
   if (!existsSync(SOURCE_GUIDES_DIR)) {
     mkdirSync(SOURCE_GUIDES_DIR, { recursive: true });
   }

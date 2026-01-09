@@ -1,22 +1,20 @@
 /**
- * FullscreenOverlay - Unified fullscreen view with margin commenting
+ * FullscreenOverlay - Unified fullscreen view with inline commenting
  *
- * Uses Dropbox Paper-style margin comments: a button appears in the right
- * margin when text is selected, and comments are positioned alongside
- * their highlighted text.
+ * Features GitHub-style inline comments that appear below
+ * highlighted text within the document flow.
  */
 
 import * as React from 'react'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import ReactDOM from 'react-dom'
+import { motion, AnimatePresence } from 'motion/react'
 import { Check, Copy, ListTodo, Send, X } from 'lucide-react'
 import { cn } from '../../../lib/utils'
 import { useTextSelection } from './hooks/useTextSelection'
 import { useComments } from './hooks/useComments'
 import { HighlightedMarkdown, scrollToHighlight } from './HighlightedMarkdown'
-import { CommentMargin } from './CommentMargin'
-import { AddCommentPopover } from './AddCommentPopover'
-import { CommentPopover } from './CommentPopover'
+import { SelectionToolbar } from './SelectionToolbar'
 import type { Comment } from './hooks/useComments'
 
 export interface FullscreenOverlayProps {
@@ -36,8 +34,6 @@ export interface FullscreenOverlayProps {
   onSendFeedback?: (feedback: string) => void
 }
 
-const MARGIN_BREAKPOINT = 1024
-
 export function FullscreenOverlay({
   content,
   isOpen,
@@ -50,31 +46,18 @@ export function FullscreenOverlay({
   // Copy state
   const [copied, setCopied] = useState(false)
 
-  // Responsive state - show margin on larger screens
-  const [showMargin, setShowMargin] = useState(window.innerWidth > MARGIN_BREAKPOINT)
-
   // Comment management
   const { comments, addComment, removeComment, clearComments, formatForLLM, count } = useComments()
 
-  // Refs for positioning
+  // Comment input state
+  const [isAddingComment, setIsAddingComment] = useState(false)
+
+  // Refs
   const scrollRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
 
-  // Selection for adding comments
+  // Text selection
   const { selection, clearSelection } = useTextSelection({ containerRef: contentRef })
-
-  // Mobile comment popover state
-  const [activeComment, setActiveComment] = useState<Comment | null>(null)
-  const [activeHighlightElement, setActiveHighlightElement] = useState<HTMLElement | null>(null)
-
-  // Handle window resize for responsive margin
-  useEffect(() => {
-    const handleResize = () => {
-      setShowMargin(window.innerWidth > MARGIN_BREAKPOINT)
-    }
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
-  }, [])
 
   // Handle escape key
   useEffect(() => {
@@ -82,13 +65,13 @@ export function FullscreenOverlay({
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        // If there's an active selection, clear that first
-        if (selection) {
+        if (isAddingComment) {
+          setIsAddingComment(false)
           clearSelection()
           return
         }
-        if (activeComment) {
-          setActiveComment(null)
+        if (selection) {
+          clearSelection()
           return
         }
         onClose()
@@ -97,14 +80,14 @@ export function FullscreenOverlay({
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isOpen, selection, activeComment, clearSelection, onClose])
+  }, [isOpen, selection, isAddingComment, clearSelection, onClose])
 
   // Reset state when closing
   useEffect(() => {
     if (!isOpen) {
       clearComments()
       clearSelection()
-      setActiveComment(null)
+      setIsAddingComment(false)
     }
   }, [isOpen, clearComments, clearSelection])
 
@@ -119,28 +102,33 @@ export function FullscreenOverlay({
     }
   }, [content])
 
+  // Handle toolbar comment button
+  const handleToolbarComment = useCallback(() => {
+    setIsAddingComment(true)
+  }, [])
+
+  // Handle toolbar copy
+  const handleToolbarCopy = useCallback(() => {
+    // Handled in SelectionToolbar
+  }, [])
+
   // Handle adding a comment
   const handleAddComment = useCallback((commentText: string) => {
     if (selection) {
       addComment(selection, commentText)
       clearSelection()
+      setIsAddingComment(false)
     }
   }, [selection, addComment, clearSelection])
 
-  // Handle highlight click
-  const handleHighlightClick = useCallback((comment: Comment, element: HTMLElement) => {
-    if (showMargin) {
-      // Desktop: scroll to the comment in margin (it's already visible)
-      scrollToHighlight(comment.id, contentRef.current || undefined)
-    } else {
-      // Mobile: show popover
-      setActiveHighlightElement(element)
-      setActiveComment(comment)
-    }
-  }, [showMargin])
+  // Handle canceling comment input
+  const handleCancelComment = useCallback(() => {
+    setIsAddingComment(false)
+    clearSelection()
+  }, [clearSelection])
 
-  // Handle comment click in margin (scroll to highlight)
-  const handleMarginCommentClick = useCallback((comment: Comment) => {
+  // Handle highlight click (scroll to it)
+  const handleHighlightClick = useCallback((comment: Comment, element: HTMLElement) => {
     scrollToHighlight(comment.id, contentRef.current || undefined)
   }, [])
 
@@ -168,7 +156,7 @@ export function FullscreenOverlay({
             copied ? "text-success" : "text-muted-foreground/50 hover:text-foreground",
             "focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           )}
-          title={copied ? "Copied!" : "Copy"}
+          title={copied ? "Copied!" : "Copy all"}
         >
           {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
         </button>
@@ -193,9 +181,8 @@ export function FullscreenOverlay({
         ref={scrollRef}
         className="flex-1 min-h-0 bg-foreground-3 overflow-y-auto"
       >
-        {/* Content stays centered, margin is absolutely positioned */}
-        <div className="min-h-full flex justify-center pt-16 px-6 pb-12 relative">
-          {/* Content card - always centered */}
+        <div className="min-h-full flex justify-center pt-16 px-6 pb-24">
+          {/* Content card */}
           <div className="bg-background rounded-[16px] shadow-strong w-full max-w-[720px] h-fit">
             {/* Plan header (variant="plan" only) */}
             {variant === 'plan' && (
@@ -212,6 +199,10 @@ export function FullscreenOverlay({
                   content={content}
                   comments={comments}
                   activeSelection={selection}
+                  isAddingComment={isAddingComment}
+                  onAddComment={handleAddComment}
+                  onCancelComment={handleCancelComment}
+                  onDeleteComment={removeComment}
                   onHighlightClick={handleHighlightClick}
                   onUrlClick={onOpenUrl}
                   onFileClick={onOpenFile}
@@ -219,61 +210,43 @@ export function FullscreenOverlay({
               </div>
             </div>
           </div>
-
-          {/* Comment margin - positioned to the right of content */}
-          {showMargin && (
-            <CommentMargin
-              selection={selection}
-              comments={comments}
-              contentRef={contentRef}
-              scrollRef={scrollRef}
-              onAddComment={handleAddComment}
-              onDeleteComment={removeComment}
-              onClearSelection={clearSelection}
-              onCommentClick={handleMarginCommentClick}
-            />
-          )}
         </div>
       </div>
 
-      {/* Footer with send feedback button (when there are comments) */}
-      {count > 0 && onSendFeedback && (
-        <div className="shrink-0 bg-background border-t border-border/30 px-6 py-3 flex items-center justify-end [-webkit-app-region:no-drag]">
-          <button
+      {/* Selection toolbar - appears above selected text */}
+      {selection && !isAddingComment && (
+        <SelectionToolbar
+          selection={selection}
+          onComment={handleToolbarComment}
+          onCopy={handleToolbarCopy}
+        />
+      )}
+
+      {/* Floating feedback button */}
+      <AnimatePresence>
+        {count > 0 && onSendFeedback && (
+          <motion.button
+            initial={{ opacity: 0, scale: 0.9, y: 8 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: 8 }}
+            transition={{ duration: 0.15 }}
             onClick={handleSendFeedback}
             className={cn(
-              "flex items-center gap-2 px-4 py-2 rounded-[8px] text-sm font-medium transition-all",
-              "bg-accent text-accent-foreground hover:bg-accent/90",
-              "focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+              "fixed bottom-6 right-6 z-[60] flex items-center gap-2 px-4 py-2.5 rounded-full",
+              "bg-foreground text-background",
+              "shadow-middle hover:shadow-strong transition-shadow",
+              "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              "[-webkit-app-region:no-drag]"
             )}
           >
             <Send className="w-3.5 h-3.5" />
-            <span>Send Feedback ({count})</span>
-          </button>
-        </div>
-      )}
-
-      {/* Mobile: popover for adding comments (on selection) */}
-      {!showMargin && (
-        <AddCommentPopover
-          selection={selection}
-          onSubmit={handleAddComment}
-          onDismiss={clearSelection}
-        />
-      )}
-
-      {/* Mobile: popover for viewing comments (tap on highlight) */}
-      {!showMargin && (
-        <CommentPopover
-          comment={activeComment}
-          anchorElement={activeHighlightElement}
-          onDelete={removeComment}
-          onDismiss={() => {
-            setActiveComment(null)
-            setActiveHighlightElement(null)
-          }}
-        />
-      )}
+            <span className="text-sm font-medium">Send Feedback</span>
+            <span className="flex items-center justify-center w-5 h-5 rounded-full bg-background/20 text-xs font-medium">
+              {count}
+            </span>
+          </motion.button>
+        )}
+      </AnimatePresence>
     </div>,
     document.body
   )
