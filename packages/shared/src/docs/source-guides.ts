@@ -492,27 +492,32 @@ GitHub organizes code and collaboration around:
 
 ## Setup Hints
 
-### IMPORTANT - Check for GitHub CLI First
+### CRITICAL - Check for GitHub CLI First (MANDATORY)
 
-Before creating a GitHub source, **check if the GitHub CLI (\`gh\`) is installed** by running \`which gh\` or \`gh --version\`.
+**Before creating ANY GitHub source, you MUST:**
+
+1. **Check if \`gh\` CLI is installed** by running \`which gh\` or \`gh --version\`
+2. **If \`gh\` is installed**, you MUST ask the user before proceeding
 
 **If \`gh\` is installed and authenticated:**
-- The user likely already has full GitHub access through the built-in Bash tool
+- The user ALREADY has full GitHub access through the built-in Bash tool
 - \`gh\` commands work out of the box: \`gh issue list\`, \`gh pr view\`, \`gh repo clone\`, etc.
-- Creating a separate GitHub source may be **unnecessary**
+- Creating a separate GitHub source is REDUNDANT in most cases
 
-**Suggest using \`gh\` CLI instead:**
-> "I noticed you have the GitHub CLI installed. You can use \`gh\` commands directly without creating a separate source. For example:
+**You MUST ask the user explicitly (do NOT proceed without asking):**
+> "I noticed you have the GitHub CLI (\`gh\`) installed. You already have full GitHub access through \`gh\` commands:
 > - \`gh issue list\` - List issues
 > - \`gh pr list\` - List pull requests
 > - \`gh repo view\` - View repository info
 > - \`gh api /repos/{owner}/{repo}/issues\` - Direct API access
 >
-> Would you still like to create a GitHub source, or is the CLI sufficient for your needs?"
+> Do you still want me to create a separate GitHub MCP source? This would require a Personal Access Token and is usually only needed if you want structured MCP tools instead of CLI commands."
 
-**Only proceed with source creation if:**
+**ONLY proceed with source creation if:**
 1. \`gh\` is NOT installed, OR
-2. User explicitly wants a dedicated GitHub source despite having \`gh\`
+2. User EXPLICITLY says yes to creating the source after being asked
+
+**DO NOT create the source if the user doesn't respond or seems unsure - default to using \`gh\` CLI.**
 
 ### If Creating a GitHub Source
 
