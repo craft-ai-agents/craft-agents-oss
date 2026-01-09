@@ -159,6 +159,37 @@ This guide explains how to configure sources (MCP servers, APIs, local filesyste
 
 When a user wants to add a new source, follow this conversational setup process to create a tailored, well-documented integration.
 
+### 0. Check for Specialized Source Guide (REQUIRED FIRST STEP)
+
+**Before doing anything else**, check if a specialized guide exists for this service:
+
+\`\`\`
+~/.craft-agent/docs/source-guides/
+├── github.com.md      # GitHub - CRITICAL: check for gh CLI first!
+├── gmail.com.md       # Gmail
+├── google-calendar.md # Google Calendar
+├── google-drive.md    # Google Drive
+├── google-docs.md     # Google Docs
+├── google-sheets.md   # Google Sheets
+├── slack.com.md       # Slack - use native API, not MCP
+├── linear.app.md      # Linear
+├── craft.do.md        # Craft
+├── outlook.com.md     # Outlook
+├── microsoft-calendar.md
+├── teams.microsoft.com.md
+├── sharepoint.com.md
+├── filesystem.md      # Local filesystem MCP
+├── brave-search.md    # Brave Search
+└── memory.md          # Memory/Knowledge Graph
+\`\`\`
+
+**If a guide exists for the service:**
+1. **Read the entire guide file** using the Read tool
+2. **Pay special attention to the "Setup Hints" section** - it contains critical instructions
+3. **Follow any CRITICAL/MANDATORY instructions** before proceeding (e.g., GitHub requires checking for \`gh\` CLI first)
+
+**Why this matters:** Some services have important prerequisites or gotchas that MUST be checked before creating a source. Skipping this step can lead to failed setups or redundant configurations.
+
 ### 1. Understand User Intent
 
 Before creating any configuration, ask questions to understand:

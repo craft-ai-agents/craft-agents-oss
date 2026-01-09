@@ -176,6 +176,11 @@ export class WindowManager {
         windows.push(managed.window)
       }
     }
+    // Debug: log registered workspaces when lookup fails
+    if (windows.length === 0 && this.windows.size > 0) {
+      const registered = Array.from(this.windows.values()).map(m => m.workspaceId)
+      windowLog.warn(`No windows for workspace '${workspaceId}', have: [${registered.join(', ')}]`)
+    }
     return windows
   }
 
@@ -219,14 +224,31 @@ export class WindowManager {
    * Update the workspace ID for an existing window (for in-window switching)
    * @param webContentsId - The webContents.id of the window
    * @param workspaceId - The new workspace ID
+   * @returns true if window was found and updated, false otherwise
    */
-  updateWindowWorkspace(webContentsId: number, workspaceId: string): void {
+  updateWindowWorkspace(webContentsId: number, workspaceId: string): boolean {
     const managed = this.windows.get(webContentsId)
     if (managed) {
       const oldWorkspaceId = managed.workspaceId
       managed.workspaceId = workspaceId
       windowLog.info(`Updated window ${webContentsId} from workspace ${oldWorkspaceId} to ${workspaceId}`)
+      return true
     }
+    // Window not found - log for debugging
+    windowLog.warn(`Cannot update workspace for unknown window ${webContentsId}, registered: [${Array.from(this.windows.keys()).join(', ')}]`)
+    return false
+  }
+
+  /**
+   * Register an existing window with a workspace ID
+   * Used for re-registration when window mapping is lost (e.g., after refresh)
+   * @param window - The BrowserWindow to register
+   * @param workspaceId - The workspace ID to associate with
+   */
+  registerWindow(window: BrowserWindow, workspaceId: string): void {
+    const webContentsId = window.webContents.id
+    this.windows.set(webContentsId, { window, workspaceId, mode: 'main' })
+    windowLog.info(`Registered window ${webContentsId} for workspace ${workspaceId}`)
   }
 
   /**

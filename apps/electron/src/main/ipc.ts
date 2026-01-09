@@ -5,7 +5,7 @@ import { normalize, isAbsolute, join, basename, dirname, resolve } from 'path'
 import { homedir, tmpdir } from 'os'
 import { randomUUID } from 'crypto'
 import { SessionManager } from './sessions'
-import { ipcLog } from './logger'
+import { ipcLog, windowLog } from './logger'
 import { WindowManager } from './window-manager'
 import { UnifiedPreviewWindowManager } from './unified-preview-window'
 import { agentService } from './agent-service'
@@ -186,8 +186,19 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // Switch workspace in current window (in-window switching)
   ipcMain.handle(IPC_CHANNELS.SWITCH_WORKSPACE, async (event, workspaceId: string) => {
     const end = perf.start('ipc.switchWorkspace', { workspaceId })
+
     // Update the window's workspace mapping
-    windowManager.updateWindowWorkspace(event.sender.id, workspaceId)
+    const updated = windowManager.updateWindowWorkspace(event.sender.id, workspaceId)
+
+    // If update failed, the window may have been re-created (e.g., after refresh)
+    // Try to register it
+    if (!updated) {
+      const win = BrowserWindow.fromWebContents(event.sender)
+      if (win) {
+        windowManager.registerWindow(win, workspaceId)
+        windowLog.info(`Re-registered window ${event.sender.id} for workspace ${workspaceId}`)
+      }
+    }
 
     // Set up ConfigWatcher for the new workspace
     const workspace = getWorkspaceByNameOrId(workspaceId)

@@ -492,11 +492,40 @@ GitHub organizes code and collaboration around:
 
 ## Setup Hints
 
-### CRITICAL - Do NOT Search for MCP URLs
+### CRITICAL - Check for GitHub CLI First (MANDATORY)
+
+**Before creating ANY GitHub source, you MUST:**
+
+1. **Check if \`gh\` CLI is installed** by running \`which gh\` or \`gh --version\`
+2. **If \`gh\` is installed**, you MUST ask the user before proceeding
+
+**If \`gh\` is installed and authenticated:**
+- The user ALREADY has full GitHub access through the built-in Bash tool
+- \`gh\` commands work out of the box: \`gh issue list\`, \`gh pr view\`, \`gh repo clone\`, etc.
+- Creating a separate GitHub source is REDUNDANT in most cases
+
+**You MUST ask the user explicitly (do NOT proceed without asking):**
+> "I noticed you have the GitHub CLI (\`gh\`) installed. You already have full GitHub access through \`gh\` commands:
+> - \`gh issue list\` - List issues
+> - \`gh pr list\` - List pull requests
+> - \`gh repo view\` - View repository info
+> - \`gh api /repos/{owner}/{repo}/issues\` - Direct API access
+>
+> Do you still want me to create a separate GitHub MCP source? This would require a Personal Access Token and is usually only needed if you want structured MCP tools instead of CLI commands."
+
+**ONLY proceed with source creation if:**
+1. \`gh\` is NOT installed, OR
+2. User EXPLICITLY says yes to creating the source after being asked
+
+**DO NOT create the source if the user doesn't respond or seems unsure - default to using \`gh\` CLI.**
+
+### If Creating a GitHub Source
+
+#### CRITICAL - Do NOT Search for MCP URLs
 
 The MCP URL \`https://api.githubcopilot.com/mcp/\` is **CORRECT**. Do NOT use WebSearch or WebFetch to find alternative URLs. The URL works - the issue is authentication method only.
 
-### Authentication - OAuth Will Fail (Expected)
+#### Authentication - OAuth Will Fail (Expected)
 
 GitHub's MCP server requires OAuth with a **pre-registered client app**. Craft Agent is NOT registered with GitHub, so OAuth authentication WILL fail. This is expected behavior - do NOT troubleshoot or search for solutions.
 
@@ -532,6 +561,7 @@ GitHub's MCP server requires OAuth with a **pre-registered client app**. Craft A
 \`\`\`
 
 ### Recommended Questions
+- Do you have the GitHub CLI (\`gh\`) installed? (Check first!)
 - Which repositories do you work with most?
 - Do you need access to issues, PRs, or code?
 - Personal repos or organization repos?
@@ -1198,6 +1228,8 @@ providers:
 
 Access Slack workspaces, channels, and messages through the Slack Web API.
 
+**IMPORTANT:** Always use the native Slack API integration (type: "api", provider: "slack"). Do NOT use third-party Slack MCP servers - they require manual credential management and don't support OAuth.
+
 ## API Reference
 
 This source provides a single flexible \`api_slack\` tool that accepts:
@@ -1277,7 +1309,6 @@ Check \`Retry-After\` header when rate limited.
 **Required config.json:**
 \`\`\`json
 {
-  "id": "src_slack",
   "name": "Slack",
   "slug": "slack",
   "enabled": true,
@@ -1288,16 +1319,17 @@ Check \`Retry-After\` header when rate limited.
     "authType": "bearer",
     "testEndpoint": {
       "method": "POST",
-      "path": "api.test"
+      "path": "auth.test"
     }
   },
-  "iconUrl": "https://slack.com"
+  "iconUrl": "slack.com"
 }
 \`\`\`
 
-**IMPORTANT**: For testEndpoint, use \`api.test\` with method POST to verify the connection. And have a trailing slash in the baseUrl.
+**IMPORTANT**: Use \`auth.test\` (not \`api.test\`) as the testEndpoint - it validates the OAuth token. Use trailing slash on baseUrl and no leading slash on path.
+
 ### Authentication
-Use \`source_oauth_trigger\` with provider "slack" to start the Slack OAuth flow.
+Use \`source_slack_oauth_trigger\` to start the Slack OAuth flow. This is a native integration that handles token storage automatically.
 
 ### Required Scopes
 Common scopes needed:

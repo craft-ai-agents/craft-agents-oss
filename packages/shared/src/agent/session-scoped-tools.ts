@@ -536,7 +536,10 @@ async function testApiSource(
 
     // Use testEndpoint if configured (required for authenticated APIs, optional for public)
     if (source.api.testEndpoint) {
-      const testUrl = new URL(source.api.testEndpoint.path, source.api.baseUrl).toString();
+      // Ensure proper URL joining: baseUrl needs trailing slash, path should not have leading slash
+      const baseWithSlash = source.api.baseUrl.endsWith('/') ? source.api.baseUrl : `${source.api.baseUrl}/`;
+      const pathWithoutLeadingSlash = source.api.testEndpoint.path.replace(/^\//, '');
+      const testUrl = new URL(pathWithoutLeadingSlash, baseWithSlash).toString();
       const fetchOptions: RequestInit = {
         method: source.api.testEndpoint.method,
         headers,
@@ -1395,7 +1398,7 @@ After successful authentication, the tokens are stored and the source is marked 
 - full: Full workspace access (messaging, channels, users, files, reactions)
 
 **Prerequisites:**
-- The source must have provider 'slack'
+- The source must have type 'api' and provider 'slack'
 - Slack OAuth must be configured in the build
 
 **Returns:**
@@ -1429,6 +1432,21 @@ After successful authentication, the tokens are stored and the source is marked 
             content: [{
               type: 'text' as const,
               text: `Source '${args.sourceSlug}' is not configured as a Slack API source. ${hint}\n\nCurrent config: ${JSON.stringify(source, null, 2)}`,
+            }],
+            isError: true,
+          };
+        }
+
+        // Verify source type is 'api', not 'mcp' - OAuth only works with API sources
+        if (source.type !== 'api') {
+          let hint = '';
+          if (source.type === 'mcp') {
+            hint = `For Slack integration, use the native Slack API approach (type: "api", provider: "slack") instead of an MCP server. This enables proper OAuth authentication via source_slack_oauth_trigger.`;
+          }
+          return {
+            content: [{
+              type: 'text' as const,
+              text: `source_slack_oauth_trigger only works with API sources (type: "api"), not ${source.type} sources. ${hint}`,
             }],
             isError: true,
           };
