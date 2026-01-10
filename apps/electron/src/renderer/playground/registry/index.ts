@@ -7,7 +7,6 @@ import { inputComponents } from './input'
 import { slashCommandComponents } from './slash-command'
 import { markdownComponents } from './markdown'
 import { iconComponents } from './icons'
-import { settingsComponents } from './settings'
 
 export * from './types'
 
@@ -21,11 +20,10 @@ export const componentRegistry: ComponentEntry[] = [
   ...slashCommandComponents,
   ...markdownComponents,
   ...iconComponents,
-  ...settingsComponents,
 ]
 
 export function getCategories(): CategoryGroup[] {
-  const categoryOrder: Category[] = ['Onboarding', 'Chat', 'Turn Cards', 'Fullscreen', 'Chat Messages', 'Chat Inputs', 'Markdown', 'Icons', 'Settings']
+  const categoryOrder: Category[] = ['Onboarding', 'Chat', 'Turn Cards', 'Fullscreen', 'Chat Messages', 'Chat Inputs', 'Markdown', 'Icons']
   const categoryMap = new Map<Category, ComponentEntry[]>()
 
   for (const entry of componentRegistry) {

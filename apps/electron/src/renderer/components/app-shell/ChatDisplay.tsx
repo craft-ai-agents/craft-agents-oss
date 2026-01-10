@@ -69,6 +69,8 @@ interface ChatDisplayProps {
   /** Current permission mode */
   permissionMode?: PermissionMode
   onPermissionModeChange?: (mode: PermissionMode) => void
+  /** Enabled permission modes for Shift+Tab cycling */
+  enabledModes?: PermissionMode[]
   // Input value preservation (controlled from parent)
   /** Current input value - preserved across mode switches and conversation changes */
   inputValue?: string
@@ -262,6 +264,7 @@ export function ChatDisplay({
   onUltrathinkChange,
   permissionMode = 'ask',
   onPermissionModeChange,
+  enabledModes,
   // Input value preservation
   inputValue,
   onInputChange,
@@ -872,6 +875,7 @@ export function ChatDisplay({
                 onUltrathinkChange={onUltrathinkChange}
                 permissionMode={permissionMode}
                 onPermissionModeChange={onPermissionModeChange}
+                enabledModes={enabledModes}
                 structuredInput={structuredInput}
                 onStructuredResponse={handleStructuredResponse}
                 inputValue={inputValue}

@@ -155,6 +155,8 @@ interface ManagedSession {
   sharedUrl?: string
   // Shared session ID in viewer (for revoke)
   sharedId?: string
+  // Role/type of the last message (for badge display without loading messages)
+  lastMessageRole?: 'user' | 'assistant' | 'plan' | 'tool' | 'error'
   // Sources that need credentials (detected at session creation)
   sourcesNeedingAuth?: LoadedSource[]
   // Whether auto-setup context has been triggered (prevents multiple triggers)
@@ -170,6 +172,8 @@ interface ManagedSession {
   }>
   // Map of shellId -> command for killing background shells
   backgroundShellCommands: Map<string, string>
+  // Whether messages have been loaded from disk (for lazy loading)
+  messagesLoaded: boolean
 }
 
 // Convert runtime Message to StoredMessage for persistence
@@ -260,6 +264,8 @@ export class SessionManager {
   private configWatchers: Map<string, ConfigWatcher> = new Map()
   // Pending credential request resolvers (keyed by requestId)
   private pendingCredentialResolvers: Map<string, (response: import('../shared/types').CredentialResponse) => void> = new Map()
+  // Promise deduplication for lazy-loading messages (prevents race conditions)
+  private messageLoadingPromises: Map<string, Promise<void>> = new Map()
 
   setWindowManager(wm: WindowManager): void {
     this.windowManager = wm
@@ -705,7 +711,7 @@ export class SessionManager {
     this.loadSessionsFromDisk()
   }
 
-  // Load all existing sessions from disk into memory
+  // Load all existing sessions from disk into memory (metadata only - messages are lazy-loaded)
   private loadSessionsFromDisk(): void {
     try {
       const workspaces = getWorkspaces()
@@ -720,50 +726,44 @@ export class SessionManager {
         const wsDefaultWorkingDir = wsConfig?.defaults?.workingDirectory
 
         for (const meta of sessionMetadata) {
-          // Load full session data
-          const storedSession = loadStoredSession(workspaceRootPath, meta.id)
-          if (!storedSession) {
-            sessionLog.warn(`Skipping session ${meta.id}: could not load from disk`)
-            continue
-          }
-
-          // Convert stored messages to runtime messages
-          const messages = (storedSession.messages || []).map(storedToMessage)
-
-          // Create managed session (agent is lazy-loaded on first message)
+          // Create managed session from metadata only (messages lazy-loaded on demand)
+          // This dramatically reduces memory usage at startup - messages are loaded
+          // when getSession() is called for a specific session
           const managed: ManagedSession = {
-            id: storedSession.id,
+            id: meta.id,
             workspace,
             agent: null,  // Lazy-load agent when needed
-            messages,
+            messages: [],  // Lazy-load messages when needed
             isProcessing: false,
-            lastMessageAt: storedSession.lastUsedAt,
+            lastMessageAt: meta.lastUsedAt,
             streamingText: '',
             pendingTools: new Map(),
             parentToolStack: [],
             toolToParentMap: new Map(),
             pendingTextParent: undefined,
-            name: storedSession.name,
-            agentId: storedSession.agentSlug,
-            agentName: storedSession.agentName,
-            isFlagged: storedSession.isFlagged ?? false,
-            permissionMode: storedSession.permissionMode,
-            sdkSessionId: storedSession.sdkSessionId,
-            tokenUsage: storedSession.tokenUsage,
-            todoState: storedSession.todoState,
-            lastReadMessageId: storedSession.lastReadMessageId,
-            enabledSourceSlugs: storedSession.enabledSourceSlugs,
-            workingDirectory: storedSession.workingDirectory ?? wsDefaultWorkingDir,
+            name: meta.name,
+            agentId: meta.agentSlug,
+            agentName: meta.agentName,
+            isFlagged: meta.isFlagged ?? false,
+            permissionMode: meta.permissionMode,
+            sdkSessionId: meta.sdkSessionId,
+            tokenUsage: undefined,  // Loaded with messages
+            todoState: meta.todoState,
+            lastReadMessageId: undefined,  // Loaded with messages
+            enabledSourceSlugs: undefined,  // Loaded with messages
+            workingDirectory: meta.workingDirectory ?? wsDefaultWorkingDir,
+            lastMessageRole: meta.lastMessageRole,
             messageQueue: [],
             backgroundShellCommands: new Map(),
+            messagesLoaded: false,  // Mark as not loaded
           }
 
-          this.sessions.set(storedSession.id, managed)
+          this.sessions.set(meta.id, managed)
           totalSessions++
         }
       }
 
-      sessionLog.info(`Loaded ${totalSessions} sessions from disk`)
+      sessionLog.info(`Loaded ${totalSessions} sessions from disk (metadata only)`)
     } catch (error) {
       sessionLog.error('Failed to load sessions from disk:', error)
     }
@@ -843,6 +843,8 @@ Use oauth_trigger for OAuth sources, credential_prompt for API key/bearer token 
   }
 
   getSessions(): Session[] {
+    // Returns session metadata only - messages are NOT included to save memory
+    // Use getSession(id) to load messages for a specific session
     return Array.from(this.sessions.values())
       .map(m => ({
         id: m.id,
@@ -850,7 +852,7 @@ Use oauth_trigger for OAuth sources, credential_prompt for API key/bearer token 
         workspaceName: m.workspace.name,
         name: m.name,
         lastMessageAt: m.lastMessageAt,
-        messages: m.messages,
+        messages: [],  // Never send all messages - use getSession(id) for specific session
         isProcessing: m.isProcessing,
         agentId: m.agentId,
         agentName: m.agentName,
@@ -862,6 +864,7 @@ Use oauth_trigger for OAuth sources, credential_prompt for API key/bearer token 
         enabledSourceSlugs: m.enabledSourceSlugs,
         sharedUrl: m.sharedUrl,
         sharedId: m.sharedId,
+        lastMessageRole: m.lastMessageRole,
       }))
       .sort((a, b) => b.lastMessageAt - a.lastMessageAt)
   }
@@ -869,10 +872,15 @@ Use oauth_trigger for OAuth sources, credential_prompt for API key/bearer token 
   /**
    * Get a single session by ID with all messages loaded.
    * Used for lazy loading session messages when session is selected.
+   * Messages are loaded from disk on first access to reduce memory usage.
    */
-  getSession(sessionId: string): Session | null {
+  async getSession(sessionId: string): Promise<Session | null> {
     const m = this.sessions.get(sessionId)
     if (!m) return null
+
+    // Lazy-load messages from disk if not yet loaded
+    await this.ensureMessagesLoaded(m)
+
     return {
       id: m.id,
       workspaceId: m.workspace.id,
@@ -891,7 +899,50 @@ Use oauth_trigger for OAuth sources, credential_prompt for API key/bearer token 
       enabledSourceSlugs: m.enabledSourceSlugs,
       sharedUrl: m.sharedUrl,
       sharedId: m.sharedId,
+      lastMessageRole: m.lastMessageRole,
     }
+  }
+
+  /**
+   * Ensure messages are loaded for a managed session.
+   * Uses promise deduplication to prevent race conditions when multiple
+   * concurrent calls (e.g., rapid session switches + message send) try
+   * to load messages simultaneously.
+   */
+  private async ensureMessagesLoaded(managed: ManagedSession): Promise<void> {
+    if (managed.messagesLoaded) return
+
+    // Deduplicate concurrent loads - return existing promise if already loading
+    const existingPromise = this.messageLoadingPromises.get(managed.id)
+    if (existingPromise) {
+      return existingPromise
+    }
+
+    const loadPromise = this.loadMessagesFromDisk(managed)
+    this.messageLoadingPromises.set(managed.id, loadPromise)
+
+    try {
+      await loadPromise
+    } finally {
+      this.messageLoadingPromises.delete(managed.id)
+    }
+  }
+
+  /**
+   * Internal: Load messages from disk storage into the managed session.
+   */
+  private async loadMessagesFromDisk(managed: ManagedSession): Promise<void> {
+    const storedSession = loadStoredSession(managed.workspace.rootPath, managed.id)
+    if (storedSession) {
+      managed.messages = (storedSession.messages || []).map(storedToMessage)
+      managed.tokenUsage = storedSession.tokenUsage
+      managed.lastReadMessageId = storedSession.lastReadMessageId
+      managed.enabledSourceSlugs = storedSession.enabledSourceSlugs
+      managed.sharedUrl = storedSession.sharedUrl
+      managed.sharedId = storedSession.sharedId
+      sessionLog.debug(`Lazy-loaded ${managed.messages.length} messages for session ${managed.id}`)
+    }
+    managed.messagesLoaded = true
   }
 
   /**
@@ -959,6 +1010,7 @@ Use oauth_trigger for OAuth sources, credential_prompt for API key/bearer token 
       autoSetupTriggered: false,
       messageQueue: [],
       backgroundShellCommands: new Map(),
+      messagesLoaded: true,  // New sessions don't need to load messages from disk
     }
 
     this.sessions.set(storedSession.id, managed)
@@ -1075,6 +1127,9 @@ Use oauth_trigger for OAuth sources, credential_prompt for API key/bearer token 
 
           // Add to session messages
           managed.messages.push(planMessage)
+
+          // Update lastMessageRole for badge display
+          managed.lastMessageRole = 'plan'
 
           // Send event to renderer
           this.sendEvent({
@@ -1478,7 +1533,10 @@ Use oauth_trigger for OAuth sources, credential_prompt for API key/bearer token 
     // If processing is in progress, abort and wait for cleanup
     if (managed.isProcessing && managed.abortController) {
       managed.abortController.abort()
-      // Brief wait for abort to propagate and in-flight operations to settle
+      // TIMING NOTE: Brief wait for abort signal to propagate through async
+      // operations. AbortController.abort() is synchronous but in-flight
+      // promises may still be settling. 100ms is a generous buffer to prevent
+      // file corruption from overlapping writes during rapid delete operations.
       await new Promise(resolve => setTimeout(resolve, 100))
     }
 
@@ -1495,6 +1553,11 @@ Use oauth_trigger for OAuth sources, credential_prompt for API key/bearer token 
 
     // Clean up session-scoped tool callbacks to prevent memory accumulation
     unregisterSessionScopedToolCallbacks(sessionId)
+
+    // Dispose agent to clean up ConfigWatchers, event listeners, MCP connections
+    if (managed.agent) {
+      managed.agent.dispose()
+    }
 
     this.sessions.delete(sessionId)
 
@@ -1516,6 +1579,9 @@ Use oauth_trigger for OAuth sources, credential_prompt for API key/bearer token 
     if (!managed) {
       throw new Error(`Session ${sessionId} not found`)
     }
+
+    // Ensure messages are loaded before we try to add new ones
+    await this.ensureMessagesLoaded(managed)
 
     // If currently processing, queue the message and interrupt
     // The SDK will send a 'complete' event which triggers onProcessingStopped
@@ -1573,6 +1639,9 @@ Use oauth_trigger for OAuth sources, credential_prompt for API key/bearer token 
         attachments: storedAttachments, // Include for persistence (has thumbnailBase64)
       }
       managed.messages.push(userMessage)
+
+      // Update lastMessageRole for badge display
+      managed.lastMessageRole = 'user'
 
       // Emit user_message event so UI can confirm the optimistic message
       this.sendEvent({
@@ -2173,6 +2242,12 @@ To view this task's output:
         managed.messages.push(assistantMessage)
         managed.streamingText = ''
         managed.pendingTextParent = undefined // Clear for next text block
+
+        // Update lastMessageRole for badge display (only for final messages)
+        if (!event.isIntermediate) {
+          managed.lastMessageRole = 'assistant'
+        }
+
         this.sendEvent({ type: 'text_complete', sessionId, text: event.text, isIntermediate: event.isIntermediate, turnId: event.turnId, parentToolUseId: textParentToolUseId }, workspaceId)
 
         // Generate title asynchronously after first assistant response

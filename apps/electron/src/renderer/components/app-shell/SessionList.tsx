@@ -34,9 +34,10 @@ import { Input } from "@/components/ui/input"
 import { RenameDialog } from "@/components/ui/rename-dialog"
 import { useSession } from "@/hooks/useSession"
 import { useFocusZone, useRovingTabIndex } from "@/hooks/keyboard"
+import { useNavigation, routes } from "@/contexts/NavigationContext"
 import { useFocusContext } from "@/context/FocusContext"
 import { getSessionTitle } from "@/utils/session"
-import type { Session } from "../../../shared/types"
+import type { SessionMeta } from "@/atoms/sessions"
 import { PERMISSION_MODE_CONFIG, type PermissionMode } from "@craft-agent/shared/agent/modes"
 
 /**
@@ -53,8 +54,8 @@ function formatDateHeader(date: Date): string {
  * Group sessions by date (day boundary)
  * Returns array of { date, sessions } sorted by date descending
  */
-function groupSessionsByDate(sessions: Session[]): Array<{ date: Date; label: string; sessions: Session[] }> {
-  const groups = new Map<string, { date: Date; sessions: Session[] }>()
+function groupSessionsByDate(sessions: SessionMeta[]): Array<{ date: Date; label: string; sessions: SessionMeta[] }> {
+  const groups = new Map<string, { date: Date; sessions: SessionMeta[] }>()
 
   for (const session of sessions) {
     const timestamp = session.lastMessageAt || 0
@@ -80,68 +81,26 @@ function groupSessionsByDate(sessions: Session[]): Array<{ date: Date; label: st
  * Get the current todo state of a session
  * States are user-controlled, never automatic
  */
-function getSessionTodoState(session: Session): TodoStateId {
+function getSessionTodoState(session: SessionMeta): TodoStateId {
   // Read from session.todoState (user-controlled)
   // Falls back to 'todo' if not set
   return (session.todoState as TodoStateId) || 'todo'
 }
 
 /**
- * Get the last final assistant message ID from a session
- * A "final" message is one where:
- * - role === 'assistant' AND
- * - isIntermediate !== true (not commentary between tool calls)
- * Returns undefined if no final assistant message exists
- */
-function getLastFinalAssistantMessageId(session: Session): string | undefined {
-  // Iterate backwards to find the most recent final assistant message
-  for (let i = session.messages.length - 1; i >= 0; i--) {
-    const msg = session.messages[i]
-    if (msg.role === 'assistant' && !msg.isIntermediate) {
-      return msg.id
-    }
-  }
-  return undefined
-}
-
-/**
  * Check if a session has unread messages
- * A session is unread if:
- * - There's a final assistant message AND
- * - Its ID differs from lastReadMessageId
+ * Compares lastFinalMessageId with lastReadMessageId
  */
-function hasUnreadMessages(session: Session): boolean {
-  const lastFinalId = getLastFinalAssistantMessageId(session)
-  if (!lastFinalId) return false  // No final assistant message yet
-  return lastFinalId !== session.lastReadMessageId
+function hasUnreadMessages(session: SessionMeta): boolean {
+  if (!session.lastFinalMessageId) return false  // No final assistant message yet
+  return session.lastFinalMessageId !== session.lastReadMessageId
 }
 
 /**
- * Count the number of unread final assistant messages
- * Returns the count of final assistant messages after lastReadMessageId
+ * Check if session has any messages (uses lastFinalMessageId as proxy)
  */
-function countUnreadMessages(session: Session): number {
-  if (!session.lastReadMessageId) {
-    // Never read - count all final assistant messages
-    return session.messages.filter(msg => msg.role === 'assistant' && !msg.isIntermediate).length
-  }
-
-  // Find the index of the last read message
-  const lastReadIndex = session.messages.findIndex(msg => msg.id === session.lastReadMessageId)
-  if (lastReadIndex === -1) {
-    // Last read message not found - count all final assistant messages
-    return session.messages.filter(msg => msg.role === 'assistant' && !msg.isIntermediate).length
-  }
-
-  // Count final assistant messages after the last read index
-  let count = 0
-  for (let i = lastReadIndex + 1; i < session.messages.length; i++) {
-    const msg = session.messages[i]
-    if (msg.role === 'assistant' && !msg.isIntermediate) {
-      count++
-    }
-  }
-  return count
+function hasMessages(session: SessionMeta): boolean {
+  return session.lastFinalMessageId !== undefined
 }
 
 /**
@@ -171,7 +130,7 @@ function highlightMatch(text: string, query: string): React.ReactNode {
 }
 
 interface SessionItemProps {
-  item: Session
+  item: SessionMeta
   index: number
   itemProps: {
     id: string
@@ -185,7 +144,7 @@ interface SessionItemProps {
   isSelected: boolean
   isLast: boolean
   isFirstInGroup: boolean
-  onKeyDown: (e: React.KeyboardEvent, item: Session) => void
+  onKeyDown: (e: React.KeyboardEvent, item: SessionMeta) => void
   onRenameClick: (sessionId: string, currentName: string) => void
   onTodoStateChange: (sessionId: string, state: TodoStateId) => void
   onFlag?: (sessionId: string) => void
@@ -325,7 +284,7 @@ function SessionItem({
               )}
               {!item.isProcessing && hasUnreadMessages(item) && (
                 <span className="shrink-0 px-1.5 py-0.5 text-[10px] font-medium rounded bg-accent text-background">
-                  {countUnreadMessages(item)} new
+                  New
                 </span>
               )}
               {item.isFlagged && (
@@ -343,6 +302,11 @@ function SessionItem({
                   }}
                 >
                   {PERMISSION_MODE_CONFIG[permissionMode].shortName}
+                </span>
+              )}
+              {item.lastMessageRole === 'plan' && (
+                <span className="shrink-0 px-1.5 py-0.5 text-[10px] font-medium rounded bg-success/10 text-success">
+                  Plan
                 </span>
               )}
               {item.sharedUrl && (
@@ -523,7 +487,7 @@ function SessionItem({
                 </StyledDropdownMenuItem>
               )}
               {/* Mark as Unread - only show if session has been read */}
-              {!hasUnreadMessages(item) && item.messages.length > 0 && (
+              {!hasUnreadMessages(item) && hasMessages(item) && (
                 <StyledDropdownMenuItem onClick={() => onMarkUnread(item.id)}>
                   <MailOpen />
                   Mark as Unread
@@ -571,7 +535,7 @@ function DateHeader({ label }: { label: string }) {
 }
 
 interface SessionListProps {
-  items: Session[]
+  items: SessionMeta[]
   onDelete: (sessionId: string, skipConfirmation?: boolean) => Promise<boolean>
   onFlag?: (sessionId: string) => void
   onUnflag?: (sessionId: string) => void
@@ -581,9 +545,9 @@ interface SessionListProps {
   /** Called when Enter is pressed to focus chat input */
   onFocusChatInput?: () => void
   /** Called when a session is selected */
-  onSessionSelect?: (session: Session) => void
+  onSessionSelect?: (session: SessionMeta) => void
   /** Called when user wants to open a session in a new window */
-  onOpenInNewWindow?: (session: Session) => void
+  onOpenInNewWindow?: (session: SessionMeta) => void
   /** Called to navigate to a specific view (e.g., 'completed', 'inbox') */
   onNavigateToView?: (view: 'inbox' | 'completed' | 'flagged') => void
   /** Unified session options per session (real-time state) */
@@ -632,7 +596,8 @@ export function SessionList({
   onSearchClose,
   todoStates = [],
 }: SessionListProps) {
-  const [session, setSession] = useSession()
+  const [session] = useSession()
+  const { navigate } = useNavigation()
   const [renameDialogOpen, setRenameDialogOpen] = useState(false)
   const [renameSessionId, setRenameSessionId] = useState<string | null>(null)
   const [renameName, setRenameName] = useState("")
@@ -690,9 +655,9 @@ export function SessionList({
   const { zoneRef, isFocused } = useFocusZone({ zoneId: 'session-list' })
 
   // Handle session selection (immediate on arrow navigation)
-  const handleActiveChange = useCallback((item: Session) => {
-    setSession({ ...session, selected: item.id })
-  }, [session, setSession])
+  const handleActiveChange = useCallback((item: SessionMeta) => {
+    navigate(routes.tab.chat(item.id))
+  }, [navigate])
 
   // Handle Enter to focus chat input
   const handleEnter = useCallback(() => {
@@ -766,7 +731,7 @@ export function SessionList({
   }, [isFocused, focusActiveItem, flatItems.length, searchActive])
 
   // Arrow key shortcuts for zone navigation
-  const handleKeyDown = useCallback((e: React.KeyboardEvent, _item: Session) => {
+  const handleKeyDown = useCallback((e: React.KeyboardEvent, _item: SessionMeta) => {
     if (e.key === 'ArrowLeft') {
       e.preventDefault()
       focusZone('sidebar')
@@ -889,8 +854,8 @@ export function SessionList({
                     onMarkUnread={onMarkUnread}
                     onDelete={handleDeleteWithToast}
                     onSelect={() => {
-                      // Always update selection
-                      setSession({ ...session, selected: item.id })
+                      // Navigate to session (updates URL and selection)
+                      navigate(routes.tab.chat(item.id))
                       // Notify parent
                       onSessionSelect?.(item)
                     }}

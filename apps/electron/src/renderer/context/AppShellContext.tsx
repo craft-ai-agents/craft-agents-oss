@@ -28,7 +28,9 @@ import { sessionAtomFamily } from '../atoms/sessions'
 
 export interface AppShellContextType {
   // Data
-  sessions: Session[]
+  // NOTE: sessions is NOT included here - use sessionMetaMapAtom for listing
+  // and useSession(id) hook for individual sessions. This prevents closures
+  // from retaining the full messages array and causing memory leaks.
   workspaces: Workspace[]
   agents: SubAgentMetadata[]
   isLoadingAgents?: boolean
@@ -40,6 +42,8 @@ export interface AppShellContextType {
   getDraft: (sessionId: string) => string
   /** All enabled sources for this workspace - provided by AppShell component */
   enabledSources?: LoadedSource[]
+  /** Enabled permission modes for Shift+Tab cycling */
+  enabledModes?: PermissionMode[]
 
   // Unified session options (replaces ultrathinkSessions and sessionModes)
   /** All session-scoped options in one map. Use useSessionOptionsFor() hook for easy access. */
@@ -135,14 +139,8 @@ export function useSession(sessionId: string): Session | null {
   return useAtomValue(sessionAtomFamily(sessionId))
 }
 
-/**
- * Get a specific session by ID from sessions array (legacy)
- * @deprecated Use useSession() instead for better performance
- */
-export function useSessionLegacy(sessionId: string): Session | null {
-  const { sessions } = useAppShellContext()
-  return sessions.find((s) => s.id === sessionId) || null
-}
+// useSessionLegacy removed - was deprecated and caused memory leaks
+// Use useSession(sessionId) hook instead for isolated updates
 
 /**
  * Get the active workspace

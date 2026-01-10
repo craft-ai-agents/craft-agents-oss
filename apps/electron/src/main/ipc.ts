@@ -126,7 +126,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // Get a single session with messages (for lazy loading)
   ipcMain.handle(IPC_CHANNELS.GET_SESSION_MESSAGES, async (_event, sessionId: string) => {
     const end = perf.start('ipc.getSessionMessages')
-    const session = sessionManager.getSession(sessionId)
+    const session = await sessionManager.getSession(sessionId)
     end()
     return session
   })
@@ -1602,4 +1602,5 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     const { setEnabledPermissionModes } = await import('@craft-agent/shared/config/storage')
     setEnabledPermissionModes(modes as ('safe' | 'ask' | 'allow-all')[])
   })
+
 }

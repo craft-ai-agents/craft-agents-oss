@@ -1,5 +1,5 @@
 /**
- * SettingsTabPanel
+ * SettingsPage
  *
  * Settings page combining global and workspace settings.
  *
@@ -16,6 +16,7 @@
 
 import * as React from 'react'
 import { useState, useEffect, useCallback } from 'react'
+import { motion, AnimatePresence } from 'motion/react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -38,11 +39,10 @@ import {
 } from 'lucide-react'
 import { Spinner } from '@craft-agent/ui'
 import { RenameDialog } from '@/components/ui/rename-dialog'
-import type { Tab } from '../types'
-import type { AuthType, PermissionMode } from '../../../shared/types'
+import type { AuthType, PermissionMode } from '../../shared/types'
+import { PERMISSION_MODE_CONFIG } from '@craft-agent/shared/agent/mode-types'
 
-interface SettingsTabPanelProps {
-  tab: Tab
+interface SettingsPageProps {
   authType?: AuthType
   model?: string
   onAuthTypeChange?: (type: AuthType) => void
@@ -158,6 +158,51 @@ function RadioOption({ selected, onClick, label, description, disabled }: RadioO
         )}
       >
         {selected && <div className="w-[6px] h-[6px] rounded-full bg-background" />}
+      </div>
+    </button>
+  )
+}
+
+// ============================================
+// Checkbox Option - vertical list item with checkbox on right
+// ============================================
+
+interface CheckboxOptionProps {
+  checked: boolean
+  onChange: (checked: boolean) => void
+  label: string
+  description?: string
+  disabled?: boolean
+  shake?: boolean
+}
+
+function CheckboxOption({ checked, onChange, label, description, disabled, shake }: CheckboxOptionProps) {
+  return (
+    <button
+      type="button"
+      onClick={() => !disabled && onChange(!checked)}
+      disabled={disabled}
+      className={cn(
+        'w-full flex items-center justify-between py-1.5 text-left transition-colors rounded',
+        disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-foreground/[0.02]',
+        shake && 'animate-shake'
+      )}
+    >
+      <div className="flex-1 min-w-0">
+        <span className="text-sm">{label}</span>
+        {description && (
+          <span className="text-sm text-muted-foreground ml-1.5">{description}</span>
+        )}
+      </div>
+      <div
+        className={cn(
+          'w-[14px] h-[14px] rounded-sm border-[1.5px] grid place-items-center transition-colors shrink-0 ml-4',
+          checked ? 'border-foreground bg-foreground' : 'border-muted-foreground/30'
+        )}
+      >
+        {checked && (
+          <Check className="w-[10px] h-[10px] text-background" strokeWidth={3} />
+        )}
       </div>
     </button>
   )
@@ -686,13 +731,12 @@ interface WorkspaceSettings {
 // Main Component
 // ============================================
 
-export default function SettingsTabPanel({
-  tab: _tab,
+export default function SettingsPage({
   authType: propAuthType,
   model: propModel,
   onAuthTypeChange,
   onModelChange: propOnModelChange,
-}: SettingsTabPanelProps) {
+}: SettingsPageProps) {
   const { mode, setMode, font, setFont } = useTheme()
 
   // Get model, onModelChange, and active workspace from context
@@ -740,18 +784,24 @@ export default function SettingsTabPanel({
   // Notifications state
   const [notificationsEnabled, setNotificationsEnabled] = useState(true)
 
-  // Load current billing method and notifications setting on mount
+  // Mode cycling state
+  const [enabledModes, setEnabledModes] = useState<PermissionMode[]>(['safe', 'ask', 'allow-all'])
+  const [modeCyclingError, setModeCyclingError] = useState<string | null>(null)
+
+  // Load current billing method, notifications setting, and mode cycling on mount
   useEffect(() => {
     const loadSettings = async () => {
       if (!window.electronAPI) return
       try {
-        const [billing, notificationsOn] = await Promise.all([
+        const [billing, notificationsOn, modes] = await Promise.all([
           window.electronAPI.getBillingMethod(),
           window.electronAPI.getNotificationsEnabled(),
+          window.electronAPI.getEnabledPermissionModes(),
         ])
         setAuthType(billing.authType)
         setHasCredential(billing.hasCredential)
         setNotificationsEnabled(notificationsOn)
+        setEnabledModes(modes)
       } catch (error) {
         console.error('Failed to load settings:', error)
       } finally {
@@ -1063,6 +1113,37 @@ export default function SettingsTabPanel({
     await window.electronAPI.setNotificationsEnabled(enabled)
   }, [])
 
+  const handleModeToggle = useCallback(
+    async (mode: PermissionMode, checked: boolean) => {
+      if (!window.electronAPI) return
+
+      // Calculate what the new modes would be
+      const newModes = checked
+        ? [...enabledModes, mode]
+        : enabledModes.filter((m) => m !== mode)
+
+      // Validate: at least 2 modes required
+      if (newModes.length < 2) {
+        setModeCyclingError('At least 2 modes required')
+        // Auto-dismiss after 2 seconds
+        setTimeout(() => {
+          setModeCyclingError(null)
+        }, 2000)
+        return
+      }
+
+      // Update state and persist
+      setEnabledModes(newModes)
+      setModeCyclingError(null)
+      try {
+        await window.electronAPI.setEnabledPermissionModes(newModes)
+      } catch (error) {
+        console.error('Failed to save mode cycling settings:', error)
+      }
+    },
+    [enabledModes]
+  )
+
   const handleCredentialStrategyChange = useCallback(
     async (newStrategy: CredentialStrategy) => {
       if (newStrategy === credentialStrategy) return
@@ -1343,6 +1424,40 @@ export default function SettingsTabPanel({
                     description="· auto-approve all tool use"
                   />
                 </div>
+              </div>
+
+              {/* Mode Cycling */}
+              <div>
+                <SectionHeader>Mode Cycling</SectionHeader>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Select which modes to cycle through with ⇧TAB
+                </p>
+                {(['safe', 'ask', 'allow-all'] as const).map((mode) => {
+                  const config = PERMISSION_MODE_CONFIG[mode]
+                  const isEnabled = enabledModes.includes(mode)
+                  return (
+                    <ToggleRow
+                      key={mode}
+                      label={config.displayName}
+                      description={`· ${config.description.toLowerCase()}`}
+                      checked={isEnabled}
+                      onCheckedChange={(checked) => handleModeToggle(mode, checked)}
+                    />
+                  )
+                })}
+                <AnimatePresence>
+                  {modeCyclingError && (
+                    <motion.p
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
+                      className="text-xs text-destructive mt-1 overflow-hidden"
+                    >
+                      {modeCyclingError}
+                    </motion.p>
+                  )}
+                </AnimatePresence>
               </div>
 
               {/* Default Working Directory */}

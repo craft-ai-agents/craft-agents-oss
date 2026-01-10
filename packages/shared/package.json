@@ -13,6 +13,7 @@
     ".": "./src/index.ts",
     "./agent": "./src/agent/index.ts",
     "./agent/modes": "./src/agent/mode-types.ts",
+    "./agent/mode-types": "./src/agent/mode-types.ts",
     "./agents": "./src/agents/index.ts",
     "./agents/types": "./src/agents/types.ts",
     "./auth": "./src/auth/index.ts",

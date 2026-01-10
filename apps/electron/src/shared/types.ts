@@ -355,6 +355,8 @@ export interface Session {
   sharedUrl?: string
   // Shared session ID in viewer (for revoke)
   sharedId?: string
+  // Role/type of the last message (for badge display without loading messages)
+  lastMessageRole?: 'user' | 'assistant' | 'plan' | 'tool' | 'error'
   // Current status for ProcessingIndicator (e.g., compacting)
   currentStatus?: {
     message: string
@@ -551,7 +553,7 @@ export const IPC_CHANNELS = {
   MENU_KEYBOARD_SHORTCUTS: 'menu:keyboardShortcuts',
   MENU_OPEN_HELP: 'menu:openHelp',
 
-  // Deep link navigation (main → renderer)
+  // Deep link navigation (main → renderer, for external craftagents:// URLs)
   DEEP_LINK_NAVIGATE: 'deeplink:navigate',
 
   // Auth
@@ -911,7 +913,7 @@ export interface ElectronAPI {
   onMenuKeyboardShortcuts(callback: () => void): () => void
   onMenuOpenHelp(callback: () => void): () => void
 
-  // Deep link navigation listener
+  // Deep link navigation listener (for external craftagents:// URLs)
   onDeepLinkNavigate(callback: (nav: DeepLinkNavigation) => void): () => void
 
   // Auth

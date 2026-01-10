@@ -34,12 +34,34 @@ export interface SessionMeta {
   sharedUrl?: string
   /** Shared session ID in viewer (for revoke) */
   sharedId?: string
+  /** ID of the last final (non-intermediate) assistant message - for unread detection */
+  lastFinalMessageId?: string
+  /** Todo state for filtering */
+  todoState?: string
+  /** Role/type of the last message (for badge display without loading messages) */
+  lastMessageRole?: 'user' | 'assistant' | 'plan' | 'tool' | 'error'
+}
+
+/**
+ * Find the last final (non-intermediate) assistant message ID
+ */
+function findLastFinalMessageId(messages: Message[]): string | undefined {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i]
+    if (msg.role === 'assistant' && !msg.isIntermediate) {
+      return msg.id
+    }
+  }
+  return undefined
 }
 
 /**
  * Extract metadata from a full session object
  */
 export function extractSessionMeta(session: Session): SessionMeta {
+  const messages = session.messages || []
+  const lastFinalMessageId = findLastFinalMessageId(messages)
+
   return {
     id: session.id,
     name: session.name,
@@ -55,6 +77,9 @@ export function extractSessionMeta(session: Session): SessionMeta {
     enabledSourceSlugs: session.enabledSourceSlugs,
     sharedUrl: session.sharedUrl,
     sharedId: session.sharedId,
+    lastFinalMessageId,
+    todoState: session.todoState,
+    lastMessageRole: session.lastMessageRole,
   }
 }
 
@@ -77,6 +102,26 @@ export const sessionMetaMapAtom = atom<Map<string, SessionMeta>>(new Map())
  * Derived atom: ordered list of session IDs (for list ordering)
  */
 export const sessionIdsAtom = atom<string[]>([])
+
+/**
+ * Track which sessions have had their messages loaded (for lazy loading)
+ * Sessions are loaded with empty messages initially, messages are fetched on-demand
+ */
+export const loadedSessionsAtom = atom<Set<string>>(new Set<string>())
+
+/**
+ * Currently active session ID - the session displayed in the main content area
+ * This replaces the tab-based session selection
+ */
+export const activeSessionIdAtom = atom<string | null>(null)
+
+// NOTE: sessionsAtom REMOVED to fix memory leak
+// The sessions array with messages was being retained by Jotai's internal state.
+// Instead, we now use:
+// - sessionMetaMapAtom for listing (lightweight metadata, no messages)
+// - sessionAtomFamily(id) for individual session data
+// - initializeSessionsAtom for bulk initialization
+// - addSessionAtom, removeSessionAtom for individual operations
 
 /**
  * Action atom: update a single session
@@ -188,9 +233,10 @@ export const initializeSessionsAtom = atom(
       .map(s => s.id)
     set(sessionIdsAtom, ids)
 
-    // Mark all sessions as loaded (they come with full messages from main process)
-    // This prevents unnecessary IPC calls when switching to a session for the first time
-    set(loadedSessionsAtom, new Set(sessions.map(s => s.id)))
+    // NOTE: Do NOT mark sessions as loaded here
+    // Sessions from getSessions() have empty messages: [] to save memory
+    // Messages are lazy-loaded via ensureSessionMessagesLoadedAtom when session is opened
+    // This reduces initial memory usage from ~500MB to ~50MB for 300+ sessions
   }
 )
 
@@ -227,8 +273,10 @@ export const addSessionAtom = atom(
 export const removeSessionAtom = atom(
   null,
   (get, set, sessionId: string) => {
-    // Clear session atom
+    // Clear session atom value first
     set(sessionAtomFamily(sessionId), null)
+    // Remove atom from family cache to allow GC of the atom and its stored value
+    sessionAtomFamily.remove(sessionId)
 
     // Remove from metadata map
     const metaMap = get(sessionMetaMapAtom)
@@ -245,6 +293,12 @@ export const removeSessionAtom = atom(
     const newLoadedSessions = new Set(loadedSessions)
     newLoadedSessions.delete(sessionId)
     set(loadedSessionsAtom, newLoadedSessions)
+
+    // Clean up additional atom families to prevent memory leaks
+    // These store per-session UI state that should be garbage collected
+    expandedTurnsAtomFamily.remove(sessionId)
+    expandedActivityGroupsAtomFamily.remove(sessionId)
+    backgroundTasksAtomFamily.remove(sessionId)
   }
 )
 
@@ -314,11 +368,7 @@ export const syncSessionsToAtomsAtom = atom(
   }
 )
 
-/**
- * Track which sessions have had their messages loaded (for lazy loading)
- * Sessions are loaded with empty messages initially, messages are fetched on-demand
- */
-export const loadedSessionsAtom = atom<Set<string>>(new Set<string>())
+// loadedSessionsAtom moved up before sessionsAtom (needed for self-syncing)
 
 /**
  * Action atom: Load session messages if not already loaded

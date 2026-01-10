@@ -118,10 +118,17 @@ export function appendMessage(
   message: Message,
   updateTimestamp = false
 ): Session {
+  // Determine if this message role should update lastMessageRole (for badge display)
+  const badgeRoles = ['user', 'assistant', 'plan', 'tool', 'error'] as const
+  const roleForBadge = badgeRoles.includes(message.role as typeof badgeRoles[number])
+    ? message.role as Session['lastMessageRole']
+    : undefined
+
   return {
     ...session,
     messages: [...session.messages, message],
     ...(updateTimestamp ? { lastMessageAt: Date.now() } : {}),
+    ...(roleForBadge ? { lastMessageRole: roleForBadge } : {}),
   }
 }
 

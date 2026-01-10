@@ -1,9 +1,8 @@
 /**
- * AgentInfoTabPanel
+ * AgentInfoPage
  *
  * Displays agent details including capabilities, MCP servers, and APIs.
  * Shows activation banner if agent hasn't been set up yet.
- * Content extracted from AgentInfoDialog.
  */
 
 import * as React from 'react'
@@ -22,21 +21,18 @@ import {
 } from '@/components/ui/collapsible'
 import { SetupAuthBanner, type BannerState } from '@/components/app-shell/SetupAuthBanner'
 import { useAgentState } from '@/hooks/useAgentState'
-import { useTabs } from '../useTabs'
 import type {
   SubAgentDefinition,
   AgentAuthStatus,
-} from '../../../shared/types'
-import type { Tab, AgentInfoTab } from '../types'
+} from '../../shared/types'
 
-interface AgentInfoTabPanelProps {
-  tab: Tab
+interface AgentInfoPageProps {
+  agentId: string
+  agentName: string
+  workspaceId: string
 }
 
-export default function AgentInfoTabPanel({ tab }: AgentInfoTabPanelProps) {
-  const agentInfoTab = tab as AgentInfoTab
-  const { agentId, workspaceId } = agentInfoTab
-
+export default function AgentInfoPage({ agentId, agentName, workspaceId }: AgentInfoPageProps) {
   const [definition, setDefinition] = useState<SubAgentDefinition | null>(null)
   const [authStatus, setAuthStatus] = useState<AgentAuthStatus | null>(null)
   const [definitionLoading, setDefinitionLoading] = useState(false)
@@ -104,7 +100,7 @@ export default function AgentInfoTabPanel({ tab }: AgentInfoTabPanelProps) {
     <ScrollArea className="h-full">
       <div className="px-8 p-6  mx-auto">
         {/* Agent name as title */}
-        <h2 className="text-lg font-semibold mb-4">{agentInfoTab.label}</h2>
+        <h2 className="text-lg font-semibold mb-4">{agentName}</h2>
 
         {/* Show loading spinner only when we expect to get data (not for idle agents) */}
         {definitionLoading && !agentState.isIdle && (
@@ -124,7 +120,7 @@ export default function AgentInfoTabPanel({ tab }: AgentInfoTabPanelProps) {
         {!definition && (!definitionLoading || agentState.needsSetup) && bannerState.state !== 'hidden' && (
           <SetupAuthBanner
             state={bannerState.state}
-            agentName={agentInfoTab.label}
+            agentName={agentName}
             reason={bannerState.reason}
             onAction={handleBannerAction}
             variant="inputAreaCover"
@@ -372,7 +368,7 @@ export default function AgentInfoTabPanel({ tab }: AgentInfoTabPanelProps) {
           <div className="mt-6">
             <SetupAuthBanner
               state={bannerState.state}
-              agentName={agentInfoTab.label}
+              agentName={agentName}
               reason={bannerState.reason}
               onAction={handleBannerAction}
               variant="inputAreaCover"

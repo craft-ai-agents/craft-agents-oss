@@ -113,6 +113,7 @@ async function createInitialWindows(): Promise<void> {
       // Restore main window
       const win = windowManager.createWindow(saved.workspaceId)
       win.setBounds(saved.bounds)
+
       restoredCount++
     }
 

@@ -1,17 +1,11 @@
 /**
- * ShortcutsTabPanel
+ * ShortcutsPage
  *
  * Displays keyboard shortcuts reference.
- * Content extracted from KeyboardShortcutsDialog.
  */
 
 import * as React from 'react'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import type { Tab } from '../types'
-
-interface ShortcutsTabPanelProps {
-  tab: Tab
-}
 
 interface ShortcutItem {
   keys: string[]
@@ -88,7 +82,7 @@ function Kbd({ children, className }: { children: React.ReactNode; className?: s
   )
 }
 
-export default function ShortcutsTabPanel({ tab }: ShortcutsTabPanelProps) {
+export default function ShortcutsPage() {
   return (
     <ScrollArea className="h-full">
       <div className="px-5 py-4">

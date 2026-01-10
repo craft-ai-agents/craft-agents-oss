@@ -404,6 +404,7 @@ export function handleUserMessage(
         ...session,
         messages: updatedMessages,
         lastMessageAt: Date.now(),
+        lastMessageRole: 'user',  // Clear plan badge when user responds
         // Set isProcessing when message is accepted/processing (enables multi-window sync)
         isProcessing: status === 'accepted' || status === 'processing',
       },

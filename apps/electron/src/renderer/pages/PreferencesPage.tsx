@@ -1,12 +1,11 @@
 /**
- * PreferencesTabPanel
+ * PreferencesPage
  *
  * Form-based editor for stored user preferences (~/.craft-agent/preferences.json).
  * Features:
  * - Fixed input fields for known preferences (name, timezone, location, language)
  * - Free-form textarea for notes
  * - Parses JSON on load, serializes back on save
- * - Dirty state tracking (dot indicator in tab)
  * - Save/Revert buttons
  */
 
@@ -17,13 +16,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Spinner } from '@craft-agent/ui'
-import { useTabs } from '../useTabs'
 import { Save, RotateCcw, Check } from 'lucide-react'
-import type { Tab } from '../types'
-
-interface PreferencesTabPanelProps {
-  tab: Tab
-}
 
 interface PreferencesFormState {
   name: string
@@ -115,8 +108,7 @@ function FormField({
   )
 }
 
-export default function PreferencesTabPanel({ tab }: PreferencesTabPanelProps) {
-  const { updateTab } = useTabs()
+export default function PreferencesPage() {
   const [formState, setFormState] = useState<PreferencesFormState>(emptyFormState)
   const [originalState, setOriginalState] = useState<PreferencesFormState>(emptyFormState)
   const [isLoading, setIsLoading] = useState(true)
@@ -125,11 +117,6 @@ export default function PreferencesTabPanel({ tab }: PreferencesTabPanelProps) {
 
   // Deep compare for dirty state
   const isDirty = JSON.stringify(formState) !== JSON.stringify(originalState)
-
-  // Update tab dirty state
-  useEffect(() => {
-    updateTab(tab.id, { dirty: isDirty })
-  }, [isDirty, tab.id, updateTab])
 
   // Load stored user preferences on mount
   useEffect(() => {

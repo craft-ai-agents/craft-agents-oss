@@ -2,7 +2,7 @@
  * NavigationContext
  *
  * Provides a global `navigate()` function that decouples components from
- * direct tab/action imports. All navigation goes through typed routes.
+ * direct session/action imports. All navigation goes through typed routes.
  *
  * Usage:
  *   import { useNavigation } from '@/contexts/NavigationContext'
@@ -19,9 +19,10 @@ import {
   useCallback,
   useEffect,
   useRef,
+  useState,
   type ReactNode,
 } from 'react'
-import { useTabs } from '@/tabs'
+import { useSession } from '@/hooks/useSession'
 import { parseRoute, type ParsedRoute } from '../../shared/route-parser'
 import { routes, type Route } from '../../shared/routes'
 import { NAVIGATE_EVENT } from '../lib/navigate'
@@ -31,11 +32,38 @@ import type { DeepLinkNavigation, Session } from '../../shared/types'
 export { routes }
 export type { Route }
 
+/**
+ * Represents the current view in the main content panel.
+ * - 'chat': Display the selected session's chat
+ * - 'settings': Display the settings page
+ * - 'preferences': Display the preferences page
+ * - 'shortcuts': Display the keyboard shortcuts page
+ * - 'source-info': Display source info (with sourceSlug, agentSlug)
+ * - 'agent-info': Display agent info (with agentId)
+ */
+export type ActiveView =
+  | { type: 'chat' }
+  | { type: 'settings' }
+  | { type: 'preferences' }
+  | { type: 'shortcuts' }
+  | { type: 'source-info'; sourceSlug: string; agentSlug?: string }
+  | { type: 'agent-info'; agentId: string; agentName: string }
+
 interface NavigationContextValue {
   /** Navigate to a route */
   navigate: (route: Route) => void | Promise<void>
   /** Check if navigation is ready */
   isReady: boolean
+  /** Current active view in main content panel */
+  activeView: ActiveView
+  /** Whether we can go back in history */
+  canGoBack: boolean
+  /** Whether we can go forward in history */
+  canGoForward: boolean
+  /** Go back in history */
+  goBack: () => void
+  /** Go forward in history */
+  goForward: () => void
 }
 
 const NavigationContext = createContext<NavigationContextValue | null>(null)
@@ -55,6 +83,8 @@ interface NavigationProviderProps {
   ) => void
   /** Whether the app is ready to navigate */
   isReady?: boolean
+  /** List of agents (for agent name lookup) */
+  agents?: Array<{ id: string; name: string }>
 }
 
 export function NavigationProvider({
@@ -64,68 +94,89 @@ export function NavigationProvider({
   onInputChange,
   onSidebarNavigate,
   isReady = true,
+  agents = [],
 }: NavigationProviderProps) {
-  const {
-    openChatTab,
-    openSettingsTab,
-    openShortcutsTab,
-    openPreferencesTab,
-    openAgentInfoTab,
-    openSourceInfoTab,
-    openFileTab,
-    openBrowserTab,
-  } = useTabs()
+  const [, setSession] = useSession()
+
+  // Active view state - defaults to chat view
+  const [activeView, setActiveView] = useState<ActiveView>({ type: 'chat' })
+
+  // Track history state for back/forward buttons
+  const [canGoBack, setCanGoBack] = useState(false)
+  const [canGoForward, setCanGoForward] = useState(false)
+
+  // Custom history stack (browser history doesn't work reliably in Electron)
+  const historyStackRef = useRef<Route[]>([])
+  const historyIndexRef = useRef(-1)
+
+  // Flag to prevent pushing to history when navigating via back/forward
+  const isNavigatingHistoryRef = useRef(false)
+
+  // Ref to hold the latest navigate function (avoids stale closure in goBack/goForward)
+  const navigateRef = useRef<((route: Route) => void | Promise<void>) | null>(null)
 
   // Queue navigation if not ready yet
   const pendingNavigationRef = useRef<ParsedRoute | null>(null)
 
-  // Handle tab navigation
+  // Handle tab navigation - sets activeView for main content panel
   const handleTabNavigation = useCallback(
     (parsed: ParsedRoute) => {
       if (!workspaceId) return
 
       switch (parsed.name) {
         case 'settings':
-          openSettingsTab()
+          setActiveView({ type: 'settings' })
           break
 
         case 'shortcuts':
-          openShortcutsTab()
+          setActiveView({ type: 'shortcuts' })
           break
 
         case 'preferences':
-          openPreferencesTab()
+          setActiveView({ type: 'preferences' })
           break
 
         case 'chat':
           if (parsed.id) {
-            openChatTab(parsed.id, workspaceId, 'Chat')
+            // Select the session and switch to chat view
+            setSession({ selected: parsed.id })
+            setActiveView({ type: 'chat' })
           }
           break
 
         case 'agent-info':
           if (parsed.id) {
-            openAgentInfoTab(parsed.id, workspaceId, 'Agent')
+            // Find agent name from agents list
+            const agent = agents.find(a => a.id === parsed.id)
+            setActiveView({
+              type: 'agent-info',
+              agentId: parsed.id,
+              agentName: agent?.name || parsed.id,
+            })
           }
           break
 
         case 'source-info':
           if (parsed.id) {
-            const agentSlug = parsed.params.agentSlug
-            // Source name will be loaded by the tab panel - pass placeholder
-            openSourceInfoTab(parsed.id, workspaceId, 'Source', agentSlug)
+            setActiveView({
+              type: 'source-info',
+              sourceSlug: parsed.id,
+              agentSlug: parsed.params.agentSlug,
+            })
           }
           break
 
         case 'file':
+          // Open file in system viewer
           if (parsed.params.path) {
-            openFileTab(parsed.params.path)
+            window.electronAPI.openFile(parsed.params.path)
           }
           break
 
         case 'browser':
+          // Open URL in system browser
           if (parsed.params.url) {
-            openBrowserTab(parsed.params.url)
+            window.electronAPI.openUrl(parsed.params.url)
           }
           break
 
@@ -133,17 +184,7 @@ export function NavigationProvider({
           console.warn('[Navigation] Unknown tab:', parsed.name)
       }
     },
-    [
-      workspaceId,
-      openChatTab,
-      openSettingsTab,
-      openShortcutsTab,
-      openPreferencesTab,
-      openAgentInfoTab,
-      openSourceInfoTab,
-      openFileTab,
-      openBrowserTab,
-    ]
+    [workspaceId, setSession, agents]
   )
 
   // Handle action navigation
@@ -163,13 +204,9 @@ export function NavigationProvider({
             await window.electronAPI.sessionCommand(session.id, { type: 'rename', name: parsed.params.name })
           }
 
-          openChatTab(
-            session.id,
-            workspaceId,
-            parsed.params.name || session.name || 'New Chat',
-            parsed.params.agentId,
-            { forceNew: true }
-          )
+          // Select the new session and switch to chat view
+          setSession({ selected: session.id })
+          setActiveView({ type: 'chat' })
 
           // Pre-fill input if provided
           if (parsed.params.input && onInputChange) {
@@ -204,18 +241,11 @@ export function NavigationProvider({
           }
           break
 
-        // Note: archive/unarchive could be added when API is available
-        // case 'archive-session':
-        // case 'unarchive-session':
-
         case 'oauth':
           if (parsed.id) {
             await window.electronAPI.startSourceOAuth(workspaceId, parsed.id)
           }
           break
-
-        // Note: test-source could be added when API is available
-        // case 'test-source':
 
         case 'delete-source':
           if (parsed.id) {
@@ -254,7 +284,7 @@ export function NavigationProvider({
           console.warn('[Navigation] Unknown action:', parsed.name)
       }
     },
-    [workspaceId, onCreateSession, onInputChange, openChatTab]
+    [workspaceId, onCreateSession, onInputChange, setSession]
   )
 
   // Handle sidebar navigation
@@ -330,9 +360,92 @@ export function NavigationProvider({
           handleSidebarNavigation(parsed)
           break
       }
+
+      // Persist route in URL for reload restoration (skip actions - they're one-time operations)
+      if (parsed.type !== 'action') {
+        const url = new URL(window.location.href)
+        url.searchParams.set('route', route)
+        history.replaceState({ route }, '', url.toString())
+
+        // Update our custom history stack (unless we're navigating via back/forward)
+        if (isNavigatingHistoryRef.current) {
+          isNavigatingHistoryRef.current = false
+          console.log('[Navigation] Skipping history push (navigating via back/forward)')
+        } else {
+          // Only push if route is different from current route (avoid duplicates)
+          const currentRoute = historyStackRef.current[historyIndexRef.current]
+          if (route !== currentRoute) {
+            // When navigating to a new route, truncate forward history and push
+            const newIndex = historyIndexRef.current + 1
+            historyStackRef.current = historyStackRef.current.slice(0, newIndex)
+            historyStackRef.current.push(route)
+            historyIndexRef.current = newIndex
+            console.log('[Navigation] Pushed to history:', route, 'index:', newIndex, 'stack length:', historyStackRef.current.length)
+          } else {
+            console.log('[Navigation] Skipping duplicate route:', route)
+          }
+        }
+
+        // Update back/forward availability
+        const newCanGoBack = historyIndexRef.current > 0
+        const newCanGoForward = historyIndexRef.current < historyStackRef.current.length - 1
+        console.log('[Navigation] Updating canGoBack:', newCanGoBack, 'canGoForward:', newCanGoForward)
+        setCanGoBack(newCanGoBack)
+        setCanGoForward(newCanGoForward)
+      }
     },
     [isReady, handleTabNavigation, handleActionNavigation, handleSidebarNavigation]
   )
+
+  // Keep navigateRef in sync with latest navigate function
+  useEffect(() => {
+    navigateRef.current = navigate
+  }, [navigate])
+
+  // Go back in history (using our custom stack)
+  const goBack = useCallback(() => {
+    const newIndex = historyIndexRef.current - 1
+    console.log('[Navigation] goBack called, current index:', historyIndexRef.current, 'new index:', newIndex)
+
+    if (newIndex >= 0 && historyStackRef.current[newIndex]) {
+      historyIndexRef.current = newIndex
+      isNavigatingHistoryRef.current = true
+      const route = historyStackRef.current[newIndex]
+      console.log('[Navigation] Going back to:', route)
+      navigateRef.current?.(route)
+    }
+  }, [])
+
+  // Go forward in history (using our custom stack)
+  const goForward = useCallback(() => {
+    const newIndex = historyIndexRef.current + 1
+    console.log('[Navigation] goForward called, current index:', historyIndexRef.current, 'new index:', newIndex)
+
+    if (newIndex < historyStackRef.current.length && historyStackRef.current[newIndex]) {
+      historyIndexRef.current = newIndex
+      isNavigatingHistoryRef.current = true
+      const route = historyStackRef.current[newIndex]
+      console.log('[Navigation] Going forward to:', route)
+      navigateRef.current?.(route)
+    }
+  }, [])
+
+  // Track whether initial route restoration has been attempted
+  const initialRouteRestoredRef = useRef(false)
+
+  // Initialize history stack on first load
+  useEffect(() => {
+    if (!isReady || !workspaceId) return
+
+    // Only initialize once
+    if (historyStackRef.current.length === 0) {
+      const params = new URLSearchParams(window.location.search)
+      const initialRoute = (params.get('route') || 'tab/chat') as Route
+      historyStackRef.current = [initialRoute]
+      historyIndexRef.current = 0
+      console.log('[Navigation] Initialized history stack with:', initialRoute)
+    }
+  }, [isReady, workspaceId])
 
   // Process pending navigation when ready
   useEffect(() => {
@@ -353,6 +466,19 @@ export function NavigationProvider({
       }
     }
   }, [isReady, handleTabNavigation, handleActionNavigation, handleSidebarNavigation])
+
+  // Restore route from URL on startup (for CMD+R reload)
+  useEffect(() => {
+    if (!isReady || !workspaceId || initialRouteRestoredRef.current) return
+    initialRouteRestoredRef.current = true
+
+    const params = new URLSearchParams(window.location.search)
+    const initialRoute = params.get('route')
+    if (initialRoute) {
+      console.log('[Navigation] Restoring route from URL:', initialRoute)
+      navigate(initialRoute as Route)
+    }
+  }, [isReady, workspaceId, navigate])
 
   // Listen for deep link navigation events from main process
   useEffect(() => {
@@ -420,7 +546,7 @@ export function NavigationProvider({
   }, [navigate])
 
   return (
-    <NavigationContext.Provider value={{ navigate, isReady }}>
+    <NavigationContext.Provider value={{ navigate, isReady, activeView, canGoBack, canGoForward, goBack, goForward }}>
       {children}
     </NavigationContext.Provider>
   )
@@ -435,4 +561,12 @@ export function useNavigation() {
     throw new Error('useNavigation must be used within NavigationProvider')
   }
   return context
+}
+
+/**
+ * Hook to access just the active view state
+ */
+export function useActiveView(): ActiveView {
+  const { activeView } = useNavigation()
+  return activeView
 }

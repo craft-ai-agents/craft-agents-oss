@@ -59,6 +59,8 @@ export interface FreeFormInputProps {
   onUltrathinkChange?: (enabled: boolean) => void
   permissionMode?: PermissionMode
   onPermissionModeChange?: (mode: PermissionMode) => void
+  /** Enabled permission modes for Shift+Tab cycling (min 2 modes) */
+  enabledModes?: PermissionMode[]
   // Controlled input value (for persisting across mode switches and conversation changes)
   /** Current input value - if provided, component becomes controlled */
   inputValue?: string
@@ -108,6 +110,7 @@ export function FreeFormInput({
   onUltrathinkChange,
   permissionMode = 'ask',
   onPermissionModeChange,
+  enabledModes = ['safe', 'ask', 'allow-all'],
   inputValue,
   onInputChange,
   unstyled = false,
@@ -527,13 +530,16 @@ export function FreeFormInput({
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    // Shift+Tab cycles through permission modes
+    // Shift+Tab cycles through enabled permission modes
     if (e.key === 'Tab' && e.shiftKey) {
       e.preventDefault()
       e.stopPropagation()
-      const currentIndex = PERMISSION_MODE_ORDER.indexOf(permissionMode)
-      const nextIndex = (currentIndex + 1) % PERMISSION_MODE_ORDER.length
-      const nextMode = PERMISSION_MODE_ORDER[nextIndex]
+      // Use enabled modes or fallback to all modes
+      const modes = enabledModes.length >= 2 ? enabledModes : PERMISSION_MODE_ORDER
+      const currentIndex = modes.indexOf(permissionMode)
+      // If current mode not in enabled list, jump to first enabled mode
+      const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % modes.length
+      const nextMode = modes[nextIndex]
       onPermissionModeChange?.(nextMode)
       return
     }

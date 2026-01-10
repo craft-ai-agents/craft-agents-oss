@@ -137,7 +137,7 @@ const api: ElectronAPI = {
     return () => ipcRenderer.removeListener(IPC_CHANNELS.MENU_OPEN_HELP, handler)
   },
 
-  // Deep link navigation listener
+  // Deep link navigation listener (for external craftagents:// URLs)
   onDeepLinkNavigate: (callback: (nav: import('../shared/types').DeepLinkNavigation) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, nav: import('../shared/types').DeepLinkNavigation) => {
       callback(nav)

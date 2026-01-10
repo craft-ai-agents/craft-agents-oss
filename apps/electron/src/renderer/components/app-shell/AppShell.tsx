@@ -1,5 +1,6 @@
 import * as React from "react"
-import { useRef, useState, useEffect, useCallback } from "react"
+import { useRef, useState, useEffect, useCallback, useMemo } from "react"
+import { useAtomValue } from "jotai"
 import { motion, AnimatePresence } from "motion/react"
 import {
   CheckCircle2,
@@ -34,7 +35,6 @@ import { Spinner } from "@craft-agent/ui"
 import { AvatarGroup } from "@/components/ui/avatar-group"
 import { SourceAvatar } from "@/components/ui/source-avatar"
 import { AppMenu } from "../AppMenu"
-import { PanelLeftRounded } from "../icons/PanelLeftRounded"
 import { SquarePenRounded } from "../icons/SquarePenRounded"
 import { cn, isHexColor } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -57,24 +57,28 @@ import {
 } from "@/components/ui/collapsible"
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher"
 import { SessionList } from "./SessionList"
+import { MainContentPanel } from "./MainContentPanel"
 import { LeftSidebar } from "./LeftSidebar"
 import { AgentContextMenu, type AgentAction } from "./AgentContextMenu"
 import { SetupAuthBanner, type BannerState } from "./SetupAuthBanner"
 import { useSession } from "@/hooks/useSession"
 import { useAgentState } from "@/hooks/useAgentState"
-import { TabContainer, useTabs, type ChatTab } from "@/tabs"
+import { ensureSessionMessagesLoadedAtom } from "@/atoms/sessions"
 import { AppShellProvider, type AppShellContextType } from "@/context/AppShellContext"
 import { useTheme } from "@/context/ThemeContext"
 import { getResizeGradientStyle } from "@/hooks/useResizeGradient"
 import { useFocusZone, useGlobalShortcuts } from "@/hooks/keyboard"
 import { useFocusContext } from "@/context/FocusContext"
 import { getSessionTitle } from "@/utils/session"
-import { closeTabWithCleanup } from "@/utils/closeTabWithCleanup"
-import type { Session, Workspace, SubAgentMetadata, FileAttachment, PermissionRequest, TodoState, LoadedSource } from "../../../shared/types"
+import { useSetAtom } from "jotai"
+import type { Session, Workspace, SubAgentMetadata, FileAttachment, PermissionRequest, TodoState, LoadedSource, PermissionMode } from "../../../shared/types"
+import { sessionMetaMapAtom, type SessionMeta } from "@/atoms/sessions"
 import { type TodoStateId, getStateColor, statusConfigsToTodoStates } from "@/config/todo-states"
 import { useStatuses } from "@/hooks/useStatuses"
 import * as storage from "@/lib/local-storage"
 import { toast } from "sonner"
+import { navigate, routes } from "@/lib/navigate"
+import { useNavigation } from "@/contexts/NavigationContext"
 import {
   type SidebarMode,
   type ChatFilter,
@@ -535,9 +539,10 @@ export function AppShell({
   isFocusedMode = false,
 }: AppShellProps) {
   // Destructure commonly used values from context
+  // Note: sessions is NOT destructured here - we use sessionMetaMapAtom instead
+  // to prevent closures from retaining the full messages array
   const {
     workspaces,
-    sessions,
     agents,
     isLoadingAgents = false,
     activeWorkspaceId,
@@ -578,6 +583,7 @@ export function AppShell({
   const sessionListHandleRef = React.useRef<HTMLDivElement>(null)
   const [session, setSession] = useSession()
   const { resolvedMode } = useTheme()
+  const { canGoBack, canGoForward, goBack, goForward } = useNavigation()
 
   // Sidebar mode - persisted to localStorage
   const [sidebarMode, setSidebarMode] = React.useState<SidebarMode>(() => {
@@ -679,6 +685,20 @@ export function AppShell({
   const [sources, setSources] = React.useState<LoadedSource[]>([])
   // Whether local MCP servers are enabled (affects stdio source status)
   const [localMcpEnabled, setLocalMcpEnabled] = React.useState(true)
+
+  // Enabled permission modes for Shift+Tab cycling (min 2 modes)
+  const [enabledModes, setEnabledModes] = React.useState<PermissionMode[]>(['safe', 'ask', 'allow-all'])
+
+  // Load enabled permission modes on mount
+  React.useEffect(() => {
+    window.electronAPI.getEnabledPermissionModes().then((modes) => {
+      if (modes && modes.length >= 2) {
+        setEnabledModes(modes)
+      }
+    }).catch((err) => {
+      console.error('[Chat] Failed to load enabled permission modes:', err)
+    })
+  }, [])
 
   // Agent-scoped sources, keyed by agent slug
   const [agentSources, setAgentSources] = React.useState<Map<string, LoadedSource[]>>(new Map())
@@ -828,45 +848,24 @@ export function AppShell({
     statusConfigsToTodoStates(statusConfigs, activeWorkspace.id).then(setTodoStates)
   }, [statusConfigs, activeWorkspace?.id])
 
-  // Tab system
-  const {
-    tabs,
-    openChatTab,
-    openSettingsTab,
-    openShortcutsTab,
-    openAgentInfoTab,
-    openSourceInfoTab,
-    updateChatTabLabel,
-    validateTabs,
-    previousTab,
-    nextTab,
-    closeTab,
-    activeTab,
-  } = useTabs()
+  // Ensure session messages are loaded when selected
+  const ensureMessagesLoaded = useSetAtom(ensureSessionMessagesLoadedAtom)
 
-  // Handle opening source info tab (agent-scoped)
+  // Handle opening source info (agent-scoped)
+  // TODO: Implement source info view without tabs
   const handleOpenSourceInfo = React.useCallback((source: LoadedSource, agentSlug: string) => {
     if (!activeWorkspaceId) return
-    openSourceInfoTab(
-      source.config.slug,
-      activeWorkspaceId,
-      source.config.name,
-      agentSlug
-    )
-  }, [activeWorkspaceId, openSourceInfoTab])
+    console.log('[AppShell] Open source info:', source.config.slug, 'agent:', agentSlug)
+    // Source info could be shown in a modal or side panel in the future
+  }, [activeWorkspaceId])
 
-  // Handle opening source info tab (workspace-scoped)
+  // Handle opening source info (workspace-scoped)
   const handleOpenWorkspaceSourceInfo = React.useCallback((source: LoadedSource) => {
     if (!activeWorkspaceId) return
     // Update selected source slug for highlighting in sources list
     setSelectedSourceSlug(source.config.slug)
-    openSourceInfoTab(
-      source.config.slug,
-      activeWorkspaceId,
-      source.config.name,
-      undefined // No agentSlug for workspace-scoped sources
-    )
-  }, [activeWorkspaceId, openSourceInfoTab])
+    navigate(routes.tab.sourceInfo(source.config.slug))
+  }, [activeWorkspaceId, navigate])
 
   // Focus zone management
   const { focusZone, focusNextZone, focusPreviousZone } = useFocusContext()
@@ -889,36 +888,29 @@ export function AppShell({
       { key: '3', cmd: true, action: () => focusZone('chat') },
       // Tab navigation between zones
       { key: 'Tab', action: focusNextZone, when: () => !document.querySelector('[role="dialog"]') },
-      // Shift+Tab cycles permission mode: safe → ask → allow-all → safe (textarea handles its own, this handles when focus is elsewhere)
+      // Shift+Tab cycles permission mode through enabled modes (textarea handles its own, this handles when focus is elsewhere)
       { key: 'Tab', shift: true, action: () => {
-        if (activeTab?.type === 'chat') {
-          const sessionId = (activeTab as ChatTab).sessionId
-          const currentOptions = contextValue.sessionOptions.get(sessionId)
+        if (session.selected) {
+          const currentOptions = contextValue.sessionOptions.get(session.selected)
           const currentMode = currentOptions?.permissionMode ?? 'ask'
-          // Cycle through permission modes: safe → ask → allow-all → safe
-          const nextMode = currentMode === 'safe' ? 'ask' : currentMode === 'ask' ? 'allow-all' : 'safe'
-          contextValue.onSessionOptionsChange(sessionId, { permissionMode: nextMode })
+          // Cycle through enabled permission modes
+          const modes = enabledModes.length >= 2 ? enabledModes : ['safe', 'ask', 'allow-all'] as PermissionMode[]
+          const currentIndex = modes.indexOf(currentMode)
+          // If current mode not in enabled list, jump to first enabled mode
+          const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % modes.length
+          const nextMode = modes[nextIndex]
+          contextValue.onSessionOptionsChange(session.selected, { permissionMode: nextMode })
         }
       }, when: () => !document.querySelector('[role="dialog"]') && document.activeElement?.tagName !== 'TEXTAREA' },
-      // Panel tab navigation
-      { key: '[', cmd: true, action: previousTab },
-      { key: ']', cmd: true, action: nextTab },
-      { key: 'w', cmd: true, action: () => {
-        if (!activeTab?.closable) return
-        closeTabWithCleanup({
-          tabId: activeTab.id,
-          tabs,
-          sessions,
-          onDeleteSession,
-          closeTab,
-        })
-      } },
       // Sidebar toggle
       { key: 'b', cmd: true, action: () => setIsSidebarVisible(v => !v) },
       // New chat (context-aware: uses selected agent if in agent view)
       { key: 'n', cmd: true, action: () => handleNewChat(true) },
       // Settings
       { key: ',', cmd: true, action: onOpenSettings },
+      // History navigation
+      { key: '[', cmd: true, action: goBack },
+      { key: ']', cmd: true, action: goForward },
     ],
   })
 
@@ -1006,21 +998,28 @@ export function AppShell({
     damping: 49,
   }
 
-  // Filter sessions by active workspace
-  const workspaceSessions = activeWorkspaceId
-    ? sessions.filter(s => s.workspaceId === activeWorkspaceId)
-    : sessions
+  // Use session metadata from Jotai atom (lightweight, no messages)
+  // This prevents closures from retaining full message arrays
+  const sessionMetaMap = useAtomValue(sessionMetaMapAtom)
+
+  // Filter session metadata by active workspace
+  const workspaceSessionMetas = useMemo(() => {
+    const metas = Array.from(sessionMetaMap.values())
+    return activeWorkspaceId
+      ? metas.filter(s => s.workspaceId === activeWorkspaceId)
+      : metas
+  }, [sessionMetaMap, activeWorkspaceId])
 
   // Count sessions by todo state (scoped to workspace)
   // Inbox = not done/cancelled, Done = todoState === 'done' or 'cancelled'
-  const isDone = (s: Session) => s.todoState === 'done' || s.todoState === 'cancelled'
-  const inboxCount = workspaceSessions.filter(s => !isDone(s)).length
-  const archiveCount = workspaceSessions.filter(s => isDone(s)).length
+  const isMetaDone = (s: SessionMeta) => s.todoState === 'done' || s.todoState === 'cancelled'
+  const inboxCount = workspaceSessionMetas.filter(s => !isMetaDone(s)).length
+  const archiveCount = workspaceSessionMetas.filter(s => isMetaDone(s)).length
   // Flagged can be both done and not done
-  const flaggedCount = workspaceSessions.filter(s => s.isFlagged).length
+  const flaggedCount = workspaceSessionMetas.filter(s => s.isFlagged).length
 
   // Count sessions by individual todo state
-  const todoStateCounts = React.useMemo(() => {
+  const todoStateCounts = useMemo(() => {
     const counts: Record<TodoStateId, number> = {
       'todo': 0,
       'in-progress': 0,
@@ -1028,48 +1027,48 @@ export function AppShell({
       'done': 0,
       'cancelled': 0,
     }
-    for (const s of workspaceSessions) {
+    for (const s of workspaceSessionMetas) {
       const state = (s.todoState || 'todo') as TodoStateId
       counts[state]++
     }
     return counts
-  }, [workspaceSessions])
+  }, [workspaceSessionMetas])
 
   // Get conversation count per agent (scoped to workspace)
-  const getConversationCount = React.useCallback((agentId: string) => {
-    return workspaceSessions.filter(s => s.agentId === agentId && !isDone(s)).length
-  }, [workspaceSessions])
+  const getConversationCount = useCallback((agentId: string) => {
+    return workspaceSessionMetas.filter(s => s.agentId === agentId && !isMetaDone(s)).length
+  }, [workspaceSessionMetas])
 
-  // Filter sessions based on sidebar mode and chat filter
-  const filteredSessions = React.useMemo(() => {
+  // Filter session metadata based on sidebar mode and chat filter
+  const filteredSessionMetas = useMemo(() => {
     // When in sources mode, return empty (no sessions to show)
     if (!chatFilter) {
       return []
     }
 
-    let result: Session[]
+    let result: SessionMeta[]
 
     switch (chatFilter.kind) {
       case 'inbox':
         // "All Chats" - shows all sessions (no filtering by done status)
-        result = workspaceSessions
+        result = workspaceSessionMetas
         break
       case 'archive':
-        result = workspaceSessions.filter(s => isDone(s))
+        result = workspaceSessionMetas.filter(s => isMetaDone(s))
         break
       case 'flagged':
         // Flagged view shows both done and not done flagged items
-        result = workspaceSessions.filter(s => s.isFlagged)
+        result = workspaceSessionMetas.filter(s => s.isFlagged)
         break
       case 'agent':
-        result = workspaceSessions.filter(s => s.agentId === chatFilter.agentId && !isDone(s))
+        result = workspaceSessionMetas.filter(s => s.agentId === chatFilter.agentId && !isMetaDone(s))
         break
       case 'state':
         // Filter by specific todo state
-        result = workspaceSessions.filter(s => (s.todoState || 'todo') === chatFilter.stateId)
+        result = workspaceSessionMetas.filter(s => (s.todoState || 'todo') === chatFilter.stateId)
         break
       default:
-        result = workspaceSessions
+        result = workspaceSessionMetas
     }
 
     // Apply secondary filter by todo states if any are selected (only in inbox view)
@@ -1078,100 +1077,14 @@ export function AppShell({
     }
 
     return result
-  }, [workspaceSessions, chatFilter, listFilter])
+  }, [workspaceSessionMetas, chatFilter, listFilter])
 
-  const selectedSession = sessions.find(s => s.id === session.selected) || null
-
-  // Refs to avoid circular dependencies and unnecessary re-runs
-  // openChatTabRef: clicking a tab would trigger the effect because openChatTab
-  // depends on state.activeTabId, causing it to fight with the user's click
-  // sessionsRef: we need to look up session data but don't want to re-run
-  // the effect when sessions update (e.g., during streaming)
-  const openChatTabRef = React.useRef(openChatTab)
-  openChatTabRef.current = openChatTab
-  const sessionsRef = React.useRef(sessions)
-  sessionsRef.current = sessions
-
-  // Sync session selection with tab system
-  // When a session is selected, open (or focus) its chat tab
-  // Uses refs for openChatTab and sessions to prevent re-running when:
-  // - tabs switch (openChatTab changes)
-  // - sessions update during generation (text_delta, etc.)
+  // Ensure session messages are loaded when selected
   React.useEffect(() => {
-    if (session.selected && activeWorkspaceId) {
-      const selectedSess = sessionsRef.current.find(s => s.id === session.selected)
-      if (selectedSess) {
-        openChatTabRef.current(
-          selectedSess.id,
-          selectedSess.workspaceId,
-          selectedSess.name || 'New Chat',
-          selectedSess.agentId
-        )
-      }
+    if (session.selected) {
+      ensureMessagesLoaded(session.selected)
     }
-  }, [session.selected, activeWorkspaceId])
-
-  // Sync view activation with sidebar state (reverse direction)
-  // When the active view changes:
-  // 1. session.selected - to highlight the session in the list
-  // 2. viewMode/selectedAgentId - only if session isn't visible in current view
-  // Does NOT sync when:
-  // - View change was initiated by sidebar (session already selected)
-  // - Opening a new session (session already selected before view exists)
-  const prevActiveTabIdRef = React.useRef<string | null>(null)
-  const sessionSelectedRef = React.useRef(session.selected)
-  sessionSelectedRef.current = session.selected
-  const filteredSessionsRef = React.useRef(filteredSessions)
-  filteredSessionsRef.current = filteredSessions
-
-  React.useEffect(() => {
-    const currentTabId = activeTab?.id ?? null
-
-    // Only sync when the tab actually changes
-    if (currentTabId === prevActiveTabIdRef.current) {
-      return
-    }
-    prevActiveTabIdRef.current = currentTabId
-
-    if (activeTab?.type === 'chat') {
-      const chatTab = activeTab as ChatTab
-
-      // If session is already selected, this was initiated by sidebar/new session
-      // The sidebar is already in the correct state, no sync needed
-      if (sessionSelectedRef.current === chatTab.sessionId) {
-        return
-      }
-
-      // View changed - update session selection
-      // Don't change the sidebar view - user controls that
-      setSession({ selected: chatTab.sessionId })
-    }
-  }, [activeTab, setSession])
-
-  // Track if sessions have been loaded at least once
-  const sessionsLoadedRef = React.useRef(false)
-  // Track previous session count to detect deletions
-  const prevSessionCountRef = React.useRef(sessions.length)
-
-  // Validate tabs only when sessions are DELETED (count decreases)
-  // This avoids race conditions when creating new sessions (tab created before sessions state updates)
-  React.useEffect(() => {
-    // Mark as loaded once we have sessions
-    if (sessions.length > 0) {
-      sessionsLoadedRef.current = true
-    }
-    // Only validate after sessions have been loaded at least once
-    if (!sessionsLoadedRef.current) {
-      prevSessionCountRef.current = sessions.length
-      return
-    }
-    // Only validate when sessions are deleted (count decreased), not when added
-    if (sessions.length < prevSessionCountRef.current) {
-      const validSessionIds = new Set(sessions.map(s => s.id))
-      validateTabs(validSessionIds)
-    }
-    prevSessionCountRef.current = sessions.length
-  }, [sessions, validateTabs])
+  }, [session.selected, ensureMessagesLoaded])
 
   // Wrap delete handler to clear selection when deleting the currently selected session
   // This prevents stale state during re-renders that could cause crashes
@@ -1183,14 +1096,15 @@ export function AppShell({
     return onDeleteSession(sessionId, skipConfirmation)
   }, [session.selected, setSession, onDeleteSession])
 
-  // Extend context value with local overrides (textareaRef, wrapped onDeleteSession, sources)
+  // Extend context value with local overrides (textareaRef, wrapped onDeleteSession, sources, enabledModes)
   const appShellContextValue = React.useMemo<AppShellContextType>(() => ({
     ...contextValue,
     onDeleteSession: handleDeleteSession,
     textareaRef: chatInputRef,
     enabledSources: sources,
+    enabledModes,
     onSessionSourcesChange: handleSessionSourcesChange,
-  }), [contextValue, handleDeleteSession, sources, handleSessionSourcesChange])
+  }), [contextValue, handleDeleteSession, sources, enabledModes, handleSessionSourcesChange])
 
   // Filter out hidden agents (those starting with '.') and group for tree view
   // For folder agents, documentId contains the slug
@@ -1352,34 +1266,29 @@ export function AppShell({
   const handleInboxClick = useCallback(() => {
     setSidebarMode({ type: 'chats', filter: { kind: 'inbox' } })
     setSelectedAgentId(null)
-    setSession({ selected: null })
-  }, [setSession])
+  }, [])
 
   const handleArchiveClick = useCallback(() => {
     setSidebarMode({ type: 'chats', filter: { kind: 'archive' } })
     setSelectedAgentId(null)
-    setSession({ selected: null })
-  }, [setSession])
+  }, [])
 
   const handleFlaggedClick = useCallback(() => {
     setSidebarMode({ type: 'chats', filter: { kind: 'flagged' } })
     setSelectedAgentId(null)
-    setSession({ selected: null })
-  }, [setSession])
+  }, [])
 
   // Handler for individual todo state views
   const handleTodoStateClick = useCallback((stateId: TodoStateId) => {
     setSidebarMode({ type: 'chats', filter: { kind: 'state', stateId } })
     setSelectedAgentId(null)
-    setSession({ selected: null })
-  }, [setSession])
+  }, [])
 
   // Handler for sources view
   const handleSourcesClick = useCallback(() => {
     setSidebarMode({ type: 'sources' })
     setSelectedAgentId(null)
-    setSession({ selected: null })
-  }, [setSession])
+  }, [])
 
   // Create a new chat and select it
   // Uses selectedAgentId when in agent view, otherwise creates a session without agent
@@ -1388,10 +1297,9 @@ export function AppShell({
 
     const agentId = useCurrentAgent && chatFilter?.kind === 'agent' ? selectedAgentId || undefined : undefined
     const newSession = await onCreateSession(activeWorkspace.id, agentId)
-    // Update selection AND open tab directly (don't rely on effect, as sessionsRef may not have new session yet)
-    setSession({ selected: newSession.id })
-    openChatTab(newSession.id, activeWorkspace.id, 'New Chat', agentId)
-  }, [activeWorkspace, chatFilter, selectedAgentId, onCreateSession, setSession, openChatTab])
+    // Navigate to the new session via central routing
+    navigate(routes.tab.chat(newSession.id))
+  }, [activeWorkspace, chatFilter, selectedAgentId, onCreateSession])
 
   // Add Source - opens a chat with the .settings builtin agent
   const handleAddSource = useCallback(async () => {
@@ -1432,7 +1340,8 @@ export function AppShell({
       const sessionName = `Delete ${sourceName} from sources`
       const newSession = await onCreateSession(activeWorkspace.id, agentId)
       await window.electronAPI.sessionCommand(newSession.id, { type: 'rename', name: sessionName })
-      openChatTab(newSession.id, activeWorkspace.id, sessionName, agentId, { forceNew: true })
+      // Navigate to the new session via central routing
+      navigate(routes.tab.chat(newSession.id))
 
       // Send the delete prompt after a short delay to ensure the chat is mounted
       // Use onSendMessage to properly add the user message to the UI
@@ -1443,7 +1352,7 @@ export function AppShell({
       console.error('[Chat] Failed to delete source:', error)
       toast.error('Failed to start source deletion')
     }
-  }, [activeWorkspace, onCreateSession, openChatTab, onSendMessage])
+  }, [activeWorkspace, onCreateSession, onSendMessage])
 
   // Respond to menu bar "New Chat" trigger
   const menuTriggerRef = useRef(menuNewChatTrigger)
@@ -1464,12 +1373,12 @@ export function AppShell({
         setSelectedAgentId(action.agent.id)
         setSidebarMode({ type: 'chats', filter: { kind: 'agent', agentId: action.agent.id } })
         const newSession = await onCreateSession(activeWorkspaceId, action.agent.id)
-        setSession({ selected: newSession.id })
+        navigate(routes.tab.chat(newSession.id))
         break
 
       case 'info':
-        // Open agent info in a tab
-        openAgentInfoTab(action.agent.id, activeWorkspaceId, action.agent.displayName || action.agent.name)
+        // Navigate to agent info view
+        navigate(routes.tab.agentInfo(action.agent.id))
         break
 
       case 'reset':
@@ -1485,7 +1394,7 @@ export function AppShell({
         }
         break
     }
-  }, [activeWorkspaceId, openAgentInfoTab, onCreateSession, setSession])
+  }, [activeWorkspaceId, onCreateSession])
 
   // Handle double-click on agent: create new conversation with setup message
   const handleAgentDoubleClick = useCallback(async (agent: SubAgentMetadata) => {
@@ -1495,11 +1404,11 @@ export function AppShell({
     setSelectedAgentId(agent.id)
     setSidebarMode({ type: 'chats', filter: { kind: 'agent', agentId: agent.id } })
     const newSession = await onCreateSession(activeWorkspaceId, agent.id)
-    setSession({ selected: newSession.id })
+    navigate(routes.tab.chat(newSession.id))
 
     // Send setup message
     await onSendMessage(newSession.id, 'Please set up this agent', [])
-  }, [activeWorkspaceId, onCreateSession, onSendMessage, setSession])
+  }, [activeWorkspaceId, onCreateSession, onSendMessage])
 
   // Unified sidebar items: nav buttons + tree items
   // This creates one continuous navigable list for the entire sidebar
@@ -1736,24 +1645,28 @@ export function AppShell({
         */}
         <div className="titlebar-drag-region fixed top-0 left-0 right-0 h-[50px] z-40" />
 
-      {/* Sidebar Toggle Button - fixed position, animated opacity (hidden in focused mode) */}
+      {/* App Menu - fixed position, always visible (hidden in focused mode) */}
       {!isFocusedMode && (
-        <motion.div
-          initial={false}
-          animate={{ opacity: isSidebarVisible ? 0 : 1 }}
-          transition={{ duration: 0.15 }}
-          className="fixed left-[86px] top-[13px] z-[60]"
-          style={{ pointerEvents: isSidebarVisible ? 'none' : 'auto' }}
+        <div
+          className="fixed left-[86px] top-0 h-[50px] z-[60] flex items-center titlebar-no-drag pr-2"
+          style={{ width: sidebarWidth - 86 }}
         >
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setIsSidebarVisible(true)}
-            className="h-7 w-7 titlebar-no-drag rounded-[4px] hover:bg-foreground/5"
-          >
-            <PanelLeftRounded className="!h-5 !w-5" />
-          </Button>
-        </motion.div>
+          <AppMenu
+            onNewChat={() => handleNewChat(true)}
+            onOpenSettings={onOpenSettings}
+            onOpenKeyboardShortcuts={onOpenKeyboardShortcuts}
+            onOpenStoredUserPreferences={onOpenStoredUserPreferences}
+            onOpenHelp={() => window.electronAPI.openUrl('https://agents.craft.do/docs')}
+            onOpenCraft={() => window.electronAPI.openUrl('craftdocs://')}
+            onReset={onReset}
+            onBack={goBack}
+            onForward={goForward}
+            canGoBack={canGoBack}
+            canGoForward={canGoForward}
+            onToggleSidebar={() => setIsSidebarVisible(prev => !prev)}
+            isSidebarVisible={isSidebarVisible}
+          />
+        </div>
       )}
 
       {/* === OUTER LAYOUT: Sidebar | Main Content === */}
@@ -1777,32 +1690,6 @@ export function AppShell({
             tabIndex={sidebarFocused ? 0 : -1}
             onKeyDown={handleSidebarKeyDown}
           >
-            {/* Header row: Logo (left) + Toggle Button (right) */}
-            <div className="absolute top-0 left-0 right-0 h-[50px] z-50 titlebar-no-drag">
-              {/* App Menu - left aligned after traffic lights */}
-              <div className="absolute left-[86px] top-0 bottom-0 flex items-center">
-                <AppMenu
-                  onNewChat={() => handleNewChat(true)}
-                  onOpenSettings={onOpenSettings}
-                  onOpenKeyboardShortcuts={onOpenKeyboardShortcuts}
-                  onOpenStoredUserPreferences={onOpenStoredUserPreferences}
-                  onOpenHelp={() => window.electronAPI.openUrl('https://agents.craft.do/docs')}
-                  onOpenCraft={() => window.electronAPI.openUrl('craftdocs://')}
-                  onReset={onReset}
-                />
-              </div>
-              {/* Toggle button - right aligned */}
-              <div className="absolute right-2 top-0 bottom-0 flex items-center">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setIsSidebarVisible(false)}
-                  className="h-7 w-7 shrink-0 rounded-[4px] hover:bg-foreground/5"
-                >
-                  <PanelLeftRounded className="!h-5 !w-5" />
-                </Button>
-              </div>
-            </div>
             <div className="flex h-full flex-col pt-[50px] select-none">
               {/* Sidebar Top Section */}
               <div className="flex-1 flex flex-col min-h-0">
@@ -1827,7 +1714,7 @@ export function AppShell({
                     {
                       id: "nav:inbox",
                       title: "All Chats",
-                      label: String(workspaceSessions.length),
+                      label: String(workspaceSessionMetas.length),
                       icon: Inbox,
                       variant: chatFilter?.kind === 'inbox' ? "default" : "ghost",
                       onClick: handleInboxClick,
@@ -2057,7 +1944,7 @@ export function AppShell({
 
         {/* === MAIN CONTENT (Right) ===
             Flex layout: Session List | Chat Display */}
-        <div className="flex-1 overflow-hidden min-w-0 flex h-full pl-1.5 pr-2 pb-2 pt-1.5 gap-[3px]">
+        <div className="flex-1 overflow-hidden min-w-0 flex h-full pl-1.5 pr-2 pb-2 pt-[6px] gap-[3px]">
           {/* === SESSION LIST PANEL === (hidden in focused mode) */}
           {!isFocusedMode && (
           <div
@@ -2070,13 +1957,10 @@ export function AppShell({
               initial={false}
               animate={{ marginLeft: isSidebarVisible ? 0 : 102 }}
               transition={springTransition}
-              className="flex h-[50px] shrink-0 items-center pl-5 pr-2 min-w-0 relative z-50"
+              className="flex h-[36px] shrink-0 items-center pl-5 pr-2 min-w-0 relative z-50"
             >
-              <div className="flex-1 min-w-0 flex flex-col justify-center">
+              <div className="flex-1 min-w-0 flex items-center">
                 <h1 className="text-sm font-semibold truncate font-sans leading-tight">{listTitle}</h1>
-                <p className="text-[11px] opacity-50 font-sans leading-tight">
-                  {isSourcesMode(sidebarMode) ? `${sources.length} sources` : `${filteredSessions.length} conversations`}
-                </p>
               </div>
               {/* Filter dropdown - allows filtering by todo states (only in All Chats view) */}
               {chatFilter?.kind === 'inbox' && (
@@ -2258,7 +2142,7 @@ export function AppShell({
                 {/* Key on sidebarMode forces full remount when switching views, skipping animations */}
                 <SessionList
                   key={chatFilter?.kind}
-                  items={filteredSessions}
+                  items={filteredSessionMetas}
                   onDelete={handleDeleteSession}
                   onFlag={onFlagSession}
                   onUnflag={onUnflagSession}
@@ -2266,19 +2150,13 @@ export function AppShell({
                   onTodoStateChange={onTodoStateChange}
                   onRename={onRenameSession}
                   onFocusChatInput={focusChatInput}
-                  onSessionSelect={(selectedSession) => {
-                    if (activeWorkspaceId) {
-                      openChatTab(
-                        selectedSession.id,
-                        activeWorkspaceId,
-                        getSessionTitle(selectedSession),
-                        selectedSession.agentId
-                      )
-                    }
+                  onSessionSelect={(selectedMeta) => {
+                    // Navigate to the session via central routing
+                    navigate(routes.tab.chat(selectedMeta.id))
                   }}
-                  onOpenInNewWindow={(selectedSession) => {
+                  onOpenInNewWindow={(selectedMeta) => {
                     if (activeWorkspaceId) {
-                      window.electronAPI.openSessionInNewWindow(activeWorkspaceId, selectedSession.id)
+                      window.electronAPI.openSessionInNewWindow(activeWorkspaceId, selectedMeta.id)
                     }
                   }}
                   onNavigateToView={(view) => {
@@ -2329,9 +2207,9 @@ export function AppShell({
           </div>
           )}
 
-          {/* === TAB CONTAINER PANEL === */}
+          {/* === MAIN CONTENT PANEL === */}
           <div className="flex-1 overflow-hidden min-w-0 bg-background shadow-middle rounded-[14px]">
-            <TabContainer isFocusedMode={isFocusedMode} />
+            <MainContentPanel isFocusedMode={isFocusedMode} />
           </div>
         </div>
       </div>

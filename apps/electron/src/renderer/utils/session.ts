@@ -1,24 +1,31 @@
 import type { Session } from "../../shared/types"
+import type { SessionMeta } from "../atoms/sessions"
+
+/** Common session fields used by getSessionTitle */
+type SessionLike = Pick<Session, 'name' | 'preview' | 'agentName'> & { messages?: Session['messages'] }
 
 /**
  * Get display title for a session.
  * Priority: custom name > first user message > preview (from metadata) > agent name > "New chat"
+ * Works with both Session (full) and SessionMeta (lightweight)
  */
-export function getSessionTitle(session: Session): string {
+export function getSessionTitle(session: SessionLike | SessionMeta): string {
   if (session.name) {
     return session.name
   }
 
-  // Check loaded messages first
-  const firstUserMessage = session.messages.find(m => m.role === 'user')
-  if (firstUserMessage?.content) {
-    const trimmed = firstUserMessage.content.slice(0, 50)
-    return trimmed.length < firstUserMessage.content.length
-      ? trimmed + '…'
-      : trimmed
+  // Check loaded messages first (only available on full Session)
+  if ('messages' in session && session.messages) {
+    const firstUserMessage = session.messages.find(m => m.role === 'user')
+    if (firstUserMessage?.content) {
+      const trimmed = firstUserMessage.content.slice(0, 50)
+      return trimmed.length < firstUserMessage.content.length
+        ? trimmed + '…'
+        : trimmed
+    }
   }
 
-  // Fall back to preview from JSONL header (for lazy-loaded sessions)
+  // Fall back to preview from JSONL header (for lazy-loaded sessions and SessionMeta)
   if (session.preview) {
     const trimmed = session.preview.slice(0, 50)
     return trimmed.length < session.preview.length

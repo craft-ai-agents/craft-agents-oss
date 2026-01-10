@@ -1,5 +1,5 @@
 /**
- * SourceInfoTabPanel
+ * SourceInfoPage
  *
  * Displays source details including connection info, authentication status,
  * documentation (guide.md), and metadata. View-only.
@@ -17,12 +17,13 @@ import { Markdown } from '@/components/markdown'
 import { cn } from '@/lib/utils'
 import { CONTENT_MAX_WIDTH_CLASS } from '@/config/layout'
 import { useAppShellContext } from '@/context/AppShellContext'
-import type { Tab, SourceInfoTab } from '../types'
-import type { LoadedSource, McpToolWithPermission } from '../../../shared/types'
+import type { LoadedSource, McpToolWithPermission } from '../../shared/types'
 import type { PermissionsConfigFile } from '@craft-agent/shared/agent'
 
-interface SourceInfoTabPanelProps {
-  tab: Tab
+interface SourceInfoPageProps {
+  sourceSlug: string
+  workspaceId: string
+  agentSlug?: string
 }
 
 /**
@@ -67,10 +68,7 @@ function SectionHeader({ children }: { children: React.ReactNode }) {
   )
 }
 
-export default function SourceInfoTabPanel({ tab }: SourceInfoTabPanelProps) {
-  const sourceInfoTab = tab as SourceInfoTab
-  const { sourceSlug, workspaceId, agentSlug } = sourceInfoTab
-
+export default function SourceInfoPage({ sourceSlug, workspaceId, agentSlug }: SourceInfoPageProps) {
   const { textareaRef, openNewChat } = useAppShellContext()
   const [source, setSource] = useState<LoadedSource | null>(null)
   const [loading, setLoading] = useState(true)
@@ -169,7 +167,7 @@ export default function SourceInfoTabPanel({ tab }: SourceInfoTabPanelProps) {
         setLocalMcpEnabled(settings.localMcpEnabled ?? true)
       }
     }).catch((err) => {
-      console.error('[SourceInfoTabPanel] Failed to load workspace settings:', err)
+      console.error('[SourceInfoPage] Failed to load workspace settings:', err)
     })
   }, [workspaceId])
 
@@ -182,7 +180,7 @@ export default function SourceInfoTabPanel({ tab }: SourceInfoTabPanelProps) {
       const updated = sources.find((s) => s.config.slug === sourceSlug)
 
       if (updated) {
-        console.log('[SourceInfoTabPanel] Source changed, reloading...')
+        console.log('[SourceInfoPage] Source changed, reloading...')
         setSource(updated)
 
         // Reload permissions config via IPC
@@ -191,7 +189,7 @@ export default function SourceInfoTabPanel({ tab }: SourceInfoTabPanelProps) {
             const config = await window.electronAPI.getSourcePermissionsConfig(workspaceId, sourceSlug)
             setPermissionsConfig(config)
           } catch (err) {
-            console.error('[SourceInfoTabPanel] Failed to reload permissions config:', err)
+            console.error('[SourceInfoPage] Failed to reload permissions config:', err)
           }
         }
         loadPermissionsConfig()
@@ -243,7 +241,7 @@ export default function SourceInfoTabPanel({ tab }: SourceInfoTabPanelProps) {
       // Ensure the .settings builtin agent exists
       const agentId = await window.electronAPI.ensureBuiltinAgent(workspaceId, '.settings')
       if (!agentId) {
-        console.error('[SourceInfoTabPanel] Failed to create settings agent')
+        console.error('[SourceInfoPage] Failed to create settings agent')
         return
       }
 
@@ -255,15 +253,14 @@ export default function SourceInfoTabPanel({ tab }: SourceInfoTabPanelProps) {
         ? `I would like to edit the connection settings for the "${source.config.name}" source: `
         : `I would like to edit the permissions for the "${source.config.name}" source: `
 
-      // Use openNewChat which handles session creation, tab opening, and input pre-filling
+      // Use openNewChat which handles session creation and input pre-filling
       await openNewChat({
         agentId,
         name: sessionName,
         input: message,
       })
 
-      // Focus the textarea and move cursor to end after the tab is mounted and input is set
-      // The deep link hook sets input after 100ms, so we wait a bit longer
+      // Focus the textarea and move cursor to end after the input is set
       setTimeout(() => {
         const textarea = textareaRef?.current
         if (textarea) {
@@ -274,7 +271,7 @@ export default function SourceInfoTabPanel({ tab }: SourceInfoTabPanelProps) {
         }
       }, 150)
     } catch (error) {
-      console.error('[SourceInfoTabPanel] Failed to edit in chat:', error)
+      console.error('[SourceInfoPage] Failed to edit in chat:', error)
     }
   }, [source, workspaceId, openNewChat, textareaRef])
 
@@ -347,7 +344,7 @@ export default function SourceInfoTabPanel({ tab }: SourceInfoTabPanelProps) {
                 <div>
                   <span className="font-medium">Source Disabled</span>
                   <p className="text-foreground/60 mt-0.5">
-                    Local MCP servers are disabled in Settings → Advanced.
+                    Local MCP servers are disabled in Settings &gt; Advanced.
                     Enable them to use this source.
                   </p>
                 </div>
@@ -461,7 +458,7 @@ export default function SourceInfoTabPanel({ tab }: SourceInfoTabPanelProps) {
                         <td className="px-4 py-2 align-top">
                           <code className="font-mono text-xs">{tool}</code>
                         </td>
-                        <td className="pr-4 py-2 text-foreground/60 text-xs align-top">—</td>
+                        <td className="pr-4 py-2 text-foreground/60 text-xs align-top">-</td>
                       </tr>
                     ))}
 
@@ -480,7 +477,7 @@ export default function SourceInfoTabPanel({ tab }: SourceInfoTabPanelProps) {
                           <td className="px-4 py-2 align-top">
                             <code className="font-mono text-xs">{pattern}</code>
                           </td>
-                          <td className="pr-4 py-2 text-foreground/60 text-xs align-top">{comment || '—'}</td>
+                          <td className="pr-4 py-2 text-foreground/60 text-xs align-top">{comment || '-'}</td>
                         </tr>
                       )
                     })}
@@ -500,7 +497,7 @@ export default function SourceInfoTabPanel({ tab }: SourceInfoTabPanelProps) {
                           <td className="px-4 py-2 align-top">
                             <code className="font-mono text-xs">{pattern}</code>
                           </td>
-                          <td className="pr-4 py-2 text-foreground/60 text-xs align-top">{comment || '—'}</td>
+                          <td className="pr-4 py-2 text-foreground/60 text-xs align-top">{comment || '-'}</td>
                         </tr>
                       )
                     })}
@@ -639,7 +636,7 @@ export default function SourceInfoTabPanel({ tab }: SourceInfoTabPanelProps) {
                         <td className="px-4 py-2 align-top">
                           <code className="font-mono text-xs">{tool}</code>
                         </td>
-                        <td className="pr-4 py-2 text-foreground/60 text-xs align-top">—</td>
+                        <td className="pr-4 py-2 text-foreground/60 text-xs align-top">-</td>
                       </tr>
                     ))}
 
@@ -657,7 +654,7 @@ export default function SourceInfoTabPanel({ tab }: SourceInfoTabPanelProps) {
                           <td className="px-4 py-2 align-top">
                             <code className="font-mono text-xs">{pattern}</code>
                           </td>
-                          <td className="pr-4 py-2 text-foreground/60 text-xs align-top">{comment || '—'}</td>
+                          <td className="pr-4 py-2 text-foreground/60 text-xs align-top">{comment || '-'}</td>
                         </tr>
                       )
                     })}

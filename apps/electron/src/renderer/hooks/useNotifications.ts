@@ -8,8 +8,9 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useAtomValue } from 'jotai'
 import type { Session } from '../../shared/types'
-import { hasUnreadMessages } from '@/utils/session'
+import { sessionMetaMapAtom, type SessionMeta } from '@/atoms/sessions'
 
 /**
  * Draw a badge onto an icon image using Canvas
@@ -73,11 +74,19 @@ function drawBadgeOnIcon(iconDataUrl: string, count: number): Promise<string> {
   })
 }
 
+/**
+ * Check if a session has unread messages using metadata
+ * Uses pre-computed lastFinalMessageId from SessionMeta
+ */
+function hasUnreadMessagesFromMeta(meta: SessionMeta): boolean {
+  // Session has unread if there's a final message and it hasn't been read
+  if (!meta.lastFinalMessageId) return false
+  return meta.lastFinalMessageId !== meta.lastReadMessageId
+}
+
 interface UseNotificationsOptions {
   /** Current workspace ID */
   workspaceId: string | null
-  /** All sessions for counting total unread */
-  sessions: Session[]
   /** Callback to navigate to a session when notification is clicked */
   onNavigateToSession?: (sessionId: string) => void
   /** Whether notifications are enabled (from app settings) */
@@ -95,12 +104,15 @@ interface UseNotificationsResult {
 
 export function useNotifications({
   workspaceId,
-  sessions,
   onNavigateToSession,
   enabled = true,
 }: UseNotificationsOptions): UseNotificationsResult {
   const [isWindowFocused, setIsWindowFocused] = useState(true)
   const onNavigateToSessionRef = useRef(onNavigateToSession)
+
+  // Use session metadata from Jotai atom (lightweight, no messages)
+  // This prevents closures from retaining the full messages array
+  const sessionMetaMap = useAtomValue(sessionMetaMapAtom)
 
   // Keep ref updated
   useEffect(() => {
@@ -148,7 +160,7 @@ export function useNotifications({
     return cleanup
   }, [])
 
-  // Update badge count when sessions change
+  // Update badge count when session metadata changes
   const updateBadgeCount = useCallback(() => {
     // Only show badge if notifications are enabled
     if (!enabled) {
@@ -157,23 +169,24 @@ export function useNotifications({
       return
     }
 
-    // Count sessions that have unread messages
-    const unreadSessions = sessions.filter(hasUnreadMessages)
+    // Count sessions that have unread messages using metadata
+    const metas = Array.from(sessionMetaMap.values())
+    const unreadSessions = metas.filter(hasUnreadMessagesFromMeta)
     const totalUnread = unreadSessions.length
 
     // Debug: log sessions with messages vs unread
-    const sessionsWithMessages = sessions.filter(s => s.messages && s.messages.length > 0)
+    const sessionsWithMessages = metas.filter(m => m.lastFinalMessageId !== undefined)
     console.log('[Notifications] Badge update:', {
-      totalSessions: sessions.length,
+      totalSessions: metas.length,
       sessionsWithMessages: sessionsWithMessages.length,
       unreadCount: totalUnread,
     })
 
     // Badge always shows unread count (regardless of focus)
     window.electronAPI.updateBadgeCount(totalUnread)
-  }, [sessions, enabled])
+  }, [sessionMetaMap, enabled])
 
-  // Auto-update badge when sessions or focus changes
+  // Auto-update badge when session metadata or focus changes
   useEffect(() => {
     updateBadgeCount()
   }, [updateBadgeCount])

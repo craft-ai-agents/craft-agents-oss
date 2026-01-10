@@ -232,7 +232,12 @@ function waitForWindowReady(window: BrowserWindow): Promise<void> {
   return new Promise((resolve) => {
     if (window.webContents.isLoading()) {
       window.webContents.once('did-finish-load', () => {
-        // Small delay to ensure React has mounted
+        // TIMING NOTE: This 100ms delay allows React to mount and register
+        // IPC listeners before we send the deep link. `did-finish-load` fires
+        // when the HTML is loaded, but React's useEffect hooks haven't run yet.
+        // A proper handshake (renderer signals "ready") would be cleaner but
+        // adds complexity for minimal gain - this delay is sufficient for all
+        // practical cases and only affects reload scenarios.
         setTimeout(resolve, 100)
       })
     } else {

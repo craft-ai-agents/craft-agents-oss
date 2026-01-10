@@ -403,7 +403,9 @@ function headerToMetadata(header: SessionHeader, workspaceRootPath: string): Ses
       agentName: header.agentName,
       isFlagged: header.isFlagged,
       todoState: validatedTodoState,
+      permissionMode: header.permissionMode,
       planCount: planCount > 0 ? planCount : undefined,
+      lastMessageRole: header.lastMessageRole,
     };
   } catch {
     return null;

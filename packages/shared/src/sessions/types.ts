@@ -164,6 +164,8 @@ export interface SessionHeader {
   // Pre-computed fields for fast list loading
   /** Number of messages in session */
   messageCount: number;
+  /** Role/type of the last message (for badge display without loading messages) */
+  lastMessageRole?: 'user' | 'assistant' | 'plan' | 'tool' | 'error';
   /** Preview of first user message (first 150 chars) */
   preview?: string;
   /** Token usage statistics */
@@ -203,4 +205,6 @@ export interface SessionMetadata {
   sharedId?: string;
   /** Working directory for this session */
   workingDirectory?: string;
+  /** Role/type of the last message (for badge display without loading messages) */
+  lastMessageRole?: 'user' | 'assistant' | 'plan' | 'tool' | 'error';
 }
