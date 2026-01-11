@@ -1912,9 +1912,19 @@ export class CraftAgent {
     // Add file attachments with stored path info
     if (attachments) {
       for (const attachment of attachments) {
+        // Always include path info for files with storedPath
+        if (attachment.storedPath) {
+          let pathInfo = `[Attached file: ${attachment.name}]`;
+          pathInfo += `\n[Stored at: ${attachment.storedPath}]`;
+          if (attachment.markdownPath) {
+            pathInfo += `\n[Markdown version: ${attachment.markdownPath}]`;
+          }
+          parts.push(pathInfo);
+        }
+
+        // Also include inline content for text files
         if (attachment.type === 'text' && attachment.text) {
-          const pathInfo = attachment.storedPath ? `\n[Stored at: ${attachment.storedPath}]` : '';
-          parts.push(`[File: ${attachment.name}]${pathInfo}\n\`\`\`\n${attachment.text}\n\`\`\``);
+          parts.push(`\`\`\`\n${attachment.text}\n\`\`\``);
         }
       }
     }
