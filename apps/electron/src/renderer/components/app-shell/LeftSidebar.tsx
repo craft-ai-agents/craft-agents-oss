@@ -17,7 +17,7 @@ export interface LinkItem {
   expandable?: boolean
   expanded?: boolean
   onToggle?: () => void
-  children?: React.ReactNode  // Content to show when expanded
+  items?: LinkItem[]    // Subitems as data (rendered as nested LeftSidebar)
 }
 
 interface LeftSidebarProps {
@@ -170,8 +170,8 @@ export function LeftSidebar({ links, isCollapsed, getItemProps, focusedItemId, i
                   </span>
                 )}
               </button>
-              {/* Expandable children with animation */}
-              {link.expandable && (
+              {/* Expandable subitems with animation */}
+              {link.expandable && link.items && (
                 <AnimatePresence initial={false}>
                   {link.expanded && (
                     <motion.div
@@ -181,7 +181,13 @@ export function LeftSidebar({ links, isCollapsed, getItemProps, focusedItemId, i
                       transition={{ duration: 0.2, ease: 'easeInOut' }}
                       className="overflow-hidden"
                     >
-                      {link.children}
+                      <LeftSidebar
+                        isCollapsed={false}
+                        isNested={true}
+                        getItemProps={getItemProps}
+                        focusedItemId={focusedItemId}
+                        links={link.items}
+                      />
                     </motion.div>
                   )}
                 </AnimatePresence>

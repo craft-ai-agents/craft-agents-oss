@@ -48,6 +48,11 @@ export function buildDeepLink(route: Route, workspaceId?: string): string {
   return `craftagents://${route}`
 }
 
+// Compound route prefixes (matches deep-link.ts)
+const COMPOUND_ROUTE_PREFIXES = [
+  'inbox', 'archive', 'flagged', 'agent', 'state', 'sources', 'settings'
+]
+
 /**
  * Parse a route from a deep link URL
  * Returns the route portion without the protocol/workspace prefix
@@ -66,7 +71,13 @@ export function parseDeepLinkRoute(url: string): string | null {
       return pathParts.slice(1).join('/') + (parsed.search || '')
     }
 
-    // craftagents://tab/... → route starts at host
+    // craftagents://inbox/..., craftagents://settings/..., etc. (compound routes)
+    if (COMPOUND_ROUTE_PREFIXES.includes(host)) {
+      const path = pathParts.join('/')
+      return path ? `${host}/${path}` : host
+    }
+
+    // craftagents://tab/... → route starts at host (legacy)
     if (['tab', 'action', 'sidebar'].includes(host)) {
       const path = pathParts.join('/')
       return `${host}/${path}${parsed.search || ''}`

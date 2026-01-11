@@ -1,7 +1,8 @@
 /**
- * SettingsPage
+ * SettingsGeneralPage
  *
- * Settings page combining global and workspace settings.
+ * General settings page combining global and workspace settings.
+ * Extracted from the original SettingsPage for the new navigation system.
  *
  * Global Settings:
  * - Appearance (Theme, Font)
@@ -17,12 +18,11 @@
 import * as React from 'react'
 import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
-import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { useTheme, type FontFamily } from '@/context/ThemeContext'
+import { useTheme } from '@/context/ThemeContext'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { cn } from '@/lib/utils'
 import { Switch } from '@/components/ui/switch'
@@ -41,10 +41,16 @@ import {
 } from 'lucide-react'
 import { Spinner } from '@craft-agent/ui'
 import { RenameDialog } from '@/components/ui/rename-dialog'
-import type { AuthType, PermissionMode } from '../../shared/types'
+import type { AuthType, PermissionMode } from '../../../shared/types'
 import { PERMISSION_MODE_CONFIG } from '@craft-agent/shared/agent/mode-types'
+import type { DetailsPageMeta } from '@/lib/navigation-registry'
 
-interface SettingsPageProps {
+export const meta: DetailsPageMeta = {
+  navigator: 'settings',
+  slug: 'general',
+}
+
+interface SettingsGeneralPageProps {
   authType?: AuthType
   model?: string
   onAuthTypeChange?: (type: AuthType) => void
@@ -160,51 +166,6 @@ function RadioOption({ selected, onClick, label, description, disabled }: RadioO
         )}
       >
         {selected && <div className="w-[6px] h-[6px] rounded-full bg-background" />}
-      </div>
-    </button>
-  )
-}
-
-// ============================================
-// Checkbox Option - vertical list item with checkbox on right
-// ============================================
-
-interface CheckboxOptionProps {
-  checked: boolean
-  onChange: (checked: boolean) => void
-  label: string
-  description?: string
-  disabled?: boolean
-  shake?: boolean
-}
-
-function CheckboxOption({ checked, onChange, label, description, disabled, shake }: CheckboxOptionProps) {
-  return (
-    <button
-      type="button"
-      onClick={() => !disabled && onChange(!checked)}
-      disabled={disabled}
-      className={cn(
-        'w-full flex items-center justify-between py-1.5 text-left transition-colors rounded',
-        disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-foreground/[0.02]',
-        shake && 'animate-shake'
-      )}
-    >
-      <div className="flex-1 min-w-0">
-        <span className="text-sm">{label}</span>
-        {description && (
-          <span className="text-sm text-muted-foreground ml-1.5">{description}</span>
-        )}
-      </div>
-      <div
-        className={cn(
-          'w-[14px] h-[14px] rounded-sm border-[1.5px] grid place-items-center transition-colors shrink-0 ml-4',
-          checked ? 'border-foreground bg-foreground' : 'border-muted-foreground/30'
-        )}
-      >
-        {checked && (
-          <Check className="w-[10px] h-[10px] text-background" strokeWidth={3} />
-        )}
       </div>
     </button>
   )
@@ -733,12 +694,12 @@ interface WorkspaceSettings {
 // Main Component
 // ============================================
 
-export default function SettingsPage({
+export default function SettingsGeneralPage({
   authType: propAuthType,
   model: propModel,
   onAuthTypeChange,
   onModelChange: propOnModelChange,
-}: SettingsPageProps) {
+}: SettingsGeneralPageProps) {
   const { mode, setMode, font, setFont } = useTheme()
 
   // Get model, onModelChange, and active workspace from context
@@ -1193,8 +1154,6 @@ export default function SettingsPage({
 
   return (
     <div className="h-full flex flex-col">
-      <PanelHeader title="Settings" />
-      <Separator />
       <ScrollArea className="flex-1">
         <div className="px-5 py-7 max-w-3xl mx-auto">
           <div className="space-y-6">

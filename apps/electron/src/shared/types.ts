@@ -1069,12 +1069,213 @@ export interface WorkspaceSettings {
  * Navigation payload for deep links (main → renderer)
  */
 export interface DeepLinkNavigation {
+  /** New compound route format (e.g., 'inbox/chat/abc123', 'settings/shortcuts') */
+  view?: string
+  /** Legacy: tab type */
   tabType?: string
   tabParams?: Record<string, string>
   action?: string
   actionParams?: Record<string, string>
   sidebar?: string
   sidebarParams?: Record<string, string>
+}
+
+// ============================================
+// Unified Navigation State Types
+// ============================================
+
+/**
+ * Chat filter options - determines which sessions to show
+ */
+export type ChatFilter =
+  | { kind: 'inbox' }
+  | { kind: 'archive' }
+  | { kind: 'flagged' }
+  | { kind: 'agent'; agentId: string }
+  | { kind: 'state'; stateId: string }
+
+/**
+ * Settings subpage options
+ */
+export type SettingsSubpage = 'general' | 'shortcuts' | 'preferences'
+
+/**
+ * Source category options for filtering sources
+ */
+export type SourceCategory = 'local-files' | 'online-sources' | 'local-mcp'
+
+/**
+ * Chats navigation state - shows SessionList in navigator
+ */
+export interface ChatsNavigationState {
+  navigator: 'chats'
+  filter: ChatFilter
+  /** Selected chat details, or null for empty state */
+  details: { type: 'chat'; sessionId: string } | null
+}
+
+/**
+ * Sources navigation state - shows SourcesListPanel in navigator
+ */
+export interface SourcesNavigationState {
+  navigator: 'sources'
+  /** Optional category filter */
+  category?: SourceCategory
+  /** Selected source details, or null for empty state */
+  details: { type: 'source'; sourceSlug: string; agentSlug?: string } | null
+}
+
+/**
+ * Settings navigation state - shows SettingsNavigator in navigator
+ * Settings subpages are the details themselves (no separate selection)
+ */
+export interface SettingsNavigationState {
+  navigator: 'settings'
+  subpage: SettingsSubpage
+}
+
+/**
+ * Unified navigation state - single source of truth for all 3 panels
+ *
+ * From this state we can derive:
+ * - LeftSidebar: which item is highlighted (from navigator + filter/category/subpage)
+ * - NavigatorPanel: which list/content to show (from navigator)
+ * - MainContentPanel: what details to display (from details or subpage)
+ */
+export type NavigationState =
+  | ChatsNavigationState
+  | SourcesNavigationState
+  | SettingsNavigationState
+
+/**
+ * Type guard to check if state is chats navigation
+ */
+export const isChatsNavigation = (
+  state: NavigationState
+): state is ChatsNavigationState => state.navigator === 'chats'
+
+/**
+ * Type guard to check if state is sources navigation
+ */
+export const isSourcesNavigation = (
+  state: NavigationState
+): state is SourcesNavigationState => state.navigator === 'sources'
+
+/**
+ * Type guard to check if state is settings navigation
+ */
+export const isSettingsNavigation = (
+  state: NavigationState
+): state is SettingsNavigationState => state.navigator === 'settings'
+
+/**
+ * Default navigation state - inbox with no selection
+ */
+export const DEFAULT_NAVIGATION_STATE: NavigationState = {
+  navigator: 'chats',
+  filter: { kind: 'inbox' },
+  details: null,
+}
+
+/**
+ * Get a persistence key for localStorage from NavigationState
+ */
+export const getNavigationStateKey = (state: NavigationState): string => {
+  if (state.navigator === 'sources') {
+    const base = state.category ? `sources:${state.category}` : 'sources'
+    if (state.details) {
+      return state.details.agentSlug
+        ? `${base}/source/${state.details.agentSlug}/${state.details.sourceSlug}`
+        : `${base}/source/${state.details.sourceSlug}`
+    }
+    return base
+  }
+  if (state.navigator === 'settings') {
+    return `settings:${state.subpage}`
+  }
+  // Chats
+  const f = state.filter
+  let base: string
+  if (f.kind === 'agent') base = `agent:${f.agentId}`
+  else if (f.kind === 'state') base = `state:${f.stateId}`
+  else base = f.kind
+  if (state.details) {
+    return `${base}/chat/${state.details.sessionId}`
+  }
+  return base
+}
+
+/**
+ * Parse a persistence key back to NavigationState
+ * Returns null if the key is invalid
+ */
+export const parseNavigationStateKey = (key: string): NavigationState | null => {
+  // Handle sources
+  if (key === 'sources') return { navigator: 'sources', details: null }
+  if (key.startsWith('sources:')) {
+    const rest = key.slice(8)
+    // Check for source details
+    if (rest.includes('/source/')) {
+      const [categoryPart, , ...sourceParts] = rest.split('/')
+      const category = categoryPart as SourceCategory
+      if (!['local-files', 'online-sources', 'local-mcp'].includes(category)) {
+        return { navigator: 'sources', details: null }
+      }
+      if (sourceParts.length === 2) {
+        return { navigator: 'sources', category, details: { type: 'source', agentSlug: sourceParts[0], sourceSlug: sourceParts[1] } }
+      }
+      if (sourceParts.length === 1) {
+        return { navigator: 'sources', category, details: { type: 'source', sourceSlug: sourceParts[0] } }
+      }
+      return { navigator: 'sources', category, details: null }
+    }
+    const category = rest as SourceCategory
+    if (['local-files', 'online-sources', 'local-mcp'].includes(category)) {
+      return { navigator: 'sources', category, details: null }
+    }
+  }
+
+  // Handle settings
+  if (key === 'settings') return { navigator: 'settings', subpage: 'general' }
+  if (key.startsWith('settings:')) {
+    const subpage = key.slice(9) as SettingsSubpage
+    if (['general', 'shortcuts', 'preferences'].includes(subpage)) {
+      return { navigator: 'settings', subpage }
+    }
+  }
+
+  // Handle chats - parse filter and optional session
+  const parseChatsKey = (filterKey: string, sessionId?: string): NavigationState | null => {
+    let filter: ChatFilter
+    if (filterKey === 'inbox') filter = { kind: 'inbox' }
+    else if (filterKey === 'archive') filter = { kind: 'archive' }
+    else if (filterKey === 'flagged') filter = { kind: 'flagged' }
+    else if (filterKey.startsWith('agent:')) {
+      const agentId = filterKey.slice(6)
+      if (!agentId) return null
+      filter = { kind: 'agent', agentId }
+    } else if (filterKey.startsWith('state:')) {
+      const stateId = filterKey.slice(6)
+      if (!stateId) return null
+      filter = { kind: 'state', stateId }
+    } else {
+      return null
+    }
+    return {
+      navigator: 'chats',
+      filter,
+      details: sessionId ? { type: 'chat', sessionId } : null,
+    }
+  }
+
+  // Check for chat details
+  if (key.includes('/chat/')) {
+    const [filterPart, , sessionId] = key.split('/')
+    return parseChatsKey(filterPart, sessionId)
+  }
+
+  // Simple filter key
+  return parseChatsKey(key)
 }
 
 declare global {

@@ -18,7 +18,9 @@
     "build": "bun run build:main && bun run build:preload && bun run build:renderer && bun run build:resources",
     "start": "bun run build && electron .",
     "dev": "vite dev",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix"
   },
   "dependencies": {
     "@craft-agent/core": "workspace:*",

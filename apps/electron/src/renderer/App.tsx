@@ -585,7 +585,7 @@ export default function App() {
       handleOpenSettings()
     })
     const unsubShortcuts = window.electronAPI.onMenuKeyboardShortcuts(() => {
-      navigate(routes.tab.shortcuts())
+      navigate(routes.view.settings('shortcuts'))
     })
     const unsubHelp = window.electronAPI.onMenuOpenHelp(() => {
       // Open help documentation URL
@@ -992,15 +992,15 @@ export default function App() {
   }, [])
 
   const handleOpenSettings = useCallback(() => {
-    navigate(routes.tab.settings())
+    navigate(routes.view.settings())
   }, [])
 
   const handleOpenKeyboardShortcuts = useCallback(() => {
-    navigate(routes.tab.shortcuts())
+    navigate(routes.view.settings('shortcuts'))
   }, [])
 
   const handleOpenStoredUserPreferences = useCallback(() => {
-    navigate(routes.tab.preferences())
+    navigate(routes.view.settings('preferences'))
   }, [])
 
   // Show reset confirmation dialog

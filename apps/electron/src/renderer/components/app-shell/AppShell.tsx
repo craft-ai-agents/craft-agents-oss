@@ -22,6 +22,7 @@ import {
   Search,
   Plus,
   Trash2,
+  Terminal,
 } from "lucide-react"
 import { McpIcon } from "../icons/McpIcon"
 import {
@@ -73,22 +74,26 @@ import { getSessionTitle } from "@/utils/session"
 import { useSetAtom } from "jotai"
 import type { Session, Workspace, SubAgentMetadata, FileAttachment, PermissionRequest, TodoState, LoadedSource, PermissionMode } from "../../../shared/types"
 import { sessionMetaMapAtom, type SessionMeta } from "@/atoms/sessions"
+import { sourcesAtom } from "@/atoms/sources"
 import { type TodoStateId, getStateColor, statusConfigsToTodoStates } from "@/config/todo-states"
 import { useStatuses } from "@/hooks/useStatuses"
 import * as storage from "@/lib/local-storage"
 import { toast } from "sonner"
 import { navigate, routes } from "@/lib/navigate"
-import { useNavigation } from "@/contexts/NavigationContext"
 import {
-  type SidebarMode,
+  useNavigation,
+  useNavigationState,
+  isChatsNavigation,
+  isSourcesNavigation,
+  isSettingsNavigation,
+  type NavigationState,
   type ChatFilter,
-  isChatsMode,
-  isSourcesMode,
-  DEFAULT_SIDEBAR_MODE,
-  getSidebarModeKey,
-  parseSidebarModeKey,
-} from "./sidebar-types"
+  type SourceCategory,
+} from "@/contexts/NavigationContext"
+import type { SettingsSubpage } from "../../../shared/types"
 import { SourcesListPanel } from "./SourcesListPanel"
+import { PanelHeader } from "./PanelHeader"
+import SettingsNavigator from "@/pages/settings/SettingsNavigator"
 
 /**
  * AppShellProps - Minimal props interface for AppShell component
@@ -585,25 +590,16 @@ export function AppShell({
   const { resolvedMode } = useTheme()
   const { canGoBack, canGoForward, goBack, goForward } = useNavigation()
 
-  // Sidebar mode - persisted to localStorage
-  const [sidebarMode, setSidebarMode] = React.useState<SidebarMode>(() => {
-    const savedKey = storage.get<string | null>(storage.KEYS.sidebarMode, null)
-    if (savedKey) {
-      const parsed = parseSidebarModeKey(savedKey)
-      if (parsed) return parsed
-    }
-    return DEFAULT_SIDEBAR_MODE
-  })
+  // UNIFIED NAVIGATION STATE - single source of truth from NavigationContext
+  // All sidebar/navigator/main panel state is derived from this
+  const navState = useNavigationState()
 
-  // Selected source slug - persisted to localStorage
-  const [selectedSourceSlug, setSelectedSourceSlug] = React.useState<string | null>(() => {
-    return storage.get<string | null>(storage.KEYS.selectedSourceSlug, null)
-  })
+  // Derive chat filter from navigation state (only when in chats navigator)
+  const chatFilter = isChatsNavigation(navState) ? navState.filter : null
 
-  const [selectedAgentId, setSelectedAgentId] = React.useState<string | null>(null)
+  // Derive selected agent ID from navigation state
+  const selectedAgentId = chatFilter?.kind === 'agent' ? chatFilter.agentId : null
 
-  // Helper to get filter kind for session filtering (when in chats mode)
-  const chatFilter = isChatsMode(sidebarMode) ? sidebarMode.filter : null
   // Session list filter: empty set shows all, otherwise shows only sessions with selected states
   const [listFilter, setListFilter] = React.useState<Set<TodoStateId>>(() => {
     const saved = storage.get<TodoStateId[]>(storage.KEYS.listFilter, [])
@@ -613,11 +609,11 @@ export function AppShell({
   const [searchActive, setSearchActive] = React.useState(false)
   const [searchQuery, setSearchQuery] = React.useState('')
 
-  // Reset search when view mode changes
+  // Reset search when navigation state changes
   React.useEffect(() => {
     setSearchActive(false)
     setSearchQuery('')
-  }, [sidebarMode, selectedAgentId])
+  }, [navState])
 
   // Cmd+F to activate search
   React.useEffect(() => {
@@ -630,17 +626,6 @@ export function AppShell({
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
-
-  // Persist sidebar mode to localStorage when it changes
-  React.useEffect(() => {
-    const key = getSidebarModeKey(sidebarMode)
-    storage.set(storage.KEYS.sidebarMode, key)
-  }, [sidebarMode])
-
-  // Persist selected source slug to localStorage when it changes
-  React.useEffect(() => {
-    storage.set(storage.KEYS.selectedSourceSlug, selectedSourceSlug)
-  }, [selectedSourceSlug])
 
   // Agent status indicators - tracks setup/auth status for sidebar icons
   const [agentStatus, setAgentStatus] = React.useState<Map<string, SidebarAgentStatus>>(new Map())
@@ -673,16 +658,27 @@ export function AppShell({
   })
   const [focusedSidebarItemId, setFocusedSidebarItemId] = React.useState<string | null>(null)
   const sidebarItemRefs = React.useRef<Map<string, HTMLElement>>(new Map())
-  // Collapsible section states for sidebar
-  const [statusCollapsed, setStatusCollapsed] = React.useState(() => {
-    return storage.get(storage.KEYS.statusCollapsed, false)
+  // Track which expandable sidebar items are collapsed (default: all expanded)
+  const [collapsedItems, setCollapsedItems] = React.useState<Set<string>>(() => {
+    const saved = storage.get<string[]>(storage.KEYS.collapsedSidebarItems, [])
+    return new Set(saved)
   })
-  const [agentsCollapsed, setAgentsCollapsed] = React.useState(() => {
-    return storage.get(storage.KEYS.agentsCollapsed, false)
-  })
-  
+  const isExpanded = React.useCallback((id: string) => !collapsedItems.has(id), [collapsedItems])
+  const toggleExpanded = React.useCallback((id: string) => {
+    setCollapsedItems(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
   // Sources state (workspace-scoped)
   const [sources, setSources] = React.useState<LoadedSource[]>([])
+  // Sync sources to atom for NavigationContext auto-selection
+  const setSourcesAtom = useSetAtom(sourcesAtom)
+  React.useEffect(() => {
+    setSourcesAtom(sources)
+  }, [sources, setSourcesAtom])
   // Whether local MCP servers are enabled (affects stdio source status)
   const [localMcpEnabled, setLocalMcpEnabled] = React.useState(true)
 
@@ -862,9 +858,8 @@ export function AppShell({
   // Handle opening source info (workspace-scoped)
   const handleOpenWorkspaceSourceInfo = React.useCallback((source: LoadedSource) => {
     if (!activeWorkspaceId) return
-    // Update selected source slug for highlighting in sources list
-    setSelectedSourceSlug(source.config.slug)
-    navigate(routes.tab.sourceInfo(source.config.slug))
+    // Navigate to source - the navigation state will update and highlight the source in the list
+    navigate(routes.view.sources({ sourceSlug: source.config.slug }))
   }, [activeWorkspaceId, navigate])
 
   // Focus zone management
@@ -1128,12 +1123,8 @@ export function AppShell({
 
   // Persist sidebar section collapsed states
   React.useEffect(() => {
-    storage.set(storage.KEYS.statusCollapsed, statusCollapsed)
-  }, [statusCollapsed])
-
-  React.useEffect(() => {
-    storage.set(storage.KEYS.agentsCollapsed, agentsCollapsed)
-  }, [agentsCollapsed])
+    storage.set(storage.KEYS.collapsedSidebarItems, [...collapsedItems])
+  }, [collapsedItems])
 
   // Helper to map AgentStatus to SidebarAgentStatus (centralized logic)
   const mapAgentStatusToSidebar = React.useCallback((status: import('../../../shared/types').AgentStatus): SidebarAgentStatus => {
@@ -1248,13 +1239,11 @@ export function AppShell({
     return cleanup
   }, [activeWorkspaceId, mapAgentStatusToSidebar, extractLogosFromStatus])
 
-  // Handler functions (defined before the unified list so they can be referenced)
+  // Handler functions - use navigate() to trigger auto-selection via NavigationContext
+  // DO NOT call setSidebarMode() directly - it bypasses auto-selection logic
   const handleSelectAgent = useCallback(async (agentId: string, _agentName: string) => {
     if (!activeWorkspaceId) return
-
-    // Always select the agent - banner state is derived from useAgentState hook
-    setSelectedAgentId(agentId)
-    setSidebarMode({ type: 'chats', filter: { kind: 'agent', agentId } })
+    navigate(routes.view.agent(agentId))
   }, [activeWorkspaceId])
 
   // Handle banner action - no-op since agent setup flow was removed
@@ -1264,30 +1253,54 @@ export function AppShell({
   }, [])
 
   const handleInboxClick = useCallback(() => {
-    setSidebarMode({ type: 'chats', filter: { kind: 'inbox' } })
-    setSelectedAgentId(null)
+    navigate(routes.view.inbox())
   }, [])
 
   const handleArchiveClick = useCallback(() => {
-    setSidebarMode({ type: 'chats', filter: { kind: 'archive' } })
-    setSelectedAgentId(null)
+    navigate(routes.view.archive())
   }, [])
 
   const handleFlaggedClick = useCallback(() => {
-    setSidebarMode({ type: 'chats', filter: { kind: 'flagged' } })
-    setSelectedAgentId(null)
+    navigate(routes.view.flagged())
   }, [])
 
   // Handler for individual todo state views
   const handleTodoStateClick = useCallback((stateId: TodoStateId) => {
-    setSidebarMode({ type: 'chats', filter: { kind: 'state', stateId } })
-    setSelectedAgentId(null)
+    navigate(routes.view.state(stateId))
   }, [])
 
   // Handler for sources view
   const handleSourcesClick = useCallback(() => {
-    setSidebarMode({ type: 'sources' })
-    setSelectedAgentId(null)
+    navigate(routes.view.sources())
+  }, [])
+
+  // Handler for source category click - uses navigate() for proper auto-selection
+  const handleSourceCategoryClick = useCallback((category: SourceCategory) => {
+    navigate(routes.view.sources({ category }))
+  }, [])
+
+  // Compute source category counts
+  const sourceCounts = React.useMemo(() => {
+    let localFiles = 0, onlineSources = 0, localMcp = 0
+    for (const s of sources) {
+      if (s.config.type === 'local') {
+        localFiles++
+      } else if (s.config.type === 'mcp') {
+        if (s.config.mcp?.transport === 'stdio') {
+          localMcp++
+        } else {
+          onlineSources++
+        }
+      } else if (s.config.type === 'api') {
+        onlineSources++
+      }
+    }
+    return { localFiles, onlineSources, localMcp }
+  }, [sources])
+
+  // Handler for settings view
+  const handleSettingsClick = useCallback((subpage: SettingsSubpage = 'general') => {
+    navigate(routes.view.settings(subpage))
   }, [])
 
   // Create a new chat and select it
@@ -1369,11 +1382,10 @@ export function AppShell({
 
     switch (action.type) {
       case 'new_conversation':
-        // Create a new conversation with this agent
-        setSelectedAgentId(action.agent.id)
-        setSidebarMode({ type: 'chats', filter: { kind: 'agent', agentId: action.agent.id } })
+        // Create a new conversation with this agent and navigate to it
         const newSession = await onCreateSession(activeWorkspaceId, action.agent.id)
-        navigate(routes.tab.chat(newSession.id))
+        // Navigate to agent view with the new chat selected
+        navigate(routes.view.agent(action.agent.id, newSession.id))
         break
 
       case 'info':
@@ -1400,11 +1412,10 @@ export function AppShell({
   const handleAgentDoubleClick = useCallback(async (agent: SubAgentMetadata) => {
     if (!activeWorkspaceId) return
 
-    // Create a new conversation with this agent
-    setSelectedAgentId(agent.id)
-    setSidebarMode({ type: 'chats', filter: { kind: 'agent', agentId: agent.id } })
+    // Create a new conversation with this agent and navigate to it
     const newSession = await onCreateSession(activeWorkspaceId, agent.id)
-    navigate(routes.tab.chat(newSession.id))
+    // Navigate to agent view with the new chat selected
+    navigate(routes.view.agent(agent.id, newSession.id))
 
     // Send setup message
     await onSendMessage(newSession.id, 'Please set up this agent', [])
@@ -1434,6 +1445,15 @@ export function AppShell({
     result.push({ id: 'nav:state:needs-review', type: 'nav', action: () => handleTodoStateClick('needs-review') })
     result.push({ id: 'nav:state:done', type: 'nav', action: () => handleTodoStateClick('done') })
     result.push({ id: 'nav:state:cancelled', type: 'nav', action: () => handleTodoStateClick('cancelled') })
+
+    // 2.5. Sources nav items (parent and categories)
+    result.push({ id: 'nav:sources', type: 'nav', action: handleSourcesClick })
+    result.push({ id: 'nav:sources:local-files', type: 'nav', action: () => handleSourceCategoryClick('local-files') })
+    result.push({ id: 'nav:sources:online-sources', type: 'nav', action: () => handleSourceCategoryClick('online-sources') })
+    result.push({ id: 'nav:sources:local-mcp', type: 'nav', action: () => handleSourceCategoryClick('local-mcp') })
+
+    // 2.6. Settings nav item
+    result.push({ id: 'nav:settings', type: 'nav', action: () => handleSettingsClick('general') })
 
     // 3. Tree items (agents and folders)
     const flattenTree = (folder: AgentFolder) => {
@@ -1477,7 +1497,7 @@ export function AppShell({
     flattenTree(agentTree)
 
     return result
-  }, [agentTree, expandedFolders, handleInboxClick, handleFlaggedClick, handleTodoStateClick])
+  }, [agentTree, expandedFolders, handleInboxClick, handleFlaggedClick, handleTodoStateClick, handleSourcesClick, handleSourceCategoryClick, handleSettingsClick])
 
   // Toggle folder expanded state
   const handleToggleFolder = React.useCallback((path: string) => {
@@ -1608,12 +1628,20 @@ export function AppShell({
     }
   }, [sidebarFocused, focusedSidebarItemId, unifiedSidebarItems])
 
-  // Get title based on sidebar mode
+  // Get title based on navigation state
   const listTitle = React.useMemo(() => {
-    // Sources mode
-    if (isSourcesMode(sidebarMode)) return 'Sources'
+    // Sources navigator - with category-specific titles
+    if (isSourcesNavigation(navState)) {
+      if (navState.category === 'local-files') return 'Local Files'
+      if (navState.category === 'online-sources') return 'Online Sources'
+      if (navState.category === 'local-mcp') return 'Local MCP'
+      return 'Sources'
+    }
 
-    // Chats mode - use chatFilter
+    // Settings navigator
+    if (isSettingsNavigation(navState)) return 'Settings'
+
+    // Chats navigator - use chatFilter
     if (!chatFilter) return 'All Chats'
 
     switch (chatFilter.kind) {
@@ -1631,7 +1659,7 @@ export function AppShell({
       default:
         return 'All Chats'
     }
-  }, [sidebarMode, chatFilter, agents, todoStates])
+  }, [navState, chatFilter, agents, todoStates])
 
   return (
     <AppShellProvider value={appShellContextValue}>
@@ -1719,174 +1747,163 @@ export function AppShell({
                       variant: chatFilter?.kind === 'inbox' ? "default" : "ghost",
                       onClick: handleInboxClick,
                       expandable: true,
-                      expanded: !statusCollapsed,
-                      onToggle: () => setStatusCollapsed(!statusCollapsed),
-                      children: (
-                        <LeftSidebar
-                          isCollapsed={false}
-                          isNested={true}
-                          getItemProps={getSidebarItemProps}
-                          focusedItemId={focusedSidebarItemId}
-                          links={[
-                            {
-                              id: "nav:flagged",
-                              title: "Flagged",
-                              label: String(flaggedCount),
-                              icon: <Flag className="h-3.5 w-3.5 fill-current" />,
-                              iconColor: "text-orange-500",
-                              variant: chatFilter?.kind === 'flagged' ? "default" : "ghost",
-                              onClick: handleFlaggedClick,
-                            },
-                            {
-                              id: "nav:state:todo",
-                              title: "Todo",
-                              label: String(todoStateCounts['todo']),
-                              icon: <CircleDashed className="h-3.5 w-3.5" />,
-                              iconColor: "text-muted-foreground",
-                              variant: chatFilter?.kind === 'state' && chatFilter.stateId === 'todo' ? "default" : "ghost",
-                              onClick: () => handleTodoStateClick('todo'),
-                            },
-                            {
-                              id: "nav:state:in-progress",
-                              title: "In Progress",
-                              label: String(todoStateCounts['in-progress']),
-                              icon: <CircleProgress className="h-3.5 w-3.5" />,
-                              iconColor: getStateColor('in-progress', todoStates),
-                              variant: chatFilter?.kind === 'state' && chatFilter.stateId === 'in-progress' ? "default" : "ghost",
-                              onClick: () => handleTodoStateClick('in-progress'),
-                            },
-                            {
-                              id: "nav:state:needs-review",
-                              title: "Needs Review",
-                              label: String(todoStateCounts['needs-review']),
-                              icon: <CircleEye className="h-3.5 w-3.5" />,
-                              iconColor: getStateColor('needs-review', todoStates),
-                              variant: chatFilter?.kind === 'state' && chatFilter.stateId === 'needs-review' ? "default" : "ghost",
-                              onClick: () => handleTodoStateClick('needs-review'),
-                            },
-                            {
-                              id: "nav:state:done",
-                              title: "Done",
-                              label: String(todoStateCounts['done']),
-                              icon: <CircleCheckFilled className="h-3.5 w-3.5" />,
-                              iconColor: "text-accent",
-                              variant: chatFilter?.kind === 'state' && chatFilter.stateId === 'done' ? "default" : "ghost",
-                              onClick: () => handleTodoStateClick('done'),
-                            },
-                            {
-                              id: "nav:state:cancelled",
-                              title: "Cancelled",
-                              label: String(todoStateCounts['cancelled']),
-                              icon: <CircleXFilled className="h-3.5 w-3.5" />,
-                              iconColor: "text-muted-foreground/60",
-                              variant: chatFilter?.kind === 'state' && chatFilter.stateId === 'cancelled' ? "default" : "ghost",
-                              onClick: () => handleTodoStateClick('cancelled'),
-                            },
-                          ]}
-                        />
-                      ),
+                      expanded: isExpanded('nav:inbox'),
+                      onToggle: () => toggleExpanded('nav:inbox'),
+                      items: [
+                        {
+                          id: "nav:flagged",
+                          title: "Flagged",
+                          label: String(flaggedCount),
+                          icon: <Flag className="h-3.5 w-3.5 fill-current" />,
+                          iconColor: "text-orange-500",
+                          variant: chatFilter?.kind === 'flagged' ? "default" : "ghost",
+                          onClick: handleFlaggedClick,
+                        },
+                        {
+                          id: "nav:state:todo",
+                          title: "Todo",
+                          label: String(todoStateCounts['todo']),
+                          icon: <CircleDashed className="h-3.5 w-3.5" />,
+                          iconColor: "text-muted-foreground",
+                          variant: chatFilter?.kind === 'state' && chatFilter.stateId === 'todo' ? "default" : "ghost",
+                          onClick: () => handleTodoStateClick('todo'),
+                        },
+                        {
+                          id: "nav:state:in-progress",
+                          title: "In Progress",
+                          label: String(todoStateCounts['in-progress']),
+                          icon: <CircleProgress className="h-3.5 w-3.5" />,
+                          iconColor: getStateColor('in-progress', todoStates),
+                          variant: chatFilter?.kind === 'state' && chatFilter.stateId === 'in-progress' ? "default" : "ghost",
+                          onClick: () => handleTodoStateClick('in-progress'),
+                        },
+                        {
+                          id: "nav:state:needs-review",
+                          title: "Needs Review",
+                          label: String(todoStateCounts['needs-review']),
+                          icon: <CircleEye className="h-3.5 w-3.5" />,
+                          iconColor: getStateColor('needs-review', todoStates),
+                          variant: chatFilter?.kind === 'state' && chatFilter.stateId === 'needs-review' ? "default" : "ghost",
+                          onClick: () => handleTodoStateClick('needs-review'),
+                        },
+                        {
+                          id: "nav:state:done",
+                          title: "Done",
+                          label: String(todoStateCounts['done']),
+                          icon: <CircleCheckFilled className="h-3.5 w-3.5" />,
+                          iconColor: "text-accent",
+                          variant: chatFilter?.kind === 'state' && chatFilter.stateId === 'done' ? "default" : "ghost",
+                          onClick: () => handleTodoStateClick('done'),
+                        },
+                        {
+                          id: "nav:state:cancelled",
+                          title: "Cancelled",
+                          label: String(todoStateCounts['cancelled']),
+                          icon: <CircleXFilled className="h-3.5 w-3.5" />,
+                          iconColor: "text-muted-foreground/60",
+                          variant: chatFilter?.kind === 'state' && chatFilter.stateId === 'cancelled' ? "default" : "ghost",
+                          onClick: () => handleTodoStateClick('cancelled'),
+                        },
+                      ],
                     },
                     {
                       id: "nav:sources",
                       title: "Sources",
                       label: String(sources.length),
                       icon: <McpIcon className="h-4 w-4" />,
-                      variant: isSourcesMode(sidebarMode) ? "default" : "ghost",
+                      variant: isSourcesNavigation(navState) && !navState.category ? "default" : "ghost",
                       onClick: handleSourcesClick,
+                      expandable: true,
+                      expanded: isExpanded('nav:sources'),
+                      onToggle: () => toggleExpanded('nav:sources'),
+                      items: [
+                        {
+                          id: "nav:sources:local-files",
+                          title: "Local Files",
+                          label: String(sourceCounts.localFiles),
+                          icon: FolderOpen,
+                          variant: isSourcesNavigation(navState) && navState.category === 'local-files' ? "default" : "ghost",
+                          onClick: () => handleSourceCategoryClick('local-files'),
+                        },
+                        {
+                          id: "nav:sources:online-sources",
+                          title: "Online Sources",
+                          label: String(sourceCounts.onlineSources),
+                          icon: Globe,
+                          variant: isSourcesNavigation(navState) && navState.category === 'online-sources' ? "default" : "ghost",
+                          onClick: () => handleSourceCategoryClick('online-sources'),
+                        },
+                        {
+                          id: "nav:sources:local-mcp",
+                          title: "Local MCP",
+                          label: String(sourceCounts.localMcp),
+                          icon: Terminal,
+                          variant: isSourcesNavigation(navState) && navState.category === 'local-mcp' ? "default" : "ghost",
+                          onClick: () => handleSourceCategoryClick('local-mcp'),
+                        },
+                      ],
+                    },
+                    {
+                      id: "nav:settings",
+                      title: "Settings",
+                      icon: Settings,
+                      variant: isSettingsNavigation(navState) ? "default" : "ghost",
+                      onClick: () => handleSettingsClick('general'),
                     },
                   ]}
                 />
-                {/* Agent Tree: Hierarchical list of agents - Collapsible */}
-                <Collapsible
-                  open={!agentsCollapsed}
-                  onOpenChange={(open) => setAgentsCollapsed(!open)}
-                  className="flex-1 min-h-0 flex flex-col overflow-hidden mb-1"
-                >
-                  <CollapsibleTrigger asChild>
-                    <button className="group flex items-center justify-between w-full pl-4 pr-3.5 pt-2 pb-1 shrink-0">
-                      <span className="flex items-center gap-1.5">
-                        <span className="text-xs font-medium text-muted-foreground select-none">Agents</span>
-                        {isLoadingAgents && agents.length > 0 && (
-                          <Spinner className="text-xs text-muted-foreground" />
-                        )}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <span
-                              className="p-0.5 rounded hover:bg-foreground/5 data-[state=open]:bg-foreground/5 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100 transition-opacity cursor-pointer"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <MoreHorizontal className="h-3 w-3" />
-                            </span>
-                          </DropdownMenuTrigger>
-                          <StyledDropdownMenuContent align="end" minWidth="min-w-0">
-                            <StyledDropdownMenuItem onClick={onRefreshAgents}>
-                              <RotateCw />
-                              Refresh
-                            </StyledDropdownMenuItem>
-                          </StyledDropdownMenuContent>
-                        </DropdownMenu>
-                        <ChevronDown className={cn(
-                          "h-3.5 w-3.5 text-muted-foreground/50 opacity-0 group-hover:opacity-100 transition-all duration-200",
-                          agentsCollapsed && "-rotate-90"
-                        )} />
-                      </span>
-                    </button>
-                  </CollapsibleTrigger>
-                  {/* Scrollable Agent Tree */}
-                  <AnimatedCollapsibleContent isOpen={!agentsCollapsed} className="flex-1 min-h-0">
-                    <ScrollArea className="h-full">
-                      <AnimatePresence mode="wait">
-                        <motion.div
-                          key={activeWorkspaceId ?? 'none'}
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          exit={{ opacity: 0 }}
-                          transition={{ duration: 0.15 }}
-                          className="px-2 py-1"
-                        >
-                          {agents.length === 0 ? (
-                            isLoadingAgents ? (
-                              <div className="flex items-center gap-2 px-2 py-4">
-                                <Spinner className="text-sm text-muted-foreground" />
-                                <span className="text-xs text-muted-foreground">Loading agents...</span>
-                              </div>
-                            ) : (
-                              <p className="text-xs text-muted-foreground px-2 py-4">
-                                No agents found. Create an "Agents" folder in your Craft space.
-                              </p>
-                            )
+                {/* Agent Tree: Hierarchical list of agents */}
+                <div className="flex-1 min-h-0 flex flex-col overflow-hidden mb-1">
+                  <ScrollArea className="h-full">
+                    <AnimatePresence mode="wait">
+                      <motion.div
+                        key={activeWorkspaceId ?? 'none'}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.15 }}
+                        className="px-2 py-1"
+                      >
+                        {agents.length === 0 ? (
+                          isLoadingAgents ? (
+                            <div className="flex items-center gap-2 px-2 py-4">
+                              <Spinner className="text-sm text-muted-foreground" />
+                              <span className="text-xs text-muted-foreground">Loading agents...</span>
+                            </div>
                           ) : (
-                            <AgentTree
-                              folder={agentTree}
-                              level={0}
-                              isCollapsed={false}
-                              selectedAgentId={selectedAgentId}
-                              onSelectAgent={handleSelectAgent}
-                              getConversationCount={getConversationCount}
-                              onAgentAction={handleAgentAction}
-                              isFocused={sidebarFocused}
-                              expandedFolders={expandedFolders}
-                              onToggleFolder={handleToggleFolder}
-                              focusedItemId={focusedSidebarItemId}
-                              onFocusItem={setFocusedSidebarItemId}
-                              getItemProps={getSidebarItemProps}
-                              agentStatus={agentStatus}
-                              agentLogos={agentLogos}
-                              onAgentDoubleClick={handleAgentDoubleClick}
-                              agentSources={agentSources}
-                              expandedAgentSources={expandedAgentSources}
-                              onToggleAgentSources={handleToggleAgentSources}
-                              onPromoteSource={handlePromoteSource}
-                              onOpenSourceInfo={handleOpenSourceInfo}
-                            />
-                          )}
-                        </motion.div>
-                      </AnimatePresence>
-                    </ScrollArea>
-                  </AnimatedCollapsibleContent>
-                </Collapsible>
+                            <p className="text-xs text-muted-foreground px-2 py-4">
+                              No agents found. Create an "Agents" folder in your Craft space.
+                            </p>
+                          )
+                        ) : (
+                          <AgentTree
+                            folder={agentTree}
+                            level={0}
+                            isCollapsed={false}
+                            selectedAgentId={selectedAgentId}
+                            onSelectAgent={handleSelectAgent}
+                            getConversationCount={getConversationCount}
+                            onAgentAction={handleAgentAction}
+                            isFocused={sidebarFocused}
+                            expandedFolders={expandedFolders}
+                            onToggleFolder={handleToggleFolder}
+                            focusedItemId={focusedSidebarItemId}
+                            onFocusItem={setFocusedSidebarItemId}
+                            getItemProps={getSidebarItemProps}
+                            agentStatus={agentStatus}
+                            agentLogos={agentLogos}
+                            onAgentDoubleClick={handleAgentDoubleClick}
+                            agentSources={agentSources}
+                            expandedAgentSources={expandedAgentSources}
+                            onToggleAgentSources={handleToggleAgentSources}
+                            onPromoteSource={handlePromoteSource}
+                            onOpenSourceInfo={handleOpenSourceInfo}
+                          />
+                        )}
+                      </motion.div>
+                    </AnimatePresence>
+                  </ScrollArea>
+                </div>
               </div>
 
               {/* Sidebar Bottom Section: WorkspaceSwitcher + Settings */}
@@ -1951,184 +1968,189 @@ export function AppShell({
             className="h-full flex flex-col min-w-0 bg-background shrink-0 shadow-middle rounded-[14px] overflow-hidden"
             style={{ width: sessionListWidth }}
           >
-            {/* Header: Dynamic title (Conversations/Archive/Agent name)
-                Animated margin when sidebar toggles - uses same spring curve */}
-            <motion.div
-              initial={false}
-              animate={{ marginLeft: isSidebarVisible ? 0 : 102 }}
-              transition={springTransition}
-              className="flex h-[36px] shrink-0 items-center pl-5 pr-2 min-w-0 relative z-50"
-            >
-              <div className="flex-1 min-w-0 flex items-center">
-                <h1 className="text-sm font-semibold truncate font-sans leading-tight">{listTitle}</h1>
-              </div>
-              {/* Filter dropdown - allows filtering by todo states (only in All Chats view) */}
-              {chatFilter?.kind === 'inbox' && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className={cn(
-                        "h-7 w-7 shrink-0 rounded-[4px] titlebar-no-drag",
-                        listFilter.size > 0 ? "text-foreground" : "text-muted-foreground hover:text-foreground"
-                      )}
-                    >
-                      <ListFilter className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <StyledDropdownMenuContent align="end" light minWidth="min-w-[200px]">
-                    {/* Header with title and clear button */}
-                    <div className="flex items-center justify-between px-2 py-1.5 border-b border-foreground/5">
-                      <span className="text-xs font-medium text-muted-foreground">Filter Chats</span>
-                      {listFilter.size > 0 && (
-                        <button
+            <PanelHeader
+              title={listTitle}
+              compensateForStoplight={!isSidebarVisible}
+              actions={
+                <>
+                  {/* Filter dropdown - allows filtering by todo states (only in All Chats view) */}
+                  {chatFilter?.kind === 'inbox' && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className={cn(
+                            "h-7 w-7 shrink-0 rounded-[4px] titlebar-no-drag",
+                            listFilter.size > 0 ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                          )}
+                        >
+                          <ListFilter className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <StyledDropdownMenuContent align="end" light minWidth="min-w-[200px]">
+                        {/* Header with title and clear button */}
+                        <div className="flex items-center justify-between px-2 py-1.5 border-b border-foreground/5">
+                          <span className="text-xs font-medium text-muted-foreground">Filter Chats</span>
+                          {listFilter.size > 0 && (
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault()
+                                setListFilter(new Set())
+                              }}
+                              className="text-xs text-muted-foreground hover:text-foreground"
+                            >
+                              Clear
+                            </button>
+                          )}
+                        </div>
+                        <StyledDropdownMenuItem
                           onClick={(e) => {
                             e.preventDefault()
-                            setListFilter(new Set())
+                            setListFilter(prev => {
+                              const next = new Set(prev)
+                              if (next.has('todo')) next.delete('todo')
+                              else next.add('todo')
+                              return next
+                            })
                           }}
-                          className="text-xs text-muted-foreground hover:text-foreground"
                         >
-                          Clear
-                        </button>
-                      )}
-                    </div>
-                    <StyledDropdownMenuItem
-                      onClick={(e) => {
-                        e.preventDefault()
-                        setListFilter(prev => {
-                          const next = new Set(prev)
-                          if (next.has('todo')) next.delete('todo')
-                          else next.add('todo')
-                          return next
-                        })
-                      }}
-                    >
-                      <CircleDashed className="h-3.5 w-3.5 text-muted-foreground" />
-                      <span className="flex-1">Todo</span>
-                      <span className="w-3.5 ml-4">{listFilter.has('todo') && <Check className="h-3.5 w-3.5 text-foreground" />}</span>
-                    </StyledDropdownMenuItem>
-                    <StyledDropdownMenuItem
-                      onClick={(e) => {
-                        e.preventDefault()
-                        setListFilter(prev => {
-                          const next = new Set(prev)
-                          if (next.has('in-progress')) next.delete('in-progress')
-                          else next.add('in-progress')
-                          return next
-                        })
-                      }}
-                    >
-                      <CircleProgress className="h-3.5 w-3.5" style={isHexColor(getStateColor('in-progress', todoStates)) ? { color: getStateColor('in-progress', todoStates) } : undefined} />
-                      <span className="flex-1">In Progress</span>
-                      <span className="w-3.5 ml-4">{listFilter.has('in-progress') && <Check className="h-3.5 w-3.5 text-foreground" />}</span>
-                    </StyledDropdownMenuItem>
-                    <StyledDropdownMenuItem
-                      onClick={(e) => {
-                        e.preventDefault()
-                        setListFilter(prev => {
-                          const next = new Set(prev)
-                          if (next.has('needs-review')) next.delete('needs-review')
-                          else next.add('needs-review')
-                          return next
-                        })
-                      }}
-                    >
-                      <CircleEye className="h-3.5 w-3.5" style={isHexColor(getStateColor('needs-review', todoStates)) ? { color: getStateColor('needs-review', todoStates) } : undefined} />
-                      <span className="flex-1">Needs Review</span>
-                      <span className="w-3.5 ml-4">{listFilter.has('needs-review') && <Check className="h-3.5 w-3.5 text-foreground" />}</span>
-                    </StyledDropdownMenuItem>
-                    <StyledDropdownMenuItem
-                      onClick={(e) => {
-                        e.preventDefault()
-                        setListFilter(prev => {
-                          const next = new Set(prev)
-                          if (next.has('done')) next.delete('done')
-                          else next.add('done')
-                          return next
-                        })
-                      }}
-                    >
-                      <CircleCheckFilled className="h-3.5 w-3.5 text-accent" />
-                      <span className="flex-1">Done</span>
-                      <span className="w-3.5 ml-4">{listFilter.has('done') && <Check className="h-3.5 w-3.5 text-foreground" />}</span>
-                    </StyledDropdownMenuItem>
-                    <StyledDropdownMenuItem
-                      onClick={(e) => {
-                        e.preventDefault()
-                        setListFilter(prev => {
-                          const next = new Set(prev)
-                          if (next.has('cancelled')) next.delete('cancelled')
-                          else next.add('cancelled')
-                          return next
-                        })
-                      }}
-                    >
-                      <CircleXFilled className="h-3.5 w-3.5 text-muted-foreground/60" />
-                      <span className="flex-1">Cancelled</span>
-                      <span className="w-3.5 ml-4">{listFilter.has('cancelled') && <Check className="h-3.5 w-3.5 text-foreground" />}</span>
-                    </StyledDropdownMenuItem>
-                    <StyledDropdownMenuSeparator />
-                    <StyledDropdownMenuItem
-                      onClick={() => {
-                        setSearchActive(true)
-                      }}
-                    >
-                      <Search className="h-3.5 w-3.5" />
-                      <span className="flex-1">Search</span>
-                    </StyledDropdownMenuItem>
-                  </StyledDropdownMenuContent>
-                </DropdownMenu>
-              )}
-              {/* More menu with Search for non-inbox views (only for chats mode) */}
-              {isChatsMode(sidebarMode) && chatFilter?.kind !== 'inbox' && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
+                          <CircleDashed className="h-3.5 w-3.5 text-muted-foreground" />
+                          <span className="flex-1">Todo</span>
+                          <span className="w-3.5 ml-4">{listFilter.has('todo') && <Check className="h-3.5 w-3.5 text-foreground" />}</span>
+                        </StyledDropdownMenuItem>
+                        <StyledDropdownMenuItem
+                          onClick={(e) => {
+                            e.preventDefault()
+                            setListFilter(prev => {
+                              const next = new Set(prev)
+                              if (next.has('in-progress')) next.delete('in-progress')
+                              else next.add('in-progress')
+                              return next
+                            })
+                          }}
+                        >
+                          <CircleProgress className="h-3.5 w-3.5" style={isHexColor(getStateColor('in-progress', todoStates)) ? { color: getStateColor('in-progress', todoStates) } : undefined} />
+                          <span className="flex-1">In Progress</span>
+                          <span className="w-3.5 ml-4">{listFilter.has('in-progress') && <Check className="h-3.5 w-3.5 text-foreground" />}</span>
+                        </StyledDropdownMenuItem>
+                        <StyledDropdownMenuItem
+                          onClick={(e) => {
+                            e.preventDefault()
+                            setListFilter(prev => {
+                              const next = new Set(prev)
+                              if (next.has('needs-review')) next.delete('needs-review')
+                              else next.add('needs-review')
+                              return next
+                            })
+                          }}
+                        >
+                          <CircleEye className="h-3.5 w-3.5" style={isHexColor(getStateColor('needs-review', todoStates)) ? { color: getStateColor('needs-review', todoStates) } : undefined} />
+                          <span className="flex-1">Needs Review</span>
+                          <span className="w-3.5 ml-4">{listFilter.has('needs-review') && <Check className="h-3.5 w-3.5 text-foreground" />}</span>
+                        </StyledDropdownMenuItem>
+                        <StyledDropdownMenuItem
+                          onClick={(e) => {
+                            e.preventDefault()
+                            setListFilter(prev => {
+                              const next = new Set(prev)
+                              if (next.has('done')) next.delete('done')
+                              else next.add('done')
+                              return next
+                            })
+                          }}
+                        >
+                          <CircleCheckFilled className="h-3.5 w-3.5 text-accent" />
+                          <span className="flex-1">Done</span>
+                          <span className="w-3.5 ml-4">{listFilter.has('done') && <Check className="h-3.5 w-3.5 text-foreground" />}</span>
+                        </StyledDropdownMenuItem>
+                        <StyledDropdownMenuItem
+                          onClick={(e) => {
+                            e.preventDefault()
+                            setListFilter(prev => {
+                              const next = new Set(prev)
+                              if (next.has('cancelled')) next.delete('cancelled')
+                              else next.add('cancelled')
+                              return next
+                            })
+                          }}
+                        >
+                          <CircleXFilled className="h-3.5 w-3.5 text-muted-foreground/60" />
+                          <span className="flex-1">Cancelled</span>
+                          <span className="w-3.5 ml-4">{listFilter.has('cancelled') && <Check className="h-3.5 w-3.5 text-foreground" />}</span>
+                        </StyledDropdownMenuItem>
+                        <StyledDropdownMenuSeparator />
+                        <StyledDropdownMenuItem
+                          onClick={() => {
+                            setSearchActive(true)
+                          }}
+                        >
+                          <Search className="h-3.5 w-3.5" />
+                          <span className="flex-1">Search</span>
+                        </StyledDropdownMenuItem>
+                      </StyledDropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+                  {/* More menu with Search for non-inbox views (only for chats mode) */}
+                  {isChatsNavigation(navState) && chatFilter?.kind !== 'inbox' && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 shrink-0 rounded-[4px] titlebar-no-drag text-muted-foreground hover:text-foreground"
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <StyledDropdownMenuContent align="end" light>
+                        <StyledDropdownMenuItem
+                          onClick={() => {
+                            setSearchActive(true)
+                          }}
+                        >
+                          <Search className="h-3.5 w-3.5" />
+                          <span className="flex-1">Search</span>
+                        </StyledDropdownMenuItem>
+                      </StyledDropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+                  {/* Add Source button (only for sources mode) */}
+                  {isSourcesNavigation(navState) && (
                     <Button
                       variant="ghost"
                       size="icon"
                       className="h-7 w-7 shrink-0 rounded-[4px] titlebar-no-drag text-muted-foreground hover:text-foreground"
+                      onClick={handleAddSource}
                     >
-                      <MoreHorizontal className="h-4 w-4" />
+                      <Plus className="h-4 w-4" />
                     </Button>
-                  </DropdownMenuTrigger>
-                  <StyledDropdownMenuContent align="end" light>
-                    <StyledDropdownMenuItem
-                      onClick={() => {
-                        setSearchActive(true)
-                      }}
-                    >
-                      <Search className="h-3.5 w-3.5" />
-                      <span className="flex-1">Search</span>
-                    </StyledDropdownMenuItem>
-                  </StyledDropdownMenuContent>
-                </DropdownMenu>
-              )}
-              {/* Add Source button (only for sources mode) */}
-              {isSourcesMode(sidebarMode) && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 shrink-0 rounded-[4px] titlebar-no-drag text-muted-foreground hover:text-foreground"
-                  onClick={handleAddSource}
-                >
-                  <Plus className="h-4 w-4" />
-                </Button>
-              )}
-            </motion.div>
+                  )}
+                </>
+              }
+            />
             <Separator />
-            {/* Content: Either SessionList or SourcesListPanel based on sidebar mode */}
-            {isSourcesMode(sidebarMode) ? (
+            {/* Content: SessionList, SourcesListPanel, or SettingsNavigator based on navigation state */}
+            {isSourcesNavigation(navState) && (
               /* Sources List */
               <SourcesListPanel
                 sources={sources}
                 onAddSource={handleAddSource}
                 onDeleteSource={handleDeleteSource}
                 onSourceClick={handleOpenWorkspaceSourceInfo}
-                selectedSourceSlug={selectedSourceSlug}
+                selectedSourceSlug={isSourcesNavigation(navState) && navState.details ? navState.details.sourceSlug : null}
                 localMcpEnabled={localMcpEnabled}
+                category={navState.category}
               />
-            ) : (
+            )}
+            {isSettingsNavigation(navState) && (
+              /* Settings Navigator */
+              <SettingsNavigator
+                selectedSubpage={navState.subpage}
+                onSelectSubpage={(subpage) => handleSettingsClick(subpage)}
+              />
+            )}
+            {isChatsNavigation(navState) && (
               /* Sessions List */
               <>
                 {/* Activation/Auth Banner - shows when agent needs activation or authentication */}
@@ -2161,11 +2183,11 @@ export function AppShell({
                   }}
                   onNavigateToView={(view) => {
                     if (view === 'completed') {
-                      setSidebarMode({ type: 'chats', filter: { kind: 'archive' } })
+                      navigate(routes.view.archive())
                     } else if (view === 'inbox') {
-                      setSidebarMode({ type: 'chats', filter: { kind: 'inbox' } })
+                      navigate(routes.view.inbox())
                     } else if (view === 'flagged') {
-                      setSidebarMode({ type: 'chats', filter: { kind: 'flagged' } })
+                      navigate(routes.view.flagged())
                     }
                   }}
                   sessionOptions={sessionOptions}

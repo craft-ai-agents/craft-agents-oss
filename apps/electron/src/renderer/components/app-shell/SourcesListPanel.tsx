@@ -20,7 +20,7 @@ import {
   StyledDropdownMenuSeparator,
 } from '@/components/ui/styled-dropdown'
 import { cn } from '@/lib/utils'
-import type { LoadedSource, SourceConnectionStatus } from '../../../shared/types'
+import type { LoadedSource, SourceConnectionStatus, SourceCategory } from '../../../shared/types'
 
 export interface SourcesListPanelProps {
   sources: LoadedSource[]
@@ -30,7 +30,29 @@ export interface SourcesListPanelProps {
   selectedSourceSlug?: string | null
   /** Whether local MCP servers are enabled (affects stdio source status) */
   localMcpEnabled?: boolean
+  /** Filter sources by category */
+  category?: SourceCategory
   className?: string
+}
+
+/**
+ * Filter sources based on category
+ */
+function filterSourcesByCategory(sources: LoadedSource[], category?: SourceCategory): LoadedSource[] {
+  if (!category) return sources
+  return sources.filter(s => {
+    if (category === 'local-files') {
+      return s.config.type === 'local'
+    }
+    if (category === 'online-sources') {
+      return s.config.type === 'api' ||
+        (s.config.type === 'mcp' && s.config.mcp?.transport !== 'stdio')
+    }
+    if (category === 'local-mcp') {
+      return s.config.type === 'mcp' && s.config.mcp?.transport === 'stdio'
+    }
+    return true
+  })
 }
 
 export function SourcesListPanel({
@@ -40,26 +62,34 @@ export function SourcesListPanel({
   onSourceClick,
   selectedSourceSlug,
   localMcpEnabled = true,
+  category,
   className,
 }: SourcesListPanelProps) {
+  const filteredSources = React.useMemo(
+    () => filterSourcesByCategory(sources, category),
+    [sources, category]
+  )
+
   return (
     <ScrollArea className={cn('flex-1', className)}>
       <div className="pb-2">
-        {sources.length === 0 ? (
+        {filteredSources.length === 0 ? (
           <div className="px-4 py-8 text-center">
             <p className="text-sm text-muted-foreground">
-              No sources configured.
+              {category ? 'No sources in this category.' : 'No sources configured.'}
             </p>
-            <button
-              onClick={onAddSource}
-              className="mt-2 text-sm text-foreground hover:underline"
-            >
-              Add your first source
-            </button>
+            {!category && (
+              <button
+                onClick={onAddSource}
+                className="mt-2 text-sm text-foreground hover:underline"
+              >
+                Add your first source
+              </button>
+            )}
           </div>
         ) : (
           <div className="pt-2">
-            {sources.map((source, index) => (
+            {filteredSources.map((source, index) => (
               <SourceItem
                 key={`${source.config.slug}-${source.config.connectionStatus}-${source.config.isAuthenticated}-${localMcpEnabled}`}
                 source={source}

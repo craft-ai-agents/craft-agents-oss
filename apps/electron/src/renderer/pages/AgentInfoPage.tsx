@@ -8,6 +8,7 @@
 import * as React from 'react'
 import { useEffect, useState, useMemo, useCallback } from 'react'
 import { AlertCircle, AlertTriangle, CheckCircle2, ChevronRight, Lock, Globe } from 'lucide-react'
+import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { SourceAvatar } from '@/components/ui/source-avatar'
 import { McpIcon } from '@/components/icons/McpIcon'
 import { Spinner } from '@craft-agent/ui'
@@ -97,13 +98,13 @@ export default function AgentInfoPage({ agentId, agentName, workspaceId }: Agent
   }, [workspaceId, agentId, agentState.isIdle])
 
   return (
-    <ScrollArea className="h-full">
-      <div className="px-8 p-6  mx-auto">
-        {/* Agent name as title */}
-        <h2 className="text-lg font-semibold mb-4">{agentName}</h2>
-
-        {/* Show loading spinner only when we expect to get data (not for idle agents) */}
-        {definitionLoading && !agentState.isIdle && (
+    <div className="h-full flex flex-col">
+      <PanelHeader title={agentName} />
+      <Separator />
+      <ScrollArea className="flex-1">
+        <div className="px-8 py-6 mx-auto">
+          {/* Show loading spinner only when we expect to get data (not for idle agents) */}
+          {definitionLoading && !agentState.isIdle && (
           <div className="flex items-center justify-center py-8">
             <Spinner className="text-lg text-muted-foreground" />
           </div>
@@ -373,9 +374,10 @@ export default function AgentInfoPage({ agentId, agentName, workspaceId }: Agent
               onAction={handleBannerAction}
               variant="inputAreaCover"
             />
-          </div>
-        )}
-      </div>
-    </ScrollArea>
+            </div>
+          )}
+        </div>
+      </ScrollArea>
+    </div>
   )
 }

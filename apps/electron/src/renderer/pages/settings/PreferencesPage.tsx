@@ -11,7 +11,6 @@
 
 import * as React from 'react'
 import { useState, useEffect, useCallback } from 'react'
-import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
@@ -20,6 +19,12 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Spinner } from '@craft-agent/ui'
 import { Save, RotateCcw, Check, ExternalLink } from 'lucide-react'
+import type { DetailsPageMeta } from '@/lib/navigation-registry'
+
+export const meta: DetailsPageMeta = {
+  navigator: 'settings',
+  slug: 'preferences',
+}
 
 interface PreferencesFormState {
   name: string
@@ -111,7 +116,18 @@ function FormField({
   )
 }
 
-export default function PreferencesPage() {
+interface PreferencesPageProps {
+  /** Optional header actions to display in parent panel header */
+  renderHeaderActions?: (props: {
+    isDirty: boolean
+    isSaving: boolean
+    saveSuccess: boolean
+    onSave: () => void
+    onRevert: () => void
+  }) => React.ReactNode
+}
+
+export default function PreferencesPage({ renderHeaderActions }: PreferencesPageProps) {
   const [formState, setFormState] = useState<PreferencesFormState>(emptyFormState)
   const [originalState, setOriginalState] = useState<PreferencesFormState>(emptyFormState)
   const [isLoading, setIsLoading] = useState(true)
@@ -178,7 +194,7 @@ export default function PreferencesPage() {
     )
   }
 
-  // Header actions
+  // Inline header actions (when not using renderHeaderActions prop)
   const headerActions = (
     <div className="flex items-center gap-1.5">
       <button
@@ -218,8 +234,12 @@ export default function PreferencesPage() {
 
   return (
     <div className="h-full flex flex-col">
-      <PanelHeader title="Preferences" actions={headerActions} />
-      <Separator />
+      {/* Header actions shown at top of content when standalone */}
+      <div className="flex items-center justify-end px-4 py-2 border-b border-border/50">
+        {renderHeaderActions
+          ? renderHeaderActions({ isDirty, isSaving, saveSuccess, onSave: handleSave, onRevert: handleRevert })
+          : headerActions}
+      </div>
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-6">
           {/* Basic Info */}

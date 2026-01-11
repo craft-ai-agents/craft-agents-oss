@@ -4,6 +4,16 @@
  * Parses craftagents:// URLs and routes to appropriate actions.
  *
  * URL Formats (workspace is optional - uses active window if omitted):
+ *
+ * New compound format (hierarchical navigation):
+ *   craftagents://inbox[/chat/{sessionId}]               - Chat list (inbox filter)
+ *   craftagents://flagged[/chat/{sessionId}]             - Chat list (flagged filter)
+ *   craftagents://archive[/chat/{sessionId}]             - Chat list (archive filter)
+ *   craftagents://agent/{agentId}[/chat/{sessionId}]     - Chat list (agent filter)
+ *   craftagents://sources[/source/{sourceSlug}]          - Sources list
+ *   craftagents://settings[/{subpage}]                   - Settings (general, shortcuts, preferences)
+ *
+ * Legacy formats (still supported):
  *   craftagents://tab/{tabType}[/{id}][?params]
  *   craftagents://action/{actionName}[/{id}][?params]
  *   craftagents://sidebar/{filter}[/{id}]
@@ -11,12 +21,14 @@
  *   craftagents://workspace/{workspaceId}/action/{actionName}[?params]
  *
  * Examples:
- *   craftagents://tab/settings                           (uses active window)
- *   craftagents://action/new-chat?agentId=my-agent       (uses active window)
- *   craftagents://sidebar/inbox                          (uses active window)
- *   craftagents://workspace/ws123/tab/chat/session456    (targets specific workspace)
- *   craftagents://workspace/ws123/tab/agent-info/my-agent
- *   craftagents://workspace/ws123/tab/file?path=/path/to/file.txt
+ *   craftagents://inbox                                  (chat list, inbox filter)
+ *   craftagents://inbox/chat/abc123                      (specific chat in inbox)
+ *   craftagents://settings/shortcuts                     (shortcuts page)
+ *   craftagents://sources/source/github                  (github source info)
+ *   craftagents://tab/settings                           (legacy - uses active window)
+ *   craftagents://action/new-chat?agentId=my-agent       (legacy - uses active window)
+ *   craftagents://sidebar/inbox                          (legacy - uses active window)
+ *   craftagents://workspace/ws123/tab/chat/session456    (legacy - targets specific workspace)
  */
 
 import type { BrowserWindow } from 'electron'
@@ -27,6 +39,9 @@ import { IPC_CHANNELS } from '../shared/types'
 export interface DeepLinkTarget {
   /** Workspace ID - undefined means use active window */
   workspaceId?: string
+  /** New compound route format (e.g., 'inbox/chat/abc123', 'settings/shortcuts') */
+  view?: string
+  /** Legacy: tab type */
   tabType?: string
   tabParams?: Record<string, string>
   action?: string
@@ -45,6 +60,9 @@ export interface DeepLinkResult {
  * Navigation payload sent to renderer via IPC
  */
 export interface DeepLinkNavigation {
+  /** New compound route format (e.g., 'inbox/chat/abc123', 'settings/shortcuts') */
+  view?: string
+  /** Legacy: tab type */
   tabType?: string
   tabParams?: Record<string, string>
   action?: string
@@ -73,6 +91,21 @@ export function parseDeepLink(url: string): DeepLinkTarget | null {
     // craftagents://auth-callback?... (OAuth callbacks - return null to let existing handler process)
     if (host === 'auth-callback') {
       return null
+    }
+
+    // Compound route prefixes (new hierarchical format)
+    const COMPOUND_ROUTE_PREFIXES = [
+      'inbox', 'archive', 'flagged', 'agent', 'state', 'sources', 'settings'
+    ]
+
+    // craftagents://inbox/..., craftagents://settings/..., etc. (compound routes)
+    if (COMPOUND_ROUTE_PREFIXES.includes(host)) {
+      // Reconstruct the full compound route from host + pathname
+      const viewRoute = pathParts.length > 0 ? `${host}/${pathParts.join('/')}` : host
+      return {
+        workspaceId: undefined,
+        view: viewRoute,
+      }
     }
 
     // craftagents://workspace/{workspaceId}/... (with workspace targeting)
@@ -291,8 +324,9 @@ export async function handleDeepLink(
   await waitForWindowReady(window)
 
   // 3. Send navigation command to renderer
-  if (target.tabType || target.action || target.sidebar) {
+  if (target.view || target.tabType || target.action || target.sidebar) {
     const navigation: DeepLinkNavigation = {
+      view: target.view,
       tabType: target.tabType,
       tabParams: target.tabParams,
       action: target.action,

@@ -48,8 +48,7 @@ export function NavigatorPanel({
       <PanelHeader
         title={title}
         actions={headerActions}
-        animated
-        isSidebarVisible={isSidebarVisible}
+        compensateForStoplight={!isSidebarVisible}
       />
       <Separator />
       {children}

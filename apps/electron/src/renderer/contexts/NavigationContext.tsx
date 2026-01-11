@@ -4,12 +4,20 @@
  * Provides a global `navigate()` function that decouples components from
  * direct session/action imports. All navigation goes through typed routes.
  *
+ * UNIFIED NAVIGATION STATE:
+ * This context now maintains a single NavigationState that determines all 3 panels:
+ * - LeftSidebar: highlighted item (derived from navigator + filter/category/subpage)
+ * - NavigatorPanel: which list to show (derived from navigator)
+ * - MainContentPanel: what details to display (derived from details or subpage)
+ *
  * Usage:
- *   import { useNavigation } from '@/contexts/NavigationContext'
+ *   import { useNavigation, useNavigationState } from '@/contexts/NavigationContext'
  *   import { routes } from '@/shared/routes'
  *
  *   const { navigate } = useNavigation()
- *   navigate(routes.tab.settings())
+ *   const navState = useNavigationState()
+ *
+ *   navigate(routes.view.inbox())
  *   navigate(routes.action.newChat({ agentId: 'claude' }))
  */
 
@@ -20,42 +28,60 @@ import {
   useEffect,
   useRef,
   useState,
+  useMemo,
   type ReactNode,
 } from 'react'
+import { useAtomValue } from 'jotai'
 import { useSession } from '@/hooks/useSession'
-import { parseRoute, type ParsedRoute } from '../../shared/route-parser'
+import {
+  parseRoute,
+  parseRouteToNavigationState,
+  buildRouteFromNavigationState,
+  type ParsedRoute,
+} from '../../shared/route-parser'
 import { routes, type Route } from '../../shared/routes'
 import { NAVIGATE_EVENT } from '../lib/navigate'
-import type { DeepLinkNavigation, Session } from '../../shared/types'
+import type {
+  DeepLinkNavigation,
+  Session,
+  NavigationState,
+  ChatFilter,
+  SourceCategory,
+  LoadedSource,
+} from '../../shared/types'
+import {
+  isChatsNavigation,
+  isSourcesNavigation,
+  isSettingsNavigation,
+  DEFAULT_NAVIGATION_STATE,
+} from '../../shared/types'
+import { sessionMetaMapAtom, type SessionMeta } from '@/atoms/sessions'
+import { sourcesAtom } from '@/atoms/sources'
+
+/**
+ * Get the category of a source
+ */
+function getSourceCategory(source: LoadedSource): SourceCategory {
+  if (source.config.type === 'local') return 'local-files'
+  if (source.config.type === 'mcp' && source.config.mcp?.transport === 'stdio') return 'local-mcp'
+  return 'online-sources'
+}
 
 // Re-export routes for convenience
 export { routes }
 export type { Route }
 
-/**
- * Represents the current view in the main content panel.
- * - 'chat': Display the selected session's chat
- * - 'settings': Display the settings page
- * - 'preferences': Display the preferences page
- * - 'shortcuts': Display the keyboard shortcuts page
- * - 'source-info': Display source info (with sourceSlug, agentSlug)
- * - 'agent-info': Display agent info (with agentId)
- */
-export type ActiveView =
-  | { type: 'chat' }
-  | { type: 'settings' }
-  | { type: 'preferences' }
-  | { type: 'shortcuts' }
-  | { type: 'source-info'; sourceSlug: string; agentSlug?: string }
-  | { type: 'agent-info'; agentId: string; agentName: string }
+// Re-export navigation state types for consumers
+export type { NavigationState, ChatFilter, SourceCategory }
+export { isChatsNavigation, isSourcesNavigation, isSettingsNavigation }
 
 interface NavigationContextValue {
   /** Navigate to a route */
   navigate: (route: Route) => void | Promise<void>
   /** Check if navigation is ready */
   isReady: boolean
-  /** Current active view in main content panel */
-  activeView: ActiveView
+  /** Unified navigation state - single source of truth for all 3 panels */
+  navigationState: NavigationState
   /** Whether we can go back in history */
   canGoBack: boolean
   /** Whether we can go forward in history */
@@ -76,11 +102,6 @@ interface NavigationProviderProps {
   onCreateSession: (workspaceId: string, agentId?: string) => Promise<Session>
   /** Input change handler for pre-filling chat input */
   onInputChange?: (sessionId: string, value: string) => void
-  /** Sidebar mode setter */
-  onSidebarNavigate?: (
-    mode: 'chats' | 'sources',
-    filter?: { kind: string; id?: string }
-  ) => void
   /** Whether the app is ready to navigate */
   isReady?: boolean
   /** List of agents (for agent name lookup) */
@@ -92,14 +113,20 @@ export function NavigationProvider({
   workspaceId,
   onCreateSession,
   onInputChange,
-  onSidebarNavigate,
   isReady = true,
   agents = [],
 }: NavigationProviderProps) {
   const [, setSession] = useSession()
 
-  // Active view state - defaults to chat view
-  const [activeView, setActiveView] = useState<ActiveView>({ type: 'chat' })
+  // Read session metadata directly from atom (reactive to session changes)
+  const sessionMetaMap = useAtomValue(sessionMetaMapAtom)
+  const sessionMetas = useMemo(() => Array.from(sessionMetaMap.values()), [sessionMetaMap])
+
+  // Read sources from atom (populated by AppShell)
+  const sources = useAtomValue(sourcesAtom)
+
+  // UNIFIED NAVIGATION STATE - single source of truth for all 3 panels
+  const [navigationState, setNavigationState] = useState<NavigationState>(DEFAULT_NAVIGATION_STATE)
 
   // Track history state for back/forward buttons
   const [canGoBack, setCanGoBack] = useState(false)
@@ -118,76 +145,55 @@ export function NavigationProvider({
   // Queue navigation if not ready yet
   const pendingNavigationRef = useRef<ParsedRoute | null>(null)
 
-  // Handle tab navigation - sets activeView for main content panel
-  const handleTabNavigation = useCallback(
-    (parsed: ParsedRoute) => {
-      if (!workspaceId) return
+  // Helper: Check if a session is "done" (completed or cancelled)
+  const isSessionDone = useCallback((session: SessionMeta): boolean => {
+    return session.todoState === 'done' || session.todoState === 'cancelled'
+  }, [])
 
-      switch (parsed.name) {
-        case 'settings':
-          setActiveView({ type: 'settings' })
-          break
-
-        case 'shortcuts':
-          setActiveView({ type: 'shortcuts' })
-          break
-
-        case 'preferences':
-          setActiveView({ type: 'preferences' })
-          break
-
-        case 'chat':
-          if (parsed.id) {
-            // Select the session and switch to chat view
-            setSession({ selected: parsed.id })
-            setActiveView({ type: 'chat' })
-          }
-          break
-
-        case 'agent-info':
-          if (parsed.id) {
-            // Find agent name from agents list
-            const agent = agents.find(a => a.id === parsed.id)
-            setActiveView({
-              type: 'agent-info',
-              agentId: parsed.id,
-              agentName: agent?.name || parsed.id,
-            })
-          }
-          break
-
-        case 'source-info':
-          if (parsed.id) {
-            setActiveView({
-              type: 'source-info',
-              sourceSlug: parsed.id,
-              agentSlug: parsed.params.agentSlug,
-            })
-          }
-          break
-
-        case 'file':
-          // Open file in system viewer
-          if (parsed.params.path) {
-            window.electronAPI.openFile(parsed.params.path)
-          }
-          break
-
-        case 'browser':
-          // Open URL in system browser
-          if (parsed.params.url) {
-            window.electronAPI.openUrl(parsed.params.url)
-          }
-          break
-
-        default:
-          console.warn('[Navigation] Unknown tab:', parsed.name)
-      }
+  // Helper: Filter sessions by ChatFilter
+  const filterSessionsByFilter = useCallback(
+    (filter: ChatFilter): SessionMeta[] => {
+      return sessionMetas.filter((session) => {
+        switch (filter.kind) {
+          case 'inbox':
+            return !isSessionDone(session)
+          case 'archive':
+            return isSessionDone(session)
+          case 'flagged':
+            return session.isFlagged === true
+          case 'agent':
+            return session.agentId === filter.agentId && !isSessionDone(session)
+          case 'state':
+            return session.todoState === filter.stateId
+          default:
+            return false
+        }
+      })
     },
-    [workspaceId, setSession, agents]
+    [sessionMetas, isSessionDone]
   )
 
-  // Handle action navigation
+  // Helper: Get first session ID for a filter
+  const getFirstSessionId = useCallback(
+    (filter: ChatFilter): string | null => {
+      const filtered = filterSessionsByFilter(filter)
+      return filtered[0]?.id ?? null
+    },
+    [filterSessionsByFilter]
+  )
+
+  // Helper: Get first source slug (optionally filtered by category)
+  const getFirstSourceSlug = useCallback(
+    (category?: SourceCategory): string | null => {
+      const filtered = category
+        ? sources.filter(s => getSourceCategory(s) === category)
+        : sources
+      return filtered[0]?.config.slug ?? null
+    },
+    [sources]
+  )
+
+  // Handle action navigation (side effects that don't change navigation state)
   const handleActionNavigation = useCallback(
     async (parsed: ParsedRoute) => {
       if (!workspaceId) return
@@ -204,9 +210,13 @@ export function NavigationProvider({
             await window.electronAPI.sessionCommand(session.id, { type: 'rename', name: parsed.params.name })
           }
 
-          // Select the new session and switch to chat view
+          // Update navigation state to show new chat in inbox
           setSession({ selected: session.id })
-          setActiveView({ type: 'chat' })
+          setNavigationState({
+            navigator: 'chats',
+            filter: { kind: 'inbox' },
+            details: { type: 'chat', sessionId: session.id },
+          })
 
           // Pre-fill input if provided
           if (parsed.params.input && onInputChange) {
@@ -287,51 +297,76 @@ export function NavigationProvider({
     [workspaceId, onCreateSession, onInputChange, setSession]
   )
 
-  // Handle sidebar navigation
-  const handleSidebarNavigation = useCallback(
-    (parsed: ParsedRoute) => {
-      if (!onSidebarNavigate) {
-        console.warn('[Navigation] Sidebar navigation not configured')
+  // Handle special tab routes (file/browser open - not navigation state changes)
+  const handleSpecialTabRoutes = useCallback((parsed: ParsedRoute): boolean => {
+    switch (parsed.name) {
+      case 'file':
+        if (parsed.params.path) {
+          window.electronAPI.openFile(parsed.params.path)
+          return true
+        }
+        break
+      case 'browser':
+        if (parsed.params.url) {
+          window.electronAPI.openUrl(parsed.params.url)
+          return true
+        }
+        break
+    }
+    return false
+  }, [])
+
+  /**
+   * Apply navigation state with auto-selection logic
+   *
+   * When navigating to a filter/category without explicit details,
+   * auto-select the first available item. This ensures the main content
+   * panel always shows meaningful content when possible.
+   */
+  const applyNavigationState = useCallback(
+    (newState: NavigationState) => {
+      // For chats: auto-select first session if no details provided
+      if (isChatsNavigation(newState) && !newState.details) {
+        const firstSessionId = getFirstSessionId(newState.filter)
+        if (firstSessionId) {
+          setSession({ selected: firstSessionId })
+          setNavigationState({
+            ...newState,
+            details: { type: 'chat', sessionId: firstSessionId },
+          })
+        } else {
+          setSession({ selected: null })
+          setNavigationState(newState)
+        }
         return
       }
 
-      switch (parsed.name) {
-        case 'inbox':
-          onSidebarNavigate('chats', { kind: 'inbox' })
-          break
-
-        case 'archive':
-          onSidebarNavigate('chats', { kind: 'archive' })
-          break
-
-        case 'flagged':
-          onSidebarNavigate('chats', { kind: 'flagged' })
-          break
-
-        case 'sources':
-          onSidebarNavigate('sources')
-          break
-
-        case 'agent':
-          if (parsed.id) {
-            onSidebarNavigate('chats', { kind: 'agent', id: parsed.id })
-          }
-          break
-
-        case 'state':
-          if (parsed.id) {
-            onSidebarNavigate('chats', { kind: 'state', id: parsed.id })
-          }
-          break
-
-        default:
-          console.warn('[Navigation] Unknown sidebar:', parsed.name)
+      // For sources: auto-select first source if no details provided
+      if (isSourcesNavigation(newState) && !newState.details) {
+        const firstSourceSlug = getFirstSourceSlug(newState.category)
+        if (firstSourceSlug) {
+          setNavigationState({
+            ...newState,
+            details: { type: 'source', sourceSlug: firstSourceSlug },
+          })
+        } else {
+          setNavigationState(newState)
+        }
+        return
       }
+
+      // For chats with explicit session: update session selection
+      if (isChatsNavigation(newState) && newState.details) {
+        setSession({ selected: newState.details.sessionId })
+      }
+
+      // Apply state directly
+      setNavigationState(newState)
     },
-    [onSidebarNavigate]
+    [getFirstSessionId, getFirstSourceSlug, setSession]
   )
 
-  // Main navigate function
+  // Main navigate function - unified approach using NavigationState
   const navigate = useCallback(
     async (route: Route) => {
       const parsed = parseRoute(route)
@@ -347,54 +382,55 @@ export function NavigationProvider({
 
       console.log('[Navigation] Navigating:', parsed)
 
-      switch (parsed.type) {
-        case 'tab':
-          handleTabNavigation(parsed)
-          break
-
-        case 'action':
-          await handleActionNavigation(parsed)
-          break
-
-        case 'sidebar':
-          handleSidebarNavigation(parsed)
-          break
+      // Handle special tab routes (file/browser open) that don't change navigation state
+      if (parsed.type === 'tab' && handleSpecialTabRoutes(parsed)) {
+        return
       }
 
-      // Persist route in URL for reload restoration (skip actions - they're one-time operations)
-      if (parsed.type !== 'action') {
-        const url = new URL(window.location.href)
-        url.searchParams.set('route', route)
-        history.replaceState({ route }, '', url.toString())
+      // Handle actions (side effects)
+      if (parsed.type === 'action') {
+        await handleActionNavigation(parsed)
+        return // Actions handle their own state updates
+      }
 
-        // Update our custom history stack (unless we're navigating via back/forward)
-        if (isNavigatingHistoryRef.current) {
-          isNavigatingHistoryRef.current = false
-          console.log('[Navigation] Skipping history push (navigating via back/forward)')
+      // Parse route to unified NavigationState
+      const newNavState = parseRouteToNavigationState(route)
+      if (newNavState) {
+        applyNavigationState(newNavState)
+      }
+
+      // Persist route in URL for reload restoration
+      const url = new URL(window.location.href)
+      url.searchParams.set('route', route)
+      history.replaceState({ route }, '', url.toString())
+
+      // Update our custom history stack (unless we're navigating via back/forward)
+      if (isNavigatingHistoryRef.current) {
+        isNavigatingHistoryRef.current = false
+        console.log('[Navigation] Skipping history push (navigating via back/forward)')
+      } else {
+        // Only push if route is different from current route (avoid duplicates)
+        const currentRoute = historyStackRef.current[historyIndexRef.current]
+        if (route !== currentRoute) {
+          // When navigating to a new route, truncate forward history and push
+          const newIndex = historyIndexRef.current + 1
+          historyStackRef.current = historyStackRef.current.slice(0, newIndex)
+          historyStackRef.current.push(route)
+          historyIndexRef.current = newIndex
+          console.log('[Navigation] Pushed to history:', route, 'index:', newIndex, 'stack length:', historyStackRef.current.length)
         } else {
-          // Only push if route is different from current route (avoid duplicates)
-          const currentRoute = historyStackRef.current[historyIndexRef.current]
-          if (route !== currentRoute) {
-            // When navigating to a new route, truncate forward history and push
-            const newIndex = historyIndexRef.current + 1
-            historyStackRef.current = historyStackRef.current.slice(0, newIndex)
-            historyStackRef.current.push(route)
-            historyIndexRef.current = newIndex
-            console.log('[Navigation] Pushed to history:', route, 'index:', newIndex, 'stack length:', historyStackRef.current.length)
-          } else {
-            console.log('[Navigation] Skipping duplicate route:', route)
-          }
+          console.log('[Navigation] Skipping duplicate route:', route)
         }
-
-        // Update back/forward availability
-        const newCanGoBack = historyIndexRef.current > 0
-        const newCanGoForward = historyIndexRef.current < historyStackRef.current.length - 1
-        console.log('[Navigation] Updating canGoBack:', newCanGoBack, 'canGoForward:', newCanGoForward)
-        setCanGoBack(newCanGoBack)
-        setCanGoForward(newCanGoForward)
       }
+
+      // Update back/forward availability
+      const newCanGoBack = historyIndexRef.current > 0
+      const newCanGoForward = historyIndexRef.current < historyStackRef.current.length - 1
+      console.log('[Navigation] Updating canGoBack:', newCanGoBack, 'canGoForward:', newCanGoForward)
+      setCanGoBack(newCanGoBack)
+      setCanGoForward(newCanGoForward)
     },
-    [isReady, handleTabNavigation, handleActionNavigation, handleSidebarNavigation]
+    [isReady, handleActionNavigation, handleSpecialTabRoutes, applyNavigationState]
   )
 
   // Keep navigateRef in sync with latest navigate function
@@ -453,19 +489,25 @@ export function NavigationProvider({
       const pending = pendingNavigationRef.current
       pendingNavigationRef.current = null
 
-      switch (pending.type) {
-        case 'tab':
-          handleTabNavigation(pending)
-          break
-        case 'action':
-          handleActionNavigation(pending)
-          break
-        case 'sidebar':
-          handleSidebarNavigation(pending)
-          break
+      // Handle special tab routes
+      if (pending.type === 'tab' && handleSpecialTabRoutes(pending)) {
+        return
+      }
+
+      // Handle actions
+      if (pending.type === 'action') {
+        handleActionNavigation(pending)
+        return
+      }
+
+      // For other routes, reconstruct route string and parse to NavigationState
+      // This is a fallback - ideally we'd store the original route string
+      const navState = parseRouteToNavigationState(`${pending.type}/${pending.name}${pending.id ? `/${pending.id}` : ''}`)
+      if (navState) {
+        applyNavigationState(navState)
       }
     }
-  }, [isReady, handleTabNavigation, handleActionNavigation, handleSidebarNavigation])
+  }, [isReady, handleActionNavigation, handleSpecialTabRoutes, applyNavigationState])
 
   // Restore route from URL on startup (for CMD+R reload)
   useEffect(() => {
@@ -488,7 +530,10 @@ export function NavigationProvider({
       // Convert DeepLinkNavigation to route string and navigate
       let route: string | null = null
 
-      if (nav.tabType) {
+      // New compound route format (e.g., 'inbox/chat/abc123', 'settings/shortcuts')
+      if (nav.view) {
+        route = nav.view
+      } else if (nav.tabType) {
         route = `tab/${nav.tabType}`
         if (nav.tabParams?.id) {
           route += `/${nav.tabParams.id}`
@@ -546,7 +591,7 @@ export function NavigationProvider({
   }, [navigate])
 
   return (
-    <NavigationContext.Provider value={{ navigate, isReady, activeView, canGoBack, canGoForward, goBack, goForward }}>
+    <NavigationContext.Provider value={{ navigate, isReady, navigationState, canGoBack, canGoForward, goBack, goForward }}>
       {children}
     </NavigationContext.Provider>
   )
@@ -564,9 +609,9 @@ export function useNavigation() {
 }
 
 /**
- * Hook to access just the active view state
+ * Hook to access just the navigation state
  */
-export function useActiveView(): ActiveView {
-  const { activeView } = useNavigation()
-  return activeView
+export function useNavigationState(): NavigationState {
+  const { navigationState } = useNavigation()
+  return navigationState
 }

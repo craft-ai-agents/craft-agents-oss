@@ -10,6 +10,8 @@ import { useEffect, useState, useMemo, useCallback } from 'react'
 import {
   AlertCircle,
 } from 'lucide-react'
+import { PanelHeader } from '@/components/app-shell/PanelHeader'
+import { Separator } from '@/components/ui/separator'
 import { SourceAvatar } from '@/components/ui/source-avatar'
 import { Spinner } from '@craft-agent/ui'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -293,48 +295,65 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, agentSlug }: S
     })
   }, [source, sourceSlug])
 
+  // Get source name for header
+  const sourceName = source?.config.name || sourceSlug
+
   if (loading) {
     return (
-      <div className="h-full flex items-center justify-center">
-        <Spinner className="text-lg text-muted-foreground" />
+      <div className="h-full flex flex-col">
+        <PanelHeader title={sourceName} />
+        <Separator />
+        <div className="flex-1 flex items-center justify-center">
+          <Spinner className="text-lg text-muted-foreground" />
+        </div>
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="h-full flex flex-col items-center justify-center gap-3 text-muted-foreground p-4">
-        <AlertCircle className="h-10 w-10 text-destructive" />
-        <p className="text-sm font-medium">Error loading source</p>
-        <p className="text-xs text-center max-w-md">{error}</p>
+      <div className="h-full flex flex-col">
+        <PanelHeader title={sourceName} />
+        <Separator />
+        <div className="flex-1 flex flex-col items-center justify-center gap-3 text-muted-foreground p-4">
+          <AlertCircle className="h-10 w-10 text-destructive" />
+          <p className="text-sm font-medium">Error loading source</p>
+          <p className="text-xs text-center max-w-md">{error}</p>
+        </div>
       </div>
     )
   }
 
   if (!source) {
     return (
-      <div className="h-full flex items-center justify-center text-muted-foreground">
-        <p className="text-sm">Source not found</p>
+      <div className="h-full flex flex-col">
+        <PanelHeader title={sourceName} />
+        <Separator />
+        <div className="flex-1 flex items-center justify-center text-muted-foreground">
+          <p className="text-sm">Source not found</p>
+        </div>
       </div>
     )
   }
 
   return (
-    <ScrollArea className="h-full">
-      <div className={cn(CONTENT_MAX_WIDTH_CLASS, "mx-auto px-5 py-4")}>
-        <div className="space-y-6">
-          {/* Header */}
-          <div className="flex items-start gap-2.5">
-            <SourceAvatar source={source} className="h-[32px] w-[32px] shrink-0 mt-[2px] rounded-[4px] ring-1 ring-border/30" />
-            <div className="flex-1 min-w-0">
-              <h2 className="text-base font-semibold leading-tight">{source.config.name}</h2>
-              {source.config.tagline && (
-                <p className="text-sm text-foreground/60 mt-0 leading-snug">
-                  {source.config.tagline}
-                </p>
-              )}
+    <div className="h-full flex flex-col">
+      <PanelHeader title={sourceName} />
+      <Separator />
+      <ScrollArea className="flex-1">
+        <div className={cn(CONTENT_MAX_WIDTH_CLASS, "mx-auto px-5 py-4")}>
+          <div className="space-y-6">
+            {/* Source avatar and tagline */}
+            <div className="flex items-start gap-2.5">
+              <SourceAvatar source={source} className="h-[32px] w-[32px] shrink-0 mt-[2px] rounded-[4px] ring-1 ring-border/30" />
+              <div className="flex-1 min-w-0">
+                {source.config.tagline && (
+                  <p className="text-sm text-foreground/60 mt-0 leading-snug">
+                    {source.config.tagline}
+                  </p>
+                )}
+              </div>
             </div>
-          </div>
 
           {/* Disabled Warning - shown when source is stdio and local MCP is disabled */}
           {source.config.mcp?.transport === 'stdio' && !localMcpEnabled && (
@@ -697,8 +716,9 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, agentSlug }: S
               </div>
             </div>
           )}
+          </div>
         </div>
-      </div>
-    </ScrollArea>
+      </ScrollArea>
+    </div>
   )
 }

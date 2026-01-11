@@ -2,16 +2,17 @@
  * PanelHeader - Standardized header component for panels
  *
  * Provides consistent header styling with:
- * - Fixed 36px height
+ * - Fixed 40px height
  * - Title with optional badge
  * - Optional action buttons
- * - Optional margin animation for sidebar collapse
+ * - Optional margin compensation for macOS traffic lights
  *
  * Usage:
  * ```tsx
  * <PanelHeader
  *   title="Conversations"
  *   actions={<Button>Add</Button>}
+ *   compensateForStoplight={!isSidebarVisible}
  * />
  * ```
  */
@@ -23,6 +24,9 @@ import { cn } from '@/lib/utils'
 // Spring transition for smooth animations (matches sidebar)
 const springTransition = { type: 'spring' as const, stiffness: 300, damping: 30 }
 
+// Margin to compensate for macOS traffic lights (stoplight buttons)
+const STOPLIGHT_MARGIN = 102
+
 export interface PanelHeaderProps {
   /** Header title */
   title: string
@@ -30,12 +34,8 @@ export interface PanelHeaderProps {
   badge?: React.ReactNode
   /** Optional action buttons rendered on the right */
   actions?: React.ReactNode
-  /** Enable margin animation for sidebar collapse */
-  animated?: boolean
-  /** Margin value when sidebar is hidden (default: 102) */
-  animateMargin?: number
-  /** Whether the sidebar is visible (controls animation state) */
-  isSidebarVisible?: boolean
+  /** When true, animates left margin to avoid macOS traffic lights (use when this is the first panel on screen) */
+  compensateForStoplight?: boolean
   /** Left padding override (e.g., for focused mode with traffic lights) */
   paddingLeft?: string
   /** Optional className for additional styling */
@@ -49,9 +49,7 @@ export function PanelHeader({
   title,
   badge,
   actions,
-  animated = false,
-  animateMargin = 102,
-  isSidebarVisible = true,
+  compensateForStoplight = false,
   paddingLeft,
   className,
 }: PanelHeaderProps) {
@@ -72,28 +70,20 @@ export function PanelHeader({
   )
 
   const baseClassName = cn(
-    'flex h-[36px] shrink-0 items-center pr-2 min-w-0 gap-3 relative z-50',
-    paddingLeft || 'pl-5',
+    'flex h-[40px] shrink-0 items-center pr-2 min-w-0 gap-3 relative z-50',
+    paddingLeft || 'pl-4',
     className
   )
 
-  // Use motion.div for animated headers, regular div otherwise
-  if (animated) {
-    return (
-      <motion.div
-        initial={false}
-        animate={{ marginLeft: isSidebarVisible ? 0 : animateMargin }}
-        transition={springTransition}
-        className={baseClassName}
-      >
-        {content}
-      </motion.div>
-    )
-  }
-
+  // Use motion.div for animated stoplight compensation
   return (
-    <div className={baseClassName}>
+    <motion.div
+      initial={false}
+      animate={{ marginLeft: compensateForStoplight ? STOPLIGHT_MARGIN : 0 }}
+      transition={springTransition}
+      className={baseClassName}
+    >
       {content}
-    </div>
+    </motion.div>
   )
 }

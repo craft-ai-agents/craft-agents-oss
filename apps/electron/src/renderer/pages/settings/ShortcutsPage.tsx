@@ -5,9 +5,14 @@
  */
 
 import * as React from 'react'
-import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import type { DetailsPageMeta } from '@/lib/navigation-registry'
+
+export const meta: DetailsPageMeta = {
+  navigator: 'settings',
+  slug: 'shortcuts',
+}
 
 interface ShortcutItem {
   keys: string[]
@@ -87,8 +92,6 @@ function Kbd({ children, className }: { children: React.ReactNode; className?: s
 export default function ShortcutsPage() {
   return (
     <div className="h-full flex flex-col">
-      <PanelHeader title="Shortcuts" />
-      <Separator />
       <ScrollArea className="flex-1">
         <div className="px-5 py-4">
           <div className="space-y-6">

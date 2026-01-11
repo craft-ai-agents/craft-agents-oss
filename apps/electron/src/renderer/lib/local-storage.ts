@@ -18,9 +18,7 @@ export const KEYS = {
   selectedSourceSlug: 'selected-source-slug',
   listFilter: 'list-filter',
   expandedFolders: 'expanded-folders',
-  statusCollapsed: 'status-collapsed',
-  agentsCollapsed: 'agents-collapsed',
-  sourcesCollapsed: 'sources-collapsed',
+  collapsedSidebarItems: 'collapsed-sidebar-items',
 
   // Theme
   theme: 'theme',

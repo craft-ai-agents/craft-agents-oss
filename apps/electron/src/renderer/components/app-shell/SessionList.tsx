@@ -40,6 +40,10 @@ import { getSessionTitle } from "@/utils/session"
 import type { SessionMeta } from "@/atoms/sessions"
 import { PERMISSION_MODE_CONFIG, type PermissionMode } from "@craft-agent/shared/agent/modes"
 
+// Pagination constants
+const INITIAL_DISPLAY_LIMIT = 20
+const BATCH_SIZE = 20
+
 /**
  * Format a date for the date header
  * Returns "Today", "Yesterday", or formatted date like "Dec 19"
@@ -290,6 +294,11 @@ function SessionItem({
               {item.isFlagged && (
                 <Flag className="h-[10px] w-[10px] text-info fill-info shrink-0" />
               )}
+              {item.lastMessageRole === 'plan' && (
+                <span className="shrink-0 px-1.5 py-0.5 text-[10px] font-medium rounded bg-success/10 text-success">
+                  Plan
+                </span>
+              )}
               {permissionMode && (
                 <span
                   className={cn(
@@ -302,11 +311,6 @@ function SessionItem({
                   }}
                 >
                   {PERMISSION_MODE_CONFIG[permissionMode].shortName}
-                </span>
-              )}
-              {item.lastMessageRole === 'plan' && (
-                <span className="shrink-0 px-1.5 py-0.5 text-[10px] font-medium rounded bg-success/10 text-success">
-                  Plan
                 </span>
               )}
               {item.sharedUrl && (
@@ -601,8 +605,10 @@ export function SessionList({
   const [renameDialogOpen, setRenameDialogOpen] = useState(false)
   const [renameSessionId, setRenameSessionId] = useState<string | null>(null)
   const [renameName, setRenameName] = useState("")
+  const [displayLimit, setDisplayLimit] = useState(INITIAL_DISPLAY_LIMIT)
   const scrollRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const sentinelRef = useRef<HTMLDivElement>(null)
 
   // Focus search input when search becomes active (with delay to let dropdown close)
   useEffect(() => {
@@ -630,8 +636,43 @@ export function SessionList({
     })
   }, [sortedItems, searchQuery])
 
-  // Group sessions by date (use filtered items when searching)
-  const dateGroups = useMemo(() => groupSessionsByDate(searchFilteredItems), [searchFilteredItems])
+  // Reset display limit when search query changes
+  useEffect(() => {
+    setDisplayLimit(INITIAL_DISPLAY_LIMIT)
+  }, [searchQuery])
+
+  // Paginate items - only show up to displayLimit
+  const paginatedItems = useMemo(() => {
+    return searchFilteredItems.slice(0, displayLimit)
+  }, [searchFilteredItems, displayLimit])
+
+  // Check if there are more items to load
+  const hasMore = displayLimit < searchFilteredItems.length
+
+  // Load more items callback
+  const loadMore = useCallback(() => {
+    setDisplayLimit(prev => Math.min(prev + BATCH_SIZE, searchFilteredItems.length))
+  }, [searchFilteredItems.length])
+
+  // Intersection observer for infinite scroll
+  useEffect(() => {
+    if (!hasMore || !sentinelRef.current) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          loadMore()
+        }
+      },
+      { rootMargin: '100px' }  // Trigger slightly before reaching bottom
+    )
+
+    observer.observe(sentinelRef.current)
+    return () => observer.disconnect()
+  }, [hasMore, loadMore])
+
+  // Group sessions by date (use paginated items)
+  const dateGroups = useMemo(() => groupSessionsByDate(paginatedItems), [paginatedItems])
 
   // Create flat list for keyboard navigation (maintains order across groups)
   const flatItems = useMemo(() => {
@@ -868,6 +909,12 @@ export function SessionList({
               })}
           </div>
           ))}
+          {/* Load more sentinel - triggers infinite scroll */}
+          {hasMore && (
+            <div ref={sentinelRef} className="flex justify-center py-4">
+              <Spinner className="text-muted-foreground" />
+            </div>
+          )}
         </div>
       </ScrollArea>
 
