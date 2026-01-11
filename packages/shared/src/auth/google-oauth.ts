@@ -17,7 +17,7 @@ import { randomBytes, createHash } from 'crypto';
 import { createCallbackServer, type AppType } from './callback-server.ts';
 import { type GoogleService } from '../sources/types.ts';
 
-// Re-export GoogleService for backwards compatibility
+// Re-export GoogleService type for convenient access
 export type { GoogleService };
 
 // Google OAuth configuration - must be set via environment variables

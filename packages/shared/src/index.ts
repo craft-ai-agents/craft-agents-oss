@@ -15,7 +15,6 @@
  *
  * Available modules:
  *   - agent: CraftAgent SDK wrapper, plan tools
- *   - agents: Subagent system, extraction, state management, folder-based agents
  *   - auth: OAuth, token management, auth state
  *   - clients: Craft API client
  *   - config: Storage, models, preferences

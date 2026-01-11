@@ -34,7 +34,7 @@ import { Input } from "@/components/ui/input"
 import { RenameDialog } from "@/components/ui/rename-dialog"
 import { useSession } from "@/hooks/useSession"
 import { useFocusZone, useRovingTabIndex } from "@/hooks/keyboard"
-import { useNavigation, routes } from "@/contexts/NavigationContext"
+import { useNavigation, useNavigationState, routes, isChatsNavigation } from "@/contexts/NavigationContext"
 import { useFocusContext } from "@/context/FocusContext"
 import { getSessionTitle } from "@/utils/session"
 import type { SessionMeta } from "@/atoms/sessions"
@@ -362,9 +362,8 @@ function SessionItem({
                 </DropdownMenu>
               )}
               <span className="truncate">
-                {searchQuery && item.agentName ? highlightMatch(item.agentName, searchQuery) : item.agentName}
                 {item.lastMessageAt && (
-                  <>{item.agentName ? ' · ' : ''}{formatDistanceToNow(new Date(item.lastMessageAt), { addSuffix: true })}</>
+                  <>{formatDistanceToNow(new Date(item.lastMessageAt), { addSuffix: true })}</>
                 )}
               </span>
             </div>
@@ -552,8 +551,8 @@ interface SessionListProps {
   onSessionSelect?: (session: SessionMeta) => void
   /** Called when user wants to open a session in a new window */
   onOpenInNewWindow?: (session: SessionMeta) => void
-  /** Called to navigate to a specific view (e.g., 'completed', 'inbox') */
-  onNavigateToView?: (view: 'inbox' | 'completed' | 'flagged') => void
+  /** Called to navigate to a specific view (e.g., 'allChats', 'flagged') */
+  onNavigateToView?: (view: 'allChats' | 'flagged') => void
   /** Unified session options per session (real-time state) */
   sessionOptions?: Map<string, import('../../hooks/useSessionOptions').SessionOptions>
   /** Whether search mode is active */
@@ -602,6 +601,11 @@ export function SessionList({
 }: SessionListProps) {
   const [session] = useSession()
   const { navigate } = useNavigation()
+  const navState = useNavigationState()
+
+  // Get current filter from navigation state (for preserving context in tab routes)
+  const currentFilter = isChatsNavigation(navState) ? navState.filter : undefined
+
   const [renameDialogOpen, setRenameDialogOpen] = useState(false)
   const [renameSessionId, setRenameSessionId] = useState<string | null>(null)
   const [renameName, setRenameName] = useState("")
@@ -631,8 +635,7 @@ export function SessionList({
     const query = searchQuery.toLowerCase()
     return sortedItems.filter(item => {
       const title = getSessionTitle(item).toLowerCase()
-      const agentName = (item.agentName || '').toLowerCase()
-      return title.includes(query) || agentName.includes(query)
+      return title.includes(query)
     })
   }, [sortedItems, searchQuery])
 
@@ -697,8 +700,15 @@ export function SessionList({
 
   // Handle session selection (immediate on arrow navigation)
   const handleActiveChange = useCallback((item: SessionMeta) => {
-    navigate(routes.tab.chat(item.id))
-  }, [navigate])
+    // Navigate using view routes to preserve filter context
+    if (!currentFilter || currentFilter.kind === 'allChats') {
+      navigate(routes.view.allChats(item.id))
+    } else if (currentFilter.kind === 'flagged') {
+      navigate(routes.view.flagged(item.id))
+    } else if (currentFilter.kind === 'state') {
+      navigate(routes.view.state(currentFilter.stateId, item.id))
+    }
+  }, [navigate, currentFilter])
 
   // Handle Enter to focus chat input
   const handleEnter = useCallback(() => {
@@ -895,8 +905,14 @@ export function SessionList({
                     onMarkUnread={onMarkUnread}
                     onDelete={handleDeleteWithToast}
                     onSelect={() => {
-                      // Navigate to session (updates URL and selection)
-                      navigate(routes.tab.chat(item.id))
+                      // Navigate to session with filter context (updates URL and selection)
+                      if (!currentFilter || currentFilter.kind === 'allChats') {
+                        navigate(routes.view.allChats(item.id))
+                      } else if (currentFilter.kind === 'flagged') {
+                        navigate(routes.view.flagged(item.id))
+                      } else if (currentFilter.kind === 'state') {
+                        navigate(routes.view.state(currentFilter.stateId, item.id))
+                      }
                       // Notify parent
                       onSessionSelect?.(item)
                     }}

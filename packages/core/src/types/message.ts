@@ -14,7 +14,33 @@ export type MessageRole =
   | 'system'
   | 'info'
   | 'warning'
-  | 'plan';
+  | 'plan'
+  | 'onboarding'
+  | 'auth-request';
+
+/**
+ * Credential input modes for different auth types
+ */
+export type CredentialInputMode =
+  | 'bearer'      // Single token field (Bearer Token, API Key)
+  | 'basic'       // Username + Password fields
+  | 'header'      // API Key with custom header name
+  | 'query';      // API Key for query parameter
+
+/**
+ * Auth request types
+ */
+export type AuthRequestType =
+  | 'credential'
+  | 'oauth'
+  | 'oauth-google'
+  | 'oauth-slack'
+  | 'oauth-microsoft';
+
+/**
+ * Auth request status
+ */
+export type AuthStatus = 'pending' | 'completed' | 'cancelled' | 'failed';
 
 /**
  * Tool execution status
@@ -105,6 +131,29 @@ export interface Message {
   ultrathink?: boolean;
   // Plan-specific fields (for role='plan')
   planPath?: string;  // Path to the plan markdown file
+  // Onboarding-specific fields (for role='onboarding')
+  onboardingId?: string;
+  onboardingWidget?: 'quick-actions' | 'source-auth';
+  onboardingData?: Record<string, unknown>;
+  onboardingSent?: boolean;
+  // Auth-request-specific fields (for role='auth-request')
+  authRequestId?: string;         // Unique ID for the auth request
+  authRequestType?: AuthRequestType;
+  authSourceSlug?: string;
+  authSourceName?: string;
+  authStatus?: AuthStatus;
+  authCredentialMode?: CredentialInputMode;  // For credential requests
+  authHeaderName?: string;        // For header auth - the header name
+  authLabels?: {                  // Custom field labels
+    credential?: string;
+    username?: string;
+    password?: string;
+  };
+  authDescription?: string;       // Description/instructions
+  authHint?: string;              // Hint about where to find credentials
+  authError?: string;             // Error message if auth failed
+  authEmail?: string;             // Authenticated email (for OAuth)
+  authWorkspace?: string;         // Authenticated workspace (for Slack)
 }
 
 /**
@@ -148,6 +197,29 @@ export interface StoredMessage {
   ultrathink?: boolean;
   // Plan-specific fields (for role='plan')
   planPath?: string;
+  // Onboarding-specific fields (for role='onboarding')
+  onboardingId?: string;
+  onboardingWidget?: 'quick-actions' | 'source-auth';
+  onboardingData?: Record<string, unknown>;
+  onboardingSent?: boolean;
+  // Auth-request-specific fields (for role='auth-request')
+  authRequestId?: string;
+  authRequestType?: AuthRequestType;
+  authSourceSlug?: string;
+  authSourceName?: string;
+  authStatus?: AuthStatus;
+  authCredentialMode?: CredentialInputMode;
+  authHeaderName?: string;
+  authLabels?: {
+    credential?: string;
+    username?: string;
+    password?: string;
+  };
+  authDescription?: string;
+  authHint?: string;
+  authError?: string;
+  authEmail?: string;
+  authWorkspace?: string;
 }
 
 /**

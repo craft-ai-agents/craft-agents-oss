@@ -115,24 +115,11 @@ source_oauth::{sourceSlug}            # OAuth for MCP/API sources
 source_bearer::{sourceSlug}           # Bearer tokens
 source_apikey::{sourceSlug}           # API keys
 source_basic::{sourceSlug}            # Basic auth
-
-# Agent-scoped source credentials
-agent_source_oauth::{agentSlug}::{sourceSlug}
-agent_source_bearer::{agentSlug}::{sourceSlug}
-agent_source_apikey::{agentSlug}::{sourceSlug}
-agent_source_basic::{agentSlug}::{sourceSlug}
 ```
 
 **Backend priority:** 1. Env vars (`ANTHROPIC_API_KEY`, `CRAFT_CLAUDE_OAUTH_TOKEN`) 2. Encrypted file
 
-### Agent System (`packages/shared/src/agents/`)
-
-Folder-based agents at `~/.craft-agent/workspaces/{ws}/agents/{agent}/`:
-```
-├── config.json      # { name, slug, enabled, useSources }
-├── instructions.md  # Agent instructions (markdown)
-└── sources/         # Optional agent-scoped sources
-```
+### Sources (`packages/shared/src/sources/`)
 
 **Sources** at `~/.craft-agent/workspaces/{ws}/sources/{source}/`:
 ```
@@ -240,12 +227,11 @@ Workspace-level customizable status configuration for session workflow states.
 
 ### Theme System (`packages/shared/src/config/theme.ts`)
 
-Cascading theme configuration: app → workspace → agent (last wins).
+Cascading theme configuration: app → workspace.
 
 **Storage:**
 - App: `~/.craft-agent/theme.json`
 - Workspace: `~/.craft-agent/workspaces/{id}/theme.json`
-- Agent: `~/.craft-agent/workspaces/{id}/agents/{slug}/theme.json`
 
 **6-color system:**
 ```typescript
@@ -256,15 +242,13 @@ Cascading theme configuration: app → workspace → agent (last wins).
 
 ### Session-Scoped Tools (`packages/shared/src/agent/session-scoped-tools.ts`)
 
-Tools available within agent sessions with per-session callbacks:
+Tools available within sessions with per-session callbacks:
 
-**Source management:** `source_test`, `source_oauth_trigger`, `source_gmail_oauth_trigger`, `source_credential_prompt`
-
-**Agent management:** `agent_list`, `agent_create`, `agent_delete`
+**Source management:** `source_test`, `source_oauth_trigger`, `source_google_oauth_trigger`, `source_credential_prompt`
 
 **Utilities:** `SubmitPlan`, `config_validate`
 
-**Callback types:** `onPlanSubmitted`, `onOAuthBrowserOpen`, `onOAuthSuccess`, `onOAuthError`, `onCredentialRequest`, `onSourcesChanged`, `onSourceActivated`, `onAgentsChanged`
+**Callback types:** `onPlanSubmitted`, `onOAuthBrowserOpen`, `onOAuthSuccess`, `onOAuthError`, `onCredentialRequest`, `onSourcesChanged`, `onSourceActivated`
 
 ## Key Patterns
 
@@ -283,8 +267,7 @@ Tools available within agent sessions with per-session callbacks:
 | Directory | Purpose |
 |-----------|---------|
 | `agent/` | CraftAgent, session-scoped-tools, mode-manager, mode-types, permissions-config |
-| `agents/` | folder-manager, folder-storage, api-tools, builtin-agents |
-| `auth/` | oauth, craft-token, claude-token, gmail-oauth, state |
+| `auth/` | oauth, craft-token, claude-token, google-oauth, state |
 | `clients/` | Craft API client |
 | `config/` | storage, preferences, models, theme, watcher |
 | `credentials/` | manager, backends (secure-storage, env) |

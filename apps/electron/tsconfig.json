@@ -15,6 +15,7 @@
     "noEmit": true,
     "strict": true,
     "skipLibCheck": true,
+    "types": [],
     "noFallthroughCasesInSwitch": true,
     "noUnusedLocals": false,
     "noUnusedParameters": false,

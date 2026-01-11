@@ -37,38 +37,17 @@ import {
   validateMcpConnection,
   validateStdioMcpConnection,
   getValidationErrorMessage,
-  type McpValidationResult,
 } from '../mcp/validation.ts';
 import {
   getAnthropicApiKey,
   getClaudeOAuthToken,
 } from '../config/storage.ts';
 import {
-  loadSourceConfig,
-  saveSourceConfig,
-  sourceExists,
   loadSourceConfigWithFallback,
   saveSourceConfigWithContext,
-  type SourceWithContext,
 } from '../sources/storage.ts';
 import type { FolderSourceConfig, LoadedSource } from '../sources/types.ts';
-import { getSourceCredentialManager, getSourceServerBuilder, type SourceWithCredential } from '../sources/index.ts';
-import { CraftOAuth, getMcpBaseUrl, type OAuthConfig, type OAuthCallbacks } from '../auth/oauth.ts';
-import {
-  startGoogleOAuth,
-  type GoogleOAuthOptions,
-  type GoogleOAuthResult,
-} from '../auth/google-oauth.ts';
-import {
-  startSlackOAuth,
-  type SlackOAuthOptions,
-  type SlackOAuthResult,
-} from '../auth/slack-oauth.ts';
-import {
-  startMicrosoftOAuth,
-  type MicrosoftOAuthOptions,
-  type MicrosoftOAuthResult,
-} from '../auth/microsoft-oauth.ts';
+import { getSourceCredentialManager } from '../sources/index.ts';
 import { inferGoogleServiceFromUrl, inferSlackServiceFromUrl, inferMicrosoftServiceFromUrl, isApiOAuthProvider, type GoogleService, type SlackService, type MicrosoftService } from '../sources/types.ts';
 import { DOC_REFS } from '../docs/index.ts';
 
@@ -82,13 +61,30 @@ import { DOC_REFS } from '../docs/index.ts';
 export type CredentialInputMode = 'bearer' | 'basic' | 'header' | 'query';
 
 /**
- * Credential request from agent - triggers secure input UI
+ * Auth request types
  */
-export interface CredentialRequest {
+export type AuthRequestType =
+  | 'credential'
+  | 'oauth'
+  | 'oauth-google'
+  | 'oauth-slack'
+  | 'oauth-microsoft';
+
+/**
+ * Base auth request fields
+ */
+interface BaseAuthRequest {
   requestId: string;
   sessionId: string;
   sourceSlug: string;
   sourceName: string;
+}
+
+/**
+ * Credential auth request - prompts for API key, bearer token, etc.
+ */
+export interface CredentialAuthRequest extends BaseAuthRequest {
+  type: 'credential';
   mode: CredentialInputMode;
   labels?: {
     credential?: string;
@@ -101,14 +97,58 @@ export interface CredentialRequest {
 }
 
 /**
- * Credential response from user
+ * MCP OAuth auth request - standard OAuth 2.0 + PKCE
  */
-export interface CredentialResponse {
-  type: 'credential';
-  value?: string;
-  username?: string;
-  password?: string;
-  cancelled: boolean;
+export interface McpOAuthAuthRequest extends BaseAuthRequest {
+  type: 'oauth';
+}
+
+/**
+ * Google OAuth auth request - Google-specific OAuth
+ */
+export interface GoogleOAuthAuthRequest extends BaseAuthRequest {
+  type: 'oauth-google';
+  service?: GoogleService;
+}
+
+/**
+ * Slack OAuth auth request - Slack-specific OAuth
+ */
+export interface SlackOAuthAuthRequest extends BaseAuthRequest {
+  type: 'oauth-slack';
+  service?: SlackService;
+}
+
+/**
+ * Microsoft OAuth auth request - Microsoft-specific OAuth
+ */
+export interface MicrosoftOAuthAuthRequest extends BaseAuthRequest {
+  type: 'oauth-microsoft';
+  service?: MicrosoftService;
+}
+
+/**
+ * Union of all auth request types
+ */
+export type AuthRequest =
+  | CredentialAuthRequest
+  | McpOAuthAuthRequest
+  | GoogleOAuthAuthRequest
+  | SlackOAuthAuthRequest
+  | MicrosoftOAuthAuthRequest;
+
+/**
+ * Auth result - sent back to agent after auth completes
+ */
+export interface AuthResult {
+  requestId: string;
+  sourceSlug: string;
+  success: boolean;
+  cancelled?: boolean;
+  error?: string;
+  // Additional info for successful auth
+  email?: string;      // For Google/Microsoft OAuth
+  workspace?: string;  // For Slack OAuth
 }
 
 /**
@@ -118,14 +158,16 @@ export interface CredentialResponse {
 export interface SessionScopedToolCallbacks {
   /** Called when a plan is submitted - triggers plan message display in UI */
   onPlanSubmitted?: (planPath: string) => void;
-  /** Called when OAuth flow needs to open a browser URL - returns promise that resolves when auth completes */
-  onOAuthBrowserOpen?: (url: string) => Promise<void>;
-  /** Called when OAuth flow completes successfully */
-  onOAuthSuccess?: (sourceSlug: string) => void;
-  /** Called when OAuth flow fails */
-  onOAuthError?: (sourceSlug: string, error: string) => void;
-  /** Called when credential input is needed - returns promise that resolves with user response */
-  onCredentialRequest?: (request: CredentialRequest) => Promise<CredentialResponse>;
+  /**
+   * Called when authentication is requested - triggers auth UI and forceAbort.
+   * This follows the SubmitPlan pattern:
+   * 1. Tool calls onAuthRequest
+   * 2. Session manager creates auth-request message and calls forceAbort
+   * 3. User completes auth in UI
+   * 4. Auth result is sent as a "faked user message"
+   * 5. Agent resumes and processes the result
+   */
+  onAuthRequest?: (request: AuthRequest) => void;
 }
 
 /**
@@ -595,7 +637,7 @@ async function testApiSource(
  * Create a session-scoped source_test tool.
  * Validates config, downloads icons, and tests connections.
  */
-export function createSourceTestTool(sessionId: string, workspaceId: string, activeAgentSlug?: string) {
+export function createSourceTestTool(sessionId: string, workspaceId: string) {
   return tool(
     'source_test',
     `Validate and test a source configuration.
@@ -629,8 +671,8 @@ After creating or editing a source's config.json, run this tool to:
       debug('[source_test] Testing source:', args.sourceSlug);
 
       try {
-        // Load the source config (checks agent folder first if activeAgentSlug set, then workspace)
-        const sourceResult = loadSourceConfigWithFallback(workspaceId, args.sourceSlug, activeAgentSlug);
+        // Load the source config
+        const sourceResult = loadSourceConfigWithFallback(workspaceId, args.sourceSlug);
         if (!sourceResult) {
           return {
             content: [{
@@ -641,8 +683,7 @@ After creating or editing a source's config.json, run this tool to:
           };
         }
         const source = sourceResult.config;
-        const sourceContext = { isAgentScoped: sourceResult.isAgentScoped, agentSlug: sourceResult.agentSlug };
-
+        
         const results: string[] = [];
         let hasErrors = false;
 
@@ -675,10 +716,8 @@ After creating or editing a source's config.json, run this tool to:
         // ============================================================
         // Step 2: Icon Handling
         // ============================================================
-        const { getSourcePath, getAgentSourcePath } = await import('../sources/storage.ts');
-        const sourcePath = sourceContext.isAgentScoped && sourceContext.agentSlug
-          ? getAgentSourcePath(workspaceId, sourceContext.agentSlug, args.sourceSlug)
-          : getSourcePath(workspaceId, args.sourceSlug);
+        const { getSourcePath } = await import('../sources/storage.ts');
+        const sourcePath = getSourcePath(workspaceId, args.sourceSlug);
 
         // Check if icon needs to be downloaded
         if (source.iconUrl && !source.iconUrl.startsWith('./')) {
@@ -688,12 +727,12 @@ After creating or editing a source's config.json, run this tool to:
           if (cached) {
             source.iconSourceUrl = source.iconUrl;
             source.iconUrl = cached;
-            saveSourceConfigWithContext(workspaceId, source, sourceContext);
+            saveSourceConfigWithContext(workspaceId, source);
             results.push(`**✓ Icon Downloaded** (${cached})`);
           } else {
             // Download failed - clear invalid URL so we can try auto-fetch
             source.iconUrl = undefined;
-            saveSourceConfigWithContext(workspaceId, source, sourceContext);
+            saveSourceConfigWithContext(workspaceId, source);
           }
         }
 
@@ -713,7 +752,7 @@ After creating or editing a source's config.json, run this tool to:
               if (cached) {
                 source.iconUrl = cached;
                 source.iconSourceUrl = logoUrl;
-                saveSourceConfigWithContext(workspaceId, source, sourceContext);
+                saveSourceConfigWithContext(workspaceId, source);
                 results.push(`**✓ Icon Auto-fetched** (${cached})`);
               } else {
                 results.push('**○ No Icon** (auto-fetch failed)');
@@ -739,18 +778,18 @@ After creating or editing a source's config.json, run this tool to:
               const cached = await cacheIcon(source.iconSourceUrl, sourcePath);
               if (cached) {
                 source.iconUrl = cached;
-                saveSourceConfigWithContext(workspaceId, source, sourceContext);
+                saveSourceConfigWithContext(workspaceId, source);
                 results.push(`**✓ Icon Re-downloaded** (${cached})`);
               } else {
                 // Clear invalid iconUrl since file doesn't exist
                 source.iconUrl = undefined;
-                saveSourceConfigWithContext(workspaceId, source, sourceContext);
+                saveSourceConfigWithContext(workspaceId, source);
                 results.push('**⚠ Icon Missing** - re-download failed, cleared config');
               }
             } else {
               // No source URL to re-download from
               source.iconUrl = undefined;
-              saveSourceConfigWithContext(workspaceId, source, sourceContext);
+              saveSourceConfigWithContext(workspaceId, source);
               results.push('**⚠ Icon Missing** - file not found, cleared config');
             }
           }
@@ -774,7 +813,7 @@ After creating or editing a source's config.json, run this tool to:
             source.connectionStatus = 'failed';
             source.connectionError = result.error;
           }
-          saveSourceConfigWithContext(workspaceId, source, sourceContext);
+          saveSourceConfigWithContext(workspaceId, source);
 
           if (result.success) {
             results.push(`**✓ API Connected** (${result.status})`);
@@ -792,7 +831,6 @@ After creating or editing a source's config.json, run this tool to:
               guide: null,
               folderPath: sourcePath,
               workspaceId: wsId,
-              agentSlug: sourceContext.agentSlug,
             };
             const credManager = getSourceCredentialManager();
             const hasCredentials = await credManager.hasValidCredentials(loadedSource);
@@ -818,13 +856,13 @@ After creating or editing a source's config.json, run this tool to:
             source.lastTestedAt = Date.now();
             source.connectionStatus = 'connected';
             source.connectionError = undefined;
-            saveSourceConfigWithContext(workspaceId, source, sourceContext);
+            saveSourceConfigWithContext(workspaceId, source);
             results.push(`**✓ Local Path Exists** (${localPath})`);
           } else {
             hasErrors = true;
             source.connectionStatus = 'failed';
             source.connectionError = 'Path not found';
-            saveSourceConfigWithContext(workspaceId, source, sourceContext);
+            saveSourceConfigWithContext(workspaceId, source);
             results.push(`**❌ Local Path Not Found** (${localPath || 'not configured'})`);
           }
         }
@@ -854,7 +892,7 @@ After creating or editing a source's config.json, run this tool to:
                 source.connectionStatus = 'connected';
                 source.connectionError = undefined;
                 source.isAuthenticated = true; // Stdio sources don't need auth
-                saveSourceConfigWithContext(workspaceId, source, sourceContext);
+                saveSourceConfigWithContext(workspaceId, source);
 
                 results.push('**✓ Stdio MCP Server Connected**');
                 results.push(`  Command: ${source.mcp.command}`);
@@ -872,7 +910,7 @@ After creating or editing a source's config.json, run this tool to:
                 hasErrors = true;
                 source.connectionStatus = 'failed';
                 source.connectionError = stdioResult.error || 'Unknown error';
-                saveSourceConfigWithContext(workspaceId, source, sourceContext);
+                saveSourceConfigWithContext(workspaceId, source);
 
                 results.push('**❌ Stdio MCP Server Failed**');
                 results.push(`  Command: ${source.mcp.command}`);
@@ -943,7 +981,7 @@ After creating or editing a source's config.json, run this tool to:
               if (mcpResult.success) {
                 source.connectionStatus = 'connected';
                 source.connectionError = undefined;
-                saveSourceConfigWithContext(workspaceId, source, sourceContext);
+                saveSourceConfigWithContext(workspaceId, source);
 
                 results.push('**✓ MCP Connected**');
                 if (mcpResult.serverInfo) {
@@ -959,7 +997,6 @@ After creating or editing a source's config.json, run this tool to:
                   guide: null,
                   folderPath: sourcePath,
                   workspaceId,
-                  agentSlug: sourceContext.agentSlug,
                 };
                 const credManager = getSourceCredentialManager();
                 const hasCredentials = await credManager.hasValidCredentials(loadedSource);
@@ -971,14 +1008,14 @@ After creating or editing a source's config.json, run this tool to:
                 }
               } else if (mcpResult.errorType === 'needs-auth') {
                 source.connectionStatus = 'needs_auth';
-                saveSourceConfigWithContext(workspaceId, source, sourceContext);
+                saveSourceConfigWithContext(workspaceId, source);
                 results.push('**⚠ MCP Needs Authentication**');
                 results.push('Use `source_oauth_trigger` to authenticate.');
               } else {
                 hasErrors = true;
                 source.connectionStatus = 'failed';
                 source.connectionError = getValidationErrorMessage(mcpResult);
-                saveSourceConfigWithContext(workspaceId, source, sourceContext);
+                saveSourceConfigWithContext(workspaceId, source);
                 results.push(`**❌ MCP Connection Failed**`);
                 results.push(`  Error: ${getValidationErrorMessage(mcpResult)}`);
 
@@ -1030,6 +1067,10 @@ After creating or editing a source's config.json, run this tool to:
 /**
  * Create a session-scoped source_oauth_trigger tool.
  * Initiates OAuth authentication for an MCP source.
+ *
+ * **IMPORTANT:** This tool triggers an auth request that pauses execution.
+ * After calling onAuthRequest, the session manager will forceAbort the agent.
+ * The OAuth flow runs in the background, and the result comes back as a new message.
  */
 export function createOAuthTriggerTool(sessionId: string, workspaceId: string, activeAgentSlug?: string) {
   return tool(
@@ -1044,16 +1085,15 @@ A browser window will open for the user to complete authentication.
 - Source must be type 'mcp' with authType 'oauth'
 - Source must have a valid MCP URL
 
-**Flow:**
-1. Tool checks if auth is needed (may already be authenticated)
-2. If needed, opens browser for user to authenticate
-3. User completes OAuth flow in browser
-4. Tokens are securely stored in credential store
-5. Source is marked as authenticated
+**IMPORTANT:** After calling this tool:
+- Execution will be **automatically paused** while OAuth completes
+- A browser window will open for user authentication
+- Once complete or cancelled, you'll receive a message with the result
+- Do NOT include any text or tool calls after this tool - they will not be executed
 
 **Returns:**
-- Success message if already authenticated or auth completes
-- Error message if OAuth flow fails or is cancelled`,
+- Success message if already authenticated
+- Authentication request if OAuth flow is triggered`,
     {
       sourceSlug: z.string().describe('The slug of the source to authenticate'),
     },
@@ -1062,7 +1102,7 @@ A browser window will open for the user to complete authentication.
 
       try {
         // Load the source config (checks agent folder first if activeAgentSlug set, then workspace)
-        const sourceResult = loadSourceConfigWithFallback(workspaceId, args.sourceSlug, activeAgentSlug);
+        const sourceResult = loadSourceConfigWithFallback(workspaceId, args.sourceSlug);
         if (!sourceResult) {
           return {
             content: [{
@@ -1073,7 +1113,6 @@ A browser window will open for the user to complete authentication.
           };
         }
         const source = sourceResult.config;
-        const sourceContext = { isAgentScoped: sourceResult.isAgentScoped, agentSlug: sourceResult.agentSlug };
 
         if (source.type !== 'mcp') {
           return {
@@ -1105,87 +1144,42 @@ A browser window will open for the user to complete authentication.
           };
         }
 
-        // Get session callbacks for browser open
+        // Get session callbacks
         const callbacks = getSessionScopedToolCallbacks(sessionId);
 
-        // Create OAuth config - strip /mcp or /sse suffix for OAuth discovery
-        const oauthConfig: OAuthConfig = {
-          mcpBaseUrl: getMcpBaseUrl(source.mcp.url),
-        };
-
-        // Create OAuth callbacks
-        const oauthCallbacks: OAuthCallbacks = {
-          onStatus: (message: string) => {
-            debug('[source_oauth_trigger] Status:', message);
-          },
-          onError: (error: string) => {
-            debug('[source_oauth_trigger] Error:', error);
-            callbacks?.onOAuthError?.(args.sourceSlug, error);
-          },
-        };
-
-        // Create OAuth client
-        const oauth = new CraftOAuth(oauthConfig, oauthCallbacks);
-
-        // Check if auth is actually needed
-        const needsAuth = await oauth.checkAuthRequired();
-        if (!needsAuth && source.isAuthenticated) {
+        if (!callbacks?.onAuthRequest) {
           return {
             content: [{
               type: 'text' as const,
-              text: `Source '${args.sourceSlug}' is already authenticated.`,
+              text: 'Error: No auth request handler available. This tool requires a UI to handle OAuth.',
             }],
-            isError: false,
+            isError: true,
           };
         }
 
-        // Run the OAuth flow
-        const result = await oauth.authenticate();
+        // Build auth request
+        const authRequest: McpOAuthAuthRequest = {
+          type: 'oauth',
+          requestId: crypto.randomUUID(),
+          sessionId,
+          sourceSlug: args.sourceSlug,
+          sourceName: source.name,
+        };
 
-        // Store the tokens
-        const credentialManager = getCredentialManager();
-        // Extract workspace ID from root path for credential storage
-        const wsId = basename(workspaceId);
-        await credentialManager.set(
-          {
-            type: 'source_oauth',
-            workspaceId: wsId,
-            sourceId: args.sourceSlug,
-          },
-          {
-            value: result.tokens.accessToken,
-            refreshToken: result.tokens.refreshToken,
-            expiresAt: result.tokens.expiresAt,
-            clientId: result.clientId,
-            tokenType: result.tokens.tokenType,
-          }
-        );
+        // Trigger auth request - this will cause the session manager to forceAbort
+        // The session manager will then run the OAuth flow
+        callbacks.onAuthRequest(authRequest);
 
-        // Update source status
-        source.isAuthenticated = true;
-        source.connectionStatus = 'connected';
-        source.connectionError = undefined;
-        source.updatedAt = Date.now();
-        saveSourceConfigWithContext(workspaceId, source, sourceContext);
-
-        // Notify success callback
-        callbacks?.onOAuthSuccess?.(args.sourceSlug);
-
-        // Source reload is now handled by ConfigWatcher detecting the config.json change
-
+        // Return immediately - execution will be paused by forceAbort
         return {
           content: [{
             type: 'text' as const,
-            text: `**Source '${args.sourceSlug}' authenticated successfully**\n\nOAuth tokens have been stored securely.\n\n**Next step:** Run \`source_test({ sourceSlug: "${args.sourceSlug}" })\` to download the icon and verify the connection works.`,
+            text: `OAuth authentication requested for '${source.name}'. Opening browser for authentication.`,
           }],
           isError: false,
         };
       } catch (error) {
         debug('[source_oauth_trigger] Error:', error);
-
-        // Notify error callback
-        const callbacks = getSessionScopedToolCallbacks(sessionId);
-        callbacks?.onOAuthError?.(args.sourceSlug, error instanceof Error ? error.message : 'Unknown error');
 
         return {
           content: [{
@@ -1202,6 +1196,10 @@ A browser window will open for the user to complete authentication.
 /**
  * Create a session-scoped source_google_oauth_trigger tool.
  * Initiates Google OAuth authentication for any Google API source (Gmail, Calendar, Drive, etc.).
+ *
+ * **IMPORTANT:** This tool triggers an auth request that pauses execution.
+ * After calling onAuthRequest, the session manager will forceAbort the agent.
+ * The OAuth flow runs in the background, and the result comes back as a new message.
  */
 export function createGoogleOAuthTriggerTool(sessionId: string, workspaceId: string, activeAgentSlug?: string) {
   return tool(
@@ -1220,16 +1218,22 @@ After successful authentication, the tokens are stored and the source is marked 
 - The source must have provider 'google'
 - Google OAuth must be configured in the build
 
+**IMPORTANT:** After calling this tool:
+- Execution will be **automatically paused** while OAuth completes
+- A browser window will open for Google sign-in
+- Once complete or cancelled, you'll receive a message with the result
+- Do NOT include any text or tool calls after this tool - they will not be executed
+
 **Returns:**
-- Success message with the authenticated email address
-- Error message if OAuth flow fails or is not configured`,
+- Success message if already authenticated
+- Authentication request if OAuth flow is triggered`,
     {
       sourceSlug: z.string().describe('The slug of the Google API source to authenticate'),
     },
     async (args) => {
       try {
         // Load the source config (checks agent folder first if activeAgentSlug set, then workspace)
-        const sourceResult = loadSourceConfigWithFallback(workspaceId, args.sourceSlug, activeAgentSlug);
+        const sourceResult = loadSourceConfigWithFallback(workspaceId, args.sourceSlug);
         if (!sourceResult) {
           return {
             content: [{
@@ -1240,7 +1244,6 @@ After successful authentication, the tokens are stored and the source is marked 
           };
         }
         const source = sourceResult.config;
-        const sourceContext = { isAgentScoped: sourceResult.isAgentScoped, agentSlug: sourceResult.agentSlug };
 
         // Verify this is a Google source
         if (source.provider !== 'google') {
@@ -1266,95 +1269,52 @@ After successful authentication, the tokens are stored and the source is marked 
           };
         }
 
-        // Determine service/scopes from config
+        // Determine service from config for new pattern
         let service: GoogleService | undefined;
-        let scopes: string[] | undefined;
         const api = source.api;
 
-        if (api?.googleScopes && api.googleScopes.length > 0) {
-          // Custom scopes take precedence
-          scopes = api.googleScopes;
-        } else if (api?.googleService) {
-          // Use predefined service scopes
+        if (api?.googleService) {
           service = api.googleService;
         } else {
-          // Infer from baseUrl
           service = inferGoogleServiceFromUrl(api?.baseUrl);
-          if (!service) {
-            return {
-              content: [{
-                type: 'text' as const,
-                text: `Cannot determine Google service for source '${args.sourceSlug}'. Set googleService ('gmail', 'calendar', or 'drive') in api config, or use a recognizable baseUrl like 'https://gmail.googleapis.com'.`,
-              }],
-              isError: true,
-            };
-          }
         }
 
-        const serviceName = service || 'Google API';
+        // Get session callbacks
+        const callbacks = getSessionScopedToolCallbacks(sessionId);
 
-        // Run the Google OAuth flow
-        const options: GoogleOAuthOptions = {
-          service,
-          scopes,
-          appType: 'electron',
-        };
-        const result: GoogleOAuthResult = await startGoogleOAuth(options);
-
-        if (!result.success) {
-          const callbacks = getSessionScopedToolCallbacks(sessionId);
-          callbacks?.onOAuthError?.(args.sourceSlug, result.error || 'Unknown error');
-
+        if (!callbacks?.onAuthRequest) {
           return {
             content: [{
               type: 'text' as const,
-              text: `${serviceName} OAuth failed: ${result.error || 'Unknown error'}`,
+              text: 'Error: No auth request handler available. This tool requires a UI to handle OAuth.',
             }],
             isError: true,
           };
         }
 
-        // Store the tokens
-        const credentialManager = getCredentialManager();
-        // Extract workspace ID from root path for credential storage
-        const wsId = basename(workspaceId);
-        await credentialManager.set(
-          {
-            type: 'source_oauth',
-            workspaceId: wsId,
-            sourceId: args.sourceSlug,
-          },
-          {
-            value: result.accessToken!,
-            refreshToken: result.refreshToken,
-            expiresAt: result.expiresAt,
-          }
-        );
+        // Build auth request
+        const authRequest: GoogleOAuthAuthRequest = {
+          type: 'oauth-google',
+          requestId: crypto.randomUUID(),
+          sessionId,
+          sourceSlug: args.sourceSlug,
+          sourceName: source.name,
+          service,
+        };
 
-        // Update source status with email info
-        source.isAuthenticated = true;
-        source.connectionStatus = 'connected';
-        source.connectionError = undefined;
-        source.updatedAt = Date.now();
-        saveSourceConfigWithContext(workspaceId, source, sourceContext);
+        // Trigger auth request - this will cause the session manager to forceAbort
+        // The session manager will then run the OAuth flow
+        callbacks.onAuthRequest(authRequest);
 
-        // Notify success callback
-        const callbacks = getSessionScopedToolCallbacks(sessionId);
-        callbacks?.onOAuthSuccess?.(args.sourceSlug);
-
-        // Source reload is now handled by ConfigWatcher detecting the config.json change
-
+        // Return immediately - execution will be paused by forceAbort
         return {
           content: [{
             type: 'text' as const,
-            text: `**${serviceName} source '${args.sourceSlug}' authenticated successfully**\n\nConnected as: ${result.email}\n\n**Next step:** Run \`source_test({ sourceSlug: "${args.sourceSlug}" })\` to download the icon and verify the connection works.`,
+            text: `Google OAuth requested for '${source.name}'. Opening browser for authentication.`,
           }],
           isError: false,
         };
       } catch (error) {
-        const callbacks = getSessionScopedToolCallbacks(sessionId);
-        callbacks?.onOAuthError?.(args.sourceSlug, error instanceof Error ? error.message : 'Unknown error');
-
         return {
           content: [{
             type: 'text' as const,
@@ -1368,16 +1328,12 @@ After successful authentication, the tokens are stored and the source is marked 
 }
 
 /**
- * @deprecated Use createGoogleOAuthTriggerTool instead.
- * Kept for backwards compatibility - delegates to createGoogleOAuthTriggerTool.
- */
-export function createGmailOAuthTriggerTool(sessionId: string, workspaceId: string, activeAgentSlug?: string) {
-  return createGoogleOAuthTriggerTool(sessionId, workspaceId, activeAgentSlug);
-}
-
-/**
  * Create a session-scoped source_slack_oauth_trigger tool.
  * Handles OAuth authentication for Slack API sources.
+ *
+ * **IMPORTANT:** This tool triggers an auth request that pauses execution.
+ * After calling onAuthRequest, the session manager will forceAbort the agent.
+ * The OAuth flow runs in the background, and the result comes back as a new message.
  */
 export function createSlackOAuthTriggerTool(sessionId: string, workspaceId: string, activeAgentSlug?: string) {
   return tool(
@@ -1398,16 +1354,22 @@ After successful authentication, the tokens are stored and the source is marked 
 - The source must have type 'api' and provider 'slack'
 - Slack OAuth must be configured in the build
 
+**IMPORTANT:** After calling this tool:
+- Execution will be **automatically paused** while OAuth completes
+- A browser window will open for Slack sign-in
+- Once complete or cancelled, you'll receive a message with the result
+- Do NOT include any text or tool calls after this tool - they will not be executed
+
 **Returns:**
-- Success message with the authenticated workspace name
-- Error message if OAuth flow fails or is not configured`,
+- Success message if already authenticated
+- Authentication request if OAuth flow is triggered`,
     {
       sourceSlug: z.string().describe('The slug of the Slack API source to authenticate'),
     },
     async (args) => {
       try {
         // Load the source config (checks agent folder first if activeAgentSlug set, then workspace)
-        const sourceResult = loadSourceConfigWithFallback(workspaceId, args.sourceSlug, activeAgentSlug);
+        const sourceResult = loadSourceConfigWithFallback(workspaceId, args.sourceSlug);
         if (!sourceResult) {
           return {
             content: [{
@@ -1418,7 +1380,6 @@ After successful authentication, the tokens are stored and the source is marked 
           };
         }
         const source = sourceResult.config;
-        const sourceContext = { isAgentScoped: sourceResult.isAgentScoped, agentSlug: sourceResult.agentSlug };
 
         // Verify this is a Slack source
         if (source.provider !== 'slack') {
@@ -1459,84 +1420,52 @@ After successful authentication, the tokens are stored and the source is marked 
           };
         }
 
-        // Determine service/scopes from config
+        // Determine service from config for new pattern
         let service: SlackService | undefined;
-        let userScopes: string[] | undefined;
         const api = source.api;
 
-        if (api?.slackUserScopes && api.slackUserScopes.length > 0) {
-          // Custom scopes take precedence
-          userScopes = api.slackUserScopes;
-        } else if (api?.slackService) {
-          // Use predefined service scopes
+        if (api?.slackService) {
           service = api.slackService;
         } else {
-          // Infer from baseUrl (defaults to 'full')
           service = inferSlackServiceFromUrl(api?.baseUrl) || 'full';
         }
 
-        const serviceName = service ? `Slack ${service}` : 'Slack';
+        // Get session callbacks
+        const callbacks = getSessionScopedToolCallbacks(sessionId);
 
-        // Run the Slack OAuth flow (uses user_scope for user authentication)
-        const options: SlackOAuthOptions = {
-          service,
-          userScopes,
-          appType: 'electron',
-        };
-        const result: SlackOAuthResult = await startSlackOAuth(options);
-
-        if (!result.success) {
-          const callbacks = getSessionScopedToolCallbacks(sessionId);
-          callbacks?.onOAuthError?.(args.sourceSlug, result.error || 'Unknown error');
-
+        if (!callbacks?.onAuthRequest) {
           return {
             content: [{
               type: 'text' as const,
-              text: `${serviceName} OAuth failed: ${result.error || 'Unknown error'}`,
+              text: 'Error: No auth request handler available. This tool requires a UI to handle OAuth.',
             }],
             isError: true,
           };
         }
 
-        // Store the tokens
-        const credentialManager = getCredentialManager();
-        // Extract workspace ID from root path for credential storage
-        const wsId = basename(workspaceId);
-        await credentialManager.set(
-          {
-            type: 'source_oauth',
-            workspaceId: wsId,
-            sourceId: args.sourceSlug,
-          },
-          {
-            value: result.accessToken!,
-            refreshToken: result.refreshToken,
-            expiresAt: result.expiresAt,
-          }
-        );
+        // Build auth request
+        const authRequest: SlackOAuthAuthRequest = {
+          type: 'oauth-slack',
+          requestId: crypto.randomUUID(),
+          sessionId,
+          sourceSlug: args.sourceSlug,
+          sourceName: source.name,
+          service,
+        };
 
-        // Update source status with workspace info
-        source.isAuthenticated = true;
-        source.connectionStatus = 'connected';
-        source.connectionError = undefined;
-        source.updatedAt = Date.now();
-        saveSourceConfigWithContext(workspaceId, source, sourceContext);
+        // Trigger auth request - this will cause the session manager to forceAbort
+        // The session manager will then run the OAuth flow
+        callbacks.onAuthRequest(authRequest);
 
-        // Notify success callback
-        const callbacks = getSessionScopedToolCallbacks(sessionId);
-        callbacks?.onOAuthSuccess?.(args.sourceSlug);
-
+        // Return immediately - execution will be paused by forceAbort
         return {
           content: [{
             type: 'text' as const,
-            text: `**${serviceName} source '${args.sourceSlug}' authenticated successfully**\n\nConnected to workspace: ${result.teamName}\n\n**Next step:** Run \`source_test({ sourceSlug: "${args.sourceSlug}" })\` to download the icon and verify the connection works.`,
+            text: `Slack OAuth requested for '${source.name}'. Opening browser for authentication.`,
           }],
           isError: false,
         };
       } catch (error) {
-        const callbacks = getSessionScopedToolCallbacks(sessionId);
-        callbacks?.onOAuthError?.(args.sourceSlug, error instanceof Error ? error.message : 'Unknown error');
-
         return {
           content: [{
             type: 'text' as const,
@@ -1552,6 +1481,10 @@ After successful authentication, the tokens are stored and the source is marked 
 /**
  * Create a session-scoped source_microsoft_oauth_trigger tool.
  * Handles OAuth authentication for Microsoft API sources (Outlook, OneDrive, Calendar, Teams, SharePoint).
+ *
+ * **IMPORTANT:** This tool triggers an auth request that pauses execution.
+ * After calling onAuthRequest, the session manager will forceAbort the agent.
+ * The OAuth flow runs in the background, and the result comes back as a new message.
  */
 export function createMicrosoftOAuthTriggerTool(sessionId: string, workspaceId: string, activeAgentSlug?: string) {
   return tool(
@@ -1572,16 +1505,22 @@ After successful authentication, the tokens are stored and the source is marked 
 - The source must have provider 'microsoft'
 - Microsoft OAuth must be configured in the build
 
+**IMPORTANT:** After calling this tool:
+- Execution will be **automatically paused** while OAuth completes
+- A browser window will open for Microsoft sign-in
+- Once complete or cancelled, you'll receive a message with the result
+- Do NOT include any text or tool calls after this tool - they will not be executed
+
 **Returns:**
-- Success message with the authenticated email address
-- Error message if OAuth flow fails or is not configured`,
+- Success message if already authenticated
+- Authentication request if OAuth flow is triggered`,
     {
       sourceSlug: z.string().describe('The slug of the Microsoft API source to authenticate'),
     },
     async (args) => {
       try {
         // Load the source config (checks agent folder first if activeAgentSlug set, then workspace)
-        const sourceResult = loadSourceConfigWithFallback(workspaceId, args.sourceSlug, activeAgentSlug);
+        const sourceResult = loadSourceConfigWithFallback(workspaceId, args.sourceSlug);
         if (!sourceResult) {
           return {
             content: [{
@@ -1592,7 +1531,6 @@ After successful authentication, the tokens are stored and the source is marked 
           };
         }
         const source = sourceResult.config;
-        const sourceContext = { isAgentScoped: sourceResult.isAgentScoped, agentSlug: sourceResult.agentSlug };
 
         // Verify this is a Microsoft source
         if (source.provider !== 'microsoft') {
@@ -1618,93 +1556,52 @@ After successful authentication, the tokens are stored and the source is marked 
           };
         }
 
-        // Determine service/scopes from config
+        // Determine service from config for new pattern
         let service: MicrosoftService | undefined;
-        let scopes: string[] | undefined;
         const api = source.api;
 
-        if (api?.microsoftScopes && api.microsoftScopes.length > 0) {
-          // Custom scopes take precedence
-          scopes = api.microsoftScopes;
-        } else if (api?.microsoftService) {
-          // Use predefined service scopes
+        if (api?.microsoftService) {
           service = api.microsoftService;
         } else {
-          // Infer from baseUrl (defaults to 'outlook' for graph.microsoft.com)
           service = inferMicrosoftServiceFromUrl(api?.baseUrl);
-          if (!service) {
-            return {
-              content: [{
-                type: 'text' as const,
-                text: `Cannot determine Microsoft service for source '${args.sourceSlug}'. Set microsoftService ('outlook', 'calendar', 'onedrive', 'teams', or 'sharepoint') in api config, or use a recognizable baseUrl like 'https://graph.microsoft.com'.`,
-              }],
-              isError: true,
-            };
-          }
         }
 
-        const serviceName = service || 'Microsoft API';
+        // Get session callbacks
+        const callbacks = getSessionScopedToolCallbacks(sessionId);
 
-        // Run the Microsoft OAuth flow
-        const options: MicrosoftOAuthOptions = {
-          service,
-          scopes,
-          appType: 'electron',
-        };
-        const result: MicrosoftOAuthResult = await startMicrosoftOAuth(options);
-
-        if (!result.success) {
-          const callbacks = getSessionScopedToolCallbacks(sessionId);
-          callbacks?.onOAuthError?.(args.sourceSlug, result.error || 'Unknown error');
-
+        if (!callbacks?.onAuthRequest) {
           return {
             content: [{
               type: 'text' as const,
-              text: `${serviceName} OAuth failed: ${result.error || 'Unknown error'}`,
+              text: 'Error: No auth request handler available. This tool requires a UI to handle OAuth.',
             }],
             isError: true,
           };
         }
 
-        // Store the tokens
-        const credentialManager = getCredentialManager();
-        // Extract workspace ID from root path for credential storage
-        const wsId = basename(workspaceId);
-        await credentialManager.set(
-          {
-            type: 'source_oauth',
-            workspaceId: wsId,
-            sourceId: args.sourceSlug,
-          },
-          {
-            value: result.accessToken!,
-            refreshToken: result.refreshToken,
-            expiresAt: result.expiresAt,
-          }
-        );
+        // Build auth request
+        const authRequest: MicrosoftOAuthAuthRequest = {
+          type: 'oauth-microsoft',
+          requestId: crypto.randomUUID(),
+          sessionId,
+          sourceSlug: args.sourceSlug,
+          sourceName: source.name,
+          service,
+        };
 
-        // Update source status with email info
-        source.isAuthenticated = true;
-        source.connectionStatus = 'connected';
-        source.connectionError = undefined;
-        source.updatedAt = Date.now();
-        saveSourceConfigWithContext(workspaceId, source, sourceContext);
+        // Trigger auth request - this will cause the session manager to forceAbort
+        // The session manager will then run the OAuth flow
+        callbacks.onAuthRequest(authRequest);
 
-        // Notify success callback
-        const callbacks = getSessionScopedToolCallbacks(sessionId);
-        callbacks?.onOAuthSuccess?.(args.sourceSlug);
-
+        // Return immediately - execution will be paused by forceAbort
         return {
           content: [{
             type: 'text' as const,
-            text: `**${serviceName} source '${args.sourceSlug}' authenticated successfully**\n\nConnected as: ${result.email}\n\n**Next step:** Run \`source_test({ sourceSlug: "${args.sourceSlug}" })\` to download the icon and verify the connection works.`,
+            text: `Microsoft OAuth requested for '${source.name}'. Opening browser for authentication.`,
           }],
           isError: false,
         };
       } catch (error) {
-        const callbacks = getSessionScopedToolCallbacks(sessionId);
-        callbacks?.onOAuthError?.(args.sourceSlug, error instanceof Error ? error.message : 'Unknown error');
-
         return {
           content: [{
             type: 'text' as const,
@@ -1724,6 +1621,10 @@ After successful authentication, the tokens are stored and the source is marked 
 /**
  * Create a session-scoped source_credential_prompt tool.
  * Prompts the user to enter credentials for a source via the secure input UI.
+ *
+ * **IMPORTANT:** This tool triggers an auth request that pauses execution.
+ * After calling onAuthRequest, the session manager will forceAbort the agent.
+ * The user completes auth in the UI, and the result comes back as a new message.
  */
 export function createCredentialPromptTool(sessionId: string, workspaceId: string, activeAgentSlug?: string) {
   return tool(
@@ -1739,10 +1640,10 @@ The user will see a secure input UI with appropriate fields based on the auth mo
 - \`header\`: API Key with custom header name shown
 - \`query\`: API Key for query parameter auth
 
-**After user enters credentials:**
-- Credentials are securely stored in the encrypted credential store
-- Source is marked as authenticated
-- Returns success or cancellation status
+**IMPORTANT:** After calling this tool:
+- Execution will be **automatically paused** to show the credential input UI
+- Once the user completes or cancels, you'll receive a message with the result
+- Do NOT include any text or tool calls after this tool - they will not be executed
 
 **Example usage:**
 \`\`\`
@@ -1766,11 +1667,11 @@ source_credential_prompt({
       hint: z.string().optional().describe('Hint about where to find credentials'),
     },
     async (args) => {
-      debug('[source_credential_prompt] Prompting for credentials:', args.sourceSlug, args.mode);
+      debug('[source_credential_prompt] Requesting credentials:', args.sourceSlug, args.mode);
 
       try {
         // Load source to get name and validate (checks agent folder first if activeAgentSlug set, then workspace)
-        const sourceResult = loadSourceConfigWithFallback(workspaceId, args.sourceSlug, activeAgentSlug);
+        const sourceResult = loadSourceConfigWithFallback(workspaceId, args.sourceSlug);
         if (!sourceResult) {
           return {
             content: [{
@@ -1781,11 +1682,11 @@ source_credential_prompt({
           };
         }
         const source = sourceResult.config;
-        const sourceContext = { isAgentScoped: sourceResult.isAgentScoped, agentSlug: sourceResult.agentSlug };
 
         // Get callbacks
         const callbacks = getSessionScopedToolCallbacks(sessionId);
-        if (!callbacks?.onCredentialRequest) {
+
+        if (!callbacks?.onAuthRequest) {
           return {
             content: [{
               type: 'text' as const,
@@ -1795,8 +1696,9 @@ source_credential_prompt({
           };
         }
 
-        // Build request
-        const request: CredentialRequest = {
+        // Build auth request
+        const authRequest: CredentialAuthRequest = {
+          type: 'credential',
           requestId: crypto.randomUUID(),
           sessionId,
           sourceSlug: args.sourceSlug,
@@ -1808,65 +1710,14 @@ source_credential_prompt({
           headerName: source.api?.headerName,
         };
 
-        // Wait for user response
-        const response = await callbacks.onCredentialRequest(request);
+        // Trigger auth request - this will cause the session manager to forceAbort
+        callbacks.onAuthRequest(authRequest);
 
-        if (response.cancelled) {
-          return {
-            content: [{
-              type: 'text' as const,
-              text: `User cancelled credential input for '${source.name}'.`,
-            }],
-            isError: false,
-          };
-        }
-
-        // Store credentials based on mode
-        const credManager = getCredentialManager();
-        // Extract workspace ID from root path for credential storage
-        const wsId = basename(workspaceId);
-
-        if (args.mode === 'basic') {
-          // Encode basic auth as base64 (username:password)
-          const encoded = Buffer.from(`${response.username}:${response.password}`).toString('base64');
-          await credManager.set(
-            { type: 'source_basic', workspaceId: wsId, sourceId: args.sourceSlug },
-            { value: encoded }
-          );
-        } else if (args.mode === 'bearer') {
-          await credManager.set(
-            { type: 'source_bearer', workspaceId: wsId, sourceId: args.sourceSlug },
-            { value: response.value! }
-          );
-        } else {
-          // header or query - stored as API key
-          await credManager.set(
-            { type: 'source_apikey', workspaceId: wsId, sourceId: args.sourceSlug },
-            { value: response.value! }
-          );
-        }
-
-        // Update source authType to match the credential mode
-        // This ensures getCredentialId() returns the correct credential type later
-        if (source.type === 'mcp' && source.mcp) {
-          source.mcp.authType = args.mode === 'bearer' ? 'bearer' : source.mcp.authType;
-        } else if (source.type === 'api' && source.api) {
-          source.api.authType = args.mode;
-        }
-
-        // Mark source as authenticated and connected
-        source.isAuthenticated = true;
-        source.connectionStatus = 'connected';
-        source.connectionError = undefined;
-        source.updatedAt = Date.now();
-        saveSourceConfigWithContext(workspaceId, source, sourceContext);
-
-        // Source reload is now handled by ConfigWatcher detecting the config.json change
-
+        // Return immediately - execution will be paused by forceAbort
         return {
           content: [{
             type: 'text' as const,
-            text: `Credentials saved for '${source.name}'. The source is now authenticated.`,
+            text: `Authentication requested for '${source.name}'. Waiting for user input.`,
           }],
           isError: false,
         };
@@ -1876,188 +1727,6 @@ source_credential_prompt({
           content: [{
             type: 'text' as const,
             text: `Error prompting for credentials: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          }],
-          isError: true,
-        };
-      }
-    }
-  );
-}
-
-// ============================================================
-// Agent Tools
-// ============================================================
-
-/**
- * List all agents in the workspace.
- */
-export function createAgentListTool(sessionId: string, workspaceId: string) {
-  return tool(
-    'agent_list',
-    `List all agents in the workspace.
-
-Returns a list of all agents with their name, slug, enabled status, and source info.
-Use this to discover what agents are available before creating new ones.`,
-    {},
-    async () => {
-      debug('[agent_list] Listing agents in workspace:', workspaceId);
-
-      try {
-        const { loadWorkspaceAgents } = await import('../agents/folder-storage.ts');
-        const agents = loadWorkspaceAgents(workspaceId);
-
-        if (agents.length === 0) {
-          return {
-            content: [{
-              type: 'text' as const,
-              text: 'No agents found in this workspace.\n\nUse `agent_create` to create a new agent.',
-            }],
-            isError: false,
-          };
-        }
-
-        const agentList = agents.map(a => {
-          const sourceInfo = a.config.source?.type === 'url'
-            ? ` (from URL: ${a.config.source.url})`
-            : a.config.source?.type === 'local'
-            ? ' (local)'
-            : '';
-          return `- **${a.config.name}** (\`${a.config.slug}\`)${a.config.enabled ? '' : ' [disabled]'}${sourceInfo}`;
-        }).join('\n');
-
-        return {
-          content: [{
-            type: 'text' as const,
-            text: `**Agents in workspace (${agents.length}):**\n\n${agentList}`,
-          }],
-          isError: false,
-        };
-      } catch (error) {
-        debug('[agent_list] Error:', error);
-        return {
-          content: [{
-            type: 'text' as const,
-            text: `Error listing agents: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          }],
-          isError: true,
-        };
-      }
-    }
-  );
-}
-
-/**
- * Create a new agent in the workspace.
- */
-export function createAgentCreateTool(sessionId: string, workspaceId: string) {
-  return tool(
-    'agent_create',
-    `Create a new agent in the workspace.
-
-An agent is a specialized configuration with custom instructions. After creation:
-- The agent appears in the agent list
-- Users can activate it to use its specialized capabilities
-- The agent can have sources attached for MCP servers and APIs
-
-**Example:**
-\`\`\`
-agent_create({
-  name: "Research Assistant",
-  instructions: "You are a research assistant that helps with deep research tasks...",
-  useSources: ["exa-search", "web-archive"]
-})
-\`\`\``,
-    {
-      name: z.string().describe('Display name for the agent'),
-      instructions: z.string().describe('Agent instructions (markdown). Describe what the agent does and how it should behave.'),
-      useSources: z.array(z.string()).optional().describe('List of workspace source slugs to attach to this agent'),
-      enabled: z.boolean().optional().describe('Whether agent is enabled (default: true)'),
-    },
-    async (args) => {
-      debug('[agent_create] Creating agent:', args.name);
-
-      try {
-        const { createAgent } = await import('../agents/folder-storage.ts');
-
-        const config = createAgent(workspaceId, {
-          name: args.name,
-          instructions: args.instructions,
-          useSources: args.useSources,
-          enabled: args.enabled ?? true,
-        });
-
-        // Agent reload is now handled by ConfigWatcher detecting the config.json change
-
-        const sourcesNote = args.useSources?.length
-          ? `\nAttached sources: ${args.useSources.join(', ')}`
-          : '';
-
-        return {
-          content: [{
-            type: 'text' as const,
-            text: `**Agent created successfully**\n\nName: ${config.name}\nSlug: ${config.slug}\nEnabled: ${config.enabled}${sourcesNote}`,
-          }],
-          isError: false,
-        };
-      } catch (error) {
-        debug('[agent_create] Error:', error);
-        return {
-          content: [{
-            type: 'text' as const,
-            text: `Error creating agent: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          }],
-          isError: true,
-        };
-      }
-    }
-  );
-}
-
-/**
- * Delete an agent from the workspace.
- */
-export function createAgentDeleteTool(sessionId: string, workspaceId: string) {
-  return tool(
-    'agent_delete',
-    `Delete an agent from the workspace.
-
-**Warning:** This permanently removes the agent and any agent-scoped sources.`,
-    {
-      agentSlug: z.string().describe('The slug of the agent to delete'),
-    },
-    async (args) => {
-      debug('[agent_delete] Deleting agent:', args.agentSlug);
-
-      try {
-        const { deleteAgent, agentExists } = await import('../agents/folder-storage.ts');
-
-        if (!agentExists(workspaceId, args.agentSlug)) {
-          return {
-            content: [{
-              type: 'text' as const,
-              text: `Agent '${args.agentSlug}' not found.`,
-            }],
-            isError: true,
-          };
-        }
-
-        deleteAgent(workspaceId, args.agentSlug);
-
-        // Agent reload is now handled by ConfigWatcher detecting the folder deletion
-
-        return {
-          content: [{
-            type: 'text' as const,
-            text: `**Agent '${args.agentSlug}' deleted successfully**`,
-          }],
-          isError: false,
-        };
-      } catch (error) {
-        debug('[agent_delete] Error:', error);
-        return {
-          content: [{
-            type: 'text' as const,
-            text: `Error deleting agent: ${error instanceof Error ? error.message : 'Unknown error'}`,
           }],
           isError: true,
         };
@@ -2081,16 +1750,14 @@ const sessionScopedToolsCache = new Map<string, ReturnType<typeof createSdkMcpSe
  *
  * @param sessionId - Unique session identifier
  * @param workspaceId - Workspace slug for source-scoped operations
- * @param activeAgentSlug - Optional active agent slug (sources default to agent scope when set)
  */
-export function getSessionScopedTools(sessionId: string, workspaceId: string, activeAgentSlug?: string): ReturnType<typeof createSdkMcpServer> {
-  // Include workspaceId and activeAgentSlug in cache key
-  // When agent changes, we need fresh tools with the new context
-  const cacheKey = `${sessionId}::${workspaceId}::${activeAgentSlug ?? ''}`;
+export function getSessionScopedTools(sessionId: string, workspaceId: string): ReturnType<typeof createSdkMcpServer> {
+  // Include workspaceId in cache key
+  const cacheKey = `${sessionId}::${workspaceId}`;
   let cached = sessionScopedToolsCache.get(cacheKey);
   if (!cached) {
-    // Create session-scoped tools that capture the sessionId, workspaceId, and activeAgentSlug in their closures
-    // Note: Source/agent CRUD is done via standard file editing tools (Read/Write/Edit).
+    // Create session-scoped tools that capture the sessionId and workspaceId in their closures
+    // Note: Source CRUD is done via standard file editing tools (Read/Write/Edit).
     // See ~/.craft-agent/docs/ for config format documentation.
     cached = createSdkMcpServer({
       name: 'session',
@@ -2100,20 +1767,16 @@ export function getSessionScopedTools(sessionId: string, workspaceId: string, ac
         // Config validation tool
         createConfigValidateTool(sessionId, workspaceId),
         // Source tools: test + auth only (CRUD via file editing)
-        createSourceTestTool(sessionId, workspaceId, activeAgentSlug),
-        createOAuthTriggerTool(sessionId, workspaceId, activeAgentSlug),
-        createGoogleOAuthTriggerTool(sessionId, workspaceId, activeAgentSlug),
-        createSlackOAuthTriggerTool(sessionId, workspaceId, activeAgentSlug),
-        createMicrosoftOAuthTriggerTool(sessionId, workspaceId, activeAgentSlug),
-        createCredentialPromptTool(sessionId, workspaceId, activeAgentSlug),
-        // Agent tools
-        createAgentListTool(sessionId, workspaceId),
-        createAgentCreateTool(sessionId, workspaceId),
-        createAgentDeleteTool(sessionId, workspaceId),
+        createSourceTestTool(sessionId, workspaceId),
+        createOAuthTriggerTool(sessionId, workspaceId),
+        createGoogleOAuthTriggerTool(sessionId, workspaceId),
+        createSlackOAuthTriggerTool(sessionId, workspaceId),
+        createMicrosoftOAuthTriggerTool(sessionId, workspaceId),
+        createCredentialPromptTool(sessionId, workspaceId),
       ],
     });
     sessionScopedToolsCache.set(cacheKey, cached);
-    debug(`[SessionScopedTools] Created tools provider for session ${sessionId} in workspace ${workspaceId}${activeAgentSlug ? ` with agent ${activeAgentSlug}` : ''}`);
+    debug(`[SessionScopedTools] Created tools provider for session ${sessionId} in workspace ${workspaceId}`);
   }
   return cached;
 }

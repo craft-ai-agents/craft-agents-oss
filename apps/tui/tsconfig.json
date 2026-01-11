@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "types": [],
     "lib": ["ESNext"],
     "target": "ESNext",
     "module": "ESNext",

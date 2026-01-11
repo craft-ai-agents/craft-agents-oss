@@ -6,7 +6,7 @@ import { ChevronRight } from "lucide-react"
 import { cn, isHexColor } from "@/lib/utils"
 
 export interface LinkItem {
-  id: string            // Unique ID for navigation (e.g., 'nav:inbox')
+  id: string            // Unique ID for navigation (e.g., 'nav:allChats')
   title: string
   label?: string        // Optional badge (e.g., count)
   icon: LucideIcon | React.ReactNode  // LucideIcon or custom React element

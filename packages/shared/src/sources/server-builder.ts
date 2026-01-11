@@ -11,10 +11,9 @@
  * - SourceServerBuilder: handles server configuration
  */
 
-import type { LoadedSource } from './types.ts';
-import type { ApiConfig } from '../agents/types.ts';
+import type { LoadedSource, ApiConfig } from './types.ts';
 import type { ApiCredential } from './credential-manager.ts';
-import { createApiServer } from '../agents/api-tools.ts';
+import { createApiServer } from './api-tools.ts';
 import { createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
 import { debug } from '../utils/debug.ts';
 

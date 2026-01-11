@@ -43,7 +43,7 @@ export class EnvironmentBackend implements CredentialBackend {
 
   async get(id: CredentialId): Promise<StoredCredential | null> {
     // Only support global credentials
-    if (id.workspaceId || id.agentId) {
+    if (id.workspaceId) {
       return null;
     }
 

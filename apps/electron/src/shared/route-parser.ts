@@ -4,9 +4,9 @@
  * Parses route strings back into structured navigation objects.
  * Used by both the navigate() function and deep link handler.
  *
- * Supports two route formats:
- * - Legacy: tab/{type}[/{id}], sidebar/{filter}[/{id}], action/{name}[/{id}]
- * - Compound: {sidebar}[/{details-type}/{details-id}] - new hierarchical format
+ * Supports route formats:
+ * - Action: action/{name}[/{id}] - Trigger side effects
+ * - Compound: {filter}[/chat/{sessionId}] - View routes for full navigation state
  */
 
 import type {
@@ -17,10 +17,10 @@ import type {
 } from './types'
 
 // =============================================================================
-// Legacy Route Types
+// Route Types
 // =============================================================================
 
-export type RouteType = 'tab' | 'action' | 'sidebar' | 'view'
+export type RouteType = 'action' | 'view'
 
 export interface ParsedRoute {
   type: RouteType
@@ -40,6 +40,8 @@ export interface ParsedCompoundRoute {
   navigator: NavigatorType
   /** Chat filter (only for chats navigator) */
   chatFilter?: ChatFilter
+  /** Source category (only for sources navigator) */
+  sourceCategory?: 'local-files' | 'online-sources' | 'local-mcp'
   /** Details page info (null for empty state) */
   details: {
     type: string
@@ -52,10 +54,10 @@ export interface ParsedCompoundRoute {
 // =============================================================================
 
 /**
- * Known sidebar prefixes that indicate a compound route
+ * Known prefixes that indicate a compound route
  */
 const COMPOUND_ROUTE_PREFIXES = [
-  'inbox', 'archive', 'flagged', 'agent', 'state', 'sources', 'settings'
+  'allChats', 'flagged', 'state', 'sources', 'settings'
 ]
 
 /**
@@ -70,10 +72,9 @@ export function isCompoundRoute(route: string): boolean {
  * Parse a compound route into structured navigation
  *
  * Examples:
- *   'inbox' -> { navigator: 'chats', chatFilter: { kind: 'inbox' }, details: null }
- *   'inbox/chat/abc123' -> { navigator: 'chats', chatFilter: { kind: 'inbox' }, details: { type: 'chat', id: 'abc123' } }
+ *   'allChats' -> { navigator: 'chats', chatFilter: { kind: 'allChats' }, details: null }
+ *   'allChats/chat/abc123' -> { navigator: 'chats', chatFilter: { kind: 'allChats' }, details: { type: 'chat', id: 'abc123' } }
  *   'flagged/chat/abc123' -> { navigator: 'chats', chatFilter: { kind: 'flagged' }, details: { type: 'chat', id: 'abc123' } }
- *   'agent/my-agent/chat/abc123' -> { navigator: 'chats', chatFilter: { kind: 'agent', agentId: 'my-agent' }, details: { type: 'chat', id: 'abc123' } }
  *   'sources' -> { navigator: 'sources', details: null }
  *   'sources/source/github' -> { navigator: 'sources', details: { type: 'source', id: 'github' } }
  *   'settings' -> { navigator: 'settings', details: { type: 'general', id: 'general' } }
@@ -101,54 +102,58 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
     if (segments.length === 1) {
       return { navigator: 'sources', details: null }
     }
-    // Category filter: sources/{category}
+
     const validCategories = ['local-files', 'online-sources', 'local-mcp']
-    if (segments.length === 2 && validCategories.includes(segments[1])) {
+    const second = segments[1]
+
+    // Check if second segment is a category
+    if (validCategories.includes(second)) {
+      const category = second as 'local-files' | 'online-sources' | 'local-mcp'
+
+      // Category only: sources/{category}
+      if (segments.length === 2) {
+        return {
+          navigator: 'sources',
+          sourceCategory: category,
+          details: { type: 'category', id: category },
+        }
+      }
+
+      // Category with source: sources/{category}/source/{sourceSlug}
+      if (segments.length >= 4 && segments[2] === 'source' && segments[3]) {
+        return {
+          navigator: 'sources',
+          sourceCategory: category,
+          details: { type: 'source', id: segments[3] },
+        }
+      }
+
+      return null
+    }
+
+    // No category, direct source: sources/source/{sourceSlug}
+    if (second === 'source' && segments[2]) {
       return {
         navigator: 'sources',
-        details: { type: 'category', id: segments[1] },
+        details: { type: 'source', id: segments[2] },
       }
     }
-    if (segments[1] === 'source') {
-      // Handle agent-scoped sources: sources/source/{agentSlug}/{sourceSlug}
-      if (segments.length >= 4) {
-        return {
-          navigator: 'sources',
-          details: { type: 'source', id: `${segments[2]}/${segments[3]}` },
-        }
-      }
-      // Workspace-level source: sources/source/{sourceSlug}
-      if (segments[2]) {
-        return {
-          navigator: 'sources',
-          details: { type: 'source', id: segments[2] },
-        }
-      }
-    }
+
     return null
   }
 
-  // Chats navigator (inbox, archive, flagged, agent, state)
+  // Chats navigator (allChats, flagged, state)
   let chatFilter: ChatFilter
   let detailsStartIndex: number
 
   switch (first) {
-    case 'inbox':
-      chatFilter = { kind: 'inbox' }
-      detailsStartIndex = 1
-      break
-    case 'archive':
-      chatFilter = { kind: 'archive' }
+    case 'allChats':
+      chatFilter = { kind: 'allChats' }
       detailsStartIndex = 1
       break
     case 'flagged':
       chatFilter = { kind: 'flagged' }
       detailsStartIndex = 1
-      break
-    case 'agent':
-      if (!segments[1]) return null
-      chatFilter = { kind: 'agent', agentId: segments[1] }
-      detailsStartIndex = 2
       break
     case 'state':
       if (!segments[1]) return null
@@ -197,26 +202,20 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
   // Chats navigator
   let base: string
   const filter = parsed.chatFilter
-  if (!filter) return 'inbox'
+  if (!filter) return 'allChats'
 
   switch (filter.kind) {
-    case 'inbox':
-      base = 'inbox'
-      break
-    case 'archive':
-      base = 'archive'
+    case 'allChats':
+      base = 'allChats'
       break
     case 'flagged':
       base = 'flagged'
-      break
-    case 'agent':
-      base = `agent/${filter.agentId}`
       break
     case 'state':
       base = `state/${filter.stateId}`
       break
     default:
-      base = 'inbox'
+      base = 'allChats'
   }
 
   if (!parsed.details) return base
@@ -224,30 +223,29 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
 }
 
 // =============================================================================
-// Legacy Route Parsing
+// Route Parsing
 // =============================================================================
 
 /**
- * Parse a route string into structured navigation (legacy format)
+ * Parse a route string into structured navigation
  *
  * Examples:
- *   'tab/settings' -> { type: 'tab', name: 'settings', params: {} }
- *   'tab/chat/abc123' -> { type: 'tab', name: 'chat', id: 'abc123', params: {} }
- *   'action/new-chat?agentId=x' -> { type: 'action', name: 'new-chat', params: { agentId: 'x' } }
- *   'sidebar/agent/my-agent' -> { type: 'sidebar', name: 'agent', id: 'my-agent', params: {} }
+ *   'allChats' -> { type: 'view', name: 'allChats', params: {} }
+ *   'allChats/chat/abc123' -> { type: 'view', name: 'chat', id: 'abc123', params: { filter: 'allChats' } }
+ *   'settings/shortcuts' -> { type: 'view', name: 'shortcuts', params: {} }
+ *   'action/new-chat' -> { type: 'action', name: 'new-chat', params: {} }
  */
 export function parseRoute(route: string): ParsedRoute | null {
   try {
-    // Check if this is a compound route
+    // Check if this is a compound route (preferred format)
     if (isCompoundRoute(route)) {
       const compound = parseCompoundRoute(route)
       if (compound) {
-        // Convert compound route to legacy ParsedRoute format for compatibility
-        return convertCompoundToLegacy(compound)
+        return convertCompoundToViewRoute(compound)
       }
     }
 
-    // Split route and query string
+    // Parse action routes: action/{name}[/{id}]
     const [pathPart, queryPart] = route.split('?')
     const segments = pathPart.split('/').filter(Boolean)
 
@@ -255,14 +253,13 @@ export function parseRoute(route: string): ParsedRoute | null {
       return null
     }
 
-    const type = segments[0] as RouteType
-    if (!['tab', 'action', 'sidebar'].includes(type)) {
+    const type = segments[0]
+    if (type !== 'action') {
       return null
     }
 
     const name = segments[1]
-    const id = segments[2] // Optional ID segment
-    const secondaryId = segments[3] // For source-info with agent slug
+    const id = segments[2]
 
     // Parse query params
     const params: Record<string, string> = {}
@@ -273,25 +270,17 @@ export function parseRoute(route: string): ParsedRoute | null {
       })
     }
 
-    // Handle special cases with path-based params
-    // For source-info with agentSlug: tab/source-info/{agentSlug}/{sourceSlug}
-    if (name === 'source-info' && secondaryId) {
-      params.agentSlug = id!
-      params.id = secondaryId
-      return { type, name, id: secondaryId, params }
-    }
-
-    return { type, name, id, params }
+    return { type: 'action', name, id, params }
   } catch {
     return null
   }
 }
 
 /**
- * Convert a parsed compound route to legacy ParsedRoute format
+ * Convert a parsed compound route to ParsedRoute format (type: 'view')
  */
-function convertCompoundToLegacy(compound: ParsedCompoundRoute): ParsedRoute {
-  // Settings -> tab/settings, tab/shortcuts, tab/preferences
+function convertCompoundToViewRoute(compound: ParsedCompoundRoute): ParsedRoute {
+  // Settings
   if (compound.navigator === 'settings') {
     const subpage = compound.details?.type || 'general'
     if (subpage === 'general') {
@@ -300,85 +289,40 @@ function convertCompoundToLegacy(compound: ParsedCompoundRoute): ParsedRoute {
     return { type: 'view', name: subpage, params: {} }
   }
 
-  // Sources -> sidebar/sources or tab/source-info
+  // Sources
   if (compound.navigator === 'sources') {
     if (!compound.details) {
       return { type: 'view', name: 'sources', params: {} }
     }
-    // Handle category filter: sources/{category}
     if (compound.details.type === 'category') {
       return { type: 'view', name: 'sources', params: { category: compound.details.id } }
     }
-    // Parse source ID which may include agent slug
-    const sourceId = compound.details.id
-    if (sourceId.includes('/')) {
-      const [agentSlug, sourceSlug] = sourceId.split('/')
-      return {
-        type: 'view',
-        name: 'source-info',
-        id: sourceSlug,
-        params: { agentSlug },
-      }
-    }
-    return { type: 'view', name: 'source-info', id: sourceId, params: {} }
+    return { type: 'view', name: 'source-info', id: compound.details.id, params: {} }
   }
 
-  // Chats -> sidebar filter + optional chat details
+  // Chats
   if (compound.chatFilter) {
     const filter = compound.chatFilter
     if (compound.details) {
-      // Has a selected session
       return {
         type: 'view',
         name: 'chat',
         id: compound.details.id,
         params: {
           filter: filter.kind,
-          ...(filter.kind === 'agent' ? { agentId: filter.agentId } : {}),
           ...(filter.kind === 'state' ? { stateId: filter.stateId } : {}),
         },
       }
     }
-    // Just the filter, no session selected
     return {
       type: 'view',
       name: filter.kind,
-      id: filter.kind === 'agent' ? filter.agentId : filter.kind === 'state' ? filter.stateId : undefined,
+      id: filter.kind === 'state' ? filter.stateId : undefined,
       params: {},
     }
   }
 
-  // Fallback
-  return { type: 'view', name: 'inbox', params: {} }
-}
-
-/**
- * Check if a string is a valid route
- */
-export function isValidRoute(route: string): boolean {
-  return parseRoute(route) !== null
-}
-
-/**
- * Convert a parsed route back to a route string
- */
-export function stringifyRoute(parsed: ParsedRoute): string {
-  let route = `${parsed.type}/${parsed.name}`
-
-  if (parsed.id) {
-    route += `/${parsed.id}`
-  }
-
-  const params = { ...parsed.params }
-  // Remove id from params if it was in the path
-  delete params.id
-
-  if (Object.keys(params).length > 0) {
-    const searchParams = new URLSearchParams(params)
-    route += `?${searchParams.toString()}`
-  }
-
-  return route
+  return { type: 'view', name: 'allChats', params: {} }
 }
 
 // =============================================================================
@@ -392,14 +336,12 @@ export function stringifyRoute(parsed: ParsedRoute): string {
  * determines all 3 panels (sidebar, navigator, main content).
  *
  * Supports:
- * - Compound routes: inbox, inbox/chat/abc, sources, sources/source/github, settings/shortcuts
- * - Legacy tab routes: tab/chat/abc (converted to NavigationState)
- * - Legacy sidebar routes: sidebar/inbox (converted to NavigationState)
+ * - Compound routes: allChats, allChats/chat/abc, sources, sources/source/github, settings/shortcuts
  *
  * Returns null for action routes (they don't map to a navigation state) and invalid routes.
  */
 export function parseRouteToNavigationState(route: string): NavigationState | null {
-  // First, check if this is a compound route
+  // Parse compound routes
   if (isCompoundRoute(route)) {
     const compound = parseCompoundRoute(route)
     if (compound) {
@@ -407,14 +349,14 @@ export function parseRouteToNavigationState(route: string): NavigationState | nu
     }
   }
 
-  // Parse as legacy route
+  // Parse as route (may be action or view)
   const parsed = parseRoute(route)
   if (!parsed) return null
 
   // Actions don't map to navigation state
   if (parsed.type === 'action') return null
 
-  // Convert legacy routes to NavigationState
+  // Convert view routes to NavigationState
   return convertParsedRouteToNavigationState(parsed)
 }
 
@@ -430,10 +372,12 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
 
   // Sources
   if (compound.navigator === 'sources') {
+    const category = compound.sourceCategory
+
     if (!compound.details) {
-      return { navigator: 'sources', details: null }
+      return { navigator: 'sources', category, details: null }
     }
-    // Handle category filter
+    // Handle category filter (no source selected)
     if (compound.details.type === 'category') {
       return {
         navigator: 'sources',
@@ -441,23 +385,16 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
         details: null,
       }
     }
-    // Parse source ID which may include agent slug
-    const sourceId = compound.details.id
-    if (sourceId.includes('/')) {
-      const [agentSlug, sourceSlug] = sourceId.split('/')
-      return {
-        navigator: 'sources',
-        details: { type: 'source', sourceSlug, agentSlug },
-      }
-    }
+    // Source selected - preserve category if present
     return {
       navigator: 'sources',
-      details: { type: 'source', sourceSlug: sourceId },
+      category,
+      details: { type: 'source', sourceSlug: compound.details.id },
     }
   }
 
   // Chats
-  const filter = compound.chatFilter || { kind: 'inbox' as const }
+  const filter = compound.chatFilter || { kind: 'allChats' as const }
   if (compound.details) {
     return {
       navigator: 'chats',
@@ -473,170 +410,82 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
 }
 
 /**
- * Convert a legacy ParsedRoute to NavigationState
+ * Convert a ParsedRoute (view type) to NavigationState
  */
 function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationState | null {
-  // Handle view routes (already converted from compound)
-  if (parsed.type === 'view') {
-    switch (parsed.name) {
-      case 'settings':
-        return { navigator: 'settings', subpage: 'general' }
-      case 'shortcuts':
-        return { navigator: 'settings', subpage: 'shortcuts' }
-      case 'preferences':
-        return { navigator: 'settings', subpage: 'preferences' }
-      case 'sources':
-        if (parsed.params.category) {
-          return {
-            navigator: 'sources',
-            category: parsed.params.category as SourceCategory,
-            details: null,
-          }
-        }
-        return { navigator: 'sources', details: null }
-      case 'source-info':
-        if (parsed.id) {
-          return {
-            navigator: 'sources',
-            details: {
-              type: 'source',
-              sourceSlug: parsed.id,
-              agentSlug: parsed.params.agentSlug,
-            },
-          }
-        }
-        return { navigator: 'sources', details: null }
-      case 'chat':
-        if (parsed.id) {
-          // Reconstruct filter from params
-          const filterKind = (parsed.params.filter || 'inbox') as ChatFilter['kind']
-          let filter: ChatFilter
-          if (filterKind === 'agent' && parsed.params.agentId) {
-            filter = { kind: 'agent', agentId: parsed.params.agentId }
-          } else if (filterKind === 'state' && parsed.params.stateId) {
-            filter = { kind: 'state', stateId: parsed.params.stateId }
-          } else {
-            filter = { kind: filterKind as 'inbox' | 'archive' | 'flagged' }
-          }
-          return {
-            navigator: 'chats',
-            filter,
-            details: { type: 'chat', sessionId: parsed.id },
-          }
-        }
-        return { navigator: 'chats', filter: { kind: 'inbox' }, details: null }
-      case 'inbox':
-        return {
-          navigator: 'chats',
-          filter: { kind: 'inbox' },
-          details: null,
-        }
-      case 'archive':
-        return {
-          navigator: 'chats',
-          filter: { kind: 'archive' },
-          details: null,
-        }
-      case 'flagged':
-        return {
-          navigator: 'chats',
-          filter: { kind: 'flagged' },
-          details: null,
-        }
-      case 'agent':
-        if (parsed.id) {
-          return {
-            navigator: 'chats',
-            filter: { kind: 'agent', agentId: parsed.id },
-            details: null,
-          }
-        }
-        return { navigator: 'chats', filter: { kind: 'inbox' }, details: null }
-      case 'state':
-        if (parsed.id) {
-          return {
-            navigator: 'chats',
-            filter: { kind: 'state', stateId: parsed.id },
-            details: null,
-          }
-        }
-        return { navigator: 'chats', filter: { kind: 'inbox' }, details: null }
-      default:
-        return null
-    }
+  // Only handle view routes (compound routes converted to view type)
+  if (parsed.type !== 'view') {
+    return null
   }
 
-  // Handle tab routes
-  if (parsed.type === 'tab') {
-    switch (parsed.name) {
-      case 'settings':
-        return { navigator: 'settings', subpage: 'general' }
-      case 'shortcuts':
-        return { navigator: 'settings', subpage: 'shortcuts' }
-      case 'preferences':
-        return { navigator: 'settings', subpage: 'preferences' }
-      case 'chat':
-        // Tab/chat without filter context - default to inbox
-        if (parsed.id) {
-          return {
-            navigator: 'chats',
-            filter: { kind: 'inbox' },
-            details: { type: 'chat', sessionId: parsed.id },
-          }
+  switch (parsed.name) {
+    case 'settings':
+      return { navigator: 'settings', subpage: 'general' }
+    case 'shortcuts':
+      return { navigator: 'settings', subpage: 'shortcuts' }
+    case 'preferences':
+      return { navigator: 'settings', subpage: 'preferences' }
+    case 'sources':
+      if (parsed.params.category) {
+        return {
+          navigator: 'sources',
+          category: parsed.params.category as SourceCategory,
+          details: null,
         }
-        return { navigator: 'chats', filter: { kind: 'inbox' }, details: null }
-      case 'source-info':
-        if (parsed.id) {
-          return {
-            navigator: 'sources',
-            details: {
-              type: 'source',
-              sourceSlug: parsed.id,
-              agentSlug: parsed.params.agentSlug,
-            },
-          }
+      }
+      return { navigator: 'sources', details: null }
+    case 'source-info':
+      if (parsed.id) {
+        return {
+          navigator: 'sources',
+          details: {
+            type: 'source',
+            sourceSlug: parsed.id,
+          },
         }
-        return { navigator: 'sources', details: null }
-      default:
-        return null
-    }
+      }
+      return { navigator: 'sources', details: null }
+    case 'chat':
+      if (parsed.id) {
+        // Reconstruct filter from params
+        const filterKind = (parsed.params.filter || 'allChats') as ChatFilter['kind']
+        let filter: ChatFilter
+        if (filterKind === 'state' && parsed.params.stateId) {
+          filter = { kind: 'state', stateId: parsed.params.stateId }
+        } else {
+          filter = { kind: filterKind as 'allChats' | 'flagged' }
+        }
+        return {
+          navigator: 'chats',
+          filter,
+          details: { type: 'chat', sessionId: parsed.id },
+        }
+      }
+      return { navigator: 'chats', filter: { kind: 'allChats' }, details: null }
+    case 'allChats':
+      return {
+        navigator: 'chats',
+        filter: { kind: 'allChats' },
+        details: null,
+      }
+    case 'flagged':
+      return {
+        navigator: 'chats',
+        filter: { kind: 'flagged' },
+        details: null,
+      }
+    case 'state':
+      if (parsed.id) {
+        return {
+          navigator: 'chats',
+          filter: { kind: 'state', stateId: parsed.id },
+          details: null,
+        }
+      }
+      return { navigator: 'chats', filter: { kind: 'allChats' }, details: null }
+    default:
+      return null
   }
-
-  // Handle sidebar routes
-  if (parsed.type === 'sidebar') {
-    switch (parsed.name) {
-      case 'inbox':
-        return { navigator: 'chats', filter: { kind: 'inbox' }, details: null }
-      case 'archive':
-        return { navigator: 'chats', filter: { kind: 'archive' }, details: null }
-      case 'flagged':
-        return { navigator: 'chats', filter: { kind: 'flagged' }, details: null }
-      case 'agent':
-        if (parsed.id) {
-          return {
-            navigator: 'chats',
-            filter: { kind: 'agent', agentId: parsed.id },
-            details: null,
-          }
-        }
-        return { navigator: 'chats', filter: { kind: 'inbox' }, details: null }
-      case 'state':
-        if (parsed.id) {
-          return {
-            navigator: 'chats',
-            filter: { kind: 'state', stateId: parsed.id },
-            details: null,
-          }
-        }
-        return { navigator: 'chats', filter: { kind: 'inbox' }, details: null }
-      case 'sources':
-        return { navigator: 'sources', details: null }
-      default:
-        return null
-    }
-  }
-
-  return null
 }
 
 /**
@@ -648,13 +497,13 @@ export function buildRouteFromNavigationState(state: NavigationState): string {
   }
 
   if (state.navigator === 'sources') {
-    let base = state.category ? `sources/${state.category}` : 'sources'
+    const base = state.category ? `sources/${state.category}` : 'sources'
     if (state.details) {
-      const { sourceSlug, agentSlug } = state.details
-      if (agentSlug) {
-        return `sources/source/${agentSlug}/${sourceSlug}`
+      // Include category in URL if present: sources/{category}/source/{slug}
+      if (state.category) {
+        return `sources/${state.category}/source/${state.details.sourceSlug}`
       }
-      return `sources/source/${sourceSlug}`
+      return `sources/source/${state.details.sourceSlug}`
     }
     return base
   }
@@ -663,17 +512,11 @@ export function buildRouteFromNavigationState(state: NavigationState): string {
   const filter = state.filter
   let base: string
   switch (filter.kind) {
-    case 'inbox':
-      base = 'inbox'
-      break
-    case 'archive':
-      base = 'archive'
+    case 'allChats':
+      base = 'allChats'
       break
     case 'flagged':
       base = 'flagged'
-      break
-    case 'agent':
-      base = `agent/${filter.agentId}`
       break
     case 'state':
       base = `state/${filter.stateId}`

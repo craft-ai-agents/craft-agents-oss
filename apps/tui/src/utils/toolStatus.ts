@@ -16,10 +16,6 @@ const TOOL_STATUS: Record<string, ToolStatusInfo> = {
   Glob: { message: 'Finding files' },
   MultiEdit: { message: 'Editing files' },
   NotebookEdit: { message: 'Editing notebook' },
-  // Legacy/lowercase names
-  web_search: { message: 'Searching the web' },
-  web_fetch: { message: 'Fetching webpage' },
-  code_execution: { message: 'Running code' },
   // Preferences
   update_user_preferences: { message: 'Remembering that' },
   // Docs server tools

@@ -46,7 +46,7 @@ export interface DetailsProps {
  */
 export interface NavigationData {
   /** All sessions in the current filter */
-  sessions: Array<{ id: string; isFlagged?: boolean; isArchived?: boolean; agentId?: string; stateId?: string }>
+  sessions: Array<{ id: string; isFlagged?: boolean; stateId?: string }>
   /** All sources */
   sources: Array<{ slug: string }>
   /** Current chat filter (if in chats mode) */
@@ -79,7 +79,7 @@ export type NavigatorType = 'chats' | 'sources' | 'settings'
 /**
  * Chat filter kinds that map to sidebar routes
  */
-export type ChatFilterKind = 'inbox' | 'archive' | 'flagged' | 'agent' | 'state'
+export type ChatFilterKind = 'allChats' | 'flagged' | 'state'
 
 // =============================================================================
 // Details Page Metadata
@@ -133,18 +133,12 @@ export const NavigationRegistry = {
         case 'flagged':
           filtered = ctx.sessions.filter(s => s.isFlagged)
           break
-        case 'archive':
-          filtered = ctx.sessions.filter(s => s.isArchived)
-          break
-        case 'agent':
-          filtered = ctx.sessions.filter(s => s.agentId === filter.agentId)
-          break
         case 'state':
           filtered = ctx.sessions.filter(s => s.stateId === filter.stateId)
           break
-        case 'inbox':
+        case 'allChats':
         default:
-          filtered = ctx.sessions.filter(s => !s.isArchived)
+          // allChats shows all sessions
           break
       }
       return filtered[0]?.id ?? null
@@ -198,185 +192,3 @@ export type NavigationState =
   | { navigator: 'sources'; details: { type: 'source'; id: string } | null }
   | { navigator: 'settings'; details: { type: DetailsType<'settings'>; id: string } }
 
-// =============================================================================
-// Helper Functions
-// =============================================================================
-
-/**
- * Get the navigator type for a given details page type
- */
-export function getNavigatorForDetails(detailsType: string): NavigatorType | null {
-  for (const [navigatorType, config] of Object.entries(NavigationRegistry)) {
-    if (detailsType in config.detailsPages) {
-      return navigatorType as NavigatorType
-    }
-  }
-  return null
-}
-
-/**
- * Check if a details type is valid for a navigator
- */
-export function isValidDetailsType(navigator: NavigatorType, detailsType: string): boolean {
-  return detailsType in NavigationRegistry[navigator].detailsPages
-}
-
-/**
- * Get the default details for a navigator
- */
-export function getDefaultDetails(navigator: NavigatorType): string | null {
-  return NavigationRegistry[navigator].defaultDetails
-}
-
-/**
- * Get the first item for a navigator (for auto-selection)
- */
-export function getFirstItem(navigator: NavigatorType, context: NavigationData): string | null {
-  return NavigationRegistry[navigator].getFirstItem(context)
-}
-
-/**
- * Get all valid details types for a navigator
- */
-export function getValidDetailsTypes(navigator: NavigatorType): string[] {
-  return Object.keys(NavigationRegistry[navigator].detailsPages)
-}
-
-// =============================================================================
-// Route Helpers
-// =============================================================================
-
-/**
- * Parse a compound route into navigation state
- * Format: {sidebar}[/{details-type}/{details-id}]
- *
- * Examples:
- *   'inbox' → chats navigator, inbox filter, no details
- *   'inbox/chat/abc123' → chats navigator, inbox filter, chat details
- *   'flagged/chat/abc123' → chats navigator, flagged filter, chat details
- *   'agent/my-agent/chat/abc123' → chats navigator, agent filter, chat details
- *   'sources' → sources navigator, no details
- *   'sources/source/github' → sources navigator, source details
- *   'settings' → settings navigator, general details (default)
- *   'settings/shortcuts' → settings navigator, shortcuts details
- */
-export function parseCompoundRoute(route: string): NavigationState | null {
-  const segments = route.split('/').filter(Boolean)
-  if (segments.length === 0) return null
-
-  const first = segments[0]
-
-  // Settings navigator
-  if (first === 'settings') {
-    const detailsType = segments[1] || 'general'
-    if (!isValidDetailsType('settings', detailsType)) return null
-    return {
-      navigator: 'settings',
-      details: { type: detailsType as DetailsType<'settings'>, id: detailsType },
-    }
-  }
-
-  // Sources navigator
-  if (first === 'sources') {
-    if (segments.length === 1) {
-      return { navigator: 'sources', details: null }
-    }
-    if (segments[1] === 'source' && segments[2]) {
-      return {
-        navigator: 'sources',
-        details: { type: 'source', id: segments[2] },
-      }
-    }
-    return null
-  }
-
-  // Chats navigator (inbox, archive, flagged, agent, state)
-  let chatFilter: ChatFilter
-  let detailsStartIndex: number
-
-  switch (first) {
-    case 'inbox':
-      chatFilter = { kind: 'inbox' }
-      detailsStartIndex = 1
-      break
-    case 'archive':
-      chatFilter = { kind: 'archive' }
-      detailsStartIndex = 1
-      break
-    case 'flagged':
-      chatFilter = { kind: 'flagged' }
-      detailsStartIndex = 1
-      break
-    case 'agent':
-      if (!segments[1]) return null
-      chatFilter = { kind: 'agent', agentId: segments[1] }
-      detailsStartIndex = 2
-      break
-    case 'state':
-      if (!segments[1]) return null
-      chatFilter = { kind: 'state', stateId: segments[1] as ChatFilter & { kind: 'state' } extends { stateId: infer T } ? T : never }
-      detailsStartIndex = 2
-      break
-    default:
-      return null
-  }
-
-  // Check for details
-  if (segments.length > detailsStartIndex) {
-    const detailsType = segments[detailsStartIndex]
-    const detailsId = segments[detailsStartIndex + 1]
-    if (detailsType === 'chat' && detailsId) {
-      return {
-        navigator: 'chats',
-        chatFilter,
-        details: { type: 'chat', id: detailsId },
-      }
-    }
-  }
-
-  return {
-    navigator: 'chats',
-    chatFilter,
-    details: null,
-  }
-}
-
-/**
- * Build a compound route from navigation state
- */
-export function buildCompoundRoute(state: NavigationState): string {
-  if (state.navigator === 'settings') {
-    const detailsType = state.details?.type || 'general'
-    return detailsType === 'general' ? 'settings' : `settings/${detailsType}`
-  }
-
-  if (state.navigator === 'sources') {
-    if (!state.details) return 'sources'
-    return `sources/source/${state.details.id}`
-  }
-
-  // Chats navigator
-  let base: string
-  switch (state.chatFilter.kind) {
-    case 'inbox':
-      base = 'inbox'
-      break
-    case 'archive':
-      base = 'archive'
-      break
-    case 'flagged':
-      base = 'flagged'
-      break
-    case 'agent':
-      base = `agent/${state.chatFilter.agentId}`
-      break
-    case 'state':
-      base = `state/${state.chatFilter.stateId}`
-      break
-    default:
-      base = 'inbox'
-  }
-
-  if (!state.details) return base
-  return `${base}/chat/${state.details.id}`
-}

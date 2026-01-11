@@ -10,9 +10,7 @@ import { debug } from '@craft-agent/shared/utils';
 export interface AppProps {
   config: CraftAgentConfig;
   onRequestSetup?: () => void;
-  /** Agent to auto-activate on startup (without @ prefix) */
-  initialAgent?: string;
-  /** Prompt to auto-send after agent activation (or immediately if no agent) */
+  /** Prompt to auto-send on startup */
   initialPrompt?: string;
   /** Error message to display on startup (e.g., workspace not found) */
   initialError?: string;
@@ -52,7 +50,6 @@ export interface AppProps {
 export const App: React.FC<AppProps> = ({
   config,
   onRequestSetup,
-  initialAgent,
   initialPrompt,
   initialError,
   newSession,
@@ -100,7 +97,6 @@ export const App: React.FC<AppProps> = ({
       <SessionContainerWithKey
         config={config}
         onRequestSetup={onRequestSetup}
-        initialAgent={initialAgent}
         initialPrompt={initialPrompt}
         initialError={initialError}
       />
@@ -117,7 +113,6 @@ import { useGlobalContext } from './context/GlobalContext.tsx';
 interface SessionContainerWithKeyProps {
   config: CraftAgentConfig;
   onRequestSetup?: () => void;
-  initialAgent?: string;
   initialPrompt?: string;
   initialError?: string;
 }
@@ -125,7 +120,6 @@ interface SessionContainerWithKeyProps {
 const SessionContainerWithKey: React.FC<SessionContainerWithKeyProps> = ({
   config,
   onRequestSetup,
-  initialAgent,
   initialPrompt,
   initialError,
 }) => {
@@ -146,7 +140,6 @@ const SessionContainerWithKey: React.FC<SessionContainerWithKeyProps> = ({
       config={currentConfig}
       session={session}
       onRequestSetup={onRequestSetup}
-      initialAgent={initialAgent}
       initialPrompt={initialPrompt}
       initialError={initialError}
     />

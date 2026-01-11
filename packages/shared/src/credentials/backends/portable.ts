@@ -184,7 +184,6 @@ export class PortableCredentialBackend implements CredentialBackend {
     return ids.filter((id) => {
       if (filter.type && id.type !== filter.type) return false;
       if (filter.workspaceId && id.workspaceId !== filter.workspaceId) return false;
-      if (filter.agentId && id.agentId !== filter.agentId) return false;
       if (filter.name && id.name !== filter.name) return false;
       return true;
     });

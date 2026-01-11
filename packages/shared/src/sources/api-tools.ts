@@ -10,19 +10,10 @@ import { z } from 'zod';
 import type { ApiConfig } from './types.ts';
 import { debug } from '../utils/debug.ts';
 import { estimateTokens, summarizeLargeResult, TOKEN_LIMIT } from '../utils/summarize.ts';
+import type { ApiCredential, BasicAuthCredential } from './credential-manager.ts';
 
-/**
- * Credential for HTTP Basic Authentication
- */
-export interface BasicAuthCredential {
-  username: string;
-  password: string;
-}
-
-/**
- * API credential - either a simple string (API key/token) or basic auth credentials
- */
-export type ApiCredential = string | BasicAuthCredential;
+// Re-export for convenience
+export type { ApiCredential, BasicAuthCredential } from './credential-manager.ts';
 
 /**
  * API credential source - can be a static credential or a function that returns a token.

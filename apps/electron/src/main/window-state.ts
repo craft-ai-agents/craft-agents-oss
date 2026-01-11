@@ -21,12 +21,6 @@ export interface WindowState {
   lastFocusedWorkspaceId?: string
 }
 
-// Old format for migration
-interface LegacyWindowState {
-  openWorkspaceIds: string[]
-  lastFocusedWorkspaceId?: string
-}
-
 const CONFIG_DIR = join(homedir(), '.craft-agent')
 const WINDOW_STATE_FILE = join(CONFIG_DIR, 'window-state.json')
 
@@ -49,7 +43,6 @@ export function saveWindowState(state: WindowState): void {
 
 /**
  * Load the saved window state
- * Handles migration from old format (openWorkspaceIds array)
  */
 export function loadWindowState(): WindowState | null {
   try {
@@ -60,21 +53,7 @@ export function loadWindowState(): WindowState | null {
     const content = readFileSync(WINDOW_STATE_FILE, 'utf-8')
     const raw = JSON.parse(content)
 
-    // Migrate old format (openWorkspaceIds array)
-    if (Array.isArray(raw.openWorkspaceIds)) {
-      const legacy = raw as LegacyWindowState
-      mainLog.info('[WindowState] Migrating from legacy format')
-      return {
-        windows: legacy.openWorkspaceIds.map(id => ({
-          type: 'main' as const,
-          workspaceId: id,
-          bounds: { x: 100, y: 100, width: 1400, height: 900 }
-        })),
-        lastFocusedWorkspaceId: legacy.lastFocusedWorkspaceId
-      }
-    }
-
-    // New format validation
+    // Validate format
     const state = raw as WindowState
     if (!Array.isArray(state.windows)) {
       mainLog.warn('[WindowState] Invalid window state file, ignoring')

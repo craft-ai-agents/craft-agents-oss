@@ -17,8 +17,8 @@
  *   const { navigate } = useNavigation()
  *   const navState = useNavigationState()
  *
- *   navigate(routes.view.inbox())
- *   navigate(routes.action.newChat({ agentId: 'claude' }))
+ *   navigate(routes.view.allChats())
+ *   navigate(routes.action.newChat())
  */
 
 import {
@@ -31,6 +31,7 @@ import {
   useMemo,
   type ReactNode,
 } from 'react'
+import { toast } from 'sonner'
 import { useAtomValue } from 'jotai'
 import { useSession } from '@/hooks/useSession'
 import {
@@ -99,13 +100,11 @@ interface NavigationProviderProps {
   /** Current workspace ID */
   workspaceId: string | null
   /** Session creation handler */
-  onCreateSession: (workspaceId: string, agentId?: string) => Promise<Session>
+  onCreateSession: (workspaceId: string, options?: import('../../shared/types').CreateSessionOptions) => Promise<Session>
   /** Input change handler for pre-filling chat input */
   onInputChange?: (sessionId: string, value: string) => void
   /** Whether the app is ready to navigate */
   isReady?: boolean
-  /** List of agents (for agent name lookup) */
-  agents?: Array<{ id: string; name: string }>
 }
 
 export function NavigationProvider({
@@ -114,7 +113,6 @@ export function NavigationProvider({
   onCreateSession,
   onInputChange,
   isReady = true,
-  agents = [],
 }: NavigationProviderProps) {
   const [, setSession] = useSession()
 
@@ -155,14 +153,10 @@ export function NavigationProvider({
     (filter: ChatFilter): SessionMeta[] => {
       return sessionMetas.filter((session) => {
         switch (filter.kind) {
-          case 'inbox':
-            return !isSessionDone(session)
-          case 'archive':
-            return isSessionDone(session)
+          case 'allChats':
+            return true
           case 'flagged':
             return session.isFlagged === true
-          case 'agent':
-            return session.agentId === filter.agentId && !isSessionDone(session)
           case 'state':
             return session.todoState === filter.stateId
           default:
@@ -170,7 +164,7 @@ export function NavigationProvider({
         }
       })
     },
-    [sessionMetas, isSessionDone]
+    [sessionMetas]
   )
 
   // Helper: Get first session ID for a filter
@@ -200,21 +194,20 @@ export function NavigationProvider({
 
       switch (parsed.name) {
         case 'new-chat': {
-          const session = await onCreateSession(
-            workspaceId,
-            parsed.params.agentId
-          )
+          // Pass onboarding option if provided
+          const onboardingOption = parsed.params.onboarding as 'add-source' | 'connect-sources' | 'welcome' | undefined
+          const session = await onCreateSession(workspaceId, onboardingOption ? { onboarding: onboardingOption } : undefined)
 
           // Rename session if name provided
           if (parsed.params.name) {
             await window.electronAPI.sessionCommand(session.id, { type: 'rename', name: parsed.params.name })
           }
 
-          // Update navigation state to show new chat in inbox
+          // Update navigation state to show new chat in allChats
           setSession({ selected: session.id })
           setNavigationState({
             navigator: 'chats',
-            filter: { kind: 'inbox' },
+            filter: { kind: 'allChats' },
             details: { type: 'chat', sessionId: session.id },
           })
 
@@ -263,18 +256,6 @@ export function NavigationProvider({
           }
           break
 
-        case 'activate-agent':
-          if (parsed.id) {
-            await window.electronAPI.activateAgent(workspaceId, parsed.id)
-          }
-          break
-
-        case 'deactivate-agent':
-          if (parsed.id) {
-            await window.electronAPI.deactivateAgent(workspaceId, parsed.id)
-          }
-          break
-
         case 'set-mode':
           if (parsed.id && parsed.params.mode) {
             await window.electronAPI.sessionCommand(
@@ -297,24 +278,6 @@ export function NavigationProvider({
     [workspaceId, onCreateSession, onInputChange, setSession]
   )
 
-  // Handle special tab routes (file/browser open - not navigation state changes)
-  const handleSpecialTabRoutes = useCallback((parsed: ParsedRoute): boolean => {
-    switch (parsed.name) {
-      case 'file':
-        if (parsed.params.path) {
-          window.electronAPI.openFile(parsed.params.path)
-          return true
-        }
-        break
-      case 'browser':
-        if (parsed.params.url) {
-          window.electronAPI.openUrl(parsed.params.url)
-          return true
-        }
-        break
-    }
-    return false
-  }, [])
 
   /**
    * Apply navigation state with auto-selection logic
@@ -322,37 +285,44 @@ export function NavigationProvider({
    * When navigating to a filter/category without explicit details,
    * auto-select the first available item. This ensures the main content
    * panel always shows meaningful content when possible.
+   *
+   * Returns the final NavigationState (with auto-selection applied if any)
+   * so the caller can update the URL with the correct route.
    */
   const applyNavigationState = useCallback(
-    (newState: NavigationState) => {
+    (newState: NavigationState): NavigationState => {
       // For chats: auto-select first session if no details provided
       if (isChatsNavigation(newState) && !newState.details) {
         const firstSessionId = getFirstSessionId(newState.filter)
         if (firstSessionId) {
-          setSession({ selected: firstSessionId })
-          setNavigationState({
+          const stateWithSelection: NavigationState = {
             ...newState,
             details: { type: 'chat', sessionId: firstSessionId },
-          })
+          }
+          setSession({ selected: firstSessionId })
+          setNavigationState(stateWithSelection)
+          return stateWithSelection
         } else {
           setSession({ selected: null })
           setNavigationState(newState)
+          return newState
         }
-        return
       }
 
       // For sources: auto-select first source if no details provided
       if (isSourcesNavigation(newState) && !newState.details) {
         const firstSourceSlug = getFirstSourceSlug(newState.category)
         if (firstSourceSlug) {
-          setNavigationState({
+          const stateWithSelection: NavigationState = {
             ...newState,
             details: { type: 'source', sourceSlug: firstSourceSlug },
-          })
+          }
+          setNavigationState(stateWithSelection)
+          return stateWithSelection
         } else {
           setNavigationState(newState)
+          return newState
         }
-        return
       }
 
       // For chats with explicit session: update session selection
@@ -362,6 +332,7 @@ export function NavigationProvider({
 
       // Apply state directly
       setNavigationState(newState)
+      return newState
     },
     [getFirstSessionId, getFirstSourceSlug, setSession]
   )
@@ -382,11 +353,6 @@ export function NavigationProvider({
 
       console.log('[Navigation] Navigating:', parsed)
 
-      // Handle special tab routes (file/browser open) that don't change navigation state
-      if (parsed.type === 'tab' && handleSpecialTabRoutes(parsed)) {
-        return
-      }
-
       // Handle actions (side effects)
       if (parsed.type === 'action') {
         await handleActionNavigation(parsed)
@@ -395,14 +361,21 @@ export function NavigationProvider({
 
       // Parse route to unified NavigationState
       const newNavState = parseRouteToNavigationState(route)
+      let finalRoute = route
+
       if (newNavState) {
-        applyNavigationState(newNavState)
+        // Apply navigation state (may auto-select first item)
+        const finalState = applyNavigationState(newNavState)
+
+        // Build route from final state (includes auto-selection)
+        // This ensures the URL reflects the actual displayed content
+        finalRoute = buildRouteFromNavigationState(finalState) as Route
       }
 
-      // Persist route in URL for reload restoration
+      // Persist route in URL for reload restoration (using final route with auto-selection)
       const url = new URL(window.location.href)
-      url.searchParams.set('route', route)
-      history.replaceState({ route }, '', url.toString())
+      url.searchParams.set('route', finalRoute)
+      history.replaceState({ route: finalRoute }, '', url.toString())
 
       // Update our custom history stack (unless we're navigating via back/forward)
       if (isNavigatingHistoryRef.current) {
@@ -411,15 +384,15 @@ export function NavigationProvider({
       } else {
         // Only push if route is different from current route (avoid duplicates)
         const currentRoute = historyStackRef.current[historyIndexRef.current]
-        if (route !== currentRoute) {
+        if (finalRoute !== currentRoute) {
           // When navigating to a new route, truncate forward history and push
           const newIndex = historyIndexRef.current + 1
           historyStackRef.current = historyStackRef.current.slice(0, newIndex)
-          historyStackRef.current.push(route)
+          historyStackRef.current.push(finalRoute)
           historyIndexRef.current = newIndex
-          console.log('[Navigation] Pushed to history:', route, 'index:', newIndex, 'stack length:', historyStackRef.current.length)
+          console.log('[Navigation] Pushed to history:', finalRoute, 'index:', newIndex, 'stack length:', historyStackRef.current.length)
         } else {
-          console.log('[Navigation] Skipping duplicate route:', route)
+          console.log('[Navigation] Skipping duplicate route:', finalRoute)
         }
       }
 
@@ -430,7 +403,7 @@ export function NavigationProvider({
       setCanGoBack(newCanGoBack)
       setCanGoForward(newCanGoForward)
     },
-    [isReady, handleActionNavigation, handleSpecialTabRoutes, applyNavigationState]
+    [isReady, handleActionNavigation, applyNavigationState]
   )
 
   // Keep navigateRef in sync with latest navigate function
@@ -438,33 +411,132 @@ export function NavigationProvider({
     navigateRef.current = navigate
   }, [navigate])
 
-  // Go back in history (using our custom stack)
-  const goBack = useCallback(() => {
-    const newIndex = historyIndexRef.current - 1
-    console.log('[Navigation] goBack called, current index:', historyIndexRef.current, 'new index:', newIndex)
+  // Helper: Check if a route points to a valid session/source
+  const isRouteValid = useCallback((route: Route): boolean => {
+    const navState = parseRouteToNavigationState(route)
+    if (!navState) return true // Non-navigation routes are always valid
 
-    if (newIndex >= 0 && historyStackRef.current[newIndex]) {
-      historyIndexRef.current = newIndex
-      isNavigatingHistoryRef.current = true
-      const route = historyStackRef.current[newIndex]
-      console.log('[Navigation] Going back to:', route)
-      navigateRef.current?.(route)
+    if (isChatsNavigation(navState) && navState.details) {
+      return sessionMetaMap.has(navState.details.sessionId)
     }
-  }, [])
+
+    if (isSourcesNavigation(navState) && navState.details) {
+      return sources.some(s => s.config.slug === navState.details!.sourceSlug)
+    }
+
+    return true // Routes without details are always valid
+  }, [sessionMetaMap, sources])
+
+  // Go back in history (using our custom stack)
+  // When encountering invalid entries (deleted sessions/sources), remove them from the stack
+  const goBack = useCallback(() => {
+    const currentIndex = historyIndexRef.current
+    console.log('[Navigation] goBack called, current index:', currentIndex, 'stack length:', historyStackRef.current.length)
+
+    if (currentIndex <= 0) {
+      console.log('[Navigation] Already at beginning of history')
+      return
+    }
+
+    // Find first valid entry going backwards, collecting indices of invalid entries
+    const invalidIndices: number[] = []
+    let targetIndex = -1
+
+    for (let i = currentIndex - 1; i >= 0; i--) {
+      const route = historyStackRef.current[i]
+      if (isRouteValid(route)) {
+        targetIndex = i
+        break
+      }
+      invalidIndices.push(i)
+      console.log('[Navigation] Marking invalid history entry for removal:', route)
+    }
+
+    // Remove invalid entries from stack (in reverse order to preserve indices)
+    if (invalidIndices.length > 0) {
+      for (const idx of invalidIndices.sort((a, b) => b - a)) {
+        historyStackRef.current.splice(idx, 1)
+      }
+      console.log('[Navigation] Removed', invalidIndices.length, 'invalid entries from history')
+    }
+
+    // Recalculate target index after removal
+    if (targetIndex >= 0) {
+      // Adjust for removed entries that were before the target
+      const removedBefore = invalidIndices.filter(i => i < targetIndex).length
+      targetIndex -= removedBefore
+    }
+
+    // Also adjust current index for removed entries
+    const removedBeforeCurrent = invalidIndices.filter(i => i < currentIndex).length
+    historyIndexRef.current = currentIndex - removedBeforeCurrent
+
+    if (targetIndex >= 0) {
+      historyIndexRef.current = targetIndex
+      isNavigatingHistoryRef.current = true
+      const route = historyStackRef.current[targetIndex]
+      console.log('[Navigation] Going back to:', route, 'new index:', targetIndex)
+      navigateRef.current?.(route)
+    } else {
+      console.log('[Navigation] No valid history entry to go back to')
+      // Update canGoBack/canGoForward since we may have removed entries
+      setCanGoBack(historyIndexRef.current > 0)
+      setCanGoForward(historyIndexRef.current < historyStackRef.current.length - 1)
+    }
+  }, [isRouteValid])
 
   // Go forward in history (using our custom stack)
+  // When encountering invalid entries (deleted sessions/sources), remove them from the stack
   const goForward = useCallback(() => {
-    const newIndex = historyIndexRef.current + 1
-    console.log('[Navigation] goForward called, current index:', historyIndexRef.current, 'new index:', newIndex)
+    const currentIndex = historyIndexRef.current
+    const stackLength = historyStackRef.current.length
+    console.log('[Navigation] goForward called, current index:', currentIndex, 'stack length:', stackLength)
 
-    if (newIndex < historyStackRef.current.length && historyStackRef.current[newIndex]) {
-      historyIndexRef.current = newIndex
-      isNavigatingHistoryRef.current = true
-      const route = historyStackRef.current[newIndex]
-      console.log('[Navigation] Going forward to:', route)
-      navigateRef.current?.(route)
+    if (currentIndex >= stackLength - 1) {
+      console.log('[Navigation] Already at end of history')
+      return
     }
-  }, [])
+
+    // Find first valid entry going forwards, collecting indices of invalid entries
+    const invalidIndices: number[] = []
+    let targetIndex = -1
+
+    for (let i = currentIndex + 1; i < stackLength; i++) {
+      const route = historyStackRef.current[i]
+      if (isRouteValid(route)) {
+        targetIndex = i
+        break
+      }
+      invalidIndices.push(i)
+      console.log('[Navigation] Marking invalid history entry for removal:', route)
+    }
+
+    // Remove invalid entries from stack (in reverse order to preserve indices)
+    if (invalidIndices.length > 0) {
+      for (const idx of invalidIndices.sort((a, b) => b - a)) {
+        historyStackRef.current.splice(idx, 1)
+      }
+      console.log('[Navigation] Removed', invalidIndices.length, 'invalid entries from history')
+    }
+
+    // Recalculate target index after removal (invalid entries were between current and target)
+    if (targetIndex >= 0) {
+      targetIndex -= invalidIndices.length
+    }
+
+    if (targetIndex >= 0 && targetIndex < historyStackRef.current.length) {
+      historyIndexRef.current = targetIndex
+      isNavigatingHistoryRef.current = true
+      const route = historyStackRef.current[targetIndex]
+      console.log('[Navigation] Going forward to:', route, 'new index:', targetIndex)
+      navigateRef.current?.(route)
+    } else {
+      console.log('[Navigation] No valid history entry to go forward to')
+      // Update canGoBack/canGoForward since we may have removed entries
+      setCanGoBack(historyIndexRef.current > 0)
+      setCanGoForward(historyIndexRef.current < historyStackRef.current.length - 1)
+    }
+  }, [isRouteValid])
 
   // Track whether initial route restoration has been attempted
   const initialRouteRestoredRef = useRef(false)
@@ -476,7 +548,7 @@ export function NavigationProvider({
     // Only initialize once
     if (historyStackRef.current.length === 0) {
       const params = new URLSearchParams(window.location.search)
-      const initialRoute = (params.get('route') || 'tab/chat') as Route
+      const initialRoute = (params.get('route') || 'allChats') as Route
       historyStackRef.current = [initialRoute]
       historyIndexRef.current = 0
       console.log('[Navigation] Initialized history stack with:', initialRoute)
@@ -489,25 +561,19 @@ export function NavigationProvider({
       const pending = pendingNavigationRef.current
       pendingNavigationRef.current = null
 
-      // Handle special tab routes
-      if (pending.type === 'tab' && handleSpecialTabRoutes(pending)) {
-        return
-      }
-
       // Handle actions
       if (pending.type === 'action') {
         handleActionNavigation(pending)
         return
       }
 
-      // For other routes, reconstruct route string and parse to NavigationState
-      // This is a fallback - ideally we'd store the original route string
-      const navState = parseRouteToNavigationState(`${pending.type}/${pending.name}${pending.id ? `/${pending.id}` : ''}`)
+      // For view routes, reconstruct route string and parse to NavigationState
+      const navState = parseRouteToNavigationState(`${pending.name}${pending.id ? `/${pending.id}` : ''}`)
       if (navState) {
         applyNavigationState(navState)
       }
     }
-  }, [isReady, handleActionNavigation, handleSpecialTabRoutes, applyNavigationState])
+  }, [isReady, handleActionNavigation, applyNavigationState])
 
   // Restore route from URL on startup (for CMD+R reload)
   useEffect(() => {
@@ -530,26 +596,11 @@ export function NavigationProvider({
       // Convert DeepLinkNavigation to route string and navigate
       let route: string | null = null
 
-      // New compound route format (e.g., 'inbox/chat/abc123', 'settings/shortcuts')
+      // Compound route format (e.g., 'allChats/chat/abc123', 'settings/shortcuts')
       if (nav.view) {
         route = nav.view
-      } else if (nav.tabType) {
-        route = `tab/${nav.tabType}`
-        if (nav.tabParams?.id) {
-          route += `/${nav.tabParams.id}`
-        }
-        if (nav.tabParams?.secondaryId) {
-          route += `/${nav.tabParams.secondaryId}`
-        }
-        // Add remaining params as query string
-        const otherParams = { ...nav.tabParams }
-        delete otherParams.id
-        delete otherParams.secondaryId
-        if (Object.keys(otherParams).length > 0) {
-          const params = new URLSearchParams(otherParams)
-          route += `?${params.toString()}`
-        }
       } else if (nav.action) {
+        // Action routes (e.g., 'action/new-chat', 'action/delete-session/abc123')
         route = `action/${nav.action}`
         if (nav.actionParams?.id) {
           route += `/${nav.actionParams.id}`
@@ -560,14 +611,18 @@ export function NavigationProvider({
           const params = new URLSearchParams(otherParams)
           route += `?${params.toString()}`
         }
-      } else if (nav.sidebar) {
-        route = `sidebar/${nav.sidebar}`
-        if (nav.sidebarParams?.id) {
-          route += `/${nav.sidebarParams.id}`
-        }
       }
 
       if (route) {
+        // Validate the route before navigating
+        const navState = parseRouteToNavigationState(route)
+        if (!navState && !route.startsWith('action/')) {
+          // Invalid route that isn't an action - show error toast
+          toast.error('Invalid link', {
+            description: 'The content may have been moved or deleted.',
+          })
+          return
+        }
         navigate(route as Route)
       }
     })
@@ -589,6 +644,49 @@ export function NavigationProvider({
       window.removeEventListener(NAVIGATE_EVENT, handleNavigateEvent)
     }
   }, [navigate])
+
+  // REACTIVE VALIDATION: Clean up stale details when sessions/sources are deleted
+  // This ensures the navigation state stays consistent with actual data
+  useEffect(() => {
+    // Validate chat details
+    if (isChatsNavigation(navigationState) && navigationState.details) {
+      const sessionId = navigationState.details.sessionId
+      const sessionExists = sessionMetaMap.has(sessionId)
+
+      if (!sessionExists) {
+        // Session was deleted - auto-select first matching filter or clear details
+        const firstSessionId = getFirstSessionId(navigationState.filter)
+        if (firstSessionId) {
+          setSession({ selected: firstSessionId })
+          setNavigationState({
+            ...navigationState,
+            details: { type: 'chat', sessionId: firstSessionId },
+          })
+        } else {
+          setSession({ selected: null })
+          setNavigationState({
+            ...navigationState,
+            details: null,
+          })
+        }
+      }
+    }
+
+    // Validate source details
+    if (isSourcesNavigation(navigationState) && navigationState.details) {
+      const sourceSlug = navigationState.details.sourceSlug
+      const sourceExists = sources.some(s => s.config.slug === sourceSlug)
+
+      if (!sourceExists) {
+        // Source was deleted - auto-select first or clear details
+        const firstSourceSlug = getFirstSourceSlug(navigationState.category)
+        setNavigationState({
+          ...navigationState,
+          details: firstSourceSlug ? { type: 'source', sourceSlug: firstSourceSlug } : null,
+        })
+      }
+    }
+  }, [sessionMetaMap, sources, navigationState, getFirstSessionId, getFirstSourceSlug, setSession])
 
   return (
     <NavigationContext.Provider value={{ navigate, isReady, navigationState, canGoBack, canGoForward, goBack, goForward }}>

@@ -53,7 +53,6 @@ const sections: ShortcutSection[] = [
     shortcuts: [
       { keys: ['Enter'], description: 'Focus chat input' },
       { keys: ['Delete'], description: 'Delete session' },
-      { keys: ['A'], description: 'Archive session' },
       { keys: ['R'], description: 'Rename session' },
       { keys: ['Right-click'], description: 'Open context menu' },
     ],

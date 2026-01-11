@@ -1,7 +1,6 @@
 import { useCallback } from 'react';
 import { resolveAgentMention } from '../../utils/filtering.ts';
 import { debug } from '@craft-agent/shared/utils';
-import type { ModalName } from '../modals/useModalState.ts';
 import type { Message } from '../../components/Messages.tsx';
 
 /**
@@ -23,7 +22,6 @@ export interface UseMentionHandlerProps {
   availableAgents: string[];
   activateAgent: (name: string) => Promise<boolean | 'pending_auth'>;
   deactivateAgent: () => void;
-  openModal: (name: ModalName) => void;
   sendMessage: (text: string) => Promise<void>;
 }
 
@@ -38,7 +36,6 @@ export interface UseMentionHandlerProps {
  *   availableAgents,
  *   activateAgent,
  *   deactivateAgent,
- *   openModal,
  *   sendMessage,
  * });
  *
@@ -55,7 +52,7 @@ export interface UseMentionHandlerProps {
  * ```
  */
 export function useMentionHandler(props: UseMentionHandlerProps) {
-  const { availableAgents, activateAgent, deactivateAgent, openModal, sendMessage } = props;
+  const { availableAgents, activateAgent, deactivateAgent, sendMessage } = props;
 
   const handleMention = useCallback(async (input: string): Promise<MentionResult> => {
     if (!input.startsWith('@')) {
@@ -67,10 +64,15 @@ export function useMentionHandler(props: UseMentionHandlerProps) {
     debug('[useMentionHandler] @mention input:', mentionInput);
     debug('[useMentionHandler] availableAgents:', availableAgents);
 
-    // Just "@" - show agent menu
+    // Just "@" - show available agents
     if (!mentionInput) {
-      openModal('agentMenu');
-      return { handled: true };
+      const agentList = availableAgents.length > 0
+        ? availableAgents.map(a => `@${a}`).join(', ')
+        : 'No agents available';
+      return {
+        handled: true,
+        message: { content: `Available agents: ${agentList}. Type @<name> to activate.`, type: 'info' },
+      };
     }
 
     const resolvedAgent = resolveAgentMention(mentionInput, availableAgents);
@@ -85,10 +87,15 @@ export function useMentionHandler(props: UseMentionHandlerProps) {
       };
     }
 
-    // @agent - show agent menu
+    // @agent - show available agents
     if (resolvedAgent === 'agent') {
-      openModal('agentMenu');
-      return { handled: true };
+      const agentList = availableAgents.length > 0
+        ? availableAgents.map(a => `@${a}`).join(', ')
+        : 'No agents available';
+      return {
+        handled: true,
+        message: { content: `Available agents: ${agentList}. Type @<name> to activate.`, type: 'info' },
+      };
     }
 
     // @<agent-name> - activate agent
@@ -113,7 +120,7 @@ export function useMentionHandler(props: UseMentionHandlerProps) {
       handled: true,
       message: { content: `Agent not found: @${mentionInput}`, type: 'error' },
     };
-  }, [availableAgents, activateAgent, deactivateAgent, openModal, sendMessage]);
+  }, [availableAgents, activateAgent, deactivateAgent, sendMessage]);
 
   return { handleMention };
 }

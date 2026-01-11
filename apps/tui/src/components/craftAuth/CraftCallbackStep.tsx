@@ -8,11 +8,8 @@ import { debug } from '@craft-agent/shared/utils';
 import { checkSubscription } from '@craft-agent/shared/subscription';
 import { getCredentialManager } from '@craft-agent/shared/credentials';
 
-// Re-export ProfileResponse as CraftProfile for backwards compatibility
-export type CraftProfile = ProfileResponse;
-
 export interface CraftCallbackStepProps {
-  onComplete: (params: { token: string; profile: CraftProfile }) => void;
+  onComplete: (params: { token: string; profile: ProfileResponse }) => void;
   onBack: () => void;
 }
 
@@ -33,7 +30,7 @@ export const CraftCallbackStep: React.FC<CraftCallbackStepProps> = ({ onComplete
   const [error, setError] = useState<string | null>(null);
   const [subscribeUrl, setSubscribeUrl] = useState<string | null>(null);
   // Store auth result for subscription retry
-  const authResultRef = useRef<{ token: string; profile: CraftProfile } | null>(null);
+  const authResultRef = useRef<{ token: string; profile: ProfileResponse } | null>(null);
   const callbackDataRef = useRef<{
     callbackUrl: string;
     callbackServer: Awaited<ReturnType<typeof createCallbackServer>>;

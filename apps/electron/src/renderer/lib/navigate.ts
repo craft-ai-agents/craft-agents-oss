@@ -9,7 +9,7 @@
  *
  *   navigate(routes.tab.settings())
  *   navigate(routes.action.newChat({ agentId: 'claude' }))
- *   navigate(routes.sidebar.inbox())
+ *   navigate(routes.view.allChats())
  */
 
 import { routes, type Route } from '../../shared/routes'
@@ -33,58 +33,4 @@ export function navigate(route: Route): void {
     bubbles: true,
   })
   window.dispatchEvent(event)
-}
-
-/**
- * Build a deep link URL from a route
- *
- * Without workspace: craftagents://tab/settings
- * With workspace: craftagents://workspace/{id}/tab/settings
- */
-export function buildDeepLink(route: Route, workspaceId?: string): string {
-  if (workspaceId) {
-    return `craftagents://workspace/${workspaceId}/${route}`
-  }
-  return `craftagents://${route}`
-}
-
-// Compound route prefixes (matches deep-link.ts)
-const COMPOUND_ROUTE_PREFIXES = [
-  'inbox', 'archive', 'flagged', 'agent', 'state', 'sources', 'settings'
-]
-
-/**
- * Parse a route from a deep link URL
- * Returns the route portion without the protocol/workspace prefix
- */
-export function parseDeepLinkRoute(url: string): string | null {
-  try {
-    const parsed = new URL(url)
-    if (parsed.protocol !== 'craftagents:') return null
-
-    const host = parsed.hostname
-    const pathParts = parsed.pathname.split('/').filter(Boolean)
-
-    // craftagents://workspace/{id}/... → extract route after workspace ID
-    if (host === 'workspace' && pathParts.length >= 2) {
-      // Skip workspace ID, join the rest
-      return pathParts.slice(1).join('/') + (parsed.search || '')
-    }
-
-    // craftagents://inbox/..., craftagents://settings/..., etc. (compound routes)
-    if (COMPOUND_ROUTE_PREFIXES.includes(host)) {
-      const path = pathParts.join('/')
-      return path ? `${host}/${path}` : host
-    }
-
-    // craftagents://tab/... → route starts at host (legacy)
-    if (['tab', 'action', 'sidebar'].includes(host)) {
-      const path = pathParts.join('/')
-      return `${host}/${path}${parsed.search || ''}`
-    }
-
-    return null
-  } catch {
-    return null
-  }
 }

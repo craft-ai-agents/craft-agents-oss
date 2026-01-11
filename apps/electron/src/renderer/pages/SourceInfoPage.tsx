@@ -17,15 +17,13 @@ import { Spinner } from '@craft-agent/ui'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Markdown } from '@/components/markdown'
 import { cn } from '@/lib/utils'
-import { CONTENT_MAX_WIDTH_CLASS } from '@/config/layout'
-import { useAppShellContext } from '@/context/AppShellContext'
+import { CHAT_LAYOUT } from '@/config/layout'
 import type { LoadedSource, McpToolWithPermission } from '../../shared/types'
 import type { PermissionsConfigFile } from '@craft-agent/shared/agent'
 
 interface SourceInfoPageProps {
   sourceSlug: string
   workspaceId: string
-  agentSlug?: string
 }
 
 /**
@@ -70,8 +68,7 @@ function SectionHeader({ children }: { children: React.ReactNode }) {
   )
 }
 
-export default function SourceInfoPage({ sourceSlug, workspaceId, agentSlug }: SourceInfoPageProps) {
-  const { textareaRef, openNewChat } = useAppShellContext()
+export default function SourceInfoPage({ sourceSlug, workspaceId }: SourceInfoPageProps) {
   const [source, setSource] = useState<LoadedSource | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -89,10 +86,8 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, agentSlug }: S
 
     const loadSource = async () => {
       try {
-        // Load sources based on whether it's agent-scoped or workspace-scoped
-        const sources = agentSlug
-          ? await window.electronAPI.getAgentSources(workspaceId, agentSlug)
-          : await window.electronAPI.getSources(workspaceId)
+        // Agent-scoped sources removed - always load workspace sources
+        const sources = await window.electronAPI.getSources(workspaceId)
 
         if (!isMounted) return
 
@@ -122,7 +117,7 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, agentSlug }: S
     return () => {
       isMounted = false
     }
-  }, [workspaceId, sourceSlug, agentSlug])
+  }, [workspaceId, sourceSlug])
 
   // Load MCP tools when source is loaded and is MCP type
   useEffect(() => {
@@ -235,47 +230,6 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, agentSlug }: S
     }
   }, [source])
 
-  // Handle "Edit in chat" - opens a new chat with the .settings agent
-  const handleEditInChat = useCallback(async (section: 'connection' | 'permissions') => {
-    if (!source || !openNewChat) return
-
-    try {
-      // Ensure the .settings builtin agent exists
-      const agentId = await window.electronAPI.ensureBuiltinAgent(workspaceId, '.settings')
-      if (!agentId) {
-        console.error('[SourceInfoPage] Failed to create settings agent')
-        return
-      }
-
-      const sessionName = section === 'connection'
-        ? `Edit ${source.config.name} connection`
-        : `Edit ${source.config.name} permissions`
-
-      const message = section === 'connection'
-        ? `I would like to edit the connection settings for the "${source.config.name}" source: `
-        : `I would like to edit the permissions for the "${source.config.name}" source: `
-
-      // Use openNewChat which handles session creation and input pre-filling
-      await openNewChat({
-        agentId,
-        name: sessionName,
-        input: message,
-      })
-
-      // Focus the textarea and move cursor to end after the input is set
-      setTimeout(() => {
-        const textarea = textareaRef?.current
-        if (textarea) {
-          textarea.focus()
-          // Move cursor to end of text
-          const length = textarea.value.length
-          textarea.setSelectionRange(length, length)
-        }
-      }, 150)
-    } catch (error) {
-      console.error('[SourceInfoPage] Failed to edit in chat:', error)
-    }
-  }, [source, workspaceId, openNewChat, textareaRef])
 
   // Handle editing guide.md in Monaco markdown editor
   const handleEditGuide = useCallback(async () => {
@@ -341,7 +295,7 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, agentSlug }: S
       <PanelHeader title={sourceName} />
       <Separator />
       <ScrollArea className="flex-1">
-        <div className={cn(CONTENT_MAX_WIDTH_CLASS, "mx-auto px-5 py-4")}>
+        <div className={cn(CHAT_LAYOUT.maxWidth, "mx-auto px-5 py-4")}>
           <div className="space-y-6">
             {/* Source avatar and tagline */}
             <div className="flex items-start gap-2.5">
@@ -375,16 +329,6 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, agentSlug }: S
           <div>
             <div className="flex items-center justify-between mb-2">
               <SectionHeader>Connection</SectionHeader>
-              <button
-                onClick={() => handleEditInChat('connection')}
-                className={cn(
-                  "transition-colors text-[13px] cursor-pointer",
-                  "text-muted-foreground hover:text-foreground hover:underline",
-                  "focus:outline-none focus-visible:underline"
-                )}
-              >
-                Edit in chat
-              </button>
             </div>
 
             <div className="bg-background shadow-minimal rounded-[8px] overflow-hidden py-2">
@@ -442,16 +386,6 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, agentSlug }: S
             <div>
               <div className="flex items-center justify-between mb-2">
                 <SectionHeader>Permissions</SectionHeader>
-                <button
-                  onClick={() => handleEditInChat('permissions')}
-                  className={cn(
-                    "transition-colors text-[13px] cursor-pointer",
-                    "text-muted-foreground hover:text-foreground hover:underline",
-                    "focus:outline-none focus-visible:underline"
-                  )}
-                >
-                  Edit in chat
-                </button>
               </div>
 
               <div className="bg-background shadow-minimal rounded-[8px] overflow-hidden py-2">
@@ -532,16 +466,6 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, agentSlug }: S
             <div>
               <div className="flex items-center justify-between mb-2">
                 <SectionHeader>Tools</SectionHeader>
-                <button
-                  onClick={() => handleEditInChat('permissions')}
-                  className={cn(
-                    "transition-colors text-[13px] cursor-pointer",
-                    "text-muted-foreground hover:text-foreground hover:underline",
-                    "focus:outline-none focus-visible:underline"
-                  )}
-                >
-                  Edit in chat
-                </button>
               </div>
 
               <div className="bg-background shadow-minimal rounded-[8px] overflow-hidden">
@@ -622,16 +546,6 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, agentSlug }: S
             <div>
               <div className="flex items-center justify-between mb-2">
                 <SectionHeader>Permissions</SectionHeader>
-                <button
-                  onClick={() => handleEditInChat('permissions')}
-                  className={cn(
-                    "transition-colors text-[13px] cursor-pointer",
-                    "text-muted-foreground hover:text-foreground hover:underline",
-                    "focus:outline-none focus-visible:underline"
-                  )}
-                >
-                  Edit in chat
-                </button>
               </div>
 
               <div className="bg-background shadow-minimal rounded-[8px] overflow-hidden py-2">

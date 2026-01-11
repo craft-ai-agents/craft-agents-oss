@@ -1,8 +1,5 @@
 import { CraftAgent, type CraftAgentConfig, type PermissionMode, type SdkMcpServerConfig } from '../agent/craft-agent.ts';
-import { FolderAgentManager } from '../agents/folder-manager.ts';
-import type { SubAgentDefinition } from '../agents/types.ts';
-import type { AgentDefinition } from '../agents/folder-types.ts';
-import { createApiServer } from '../agents/api-tools.ts';
+import { createApiServer } from '../sources/api-tools.ts';
 import { listSessions, getOrCreateSessionById, updateSessionSdkId } from '../sessions/storage.ts';
 import { debug } from '../utils/debug.ts';
 import { DEFAULT_MODEL } from '../config/models.ts';
@@ -44,7 +41,6 @@ const SAFE_COMMANDS = new Set([
  *
  * Reuses existing components:
  * - CraftMcpClient for MCP connections
- * - SubAgentManager for agent discovery and activation
  * - CraftAgent for query execution
  *
  * Handles interactions automatically:
@@ -54,13 +50,7 @@ const SAFE_COMMANDS = new Set([
  */
 export class HeadlessRunner {
   private config: HeadlessConfig;
-  private agentManager: FolderAgentManager | null = null;
   private agent: CraftAgent | null = null;
-
-  // Temporary storage for agent activation
-  private activeDefinition: SubAgentDefinition | null = null;
-  private mcpServers: Record<string, SdkMcpServerConfig> = {};
-  private apiServers: Record<string, unknown> = {};
 
   // Session management
   private workspaceRootPath: string | null = null;
@@ -91,28 +81,14 @@ export class HeadlessRunner {
    */
   async *runStreaming(): AsyncGenerator<HeadlessEvent> {
     try {
-      // 1. Initialize MCP client and agent manager
+      // 1. Initialize
       yield { type: 'status', message: 'Connecting to workspace...' };
-      const initResult = await this.initializeAgentManager();
-      if (!initResult.success) {
-        yield { type: 'complete', result: { success: false, error: initResult.error } };
-        return;
-      }
+      this.workspaceRootPath = this.config.workspace.rootPath;
 
-      // 2. Activate agent if specified
-      if (this.config.agentName) {
-        yield { type: 'status', message: `Activating @${this.config.agentName}...` };
-        const activationResult = await this.activateAgent();
-        if (!activationResult.success) {
-          yield { type: 'complete', result: { success: false, error: activationResult.error } };
-          return;
-        }
-      }
-
-      // 3. Create CraftAgent with headless callbacks
+      // 2. Create CraftAgent with headless callbacks
       this.createAgent();
 
-      // 4. Execute query
+      // 3. Execute query
       yield { type: 'status', message: 'Processing...' };
 
       let response = '';
@@ -209,99 +185,6 @@ ${this.config.prompt}
   }
 
   /**
-   * Initialize agent manager for the workspace.
-   */
-  private async initializeAgentManager(): Promise<{ success: true } | { success: false; error: HeadlessResult['error'] }> {
-    try {
-      // Create agent manager (sources handle MCP connections)
-      this.workspaceRootPath = this.config.workspace.rootPath;
-      this.agentManager = new FolderAgentManager(this.workspaceRootPath);
-
-      debug('[HeadlessRunner] Initialized agent manager for workspace:', this.workspaceRootPath);
-
-      return { success: true };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to initialize';
-      return {
-        success: false,
-        error: { code: 'execution_error', message: `Agent manager initialization failed: ${message}` },
-      };
-    }
-  }
-
-  /**
-   * Activate the specified agent.
-   * Fails if authentication is required but not available.
-   */
-  private async activateAgent(): Promise<{ success: true } | { success: false; error: HeadlessResult['error'] }> {
-    if (!this.agentManager) {
-      return {
-        success: false,
-        error: { code: 'execution_error', message: 'Agent manager not initialized' },
-      };
-    }
-
-    const agentName = this.config.agentName!;
-    debug('[HeadlessRunner] Activating agent:', agentName);
-
-    // Activate agent from folder (no extraction needed - reads from disk)
-    const agentDef = this.agentManager.activateAgent(agentName);
-    if (!agentDef) {
-      // List available agents for helpful error message
-      const available = this.agentManager.getAvailableAgents();
-      const names = available.map((a: { config: { name: string } }) => `@${a.config.name}`).join(', ') || 'none';
-      return {
-        success: false,
-        error: {
-          code: 'agent_not_found',
-          message: `Agent '@${agentName}' not found. Available: ${names}`,
-          details: { availableAgents: available.map((a: { config: { name: string } }) => a.config.name) },
-        },
-      };
-    }
-
-    // Check MCP auth requirements - FAIL if missing (don't prompt)
-    // Note: stdio transport servers don't require auth
-    const serversNeedingAuth = (agentDef.mcpServers || []).filter((s: { requiresAuth?: boolean; transport?: string }) =>
-      s.requiresAuth && s.transport !== 'stdio'
-    );
-    if (serversNeedingAuth.length > 0) {
-      const serverNames = serversNeedingAuth.map((s: { name: string; url?: string }) => s.name || s.url || 'unknown').join(', ');
-      return {
-        success: false,
-        error: {
-          code: 'auth_required',
-          message: `MCP server authentication required: ${serverNames}. Run 'craft' interactively and activate @${agentName} to authenticate.`,
-          details: { servers: serversNeedingAuth.map((s: { name: string; url?: string }) => s.name || s.url || 'unknown') },
-        },
-      };
-    }
-
-    // Check API auth requirements - FAIL if missing
-    const apisNeedingAuth = (agentDef.apis || []).filter((a: { auth?: { type: string } }) => a.auth && a.auth.type !== 'none');
-    if (apisNeedingAuth.length > 0) {
-      const apiNames = apisNeedingAuth.map((a: { name: string }) => a.name).join(', ');
-      return {
-        success: false,
-        error: {
-          code: 'auth_required',
-          message: `API authentication required: ${apiNames}. Run 'craft' interactively and activate @${agentName} to authenticate.`,
-          details: { apis: apisNeedingAuth.map((a: { name: string }) => a.name) },
-        },
-      };
-    }
-
-    // Build MCP and API server configs (with credential lookup)
-    this.mcpServers = await this.buildMcpServers(agentDef);
-    this.apiServers = await this.buildApiServers(agentDef);
-    this.activeDefinition = agentDef;
-
-    debug('[HeadlessRunner] Agent activated:', agentName, 'mcpServers:', Object.keys(this.mcpServers).length);
-
-    return { success: true };
-  }
-
-  /**
    * Create CraftAgent with headless callbacks for permissions and questions.
    */
   private createAgent(): void {
@@ -324,15 +207,6 @@ ${this.config.prompt}
     };
 
     this.agent = new CraftAgent(agentConfig);
-
-    // Set active agent if we activated one
-    if (this.activeDefinition) {
-      this.agent.setActiveAgentDefinition(
-        this.activeDefinition,
-        this.mcpServers,
-        this.apiServers as Record<string, ReturnType<typeof import('@anthropic-ai/claude-agent-sdk').createSdkMcpServer>>
-      );
-    }
 
     // Wire up permission handler based on policy
     this.agent.onPermissionRequest = (request) => {
@@ -409,128 +283,8 @@ ${this.config.prompt}
       }
     }
 
-    this.agentManager = null;
     this.agent = null;
-    this.activeDefinition = null;
-    this.mcpServers = {};
-    this.apiServers = {};
     this.workspaceRootPath = null;
     this.sessionIdToUpdate = null;
-  }
-
-  /**
-   * Build MCP server config from agent definition
-   * Fetches credentials from the credential store for authenticated servers
-   * Supports both HTTP/SSE and stdio transports
-   */
-  private async buildMcpServers(
-    agentDef: AgentDefinition
-  ): Promise<Record<string, SdkMcpServerConfig>> {
-    const result: Record<string, SdkMcpServerConfig> = {};
-
-    for (const server of agentDef.mcpServers || []) {
-      const transport = server.transport || 'http';
-
-      if (transport === 'stdio') {
-        // Stdio server - local subprocess, no auth headers
-        if (!server.command) {
-          debug(`[buildMcpServers] Skipping stdio server "${server.name}" - no command specified`);
-          continue;
-        }
-        result[server.name] = {
-          type: 'stdio',
-          command: server.command,
-          args: server.args,
-          env: server.env,
-        };
-      } else {
-        // HTTP/SSE server
-        if (!server.url) {
-          debug(`[buildMcpServers] Skipping HTTP server "${server.name}" - no URL specified`);
-          continue;
-        }
-        const config: SdkMcpServerConfig = {
-          type: transport === 'sse' ? 'sse' : 'http',
-          url: server.url,
-        };
-
-        // Add authorization header if server requires auth
-        if (server.requiresAuth) {
-          // Try OAuth first, then bearer token
-          let token = await this.getSourceCredential(server.name, 'oauth');
-          if (!token) {
-            token = await this.getSourceCredential(server.name, 'bearer');
-          }
-          if (token) {
-            (config as { type: 'http' | 'sse'; url: string; headers?: Record<string, string> }).headers = {
-              Authorization: `Bearer ${token}`,
-            };
-          }
-        }
-
-        result[server.name] = config;
-      }
-    }
-
-    return result;
-  }
-
-  /**
-   * Build API servers from agent definition
-   * Fetches credentials from the credential store for authenticated APIs
-   */
-  private async buildApiServers(agentDef: AgentDefinition): Promise<Record<string, unknown>> {
-    const result: Record<string, unknown> = {};
-
-    for (const api of agentDef.apis || []) {
-      // Get credential based on auth type
-      let credential = '';
-      if (api.auth && api.auth.type !== 'none') {
-        const credType = this.apiAuthToCredentialType(api.auth.type);
-        const credValue = await this.getSourceCredential(api.name, credType);
-        credential = credValue || '';
-      }
-      result[api.name] = createApiServer(api, credential);
-    }
-
-    return result;
-  }
-
-  /**
-   * Get credential value for a source
-   */
-  private async getSourceCredential(
-    sourceSlug: string,
-    credType: 'oauth' | 'bearer' | 'apikey' | 'basic'
-  ): Promise<string | null> {
-    const credentialManager = getCredentialManager();
-    const credentialId: CredentialId = {
-      type: `source_${credType}` as CredentialType,
-      sourceId: sourceSlug,
-    };
-
-    try {
-      const credential = await credentialManager.get(credentialId);
-      return credential?.value ?? null;
-    } catch {
-      return null;
-    }
-  }
-
-  /**
-   * Map API auth type to credential type suffix
-   */
-  private apiAuthToCredentialType(authType: string): 'oauth' | 'bearer' | 'apikey' | 'basic' {
-    switch (authType) {
-      case 'bearer':
-        return 'bearer';
-      case 'header':
-      case 'query':
-        return 'apikey';
-      case 'basic':
-        return 'basic';
-      default:
-        return 'bearer';
-    }
   }
 }

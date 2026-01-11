@@ -7,7 +7,8 @@ import { getExistingClaudeToken, isClaudeCliInstalled, runClaudeSetupToken } fro
 import { getCredentialManager } from '@craft-agent/shared/credentials';
 import { TextInput } from './TextInput.tsx';
 import { AnimatedSpinner } from './Spinner.tsx';
-import { CraftCallbackStep, type CraftProfile } from './craftAuth/CraftCallbackStep.tsx';
+import { CraftCallbackStep } from './craftAuth/CraftCallbackStep.tsx';
+import type { ProfileResponse } from '@craft-agent/shared/clients';
 
 // Simplified flow: Welcome -> Billing Method -> [Craft Login if credits] -> [Credentials if API/Claude] -> Complete
 type SetupStep =
@@ -170,7 +171,7 @@ export const Setup: React.FC<SetupProps> = ({ onComplete, onCancel, authState, s
   }, [apiKey, oauthToken, onComplete]);
 
   // Craft OAuth complete -> Save
-  const handleCraftLoginComplete = useCallback(async (_token: string, _profile: CraftProfile) => {
+  const handleCraftLoginComplete = useCallback(async (_token: string, _profile: ProfileResponse) => {
     // Craft OAuth token is already saved by CraftCallbackStep
     saveConfiguration('craft_credits');
   }, [saveConfiguration]);

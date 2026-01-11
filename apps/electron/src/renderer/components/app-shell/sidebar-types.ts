@@ -5,27 +5,9 @@
  * The left sidebar navigation items control which mode is active.
  */
 
-import type { TodoStateId } from '@/config/todo-states'
-
-/**
- * Chat filter options for the chats sidebar mode
- */
-export type ChatFilter =
-  | { kind: 'inbox' }
-  | { kind: 'archive' }
-  | { kind: 'flagged' }
-  | { kind: 'agent'; agentId: string }
-  | { kind: 'state'; stateId: TodoStateId }
-
-/**
- * Settings subpage options
- */
-export type SettingsSubpage = 'general' | 'shortcuts' | 'preferences'
-
-/**
- * Source category options for filtering sources
- */
-export type SourceCategory = 'local-files' | 'online-sources' | 'local-mcp'
+// Import shared types - single source of truth
+import type { ChatFilter, SettingsSubpage, SourceCategory } from '../../../shared/types'
+export type { ChatFilter, SettingsSubpage, SourceCategory }
 
 /**
  * Sidebar mode - determines what content is shown in the 2nd sidebar
@@ -66,14 +48,13 @@ export const getSidebarModeKey = (mode: SidebarMode): string => {
   }
   if (mode.type === 'settings') return `settings:${mode.subpage}`
   const f = mode.filter
-  if (f.kind === 'agent') return `agent:${f.agentId}`
   if (f.kind === 'state') return `state:${f.stateId}`
   return f.kind
 }
 
 /**
  * Parse a persistence key back to a SidebarMode
- * Returns null if the key is invalid or requires validation (agent/state)
+ * Returns null if the key is invalid or requires validation (state)
  */
 export const parseSidebarModeKey = (key: string): SidebarMode | null => {
   if (key === 'sources') return { type: 'sources' }
@@ -83,15 +64,10 @@ export const parseSidebarModeKey = (key: string): SidebarMode | null => {
       return { type: 'sources', category }
     }
   }
-  if (key === 'inbox') return { type: 'chats', filter: { kind: 'inbox' } }
-  if (key === 'archive') return { type: 'chats', filter: { kind: 'archive' } }
+  if (key === 'allChats') return { type: 'chats', filter: { kind: 'allChats' } }
   if (key === 'flagged') return { type: 'chats', filter: { kind: 'flagged' } }
-  if (key.startsWith('agent:')) {
-    const agentId = key.slice(6)
-    if (agentId) return { type: 'chats', filter: { kind: 'agent', agentId } }
-  }
   if (key.startsWith('state:')) {
-    const stateId = key.slice(6) as TodoStateId
+    const stateId = key.slice(6)
     if (stateId) return { type: 'chats', filter: { kind: 'state', stateId } }
   }
   if (key.startsWith('settings:')) {
@@ -105,9 +81,9 @@ export const parseSidebarModeKey = (key: string): SidebarMode | null => {
 }
 
 /**
- * Default sidebar mode - inbox view
+ * Default sidebar mode - all chats view
  */
 export const DEFAULT_SIDEBAR_MODE: SidebarMode = {
   type: 'chats',
-  filter: { kind: 'inbox' },
+  filter: { kind: 'allChats' },
 }

@@ -8,12 +8,10 @@ import {
   setAuthType,
   setTokenDisplay,
   setShowCost,
-  setShowClock,
-  setSafeMode,
 } from '@craft-agent/shared/config';
 import { getCredentialManager } from '@craft-agent/shared/credentials';
-import { setAuthEnvironment } from '@craft-agent/shared/auth';
-import { maskCredential } from '@craft-agent/shared/utils';
+import { setAuthEnvironment } from '@craft-agent/shared/auth/env';
+import { maskCredential } from '@craft-agent/shared/utils/mask';
 
 /**
  * State for pending auth mode switch (when credentials exist)
@@ -196,11 +194,11 @@ export function useSettingsHandlers(props: UseSettingsHandlersProps): UseSetting
         setShowCostSetting(action.show);
         break;
       case 'set_show_clock':
-        setShowClock(action.show);
+        // setShowClock config removed - just update local state
         setShowClockSetting(action.show);
         break;
       case 'set_safe_mode':
-        setSafeMode(action.enabled);
+        // setSafeMode config removed - just update local state
         setSafeModeSetting(action.enabled);
         addMessage(`Safe Mode ${action.enabled ? 'enabled' : 'disabled'}`, 'info');
         break;

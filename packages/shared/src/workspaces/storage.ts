@@ -175,7 +175,6 @@ export function loadWorkspace(rootPath: string): LoadedWorkspace | null {
   return {
     config,
     sourceSlugs: listSubdirNames(getWorkspaceSourcesPath(rootPath)),
-    agentSlugs: listSubdirNames(getWorkspaceAgentsPath(rootPath)),
     sessionCount: countSubdirs(getWorkspaceSessionsPath(rootPath)),
   };
 }
@@ -192,7 +191,6 @@ export function getWorkspaceSummary(rootPath: string): WorkspaceSummary | null {
     slug: config.slug,
     name: config.name,
     sourceCount: countSubdirs(getWorkspaceSourcesPath(rootPath)),
-    agentCount: countSubdirs(getWorkspaceAgentsPath(rootPath)),
     sessionCount: countSubdirs(getWorkspaceSessionsPath(rootPath)),
     createdAt: config.createdAt,
     updatedAt: config.updatedAt,

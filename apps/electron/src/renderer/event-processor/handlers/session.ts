@@ -23,9 +23,10 @@ import type {
   PermissionModeChangedEvent,
   AskQuestionRequestEvent,
   UserMessageEvent,
-  AgentStatusEvent,
   SessionSharedEvent,
   SessionUnsharedEvent,
+  AuthRequestEvent,
+  AuthCompletedEvent,
 } from '../types'
 import type { Message } from '../../../shared/types'
 import { generateMessageId, appendMessage } from '../helpers'
@@ -486,28 +487,6 @@ export function handlePlanSubmitted(
 }
 
 /**
- * Handle agent_status - update agent status on session
- * This is informational; the actual agent state is managed by useAgentState hook
- */
-export function handleAgentStatus(
-  state: SessionState,
-  event: AgentStatusEvent
-): ProcessResult {
-  const { session, streaming } = state
-
-  return {
-    state: {
-      session: {
-        ...session,
-        agentStatus: event.status,
-      },
-      streaming,
-    },
-    effects: [],
-  }
-}
-
-/**
  * Handle session_shared - session was shared to viewer
  */
 export function handleSessionShared(
@@ -543,6 +522,71 @@ export function handleSessionUnshared(
         ...session,
         sharedUrl: undefined,
         sharedId: undefined,
+      },
+      streaming,
+    },
+    effects: [],
+  }
+}
+
+/**
+ * Handle auth_request - add auth-request message to session
+ * This is the unified auth flow - execution is paused until auth completes
+ */
+export function handleAuthRequest(
+  state: SessionState,
+  event: AuthRequestEvent
+): ProcessResult {
+  const { session, streaming } = state
+
+  // Add auth-request message to session
+  return {
+    state: {
+      session: {
+        ...appendMessage(session, event.message),
+        isProcessing: false,  // Agent execution is paused
+      },
+      streaming: null,  // Clear any streaming state
+    },
+    effects: [],
+  }
+}
+
+/**
+ * Handle auth_completed - update auth-request message status
+ * The agent will resume via a new user message (sent by session manager)
+ */
+export function handleAuthCompleted(
+  state: SessionState,
+  event: AuthCompletedEvent
+): ProcessResult {
+  const { session, streaming } = state
+
+  // Update the auth-request message status
+  const updatedMessages = session.messages.map(m => {
+    if (
+      m.role === 'auth-request' &&
+      m.authRequestId === event.requestId &&
+      m.authStatus === 'pending'
+    ) {
+      return {
+        ...m,
+        authStatus: event.success
+          ? ('completed' as const)
+          : event.cancelled
+            ? ('cancelled' as const)
+            : ('failed' as const),
+        authError: event.error,
+      }
+    }
+    return m
+  })
+
+  return {
+    state: {
+      session: {
+        ...session,
+        messages: updatedMessages,
       },
       streaming,
     },

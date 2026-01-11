@@ -271,14 +271,6 @@ export class WindowManager {
   }
 
   /**
-   * Get list of workspace IDs that have open windows (for persistence)
-   * @deprecated Use getWindowStates() instead for full window state persistence
-   */
-  getOpenWorkspaceIds(): string[] {
-    return this.getAllWindows().map(m => m.workspaceId)
-  }
-
-  /**
    * Get window states for persistence (includes bounds)
    * Used by window-state.ts to save/restore windows
    */

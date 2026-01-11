@@ -2,11 +2,11 @@ import type { Session } from "../../shared/types"
 import type { SessionMeta } from "../atoms/sessions"
 
 /** Common session fields used by getSessionTitle */
-type SessionLike = Pick<Session, 'name' | 'preview' | 'agentName'> & { messages?: Session['messages'] }
+type SessionLike = Pick<Session, 'name' | 'preview'> & { messages?: Session['messages'] }
 
 /**
  * Get display title for a session.
- * Priority: custom name > first user message > preview (from metadata) > agent name > "New chat"
+ * Priority: custom name > first user message > preview (from metadata) > "New chat"
  * Works with both Session (full) and SessionMeta (lightweight)
  */
 export function getSessionTitle(session: SessionLike | SessionMeta): string {
@@ -31,11 +31,6 @@ export function getSessionTitle(session: SessionLike | SessionMeta): string {
     return trimmed.length < session.preview.length
       ? trimmed + '…'
       : trimmed
-  }
-
-  // For agent sessions, show the agent name instead of generic "New chat"
-  if (session.agentName) {
-    return session.agentName
   }
 
   return 'New chat'

@@ -64,7 +64,7 @@ const STATIC_PROVIDER_DOMAINS: Readonly<Record<string, string>> = Object.freeze(
   'notion': 'notion.so',
 });
 
-// Re-export browser-safe utility for backward compatibility
+// Re-export browser-safe utility from service-url
 export { deriveServiceUrl } from './service-url.ts';
 
 /**
@@ -368,11 +368,12 @@ export async function getHighQualityLogoUrl(serviceUrl: string, provider?: strin
 
 /**
  * Get logo URL for a service (synchronous, uses Google Favicon API)
- * Returns Google Favicon URL or null for internal domains
+ * Returns Google Favicon URL or null for internal domains.
+ *
+ * Use getHighQualityLogoUrl() when possible for better quality icons.
  *
  * @param serviceUrl - The service URL to get logo for
  * @param provider - Optional provider name (e.g., 'gmail') to use canonical domain mapping
- * @deprecated Use getHighQualityLogoUrl() when possible for better quality
  */
 export function getLogoUrl(serviceUrl: string, provider?: string): string | null {
   // Check if provider has a direct icon URL (highest priority)

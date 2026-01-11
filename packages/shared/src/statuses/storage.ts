@@ -9,15 +9,10 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import type { WorkspaceStatusConfig, StatusConfig, StatusCategory } from './types.ts';
 import { DEFAULT_ICON_SVGS } from './default-icons.ts';
-import { perf } from '../utils/perf.ts';
 
 const STATUS_CONFIG_DIR = 'statuses';
 const STATUS_CONFIG_FILE = 'statuses/config.json';
 const STATUS_ICONS_DIR = 'statuses/icons';
-
-// Track call counts for debugging
-let loadStatusConfigCallCount = 0;
-let ensureDefaultIconFilesCallCount = 0;
 
 /**
  * Get default status configuration (matches current hardcoded behavior)
@@ -91,7 +86,6 @@ export function getDefaultStatusConfig(): WorkspaceStatusConfig {
  * Creates missing icon files from embedded SVG strings
  */
 export function ensureDefaultIconFiles(workspaceRootPath: string): void {
-  ensureDefaultIconFilesCallCount++;
   const iconsDir = join(workspaceRootPath, STATUS_ICONS_DIR);
 
   // Create icons directory if missing
@@ -130,14 +124,6 @@ function validateStatusConfig(config: WorkspaceStatusConfig): boolean {
  * Ensures icon files exist
  */
 export function loadStatusConfig(workspaceRootPath: string): WorkspaceStatusConfig {
-  loadStatusConfigCallCount++;
-
-  // Log every 50 calls to track frequency without spamming
-  if (loadStatusConfigCallCount % 50 === 0) {
-    perf.start(`status.loadStatusConfig.milestone`)();
-    console.log(`[loadStatusConfig] Called ${loadStatusConfigCallCount} times, ensureDefaultIconFiles called ${ensureDefaultIconFilesCallCount} times`);
-  }
-
   // Ensure default icon files exist (self-healing)
   ensureDefaultIconFiles(workspaceRootPath);
 

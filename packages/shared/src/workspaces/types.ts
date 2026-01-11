@@ -73,12 +73,11 @@ export interface CreateWorkspaceInput {
 }
 
 /**
- * Loaded workspace with resolved sources and agents
+ * Loaded workspace with resolved sources
  */
 export interface LoadedWorkspace {
   config: WorkspaceConfig;
   sourceSlugs: string[]; // Available source slugs (not fully loaded to save memory)
-  agentSlugs: string[]; // Available agent slugs
   sessionCount: number; // Number of sessions
 }
 
@@ -89,7 +88,6 @@ export interface WorkspaceSummary {
   slug: string;
   name: string;
   sourceCount: number;
-  agentCount: number;
   sessionCount: number;
   createdAt: number;
   updatedAt: number;

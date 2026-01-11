@@ -201,7 +201,7 @@ export function useNotifications({
     if (!workspaceId) return
 
     // Get session title for notification
-    const title = session.name || session.agentName || 'New message'
+    const title = session.name || 'New message'
 
     // Get message preview (truncate if needed)
     let body = messagePreview || 'Craft Agent has a new message for you'

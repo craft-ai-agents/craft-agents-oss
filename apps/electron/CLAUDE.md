@@ -584,52 +584,41 @@ src/renderer/contexts/NavigationContext.tsx  # React context for navigation
 
 | Type | Purpose | Example |
 |------|---------|---------|
-| **tab** | Open tabs in the tab bar | `tab/settings`, `tab/chat/abc123` |
-| **action** | Trigger actions | `action/new-chat?agentId=claude` |
-| **sidebar** | Navigate sidebar | `sidebar/inbox`, `sidebar/agent/my-agent` |
+| **view** | Navigate to views | `allChats`, `settings/shortcuts`, `sources/source/github` |
+| **action** | Trigger actions | `action/new-chat`, `action/delete-session/abc123` |
 
 #### Using Routes
 
 ```typescript
 import { navigate, routes } from '@/lib/navigate'
 
-// Tab routes
-navigate(routes.tab.settings())           // Open settings tab
-navigate(routes.tab.chat('session123'))   // Open chat tab
-navigate(routes.tab.agentInfo('claude'))  // Open agent info tab
-navigate(routes.tab.sourceInfo('github')) // Open source info tab
-navigate(routes.tab.file('/path/to.ts'))  // Open file viewer tab
-navigate(routes.tab.browser('https://...')) // Open browser tab
+// View routes (compound format)
+navigate('settings')                       // Open settings
+navigate('settings/shortcuts')             // Open shortcuts settings
+navigate('allChats')                       // All chats view
+navigate('allChats/chat/session123')       // Specific chat
+navigate('flagged/chat/session123')        // Flagged chat
+navigate('sources')                        // Sources view
+navigate('sources/source/github')          // Source info
 
 // Action routes
 navigate(routes.action.newChat())                         // New chat
-navigate(routes.action.newChat({ agentId: 'claude' }))    // New chat with agent
-navigate(routes.action.newChat({ input: 'Hello!' }))      // New chat with pre-filled input
 navigate(routes.action.renameSession('id', 'New Name'))   // Rename session
 navigate(routes.action.deleteSession('id'))               // Delete session
 navigate(routes.action.flagSession('id'))                 // Flag session
 navigate(routes.action.oauth('github'))                   // Start OAuth flow
-navigate(routes.action.setPermissionMode('id', 'safe'))   // Set permission mode
-
-// Sidebar routes
-navigate(routes.sidebar.inbox())           // Show inbox
-navigate(routes.sidebar.archive())         // Show archive
-navigate(routes.sidebar.flagged())         // Show flagged
-navigate(routes.sidebar.sources())         // Show sources panel
-navigate(routes.sidebar.agent('claude'))   // Filter by agent
-navigate(routes.sidebar.todoState('done')) // Filter by todo state
 ```
 
 #### React Hook Usage
 
 ```typescript
-import { useNavigation, routes } from '@/contexts/NavigationContext'
+import { useNavigation } from '@/contexts/NavigationContext'
 
 function MyComponent() {
   const { navigate, isReady } = useNavigation()
 
   return (
-    <button onClick={() => navigate(routes.tab.settings())}>
+    <button onClick={() => navigate('settings')}>
       Settings
     </button>
   )
@@ -644,43 +633,49 @@ The `navigate()` function from `@/lib/navigate` works anywhere - it dispatches a
 import { navigate, routes } from '@/lib/navigate'
 
 // Can be called from anywhere, even outside React components
-navigate(routes.action.newChat({ agentId: 'claude' }))
+navigate(routes.action.newChat())
 ```
 
 #### Building Deep Links
 
 ```typescript
-import { buildDeepLink, routes } from '@/lib/navigate'
+import { buildDeepLink } from '@/lib/navigate'
 
 // Without workspace (uses current)
-buildDeepLink(routes.tab.settings())
-// → 'craftagents://tab/settings'
+buildDeepLink('settings')
+// → 'craftagents://settings'
 
 // With workspace
-buildDeepLink(routes.tab.chat('abc'), 'workspace123')
-// → 'craftagents://workspace/workspace123/tab/chat/abc'
+buildDeepLink('allChats/chat/abc', 'workspace123')
+// → 'craftagents://workspace/workspace123/allChats/chat/abc'
 ```
 
 ### Deep Links
 
 The app registers the `craftagents://` URL scheme for external deep linking.
 
-**URL Format:**
+**URL Format (Compound Routes):**
 ```
-craftagents://tab/{tabType}[/{id}][?params]
+craftagents://allChats[/chat/{sessionId}]
+craftagents://flagged[/chat/{sessionId}]
+craftagents://state/{stateId}[/chat/{sessionId}]
+craftagents://sources[/source/{sourceSlug}]
+craftagents://settings[/{subpage}]
 craftagents://action/{actionName}[/{id}][?params]
-craftagents://workspace/{workspaceId}/tab/{tabType}[/{id}][?params]
-craftagents://workspace/{workspaceId}/action/{actionName}[/{id}][?params]
+craftagents://workspace/{workspaceId}/{compoundRoute}
 ```
 
 **Examples:**
 | Use Case | URL |
 |----------|-----|
-| Settings | `craftagents://tab/settings` |
-| Chat session | `craftagents://tab/chat/session456` |
-| Agent info | `craftagents://workspace/ws123/tab/agent-info/my-agent` |
-| New chat | `craftagents://action/new-chat?agentId=my-agent&input=Hello` |
-| File | `craftagents://tab/file?path=/path/to/file.txt` |
+| Settings | `craftagents://settings` |
+| Shortcuts | `craftagents://settings/shortcuts` |
+| All chats | `craftagents://allChats` |
+| Chat session | `craftagents://allChats/chat/session456` |
+| Sources | `craftagents://sources` |
+| Source info | `craftagents://sources/source/github` |
+| New chat | `craftagents://action/new-chat` |
+| With workspace | `craftagents://workspace/ws123/allChats/chat/abc` |
 
 **Flow:**
 1. User clicks `craftagents://` URL or app launched with URL
@@ -688,7 +683,7 @@ craftagents://workspace/{workspaceId}/action/{actionName}[/{id}][?params]
 3. `handleDeepLink()` focuses/creates workspace window
 4. Sends `DEEP_LINK_NAVIGATE` IPC to renderer
 5. `NavigationContext` receives event and calls `navigate()` with parsed route
-6. Route is dispatched to appropriate handler (tab/action/sidebar)
+6. Route is dispatched to appropriate handler (view or action)
 
 **Cold Start:** If app isn't running, URL is stored in `pendingDeepLink` and processed after `app.whenReady()`.
 

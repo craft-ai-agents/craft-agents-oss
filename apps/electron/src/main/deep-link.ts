@@ -5,30 +5,24 @@
  *
  * URL Formats (workspace is optional - uses active window if omitted):
  *
- * New compound format (hierarchical navigation):
- *   craftagents://inbox[/chat/{sessionId}]               - Chat list (inbox filter)
+ * Compound format (hierarchical navigation):
+ *   craftagents://allChats[/chat/{sessionId}]            - Chat list (all chats)
  *   craftagents://flagged[/chat/{sessionId}]             - Chat list (flagged filter)
- *   craftagents://archive[/chat/{sessionId}]             - Chat list (archive filter)
- *   craftagents://agent/{agentId}[/chat/{sessionId}]     - Chat list (agent filter)
+ *   craftagents://state/{stateId}[/chat/{sessionId}]     - Chat list (state filter)
  *   craftagents://sources[/source/{sourceSlug}]          - Sources list
  *   craftagents://settings[/{subpage}]                   - Settings (general, shortcuts, preferences)
  *
- * Legacy formats (still supported):
- *   craftagents://tab/{tabType}[/{id}][?params]
+ * Action format:
  *   craftagents://action/{actionName}[/{id}][?params]
- *   craftagents://sidebar/{filter}[/{id}]
- *   craftagents://workspace/{workspaceId}/tab/{tabType}[/{id}][?params]
  *   craftagents://workspace/{workspaceId}/action/{actionName}[?params]
  *
  * Examples:
- *   craftagents://inbox                                  (chat list, inbox filter)
- *   craftagents://inbox/chat/abc123                      (specific chat in inbox)
+ *   craftagents://allChats                               (all chats view)
+ *   craftagents://allChats/chat/abc123                   (specific chat)
  *   craftagents://settings/shortcuts                     (shortcuts page)
  *   craftagents://sources/source/github                  (github source info)
- *   craftagents://tab/settings                           (legacy - uses active window)
- *   craftagents://action/new-chat?agentId=my-agent       (legacy - uses active window)
- *   craftagents://sidebar/inbox                          (legacy - uses active window)
- *   craftagents://workspace/ws123/tab/chat/session456    (legacy - targets specific workspace)
+ *   craftagents://action/new-chat                        (uses active window)
+ *   craftagents://workspace/ws123/allChats/chat/abc123   (targets specific workspace)
  */
 
 import type { BrowserWindow } from 'electron'
@@ -39,15 +33,11 @@ import { IPC_CHANNELS } from '../shared/types'
 export interface DeepLinkTarget {
   /** Workspace ID - undefined means use active window */
   workspaceId?: string
-  /** New compound route format (e.g., 'inbox/chat/abc123', 'settings/shortcuts') */
+  /** Compound route format (e.g., 'allChats/chat/abc123', 'settings/shortcuts') */
   view?: string
-  /** Legacy: tab type */
-  tabType?: string
-  tabParams?: Record<string, string>
+  /** Action route (e.g., 'new-chat', 'delete-session') */
   action?: string
   actionParams?: Record<string, string>
-  sidebar?: string
-  sidebarParams?: Record<string, string>
 }
 
 export interface DeepLinkResult {
@@ -60,15 +50,11 @@ export interface DeepLinkResult {
  * Navigation payload sent to renderer via IPC
  */
 export interface DeepLinkNavigation {
-  /** New compound route format (e.g., 'inbox/chat/abc123', 'settings/shortcuts') */
+  /** Compound route format (e.g., 'allChats/chat/abc123', 'settings/shortcuts') */
   view?: string
-  /** Legacy: tab type */
-  tabType?: string
-  tabParams?: Record<string, string>
+  /** Action route (e.g., 'new-chat', 'delete-session') */
   action?: string
   actionParams?: Record<string, string>
-  sidebar?: string
-  sidebarParams?: Record<string, string>
 }
 
 /**
@@ -84,7 +70,7 @@ export function parseDeepLink(url: string): DeepLinkTarget | null {
 
     // For custom protocols, the hostname contains the first path segment
     // e.g., craftagents://workspace/ws123 → hostname='workspace', pathname='/ws123'
-    // e.g., craftagents://tab/settings → hostname='tab', pathname='/settings'
+    // e.g., craftagents://allChats/chat/abc → hostname='allChats', pathname='/chat/abc'
     const host = parsed.hostname
     const pathParts = parsed.pathname.split('/').filter(Boolean)
 
@@ -93,12 +79,12 @@ export function parseDeepLink(url: string): DeepLinkTarget | null {
       return null
     }
 
-    // Compound route prefixes (new hierarchical format)
+    // Compound route prefixes
     const COMPOUND_ROUTE_PREFIXES = [
-      'inbox', 'archive', 'flagged', 'agent', 'state', 'sources', 'settings'
+      'allChats', 'flagged', 'state', 'sources', 'settings'
     ]
 
-    // craftagents://inbox/..., craftagents://settings/..., etc. (compound routes)
+    // craftagents://allChats/..., craftagents://settings/..., etc. (compound routes)
     if (COMPOUND_ROUTE_PREFIXES.includes(host)) {
       // Reconstruct the full compound route from host + pathname
       const viewRoute = pathParts.length > 0 ? `${host}/${pathParts.join('/')}` : host
@@ -115,28 +101,19 @@ export function parseDeepLink(url: string): DeepLinkTarget | null {
 
       const result: DeepLinkTarget = { workspaceId }
 
-      // Parse /tab/{tabType}/...
-      if (pathParts[1] === 'tab') {
-        result.tabType = pathParts[2]
-        result.tabParams = {}
+      // Check what type of route follows the workspace ID
+      const routeType = pathParts[1]
 
-        // Handle path-based params (e.g., /tab/chat/{sessionId})
-        if (pathParts[3]) {
-          result.tabParams.id = pathParts[3]
-        }
-        // Handle secondary path param (e.g., /tab/source-info/{agentSlug}/{sourceSlug})
-        if (pathParts[4]) {
-          result.tabParams.secondaryId = pathParts[4]
-        }
-
-        // Handle query params (e.g., ?path=...&url=...)
-        parsed.searchParams.forEach((value, key) => {
-          result.tabParams![key] = value
-        })
+      // Parse compound routes: /workspace/{id}/{compoundRoute}
+      // e.g., /workspace/ws123/allChats/chat/abc123
+      if (routeType && COMPOUND_ROUTE_PREFIXES.includes(routeType)) {
+        const viewRoute = pathParts.slice(1).join('/')
+        result.view = viewRoute
+        return result
       }
 
       // Parse /action/{actionName}/...
-      if (pathParts[1] === 'action') {
+      if (routeType === 'action') {
         result.action = pathParts[2]
         result.actionParams = {}
         // Handle path-based ID (e.g., /action/delete-session/{sessionId})
@@ -146,42 +123,8 @@ export function parseDeepLink(url: string): DeepLinkTarget | null {
         parsed.searchParams.forEach((value, key) => {
           result.actionParams![key] = value
         })
+        return result
       }
-
-      // Parse /sidebar/{filter}/...
-      if (pathParts[1] === 'sidebar') {
-        result.sidebar = pathParts[2]
-        result.sidebarParams = {}
-        if (pathParts[3]) {
-          result.sidebarParams.id = pathParts[3]
-        }
-        parsed.searchParams.forEach((value, key) => {
-          result.sidebarParams![key] = value
-        })
-      }
-
-      return result
-    }
-
-    // craftagents://tab/... (no workspace - uses active window)
-    if (host === 'tab') {
-      const result: DeepLinkTarget = {
-        workspaceId: undefined, // Will use active window
-        tabType: pathParts[0],
-        tabParams: {},
-      }
-
-      // Handle path-based params
-      if (pathParts[1]) {
-        result.tabParams!.id = pathParts[1]
-      }
-      if (pathParts[2]) {
-        result.tabParams!.secondaryId = pathParts[2]
-      }
-
-      parsed.searchParams.forEach((value, key) => {
-        result.tabParams![key] = value
-      })
 
       return result
     }
@@ -205,57 +148,11 @@ export function parseDeepLink(url: string): DeepLinkTarget | null {
       return result
     }
 
-    // craftagents://sidebar/... (no workspace - uses active window)
-    if (host === 'sidebar') {
-      const result: DeepLinkTarget = {
-        workspaceId: undefined,
-        sidebar: pathParts[0],
-        sidebarParams: {},
-      }
-
-      if (pathParts[1]) {
-        result.sidebarParams!.id = pathParts[1]
-      }
-
-      parsed.searchParams.forEach((value, key) => {
-        result.sidebarParams![key] = value
-      })
-
-      return result
-    }
-
     return null
   } catch (error) {
     mainLog.error('[DeepLink] Failed to parse URL:', url, error)
     return null
   }
-}
-
-/**
- * Generate a deep link URL from components
- */
-export function generateDeepLinkUrl(
-  workspaceId: string,
-  tabType: string,
-  params?: Record<string, string>
-): string {
-  let url = `craftagents://workspace/${workspaceId}/tab/${tabType}`
-
-  // For simple tab types with an ID, append to path
-  if (params?.id && !params.path && !params.url) {
-    url += `/${params.id}`
-    // Remove id from params so it's not duplicated in query string
-    const { id: _id, ...remainingParams } = params
-    params = Object.keys(remainingParams).length > 0 ? remainingParams : undefined
-  }
-
-  // Add remaining params as query string
-  if (params && Object.keys(params).length > 0) {
-    const searchParams = new URLSearchParams(params)
-    url += `?${searchParams.toString()}`
-  }
-
-  return url
 }
 
 /**
@@ -324,15 +221,11 @@ export async function handleDeepLink(
   await waitForWindowReady(window)
 
   // 3. Send navigation command to renderer
-  if (target.view || target.tabType || target.action || target.sidebar) {
+  if (target.view || target.action) {
     const navigation: DeepLinkNavigation = {
       view: target.view,
-      tabType: target.tabType,
-      tabParams: target.tabParams,
       action: target.action,
       actionParams: target.actionParams,
-      sidebar: target.sidebar,
-      sidebarParams: target.sidebarParams,
     }
     if (!window.isDestroyed() && !window.webContents.isDestroyed()) {
       window.webContents.send(IPC_CHANNELS.DEEP_LINK_NAVIGATE, navigation)

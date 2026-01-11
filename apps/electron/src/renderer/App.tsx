@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useTheme } from '@/hooks/useTheme'
 import type { ThemeOverrides } from '@config/theme'
 import { useSetAtom, useStore } from 'jotai'
-import type { Session, Workspace, SessionEvent, Message, SubAgentMetadata, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, SetupNeeds, TodoState, NewChatActionParams } from '../shared/types'
+import type { Session, Workspace, SessionEvent, Message, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, SetupNeeds, TodoState, NewChatActionParams } from '../shared/types'
 import type { SessionOptions, SessionOptionUpdates } from './hooks/useSessionOptions'
 import { defaultSessionOptions, mergeSessionOptions } from './hooks/useSessionOptions'
 import { generateMessageId } from '../shared/types'
@@ -159,8 +159,6 @@ export default function App() {
   }, [updateSessionDirect])
 
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
-  const [agents, setAgents] = useState<SubAgentMetadata[]>([])
-  const [isLoadingAgents, setIsLoadingAgents] = useState(false)
   // Window's workspace ID - fixed for this window (multi-window architecture)
   const [windowWorkspaceId, setWindowWorkspaceId] = useState<string | null>(null)
   const [currentModel, setCurrentModel] = useState(DEFAULT_MODEL)
@@ -192,7 +190,7 @@ export default function App() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true)
 
   // Compute if app is fully ready (all data loaded)
-  const isFullyReady = appState === 'ready' && sessionsLoaded && !isLoadingAgents
+  const isFullyReady = appState === 'ready' && sessionsLoaded
 
   // Trigger splash exit animation when fully ready
   useEffect(() => {
@@ -311,8 +309,8 @@ export default function App() {
 
   // Notification system - shows native OS notifications and badge count
   const handleNavigateToSession = useCallback((sessionId: string) => {
-    // Navigate to the session via central routing
-    navigate(routes.tab.chat(sessionId))
+    // Navigate to the session via central routing (uses allChats filter)
+    navigate(routes.view.allChats(sessionId))
   }, [])
 
   const { isWindowFocused, showSessionNotification } = useNotifications({
@@ -353,7 +351,7 @@ export default function App() {
       if (initialSessionId && windowWorkspaceId) {
         const session = loadedSessions.find(s => s.id === initialSessionId)
         if (session) {
-          navigate(routes.tab.chat(session.id))
+          navigate(routes.view.allChats(session.id))
         }
       }
     })
@@ -373,31 +371,11 @@ export default function App() {
     window.electronAPI.getAppTheme().then(setAppTheme)
   }, [appState, initialSessionId, windowWorkspaceId, setSession, initializeSessions])
 
-  // Load agents and workspace theme when window's workspace is set
+  // Load workspace theme when window's workspace is set
   useEffect(() => {
     if (windowWorkspaceId) {
-      setIsLoadingAgents(true)
-      window.electronAPI.getAgents(windowWorkspaceId)
-        .then(setAgents)
-        .finally(() => setIsLoadingAgents(false))
-      // Load workspace-level theme
       window.electronAPI.getWorkspaceTheme(windowWorkspaceId).then(setWorkspaceTheme)
-    } else {
-      setAgents([])
-      setIsLoadingAgents(false)
     }
-  }, [windowWorkspaceId])
-
-  // Subscribe to agents changed events (when agents are created/synced/deleted via chat)
-  useEffect(() => {
-    const cleanup = window.electronAPI.onAgentsChanged(() => {
-      if (windowWorkspaceId) {
-        console.log('[App] Agents changed, refreshing list')
-        window.electronAPI.getAgents(windowWorkspaceId)
-          .then(setAgents)
-      }
-    })
-    return cleanup
   }, [windowWorkspaceId])
 
   // Subscribe to theme change events (live updates when theme.json files change)
@@ -600,12 +578,8 @@ export default function App() {
     }
   }, [])
 
-  const handleCreateSession = useCallback(async (workspaceId: string, agentId?: string): Promise<Session> => {
-    // Find agent if provided - prefer displayName for human-readable title
-    const agent = agentId ? agents.find(a => a.id === agentId) : undefined
-    const agentName = agent?.displayName || agent?.name
-    // Pass agentName to main process so it's stored in the session
-    const session = await window.electronAPI.createSession(workspaceId, agentId, agentName)
+  const handleCreateSession = useCallback(async (workspaceId: string, options?: import('../shared/types').CreateSessionOptions): Promise<Session> => {
+    const session = await window.electronAPI.createSession(workspaceId, options)
     // Add to per-session atom and metadata map (no sessionsAtom)
     addSession(session)
 
@@ -623,7 +597,7 @@ export default function App() {
     }
 
     return session
-  }, [agents, addSession])
+  }, [addSession])
 
   // Deep link navigation is initialized later after handleInputChange is defined
 
@@ -800,19 +774,6 @@ export default function App() {
     }
   }, [sessionOptions, updateSessionById])
 
-  const handleRefreshAgents = useCallback(async () => {
-    if (windowWorkspaceId) {
-      setIsLoadingAgents(true)
-      try {
-        // Reload local agents
-        const refreshedAgents = await window.electronAPI.refreshAgents(windowWorkspaceId)
-        setAgents(refreshedAgents)
-      } finally {
-        setIsLoadingAgents(false)
-      }
-    }
-  }, [windowWorkspaceId])
-
   const handleModelChange = useCallback((model: string) => {
     setCurrentModel(model)
     // Persist to config so it's remembered across launches
@@ -884,14 +845,14 @@ export default function App() {
       return
     }
 
-    const session = await handleCreateSession(windowWorkspaceId, params.agentId)
+    const session = await handleCreateSession(windowWorkspaceId)
 
     if (params.name) {
       await window.electronAPI.sessionCommand(session.id, { type: 'rename', name: params.name })
     }
 
     // Navigate to the chat view - this sets both selectedSession and activeView
-    navigate(routes.tab.chat(session.id))
+    navigate(routes.view.allChats(session.id))
 
     // Pre-fill input if provided (after a small delay to ensure component is mounted)
     if (params.input) {
@@ -1016,7 +977,6 @@ export default function App() {
       // Clear session atoms - initialize with empty array clears all per-session atoms
       initializeSessions([])
       setWorkspaces([])
-      setAgents([])
       setWindowWorkspaceId(null)
       // Reset setupNeeds to force fresh onboarding start
       setSetupNeeds({
@@ -1081,8 +1041,6 @@ export default function App() {
     // NOTE: sessions is NOT included - use sessionMetaMapAtom for listing
     // and useSession(id) hook for individual sessions. This prevents memory leaks.
     workspaces,
-    agents,
-    isLoadingAgents,
     activeWorkspaceId: windowWorkspaceId,
     currentModel,
     pendingPermissions,
@@ -1113,7 +1071,6 @@ export default function App() {
     onOpenSettings: handleOpenSettings,
     onOpenKeyboardShortcuts: handleOpenKeyboardShortcuts,
     onOpenStoredUserPreferences: handleOpenStoredUserPreferences,
-    onRefreshAgents: handleRefreshAgents,
     onReset: handleReset,
     // Session options
     onSessionOptionsChange: handleSessionOptionsChange,
@@ -1123,8 +1080,6 @@ export default function App() {
   }), [
     // NOTE: sessions removed to prevent memory leaks - components use atoms instead
     workspaces,
-    agents,
-    isLoadingAgents,
     windowWorkspaceId,
     currentModel,
     pendingPermissions,
@@ -1150,7 +1105,6 @@ export default function App() {
     handleOpenSettings,
     handleOpenKeyboardShortcuts,
     handleOpenStoredUserPreferences,
-    handleRefreshAgents,
     handleReset,
     handleSessionOptionsChange,
     handleInputChange,
@@ -1213,7 +1167,6 @@ export default function App() {
           onCreateSession={handleCreateSession}
           onInputChange={handleInputChange}
           isReady={appState === 'ready'}
-          agents={agents}
         >
           {/* Splash screen overlay - fades out when fully ready */}
           {showSplash && (

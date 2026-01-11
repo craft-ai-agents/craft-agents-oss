@@ -67,7 +67,6 @@ export function MainContentPanel({
           <SourceInfoPage
             sourceSlug={navState.details.sourceSlug}
             workspaceId={activeWorkspaceId || ''}
-            agentSlug={navState.details.agentSlug}
           />
         </Panel>
       )
@@ -98,9 +97,7 @@ export function MainContentPanel({
           <p className="text-sm">
             {navState.filter.kind === 'flagged'
               ? 'No flagged conversations'
-              : navState.filter.kind === 'archive'
-                ? 'No archived conversations'
-                : 'No conversations yet'}
+              : 'No conversations yet'}
           </p>
         </div>
       </Panel>

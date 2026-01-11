@@ -38,6 +38,7 @@ export {
   loadSession,
   listSessions,
   deleteSession,
+  clearSessionMessages,
   getOrCreateLatestSession,
   // Metadata updates
   updateSessionSdkId,
@@ -45,12 +46,10 @@ export {
   flagSession,
   unflagSession,
   setSessionTodoState,
-  assignAgentToSession,
   // Session filtering
   listFlaggedSessions,
   listCompletedSessions,
   listInboxSessions,
-  listSessionsByAgent,
   // Plan storage
   formatPlanAsMarkdown,
   parsePlanFromMarkdown,
@@ -71,3 +70,24 @@ export {
   writeSessionJsonl,
   createSessionHeader,
 } from './jsonl.ts';
+
+// Slug generator utilities
+export {
+  generateDatePrefix,
+  generateHumanSlug,
+  generateUniqueSessionId,
+  parseSessionId,
+  isHumanReadableId,
+} from './slug-generator.ts';
+
+// Word lists (for customization if needed)
+export { ADJECTIVES, NOUNS } from './word-lists.ts';
+
+// Onboarding
+export {
+  generateOnboardingMessages,
+  formatOnboardingContext,
+  type OnboardingContext,
+  type QuickAction,
+  type SourceNeedingAuth,
+} from './onboarding.ts';

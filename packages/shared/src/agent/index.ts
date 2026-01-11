@@ -19,8 +19,15 @@ export {
   unregisterSessionScopedToolCallbacks,
   // Types
   type SessionScopedToolCallbacks,
-  type CredentialRequest,
-  type CredentialResponse,
+  // Auth request types (unified auth flow)
+  type AuthRequest,
+  type AuthRequestType,
+  type AuthResult,
+  type CredentialAuthRequest,
+  type McpOAuthAuthRequest,
+  type GoogleOAuthAuthRequest,
+  type SlackOAuthAuthRequest,
+  type MicrosoftOAuthAuthRequest,
   type CredentialInputMode,
 } from './session-scoped-tools.ts';
 
@@ -52,8 +59,9 @@ export {
   type ModeConfig,
 } from './mode-manager.ts';
 
-// Export plan review types for electron app (plans can still be submitted via SubmitPlan)
-export type { PlanReviewRequest, PlanReviewResult } from '../agents/plan-types.ts';
+// Export plan types and permission mode messages
+export type { Plan, PlanStep, PlanState, PlanReviewRequest, PlanReviewResult } from './plan-types.ts';
+export { PERMISSION_MODE_MESSAGES, PERMISSION_MODE_PROMPTS } from './plan-types.ts';
 
 // Export permissions-config - customizable permissions per workspace/source (permissions.json)
 export {

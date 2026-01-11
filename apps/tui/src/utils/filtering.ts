@@ -41,6 +41,7 @@ export type CommandCategory =
   | 'AI & Billing'
   | 'Configuration'
   | 'Space'
+  | 'Workspace'
   | 'Sub-Agents'
   | 'Attaching Files'
   | 'Troubleshooting';

@@ -7,8 +7,6 @@
  * - session.jsonl (main data in JSONL format: line 1 = header, lines 2+ = messages)
  * - attachments/ (file attachments)
  * - plans/ (plan files for Safe Mode)
- *
- * Legacy session.json files are automatically migrated to JSONL on first load.
  */
 
 import {
@@ -17,13 +15,13 @@ import {
   readFileSync,
   writeFileSync,
   readdirSync,
-  unlinkSync,
   rmSync,
   statSync,
+  unlinkSync,
 } from 'fs';
 import { join } from 'path';
-import { randomUUID } from 'crypto';
 import { getWorkspaceSessionsPath } from '../workspaces/storage.ts';
+import { generateUniqueSessionId } from './slug-generator.ts';
 import { toPortablePath, expandPath } from '../utils/paths.ts';
 import { perf } from '../utils/perf.ts';
 import type {
@@ -34,7 +32,7 @@ import type {
   SessionHeader,
   TodoState,
 } from './types.ts';
-import type { Plan } from '../agents/plan-types.ts';
+import type { Plan } from '../agent/plan-types.ts';
 import { validateSessionStatus } from '../statuses/validation.ts';
 import { getStatusCategory } from '../statuses/storage.ts';
 import { readSessionHeader, readSessionJsonl, writeSessionJsonl } from './jsonl.ts';
@@ -69,13 +67,6 @@ export function getSessionPath(workspaceRootPath: string, sessionId: string): st
  */
 export function getSessionFilePath(workspaceRootPath: string, sessionId: string): string {
   return join(getSessionPath(workspaceRootPath, sessionId), 'session.jsonl');
-}
-
-/**
- * Get path to legacy session.json file (for migration)
- */
-function getLegacySessionFilePath(workspaceRootPath: string, sessionId: string): string {
-  return join(getSessionPath(workspaceRootPath, sessionId), 'session.json');
 }
 
 /**
@@ -117,10 +108,24 @@ export function getSessionPlansPath(workspaceRootPath: string, sessionId: string
 // ============================================================
 
 /**
- * Generate a UUID for session IDs
+ * Get existing session IDs for collision detection
  */
-export function generateSessionId(): string {
-  return randomUUID();
+function getExistingSessionIds(workspaceRootPath: string): Set<string> {
+  const sessionsDir = getWorkspaceSessionsPath(workspaceRootPath);
+  if (!existsSync(sessionsDir)) {
+    return new Set();
+  }
+  const entries = readdirSync(sessionsDir, { withFileTypes: true });
+  return new Set(entries.filter(e => e.isDirectory()).map(e => e.name));
+}
+
+/**
+ * Generate a human-readable session ID
+ * Format: YYMMDD-adjective-noun (e.g., 260111-swift-river)
+ */
+export function generateSessionId(workspaceRootPath: string): string {
+  const existingIds = getExistingSessionIds(workspaceRootPath);
+  return generateUniqueSessionId(existingIds);
 }
 
 // ============================================================
@@ -134,8 +139,6 @@ export function createSession(
   workspaceRootPath: string,
   options?: {
     name?: string;
-    agentSlug?: string;
-    agentName?: string;
     workingDirectory?: string;
     permissionMode?: SessionConfig['permissionMode'];
     enabledSourceSlugs?: string[];
@@ -144,7 +147,7 @@ export function createSession(
   ensureSessionsDir(workspaceRootPath);
 
   const now = Date.now();
-  const sessionId = generateSessionId();
+  const sessionId = generateSessionId(workspaceRootPath);
 
   // Create session directory with all subdirectories (plans, attachments)
   ensureSessionDir(workspaceRootPath, sessionId);
@@ -155,8 +158,6 @@ export function createSession(
     name: options?.name,
     createdAt: now,
     lastUsedAt: now,
-    agentSlug: options?.agentSlug,
-    agentName: options?.agentName,
     workingDirectory: options?.workingDirectory,
     permissionMode: options?.permissionMode,
     enabledSourceSlugs: options?.enabledSourceSlugs,
@@ -196,8 +197,6 @@ export function getOrCreateSessionById(
       name: existing.name,
       createdAt: existing.createdAt,
       lastUsedAt: existing.lastUsedAt,
-      agentSlug: existing.agentSlug,
-      agentName: existing.agentName,
     };
   }
 
@@ -265,15 +264,11 @@ export { sessionPersistenceQueue } from './persistence-queue.js'
 
 /**
  * Load session by ID
- * Loads session from folder structure.
- *
- * Supports both JSONL (new) and JSON (legacy) formats.
- * Legacy JSON files are automatically migrated to JSONL on first load.
+ * Loads session from folder structure in JSONL format.
  */
 export function loadSession(workspaceRootPath: string, sessionId: string): StoredSession | null {
   const end = perf.start('session.loadSession', { sessionId });
 
-  // Try new JSONL format first
   const jsonlPath = getSessionFilePath(workspaceRootPath, sessionId);
   if (existsSync(jsonlPath)) {
     const session = readSessionJsonl(jsonlPath);
@@ -287,36 +282,6 @@ export function loadSession(workspaceRootPath: string, sessionId: string): Store
     }
   }
 
-  // Fall back to legacy JSON format and migrate
-  const legacyPath = getLegacySessionFilePath(workspaceRootPath, sessionId);
-  if (existsSync(legacyPath)) {
-    try {
-      const content = readFileSync(legacyPath, 'utf-8');
-      const session = JSON.parse(content) as StoredSession;
-
-      // Expand portable paths
-      session.workspaceRootPath = expandPath(session.workspaceRootPath);
-      if (session.workingDirectory) {
-        session.workingDirectory = expandPath(session.workingDirectory);
-      }
-
-      // Migrate to JSONL format
-      writeSessionJsonl(jsonlPath, session);
-
-      // Delete legacy file after successful migration
-      try {
-        unlinkSync(legacyPath);
-      } catch {
-        // Ignore deletion errors
-      }
-
-      end();
-      return session;
-    } catch {
-      // Session not found or invalid
-    }
-  }
-
   end();
   return null;
 }
@@ -326,7 +291,6 @@ export function loadSession(workspaceRootPath: string, sessionId: string): Store
  * Lists sessions from folder structure.
  *
  * Uses JSONL header for fast loading (only reads first line of each file).
- * Falls back to legacy JSON for unmigrated sessions.
  */
 export function listSessions(workspaceRootPath: string): SessionMetadata[] {
   const span = perf.span('session.listSessions');
@@ -343,28 +307,12 @@ export function listSessions(workspaceRootPath: string): SessionMetadata[] {
   for (const entry of entries) {
     if (entry.isDirectory()) {
       const sessionId = entry.name;
-
-      // Try new JSONL format first (fast - only reads first line)
       const jsonlFile = join(sessionsDir, sessionId, 'session.jsonl');
       if (existsSync(jsonlFile)) {
         const header = readSessionHeader(jsonlFile);
         if (header) {
           const metadata = headerToMetadata(header, workspaceRootPath);
           if (metadata) sessions.push(metadata);
-        }
-        continue;
-      }
-
-      // Fall back to legacy JSON format (slower - reads entire file)
-      const jsonFile = join(sessionsDir, sessionId, 'session.json');
-      if (existsSync(jsonFile)) {
-        try {
-          const content = readFileSync(jsonFile, 'utf-8');
-          const session = JSON.parse(content) as StoredSession;
-          const metadata = extractSessionMetadataLegacy(session, workspaceRootPath);
-          if (metadata) sessions.push(metadata);
-        } catch {
-          // Skip invalid files
         }
       }
     }
@@ -399,78 +347,11 @@ function headerToMetadata(header: SessionHeader, workspaceRootPath: string): Ses
       messageCount: header.messageCount,
       preview: header.preview,
       sdkSessionId: header.sdkSessionId,
-      agentSlug: header.agentSlug,
-      agentName: header.agentName,
       isFlagged: header.isFlagged,
       todoState: validatedTodoState,
       permissionMode: header.permissionMode,
       planCount: planCount > 0 ? planCount : undefined,
       lastMessageRole: header.lastMessageRole,
-    };
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Extract metadata from a stored session (legacy JSON format)
- * @deprecated Used only for legacy session.json migration
- * @param session - Raw session loaded from JSON (may have portable workspaceRootPath)
- * @param workspaceRootPath - Actual expanded workspace root path (used for filesystem ops)
- */
-function extractSessionMetadataLegacy(session: StoredSession, workspaceRootPath: string): SessionMetadata | null {
-  try {
-    // Find first user message for preview
-    const firstUserMessage = session.messages?.find(m => m.type === 'user');
-    const preview = firstUserMessage?.content?.replace(/\n/g, ' ').substring(0, 150);
-
-    // Extract distinct agent names from "Now chatting with @<name>" messages
-    const agentPattern = /Now chatting with @(\S+)/g;
-    const agents = new Set<string>();
-    for (const msg of session.messages ?? []) {
-      if (msg.content) {
-        let match;
-        while ((match = agentPattern.exec(msg.content)) !== null) {
-          if (match[1]) {
-            agents.add(match[1]);
-          }
-        }
-      }
-    }
-
-    // Count plan files for this session (use actual path for filesystem ops)
-    const planCount = listPlanFiles(workspaceRootPath, session.id).length;
-
-    // Validate todoState against workspace status config (use actual path)
-    const validatedTodoState = validateSessionStatus(workspaceRootPath, session.todoState);
-
-    // If validation changed the status, auto-save corrected value
-    if (validatedTodoState !== session.todoState) {
-      console.warn(
-        `[extractSessionMetadataLegacy] Session ${session.id} had invalid status '${session.todoState}', ` +
-        `reset to '${validatedTodoState}'`
-      );
-      session.todoState = validatedTodoState;
-      // Use actual path for saving (saveSession will convert back to portable)
-      saveSession({ ...session, workspaceRootPath });
-    }
-
-    return {
-      id: session.id,
-      // Return expanded path so callers get usable paths
-      workspaceRootPath,
-      name: session.name,
-      createdAt: session.createdAt,
-      lastUsedAt: session.lastUsedAt,
-      messageCount: session.messages?.length ?? 0,
-      preview,
-      sdkSessionId: session.sdkSessionId,
-      agentSlug: session.agentSlug,
-      agentName: session.agentName,
-      isFlagged: session.isFlagged,
-      todoState: validatedTodoState,
-      agents: agents.size > 0 ? Array.from(agents) : undefined,
-      planCount: planCount > 0 ? planCount : undefined,
     };
   } catch {
     return null;
@@ -496,6 +377,29 @@ export function deleteSession(workspaceRootPath: string, sessionId: string): boo
 }
 
 /**
+ * Clear messages from a session while preserving metadata.
+ * Used for /clear command to reset conversation without creating a new session.
+ * Also clears the SDK session ID to start a fresh Claude conversation.
+ */
+export function clearSessionMessages(workspaceRootPath: string, sessionId: string): void {
+  const session = loadSession(workspaceRootPath, sessionId);
+  if (session) {
+    // Clear messages and SDK session ID but preserve metadata
+    session.messages = [];
+    session.sdkSessionId = undefined;
+    // Reset token usage to zero
+    session.tokenUsage = {
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      contextTokens: 0,
+      costUsd: 0,
+    };
+    saveSession(session);
+  }
+}
+
+/**
  * Get or create the latest session for a workspace
  */
 export function getOrCreateLatestSession(workspaceRootPath: string): SessionConfig {
@@ -509,8 +413,6 @@ export function getOrCreateLatestSession(workspaceRootPath: string): SessionConf
       name: latest.name,
       createdAt: latest.createdAt,
       lastUsedAt: latest.lastUsedAt,
-      agentSlug: latest.agentSlug,
-      agentName: latest.agentName,
     };
   }
   return createSession(workspaceRootPath);
@@ -542,8 +444,6 @@ export function updateSessionMetadata(
   workspaceRootPath: string,
   sessionId: string,
   updates: Partial<Pick<SessionConfig,
-    | 'agentSlug'
-    | 'agentName'
     | 'isFlagged'
     | 'name'
     | 'todoState'
@@ -558,8 +458,6 @@ export function updateSessionMetadata(
   const session = loadSession(workspaceRootPath, sessionId);
   if (!session) return;
 
-  if (updates.agentSlug !== undefined) session.agentSlug = updates.agentSlug;
-  if (updates.agentName !== undefined) session.agentName = updates.agentName;
   if (updates.isFlagged !== undefined) session.isFlagged = updates.isFlagged;
   if (updates.name !== undefined) session.name = updates.name;
   if (updates.todoState !== undefined) session.todoState = updates.todoState;
@@ -598,18 +496,6 @@ export function setSessionTodoState(
   updateSessionMetadata(workspaceRootPath, sessionId, { todoState });
 }
 
-/**
- * Assign agent to a session
- */
-export function assignAgentToSession(
-  workspaceRootPath: string,
-  sessionId: string,
-  agentSlug: string,
-  agentName?: string
-): void {
-  updateSessionMetadata(workspaceRootPath, sessionId, { agentSlug, agentName });
-}
-
 // ============================================================
 // Session Filtering
 // ============================================================
@@ -641,16 +527,6 @@ export function listInboxSessions(workspaceRootPath: string): SessionMetadata[] 
     const category = getStatusCategory(workspaceRootPath, s.todoState || 'todo');
     return category === 'open';
   });
-}
-
-/**
- * List sessions by agent
- */
-export function listSessionsByAgent(
-  workspaceRootPath: string,
-  agentSlug: string
-): SessionMetadata[] {
-  return listSessions(workspaceRootPath).filter(s => s.agentSlug === agentSlug);
 }
 
 // ============================================================

@@ -11,10 +11,6 @@ import {
   FolderOpen,
   MoreHorizontal,
   RotateCw,
-  CircleAlert,
-  CloudOff,
-  CloudCheck,
-  PowerOff,
   Globe,
   Flag,
   ListFilter,
@@ -22,7 +18,7 @@ import {
   Search,
   Plus,
   Trash2,
-  Terminal,
+  DatabaseZap,
 } from "lucide-react"
 import { McpIcon } from "../icons/McpIcon"
 import {
@@ -32,8 +28,6 @@ import {
   CircleCheckFilled,
   CircleXFilled,
 } from "../icons/TodoStateIcons"
-import { Spinner } from "@craft-agent/ui"
-import { AvatarGroup } from "@/components/ui/avatar-group"
 import { SourceAvatar } from "@/components/ui/source-avatar"
 import { AppMenu } from "../AppMenu"
 import { SquarePenRounded } from "../icons/SquarePenRounded"
@@ -60,10 +54,7 @@ import { WorkspaceSwitcher } from "./WorkspaceSwitcher"
 import { SessionList } from "./SessionList"
 import { MainContentPanel } from "./MainContentPanel"
 import { LeftSidebar } from "./LeftSidebar"
-import { AgentContextMenu, type AgentAction } from "./AgentContextMenu"
-import { SetupAuthBanner, type BannerState } from "./SetupAuthBanner"
 import { useSession } from "@/hooks/useSession"
-import { useAgentState } from "@/hooks/useAgentState"
 import { ensureSessionMessagesLoadedAtom } from "@/atoms/sessions"
 import { AppShellProvider, type AppShellContextType } from "@/context/AppShellContext"
 import { useTheme } from "@/context/ThemeContext"
@@ -72,7 +63,7 @@ import { useFocusZone, useGlobalShortcuts } from "@/hooks/keyboard"
 import { useFocusContext } from "@/context/FocusContext"
 import { getSessionTitle } from "@/utils/session"
 import { useSetAtom } from "jotai"
-import type { Session, Workspace, SubAgentMetadata, FileAttachment, PermissionRequest, TodoState, LoadedSource, PermissionMode } from "../../../shared/types"
+import type { Session, Workspace, FileAttachment, PermissionRequest, TodoState, LoadedSource, PermissionMode } from "../../../shared/types"
 import { sessionMetaMapAtom, type SessionMeta } from "@/atoms/sessions"
 import { sourcesAtom } from "@/atoms/sources"
 import { type TodoStateId, getStateColor, statusConfigsToTodoStates } from "@/config/todo-states"
@@ -118,423 +109,14 @@ interface AppShellProps {
 }
 
 /**
- * AgentFolder - Hierarchical structure for organizing agents
- * Agents can be nested in folders up to 3 levels deep
- */
-interface AgentFolder {
-  name: string                    // Folder name (empty string for root)
-  path: string[]                  // Full path from root
-  agents: SubAgentMetadata[]      // Agents directly in this folder
-  subfolders: AgentFolder[]       // Nested folders
-}
-
-/**
- * SidebarAgentStatus - Status displayed in sidebar for each agent
- * Based on AgentSetupStatus but with additional UI-specific states
- */
-type SidebarAgentStatus =
-  | 'idle'         // Default state, no special indicator
-  | 'loading'      // Currently loading/extracting
-  | 'needs_setup'  // Agent has never been extracted
-  | 'needs_auth'   // Credentials missing
-  | 'ready'        // Fully set up and ready to use
-  | 'error'        // Error state
-
-/**
- * SidebarServiceLogos - Logo info for MCP servers and APIs
- * Used to display avatar group in sidebar when agent is ready
- */
-interface SidebarServiceLogos {
-  mcpLogos: Array<{ name: string; logo?: string; type: 'mcp' }>
-  apiLogos: Array<{ name: string; logo?: string; type: 'api' }>
-}
-
-/**
- * Groups flat agent list into hierarchical folder structure
- * Uses agent.folderPath to determine nesting
- */
-function groupAgentsByFolder(agents: SubAgentMetadata[]): AgentFolder {
-  const root: AgentFolder = { name: '', path: [], agents: [], subfolders: [] }
-
-  for (const agent of agents) {
-    const folderPath = agent.folderPath || []
-    let current = root
-
-    for (const folderName of folderPath) {
-      let subfolder = current.subfolders.find(f => f.name === folderName)
-      if (!subfolder) {
-        subfolder = {
-          name: folderName,
-          path: [...current.path, folderName],
-          agents: [],
-          subfolders: []
-        }
-        current.subfolders.push(subfolder)
-      }
-      current = subfolder
-    }
-
-    current.agents.push(agent)
-  }
-
-  return root
-}
-
-interface AgentTreeProps {
-  folder: AgentFolder
-  level: number
-  isCollapsed: boolean
-  selectedAgentId: string | null
-  onSelectAgent: (agentId: string, agentName: string) => void
-  getConversationCount: (agentId: string) => number
-  /** Context menu action handler */
-  onAgentAction?: (action: AgentAction) => void
-  /** Keyboard navigation props */
-  isFocused?: boolean
-  expandedFolders?: Set<string>
-  onToggleFolder?: (path: string) => void
-  focusedItemId?: string | null
-  onFocusItem?: (id: string) => void
-  getItemProps?: (id: string) => {
-    tabIndex: number
-    'data-focused': boolean
-    ref: (el: HTMLElement | null) => void
-  }
-  /** Agent status indicators */
-  agentStatus?: Map<string, SidebarAgentStatus>
-  /** Agent service logos for ready agents */
-  agentLogos?: Map<string, SidebarServiceLogos>
-  /** Double-click handler for starting setup conversation */
-  onAgentDoubleClick?: (agent: SubAgentMetadata) => void
-  /** Agent-scoped sources, keyed by agent slug */
-  agentSources?: Map<string, LoadedSource[]>
-  /** Expanded agent sources (set of agent slugs that have sources expanded) */
-  expandedAgentSources?: Set<string>
-  /** Toggle agent sources expansion */
-  onToggleAgentSources?: (agentSlug: string) => void
-  /** Promote agent source to workspace */
-  onPromoteSource?: (agentSlug: string, sourceSlug: string) => void
-  /** Open source info tab */
-  onOpenSourceInfo?: (source: LoadedSource, agentSlug: string) => void
-}
-
-// Union type for sorting agents and folders together alphabetically
-type TreeItem =
-  | { type: 'agent'; agent: SubAgentMetadata }
-  | { type: 'folder'; folder: AgentFolder }
-
-/**
- * AgentTree - Recursive component for rendering agent folder hierarchy
- *
- * Follows shadcn/ui Sidebar component patterns for proper width handling:
- * - Container: flex min-w-0 flex-col (allows shrinking)
- * - Buttons: overflow-hidden + [&>span:last-child]:truncate (clips text)
- * - Nested: border-l for vertical line, ml-* for indentation
- *
- * Keyboard navigation (when isFocused):
- * - Arrow Up/Down: Navigate between items
- * - Arrow Left: Collapse folder / go to parent
- * - Arrow Right: Expand folder
- * - Enter: Select agent or toggle folder
- */
-function AgentTree({
-  folder,
-  level,
-  isCollapsed,
-  selectedAgentId,
-  onSelectAgent,
-  getConversationCount,
-  onAgentAction,
-  isFocused = false,
-  expandedFolders,
-  onToggleFolder,
-  focusedItemId,
-  onFocusItem,
-  getItemProps,
-  agentStatus,
-  agentLogos,
-  onAgentDoubleClick,
-  agentSources,
-  expandedAgentSources,
-  onToggleAgentSources,
-  onPromoteSource,
-  onOpenSourceInfo,
-}: AgentTreeProps) {
-  // Track which agent has an open context menu
-  const [openMenuAgentId, setOpenMenuAgentId] = React.useState<string | null>(null)
-
-  // For non-root levels, use parent's expanded state if provided
-  const folderPath = folder.path.join('/')
-  const isOpen = expandedFolders ? expandedFolders.has(folderPath) : true
-
-  if (isCollapsed && level > 0) return null
-
-  // Combine agents and folders: agents first (alphabetically), then folders (alphabetically)
-  const items: TreeItem[] = React.useMemo(() => {
-    const agentItems: TreeItem[] = folder.agents
-      .map(agent => ({ type: 'agent' as const, agent }))
-      .sort((a, b) => {
-        const nameA = a.agent.name.split('/').pop()!
-        const nameB = b.agent.name.split('/').pop()!
-        return nameA.localeCompare(nameB)
-      })
-    const folderItems: TreeItem[] = folder.subfolders
-      .map(f => ({ type: 'folder' as const, folder: f }))
-      .sort((a, b) => a.folder.name.localeCompare(b.folder.name))
-    return [...agentItems, ...folderItems]
-  }, [folder.agents, folder.subfolders])
-
-  // Render agent button - min-w-0 on li and span allows proper truncation
-  // Selection style matches LeftSidebar "default" variant
-  const isSelected = (agentId: string) => selectedAgentId === agentId
-  const renderAgentItem = (agent: SubAgentMetadata) => {
-    const itemProps = getItemProps?.(`agent:${agent.id}`)
-    const isFocusedItem = focusedItemId === `agent:${agent.id}`
-    const isMenuOpen = openMenuAgentId === agent.id
-
-    const agentButton = (
-      <button
-        {...itemProps}
-        onClick={() => onSelectAgent(agent.id, agent.name)}
-        onDoubleClick={() => onAgentDoubleClick?.(agent)}
-        className={cn(
-          "flex w-full items-center gap-2 overflow-hidden rounded-[6px] py-[6px] px-2 text-[13px] select-none outline-none",
-          "focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-          isSelected(agent.id)
-            ? "bg-foreground/[0.07]"
-            : "hover:bg-foreground/5",
-          (isFocusedItem || isMenuOpen) && !isSelected(agent.id) && "bg-foreground/5"
-        )}
-        role="treeitem"
-        aria-selected={isSelected(agent.id)}
-      >
-        {/* Status indicator - always visible, before title */}
-        {(() => {
-          const status = agentStatus?.get(agent.id)
-          const iconClasses = "h-3.5 w-3.5 shrink-0 text-muted-foreground"
-          switch (status) {
-            case 'loading':
-              return <Spinner className="text-sm shrink-0 text-muted-foreground" />
-            case 'needs_setup':
-              return <PowerOff className={iconClasses} />
-            case 'needs_auth':
-              return <CloudOff className={iconClasses} />
-            case 'error':
-              return <CircleAlert className={iconClasses} />
-            default: {
-              // Ready state - show service logos if available, or check icon
-              const logos = agentLogos?.get(agent.id)
-              if (!logos || (logos.mcpLogos.length === 0 && logos.apiLogos.length === 0)) {
-                return <CloudCheck className={iconClasses} />
-              }
-              const allServices = [...logos.mcpLogos, ...logos.apiLogos]
-              return (
-                <AvatarGroup
-                  max={3}
-                  className="shrink-0"
-                >
-                  {allServices.map((service, i) => (
-                    <SourceAvatar
-                      key={i}
-                      type={service.type}
-                      name={service.name}
-                      logoUrl={service.logo}
-                      size="sm"
-                      className="rounded-[4px]"
-                    />
-                  ))}
-                </AvatarGroup>
-              )
-            }
-          }
-        })()}
-        <FadingText>
-          {agent.displayName || agent.name.split('/').pop()}
-        </FadingText>
-      </button>
-    )
-
-    // Get agent sources for this agent (agent.id is the slug for folder-based agents)
-    const sources = agentSources?.get(agent.id) || []
-    const hasAgentSources = sources.length > 0
-    const isSourcesExpanded = expandedAgentSources?.has(agent.id) || false
-
-    return (
-      <li key={agent.id} className="min-w-0">
-        {onAgentAction ? (
-          <AgentContextMenu
-            agent={agent}
-            onAction={onAgentAction}
-            onOpenChange={(open) => setOpenMenuAgentId(open ? agent.id : null)}
-            canStartConversation={agentStatus?.get(agent.id) === 'ready'}
-          >
-            {agentButton}
-          </AgentContextMenu>
-        ) : (
-          agentButton
-        )}
-        {/* Agent-scoped sources */}
-        {hasAgentSources && (
-          <div className="ml-2">
-            <button
-              className="flex items-center gap-1.5 w-full pl-4 pr-2 py-1 text-[11px] text-muted-foreground hover:text-foreground hover:bg-foreground/5 rounded-md transition-colors"
-              onClick={(e) => {
-                e.stopPropagation()
-                onToggleAgentSources?.(agent.id)
-              }}
-            >
-              <ChevronRight className={cn(
-                "h-3 w-3 transition-transform",
-                isSourcesExpanded && "rotate-90"
-              )} />
-              <span>{sources.length} source{sources.length !== 1 ? 's' : ''}</span>
-            </button>
-            <AnimatedCollapsibleContent isOpen={isSourcesExpanded}>
-              <div className="ml-6 pl-3 border-l border-foreground/10 space-y-0.5 py-0.5">
-                {sources.map((source) => (
-                  <button
-                    key={source.config.slug}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      onOpenSourceInfo?.(source, agent.id)
-                    }}
-                    className="group/source flex items-center gap-2 px-2 py-1 rounded-md hover:bg-foreground/5 w-full text-left"
-                  >
-                    <SourceAvatar source={source} size="xs" />
-                    <span className="text-[12px] text-foreground/80 truncate flex-1">
-                      {source.config.name}
-                    </span>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            onPromoteSource?.(agent.id, source.config.slug)
-                          }}
-                          className="p-0.5 rounded hover:bg-foreground/10 text-muted-foreground hover:text-foreground opacity-0 group-hover/source:opacity-100 transition-opacity"
-                          role="button"
-                          tabIndex={0}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.stopPropagation()
-                              onPromoteSource?.(agent.id, source.config.slug)
-                            }
-                          }}
-                        >
-                          <Plus className="h-3 w-3" />
-                        </span>
-                      </TooltipTrigger>
-                      <TooltipContent side="right" sideOffset={4}>
-                        Add to sources
-                      </TooltipContent>
-                    </Tooltip>
-                  </button>
-                ))}
-              </div>
-            </AnimatedCollapsibleContent>
-          </div>
-        )}
-      </li>
-    )
-  }
-
-  // Render folder with collapsible children - shadcn SidebarMenuSub pattern
-  const renderFolderItem = (subFolder: AgentFolder) => (
-    <AgentTree
-      key={subFolder.path.join('/')}
-      folder={subFolder}
-      level={level + 1}
-      isCollapsed={isCollapsed}
-      selectedAgentId={selectedAgentId}
-      onSelectAgent={onSelectAgent}
-      getConversationCount={getConversationCount}
-      onAgentAction={onAgentAction}
-      isFocused={isFocused}
-      expandedFolders={expandedFolders}
-      onToggleFolder={onToggleFolder}
-      focusedItemId={focusedItemId}
-      onFocusItem={onFocusItem}
-      getItemProps={getItemProps}
-      agentStatus={agentStatus}
-      agentLogos={agentLogos}
-      onAgentDoubleClick={onAgentDoubleClick}
-      agentSources={agentSources}
-      expandedAgentSources={expandedAgentSources}
-      onToggleAgentSources={onToggleAgentSources}
-      onPromoteSource={onPromoteSource}
-      onOpenSourceInfo={onOpenSourceInfo}
-    />
-  )
-
-  // Root level (no folder name) - render as flat list
-  // Uses grid like LeftSidebar component - grid children respect container width automatically
-  if (!folder.name) {
-    return (
-      <ul className="grid gap-0.5" role="tree" aria-label="Agents">
-        {items.map(item =>
-          item.type === 'agent' ? renderAgentItem(item.agent) : renderFolderItem(item.folder)
-        )}
-      </ul>
-    )
-  }
-
-  // Folder level - render with collapsible and nested list
-  const folderItemProps = getItemProps?.(`folder:${folderPath}`)
-  const isFocusedFolder = focusedItemId === `folder:${folderPath}`
-
-  return (
-    <li className="min-w-0" role="none">
-      <Collapsible open={isOpen} onOpenChange={() => onToggleFolder?.(folderPath)}>
-        <CollapsibleTrigger
-          {...folderItemProps}
-          className={cn(
-            "group flex w-full items-center gap-2 overflow-hidden rounded-md py-1.5 px-2 text-[13px] select-none outline-none",
-            "hover:bg-foreground/[0.03]",
-            "focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-            isFocusedFolder && "bg-foreground/[0.03]"
-          )}
-          role="treeitem"
-          aria-expanded={isOpen}
-        >
-          <div className="relative h-3.5 w-3.5 shrink-0">
-            <FolderOpen className="absolute inset-0 h-3.5 w-3.5 text-muted-foreground transition-opacity group-hover:opacity-0" />
-            <motion.div
-              initial={false}
-              animate={{ rotate: isOpen ? 90 : 0 }}
-              transition={collapsibleSpring}
-              className="absolute inset-0"
-            >
-              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground transition-opacity opacity-0 group-hover:opacity-100" />
-            </motion.div>
-          </div>
-          <FadingText>
-            {folder.name}
-          </FadingText>
-        </CollapsibleTrigger>
-        <AnimatedCollapsibleContent isOpen={isOpen}>
-          {/* Nested list - uses grid + border-l for line, ml/pl for indent */}
-          {/* ml-[15px] aligns border-l with icon center: px-2 (8px) + half of w-3.5 (7px) = 15px */}
-          <ul className="ml-[15px] grid gap-0.5 border-l border-foreground/10 pl-3 pt-0.5" role="group">
-            {items.map(item =>
-              item.type === 'agent' ? renderAgentItem(item.agent) : renderFolderItem(item.folder)
-            )}
-          </ul>
-        </AnimatedCollapsibleContent>
-      </Collapsible>
-    </li>
-  )
-}
-
-/**
  * AppShell - Main 3-panel layout container
  *
  * Layout: [LeftSidebar 20%] | [NavigatorPanel 32%] | [MainContentPanel 48%]
  *
- * View Modes:
- * - 'inbox': Shows non-archived sessions
- * - 'archive': Shows archived sessions
- * - 'agent': Shows sessions for a specific agent
- * - 'sources': Shows workspace sources
+ * Chat Filters:
+ * - 'allChats': Shows all sessions
+ * - 'flagged': Shows flagged sessions
+ * - 'state': Shows sessions with a specific todo state
  */
 export function AppShell({
   contextValue,
@@ -548,8 +130,6 @@ export function AppShell({
   // to prevent closures from retaining the full messages array
   const {
     workspaces,
-    agents,
-    isLoadingAgents = false,
     activeWorkspaceId,
     currentModel,
     sessionOptions,
@@ -563,7 +143,6 @@ export function AppShell({
     onMarkSessionUnread,
     onTodoStateChange,
     onRenameSession,
-    onRefreshAgents,
     onOpenSettings,
     onOpenKeyboardShortcuts,
     onOpenStoredUserPreferences,
@@ -571,6 +150,7 @@ export function AppShell({
     onSendMessage,
     openNewChat,
   } = contextValue
+
   const [isSidebarVisible, setIsSidebarVisible] = React.useState(() => {
     return storage.get(storage.KEYS.sidebarVisible, !defaultCollapsed)
   })
@@ -596,9 +176,6 @@ export function AppShell({
 
   // Derive chat filter from navigation state (only when in chats navigator)
   const chatFilter = isChatsNavigation(navState) ? navState.filter : null
-
-  // Derive selected agent ID from navigation state
-  const selectedAgentId = chatFilter?.kind === 'agent' ? chatFilter.agentId : null
 
   // Session list filter: empty set shows all, otherwise shows only sessions with selected states
   const [listFilter, setListFilter] = React.useState<Set<TodoStateId>>(() => {
@@ -626,29 +203,6 @@ export function AppShell({
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
-
-  // Agent status indicators - tracks setup/auth status for sidebar icons
-  const [agentStatus, setAgentStatus] = React.useState<Map<string, SidebarAgentStatus>>(new Map())
-  // Agent service logos - extracted from definition when agent is ready/active
-  const [agentLogos, setAgentLogos] = React.useState<Map<string, SidebarServiceLogos>>(new Map())
-
-  // Agent state for selected agent via AgentStateManager (single source of truth)
-  // This ensures the banner in the session list shows the same state as ChatTabPanel
-  const selectedAgentState = useAgentState(
-    activeWorkspaceId,
-    chatFilter?.kind === 'agent' ? selectedAgentId : null
-  )
-
-  // Banner state from centralized hook (single source of truth)
-  const bannerState = React.useMemo((): { state: BannerState; reason?: string } => {
-    if (chatFilter?.kind !== 'agent' || !selectedAgentId) {
-      return { state: 'hidden' }
-    }
-    return {
-      state: selectedAgentState.bannerState,
-      reason: selectedAgentState.bannerReason ?? undefined
-    }
-  }, [chatFilter, selectedAgentId, selectedAgentState.bannerState, selectedAgentState.bannerReason])
 
   // Unified sidebar keyboard navigation state
   // Load expanded folders from localStorage (default: all collapsed)
@@ -696,11 +250,6 @@ export function AppShell({
     })
   }, [])
 
-  // Agent-scoped sources, keyed by agent slug
-  const [agentSources, setAgentSources] = React.useState<Map<string, LoadedSource[]>>(new Map())
-  // Track which agents have their sources expanded
-  const [expandedAgentSources, setExpandedAgentSources] = React.useState<Set<string>>(new Set())
-
   // Load workspace settings (for localMcpEnabled) on workspace change
   React.useEffect(() => {
     if (!activeWorkspaceId) return
@@ -723,91 +272,14 @@ export function AppShell({
     })
   }, [activeWorkspaceId])
 
-  // Load agent-scoped sources for all agents
-  React.useEffect(() => {
-    if (!activeWorkspaceId || agents.length === 0) return
-
-    const loadAgentSources = async () => {
-      const newAgentSources = new Map<string, LoadedSource[]>()
-
-      for (const agent of agents) {
-        try {
-          // agent.id is the slug for folder-based agents
-          const agentSourceList = await window.electronAPI.getAgentSources(activeWorkspaceId, agent.id)
-          if (agentSourceList && agentSourceList.length > 0) {
-            newAgentSources.set(agent.id, agentSourceList)
-          }
-        } catch (err) {
-          console.error(`[Chat] Failed to load sources for agent ${agent.id}:`, err)
-        }
-      }
-
-      setAgentSources(newAgentSources)
-    }
-
-    loadAgentSources()
-  }, [activeWorkspaceId, agents])
-
   // Subscribe to live source updates (when sources are added/removed via agent)
   React.useEffect(() => {
-    const cleanup = window.electronAPI.onSourcesChanged(async (updatedSources) => {
+    const cleanup = window.electronAPI.onSourcesChanged((updatedSources) => {
       console.log('[Chat] Sources changed, updating sidebar:', updatedSources.length)
       setSources(updatedSources || [])
-
-      // Also reload agent-scoped sources when workspace sources change
-      // (agent sources may have been created or promoted)
-      if (activeWorkspaceId && agents.length > 0) {
-        const newAgentSources = new Map<string, LoadedSource[]>()
-        for (const agent of agents) {
-          try {
-            const agentSourceList = await window.electronAPI.getAgentSources(activeWorkspaceId, agent.id)
-            if (agentSourceList && agentSourceList.length > 0) {
-              newAgentSources.set(agent.id, agentSourceList)
-            }
-          } catch (err) {
-            // Ignore errors for individual agents
-          }
-        }
-        setAgentSources(newAgentSources)
-      }
     })
     return cleanup
-  }, [activeWorkspaceId, agents])
-
-  // Toggle agent sources expansion
-  const handleToggleAgentSources = React.useCallback((agentSlug: string) => {
-    setExpandedAgentSources(prev => {
-      const next = new Set(prev)
-      if (next.has(agentSlug)) {
-        next.delete(agentSlug)
-      } else {
-        next.add(agentSlug)
-      }
-      return next
-    })
   }, [])
-
-  // Promote agent source to workspace
-  const handlePromoteSource = React.useCallback(async (agentSlug: string, sourceSlug: string) => {
-    if (!activeWorkspaceId) return
-    try {
-      await window.electronAPI.promoteSource(activeWorkspaceId, agentSlug, sourceSlug)
-      // Reload both workspace and agent sources
-      const [updatedWorkspaceSources, updatedAgentSources] = await Promise.all([
-        window.electronAPI.getSources(activeWorkspaceId),
-        window.electronAPI.getAgentSources(activeWorkspaceId, agentSlug),
-      ])
-      setSources(updatedWorkspaceSources || [])
-      setAgentSources(prev => {
-        const next = new Map(prev)
-        next.set(agentSlug, updatedAgentSources || [])
-        return next
-      })
-      console.log(`[Chat] Promoted source ${sourceSlug} from agent ${agentSlug} to workspace`)
-    } catch (err) {
-      console.error(`[Chat] Failed to promote source:`, err)
-    }
-  }, [activeWorkspaceId])
 
   // Handle session source selection changes
   const handleSessionSourcesChange = React.useCallback(async (sessionId: string, sourceSlugs: string[]) => {
@@ -847,20 +319,13 @@ export function AppShell({
   // Ensure session messages are loaded when selected
   const ensureMessagesLoaded = useSetAtom(ensureSessionMessagesLoadedAtom)
 
-  // Handle opening source info (agent-scoped)
-  // TODO: Implement source info view without tabs
-  const handleOpenSourceInfo = React.useCallback((source: LoadedSource, agentSlug: string) => {
+  // Handle selecting a source from the list
+  const handleSourceSelect = React.useCallback((source: LoadedSource) => {
     if (!activeWorkspaceId) return
-    console.log('[AppShell] Open source info:', source.config.slug, 'agent:', agentSlug)
-    // Source info could be shown in a modal or side panel in the future
-  }, [activeWorkspaceId])
-
-  // Handle opening source info (workspace-scoped)
-  const handleOpenWorkspaceSourceInfo = React.useCallback((source: LoadedSource) => {
-    if (!activeWorkspaceId) return
-    // Navigate to source - the navigation state will update and highlight the source in the list
-    navigate(routes.view.sources({ sourceSlug: source.config.slug }))
-  }, [activeWorkspaceId, navigate])
+    // Preserve current category when navigating to a source
+    const currentCategory = isSourcesNavigation(navState) ? navState.category : undefined
+    navigate(routes.view.sources({ sourceSlug: source.config.slug, category: currentCategory }))
+  }, [activeWorkspaceId, navigate, navState])
 
   // Focus zone management
   const { focusZone, focusNextZone, focusPreviousZone } = useFocusContext()
@@ -1006,11 +471,7 @@ export function AppShell({
   }, [sessionMetaMap, activeWorkspaceId])
 
   // Count sessions by todo state (scoped to workspace)
-  // Inbox = not done/cancelled, Done = todoState === 'done' or 'cancelled'
   const isMetaDone = (s: SessionMeta) => s.todoState === 'done' || s.todoState === 'cancelled'
-  const inboxCount = workspaceSessionMetas.filter(s => !isMetaDone(s)).length
-  const archiveCount = workspaceSessionMetas.filter(s => isMetaDone(s)).length
-  // Flagged can be both done and not done
   const flaggedCount = workspaceSessionMetas.filter(s => s.isFlagged).length
 
   // Count sessions by individual todo state
@@ -1029,11 +490,6 @@ export function AppShell({
     return counts
   }, [workspaceSessionMetas])
 
-  // Get conversation count per agent (scoped to workspace)
-  const getConversationCount = useCallback((agentId: string) => {
-    return workspaceSessionMetas.filter(s => s.agentId === agentId && !isMetaDone(s)).length
-  }, [workspaceSessionMetas])
-
   // Filter session metadata based on sidebar mode and chat filter
   const filteredSessionMetas = useMemo(() => {
     // When in sources mode, return empty (no sessions to show)
@@ -1044,19 +500,12 @@ export function AppShell({
     let result: SessionMeta[]
 
     switch (chatFilter.kind) {
-      case 'inbox':
-        // "All Chats" - shows all sessions (no filtering by done status)
+      case 'allChats':
+        // "All Chats" - shows all sessions
         result = workspaceSessionMetas
         break
-      case 'archive':
-        result = workspaceSessionMetas.filter(s => isMetaDone(s))
-        break
       case 'flagged':
-        // Flagged view shows both done and not done flagged items
         result = workspaceSessionMetas.filter(s => s.isFlagged)
-        break
-      case 'agent':
-        result = workspaceSessionMetas.filter(s => s.agentId === chatFilter.agentId && !isMetaDone(s))
         break
       case 'state':
         // Filter by specific todo state
@@ -1066,8 +515,8 @@ export function AppShell({
         result = workspaceSessionMetas
     }
 
-    // Apply secondary filter by todo states if any are selected (only in inbox view)
-    if (chatFilter.kind === 'inbox' && listFilter.size > 0) {
+    // Apply secondary filter by todo states if any are selected (only in allChats view)
+    if (chatFilter.kind === 'allChats' && listFilter.size > 0) {
       result = result.filter(s => listFilter.has((s.todoState || 'todo') as TodoStateId))
     }
 
@@ -1101,11 +550,6 @@ export function AppShell({
     onSessionSourcesChange: handleSessionSourcesChange,
   }), [contextValue, handleDeleteSession, sources, enabledModes, handleSessionSourcesChange])
 
-  // Filter out hidden agents (those starting with '.') and group for tree view
-  // For folder agents, documentId contains the slug
-  const visibleAgents = React.useMemo(() => agents.filter(a => !a.documentId?.startsWith('.')), [agents])
-  const agentTree = React.useMemo(() => groupAgentsByFolder(visibleAgents), [visibleAgents])
-
   // Persist expanded folders to localStorage
   React.useEffect(() => {
     storage.set(storage.KEYS.expandedFolders, [...expandedFolders])
@@ -1126,138 +570,8 @@ export function AppShell({
     storage.set(storage.KEYS.collapsedSidebarItems, [...collapsedItems])
   }, [collapsedItems])
 
-  // Helper to map AgentStatus to SidebarAgentStatus (centralized logic)
-  const mapAgentStatusToSidebar = React.useCallback((status: import('../../../shared/types').AgentStatus): SidebarAgentStatus => {
-    switch (status.status) {
-      case 'idle':
-        // Use centralized setup info from status
-        if (status.needsAuth) {
-          return 'needs_auth'
-        }
-        if (status.needsSetup) {
-          return 'needs_setup'
-        }
-        return 'ready'
-      case 'extracting':
-        return 'loading'
-      case 'needs_mcp_auth':
-      case 'needs_api_auth':
-        return 'needs_auth'
-      case 'ready':
-      case 'active':
-        return 'ready'
-      case 'error':
-        return 'error'
-      default:
-        return 'needs_setup'
-    }
-  }, [])
-
-  // Extract logo info from AgentStatus when status is ready/active
-  // Returns null if no MCP servers or APIs (nothing to display)
-  const extractLogosFromStatus = React.useCallback((status: import('../../../shared/types').AgentStatus): SidebarServiceLogos | null => {
-    if (status.status !== 'ready' && status.status !== 'active') {
-      return null
-    }
-    const def = status.definition
-    const mcpLogos = def.mcpServers?.map(s => ({ name: s.name, logo: s.logo, type: 'mcp' as const })) ?? []
-    const apiLogos = def.apis?.map(a => ({ name: a.name, logo: a.logo, type: 'api' as const })) ?? []
-
-    // Don't return anything if there are no services to display
-    if (mcpLogos.length === 0 && apiLogos.length === 0) {
-      return null
-    }
-
-    return { mcpLogos, apiLogos }
-  }, [])
-
-  // Fetch status for all agents when agents list changes (uses centralized getAgentStatus)
-  React.useEffect(() => {
-    if (!activeWorkspaceId || agents.length === 0) {
-      setAgentStatus(new Map())
-      setAgentLogos(new Map())
-      return
-    }
-
-    const fetchStatuses = async () => {
-      const newStatus = new Map<string, SidebarAgentStatus>()
-      const newLogos = new Map<string, SidebarServiceLogos>()
-
-      await Promise.all(
-        agents.map(async (agent) => {
-          try {
-            const result = await window.electronAPI.getAgentStatus(activeWorkspaceId, agent.id)
-            newStatus.set(agent.id, mapAgentStatusToSidebar(result))
-
-            // Extract logos if agent is ready/active
-            const logos = extractLogosFromStatus(result)
-            if (logos) {
-              newLogos.set(agent.id, logos)
-            }
-          } catch {
-            newStatus.set(agent.id, 'error')
-          }
-        })
-      )
-
-      setAgentStatus(newStatus)
-      setAgentLogos(newLogos)
-    }
-
-    fetchStatuses()
-  }, [activeWorkspaceId, agents, mapAgentStatusToSidebar, extractLogosFromStatus])
-
-  // Listen for agent status changes from broadcastAgentState()
-  // This is now the SINGLE listener for all agent state changes:
-  // - Status changes (extracting, ready, active, error)
-  // - Auth changes (credentials saved/cleared)
-  // - Reset (credentials and cache cleared)
-  // The complete state (status + needsSetup + needsAuth) is always included
-  React.useEffect(() => {
-    const cleanup = window.electronAPI.onAgentStatusChanged((workspaceId, agentId, status) => {
-      if (workspaceId !== activeWorkspaceId) return
-
-      setAgentStatus(prev => {
-        const next = new Map(prev)
-        next.set(agentId, mapAgentStatusToSidebar(status))
-        return next
-      })
-
-      // Update logos if status includes definition
-      const logos = extractLogosFromStatus(status)
-      setAgentLogos(prev => {
-        const next = new Map(prev)
-        if (logos) {
-          next.set(agentId, logos)
-        } else {
-          next.delete(agentId)
-        }
-        return next
-      })
-    })
-
-    return cleanup
-  }, [activeWorkspaceId, mapAgentStatusToSidebar, extractLogosFromStatus])
-
-  // Handler functions - use navigate() to trigger auto-selection via NavigationContext
-  // DO NOT call setSidebarMode() directly - it bypasses auto-selection logic
-  const handleSelectAgent = useCallback(async (agentId: string, _agentName: string) => {
-    if (!activeWorkspaceId) return
-    navigate(routes.view.agent(agentId))
-  }, [activeWorkspaceId])
-
-  // Handle banner action - no-op since agent setup flow was removed
-  const handleBannerAction = useCallback(() => {
-    // Agent setup wizard has been removed
-    // Banner will still show auth status, but no action available
-  }, [])
-
-  const handleInboxClick = useCallback(() => {
-    navigate(routes.view.inbox())
-  }, [])
-
-  const handleArchiveClick = useCallback(() => {
-    navigate(routes.view.archive())
+  const handleAllChatsClick = useCallback(() => {
+    navigate(routes.view.allChats())
   }, [])
 
   const handleFlaggedClick = useCallback(() => {
@@ -1304,68 +618,31 @@ export function AppShell({
   }, [])
 
   // Create a new chat and select it
-  // Uses selectedAgentId when in agent view, otherwise creates a session without agent
-  const handleNewChat = useCallback(async (useCurrentAgent: boolean = true) => {
+  const handleNewChat = useCallback(async (_useCurrentAgent: boolean = true) => {
     if (!activeWorkspace) return
 
-    const agentId = useCurrentAgent && chatFilter?.kind === 'agent' ? selectedAgentId || undefined : undefined
-    const newSession = await onCreateSession(activeWorkspace.id, agentId)
+    const newSession = await onCreateSession(activeWorkspace.id)
     // Navigate to the new session via central routing
-    navigate(routes.tab.chat(newSession.id))
-  }, [activeWorkspace, chatFilter, selectedAgentId, onCreateSession])
+    navigate(routes.view.allChats(newSession.id))
+  }, [activeWorkspace, onCreateSession])
 
-  // Add Source - opens a chat with the .settings builtin agent
-  const handleAddSource = useCallback(async () => {
-    if (!activeWorkspace || !openNewChat) return
+  // Add Source - create a new chat with add-source onboarding
+  const handleAddSource = useCallback(() => {
+    // Navigate using route with onboarding param - NavigationContext handles session creation
+    navigate(routes.action.newChat({ onboarding: 'add-source' }))
+  }, [])
 
-    try {
-      // Ensure the builtin agent exists
-      const agentId = await window.electronAPI.ensureBuiltinAgent(activeWorkspace.id, '.settings')
-      if (!agentId) {
-        toast.error('Failed to create settings agent')
-        return
-      }
-
-      // Use openNewChat which handles session creation, tab opening, and input pre-filling
-      await openNewChat({
-        agentId,
-        name: 'Add Source',
-        input: 'I would like to add a new source: ',
-      })
-    } catch (error) {
-      console.error('[Chat] Failed to add source:', error)
-      toast.error('Failed to start source setup')
-    }
-  }, [activeWorkspace, openNewChat])
-
+  // Delete Source - simplified since agents system is removed
   const handleDeleteSource = useCallback(async (sourceName: string) => {
     if (!activeWorkspace) return
-
     try {
-      // Ensure the builtin agent exists
-      const agentId = await window.electronAPI.ensureBuiltinAgent(activeWorkspace.id, '.settings')
-      if (!agentId) {
-        toast.error('Failed to create settings agent')
-        return
-      }
-
-      // Create a new session with this agent and set the name
-      const sessionName = `Delete ${sourceName} from sources`
-      const newSession = await onCreateSession(activeWorkspace.id, agentId)
-      await window.electronAPI.sessionCommand(newSession.id, { type: 'rename', name: sessionName })
-      // Navigate to the new session via central routing
-      navigate(routes.tab.chat(newSession.id))
-
-      // Send the delete prompt after a short delay to ensure the chat is mounted
-      // Use onSendMessage to properly add the user message to the UI
-      setTimeout(() => {
-        onSendMessage(newSession.id, `Delete ${sourceName} source.`, [])
-      }, 100)
+      await window.electronAPI.deleteSource(activeWorkspace.id, sourceName)
+      toast.success(`Deleted source: ${sourceName}`)
     } catch (error) {
       console.error('[Chat] Failed to delete source:', error)
-      toast.error('Failed to start source deletion')
+      toast.error('Failed to delete source')
     }
-  }, [activeWorkspace, onCreateSession, onSendMessage])
+  }, [activeWorkspace])
 
   // Respond to menu bar "New Chat" trigger
   const menuTriggerRef = useRef(menuNewChatTrigger)
@@ -1376,67 +653,18 @@ export function AppShell({
     handleNewChat(true)
   }, [menuNewChatTrigger, handleNewChat])
 
-  // Handle agent context menu actions
-  const handleAgentAction = useCallback(async (action: AgentAction) => {
-    if (!activeWorkspaceId) return
-
-    switch (action.type) {
-      case 'new_conversation':
-        // Create a new conversation with this agent and navigate to it
-        const newSession = await onCreateSession(activeWorkspaceId, action.agent.id)
-        // Navigate to agent view with the new chat selected
-        navigate(routes.view.agent(action.agent.id, newSession.id))
-        break
-
-      case 'info':
-        // Navigate to agent info view
-        navigate(routes.tab.agentInfo(action.agent.id))
-        break
-
-      case 'reset':
-        // Reset clears both cached instructions and auth credentials
-        console.log('[Chat] Resetting agent:', action.agent.name)
-        const resetSuccess = await window.electronAPI.resetAgent(activeWorkspaceId, action.agent.id)
-        if (resetSuccess) {
-          console.log('[Chat] Agent reset successfully:', action.agent.name)
-          // Sidebar and banners will update automatically via AGENT_STATUS_CHANGED broadcast
-        } else {
-          console.error('[Chat] Failed to reset agent:', action.agent.name)
-          setAgentStatus(prev => new Map(prev).set(action.agent.id, 'error'))
-        }
-        break
-    }
-  }, [activeWorkspaceId, onCreateSession])
-
-  // Handle double-click on agent: create new conversation with setup message
-  const handleAgentDoubleClick = useCallback(async (agent: SubAgentMetadata) => {
-    if (!activeWorkspaceId) return
-
-    // Create a new conversation with this agent and navigate to it
-    const newSession = await onCreateSession(activeWorkspaceId, agent.id)
-    // Navigate to agent view with the new chat selected
-    navigate(routes.view.agent(agent.id, newSession.id))
-
-    // Send setup message
-    await onSendMessage(newSession.id, 'Please set up this agent', [])
-  }, [activeWorkspaceId, onCreateSession, onSendMessage])
-
-  // Unified sidebar items: nav buttons + tree items
-  // This creates one continuous navigable list for the entire sidebar
+  // Unified sidebar items: nav buttons only (agents system removed)
   type SidebarItem = {
     id: string
-    type: 'nav' | 'agent' | 'folder'
+    type: 'nav'
     action?: () => void
-    agentId?: string
-    folderPath?: string
-    parentPath?: string
   }
 
   const unifiedSidebarItems = React.useMemo((): SidebarItem[] => {
     const result: SidebarItem[] = []
 
-    // 1. Nav items (Inbox, Flagged)
-    result.push({ id: 'nav:inbox', type: 'nav', action: handleInboxClick })
+    // 1. Nav items (All Chats, Flagged)
+    result.push({ id: 'nav:allChats', type: 'nav', action: handleAllChatsClick })
     result.push({ id: 'nav:flagged', type: 'nav', action: handleFlaggedClick })
 
     // 2. Status nav items (todo states)
@@ -1455,49 +683,8 @@ export function AppShell({
     // 2.6. Settings nav item
     result.push({ id: 'nav:settings', type: 'nav', action: () => handleSettingsClick('general') })
 
-    // 3. Tree items (agents and folders)
-    const flattenTree = (folder: AgentFolder) => {
-      // Sort items: agents first (alphabetically), then folders (alphabetically)
-      const agentItems = folder.agents
-        .map(a => ({ type: 'agent' as const, agent: a }))
-        .sort((a, b) => {
-          const nameA = a.agent.name.split('/').pop()!
-          const nameB = b.agent.name.split('/').pop()!
-          return nameA.localeCompare(nameB)
-        })
-      const folderItems = folder.subfolders
-        .map(f => ({ type: 'folder' as const, folder: f }))
-        .sort((a, b) => a.folder.name.localeCompare(b.folder.name))
-
-      // Add agents first
-      for (const item of agentItems) {
-        result.push({
-          id: `agent:${item.agent.id}`,
-          type: 'agent',
-          agentId: item.agent.id,
-          parentPath: folder.path.join('/'),
-        })
-      }
-
-      // Then folders
-      for (const item of folderItems) {
-        const folderPath = item.folder.path.join('/')
-        result.push({
-          id: `folder:${folderPath}`,
-          type: 'folder',
-          folderPath,
-          parentPath: folder.path.join('/'),
-        })
-        // Only add children if folder is expanded
-        if (expandedFolders.has(folderPath)) {
-          flattenTree(item.folder)
-        }
-      }
-    }
-    flattenTree(agentTree)
-
     return result
-  }, [agentTree, expandedFolders, handleInboxClick, handleFlaggedClick, handleTodoStateClick, handleSourcesClick, handleSourceCategoryClick, handleSettingsClick])
+  }, [handleAllChatsClick, handleFlaggedClick, handleTodoStateClick, handleSourcesClick, handleSourceCategoryClick, handleSettingsClick])
 
   // Toggle folder expanded state
   const handleToggleFolder = React.useCallback((path: string) => {
@@ -1551,30 +738,13 @@ export function AppShell({
       }
       case 'ArrowLeft': {
         e.preventDefault()
-        // For folders: collapse if expanded, otherwise go to parent
-        if (currentItem?.type === 'folder' && currentItem.folderPath && expandedFolders.has(currentItem.folderPath)) {
-          handleToggleFolder(currentItem.folderPath)
-        } else if (currentItem?.parentPath) {
-          const parentId = `folder:${currentItem.parentPath}`
-          const parentItem = unifiedSidebarItems.find(item => item.id === parentId)
-          if (parentItem) {
-            setFocusedSidebarItemId(parentId)
-            sidebarItemRefs.current.get(parentId)?.focus()
-          }
-        } else {
-          // At boundary - do nothing (Left doesn't change zones from sidebar)
-        }
+        // At boundary - do nothing (Left doesn't change zones from sidebar)
         break
       }
       case 'ArrowRight': {
         e.preventDefault()
-        // For folders: expand if collapsed
-        if (currentItem?.type === 'folder' && currentItem.folderPath && !expandedFolders.has(currentItem.folderPath)) {
-          handleToggleFolder(currentItem.folderPath)
-        } else {
-          // Move to next zone (session list)
-          focusZone('session-list')
-        }
+        // Move to next zone (session list)
+        focusZone('session-list')
         break
       }
       case 'Enter':
@@ -1582,13 +752,6 @@ export function AppShell({
         e.preventDefault()
         if (currentItem?.type === 'nav' && currentItem.action) {
           currentItem.action()
-        } else if (currentItem?.type === 'folder' && currentItem.folderPath) {
-          handleToggleFolder(currentItem.folderPath)
-        } else if (currentItem?.type === 'agent' && currentItem.agentId) {
-          const agent = agents.find(a => a.id === currentItem.agentId)
-          if (agent) {
-            handleSelectAgent(agent.id, agent.name)
-          }
         }
         break
       }
@@ -1611,7 +774,7 @@ export function AppShell({
         break
       }
     }
-  }, [sidebarFocused, unifiedSidebarItems, focusedSidebarItemId, expandedFolders, handleToggleFolder, agents, handleSelectAgent, focusZone])
+  }, [sidebarFocused, unifiedSidebarItems, focusedSidebarItemId, focusZone])
 
   // Focus sidebar item when sidebar zone gains focus
   React.useEffect(() => {
@@ -1632,9 +795,9 @@ export function AppShell({
   const listTitle = React.useMemo(() => {
     // Sources navigator - with category-specific titles
     if (isSourcesNavigation(navState)) {
-      if (navState.category === 'local-files') return 'Local Files'
-      if (navState.category === 'online-sources') return 'Online Sources'
-      if (navState.category === 'local-mcp') return 'Local MCP'
+      if (navState.category === 'local-files') return 'Local Folders'
+      if (navState.category === 'online-sources') return 'Cloud Services'
+      if (navState.category === 'local-mcp') return 'Local Tools'
       return 'Sources'
     }
 
@@ -1645,21 +808,15 @@ export function AppShell({
     if (!chatFilter) return 'All Chats'
 
     switch (chatFilter.kind) {
-      case 'archive':
-        return 'Archive'
       case 'flagged':
         return 'Flagged'
-      case 'agent':
-        return agents.find(a => a.id === chatFilter.agentId)?.displayName ||
-               agents.find(a => a.id === chatFilter.agentId)?.name ||
-               'All Chats'
       case 'state':
         const state = todoStates.find(s => s.id === chatFilter.stateId)
         return state?.label || 'All Chats'
       default:
         return 'All Chats'
     }
-  }, [navState, chatFilter, agents, todoStates])
+  }, [navState, chatFilter, todoStates])
 
   return (
     <AppShellProvider value={appShellContextValue}>
@@ -1726,7 +883,6 @@ export function AppShell({
                   <Button
                     variant="ghost"
                     onClick={() => handleNewChat(true)}
-                    disabled={chatFilter?.kind === 'agent' && bannerState.state !== 'hidden'}
                     className="w-full justify-start gap-2 py-[7px] px-2 text-[13px] font-normal rounded-[6px] shadow-minimal bg-background"
                   >
                     <SquarePenRounded className="h-3.5 w-3.5 shrink-0" />
@@ -1740,15 +896,15 @@ export function AppShell({
                   focusedItemId={focusedSidebarItemId}
                   links={[
                     {
-                      id: "nav:inbox",
+                      id: "nav:allChats",
                       title: "All Chats",
                       label: String(workspaceSessionMetas.length),
                       icon: Inbox,
-                      variant: chatFilter?.kind === 'inbox' ? "default" : "ghost",
-                      onClick: handleInboxClick,
+                      variant: chatFilter?.kind === 'allChats' ? "default" : "ghost",
+                      onClick: handleAllChatsClick,
                       expandable: true,
-                      expanded: isExpanded('nav:inbox'),
-                      onToggle: () => toggleExpanded('nav:inbox'),
+                      expanded: isExpanded('nav:allChats'),
+                      onToggle: () => toggleExpanded('nav:allChats'),
                       items: [
                         {
                           id: "nav:flagged",
@@ -1810,7 +966,7 @@ export function AppShell({
                       id: "nav:sources",
                       title: "Sources",
                       label: String(sources.length),
-                      icon: <McpIcon className="h-4 w-4" />,
+                      icon: DatabaseZap,
                       variant: isSourcesNavigation(navState) && !navState.category ? "default" : "ghost",
                       onClick: handleSourcesClick,
                       expandable: true,
@@ -1819,7 +975,7 @@ export function AppShell({
                       items: [
                         {
                           id: "nav:sources:local-files",
-                          title: "Local Files",
+                          title: "Local Folders",
                           label: String(sourceCounts.localFiles),
                           icon: FolderOpen,
                           variant: isSourcesNavigation(navState) && navState.category === 'local-files' ? "default" : "ghost",
@@ -1827,7 +983,7 @@ export function AppShell({
                         },
                         {
                           id: "nav:sources:online-sources",
-                          title: "Online Sources",
+                          title: "Cloud Services",
                           label: String(sourceCounts.onlineSources),
                           icon: Globe,
                           variant: isSourcesNavigation(navState) && navState.category === 'online-sources' ? "default" : "ghost",
@@ -1835,9 +991,9 @@ export function AppShell({
                         },
                         {
                           id: "nav:sources:local-mcp",
-                          title: "Local MCP",
+                          title: "Local Tools",
                           label: String(sourceCounts.localMcp),
-                          icon: Terminal,
+                          icon: <McpIcon className="h-4 w-4" />,
                           variant: isSourcesNavigation(navState) && navState.category === 'local-mcp' ? "default" : "ghost",
                           onClick: () => handleSourceCategoryClick('local-mcp'),
                         },
@@ -1853,57 +1009,7 @@ export function AppShell({
                   ]}
                 />
                 {/* Agent Tree: Hierarchical list of agents */}
-                <div className="flex-1 min-h-0 flex flex-col overflow-hidden mb-1">
-                  <ScrollArea className="h-full">
-                    <AnimatePresence mode="wait">
-                      <motion.div
-                        key={activeWorkspaceId ?? 'none'}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ duration: 0.15 }}
-                        className="px-2 py-1"
-                      >
-                        {agents.length === 0 ? (
-                          isLoadingAgents ? (
-                            <div className="flex items-center gap-2 px-2 py-4">
-                              <Spinner className="text-sm text-muted-foreground" />
-                              <span className="text-xs text-muted-foreground">Loading agents...</span>
-                            </div>
-                          ) : (
-                            <p className="text-xs text-muted-foreground px-2 py-4">
-                              No agents found. Create an "Agents" folder in your Craft space.
-                            </p>
-                          )
-                        ) : (
-                          <AgentTree
-                            folder={agentTree}
-                            level={0}
-                            isCollapsed={false}
-                            selectedAgentId={selectedAgentId}
-                            onSelectAgent={handleSelectAgent}
-                            getConversationCount={getConversationCount}
-                            onAgentAction={handleAgentAction}
-                            isFocused={sidebarFocused}
-                            expandedFolders={expandedFolders}
-                            onToggleFolder={handleToggleFolder}
-                            focusedItemId={focusedSidebarItemId}
-                            onFocusItem={setFocusedSidebarItemId}
-                            getItemProps={getSidebarItemProps}
-                            agentStatus={agentStatus}
-                            agentLogos={agentLogos}
-                            onAgentDoubleClick={handleAgentDoubleClick}
-                            agentSources={agentSources}
-                            expandedAgentSources={expandedAgentSources}
-                            onToggleAgentSources={handleToggleAgentSources}
-                            onPromoteSource={handlePromoteSource}
-                            onOpenSourceInfo={handleOpenSourceInfo}
-                          />
-                        )}
-                      </motion.div>
-                    </AnimatePresence>
-                  </ScrollArea>
-                </div>
+                {/* Agents section removed */}
               </div>
 
               {/* Sidebar Bottom Section: WorkspaceSwitcher + Settings */}
@@ -1974,7 +1080,7 @@ export function AppShell({
               actions={
                 <>
                   {/* Filter dropdown - allows filtering by todo states (only in All Chats view) */}
-                  {chatFilter?.kind === 'inbox' && (
+                  {chatFilter?.kind === 'allChats' && (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button
@@ -2091,8 +1197,8 @@ export function AppShell({
                       </StyledDropdownMenuContent>
                     </DropdownMenu>
                   )}
-                  {/* More menu with Search for non-inbox views (only for chats mode) */}
-                  {isChatsNavigation(navState) && chatFilter?.kind !== 'inbox' && (
+                  {/* More menu with Search for non-allChats views (only for chats mode) */}
+                  {isChatsNavigation(navState) && chatFilter?.kind !== 'allChats' && (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button
@@ -2137,7 +1243,7 @@ export function AppShell({
                 sources={sources}
                 onAddSource={handleAddSource}
                 onDeleteSource={handleDeleteSource}
-                onSourceClick={handleOpenWorkspaceSourceInfo}
+                onSourceClick={handleSourceSelect}
                 selectedSourceSlug={isSourcesNavigation(navState) && navState.details ? navState.details.sourceSlug : null}
                 localMcpEnabled={localMcpEnabled}
                 category={navState.category}
@@ -2153,13 +1259,6 @@ export function AppShell({
             {isChatsNavigation(navState) && (
               /* Sessions List */
               <>
-                {/* Activation/Auth Banner - shows when agent needs activation or authentication */}
-                <SetupAuthBanner
-                  state={chatFilter?.kind === 'agent' ? bannerState.state : 'hidden'}
-                  agentName={selectedAgentId ? agents.find(a => a.id === selectedAgentId)?.displayName || agents.find(a => a.id === selectedAgentId)?.name : undefined}
-                  reason={bannerState.reason}
-                  onAction={handleBannerAction}
-                />
                 {/* SessionList: Scrollable list of session cards */}
                 {/* Key on sidebarMode forces full remount when switching views, skipping animations */}
                 <SessionList
@@ -2173,8 +1272,14 @@ export function AppShell({
                   onRename={onRenameSession}
                   onFocusChatInput={focusChatInput}
                   onSessionSelect={(selectedMeta) => {
-                    // Navigate to the session via central routing
-                    navigate(routes.tab.chat(selectedMeta.id))
+                    // Navigate to the session via central routing (with filter context)
+                    if (!chatFilter || chatFilter.kind === 'allChats') {
+                      navigate(routes.view.allChats(selectedMeta.id))
+                    } else if (chatFilter.kind === 'flagged') {
+                      navigate(routes.view.flagged(selectedMeta.id))
+                    } else if (chatFilter.kind === 'state') {
+                      navigate(routes.view.state(chatFilter.stateId, selectedMeta.id))
+                    }
                   }}
                   onOpenInNewWindow={(selectedMeta) => {
                     if (activeWorkspaceId) {
@@ -2182,10 +1287,8 @@ export function AppShell({
                     }
                   }}
                   onNavigateToView={(view) => {
-                    if (view === 'completed') {
-                      navigate(routes.view.archive())
-                    } else if (view === 'inbox') {
-                      navigate(routes.view.inbox())
+                    if (view === 'allChats') {
+                      navigate(routes.view.allChats())
                     } else if (view === 'flagged') {
                       navigate(routes.view.flagged())
                     }

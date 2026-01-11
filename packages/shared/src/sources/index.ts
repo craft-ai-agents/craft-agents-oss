@@ -7,7 +7,7 @@
 // Types
 export type {
   SourceType,
-  McpAuthType,
+  SourceMcpAuthType,
   ApiAuthType,
   KnownProvider,
   ApiOAuthProvider,
@@ -32,27 +32,21 @@ export {
   // Directory utilities
   ensureSourcesDir,
   getSourcePath,
-  getAgentSourcePath,
   // Config operations
   loadSourceConfig,
-  loadAgentSourceConfig,
   saveSourceConfig,
-  saveAgentSourceConfig,
-  // Agent-aware loading/saving (checks agent folder first, then workspace)
+  // Source loading/saving helpers
   loadSourceConfigWithFallback,
   saveSourceConfigWithContext,
   // Guide operations
   loadSourceGuide,
-  loadAgentSourceGuide,
   saveSourceGuide,
   // Icon operations
   findSourceIcon,
   findIconInDir,
   // Load operations
   loadSource,
-  loadAgentSource,
   loadWorkspaceSources,
-  loadAgentSources,
   getEnabledSources,
   getSourcesBySlugs,
   // Create/Delete operations

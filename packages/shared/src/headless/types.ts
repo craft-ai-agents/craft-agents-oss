@@ -9,7 +9,6 @@ export interface HeadlessConfig {
   workspace: Workspace;
 
   // Optional overrides
-  agentName?: string;           // -a flag (without @ prefix)
   model?: string;               // -m flag
   outputFormat?: 'text' | 'json' | 'stream-json';
 
@@ -55,7 +54,7 @@ export interface ToolCallRecord {
 }
 
 export interface HeadlessError {
-  code: 'auth_required' | 'agent_not_found' | 'config_missing' | 'execution_error';
+  code: 'auth_required' | 'config_missing' | 'execution_error';
   message: string;
   details?: unknown;
 }

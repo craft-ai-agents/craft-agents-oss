@@ -7,7 +7,6 @@ import { useState, useCallback } from 'react';
 export type ModalName =
   | 'modelSelector'
   | 'help'
-  | 'agentMenu'
   | 'workspaceSelector'
   | 'workspaceRename'
   | 'apiKeyChange'
@@ -16,12 +15,8 @@ export type ModalName =
   | 'balance'
   | 'settings'
   | 'logoutConfirm'
-  | 'planMenu'
   | 'planSelector'
-  | 'planReview'
   | 'sessionMenu'
-  | 'credentialsViewer'
-  | 'reauthSelector'
   | 'authModeOptions';
 
 export interface UseModalStateResult {

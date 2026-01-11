@@ -15,11 +15,10 @@ import { URL } from 'url';
 import open from 'open';
 import { randomBytes } from 'crypto';
 import { createCallbackServer, type AppType } from './callback-server.ts';
+import type { SlackService } from '../sources/types.ts';
 
-/**
- * Slack service types for scope selection
- */
-export type SlackService = 'messaging' | 'channels' | 'users' | 'files' | 'full';
+// Re-export for convenience
+export type { SlackService } from '../sources/types.ts';
 
 // Slack OAuth configuration - must be set via environment variables
 // These are baked into the build at compile time

@@ -5,7 +5,7 @@
  * All agent events flow through a single pure function for consistent state transitions.
  */
 
-import type { Session, Message, PermissionRequest, CredentialRequest, TypedError, PermissionMode, AskQuestionRequest, TodoState, AgentStatus } from '../../shared/types'
+import type { Session, Message, PermissionRequest, CredentialRequest, TypedError, PermissionMode, AskQuestionRequest, TodoState, AuthRequest } from '../../shared/types'
 
 /**
  * Streaming state for a session - replaces streamingTextRef
@@ -269,15 +269,6 @@ export interface UserMessageEvent {
 }
 
 /**
- * Agent status event - updates agent state (idle, extracting, ready, etc.)
- */
-export interface AgentStatusEvent {
-  type: 'agent_status'
-  sessionId: string
-  status: AgentStatus
-}
-
-/**
  * Session shared event - session was shared to viewer
  */
 export interface SessionSharedEvent {
@@ -292,6 +283,30 @@ export interface SessionSharedEvent {
 export interface SessionUnsharedEvent {
   type: 'session_unshared'
   sessionId: string
+}
+
+/**
+ * Auth request event - unified auth flow (credential or OAuth)
+ * Adds auth-request message to session and displays inline auth UI
+ */
+export interface AuthRequestEvent {
+  type: 'auth_request'
+  sessionId: string
+  message: Message
+  request: AuthRequest
+}
+
+/**
+ * Auth completed event - auth request was completed (success, failure, or cancelled)
+ * Updates the auth-request message status
+ */
+export interface AuthCompletedEvent {
+  type: 'auth_completed'
+  sessionId: string
+  requestId: string
+  success: boolean
+  cancelled?: boolean
+  error?: string
 }
 
 /**
@@ -321,9 +336,10 @@ export type AgentEvent =
   | ShellBackgroundedEvent
   | TaskProgressEvent
   | UserMessageEvent
-  | AgentStatusEvent
   | SessionSharedEvent
   | SessionUnsharedEvent
+  | AuthRequestEvent
+  | AuthCompletedEvent
 
 /**
  * Side effects that need to be handled outside the pure processor

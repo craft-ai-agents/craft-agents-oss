@@ -6,7 +6,6 @@
 
 export { default as ChatPage } from './ChatPage'
 export { default as SourceInfoPage } from './SourceInfoPage'
-export { default as AgentInfoPage } from './AgentInfoPage'
 
 // Settings pages (new structure)
 export {
@@ -16,6 +15,5 @@ export {
   PreferencesPage,
 } from './settings'
 
-// Legacy exports for backwards compatibility during transition
-// These redirect to the new settings pages
+// SettingsPage export (used by MainContentPanel)
 export { default as SettingsPage } from './SettingsPage'

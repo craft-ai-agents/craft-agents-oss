@@ -73,15 +73,12 @@ const cli = meow(
   Usage
     $ craft [options]                     Interactive mode
     $ craft [options] "prompt"            Interactive mode with initial prompt
-    $ craft -a agent "prompt"             Activate agent and send prompt
     $ craft -p "query"                    Print mode: execute and exit
-    $ craft -p "query" -a agent           Print mode with agent
 
   Commands
     install [version]  Install a specific version (defaults to "latest")
 
   Common Options (both modes)
-    --agent, -a <name>      Agent to activate (with or without @ prefix)
     --workspace, -w <name>  Select workspace by name, ID, or MCP server URL (http/https)
     --model, -m <model>     Claude model to use (default: ${DEFAULT_MODEL})
     --debug                 Enable debug logging to /tmp/craft-debug.log
@@ -121,10 +118,8 @@ const cli = meow(
     $ craft --session abc123                   # Resume specific session
     $ craft --list-sessions                    # List all sessions
     $ craft "What documents do I have?"        # Interactive with initial prompt
-    $ craft -a writer "Help me draft an email" # Activate agent + prompt
     $ craft -w work -p "list my documents"     # Print mode with specific workspace
     $ craft -w https://mcp.example.com -p "query"  # Use MCP URL directly
-    $ craft -p "summarize" -a writer           # Print mode with agent
     $ craft -p "query" --session-resume        # Print mode, resume session
     $ craft -p "query" --output-format json    # JSON output for scripts
     $ craft install 0.0.1                      # Install specific version
@@ -137,10 +132,6 @@ const cli = meow(
       print: {
         type: 'string',
         shortFlag: 'p',
-      },
-      agent: {
-        type: 'string',
-        shortFlag: 'a',
       },
       outputFormat: {
         type: 'string',
@@ -196,13 +187,11 @@ interface RootProps {
   authState: AuthState;
   /** Derived setup needs from getSetupNeeds() */
   setupNeeds: SetupNeeds;
-  /** Agent to auto-activate on startup (without @ prefix) */
-  initialAgent?: string;
-  /** Prompt to auto-send after agent activation */
+  /** Prompt to auto-send on startup */
   initialPrompt?: string;
 }
 
-const Root: React.FC<RootProps> = ({ initialConfig, cliFlags, authState, setupNeeds, initialAgent, initialPrompt }) => {
+const Root: React.FC<RootProps> = ({ initialConfig, cliFlags, authState, setupNeeds, initialPrompt }) => {
   // Show setup if: not fully configured
   const [showSetup, setShowSetup] = useState(!setupNeeds.isFullyConfigured);
   const [config, setConfig] = useState<StoredConfig | null>(initialConfig);
@@ -346,8 +335,7 @@ const Root: React.FC<RootProps> = ({ initialConfig, cliFlags, authState, setupNe
     <App
       config={agentConfig}
       onRequestSetup={handleRequestSetup}
-      // Cancel initial agent/prompt if workspace lookup failed
-      initialAgent={workspaceError ? undefined : initialAgent}
+      // Cancel initial prompt if workspace lookup failed
       initialPrompt={workspaceError ? undefined : initialPrompt}
       initialError={workspaceError}
       // Session flags from CLI
@@ -468,11 +456,6 @@ async function main() {
       delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
     }
 
-    // Normalize agent name (strip @ prefix if present)
-    // Note: meow exposes short flags under their short name when used
-    const agentFlag = cli.flags.agent ?? (cli.flags as Record<string, unknown>).a as string | undefined;
-    const agentName = agentFlag?.replace(/^@/, '');
-
     // Validate output format
     const outputFormat = cli.flags.outputFormat as 'text' | 'json' | 'stream-json';
     if (!['text', 'json', 'stream-json'].includes(outputFormat)) {
@@ -495,7 +478,6 @@ async function main() {
     const runner = new HeadlessRunner({
       prompt: cli.flags.print,
       workspace,
-      agentName,
       model,
       outputFormat,
       permissionPolicy,
@@ -532,10 +514,7 @@ async function main() {
   const authState = await getAuthState();
   const setupNeeds = getSetupNeeds(authState);
 
-  // Extract initial agent and prompt for interactive mode
-  // Agent comes from -a flag (strip @ prefix if present)
-  // Prompt comes from positional arguments (cli.input)
-  const initialAgent = cli.flags.agent?.replace(/^@/, '');
+  // Extract initial prompt for interactive mode from positional arguments
   const initialPrompt = cli.input.length > 0 ? cli.input.join(' ') : undefined;
 
   // Render the root component
@@ -545,7 +524,6 @@ async function main() {
       cliFlags={cli.flags}
       authState={authState}
       setupNeeds={setupNeeds}
-      initialAgent={initialAgent}
       initialPrompt={initialPrompt}
     />,
     { exitOnCtrlC: false } // Let useInput handle Ctrl+C for double-press-to-exit

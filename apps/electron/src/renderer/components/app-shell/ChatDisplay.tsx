@@ -20,25 +20,16 @@ import { Spinner, parseReadResult, parseBashResult, parseGrepResult, parseGlobRe
 import { useFocusZone } from "@/hooks/keyboard"
 import type { Session, Message, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, LoadedSource, FileChange } from "../../../shared/types"
 import type { PermissionMode } from "@craft-agent/shared/agent/modes"
-import { SetupAuthBanner, type BannerState } from "./SetupAuthBanner"
-import { TurnCard, UserMessageBubble, groupMessagesByTurn, formatTurnAsMarkdown, formatActivityAsMarkdown, type Turn, type AssistantTurn, type UserTurn, type SystemTurn } from "@craft-agent/ui"
+import { TurnCard, UserMessageBubble, groupMessagesByTurn, formatTurnAsMarkdown, formatActivityAsMarkdown, type Turn, type AssistantTurn, type UserTurn, type SystemTurn, type OnboardingTurn, type AuthRequestTurn } from "@craft-agent/ui"
+import { MemoizedOnboardingBubble } from "@/components/chat/OnboardingBubble"
+import { MemoizedAuthRequestCard } from "@/components/chat/AuthRequestCard"
+import type { SourceNeedingAuth } from "@craft-agent/shared/sessions"
 import { ActiveOptionBadges } from "./ActiveOptionBadges"
 import { InputContainer, type StructuredInputState, type StructuredResponse, type PermissionResponse } from "./input"
 import { useBackgroundTasks } from "@/hooks/useBackgroundTasks"
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover"
 import { SlashCommandMenu, DEFAULT_SLASH_COMMANDS, type SlashCommandId } from "@/components/ui/slash-command-menu"
-import { CONTENT_MAX_WIDTH_CLASS, CHAT_LAYOUT } from "@/config/layout"
-
-/** Agent setup state for showing setup indicator in input area */
-interface AgentSetupState {
-  /** Banner state matching SetupAuthBanner */
-  state: BannerState
-  agentName?: string
-  /** Optional reason/message to display */
-  reason?: string
-  /** Action callback (activate, retry, authenticate) */
-  onAction: () => void
-}
+import { CHAT_LAYOUT } from "@/config/layout"
 
 interface ChatDisplayProps {
   session: Session | null
@@ -60,8 +51,6 @@ interface ChatDisplayProps {
   pendingCredential?: CredentialRequest
   /** Callback to respond to credential request */
   onRespondToCredential?: (sessionId: string, requestId: string, response: CredentialResponse) => void
-  /** Agent setup state - when present, shows setup indicator in input area */
-  agentSetupState?: AgentSetupState
   // Advanced options
   /** Enable ultrathink mode for extended reasoning */
   ultrathinkEnabled?: boolean
@@ -258,7 +247,6 @@ export function ChatDisplay({
   onRespondToPermission,
   pendingCredential,
   onRespondToCredential,
-  agentSetupState,
   // Advanced options
   ultrathinkEnabled = false,
   onUltrathinkChange,
@@ -544,7 +532,7 @@ export function ChatDisplay({
                 /* Empty State: Welcome message for new sessions */
                 <div className="flex flex-col items-center justify-center h-64 text-muted-foreground px-8">
                   <p className="text-sm font-medium">
-                    {session.agentName ? `Chat with ${session.agentName}` : `Welcome to ${session.workspaceName}`}
+                    {`Welcome to ${session.workspaceName}`}
                   </p>
                   <p className="text-xs mt-1 text-center">Start a conversation by typing a message below.</p>
                 </div>
@@ -566,6 +554,26 @@ export function ChatDisplay({
                     </div>
                   )}
                   {turns.map((turn, index) => {
+                    // Onboarding turns - render at the start of new sessions
+                    if (turn.type === 'onboarding') {
+                      return (
+                        <div key={`onboarding-${turn.message.id}`} className="px-3">
+                          <MemoizedOnboardingBubble
+                            message={turn.message}
+                            onQuickAction={(prompt) => {
+                              // Send the quick action prompt as a message
+                              onSendMessage(prompt)
+                            }}
+                            onConnectSources={(sources) => {
+                              // Send a message to connect sources
+                              const sourceNames = sources.map(s => s.name).join(', ')
+                              onSendMessage(`Help me connect these sources: ${sourceNames}`)
+                            }}
+                          />
+                        </div>
+                      )
+                    }
+
                     // User turns - render with MemoizedMessageBubble
                     // Extra padding creates visual separation from AI responses
                     if (turn.type === 'user') {
@@ -588,6 +596,18 @@ export function ChatDisplay({
                           message={turn.message}
                           onOpenFile={onOpenFile}
                           onOpenUrl={onOpenUrl}
+                        />
+                      )
+                    }
+
+                    // Auth-request turns - render inline auth UI
+                    if (turn.type === 'auth-request') {
+                      return (
+                        <MemoizedAuthRequestCard
+                          key={`auth-${turn.message.id}`}
+                          message={turn.message}
+                          sessionId={session.id}
+                          onRespondToCredential={onRespondToCredential}
                         />
                       )
                     }
@@ -863,56 +883,43 @@ export function ChatDisplay({
           </div>
 
           {/* === INPUT CONTAINER: FreeForm or Structured Input === */}
-          <div className={cn(CONTENT_MAX_WIDTH_CLASS, "mx-auto w-full px-4 pb-4 mt-1")}>
-            {/* Agent Setup Banner - shown instead of input when agent needs setup */}
-            {agentSetupState && agentSetupState.state !== 'hidden' && !pendingPermission ? (
-              <SetupAuthBanner
-                state={agentSetupState.state}
-                agentName={agentSetupState.agentName}
-                reason={agentSetupState.reason}
-                onAction={agentSetupState.onAction}
-                variant="inputAreaCover"
-              />
-            ) : (
-              <>
-                {/* Active option badges and tasks - positioned above input */}
-                <ActiveOptionBadges
-                  ultrathinkEnabled={ultrathinkEnabled}
-                  onUltrathinkChange={onUltrathinkChange}
-                  permissionMode={permissionMode}
-                  onPermissionModeChange={onPermissionModeChange}
-                  tasks={backgroundTasks}
-                  sessionId={session.id}
-                  onKillTask={(taskId) => killTask(taskId, backgroundTasks.find(t => t.id === taskId)?.type ?? 'shell')}
-                  onInsertMessage={onInputChange}
-                />
-                <InputContainer
-                  placeholder={`Message ${session.agentName || session.workspaceName || 'Chat'}...`}
-                disabled={isInputDisabled}
-                isProcessing={session.isProcessing}
-                onSubmit={handleSubmit}
-                onStop={handleStop}
-                textareaRef={textareaRef}
-                currentModel={currentModel}
-                onModelChange={onModelChange}
-                ultrathinkEnabled={ultrathinkEnabled}
-                onUltrathinkChange={onUltrathinkChange}
-                permissionMode={permissionMode}
-                onPermissionModeChange={onPermissionModeChange}
-                enabledModes={enabledModes}
-                structuredInput={structuredInput}
-                onStructuredResponse={handleStructuredResponse}
-                inputValue={inputValue}
-                onInputChange={onInputChange}
-                sources={sources}
-                enabledSourceSlugs={session.enabledSourceSlugs}
-                onSourcesChange={onSourcesChange}
-                workingDirectory={workingDirectory}
-                onWorkingDirectoryChange={onWorkingDirectoryChange}
-                sessionId={session.id}
-              />
-              </>
-            )}
+          <div className={cn(CHAT_LAYOUT.maxWidth, "mx-auto w-full px-4 pb-4 mt-1")}>
+            {/* Active option badges and tasks - positioned above input */}
+            <ActiveOptionBadges
+              ultrathinkEnabled={ultrathinkEnabled}
+              onUltrathinkChange={onUltrathinkChange}
+              permissionMode={permissionMode}
+              onPermissionModeChange={onPermissionModeChange}
+              tasks={backgroundTasks}
+              sessionId={session.id}
+              onKillTask={(taskId) => killTask(taskId, backgroundTasks.find(t => t.id === taskId)?.type ?? 'shell')}
+              onInsertMessage={onInputChange}
+            />
+            <InputContainer
+              placeholder={`Message ${session.workspaceName || 'Chat'}...`}
+              disabled={isInputDisabled}
+              isProcessing={session.isProcessing}
+              onSubmit={handleSubmit}
+              onStop={handleStop}
+              textareaRef={textareaRef}
+              currentModel={currentModel}
+              onModelChange={onModelChange}
+              ultrathinkEnabled={ultrathinkEnabled}
+              onUltrathinkChange={onUltrathinkChange}
+              permissionMode={permissionMode}
+              onPermissionModeChange={onPermissionModeChange}
+              enabledModes={enabledModes}
+              structuredInput={structuredInput}
+              onStructuredResponse={handleStructuredResponse}
+              inputValue={inputValue}
+              onInputChange={onInputChange}
+              sources={sources}
+              enabledSourceSlugs={session.enabledSourceSlugs}
+              onSourcesChange={onSourcesChange}
+              workingDirectory={workingDirectory}
+              onWorkingDirectoryChange={onWorkingDirectoryChange}
+              sessionId={session.id}
+            />
           </div>
         </div>
       ) : null}

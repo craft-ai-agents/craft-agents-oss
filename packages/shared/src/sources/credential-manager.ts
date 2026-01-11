@@ -134,22 +134,19 @@ export class SourceCredentialManager {
     const baseId = {
       workspaceId: source.workspaceId,
       sourceId: source.config.slug,
-      ...(source.agentSlug && { agentId: source.agentSlug }),
     };
 
     // Try OAuth first
-    const oauthType = source.agentSlug ? 'agent_source_oauth' : 'source_oauth';
-    const oauthCreds = await manager.get({ type: oauthType, ...baseId } as CredentialId);
+    const oauthCreds = await manager.get({ type: 'source_oauth', ...baseId });
     if (oauthCreds?.value) {
-      debug(`[SourceCredentialManager] Found ${oauthType} for ${source.config.slug}`);
+      debug(`[SourceCredentialManager] Found source_oauth for ${source.config.slug}`);
       return oauthCreds;
     }
 
     // Fall back to bearer
-    const bearerType = source.agentSlug ? 'agent_source_bearer' : 'source_bearer';
-    const bearerCreds = await manager.get({ type: bearerType, ...baseId } as CredentialId);
+    const bearerCreds = await manager.get({ type: 'source_bearer', ...baseId });
     if (bearerCreds?.value) {
-      debug(`[SourceCredentialManager] Found ${bearerType} for ${source.config.slug}`);
+      debug(`[SourceCredentialManager] Found source_bearer for ${source.config.slug}`);
       return bearerCreds;
     }
 
@@ -219,7 +216,6 @@ export class SourceCredentialManager {
    * Determines the correct credential type based on:
    * - Source type (mcp, api, local)
    * - Auth type (oauth, bearer, header, etc.)
-   * - Scope (workspace vs agent)
    */
   getCredentialId(source: LoadedSource): CredentialId {
     const mcp = source.config.mcp;
@@ -227,19 +223,6 @@ export class SourceCredentialManager {
 
     let type: CredentialId['type'];
 
-    if (source.agentSlug) {
-      // Agent-scoped source
-      type = this.getAgentCredentialType(source);
-
-      return {
-        type,
-        workspaceId: source.workspaceId,
-        agentId: source.agentSlug,
-        sourceId: source.config.slug,
-      };
-    }
-
-    // Workspace-scoped source
     if (source.config.type === 'mcp') {
       type = mcp?.authType === 'bearer' ? 'source_bearer' : 'source_oauth';
     } else if (source.config.type === 'api') {
@@ -264,34 +247,6 @@ export class SourceCredentialManager {
       workspaceId: source.workspaceId,
       sourceId: source.config.slug,
     };
-  }
-
-  /**
-   * Get credential type for agent-scoped source
-   */
-  private getAgentCredentialType(source: LoadedSource): CredentialId['type'] {
-    const mcp = source.config.mcp;
-    const api = source.config.api;
-
-    if (source.config.type === 'mcp') {
-      return mcp?.authType === 'bearer' ? 'agent_source_bearer' : 'agent_source_oauth';
-    }
-
-    if (source.config.type === 'api') {
-      // OAuth providers (Google/Slack/Microsoft) store credentials as agent_source_oauth.
-      // This separates HOW we get credentials (OAuth flow) from HOW we send them (Bearer header).
-      if (isApiOAuthProvider(source.config.provider)) {
-        return 'agent_source_oauth';
-      } else if (api?.authType === 'bearer') {
-        return 'agent_source_bearer';
-      } else if (api?.authType === 'basic') {
-        return 'agent_source_basic';
-      } else {
-        return 'agent_source_apikey';
-      }
-    }
-
-    return 'agent_source_oauth';
   }
 
   // ============================================================

@@ -9,7 +9,6 @@ import type {
   TokenUsage as CoreTokenUsage,
   Workspace as CoreWorkspace,
   SessionMetadata as CoreSessionMetadata,
-  SubAgentMetadata as CoreSubAgentMetadata,
   StoredAttachment as CoreStoredAttachment,
 } from '@craft-agent/core/types';
 
@@ -25,26 +24,7 @@ export type {
   CoreTokenUsage as TokenUsage,
   CoreWorkspace as Workspace,
   CoreSessionMetadata as SessionMetadata,
-  CoreSubAgentMetadata as SubAgentMetadata,
   CoreStoredAttachment as StoredAttachment,
-};
-
-// Import and re-export agent types for Info dialog
-// Use types-only subpath to avoid pulling in debug.ts (Node.js fs dependency)
-import type {
-  SubAgentDefinition,
-  McpServerConfig,
-  ApiConfig,
-  AgentStatus,
-  AgentActivateOptions,
-} from '@craft-agent/shared/agents/types';
-
-export type {
-  SubAgentDefinition,
-  McpServerConfig,
-  ApiConfig,
-  AgentStatus,
-  AgentActivateOptions,
 };
 
 // Import and re-export auth types for onboarding
@@ -56,15 +36,14 @@ export type { AuthState, SetupNeeds, AuthType };
 // Import source types for session source selection
 import type { LoadedSource, FolderSourceConfig, SourceConnectionStatus } from '@craft-agent/shared/sources/types';
 export type { LoadedSource, FolderSourceConfig, SourceConnectionStatus };
-export { generateMessageId } from '@craft-agent/core/types';
 
-/**
- * Auth requirements for an agent - lists MCP servers and APIs needing credentials
- */
-export interface AgentAuthRequirements {
-  mcpServers: Array<{ name: string; url: string; requiresAuth?: boolean }>
-  apis: Array<{ name: string; auth?: { type: string; credentialLabel?: string; secretLabel?: string } }>
-}
+// Import auth request types for unified auth flow
+import type { AuthRequest as SharedAuthRequest, CredentialInputMode as SharedCredentialInputMode, CredentialAuthRequest as SharedCredentialAuthRequest } from '@craft-agent/shared/agent';
+export type { SharedAuthRequest as AuthRequest };
+export type { SharedCredentialInputMode as CredentialInputMode };
+// CredentialRequest is used by UI components for displaying credential input
+export type CredentialRequest = SharedCredentialAuthRequest;
+export { generateMessageId } from '@craft-agent/core/types';
 
 /**
  * OAuth result from main process
@@ -110,14 +89,6 @@ export interface ShareResult {
   error?: string
 }
 
-/**
- * Agent activation status - indicates if agent needs activation or auth
- */
-export interface AgentSetupStatus {
-  needsSetup: boolean  // Agent definition has never been extracted (needs activation)
-  needsAuth: boolean   // Definition exists but credentials are missing
-  reason?: string
-}
 
 // Re-export permission types from core, extended with sessionId for multi-session context
 export type { PermissionRequest as BasePermissionRequest } from '@craft-agent/core/types';
@@ -134,46 +105,10 @@ export interface PermissionRequest extends BasePermissionRequest {
 // Credential Input Types (Secure Auth UI)
 // ============================================
 
-/**
- * Credential input modes for different auth types
- */
-export type CredentialInputMode =
-  | 'bearer'      // Single token field (Bearer Token, API Key)
-  | 'basic'       // Username + Password fields
-  | 'header'      // API Key with custom header name
-  | 'query'       // API Key for query parameter
+// CredentialInputMode is imported from @craft-agent/shared/agent above
 
 /**
- * Credential request from agent - triggers secure input UI
- */
-export interface CredentialRequest {
-  requestId: string
-  sessionId: string
-  /** Source slug to associate credentials with */
-  sourceSlug: string
-  /** Display name for the source/service */
-  sourceName: string
-  /** What type of credential input to show */
-  mode: CredentialInputMode
-  /** Custom labels for fields */
-  labels?: {
-    /** Label for primary credential field (default: "API Key" or "Bearer Token") */
-    credential?: string
-    /** Label for username field in basic auth (default: "Username") */
-    username?: string
-    /** Label for password field in basic auth (default: "Password") */
-    password?: string
-  }
-  /** Optional description/instructions */
-  description?: string
-  /** Optional hint about where to find the credential */
-  hint?: string
-  /** For header auth - the header name being used */
-  headerName?: string
-}
-
-/**
- * Credential response from user
+ * Credential response from user (for credential auth requests)
  */
 export interface CredentialResponse {
   type: 'credential'
@@ -215,36 +150,6 @@ export interface Plan {
   updatedAt?: number
 }
 
-/**
- * MCP server with auth status for Info dialog
- */
-export interface McpServerWithAuthStatus {
-  name: string
-  url: string
-  requiresAuth?: boolean
-  hasAuth: boolean  // Whether credentials have been provided
-  tools?: string[]
-  logo?: string  // Local logo filename (e.g., "craft.png")
-}
-
-/**
- * API with auth status for Info dialog
- */
-export interface ApiWithAuthStatus {
-  name: string
-  baseUrl: string
-  auth?: { type: string; credentialLabel?: string; secretLabel?: string }
-  hasAuth: boolean  // Whether credentials have been provided
-  logo?: string  // Local logo filename (e.g., "exa.png")
-}
-
-/**
- * Auth status for an agent's MCP servers and APIs
- */
-export interface AgentAuthStatus {
-  mcpServers: McpServerWithAuthStatus[]
-  apis: ApiWithAuthStatus[]
-}
 
 // ============================================
 // Onboarding Types
@@ -337,13 +242,11 @@ export interface Session {
   messages: Message[]
   isProcessing: boolean
   // Session metadata
-  agentId?: string
-  agentName?: string
   isFlagged?: boolean
   // Advanced options (persisted per session)
   /** Permission mode for this session ('safe', 'ask', 'allow-all') */
   permissionMode?: PermissionMode
-  // Todo state (user-controlled) - determines inbox vs completed
+  // Todo state (user-controlled) - determines open vs closed
   todoState?: TodoState
   // Read/unread tracking - ID of last message user has read
   lastReadMessageId?: string
@@ -362,8 +265,14 @@ export interface Session {
     message: string
     statusType?: string
   }
-  // Agent status (idle, extracting, ready, active, etc.)
-  agentStatus?: AgentStatus
+}
+
+/**
+ * Options for creating a new session
+ */
+export interface CreateSessionOptions {
+  /** Onboarding context to show welcome/guidance messages */
+  onboarding?: 'add-source' | 'connect-sources' | 'welcome'
 }
 
 // AskUserQuestion types (matches shared/agent/craft-agent.ts)
@@ -400,7 +309,6 @@ export type SessionEvent =
   | { type: 'info'; sessionId: string; message: string; statusType?: 'compaction_complete'; level?: 'info' | 'warning' | 'error' | 'success' }
   | { type: 'title_generated'; sessionId: string; title: string }
   | { type: 'working_directory_changed'; sessionId: string; workingDirectory: string }
-  | { type: 'agent_status'; sessionId: string; status: AgentStatus }
   | { type: 'permission_request'; sessionId: string; request: PermissionRequest }
   | { type: 'credential_request'; sessionId: string; request: CredentialRequest }
   // Permission mode events
@@ -423,6 +331,9 @@ export type SessionEvent =
   | { type: 'session_deleted'; sessionId: string }
   | { type: 'session_shared'; sessionId: string; sharedUrl: string }
   | { type: 'session_unshared'; sessionId: string }
+  // Auth request events (unified auth flow)
+  | { type: 'auth_request'; sessionId: string; message: CoreMessage; request: SharedAuthRequest }
+  | { type: 'auth_completed'; sessionId: string; requestId: string; success: boolean; cancelled?: boolean; error?: string }
 
 // Options for sendMessage
 export interface SendMessageOptions {
@@ -457,8 +368,6 @@ export type SessionCommand =
  * Parameters for opening a new chat session
  */
 export interface NewChatActionParams {
-  /** Agent ID to use for the new chat */
-  agentId?: string
   /** Text to pre-fill in the input (not sent automatically) */
   input?: string
   /** Session name */
@@ -494,37 +403,8 @@ export const IPC_CHANNELS = {
   SWITCH_WORKSPACE: 'window:switchWorkspace',
   CLOSE_WINDOW: 'window:close',
 
-  // Agent management
-  GET_AGENTS: 'agents:get',
-  REFRESH_AGENTS: 'agents:refresh',
-  CHECK_AGENT_AUTH: 'agents:checkAuth',
-  GET_AGENT_AUTH_STATUS: 'agents:getAuthStatus',
-  GET_AGENT_DEFINITION: 'agents:getDefinition',
-  RELOAD_AGENT: 'agents:reloadAgent',
-  RESET_AGENT: 'agents:resetAgent',
-  ENSURE_BUILTIN_AGENT: 'agents:ensureBuiltinAgent',
-
-  // Agent authentication
-  GET_AGENT_AUTH_REQUIREMENTS: 'agents:getAuthRequirements',
-  START_MCP_OAUTH: 'agents:startMcpOAuth',
-  SAVE_MCP_BEARER: 'agents:saveMcpBearer',
-  SAVE_API_CREDENTIALS: 'agents:saveApiCredentials',
-  VALIDATE_MCP_CONNECTION: 'agents:validateMcpConnection',
-
-  // Agent state management (unified state machine, agent-scoped by workspaceId:agentId)
-  AGENT_GET_STATUS: 'agent:getStatus',           // (workspaceId, agentId) → AgentStatus
-  AGENT_ACTIVATE: 'agent:activate',               // (workspaceId, agentId, options?) → AgentStatus
-  AGENT_CONTINUE_MCP_AUTH: 'agent:continueMcpAuth', // (workspaceId, agentId) → AgentStatus
-  AGENT_CONTINUE_API_AUTH: 'agent:continueApiAuth', // (workspaceId, agentId) → AgentStatus
-  AGENT_DEACTIVATE: 'agent:deactivate',           // (workspaceId, agentId) → void
-  AGENT_RELOAD: 'agent:reload',                   // (workspaceId, agentId) → AgentStatus
-  AGENT_RESET: 'agent:reset',                     // (workspaceId, agentId) → void
-  AGENT_MARK_ACTIVE: 'agent:markActive',          // (workspaceId, agentId) → void
-
   // Events from main to renderer
   SESSION_EVENT: 'session:event',
-  AGENT_STATUS_CHANGED: 'agent:statusChanged',    // Broadcast: { workspaceId, agentId, status } - complete state including needsSetup/needsAuth
-  AGENTS_CHANGED: 'agents:changed',               // Broadcast: agents list changed (created/synced/deleted) - triggers sidebar refresh
 
   // File operations
   READ_FILE: 'file:read',
@@ -602,10 +482,7 @@ export const IPC_CHANNELS = {
   SOURCES_START_OAUTH: 'sources:startOAuth',
   SOURCES_SAVE_CREDENTIALS: 'sources:saveCredentials',
   SOURCES_CHANGED: 'sources:changed',
-  // Agent-scoped sources
-  SOURCES_GET_AGENT: 'sources:getAgent',
-  SOURCES_PROMOTE: 'sources:promote',
-
+  
   // Source permissions config
   SOURCES_GET_PERMISSIONS: 'sources:getPermissions',
   // MCP tools listing
@@ -615,10 +492,9 @@ export const IPC_CHANNELS = {
   STATUSES_LIST: 'statuses:list',
   STATUSES_CHANGED: 'statuses:changed',  // Broadcast event
 
-  // Theme management (cascading: app → workspace → agent)
+  // Theme management (cascading: app → workspace)
   THEME_APP_CHANGED: 'theme:appChanged',        // Broadcast event
   THEME_WORKSPACE_CHANGED: 'theme:workspaceChanged',  // Broadcast event
-  THEME_AGENT_CHANGED: 'theme:agentChanged',    // Broadcast event
 
   // Generic workspace image loading/saving (for icons, etc.)
   WORKSPACE_READ_IMAGE: 'workspace:readImage',
@@ -637,10 +513,9 @@ export const IPC_CHANNELS = {
   WORKSPACE_SETTINGS_ENABLE_PORTABLE: 'workspaceSettings:enablePortable',
   WORKSPACE_SETTINGS_DISABLE_PORTABLE: 'workspaceSettings:disablePortable',
 
-  // Theme (cascading: app → workspace → agent)
+  // Theme (cascading: app → workspace)
   THEME_GET_APP: 'theme:getApp',
   THEME_GET_WORKSPACE: 'theme:getWorkspace',
-  THEME_GET_AGENT: 'theme:getAgent',
 
   // Logo URL resolution (uses Node.js filesystem cache)
   LOGO_GET_URL: 'logo:getUrl',
@@ -823,14 +698,13 @@ export type PreviewMode = PreviewData['mode']
 
 // Re-import types for ElectronAPI
 import type { Workspace, SessionMetadata, StoredAttachment as StoredAttachmentType } from '@craft-agent/core/types';
-import type { SubAgentMetadata } from '@craft-agent/core/types';
 
 // Type-safe IPC API exposed to renderer
 export interface ElectronAPI {
   // Session management
   getSessions(): Promise<Session[]>
   getSessionMessages(sessionId: string): Promise<Session | null>
-  createSession(workspaceId: string, agentId?: string, agentName?: string): Promise<Session>
+  createSession(workspaceId: string, options?: CreateSessionOptions): Promise<Session>
   deleteSession(sessionId: string): Promise<void>
   sendMessage(sessionId: string, message: string, attachments?: FileAttachment[], storedAttachments?: StoredAttachmentType[], options?: SendMessageOptions): Promise<void>
   cancelProcessing(sessionId: string, silent?: boolean): Promise<void>
@@ -854,37 +728,8 @@ export interface ElectronAPI {
   switchWorkspace(workspaceId: string): Promise<void>
   closeWindow(): Promise<void>
 
-  // Agent management
-  getAgents(workspaceId: string): Promise<SubAgentMetadata[]>
-  refreshAgents(workspaceId: string): Promise<SubAgentMetadata[]>
-  checkAgentAuth(workspaceId: string, agentId: string): Promise<{ needsAuth: boolean; reason?: string }>
-  getAgentAuthStatus(workspaceId: string, agentId: string): Promise<AgentAuthStatus>
-  getAgentDefinition(workspaceId: string, agentId: string): Promise<SubAgentDefinition | null>
-  reloadAgent(workspaceId: string, agentId: string): Promise<boolean>
-  resetAgent(workspaceId: string, agentId: string): Promise<boolean>
-  ensureBuiltinAgent(workspaceId: string, slug: string): Promise<string | null>
-
-  // Agent authentication
-  getAgentAuthRequirements(workspaceId: string, agentId: string): Promise<AgentAuthRequirements>
-  startMcpOAuth(workspaceId: string, agentId: string, serverUrl: string, serverName: string): Promise<OAuthResult>
-  saveMcpBearer(workspaceId: string, agentId: string, serverName: string, token: string): Promise<void>
-  saveApiCredentials(workspaceId: string, agentId: string, apiName: string, credential: string): Promise<void>
-  validateMcpConnection(serverUrl: string, accessToken?: string): Promise<McpValidationResult>
-
-  // Agent state management (unified state machine, agent-scoped)
-  getAgentStatus(workspaceId: string, agentId: string): Promise<AgentStatus>
-  activateAgent(workspaceId: string, agentId: string, options?: AgentActivateOptions): Promise<AgentStatus>
-  continueAfterMcpAuth(workspaceId: string, agentId: string): Promise<AgentStatus>
-  continueAfterApiAuth(workspaceId: string, agentId: string): Promise<AgentStatus>
-  deactivateAgent(workspaceId: string, agentId: string): Promise<void>
-  reloadAgentState(workspaceId: string, agentId: string): Promise<AgentStatus>
-  resetAgentState(workspaceId: string, agentId: string): Promise<void>
-  markAgentActive(workspaceId: string, agentId: string): Promise<void>
-
   // Event listeners
   onSessionEvent(callback: (event: SessionEvent) => void): () => void
-  /** Listens for complete agent state changes (status + needsSetup + needsAuth) */
-  onAgentStatusChanged(callback: (workspaceId: string, agentId: string, status: AgentStatus) => void): () => void
 
   // File operations
   readFile(path: string): Promise<string>
@@ -975,12 +820,10 @@ export interface ElectronAPI {
 
   // Sources
   getSources(workspaceId: string): Promise<LoadedSource[]>
-  getAgentSources(workspaceId: string, agentSlug: string): Promise<LoadedSource[]>
   createSource(workspaceId: string, config: Partial<FolderSourceConfig>): Promise<FolderSourceConfig>
   deleteSource(workspaceId: string, sourceSlug: string): Promise<void>
   startSourceOAuth(workspaceId: string, sourceSlug: string): Promise<{ success: boolean; error?: string; accessToken?: string }>
   saveSourceCredentials(workspaceId: string, sourceSlug: string, credential: string): Promise<void>
-  promoteSource(workspaceId: string, agentSlug: string, sourceSlug: string): Promise<void>
   getSourcePermissionsConfig(workspaceId: string, sourceSlug: string): Promise<import('@craft-agent/shared/agent').PermissionsConfigFile | null>
   getMcpTools(workspaceId: string, sourceSlug: string): Promise<McpToolsResult>
 
@@ -996,18 +839,13 @@ export interface ElectronAPI {
   readWorkspaceImage(workspaceId: string, relativePath: string): Promise<string>
   writeWorkspaceImage(workspaceId: string, relativePath: string, base64: string, mimeType: string): Promise<void>
 
-  // Agents change listener (live updates when agents are created/synced/deleted)
-  onAgentsChanged(callback: () => void): () => void
-
-  // Theme (cascading: app → workspace → agent)
+  // Theme (cascading: app → workspace)
   getAppTheme(): Promise<import('@config/theme').ThemeOverrides | null>
   getWorkspaceTheme(workspaceId: string): Promise<import('@config/theme').ThemeOverrides | null>
-  getAgentTheme(workspaceId: string, agentSlug: string): Promise<import('@config/theme').ThemeOverrides | null>
 
   // Theme change listeners (live updates when theme.json files change)
   onAppThemeChange(callback: (theme: import('@config/theme').ThemeOverrides | null) => void): () => void
   onWorkspaceThemeChange(callback: (theme: import('@config/theme').ThemeOverrides | null) => void): () => void
-  onAgentThemeChange(callback: (agentSlug: string, theme: import('@config/theme').ThemeOverrides | null) => void): () => void
 
   // Logo URL resolution (uses Node.js filesystem cache for provider domains)
   getLogoUrl(serviceUrl: string, provider?: string): Promise<string | null>
@@ -1069,15 +907,13 @@ export interface WorkspaceSettings {
  * Navigation payload for deep links (main → renderer)
  */
 export interface DeepLinkNavigation {
-  /** New compound route format (e.g., 'inbox/chat/abc123', 'settings/shortcuts') */
+  /** Compound route format (e.g., 'allChats/chat/abc123', 'settings/shortcuts') */
   view?: string
-  /** Legacy: tab type */
+  /** Tab type */
   tabType?: string
   tabParams?: Record<string, string>
   action?: string
   actionParams?: Record<string, string>
-  sidebar?: string
-  sidebarParams?: Record<string, string>
 }
 
 // ============================================
@@ -1086,12 +922,13 @@ export interface DeepLinkNavigation {
 
 /**
  * Chat filter options - determines which sessions to show
+ * - 'allChats': All sessions regardless of status
+ * - 'flagged': Only flagged sessions
+ * - 'state': Sessions with specific status ID
  */
 export type ChatFilter =
-  | { kind: 'inbox' }
-  | { kind: 'archive' }
+  | { kind: 'allChats' }
   | { kind: 'flagged' }
-  | { kind: 'agent'; agentId: string }
   | { kind: 'state'; stateId: string }
 
 /**
@@ -1122,7 +959,7 @@ export interface SourcesNavigationState {
   /** Optional category filter */
   category?: SourceCategory
   /** Selected source details, or null for empty state */
-  details: { type: 'source'; sourceSlug: string; agentSlug?: string } | null
+  details: { type: 'source'; sourceSlug: string } | null
 }
 
 /**
@@ -1169,11 +1006,11 @@ export const isSettingsNavigation = (
 ): state is SettingsNavigationState => state.navigator === 'settings'
 
 /**
- * Default navigation state - inbox with no selection
+ * Default navigation state - allChats with no selection
  */
 export const DEFAULT_NAVIGATION_STATE: NavigationState = {
   navigator: 'chats',
-  filter: { kind: 'inbox' },
+  filter: { kind: 'allChats' },
   details: null,
 }
 
@@ -1184,9 +1021,7 @@ export const getNavigationStateKey = (state: NavigationState): string => {
   if (state.navigator === 'sources') {
     const base = state.category ? `sources:${state.category}` : 'sources'
     if (state.details) {
-      return state.details.agentSlug
-        ? `${base}/source/${state.details.agentSlug}/${state.details.sourceSlug}`
-        : `${base}/source/${state.details.sourceSlug}`
+      return `${base}/source/${state.details.sourceSlug}`
     }
     return base
   }
@@ -1196,8 +1031,7 @@ export const getNavigationStateKey = (state: NavigationState): string => {
   // Chats
   const f = state.filter
   let base: string
-  if (f.kind === 'agent') base = `agent:${f.agentId}`
-  else if (f.kind === 'state') base = `state:${f.stateId}`
+  if (f.kind === 'state') base = `state:${f.stateId}`
   else base = f.kind
   if (state.details) {
     return `${base}/chat/${state.details.sessionId}`
@@ -1216,16 +1050,13 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
     const rest = key.slice(8)
     // Check for source details
     if (rest.includes('/source/')) {
-      const [categoryPart, , ...sourceParts] = rest.split('/')
+      const [categoryPart, , sourceSlug] = rest.split('/')
       const category = categoryPart as SourceCategory
       if (!['local-files', 'online-sources', 'local-mcp'].includes(category)) {
         return { navigator: 'sources', details: null }
       }
-      if (sourceParts.length === 2) {
-        return { navigator: 'sources', category, details: { type: 'source', agentSlug: sourceParts[0], sourceSlug: sourceParts[1] } }
-      }
-      if (sourceParts.length === 1) {
-        return { navigator: 'sources', category, details: { type: 'source', sourceSlug: sourceParts[0] } }
+      if (sourceSlug) {
+        return { navigator: 'sources', category, details: { type: 'source', sourceSlug } }
       }
       return { navigator: 'sources', category, details: null }
     }
@@ -1247,14 +1078,9 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
   // Handle chats - parse filter and optional session
   const parseChatsKey = (filterKey: string, sessionId?: string): NavigationState | null => {
     let filter: ChatFilter
-    if (filterKey === 'inbox') filter = { kind: 'inbox' }
-    else if (filterKey === 'archive') filter = { kind: 'archive' }
+    if (filterKey === 'allChats') filter = { kind: 'allChats' }
     else if (filterKey === 'flagged') filter = { kind: 'flagged' }
-    else if (filterKey.startsWith('agent:')) {
-      const agentId = filterKey.slice(6)
-      if (!agentId) return null
-      filter = { kind: 'agent', agentId }
-    } else if (filterKey.startsWith('state:')) {
+    else if (filterKey.startsWith('state:')) {
       const stateId = filterKey.slice(6)
       if (!stateId) return null
       filter = { kind: 'state', stateId }

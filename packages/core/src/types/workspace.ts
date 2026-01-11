@@ -2,13 +2,21 @@
  * Workspace and authentication types
  */
 
+/**
+ * How MCP server should be authenticated (workspace-level)
+ * Note: Different from SourceMcpAuthType which uses 'oauth' | 'bearer' | 'none' for individual sources
+ */
+export type McpAuthType = 'workspace_oauth' | 'workspace_bearer' | 'public';
+
 export interface Workspace {
   id: string;
-  name: string;
-  slug?: string;       // URL-safe folder name for workspace-scoped storage (defaults to id if not set)
+  name: string;            // Read from workspace folder config (not stored in global config)
+  rootPath: string;        // Absolute path to workspace folder (e.g., ~/Projects/my-app/craft-agent)
   createdAt: number;
-  sessionId?: string;  // SDK session ID for conversation continuity
-  iconUrl?: string;    // Space icon URL from Craft profile
+  lastAccessedAt?: number; // For sorting recent workspaces
+  iconUrl?: string;
+  mcpUrl?: string;
+  mcpAuthType?: McpAuthType;
 }
 
 export type AuthType = 'api_key' | 'oauth_token' | 'craft_credits';

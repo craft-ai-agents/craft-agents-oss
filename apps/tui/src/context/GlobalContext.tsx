@@ -4,9 +4,8 @@ import {
   getCumulativeUsage,
   addToCumulativeUsage,
   switchWorkspaceAtomic,
-  clearSessionMessages,
 } from '@craft-agent/shared/config';
-import { createSession, type SessionConfig } from '@craft-agent/shared/sessions';
+import { createSession, clearSessionMessages, type SessionConfig } from '@craft-agent/shared/sessions';
 
 /**
  * GlobalContext holds state that PERSISTS across session switches.
@@ -120,12 +119,12 @@ export function GlobalProvider({
 
   const resetSession = useCallback(() => {
     // Clear messages in storage (clears SDK session ID for fresh Claude conversation)
-    clearSessionMessages(session.id);
+    clearSessionMessages(session.workspaceRootPath, session.id);
     // Update React state to clear SDK session ID
     setSessionState(prev => ({ ...prev, sdkSessionId: undefined }));
     // Increment reset key to force SessionContainer remount
     setSessionResetKey(k => k + 1);
-  }, [session.id]);
+  }, [session.workspaceRootPath, session.id]);
 
   const addUsage = useCallback((delta: { costUsd: number; inputTokens: number; outputTokens: number }) => {
     // Only add if there's actual new usage

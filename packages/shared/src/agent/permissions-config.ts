@@ -16,7 +16,6 @@ import { join } from 'path';
 import { z } from 'zod';
 import { debug } from '../utils/debug.ts';
 import { getSourcePath } from '../sources/storage.ts';
-import { getAgentPath } from '../agents/folder-storage.ts';
 import { SAFE_MODE_CONFIG } from './mode-manager.ts';
 
 // ============================================================
@@ -118,8 +117,6 @@ export interface PermissionsContext {
   workspaceRootPath: string;
   /** Active source slugs for source-specific rules */
   activeSourceSlugs?: string[];
-  /** Active agent slug for agent-specific rules */
-  activeAgentSlug?: string;
 }
 
 // ============================================================
@@ -237,13 +234,6 @@ export function getSourcePermissionsPath(workspaceRootPath: string, sourceSlug: 
 }
 
 /**
- * Get path to agent permissions.json
- */
-export function getAgentPermissionsPath(workspaceRootPath: string, agentSlug: string): string {
-  return join(getAgentPath(workspaceRootPath, agentSlug), 'permissions.json');
-}
-
-/**
  * Load workspace-level permissions config
  */
 export function loadWorkspacePermissionsConfig(workspaceRootPath: string): PermissionsCustomConfig | null {
@@ -278,27 +268,6 @@ export function loadSourcePermissionsConfig(
     return config;
   } catch (error) {
     debug(`[Permissions] Error loading source config:`, error);
-    return null;
-  }
-}
-
-/**
- * Load agent-level permissions config
- */
-export function loadAgentPermissionsConfig(
-  workspaceRootPath: string,
-  agentSlug: string
-): PermissionsCustomConfig | null {
-  const path = getAgentPermissionsPath(workspaceRootPath, agentSlug);
-  if (!existsSync(path)) return null;
-
-  try {
-    const content = readFileSync(path, 'utf-8');
-    const config = parsePermissionsJson(content);
-    debug(`[Permissions] Loaded agent config from ${path}:`, config);
-    return config;
-  } catch (error) {
-    debug(`[Permissions] Error loading agent config:`, error);
     return null;
   }
 }
@@ -341,7 +310,6 @@ export function isApiEndpointAllowed(
 class PermissionsConfigCache {
   private workspaceConfigs: Map<string, PermissionsCustomConfig | null> = new Map();
   private sourceConfigs: Map<string, PermissionsCustomConfig | null> = new Map();
-  private agentConfigs: Map<string, PermissionsCustomConfig | null> = new Map();
   private mergedConfigs: Map<string, MergedPermissionsConfig> = new Map();
 
   /**
@@ -363,17 +331,6 @@ class PermissionsConfigCache {
       this.sourceConfigs.set(key, loadSourcePermissionsConfig(workspaceRootPath, sourceSlug));
     }
     return this.sourceConfigs.get(key) ?? null;
-  }
-
-  /**
-   * Get or load agent config
-   */
-  getAgentConfig(workspaceRootPath: string, agentSlug: string): PermissionsCustomConfig | null {
-    const key = `${workspaceRootPath}::agent::${agentSlug}`;
-    if (!this.agentConfigs.has(key)) {
-      this.agentConfigs.set(key, loadAgentPermissionsConfig(workspaceRootPath, agentSlug));
-    }
-    return this.agentConfigs.get(key) ?? null;
   }
 
   /**
@@ -404,19 +361,6 @@ class PermissionsConfigCache {
     }
   }
 
-  /**
-   * Invalidate agent config (called by ConfigWatcher)
-   */
-  invalidateAgent(workspaceRootPath: string, agentSlug: string): void {
-    debug(`[Permissions] Invalidating agent config: ${workspaceRootPath}/${agentSlug}`);
-    this.agentConfigs.delete(`${workspaceRootPath}::agent::${agentSlug}`);
-    // Clear merged configs that include this agent
-    for (const key of this.mergedConfigs.keys()) {
-      if (key.startsWith(`${workspaceRootPath}::`) && key.includes(`agent:${agentSlug}`)) {
-        this.mergedConfigs.delete(key);
-      }
-    }
-  }
 
   /**
    * Get merged config for a context (workspace + active sources)
@@ -462,14 +406,6 @@ class PermissionsConfigCache {
           // Use applySourceConfig which auto-scopes MCP patterns to this source
           this.applySourceConfig(merged, srcConfig, sourceSlug);
         }
-      }
-    }
-
-    // Add agent-level customizations (additive)
-    if (context.activeAgentSlug) {
-      const agentConfig = this.getAgentConfig(context.workspaceRootPath, context.activeAgentSlug);
-      if (agentConfig) {
-        this.applyCustomConfig(merged, agentConfig);
       }
     }
 
@@ -583,8 +519,7 @@ class PermissionsConfigCache {
 
   private buildCacheKey(context: PermissionsContext): string {
     const sources = context.activeSourceSlugs?.sort().join(',') ?? '';
-    const agent = context.activeAgentSlug ? `agent:${context.activeAgentSlug}` : '';
-    return `${context.workspaceRootPath}::${sources}::${agent}`;
+    return `${context.workspaceRootPath}::${sources}`;
   }
 
   /**
@@ -593,7 +528,6 @@ class PermissionsConfigCache {
   clear(): void {
     this.workspaceConfigs.clear();
     this.sourceConfigs.clear();
-    this.agentConfigs.clear();
     this.mergedConfigs.clear();
   }
 }

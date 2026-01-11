@@ -20,7 +20,7 @@ import { randomBytes, createHash } from 'crypto';
 import { createCallbackServer, type AppType } from './callback-server.ts';
 import { type MicrosoftService } from '../sources/types.ts';
 
-// Re-export MicrosoftService for backwards compatibility
+// Re-export MicrosoftService type for convenient access
 export type { MicrosoftService };
 
 // Microsoft OAuth configuration - must be set via environment variables

@@ -4,13 +4,10 @@
  * Sources are external data connections (MCP servers, APIs, local filesystems).
  * They replace the old "connections" concept with a more flexible, folder-based architecture.
  *
- * File structure (workspace-scoped):
+ * File structure:
  * ~/.craft-agent/workspaces/{workspaceId}/sources/{sourceSlug}/
  *   ├── config.json   - Source settings
  *   └── guide.md      - Usage guidelines + cached data (in YAML frontmatter)
- *
- * Agent-scoped sources:
- * ~/.craft-agent/workspaces/{workspaceId}/agents/{agentSlug}/sources/{sourceSlug}/
  */
 
 /**
@@ -19,9 +16,10 @@
 export type SourceType = 'mcp' | 'api' | 'local';
 
 /**
- * MCP authentication types
+ * MCP source authentication types (for individual source connections)
+ * Note: Different from workspace McpAuthType which uses 'workspace_oauth' | 'workspace_bearer' | 'public'
  */
-export type McpAuthType = 'oauth' | 'bearer' | 'none';
+export type SourceMcpAuthType = 'oauth' | 'bearer' | 'none';
 
 /**
  * API authentication types
@@ -207,7 +205,7 @@ export interface McpSourceConfig {
   /**
    * Authentication type for HTTP/SSE servers.
    */
-  authType?: McpAuthType;
+  authType?: SourceMcpAuthType;
 
   /**
    * OAuth client ID (stored in config, not secret).
@@ -359,13 +357,6 @@ export interface LoadedSource {
    * Used for credential lookups: source_oauth::{workspaceId}::{sourceSlug}
    */
   workspaceId: string;
-
-  /**
-   * If set, this source is agent-scoped.
-   * Path: workspaces/{workspaceId}/agents/{agentSlug}/sources/{slug}/
-   * Credentials: agent_source_oauth::{workspaceId}::{agentSlug}::{sourceSlug}
-   */
-  agentSlug?: string;
 }
 
 /**
@@ -380,4 +371,27 @@ export interface CreateSourceInput {
   local?: LocalSourceConfig;
   iconUrl?: string;
   enabled?: boolean;
+}
+
+/**
+ * REST API configuration for API sources
+ * Used by api-tools.ts to create dynamic API tools
+ */
+export interface ApiConfig {
+  name: string;
+  baseUrl: string;
+  auth?: {
+    type: 'none' | 'header' | 'bearer' | 'query' | 'basic';
+    headerName?: string;
+    queryParam?: string;
+    authScheme?: string;
+    credentialLabel?: string;
+    secretLabel?: string;
+  };
+  headers?: Record<string, string>;
+  documentation?: string;
+  docsUrl?: string;
+  defaultHeaders?: Record<string, string>;
+  logo?: string;
+  workspaceId?: string;
 }

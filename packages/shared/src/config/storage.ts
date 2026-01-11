@@ -13,52 +13,22 @@ import {
 import { findIconInDir } from '../sources/storage.ts';
 import { initializeDocs } from '../docs/index.ts';
 import { expandPath, toPortablePath } from '../utils/paths.ts';
-import type { StoredAttachment } from '@craft-agent/core/types';
-import type { Plan } from '../agents/plan-types.ts';
+import type { StoredAttachment, StoredMessage } from '@craft-agent/core/types';
+import type { Plan } from '../agent/plan-types.ts';
 import type { PermissionMode } from '../agent/mode-manager.ts';
 
-/**
- * OAuth credentials from a fresh authentication flow.
- * Used for temporary state in UI components before saving to credential store.
- *
- * Note: `clientId` is required here because OAuth flows always return it.
- * This differs from `StoredCredential` where `clientId` is optional since
- * not all credential types (bearer tokens, API keys) have a clientId.
- */
-export interface OAuthCredentials {
-  accessToken: string;
-  refreshToken?: string;
-  expiresAt?: number;
-  clientId: string;
-  tokenType: string;
-}
+// Re-export base types from core (single source of truth)
+export type {
+  Workspace,
+  McpAuthType,
+  AuthType,
+  OAuthCredentials,
+  TokenDisplayMode,
+  CumulativeUsage,
+} from '@craft-agent/core/types';
 
-// How MCP server should be authenticated
-export type McpAuthType = 'workspace_oauth' | 'workspace_bearer' | 'public';
-
-export interface Workspace {
-  id: string;
-  name: string;            // Read from workspace folder config (not stored in global config)
-  rootPath: string;        // Absolute path to workspace folder (e.g., ~/Projects/my-app/craft-agent)
-  createdAt: number;
-  lastAccessedAt?: number; // For sorting recent workspaces
-  iconUrl?: string;
-  mcpUrl?: string;
-  mcpAuthType?: McpAuthType;
-}
-
-export type AuthType = 'api_key' | 'oauth_token' | 'craft_credits';
-
-// Token display mode for status bar
-export type TokenDisplayMode = 'hidden' | 'total' | 'separate';
-
-// Global cumulative usage tracking across all workspaces
-export interface CumulativeUsage {
-  totalCostUsd: number;
-  totalInputTokens: number;
-  totalOutputTokens: number;
-  lastUpdated: number;
-}
+// Import for local use
+import type { Workspace, AuthType, TokenDisplayMode, CumulativeUsage } from '@craft-agent/core/types';
 
 // Config stored in JSON file (credentials stored in encrypted file, not here)
 export interface StoredConfig {
@@ -626,43 +596,8 @@ function ensureWorkspaceDir(workspaceId: string): string {
 }
 
 
-// Re-export StoredAttachment for convenience (imported at top of file)
-export type { StoredAttachment };
-
-// Stored message format (simplified for persistence)
-export interface StoredMessage {
-  id: string;
-  type: 'user' | 'assistant' | 'tool' | 'error' | 'status' | 'system' | 'info' | 'warning' | 'plan';
-  content: string;
-  timestamp?: number;
-  toolName?: string;
-  toolInput?: Record<string, unknown>;
-  toolStatus?: 'pending' | 'executing' | 'completed' | 'error';
-  toolDuration?: number;
-  /** Tool intent description (from MCP _intent field) */
-  toolIntent?: string;
-  isError?: boolean;
-  /** Stored attachments for user messages (persisted to disk) */
-  attachments?: StoredAttachment[];
-  /** Tool use ID for deduplication (SDK sends duplicate tool_start events) */
-  toolUseId?: string;
-  /** Tool result content (for tool messages) */
-  toolResult?: string;
-  /** Parent tool use ID for nested tool calls (e.g., child tools inside Task subagent) */
-  parentToolUseId?: string;
-  /** Whether this is an intermediate assistant message (commentary between tool calls) */
-  isIntermediate?: boolean;
-  /** Turn ID for grouping messages in TurnCard after reload */
-  turnId?: string;
-  /** Error display fields for typed errors */
-  errorCode?: string;
-  errorTitle?: string;
-  errorDetails?: string[];
-  errorOriginal?: string;
-  errorCanRetry?: boolean;
-  /** Whether this user message was sent with ultrathink (extended thinking) enabled */
-  ultrathink?: boolean;
-}
+// Re-export types from core for convenience
+export type { StoredAttachment, StoredMessage } from '@craft-agent/core/types';
 
 export interface WorkspaceConversation {
   messages: StoredMessage[];
@@ -929,33 +864,5 @@ export function loadWorkspaceTheme(workspaceRootPath: string): ThemeOverrides | 
  */
 export function saveWorkspaceTheme(workspaceRootPath: string, theme: ThemeOverrides): void {
   const themePath = join(workspaceRootPath, 'theme.json');
-  writeFileSync(themePath, JSON.stringify(theme, null, 2), 'utf-8');
-}
-
-/**
- * Load agent-level theme overrides
- */
-export function loadAgentTheme(workspaceRootPath: string, agentSlug: string): ThemeOverrides | null {
-  try {
-    const themePath = join(workspaceRootPath, 'agents', agentSlug, 'theme.json');
-    if (!existsSync(themePath)) {
-      return null;
-    }
-    const content = readFileSync(themePath, 'utf-8');
-    return JSON.parse(content) as ThemeOverrides;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Save agent-level theme overrides
- */
-export function saveAgentTheme(workspaceRootPath: string, agentSlug: string, theme: ThemeOverrides): void {
-  const agentDir = join(workspaceRootPath, 'agents', agentSlug);
-  if (!existsSync(agentDir)) {
-    mkdirSync(agentDir, { recursive: true });
-  }
-  const themePath = join(agentDir, 'theme.json');
   writeFileSync(themePath, JSON.stringify(theme, null, 2), 'utf-8');
 }

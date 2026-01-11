@@ -24,8 +24,6 @@ export interface HeaderProps {
   version?: string;
   /** Current permission mode ('safe', 'ask', 'allow-all') */
   permissionMode?: PermissionMode;
-  /** @deprecated Use permissionMode instead */
-  safeMode?: boolean;
   /** Show "Press Ctrl+C again to exit" warning */
   exitWarning?: boolean;
   /** Show "Cannot toggle Plan Mode while processing" warning */
@@ -47,14 +45,11 @@ export const Header: React.FC<HeaderProps> = memo(({
   showCost = true,
   showClock = false,
   version,
-  permissionMode,
-  safeMode = false,
+  permissionMode = 'ask',
   exitWarning = false,
   planToggleWarning = false,
 }) => {
-  // Resolve permission mode: prefer explicit prop, fallback to legacy safeMode
-  const resolvedMode: PermissionMode = permissionMode ?? (safeMode ? 'safe' : 'ask');
-  const modeConfig = PERMISSION_MODE_CONFIG[resolvedMode];
+  const modeConfig = PERMISSION_MODE_CONFIG[permissionMode];
 
   // Use the mode's muted color for terminal background display
   const modeBackgroundColor = useMemo(() => modeConfig.colors.muted, [modeConfig.colors.muted]);
@@ -76,6 +71,19 @@ export const Header: React.FC<HeaderProps> = memo(({
     if (authType === 'craft_credits') return 'Craft Credits';
     return 'Unknown';
   }, [authType]);
+
+  // Clock display state
+  const [clockDisplay, setClockDisplay] = useState<string>('');
+  useEffect(() => {
+    if (!showClock) return;
+    const update = () => {
+      const now = new Date();
+      setClockDisplay(now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+    };
+    update();
+    const interval = setInterval(update, 60000); // Update every minute
+    return () => clearInterval(interval);
+  }, [showClock]);
 
   // Show only the exit warning when active (replaces entire header)
   if (exitWarning) {

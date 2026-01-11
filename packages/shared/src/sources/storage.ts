@@ -20,7 +20,7 @@ import type {
 import { validateSourceConfig } from '../config/validators.ts';
 import { debug } from '../utils/debug.ts';
 import { expandPath, toPortablePath } from '../utils/paths.ts';
-import { getWorkspaceSourcesPath, getWorkspaceAgentsPath } from '../workspaces/storage.ts';
+import { getWorkspaceSourcesPath } from '../workspaces/storage.ts';
 
 // ============================================================
 // Directory Utilities
@@ -31,17 +31,6 @@ import { getWorkspaceSourcesPath, getWorkspaceAgentsPath } from '../workspaces/s
  */
 export function getSourcePath(workspaceRootPath: string, sourceSlug: string): string {
   return join(getWorkspaceSourcesPath(workspaceRootPath), sourceSlug);
-}
-
-/**
- * Get path to an agent-scoped source folder
- */
-export function getAgentSourcePath(
-  workspaceRootPath: string,
-  agentSlug: string,
-  sourceSlug: string
-): string {
-  return join(getWorkspaceAgentsPath(workspaceRootPath), agentSlug, 'sources', sourceSlug);
 }
 
 /**
@@ -83,31 +72,6 @@ export function loadSourceConfig(
 }
 
 /**
- * Load agent-scoped source config.json
- */
-export function loadAgentSourceConfig(
-  workspaceRootPath: string,
-  agentSlug: string,
-  sourceSlug: string
-): FolderSourceConfig | null {
-  const configPath = join(getAgentSourcePath(workspaceRootPath, agentSlug, sourceSlug), 'config.json');
-  if (!existsSync(configPath)) return null;
-
-  try {
-    const config = JSON.parse(readFileSync(configPath, 'utf-8')) as FolderSourceConfig;
-
-    // Expand path variables in local source paths for portability
-    if (config.type === 'local' && config.local?.path) {
-      config.local.path = expandPath(config.local.path);
-    }
-
-    return config;
-  } catch {
-    return null;
-  }
-}
-
-/**
  * Save source config.json
  * @throws Error if config is invalid
  */
@@ -124,39 +88,6 @@ export function saveSourceConfig(
   }
 
   const dir = getSourcePath(workspaceRootPath, config.slug);
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true });
-  }
-
-  // Convert local source paths to portable form
-  const storageConfig: FolderSourceConfig = { ...config, updatedAt: Date.now() };
-  if (storageConfig.type === 'local' && storageConfig.local?.path) {
-    storageConfig.local = {
-      ...storageConfig.local,
-      path: toPortablePath(storageConfig.local.path),
-    };
-  }
-
-  writeFileSync(join(dir, 'config.json'), JSON.stringify(storageConfig, null, 2));
-}
-
-/**
- * Save agent-scoped source config.json
- */
-export function saveAgentSourceConfig(
-  workspaceRootPath: string,
-  agentSlug: string,
-  config: FolderSourceConfig
-): void {
-  // Validate config before writing
-  const validation = validateSourceConfig(config);
-  if (!validation.valid) {
-    const errorMessages = validation.errors.map((e) => `${e.path}: ${e.message}`).join(', ');
-    debug('[saveAgentSourceConfig] Validation failed:', errorMessages);
-    throw new Error(`Invalid source config: ${errorMessages}`);
-  }
-
-  const dir = getAgentSourcePath(workspaceRootPath, agentSlug, config.slug);
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
   }
@@ -237,25 +168,6 @@ export function loadSourceGuide(workspaceRootPath: string, sourceSlug: string): 
 }
 
 /**
- * Load agent-scoped source guide
- */
-export function loadAgentSourceGuide(
-  workspaceRootPath: string,
-  agentSlug: string,
-  sourceSlug: string
-): SourceGuide | null {
-  const guidePath = join(getAgentSourcePath(workspaceRootPath, agentSlug, sourceSlug), 'guide.md');
-  if (!existsSync(guidePath)) return null;
-
-  try {
-    const raw = readFileSync(guidePath, 'utf-8');
-    return parseGuideMarkdown(raw);
-  } catch {
-    return null;
-  }
-}
-
-/**
  * Extract a short tagline from guide.md content
  * Looks for the first non-empty paragraph after the title, or falls back to scope section
  * @returns Tagline string (max 100 chars) or null if not found
@@ -296,23 +208,6 @@ export function saveSourceGuide(
   guide: SourceGuide
 ): void {
   const dir = getSourcePath(workspaceRootPath, sourceSlug);
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true });
-  }
-
-  writeFileSync(join(dir, 'guide.md'), guide.raw);
-}
-
-/**
- * Save agent-scoped source guide.md
- */
-export function saveAgentSourceGuide(
-  workspaceRootPath: string,
-  agentSlug: string,
-  sourceSlug: string,
-  guide: SourceGuide
-): void {
-  const dir = getAgentSourcePath(workspaceRootPath, agentSlug, sourceSlug);
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
   }
@@ -378,31 +273,6 @@ export function loadSource(workspaceRootPath: string, sourceSlug: string): Loade
 }
 
 /**
- * Load agent-scoped source
- * @param workspaceRootPath - Absolute path to workspace folder
- */
-export function loadAgentSource(
-  workspaceRootPath: string,
-  agentSlug: string,
-  sourceSlug: string
-): LoadedSource | null {
-  const folderPath = getAgentSourcePath(workspaceRootPath, agentSlug, sourceSlug);
-  const config = loadAgentSourceConfig(workspaceRootPath, agentSlug, sourceSlug);
-  if (!config) return null;
-
-  // Extract workspace folder name for credential lookup
-  const workspaceId = basename(workspaceRootPath);
-
-  return {
-    config,
-    guide: loadAgentSourceGuide(workspaceRootPath, agentSlug, sourceSlug),
-    folderPath,
-    workspaceId,
-    agentSlug,
-  };
-}
-
-/**
  * Load all sources for a workspace
  */
 export function loadWorkspaceSources(workspaceRootPath: string): LoadedSource[] {
@@ -418,29 +288,6 @@ export function loadWorkspaceSources(workspaceRootPath: string): LoadedSource[] 
   for (const entry of entries) {
     if (entry.isDirectory()) {
       const source = loadSource(workspaceRootPath, entry.name);
-      if (source) {
-        sources.push(source);
-      }
-    }
-  }
-
-  return sources;
-}
-
-/**
- * Load all agent-scoped sources
- */
-export function loadAgentSources(workspaceRootPath: string, agentSlug: string): LoadedSource[] {
-  const sourcesDir = join(getWorkspaceAgentsPath(workspaceRootPath), agentSlug, 'sources');
-
-  if (!existsSync(sourcesDir)) return [];
-
-  const sources: LoadedSource[] = [];
-  const entries = readdirSync(sourcesDir, { withFileTypes: true });
-
-  for (const entry of entries) {
-    if (entry.isDirectory()) {
-      const source = loadAgentSource(workspaceRootPath, agentSlug, entry.name);
       if (source) {
         sources.push(source);
       }
@@ -633,233 +480,47 @@ export function sourceExists(workspaceRootPath: string, sourceSlug: string): boo
 }
 
 // ============================================================
-// Agent-Scoped Source Operations
+// Source Loading/Saving Helpers
 // ============================================================
 
 /**
- * Generate URL-safe slug for agent-scoped source
- */
-export function generateAgentSourceSlug(
-  workspaceRootPath: string,
-  agentSlug: string,
-  name: string
-): string {
-  let slug = name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-    .substring(0, 50);
-
-  // Ensure slug is not empty
-  if (!slug) {
-    slug = 'source';
-  }
-
-  // Check for existing slugs in agent's sources folder
-  const sourcesDir = join(getWorkspaceAgentsPath(workspaceRootPath), agentSlug, 'sources');
-  const existingSlugs = new Set<string>();
-  if (existsSync(sourcesDir)) {
-    const entries = readdirSync(sourcesDir, { withFileTypes: true });
-    for (const entry of entries) {
-      if (entry.isDirectory()) {
-        existingSlugs.add(entry.name);
-      }
-    }
-  }
-
-  if (!existingSlugs.has(slug)) {
-    return slug;
-  }
-
-  // Find next available number
-  let counter = 2;
-  while (existingSlugs.has(`${slug}-${counter}`)) {
-    counter++;
-  }
-
-  return `${slug}-${counter}`;
-}
-
-/**
- * Create a new agent-scoped source
- */
-export async function createAgentSource(
-  workspaceRootPath: string,
-  agentSlug: string,
-  input: CreateSourceInput
-): Promise<FolderSourceConfig> {
-  const slug = generateAgentSourceSlug(workspaceRootPath, agentSlug, input.name);
-  const now = Date.now();
-
-  const config: FolderSourceConfig = {
-    id: `src_${randomUUID().slice(0, 8)}`,
-    name: input.name,
-    slug,
-    enabled: input.enabled ?? true,
-    provider: input.provider,
-    type: input.type,
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  // Add type-specific config
-  switch (input.type) {
-    case 'mcp':
-      if (input.mcp) {
-        config.mcp = input.mcp;
-      }
-      break;
-    case 'api':
-      if (input.api) {
-        config.api = input.api;
-      }
-      break;
-    case 'local':
-      if (input.local) {
-        config.local = input.local;
-      }
-      break;
-  }
-
-  // Save config first to create the directory
-  saveAgentSourceConfig(workspaceRootPath, agentSlug, config);
-
-  // Cache icon locally
-  const sourcePath = getAgentSourcePath(workspaceRootPath, agentSlug, slug);
-  if (input.iconUrl) {
-    // User-provided URL: download and cache it
-    const { cacheIcon } = await import('../utils/logo.ts');
-    const cached = await cacheIcon(input.iconUrl, sourcePath);
-    if (cached) {
-      config.iconUrl = cached;
-      config.iconSourceUrl = input.iconUrl;
-      saveAgentSourceConfig(workspaceRootPath, agentSlug, config);
-    } else {
-      config.iconUrl = input.iconUrl; // Fallback to URL if download fails
-    }
-  } else {
-    // Auto-fetch from service URL
-    const { deriveServiceUrl, getHighQualityLogoUrl, cacheIcon } = await import('../utils/logo.ts');
-    const serviceUrl = deriveServiceUrl(input);
-    if (serviceUrl) {
-      const logoUrl = await getHighQualityLogoUrl(serviceUrl, input.provider);
-      if (logoUrl) {
-        const cached = await cacheIcon(logoUrl, sourcePath);
-        if (cached) {
-          config.iconUrl = cached;
-          config.iconSourceUrl = logoUrl;
-          saveAgentSourceConfig(workspaceRootPath, agentSlug, config);
-        }
-      }
-    }
-  }
-
-  // Create default guide.md
-  const guideContent = `# ${input.name}
-
-## Guidelines
-
-(Add usage guidelines here)
-
-## Context
-
-(Add context about this source)
-`;
-  saveAgentSourceGuide(workspaceRootPath, agentSlug, slug, { raw: guideContent });
-
-  return config;
-}
-
-/**
- * Delete an agent-scoped source
- */
-export function deleteAgentSource(
-  workspaceRootPath: string,
-  agentSlug: string,
-  sourceSlug: string
-): void {
-  const dir = getAgentSourcePath(workspaceRootPath, agentSlug, sourceSlug);
-  if (existsSync(dir)) {
-    rmSync(dir, { recursive: true });
-  }
-}
-
-/**
- * Check if an agent-scoped source exists
- */
-export function agentSourceExists(
-  workspaceRootPath: string,
-  agentSlug: string,
-  sourceSlug: string
-): boolean {
-  return existsSync(join(getAgentSourcePath(workspaceRootPath, agentSlug, sourceSlug), 'config.json'));
-}
-
-// ============================================================
-// Agent-Aware Source Loading/Saving
-// ============================================================
-
-/**
- * Result of loading a source with agent context
+ * Result of loading a source with context
  */
 export interface SourceWithContext {
   config: FolderSourceConfig;
-  /** Whether this source is agent-scoped (vs workspace-scoped) */
-  isAgentScoped: boolean;
-  /** Agent slug if this is an agent-scoped source */
-  agentSlug?: string;
+  /** Always false - agent-scoped sources are no longer supported */
+  isAgentScoped: false;
 }
 
 /**
- * Load source config, checking agent folder first (if activeAgentSlug provided), then workspace.
- * Returns null if not found in either location.
+ * Load source config from workspace with context wrapper.
  */
 export function loadSourceConfigWithFallback(
   workspaceRootPath: string,
-  sourceSlug: string,
-  activeAgentSlug?: string
+  sourceSlug: string
 ): SourceWithContext | null {
-  // If active agent context, check agent folder first
-  if (activeAgentSlug) {
-    const agentConfig = loadAgentSourceConfig(workspaceRootPath, activeAgentSlug, sourceSlug);
-    if (agentConfig) {
-      return {
-        config: agentConfig,
-        isAgentScoped: true,
-        agentSlug: activeAgentSlug,
-      };
-    }
-  }
-
-  // Fall back to workspace folder
-  const workspaceConfig = loadSourceConfig(workspaceRootPath, sourceSlug);
-  if (workspaceConfig) {
+  const config = loadSourceConfig(workspaceRootPath, sourceSlug);
+  if (config) {
     return {
-      config: workspaceConfig,
+      config,
       isAgentScoped: false,
     };
   }
-
   return null;
 }
 
 /**
- * Save source config back to the correct location based on context.
+ * Save source config back to workspace with context wrapper.
  */
 export function saveSourceConfigWithContext(
   workspaceRootPath: string,
-  config: FolderSourceConfig,
-  context: { isAgentScoped: boolean; agentSlug?: string }
+  config: FolderSourceConfig
 ): void {
-  if (context.isAgentScoped && context.agentSlug) {
-    saveAgentSourceConfig(workspaceRootPath, context.agentSlug, config);
-  } else {
-    saveSourceConfig(workspaceRootPath, config);
-  }
+  saveSourceConfig(workspaceRootPath, config);
 }
 
 // ============================================================
-// Re-export parseGuideMarkdown for use in agent folder storage
+// Re-export parseGuideMarkdown for use in other modules
 // ============================================================
 
 export { parseGuideMarkdown };
@@ -874,21 +535,16 @@ export { parseGuideMarkdown };
  */
 export async function migrateSourceIcon(
   workspaceRootPath: string,
-  sourceSlug: string,
-  agentSlug?: string
+  sourceSlug: string
 ): Promise<boolean> {
-  const config = agentSlug
-    ? loadAgentSourceConfig(workspaceRootPath, agentSlug, sourceSlug)
-    : loadSourceConfig(workspaceRootPath, sourceSlug);
+  const config = loadSourceConfig(workspaceRootPath, sourceSlug);
 
   if (!config?.iconUrl) return false;
 
   // Skip if already a relative path (already cached)
   if (config.iconUrl.startsWith('./')) return false;
 
-  const sourcePath = agentSlug
-    ? getAgentSourcePath(workspaceRootPath, agentSlug, sourceSlug)
-    : getSourcePath(workspaceRootPath, sourceSlug);
+  const sourcePath = getSourcePath(workspaceRootPath, sourceSlug);
 
   const { cacheIcon } = await import('../utils/logo.ts');
   const cached = await cacheIcon(config.iconUrl, sourcePath);
@@ -896,11 +552,7 @@ export async function migrateSourceIcon(
   if (cached) {
     config.iconSourceUrl = config.iconUrl;
     config.iconUrl = cached;
-    if (agentSlug) {
-      saveAgentSourceConfig(workspaceRootPath, agentSlug, config);
-    } else {
-      saveSourceConfig(workspaceRootPath, config);
-    }
+    saveSourceConfig(workspaceRootPath, config);
     return true;
   }
 
@@ -914,32 +566,12 @@ export async function migrateSourceIcon(
 export async function migrateWorkspaceIcons(workspaceRootPath: string): Promise<number> {
   let migrated = 0;
 
-  // Migrate workspace-scoped sources
   const sourcesDir = getWorkspaceSourcesPath(workspaceRootPath);
   if (existsSync(sourcesDir)) {
     for (const entry of readdirSync(sourcesDir, { withFileTypes: true })) {
       if (entry.isDirectory()) {
         if (await migrateSourceIcon(workspaceRootPath, entry.name)) {
           migrated++;
-        }
-      }
-    }
-  }
-
-  // Migrate agent-scoped sources
-  const agentsDir = getWorkspaceAgentsPath(workspaceRootPath);
-  if (existsSync(agentsDir)) {
-    for (const agentEntry of readdirSync(agentsDir, { withFileTypes: true })) {
-      if (agentEntry.isDirectory()) {
-        const agentSourcesDir = join(agentsDir, agentEntry.name, 'sources');
-        if (existsSync(agentSourcesDir)) {
-          for (const sourceEntry of readdirSync(agentSourcesDir, { withFileTypes: true })) {
-            if (sourceEntry.isDirectory()) {
-              if (await migrateSourceIcon(workspaceRootPath, sourceEntry.name, agentEntry.name)) {
-                migrated++;
-              }
-            }
-          }
         }
       }
     }

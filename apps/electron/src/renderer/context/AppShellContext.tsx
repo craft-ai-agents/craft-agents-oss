@@ -12,7 +12,6 @@ import { useAtomValue } from 'jotai'
 import type {
   Session,
   Workspace,
-  SubAgentMetadata,
   FileAttachment,
   PermissionRequest,
   CredentialRequest,
@@ -32,8 +31,6 @@ export interface AppShellContextType {
   // and useSession(id) hook for individual sessions. This prevents closures
   // from retaining the full messages array and causing memory leaks.
   workspaces: Workspace[]
-  agents: SubAgentMetadata[]
-  isLoadingAgents?: boolean
   activeWorkspaceId: string | null
   currentModel: string
   pendingPermissions: Map<string, PermissionRequest[]>
@@ -50,7 +47,7 @@ export interface AppShellContextType {
   sessionOptions: Map<string, SessionOptions>
 
   // Session callbacks
-  onCreateSession: (workspaceId: string, agentId?: string) => Promise<Session>
+  onCreateSession: (workspaceId: string) => Promise<Session>
   onSendMessage: (sessionId: string, message: string, attachments?: FileAttachment[]) => void
   onRenameSession: (sessionId: string, name: string) => void
   onFlagSession: (sessionId: string) => void
@@ -90,7 +87,6 @@ export interface AppShellContextType {
   onOpenSettings: () => void
   onOpenKeyboardShortcuts: () => void
   onOpenStoredUserPreferences: () => void
-  onRefreshAgents: () => void
   onReset: () => void
 
   // Unified session options callback (replaces onUltrathinkChange, onSkipPermissionsChange, onModeChange)
@@ -138,9 +134,6 @@ export function useSession(sessionId: string): Session | null {
   // Use per-session atom for isolated updates
   return useAtomValue(sessionAtomFamily(sessionId))
 }
-
-// useSessionLegacy removed - was deprecated and caused memory leaks
-// Use useSession(sessionId) hook instead for isolated updates
 
 /**
  * Get the active workspace

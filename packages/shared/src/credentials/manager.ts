@@ -271,126 +271,16 @@ export class CredentialManager {
     await this.set({ type: 'workspace_bearer', workspaceId }, { value: token });
   }
 
-  /** Get MCP server OAuth credentials for an agent */
-  async getMcpOAuth(
-    workspaceId: string,
-    agentId: string,
-    serverName: string
-  ): Promise<{
-    accessToken: string;
-    refreshToken?: string;
-    expiresAt?: number;
-    clientId?: string;
-  } | null> {
-    const cred = await this.get({
-      type: 'mcp_oauth',
-      workspaceId,
-      agentId,
-      name: serverName,
-    });
-    if (!cred) return null;
-
-    return {
-      accessToken: cred.value,
-      refreshToken: cred.refreshToken,
-      expiresAt: cred.expiresAt,
-      clientId: cred.clientId,
-    };
-  }
-
-  /** Set MCP server OAuth credentials for an agent */
-  async setMcpOAuth(
-    workspaceId: string,
-    agentId: string,
-    serverName: string,
-    credentials: {
-      accessToken: string;
-      refreshToken?: string;
-      expiresAt?: number;
-      clientId?: string;
-    }
-  ): Promise<void> {
-    await this.set(
-      { type: 'mcp_oauth', workspaceId, agentId, name: serverName },
-      {
-        value: credentials.accessToken,
-        refreshToken: credentials.refreshToken,
-        expiresAt: credentials.expiresAt,
-        clientId: credentials.clientId,
-      }
-    );
-  }
-
-  /** Get API key for an agent's REST API */
-  async getApiKeyForAgent(
-    workspaceId: string,
-    agentId: string,
-    apiName: string
-  ): Promise<string | null> {
-    const cred = await this.get({
-      type: 'api_key',
-      workspaceId,
-      agentId,
-      name: apiName,
-    });
-    return cred?.value || null;
-  }
-
-  /** Set API key for an agent's REST API */
-  async setApiKeyForAgent(
-    workspaceId: string,
-    agentId: string,
-    apiName: string,
-    apiKey: string
-  ): Promise<void> {
-    await this.set(
-      { type: 'api_key', workspaceId, agentId, name: apiName },
-      { value: apiKey }
-    );
-  }
-
-  /** Delete all credentials for a workspace (including all agent credentials) */
+  /** Delete all credentials for a workspace */
   async deleteWorkspaceCredentials(workspaceId: string): Promise<void> {
     // Delete workspace-level credentials
     await this.delete({ type: 'workspace_oauth', workspaceId });
     await this.delete({ type: 'workspace_bearer', workspaceId });
 
-    // Delete all agent credentials for this workspace
+    // Delete all source credentials for this workspace
     const allCreds = await this.list({ workspaceId });
     for (const cred of allCreds) {
       await this.delete(cred);
-    }
-  }
-
-  /**
-   * Delete all credentials for an agent.
-   * If serverNames/apiNames are provided, only those are deleted.
-   * If not provided, finds and deletes ALL credentials for this agent.
-   */
-  async deleteAgentCredentials(
-    workspaceId: string,
-    agentId: string,
-    serverNames?: string[],
-    apiNames?: string[]
-  ): Promise<void> {
-    // If names provided, delete only those
-    if (serverNames && serverNames.length > 0) {
-      for (const name of serverNames) {
-        await this.delete({ type: 'mcp_oauth', workspaceId, agentId, name });
-      }
-    }
-    if (apiNames && apiNames.length > 0) {
-      for (const name of apiNames) {
-        await this.delete({ type: 'api_key', workspaceId, agentId, name });
-      }
-    }
-
-    // If no names provided, find and delete all credentials for this agent
-    if (!serverNames && !apiNames) {
-      const allCredentials = await this.list({ workspaceId, agentId });
-      for (const id of allCredentials) {
-        await this.delete(id);
-      }
     }
   }
 

@@ -14,6 +14,8 @@ import {
 import { AnimatedCollapsibleContent } from '@/components/ui/collapsible'
 import { AnimatePresence, motion } from 'motion/react'
 import { cn } from '@/lib/utils'
+import { AuthRequestCard } from '@/components/chat/AuthRequestCard'
+import type { Message } from '../../../shared/types'
 
 // ============================================================================
 // Message Components - Extracted from ChatDisplay for playground preview
@@ -495,8 +497,160 @@ const config = {
           onOpenUrl={(url) => console.log('Open URL:', url)}
         />
       </section>
+
+      {/* Section: Auth Request Cards */}
+      <section>
+        <h2 className="text-lg font-semibold mb-4 text-foreground/80">Auth Request Cards</h2>
+        <div className="space-y-4">
+          {/* Credential - Pending */}
+          <div>
+            <h3 className="text-sm font-medium mb-2 text-muted-foreground">Credential Request (pending)</h3>
+            <AuthRequestCard
+              sessionId="playground-session"
+              message={createAuthMessage({
+                type: 'credential',
+                status: 'pending',
+                sourceSlug: 'github',
+                sourceName: 'GitHub',
+                mode: 'bearer',
+                description: 'Enter your GitHub personal access token to connect.',
+                hint: 'Generate a token at https://github.com/settings/tokens',
+              })}
+              onRespondToCredential={(sessionId, requestId, response) =>
+                console.log('Credential response:', { sessionId, requestId, response })
+              }
+            />
+          </div>
+
+          {/* Credential - Basic Auth */}
+          <div>
+            <h3 className="text-sm font-medium mb-2 text-muted-foreground">Basic Auth (pending)</h3>
+            <AuthRequestCard
+              sessionId="playground-session"
+              message={createAuthMessage({
+                type: 'credential',
+                status: 'pending',
+                sourceSlug: 'jira',
+                sourceName: 'Jira',
+                mode: 'basic',
+                labels: { username: 'Email', password: 'API Token' },
+                description: 'Connect to your Atlassian account.',
+              })}
+              onRespondToCredential={(sessionId, requestId, response) =>
+                console.log('Credential response:', { sessionId, requestId, response })
+              }
+            />
+          </div>
+
+          {/* OAuth - Pending */}
+          <div>
+            <h3 className="text-sm font-medium mb-2 text-muted-foreground">OAuth Request (pending)</h3>
+            <AuthRequestCard
+              sessionId="playground-session"
+              message={createAuthMessage({
+                type: 'oauth',
+                status: 'pending',
+                sourceSlug: 'linear',
+                sourceName: 'Linear',
+              })}
+            />
+          </div>
+
+          {/* Google OAuth - Pending */}
+          <div>
+            <h3 className="text-sm font-medium mb-2 text-muted-foreground">Google OAuth (pending)</h3>
+            <AuthRequestCard
+              sessionId="playground-session"
+              message={createAuthMessage({
+                type: 'oauth-google',
+                status: 'pending',
+                sourceSlug: 'gmail',
+                sourceName: 'Gmail',
+              })}
+            />
+          </div>
+
+          {/* Completed */}
+          <div>
+            <h3 className="text-sm font-medium mb-2 text-muted-foreground">Auth Completed</h3>
+            <AuthRequestCard
+              sessionId="playground-session"
+              message={createAuthMessage({
+                type: 'oauth-google',
+                status: 'completed',
+                sourceSlug: 'gmail',
+                sourceName: 'Gmail',
+                email: 'user@example.com',
+              })}
+            />
+          </div>
+
+          {/* Cancelled */}
+          <div>
+            <h3 className="text-sm font-medium mb-2 text-muted-foreground">Auth Cancelled</h3>
+            <AuthRequestCard
+              sessionId="playground-session"
+              message={createAuthMessage({
+                type: 'oauth',
+                status: 'cancelled',
+                sourceSlug: 'slack',
+                sourceName: 'Slack',
+              })}
+            />
+          </div>
+
+          {/* Failed */}
+          <div>
+            <h3 className="text-sm font-medium mb-2 text-muted-foreground">Auth Failed</h3>
+            <AuthRequestCard
+              sessionId="playground-session"
+              message={createAuthMessage({
+                type: 'credential',
+                status: 'failed',
+                sourceSlug: 'sentry',
+                sourceName: 'Sentry',
+                error: 'Invalid API key. Please check and try again.',
+              })}
+            />
+          </div>
+        </div>
+      </section>
     </div>
   )
+}
+
+/** Helper to create auth message for playground */
+function createAuthMessage(opts: {
+  type: 'credential' | 'oauth' | 'oauth-google' | 'oauth-slack' | 'oauth-microsoft'
+  status: 'pending' | 'completed' | 'cancelled' | 'failed'
+  sourceSlug: string
+  sourceName: string
+  mode?: 'bearer' | 'basic' | 'header' | 'query'
+  labels?: { credential?: string; username?: string; password?: string }
+  description?: string
+  hint?: string
+  error?: string
+  email?: string
+  workspace?: string
+}): Message {
+  return {
+    id: `auth-${opts.sourceSlug}-${Date.now()}`,
+    role: 'auth-request',
+    content: `Authentication required for ${opts.sourceName}`,
+    timestamp: Date.now(),
+    authRequestId: `req-${opts.sourceSlug}`,
+    authRequestType: opts.type,
+    authSourceSlug: opts.sourceSlug,
+    authSourceName: opts.sourceName,
+    authStatus: opts.status,
+    authCredentialMode: opts.mode,
+    authLabels: opts.labels,
+    authDescription: opts.description,
+    authHint: opts.hint,
+    authError: opts.error,
+    authEmail: opts.email,
+    authWorkspace: opts.workspace,
+  }
 }
 
 // ============================================================================
@@ -701,6 +855,172 @@ export const messagesComponents: ComponentEntry[] = [
       { name: 'Fast Cycle (3s)', props: { cycleMs: 3000, counting: true } },
       { name: 'Static at 5s', props: { cycleMs: 10000, counting: false, elapsed: 5 } },
       { name: 'Static at 30s', props: { cycleMs: 10000, counting: false, elapsed: 30 } },
+    ],
+    mockData: () => ({}),
+  },
+  {
+    id: 'auth-request-card',
+    name: 'AuthRequestCard',
+    category: 'Chat Messages',
+    description: 'Inline authentication request card for credentials or OAuth flows',
+    component: ({ authType, authStatus, sourceName, mode, description, hint, error, email }) => (
+      <AuthRequestCard
+        sessionId="playground-session"
+        message={createAuthMessage({
+          type: authType,
+          status: authStatus,
+          sourceSlug: sourceName.toLowerCase().replace(/\s+/g, '-'),
+          sourceName,
+          mode,
+          description,
+          hint,
+          error,
+          email,
+        })}
+        onRespondToCredential={(sessionId, requestId, response) =>
+          console.log('Credential response:', { sessionId, requestId, response })
+        }
+      />
+    ),
+    props: [
+      {
+        name: 'authType',
+        description: 'Type of authentication',
+        control: {
+          type: 'select',
+          options: [
+            { label: 'Credential', value: 'credential' },
+            { label: 'OAuth', value: 'oauth' },
+            { label: 'Google OAuth', value: 'oauth-google' },
+            { label: 'Slack OAuth', value: 'oauth-slack' },
+            { label: 'Microsoft OAuth', value: 'oauth-microsoft' },
+          ],
+        },
+        defaultValue: 'credential',
+      },
+      {
+        name: 'authStatus',
+        description: 'Current status of the auth request',
+        control: {
+          type: 'select',
+          options: [
+            { label: 'Pending', value: 'pending' },
+            { label: 'Completed', value: 'completed' },
+            { label: 'Cancelled', value: 'cancelled' },
+            { label: 'Failed', value: 'failed' },
+          ],
+        },
+        defaultValue: 'pending',
+      },
+      {
+        name: 'sourceName',
+        description: 'Name of the source',
+        control: { type: 'string', placeholder: 'Source name...' },
+        defaultValue: 'GitHub',
+      },
+      {
+        name: 'mode',
+        description: 'Credential mode (only for credential type)',
+        control: {
+          type: 'select',
+          options: [
+            { label: 'Bearer Token', value: 'bearer' },
+            { label: 'Basic Auth', value: 'basic' },
+            { label: 'Header', value: 'header' },
+            { label: 'Query Param', value: 'query' },
+          ],
+        },
+        defaultValue: 'bearer',
+      },
+      {
+        name: 'description',
+        description: 'Description shown to user',
+        control: { type: 'string', placeholder: 'Description...' },
+        defaultValue: 'Enter your personal access token to connect.',
+      },
+      {
+        name: 'hint',
+        description: 'Hint about where to find credentials',
+        control: { type: 'string', placeholder: 'Hint...' },
+        defaultValue: '',
+      },
+      {
+        name: 'error',
+        description: 'Error message (for failed status)',
+        control: { type: 'string', placeholder: 'Error message...' },
+        defaultValue: '',
+      },
+      {
+        name: 'email',
+        description: 'Email (for completed OAuth)',
+        control: { type: 'string', placeholder: 'Email...' },
+        defaultValue: '',
+      },
+    ],
+    variants: [
+      {
+        name: 'Credential Pending',
+        props: {
+          authType: 'credential',
+          authStatus: 'pending',
+          sourceName: 'GitHub',
+          mode: 'bearer',
+          description: 'Enter your personal access token to connect.',
+          hint: 'Generate at https://github.com/settings/tokens',
+        },
+      },
+      {
+        name: 'Basic Auth',
+        props: {
+          authType: 'credential',
+          authStatus: 'pending',
+          sourceName: 'Jira',
+          mode: 'basic',
+          description: 'Connect to your Atlassian account.',
+        },
+      },
+      {
+        name: 'OAuth Pending',
+        props: {
+          authType: 'oauth',
+          authStatus: 'pending',
+          sourceName: 'Linear',
+        },
+      },
+      {
+        name: 'Google OAuth',
+        props: {
+          authType: 'oauth-google',
+          authStatus: 'pending',
+          sourceName: 'Gmail',
+        },
+      },
+      {
+        name: 'Completed',
+        props: {
+          authType: 'oauth-google',
+          authStatus: 'completed',
+          sourceName: 'Gmail',
+          email: 'user@example.com',
+        },
+      },
+      {
+        name: 'Cancelled',
+        props: {
+          authType: 'oauth',
+          authStatus: 'cancelled',
+          sourceName: 'Slack',
+        },
+      },
+      {
+        name: 'Failed',
+        props: {
+          authType: 'credential',
+          authStatus: 'failed',
+          sourceName: 'Sentry',
+          error: 'Invalid API key. Please check and try again.',
+        },
+      },
     ],
     mockData: () => ({}),
   },

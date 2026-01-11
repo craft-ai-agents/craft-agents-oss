@@ -10,7 +10,7 @@
  */
 
 import type { PermissionMode } from '../agent/mode-manager.ts';
-import type { StoredAttachment } from '@craft-agent/core/types';
+import type { StoredAttachment, MessageRole, ToolStatus, AuthRequestType, AuthStatus, CredentialInputMode, StoredMessage } from '@craft-agent/core/types';
 
 /**
  * Todo state for sessions (user-controlled, never automatic)
@@ -42,45 +42,9 @@ export interface SessionTokenUsage {
 
 /**
  * Stored message format (simplified for persistence)
+ * Re-exported from @craft-agent/core for convenience
  */
-export interface StoredMessage {
-  id: string;
-  type: 'user' | 'assistant' | 'tool' | 'error' | 'status' | 'system' | 'info' | 'warning' | 'plan';
-  content: string;
-  timestamp?: number;
-  toolName?: string;
-  toolInput?: Record<string, unknown>;
-  toolStatus?: 'pending' | 'executing' | 'completed' | 'error' | 'backgrounded';
-  toolDuration?: number;
-  /** Tool intent description (from MCP _intent field) */
-  toolIntent?: string;
-  isError?: boolean;
-  /** Stored attachments for user messages (persisted to disk) */
-  attachments?: StoredAttachment[];
-  /** Tool use ID for deduplication (SDK sends duplicate tool_start events) */
-  toolUseId?: string;
-  /** Tool result content (for tool messages) */
-  toolResult?: string;
-  /** Parent tool use ID for nested tool calls (e.g., child tools inside Task subagent) */
-  parentToolUseId?: string;
-  /** Whether this is an intermediate assistant message (commentary between tool calls) */
-  isIntermediate?: boolean;
-  /** Turn ID for grouping messages in TurnCard after reload */
-  turnId?: string;
-  /** Error display fields for typed errors */
-  errorCode?: string;
-  errorTitle?: string;
-  errorDetails?: string[];
-  errorOriginal?: string;
-  errorCanRetry?: boolean;
-  /** Whether this user message was sent with ultrathink (extended thinking) enabled */
-  ultrathink?: boolean;
-  /** Background task fields */
-  taskId?: string;
-  shellId?: string;
-  elapsedSeconds?: number;
-  isBackground?: boolean;
-}
+export type { StoredMessage } from '@craft-agent/core/types';
 
 /**
  * Session configuration (persisted metadata)
@@ -95,10 +59,6 @@ export interface SessionConfig {
   name?: string;
   createdAt: number;
   lastUsedAt: number;
-  /** Assigned agent slug (for filtering) */
-  agentSlug?: string;
-  /** Cached agent name for display */
-  agentName?: string;
   /** Whether this session is flagged */
   isFlagged?: boolean;
   /** Permission mode for this session ('safe', 'ask', 'allow-all') */
@@ -141,10 +101,6 @@ export interface SessionHeader {
   name?: string;
   createdAt: number;
   lastUsedAt: number;
-  /** Assigned agent slug (for filtering) */
-  agentSlug?: string;
-  /** Cached agent name for display */
-  agentName?: string;
   /** Whether this session is flagged */
   isFlagged?: boolean;
   /** Permission mode for this session ('safe', 'ask', 'allow-all') */
@@ -185,10 +141,6 @@ export interface SessionMetadata {
   /** Preview of first user message */
   preview?: string;
   sdkSessionId?: string;
-  /** Assigned agent slug (for filtering) */
-  agentSlug?: string;
-  /** Cached agent name for display */
-  agentName?: string;
   /** Whether this session is flagged */
   isFlagged?: boolean;
   /** User-controlled todo state */

@@ -9,7 +9,7 @@ import {
   ChevronDown,
   SquareSlash,
   Check,
-  CloudCog,
+  DatabaseZap,
 } from 'lucide-react'
 
 import * as storage from '@/lib/local-storage'
@@ -770,7 +770,7 @@ export function FreeFormInput({
                     }}
                   >
                     {optimisticSourceSlugs.length === 0 ? (
-                      <CloudCog className="h-4 w-4" />
+                      <DatabaseZap className="h-4 w-4" />
                     ) : (
                       <div className="flex items-center">
                         {(() => {

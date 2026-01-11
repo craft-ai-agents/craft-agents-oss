@@ -11,9 +11,7 @@ import { AlertCircle } from 'lucide-react'
 import { ChatDisplay } from '@/components/app-shell/ChatDisplay'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { Separator } from '@/components/ui/separator'
-import { Badge } from '@/components/ui/badge'
 import { useAppShellContext, usePendingPermission, usePendingCredential, useSessionOptionsFor, useSession as useSessionData } from '@/context/AppShellContext'
-import { useAgentState } from '@/hooks/useAgentState'
 import { rendererPerf } from '@/lib/perf'
 import { ensureSessionMessagesLoadedAtom, loadedSessionsAtom, sessionMetaMapAtom } from '@/atoms/sessions'
 
@@ -86,22 +84,6 @@ const ChatPage = React.memo(function ChatPage({ sessionId, isFocusedMode }: Chat
     }
   }, [session?.id, session?.isProcessing, onMarkSessionRead])
 
-  // Get agent status from main process
-  const agentState = useAgentState(
-    session ? activeWorkspaceId : null,
-    session ? (session.agentId || null) : null
-  )
-
-  // Perf: Mark when agent state resolves
-  const agentStatusMarkedRef = React.useRef<string | null>(null)
-  React.useLayoutEffect(() => {
-    if ((agentState.status.status !== 'idle' || !agentState.isLoading) &&
-        agentStatusMarkedRef.current !== sessionId) {
-      agentStatusMarkedRef.current = sessionId
-      rendererPerf.markSessionSwitch(sessionId, 'agent.status')
-    }
-  }, [sessionId, agentState.status.status, agentState.isLoading])
-
   // Get pending permission and credential for this session
   const pendingPermission = usePendingPermission(sessionId)
   const pendingCredential = usePendingCredential(sessionId)
@@ -166,39 +148,6 @@ const ChatPage = React.memo(function ChatPage({ sessionId, isFocusedMode }: Chat
     [onOpenUrl]
   )
 
-  // Auto-mark agent as active when ready
-  const { isReady, markActive } = agentState
-  React.useEffect(() => {
-    if (isReady && session?.agentId) {
-      markActive()
-    }
-  }, [isReady, session?.agentId, markActive])
-
-  // Agent setup state from centralized hook
-  const agentSetupState = React.useMemo(() => {
-    if (!session?.agentId) return undefined
-
-    if (agentState.bannerState === 'hidden') {
-      return undefined
-    }
-
-    const getAction = () => {
-      switch (agentState.bannerState) {
-        case 'error':
-          return () => agentState.reload()
-        default:
-          return () => {}
-      }
-    }
-
-    return {
-      state: agentState.bannerState,
-      agentName: agentState.agentName || session.agentName,
-      reason: agentState.bannerReason ?? undefined,
-      onAction: getAction(),
-    }
-  }, [session?.agentId, session?.agentName, agentState.bannerState, agentState.bannerReason, agentState.agentName, agentState.reload])
-
   // Perf: Mark when data is ready
   const dataReadyMarkedRef = React.useRef<string | null>(null)
   React.useLayoutEffect(() => {
@@ -220,7 +169,6 @@ const ChatPage = React.memo(function ChatPage({ sessionId, isFocusedMode }: Chat
 
   // Get display title for header
   const displayTitle = session?.name || sessionMeta?.name || 'Chat'
-  const agentName = session?.agentName || sessionMeta?.agentName
 
   // Handle missing session - loading or deleted
   if (!session) {
@@ -235,8 +183,6 @@ const ChatPage = React.memo(function ChatPage({ sessionId, isFocusedMode }: Chat
         lastMessageAt: sessionMeta.lastMessageAt || 0,
         messages: [],
         isProcessing: sessionMeta.isProcessing || false,
-        agentId: sessionMeta.agentId,
-        agentName: sessionMeta.agentName,
         isFlagged: sessionMeta.isFlagged,
         workingDirectory: sessionMeta.workingDirectory,
         enabledSourceSlugs: sessionMeta.enabledSourceSlugs,
@@ -244,10 +190,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId, isFocusedMode }: Chat
 
       return (
         <div className="h-full flex flex-col">
-          <PanelHeader
-            title={displayTitle}
-            badge={agentName ? <Badge variant="secondary" className="text-xs font-normal">@{agentName}</Badge> : undefined}
-          />
+          <PanelHeader title={displayTitle} />
           <Separator />
           <div className="flex-1 flex flex-col min-h-0">
             <ChatDisplay
@@ -262,7 +205,6 @@ const ChatPage = React.memo(function ChatPage({ sessionId, isFocusedMode }: Chat
               onRespondToPermission={onRespondToPermission}
               pendingCredential={undefined}
               onRespondToCredential={onRespondToCredential}
-              agentSetupState={undefined}
               ultrathinkEnabled={sessionOpts.ultrathinkEnabled}
               onUltrathinkChange={(enabled) => setOption('ultrathinkEnabled', enabled)}
               permissionMode={sessionOpts.permissionMode}
@@ -296,10 +238,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId, isFocusedMode }: Chat
 
   return (
     <div className="h-full flex flex-col">
-      <PanelHeader
-        title={displayTitle}
-        badge={agentName ? <Badge variant="secondary" className="text-xs font-normal">@{agentName}</Badge> : undefined}
-      />
+      <PanelHeader title={displayTitle} />
       <Separator />
       <div className="flex-1 flex flex-col min-h-0">
         <ChatDisplay
@@ -318,7 +257,6 @@ const ChatPage = React.memo(function ChatPage({ sessionId, isFocusedMode }: Chat
           onRespondToPermission={onRespondToPermission}
           pendingCredential={pendingCredential}
           onRespondToCredential={onRespondToCredential}
-          agentSetupState={agentSetupState}
           ultrathinkEnabled={sessionOpts.ultrathinkEnabled}
           onUltrathinkChange={(enabled) => setOption('ultrathinkEnabled', enabled)}
           permissionMode={sessionOpts.permissionMode}

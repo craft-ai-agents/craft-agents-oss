@@ -276,13 +276,9 @@ export function SourceAvatar(props: SourceAvatarProps) {
     const iconUrl = source.config.iconUrl
     if (iconUrl?.startsWith('./')) {
       // Local icon - need to load via IPC
-      // Path format: sources/{slug}/icon.png (or agents/{agentSlug}/sources/{slug}/icon.png)
+      // Path format: sources/{slug}/icon.png
       const iconFilename = iconUrl.slice(2) // Remove './'
-      if (source.agentSlug) {
-        localIconPath = `agents/${source.agentSlug}/sources/${source.config.slug}/${iconFilename}`
-      } else {
-        localIconPath = `sources/${source.config.slug}/${iconFilename}`
-      }
+      localIconPath = `sources/${source.config.slug}/${iconFilename}`
     } else {
       // Derive service URL for favicon resolution
       serviceUrl = deriveServiceUrl(source.config)

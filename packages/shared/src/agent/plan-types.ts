@@ -3,7 +3,6 @@
  *
  * Defines the structure for plans and plan-related types.
  * Plans are used for structured task execution with user review.
- * Safe Mode is a separate UI feature for read-only exploration.
  */
 
 import { randomUUID } from 'crypto';
@@ -213,7 +212,7 @@ export function addRefinementEntry(
 // Permission modes control tool execution behavior.
 // User can cycle via SHIFT+TAB: Safe → Ask → Allow All → Safe
 
-import type { PermissionMode } from '../agent/mode-manager.ts';
+import type { PermissionMode } from './mode-manager.ts';
 
 /** User-visible messages for each permission mode */
 export const PERMISSION_MODE_MESSAGES: Record<PermissionMode, string> = {

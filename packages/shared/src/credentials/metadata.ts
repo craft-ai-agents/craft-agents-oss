@@ -57,18 +57,6 @@ export const CREDENTIAL_METADATA: Partial<Record<CredentialType, CredentialMetad
     description: 'Bearer token for a source',
   },
 
-  agent_source_apikey: {
-    category: 'api_key',
-    workspaceScoped: true,
-    description: 'API key for an agent-scoped source',
-  },
-
-  agent_source_bearer: {
-    category: 'bearer',
-    workspaceScoped: true,
-    description: 'Bearer token for an agent-scoped source',
-  },
-
   // ============================================================
   // Global only (machine-bound, NOT portable)
   // ============================================================
@@ -103,12 +91,6 @@ export const CREDENTIAL_METADATA: Partial<Record<CredentialType, CredentialMetad
     description: 'OAuth token for a source (e.g., Gmail)',
   },
 
-  agent_source_oauth: {
-    category: 'oauth',
-    workspaceScoped: false, // Identity - re-auth per machine
-    description: 'OAuth token for an agent-scoped source',
-  },
-
   mcp_oauth: {
     category: 'oauth',
     workspaceScoped: false, // Identity - re-auth per machine
@@ -125,18 +107,6 @@ export const CREDENTIAL_METADATA: Partial<Record<CredentialType, CredentialMetad
     category: 'api_key', // Basic auth is like API key
     workspaceScoped: true,
     description: 'Basic auth credentials for a source',
-  },
-
-  agent_source_basic: {
-    category: 'api_key',
-    workspaceScoped: true,
-    description: 'Basic auth credentials for an agent-scoped source',
-  },
-
-  agent_secret: {
-    category: 'api_key',
-    workspaceScoped: false, // Agent secrets are intentionally machine-local
-    description: 'Agent-managed secret',
   },
 
   api_key: {

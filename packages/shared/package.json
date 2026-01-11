@@ -14,8 +14,6 @@
     "./agent": "./src/agent/index.ts",
     "./agent/modes": "./src/agent/mode-types.ts",
     "./agent/mode-types": "./src/agent/mode-types.ts",
-    "./agents": "./src/agents/index.ts",
-    "./agents/types": "./src/agents/types.ts",
     "./auth": "./src/auth/index.ts",
     "./auth/types": "./src/auth/types.ts",
     "./clients": "./src/clients/index.ts",
@@ -51,6 +49,7 @@
     "zod": ">=3.0.0"
   },
   "devDependencies": {
-    "@types/shell-quote": "^1.7.5"
+    "@types/shell-quote": "^1.7.5",
+    "@types/uuid": "^11.0.0"
   }
 }
