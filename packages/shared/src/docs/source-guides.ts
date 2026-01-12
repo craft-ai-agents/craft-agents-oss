@@ -650,7 +650,7 @@ Combine operators with spaces: \`from:john@example.com after:2024/01/01 has:atta
   "provider": "google",
   "type": "api",
   "api": {
-    "baseUrl": "https://gmail.googleapis.com",
+    "baseUrl": "https://gmail.googleapis.com/",
     "authType": "bearer",
     "googleService": "gmail"
   },
@@ -726,7 +726,7 @@ This source provides a single flexible \`api_google-calendar\` tool that accepts
   "provider": "google",
   "type": "api",
   "api": {
-    "baseUrl": "https://www.googleapis.com/calendar/v3",
+    "baseUrl": "https://www.googleapis.com/calendar/v3/",
     "authType": "bearer",
     "googleService": "calendar"
   },
@@ -798,7 +798,7 @@ Use the \`q\` parameter:
   "provider": "google",
   "type": "api",
   "api": {
-    "baseUrl": "https://www.googleapis.com/drive/v3",
+    "baseUrl": "https://www.googleapis.com/drive/v3/",
     "authType": "bearer",
     "googleService": "drive"
   },
@@ -911,7 +911,7 @@ When getting a document, the response includes:
   "provider": "google",
   "type": "api",
   "api": {
-    "baseUrl": "https://docs.googleapis.com/v1",
+    "baseUrl": "https://docs.googleapis.com/v1/",
     "authType": "bearer",
     "googleService": "docs"
   },
@@ -1058,7 +1058,7 @@ Request body for structural changes:
   "provider": "google",
   "type": "api",
   "api": {
-    "baseUrl": "https://sheets.googleapis.com/v4",
+    "baseUrl": "https://sheets.googleapis.com/v4/",
     "authType": "bearer",
     "googleService": "sheets"
   },

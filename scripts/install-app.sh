@@ -42,19 +42,29 @@ if command -v jq >/dev/null 2>&1; then
 fi
 
 # Download function that works with both curl and wget
+# Usage: download_file <url> [output_file] [show_progress]
 download_file() {
     local url="$1"
     local output="$2"
+    local show_progress="${3:-false}"
 
     if [ "$DOWNLOADER" = "curl" ]; then
         if [ -n "$output" ]; then
-            curl -fsSL -o "$output" "$url"
+            if [ "$show_progress" = "true" ]; then
+                curl -fL --progress-bar -o "$output" "$url"
+            else
+                curl -fsSL -o "$output" "$url"
+            fi
         else
             curl -fsSL "$url"
         fi
     elif [ "$DOWNLOADER" = "wget" ]; then
         if [ -n "$output" ]; then
-            wget -q -O "$output" "$url"
+            if [ "$show_progress" = "true" ]; then
+                wget --show-progress -q -O "$output" "$url"
+            else
+                wget -q -O "$output" "$url"
+            fi
         else
             wget -q -O - "$url"
         fi
@@ -156,10 +166,12 @@ dmg_url="$VERSIONS_URL/$version/$filename"
 dmg_path="$DOWNLOAD_DIR/$filename"
 
 info "Downloading $filename..."
-if ! download_file "$dmg_url" "$dmg_path"; then
+echo ""
+if ! download_file "$dmg_url" "$dmg_path" true; then
     rm -f "$dmg_path"
     error "Download failed"
 fi
+echo ""
 
 # Verify checksum
 info "Verifying checksum..."
@@ -172,26 +184,15 @@ fi
 
 success "Checksum verified!"
 
-# Check for existing installation
+# Remove existing installation if present
 if [ -d "$INSTALL_DIR/$APP_NAME" ]; then
-    echo ""
-    warn "Craft Agent is already installed at $INSTALL_DIR/$APP_NAME"
-    printf "%b" "  Do you want to replace it? [y/N] "
-    read -r response
-    if [[ ! "$response" =~ ^[Yy]$ ]]; then
-        rm -f "$dmg_path"
-        echo ""
-        info "Installation cancelled."
-        exit 0
-    fi
-    echo ""
-    info "Removing existing installation..."
+    info "Updating existing installation..."
     rm -rf "$INSTALL_DIR/$APP_NAME"
 fi
 
 # Mount DMG
 info "Mounting disk image..."
-mount_point=$(hdiutil attach "$dmg_path" -nobrowse -quiet -mountrandom /tmp | tail -1 | awk '{print $NF}')
+mount_point=$(hdiutil attach "$dmg_path" -nobrowse -mountrandom /tmp 2>/dev/null | tail -1 | awk '{print $NF}')
 
 if [ -z "$mount_point" ] || [ ! -d "$mount_point" ]; then
     rm -f "$dmg_path"
