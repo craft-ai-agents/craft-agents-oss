@@ -184,10 +184,32 @@ fi
 
 success "Checksum verified!"
 
+# Quit the app if it's running
+if pgrep -x "Craft Agent" >/dev/null 2>&1; then
+    info "Quitting Craft Agent..."
+    osascript -e 'quit app "Craft Agent"' 2>/dev/null || true
+    # Wait for app to quit (max 5 seconds)
+    for i in {1..10}; do
+        if ! pgrep -x "Craft Agent" >/dev/null 2>&1; then
+            break
+        fi
+        sleep 0.5
+    done
+    # Force kill if still running
+    if pgrep -x "Craft Agent" >/dev/null 2>&1; then
+        warn "Force quitting Craft Agent..."
+        pkill -9 -x "Craft Agent" 2>/dev/null || true
+        sleep 1
+    fi
+fi
+
 # Remove existing installation if present
 if [ -d "$INSTALL_DIR/$APP_NAME" ]; then
-    info "Updating existing installation..."
-    rm -rf "$INSTALL_DIR/$APP_NAME"
+    info "Removing previous installation..."
+    rm -rf "$INSTALL_DIR/$APP_NAME" 2>/dev/null || {
+        warn "Could not remove existing app, trying with sudo..."
+        sudo rm -rf "$INSTALL_DIR/$APP_NAME"
+    }
 fi
 
 # Mount DMG
@@ -208,9 +230,12 @@ if [ -z "$app_source" ]; then
     error "No .app found in DMG"
 fi
 
-# Copy app to /Applications
+# Copy app to /Applications using ditto (handles macOS bundles better than cp)
 info "Installing to $INSTALL_DIR..."
-cp -R "$app_source" "$INSTALL_DIR/"
+if ! ditto "$app_source" "$INSTALL_DIR/$APP_NAME" 2>/dev/null; then
+    warn "Install failed, trying with sudo..."
+    sudo ditto "$app_source" "$INSTALL_DIR/$APP_NAME"
+fi
 
 # Unmount DMG
 info "Cleaning up..."
