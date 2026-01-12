@@ -5,6 +5,26 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ELECTRON_DIR="$(dirname "$SCRIPT_DIR")"
 ROOT_DIR="$(dirname "$(dirname "$ELECTRON_DIR")")"
 
+# Helper function to check required file/directory exists
+require_path() {
+    local path="$1"
+    local description="$2"
+    local hint="$3"
+
+    if [ ! -e "$path" ]; then
+        echo "ERROR: $description not found at $path"
+        [ -n "$hint" ] && echo "$hint"
+        exit 1
+    fi
+}
+
+# Helper function for codesigning
+codesign_item() {
+    local item="$1"
+    echo "  Signing: $item"
+    codesign --force --options runtime --timestamp --sign "$SIGN_APP" "$item"
+}
+
 # Sync secrets from 1Password if CLI is available
 if command -v op &> /dev/null; then
     echo "1Password CLI detected, syncing secrets..."
@@ -29,41 +49,33 @@ UPLOAD=false
 UPLOAD_LATEST=false
 UPLOAD_SCRIPT=false
 
+show_help() {
+    cat << EOF
+Usage: build-dmg.sh [arm64|x64] [--upload] [--latest] [--script]
+
+Arguments:
+  arm64|x64    Target architecture (default: arm64)
+  --upload     Upload DMG to S3 after building
+  --latest     Also update electron/latest (requires --upload)
+  --script     Also upload install-app.sh (requires --upload)
+
+Environment variables (from .env or environment):
+  APPLE_SIGNING_IDENTITY    - Code signing identity
+  APPLE_ID                  - Apple ID for notarization
+  APPLE_TEAM_ID             - Apple Team ID
+  APPLE_APP_SPECIFIC_PASSWORD - App-specific password
+  S3_VERSIONS_BUCKET_*      - S3 credentials (for --upload)
+EOF
+    exit 0
+}
+
 while [[ $# -gt 0 ]]; do
     case $1 in
-        arm64|x64)
-            ARCH="$1"
-            shift
-            ;;
-        --upload)
-            UPLOAD=true
-            shift
-            ;;
-        --latest)
-            UPLOAD_LATEST=true
-            shift
-            ;;
-        --script)
-            UPLOAD_SCRIPT=true
-            shift
-            ;;
-        -h|--help)
-            echo "Usage: build-dmg.sh [arm64|x64] [--upload] [--latest] [--script]"
-            echo ""
-            echo "Arguments:"
-            echo "  arm64|x64    Target architecture (default: arm64)"
-            echo "  --upload     Upload DMG to S3 after building"
-            echo "  --latest     Also update electron/latest (requires --upload)"
-            echo "  --script     Also upload install-app.sh (requires --upload)"
-            echo ""
-            echo "Environment variables (from .env or environment):"
-            echo "  APPLE_SIGNING_IDENTITY    - Code signing identity"
-            echo "  APPLE_ID                  - Apple ID for notarization"
-            echo "  APPLE_TEAM_ID             - Apple Team ID"
-            echo "  APPLE_APP_SPECIFIC_PASSWORD - App-specific password"
-            echo "  S3_VERSIONS_BUCKET_*      - S3 credentials (for --upload)"
-            exit 0
-            ;;
+        arm64|x64)     ARCH="$1"; shift ;;
+        --upload)      UPLOAD=true; shift ;;
+        --latest)      UPLOAD_LATEST=true; shift ;;
+        --script)      UPLOAD_SCRIPT=true; shift ;;
+        -h|--help)     show_help ;;
         *)
             echo "Unknown option: $1"
             echo "Run with --help for usage"
@@ -98,11 +110,7 @@ bun install
 # 3. Download Bun binary with checksum verification
 echo "Downloading Bun ${BUN_VERSION} for darwin-${ARCH}..."
 mkdir -p "$ELECTRON_DIR/vendor/bun"
-if [ "$ARCH" = "arm64" ]; then
-    BUN_DOWNLOAD="bun-darwin-aarch64"
-else
-    BUN_DOWNLOAD="bun-darwin-x64"
-fi
+BUN_DOWNLOAD="bun-darwin-$([ "$ARCH" = "arm64" ] && echo "aarch64" || echo "x64")"
 
 # Create temp directory to avoid race conditions
 TEMP_DIR=$(mktemp -d)
@@ -127,22 +135,14 @@ chmod +x "$ELECTRON_DIR/vendor/bun/bun"
 # Note: The SDK is hoisted to root node_modules by the package manager.
 # We copy it here because electron-packager only sees apps/electron/.
 SDK_SOURCE="$ROOT_DIR/node_modules/@anthropic-ai/claude-agent-sdk"
-if [ ! -d "$SDK_SOURCE" ]; then
-    echo "ERROR: SDK not found at $SDK_SOURCE"
-    echo "Run 'bun install' from the repository root first."
-    exit 1
-fi
+require_path "$SDK_SOURCE" "SDK" "Run 'bun install' from the repository root first."
 echo "Copying SDK..."
 mkdir -p "$ELECTRON_DIR/node_modules/@anthropic-ai"
 cp -r "$SDK_SOURCE" "$ELECTRON_DIR/node_modules/@anthropic-ai/"
 
 # 5. Copy interceptor
 INTERCEPTOR_SOURCE="$ROOT_DIR/packages/shared/src/cache-ttl-interceptor.ts"
-if [ ! -f "$INTERCEPTOR_SOURCE" ]; then
-    echo "ERROR: Interceptor not found at $INTERCEPTOR_SOURCE"
-    echo "Ensure packages/shared/src/cache-ttl-interceptor.ts exists."
-    exit 1
-fi
+require_path "$INTERCEPTOR_SOURCE" "Interceptor" "Ensure packages/shared/src/cache-ttl-interceptor.ts exists."
 echo "Copying interceptor..."
 mkdir -p "$ELECTRON_DIR/packages/shared/src"
 cp "$INTERCEPTOR_SOURCE" "$ELECTRON_DIR/packages/shared/src/"
@@ -197,37 +197,30 @@ if [ -n "$SIGN_APP" ]; then
     # Sign all nested binaries first (deepest first)
     echo "Signing nested binaries (.node, .dylib, rg)..."
     find "$APP_PATH" -type f \( -name "*.node" -o -name "*.dylib" -o -name "rg" \) | while read -r binary; do
-        echo "  Signing: $binary"
-        codesign --force --options runtime --timestamp --sign "$SIGN_APP" "$binary"
+        codesign_item "$binary"
     done
 
     # Sign executables in framework Helpers and Resources
     echo "Signing framework executables..."
     for exe in "$APP_PATH/Contents/Frameworks/Electron Framework.framework/Versions/A/Helpers/chrome_crashpad_handler" \
                "$APP_PATH/Contents/Frameworks/Squirrel.framework/Versions/A/Resources/ShipIt"; do
-        if [ -f "$exe" ]; then
-            echo "  Signing: $exe"
-            codesign --force --options runtime --timestamp --sign "$SIGN_APP" "$exe"
-        fi
+        [ -f "$exe" ] && codesign_item "$exe"
     done
 
-    # Sign frameworks
+    # Sign frameworks and helper apps
     echo "Signing frameworks..."
-    find "$APP_PATH/Contents/Frameworks" -type d -name "*.framework" | while read -r framework; do
-        echo "  Signing: $framework"
-        codesign --force --options runtime --timestamp --sign "$SIGN_APP" "$framework"
+    find "$APP_PATH/Contents/Frameworks" -type d -name "*.framework" | while read -r item; do
+        codesign_item "$item"
     done
 
-    # Sign helper apps
     echo "Signing helper apps..."
-    find "$APP_PATH/Contents/Frameworks" -type d -name "*.app" | while read -r helper; do
-        echo "  Signing: $helper"
-        codesign --force --options runtime --timestamp --sign "$SIGN_APP" "$helper"
+    find "$APP_PATH/Contents/Frameworks" -type d -name "*.app" | while read -r item; do
+        codesign_item "$item"
     done
 
     # Sign the main app
     echo "Signing main app..."
-    codesign --force --options runtime --timestamp --sign "$SIGN_APP" "$APP_PATH"
+    codesign_item "$APP_PATH"
 else
     echo "Ad-hoc signing app (no APPLE_SIGNING_IDENTITY set)..."
     codesign --force --deep --sign - "$APP_PATH"
@@ -282,23 +275,21 @@ if [ "$UPLOAD" = true ]; then
 
     # Check for S3 credentials
     if [ -z "$S3_VERSIONS_BUCKET_ENDPOINT" ] || [ -z "$S3_VERSIONS_BUCKET_ACCESS_KEY_ID" ] || [ -z "$S3_VERSIONS_BUCKET_SECRET_ACCESS_KEY" ]; then
-        echo "ERROR: Missing S3 credentials. Set these environment variables:"
-        echo "  S3_VERSIONS_BUCKET_ENDPOINT"
-        echo "  S3_VERSIONS_BUCKET_ACCESS_KEY_ID"
-        echo "  S3_VERSIONS_BUCKET_SECRET_ACCESS_KEY"
-        echo ""
-        echo "You can add them to .env or export them directly."
+        cat << EOF
+ERROR: Missing S3 credentials. Set these environment variables:
+  S3_VERSIONS_BUCKET_ENDPOINT
+  S3_VERSIONS_BUCKET_ACCESS_KEY_ID
+  S3_VERSIONS_BUCKET_SECRET_ACCESS_KEY
+
+You can add them to .env or export them directly.
+EOF
         exit 1
     fi
 
     # Build upload flags
     UPLOAD_FLAGS="--electron"
-    if [ "$UPLOAD_LATEST" = true ]; then
-        UPLOAD_FLAGS="$UPLOAD_FLAGS --latest"
-    fi
-    if [ "$UPLOAD_SCRIPT" = true ]; then
-        UPLOAD_FLAGS="$UPLOAD_FLAGS --script"
-    fi
+    [ "$UPLOAD_LATEST" = true ] && UPLOAD_FLAGS="$UPLOAD_FLAGS --latest"
+    [ "$UPLOAD_SCRIPT" = true ] && UPLOAD_FLAGS="$UPLOAD_FLAGS --script"
 
     cd "$ROOT_DIR"
     bun run scripts/upload.ts $UPLOAD_FLAGS
