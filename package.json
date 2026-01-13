@@ -1,6 +1,6 @@
 {
   "name": "craft-tui-agent",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "description": "Claude Code-like agent for Craft documents",
   "module": "apps/tui/src/index.tsx",
   "type": "module",
@@ -51,8 +51,10 @@
     "@types/bun": "latest",
     "@types/js-yaml": "^4.0.9",
     "@types/linkify-it": "^5.0.0",
+    "@types/node": "^25.0.8",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
+    "@types/semver": "^7.7.1",
     "@types/shell-quote": "^1.7.5",
     "@types/uuid": "^11.0.0",
     "@typescript-eslint/eslint-plugin": "^8.52.0",
@@ -109,6 +111,7 @@
     "react-resizable-panels": "^3.0.6",
     "rehype-raw": "^7.0.0",
     "remark-gfm": "^4.0.1",
+    "semver": "^7.7.3",
     "shiki": "^3.19.0",
     "tailwind-merge": "^3.4.0",
     "zod": "^3.24.1"

@@ -76,6 +76,25 @@ const api: ElectronAPI = {
   getHomeDir: () => ipcRenderer.invoke(IPC_CHANNELS.GET_HOME_DIR),
   isDebugMode: () => ipcRenderer.invoke(IPC_CHANNELS.IS_DEBUG_MODE),
 
+  // Auto-update
+  checkForUpdates: () => ipcRenderer.invoke(IPC_CHANNELS.UPDATE_CHECK),
+  getUpdateInfo: () => ipcRenderer.invoke(IPC_CHANNELS.UPDATE_GET_INFO),
+  installUpdate: () => ipcRenderer.invoke(IPC_CHANNELS.UPDATE_INSTALL),
+  onUpdateAvailable: (callback: (info: import('../shared/types').UpdateInfo) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, info: import('../shared/types').UpdateInfo) => {
+      callback(info)
+    }
+    ipcRenderer.on(IPC_CHANNELS.UPDATE_AVAILABLE, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.UPDATE_AVAILABLE, handler)
+  },
+  onUpdateDownloadProgress: (callback: (progress: number) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, progress: number) => {
+      callback(progress)
+    }
+    ipcRenderer.on(IPC_CHANNELS.UPDATE_DOWNLOAD_PROGRESS, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.UPDATE_DOWNLOAD_PROGRESS, handler)
+  },
+
   // Shell operations
   openUrl: (url: string) => ipcRenderer.invoke(IPC_CHANNELS.OPEN_URL, url),
   openFile: (path: string) => ipcRenderer.invoke(IPC_CHANNELS.OPEN_FILE, path),

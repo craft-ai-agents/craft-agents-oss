@@ -42,6 +42,8 @@ import {
   SettingsMenuSelectRow,
   SettingsMenuSelect,
 } from '@/components/settings'
+import { useUpdateChecker } from '@/hooks/useUpdateChecker'
+import { Badge } from '@/components/ui/badge'
 import type { PresetTheme } from '@config/theme'
 import {
   Dialog,
@@ -300,6 +302,19 @@ export default function AppSettingsPage() {
 
   // Notifications state
   const [notificationsEnabled, setNotificationsEnabled] = useState(true)
+
+  // Auto-update state
+  const updateChecker = useUpdateChecker()
+  const [isCheckingForUpdates, setIsCheckingForUpdates] = useState(false)
+
+  const handleCheckForUpdates = useCallback(async () => {
+    setIsCheckingForUpdates(true)
+    try {
+      await updateChecker.checkForUpdates()
+    } finally {
+      setIsCheckingForUpdates(false)
+    }
+  }, [updateChecker])
 
   // Load current billing method, notifications setting, and preset themes on mount
   useEffect(() => {
@@ -573,6 +588,51 @@ export default function AppSettingsPage() {
                   />
                 </DialogContent>
               </Dialog>
+            </SettingsSection>
+
+            {/* About */}
+            <SettingsSection title="About">
+              <SettingsCard>
+                <SettingsRow label="Version">
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground">
+                      {updateChecker.updateInfo?.currentVersion ?? 'Loading...'}
+                    </span>
+                    {updateChecker.updateAvailable && (
+                      <Badge variant="secondary" className="text-xs">
+                        Update available
+                      </Badge>
+                    )}
+                  </div>
+                </SettingsRow>
+                <SettingsRow label="Check for updates">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCheckForUpdates}
+                    disabled={isCheckingForUpdates}
+                  >
+                    {isCheckingForUpdates ? (
+                      <>
+                        <Spinner className="mr-1.5" />
+                        Checking...
+                      </>
+                    ) : (
+                      'Check Now'
+                    )}
+                  </Button>
+                </SettingsRow>
+                {updateChecker.isReadyToInstall && (
+                  <SettingsRow label="Install update">
+                    <Button
+                      size="sm"
+                      onClick={updateChecker.installUpdate}
+                    >
+                      Restart to Update
+                    </Button>
+                  </SettingsRow>
+                )}
+              </SettingsCard>
             </SettingsSection>
           </div>
         </div>

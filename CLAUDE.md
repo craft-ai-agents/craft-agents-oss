@@ -77,6 +77,15 @@ bash apps/electron/scripts/build-dmg.sh --help
 
 **Install:** `curl -fsSL https://agents.craft.do/install-app.sh | bash`
 
+### Version Sync
+
+When bumping the version:
+
+1. Update `packages/shared/src/version/app-version.ts` → `APP_VERSION = 'X.Y.Z'`
+2. Run `bun run scripts/sync-version.ts` to sync all package.json files
+
+The sync script reads APP_VERSION and updates all package.json files in the monorepo.
+
 ## Architecture
 
 ### Agent Layer (`packages/shared/src/agent/craft-agent.ts`)

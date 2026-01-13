@@ -32,9 +32,16 @@ export async function getManifest(version: string): Promise<VersionManifest | nu
 }
 
 
+export interface BinaryInfo {
+  url: string;
+  sha256: string;
+  size: number;
+  filename?: string;
+}
+
 export interface VersionManifest {
   version: string;
   build_time: string;
   build_timestamp: number;
-  binaries: Record<string, { url: string; sha256: string; size: number }>;
+  binaries: Record<string, BinaryInfo>;
 }

@@ -111,22 +111,59 @@ function computeSha256(filePath: string): string {
   return createHash('sha256').update(content).digest('hex');
 }
 
+/**
+ * Detect platform from installer filename
+ * Returns platform key (e.g., 'darwin-arm64', 'win32-x64', 'linux-x64') or null
+ */
+function detectPlatformFromFilename(filename: string): string | null {
+  // macOS DMG
+  if (filename.endsWith('.dmg')) {
+    if (filename.includes('arm64')) return 'darwin-arm64';
+    if (filename.includes('x64') || filename.includes('x86_64')) return 'darwin-x64';
+  }
+  // Windows NSIS installer
+  if (filename.endsWith('.exe')) {
+    // Currently only x64 Windows builds
+    if (filename.includes('arm64')) return 'win32-arm64';
+    return 'win32-x64';
+  }
+  // Linux AppImage
+  if (filename.endsWith('.AppImage')) {
+    if (filename.includes('arm64')) return 'linux-arm64';
+    return 'linux-x64';
+  }
+  return null;
+}
+
+/**
+ * Get content type for installer file
+ */
+function getContentType(filename: string): string {
+  if (filename.endsWith('.dmg')) return 'application/x-apple-diskimage';
+  if (filename.endsWith('.exe')) return 'application/x-msdownload';
+  if (filename.endsWith('.AppImage')) return 'application/x-executable';
+  return 'application/octet-stream';
+}
+
 async function uploadElectronBuilds(version: string) {
   console.log('Uploading Electron builds...');
 
-  // Find DMG files in the release directory
+  // Find installer files in the release directory
   if (!existsSync(electronReleaseDir)) {
     console.error(`  ✗ Electron release directory not found: ${electronReleaseDir}`);
-    console.error('  Run: bun run electron:dist:mac');
+    console.error('  Run: bun run electron:dist:mac (or :win, :linux)');
     process.exit(1);
   }
 
   const files = readdirSync(electronReleaseDir);
-  const dmgFiles = files.filter(f => f.endsWith('.dmg'));
+  // Support all installer types: .dmg (macOS), .exe (Windows NSIS), .AppImage (Linux)
+  const installerFiles = files.filter(f =>
+    f.endsWith('.dmg') || f.endsWith('.exe') || f.endsWith('.AppImage')
+  );
 
-  if (dmgFiles.length === 0) {
-    console.error('  ✗ No DMG files found in release directory');
-    console.error('  Run: bun run electron:dist:mac');
+  if (installerFiles.length === 0) {
+    console.error('  ✗ No installer files found in release directory');
+    console.error('  Run: bun run electron:dist:mac (or :win, :linux)');
     process.exit(1);
   }
 
@@ -145,33 +182,30 @@ async function uploadElectronBuilds(version: string) {
   const electronVersionPrefix = `electron/${version}/`;
   await deleteFolder(electronVersionPrefix);
 
-  // Upload each DMG file
-  for (const dmgFile of dmgFiles) {
-    const filePath = join(electronReleaseDir, dmgFile);
+  // Upload each installer file
+  for (const installerFile of installerFiles) {
+    const filePath = join(electronReleaseDir, installerFile);
     const stats = statSync(filePath);
     const content = readFileSync(filePath);
     const sha256 = computeSha256(filePath);
 
-    // Determine platform from filename (Craft-Agent-arm64.dmg or Craft-Agent-x64.dmg)
-    let platform: string;
-    if (dmgFile.includes('arm64')) {
-      platform = 'darwin-arm64';
-    } else if (dmgFile.includes('x64') || dmgFile.includes('x86_64')) {
-      platform = 'darwin-x64';
-    } else {
-      console.warn(`  ! Skipping unknown DMG: ${dmgFile}`);
+    // Determine platform from filename
+    const platform = detectPlatformFromFilename(installerFile);
+    if (!platform) {
+      console.warn(`  ! Skipping unknown installer: ${installerFile}`);
       continue;
     }
 
-    const key = `electron/${version}/${dmgFile}`;
+    const key = `electron/${version}/${installerFile}`;
+    const contentType = getContentType(installerFile);
 
-    console.log(`  Uploading ${dmgFile} (${(stats.size / 1024 / 1024).toFixed(2)} MB)...`);
+    console.log(`  Uploading ${installerFile} (${(stats.size / 1024 / 1024).toFixed(2)} MB) [${platform}]...`);
 
     await s3.send(new PutObjectCommand({
       Bucket: BUCKET,
       Key: key,
       Body: content,
-      ContentType: 'application/x-apple-diskimage',
+      ContentType: contentType,
       CacheControl: 'no-cache, no-store, must-revalidate',
     }));
 
@@ -179,10 +213,10 @@ async function uploadElectronBuilds(version: string) {
 
     // Add to manifest
     electronManifest.binaries[platform] = {
-      url: `https://agents.craft.do/electron/${version}/${dmgFile}`,
+      url: `https://agents.craft.do/electron/${version}/${installerFile}`,
       sha256,
       size: stats.size,
-      filename: dmgFile,
+      filename: installerFile,
     };
   }
 
