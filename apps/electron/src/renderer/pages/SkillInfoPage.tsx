@@ -159,13 +159,18 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
   // Extract icon filename from path
   const iconFilename = skill?.iconPath?.split('/').pop()
 
-  // Calculate statistics
-  const stats = skill ? {
-    instructionLength: skill.content?.length || 0,
-    filePatterns: skill.metadata.globs?.length || 0,
-    allowedTools: skill.metadata.alwaysAllow?.length || 0,
-    additionalFiles: skillFiles.filter(f => f.name !== 'SKILL.md' && !f.name.startsWith('icon.')).length,
-  } : null
+  // Format path with tilde for home directory
+  const formatPath = (path: string) => {
+    const home = '/Users/'
+    if (path.startsWith(home)) {
+      const afterUsers = path.slice(home.length)
+      const slashIndex = afterUsers.indexOf('/')
+      if (slashIndex !== -1) {
+        return '~' + afterUsers.slice(slashIndex)
+      }
+    }
+    return path
+  }
 
   return (
     <Info_Page
@@ -207,20 +212,21 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
           />
 
           {/* Metadata */}
-          <Info_Section title="Metadata">
+          <Info_Section title="Metadata" description="Identity from SKILL.md frontmatter.">
             <Info_Table>
-              <Info_Table.Row label="Slug">
-                <span className="font-mono text-xs">{skill.slug}</span>
-              </Info_Table.Row>
+              <Info_Table.Row label="Slug" value={skill.slug} />
               <Info_Table.Row label="Name">{skill.metadata.name}</Info_Table.Row>
               <Info_Table.Row label="Description">
                 <span className="text-foreground/80">{skill.metadata.description}</span>
+              </Info_Table.Row>
+              <Info_Table.Row label="Location">
+                <span className="font-mono text-xs text-muted-foreground break-all">{formatPath(skill.path)}</span>
               </Info_Table.Row>
             </Info_Table>
           </Info_Section>
 
           {/* Configuration */}
-          <Info_Section title="Configuration">
+          <Info_Section title="Configuration" description="Trigger patterns and auto-approved tools.">
             <div className="space-y-4">
               {/* Icon status */}
               <Info_Table>
@@ -287,7 +293,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
 
           {/* Permission Modes */}
           {skill.metadata.alwaysAllow && skill.metadata.alwaysAllow.length > 0 && (
-            <Info_Section title="Permission Modes">
+            <Info_Section title="Permission Modes" description="How auto-approved tools behave in each mode.">
               <div className="space-y-2">
                 <p className="text-xs text-muted-foreground mb-3">
                   How "Always Allowed Tools" interacts with permission modes:
@@ -323,9 +329,21 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
             </Info_Section>
           )}
 
+          {/* Files */}
+          {skillFiles.length > 0 && (
+            <Info_Section title="Files" description="Contents of the skill folder.">
+              <div className="rounded-lg border border-border/50 overflow-hidden divide-y divide-border/30">
+                {skillFiles.map((file, i) => (
+                  <FileTreeItem key={i} file={file} depth={0} basePath={skill.path} />
+                ))}
+              </div>
+            </Info_Section>
+          )}
+
           {/* Instructions */}
           <Info_Section
             title="Instructions"
+            description="Prompt injected when this skill is active."
             actions={
               <button
                 onClick={handleEdit}
@@ -340,47 +358,6 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
             </Info_Markdown>
           </Info_Section>
 
-          {/* Files */}
-          {skillFiles.length > 0 && (
-            <Info_Section title="Files">
-              <div className="space-y-0.5">
-                {skillFiles.map((file, i) => (
-                  <FileTreeItem key={i} file={file} depth={0} />
-                ))}
-              </div>
-            </Info_Section>
-          )}
-
-          {/* Statistics */}
-          {stats && (
-            <Info_Section title="Statistics">
-              <Info_Table>
-                <Info_Table.Row label="Instruction Length">
-                  {stats.instructionLength.toLocaleString()} characters
-                </Info_Table.Row>
-                <Info_Table.Row label="File Patterns">
-                  {stats.filePatterns} pattern{stats.filePatterns !== 1 ? 's' : ''}
-                </Info_Table.Row>
-                <Info_Table.Row label="Auto-allowed Tools">
-                  {stats.allowedTools} tool{stats.allowedTools !== 1 ? 's' : ''}
-                </Info_Table.Row>
-                {stats.additionalFiles > 0 && (
-                  <Info_Table.Row label="Additional Files">
-                    {stats.additionalFiles} file{stats.additionalFiles !== 1 ? 's' : ''}
-                  </Info_Table.Row>
-                )}
-              </Info_Table>
-            </Info_Section>
-          )}
-
-          {/* Location */}
-          <Info_Section title="Location">
-            <Info_Table>
-              <Info_Table.Row label="Path">
-                <span className="font-mono text-xs break-all">{skill.path}</span>
-              </Info_Table.Row>
-            </Info_Table>
-          </Info_Section>
         </Info_Page.Content>
       )}
     </Info_Page>
@@ -388,37 +365,55 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
 }
 
 // File tree item component
-function FileTreeItem({ file, depth }: { file: SkillFile; depth: number }) {
+function FileTreeItem({ file, depth, basePath }: { file: SkillFile; depth: number; basePath: string }) {
   const [expanded, setExpanded] = useState(true)
+  const isDirectory = file.type === 'directory'
+  const hasChildren = isDirectory && file.children && file.children.length > 0
+  const filePath = `${basePath}/${file.name}`
+
+  const handleClick = () => {
+    if (isDirectory) {
+      setExpanded(!expanded)
+    } else {
+      // Open file in Finder
+      window.electronAPI.showInFolder(filePath)
+    }
+  }
 
   return (
-    <div>
+    <>
       <div
         className={cn(
-          'flex items-center gap-2 py-1 px-2 rounded text-sm hover:bg-foreground/5',
-          file.type === 'directory' && 'cursor-pointer'
+          'flex items-center gap-3 py-2.5 px-4 text-sm transition-colors cursor-pointer hover:bg-foreground/[0.02]'
         )}
-        style={{ paddingLeft: `${depth * 16 + 8}px` }}
-        onClick={() => file.type === 'directory' && setExpanded(!expanded)}
+        style={{ paddingLeft: `${depth * 20 + 16}px` }}
+        onClick={handleClick}
       >
-        {getFileIcon(file)}
-        <span className="font-mono text-xs flex-1">{file.name}</span>
+        <span className="shrink-0">{getFileIcon(file)}</span>
+        <span className={cn('font-mono text-[13px] flex-1 truncate', isDirectory && 'font-medium')}>
+          {file.name}
+        </span>
         {file.size !== undefined && (
-          <span className="text-xs text-muted-foreground">{formatBytes(file.size)}</span>
+          <span className="text-xs text-muted-foreground tabular-nums">{formatBytes(file.size)}</span>
         )}
-        {file.type === 'directory' && file.children && (
+        {hasChildren && (
           <span className="text-xs text-muted-foreground">
-            {file.children.length} file{file.children.length !== 1 ? 's' : ''}
+            {file.children!.length}
           </span>
         )}
       </div>
-      {file.type === 'directory' && expanded && file.children && (
-        <div>
+      {isDirectory && expanded && file.children && (
+        <>
           {file.children.map((child, i) => (
-            <FileTreeItem key={i} file={child} depth={depth + 1} />
+            <FileTreeItem
+              key={i}
+              file={child}
+              depth={depth + 1}
+              basePath={filePath}
+            />
           ))}
-        </div>
+        </>
       )}
-    </div>
+    </>
   )
 }

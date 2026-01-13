@@ -8,6 +8,7 @@
 import * as React from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { cn } from '@/lib/utils'
+import { settingsUI } from './SettingsUIConstants'
 
 // ============================================
 // Context
@@ -183,11 +184,11 @@ export function SettingsRadioCard({
         {/* Content */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">{label}</span>
+            <span className={settingsUI.label}>{label}</span>
             {badge}
           </div>
           {description && (
-            <div className="text-sm text-muted-foreground mt-0.5">
+            <div className={cn(settingsUI.description, settingsUI.labelDescriptionGap)}>
               {description}
             </div>
           )}

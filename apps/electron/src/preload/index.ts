@@ -252,6 +252,11 @@ const api: ElectronAPI = {
   getAppTheme: () => ipcRenderer.invoke(IPC_CHANNELS.THEME_GET_APP),
   getWorkspaceTheme: (workspaceId: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.THEME_GET_WORKSPACE, workspaceId),
+  // Preset themes
+  loadPresetThemes: () => ipcRenderer.invoke(IPC_CHANNELS.THEME_GET_PRESETS),
+  loadPresetTheme: (themeId: string) => ipcRenderer.invoke(IPC_CHANNELS.THEME_LOAD_PRESET, themeId),
+  getColorTheme: () => ipcRenderer.invoke(IPC_CHANNELS.THEME_GET_COLOR_THEME),
+  setColorTheme: (themeId: string) => ipcRenderer.invoke(IPC_CHANNELS.THEME_SET_COLOR_THEME, themeId),
 
   // Logo URL resolution (uses Node.js filesystem cache for provider domains)
   getLogoUrl: (serviceUrl: string, provider?: string) =>
@@ -274,6 +279,18 @@ const api: ElectronAPI = {
     ipcRenderer.on(IPC_CHANNELS.THEME_WORKSPACE_CHANGED, handler)
     return () => {
       ipcRenderer.removeListener(IPC_CHANNELS.THEME_WORKSPACE_CHANGED, handler)
+    }
+  },
+  // Theme preferences sync across windows (mode, colorTheme, font)
+  broadcastThemePreferences: (preferences: { mode: string; colorTheme: string; font: string }) =>
+    ipcRenderer.invoke(IPC_CHANNELS.THEME_BROADCAST_PREFERENCES, preferences),
+  onThemePreferencesChange: (callback: (preferences: { mode: string; colorTheme: string; font: string }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, preferences: { mode: string; colorTheme: string; font: string }) => {
+      callback(preferences)
+    }
+    ipcRenderer.on(IPC_CHANNELS.THEME_PREFERENCES_CHANGED, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.THEME_PREFERENCES_CHANGED, handler)
     }
   },
 

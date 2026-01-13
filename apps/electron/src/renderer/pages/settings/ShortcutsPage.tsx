@@ -6,8 +6,8 @@
 
 import * as React from 'react'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
-import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { SettingsSection, SettingsCard, SettingsRow } from '@/components/settings'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 
 export const meta: DetailsPageMeta = {
@@ -40,14 +40,13 @@ const sections: ShortcutSection[] = [
       { keys: [cmdKey, 'N'], description: 'New chat' },
       { keys: [cmdKey, 'B'], description: 'Toggle sidebar' },
       { keys: [cmdKey, ','], description: 'Open settings' },
-      { keys: [cmdKey, '/'], description: 'Show keyboard shortcuts' },
     ],
   },
   {
     title: 'Navigation',
     shortcuts: [
       { keys: ['Tab'], description: 'Move to next zone' },
-      { keys: ['Shift', 'Tab'], description: 'Move to previous zone' },
+      { keys: ['Shift', 'Tab'], description: 'Cycle permission mode' },
       { keys: ['←', '→'], description: 'Move between zones (in lists)' },
       { keys: ['↑', '↓'], description: 'Navigate items in list' },
       { keys: ['Home'], description: 'Go to first item' },
@@ -60,15 +59,6 @@ const sections: ShortcutSection[] = [
     shortcuts: [
       { keys: ['Enter'], description: 'Focus chat input' },
       { keys: ['Delete'], description: 'Delete session' },
-      { keys: ['R'], description: 'Rename session' },
-      { keys: ['Right-click'], description: 'Open context menu' },
-    ],
-  },
-  {
-    title: 'Agent Tree',
-    shortcuts: [
-      { keys: ['←'], description: 'Collapse folder' },
-      { keys: ['→'], description: 'Expand folder' },
     ],
   },
   {
@@ -81,9 +71,9 @@ const sections: ShortcutSection[] = [
   },
 ]
 
-function Kbd({ children, className }: { children: React.ReactNode; className?: string }) {
+function Kbd({ children }: { children: React.ReactNode }) {
   return (
-    <kbd className={`inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-[11px] font-medium bg-muted border border-border rounded shadow-sm ${className || ''}`}>
+    <kbd className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-[11px] font-medium bg-muted border border-border rounded shadow-sm">
       {children}
     </kbd>
   )
@@ -93,36 +83,31 @@ export default function ShortcutsPage() {
   return (
     <div className="h-full flex flex-col bg-surface-below">
       <PanelHeader title="Shortcuts" className="bg-surface-below" />
-      <Separator />
-      <ScrollArea className="flex-1">
-        <div className="px-5 py-4">
-          <div className="space-y-6">
+      <div className="relative flex-1 min-h-0">
+        {/* Top fade gradient */}
+        <div className="absolute top-0 left-0 right-2 h-8 z-10 bg-gradient-to-b from-surface-below to-transparent pointer-events-none" />
+        <ScrollArea className="h-full">
+          <div className="px-5 py-7 max-w-3xl mx-auto space-y-6">
             {sections.map((section) => (
-              <div key={section.title}>
-                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 pb-1.5 border-b border-border/50">
-                  {section.title}
-                </h3>
-                <div className="space-y-0.5">
+              <SettingsSection key={section.title} title={section.title}>
+                <SettingsCard>
                   {section.shortcuts.map((shortcut, index) => (
-                    <div
-                      key={index}
-                      className="group flex items-center justify-between py-1.5"
-                    >
-                      <span className="text-sm">{shortcut.description}</span>
-                      <div className="flex-1 mx-3 h-px bg-[repeating-linear-gradient(90deg,currentColor_0_2px,transparent_2px_8px)] opacity-0 group-hover:opacity-15" />
+                    <SettingsRow key={index} label={shortcut.description}>
                       <div className="flex items-center gap-1">
                         {shortcut.keys.map((key, keyIndex) => (
-                          <Kbd key={keyIndex} className="group-hover:bg-foreground/10 group-hover:border-foreground/20">{key}</Kbd>
+                          <Kbd key={keyIndex}>{key}</Kbd>
                         ))}
                       </div>
-                    </div>
+                    </SettingsRow>
                   ))}
-                </div>
-              </div>
+                </SettingsCard>
+              </SettingsSection>
             ))}
           </div>
-        </div>
-      </ScrollArea>
+        </ScrollArea>
+        {/* Bottom fade gradient */}
+        <div className="absolute bottom-0 left-0 right-2 h-8 z-10 bg-gradient-to-t from-surface-below to-transparent pointer-events-none" />
+      </div>
     </div>
   )
 }

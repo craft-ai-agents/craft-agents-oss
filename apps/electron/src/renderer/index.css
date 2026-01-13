@@ -38,24 +38,29 @@
   --destructive: oklch(0.58 0.24 28);       /* red - errors, failed */
   --destructive-rgb: 180, 60, 50;           /* RGB for shadow-tinted */
 
+  /* === SHADOW OPACITY (light mode = subtle, dark mode = stronger) === */
+  --shadow-border-opacity: 0.08;            /* Border ring opacity */
+  --shadow-blur-opacity: 0.06;              /* Blur/spread shadow opacity */
+
   /* === MIX VARIANTS (solid interpolation toward background) === */
   /* Use -2, -3, -5, -10, -20, ..., -90, -95 for solid colors (e.g., separators, Explore mode) */
-  --foreground-2: color-mix(in oklch, var(--foreground) 2%, var(--background));
-  --foreground-3: color-mix(in oklch, var(--foreground) 3%, var(--background));
-  --foreground-5: color-mix(in oklch, var(--foreground) 5%, var(--background));
-  --foreground-10: color-mix(in oklch, var(--foreground) 10%, var(--background));
-  --foreground-20: color-mix(in oklch, var(--foreground) 20%, var(--background));
-  --foreground-30: color-mix(in oklch, var(--foreground) 30%, var(--background));
-  --foreground-40: color-mix(in oklch, var(--foreground) 40%, var(--background));
-  --foreground-50: color-mix(in oklch, var(--foreground) 50%, var(--background));
-  --foreground-60: color-mix(in oklch, var(--foreground) 60%, var(--background));
-  --foreground-70: color-mix(in oklch, var(--foreground) 70%, var(--background));
-  --foreground-80: color-mix(in oklch, var(--foreground) 80%, var(--background));
-  --foreground-90: color-mix(in oklch, var(--foreground) 90%, var(--background));
-  --foreground-95: color-mix(in oklch, var(--foreground) 95%, var(--background));
+  --foreground-1\.5: color-mix(in srgb, var(--foreground) 1.5%, var(--background));
+  --foreground-2: color-mix(in srgb, var(--foreground) 2%, var(--background));
+  --foreground-3: color-mix(in srgb, var(--foreground) 3%, var(--background));
+  --foreground-5: color-mix(in srgb, var(--foreground) 5%, var(--background));
+  --foreground-10: color-mix(in srgb, var(--foreground) 10%, var(--background));
+  --foreground-20: color-mix(in srgb, var(--foreground) 20%, var(--background));
+  --foreground-30: color-mix(in srgb, var(--foreground) 30%, var(--background));
+  --foreground-40: color-mix(in srgb, var(--foreground) 40%, var(--background));
+  --foreground-50: color-mix(in srgb, var(--foreground) 50%, var(--background));
+  --foreground-60: color-mix(in srgb, var(--foreground) 60%, var(--background));
+  --foreground-70: color-mix(in srgb, var(--foreground) 70%, var(--background));
+  --foreground-80: color-mix(in srgb, var(--foreground) 80%, var(--background));
+  --foreground-90: color-mix(in srgb, var(--foreground) 90%, var(--background));
+  --foreground-95: color-mix(in srgb, var(--foreground) 95%, var(--background));
 
   /* === SEMANTIC SURFACE COLORS === */
-  --surface-below: var(--foreground-2);
+  --surface-below: var(--foreground-1\.5);
 
   /* Success/destructive/info interpolated toward foreground (for tinted text) */
   /* Using oklab for perceptually uniform mixing without hue shifts */
@@ -122,23 +127,25 @@
   --destructive: oklch(0.70 0.19 22);        /* brighter red in dark */
   --destructive-rgb: 200, 80, 70;            /* RGB for shadow-tinted */
 
+
   /* === MIX VARIANTS === */
-  --foreground-2: color-mix(in oklch, var(--foreground) 2%, var(--background));
-  --foreground-3: color-mix(in oklch, var(--foreground) 3%, var(--background));
-  --foreground-5: color-mix(in oklch, var(--foreground) 5%, var(--background));
-  --foreground-10: color-mix(in oklch, var(--foreground) 10%, var(--background));
-  --foreground-20: color-mix(in oklch, var(--foreground) 20%, var(--background));
-  --foreground-30: color-mix(in oklch, var(--foreground) 30%, var(--background));
-  --foreground-40: color-mix(in oklch, var(--foreground) 40%, var(--background));
-  --foreground-50: color-mix(in oklch, var(--foreground) 50%, var(--background));
-  --foreground-60: color-mix(in oklch, var(--foreground) 60%, var(--background));
-  --foreground-70: color-mix(in oklch, var(--foreground) 70%, var(--background));
-  --foreground-80: color-mix(in oklch, var(--foreground) 80%, var(--background));
-  --foreground-90: color-mix(in oklch, var(--foreground) 90%, var(--background));
-  --foreground-95: color-mix(in oklch, var(--foreground) 95%, var(--background));
+  --foreground-1\.5: color-mix(in srgb, var(--foreground) 1.5%, var(--background));
+  --foreground-2: color-mix(in srgb, var(--foreground) 2%, var(--background));
+  --foreground-3: color-mix(in srgb, var(--foreground) 3%, var(--background));
+  --foreground-5: color-mix(in srgb, var(--foreground) 5%, var(--background));
+  --foreground-10: color-mix(in srgb, var(--foreground) 10%, var(--background));
+  --foreground-20: color-mix(in srgb, var(--foreground) 20%, var(--background));
+  --foreground-30: color-mix(in srgb, var(--foreground) 30%, var(--background));
+  --foreground-40: color-mix(in srgb, var(--foreground) 40%, var(--background));
+  --foreground-50: color-mix(in srgb, var(--foreground) 50%, var(--background));
+  --foreground-60: color-mix(in srgb, var(--foreground) 60%, var(--background));
+  --foreground-70: color-mix(in srgb, var(--foreground) 70%, var(--background));
+  --foreground-80: color-mix(in srgb, var(--foreground) 80%, var(--background));
+  --foreground-90: color-mix(in srgb, var(--foreground) 90%, var(--background));
+  --foreground-95: color-mix(in srgb, var(--foreground) 95%, var(--background));
 
   /* === SEMANTIC SURFACE COLORS === */
-  --surface-below: var(--foreground-2);
+  --surface-below: var(--foreground-1\.5);
 
   /* Success/destructive/info interpolated toward foreground (for tinted text) */
   /* Using oklab for perceptually uniform mixing without hue shifts */
@@ -164,9 +171,12 @@
   --md-counters: var(--foreground-50);
 }
 
-/* Theme Override - Solid background when app theme differs from system
-   Prevents color bleed through macOS vibrancy when forcing light/dark mode */
-html[data-theme-override]::before {
+/* Theme Override - Solid background when:
+   1. App theme differs from system (data-theme-override)
+   2. Theme doesn't support current mode, e.g. dark-only theme in light mode (data-theme-mismatch)
+   Prevents color bleed through macOS vibrancy */
+html[data-theme-override]::before,
+html[data-theme-mismatch]::before {
   content: '';
   position: fixed;
   inset: 0;
@@ -195,6 +205,7 @@ html[data-font="inter"] {
   --color-destructive: var(--destructive);
 
   /* === MIX VARIANTS (solid interpolation) === */
+  --color-foreground-1\.5: var(--foreground-1\.5);
   --color-foreground-2: var(--foreground-2);
   --color-foreground-3: var(--foreground-3);
   --color-foreground-5: var(--foreground-5);
@@ -313,15 +324,16 @@ html[data-font="inter"] {
   }
 
   /* Custom shadow utilities
-     Border layer (0px 0px 0px 1px) uses foreground color for theme adaptation
-     Blur/spread layers use black for consistent depth */
+     - Border layer (1px ring) uses foreground color with --shadow-border-opacity
+     - Blur/spread layers use black with --shadow-blur-opacity
+     - Dark mode has stronger values for visibility */
   .shadow-minimal {
     box-shadow:
       rgba(0, 0, 0, 0) 0px 0px 0px 0px,
       rgba(0, 0, 0, 0) 0px 0px 0px 0px,
       rgba(var(--foreground-rgb), 0.06) 0px 0px 0px 1px,
-      rgba(0, 0, 0, 0.06) 0px 1px 1px -0.5px,
-      rgba(0, 0, 0, 0.06) 0px 3px 3px -1.5px;
+      rgba(0, 0, 0, var(--shadow-blur-opacity)) 0px 1px 1px -0.5px,
+      rgba(0, 0, 0, var(--shadow-blur-opacity)) 0px 3px 3px -1.5px;
   }
 
   .shadow-middle {
@@ -329,9 +341,9 @@ html[data-font="inter"] {
       rgba(0, 0, 0, 0) 0px 0px 0px 0px,
       rgba(0, 0, 0, 0) 0px 0px 0px 0px,
       rgba(var(--foreground-rgb), 0.06) 0px 0px 0px 1px,
-      rgba(0, 0, 0, 0.06) 0px 1px 1px -0.5px,
-      rgba(0, 0, 0, 0.06) 0px 3px 3px -1.5px,
-      rgba(0, 0, 0, 0.06) 0px 6px 6px -3px;
+      rgba(0, 0, 0, var(--shadow-blur-opacity)) 0px 1px 1px -0.5px,
+      rgba(0, 0, 0, var(--shadow-blur-opacity)) 0px 3px 3px -1.5px,
+      rgba(0, 0, 0, var(--shadow-blur-opacity)) 0px 6px 6px -3px;
   }
 
   /* Tinted shadow using CSS variable - use with style={{ '--shadow-color': 'r, g, b' }} */
@@ -340,10 +352,10 @@ html[data-font="inter"] {
     box-shadow:
       rgba(var(--shadow-color), 0) 0px 0px 0px 0px,
       rgba(var(--shadow-color), 0) 0px 0px 0px 0px,
-      rgba(var(--shadow-color), 0.12) 0px 0px 0px 1px,
-      rgba(var(--shadow-color), 0.08) 0px 1px 1px -0.5px,
-      rgba(var(--shadow-color), 0.06) 0px 3px 3px -1.5px,
-      rgba(var(--shadow-color), 0.04) 0px 6px 6px -3px;
+      rgba(var(--shadow-color), calc(var(--shadow-border-opacity) * 1.5)) 0px 0px 0px 1px,
+      rgba(var(--shadow-color), var(--shadow-border-opacity)) 0px 1px 1px -0.5px,
+      rgba(var(--shadow-color), var(--shadow-blur-opacity)) 0px 3px 3px -1.5px,
+      rgba(var(--shadow-color), calc(var(--shadow-blur-opacity) * 0.67)) 0px 6px 6px -3px;
   }
 
   .shadow-strong {
@@ -351,11 +363,11 @@ html[data-font="inter"] {
       rgba(0, 0, 0, 0) 0px 0px 0px 0px,
       rgba(0, 0, 0, 0) 0px 0px 0px 0px,
       rgba(var(--foreground-rgb), 0.06) 0px 0px 0px 1px,
-      rgba(0, 0, 0, 0.06) 0px 1px 1px -0.5px,
-      rgba(0, 0, 0, 0.06) 0px 3px 3px -1.5px,
-      rgba(0, 0, 0, 0.06) 0px 6px 6px -3px,
-      rgba(0, 0, 0, 0.04) 0px 12px 12px -6px,
-      rgba(0, 0, 0, 0.04) 0px 24px 24px -12px;
+      rgba(0, 0, 0, var(--shadow-blur-opacity)) 0px 1px 1px -0.5px,
+      rgba(0, 0, 0, var(--shadow-blur-opacity)) 0px 3px 3px -1.5px,
+      rgba(0, 0, 0, var(--shadow-blur-opacity)) 0px 6px 6px -3px,
+      rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.67)) 0px 12px 12px -6px,
+      rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.67)) 0px 24px 24px -12px;
   }
 
   .shadow-modal-small {
@@ -363,11 +375,11 @@ html[data-font="inter"] {
       rgba(0, 0, 0, 0) 0px 0px 0px 0px,
       rgba(0, 0, 0, 0) 0px 0px 0px 0px,
       rgba(var(--foreground-rgb), 0.06) 0px 0px 0px 1px,
-      rgba(0, 0, 0, 0.04) 0px 1px 1px -0.5px,
-      rgba(0, 0, 0, 0.04) 0px 3px 3px 0px,
-      rgba(0, 0, 0, 0.02) 0px 6px 6px 0px,
-      rgba(0, 0, 0, 0.02) 0px 12px 12px 0px,
-      rgba(0, 0, 0, 0.02) 0px 24px 24px 0px;
+      rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.67)) 0px 1px 1px -0.5px,
+      rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.67)) 0px 3px 3px 0px,
+      rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.33)) 0px 6px 6px 0px,
+      rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.33)) 0px 12px 12px 0px,
+      rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.33)) 0px 24px 24px 0px;
   }
 
   /* =============================================================================
@@ -389,11 +401,11 @@ html[data-font="inter"] {
       rgba(0, 0, 0, 0) 0px 0px 0px 0px,
       rgba(0, 0, 0, 0) 0px 0px 0px 0px,
       rgba(var(--foreground-rgb), 0.06) 0px 0px 0px 1px,
-      rgba(0, 0, 0, 0.04) 0px 1px 1px -0.5px,
-      rgba(0, 0, 0, 0.04) 0px 3px 3px 0px,
-      rgba(0, 0, 0, 0.02) 0px 6px 6px 0px,
-      rgba(0, 0, 0, 0.02) 0px 12px 12px 0px,
-      rgba(0, 0, 0, 0.02) 0px 24px 24px 0px;
+      rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.67)) 0px 1px 1px -0.5px,
+      rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.67)) 0px 3px 3px 0px,
+      rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.33)) 0px 6px 6px 0px,
+      rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.33)) 0px 12px 12px 0px,
+      rgba(0, 0, 0, calc(var(--shadow-blur-opacity) * 0.33)) 0px 24px 24px 0px;
   }
 }
 

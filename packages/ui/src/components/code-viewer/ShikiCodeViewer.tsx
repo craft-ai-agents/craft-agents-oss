@@ -25,6 +25,8 @@ export interface ShikiCodeViewerProps {
   startLine?: number
   /** Theme mode */
   theme?: 'light' | 'dark'
+  /** Shiki theme name (e.g., 'github-dark', 'dracula'). Defaults to github-dark/github-light based on theme mode */
+  shikiTheme?: string
   /** Callback when ready */
   onReady?: () => void
   /** Additional class names */
@@ -66,6 +68,7 @@ export function ShikiCodeViewer({
   filePath,
   startLine = 1,
   theme = 'light',
+  shikiTheme,
   onReady,
   className,
 }: ShikiCodeViewerProps) {
@@ -88,13 +91,14 @@ export function ShikiCodeViewer({
     let cancelled = false
 
     async function highlight() {
-      const shikiTheme = theme === 'dark' ? 'github-dark' : 'github-light'
+      // Use provided shikiTheme or fall back to github theme based on mode
+      const resolvedShikiTheme = shikiTheme || (theme === 'dark' ? 'github-dark' : 'github-light')
       const lang = isValidLanguage(resolvedLang) ? resolvedLang : 'text'
 
       try {
         const html = await codeToHtml(code, {
           lang,
-          theme: shikiTheme,
+          theme: resolvedShikiTheme,
         })
 
         if (!cancelled) {
@@ -126,7 +130,7 @@ export function ShikiCodeViewer({
     return () => {
       cancelled = true
     }
-  }, [code, resolvedLang, theme, onReady])
+  }, [code, resolvedLang, theme, shikiTheme, onReady])
 
   // Theme-aware colors
   const backgroundColor = theme === 'dark' ? '#1e1e1e' : '#ffffff'

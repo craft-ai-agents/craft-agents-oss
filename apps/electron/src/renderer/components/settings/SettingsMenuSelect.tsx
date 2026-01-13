@@ -9,6 +9,7 @@ import * as React from 'react'
 import { Check, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { settingsUI } from './SettingsUIConstants'
 
 export interface SettingsMenuSelectOption {
   /** Value for this option */
@@ -99,9 +100,9 @@ export function SettingsMenuSelect({
                 )}
               >
                 <div className="flex-1 min-w-0">
-                  <div className="font-medium text-sm">{option.label}</div>
+                  <div className={settingsUI.label}>{option.label}</div>
                   {option.description && (
-                    <div className="text-xs text-muted-foreground mt-0.5">
+                    <div className={cn(settingsUI.descriptionSmall, settingsUI.labelDescriptionGap)}>
                       {option.description}
                     </div>
                   )}
@@ -165,9 +166,9 @@ export function SettingsMenuSelectRow({
       )}
     >
       <div className="flex-1 min-w-0">
-        <div className="text-sm font-medium">{label}</div>
+        <div className={settingsUI.label}>{label}</div>
         {description && (
-          <p className="text-sm text-muted-foreground mt-0.5">{description}</p>
+          <p className={cn(settingsUI.description, settingsUI.labelDescriptionGap)}>{description}</p>
         )}
       </div>
       <div className="ml-4 shrink-0">

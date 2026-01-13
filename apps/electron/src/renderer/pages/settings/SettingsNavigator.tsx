@@ -3,11 +3,76 @@
  *
  * Navigator panel content for settings. Displays a list of settings sections
  * (App, Workspace, Shortcuts, Preferences) that can be selected to show in the details panel.
+ *
+ * Styling follows SessionList/SourcesListPanel patterns for visual consistency.
  */
 
 import * as React from 'react'
-import { Settings, Briefcase, Keyboard, User } from 'lucide-react'
+/** Custom app settings icon */
+const AppSettingsIcon = ({ className }: { className?: string }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+  >
+    <path
+      d="M16.5 12C18.9853 12 21 14.0147 21 16.5C21 18.9853 18.9853 21 16.5 21H7.5C5.01472 21 3 18.9853 3 16.5C3 14.0147 5.01472 12 7.5 12H16.5ZM7 14.5C5.89543 14.5 5 15.3954 5 16.5C5 17.6046 5.89543 18.5 7 18.5C8.10457 18.5 9 17.6046 9 16.5C9 15.3954 8.10457 14.5 7 14.5ZM16.5 2C18.9853 2 21 4.01472 21 6.5C21 8.98528 18.9853 11 16.5 11H7.5C5.01472 11 3 8.98528 3 6.5C3 4.01472 5.01472 2 7.5 2H16.5ZM17 4.5C15.8954 4.5 15 5.39543 15 6.5C15 7.60457 15.8954 8.5 17 8.5C18.1046 8.5 19 7.60457 19 6.5C19 5.39543 18.1046 4.5 17 4.5Z"
+      fill="currentColor"
+    />
+  </svg>
+)
+
+/** Custom workspace icon */
+const WorkspaceIcon = ({ className }: { className?: string }) => (
+  <svg
+    viewBox="0 0 19 19"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+  >
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M7.91847 3.17157H11.0846C10.6853 2.77838 10.3838 2.49639 10.1198 2.29502C9.77189 2.02956 9.60919 2 9.50153 2C9.39388 2 9.23118 2.02956 8.88324 2.29502C8.61931 2.49639 8.31775 2.77838 7.91847 3.17157ZM13.9527 3.2085L12.9905 2.24634C12.3637 1.61947 11.8236 1.07934 11.333 0.704979C10.8072 0.303777 10.2223 0 9.50153 0C8.78076 0 8.19592 0.303777 7.67008 0.704978C7.17942 1.07934 6.63936 1.61946 6.01255 2.24634C5.99709 2.2618 5.98157 2.27732 5.966 2.29289L5.05039 3.2085C4.92222 3.21562 4.79877 3.2241 4.67987 3.23421C3.92112 3.29875 3.25593 3.43518 2.64455 3.76197C1.77241 4.22813 1.0581 4.94245 0.591928 5.81459C0.26514 6.42597 0.128709 7.09116 0.0641714 7.84991C-0.0155305 8.78694 0.00153398 9.73212 0.00153398 10.6716C0.00153398 11.611 -0.0155305 12.5562 0.0641714 13.4932C0.128709 14.252 0.26514 14.9172 0.591928 15.5286C1.0581 16.4007 1.77241 17.115 2.64455 17.5812C3.25593 17.908 3.92112 18.0444 4.67987 18.1089C5.41651 18.1716 6.32746 18.1716 7.4569 18.1716H11.5462C12.6756 18.1716 13.5866 18.1716 14.3232 18.1089C15.082 18.0444 15.7471 17.908 16.3585 17.5812C17.2307 17.115 17.945 16.4007 18.4111 15.5286C18.7379 14.9172 18.8744 14.252 18.9389 13.4932C19.0186 12.5562 19.0015 11.611 19.0015 10.6716C19.0015 9.73212 19.0186 8.78694 18.9389 7.84991C18.8744 7.09116 18.7379 6.42597 18.4111 5.81459C17.945 4.94245 17.2307 4.22813 16.3585 3.76197C15.7471 3.43518 15.082 3.29875 14.3232 3.23421C14.2043 3.2241 14.0809 3.21562 13.9527 3.2085ZM11.5015 9.67157H5.50153C4.94925 9.67157 4.50153 9.22386 4.50153 8.67157C4.50153 8.11929 4.94925 7.67157 5.50153 7.67157H11.5015C12.0538 7.67157 12.5015 8.11929 12.5015 8.67157C12.5015 9.22386 12.0538 9.67157 11.5015 9.67157ZM7.50153 13.6716H5.50153C4.94925 13.6716 4.50153 13.2239 4.50153 12.6716C4.50153 12.1193 4.94925 11.6716 5.50153 11.6716H7.50153C8.05382 11.6716 8.50153 12.1193 8.50153 12.6716C8.50153 13.2239 8.05382 13.6716 7.50153 13.6716Z"
+      fill="currentColor"
+    />
+  </svg>
+)
+
+/** Custom preferences/user icon */
+const PreferencesIcon = ({ className }: { className?: string }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+  >
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2ZM8.5 9.5C8.5 7.567 10.067 6 12 6C13.933 6 15.5 7.567 15.5 9.5C15.5 11.433 13.933 13 12 13C10.067 13 8.5 11.433 8.5 9.5ZM18.2579 16.9843C16.7921 18.8222 14.5336 20 12 20C9.46642 20 7.20792 18.8222 5.74212 16.9843C7.36304 15.8211 9.57493 15 12 15C14.4251 15 16.637 15.8211 18.2579 16.9843Z"
+      fill="currentColor"
+    />
+  </svg>
+)
+
+/** Custom keyboard icon for shortcuts */
+const KeyboardIcon = ({ className }: { className?: string }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+  >
+    <path
+      d="M14.0635 3.5C15.6533 3.49998 16.9351 3.49967 17.9541 3.62012C19.0086 3.74476 19.911 4.01042 20.6719 4.63477C20.925 4.84254 21.1575 5.07495 21.3652 5.32812C21.9896 6.08897 22.2552 6.99139 22.3799 8.0459C22.5003 9.06487 22.5 10.3467 22.5 11.9365V12.0635C22.5 13.6533 22.5003 14.9351 22.3799 15.9541C22.2552 17.0086 21.9896 17.911 21.3652 18.6719C21.1575 18.925 20.925 19.1575 20.6719 19.3652C19.911 19.9896 19.0086 20.2552 17.9541 20.3799C16.9351 20.5003 15.6533 20.5 14.0635 20.5H9.93652C8.34669 20.5 7.06487 20.5003 6.0459 20.3799C4.99139 20.2552 4.08897 19.9896 3.32812 19.3652C3.07495 19.1575 2.84254 18.925 2.63477 18.6719C2.01042 17.911 1.74476 17.0086 1.62012 15.9541C1.49967 14.9351 1.49998 13.6533 1.5 12.0635V11.9365C1.49998 10.3467 1.49967 9.06487 1.62012 8.0459C1.74476 6.99139 2.01042 6.08897 2.63477 5.32812C2.84254 5.07495 3.07495 4.84254 3.32812 4.63477C4.08897 4.01042 4.99139 3.74476 6.0459 3.62012C7.06487 3.49967 8.34669 3.49998 9.93652 3.5H14.0635ZM7 15C6.44772 15 6 15.4477 6 16C6 16.5523 6.44772 17 7 17H17C17.5523 17 18 16.5523 18 16C18 15.4477 17.5523 15 17 15H7ZM7 11C6.44772 11 6 11.4477 6 12C6 12.5523 6.44772 13 7 13H8C8.55228 13 9 12.5523 9 12C9 11.4477 8.55228 11 8 11H7ZM11.5 11C10.9477 11 10.5 11.4477 10.5 12C10.5 12.5523 10.9477 13 11.5 13H12.5C13.0523 13 13.5 12.5523 13.5 12C13.5 11.4477 13.0523 11 12.5 11H11.5ZM16 11C15.4477 11 15 11.4477 15 12C15 12.5523 15.4477 13 16 13H17C17.5523 13 18 12.5523 18 12C18 11.4477 17.5523 11 17 11H16ZM7 7C6.44772 7 6 7.44772 6 8C6 8.55228 6.44772 9 7 9H8C8.55228 9 9 8.55228 9 8C9 7.44772 8.55228 7 8 7H7ZM11.5 7C10.9477 7 10.5 7.44772 10.5 8C10.5 8.55228 10.9477 9 11.5 9H12.5C13.0523 9 13.5 8.55228 13.5 8C13.5 7.44772 13.0523 7 12.5 7H11.5ZM16 7C15.4477 7 15 7.44772 15 8C15 8.55228 15.4477 9 16 9H17C17.5523 9 18 8.55228 18 8C18 7.44772 17.5523 7 17 7H16Z"
+      fill="currentColor"
+    />
+  </svg>
+)
 import { cn } from '@/lib/utils'
+import { Separator } from '@/components/ui/separator'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import type { SettingsSubpage } from '../../../shared/types'
 
@@ -34,25 +99,25 @@ const settingsItems: SettingsItem[] = [
   {
     id: 'app',
     label: 'App',
-    icon: Settings,
+    icon: AppSettingsIcon,
     description: 'Appearance, notifications, billing',
   },
   {
     id: 'workspace',
     label: 'Workspace',
-    icon: Briefcase,
+    icon: WorkspaceIcon,
     description: 'Model, permissions, advanced',
   },
   {
     id: 'shortcuts',
     label: 'Shortcuts',
-    icon: Keyboard,
+    icon: KeyboardIcon,
     description: 'Keyboard shortcuts reference',
   },
   {
     id: 'preferences',
     label: 'Preferences',
-    icon: User,
+    icon: PreferencesIcon,
     description: 'Your personal preferences',
   },
 ]
@@ -64,41 +129,62 @@ export default function SettingsNavigator({
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto">
-        <div className="py-2">
-          {settingsItems.map((item) => {
+        <div className="pt-2">
+          {settingsItems.map((item, index) => {
             const Icon = item.icon
             const isSelected = selectedSubpage === item.id
+            const isFirst = index === 0
             return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => onSelectSubpage(item.id)}
-                className={cn(
-                  'w-full flex items-start gap-3 px-4 py-2.5 text-left transition-colors',
-                  'hover:bg-foreground/5',
-                  isSelected && 'bg-foreground/5'
+              <div key={item.id} className="settings-item" data-selected={isSelected || undefined}>
+                {/* Separator - only show if not first */}
+                {!isFirst && (
+                  <div className="settings-separator pl-12 pr-4">
+                    <Separator />
+                  </div>
                 )}
-              >
-                <Icon
-                  className={cn(
-                    'w-4 h-4 mt-0.5 shrink-0',
-                    isSelected ? 'text-foreground' : 'text-muted-foreground'
-                  )}
-                />
-                <div className="min-w-0 flex-1">
-                  <span
+                {/* Wrapper for button with proper margins */}
+                <div className="settings-content relative group select-none pl-2 mr-2">
+                  {/* Icon - positioned absolutely for consistent alignment */}
+                  <div className="absolute left-[20px] top-[14px] z-10">
+                    <Icon
+                      className={cn(
+                        'w-4 h-4 shrink-0',
+                        isSelected ? 'text-foreground' : 'text-muted-foreground'
+                      )}
+                    />
+                  </div>
+                  {/* Main content button */}
+                  <button
+                    type="button"
+                    onClick={() => onSelectSubpage(item.id)}
                     className={cn(
-                      'text-sm font-medium block',
-                      isSelected ? 'text-foreground' : 'text-foreground/80'
+                      'flex w-full items-start gap-2 pl-2 pr-4 py-3 text-left text-sm outline-none rounded-[8px]',
+                      // Fast hover transition (75ms vs default 150ms)
+                      'transition-[background-color] duration-75',
+                      isSelected
+                        ? 'bg-foreground/5 hover:bg-foreground/7'
+                        : 'hover:bg-foreground/2'
                     )}
                   >
-                    {item.label}
-                  </span>
-                  <span className="text-xs text-muted-foreground block mt-0.5 line-clamp-1">
-                    {item.description}
-                  </span>
+                    {/* Spacer for icon */}
+                    <div className="w-6 h-5 shrink-0" />
+                    {/* Content column */}
+                    <div className="flex flex-col min-w-0 flex-1">
+                      <span
+                        className={cn(
+                          'font-medium',
+                          isSelected ? 'text-foreground' : 'text-foreground/80'
+                        )}
+                      >
+                        {item.label}
+                      </span>
+                      <span className="text-xs text-foreground/60 line-clamp-1">
+                        {item.description}
+                      </span>
+                    </div>
+                  </button>
                 </div>
-              </button>
+              </div>
             )
           })}
         </div>

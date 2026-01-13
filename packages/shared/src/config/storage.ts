@@ -49,6 +49,8 @@ export interface StoredConfig {
   notificationsEnabled?: boolean;  // Desktop notifications for task completion (default: true)
   // Mode cycling
   enabledPermissionModes?: PermissionMode[];  // Modes to include in SHIFT+TAB cycling (min 2, default: all 3)
+  // Appearance
+  colorTheme?: string;  // ID of selected preset theme (e.g., 'dracula', 'nord'). Default: 'default'
 }
 
 const CONFIG_DIR = join(homedir(), '.craft-agent');
@@ -816,9 +818,30 @@ export function getAllSessionDrafts(): Record<string, string> {
 // Theme Storage (Cascading: app → workspace → agent)
 // ============================================
 
-import type { ThemeOverrides } from './theme.ts';
+import type { ThemeOverrides, ThemeFile, PresetTheme } from './theme.ts';
+import { readdirSync } from 'fs';
+import { dirname } from 'path';
+import { fileURLToPath } from 'url';
 
 const APP_THEME_FILE = join(CONFIG_DIR, 'theme.json');
+const PRESET_THEMES_DIR = join(CONFIG_DIR, 'themes');
+
+// Get the directory where bundled themes are stored (in the package)
+// Returns null if running in bundled CJS environment where import.meta.url is unavailable
+function getBundledThemesDir(): string | null {
+  try {
+    // import.meta.url is undefined when bundled with esbuild to CJS format
+    if (typeof import.meta?.url !== 'string') {
+      return null;
+    }
+    // __dirname equivalent for ESM
+    const currentFilePath = fileURLToPath(import.meta.url);
+    const currentDir = dirname(currentFilePath);
+    return join(currentDir, 'themes');
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Load app-level theme overrides
@@ -865,4 +888,160 @@ export function loadWorkspaceTheme(workspaceRootPath: string): ThemeOverrides | 
 export function saveWorkspaceTheme(workspaceRootPath: string, theme: ThemeOverrides): void {
   const themePath = join(workspaceRootPath, 'theme.json');
   writeFileSync(themePath, JSON.stringify(theme, null, 2), 'utf-8');
+}
+
+// ============================================
+// Preset Themes
+// ============================================
+
+/**
+ * Ensure preset themes directory exists and has bundled themes.
+ * Copies bundled themes from package to ~/.craft-agent/themes/ on first run.
+ * Only copies if theme doesn't exist (preserves user edits).
+ * @param externalBundledDir - Optional path to bundled themes (for Electron)
+ */
+export function ensurePresetThemes(externalBundledDir?: string): void {
+  // Create themes directory if it doesn't exist
+  if (!existsSync(PRESET_THEMES_DIR)) {
+    mkdirSync(PRESET_THEMES_DIR, { recursive: true });
+  }
+
+  // Get bundled themes directory - prefer external path (from Electron) over ESM path
+  const bundledDir = externalBundledDir ?? getBundledThemesDir();
+  if (!bundledDir || !existsSync(bundledDir)) {
+    return; // No bundled themes available
+  }
+
+  // Copy each bundled theme if it doesn't exist in user's themes dir
+  try {
+    const bundledFiles = readdirSync(bundledDir).filter(f => f.endsWith('.json'));
+    for (const file of bundledFiles) {
+      const destPath = join(PRESET_THEMES_DIR, file);
+      if (!existsSync(destPath)) {
+        const srcPath = join(bundledDir, file);
+        const content = readFileSync(srcPath, 'utf-8');
+        writeFileSync(destPath, content, 'utf-8');
+      }
+    }
+  } catch {
+    // Ignore errors - themes are optional
+  }
+}
+
+/**
+ * Load all preset themes from ~/.craft-agent/themes/
+ * Returns array of PresetTheme objects sorted by name.
+ * @param bundledThemesDir - Optional path to bundled themes (for Electron)
+ */
+export function loadPresetThemes(bundledThemesDir?: string): PresetTheme[] {
+  ensurePresetThemes(bundledThemesDir);
+
+  if (!existsSync(PRESET_THEMES_DIR)) {
+    return [];
+  }
+
+  const themes: PresetTheme[] = [];
+
+  try {
+    const files = readdirSync(PRESET_THEMES_DIR).filter(f => f.endsWith('.json'));
+    for (const file of files) {
+      const id = file.replace('.json', '');
+      const path = join(PRESET_THEMES_DIR, file);
+      try {
+        const content = readFileSync(path, 'utf-8');
+        const theme = JSON.parse(content) as ThemeFile;
+        themes.push({ id, path, theme });
+      } catch {
+        // Skip invalid theme files
+      }
+    }
+  } catch {
+    return [];
+  }
+
+  // Sort by name (default first, then alphabetically)
+  return themes.sort((a, b) => {
+    if (a.id === 'default') return -1;
+    if (b.id === 'default') return 1;
+    return (a.theme.name || a.id).localeCompare(b.theme.name || b.id);
+  });
+}
+
+/**
+ * Load a specific preset theme by ID.
+ * @param id Theme ID (filename without .json)
+ */
+export function loadPresetTheme(id: string): PresetTheme | null {
+  ensurePresetThemes();
+
+  const path = join(PRESET_THEMES_DIR, `${id}.json`);
+  if (!existsSync(path)) {
+    return null;
+  }
+
+  try {
+    const content = readFileSync(path, 'utf-8');
+    const theme = JSON.parse(content) as ThemeFile;
+    return { id, path, theme };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Get the path to the preset themes directory
+ */
+export function getPresetThemesDir(): string {
+  return PRESET_THEMES_DIR;
+}
+
+/**
+ * Reset a preset theme to its bundled default.
+ * Copies the bundled version over the user's version.
+ */
+export function resetPresetTheme(id: string): boolean {
+  const bundledDir = getBundledThemesDir();
+  if (!bundledDir) {
+    return false; // Bundled themes not available in this environment
+  }
+  const bundledPath = join(bundledDir, `${id}.json`);
+  const destPath = join(PRESET_THEMES_DIR, `${id}.json`);
+
+  if (!existsSync(bundledPath)) {
+    return false;
+  }
+
+  try {
+    const content = readFileSync(bundledPath, 'utf-8');
+    if (!existsSync(PRESET_THEMES_DIR)) {
+      mkdirSync(PRESET_THEMES_DIR, { recursive: true });
+    }
+    writeFileSync(destPath, content, 'utf-8');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// ============================================
+// Color Theme Selection (stored in config)
+// ============================================
+
+/**
+ * Get the currently selected color theme ID.
+ * Returns 'default' if not set.
+ */
+export function getColorTheme(): string {
+  const config = loadStoredConfig();
+  return config?.colorTheme || 'default';
+}
+
+/**
+ * Set the color theme ID.
+ */
+export function setColorTheme(themeId: string): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+  config.colorTheme = themeId;
+  saveConfig(config);
 }

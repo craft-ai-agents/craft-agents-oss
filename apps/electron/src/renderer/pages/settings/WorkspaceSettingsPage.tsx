@@ -14,7 +14,6 @@ import * as React from 'react'
 import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
-import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { HeaderMenu } from '@/components/ui/HeaderMenu'
 import { useAppShellContext } from '@/context/AppShellContext'
@@ -286,7 +285,6 @@ export default function WorkspaceSettingsPage() {
     return (
       <div className="h-full flex flex-col bg-surface-below">
         <PanelHeader title="Workspace Settings" actions={<HeaderMenu route={routes.view.settings('workspace')} />} className="bg-surface-below" />
-        <Separator />
         <div className="flex-1 flex items-center justify-center">
           <p className="text-sm text-muted-foreground">No workspace selected</p>
         </div>
@@ -299,7 +297,6 @@ export default function WorkspaceSettingsPage() {
     return (
       <div className="h-full flex flex-col bg-surface-below">
         <PanelHeader title="Workspace Settings" actions={<HeaderMenu route={routes.view.settings('workspace')} />} className="bg-surface-below" />
-        <Separator />
         <div className="flex-1 flex items-center justify-center">
           <Spinner className="text-muted-foreground" />
         </div>
@@ -310,12 +307,14 @@ export default function WorkspaceSettingsPage() {
   return (
     <div className="h-full flex flex-col bg-surface-below">
       <PanelHeader title="Workspace Settings" actions={<HeaderMenu route={routes.view.settings('workspace')} />} className="bg-surface-below" />
-      <Separator />
-      <ScrollArea className="flex-1">
-        <div className="px-5 py-7 max-w-3xl mx-auto">
+      <div className="relative flex-1 min-h-0">
+        {/* Top fade gradient */}
+        <div className="absolute top-0 left-0 right-2 h-8 z-10 bg-gradient-to-b from-surface-below to-transparent pointer-events-none" />
+        <ScrollArea className="h-full">
+          <div className="px-5 py-7 max-w-3xl mx-auto">
           <div className="space-y-6">
-            {/* Identity */}
-            <SettingsSection title="Identity">
+            {/* Workspace Info */}
+            <SettingsSection title="Workspace Info">
               <SettingsCard>
                 <SettingsRow
                   label="Name"
@@ -484,7 +483,10 @@ export default function WorkspaceSettingsPage() {
 
           </div>
         </div>
-      </ScrollArea>
+        </ScrollArea>
+        {/* Bottom fade gradient */}
+        <div className="absolute bottom-0 left-0 right-2 h-8 z-10 bg-gradient-to-t from-surface-below to-transparent pointer-events-none" />
+      </div>
     </div>
   )
 }

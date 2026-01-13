@@ -33,8 +33,8 @@ const springTransition = { type: 'spring' as const, stiffness: 300, damping: 30 
 const STOPLIGHT_PADDING = 84
 
 export interface PanelHeaderProps {
-  /** Header title */
-  title: string
+  /** Header title (undefined hides with animation) */
+  title?: string
   /** Optional badge element (e.g., agent badge) */
   badge?: React.ReactNode
   /** Optional action buttons rendered on the right */
@@ -64,11 +64,16 @@ export function PanelHeader({
 
   const content = (
     <>
-      <div className="flex-1 min-w-0 flex items-center select-none">
-        <div className="flex items-center gap-2">
+      <div className="flex-1 min-w-0 flex items-center justify-center select-none">
+        <motion.div
+          initial={false}
+          animate={{ opacity: title ? 1 : 0 }}
+          transition={{ duration: 0.15 }}
+          className="flex items-center gap-2"
+        >
           <h1 className="text-sm font-semibold truncate font-sans leading-tight">{title}</h1>
           {badge}
-        </div>
+        </motion.div>
       </div>
       {actions && (
         <div className="titlebar-no-drag shrink-0">

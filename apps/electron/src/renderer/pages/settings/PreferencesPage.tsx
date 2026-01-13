@@ -11,12 +11,14 @@
 import * as React from 'react'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
-import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import { Spinner } from '@craft-agent/ui'
+import {
+  SettingsSection,
+  SettingsCard,
+  SettingsInput,
+  SettingsTextarea,
+} from '@/components/settings'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 
 export const meta: DetailsPageMeta = {
@@ -78,40 +80,6 @@ function serializePreferences(state: PreferencesFormState): string {
   prefs.updatedAt = Date.now()
 
   return JSON.stringify(prefs, null, 2)
-}
-
-function SectionHeader({ children }: { children: React.ReactNode }) {
-  return (
-    <h3 className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-3">
-      {children}
-    </h3>
-  )
-}
-
-function FormField({
-  label,
-  value,
-  onChange,
-  placeholder,
-}: {
-  label: string
-  value: string
-  onChange: (value: string) => void
-  placeholder?: string
-}) {
-  return (
-    <div className="flex items-center gap-4 py-1.5">
-      <Label className="w-20 text-sm text-muted-foreground shrink-0">
-        {label}
-      </Label>
-      <Input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="flex-1 h-8 text-sm"
-      />
-    </div>
-  )
 }
 
 export default function PreferencesPage() {
@@ -218,65 +186,89 @@ export default function PreferencesPage() {
   return (
     <div className="h-full flex flex-col bg-surface-below">
       <PanelHeader title="Preferences" className="bg-surface-below" />
-      <Separator />
-      <ScrollArea className="flex-1">
-        <div className="p-4 space-y-6">
+      <div className="relative flex-1 min-h-0">
+        {/* Top fade gradient */}
+        <div className="absolute top-0 left-0 right-2 h-8 z-10 bg-gradient-to-b from-surface-below to-transparent pointer-events-none" />
+        <ScrollArea className="h-full">
+          <div className="px-5 py-7 max-w-3xl mx-auto space-y-6">
           {/* Basic Info */}
-          <section>
-            <SectionHeader>Basic Info</SectionHeader>
-            <div className="space-y-1">
-              <FormField
+          <SettingsSection
+            title="Basic Info"
+            description="Help Craft Agent personalize responses to you."
+          >
+            <SettingsCard divided>
+              <SettingsInput
                 label="Name"
+                description="How Craft Agent should address you."
                 value={formState.name}
                 onChange={(v) => updateField('name', v)}
                 placeholder="Your name"
+                inCard
               />
-              <FormField
+              <SettingsInput
                 label="Timezone"
+                description="Used for relative dates like 'tomorrow' or 'next week'."
                 value={formState.timezone}
                 onChange={(v) => updateField('timezone', v)}
                 placeholder="e.g., America/New_York"
+                inCard
               />
-              <FormField
+              <SettingsInput
                 label="Language"
+                description="Preferred language for Craft Agent's responses."
                 value={formState.language}
                 onChange={(v) => updateField('language', v)}
                 placeholder="e.g., English"
+                inCard
               />
-            </div>
-          </section>
+            </SettingsCard>
+          </SettingsSection>
 
           {/* Location */}
-          <section>
-            <SectionHeader>Location</SectionHeader>
-            <div className="space-y-1">
-              <FormField
+          <SettingsSection
+            title="Location"
+            description="Enables location-aware responses like weather, local time, and regional context."
+          >
+            <SettingsCard divided>
+              <SettingsInput
                 label="City"
+                description="Your city for local information and context."
                 value={formState.city}
                 onChange={(v) => updateField('city', v)}
                 placeholder="e.g., New York"
+                inCard
               />
-              <FormField
+              <SettingsInput
                 label="Country"
+                description="Your country for regional formatting and context."
                 value={formState.country}
                 onChange={(v) => updateField('country', v)}
                 placeholder="e.g., USA"
+                inCard
               />
-            </div>
-          </section>
+            </SettingsCard>
+          </SettingsSection>
 
           {/* Notes */}
-          <section>
-            <SectionHeader>Notes</SectionHeader>
-            <Textarea
-              value={formState.notes}
-              onChange={(e) => updateField('notes', e.target.value)}
-              placeholder="Any additional information you'd like to share with the AI assistant..."
-              className="min-h-[120px] text-sm resize-y"
-            />
-          </section>
+          <SettingsSection
+            title="Notes"
+            description="Free-form context that helps Craft Agent understand your preferences."
+          >
+            <SettingsCard divided={false}>
+              <SettingsTextarea
+                value={formState.notes}
+                onChange={(v) => updateField('notes', v)}
+                placeholder="Any additional context you'd like Craft Agent to know..."
+                rows={5}
+                inCard
+              />
+            </SettingsCard>
+          </SettingsSection>
         </div>
-      </ScrollArea>
+        </ScrollArea>
+        {/* Bottom fade gradient */}
+        <div className="absolute bottom-0 left-0 right-2 h-8 z-10 bg-gradient-to-t from-surface-below to-transparent pointer-events-none" />
+      </div>
     </div>
   )
 }

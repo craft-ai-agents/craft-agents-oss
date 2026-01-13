@@ -8,6 +8,7 @@
 import * as React from 'react'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
+import { settingsUI } from './SettingsUIConstants'
 
 export interface SettingsToggleProps {
   /** Toggle label */
@@ -60,9 +61,9 @@ export function SettingsToggle({
       )}
     >
       <label htmlFor={id} className="flex-1 min-w-0 cursor-pointer select-none">
-        <div className="text-sm font-medium">{label}</div>
+        <div className={settingsUI.label}>{label}</div>
         {description && (
-          <div className="text-sm text-muted-foreground mt-0.5">{description}</div>
+          <div className={cn(settingsUI.description, settingsUI.labelDescriptionGap)}>{description}</div>
         )}
       </label>
       <Switch

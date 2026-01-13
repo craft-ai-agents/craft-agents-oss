@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
 import * as storage from '@/lib/local-storage'
 
 export type ThemeMode = 'light' | 'dark' | 'system'
@@ -92,6 +92,9 @@ export function ThemeProvider({
   const [font, setFontState] = useState<FontFamily>(stored?.font ?? defaultFont)
   const [systemPreference, setSystemPreference] = useState<'light' | 'dark'>(getSystemPreference)
 
+  // Track if we're receiving an external update to prevent echo broadcasts
+  const isExternalUpdate = useRef(false)
+
   // Resolve the actual mode to apply
   const resolvedMode = mode === 'system' ? systemPreference : mode
 
@@ -131,19 +134,56 @@ export function ThemeProvider({
     }
   }, [])
 
+  // Listen for theme preference changes from other windows
+  useEffect(() => {
+    if (!window.electronAPI?.onThemePreferencesChange) return
+
+    const cleanup = window.electronAPI.onThemePreferencesChange((preferences) => {
+      // Mark as external update to prevent re-broadcasting
+      isExternalUpdate.current = true
+      setModeState(preferences.mode as ThemeMode)
+      setColorThemeState(preferences.colorTheme)
+      setFontState(preferences.font as FontFamily)
+      // Also save to localStorage so it persists
+      saveTheme({
+        mode: preferences.mode as ThemeMode,
+        colorTheme: preferences.colorTheme,
+        font: preferences.font as FontFamily
+      })
+      // Reset flag after state updates are scheduled
+      setTimeout(() => {
+        isExternalUpdate.current = false
+      }, 0)
+    })
+
+    return cleanup
+  }, [])
+
   const setMode = useCallback((newMode: ThemeMode) => {
     setModeState(newMode)
     saveTheme({ mode: newMode, colorTheme, font })
+    // Broadcast to other windows (unless this is from an external update)
+    if (!isExternalUpdate.current && window.electronAPI?.broadcastThemePreferences) {
+      window.electronAPI.broadcastThemePreferences({ mode: newMode, colorTheme, font })
+    }
   }, [colorTheme, font])
 
   const setColorTheme = useCallback((newTheme: string) => {
     setColorThemeState(newTheme)
     saveTheme({ mode, colorTheme: newTheme, font })
+    // Broadcast to other windows (unless this is from an external update)
+    if (!isExternalUpdate.current && window.electronAPI?.broadcastThemePreferences) {
+      window.electronAPI.broadcastThemePreferences({ mode, colorTheme: newTheme, font })
+    }
   }, [mode, font])
 
   const setFont = useCallback((newFont: FontFamily) => {
     setFontState(newFont)
     saveTheme({ mode, colorTheme, font: newFont })
+    // Broadcast to other windows (unless this is from an external update)
+    if (!isExternalUpdate.current && window.electronAPI?.broadcastThemePreferences) {
+      window.electronAPI.broadcastThemePreferences({ mode, colorTheme, font: newFont })
+    }
   }, [mode, colorTheme])
 
   return (

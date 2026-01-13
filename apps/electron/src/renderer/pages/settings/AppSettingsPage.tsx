@@ -12,7 +12,6 @@
 import * as React from 'react'
 import { useState, useEffect, useCallback } from 'react'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
-import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -41,7 +40,9 @@ import {
   SettingsToggle,
   SettingsSegmentedControl,
   SettingsMenuSelectRow,
+  SettingsMenuSelect,
 } from '@/components/settings'
+import type { PresetTheme } from '@config/theme'
 import {
   Dialog,
   DialogContent,
@@ -275,7 +276,10 @@ function ClaudeOAuthDialogContent({
 // ============================================
 
 export default function AppSettingsPage() {
-  const { mode, setMode, font, setFont } = useTheme()
+  const { mode, setMode, colorTheme, setColorTheme, font, setFont } = useTheme()
+
+  // Preset themes state
+  const [presetThemes, setPresetThemes] = useState<PresetTheme[]>([])
 
   // Billing state
   const [authType, setAuthType] = useState<AuthType>('craft_credits')
@@ -297,18 +301,20 @@ export default function AppSettingsPage() {
   // Notifications state
   const [notificationsEnabled, setNotificationsEnabled] = useState(true)
 
-  // Load current billing method and notifications setting on mount
+  // Load current billing method, notifications setting, and preset themes on mount
   useEffect(() => {
     const loadSettings = async () => {
       if (!window.electronAPI) return
       try {
-        const [billing, notificationsOn] = await Promise.all([
+        const [billing, notificationsOn, themes] = await Promise.all([
           window.electronAPI.getBillingMethod(),
           window.electronAPI.getNotificationsEnabled(),
+          window.electronAPI.loadPresetThemes?.() ?? [],
         ])
         setAuthType(billing.authType)
         setHasCredential(billing.hasCredential)
         setNotificationsEnabled(notificationsOn)
+        setPresetThemes(themes)
       } catch (error) {
         console.error('Failed to load settings:', error)
       } finally {
@@ -441,14 +447,16 @@ export default function AppSettingsPage() {
   return (
     <div className="h-full flex flex-col bg-surface-below">
       <PanelHeader title="App Settings" actions={<HeaderMenu route={routes.view.settings('app')} />} className="bg-surface-below" />
-      <Separator />
-      <ScrollArea className="flex-1">
-        <div className="px-5 py-7 max-w-3xl mx-auto">
+      <div className="relative flex-1 min-h-0">
+        {/* Top fade gradient */}
+        <div className="absolute top-0 left-0 right-2 h-8 z-10 bg-gradient-to-b from-surface-below to-transparent pointer-events-none" />
+        <ScrollArea className="h-full">
+          <div className="px-5 py-7 max-w-3xl mx-auto">
           <div className="space-y-6">
             {/* Appearance */}
             <SettingsSection title="Appearance">
               <SettingsCard>
-                <SettingsRow label="Theme">
+                <SettingsRow label="Mode">
                   <SettingsSegmentedControl
                     value={mode}
                     onValueChange={setMode}
@@ -456,6 +464,19 @@ export default function AppSettingsPage() {
                       { value: 'system', label: 'System', icon: <Monitor className="w-4 h-4" /> },
                       { value: 'light', label: 'Light', icon: <Sun className="w-4 h-4" /> },
                       { value: 'dark', label: 'Dark', icon: <Moon className="w-4 h-4" /> },
+                    ]}
+                  />
+                </SettingsRow>
+                <SettingsRow label="Color theme">
+                  <SettingsMenuSelect
+                    value={colorTheme}
+                    onValueChange={setColorTheme}
+                    options={[
+                      { value: 'default', label: 'Default' },
+                      ...presetThemes.map(t => ({
+                        value: t.id,
+                        label: t.theme.name || t.id,
+                      })),
                     ]}
                   />
                 </SettingsRow>
@@ -553,7 +574,10 @@ export default function AppSettingsPage() {
             </SettingsSection>
           </div>
         </div>
-      </ScrollArea>
+        </ScrollArea>
+        {/* Bottom fade gradient */}
+        <div className="absolute bottom-0 left-0 right-2 h-8 z-10 bg-gradient-to-t from-surface-below to-transparent pointer-events-none" />
+      </div>
     </div>
   )
 }

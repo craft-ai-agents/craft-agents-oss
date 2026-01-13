@@ -1,20 +1,19 @@
 /**
  * Info_Table
  *
- * Two-column key-value table with consistent styling.
+ * Clean definition list style key-value display.
  * Use for Connection info, metadata display, etc.
- * Built on shadcn Table primitives.
+ * No card wrapper - integrates cleanly with page.
  */
 
 import * as React from 'react'
 import { cn } from '@/lib/utils'
-import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table'
 
 export interface Info_TableProps {
   children: React.ReactNode
   /** Optional footer content (e.g., error alert) */
   footer?: React.ReactNode
-  /** Label column width in pixels (default: 128) */
+  /** Label column width in pixels (default: 120) */
   labelWidth?: number
   className?: string
 }
@@ -32,18 +31,17 @@ export interface Info_TableRowProps {
 function Info_TableRoot({
   children,
   footer,
-  labelWidth = 128,
+  labelWidth = 120,
   className,
 }: Info_TableProps) {
   return (
     <div className={cn('py-2', className)}>
-      <Table className="table-fixed">
-        <colgroup>
-          <col style={{ width: labelWidth }} />
-          <col />
-        </colgroup>
-        <TableBody>{children}</TableBody>
-      </Table>
+      <dl
+        className="divide-y divide-border/30"
+        style={{ '--label-width': `${labelWidth}px` } as React.CSSProperties}
+      >
+        {children}
+      </dl>
       {footer}
     </div>
   )
@@ -53,12 +51,15 @@ function Info_TableRow({ label, value, children, className }: Info_TableRowProps
   const content = children ?? value
 
   return (
-    <TableRow className={cn('border-b border-border/30 last:border-0 hover:bg-transparent', className)}>
-      <TableCell className="pl-[22px] pr-4 py-1.5 text-muted-foreground align-top">
+    <div className={cn('flex py-2.5 px-4 text-sm', className)}>
+      <dt
+        className="text-muted-foreground shrink-0"
+        style={{ width: 'var(--label-width)' }}
+      >
         {label}
-      </TableCell>
-      <TableCell className="pr-4 py-1.5 align-top">{content}</TableCell>
-    </TableRow>
+      </dt>
+      <dd className="flex-1 min-w-0">{content}</dd>
+    </div>
   )
 }
 

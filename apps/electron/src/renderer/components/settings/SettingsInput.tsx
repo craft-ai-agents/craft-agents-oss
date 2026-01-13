@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { settingsUI } from './SettingsUIConstants'
 
 export interface SettingsInputProps {
   /** Input label */
@@ -81,17 +82,20 @@ export function SettingsInput({
       )}
     >
       {label && (
-        <div className="space-y-0.5">
-          <Label htmlFor={id} className="text-sm font-medium">
+        <div className={settingsUI.labelGroup}>
+          <Label htmlFor={id} className={settingsUI.label}>
             {label}
           </Label>
           {description && (
-            <p className="text-sm text-muted-foreground">{description}</p>
+            <p className={cn(settingsUI.description, settingsUI.labelDescriptionGap)}>{description}</p>
           )}
         </div>
       )}
       <div className="flex gap-2">
-        <div className="relative flex-1">
+        <div className={cn(
+          'relative flex-1 rounded-md shadow-minimal has-[:focus-visible]:bg-background',
+          error && 'ring-1 ring-destructive'
+        )}>
           <Input
             id={id}
             type={inputType}
@@ -102,9 +106,8 @@ export function SettingsInput({
             onBlur={onBlur}
             onKeyDown={onKeyDown}
             className={cn(
-              'bg-muted/50',
-              isPassword && 'pr-10',
-              error && 'border-destructive focus:ring-destructive'
+              'bg-muted/50 border-0 shadow-none focus-visible:ring-0 focus-visible:outline-none focus-visible:bg-transparent',
+              isPassword && 'pr-10'
             )}
           />
           {isPassword && (
@@ -180,15 +183,18 @@ export function SettingsInputRow({
       )}
     >
       <div className="flex-1 min-w-0">
-        <Label htmlFor={id} className="text-sm font-medium">
+        <Label htmlFor={id} className={settingsUI.label}>
           {label}
         </Label>
         {description && (
-          <p className="text-sm text-muted-foreground mt-0.5">{description}</p>
+          <p className={cn(settingsUI.description, settingsUI.labelDescriptionGap)}>{description}</p>
         )}
-        {error && <p className="text-sm text-destructive mt-0.5">{error}</p>}
+        {error && <p className={cn('text-sm text-destructive', settingsUI.labelDescriptionGap)}>{error}</p>}
       </div>
-      <div className="ml-4 shrink-0">
+      <div className={cn(
+        'ml-4 shrink-0 rounded-md shadow-minimal has-[:focus-visible]:bg-background',
+        error && 'ring-1 ring-destructive'
+      )}>
         <Input
           id={id}
           type={type}
@@ -196,10 +202,7 @@ export function SettingsInputRow({
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
           disabled={disabled}
-          className={cn(
-            'w-[200px] bg-muted/50',
-            error && 'border-destructive focus:ring-destructive'
-          )}
+          className="w-[200px] bg-muted/50 border-0 shadow-none focus-visible:ring-0 focus-visible:outline-none focus-visible:bg-transparent"
         />
       </div>
     </div>
@@ -265,16 +268,19 @@ export function SettingsSecretInput({
       )}
     >
       {label && (
-        <div className="space-y-0.5">
-          <Label htmlFor={id} className="text-sm font-medium">
+        <div className={settingsUI.labelGroup}>
+          <Label htmlFor={id} className={settingsUI.label}>
             {label}
           </Label>
           {description && (
-            <p className="text-sm text-muted-foreground">{description}</p>
+            <p className={cn(settingsUI.description, settingsUI.labelDescriptionGap)}>{description}</p>
           )}
         </div>
       )}
-      <div className="relative">
+      <div className={cn(
+        'relative rounded-md shadow-minimal has-[:focus-visible]:bg-background',
+        error && 'ring-1 ring-destructive'
+      )}>
         <Input
           id={id}
           type={showValue ? 'text' : 'password'}
@@ -282,10 +288,7 @@ export function SettingsSecretInput({
           onChange={(e) => onChange(e.target.value)}
           placeholder={displayPlaceholder}
           disabled={disabled}
-          className={cn(
-            'pr-10 bg-muted/50',
-            error && 'border-destructive focus:ring-destructive'
-          )}
+          className="pr-10 bg-muted/50 border-0 shadow-none focus-visible:ring-0 focus-visible:outline-none focus-visible:bg-transparent"
         />
         <button
           type="button"

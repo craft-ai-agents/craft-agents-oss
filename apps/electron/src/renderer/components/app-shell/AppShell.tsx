@@ -934,7 +934,7 @@ export function AppShell({
               {/* Sidebar Top Section */}
               <div className="flex-1 flex flex-col min-h-0">
                 {/* New Chat Button - Gmail-style */}
-                <div className="px-2 pt-2 pb-1">
+                <div className="px-2 pt-1 pb-2">
                   <Button
                     variant="ghost"
                     onClick={() => handleNewChat(true)}
@@ -1063,6 +1063,7 @@ export function AppShell({
                       variant: isSkillsNavigation(navState) ? "default" : "ghost",
                       onClick: handleSkillsClick,
                     },
+                    { id: "separator:skills-settings", type: "separator" },
                     {
                       id: "nav:settings",
                       title: "Settings",
@@ -1135,11 +1136,14 @@ export function AppShell({
           {/* === SESSION LIST PANEL === (hidden in focused mode) */}
           {!isFocusedMode && (
           <div
-            className="h-full flex flex-col min-w-0 bg-background shrink-0 shadow-middle rounded-[14px] overflow-hidden"
+            className={cn(
+              "h-full flex flex-col min-w-0 bg-background shrink-0 shadow-middle overflow-hidden",
+              isSidebarVisible ? "rounded-l-[14px] rounded-r-[10px]" : "rounded-l-[14px] rounded-r-[10px]"
+            )}
             style={{ width: sessionListWidth }}
           >
             <PanelHeader
-              title={listTitle}
+              title={isSidebarVisible ? listTitle : undefined}
               compensateForStoplight={!isSidebarVisible}
               className="bg-background"
               actions={
@@ -1286,7 +1290,6 @@ export function AppShell({
                 </>
               }
             />
-            <Separator />
             {/* Content: SessionList, SourcesListPanel, or SettingsNavigator based on navigation state */}
             {isSourcesNavigation(navState) && (
               /* Sources List */
@@ -1394,7 +1397,10 @@ export function AppShell({
           )}
 
           {/* === MAIN CONTENT PANEL === */}
-          <div className="flex-1 overflow-hidden min-w-0 bg-background shadow-middle rounded-[14px]">
+          <div className={cn(
+            "flex-1 overflow-hidden min-w-0 bg-background shadow-middle",
+            isFocusedMode ? "rounded-[14px]" : "rounded-l-[10px] rounded-r-[14px]"
+          )}>
             <MainContentPanel isFocusedMode={isFocusedMode} />
           </div>
         </div>

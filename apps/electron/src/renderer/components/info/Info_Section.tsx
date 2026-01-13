@@ -1,15 +1,18 @@
 /**
  * Info_Section
  *
- * Section container with uppercase header and optional actions.
+ * Section container with title, optional description, and content card.
+ * Matches SettingsSection styling pattern.
  */
 
 import * as React from 'react'
 import { cn } from '@/lib/utils'
 
 export interface Info_SectionProps {
-  /** Section title (displayed uppercase) */
+  /** Section title */
   title: string
+  /** Optional description below title */
+  description?: string
   /** Optional right-aligned header actions */
   actions?: React.ReactNode
   /** Section content */
@@ -19,21 +22,27 @@ export interface Info_SectionProps {
 
 export function Info_Section({
   title,
+  description,
   actions,
   children,
   className,
 }: Info_SectionProps) {
   return (
-    <div className={className}>
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-          {title}
-        </h3>
+    <section className={cn('space-y-3 pt-2', className)}>
+      <div className="flex items-start justify-between pl-1">
+        <div className="space-y-0.5">
+          <h3 className="text-base font-semibold">
+            {title}
+          </h3>
+          {description && (
+            <p className="text-sm text-muted-foreground">{description}</p>
+          )}
+        </div>
         {actions}
       </div>
       <div className="bg-background shadow-minimal rounded-[8px] overflow-hidden">
         {children}
       </div>
-    </div>
+    </section>
   )
 }

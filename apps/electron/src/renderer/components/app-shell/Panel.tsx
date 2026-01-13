@@ -3,9 +3,10 @@
  *
  * Provides consistent styling for panel containers including:
  * - Background color (theme-aware)
- * - Shadow (shadow-middle)
- * - Corner radius (14px)
  * - Overflow handling
+ *
+ * Note: Corner radius and shadow are handled by parent containers (AppShell)
+ * to avoid visual artifacts from nested rounded corners.
  *
  * Usage:
  * ```tsx
@@ -47,7 +48,8 @@ export function Panel({
     <div
       className={cn(
         // Base styles shared by all panels
-        'h-full flex flex-col min-w-0 bg-background shadow-middle rounded-[14px] overflow-hidden',
+        // Note: No rounded corners here - parent container handles clipping via overflow-hidden
+        'h-full flex flex-col min-w-0 bg-background overflow-hidden',
         // Variant-specific styles
         variant === 'grow' && 'flex-1',
         variant === 'shrink' && 'shrink-0',

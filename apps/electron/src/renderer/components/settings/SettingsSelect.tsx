@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
+import { settingsUI } from './SettingsUIConstants'
 
 export interface SettingsSelectOption {
   /** Value for this option */
@@ -78,12 +79,12 @@ export function SettingsSelect({
       )}
     >
       {label && (
-        <div className="space-y-0.5">
-          <Label htmlFor={id} className="text-sm font-medium">
+        <div className={settingsUI.labelGroup}>
+          <Label htmlFor={id} className={settingsUI.label}>
             {label}
           </Label>
           {description && (
-            <p className="text-sm text-muted-foreground">{description}</p>
+            <p className={cn(settingsUI.description, settingsUI.labelDescriptionGap)}>{description}</p>
           )}
         </div>
       )}
@@ -151,11 +152,11 @@ export function SettingsSelectRow({
       )}
     >
       <div className="flex-1 min-w-0">
-        <Label htmlFor={id} className="text-sm font-medium">
+        <Label htmlFor={id} className={settingsUI.label}>
           {label}
         </Label>
         {description && (
-          <p className="text-sm text-muted-foreground mt-0.5">{description}</p>
+          <p className={cn(settingsUI.description, settingsUI.labelDescriptionGap)}>{description}</p>
         )}
       </div>
       <div className="ml-4 shrink-0">

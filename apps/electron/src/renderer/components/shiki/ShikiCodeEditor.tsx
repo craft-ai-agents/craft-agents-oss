@@ -16,7 +16,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import Editor from 'react-simple-code-editor'
 import { codeToHtml, bundledLanguages, type BundledLanguage } from 'shiki'
 import { cn } from '@/lib/utils'
-import { useTheme } from '@/context/ThemeContext'
+import { useTheme } from '@/hooks/useTheme'
 
 export interface ShikiCodeEditorProps {
   /** The code/markdown content */
@@ -72,13 +72,14 @@ export function ShikiCodeEditor({
   className,
   placeholder,
 }: ShikiCodeEditorProps) {
-  const { resolvedMode } = useTheme()
+  const { isDark, shikiTheme } = useTheme()
   const hasCalledReady = useRef(false)
   const [highlightedCode, setHighlightedCode] = useState<string>('')
 
   // Resolve language alias
   const resolvedLang = LANGUAGE_ALIASES[language.toLowerCase()] || language.toLowerCase()
-  const theme = resolvedMode === 'dark' ? 'github-dark' : 'github-light'
+  // Use the Shiki theme from the preset, falling back to github themes
+  const theme = shikiTheme
 
   // Highlight function for the editor
   const highlight = useCallback(async (code: string): Promise<string> => {
@@ -161,9 +162,9 @@ export function ShikiCodeEditor({
   }, [resolvedLang, theme, highlight, highlightedCode])
 
   // Background color (must match CSS --background values)
-  const backgroundColor = resolvedMode === 'dark' ? '#302f33' : '#faf9fb'
-  const textColor = resolvedMode === 'dark' ? '#d4d4d4' : '#1f1f1f'
-  const placeholderColor = resolvedMode === 'dark' ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)'
+  const backgroundColor = isDark ? '#302f33' : '#faf9fb'
+  const textColor = isDark ? '#d4d4d4' : '#1f1f1f'
+  const placeholderColor = isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)'
 
   return (
     <div

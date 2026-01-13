@@ -27,7 +27,7 @@ export const OVERLAY_LAYOUT = {
  */
 export const CHAT_LAYOUT = {
   /** Max width for chat content area */
-  maxWidth: 'max-w-[960px]',
+  maxWidth: 'max-w-[840px]',
 
   /** Horizontal padding for main container */
   containerPaddingX: 'px-5',

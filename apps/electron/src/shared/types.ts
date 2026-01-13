@@ -519,6 +519,12 @@ export const IPC_CHANNELS = {
   // Theme (cascading: app → workspace)
   THEME_GET_APP: 'theme:getApp',
   THEME_GET_WORKSPACE: 'theme:getWorkspace',
+  THEME_GET_PRESETS: 'theme:getPresets',
+  THEME_LOAD_PRESET: 'theme:loadPreset',
+  THEME_GET_COLOR_THEME: 'theme:getColorTheme',
+  THEME_SET_COLOR_THEME: 'theme:setColorTheme',
+  THEME_BROADCAST_PREFERENCES: 'theme:broadcastPreferences',  // Send preferences to main for broadcast
+  THEME_PREFERENCES_CHANGED: 'theme:preferencesChanged',  // Broadcast: preferences changed in another window
 
   // Logo URL resolution (uses Node.js filesystem cache)
   LOGO_GET_URL: 'logo:getUrl',
@@ -853,6 +859,11 @@ export interface ElectronAPI {
   // Theme (cascading: app → workspace)
   getAppTheme(): Promise<import('@config/theme').ThemeOverrides | null>
   getWorkspaceTheme(workspaceId: string): Promise<import('@config/theme').ThemeOverrides | null>
+  // Preset themes
+  loadPresetThemes(): Promise<import('@config/theme').PresetTheme[]>
+  loadPresetTheme(themeId: string): Promise<import('@config/theme').PresetTheme | null>
+  getColorTheme(): Promise<string>
+  setColorTheme(themeId: string): Promise<void>
 
   // Theme change listeners (live updates when theme.json files change)
   onAppThemeChange(callback: (theme: import('@config/theme').ThemeOverrides | null) => void): () => void

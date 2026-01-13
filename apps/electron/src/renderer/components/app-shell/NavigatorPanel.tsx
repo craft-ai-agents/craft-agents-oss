@@ -16,7 +16,6 @@
  */
 
 import * as React from 'react'
-import { Separator } from '@/components/ui/separator'
 import { Panel } from './Panel'
 import { PanelHeader } from './PanelHeader'
 
@@ -51,7 +50,6 @@ export function NavigatorPanel({
         compensateForStoplight={!isSidebarVisible}
         className="bg-background"
       />
-      <Separator />
       {children}
     </Panel>
   )

@@ -7,6 +7,7 @@
 
 import * as React from 'react'
 import { cn } from '@/lib/utils'
+import { settingsUI } from './SettingsUIConstants'
 
 export interface SettingsRowProps {
   /** Row label */
@@ -58,9 +59,9 @@ export function SettingsRow({
       )}
     >
       <div className="flex-1 min-w-0">
-        <div className="text-sm font-medium">{label}</div>
+        <div className={settingsUI.label}>{label}</div>
         {description && (
-          <div className="text-sm text-muted-foreground mt-0.5 truncate">
+          <div className={cn(settingsUI.description, settingsUI.labelDescriptionGap, 'truncate')}>
             {description}
           </div>
         )}
@@ -92,10 +93,10 @@ export function SettingsRowLabel({
   className?: string
 }) {
   return (
-    <div className={cn('space-y-0.5', className)}>
-      <div className="text-sm font-medium">{label}</div>
+    <div className={cn(settingsUI.labelGroup, className)}>
+      <div className={settingsUI.label}>{label}</div>
       {description && (
-        <div className="text-sm text-muted-foreground">{description}</div>
+        <div className={cn(settingsUI.description, settingsUI.labelDescriptionGap)}>{description}</div>
       )}
     </div>
   )

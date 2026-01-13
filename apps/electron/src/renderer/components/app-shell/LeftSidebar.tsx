@@ -22,9 +22,19 @@ export interface LinkItem {
   dataTutorial?: string // data-tutorial attribute for tutorial targeting
 }
 
+export interface SeparatorItem {
+  id: string
+  type: 'separator'
+}
+
+export type SidebarItem = LinkItem | SeparatorItem
+
+export const isSeparatorItem = (item: SidebarItem): item is SeparatorItem =>
+  'type' in item && item.type === 'separator'
+
 interface LeftSidebarProps {
   isCollapsed: boolean
-  links: LinkItem[]
+  links: SidebarItem[]
   /** Get props for each item (from unified sidebar navigation) */
   getItemProps?: (id: string) => {
     tabIndex: number
@@ -117,7 +127,17 @@ export function LeftSidebar({ links, isCollapsed, getItemProps, focusedItemId, i
             aria-hidden="true"
           />
         )}
-        {links.map((link) => {
+        {links.map((item) => {
+          // Handle separator items
+          if (isSeparatorItem(item)) {
+            return (
+              <div key={item.id} className="py-2 px-2" aria-hidden="true">
+                <div className="h-px bg-foreground/5" />
+              </div>
+            )
+          }
+
+          const link = item
           const itemProps = getItemProps?.(link.id)
           const isFocused = focusedItemId === link.id
 

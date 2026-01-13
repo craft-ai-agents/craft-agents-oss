@@ -1427,6 +1427,43 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     return loadWorkspaceTheme(workspace.rootPath)
   })
 
+  // Preset themes
+  ipcMain.handle(IPC_CHANNELS.THEME_GET_PRESETS, async () => {
+    const { loadPresetThemes } = await import('@craft-agent/shared/config/storage')
+    // Pass bundled themes path from Electron resources (dist/resources/themes)
+    const bundledThemesDir = join(__dirname, 'resources/themes')
+    return loadPresetThemes(bundledThemesDir)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.THEME_LOAD_PRESET, async (_event, themeId: string) => {
+    const { loadPresetTheme } = await import('@craft-agent/shared/config/storage')
+    return loadPresetTheme(themeId)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.THEME_GET_COLOR_THEME, async () => {
+    const { getColorTheme } = await import('@craft-agent/shared/config/storage')
+    return getColorTheme()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.THEME_SET_COLOR_THEME, async (_event, themeId: string) => {
+    const { setColorTheme } = await import('@craft-agent/shared/config/storage')
+    setColorTheme(themeId)
+  })
+
+  // Broadcast theme preferences to all other windows (for cross-window sync)
+  ipcMain.handle(IPC_CHANNELS.THEME_BROADCAST_PREFERENCES, async (event, preferences: { mode: string; colorTheme: string; font: string }) => {
+    const senderId = event.sender.id
+    // Broadcast to all windows except the sender
+    for (const managed of windowManager.getAllWindows()) {
+      if (!managed.window.isDestroyed() &&
+          !managed.window.webContents.isDestroyed() &&
+          managed.window.webContents.mainFrame &&
+          managed.window.webContents.id !== senderId) {
+        managed.window.webContents.send(IPC_CHANNELS.THEME_PREFERENCES_CHANGED, preferences)
+      }
+    }
+  })
+
   // Logo URL resolution (uses Node.js filesystem cache for provider domains)
   ipcMain.handle(IPC_CHANNELS.LOGO_GET_URL, async (_event, serviceUrl: string, provider?: string) => {
     const { getLogoUrl } = await import('@craft-agent/shared/utils/logo')

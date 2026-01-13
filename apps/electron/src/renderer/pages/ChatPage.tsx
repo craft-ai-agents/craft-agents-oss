@@ -10,7 +10,6 @@ import { useAtomValue, useSetAtom } from 'jotai'
 import { AlertCircle, Trash2, Flag, FlagOff, Pencil } from 'lucide-react'
 import { ChatDisplay } from '@/components/app-shell/ChatDisplay'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
-import { Separator } from '@/components/ui/separator'
 import { useAppShellContext, usePendingPermission, usePendingCredential, useSessionOptionsFor, useSession as useSessionData } from '@/context/AppShellContext'
 import { rendererPerf } from '@/lib/perf'
 import { HeaderMenu } from '@/components/ui/HeaderMenu'
@@ -237,7 +236,6 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
       return (
         <div className="h-full flex flex-col">
           <PanelHeader title={displayTitle} actions={headerMenu} className="bg-surface-below" />
-          <Separator />
           <div className="flex-1 flex flex-col min-h-0">
             <ChatDisplay
               session={skeletonSession}
@@ -274,7 +272,6 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     return (
       <div className="h-full flex flex-col">
         <PanelHeader title="Chat" className="bg-surface-below" />
-        <Separator />
         <div className="flex-1 flex flex-col items-center justify-center gap-3 text-muted-foreground">
           <AlertCircle className="h-10 w-10" />
           <p className="text-sm">This session no longer exists</p>
@@ -286,7 +283,6 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
   return (
     <div className="h-full flex flex-col">
       <PanelHeader title={displayTitle} actions={headerMenu} className="bg-surface-below" />
-      <Separator />
       <div className="flex-1 flex flex-col min-h-0">
         <ChatDisplay
           session={session}

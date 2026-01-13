@@ -8,7 +8,6 @@
 import * as React from 'react'
 import { AlertCircle } from 'lucide-react'
 import { PanelHeader, type PanelHeaderProps } from '@/components/app-shell/PanelHeader'
-import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Spinner } from '@craft-agent/ui'
 import { cn } from '@/lib/utils'
@@ -68,7 +67,6 @@ function Info_PageRoot({
     return (
       <div className={cn('h-full flex flex-col bg-surface-below', className)}>
         {header}
-        <Separator />
         <div className="flex-1 flex items-center justify-center">
           <Spinner className="text-lg text-muted-foreground" />
         </div>
@@ -81,7 +79,6 @@ function Info_PageRoot({
     return (
       <div className={cn('h-full flex flex-col bg-surface-below', className)}>
         {header}
-        <Separator />
         <div className="flex-1 flex flex-col items-center justify-center gap-3 text-muted-foreground p-4">
           <AlertCircle className="h-10 w-10 text-destructive" />
           <p className="text-sm font-medium">Error loading content</p>
@@ -96,7 +93,6 @@ function Info_PageRoot({
     return (
       <div className={cn('h-full flex flex-col bg-surface-below', className)}>
         {header}
-        <Separator />
         <div className="flex-1 flex items-center justify-center text-muted-foreground">
           <p className="text-sm">{empty}</p>
         </div>
@@ -108,7 +104,6 @@ function Info_PageRoot({
   return (
     <div className={cn('h-full flex flex-col bg-surface-below', className)}>
       {header}
-      <Separator />
       {otherChildren}
     </div>
   )
@@ -142,11 +137,17 @@ function Info_PageHero({ avatar, title, tagline, className }: Info_PageHeroProps
 
 function Info_PageContent({ children, className }: Info_PageContentProps) {
   return (
-    <ScrollArea className="flex-1">
-      <div className={cn(CHAT_LAYOUT.maxWidth, 'mx-auto px-5 py-4')}>
-        <div className={cn('space-y-6', className)}>{children}</div>
-      </div>
-    </ScrollArea>
+    <div className="relative flex-1 min-h-0">
+      {/* Top fade gradient */}
+      <div className="absolute top-0 left-0 right-2 h-8 z-10 bg-gradient-to-b from-surface-below to-transparent pointer-events-none" />
+      <ScrollArea className="h-full">
+        <div className={cn(CHAT_LAYOUT.maxWidth, 'mx-auto px-5 pt-6 pb-10')}>
+          <div className={cn('space-y-6', className)}>{children}</div>
+        </div>
+      </ScrollArea>
+      {/* Bottom fade gradient */}
+      <div className="absolute bottom-0 left-0 right-2 h-8 z-10 bg-gradient-to-t from-surface-below to-transparent pointer-events-none" />
+    </div>
   )
 }
 

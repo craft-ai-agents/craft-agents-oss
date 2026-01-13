@@ -125,7 +125,7 @@ export function PermissionsDataTable({
   data,
   hideTypeColumn = false,
   searchable = false,
-  maxHeight,
+  maxHeight = 400,
   className,
 }: PermissionsDataTableProps) {
   const columns = hideTypeColumn ? columnsWithoutType : columnsWithType

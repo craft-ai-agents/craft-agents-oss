@@ -130,6 +130,42 @@ function buildToolsData(tools: McpToolWithPermission[]): ToolRow[] {
   }))
 }
 
+/**
+ * Get contextual description for Connection section based on source type
+ */
+function getConnectionDescription(source: LoadedSource): string {
+  const { type, mcp } = source.config
+
+  if (type === 'mcp') {
+    if (mcp?.transport === 'stdio') {
+      return 'Local command that spawns this MCP server.'
+    }
+    return 'Server URL and connection status.'
+  }
+  if (type === 'api') {
+    return 'Base URL for API requests.'
+  }
+  if (type === 'local') {
+    return 'Filesystem path for this source.'
+  }
+  return 'Connection details.'
+}
+
+/**
+ * Get contextual description for Permissions section based on source type
+ */
+function getPermissionsDescription(source: LoadedSource): string {
+  const { type } = source.config
+
+  if (type === 'mcp') {
+    return 'Tool patterns allowed in Explore mode.'
+  }
+  if (type === 'api') {
+    return 'API endpoints allowed in Explore mode.'
+  }
+  return 'Access rules for Explore mode.'
+}
+
 export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: SourceInfoPageProps) {
   const [source, setSource] = useState<LoadedSource | null>(null)
   const [loading, setLoading] = useState(true)
@@ -354,9 +390,10 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
 
       {source && (
         <Info_Page.Content>
-          {/* Hero: Avatar and tagline */}
+          {/* Hero: Avatar, title, and tagline */}
           <Info_Page.Hero
             avatar={<SourceAvatar source={source} className="h-full w-full" />}
+            title={source.config.name}
             tagline={source.config.tagline}
           />
 
@@ -372,10 +409,10 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
           )}
 
           {/* Connection */}
-          <Info_Section title="Connection">
+          <Info_Section title="Connection" description={getConnectionDescription(source)}>
             <Info_Table
               footer={source.config.connectionError && (
-                <div className="px-[22px] py-2 border-t border-border/30 bg-destructive/5">
+                <div className="px-4 py-2 border-t border-border/30 bg-destructive/5">
                   <div className="flex items-start gap-2 text-sm text-destructive">
                     <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
                     <span>{source.config.connectionError}</span>
@@ -388,7 +425,7 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
                 <Info_Table.Row label="URL">
                   <button
                     onClick={handleOpenUrl}
-                    className="font-mono truncate hover:underline text-foreground focus:outline-none focus-visible:underline text-left block w-full"
+                    className="truncate hover:underline text-foreground focus:outline-none focus-visible:underline text-left block w-full"
                   >
                     {sourceUrl}
                   </button>
@@ -400,14 +437,14 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
 
           {/* Permissions - for API and local sources */}
           {source.config.type !== 'mcp' && permissionsConfig && apiPermissionsData.length > 0 && (
-            <Info_Section title="Permissions">
+            <Info_Section title="Permissions" description={getPermissionsDescription(source)}>
               <PermissionsDataTable data={apiPermissionsData} />
             </Info_Section>
           )}
 
           {/* Tools - for MCP sources */}
           {source.config.type === 'mcp' && (
-            <Info_Section title="Tools">
+            <Info_Section title="Tools" description="Operations exposed by this server.">
               <ToolsDataTable
                 data={toolsData}
                 loading={mcpToolsLoading}
@@ -418,7 +455,7 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
 
           {/* Permissions - for MCP sources */}
           {source.config.type === 'mcp' && permissionsConfig && mcpPermissionsData.length > 0 && (
-            <Info_Section title="Permissions">
+            <Info_Section title="Permissions" description={getPermissionsDescription(source)}>
               <PermissionsDataTable data={mcpPermissionsData} hideTypeColumn />
             </Info_Section>
           )}
@@ -427,6 +464,7 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
           {source.guide?.raw && (
             <Info_Section
               title="Documentation"
+              description="Context and guidelines for the agent."
               actions={
                 <button
                   onClick={handleEditGuide}

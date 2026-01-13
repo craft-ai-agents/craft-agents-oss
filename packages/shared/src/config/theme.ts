@@ -139,7 +139,14 @@ export function themeToCSS(theme: ThemeOverrides, isDark: boolean = false): stri
 
   // Color variables
   if (colors.background) vars.push(`--background: ${colors.background};`);
-  if (colors.foreground) vars.push(`--foreground: ${colors.foreground};`);
+  if (colors.foreground) {
+    vars.push(`--foreground: ${colors.foreground};`);
+    // Also output RGB version for shadow borders (only works with hex colors)
+    const rgbValues = hexToRgbValues(colors.foreground);
+    if (rgbValues) {
+      vars.push(`--foreground-rgb: ${rgbValues};`);
+    }
+  }
   if (colors.accent) {
     vars.push(`--accent: ${colors.accent};`);
     // Also output darkened RGB version for shadow-tinted (only works with hex colors)
@@ -193,3 +200,57 @@ export const DEFAULT_THEME: ThemeOverrides = {
     destructive: 'oklch(0.65 0.22 28)',
   },
 };
+
+// ============================================
+// Preset Themes
+// ============================================
+
+/**
+ * Shiki theme configuration for syntax highlighting
+ */
+export interface ShikiThemeConfig {
+  light?: string;
+  dark?: string;
+}
+
+/**
+ * Extended theme file format with metadata
+ * Used for preset themes stored as JSON files
+ */
+export interface ThemeFile extends ThemeOverrides {
+  name?: string;
+  description?: string;
+  author?: string;
+  license?: string;
+  source?: string;
+  supportedModes?: ('light' | 'dark')[];
+  shikiTheme?: ShikiThemeConfig;
+}
+
+/**
+ * Preset theme with ID and path
+ */
+export interface PresetTheme {
+  id: string; // filename without .json (e.g., 'dracula')
+  path: string; // full path to theme.json
+  theme: ThemeFile; // parsed theme data
+}
+
+/**
+ * Default Shiki themes (used when no preset is selected)
+ */
+export const DEFAULT_SHIKI_THEME: ShikiThemeConfig = {
+  light: 'github-light',
+  dark: 'github-dark',
+};
+
+/**
+ * Get Shiki theme name for current mode
+ */
+export function getShikiTheme(
+  shikiConfig: ShikiThemeConfig | undefined,
+  isDark: boolean
+): string {
+  const config = shikiConfig || DEFAULT_SHIKI_THEME;
+  return isDark ? config.dark || 'github-dark' : config.light || 'github-light';
+}

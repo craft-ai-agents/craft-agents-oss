@@ -8,6 +8,7 @@ import * as React from 'react'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
+import { settingsUI } from './SettingsUIConstants'
 
 export interface SettingsTextareaProps {
   /** Textarea label */
@@ -73,16 +74,20 @@ export function SettingsTextarea({
       )}
     >
       {label && (
-        <div className="space-y-0.5">
-          <Label htmlFor={id} className="text-sm font-medium">
+        <div className={settingsUI.labelGroup}>
+          <Label htmlFor={id} className={settingsUI.label}>
             {label}
           </Label>
           {description && (
-            <p className="text-sm text-muted-foreground">{description}</p>
+            <p className={cn(settingsUI.description, settingsUI.labelDescriptionGap)}>{description}</p>
           )}
         </div>
       )}
-      <div className="relative">
+      <div className={cn(
+        'relative rounded-md shadow-minimal has-[:focus-visible]:bg-background',
+        error && 'ring-1 ring-destructive',
+        isOverLimit && 'ring-1 ring-destructive'
+      )}>
         <Textarea
           id={id}
           value={value}
@@ -91,10 +96,8 @@ export function SettingsTextarea({
           rows={rows}
           disabled={disabled}
           className={cn(
-            'bg-muted/50 resize-none',
-            maxLength && 'pb-6',
-            error && 'border-destructive focus:ring-destructive',
-            isOverLimit && 'border-destructive'
+            'bg-muted/50 border-0 shadow-none resize-y min-h-[120px] focus-visible:ring-0 focus-visible:outline-none focus-visible:bg-transparent',
+            maxLength && 'pb-6'
           )}
         />
         {maxLength !== undefined && (
