@@ -352,6 +352,9 @@ export interface LoadedSource {
   /** Absolute path to source folder (for resolving relative icon paths) */
   folderPath: string;
 
+  /** Absolute path to workspace folder (e.g., ~/.craft-agent/workspaces/xxx) */
+  workspaceRootPath: string;
+
   /**
    * Workspace this source belongs to.
    * Used for credential lookups: source_oauth::{workspaceId}::{sourceSlug}

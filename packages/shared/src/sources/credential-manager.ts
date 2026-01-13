@@ -44,6 +44,7 @@ import {
   type MicrosoftOAuthOptions,
 } from '../auth/microsoft-oauth.ts';
 import { debug } from '../utils/debug.ts';
+import { markSourceAuthenticated } from './storage.ts';
 
 /**
  * Result of authentication attempt
@@ -352,6 +353,9 @@ export class SourceCredentialManager {
         tokenType: tokens.tokenType,
       });
 
+      // Mark source as authenticated in config.json
+      markSourceAuthenticated(source.workspaceRootPath, source.config.slug);
+
       return { success: true };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -417,6 +421,9 @@ export class SourceCredentialManager {
         expiresAt: result.expiresAt,
       });
 
+      // Mark source as authenticated in config.json
+      markSourceAuthenticated(source.workspaceRootPath, source.config.slug);
+
       callbacks.onStatus(`${serviceName} authentication successful`);
       return { success: true, email: result.email };
     } catch (error) {
@@ -476,6 +483,9 @@ export class SourceCredentialManager {
         refreshToken: result.refreshToken,
         expiresAt: result.expiresAt,
       });
+
+      // Mark source as authenticated in config.json
+      markSourceAuthenticated(source.workspaceRootPath, source.config.slug);
 
       callbacks.onStatus(`${serviceName} authentication successful`);
       // Use teamName as the identifier (similar to email for Google)
@@ -543,6 +553,9 @@ export class SourceCredentialManager {
         refreshToken: result.refreshToken,
         expiresAt: result.expiresAt,
       });
+
+      // Mark source as authenticated in config.json
+      markSourceAuthenticated(source.workspaceRootPath, source.config.slug);
 
       callbacks.onStatus(`${serviceName} authentication successful`);
       return { success: true, email: result.email };

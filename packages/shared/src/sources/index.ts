@@ -35,6 +35,7 @@ export {
   // Config operations
   loadSourceConfig,
   saveSourceConfig,
+  markSourceAuthenticated,
   // Source loading/saving helpers
   loadSourceConfigWithFallback,
   saveSourceConfigWithContext,

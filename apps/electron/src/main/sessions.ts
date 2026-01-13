@@ -870,15 +870,8 @@ export class SessionManager {
       }
 
       // Update source config to mark as authenticated
-      // Uses the same pattern as the OAuth tools
-      const { loadSourceConfigWithFallback, saveSourceConfigWithContext } = await import('@craft-agent/shared/sources')
-      const sourceResult = loadSourceConfigWithFallback(managed.workspace.rootPath, request.sourceSlug)
-      if (sourceResult) {
-        sourceResult.config.isAuthenticated = true
-        sourceResult.config.connectionStatus = 'connected'
-        sourceResult.config.connectionError = undefined
-        saveSourceConfigWithContext(managed.workspace.rootPath, sourceResult.config)
-      }
+      const { markSourceAuthenticated } = await import('@craft-agent/shared/sources')
+      markSourceAuthenticated(managed.workspace.rootPath, request.sourceSlug)
 
       await this.completeAuthRequest(sessionId, {
         requestId,

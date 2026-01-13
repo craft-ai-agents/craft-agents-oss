@@ -72,6 +72,31 @@ export function loadSourceConfig(
 }
 
 /**
+ * Mark a source as authenticated and connected.
+ * Updates isAuthenticated, connectionStatus, and clears any connection error.
+ *
+ * @returns true if the source was found and updated, false otherwise
+ */
+export function markSourceAuthenticated(
+  workspaceRootPath: string,
+  sourceSlug: string
+): boolean {
+  const config = loadSourceConfig(workspaceRootPath, sourceSlug);
+  if (!config) {
+    debug(`[markSourceAuthenticated] Source ${sourceSlug} not found`);
+    return false;
+  }
+
+  config.isAuthenticated = true;
+  config.connectionStatus = 'connected';
+  config.connectionError = undefined;
+
+  saveSourceConfig(workspaceRootPath, config);
+  debug(`[markSourceAuthenticated] Marked ${sourceSlug} as authenticated`);
+  return true;
+}
+
+/**
  * Save source config.json
  * @throws Error if config is invalid
  */
@@ -268,6 +293,7 @@ export function loadSource(workspaceRootPath: string, sourceSlug: string): Loade
     config,
     guide: loadSourceGuide(workspaceRootPath, sourceSlug),
     folderPath,
+    workspaceRootPath,
     workspaceId,
   };
 }
