@@ -21,7 +21,7 @@ import { cn } from '@/lib/utils'
 import { routes } from '@/lib/navigate'
 import { Spinner } from '@craft-agent/ui'
 import { RenameDialog } from '@/components/ui/rename-dialog'
-import type { PermissionMode } from '../../../shared/types'
+import type { PermissionMode, WorkspaceSettings } from '../../../shared/types'
 import { PERMISSION_MODE_CONFIG } from '@craft-agent/shared/agent/mode-types'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 
@@ -36,18 +36,6 @@ import {
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
   slug: 'workspace',
-}
-
-// ============================================
-// Type for workspace settings (matches IPC interface)
-// ============================================
-
-interface WorkspaceSettings {
-  name?: string
-  model?: string
-  permissionMode?: PermissionMode
-  workingDirectory?: string
-  localMcpEnabled?: boolean
 }
 
 // ============================================
@@ -71,6 +59,7 @@ export default function WorkspaceSettingsPage() {
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('ask')
   const [workingDirectory, setWorkingDirectory] = useState('')
   const [localMcpEnabled, setLocalMcpEnabled] = useState(true)
+  const [tutorialsEnabled, setTutorialsEnabled] = useState(true)
   const [isLoadingWorkspace, setIsLoadingWorkspace] = useState(true)
 
   // Mode cycling state
@@ -109,6 +98,7 @@ export default function WorkspaceSettingsPage() {
           setPermissionMode(settings.permissionMode || 'ask')
           setWorkingDirectory(settings.workingDirectory || '')
           setLocalMcpEnabled(settings.localMcpEnabled ?? true)
+          setTutorialsEnabled(settings.tutorialsEnabled ?? true)
         }
 
         // Try to load workspace icon (check common extensions)
@@ -245,6 +235,14 @@ export default function WorkspaceSettingsPage() {
     async (enabled: boolean) => {
       setLocalMcpEnabled(enabled)
       await updateWorkspaceSetting('localMcpEnabled', enabled)
+    },
+    [updateWorkspaceSetting]
+  )
+
+  const handleTutorialsEnabledChange = useCallback(
+    async (enabled: boolean) => {
+      setTutorialsEnabled(enabled)
+      await updateWorkspaceSetting('tutorialsEnabled', enabled)
     },
     [updateWorkspaceSetting]
   )
@@ -477,6 +475,12 @@ export default function WorkspaceSettingsPage() {
                   description="Enable stdio subprocess servers"
                   checked={localMcpEnabled}
                   onCheckedChange={handleLocalMcpEnabledChange}
+                />
+                <SettingsToggle
+                  label="Show tutorials"
+                  description="Display interactive tutorials when setting up new sources"
+                  checked={tutorialsEnabled}
+                  onCheckedChange={handleTutorialsEnabledChange}
                 />
               </SettingsCard>
             </SettingsSection>

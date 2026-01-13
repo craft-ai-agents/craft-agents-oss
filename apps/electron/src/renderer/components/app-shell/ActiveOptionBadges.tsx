@@ -140,6 +140,7 @@ function PermissionModeDropdown({ permissionMode, onPermissionModeChange }: Perm
       <PopoverTrigger asChild>
         <button
           type="button"
+          data-tutorial="permission-mode-dropdown"
           className={cn(
             "h-[30px] pl-2.5 pr-2 text-xs font-medium rounded-[8px] flex items-center gap-1.5 shadow-tinted",
             useAccentVar && "bg-accent/5 text-accent"

@@ -30,6 +30,9 @@ export const KEYS = {
 
   // Working directory
   recentWorkingDirs: 'recent-working-dirs',
+
+  // Tutorial system
+  tutorialProgress: 'tutorial-progress',
 } as const
 
 export type StorageKey = typeof KEYS[keyof typeof KEYS]

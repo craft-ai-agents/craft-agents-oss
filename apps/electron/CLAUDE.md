@@ -455,7 +455,7 @@ const config = await window.electronAPI.getSourcePermissionsConfig(workspaceId, 
 │   │   ├── atoms/         # Jotai atom definitions
 │   │   │   └── sessions.ts # Per-session Jotai atoms for performance isolation
 │   │   ├── components/
-│   │   │   ├── chat/      # Chat UI (Chat, ChatInput, ChatDisplay, SessionList, PermissionBanner)
+│   │   │   ├── chat/      # Chat UI (Chat, ChatInput, ChatDisplay, SessionList)
 │   │   │   ├── code-preview/  # Code preview window component
 │   │   │   ├── diff-preview/  # Diff preview window component
 │   │   │   ├── files/         # File viewer component
@@ -1160,20 +1160,9 @@ export const componentRegistry = [
 ]
 ```
 
-## Permission Banner
+## Permission Request
 
-The `PermissionBanner` component shows bash command approval requests:
-
-```tsx
-<PermissionBanner
-  command="rm -rf /tmp/cache"
-  onAllow={() => respond('allow')}
-  onAlwaysAllow={() => respond('always_allow')}
-  onDeny={() => respond('deny')}
-/>
-```
-
-**Styling:** Amber border/background with shield icon, three action buttons.
+Permission requests for bash commands are handled by the `PermissionRequest` component in `components/app-shell/input/structured/PermissionRequest.tsx`. This is rendered as a structured input within the `InputContainer`.
 
 ## Background Tasks
 

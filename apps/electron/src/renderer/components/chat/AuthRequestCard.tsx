@@ -80,6 +80,7 @@ interface AuthCardActionsProps {
     onClick: () => void
     disabled?: boolean
     loading?: boolean
+    dataTutorial?: string
   }
   secondary?: {
     label: string
@@ -102,6 +103,7 @@ function AuthCardActions({ primary, secondary, hint }: AuthCardActionsProps) {
         className="h-7 gap-1.5"
         onClick={primary.onClick}
         disabled={primary.disabled}
+        data-tutorial={primary.dataTutorial}
       >
         {primary.loading ? (
           <Spinner className="text-[10px]" />
@@ -489,6 +491,7 @@ export function AuthRequestCard({ message, onRespondToCredential, sessionId, isI
           primary={{
             label: `Sign in with ${authTypeLabel.replace(' Sign-In', '')}`,
             onClick: handleOAuthClick,
+            dataTutorial: 'oauth-sign-in-button',
           }}
           secondary={{
             label: 'Cancel',

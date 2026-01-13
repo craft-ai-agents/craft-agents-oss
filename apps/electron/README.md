@@ -28,7 +28,7 @@ apps/electron/
 │   ├── renderer/          # React UI
 │   │   ├── App.tsx        # Main app, event handling
 │   │   ├── components/
-│   │   │   ├── chat/      # Chat UI (ChatInput, ChatDisplay, PermissionBanner)
+│   │   │   ├── chat/      # Chat UI (ChatInput, ChatDisplay)
 │   │   │   ├── markdown/  # Markdown renderer with Shiki
 │   │   │   └── ui/        # shadcn/ui components (incl. source-avatar.tsx)
 │   │   ├── contexts/
@@ -273,7 +273,7 @@ See `CLAUDE.md` for complete route reference.
 | `renderer/components/chat/Chat.tsx` | Main chat layout with resizable panels |
 | `renderer/components/chat/ChatInput.tsx` | Message input with file attachments |
 | `renderer/components/chat/ChatDisplay.tsx` | Message list with markdown rendering |
-| `renderer/components/chat/PermissionBanner.tsx` | Bash command approval UI |
+| `renderer/components/app-shell/input/structured/PermissionRequest.tsx` | Bash command approval UI |
 | `renderer/components/chat/SessionList.tsx` | Session sidebar with rename support |
 | `renderer/components/chat/AttachmentPreview.tsx` | File attachment bubbles |
 | `renderer/components/ui/source-avatar.tsx` | Unified source icon component |

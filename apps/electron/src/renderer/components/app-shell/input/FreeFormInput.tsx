@@ -85,6 +85,8 @@ export interface FreeFormInputProps {
   onWorkingDirectoryChange?: (path: string) => void
   /** Session ID for scoping events like approve-plan */
   sessionId?: string
+  /** Disable send action (for tutorial guidance) */
+  disableSend?: boolean
 }
 
 /**
@@ -122,6 +124,7 @@ export function FreeFormInput({
   workingDirectory,
   onWorkingDirectoryChange,
   sessionId,
+  disableSend = false,
 }: FreeFormInputProps) {
   // Performance optimization: Always use internal state for typing to avoid parent re-renders
   // Sync FROM parent on mount/change (for restoring drafts)
@@ -504,6 +507,9 @@ export function FreeFormInput({
     const hasContent = input.trim() || attachments.length > 0
     if (!hasContent || disabled) return false
 
+    // Tutorial may disable sending to guide user through specific steps
+    if (disableSend) return false
+
     onSubmit(input.trim(), attachments.length > 0 ? attachments : undefined)
     setInput('')
     setAttachments([])
@@ -518,7 +524,7 @@ export function FreeFormInput({
     })
 
     return true
-  }, [input, attachments, disabled, onInputChange, onSubmit])
+  }, [input, attachments, disabled, disableSend, onInputChange, onSubmit])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -647,6 +653,7 @@ export function FreeFormInput({
           {/* Textarea positioned over sizer */}
           <textarea
             ref={textareaRef}
+            data-tutorial="chat-input"
             className="absolute inset-0 w-full h-full pl-5 pr-4 pt-4 pb-3 bg-transparent outline-none text-sm placeholder:text-muted-foreground resize-none focus-visible:ring-0"
             placeholder={placeholder}
             value={input}
@@ -753,6 +760,7 @@ export function FreeFormInput({
                       sourceDropdownOpen && "bg-foreground/5"
                     )}
                     disabled={disabled}
+                    data-tutorial="source-selector-button"
                     onClick={() => {
                       if (!sourceDropdownOpen && sourceButtonRef.current) {
                         const rect = sourceButtonRef.current.getBoundingClientRect()
@@ -845,12 +853,13 @@ export function FreeFormInput({
                         <CommandPrimitive.List className="max-h-[240px] overflow-y-auto p-1">
                           {sources
                             .filter(source => source.config.name.toLowerCase().includes(sourceFilter.toLowerCase()))
-                            .map(source => {
+                            .map((source, index) => {
                               const isEnabled = optimisticSourceSlugs.includes(source.config.slug)
                               return (
                                 <CommandPrimitive.Item
                                   key={source.config.slug}
                                   value={source.config.slug}
+                                  data-tutorial={index === 0 ? "source-dropdown-item-first" : undefined}
                                   onSelect={() => {
                                     const newSlugs = isEnabled
                                       ? optimisticSourceSlugs.filter(slug => slug !== source.config.slug)
@@ -999,6 +1008,7 @@ export function FreeFormInput({
               size="icon"
               className="h-7 w-7 rounded-full shrink-0"
               disabled={!hasContent || disabled}
+              data-tutorial="send-button"
             >
               <ArrowUp className="h-4 w-4" />
             </Button>

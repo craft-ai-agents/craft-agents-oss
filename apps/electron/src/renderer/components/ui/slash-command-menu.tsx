@@ -183,6 +183,7 @@ export function SlashCommandMenu({
                 key={cmd.id}
                 value={cmd.id}
                 onSelect={() => onSelect(cmd.id)}
+                data-tutorial={`permission-mode-${cmd.id}`}
                 className={cn(
                   MENU_ITEM_STYLE,
                   'outline-none',

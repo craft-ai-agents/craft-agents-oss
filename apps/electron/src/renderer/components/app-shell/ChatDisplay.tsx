@@ -78,6 +78,9 @@ interface ChatDisplayProps {
   // Lazy loading
   /** When true, messages are still loading - show spinner in messages area */
   messagesLoading?: boolean
+  // Tutorial
+  /** Disable send action (for tutorial guidance) */
+  disableSend?: boolean
 }
 
 /**
@@ -264,6 +267,8 @@ export function ChatDisplay({
   onWorkingDirectoryChange,
   // Lazy loading
   messagesLoading = false,
+  // Tutorial
+  disableSend = false,
 }: ChatDisplayProps) {
   // Input is only disabled when explicitly disabled (e.g., agent needs activation)
   // User can type during streaming - submitting will stop the stream and send
@@ -933,6 +938,7 @@ export function ChatDisplay({
               workingDirectory={workingDirectory}
               onWorkingDirectoryChange={onWorkingDirectoryChange}
               sessionId={session.id}
+              disableSend={disableSend}
             />
           </div>
         </div>

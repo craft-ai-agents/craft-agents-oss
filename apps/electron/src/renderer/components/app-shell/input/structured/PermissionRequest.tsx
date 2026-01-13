@@ -36,12 +36,15 @@ export function PermissionRequest({ request, onResponse, unstyled = false }: Per
   }
 
   return (
-    <div className={cn(
-      'overflow-hidden h-full flex flex-col bg-info/5',
-      unstyled
-        ? 'border-0'
-        : 'border border-info/30 rounded-[8px] shadow-middle'
-    )}>
+    <div
+      className={cn(
+        'overflow-hidden h-full flex flex-col bg-info/5',
+        unstyled
+          ? 'border-0'
+          : 'border border-info/30 rounded-[8px] shadow-middle'
+      )}
+      data-tutorial="permission-banner"
+    >
       {/* Content - grows to fill available space */}
       <div className="p-4 space-y-3 flex-1 min-h-0 flex flex-col">
         {/* Header with shield icon */}
@@ -75,6 +78,7 @@ export function PermissionRequest({ request, onResponse, unstyled = false }: Per
           variant="default"
           className="h-7 gap-1.5"
           onClick={handleAllow}
+          data-tutorial="permission-allow-button"
         >
           <Check className="h-3.5 w-3.5" />
           Allow

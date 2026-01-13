@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useTheme } from '@/hooks/useTheme'
 import type { ThemeOverrides } from '@config/theme'
-import { useSetAtom, useStore } from 'jotai'
+import { useSetAtom, useStore, useAtomValue } from 'jotai'
 import type { Session, Workspace, SessionEvent, Message, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, SetupNeeds, TodoState, NewChatActionParams } from '../shared/types'
 import type { SessionOptions, SessionOptionUpdates } from './hooks/useSessionOptions'
 import { defaultSessionOptions, mergeSessionOptions } from './hooks/useSessionOptions'
@@ -21,6 +21,14 @@ import { useNotifications } from '@/hooks/useNotifications'
 import { useSession } from '@/hooks/useSession'
 import { NavigationProvider } from '@/contexts/NavigationContext'
 import { navigate, routes } from './lib/navigate'
+import {
+  TutorialProvider,
+  TutorialOverlay,
+  TutorialPrompt,
+  TutorialComplete,
+  registerTutorial,
+  sourceCreationTutorial,
+} from '@/tutorial'
 import { initRendererPerf } from './lib/perf'
 import { DEFAULT_MODEL } from '@config/models'
 import {
@@ -34,7 +42,11 @@ import {
   extractSessionMeta,
   type SessionMeta,
 } from '@/atoms/sessions'
+import { sourcesAtom } from '@/atoms/sources'
 import { getDefaultStore } from 'jotai'
+
+// Register tutorials at module load
+registerTutorial(sourceCreationTutorial)
 
 type AppState = 'loading' | 'onboarding' | 'reauth' | 'ready'
 
@@ -188,6 +200,9 @@ export default function App() {
 
   // Notifications enabled state (from app settings)
   const [notificationsEnabled, setNotificationsEnabled] = useState(true)
+
+  // Sources for tutorial trigger condition
+  const sources = useAtomValue(sourcesAtom)
 
   // Compute if app is fully ready (all data loaded)
   const isFullyReady = appState === 'ready' && sessionsLoaded
@@ -1164,28 +1179,35 @@ export default function App() {
           onInputChange={handleInputChange}
           isReady={appState === 'ready'}
         >
-          {/* Splash screen overlay - fades out when fully ready */}
-          {showSplash && (
-            <SplashScreen
-              isExiting={splashExiting}
-              onExitComplete={handleSplashExitComplete}
-            />
-          )}
+          <TutorialProvider workspaceId={windowWorkspaceId} sourcesCount={sources.length}>
+            {/* Splash screen overlay - fades out when fully ready */}
+            {showSplash && (
+              <SplashScreen
+                isExiting={splashExiting}
+                onExitComplete={handleSplashExitComplete}
+              />
+            )}
 
-          {/* Main UI - always rendered, splash fades away to reveal it */}
-          <div className="h-full text-foreground">
-            <AppShell
-              contextValue={appShellContextValue}
-              defaultLayout={[20, 32, 48]}
-              menuNewChatTrigger={menuNewChatTrigger}
-              isFocusedMode={isFocusedMode}
-            />
-            <ResetConfirmationDialog
-              open={showResetDialog}
-              onConfirm={executeReset}
-              onCancel={() => setShowResetDialog(false)}
-            />
-          </div>
+            {/* Main UI - always rendered, splash fades away to reveal it */}
+            <div className="h-full text-foreground">
+              <AppShell
+                contextValue={appShellContextValue}
+                defaultLayout={[20, 32, 48]}
+                menuNewChatTrigger={menuNewChatTrigger}
+                isFocusedMode={isFocusedMode}
+              />
+              <ResetConfirmationDialog
+                open={showResetDialog}
+                onConfirm={executeReset}
+                onCancel={() => setShowResetDialog(false)}
+              />
+            </div>
+
+            {/* Tutorial system overlays */}
+            <TutorialOverlay />
+            <TutorialPrompt />
+            <TutorialComplete />
+          </TutorialProvider>
         </NavigationProvider>
       </TooltipProvider>
     </FocusProvider>

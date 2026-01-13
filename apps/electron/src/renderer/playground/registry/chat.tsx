@@ -1,7 +1,6 @@
 import * as React from 'react'
 import type { ComponentEntry } from './types'
 import { AttachmentPreview } from '@/components/app-shell/AttachmentPreview'
-import { PermissionBanner } from '@/components/app-shell/PermissionBanner'
 import { SetupAuthBanner } from '@/components/app-shell/SetupAuthBanner'
 import { TurnCard, type ActivityItem } from '@craft-agent/ui'
 import type { BackgroundTask } from '@/components/app-shell/ActiveTasksBar'
@@ -658,24 +657,6 @@ export const chatComponents: ComponentEntry[] = [
     mockData: () => ({
       attachments: [sampleImageAttachment, samplePdfAttachment],
       onRemove: mockAttachmentCallbacks.onRemove,
-    }),
-  },
-  {
-    id: 'permission-banner',
-    name: 'PermissionBanner',
-    category: 'Chat',
-    description: 'Shows when agent needs approval for a bash command with Allow/Always Allow/Deny options',
-    component: PermissionBanner,
-    props: [],
-    variants: [
-      { name: 'Default', props: { request: samplePermissionRequest } },
-      { name: 'Long Command', props: { request: longPermissionRequest } },
-    ],
-    mockData: () => ({
-      request: samplePermissionRequest,
-      onRespond: (allowed: boolean, alwaysAllow: boolean) => {
-        console.log('[Playground] Permission response:', { allowed, alwaysAllow })
-      },
     }),
   },
   {

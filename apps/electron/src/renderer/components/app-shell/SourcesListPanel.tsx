@@ -181,7 +181,7 @@ function SourceItem({ source, isSelected, isFirst, localMcpEnabled, onClick, onD
   const statusBadge = getStatusBadge(connectionStatus)
 
   return (
-    <div className="source-item" data-selected={isSelected || undefined}>
+    <div className="source-item" data-selected={isSelected || undefined} data-tutorial={isFirst ? "source-item-first" : undefined}>
       {/* Separator - only show if not first */}
       {!isFirst && (
         <div className="source-separator pl-12 pr-4">
