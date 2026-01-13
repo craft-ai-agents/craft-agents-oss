@@ -6,7 +6,6 @@ import {
   Paperclip,
   ArrowUp,
   Square,
-  ChevronDown,
   SquareSlash,
   Check,
   DatabaseZap,
@@ -30,7 +29,7 @@ import {
 import { StyledDropdownMenuContent, StyledDropdownMenuItem } from '@/components/ui/styled-dropdown'
 import { cn } from '@/lib/utils'
 import { AttachmentPreview } from '../AttachmentPreview'
-import { MODELS, getModelDisplayName } from '@config/models'
+import { MODELS, getModelShortName } from '@config/models'
 import { SourceAvatar } from '@/components/ui/source-avatar'
 import type { FileAttachment, LoadedSource } from '../../../../shared/types'
 import type { PermissionMode } from '@craft-agent/shared/agent/modes'
@@ -924,8 +923,7 @@ export function FreeFormInput({
                     setModelDropdownOpen(!modelDropdownOpen)
                   }}
                 >
-                  {getModelDisplayName(currentModel)}
-                  <ChevronDown className="opacity-50" style={{ width: 12, height: 12 }} />
+                  {getModelShortName(currentModel)}
                 </button>
               </TooltipTrigger>
               <TooltipContent side="top">Model</TooltipContent>
@@ -1094,7 +1092,6 @@ function WorkingDirectorySelector({
               className="inline-flex items-center h-7 px-1.5 gap-0.5 text-[13px] shrink-0 rounded-[6px] hover:bg-foreground/5 data-[state=open]:bg-foreground/5 transition-colors max-w-[160px]"
             >
               <span className="truncate">{workingDirectory.split('/').pop() || 'Home'}</span>
-              <ChevronDown className="opacity-50 shrink-0" style={{ width: 12, height: 12 }} />
             </button>
           </DropdownMenuTrigger>
         </TooltipTrigger>
