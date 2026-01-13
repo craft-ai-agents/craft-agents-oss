@@ -164,11 +164,12 @@ export class ConfigWatcher {
   constructor(workspaceIdOrPath: string, callbacks: ConfigWatcherCallbacks) {
     this.callbacks = callbacks;
     // Support both workspace ID and workspace root path
-    // Paths contain '/' while IDs don't
-    if (workspaceIdOrPath.includes('/')) {
+    // Paths contain '/' or '\\' (Windows) while IDs don't
+    const isPath = workspaceIdOrPath.includes('/') || workspaceIdOrPath.includes('\\');
+    if (isPath) {
       this.workspaceDir = workspaceIdOrPath;
-      // Extract workspace ID from path (last segment)
-      this.workspaceId = workspaceIdOrPath.split('/').pop() || workspaceIdOrPath;
+      // Extract workspace ID from path (last segment) - handle both separators
+      this.workspaceId = workspaceIdOrPath.split(/[/\\]/).pop() || workspaceIdOrPath;
     } else {
       this.workspaceId = workspaceIdOrPath;
       this.workspaceDir = getWorkspacePath(workspaceIdOrPath);
