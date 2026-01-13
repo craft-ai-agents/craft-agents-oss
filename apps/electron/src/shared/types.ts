@@ -888,6 +888,10 @@ export interface ElectronAPI {
   getWindowFocusState(): Promise<boolean>
   onWindowFocusChange(callback: (isFocused: boolean) => void): () => void
   onNotificationNavigate(callback: (data: { workspaceId: string; sessionId: string }) => void): () => void
+
+  // Theme preferences sync across windows (mode, colorTheme, font)
+  broadcastThemePreferences(preferences: { mode: string; colorTheme: string; font: string }): Promise<void>
+  onThemePreferencesChange(callback: (preferences: { mode: string; colorTheme: string; font: string }) => void): () => void
 }
 
 /**

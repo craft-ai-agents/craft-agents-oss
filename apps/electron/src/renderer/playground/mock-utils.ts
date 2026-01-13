@@ -76,6 +76,7 @@ export const mockSources: LoadedSource[] = [
     },
     guide: null,
     folderPath: '/mock/sources/github-api',
+    workspaceRootPath: '/mock/workspaces/playground-workspace',
     workspaceId: 'playground-workspace',
   },
   {
@@ -97,6 +98,7 @@ export const mockSources: LoadedSource[] = [
     },
     guide: null,
     folderPath: '/mock/sources/linear-api',
+    workspaceRootPath: '/mock/workspaces/playground-workspace',
     workspaceId: 'playground-workspace',
   },
   {
@@ -115,6 +117,7 @@ export const mockSources: LoadedSource[] = [
     },
     guide: null,
     folderPath: '/mock/sources/local-files',
+    workspaceRootPath: '/mock/workspaces/playground-workspace',
     workspaceId: 'playground-workspace',
   },
 ]
