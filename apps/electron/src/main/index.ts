@@ -1,3 +1,8 @@
+// Load user's shell environment first (before other imports that may use env)
+// This ensures tools like Homebrew, nvm, etc. are available to the agent
+import { loadShellEnv } from './shell-env'
+loadShellEnv()
+
 import { app, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { existsSync } from 'fs'

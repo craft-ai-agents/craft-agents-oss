@@ -22,10 +22,10 @@ export default defineConfig({
     alias: {
       '@': resolve(__dirname, 'src/renderer'),
       '@config': resolve(__dirname, '../../packages/shared/src/config'),
-      // Force all React imports to use the Electron app's React (v19)
-      // This prevents the "multiple React copies" error when importing from @craft-agent/ui
-      'react': resolve(__dirname, 'node_modules/react'),
-      'react-dom': resolve(__dirname, 'node_modules/react-dom'),
+      // Force all React imports to use the root node_modules React
+      // Bun hoists deps to root. This prevents "multiple React copies" error from @craft-agent/ui
+      'react': resolve(__dirname, '../../node_modules/react'),
+      'react-dom': resolve(__dirname, '../../node_modules/react-dom'),
     },
     dedupe: ['react', 'react-dom']
   },
