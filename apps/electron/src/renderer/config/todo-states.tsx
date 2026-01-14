@@ -59,7 +59,9 @@ export async function resolveStatusIcon(
 ): Promise<React.ReactNode> {
   switch (icon.type) {
     case 'emoji':
-      return <span className={className}>{icon.value}</span>
+      // Emojis need font-size for sizing, not height/width
+      // Use 13px to match the icon size, with flex centering
+      return <span className="text-[13px] leading-none">{icon.value}</span>
 
     case 'file': {
       // Check cache first

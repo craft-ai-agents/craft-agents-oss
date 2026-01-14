@@ -151,3 +151,10 @@ export {
 
 // Turn utilities (pure functions)
 export * from './components/chat/turn-utils'
+
+// Icons
+export {
+  Icon_Folder,
+  Icon_Inbox,
+  type IconProps,
+} from './components/icons'

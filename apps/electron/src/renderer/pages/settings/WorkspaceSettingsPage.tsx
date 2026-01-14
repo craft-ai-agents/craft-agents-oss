@@ -231,6 +231,17 @@ export default function WorkspaceSettingsPage() {
     }
   }, [updateWorkspaceSetting])
 
+  const handleClearWorkingDirectory = useCallback(async () => {
+    if (!window.electronAPI) return
+
+    try {
+      setWorkingDirectory('')
+      await updateWorkspaceSetting('workingDirectory', undefined)
+    } catch (error) {
+      console.error('Failed to clear working directory:', error)
+    }
+  }, [updateWorkspaceSetting])
+
   const handleLocalMcpEnabledChange = useCallback(
     async (enabled: boolean) => {
       setLocalMcpEnabled(enabled)
@@ -459,15 +470,26 @@ export default function WorkspaceSettingsPage() {
               <SettingsCard>
                 <SettingsRow
                   label="Working Directory"
-                  description={workingDirectory || '~ (Home)'}
+                  description={workingDirectory || 'Not set (uses session folder)'}
                   action={
-                    <button
-                      type="button"
-                      onClick={handleChangeWorkingDirectory}
-                      className="inline-flex items-center h-8 px-3 text-sm rounded-lg bg-background shadow-minimal hover:bg-foreground/[0.02] transition-colors"
-                    >
-                      Change...
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {workingDirectory && (
+                        <button
+                          type="button"
+                          onClick={handleClearWorkingDirectory}
+                          className="inline-flex items-center h-8 px-3 text-sm rounded-lg bg-background shadow-minimal hover:bg-foreground/[0.02] transition-colors text-foreground/60 hover:text-foreground"
+                        >
+                          Clear
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={handleChangeWorkingDirectory}
+                        className="inline-flex items-center h-8 px-3 text-sm rounded-lg bg-background shadow-minimal hover:bg-foreground/[0.02] transition-colors"
+                      >
+                        Change...
+                      </button>
+                    </div>
                   }
                 />
                 <SettingsToggle

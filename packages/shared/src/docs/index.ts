@@ -43,6 +43,7 @@ export const DOC_REFS = {
   permissions: '~/.craft-agent/docs/permissions.md',
   skills: '~/.craft-agent/docs/skills.md',
   themes: '~/.craft-agent/docs/themes.md',
+  statuses: '~/.craft-agent/docs/statuses.md',
   sourceGuides: '~/.craft-agent/docs/source-guides/',
   docsDir: '~/.craft-agent/docs/',
 } as const;
@@ -1508,6 +1509,121 @@ Common hues:
 - Pink: ~330
 `;
 
+const STATUSES_MD = `# Status Configuration
+
+Session statuses represent workflow states. Each workspace has its own status configuration.
+
+## Storage Locations
+
+- Config: \`~/.craft-agent/workspaces/{id}/statuses/config.json\`
+- Icons: \`~/.craft-agent/workspaces/{id}/statuses/icons/\`
+
+## Default Statuses
+
+| ID | Label | Color | Category | Type |
+|----|-------|-------|----------|------|
+| \`todo\` | Todo | #71717A | open | Fixed |
+| \`in-progress\` | In Progress | #3B82F6 | open | Default |
+| \`needs-review\` | Needs Review | #F59E0B | open | Default |
+| \`done\` | Done | #9570BE | closed | Fixed |
+| \`cancelled\` | Cancelled | #A1A1AA | closed | Fixed |
+
+## Status Types
+
+- **Fixed** (\`isFixed: true\`): Cannot be deleted or renamed. Required statuses: \`todo\`, \`done\`, \`cancelled\`.
+- **Default** (\`isDefault: true\`): Ships with app, can be modified but not deleted.
+- **Custom** (\`isFixed: false, isDefault: false\`): User-created, fully editable and deletable.
+
+## Category System
+
+- **open**: Session appears in inbox/active list
+- **closed**: Session appears in archive/completed list
+
+## config.json Schema
+
+\`\`\`json
+{
+  "version": 1,
+  "statuses": [
+    {
+      "id": "todo",
+      "label": "Todo",
+      "color": "#71717A",
+      "icon": { "type": "file", "value": "todo.svg" },
+      "category": "open",
+      "isFixed": true,
+      "isDefault": false,
+      "order": 0
+    }
+  ],
+  "defaultStatusId": "todo"
+}
+\`\`\`
+
+## Status Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| \`id\` | string | Unique slug (lowercase, hyphens) |
+| \`label\` | string | Display name |
+| \`color\` | string | Hex color code |
+| \`icon\` | object | Icon config (see below) |
+| \`category\` | \`"open"\` \\| \`"closed"\` | Inbox vs archive |
+| \`isFixed\` | boolean | Cannot delete/rename if true |
+| \`isDefault\` | boolean | Ships with app, cannot delete |
+| \`order\` | number | Display order (lower = first) |
+
+## Icon Configuration
+
+**File-based SVG:**
+\`\`\`json
+{ "type": "file", "value": "my-status.svg" }
+\`\`\`
+Place SVG in \`statuses/icons/\` directory.
+
+**Emoji:**
+\`\`\`json
+{ "type": "emoji", "value": "🔥" }
+\`\`\`
+
+## Adding Custom Statuses
+
+Edit the workspace's \`statuses/config.json\`:
+
+\`\`\`json
+{
+  "id": "blocked",
+  "label": "Blocked",
+  "color": "#EF4444",
+  "icon": { "type": "emoji", "value": "🚫" },
+  "category": "open",
+  "isFixed": false,
+  "isDefault": false,
+  "order": 3
+}
+\`\`\`
+
+Adjust \`order\` values for existing statuses as needed.
+
+## SVG Icon Guidelines
+
+- Size: 24x24
+- Use \`currentColor\` for stroke/fill (theming support)
+- stroke-width: 2
+- stroke-linecap: round
+- stroke-linejoin: round
+
+## Self-Healing
+
+- Missing icon files are auto-recreated from embedded defaults
+- Invalid status IDs on sessions fallback to \`todo\`
+- Corrupted configs reset to defaults
+
+## Validation
+
+Required fixed statuses (\`todo\`, \`done\`, \`cancelled\`) must exist. Invalid configs return defaults.
+`;
+
 /**
  * Map of bundled documentation files
  */
@@ -1516,6 +1632,7 @@ const BUNDLED_DOCS: Record<string, string> = {
   'permissions.md': PERMISSIONS_MD,
   'skills.md': SKILLS_MD,
   'themes.md': THEMES_MD,
+  'statuses.md': STATUSES_MD,
 };
 
 export { BUNDLED_DOCS };

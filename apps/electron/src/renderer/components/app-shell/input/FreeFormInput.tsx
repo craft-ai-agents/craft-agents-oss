@@ -6,16 +6,16 @@ import {
   Paperclip,
   ArrowUp,
   Square,
-  SquareSlash,
   Check,
   DatabaseZap,
+  ChevronDown,
 } from 'lucide-react'
+import { Icon_Folder } from '@craft-agent/ui'
 
 import * as storage from '@/lib/local-storage'
 
 import { Button } from '@/components/ui/button'
 import {
-  SlashCommandMenu,
   InlineSlashCommand,
   useInlineSlashCommand,
   DEFAULT_SLASH_COMMANDS,
@@ -28,9 +28,11 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { StyledDropdownMenuContent, StyledDropdownMenuItem } from '@/components/ui/styled-dropdown'
 import { cn } from '@/lib/utils'
+import { applySmartTypography } from '@/lib/smart-typography'
 import { AttachmentPreview } from '../AttachmentPreview'
 import { MODELS, getModelShortName } from '@config/models'
 import { SourceAvatar } from '@/components/ui/source-avatar'
+import { FreeFormInputContextBadge } from './FreeFormInputContextBadge'
 import type { FileAttachment, LoadedSource } from '../../../../shared/types'
 import type { PermissionMode } from '@craft-agent/shared/agent/modes'
 import { PERMISSION_MODE_ORDER } from '@craft-agent/shared/agent/modes'
@@ -82,10 +84,14 @@ export interface FreeFormInputProps {
   workingDirectory?: string
   /** Callback when working directory changes */
   onWorkingDirectoryChange?: (path: string) => void
+  /** Session folder path (for "Reset to Session Root" option) */
+  sessionFolderPath?: string
   /** Session ID for scoping events like approve-plan */
   sessionId?: string
   /** Disable send action (for tutorial guidance) */
   disableSend?: boolean
+  /** Whether the session is empty (no messages yet) - affects context badge prominence */
+  isEmptySession?: boolean
 }
 
 /**
@@ -122,8 +128,10 @@ export function FreeFormInput({
   onSourcesChange,
   workingDirectory,
   onWorkingDirectoryChange,
+  sessionFolderPath,
   sessionId,
   disableSend = false,
+  isEmptySession = false,
 }: FreeFormInputProps) {
   // Performance optimization: Always use internal state for typing to avoid parent re-renders
   // Sync FROM parent on mount/change (for restoring drafts)
@@ -187,7 +195,6 @@ export function FreeFormInput({
 
   const [isDraggingOver, setIsDraggingOver] = React.useState(false)
   const [loadingCount, setLoadingCount] = React.useState(0)
-  const [slashDropdownOpen, setSlashDropdownOpen] = React.useState(false)
   const [modelDropdownOpen, setModelDropdownOpen] = React.useState(false)
   const [sourceDropdownOpen, setSourceDropdownOpen] = React.useState(false)
   const [sourceFilter, setSourceFilter] = React.useState('')
@@ -196,9 +203,8 @@ export function FreeFormInput({
   const dragCounterRef = React.useRef(0)
   const containerRef = React.useRef<HTMLDivElement>(null)
   const modelButtonRef = React.useRef<HTMLButtonElement>(null)
-  const [modelDropdownPosition, setModelDropdownPosition] = React.useState<{ top: number; left: number } | null>(null)
-  const slashButtonRef = React.useRef<HTMLButtonElement>(null)
-  const [slashDropdownPosition, setSlashDropdownPosition] = React.useState<{ top: number; left: number } | null>(null)
+  const modelDropdownRef = React.useRef<HTMLDivElement>(null)
+  const [modelDropdownPosition, setModelDropdownPosition] = React.useState<{ top: number; left: number; buttonCenter: number } | null>(null)
   const sourceButtonRef = React.useRef<HTMLButtonElement>(null)
   const sourceFilterInputRef = React.useRef<HTMLInputElement>(null)
   const [sourceDropdownPosition, setSourceDropdownPosition] = React.useState<{ top: number; left: number } | null>(null)
@@ -332,6 +338,37 @@ export function FreeFormInput({
     observer.observe(containerRef.current)
     return () => observer.disconnect()
   }, [onHeightChange])
+
+  // Adjust model dropdown position if it would overflow the viewport
+  React.useLayoutEffect(() => {
+    if (!modelDropdownOpen || !modelDropdownRef.current || !modelDropdownPosition) return
+
+    const dropdown = modelDropdownRef.current
+    const dropdownRect = dropdown.getBoundingClientRect()
+    const viewportWidth = window.innerWidth
+    const padding = 8 // Minimum padding from viewport edge
+
+    // Calculate where the dropdown would be if centered
+    const centeredLeft = modelDropdownPosition.buttonCenter - dropdownRect.width / 2
+    const centeredRight = modelDropdownPosition.buttonCenter + dropdownRect.width / 2
+
+    // Check if it overflows on the right
+    if (centeredRight > viewportWidth - padding) {
+      // Shift left to fit, but keep natural width
+      const newLeft = viewportWidth - padding - dropdownRect.width / 2
+      if (newLeft !== modelDropdownPosition.left) {
+        setModelDropdownPosition(prev => prev ? { ...prev, left: newLeft } : null)
+      }
+    }
+    // Check if it overflows on the left
+    else if (centeredLeft < padding) {
+      // Shift right to fit
+      const newLeft = padding + dropdownRect.width / 2
+      if (newLeft !== modelDropdownPosition.left) {
+        setModelDropdownPosition(prev => prev ? { ...prev, left: newLeft } : null)
+      }
+    }
+  }, [modelDropdownOpen, modelDropdownPosition])
 
   // Check if running in Electron environment (has electronAPI)
   const hasElectronAPI = typeof window !== 'undefined' && !!window.electronAPI
@@ -579,7 +616,7 @@ export function FreeFormInput({
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     let value = e.target.value
-    const cursorPosition = e.target.selectionStart
+    let cursorPosition = e.target.selectionStart
 
     // Update inline slash command state
     inlineSlash.handleInputChange(value, cursorPosition)
@@ -589,8 +626,20 @@ export function FreeFormInput({
       value = value.charAt(0).toUpperCase() + value.slice(1)
     }
 
+    // Apply smart typography (-> to →, etc.)
+    const typography = applySmartTypography(value, cursorPosition)
+    value = typography.text
+    cursorPosition = typography.cursor
+
     setInput(value)
     syncToParent(value) // Debounced sync to parent for draft persistence
+
+    // Restore cursor position after React re-render (if typography changed it)
+    if (typography.replaced) {
+      requestAnimationFrame(() => {
+        textareaRef.current?.setSelectionRange(cursorPosition, cursorPosition)
+      })
+    }
   }
 
   // Handle inline slash command selection (removes the /command text)
@@ -670,148 +719,96 @@ export function FreeFormInput({
 
         {/* Bottom Row: Controls */}
         <div className="flex items-center gap-1 px-2 py-2 border-t border-border/50">
-          {/* 1. Attach File Button */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 shrink-0 rounded-[4px]"
-                onClick={handleAttachClick}
-                disabled={disabled}
-              >
-                <Paperclip className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top">Attach files</TooltipContent>
-          </Tooltip>
+          {/* Context Badges - Files, Sources, Folder */}
+          {/* 1. Attach Files Badge */}
+          <FreeFormInputContextBadge
+            icon={<Paperclip className="h-4 w-4" />}
+            label={attachments.length > 0
+              ? attachments.length === 1
+                ? attachments[0].name
+                : `${attachments.length} files`
+              : "Attach Files"
+            }
+            isExpanded={isEmptySession}
+            hasSelection={attachments.length > 0}
+            showChevron={false}
+            onClick={handleAttachClick}
+            tooltip="Attach files"
+            disabled={disabled}
+          />
 
-          {/* 2. Slash Command Button */}
-          <div className="relative">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  ref={slashButtonRef}
-                  type="button"
-                  className={cn(
-                    "inline-flex items-center justify-center h-7 w-7 shrink-0 rounded-[4px] hover:bg-foreground/5 transition-colors disabled:opacity-50 disabled:pointer-events-none",
-                    slashDropdownOpen && "bg-foreground/5"
-                  )}
-                  disabled={disabled}
-                  onClick={() => {
-                    if (!slashDropdownOpen && slashButtonRef.current) {
-                      const rect = slashButtonRef.current.getBoundingClientRect()
-                      setSlashDropdownPosition({
-                        top: rect.top,
-                        left: rect.left,
-                      })
-                    }
-                    setSlashDropdownOpen(!slashDropdownOpen)
-                  }}
-                >
-                  <SquareSlash className="h-4 w-4" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="top">Slash commands</TooltipContent>
-            </Tooltip>
-            {slashDropdownOpen && slashDropdownPosition && ReactDOM.createPortal(
-              <>
-                <div
-                  className="fixed inset-0 z-[9998]"
-                  onClick={() => setSlashDropdownOpen(false)}
-                />
-                <div
-                  className="fixed popover-styled z-[9999] overflow-hidden"
-                  style={{
-                    top: slashDropdownPosition.top - 8,
-                    left: slashDropdownPosition.left,
-                    transform: 'translateY(-100%)',
-                  }}
-                >
-                  <SlashCommandMenu
-                    commands={DEFAULT_SLASH_COMMANDS}
-                    activeCommands={activeCommands}
-                    onSelect={(commandId) => {
-                      handleSlashCommand(commandId)
-                      setSlashDropdownOpen(false)
-                    }}
-                    showFilter
-                  />
-                </div>
-              </>,
-              document.body
-            )}
-          </div>
-
-          {/* 3. Source Selector Button - only show if onSourcesChange is provided */}
+          {/* 2. Source Selector Badge - only show if onSourcesChange is provided */}
           {onSourcesChange && (
             <div className="relative">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    ref={sourceButtonRef}
-                    type="button"
-                    className={cn(
-                      "inline-flex items-center justify-center h-7 shrink-0 rounded-[6px] hover:bg-foreground/5 transition-colors disabled:opacity-50 disabled:pointer-events-none",
-                      optimisticSourceSlugs.length === 0 && "w-7",
-                      optimisticSourceSlugs.length > 0 && "px-0.5",
-                      sourceDropdownOpen && "bg-foreground/5"
-                    )}
-                    disabled={disabled}
-                    data-tutorial="source-selector-button"
-                    onClick={() => {
-                      if (!sourceDropdownOpen && sourceButtonRef.current) {
-                        const rect = sourceButtonRef.current.getBoundingClientRect()
-                        setSourceDropdownPosition({
-                          top: rect.top,
-                          left: rect.left,
-                        })
-                        // Focus filter input after popover opens
-                        setTimeout(() => sourceFilterInputRef.current?.focus(), 0)
-                      } else {
-                        // Clear filter when closing
-                        setSourceFilter('')
-                      }
-                      setSourceDropdownOpen(!sourceDropdownOpen)
-                    }}
-                  >
-                    {optimisticSourceSlugs.length === 0 ? (
-                      <DatabaseZap className="h-4 w-4" />
-                    ) : (
-                      <div className="flex items-center">
-                        {(() => {
-                          const enabledSources = sources.filter(s => optimisticSourceSlugs.includes(s.config.slug))
-                          const displaySources = enabledSources.slice(0, 3)
-                          const remainingCount = enabledSources.length - 3
-                          return (
-                            <>
-                              {displaySources.map((source, index) => (
-                                <div
-                                  key={source.config.slug}
-                                  className={cn("relative h-6 w-6 rounded-[6px] bg-background shadow-minimal flex items-center justify-center", index > 0 && "-ml-1.5")}
-                                  style={{ zIndex: index + 1 }}
-                                >
-                                  <SourceAvatar source={source} size="sm" />
-                                </div>
-                              ))}
-                              {remainingCount > 0 && (
-                                <div
-                                  className="-ml-1.5 h-6 w-6 rounded-[6px] bg-background shadow-minimal flex items-center justify-center text-[9px] font-medium text-muted-foreground"
-                                  style={{ zIndex: displaySources.length + 1 }}
-                                >
-                                  +{remainingCount}
-                                </div>
-                              )}
-                            </>
-                          )
-                        })()}
-                      </div>
-                    )}
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="top">Sources</TooltipContent>
-              </Tooltip>
+              <FreeFormInputContextBadge
+                buttonRef={sourceButtonRef}
+                icon={
+                  optimisticSourceSlugs.length === 0 ? (
+                    <DatabaseZap className="h-4 w-4" />
+                  ) : (
+                    <div className="flex items-center -ml-0.5">
+                      {(() => {
+                        const enabledSources = sources.filter(s => optimisticSourceSlugs.includes(s.config.slug))
+                        const displaySources = enabledSources.slice(0, 3)
+                        const remainingCount = enabledSources.length - 3
+                        return (
+                          <>
+                            {displaySources.map((source, index) => (
+                              <div
+                                key={source.config.slug}
+                                className={cn("relative h-5 w-5 rounded-[4px] bg-background shadow-minimal flex items-center justify-center", index > 0 && "-ml-1")}
+                                style={{ zIndex: index + 1 }}
+                              >
+                                <SourceAvatar source={source} size="xs" />
+                              </div>
+                            ))}
+                            {remainingCount > 0 && (
+                              <div
+                                className="-ml-1 h-5 w-5 rounded-[4px] bg-background shadow-minimal flex items-center justify-center text-[8px] font-medium text-muted-foreground"
+                                style={{ zIndex: displaySources.length + 1 }}
+                              >
+                                +{remainingCount}
+                              </div>
+                            )}
+                          </>
+                        )
+                      })()}
+                    </div>
+                  )
+                }
+                label={
+                  optimisticSourceSlugs.length === 0
+                    ? "Choose Sources"
+                    : (() => {
+                        const enabledSources = sources.filter(s => optimisticSourceSlugs.includes(s.config.slug))
+                        if (enabledSources.length === 1) return enabledSources[0].config.name
+                        if (enabledSources.length === 2) return enabledSources.map(s => s.config.name).join(', ')
+                        return `${enabledSources.length} sources`
+                      })()
+                }
+                isExpanded={isEmptySession}
+                hasSelection={optimisticSourceSlugs.length > 0}
+                showChevron={true}
+                isOpen={sourceDropdownOpen}
+                disabled={disabled}
+                data-tutorial="source-selector-button"
+                onClick={() => {
+                  if (!sourceDropdownOpen && sourceButtonRef.current) {
+                    const rect = sourceButtonRef.current.getBoundingClientRect()
+                    setSourceDropdownPosition({
+                      top: rect.top,
+                      left: rect.left,
+                    })
+                    // Focus filter input after popover opens
+                    setTimeout(() => sourceFilterInputRef.current?.focus(), 0)
+                  } else {
+                    // Clear filter when closing
+                    setSourceFilter('')
+                  }
+                  setSourceDropdownOpen(!sourceDropdownOpen)
+                }}
+                tooltip="Sources"
+              />
               {sourceDropdownOpen && sourceDropdownPosition && ReactDOM.createPortal(
                 <>
                   <div
@@ -900,7 +897,20 @@ export function FreeFormInput({
             </div>
           )}
 
-          {/* 4. Model Selector */}
+          {/* 3. Working Directory Selector Badge */}
+          {onWorkingDirectoryChange && (
+            <WorkingDirectoryBadge
+              workingDirectory={workingDirectory}
+              onWorkingDirectoryChange={onWorkingDirectoryChange}
+              sessionFolderPath={sessionFolderPath}
+              isEmptySession={isEmptySession}
+            />
+          )}
+
+          {/* Spacer */}
+          <div className="flex-1" />
+
+          {/* 5. Model Selector */}
           <div className="relative">
             <Tooltip>
               <TooltipTrigger asChild>
@@ -915,15 +925,18 @@ export function FreeFormInput({
                     if (!modelDropdownOpen && modelButtonRef.current) {
                       // Calculate position when opening
                       const rect = modelButtonRef.current.getBoundingClientRect()
+                      const buttonCenter = rect.left + rect.width / 2
                       setModelDropdownPosition({
                         top: rect.top,
-                        left: rect.left, // Align left edge of dropdown with left edge of button
+                        left: buttonCenter, // Start centered, will adjust in useLayoutEffect if needed
+                        buttonCenter,
                       })
                     }
                     setModelDropdownOpen(!modelDropdownOpen)
                   }}
                 >
                   {getModelShortName(currentModel)}
+                  <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />
                 </button>
               </TooltipTrigger>
               <TooltipContent side="top">Model</TooltipContent>
@@ -936,11 +949,12 @@ export function FreeFormInput({
                   onClick={() => setModelDropdownOpen(false)}
                 />
                 <div
-                  className="fixed popover-styled p-2 min-w-[280px] z-[9999]"
+                  ref={modelDropdownRef}
+                  className="fixed popover-styled p-2 z-[9999] min-w-[240px]"
                   style={{
                     top: modelDropdownPosition.top - 8, // 8px gap above button
                     left: modelDropdownPosition.left,
-                    transform: 'translateY(-100%)', // Position above the calculated point
+                    transform: 'translate(-50%, -100%)', // Center horizontally, position above
                   }}
                 >
                   <div className="space-y-1">
@@ -978,24 +992,13 @@ export function FreeFormInput({
             )}
           </div>
 
-          {/* 5. Working Directory Selector */}
-          {workingDirectory && onWorkingDirectoryChange && (
-            <WorkingDirectorySelector
-              workingDirectory={workingDirectory}
-              onWorkingDirectoryChange={onWorkingDirectoryChange}
-            />
-          )}
-
-          {/* Spacer */}
-          <div className="flex-1" />
-
-          {/* Send/Stop Button - Always show stop when processing */}
+          {/* 6. Send/Stop Button - Always show stop when processing */}
           {isProcessing ? (
             <Button
               type="button"
               size="icon"
               variant="secondary"
-              className="h-7 w-7 rounded-full shrink-0 hover:bg-foreground/15 active:bg-foreground/20"
+              className="h-7 w-7 rounded-full shrink-0 hover:bg-foreground/15 active:bg-foreground/20 ml-2"
               onClick={() => handleStop(false)}
             >
               <Square className="h-3 w-3 fill-current" />
@@ -1004,7 +1007,7 @@ export function FreeFormInput({
             <Button
               type="submit"
               size="icon"
-              className="h-7 w-7 rounded-full shrink-0"
+              className="h-7 w-7 rounded-full shrink-0 ml-2"
               disabled={!hasContent || disabled}
               data-tutorial="send-button"
             >
@@ -1031,25 +1034,30 @@ function addRecentDir(path: string): void {
 }
 
 /**
- * Format path for display, replacing home directory with home icon
+ * Format path for display, with home directory shortened
  */
 function formatPathForDisplay(path: string, homeDir: string): string {
+  let displayPath = path
   if (homeDir && path.startsWith(homeDir)) {
     const relativePath = path.slice(homeDir.length)
-    return `~${relativePath || '/'}`
+    displayPath = relativePath || '/'
   }
-  return path
+  return `in ${displayPath}`
 }
 
 /**
- * WorkingDirectorySelector - Dropdown for selecting working directory
+ * WorkingDirectoryBadge - Context badge for selecting working directory
  */
-function WorkingDirectorySelector({
+function WorkingDirectoryBadge({
   workingDirectory,
   onWorkingDirectoryChange,
+  sessionFolderPath,
+  isEmptySession = false,
 }: {
-  workingDirectory: string
+  workingDirectory?: string
   onWorkingDirectoryChange: (path: string) => void
+  sessionFolderPath?: string
+  isEmptySession?: boolean
 }) {
   const [recentDirs, setRecentDirs] = React.useState<string[]>([])
   const [dropdownOpen, setDropdownOpen] = React.useState(false)
@@ -1082,39 +1090,74 @@ function WorkingDirectorySelector({
   // Filter out current directory from recent list
   const filteredRecent = recentDirs.filter(p => p !== workingDirectory)
 
+  // Determine label - "Work in Folder" if not set, otherwise folder name
+  const hasFolder = !!workingDirectory
+  const folderName = hasFolder ? (workingDirectory.split('/').pop() || 'Folder') : 'Work in Folder'
+
   return (
     <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
-      <Tooltip open={dropdownOpen ? false : undefined}>
-        <TooltipTrigger asChild>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              className="inline-flex items-center h-7 px-1.5 gap-0.5 text-[13px] shrink-0 rounded-[6px] hover:bg-foreground/5 data-[state=open]:bg-foreground/5 transition-colors max-w-[160px]"
-            >
-              <span className="truncate">{workingDirectory.split('/').pop() || 'Home'}</span>
-            </button>
-          </DropdownMenuTrigger>
-        </TooltipTrigger>
-        <TooltipContent side="top" className="flex flex-col gap-0.5">
-          <span className="font-medium">Working directory</span>
-          <span className="text-xs opacity-70">{formatPathForDisplay(workingDirectory, homeDir)}</span>
-        </TooltipContent>
-      </Tooltip>
+      <DropdownMenuTrigger asChild>
+        <span>
+          <FreeFormInputContextBadge
+            icon={<Icon_Folder className="h-4 w-4" strokeWidth={1.75} />}
+            label={folderName}
+            isExpanded={isEmptySession}
+            hasSelection={hasFolder}
+            showChevron={true}
+            isOpen={dropdownOpen}
+            tooltip={
+              hasFolder ? (
+                <span className="flex flex-col gap-0.5">
+                  <span className="font-medium">Working directory</span>
+                  <span className="text-xs opacity-70">{formatPathForDisplay(workingDirectory, homeDir)}</span>
+                </span>
+              ) : "Choose working directory"
+            }
+          />
+        </span>
+      </DropdownMenuTrigger>
       <StyledDropdownMenuContent side="top" align="start" sideOffset={8} className="w-auto min-w-[200px] max-w-[400px]">
+        {/* Current Folder Display */}
+        {hasFolder && (
+          <>
+            <StyledDropdownMenuItem className="text-sm pointer-events-none">
+              <Icon_Folder className="text-muted-foreground" strokeWidth={1.75} />
+              <span className="flex-1 min-w-0">
+                <span className="font-medium">{folderName}</span>
+                <span className="text-muted-foreground text-xs ml-1.5">{formatPathForDisplay(workingDirectory, homeDir)}</span>
+              </span>
+              <Check />
+            </StyledDropdownMenuItem>
+            <div className="h-px bg-border my-1" />
+          </>
+        )}
         {/* Recent Directories */}
         {filteredRecent.length > 0 && (
           <>
-            {filteredRecent.map((path) => (
-              <StyledDropdownMenuItem
-                key={path}
-                onClick={() => handleSelectRecent(path)}
-                className="text-sm"
-              >
-                <span className="whitespace-nowrap">{formatPathForDisplay(path, homeDir)}</span>
-              </StyledDropdownMenuItem>
-            ))}
+            {filteredRecent.map((path) => {
+              const recentFolderName = path.split('/').pop() || 'Folder'
+              return (
+                <StyledDropdownMenuItem
+                  key={path}
+                  onClick={() => handleSelectRecent(path)}
+                  className="text-sm"
+                >
+                  <Icon_Folder className="text-muted-foreground" strokeWidth={1.75} />
+                  <span className="flex-1 min-w-0 whitespace-nowrap">
+                    <span className="font-medium">{recentFolderName}</span>
+                    <span className="text-muted-foreground text-xs ml-1.5">{formatPathForDisplay(path, homeDir)}</span>
+                  </span>
+                </StyledDropdownMenuItem>
+              )
+            })}
             <div className="h-px bg-border my-1" />
           </>
+        )}
+        {/* Reset option - only show when a folder is selected */}
+        {hasFolder && sessionFolderPath && sessionFolderPath !== workingDirectory && (
+          <StyledDropdownMenuItem onClick={() => onWorkingDirectoryChange(sessionFolderPath)}>
+            Reset
+          </StyledDropdownMenuItem>
         )}
         {/* Choose Folder option */}
         <StyledDropdownMenuItem onClick={handleChooseFolder}>

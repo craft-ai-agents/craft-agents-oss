@@ -102,6 +102,25 @@ export function createApplicationMenu(windowManager: WindowManager): void {
       ]
     },
 
+    // Debug menu (development only)
+    ...(!app.isPackaged ? [{
+      label: 'Debug',
+      submenu: [
+        {
+          label: 'Reset Onboarding Tutorial',
+          click: async () => {
+            const win = BrowserWindow.getFocusedWindow()
+            if (win && !win.isDestroyed()) {
+              await win.webContents.executeJavaScript(
+                `localStorage.removeItem('craft-tutorial-progress')`
+              )
+              win.reload()
+            }
+          }
+        }
+      ]
+    }] : []),
+
     // Help menu
     {
       label: 'Help',

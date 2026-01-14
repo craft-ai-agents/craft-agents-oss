@@ -7,14 +7,9 @@
 
 import * as React from 'react'
 import { useEffect, useState, useMemo, useCallback } from 'react'
-import {
-  AlertCircle,
-  FolderOpen,
-  Trash2,
-} from 'lucide-react'
+import { AlertCircle } from 'lucide-react'
 import { SourceAvatar } from '@/components/ui/source-avatar'
-import { HeaderMenu } from '@/components/ui/HeaderMenu'
-import { StyledDropdownMenuItem, StyledDropdownMenuSeparator } from '@/components/ui/styled-dropdown'
+import { SourceMenu } from '@/components/app-shell/SourceMenu'
 import { cn } from '@/lib/utils'
 import { routes, navigate } from '@/lib/navigate'
 import { toast } from 'sonner'
@@ -362,6 +357,11 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
     }
   }, [source, workspaceId, sourceSlug, onDelete])
 
+  // Handle opening in new window
+  const handleOpenInNewWindow = useCallback(() => {
+    window.electronAPI.openUrl(`craftagents://sources/source/${sourceSlug}?window=focused`)
+  }, [sourceSlug])
+
   // Get source name for header
   const sourceName = source?.config.name || sourceSlug
 
@@ -373,18 +373,14 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
     >
       <Info_Page.Header
         title={sourceName}
-        actions={
-          <HeaderMenu route={routes.view.sources({ sourceSlug })}>
-            <StyledDropdownMenuItem onClick={handleOpenSourceFolder}>
-              <FolderOpen className="h-3.5 w-3.5" />
-              <span className="flex-1">Show in Finder</span>
-            </StyledDropdownMenuItem>
-            <StyledDropdownMenuSeparator />
-            <StyledDropdownMenuItem onClick={handleDelete} variant="destructive">
-              <Trash2 className="h-3.5 w-3.5" />
-              <span className="flex-1">Delete</span>
-            </StyledDropdownMenuItem>
-          </HeaderMenu>
+        titleMenu={
+          <SourceMenu
+            sourceSlug={sourceSlug}
+            sourceName={sourceName}
+            onOpenInNewWindow={handleOpenInNewWindow}
+            onShowInFinder={handleOpenSourceFolder}
+            onDelete={handleDelete}
+          />
         }
       />
 

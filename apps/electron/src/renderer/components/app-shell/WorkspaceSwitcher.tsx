@@ -1,6 +1,6 @@
 import * as React from "react"
 import { useState, useEffect } from "react"
-import { Check, FolderPlus, ExternalLink } from "lucide-react"
+import { Check, FolderPlus, ExternalLink, ChevronDown } from "lucide-react"
 import { AnimatePresence } from "motion/react"
 import { useSetAtom } from "jotai"
 import { toast } from "sonner"
@@ -153,9 +153,12 @@ export function WorkspaceSwitcher({
           />
           {/* Workspace Name: Hidden when collapsed, gradient fade on overflow */}
           {!isCollapsed && (
-            <FadingText className="ml-1 font-sans min-w-0 text-sm" fadeWidth={36}>
-              {selectedWorkspace?.name || 'Select workspace'}
-            </FadingText>
+            <>
+              <FadingText className="ml-1 font-sans min-w-0 text-sm" fadeWidth={36}>
+                {selectedWorkspace?.name || 'Select workspace'}
+              </FadingText>
+              <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />
+            </>
           )}
         </button>
       </DropdownMenuTrigger>

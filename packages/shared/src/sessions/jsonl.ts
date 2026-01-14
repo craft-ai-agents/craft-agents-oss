@@ -48,6 +48,11 @@ export function readSessionJsonl(sessionFile: string): StoredSession | null {
     const header = JSON.parse(firstLine) as SessionHeader;
     const messages = lines.slice(1).map(line => JSON.parse(line) as StoredMessage);
 
+    // Migration: For sessions created before sdkCwd was added, use workingDirectory as fallback.
+    // This is correct because the old code used workingDirectory for SDK's cwd parameter.
+    const workingDir = header.workingDirectory ? expandPath(header.workingDirectory) : undefined;
+    const sdkCwd = header.sdkCwd ? expandPath(header.sdkCwd) : workingDir;
+
     return {
       id: header.id,
       workspaceRootPath: expandPath(header.workspaceRootPath),
@@ -60,9 +65,11 @@ export function readSessionJsonl(sessionFile: string): StoredSession | null {
       permissionMode: header.permissionMode,
       lastReadMessageId: header.lastReadMessageId,
       enabledSourceSlugs: header.enabledSourceSlugs,
-      workingDirectory: header.workingDirectory,
+      workingDirectory: workingDir,
+      sdkCwd,
       sharedUrl: header.sharedUrl,
       sharedId: header.sharedId,
+      backgroundImageUrl: header.backgroundImageUrl,
       messages,
       tokenUsage: header.tokenUsage,
     };
@@ -106,8 +113,10 @@ export function createSessionHeader(session: StoredSession): SessionHeader {
     lastReadMessageId: session.lastReadMessageId,
     enabledSourceSlugs: session.enabledSourceSlugs,
     workingDirectory: session.workingDirectory,
+    sdkCwd: session.sdkCwd,
     sharedUrl: session.sharedUrl,
     sharedId: session.sharedId,
+    backgroundImageUrl: session.backgroundImageUrl,
     // Pre-computed fields
     messageCount: session.messages.length,
     lastMessageRole: extractLastMessageRole(session.messages),

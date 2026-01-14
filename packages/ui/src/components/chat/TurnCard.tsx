@@ -1119,7 +1119,7 @@ function TodoStatusIcon({ status }: { status: TodoStatus }) {
         </div>
       )
     case 'completed':
-      return <CircleCheck className={cn(SIZE_CONFIG.iconSize, "shrink-0 text-accent fill-current")} />
+      return <CircleCheck className={cn(SIZE_CONFIG.iconSize, "shrink-0 text-accent")} />
     case 'interrupted':
       return <Ban className={cn(SIZE_CONFIG.iconSize, "shrink-0 text-muted-foreground/50")} />
   }

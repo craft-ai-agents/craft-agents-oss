@@ -21,6 +21,7 @@ import type {
   LoadedSource,
   NewChatActionParams,
 } from '../../shared/types'
+import type { TodoState as TodoStateConfig } from '@/config/todo-states'
 import type { SessionOptions, SessionOptionUpdates } from '../hooks/useSessionOptions'
 import { defaultSessionOptions } from '../hooks/useSessionOptions'
 import { sessionAtomFamily } from '../atoms/sessions'
@@ -41,6 +42,8 @@ export interface AppShellContextType {
   enabledSources?: LoadedSource[]
   /** Enabled permission modes for Shift+Tab cycling */
   enabledModes?: PermissionMode[]
+  /** Dynamic todo states from workspace config (provided by AppShell, defaults to empty) */
+  todoStates?: TodoStateConfig[]
 
   // Unified session options (replaces ultrathinkSessions and sessionModes)
   /** All session-scoped options in one map. Use useSessionOptionsFor() hook for easy access. */

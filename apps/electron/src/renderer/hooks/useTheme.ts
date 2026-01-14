@@ -46,8 +46,8 @@ interface UseThemeResult {
  * ```
  */
 export function useTheme({ appTheme, workspaceTheme }: UseThemeOptions = {}): UseThemeResult {
-  // Get resolved mode and color theme from ThemeContext
-  const { resolvedMode, colorTheme } = useThemeContext()
+  // Get resolved mode, system preference, and color theme from ThemeContext
+  const { resolvedMode, systemPreference, colorTheme } = useThemeContext()
   const isDark = resolvedMode === 'dark'
 
   // Load preset theme when colorTheme changes
@@ -110,10 +110,26 @@ export function useTheme({ appTheme, workspaceTheme }: UseThemeOptions = {}): Us
       document.head.appendChild(styleEl)
     }
 
-    // When using default theme, clear all custom CSS and return
+    // Always set theme-override for 50% opacity background (vibrancy effect)
+    document.documentElement.dataset.themeOverride = 'true'
+
+    // Handle themeMismatch - set solid background when:
+    // 1. Theme doesn't support current mode (e.g., dark-only Dracula in light mode), OR
+    // 2. Resolved mode differs from system preference (vibrancy mismatch)
+    const supportedModes = presetTheme?.supportedModes
+    const currentMode = isDark ? 'dark' : 'light'
+    const themeModeUnsupported = supportedModes && supportedModes.length > 0 && !supportedModes.includes(currentMode)
+    const vibrancyMismatch = resolvedMode !== systemPreference
+
+    if (themeModeUnsupported || vibrancyMismatch) {
+      document.documentElement.dataset.themeMismatch = 'true'
+    } else {
+      delete document.documentElement.dataset.themeMismatch
+    }
+
+    // When using default theme, clear custom CSS but keep theme-override and themeMismatch
     if (!colorTheme || colorTheme === 'default') {
       styleEl.textContent = ''
-      delete document.documentElement.dataset.themeMismatch
       return
     }
 
@@ -127,16 +143,7 @@ export function useTheme({ appTheme, workspaceTheme }: UseThemeOptions = {}): Us
       styleEl.textContent = ''
     }
 
-    // Handle theme-mode mismatch (e.g., dark-only theme in light mode)
-    // When a theme doesn't support the current mode, add solid background
-    const supportedModes = presetTheme?.supportedModes
-    const currentMode = isDark ? 'dark' : 'light'
-    if (supportedModes && supportedModes.length > 0 && !supportedModes.includes(currentMode)) {
-      document.documentElement.dataset.themeMismatch = 'true'
-    } else {
-      delete document.documentElement.dataset.themeMismatch
-    }
-  }, [resolvedTheme, isDark, presetTheme, appTheme, workspaceTheme, colorTheme])
+  }, [resolvedTheme, isDark, presetTheme, appTheme, workspaceTheme, colorTheme, resolvedMode, systemPreference])
 
   return {
     theme: resolvedTheme,

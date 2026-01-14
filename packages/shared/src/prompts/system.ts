@@ -44,8 +44,14 @@ export function readProjectContextFile(directory: string): { filename: string; c
  * Get the working directory context string for injection into user messages.
  * Includes the working directory path and any CLAUDE.md content.
  * Returns empty string if no working directory is set.
+ *
+ * @param workingDirectory - The effective working directory path
+ * @param isSessionRoot - If true, this is the session folder (not a user-specified project)
  */
-export function getWorkingDirectoryContext(workingDirectory?: string): string {
+export function getWorkingDirectoryContext(
+  workingDirectory?: string,
+  isSessionRoot?: boolean
+): string {
   if (!workingDirectory) {
     return '';
   }
@@ -53,10 +59,21 @@ export function getWorkingDirectoryContext(workingDirectory?: string): string {
   const parts: string[] = [];
   parts.push(`<working_directory>${workingDirectory}</working_directory>`);
 
-  // Try to read project context file
-  const contextFile = readProjectContextFile(workingDirectory);
-  if (contextFile) {
-    parts.push(`<project_context file="${contextFile.filename}">\n${contextFile.content}\n</project_context>`);
+  if (isSessionRoot) {
+    // Add context explaining this is the session folder, not a code project
+    parts.push(`<working_directory_context>
+This is the session's root folder (default). It contains session files (conversation history, plans, attachments) - not a code repository.
+You can access any files the user attaches here. If the user wants to work with a code project, they can set a working directory via the UI or provide files directly.
+</working_directory_context>`);
+  } else {
+    // Note that this is a user-selected working directory
+    parts.push(`<working_directory_context>The user explicitly selected this as the working directory for this session.</working_directory_context>`);
+
+    // Try to read project context file (CLAUDE.md) for non-session directories
+    const contextFile = readProjectContextFile(workingDirectory);
+    if (contextFile) {
+      parts.push(`<project_context file="${contextFile.filename}">\n${contextFile.content}\n</project_context>`);
+    }
   }
 
   return parts.join('\n\n');
@@ -205,6 +222,7 @@ Each source has:
 | Permissions | \`${DOC_REFS.permissions}\` | BEFORE modifying Explore mode rules |
 | Skills | \`${DOC_REFS.skills}\` | BEFORE creating custom skills |
 | Themes | \`${DOC_REFS.themes}\` | BEFORE customizing colors |
+| Statuses | \`${DOC_REFS.statuses}\` | When user mentions statuses, workflow states, or session organization |
 
 ### Source Setup - MANDATORY Reading Order
 
@@ -270,6 +288,17 @@ When a user wants to customize Explore mode permissions or troubleshoot blocked 
 - **Auto-scoping:** Source permissions.json patterns are auto-scoped to that source (write simple patterns like \`list\`, not full \`mcp__source__list\`)
 - Rules are additive - they extend defaults, cannot restrict further
 
+### Statuses - Proactive Reading
+
+**When the user mentions statuses**, read \`${DOC_REFS.statuses}\` to understand their intent. Users may want to:
+- **Add custom statuses** - New workflow states like "Blocked", "Waiting", "Research"
+- **Modify existing statuses** - Change colors, labels, icons, or order
+- **Understand the system** - How statuses work, categories (open/closed), fixed vs custom
+
+Keywords that trigger reading: "status", "statuses", "workflow", "inbox", "archive", "session state", "todo/done/cancelled"
+
+The statuses system controls how sessions are organized in the sidebar (open = inbox, closed = archive). Always read the docs before making changes.
+
 ## Interaction Guidelines
 
 1. **Be Concise**: Terminal space is limited. Provide focused, actionable responses.
@@ -308,6 +337,7 @@ ${getPermissionModesDocumentation()}
 - **Permission denied in Explore mode:** Read \`${DOC_REFS.permissions}\` to check/add allowed patterns
 - **Skill not loading:** Read \`${DOC_REFS.skills}\` for validation requirements, run \`skill_validate\`
 - **Theme not applying:** Read \`${DOC_REFS.themes}\` for schema and cascading rules
+- **Status not showing or session in wrong list:** Read \`${DOC_REFS.statuses}\` for config.json schema and category system
 
 ## Tool Metadata
 

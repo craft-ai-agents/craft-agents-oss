@@ -20,6 +20,11 @@ export interface SlashCommand {
   color?: string
 }
 
+export interface CommandGroup {
+  id: string
+  commands: SlashCommand[]
+}
+
 // ============================================================================
 // Permission Mode Icon Component
 // ============================================================================
@@ -65,15 +70,22 @@ const permissionModeCommands: SlashCommand[] = PERMISSION_MODE_ORDER.map(mode =>
   }
 })
 
+const ultrathinkCommand: SlashCommand = {
+  id: 'ultrathink',
+  label: 'Ultrathink',
+  description: 'Extended reasoning for complex problems',
+  icon: <Brain className={MENU_ICON_SIZE} />,
+  color: '#d946ef', // fuchsia-500
+}
+
 export const DEFAULT_SLASH_COMMANDS: SlashCommand[] = [
   ...permissionModeCommands,
-  {
-    id: 'ultrathink',
-    label: 'Ultrathink',
-    description: 'Extended reasoning for complex problems',
-    icon: <Brain className={MENU_ICON_SIZE} />,
-    color: '#d946ef', // fuchsia-500
-  },
+  ultrathinkCommand,
+]
+
+export const DEFAULT_SLASH_COMMAND_GROUPS: CommandGroup[] = [
+  { id: 'modes', commands: permissionModeCommands },
+  { id: 'features', commands: [ultrathinkCommand] },
 ]
 
 // ============================================================================
@@ -122,7 +134,10 @@ function CommandItemContent({ command, isActive }: { command: SlashCommand; isAc
 // ============================================================================
 
 export interface SlashCommandMenuProps {
-  commands: SlashCommand[]
+  /** Flat list of commands (use this OR commandGroups, not both) */
+  commands?: SlashCommand[]
+  /** Grouped commands with separators between groups */
+  commandGroups?: CommandGroup[]
   activeCommands?: SlashCommandId[]
   onSelect: (commandId: SlashCommandId) => void
   showFilter?: boolean
@@ -132,6 +147,7 @@ export interface SlashCommandMenuProps {
 
 export function SlashCommandMenu({
   commands,
+  commandGroups,
   activeCommands = [],
   onSelect,
   showFilter = false,
@@ -140,10 +156,32 @@ export function SlashCommandMenu({
 }: SlashCommandMenuProps) {
   const [filter, setFilter] = React.useState('')
   const inputRef = React.useRef<HTMLInputElement>(null)
-  const filteredCommands = filterCommands(commands, filter)
+
+  // If groups provided, filter within each group; otherwise use flat commands
+  const filteredGroups = React.useMemo(() => {
+    if (commandGroups) {
+      return commandGroups.map(group => ({
+        ...group,
+        commands: filterCommands(group.commands, filter),
+      })).filter(group => group.commands.length > 0)
+    }
+    return null
+  }, [commandGroups, filter])
+
+  const filteredCommands = React.useMemo(() => {
+    if (commands && !commandGroups) {
+      return filterCommands(commands, filter)
+    }
+    return null
+  }, [commands, commandGroups, filter])
+
+  // Get all commands for defaultValue calculation
+  const allFilteredCommands = filteredGroups
+    ? filteredGroups.flatMap(g => g.commands)
+    : (filteredCommands ?? [])
 
   // Default to the first active command, or first command if none active
-  const defaultValue = activeCommands[0] ?? filteredCommands[0]?.id
+  const defaultValue = activeCommands[0] ?? allFilteredCommands[0]?.id
 
   React.useEffect(() => {
     if (showFilter && inputRef.current) {
@@ -151,7 +189,27 @@ export function SlashCommandMenu({
     }
   }, [showFilter])
 
-  if (filteredCommands.length === 0 && !showFilter) return null
+  if (allFilteredCommands.length === 0 && !showFilter) return null
+
+  // Render a single command item
+  const renderCommandItem = (cmd: SlashCommand) => {
+    const isActive = activeCommands.includes(cmd.id)
+    return (
+      <CommandPrimitive.Item
+        key={cmd.id}
+        value={cmd.id}
+        onSelect={() => onSelect(cmd.id)}
+        data-tutorial={`permission-mode-${cmd.id}`}
+        className={cn(
+          MENU_ITEM_STYLE,
+          'outline-none',
+          'data-[selected=true]:bg-foreground/5'
+        )}
+      >
+        <CommandItemContent command={cmd} isActive={isActive} />
+      </CommandPrimitive.Item>
+    )
+  }
 
   return (
     <CommandPrimitive
@@ -171,30 +229,24 @@ export function SlashCommandMenu({
         </div>
       )}
       <CommandPrimitive.List className={MENU_LIST_STYLE}>
-        {filteredCommands.length === 0 ? (
+        {allFilteredCommands.length === 0 ? (
           <CommandPrimitive.Empty className="py-4 text-center text-sm text-muted-foreground">
             No commands found
           </CommandPrimitive.Empty>
+        ) : filteredGroups ? (
+          // Group-based rendering with smart separators
+          filteredGroups.map((group, groupIndex) => (
+            <React.Fragment key={group.id}>
+              {group.commands.map(renderCommandItem)}
+              {/* Separator: only show if there's another group after this one */}
+              {groupIndex < filteredGroups.length - 1 && (
+                <div className="h-px bg-border/50 my-1 mx-2" />
+              )}
+            </React.Fragment>
+          ))
         ) : (
-          filteredCommands.map((cmd) => {
-            const isActive = activeCommands.includes(cmd.id)
-            return (
-              <CommandPrimitive.Item
-                key={cmd.id}
-                value={cmd.id}
-                onSelect={() => onSelect(cmd.id)}
-                data-tutorial={`permission-mode-${cmd.id}`}
-                className={cn(
-                  MENU_ITEM_STYLE,
-                  'outline-none',
-                  // Hover state uses accent colors
-                  'data-[selected=true]:bg-foreground/5'
-                )}
-              >
-                <CommandItemContent command={cmd} isActive={isActive} />
-              </CommandPrimitive.Item>
-            )
-          })
+          // Flat list rendering
+          filteredCommands?.map(renderCommandItem)
         )}
       </CommandPrimitive.List>
     </CommandPrimitive>

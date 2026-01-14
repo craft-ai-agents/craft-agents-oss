@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { cn } from '@/lib/utils'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { SlashCommandMenu, DEFAULT_SLASH_COMMANDS, type SlashCommandId } from '@/components/ui/slash-command-menu'
+import { SlashCommandMenu, DEFAULT_SLASH_COMMAND_GROUPS, type SlashCommandId } from '@/components/ui/slash-command-menu'
 import { ChevronDown, X } from 'lucide-react'
 import { PERMISSION_MODE_CONFIG, hexToRgb, type PermissionMode } from '@craft-agent/shared/agent/modes'
 import { ActiveTasksBar, type BackgroundTask } from './ActiveTasksBar'
@@ -66,12 +66,24 @@ export function ActiveOptionBadges({
 
   return (
     <div className={cn("flex items-start gap-2 mb-2 px-px pt-px pb-0.5 overflow-x-auto overflow-y-hidden", className)}>
+      {/* Permission Mode Badge */}
+      {permissionMode && (
+        <div className="shrink-0">
+          <PermissionModeDropdown
+            permissionMode={permissionMode}
+            ultrathinkEnabled={ultrathinkEnabled}
+            onPermissionModeChange={onPermissionModeChange}
+            onUltrathinkChange={onUltrathinkChange}
+          />
+        </div>
+      )}
+
       {/* Ultrathink Badge */}
       {ultrathinkEnabled && (
         <button
           type="button"
           onClick={() => onUltrathinkChange?.(false)}
-          className="h-[30px] pl-2.5 pr-2 text-xs font-medium rounded-[8px] flex items-center gap-1.5 shrink-0 transition-all bg-gradient-to-r from-blue-600/10 via-purple-600/10 to-pink-600/10 hover:from-blue-600/15 hover:via-purple-600/15 hover:to-pink-600/15 shadow-tinted"
+          className="h-[30px] pl-2.5 pr-2 text-xs font-medium rounded-[8px] flex items-center gap-1.5 shrink-0 transition-all bg-gradient-to-r from-blue-600/10 via-purple-600/10 to-pink-600/10 hover:from-blue-600/15 hover:via-purple-600/15 hover:to-pink-600/15 shadow-tinted outline-none"
           style={{ '--shadow-color': '147, 51, 234' } as React.CSSProperties}
         >
           <span className="bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
@@ -79,16 +91,6 @@ export function ActiveOptionBadges({
           </span>
           <X className="h-3 w-3 text-purple-500 opacity-60 hover:opacity-100 translate-y-px" />
         </button>
-      )}
-
-      {/* Permission Mode Badge */}
-      {permissionMode && (
-        <div className="shrink-0">
-          <PermissionModeDropdown
-            permissionMode={permissionMode}
-            onPermissionModeChange={onPermissionModeChange}
-          />
-        </div>
       )}
 
       {/* Background Tasks */}
@@ -99,10 +101,12 @@ export function ActiveOptionBadges({
 
 interface PermissionModeDropdownProps {
   permissionMode: PermissionMode
+  ultrathinkEnabled?: boolean
   onPermissionModeChange?: (mode: PermissionMode) => void
+  onUltrathinkChange?: (enabled: boolean) => void
 }
 
-function PermissionModeDropdown({ permissionMode, onPermissionModeChange }: PermissionModeDropdownProps) {
+function PermissionModeDropdown({ permissionMode, ultrathinkEnabled = false, onPermissionModeChange, onUltrathinkChange }: PermissionModeDropdownProps) {
   const [open, setOpen] = React.useState(false)
   // Optimistic local state - updates immediately, syncs with prop
   const [optimisticMode, setOptimisticMode] = React.useState(permissionMode)
@@ -112,21 +116,23 @@ function PermissionModeDropdown({ permissionMode, onPermissionModeChange }: Perm
     setOptimisticMode(permissionMode)
   }, [permissionMode])
 
-  // Filter slash commands to only permission modes
-  const permissionModeCommands = React.useMemo(() =>
-    DEFAULT_SLASH_COMMANDS.filter(cmd => ['safe', 'ask', 'allow-all'].includes(cmd.id)),
-    []
-  )
+  // Build active commands including ultrathink state
+  const activeCommands = React.useMemo((): SlashCommandId[] => {
+    const active: SlashCommandId[] = [optimisticMode as SlashCommandId]
+    if (ultrathinkEnabled) active.push('ultrathink')
+    return active
+  }, [optimisticMode, ultrathinkEnabled])
 
-  // Handle permission mode selection from dropdown
+  // Handle command selection from dropdown
   const handleSelect = React.useCallback((commandId: SlashCommandId) => {
-    // Optimistically update local state for instant feedback
     if (commandId === 'safe' || commandId === 'ask' || commandId === 'allow-all') {
       setOptimisticMode(commandId)
       onPermissionModeChange?.(commandId)
+    } else if (commandId === 'ultrathink') {
+      onUltrathinkChange?.(!ultrathinkEnabled)
     }
     setOpen(false)
-  }, [onPermissionModeChange])
+  }, [onPermissionModeChange, onUltrathinkChange, ultrathinkEnabled])
 
   // Get config for current mode (use optimistic state for instant UI update)
   const config = PERMISSION_MODE_CONFIG[optimisticMode]
@@ -142,7 +148,7 @@ function PermissionModeDropdown({ permissionMode, onPermissionModeChange }: Perm
           type="button"
           data-tutorial="permission-mode-dropdown"
           className={cn(
-            "h-[30px] pl-2.5 pr-2 text-xs font-medium rounded-[8px] flex items-center gap-1.5 shadow-tinted",
+            "h-[30px] pl-2.5 pr-2 text-xs font-medium rounded-[8px] flex items-center gap-1.5 shadow-tinted outline-none",
             useAccentVar && "bg-accent/5 text-accent"
           )}
           style={useAccentVar ? {
@@ -161,16 +167,19 @@ function PermissionModeDropdown({ permissionMode, onPermissionModeChange }: Perm
       </PopoverTrigger>
       <PopoverContent
         className="w-auto p-0 bg-background/80 backdrop-blur-xl backdrop-saturate-150 border-border/50"
+        side="top"
         align="start"
         sideOffset={4}
         style={{ borderRadius: '8px', boxShadow: '0 8px 24px rgba(0, 0, 0, 0.25)' }}
       >
         <SlashCommandMenu
-          commands={permissionModeCommands}
-          activeCommands={[optimisticMode as SlashCommandId]}
+          commandGroups={DEFAULT_SLASH_COMMAND_GROUPS}
+          activeCommands={activeCommands}
           onSelect={handleSelect}
+          showFilter
         />
       </PopoverContent>
     </Popover>
   )
 }
+

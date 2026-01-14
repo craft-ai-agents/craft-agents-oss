@@ -66,7 +66,7 @@ export const StyledDropdownMenuItem = React.forwardRef<
   <DropdownMenuItem
     ref={ref}
     className={cn(
-      "gap-3 pr-4 rounded-[4px] hover:bg-foreground/[0.03] focus:bg-foreground/[0.03]",
+      "gap-2 pr-4 rounded-[4px] hover:bg-foreground/[0.03] focus:bg-foreground/[0.03]",
       "[&>svg]:h-3.5 [&>svg]:w-3.5 [&>svg]:shrink-0",
       variant === "destructive" && "text-destructive focus:text-destructive hover:text-destructive [&_svg]:!text-destructive",
       className

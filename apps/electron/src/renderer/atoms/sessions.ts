@@ -38,6 +38,8 @@ export interface SessionMeta {
   todoState?: string
   /** Role/type of the last message (for badge display without loading messages) */
   lastMessageRole?: 'user' | 'assistant' | 'plan' | 'tool' | 'error'
+  /** Background image URL (from Pexels) */
+  backgroundImageUrl?: string
 }
 
 /**
@@ -76,6 +78,7 @@ export function extractSessionMeta(session: Session): SessionMeta {
     lastFinalMessageId,
     todoState: session.todoState,
     lastMessageRole: session.lastMessageRole,
+    backgroundImageUrl: session.backgroundImageUrl,
   }
 }
 

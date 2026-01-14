@@ -171,16 +171,23 @@
   --md-counters: var(--foreground-50);
 }
 
-/* Theme Override - Solid background when:
-   1. App theme differs from system (data-theme-override)
-   2. Theme doesn't support current mode, e.g. dark-only theme in light mode (data-theme-mismatch)
-   Prevents color bleed through macOS vibrancy */
-html[data-theme-override]::before,
+/* Theme Override - Semi-transparent background to allow vibrancy through */
+html[data-theme-override]::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: color-mix(in srgb, var(--background) 50%, transparent);
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* Theme Mismatch - Solid background when theme doesn't support current mode
+   e.g. dark-only theme in light mode. Uses foreground-10 for subtle contrast. */
 html[data-theme-mismatch]::before {
   content: '';
   position: fixed;
   inset: 0;
-  background: var(--background);
+  background: var(--foreground-10);
   z-index: -1;
   pointer-events: none;
 }
@@ -327,6 +334,13 @@ html[data-font="inter"] {
      - Border layer (1px ring) uses foreground color with --shadow-border-opacity
      - Blur/spread layers use black with --shadow-blur-opacity
      - Dark mode has stronger values for visibility */
+  .shadow-thin {
+    box-shadow:
+      rgba(0, 0, 0, 0) 0px 0px 0px 0px,
+      rgba(0, 0, 0, 0) 0px 0px 0px 0px,
+      rgba(var(--foreground-rgb), 0.06) 0px 0px 0px 1px;
+  }
+
   .shadow-minimal {
     box-shadow:
       rgba(0, 0, 0, 0) 0px 0px 0px 0px,

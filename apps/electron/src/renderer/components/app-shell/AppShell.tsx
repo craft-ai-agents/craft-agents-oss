@@ -4,7 +4,6 @@ import { useAtomValue } from "jotai"
 import { motion, AnimatePresence } from "motion/react"
 import {
   CheckCircle2,
-  Inbox,
   Settings,
   ChevronRight,
   ChevronDown,
@@ -20,17 +19,12 @@ import {
   Trash2,
   DatabaseZap,
   Zap,
+  Inbox,
 } from "lucide-react"
 import { McpIcon } from "../icons/McpIcon"
 import { PanelRightRounded } from "../icons/PanelRightRounded"
 import { PanelLeftRounded } from "../icons/PanelLeftRounded"
-import {
-  CircleDashed,
-  CircleProgress,
-  CircleEye,
-  CircleCheckFilled,
-  CircleXFilled,
-} from "../icons/TodoStateIcons"
+// TodoStateIcons no longer used - icons come from dynamic todoStates
 import { SourceAvatar } from "@/components/ui/source-avatar"
 import { AppMenu } from "../AppMenu"
 import { SquarePenRounded } from "../icons/SquarePenRounded"
@@ -71,7 +65,7 @@ import type { Session, Workspace, FileAttachment, PermissionRequest, TodoState, 
 import { sessionMetaMapAtom, type SessionMeta } from "@/atoms/sessions"
 import { sourcesAtom } from "@/atoms/sources"
 import { skillsAtom } from "@/atoms/skills"
-import { type TodoStateId, getStateColor, statusConfigsToTodoStates } from "@/config/todo-states"
+import { type TodoStateId, statusConfigsToTodoStates } from "@/config/todo-states"
 import { useStatuses } from "@/hooks/useStatuses"
 import * as storage from "@/lib/local-storage"
 import { toast } from "sonner"
@@ -217,11 +211,19 @@ export function AppShell({
   const [searchActive, setSearchActive] = React.useState(false)
   const [searchQuery, setSearchQuery] = React.useState('')
 
-  // Reset search when navigation state changes
+  // Reset search only when navigator or filter changes (not when selecting sessions)
+  const navFilterKey = React.useMemo(() => {
+    if (isChatsNavigation(navState)) {
+      const filter = navState.filter
+      return `chats:${filter.kind}:${filter.kind === 'state' ? filter.stateId : ''}`
+    }
+    return navState.navigator
+  }, [navState])
+
   React.useEffect(() => {
     setSearchActive(false)
     setSearchQuery('')
-  }, [navState])
+  }, [navFilterKey])
 
   // Auto-hide right sidebar when navigating away from chat sessions
   React.useEffect(() => {
@@ -567,21 +569,21 @@ export function AppShell({
   const isMetaDone = (s: SessionMeta) => s.todoState === 'done' || s.todoState === 'cancelled'
   const flaggedCount = workspaceSessionMetas.filter(s => s.isFlagged).length
 
-  // Count sessions by individual todo state
+  // Count sessions by individual todo state (dynamic based on todoStates)
   const todoStateCounts = useMemo(() => {
-    const counts: Record<TodoStateId, number> = {
-      'todo': 0,
-      'in-progress': 0,
-      'needs-review': 0,
-      'done': 0,
-      'cancelled': 0,
+    const counts: Record<TodoStateId, number> = {}
+    // Initialize counts for all dynamic statuses
+    for (const state of todoStates) {
+      counts[state.id] = 0
     }
+    // Count sessions
     for (const s of workspaceSessionMetas) {
       const state = (s.todoState || 'todo') as TodoStateId
-      counts[state]++
+      // Increment count (initialize to 0 if status not in todoStates yet)
+      counts[state] = (counts[state] || 0) + 1
     }
     return counts
-  }, [workspaceSessionMetas])
+  }, [workspaceSessionMetas, todoStates])
 
   // Filter session metadata based on sidebar mode and chat filter
   const filteredSessionMetas = useMemo(() => {
@@ -633,16 +635,23 @@ export function AppShell({
     return onDeleteSession(sessionId, skipConfirmation)
   }, [session.selected, setSession, onDeleteSession])
 
-  // Right sidebar OPEN button (only shown when sidebar is closed, in chats mode with session selected)
+  // Right sidebar OPEN button (fades out when sidebar is open, hidden in focused mode or non-chat views)
   const rightSidebarOpenButton = React.useMemo(() => {
-    if (isFocusedMode || !isChatsNavigation(navState) || !navState.details || isRightSidebarVisible) return null
+    if (isFocusedMode || !isChatsNavigation(navState) || !navState.details) return null
 
     return (
-      <HeaderIconButton
-        icon={<PanelRightRounded className="h-5 w-6" />}
-        onClick={() => setIsRightSidebarVisible(true)}
-        tooltip="Open sidebar"
-      />
+      <motion.div
+        initial={false}
+        animate={{ opacity: isRightSidebarVisible ? 0 : 1 }}
+        transition={{ duration: 0.15 }}
+        style={{ pointerEvents: isRightSidebarVisible ? 'none' : 'auto' }}
+      >
+        <HeaderIconButton
+          icon={<PanelRightRounded className="h-5 w-6" />}
+          onClick={() => setIsRightSidebarVisible(true)}
+          tooltip="Open sidebar"
+        />
+      </motion.div>
     )
   }, [isFocusedMode, navState, isRightSidebarVisible])
 
@@ -660,16 +669,17 @@ export function AppShell({
     )
   }, [isFocusedMode, isRightSidebarVisible])
 
-  // Extend context value with local overrides (textareaRef, wrapped onDeleteSession, sources, enabledModes, rightSidebarOpenButton)
+  // Extend context value with local overrides (textareaRef, wrapped onDeleteSession, sources, enabledModes, rightSidebarOpenButton, todoStates)
   const appShellContextValue = React.useMemo<AppShellContextType>(() => ({
     ...contextValue,
     onDeleteSession: handleDeleteSession,
     textareaRef: chatInputRef,
     enabledSources: sources,
     enabledModes,
+    todoStates,
     onSessionSourcesChange: handleSessionSourcesChange,
     rightSidebarButton: rightSidebarOpenButton,
-  }), [contextValue, handleDeleteSession, sources, enabledModes, handleSessionSourcesChange, rightSidebarOpenButton])
+  }), [contextValue, handleDeleteSession, sources, enabledModes, todoStates, handleSessionSourcesChange, rightSidebarOpenButton])
 
   // Persist expanded folders to localStorage
   React.useEffect(() => {
@@ -810,12 +820,10 @@ export function AppShell({
     result.push({ id: 'nav:allChats', type: 'nav', action: handleAllChatsClick })
     result.push({ id: 'nav:flagged', type: 'nav', action: handleFlaggedClick })
 
-    // 2. Status nav items (todo states)
-    result.push({ id: 'nav:state:todo', type: 'nav', action: () => handleTodoStateClick('todo') })
-    result.push({ id: 'nav:state:in-progress', type: 'nav', action: () => handleTodoStateClick('in-progress') })
-    result.push({ id: 'nav:state:needs-review', type: 'nav', action: () => handleTodoStateClick('needs-review') })
-    result.push({ id: 'nav:state:done', type: 'nav', action: () => handleTodoStateClick('done') })
-    result.push({ id: 'nav:state:cancelled', type: 'nav', action: () => handleTodoStateClick('cancelled') })
+    // 2. Status nav items (dynamic from todoStates)
+    for (const state of todoStates) {
+      result.push({ id: `nav:state:${state.id}`, type: 'nav', action: () => handleTodoStateClick(state.id) })
+    }
 
     // 2.5. Sources nav items (parent and categories)
     result.push({ id: 'nav:sources', type: 'nav', action: handleSourcesClick })
@@ -827,7 +835,7 @@ export function AppShell({
     result.push({ id: 'nav:settings', type: 'nav', action: () => handleSettingsClick('app') })
 
     return result
-  }, [handleAllChatsClick, handleFlaggedClick, handleTodoStateClick, handleSourcesClick, handleSourceCategoryClick, handleSettingsClick])
+  }, [handleAllChatsClick, handleFlaggedClick, handleTodoStateClick, todoStates, handleSourcesClick, handleSourceCategoryClick, handleSettingsClick])
 
   // Toggle folder expanded state
   const handleToggleFolder = React.useCallback((path: string) => {
@@ -1059,51 +1067,16 @@ export function AppShell({
                           variant: chatFilter?.kind === 'flagged' ? "default" : "ghost",
                           onClick: handleFlaggedClick,
                         },
-                        {
-                          id: "nav:state:todo",
-                          title: "Todo",
-                          label: String(todoStateCounts['todo']),
-                          icon: <CircleDashed className="h-3.5 w-3.5" />,
-                          iconColor: "text-muted-foreground",
-                          variant: chatFilter?.kind === 'state' && chatFilter.stateId === 'todo' ? "default" : "ghost",
-                          onClick: () => handleTodoStateClick('todo'),
-                        },
-                        {
-                          id: "nav:state:in-progress",
-                          title: "In Progress",
-                          label: String(todoStateCounts['in-progress']),
-                          icon: <CircleProgress className="h-3.5 w-3.5" />,
-                          iconColor: getStateColor('in-progress', todoStates),
-                          variant: chatFilter?.kind === 'state' && chatFilter.stateId === 'in-progress' ? "default" : "ghost",
-                          onClick: () => handleTodoStateClick('in-progress'),
-                        },
-                        {
-                          id: "nav:state:needs-review",
-                          title: "Needs Review",
-                          label: String(todoStateCounts['needs-review']),
-                          icon: <CircleEye className="h-3.5 w-3.5" />,
-                          iconColor: getStateColor('needs-review', todoStates),
-                          variant: chatFilter?.kind === 'state' && chatFilter.stateId === 'needs-review' ? "default" : "ghost",
-                          onClick: () => handleTodoStateClick('needs-review'),
-                        },
-                        {
-                          id: "nav:state:done",
-                          title: "Done",
-                          label: String(todoStateCounts['done']),
-                          icon: <CircleCheckFilled className="h-3.5 w-3.5" />,
-                          iconColor: "text-accent",
-                          variant: chatFilter?.kind === 'state' && chatFilter.stateId === 'done' ? "default" : "ghost",
-                          onClick: () => handleTodoStateClick('done'),
-                        },
-                        {
-                          id: "nav:state:cancelled",
-                          title: "Cancelled",
-                          label: String(todoStateCounts['cancelled']),
-                          icon: <CircleXFilled className="h-3.5 w-3.5" />,
-                          iconColor: "text-muted-foreground/60",
-                          variant: chatFilter?.kind === 'state' && chatFilter.stateId === 'cancelled' ? "default" : "ghost",
-                          onClick: () => handleTodoStateClick('cancelled'),
-                        },
+                        // Dynamic status items from todoStates
+                        ...todoStates.map(state => ({
+                          id: `nav:state:${state.id}`,
+                          title: state.label,
+                          label: String(todoStateCounts[state.id] || 0),
+                          icon: state.icon,
+                          iconColor: state.color,
+                          variant: (chatFilter?.kind === 'state' && chatFilter.stateId === state.id ? "default" : "ghost") as "default" | "ghost",
+                          onClick: () => handleTodoStateClick(state.id),
+                        })),
                       ],
                     },
                     {
@@ -1255,81 +1228,30 @@ export function AppShell({
                             </button>
                           )}
                         </div>
-                        <StyledDropdownMenuItem
-                          onClick={(e) => {
-                            e.preventDefault()
-                            setListFilter(prev => {
-                              const next = new Set(prev)
-                              if (next.has('todo')) next.delete('todo')
-                              else next.add('todo')
-                              return next
-                            })
-                          }}
-                        >
-                          <CircleDashed className="h-3.5 w-3.5 text-muted-foreground" />
-                          <span className="flex-1">Todo</span>
-                          <span className="w-3.5 ml-4">{listFilter.has('todo') && <Check className="h-3.5 w-3.5 text-foreground" />}</span>
-                        </StyledDropdownMenuItem>
-                        <StyledDropdownMenuItem
-                          onClick={(e) => {
-                            e.preventDefault()
-                            setListFilter(prev => {
-                              const next = new Set(prev)
-                              if (next.has('in-progress')) next.delete('in-progress')
-                              else next.add('in-progress')
-                              return next
-                            })
-                          }}
-                        >
-                          <CircleProgress className="h-3.5 w-3.5" style={isHexColor(getStateColor('in-progress', todoStates)) ? { color: getStateColor('in-progress', todoStates) } : undefined} />
-                          <span className="flex-1">In Progress</span>
-                          <span className="w-3.5 ml-4">{listFilter.has('in-progress') && <Check className="h-3.5 w-3.5 text-foreground" />}</span>
-                        </StyledDropdownMenuItem>
-                        <StyledDropdownMenuItem
-                          onClick={(e) => {
-                            e.preventDefault()
-                            setListFilter(prev => {
-                              const next = new Set(prev)
-                              if (next.has('needs-review')) next.delete('needs-review')
-                              else next.add('needs-review')
-                              return next
-                            })
-                          }}
-                        >
-                          <CircleEye className="h-3.5 w-3.5" style={isHexColor(getStateColor('needs-review', todoStates)) ? { color: getStateColor('needs-review', todoStates) } : undefined} />
-                          <span className="flex-1">Needs Review</span>
-                          <span className="w-3.5 ml-4">{listFilter.has('needs-review') && <Check className="h-3.5 w-3.5 text-foreground" />}</span>
-                        </StyledDropdownMenuItem>
-                        <StyledDropdownMenuItem
-                          onClick={(e) => {
-                            e.preventDefault()
-                            setListFilter(prev => {
-                              const next = new Set(prev)
-                              if (next.has('done')) next.delete('done')
-                              else next.add('done')
-                              return next
-                            })
-                          }}
-                        >
-                          <CircleCheckFilled className="h-3.5 w-3.5 text-accent" />
-                          <span className="flex-1">Done</span>
-                          <span className="w-3.5 ml-4">{listFilter.has('done') && <Check className="h-3.5 w-3.5 text-foreground" />}</span>
-                        </StyledDropdownMenuItem>
-                        <StyledDropdownMenuItem
-                          onClick={(e) => {
-                            e.preventDefault()
-                            setListFilter(prev => {
-                              const next = new Set(prev)
-                              if (next.has('cancelled')) next.delete('cancelled')
-                              else next.add('cancelled')
-                              return next
-                            })
-                          }}
-                        >
-                          <CircleXFilled className="h-3.5 w-3.5 text-muted-foreground/60" />
-                          <span className="flex-1">Cancelled</span>
-                          <span className="w-3.5 ml-4">{listFilter.has('cancelled') && <Check className="h-3.5 w-3.5 text-foreground" />}</span>
-                        </StyledDropdownMenuItem>
+                        {/* Dynamic status filter items */}
+                        {todoStates.map(state => (
+                          <StyledDropdownMenuItem
+                            key={state.id}
+                            onClick={(e) => {
+                              e.preventDefault()
+                              setListFilter(prev => {
+                                const next = new Set(prev)
+                                if (next.has(state.id)) next.delete(state.id)
+                                else next.add(state.id)
+                                return next
+                              })
+                            }}
+                          >
+                            <span
+                              className="h-3.5 w-3.5 flex items-center justify-center shrink-0 [&>svg]:w-full [&>svg]:h-full [&>img]:w-full [&>img]:h-full"
+                              style={isHexColor(state.color) ? { color: state.color } : undefined}
+                            >
+                              {state.icon}
+                            </span>
+                            <span className="flex-1">{state.label}</span>
+                            <span className="w-3.5 ml-4">{listFilter.has(state.id) && <Check className="h-3.5 w-3.5 text-foreground" />}</span>
+                          </StyledDropdownMenuItem>
+                        ))}
                         <StyledDropdownMenuSeparator />
                         <StyledDropdownMenuItem
                           onClick={() => {
@@ -1518,21 +1440,26 @@ export function AppShell({
                 initial={false}
                 animate={{
                   width: isRightSidebarVisible ? rightSidebarWidth : 0,
-                  opacity: isRightSidebarVisible ? 1 : 0,
                 }}
                 transition={isResizing === 'right-sidebar' || skipRightSidebarAnimation ? { duration: 0 } : springTransition}
-                className="h-full shrink-0"
+                className="h-full shrink-0 overflow-hidden"
               >
-                <div
-                  style={{ width: rightSidebarWidth }}
+                <motion.div
+                  initial={false}
+                  animate={{
+                    x: isRightSidebarVisible ? 0 : rightSidebarWidth,
+                    opacity: isRightSidebarVisible ? 1 : 0,
+                  }}
+                  transition={isResizing === 'right-sidebar' || skipRightSidebarAnimation ? { duration: 0 } : springTransition}
                   className="h-full bg-surface-below shadow-middle rounded-l-[10px] rounded-r-[14px]"
+                  style={{ width: rightSidebarWidth }}
                 >
                   <RightSidebar
                     panel={{ type: 'sessionMetadata' }}
                     sessionId={isChatsNavigation(navState) && navState.details ? navState.details.sessionId : undefined}
                     closeButton={rightSidebarCloseButton}
                   />
-                </div>
+                </motion.div>
               </motion.div>
             </>
           )}

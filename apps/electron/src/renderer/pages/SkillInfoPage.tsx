@@ -9,9 +9,6 @@
 import * as React from 'react'
 import { useEffect, useState, useCallback } from 'react'
 import {
-  FolderOpen,
-  Pencil,
-  Trash2,
   FileText,
   Folder,
   Image,
@@ -20,9 +17,7 @@ import {
   Minus,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { HeaderIconButton } from '@/components/ui/HeaderIconButton'
-import { HeaderMenu } from '@/components/ui/HeaderMenu'
-import { StyledDropdownMenuItem, StyledDropdownMenuSeparator } from '@/components/ui/styled-dropdown'
+import { SkillMenu } from '@/components/app-shell/SkillMenu'
 import { SkillAvatar } from '@/components/ui/skill-avatar'
 import { routes, navigate } from '@/lib/navigate'
 import {
@@ -153,6 +148,11 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
     }
   }, [skill, workspaceId, skillSlug])
 
+  // Handle opening in new window
+  const handleOpenInNewWindow = useCallback(() => {
+    window.electronAPI.openUrl(`craftagents://skills/skill/${skillSlug}?window=focused`)
+  }, [skillSlug])
+
   // Get skill name for header
   const skillName = skill?.metadata.name || skillSlug
 
@@ -180,25 +180,15 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
     >
       <Info_Page.Header
         title={skillName}
-        actions={
-          <div className="flex items-center gap-1">
-            <HeaderIconButton
-              icon={<Pencil className="h-4 w-4" />}
-              onClick={handleEdit}
-              tooltip="Edit SKILL.md"
-            />
-            <HeaderMenu route={routes.view.skills(skillSlug)}>
-              <StyledDropdownMenuItem onClick={handleOpenInFinder}>
-                <FolderOpen className="h-3.5 w-3.5" />
-                <span className="flex-1">Show in Finder</span>
-              </StyledDropdownMenuItem>
-              <StyledDropdownMenuSeparator />
-              <StyledDropdownMenuItem onClick={handleDelete} variant="destructive">
-                <Trash2 className="h-3.5 w-3.5" />
-                <span className="flex-1">Delete</span>
-              </StyledDropdownMenuItem>
-            </HeaderMenu>
-          </div>
+        titleMenu={
+          <SkillMenu
+            skillSlug={skillSlug}
+            skillName={skillName}
+            onEdit={handleEdit}
+            onOpenInNewWindow={handleOpenInNewWindow}
+            onShowInFinder={handleOpenInFinder}
+            onDelete={handleDelete}
+          />
         }
       />
 

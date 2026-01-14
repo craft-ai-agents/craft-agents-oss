@@ -7,6 +7,7 @@ export type FontFamily = 'inter' | 'system'
 interface ThemeContextType {
   mode: ThemeMode
   resolvedMode: 'light' | 'dark'
+  systemPreference: 'light' | 'dark'
   colorTheme: string
   font: FontFamily
   setMode: (mode: ThemeMode) => void
@@ -63,13 +64,11 @@ function applyThemeToDOM(resolvedMode: 'light' | 'dark', colorTheme: string, mod
     delete root.dataset.theme
   }
 
-  // Mark as theme override when resolved mode differs from system
-  // This adds a solid background to prevent color bleed through vibrancy
-  if (resolvedMode !== systemPreference) {
-    root.dataset.themeOverride = 'true'
-  } else {
-    delete root.dataset.themeOverride
-  }
+  // Always set theme override for semi-transparent background (vibrancy effect)
+  root.dataset.themeOverride = 'true'
+
+  // Note: themeMismatch is managed by useTheme hook which has access to both
+  // systemPreference (for vibrancy) and presetTheme.supportedModes (for theme support)
 
   // Apply font (default CSS is system, data-font="inter" opts into Inter)
   if (font === 'inter') {
@@ -191,6 +190,7 @@ export function ThemeProvider({
       value={{
         mode,
         resolvedMode,
+        systemPreference,
         colorTheme,
         font,
         setMode,

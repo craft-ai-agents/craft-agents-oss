@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react"
 import { formatDistanceToNow, isToday, isYesterday, format, startOfDay } from "date-fns"
-import { Trash2, Pencil, MoreHorizontal, Flag, FlagOff, MailOpen, Search, X, FolderOpen, Copy, Link2Off, AppWindow, Globe, RefreshCw } from "lucide-react"
+import { MoreHorizontal, Flag, Search, X, Copy, Link2Off, CloudUpload, Globe, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 
 import { cn, isHexColor } from "@/lib/utils"
@@ -16,13 +16,11 @@ import type { TodoState } from "@/config/todo-states"
 import {
   DropdownMenu,
   DropdownMenuTrigger,
-  DropdownMenuSub,
   StyledDropdownMenuContent,
   StyledDropdownMenuItem,
   StyledDropdownMenuSeparator,
-  StyledDropdownMenuSubTrigger,
-  StyledDropdownMenuSubContent,
 } from "@/components/ui/styled-dropdown"
+import { SessionMenu } from "./SessionMenu"
 import {
   Dialog,
   DialogContent,
@@ -320,7 +318,7 @@ function SessionItem({
                       className="shrink-0 px-1.5 py-0.5 h-[18px] text-[10px] font-medium rounded flex items-center bg-foreground/10 text-foreground/70 cursor-pointer hover:bg-foreground/15"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <Globe className="h-[10px] w-[10px]" />
+                      <CloudUpload className="h-[10px] w-[10px]" />
                     </span>
                   </DropdownMenuTrigger>
                   <StyledDropdownMenuContent align="start">
@@ -384,138 +382,25 @@ function SessionItem({
                   <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
                 </div>
               </DropdownMenuTrigger>
-            <StyledDropdownMenuContent align="end">
-              {/* Share/Revoke based on shared state */}
-              {!item.sharedUrl ? (
-                <StyledDropdownMenuItem onClick={async () => {
-                  const result = await window.electronAPI.sessionCommand(item.id, { type: 'shareToViewer' })
-                  if (result?.success && result.url) {
-                    await navigator.clipboard.writeText(result.url)
-                    toast.success('Link copied to clipboard', {
-                      description: result.url,
-                      action: {
-                        label: 'Open',
-                        onClick: () => window.electronAPI.openUrl(result.url!),
-                      },
-                    })
-                  } else {
-                    toast.error('Failed to share', { description: result?.error || 'Unknown error' })
-                  }
-                }}>
-                  <Globe />
-                  Share
-                </StyledDropdownMenuItem>
-              ) : (
-                <DropdownMenuSub>
-                  <StyledDropdownMenuSubTrigger>
-                    <Globe />
-                    Shared
-                  </StyledDropdownMenuSubTrigger>
-                  <StyledDropdownMenuSubContent>
-                    <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(item.sharedUrl!)}>
-                      <Globe />
-                      Open in Browser
-                    </StyledDropdownMenuItem>
-                    <StyledDropdownMenuItem onClick={async () => {
-                      await navigator.clipboard.writeText(item.sharedUrl!)
-                      toast.success('Link copied to clipboard')
-                    }}>
-                      <Copy />
-                      Copy Link
-                    </StyledDropdownMenuItem>
-                    <StyledDropdownMenuItem onClick={async () => {
-                      const result = await window.electronAPI.sessionCommand(item.id, { type: 'updateShare' })
-                      if (result?.success) {
-                        toast.success('Share updated')
-                      } else {
-                        toast.error('Failed to update share', { description: result?.error })
-                      }
-                    }}>
-                      <RefreshCw />
-                      Update Share
-                    </StyledDropdownMenuItem>
-                    <StyledDropdownMenuItem onClick={async () => {
-                      const result = await window.electronAPI.sessionCommand(item.id, { type: 'revokeShare' })
-                      if (result?.success) {
-                        toast.success('Sharing stopped')
-                      } else {
-                        toast.error('Failed to stop sharing', { description: result?.error })
-                      }
-                    }} variant="destructive">
-                      <Link2Off />
-                      Stop Sharing
-                    </StyledDropdownMenuItem>
-                  </StyledDropdownMenuSubContent>
-                </DropdownMenuSub>
-              )}
-              <StyledDropdownMenuSeparator />
-              <DropdownMenuSub>
-                <StyledDropdownMenuSubTrigger>
-                  <span
-                    className={cn("shrink-0 flex items-center -mt-px", !isHexColor(getStateColor(currentTodoState, todoStates)) && (getStateColor(currentTodoState, todoStates) || 'text-muted-foreground'))}
-                    style={isHexColor(getStateColor(currentTodoState, todoStates)) ? { color: getStateColor(currentTodoState, todoStates) } : undefined}
-                  >
-                    {getStateIcon(currentTodoState, todoStates)}
-                  </span>
-                  Status
-                </StyledDropdownMenuSubTrigger>
-                <StyledDropdownMenuSubContent>
-                  {todoStates.map((state) => (
-                    <StyledDropdownMenuItem
-                      key={state.id}
-                      onClick={() => onTodoStateChange(item.id, state.id)}
-                      className={currentTodoState === state.id ? "bg-foreground/5" : ""}
-                    >
-                      <span
-                        className={cn("shrink-0 flex items-center -mt-px", !isHexColor(state.color) && state.color)}
-                        style={isHexColor(state.color) ? { color: state.color } : undefined}
-                      >
-                        {state.icon}
-                      </span>
-                      {state.label}
-                    </StyledDropdownMenuItem>
-                  ))}
-                </StyledDropdownMenuSubContent>
-              </DropdownMenuSub>
-              {onFlag && !item.isFlagged && (
-                <StyledDropdownMenuItem onClick={() => onFlag(item.id)}>
-                  <Flag />
-                  Flag
-                </StyledDropdownMenuItem>
-              )}
-              {onUnflag && item.isFlagged && (
-                <StyledDropdownMenuItem onClick={() => onUnflag(item.id)}>
-                  <FlagOff />
-                  Unflag
-                </StyledDropdownMenuItem>
-              )}
-              {/* Mark as Unread - only show if session has been read */}
-              {!hasUnreadMessages(item) && hasMessages(item) && (
-                <StyledDropdownMenuItem onClick={() => onMarkUnread(item.id)}>
-                  <MailOpen />
-                  Mark as Unread
-                </StyledDropdownMenuItem>
-              )}
-              <StyledDropdownMenuSeparator />
-              <StyledDropdownMenuItem onClick={() => onRenameClick(item.id, getSessionTitle(item))}>
-                <Pencil />
-                Rename
-              </StyledDropdownMenuItem>
-              <StyledDropdownMenuItem onClick={onOpenInNewWindow}>
-                <AppWindow />
-                Open in New Window
-              </StyledDropdownMenuItem>
-              <StyledDropdownMenuSeparator />
-              <StyledDropdownMenuItem onClick={() => window.electronAPI.sessionCommand(item.id, { type: 'showInFinder' })}>
-                <FolderOpen />
-                View in Finder
-              </StyledDropdownMenuItem>
-              <StyledDropdownMenuSeparator />
-              <StyledDropdownMenuItem onClick={() => onDelete(item.id)} variant="destructive">
-                <Trash2 />
-                Delete
-              </StyledDropdownMenuItem>
-            </StyledDropdownMenuContent>
+              <StyledDropdownMenuContent align="end">
+                <SessionMenu
+                  sessionId={item.id}
+                  sessionName={getSessionTitle(item)}
+                  isFlagged={item.isFlagged ?? false}
+                  sharedUrl={item.sharedUrl}
+                  hasMessages={hasMessages(item)}
+                  hasUnreadMessages={hasUnreadMessages(item)}
+                  currentTodoState={currentTodoState}
+                  todoStates={todoStates}
+                  onRename={() => onRenameClick(item.id, getSessionTitle(item))}
+                  onFlag={() => onFlag?.(item.id)}
+                  onUnflag={() => onUnflag?.(item.id)}
+                  onMarkUnread={() => onMarkUnread(item.id)}
+                  onTodoStateChange={(state) => onTodoStateChange(item.id, state)}
+                  onOpenInNewWindow={onOpenInNewWindow}
+                  onDelete={() => onDelete(item.id)}
+                />
+              </StyledDropdownMenuContent>
             </DropdownMenu>
           </div>
         </div>
@@ -816,6 +701,9 @@ export function SessionList({
 
   // Handle search input key events
   const handleSearchKeyDown = (e: React.KeyboardEvent) => {
+    // Stop propagation to prevent roving tabindex from intercepting keys (e.g. Backspace as Delete)
+    e.stopPropagation()
+
     if (e.key === 'Escape') {
       e.preventDefault()
       onSearchClose?.()

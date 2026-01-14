@@ -7,7 +7,7 @@
 
 import * as React from 'react'
 import { useState } from 'react'
-import { MoreHorizontal, Trash2, ExternalLink, SquareArrowOutUpRight } from 'lucide-react'
+import { MoreHorizontal } from 'lucide-react'
 import { SourceAvatar } from '@/components/ui/source-avatar'
 import { deriveConnectionStatus } from '@/components/ui/source-status-indicator'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -16,9 +16,8 @@ import {
   DropdownMenu,
   DropdownMenuTrigger,
   StyledDropdownMenuContent,
-  StyledDropdownMenuItem,
-  StyledDropdownMenuSeparator,
 } from '@/components/ui/styled-dropdown'
+import { SourceMenu } from './SourceMenu'
 import { cn } from '@/lib/utils'
 import type { LoadedSource, SourceConnectionStatus, SourceCategory } from '../../../shared/types'
 
@@ -257,30 +256,19 @@ function SourceItem({ source, isSelected, isFirst, localMcpEnabled, onClick, onD
                 </div>
               </DropdownMenuTrigger>
               <StyledDropdownMenuContent align="end">
-                <StyledDropdownMenuItem onClick={onClick}>
-                  <ExternalLink />
-                  View Details
-                </StyledDropdownMenuItem>
-                <StyledDropdownMenuItem
-                  onClick={(e) => {
-                    e.stopPropagation()
+                <SourceMenu
+                  sourceSlug={config.slug}
+                  sourceName={config.name}
+                  showViewDetails
+                  onViewDetails={onClick}
+                  onOpenInNewWindow={() => {
                     window.electronAPI.openUrl(`craftagents://sources/source/${config.slug}?window=focused`)
                   }}
-                >
-                  <SquareArrowOutUpRight />
-                  Open in New Window
-                </StyledDropdownMenuItem>
-                <StyledDropdownMenuSeparator />
-                <StyledDropdownMenuItem
-                  variant="destructive"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onDelete()
+                  onShowInFinder={() => {
+                    window.electronAPI.showInFolder(source.folderPath)
                   }}
-                >
-                  <Trash2 />
-                  Delete Source
-                </StyledDropdownMenuItem>
+                  onDelete={onDelete}
+                />
               </StyledDropdownMenuContent>
             </DropdownMenu>
           </div>

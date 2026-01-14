@@ -40,7 +40,7 @@ import {
   SAFE_MODE_CONFIG,
 } from './mode-manager.ts';
 import type { PermissionsContext } from './permissions-config.ts';
-import { getSessionPlansPath } from '../sessions/storage.ts';
+import { getSessionPlansPath, getSessionPath } from '../sessions/storage.ts';
 import { expandPath } from '../utils/paths.ts';
 import {
   ConfigWatcher,
@@ -821,7 +821,11 @@ export class CraftAgent {
             this.workspaceRootPath
           ),
         },
-        cwd: this.config.session?.workingDirectory ?? process.cwd(),
+        // Use sdkCwd for SDK session storage - this is set once at session creation and never changes.
+        // This ensures SDK can always find session transcripts regardless of workingDirectory changes.
+        // Note: workingDirectory is still used for context injection and shown to the agent.
+        cwd: this.config.session?.sdkCwd ??
+          (sessionId ? getSessionPath(this.workspaceRootPath, sessionId) : this.workspaceRootPath),
         includePartialMessages: true,
         // Enable the full Claude Code toolset
         tools: { type: 'preset', preset: 'claude_code' },
@@ -1903,8 +1907,12 @@ export class CraftAgent {
     // Add workspace capabilities (local MCP enabled/disabled, etc.)
     parts.push(this.formatWorkspaceCapabilities());
 
-    // Add working directory context if set
-    const workingDirContext = getWorkingDirectoryContext(this.config.session?.workingDirectory);
+    // Add working directory context
+    // Calculate effective working directory (same logic as cwd parameter)
+    const effectiveWorkingDir = this.config.session?.workingDirectory ??
+      (this.modeSessionId ? getSessionPath(this.workspaceRootPath, this.modeSessionId) : undefined);
+    const isSessionRoot = !this.config.session?.workingDirectory && !!this.modeSessionId;
+    const workingDirContext = getWorkingDirectoryContext(effectiveWorkingDir, isSessionRoot);
     if (workingDirContext) {
       parts.push(workingDirContext);
     }
@@ -1960,10 +1968,14 @@ export class CraftAgent {
     // Add workspace capabilities (local MCP enabled/disabled, etc.)
     contentBlocks.push({ type: 'text', text: this.formatWorkspaceCapabilities() });
 
-    // Add working directory context if set
-    const workingDirContext = getWorkingDirectoryContext(this.config.session?.workingDirectory);
-    if (workingDirContext) {
-      contentBlocks.push({ type: 'text', text: workingDirContext });
+    // Add working directory context
+    // Calculate effective working directory (same logic as cwd parameter)
+    const effectiveWorkingDirSdk = this.config.session?.workingDirectory ??
+      (this.modeSessionId ? getSessionPath(this.workspaceRootPath, this.modeSessionId) : undefined);
+    const isSessionRootSdk = !this.config.session?.workingDirectory && !!this.modeSessionId;
+    const workingDirContextSdk = getWorkingDirectoryContext(effectiveWorkingDirSdk, isSessionRootSdk);
+    if (workingDirContextSdk) {
+      contentBlocks.push({ type: 'text', text: workingDirContextSdk });
     }
 
     // Add attachments with stored path info
@@ -2037,7 +2049,9 @@ export class CraftAgent {
         content: contentBlocks,
       },
       parent_tool_use_id: null,
-      session_id: this.sessionId || '',
+      // Session resumption is handled by options.resume, not here
+      // Setting session_id here with resume option causes SDK to return empty response
+      session_id: '',
     } as SDKUserMessage;
   }
 

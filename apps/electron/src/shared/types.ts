@@ -278,6 +278,8 @@ export interface Session {
   enabledSourceSlugs?: string[]
   // Working directory for this session (used by agent for bash commands)
   workingDirectory?: string
+  // Session folder path (for "Reset to Session Root" option)
+  sessionFolderPath?: string
   // Shared viewer URL (if shared via viewer)
   sharedUrl?: string
   // Shared session ID in viewer (for revoke)
@@ -289,6 +291,8 @@ export interface Session {
     message: string
     statusType?: string
   }
+  // Background image URL (from Pexels)
+  backgroundImageUrl?: string
 }
 
 /**

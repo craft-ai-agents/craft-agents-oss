@@ -1,5 +1,5 @@
 import * as React from "react"
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import {
   AlertTriangle,
   CheckCircle2,
@@ -27,9 +27,46 @@ import type { SourceNeedingAuth } from "@craft-agent/shared/sessions"
 import { ActiveOptionBadges } from "./ActiveOptionBadges"
 import { InputContainer, type StructuredInputState, type StructuredResponse, type PermissionResponse } from "./input"
 import { useBackgroundTasks } from "@/hooks/useBackgroundTasks"
-import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover"
-import { SlashCommandMenu, DEFAULT_SLASH_COMMANDS, type SlashCommandId } from "@/components/ui/slash-command-menu"
 import { CHAT_LAYOUT } from "@/config/layout"
+import { FEATURE_FLAGS } from "../../../shared/feature-flags"
+
+/**
+ * Background image with fade-in animation on load
+ * Uses a hidden img element to detect when the image has loaded,
+ * then fades in the CSS background
+ */
+function BackgroundImage({ url }: { url: string }) {
+  const [loaded, setLoaded] = useState(false)
+  const imgRef = React.useRef<HTMLImageElement>(null)
+
+  // Check if image is already cached on mount (e.g., after CMD+R)
+  useEffect(() => {
+    if (imgRef.current?.complete && imgRef.current?.naturalHeight > 0) {
+      setLoaded(true)
+    }
+  }, [url])
+
+  return (
+    <>
+      {/* Hidden image for load detection - CSS backgrounds don't fire load events */}
+      <img
+        ref={imgRef}
+        src={url}
+        onLoad={() => setLoaded(true)}
+        className="hidden"
+        alt=""
+      />
+      {/* Actual background with fade-in */}
+      <div
+        className={cn(
+          "absolute inset-0 bg-cover bg-center bg-fixed transition-opacity duration-500 ease-out",
+          loaded ? "opacity-100" : "opacity-0"
+        )}
+        style={{ backgroundImage: `url(${url})` }}
+      />
+    </>
+  )
+}
 
 interface ChatDisplayProps {
   session: Session | null
@@ -75,12 +112,17 @@ interface ChatDisplayProps {
   workingDirectory?: string
   /** Callback when working directory changes */
   onWorkingDirectoryChange?: (path: string) => void
+  /** Session folder path (for "Reset to Session Root" option) */
+  sessionFolderPath?: string
   // Lazy loading
   /** When true, messages are still loading - show spinner in messages area */
   messagesLoading?: boolean
   // Tutorial
   /** Disable send action (for tutorial guidance) */
   disableSend?: boolean
+  // Background image
+  /** Background image URL (from Pexels) */
+  backgroundImageUrl?: string
 }
 
 /**
@@ -265,10 +307,13 @@ export function ChatDisplay({
   // Working directory
   workingDirectory,
   onWorkingDirectoryChange,
+  sessionFolderPath,
   // Lazy loading
   messagesLoading = false,
   // Tutorial
   disableSend = false,
+  // Background image
+  backgroundImageUrl,
 }: ChatDisplayProps) {
   // Input is only disabled when explicitly disabled (e.g., agent needs activation)
   // User can type during streaming - submitting will stop the stream and send
@@ -530,27 +575,26 @@ export function ChatDisplay({
   return (
     <div ref={zoneRef} className="flex h-full flex-col min-w-0" data-focus-zone="chat">
       {session ? (
-        <div className="flex flex-1 flex-col min-h-0 min-w-0 bg-surface-below">
+        <div className="flex flex-1 flex-col min-h-0 min-w-0 relative">
+          {/* Background image with fade-in animation (feature flagged) */}
+          {FEATURE_FLAGS.PEXELS_BACKGROUNDS && backgroundImageUrl && (
+            <BackgroundImage url={backgroundImageUrl} />
+          )}
+          {/* Content layer */}
+          <div className={cn(
+            "flex flex-1 flex-col min-h-0 min-w-0 relative z-10",
+            !(FEATURE_FLAGS.PEXELS_BACKGROUNDS && backgroundImageUrl) && "bg-surface-below"
+          )}>
           {/* === MESSAGES AREA: Scrollable list of message bubbles === */}
           <div className="relative flex-1 min-h-0">
-            {/* Top fade gradient - absolutely positioned overlay */}
-            <div className="absolute top-0 left-0 right-2 h-8 z-10 bg-gradient-to-b from-surface-below to-transparent pointer-events-none" />
-            <ScrollArea className="h-full min-w-0" viewportRef={scrollViewportRef}>
-            <div className={cn(CHAT_LAYOUT.maxWidth, "mx-auto", CHAT_LAYOUT.containerPadding, CHAT_LAYOUT.messageSpacing, "min-w-0")}>
-              {messagesLoading ? (
-                /* Loading State: Show spinner while messages are being lazy loaded */
-                <div className="flex items-center justify-center h-64">
-                  <Spinner className="text-foreground/30" />
-                </div>
-              ) : session.messages.length === 0 ? (
-                /* Empty State: Welcome message for new sessions */
-                <div className="flex flex-col items-center justify-center h-64 text-muted-foreground px-8">
-                  <p className="text-sm font-medium">
-                    {`Welcome to ${session.workspaceName}`}
-                  </p>
-                  <p className="text-xs mt-1 text-center">Start a conversation by typing a message below.</p>
-                </div>
-              ) : (
+              <ScrollArea className="h-full min-w-0" viewportRef={scrollViewportRef}>
+              <div className={cn(CHAT_LAYOUT.maxWidth, "mx-auto", CHAT_LAYOUT.containerPadding, CHAT_LAYOUT.messageSpacing, "min-w-0")}>
+                {messagesLoading ? (
+                  /* Loading State: Show spinner while messages are being lazy loaded */
+                  <div className="flex items-center justify-center h-64">
+                    <Spinner className="text-foreground/30" />
+                  </div>
+                ) : (
                 /* Turn-based Message Display - memoized to avoid re-grouping on every render */
                 /* Fade in when messages were lazy-loaded (not immediately available) */
                 /* key={fadeInKey} forces remount when messages finish loading, so initial animation plays */
@@ -882,27 +926,30 @@ export function ChatDisplay({
                   })}
                 </motion.div>
               )}
-              {/* Processing Indicator - always visible while processing */}
-              {session.isProcessing && (() => {
-                // Find the last user message timestamp for accurate elapsed time
-                const lastUserMsg = [...session.messages].reverse().find(m => m.role === 'user')
-                return (
-                  <ProcessingIndicator
-                    startTime={lastUserMsg?.timestamp}
-                    statusMessage={session.currentStatus?.message}
-                  />
-                )
-              })()}
-              {/* Scroll Anchor: For auto-scroll to bottom */}
-              <div ref={messagesEndRef} />
-            </div>
-          </ScrollArea>
+                {/* Processing Indicator - always visible while processing */}
+                {session.isProcessing && (() => {
+                  // Find the last user message timestamp for accurate elapsed time
+                  const lastUserMsg = [...session.messages].reverse().find(m => m.role === 'user')
+                  return (
+                    <ProcessingIndicator
+                      startTime={lastUserMsg?.timestamp}
+                      statusMessage={session.currentStatus?.message}
+                    />
+                  )
+                })()}
+                {/* Scroll Anchor: For auto-scroll to bottom */}
+                <div ref={messagesEndRef} />
+              </div>
+            </ScrollArea>
             {/* Bottom fade gradient - absolutely positioned overlay */}
             <div className="absolute bottom-0 left-0 right-2 h-8 z-10 bg-gradient-to-t from-surface-below to-transparent pointer-events-none" />
           </div>
 
           {/* === INPUT CONTAINER: FreeForm or Structured Input === */}
-          <div className={cn(CHAT_LAYOUT.maxWidth, "mx-auto w-full px-4 pb-4 mt-1")}>
+          <div className={cn(
+            CHAT_LAYOUT.maxWidth,
+            "mx-auto w-full px-4 pb-4 mt-1"
+          )}>
             {/* Active option badges and tasks - positioned above input */}
             <ActiveOptionBadges
               ultrathinkEnabled={ultrathinkEnabled}
@@ -937,9 +984,12 @@ export function ChatDisplay({
               onSourcesChange={onSourcesChange}
               workingDirectory={workingDirectory}
               onWorkingDirectoryChange={onWorkingDirectoryChange}
+              sessionFolderPath={sessionFolderPath}
               sessionId={session.id}
               disableSend={disableSend}
+              isEmptySession={session.messages.length === 0}
             />
+          </div>
           </div>
         </div>
       ) : null}

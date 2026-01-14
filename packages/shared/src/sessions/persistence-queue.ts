@@ -60,6 +60,7 @@ class SessionPersistenceQueue {
         ...data,
         workspaceRootPath: toPortablePath(data.workspaceRootPath),
         workingDirectory: data.workingDirectory ? toPortablePath(data.workingDirectory) : undefined,
+        sdkCwd: data.sdkCwd ? toPortablePath(data.sdkCwd) : undefined,
         lastUsedAt: Date.now(),
       }
 

@@ -7,7 +7,7 @@
 
 import * as React from 'react'
 import { useState } from 'react'
-import { MoreHorizontal, Trash2, ExternalLink, SquareArrowOutUpRight } from 'lucide-react'
+import { MoreHorizontal } from 'lucide-react'
 import { SkillAvatar } from '@/components/ui/skill-avatar'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
@@ -15,9 +15,8 @@ import {
   DropdownMenu,
   DropdownMenuTrigger,
   StyledDropdownMenuContent,
-  StyledDropdownMenuItem,
-  StyledDropdownMenuSeparator,
 } from '@/components/ui/styled-dropdown'
+import { SkillMenu } from './SkillMenu'
 import { cn } from '@/lib/utils'
 import type { LoadedSkill } from '../../../shared/types'
 
@@ -140,30 +139,26 @@ function SkillItem({ skill, isSelected, isFirst, workspaceId, onClick, onDelete 
                 </div>
               </DropdownMenuTrigger>
               <StyledDropdownMenuContent align="end">
-                <StyledDropdownMenuItem onClick={onClick}>
-                  <ExternalLink />
-                  View Details
-                </StyledDropdownMenuItem>
-                <StyledDropdownMenuItem
-                  onClick={(e) => {
-                    e.stopPropagation()
+                <SkillMenu
+                  skillSlug={skill.slug}
+                  skillName={skill.metadata.name}
+                  showViewDetails
+                  onViewDetails={onClick}
+                  onEdit={() => {
+                    if (workspaceId) {
+                      window.electronAPI.openSkillInEditor(workspaceId, skill.slug)
+                    }
+                  }}
+                  onOpenInNewWindow={() => {
                     window.electronAPI.openUrl(`craftagents://skills/skill/${skill.slug}?window=focused`)
                   }}
-                >
-                  <SquareArrowOutUpRight />
-                  Open in New Window
-                </StyledDropdownMenuItem>
-                <StyledDropdownMenuSeparator />
-                <StyledDropdownMenuItem
-                  variant="destructive"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onDelete()
+                  onShowInFinder={() => {
+                    if (workspaceId) {
+                      window.electronAPI.openSkillInFinder(workspaceId, skill.slug)
+                    }
                   }}
-                >
-                  <Trash2 />
-                  Delete Skill
-                </StyledDropdownMenuItem>
+                  onDelete={onDelete}
+                />
               </StyledDropdownMenuContent>
             </DropdownMenu>
           </div>

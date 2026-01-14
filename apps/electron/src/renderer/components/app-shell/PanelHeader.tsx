@@ -5,6 +5,7 @@
  * - Fixed 40px height
  * - Title with optional badge
  * - Optional action buttons
+ * - Optional title dropdown menu (renders chevron and makes title interactive)
  * - Automatic padding compensation for macOS traffic lights (via StoplightContext)
  *
  * Usage:
@@ -12,6 +13,12 @@
  * <PanelHeader
  *   title="Conversations"
  *   actions={<Button>Add</Button>}
+ * />
+ *
+ * // With interactive title menu:
+ * <PanelHeader
+ *   title="Chat Name"
+ *   titleMenu={<><MenuItem>Rename</MenuItem><MenuItem>Delete</MenuItem></>}
  * />
  * ```
  *
@@ -21,9 +28,16 @@
  */
 
 import * as React from 'react'
+import { useState } from 'react'
 import { motion } from 'motion/react'
+import { ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useCompensateForStoplight } from '@/context/StoplightContext'
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { StyledDropdownMenuContent } from '@/components/ui/styled-dropdown'
 
 // Spring transition for smooth animations (matches sidebar)
 const springTransition = { type: 'spring' as const, stiffness: 300, damping: 30 }
@@ -37,6 +51,8 @@ export interface PanelHeaderProps {
   title?: string
   /** Optional badge element (e.g., agent badge) */
   badge?: React.ReactNode
+  /** Optional dropdown menu content for interactive title (renders chevron when provided) */
+  titleMenu?: React.ReactNode
   /** Optional action buttons rendered on the right */
   actions?: React.ReactNode
   /** Optional right sidebar button (rendered after actions) */
@@ -55,6 +71,7 @@ export interface PanelHeaderProps {
 export function PanelHeader({
   title,
   badge,
+  titleMenu,
   actions,
   rightSidebarButton,
   compensateForStoplight,
@@ -65,18 +82,54 @@ export function PanelHeader({
   const contextCompensate = useCompensateForStoplight()
   const shouldCompensate = compensateForStoplight ?? contextCompensate
 
+  // Controlled dropdown state for anchoring to chevron while keeping full title clickable
+  const [dropdownOpen, setDropdownOpen] = useState(false)
+
+  // Title content - either static or interactive with dropdown
+  const titleContent = (
+    <motion.div
+      initial={false}
+      animate={{ opacity: title ? 1 : 0 }}
+      transition={{ duration: 0.15 }}
+      className="flex items-center gap-1"
+    >
+      <h1 className="text-sm font-semibold truncate font-sans leading-tight">{title}</h1>
+      {badge}
+    </motion.div>
+  )
+
   const content = (
     <>
-      <div className="flex-1 min-w-0 flex items-center justify-center select-none">
-        <motion.div
-          initial={false}
-          animate={{ opacity: title ? 1 : 0 }}
-          transition={{ duration: 0.15 }}
-          className="flex items-center gap-2"
-        >
-          <h1 className="text-sm font-semibold truncate font-sans leading-tight">{title}</h1>
-          {badge}
-        </motion.div>
+      <div className="flex-1 min-w-0 flex items-center select-none">
+        <div className="mx-auto w-fit">
+          {titleMenu ? (
+            <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
+              {/* Wrapper button for the whole clickable area */}
+              <button
+                onClick={() => setDropdownOpen(true)}
+                className={cn(
+                  "flex items-center gap-1 px-2 py-1 rounded-md titlebar-no-drag",
+                  "hover:bg-foreground/[0.03] transition-colors",
+                  "focus:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                  dropdownOpen && "bg-foreground/[0.03]"
+                )}
+              >
+                {titleContent}
+                {/* Chevron is the actual trigger anchor point */}
+                <DropdownMenuTrigger asChild>
+                  <span className="shrink-0 flex items-center justify-center">
+                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                  </span>
+                </DropdownMenuTrigger>
+              </button>
+              <StyledDropdownMenuContent align="center" sideOffset={8}>
+                {titleMenu}
+              </StyledDropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            titleContent
+          )}
+        </div>
       </div>
       {actions && (
         <div className="titlebar-no-drag shrink-0">
