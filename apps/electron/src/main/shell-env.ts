@@ -12,6 +12,12 @@
 import { execSync } from 'child_process'
 import { mainLog } from './logger'
 
+// Environment variables that should NOT be imported from the shell
+// VITE_* vars from dev mode would make packaged app try to load from localhost
+const shouldSkipEnvVar = (key: string): boolean => {
+  return key.startsWith('VITE_')
+}
+
 /**
  * Load the user's shell environment and merge it into process.env
  *
@@ -52,13 +58,14 @@ export function loadShellEnv(): void {
       stdio: ['pipe', 'pipe', 'pipe'],
     })
 
-    // Parse environment after marker and set all variables
+    // Parse environment after marker and set variables (excluding blocked ones)
     const envSection = output.split('__ENV_START__')[1] || ''
     let count = 0
     for (const line of envSection.trim().split('\n')) {
       const eq = line.indexOf('=')
       if (eq > 0) {
         const key = line.substring(0, eq)
+        if (shouldSkipEnvVar(key)) continue
         const value = line.substring(eq + 1)
         process.env[key] = value
         count++
