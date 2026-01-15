@@ -26,6 +26,7 @@ import {
   sourceIconCache,
   logoUrlCache,
   clearIconCaches,
+  svgToThemedDataUrl,
 } from '@/lib/icon-cache'
 import { Mail, Plug, Globe, HardDrive } from 'lucide-react'
 import { McpIcon } from '@/components/icons/McpIcon'
@@ -162,10 +163,11 @@ function useWorkspaceImage(
       .then((result) => {
         if (cancelled) return
 
-        // For SVG, convert to data URL for use in img src
+        // For SVG, theme and convert to data URL
+        // This injects foreground color since currentColor doesn't work in background-image
         let url = result
         if (relativePath.endsWith('.svg')) {
-          url = `data:image/svg+xml;base64,${btoa(result)}`
+          url = svgToThemedDataUrl(result)
         }
 
         sourceIconCache.set(cacheKey, url)

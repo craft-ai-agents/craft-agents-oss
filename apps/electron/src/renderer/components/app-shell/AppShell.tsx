@@ -112,7 +112,7 @@ interface AppShellProps {
  * Panel spacing constants (in pixels)
  */
 const PANEL_WINDOW_EDGE_SPACING = 6 // Padding between panels and window edge
-const PANEL_PANEL_SPACING = 6 // Gap between adjacent panels
+const PANEL_PANEL_SPACING = 5 // Gap between adjacent panels
 
 /**
  * AppShell - Main 3-panel layout container

@@ -14,7 +14,7 @@
 import * as React from 'react'
 import { CrossfadeAvatar } from '@/components/ui/avatar'
 import { cn } from '@/lib/utils'
-import { skillIconCache, clearSkillIconCaches } from '@/lib/icon-cache'
+import { skillIconCache, clearSkillIconCaches, svgToThemedDataUrl } from '@/lib/icon-cache'
 import { Zap } from 'lucide-react'
 import type { LoadedSkill } from '../../../shared/types'
 
@@ -92,10 +92,11 @@ function useSkillIcon(
       .then((result) => {
         if (cancelled) return
 
-        // For SVG, convert to data URL
+        // For SVG, theme and convert to data URL
+        // This injects foreground color since currentColor doesn't work in background-image
         let url = result
         if (relativePath.endsWith('.svg')) {
-          url = `data:image/svg+xml;base64,${btoa(result)}`
+          url = svgToThemedDataUrl(result)
         }
 
         skillIconCache.set(cacheKey, url)
