@@ -120,7 +120,7 @@ export function WorkspaceCreationScreen({
       exit={{ opacity: 0 }}
       transition={overlayTransitionIn}
       className={cn(
-        "fixed inset-0 z-[9999] flex flex-col bg-transparent",
+        "fixed inset-0 z-splash flex flex-col bg-transparent",
         className
       )}
     >

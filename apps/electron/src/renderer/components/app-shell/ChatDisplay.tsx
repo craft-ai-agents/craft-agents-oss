@@ -508,7 +508,7 @@ export function ChatDisplay({
       {session ? (
         <div className="flex flex-1 flex-col min-h-0 min-w-0 relative">
           {/* Content layer */}
-          <div className="flex flex-1 flex-col min-h-0 min-w-0 relative z-10 bg-transparent">
+          <div className="flex flex-1 flex-col min-h-0 min-w-0 relative z-10 bg-surface-below">
           {/* === MESSAGES AREA: Scrollable list of message bubbles === */}
           <div className="relative flex-1 min-h-0">
               <ScrollArea className="h-full min-w-0" viewportRef={scrollViewportRef}>
@@ -893,7 +893,7 @@ export function ChatDisplay({
               </div>
             </ScrollArea>
             {/* Bottom fade gradient - absolutely positioned overlay */}
-            <div className="absolute bottom-0 left-0 right-2 h-8 z-10 bg-gradient-to-t from-transparent to-transparent pointer-events-none" />
+            <div className="absolute bottom-0 left-0 right-2 h-8 z-10 bg-gradient-to-t from-surface-below to-transparent pointer-events-none" />
           </div>
 
           {/* === INPUT CONTAINER: FreeForm or Structured Input === */}

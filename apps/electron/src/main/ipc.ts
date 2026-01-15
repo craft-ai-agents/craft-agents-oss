@@ -129,43 +129,6 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     return session
   })
 
-  // ============================================================
-  // Claude Code Import
-  // ============================================================
-
-  // Discover Claude Code sessions
-  ipcMain.handle(IPC_CHANNELS.IMPORT_DISCOVER_SESSIONS, async () => {
-    const { discoverClaudeCodeSessions } = await import('@craft-agent/shared/sessions')
-    return discoverClaudeCodeSessions()
-  })
-
-  // Import Claude Code sessions
-  ipcMain.handle(IPC_CHANNELS.IMPORT_SESSIONS, async (event, filePaths: string[]) => {
-    const workspaceId = windowManager.getWorkspaceForWindow(event.sender.id)
-    if (!workspaceId) {
-      throw new Error('No workspace for window')
-    }
-    const workspace = getWorkspaceOrThrow(workspaceId)
-    const existingIds = sessionManager.getSessions().map(s => s.id)
-
-    const { importClaudeCodeSessions } = await import('@craft-agent/shared/sessions')
-    const result = importClaudeCodeSessions(filePaths, workspace.rootPath, existingIds)
-
-    // Refresh session list if any imports succeeded
-    if (result.successCount > 0) {
-      sessionManager.reloadSessions()
-    }
-
-    ipcLog.info(`Imported ${result.successCount}/${filePaths.length} Claude Code sessions`)
-    return result
-  })
-
-  // Find a session by its SDK session ID (for Claude Code resume via deep link)
-  ipcMain.handle(IPC_CHANNELS.FIND_SESSION_BY_SDK_ID, async (_event, sdkSessionId: string) => {
-    const sessionId = sessionManager.findSessionBySdkId(sdkSessionId)
-    return sessionId
-  })
-
   // Get workspaces
   ipcMain.handle(IPC_CHANNELS.GET_WORKSPACES, async () => {
     return sessionManager.getWorkspaces()
@@ -509,6 +472,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       // Track if image was resized (for return value)
       let wasResized = false
       let finalSize = attachment.size
+      let resizedBase64: string | undefined
 
       // 1. Save the file (with image validation and resizing)
       if (attachment.base64) {
@@ -560,6 +524,10 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
             }
 
             ipcLog.info(`Image resized: ${attachment.size} → ${finalSize} bytes (${Math.round((1 - finalSize / attachment.size) * 100)}% reduction)`)
+
+            // Store resized base64 to return to renderer
+            // This is used when sending to Claude API instead of original large base64
+            resizedBase64 = decoded.toString('base64')
           }
         }
 
@@ -619,6 +587,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
       // Return StoredAttachment metadata
       // Include wasResized flag so UI can show notification
+      // Include resizedBase64 so renderer uses resized image for Claude API
       return {
         id,
         type: attachment.type,
@@ -631,6 +600,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
         thumbnailBase64,
         markdownPath,
         wasResized,
+        resizedBase64, // Only set when wasResized=true, used for Claude API
       }
     } catch (error) {
       // Clean up any files we've written before the error

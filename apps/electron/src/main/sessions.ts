@@ -912,19 +912,6 @@ export class SessionManager {
     this.loadSessionsFromDisk()
   }
 
-  /**
-   * Find a session by its SDK session ID.
-   * Used for Claude Code resume deep links.
-   */
-  findSessionBySdkId(sdkSessionId: string): string | null {
-    for (const [id, session] of this.sessions) {
-      if (session.sdkSessionId === sdkSessionId) {
-        return id
-      }
-    }
-    return null
-  }
-
   getSessions(): Session[] {
     // Returns session metadata only - messages are NOT included to save memory
     // Use getSession(id) to load messages for a specific session
@@ -1235,8 +1222,8 @@ export class SessionManager {
             managed.toolToParentMap.clear()
             managed.pendingTextParent = undefined
 
-            // Send complete event so renderer knows processing stopped
-            this.sendEvent({ type: 'complete', sessionId: managed.id }, managed.workspace.id)
+            // Send complete event so renderer knows processing stopped (include tokenUsage for real-time updates)
+            this.sendEvent({ type: 'complete', sessionId: managed.id, tokenUsage: managed.tokenUsage }, managed.workspace.id)
 
             // Persist session state
             this.persistSession(managed)
@@ -1290,8 +1277,8 @@ export class SessionManager {
           managed.toolToParentMap.clear()
           managed.pendingTextParent = undefined
 
-          // Send complete event so renderer knows processing stopped
-          this.sendEvent({ type: 'complete', sessionId: managed.id }, managed.workspace.id)
+          // Send complete event so renderer knows processing stopped (include tokenUsage for real-time updates)
+          this.sendEvent({ type: 'complete', sessionId: managed.id, tokenUsage: managed.tokenUsage }, managed.workspace.id)
         }
 
         // Emit auth_request event to renderer
@@ -2159,8 +2146,8 @@ export class SessionManager {
       this.sendEvent({ type: 'interrupted', sessionId }, managed.workspace.id)
     }
 
-    // Emit complete since we're stopping and queue is cleared
-    this.sendEvent({ type: 'complete', sessionId }, managed.workspace.id)
+    // Emit complete since we're stopping and queue is cleared (include tokenUsage for real-time updates)
+    this.sendEvent({ type: 'complete', sessionId, tokenUsage: managed.tokenUsage }, managed.workspace.id)
 
     // Persist session
     this.persistSession(managed)
@@ -2194,8 +2181,8 @@ export class SessionManager {
       // Has queued messages - process next
       this.processNextQueuedMessage(sessionId)
     } else {
-      // No queue - emit complete to UI
-      this.sendEvent({ type: 'complete', sessionId }, managed.workspace.id)
+      // No queue - emit complete to UI (include tokenUsage for real-time updates)
+      this.sendEvent({ type: 'complete', sessionId, tokenUsage: managed.tokenUsage }, managed.workspace.id)
     }
 
     // 3. Always persist
@@ -2459,8 +2446,10 @@ To view this task's output:
         this.flushDelta(sessionId, workspaceId)
 
         // Check if this is the first assistant message and no name exists yet
+        // Only generate title on non-intermediate (final) messages to ensure we have
+        // substantive content for the Haiku title generator, not brief tool-use commentary
         const existingAssistantCount = managed.messages.filter(m => m.role === 'assistant').length
-        const shouldGenerateTitle = existingAssistantCount === 0 && !managed.name
+        const shouldGenerateTitle = existingAssistantCount === 0 && !managed.name && !event.isIntermediate
 
         // Use the parent that was active when text STARTED streaming (captured in text_delta)
         // This prevents text from being nested under tools that started after the text began
@@ -2829,13 +2818,16 @@ To view this task's output:
               costUsd: 0,
             }
           }
-          // Accumulate tokens from this turn
-          managed.tokenUsage.inputTokens += event.usage.inputTokens
+          // inputTokens = current context size (full conversation sent this turn), NOT accumulated
+          // Each API call sends the full conversation history, so we use the latest value
+          managed.tokenUsage.inputTokens = event.usage.inputTokens
+          // outputTokens and costUsd are accumulated across all turns (total session usage)
           managed.tokenUsage.outputTokens += event.usage.outputTokens
           managed.tokenUsage.totalTokens = managed.tokenUsage.inputTokens + managed.tokenUsage.outputTokens
           managed.tokenUsage.costUsd += event.usage.costUsd ?? 0
-          managed.tokenUsage.cacheReadTokens = (managed.tokenUsage.cacheReadTokens ?? 0) + (event.usage.cacheReadTokens ?? 0)
-          managed.tokenUsage.cacheCreationTokens = (managed.tokenUsage.cacheCreationTokens ?? 0) + (event.usage.cacheCreationTokens ?? 0)
+          // Cache tokens reflect current state, not accumulated
+          managed.tokenUsage.cacheReadTokens = event.usage.cacheReadTokens ?? 0
+          managed.tokenUsage.cacheCreationTokens = event.usage.cacheCreationTokens ?? 0
           // Update context window (use latest value - may change if model switches)
           if (event.usage.contextWindow) {
             managed.tokenUsage.contextWindow = event.usage.contextWindow

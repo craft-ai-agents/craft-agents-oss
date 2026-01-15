@@ -94,6 +94,7 @@ export interface ParentUpdateEvent {
 export interface CompleteEvent {
   type: 'complete'
   sessionId: string
+  tokenUsage?: Session['tokenUsage']
 }
 
 /**

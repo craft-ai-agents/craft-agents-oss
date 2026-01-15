@@ -7,7 +7,7 @@
   "supportedModes": ["dark"],
   "shikiTheme": {
     "light": "github-light",
-    "dark": "github-dark"
+    "dark": "vitesse-dark"
   },
   "background": "#292c33",
   "foreground": "#ffffff",

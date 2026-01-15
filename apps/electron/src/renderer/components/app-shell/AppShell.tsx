@@ -1001,17 +1001,17 @@ export function AppShell({
       <TooltipProvider delayDuration={0}>
         {/*
           Draggable title bar region for transparent window (macOS)
-          - Fixed overlay at z-40 allows window dragging from the top bar area
+          - Fixed overlay at z-titlebar allows window dragging from the top bar area
           - Interactive elements (buttons, dropdowns) must use:
             1. titlebar-no-drag: prevents drag behavior on clickable elements
-            2. relative z-50: ensures elements render above this drag overlay
+            2. relative z-panel: ensures elements render above this drag overlay
         */}
-        <div className="titlebar-drag-region fixed top-0 left-0 right-0 h-[50px] z-40" />
+        <div className="titlebar-drag-region fixed top-0 left-0 right-0 h-[50px] z-titlebar" />
 
       {/* App Menu - fixed position, always visible (hidden in focused mode) */}
       {!isFocusedMode && (
         <div
-          className="fixed left-[86px] top-0 h-[50px] z-[60] flex items-center titlebar-no-drag pr-2"
+          className="fixed left-[86px] top-0 h-[50px] z-overlay flex items-center titlebar-no-drag pr-2"
           style={{ width: sidebarWidth - 86 }}
         >
           <AppMenu
@@ -1033,8 +1033,7 @@ export function AppShell({
       )}
 
       {/* === OUTER LAYOUT: Sidebar | Main Content === */}
-      {/* z-50 ensures content stacks above the fixed titlebar-drag-region (z-40) */}
-      <div className="h-full flex items-stretch relative z-50">
+      <div className="h-full flex items-stretch relative">
         {/* === SIDEBAR (Left) === (hidden in focused mode)
             Animated width with spring physics for smooth 60-120fps transitions.
             Uses overflow-hidden to clip content during collapse animation.
@@ -1195,7 +1194,7 @@ export function AppShell({
             }
           }}
           onMouseLeave={() => { if (!isResizing) setSidebarHandleY(null) }}
-          className="absolute top-0 w-3 h-full cursor-col-resize z-50 flex justify-center"
+          className="absolute top-0 w-3 h-full cursor-col-resize z-panel flex justify-center"
           style={{
             left: isSidebarVisible ? sidebarWidth - 6 : -6,
             transition: isResizing === 'sidebar' ? undefined : 'left 0.15s ease-out',
@@ -1218,13 +1217,12 @@ export function AppShell({
           {/* === SESSION LIST PANEL === (hidden in focused mode) */}
           {!isFocusedMode && (
           <div
-            className="h-full flex flex-col min-w-0 bg-background/60 backdrop-blur-xl z-50 shrink-0 shadow-middle overflow-hidden rounded-l-[14px] rounded-r-[10px]"
+            className="h-full flex flex-col min-w-0 bg-background shrink-0 shadow-middle overflow-hidden rounded-l-[14px] rounded-r-[10px]"
             style={{ width: sessionListWidth }}
           >
             <PanelHeader
               title={isSidebarVisible ? listTitle : undefined}
               compensateForStoplight={!isSidebarVisible}
-              className="bg-transparent"
               actions={
                 <>
                   {/* Filter dropdown - allows filtering by todo states (only in All Chats view) */}
@@ -1426,7 +1424,7 @@ export function AppShell({
 
           {/* === MAIN CONTENT PANEL === */}
           <div className={cn(
-            "flex-1 overflow-hidden min-w-0 bg-transparent z-50 shadow-middle",
+            "flex-1 overflow-hidden min-w-0 bg-background shadow-middle",
             isFocusedMode ? "rounded-[14px]" : (isRightSidebarVisible ? "rounded-l-[10px] rounded-r-[10px]" : "rounded-l-[10px] rounded-r-[14px]")
           )}>
             <MainContentPanel isFocusedMode={isFocusedMode} />
@@ -1476,7 +1474,7 @@ export function AppShell({
                     opacity: isRightSidebarVisible ? 1 : 0,
                   }}
                   transition={isResizing === 'right-sidebar' || skipRightSidebarAnimation ? { duration: 0 } : springTransition}
-                  className="h-full bg-background/60 backdrop-blur-xl z-50 shadow-middle rounded-l-[10px] rounded-r-[14px]"
+                  className="h-full bg-surface-below shadow-middle rounded-l-[10px] rounded-r-[14px]"
                   style={{ width: rightSidebarWidth }}
                 >
                   <RightSidebar
@@ -1500,7 +1498,7 @@ export function AppShell({
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     transition={skipRightSidebarAnimation ? { duration: 0 } : { duration: 0.2 }}
-                    className="fixed inset-0 bg-black/25 z-60"
+                    className="fixed inset-0 bg-black/25 z-overlay"
                     onClick={() => setIsRightSidebarVisible(false)}
                   />
                   {/* Drawer panel */}
@@ -1509,9 +1507,9 @@ export function AppShell({
                     animate={{ x: 0 }}
                     exit={{ x: 316 }}
                     transition={skipRightSidebarAnimation ? { duration: 0 } : springTransition}
-                    className="fixed inset-y-0 right-0 w-[316px] h-screen z-60 p-1.5"
+                    className="fixed inset-y-0 right-0 w-[316px] h-screen z-overlay p-1.5"
                   >
-                    <div className="h-full bg-background/60 backdrop-blur-xl z-50 overflow-hidden shadow-strong rounded-[12px]">
+                    <div className="h-full bg-surface-below overflow-hidden shadow-strong rounded-[12px]">
                       <RightSidebar
                         panel={{ type: 'sessionMetadata' }}
                         sessionId={isChatsNavigation(navState) && navState.details ? navState.details.sessionId : undefined}

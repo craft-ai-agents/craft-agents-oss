@@ -1070,14 +1070,14 @@ export function FreeFormInput({
               {sourceDropdownOpen && sourceDropdownPosition && ReactDOM.createPortal(
                 <>
                   <div
-                    className="fixed inset-0 z-[9998]"
+                    className="fixed inset-0 z-floating-backdrop"
                     onClick={() => {
                       setSourceDropdownOpen(false)
                       setSourceFilter('')
                     }}
                   />
                   <div
-                    className="fixed z-[9999] min-w-[200px] overflow-hidden rounded-[8px] bg-background text-foreground shadow-modal-small"
+                    className="fixed z-floating-menu min-w-[200px] overflow-hidden rounded-[8px] bg-background text-foreground shadow-modal-small"
                     style={{
                       top: sourceDropdownPosition.top - 8,
                       left: sourceDropdownPosition.left,
@@ -1203,12 +1203,12 @@ export function FreeFormInput({
               <>
                 {/* Backdrop to close on click outside */}
                 <div
-                  className="fixed inset-0 z-[9998]"
+                  className="fixed inset-0 z-floating-backdrop"
                   onClick={() => setModelDropdownOpen(false)}
                 />
                 <div
                   ref={modelDropdownRef}
-                  className="fixed popover-styled p-2 z-[9999] min-w-[240px]"
+                  className="fixed popover-styled p-2 z-floating-menu min-w-[240px]"
                   style={{
                     top: modelDropdownPosition.top - 8, // 8px gap above button
                     left: modelDropdownPosition.left,
@@ -1259,20 +1259,6 @@ export function FreeFormInput({
                           )}
                         </span>
                       </div>
-                      {/* Progress bar - only show if we know the context window */}
-                      {contextStatus.contextWindow && (
-                        <div className="mt-1.5 h-1 bg-foreground/10 rounded-full overflow-hidden">
-                          <div
-                            className={cn(
-                              "h-full rounded-full transition-all",
-                              contextStatus.inputTokens / contextStatus.contextWindow > 0.8
-                                ? "bg-amber-500"
-                                : "bg-foreground/30"
-                            )}
-                            style={{ width: `${Math.min(100, (contextStatus.inputTokens / contextStatus.contextWindow) * 100)}%` }}
-                          />
-                        </div>
-                      )}
                     </div>
                   )}
                 </div>

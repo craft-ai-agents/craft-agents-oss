@@ -126,7 +126,7 @@ export function SessionMetadataPanel({ sessionId, closeButton }: SessionMetadata
   if (!sessionId) {
     return (
       <div className="h-full flex flex-col">
-        <PanelHeader title="Session Info" actions={closeButton} className="bg-transparent" />
+        <PanelHeader title="Session Info" actions={closeButton} />
         <div className="flex-1 flex items-center justify-center text-muted-foreground p-4">
           <p className="text-sm text-center">No session selected</p>
         </div>
@@ -137,7 +137,7 @@ export function SessionMetadataPanel({ sessionId, closeButton }: SessionMetadata
   if (!session) {
     return (
       <div className="h-full flex flex-col">
-        <PanelHeader title="Session Info" actions={closeButton} className="bg-transparent" />
+        <PanelHeader title="Session Info" actions={closeButton} />
         <div className="flex-1 flex items-center justify-center text-muted-foreground p-4">
           <p className="text-sm text-center">Loading session...</p>
         </div>
@@ -147,7 +147,7 @@ export function SessionMetadataPanel({ sessionId, closeButton }: SessionMetadata
 
   return (
     <div className="h-full flex flex-col">
-      <PanelHeader title="Session Info" actions={closeButton} className="bg-transparent" />
+      <PanelHeader title="Session Info" actions={closeButton} />
       <div className="flex-1 overflow-auto p-4 space-y-5">
         {/* Name */}
         <div>

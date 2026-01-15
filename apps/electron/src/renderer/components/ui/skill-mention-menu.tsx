@@ -127,7 +127,7 @@ export function InlineSkillMention({
   return (
     <div
       ref={menuRef}
-      className={cn('fixed z-50', MENU_CONTAINER_STYLE, className)}
+      className={cn('fixed z-dropdown', MENU_CONTAINER_STYLE, className)}
       style={{ left: Math.round(position.x) - 10, bottom: bottomPosition }}
     >
       <div className={MENU_LIST_STYLE}>

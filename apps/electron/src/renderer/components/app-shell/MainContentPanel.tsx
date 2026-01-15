@@ -52,26 +52,26 @@ export function MainContentPanel({
     switch (navState.subpage) {
       case 'workspace':
         return wrapWithStoplight(
-          <Panel variant="grow" transparent className={className}>
+          <Panel variant="grow" className={className}>
             <WorkspaceSettingsPage />
           </Panel>
         )
       case 'shortcuts':
         return wrapWithStoplight(
-          <Panel variant="grow" transparent className={className}>
+          <Panel variant="grow" className={className}>
             <ShortcutsPage />
           </Panel>
         )
       case 'preferences':
         return wrapWithStoplight(
-          <Panel variant="grow" transparent className={className}>
+          <Panel variant="grow" className={className}>
             <PreferencesPage />
           </Panel>
         )
       case 'app':
       default:
         return wrapWithStoplight(
-          <Panel variant="grow" transparent className={className}>
+          <Panel variant="grow" className={className}>
             <AppSettingsPage />
           </Panel>
         )
@@ -82,7 +82,7 @@ export function MainContentPanel({
   if (isSourcesNavigation(navState)) {
     if (navState.details) {
       return wrapWithStoplight(
-        <Panel variant="grow" transparent className={className}>
+        <Panel variant="grow" className={className}>
           <SourceInfoPage
             sourceSlug={navState.details.sourceSlug}
             workspaceId={activeWorkspaceId || ''}
@@ -92,7 +92,7 @@ export function MainContentPanel({
     }
     // No source selected - empty state
     return wrapWithStoplight(
-      <Panel variant="grow" transparent className={className}>
+      <Panel variant="grow" className={className}>
         <div className="flex items-center justify-center h-full text-muted-foreground">
           <p className="text-sm">No sources configured</p>
         </div>
@@ -104,7 +104,7 @@ export function MainContentPanel({
   if (isSkillsNavigation(navState)) {
     if (navState.details) {
       return wrapWithStoplight(
-        <Panel variant="grow" transparent className={className}>
+        <Panel variant="grow" className={className}>
           <SkillInfoPage
             skillSlug={navState.details.skillSlug}
             workspaceId={activeWorkspaceId || ''}
@@ -114,7 +114,7 @@ export function MainContentPanel({
     }
     // No skill selected - empty state
     return wrapWithStoplight(
-      <Panel variant="grow" transparent className={className}>
+      <Panel variant="grow" className={className}>
         <div className="flex items-center justify-center h-full text-muted-foreground">
           <p className="text-sm">No skills configured</p>
         </div>
@@ -126,14 +126,14 @@ export function MainContentPanel({
   if (isChatsNavigation(navState)) {
     if (navState.details) {
       return wrapWithStoplight(
-        <Panel variant="grow" transparent className={className}>
+        <Panel variant="grow" className={className}>
           <ChatPage sessionId={navState.details.sessionId} />
         </Panel>
       )
     }
     // No session selected - empty state
     return wrapWithStoplight(
-      <Panel variant="grow" transparent className={className}>
+      <Panel variant="grow" className={className}>
         <div className="flex items-center justify-center h-full text-muted-foreground">
           <p className="text-sm">
             {navState.filter.kind === 'flagged'
@@ -147,7 +147,7 @@ export function MainContentPanel({
 
   // Fallback (should not happen with proper NavigationState)
   return wrapWithStoplight(
-    <Panel variant="grow" transparent className={className}>
+    <Panel variant="grow" className={className}>
       <div className="flex items-center justify-center h-full text-muted-foreground">
         <p className="text-sm">Select a conversation to get started</p>
       </div>

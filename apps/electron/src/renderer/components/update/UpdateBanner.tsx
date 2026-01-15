@@ -50,7 +50,7 @@ export function UpdateBanner({
             damping: 30,
             mass: 0.8,
           }}
-          className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50"
+          className="fixed bottom-4 left-1/2 -translate-x-1/2 z-overlay"
           style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
         >
           <div

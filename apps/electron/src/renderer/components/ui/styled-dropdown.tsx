@@ -122,7 +122,7 @@ export const StyledDropdownMenuSubContent = React.forwardRef<
       ref={ref}
       sideOffset={sideOffset}
       className={cn(
-        "popover-styled w-fit font-sans whitespace-nowrap text-xs flex flex-col gap-0.5 z-50 overflow-hidden p-1",
+        "popover-styled w-fit font-sans whitespace-nowrap text-xs flex flex-col gap-0.5 z-dropdown overflow-hidden p-1",
         "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
         minWidth,
         className

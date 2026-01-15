@@ -81,11 +81,11 @@ function Kbd({ children }: { children: React.ReactNode }) {
 
 export default function ShortcutsPage() {
   return (
-    <div className="h-full flex flex-col bg-transparent">
-      <PanelHeader title="Shortcuts" className="bg-transparent" />
+    <div className="h-full flex flex-col bg-surface-below">
+      <PanelHeader title="Shortcuts" />
       <div className="relative flex-1 min-h-0">
         {/* Top fade gradient */}
-        <div className="absolute top-0 left-0 right-2 h-8 z-10 bg-gradient-to-b from-transparent to-transparent pointer-events-none" />
+        <div className="absolute top-0 left-0 right-2 h-8 z-10 bg-gradient-to-b from-surface-below to-transparent pointer-events-none" />
         <ScrollArea className="h-full">
           <div className="px-5 py-7 max-w-3xl mx-auto space-y-6">
             {sections.map((section) => (
@@ -106,7 +106,7 @@ export default function ShortcutsPage() {
           </div>
         </ScrollArea>
         {/* Bottom fade gradient */}
-        <div className="absolute bottom-0 left-0 right-2 h-8 z-10 bg-gradient-to-t from-transparent to-transparent pointer-events-none" />
+        <div className="absolute bottom-0 left-0 right-2 h-8 z-10 bg-gradient-to-t from-surface-below to-transparent pointer-events-none" />
       </div>
     </div>
   )

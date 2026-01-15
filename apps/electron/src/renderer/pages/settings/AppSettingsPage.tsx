@@ -469,11 +469,11 @@ export default function AppSettingsPage() {
   }, [])
 
   return (
-    <div className="h-full flex flex-col bg-transparent">
-      <PanelHeader title="App Settings" actions={<HeaderMenu route={routes.view.settings('app')} />} className="bg-transparent" />
+    <div className="h-full flex flex-col bg-surface-below">
+      <PanelHeader title="App Settings" actions={<HeaderMenu route={routes.view.settings('app')} />} />
       <div className="relative flex-1 min-h-0">
         {/* Top fade gradient */}
-        <div className="absolute top-0 left-0 right-2 h-8 z-10 bg-gradient-to-b from-transparent to-transparent pointer-events-none" />
+        <div className="absolute top-0 left-0 right-2 h-8 z-10 bg-gradient-to-b from-surface-below to-transparent pointer-events-none" />
         <ScrollArea className="h-full">
           <div className="px-5 py-7 max-w-3xl mx-auto">
           <div className="space-y-6">
@@ -644,7 +644,7 @@ export default function AppSettingsPage() {
         </div>
         </ScrollArea>
         {/* Bottom fade gradient */}
-        <div className="absolute bottom-0 left-0 right-2 h-8 z-10 bg-gradient-to-t from-transparent to-transparent pointer-events-none" />
+        <div className="absolute bottom-0 left-0 right-2 h-8 z-10 bg-gradient-to-t from-surface-below to-transparent pointer-events-none" />
       </div>
     </div>
   )

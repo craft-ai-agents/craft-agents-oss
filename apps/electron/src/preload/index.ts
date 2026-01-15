@@ -121,16 +121,6 @@ const api: ElectronAPI = {
     ipcRenderer.on(IPC_CHANNELS.MENU_OPEN_HELP, handler)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.MENU_OPEN_HELP, handler)
   },
-  onMenuImportClaudeCode: (callback: () => void) => {
-    const handler = () => callback()
-    ipcRenderer.on(IPC_CHANNELS.MENU_IMPORT_CLAUDE_CODE, handler)
-    return () => ipcRenderer.removeListener(IPC_CHANNELS.MENU_IMPORT_CLAUDE_CODE, handler)
-  },
-
-  // Claude Code import
-  discoverClaudeCodeSessions: () => ipcRenderer.invoke(IPC_CHANNELS.IMPORT_DISCOVER_SESSIONS),
-  importClaudeCodeSessions: (filePaths: string[]) => ipcRenderer.invoke(IPC_CHANNELS.IMPORT_SESSIONS, filePaths),
-  findSessionBySdkId: (sdkSessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.FIND_SESSION_BY_SDK_ID, sdkSessionId),
 
   // Deep link navigation listener (for external craftagents:// URLs)
   onDeepLinkNavigate: (callback: (nav: import('../shared/types').DeepLinkNavigation) => void) => {

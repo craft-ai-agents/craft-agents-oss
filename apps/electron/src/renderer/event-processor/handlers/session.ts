@@ -39,7 +39,7 @@ import { generateMessageId, appendMessage } from '../helpers'
  */
 export function handleComplete(
   state: SessionState,
-  _event: CompleteEvent
+  event: CompleteEvent
 ): ProcessResult {
   const { session } = state
 
@@ -65,6 +65,8 @@ export function handleComplete(
         messages: updatedMessages,
         isProcessing: false,
         currentStatus: undefined,  // Clear any lingering status
+        // Update tokenUsage from complete event (for real-time context counter updates)
+        tokenUsage: event.tokenUsage ?? session.tokenUsage,
       },
       streaming: null,
     },

@@ -67,10 +67,6 @@ function applyThemeToDOM(resolvedMode: 'light' | 'dark', colorTheme: string, mod
   // Always set theme override for semi-transparent background (vibrancy effect)
   root.dataset.themeOverride = 'true'
 
-  // Experimental: Custom background image
-  // To disable: comment out or delete this line
-  root.dataset.customBackground = 'true'
-
   // Note: themeMismatch is managed by useTheme hook which has access to both
   // systemPreference (for vibrancy) and presetTheme.supportedModes (for theme support)
 

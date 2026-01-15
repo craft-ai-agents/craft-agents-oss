@@ -30,7 +30,7 @@ function TooltipContent({
         data-slot="tooltip-content"
         sideOffset={sideOffset}
         className={cn(
-          "z-50 overflow-hidden rounded-[8px] px-2.5 py-1.5 text-xs",
+          "z-tooltip overflow-hidden rounded-[8px] px-2.5 py-1.5 text-xs",
           "dark bg-background/80 backdrop-blur-xl backdrop-saturate-150 border border-border/50 text-foreground",
           "animate-in fade-in-0 duration-100 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:duration-75",
           className

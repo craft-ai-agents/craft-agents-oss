@@ -43,12 +43,11 @@ export function NavigatorPanel({
   className,
 }: NavigatorPanelProps) {
   return (
-    <Panel variant="shrink" width={width} transparent className={className}>
+    <Panel variant="shrink" width={width} className={className}>
       <PanelHeader
         title={title}
         actions={headerActions}
         compensateForStoplight={!isSidebarVisible}
-        className="bg-transparent"
       />
       {children}
     </Panel>

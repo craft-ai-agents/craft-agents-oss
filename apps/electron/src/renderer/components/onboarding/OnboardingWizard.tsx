@@ -118,7 +118,7 @@ export function OnboardingWizard({
       )}
     >
       {/* Draggable title bar region for transparent window (macOS) */}
-      <div className="titlebar-drag-region fixed top-0 left-0 right-0 h-[50px] z-40" />
+      <div className="titlebar-drag-region fixed top-0 left-0 right-0 h-[50px] z-titlebar" />
 
       {/* Header with progress indicator */}
       <header className="flex h-14 items-center justify-center px-4">

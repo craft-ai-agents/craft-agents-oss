@@ -2778,23 +2778,24 @@ export class CraftAgent {
         // Debug: log result message details (stderr to avoid SDK JSON pollution)
         console.error(`[CraftAgent] result message: subtype=${message.subtype}, errors=${'errors' in message ? JSON.stringify((message as any).errors) : 'none'}`);
 
-        // Build usage info with all token types
-        // Total input = input_tokens + cache_creation + cache_read
+        // Extract authoritative usage from modelUsage (SDK provides per-model breakdown)
+        // modelUsage.inputTokens already includes cache tokens - don't double count!
+        const modelUsageEntries = Object.values(message.modelUsage || {});
+        const primaryModelUsage = modelUsageEntries[0];
+
+        // Cache tokens from top-level usage (for separate tracking)
         const cacheRead = message.usage.cache_read_input_tokens ?? 0;
         const cacheCreation = message.usage.cache_creation_input_tokens ?? 0;
 
-        // Extract context window from modelUsage (SDK provides per-model usage breakdown)
-        // Use the first model's contextWindow (typically only one model per turn)
-        const modelUsageEntries = Object.values(message.modelUsage || {});
-        const contextWindow = modelUsageEntries[0]?.contextWindow;
-
         const usage = {
-          inputTokens: message.usage.input_tokens + cacheRead + cacheCreation,
-          outputTokens: message.usage.output_tokens,
+          // Use modelUsage.inputTokens (authoritative, includes cache) for context size
+          // Fall back to manual calculation only if modelUsage unavailable
+          inputTokens: primaryModelUsage?.inputTokens ?? (message.usage.input_tokens + cacheRead + cacheCreation),
+          outputTokens: primaryModelUsage?.outputTokens ?? message.usage.output_tokens,
           cacheReadTokens: cacheRead,
           cacheCreationTokens: cacheCreation,
           costUsd: message.total_cost_usd,
-          contextWindow,
+          contextWindow: primaryModelUsage?.contextWindow,
         };
 
         if (message.subtype === 'success') {

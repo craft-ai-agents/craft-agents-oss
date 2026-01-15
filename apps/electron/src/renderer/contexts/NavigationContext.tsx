@@ -290,25 +290,6 @@ export function NavigationProvider({
           }
           break
 
-        case 'resume-sdk-session':
-          // Look up Craft Agent session by SDK session ID (for Claude Code resume)
-          if (parsed.id) {
-            const sessionId = await window.electronAPI.findSessionBySdkId(parsed.id)
-            if (sessionId) {
-              setSession({ selected: sessionId })
-              setNavigationState({
-                navigator: 'chats',
-                filter: { kind: 'allChats' },
-                details: { type: 'chat', sessionId },
-              })
-            } else {
-              toast.error('Session not found', {
-                description: 'This Claude Code session has not been imported yet.',
-              })
-            }
-          }
-          break
-
         default:
           console.warn('[Navigation] Unknown action:', parsed.name)
       }

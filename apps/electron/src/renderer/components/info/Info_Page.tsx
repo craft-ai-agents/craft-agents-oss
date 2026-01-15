@@ -65,7 +65,7 @@ function Info_PageRoot({
   // Loading state
   if (loading) {
     return (
-      <div className={cn('h-full flex flex-col bg-transparent', className)}>
+      <div className={cn('h-full flex flex-col bg-surface-below', className)}>
         {header}
         <div className="flex-1 flex items-center justify-center">
           <Spinner className="text-lg text-muted-foreground" />
@@ -77,7 +77,7 @@ function Info_PageRoot({
   // Error state
   if (error) {
     return (
-      <div className={cn('h-full flex flex-col bg-transparent', className)}>
+      <div className={cn('h-full flex flex-col bg-surface-below', className)}>
         {header}
         <div className="flex-1 flex flex-col items-center justify-center gap-3 text-muted-foreground p-4">
           <AlertCircle className="h-10 w-10 text-destructive" />
@@ -91,7 +91,7 @@ function Info_PageRoot({
   // Empty state
   if (empty) {
     return (
-      <div className={cn('h-full flex flex-col bg-transparent', className)}>
+      <div className={cn('h-full flex flex-col bg-surface-below', className)}>
         {header}
         <div className="flex-1 flex items-center justify-center text-muted-foreground">
           <p className="text-sm">{empty}</p>
@@ -102,7 +102,7 @@ function Info_PageRoot({
 
   // Normal content
   return (
-    <div className={cn('h-full flex flex-col bg-transparent', className)}>
+    <div className={cn('h-full flex flex-col bg-surface-below', className)}>
       {header}
       {otherChildren}
     </div>
@@ -110,7 +110,7 @@ function Info_PageRoot({
 }
 
 function Info_PageHeader({ className, ...props }: Info_PageHeaderProps) {
-  return <PanelHeader className={cn('bg-transparent', className)} {...props} />
+  return <PanelHeader className={cn('bg-surface-below', className)} {...props} />
 }
 
 function Info_PageHero({ avatar, title, tagline, className }: Info_PageHeroProps) {
@@ -139,14 +139,14 @@ function Info_PageContent({ children, className }: Info_PageContentProps) {
   return (
     <div className="relative flex-1 min-h-0">
       {/* Top fade gradient */}
-      <div className="absolute top-0 left-0 right-2 h-8 z-10 bg-gradient-to-b from-transparent to-transparent pointer-events-none" />
+      <div className="absolute top-0 left-0 right-2 h-8 z-10 bg-gradient-to-b from-surface-below to-transparent pointer-events-none" />
       <ScrollArea className="h-full">
         <div className={cn(CHAT_LAYOUT.maxWidth, 'mx-auto px-5 pt-6 pb-10')}>
           <div className={cn('space-y-6', className)}>{children}</div>
         </div>
       </ScrollArea>
       {/* Bottom fade gradient */}
-      <div className="absolute bottom-0 left-0 right-2 h-8 z-10 bg-gradient-to-t from-transparent to-transparent pointer-events-none" />
+      <div className="absolute bottom-0 left-0 right-2 h-8 z-10 bg-gradient-to-t from-surface-below to-transparent pointer-events-none" />
     </div>
   )
 }

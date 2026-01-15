@@ -148,9 +148,7 @@ export function PanelHeader({
   const basePadding = 16
 
   const baseClassName = cn(
-    'flex shrink-0 items-center pr-2 min-w-0 gap-1 relative z-50',
-    // Transparent background by default (for custom background image support)
-    'bg-transparent',
+    'flex shrink-0 items-center pr-2 min-w-0 gap-1 relative z-panel',
     // Slightly shorter header in focused mode to align with traffic lights
     shouldCompensate ? 'h-[38px]' : 'h-[40px]',
     // Only use static paddingLeft class when not animating

@@ -110,6 +110,38 @@
   --spacing: 0.25rem;
   --tracking-normal: 0em;
 
+  /* === Z-INDEX SCALE ===
+     Centralized z-index registry for consistent stacking order.
+     Use semantic names (z-panel, z-modal) instead of magic numbers.
+
+     Layer              Value   Use Case
+     ─────────────────────────────────────────────────────
+     base               0       Default content
+     local              10      Local stacking (sticky headers, icons)
+     sticky             20      Sticky section headers
+     titlebar           40      Window titlebar drag region
+     panel              50      App panels (sidebar, chat, detail)
+     dropdown           100     Dropdowns, popovers, select menus
+     tooltip            150     Tooltips (above dropdowns)
+     modal              200     Dialogs, drawers
+     overlay            300     Full-screen overlays (settings)
+     floating-backdrop  390     Backdrop for floating menus
+     floating-menu      400     Floating menus above modals
+     splash             600     Splash screen, workspace creation
+  */
+  --z-base: 0;
+  --z-local: 10;
+  --z-sticky: 20;
+  --z-titlebar: 40;
+  --z-panel: 50;
+  --z-dropdown: 100;
+  --z-tooltip: 150;
+  --z-modal: 200;
+  --z-overlay: 300;
+  --z-floating-backdrop: 390;
+  --z-floating-menu: 400;
+  --z-splash: 600;
+
 }
 
 /* Dark Mode */
@@ -171,9 +203,8 @@
   --md-counters: var(--foreground-50);
 }
 
-/* Theme Override - Semi-transparent background to allow vibrancy through
-   When custom background is enabled, skip this overlay so the image shows at 100% */
-html[data-theme-override]:not([data-custom-background])::before {
+/* Theme Override - Semi-transparent background to allow vibrancy through */
+html[data-theme-override]::before {
   content: '';
   position: fixed;
   inset: 0;
@@ -190,25 +221,6 @@ html[data-theme-mismatch]::before {
   inset: 0;
   background: var(--foreground-10);
   z-index: -1;
-  pointer-events: none;
-}
-
-/* =============================================================================
-   CUSTOM BACKGROUND IMAGE (Experimental)
-
-   Enabled via data-custom-background attribute on html element.
-   To disable: remove the dataset.customBackground line in ThemeContext.tsx
-   To remove completely: delete this CSS block and the image file in assets/backgrounds/
-============================================================================= */
-html[data-custom-background]::after {
-  content: '';
-  position: fixed;
-  inset: 0;
-  background-image: url('./assets/backgrounds/mountain-sunset.jpg');
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  z-index: -2;
   pointer-events: none;
 }
 
@@ -270,6 +282,19 @@ html[data-font="inter"] {
   --font-mono: var(--font-mono);
   --font-serif: var(--font-serif);
 
+  /* === Z-INDEX SCALE === */
+  --z-index-base: var(--z-base);
+  --z-index-local: var(--z-local);
+  --z-index-sticky: var(--z-sticky);
+  --z-index-titlebar: var(--z-titlebar);
+  --z-index-panel: var(--z-panel);
+  --z-index-dropdown: var(--z-dropdown);
+  --z-index-tooltip: var(--z-tooltip);
+  --z-index-modal: var(--z-modal);
+  --z-index-overlay: var(--z-overlay);
+  --z-index-floating-backdrop: var(--z-floating-backdrop);
+  --z-index-floating-menu: var(--z-floating-menu);
+  --z-index-splash: var(--z-splash);
 
   --shadow-2xs: var(--shadow-2xs);
   --shadow-xs: var(--shadow-xs);
