@@ -20,6 +20,9 @@ export {
   usePlatform,
   type PlatformActions,
   type PlatformProviderProps,
+  ShikiThemeProvider,
+  useShikiTheme,
+  type ShikiThemeProviderProps,
 } from './context'
 
 // Chat components

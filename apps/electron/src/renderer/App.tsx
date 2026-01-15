@@ -48,6 +48,7 @@ import { sourcesAtom } from '@/atoms/sources'
 import { skillsAtom } from '@/atoms/skills'
 import { extractBadges } from '@/lib/mentions'
 import { getDefaultStore } from 'jotai'
+import { ShikiThemeProvider } from '@craft-agent/ui'
 
 // Register tutorials at module load
 registerTutorial(sourceCreationTutorial)
@@ -227,7 +228,9 @@ export default function App() {
   }, [])
 
   // Apply theme via hook (injects CSS variables)
-  useTheme({ appTheme })
+  // shikiTheme is passed to ShikiThemeProvider to ensure correct syntax highlighting
+  // theme for dark-only themes in light system mode
+  const { shikiTheme } = useTheme({ appTheme })
 
   // Ref for sessionOptions to access current value in event handlers without re-registering
   const sessionOptionsRef = useRef(sessionOptions)
@@ -1184,8 +1187,9 @@ export default function App() {
 
   // Ready state - main app with splash overlay during data loading
   return (
-    <FocusProvider>
-      <TooltipProvider>
+    <ShikiThemeProvider shikiTheme={shikiTheme}>
+      <FocusProvider>
+        <TooltipProvider>
         <NavigationProvider
           workspaceId={windowWorkspaceId}
           onCreateSession={handleCreateSession}
@@ -1233,7 +1237,8 @@ export default function App() {
             <TutorialComplete />
           </TutorialProvider>
         </NavigationProvider>
-      </TooltipProvider>
-    </FocusProvider>
+        </TooltipProvider>
+      </FocusProvider>
+    </ShikiThemeProvider>
   )
 }

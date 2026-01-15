@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { codeToHtml, bundledLanguages, type BundledLanguage } from 'shiki'
 import { cn } from '../../lib/utils'
+import { useShikiTheme } from '../../context/ShikiThemeContext'
 
 export interface CodeBlockProps {
   code: string
@@ -65,6 +66,10 @@ export function CodeBlock({ code, language = 'text', className, mode = 'full', f
   const [isLoading, setIsLoading] = React.useState(true)
   const [copied, setCopied] = React.useState(false)
 
+  // Get shiki theme from context (set by ShikiThemeProvider in the app).
+  // This correctly handles edge cases like dark-only themes in light system mode.
+  const contextShikiTheme = useShikiTheme()
+
   // Resolve language alias - keep as string to allow 'text' fallback
   const langLower = language.toLowerCase()
   const resolvedLang: string = LANGUAGE_ALIASES[langLower] || langLower
@@ -73,9 +78,19 @@ export function CodeBlock({ code, language = 'text', className, mode = 'full', f
     let cancelled = false
 
     async function highlight() {
-      // Check cache first - use forcedTheme if provided, otherwise detect from DOM
-      const isDark = forcedTheme ? forcedTheme === 'dark' : document.documentElement.classList.contains('dark')
-      const theme = isDark ? 'github-dark' : 'github-light'
+      // Theme priority:
+      // 1. Context theme (from ShikiThemeProvider) - handles supportedModes correctly
+      // 2. forcedTheme prop - explicit override for specific use cases
+      // 3. DOM detection fallback - backwards compatible default
+      let theme: string
+      if (contextShikiTheme) {
+        theme = contextShikiTheme
+      } else if (forcedTheme) {
+        theme = forcedTheme === 'dark' ? 'github-dark' : 'github-light'
+      } else {
+        const isDark = document.documentElement.classList.contains('dark')
+        theme = isDark ? 'github-dark' : 'github-light'
+      }
       const cacheKey = getCacheKey(code, resolvedLang, theme)
 
       const cached = highlightCache.get(cacheKey)
@@ -122,7 +137,7 @@ export function CodeBlock({ code, language = 'text', className, mode = 'full', f
     return () => {
       cancelled = true
     }
-  }, [code, resolvedLang, forcedTheme])
+  }, [code, resolvedLang, forcedTheme, contextShikiTheme])
 
   const handleCopy = React.useCallback(async () => {
     try {
