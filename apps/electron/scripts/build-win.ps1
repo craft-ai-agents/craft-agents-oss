@@ -81,9 +81,29 @@ try {
     $BunExePath = "$ElectronDir\vendor\bun\bun.exe"
     Unblock-File -Path $BunExePath -ErrorAction SilentlyContinue
 
-    # Verify we can read the file (ensures no lock)
-    Write-Host "Verifying bun.exe is accessible..."
-    $null = [System.IO.File]::OpenRead($BunExePath).Close()
+    # Wait for Windows Defender to finish scanning the executable
+    # This prevents EBUSY errors when electron-builder tries to copy it later
+    Write-Host "Waiting for antivirus scan to complete..."
+    $maxWaitAttempts = 12  # 12 attempts * 5 seconds = 60 seconds max
+    $waitAttempt = 0
+    $fileAccessible = $false
+
+    while (-not $fileAccessible -and $waitAttempt -lt $maxWaitAttempts) {
+        $waitAttempt++
+        Start-Sleep -Seconds 5
+        try {
+            $stream = [System.IO.File]::Open($BunExePath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
+            $stream.Close()
+            $fileAccessible = $true
+            Write-Host "  bun.exe is accessible (attempt $waitAttempt)" -ForegroundColor Green
+        } catch {
+            Write-Host "  Waiting... (attempt $waitAttempt/$maxWaitAttempts)" -ForegroundColor Yellow
+        }
+    }
+
+    if (-not $fileAccessible) {
+        Write-Host "WARNING: bun.exe may still be locked after $maxWaitAttempts attempts" -ForegroundColor Yellow
+    }
 } finally {
     Remove-Item -Recurse -Force $TempDir -ErrorAction SilentlyContinue
 }
