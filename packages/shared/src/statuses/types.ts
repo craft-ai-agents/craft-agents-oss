@@ -3,6 +3,13 @@
  *
  * Types for configurable session statuses.
  * Statuses are stored at {workspaceRootPath}/statuses/config.json
+ *
+ * Icon format: Simple string (emoji or URL)
+ * - Emoji: "✅", "🔥" - rendered as text
+ * - URL: "https://..." - auto-downloaded to statuses/icons/{id}.{ext}
+ * - Local files: Stored in statuses/icons/{id}.svg (auto-discovered)
+ *
+ * Priority: local file > URL (downloaded) > emoji
  */
 
 /**
@@ -11,25 +18,6 @@
  * - 'closed': Appears in archive (listCompletedSessions)
  */
 export type StatusCategory = 'open' | 'closed';
-
-/**
- * Status icon representation
- */
-export interface StatusIcon {
-  /**
-   * Icon type:
-   * - 'emoji': Unicode emoji character (e.g., "✅", "🔥")
-   * - 'file': Filename in statuses/icons/ directory (e.g., "todo.svg", "custom.png")
-   */
-  type: 'emoji' | 'file';
-
-  /**
-   * Icon value:
-   * - For emoji: the Unicode character
-   * - For file: the filename (SVG, PNG, JPG, etc.)
-   */
-  value: string;
-}
 
 /**
  * Status configuration (stored in statuses/config.json)
@@ -44,8 +32,13 @@ export interface StatusConfig {
   /** Optional color (hex code or Tailwind class). If omitted, uses design system defaults. */
   color?: string;
 
-  /** Icon configuration */
-  icon: StatusIcon;
+  /**
+   * Icon: emoji or URL (auto-downloaded)
+   * - Emoji: "✅", "🔥" - rendered as text
+   * - URL: "https://..." - auto-downloaded to statuses/icons/{id}.{ext}
+   * - Omit to use auto-discovered local file (statuses/icons/{id}.svg)
+   */
+  icon?: string;
 
   /** Category (open = inbox, closed = archive) */
   category: StatusCategory;
@@ -80,7 +73,7 @@ export interface WorkspaceStatusConfig {
 export interface CreateStatusInput {
   label: string;
   color?: string;
-  icon: StatusIcon;
+  icon?: string; // Emoji or URL
   category: StatusCategory;
 }
 
@@ -90,6 +83,6 @@ export interface CreateStatusInput {
 export interface UpdateStatusInput {
   label?: string;
   color?: string;
-  icon?: StatusIcon;
+  icon?: string; // Emoji or URL
   category?: StatusCategory;
 }

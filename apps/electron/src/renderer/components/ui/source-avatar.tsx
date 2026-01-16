@@ -4,6 +4,12 @@
  * Provides consistent styling for all source icons.
  * Uses CrossfadeAvatar internally for smooth image loading with fallback support.
  *
+ * Supports three icon types:
+ * - File-based icons (icon.svg, icon.png) - loaded via IPC
+ * - Emoji icons (from config.icon) - rendered as text
+ * - URL icons - resolved via favicon service or downloaded
+ * - Default fallback (type-specific icon)
+ *
  * Two usage patterns:
  * 1. Direct props: <SourceAvatar type="mcp" name="Linear" logoUrl="..." />
  * 2. Source object: <SourceAvatar source={loadedSource} />
@@ -31,6 +37,7 @@ import {
 import { Mail, Plug, Globe, HardDrive } from 'lucide-react'
 import { McpIcon } from '@/components/icons/McpIcon'
 import { deriveServiceUrl } from '@craft-agent/shared/utils/service-url'
+import { isEmoji } from '@craft-agent/shared/utils/icon-constants'
 import type { LoadedSource } from '@craft-agent/shared/sources/types'
 import type { SourceConnectionStatus } from '../../../shared/types'
 import { SourceStatusIndicator, deriveConnectionStatus } from './source-status-indicator'
@@ -92,6 +99,14 @@ const SIZE_CONFIG: Record<SourceAvatarSize, string> = {
   sm: 'h-4 w-4',
   md: 'h-5 w-5',
   lg: 'h-6 w-6',
+}
+
+// Font size mapping for emoji rendering at different avatar sizes
+const EMOJI_SIZE_CONFIG: Record<SourceAvatarSize, string> = {
+  xs: 'text-[10px]',
+  sm: 'text-[11px]',
+  md: 'text-[13px]',
+  lg: 'text-[16px]',
 }
 
 // Fallback icons by source type
@@ -258,6 +273,9 @@ export function SourceAvatar(props: SourceAvatarProps) {
   let workspaceId: string | undefined
   let localIconPath: string | undefined
 
+  // For emoji icons from config.icon
+  let emojiIcon: string | undefined
+
   // For remote icons, we need serviceUrl and provider
   let serviceUrl: string | null = null
   let provider: string | undefined
@@ -273,15 +291,20 @@ export function SourceAvatar(props: SourceAvatarProps) {
     // e.g., "gmail" slug maps to mail.google.com, while "google" provider has no mapping
     provider = source.config.slug ?? source.config.provider
 
-    // Check if iconUrl is a local path
-    const iconUrl = source.config.iconUrl
-    if (iconUrl?.startsWith('./')) {
-      // Local icon - need to load via IPC
-      // Path format: sources/{slug}/icon.png
-      const iconFilename = iconUrl.slice(2) // Remove './'
-      localIconPath = `sources/${source.config.slug}/${iconFilename}`
+    // Check icon field for emoji or URL
+    const icon = source.config.icon
+    if (icon && isEmoji(icon)) {
+      // Emoji icon - render as text
+      emojiIcon = icon
     } else {
-      // Derive service URL for favicon resolution
+      // Try to find local icon file (icon.svg, icon.png, etc.)
+      // The watcher downloads URL icons to local files automatically
+      // We check for common extensions - the actual file is found via IPC
+      localIconPath = `sources/${source.config.slug}/icon`
+    }
+
+    // If no icon field set, derive service URL for favicon resolution
+    if (!icon && !emojiIcon) {
       serviceUrl = deriveServiceUrl(source.config)
     }
 
@@ -300,17 +323,19 @@ export function SourceAvatar(props: SourceAvatarProps) {
     connectionError = directProps.statusError
   }
 
-  // Load local icon via IPC if needed
-  const loadedLocalIcon = useWorkspaceImage(workspaceId, localIconPath)
+  // Load local icon via IPC if needed (tries icon.svg, icon.png, etc.)
+  const loadedLocalIcon = useWorkspaceImage(workspaceId, localIconPath ? localIconPath + '.svg' : undefined)
+  const loadedLocalIconPng = useWorkspaceImage(workspaceId, localIconPath && !loadedLocalIcon ? localIconPath + '.png' : undefined)
+  const finalLocalIcon = loadedLocalIcon ?? loadedLocalIconPng
 
-  // Resolve logo URL via IPC (only if no local icon and no explicit URL)
+  // Resolve logo URL via IPC (only if no local icon, no emoji, and no explicit URL)
   const resolvedLogoUrl = useLogoUrl(
-    !localIconPath && !explicitLogoUrl ? serviceUrl : null,
+    !finalLocalIcon && !emojiIcon && !explicitLogoUrl ? serviceUrl : null,
     provider
   )
 
   // Final resolved URL: local icon > explicit URL > resolved URL > null
-  const finalLogoUrl = loadedLocalIcon ?? explicitLogoUrl ?? resolvedLogoUrl
+  const finalLogoUrl = finalLocalIcon ?? explicitLogoUrl ?? resolvedLogoUrl
 
   const FallbackIcon = FALLBACK_ICONS[type] ?? Plug
   const statusSize = STATUS_SIZE_CONFIG[size]
@@ -319,6 +344,37 @@ export function SourceAvatar(props: SourceAvatarProps) {
   const hasCustomSize = className?.match(/\b(h-|w-|size-)/)
   const containerSize = hasCustomSize ? undefined : SIZE_CONFIG[size]
   const defaultClasses = hasCustomSize ? undefined : 'rounded-[4px] ring-1 ring-border/30 shrink-0'
+
+  // Priority: local file > emoji > URL > fallback
+  // If we have an emoji icon and no local file, render emoji
+  if (emojiIcon && !finalLocalIcon) {
+    return (
+      <span className="relative inline-flex shrink-0">
+        <div
+          className={cn(
+            containerSize,
+            defaultClasses,
+            'flex items-center justify-center bg-muted',
+            EMOJI_SIZE_CONFIG[size],
+            'leading-none',
+            className
+          )}
+          title={name}
+        >
+          {emojiIcon}
+        </div>
+        {showStatus && connectionStatus && (
+          <span className="absolute -bottom-0.5 -right-0.5">
+            <SourceStatusIndicator
+              status={connectionStatus}
+              errorMessage={connectionError}
+              size={statusSize}
+            />
+          </span>
+        )}
+      </span>
+    )
+  }
 
   return (
     <span className="relative inline-flex shrink-0">

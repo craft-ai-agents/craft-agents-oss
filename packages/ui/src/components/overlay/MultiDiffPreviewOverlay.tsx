@@ -16,6 +16,7 @@ import { ShikiDiffViewer } from '../code-viewer/ShikiDiffViewer'
 import { truncateFilePath } from '../code-viewer/language-map'
 import { useOverlayMode, OVERLAY_LAYOUT } from '../../lib/layout'
 import { PreviewHeader, PreviewHeaderBadge } from '../ui/PreviewHeader'
+import { usePlatform } from '../../context/PlatformContext'
 
 /**
  * A single file change (Edit or Write)
@@ -286,6 +287,15 @@ export function MultiDiffPreviewOverlay({
 }: MultiDiffPreviewOverlayProps) {
   const responsiveMode = useOverlayMode()
   const isModal = responsiveMode === 'modal'
+  const { onSetTrafficLightsVisible } = usePlatform()
+
+  // Hide macOS traffic lights when overlay opens, restore when it closes
+  useEffect(() => {
+    if (!isOpen) return
+
+    onSetTrafficLightsVisible?.(false)
+    return () => onSetTrafficLightsVisible?.(true)
+  }, [isOpen, onSetTrafficLightsVisible])
 
   const isDark = theme === 'dark'
   const backgroundColor = isDark ? '#1e1e1e' : '#ffffff'

@@ -406,37 +406,3 @@ export function getLogoUrl(serviceUrl: string, provider?: string): string | null
   // Return Google Favicon V2 URL - browser handles caching
   return `${GOOGLE_FAVICON_URL}128&url=https://${rootDomain}`;
 }
-
-/**
- * Download icon and save to folder as icon.[ext]
- * Returns relative path (e.g., "./icon.png") or null on failure
- */
-export async function cacheIcon(iconUrl: string, destDir: string): Promise<string | null> {
-  const { existsSync, mkdirSync, writeFileSync } = await import('fs');
-  const { join } = await import('path');
-
-  try {
-    const response = await fetch(iconUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
-    if (!response.ok) return null;
-
-    // Verify it's actually an image
-    const contentType = response.headers.get('content-type') ?? '';
-    if (!contentType.startsWith('image/')) return null;
-
-    // Get extension from content-type or URL
-    const typeToExt: Record<string, string> = {
-      'image/png': 'png', 'image/jpeg': 'jpg', 'image/svg+xml': 'svg',
-      'image/webp': 'webp', 'image/gif': 'gif', 'image/x-icon': 'ico',
-    };
-    const urlExt = iconUrl.match(/\.(png|jpg|jpeg|svg|webp|gif|ico)$/i)?.[1]?.toLowerCase();
-    const ext = typeToExt[contentType.split(';')[0] ?? ''] ?? urlExt ?? 'png';
-    const filename = `icon.${ext}`;
-
-    if (!existsSync(destDir)) mkdirSync(destDir, { recursive: true });
-    writeFileSync(join(destDir, filename), Buffer.from(await response.arrayBuffer()));
-
-    return `./${filename}`;
-  } catch {
-    return null;
-  }
-}

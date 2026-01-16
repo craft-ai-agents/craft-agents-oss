@@ -28,10 +28,14 @@ import {
   validateConfig,
   validateSource,
   validateAllSources,
+  validateStatuses,
   validatePreferences,
   validateAll,
   validateSkill,
   validateAllSkills,
+  validateWorkspacePermissions,
+  validateSourcePermissions,
+  validateAllPermissions,
   formatValidationResult,
 } from '../config/validators.ts';
 import { PERMISSION_MODE_CONFIG } from './mode-types.ts';
@@ -356,10 +360,13 @@ Returns structured validation results with errors, warnings, and suggestions.
 **Targets:**
 - \`config\`: Validates ~/.craft-agent/config.json (workspaces, model, settings)
 - \`sources\`: Validates all sources in ~/.craft-agent/workspaces/{workspace}/sources/*/config.json
+- \`statuses\`: Validates ~/.craft-agent/workspaces/{workspace}/statuses/config.json (workflow states)
 - \`preferences\`: Validates ~/.craft-agent/preferences.json (user preferences)
+- \`permissions\`: Validates permissions.json files (workspace, source, and app-level default)
 - \`all\`: Validates all configuration files
 
 **For specific source validation:** Use target='sources' with sourceSlug parameter.
+**For specific source permissions:** Use target='permissions' with sourceSlug parameter.
 
 **Example workflow:**
 1. Edit a config file using Write/Edit tools
@@ -367,11 +374,11 @@ Returns structured validation results with errors, warnings, and suggestions.
 3. If errors found, fix them and re-validate
 4. Once valid, changes take effect on next reload`,
     {
-      target: z.enum(['config', 'sources', 'preferences', 'all']).describe(
+      target: z.enum(['config', 'sources', 'statuses', 'preferences', 'permissions', 'all']).describe(
         'Which config file(s) to validate'
       ),
       sourceSlug: z.string().optional().describe(
-        'Validate a specific source by slug (only used when target is "sources")'
+        'Validate a specific source by slug (used with target "sources" or "permissions")'
       ),
     },
     async (args) => {
@@ -391,8 +398,18 @@ Returns structured validation results with errors, warnings, and suggestions.
               result = validateAllSources(workspaceRootPath);
             }
             break;
+          case 'statuses':
+            result = validateStatuses(workspaceRootPath);
+            break;
           case 'preferences':
             result = validatePreferences();
+            break;
+          case 'permissions':
+            if (args.sourceSlug) {
+              result = validateSourcePermissions(workspaceRootPath, args.sourceSlug);
+            } else {
+              result = validateAllPermissions(workspaceRootPath);
+            }
             break;
           case 'all':
             result = validateAll(workspaceRootPath);
@@ -772,45 +789,42 @@ After creating or editing a source's config.json, run this tool to:
 
         // ============================================================
         // Step 2: Icon Handling
+        // Uses unified icon system: local file > URL (downloaded) > emoji
         // ============================================================
-        const { getSourcePath } = await import('../sources/storage.ts');
+        const { getSourcePath, findSourceIcon, downloadSourceIcon, isIconUrl } = await import('../sources/storage.ts');
         const sourcePath = getSourcePath(workspaceRootPath, args.sourceSlug);
 
-        // Check if icon needs to be downloaded
-        if (source.iconUrl && !source.iconUrl.startsWith('./')) {
-          // Remote URL - try to download and cache
-          const { cacheIcon } = await import('../utils/logo.ts');
-          const cached = await cacheIcon(source.iconUrl, sourcePath);
-          if (cached) {
-            source.iconSourceUrl = source.iconUrl;
-            source.iconUrl = cached;
-            saveSourceConfig(workspaceRootPath, source);
-            results.push(`**✓ Icon Downloaded** (${cached})`);
+        // Check for local icon file first (auto-discovered)
+        const localIcon = findSourceIcon(workspaceRootPath, args.sourceSlug);
+        if (localIcon) {
+          results.push(`**✓ Icon Found** (${localIcon.split('/').pop()})`);
+        } else if (source.icon && isIconUrl(source.icon)) {
+          // URL icon - download it
+          const iconPath = await downloadSourceIcon(workspaceRootPath, args.sourceSlug, source.icon);
+          if (iconPath) {
+            results.push(`**✓ Icon Downloaded** (${iconPath.split('/').pop()})`);
           } else {
-            // Download failed - clear invalid URL so we can try auto-fetch
-            source.iconUrl = undefined;
-            saveSourceConfig(workspaceRootPath, source);
+            results.push('**⚠ Icon Download Failed**');
           }
-        }
-
-        // Auto-fetch icon if not set
-        if (!source.iconUrl) {
-          // No icon - try to auto-fetch from service URL or provider domain
-          const { deriveServiceUrl, getHighQualityLogoUrl, cacheIcon } = await import('../utils/logo.ts');
+        } else if (source.icon) {
+          // Emoji icon
+          results.push(`**✓ Icon** (emoji: ${source.icon})`);
+        } else {
+          // No icon set - try to auto-fetch from service URL
+          const { deriveServiceUrl, getHighQualityLogoUrl } = await import('../utils/logo.ts');
+          const { downloadIcon } = await import('../utils/icon.ts');
           const serviceUrl = deriveServiceUrl(source);
 
           if (serviceUrl) {
-            // Try slug first (most specific), then provider (fallback)
-            // This allows PROVIDER_ICON_URLS to map 'outlook', 'teams', 'gmail' etc. directly
             const logoUrl = await getHighQualityLogoUrl(serviceUrl, source.slug)
               || await getHighQualityLogoUrl(serviceUrl, source.provider);
             if (logoUrl) {
-              const cached = await cacheIcon(logoUrl, sourcePath);
-              if (cached) {
-                source.iconUrl = cached;
-                source.iconSourceUrl = logoUrl;
+              const iconPath = await downloadIcon(sourcePath, logoUrl, `source_test:${source.slug}`);
+              if (iconPath) {
+                // Store the URL for future reference
+                source.icon = logoUrl;
                 saveSourceConfig(workspaceRootPath, source);
-                results.push(`**✓ Icon Auto-fetched** (${cached})`);
+                results.push(`**✓ Icon Auto-fetched**`);
               } else {
                 results.push('**○ No Icon** (auto-fetch failed)');
               }
@@ -819,36 +833,6 @@ After creating or editing a source's config.json, run this tool to:
             }
           } else {
             results.push('**○ No Icon**');
-          }
-        } else {
-          // iconUrl starts with './' - verify the file actually exists
-          const { existsSync } = await import('fs');
-          const { join } = await import('path');
-          const iconPath = join(sourcePath, source.iconUrl.slice(2)); // Remove './' prefix
-
-          if (existsSync(iconPath)) {
-            results.push(`**✓ Icon Cached** (${source.iconUrl})`);
-          } else {
-            // File missing - try to re-download from original source
-            if (source.iconSourceUrl) {
-              const { cacheIcon } = await import('../utils/logo.ts');
-              const cached = await cacheIcon(source.iconSourceUrl, sourcePath);
-              if (cached) {
-                source.iconUrl = cached;
-                saveSourceConfig(workspaceRootPath, source);
-                results.push(`**✓ Icon Re-downloaded** (${cached})`);
-              } else {
-                // Clear invalid iconUrl since file doesn't exist
-                source.iconUrl = undefined;
-                saveSourceConfig(workspaceRootPath, source);
-                results.push('**⚠ Icon Missing** - re-download failed, cleared config');
-              }
-            } else {
-              // No source URL to re-download from
-              source.iconUrl = undefined;
-              saveSourceConfig(workspaceRootPath, source);
-              results.push('**⚠ Icon Missing** - file not found, cleared config');
-            }
           }
         }
 

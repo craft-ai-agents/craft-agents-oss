@@ -12,31 +12,21 @@ import {
   rmSync,
   statSync,
 } from 'fs';
-import { join, extname } from 'path';
+import { join } from 'path';
 import matter from 'gray-matter';
 import type { LoadedSkill, SkillMetadata } from './types.ts';
 import { getWorkspaceSkillsPath } from '../workspaces/storage.ts';
+import {
+  validateIconValue,
+  findIconFile,
+  downloadIcon,
+  needsIconDownload,
+  isIconUrl,
+} from '../utils/icon.ts';
 
 // ============================================================
-// Path Utilities
+// Parsing
 // ============================================================
-
-/**
- * Find icon file in skill directory
- * Returns first matching icon.{svg,png,jpg,jpeg} or undefined
- */
-function findSkillIcon(skillDir: string): string | undefined {
-  const iconExtensions = ['.svg', '.png', '.jpg', '.jpeg'];
-
-  for (const ext of iconExtensions) {
-    const iconPath = join(skillDir, `icon${ext}`);
-    if (existsSync(iconPath)) {
-      return iconPath;
-    }
-  }
-
-  return undefined;
-}
 
 /**
  * Parse SKILL.md content and extract frontmatter + body
@@ -50,12 +40,17 @@ function parseSkillFile(content: string): { metadata: SkillMetadata; body: strin
       return null;
     }
 
+    // Validate and extract optional icon field
+    // Only accepts emoji or URL - rejects inline SVG and relative paths
+    const icon = validateIconValue(parsed.data.icon, 'Skills');
+
     return {
       metadata: {
         name: parsed.data.name as string,
         description: parsed.data.description as string,
         globs: parsed.data.globs as string[] | undefined,
         alwaysAllow: parsed.data.alwaysAllow as string[] | undefined,
+        icon,
       },
       body: parsed.content,
     };
@@ -105,7 +100,7 @@ export function loadSkill(workspaceRoot: string, slug: string): LoadedSkill | nu
     slug,
     metadata: parsed.metadata,
     content: parsed.body,
-    iconPath: findSkillIcon(skillDir),
+    iconPath: findIconFile(skillDir),
     path: skillDir,
   };
 }
@@ -153,7 +148,7 @@ export function getSkillIconPath(workspaceRoot: string, slug: string): string | 
     return null;
   }
 
-  return findSkillIcon(skillDir) || null;
+  return findIconFile(skillDir) || null;
 }
 
 // ============================================================
@@ -221,3 +216,29 @@ export function listSkillSlugs(workspaceRoot: string): string[] {
     return [];
   }
 }
+
+// ============================================================
+// Icon Download (uses shared utilities)
+// ============================================================
+
+/**
+ * Download an icon from a URL and save it to the skill directory.
+ * Returns the path to the downloaded icon, or null on failure.
+ */
+export async function downloadSkillIcon(
+  skillDir: string,
+  iconUrl: string
+): Promise<string | null> {
+  return downloadIcon(skillDir, iconUrl, 'Skills');
+}
+
+/**
+ * Check if a skill needs its icon downloaded.
+ * Returns true if metadata has a URL icon and no local icon file exists.
+ */
+export function skillNeedsIconDownload(skill: LoadedSkill): boolean {
+  return needsIconDownload(skill.metadata.icon, skill.iconPath);
+}
+
+// Re-export icon utilities for convenience
+export { isIconUrl } from '../utils/icon.ts';

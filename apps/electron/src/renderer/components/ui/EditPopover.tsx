@@ -91,6 +91,7 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Their intent is likely to update the setting immediately unless otherwise specified. ' +
         'The permissions.json file configures Explore mode rules. It can contain: allowedBashPatterns, ' +
         'allowedMcpPatterns, allowedApiEndpoints, blockedTools, and allowedWritePaths. ' +
+        'After editing, call config_validate with target "permissions" to verify the changes. ' +
         'Confirm clearly when done.',
     },
     example: "Allow running 'make build' in Explore mode",
@@ -105,7 +106,9 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'This file configures Explore mode rules that apply to ALL workspaces. ' +
         'It can contain: allowedBashPatterns, allowedMcpPatterns, allowedApiEndpoints, blockedTools, and allowedWritePaths. ' +
         'Each pattern can be a string or an object with pattern and comment fields. ' +
-        'Be careful - these are app-wide defaults. Confirm clearly when done.',
+        'Be careful - these are app-wide defaults. ' +
+        'After editing, call config_validate with target "permissions" to verify the changes. ' +
+        'Confirm clearly when done.',
     },
     example: 'Allow git fetch command',
   }),
@@ -120,6 +123,7 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'IMPORTANT: Preserve the YAML frontmatter (between --- markers) at the top of the file. ' +
         'Focus on editing the markdown content after the frontmatter. ' +
         'The skill instructions guide the AI on how to use this skill. ' +
+        'After editing, call skill_validate with the skill slug to verify the changes. ' +
         'Confirm clearly when done.',
     },
     example: 'Add error handling guidelines',
@@ -133,6 +137,7 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'The user is editing skill metadata in the YAML frontmatter of SKILL.md. ' +
         'Frontmatter fields: name (required), description (required), globs (optional array), alwaysAllow (optional array). ' +
         'Keep the content after the frontmatter unchanged unless specifically requested. ' +
+        'After editing, call skill_validate with the skill slug to verify the changes. ' +
         'Confirm clearly when done.',
     },
     example: 'Update the skill description',
@@ -160,6 +165,7 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'The user is editing source configuration (config.json). ' +
         'Be careful with JSON syntax. Fields include: type, slug, name, tagline, iconUrl, and transport-specific settings (mcp, api, local). ' +
         'Do NOT modify the slug unless explicitly requested. ' +
+        'After editing, call source_test with the source slug to verify the configuration. ' +
         'Confirm clearly when done.',
     },
     example: 'Update the display name',
@@ -173,6 +179,7 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'The user is editing source-level permissions (permissions.json). ' +
         'These rules are auto-scoped to this source - write simple patterns without prefixes. ' +
         'For MCP: use allowedMcpPatterns (e.g., "list", "get"). For API: use allowedApiEndpoints. ' +
+        'After editing, call config_validate with target "permissions" and the source slug to verify the changes. ' +
         'Confirm clearly when done.',
     },
     example: 'Allow list operations in Explore mode',
@@ -187,7 +194,9 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Edit the permissions.json file to control which tools are allowed in Explore mode. ' +
         'Use allowedMcpPatterns to allow specific tools (e.g., ["list_*", "get_*"] for read-only). ' +
         'Use blockedTools to explicitly block specific tools. ' +
-        'Patterns are auto-scoped to this source. Confirm clearly when done.',
+        'Patterns are auto-scoped to this source. ' +
+        'After editing, call config_validate with target "permissions" and the source slug to verify the changes. ' +
+        'Confirm clearly when done.',
     },
     example: 'Only allow read operations (list, get, search)',
   }),
@@ -201,6 +210,7 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'The user is editing the notes field in their preferences (~/.craft-agent/preferences.json). ' +
         'This is a JSON file. Only modify the "notes" field unless explicitly asked otherwise. ' +
         'The notes field is free-form text that provides context about the user to the AI. ' +
+        'After editing, call config_validate with target "preferences" to verify the changes. ' +
         'Confirm clearly when done.',
     },
     example: 'Add coding style preferences',
@@ -216,7 +226,8 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Sources can be MCP servers (HTTP/SSE or stdio), REST APIs, or local filesystems. ' +
         'Ask clarifying questions if needed: What service? MCP or API? Auth type? ' +
         'Create the source folder and config.json in the workspace sources directory. ' +
-        'Follow the patterns in ~/.craft-agent/docs/sources.md',
+        'Follow the patterns in ~/.craft-agent/docs/sources.md. ' +
+        'After creating the source, call source_test with the source slug to verify the configuration.',
     },
     example: 'Connect to my Craft space',
     overridePlaceholder: 'What would you like to connect?',
@@ -231,7 +242,8 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Skills are specialized instructions with a SKILL.md file containing YAML frontmatter (name, description) and markdown instructions. ' +
         'Ask clarifying questions if needed: What should the skill do? When should it trigger? ' +
         'Create the skill folder and SKILL.md in the workspace skills directory. ' +
-        'Follow the patterns in ~/.craft-agent/docs/skills.md',
+        'Follow the patterns in ~/.craft-agent/docs/skills.md. ' +
+        'After creating the skill, call skill_validate with the skill slug to verify the SKILL.md file.',
     },
     example: 'Review PRs following our code standards',
     overridePlaceholder: 'What should I learn to do?',
@@ -248,6 +260,7 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Fixed statuses (todo, done, cancelled) cannot be deleted but can be reordered or have their label changed. ' +
         'Icon can be { type: "file", value: "name.svg" } for custom icons in statuses/icons/ or { type: "lucide", value: "icon-name" } for Lucide icons. ' +
         'Category "open" shows in inbox, "closed" shows in archive. ' +
+        'After editing, call config_validate with target "statuses" to verify the changes. ' +
         'Confirm clearly when done.',
     },
     example: 'Add a "Blocked" status',

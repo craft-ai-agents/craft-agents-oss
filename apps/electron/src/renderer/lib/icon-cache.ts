@@ -1,12 +1,17 @@
 /**
  * Unified Icon Cache
  *
- * Shared cache for source and skill icons.
- * Used by SourceAvatar, SkillAvatar, and RichTextInput.
+ * Single cache for source, skill, and status icons.
+ * Used by SourceAvatar, SkillAvatar, todo-states, and RichTextInput.
  *
  * Icons are stored as data URLs for consistent usage across:
  * - React components (img src)
  * - HTML string generation (inline badges)
+ *
+ * Cache key format uses type prefixes to avoid collisions:
+ * - source:{workspaceId}:{slug}
+ * - skill:{workspaceId}:{slug}
+ * - status:{workspaceId}:{relativePath}
  */
 
 // ============================================================================
@@ -17,7 +22,7 @@ interface SourceConfig {
   slug: string
   name: string
   type: string
-  iconUrl?: string
+  icon?: string  // Emoji or URL (local icon files are auto-discovered separately)
   provider?: string
   mcp?: {
     url?: string
@@ -33,29 +38,74 @@ interface SkillConfig {
 }
 
 // ============================================================================
-// Caches
+// Unified Cache
 // ============================================================================
 
 /**
- * Cache for source icons
- * Key: `{workspaceId}:{slug}` or `{slug}` for logo URLs
- * Value: data URL or favicon URL
+ * Single unified cache for all icon types.
+ * Key format: `{type}:{workspaceId}:{identifier}`
+ * - source:wsId:slug
+ * - skill:wsId:slug
+ * - status:wsId:relativePath
  */
-export const sourceIconCache = new Map<string, string>()
+export const iconCache = new Map<string, string>()
 
 /**
- * Cache for resolved logo URLs (from service URL resolution)
- * Key: `{serviceUrl}:{provider}`
- * Value: logo URL or null (if not found)
+ * Cache for resolved logo URLs (from service URL resolution).
+ * Kept separate because it caches URL resolution, not icon data,
+ * and uses a different key format: `{serviceUrl}:{provider}`
  */
 export const logoUrlCache = new Map<string, string | null>()
 
-/**
- * Cache for skill icons
- * Key: `{workspaceId}:{slug}`
- * Value: data URL
- */
-export const skillIconCache = new Map<string, string>()
+// ============================================================================
+// Legacy exports (for backward compatibility during migration)
+// These are views into the unified cache, not separate maps.
+// ============================================================================
+
+// Proxy objects that redirect to the unified cache with appropriate prefixes
+// This allows consumers to continue using the old API while we migrate them
+
+/** @deprecated Use iconCache directly with 'source:' prefix */
+export const sourceIconCache = {
+  get: (key: string) => iconCache.get(`source:${key}`),
+  set: (key: string, value: string) => iconCache.set(`source:${key}`, value),
+  has: (key: string) => iconCache.has(`source:${key}`),
+  delete: (key: string) => iconCache.delete(`source:${key}`),
+  clear: () => {
+    // Clear only source entries
+    for (const key of iconCache.keys()) {
+      if (key.startsWith('source:')) iconCache.delete(key)
+    }
+  },
+}
+
+/** @deprecated Use iconCache directly with 'skill:' prefix */
+export const skillIconCache = {
+  get: (key: string) => iconCache.get(`skill:${key}`),
+  set: (key: string, value: string) => iconCache.set(`skill:${key}`, value),
+  has: (key: string) => iconCache.has(`skill:${key}`),
+  delete: (key: string) => iconCache.delete(`skill:${key}`),
+  clear: () => {
+    // Clear only skill entries
+    for (const key of iconCache.keys()) {
+      if (key.startsWith('skill:')) iconCache.delete(key)
+    }
+  },
+}
+
+/** @deprecated Use iconCache directly with 'status:' prefix */
+export const statusIconCache = {
+  get: (key: string) => iconCache.get(`status:${key}`),
+  set: (key: string, value: string) => iconCache.set(`status:${key}`, value),
+  has: (key: string) => iconCache.has(`status:${key}`),
+  delete: (key: string) => iconCache.delete(`status:${key}`),
+  clear: () => {
+    // Clear only status entries
+    for (const key of iconCache.keys()) {
+      if (key.startsWith('status:')) iconCache.delete(key)
+    }
+  },
+}
 
 // ============================================================================
 // Cache Management
@@ -65,9 +115,8 @@ export const skillIconCache = new Map<string, string>()
  * Clear all icon caches
  */
 export function clearIconCaches(): void {
-  sourceIconCache.clear()
+  iconCache.clear()
   logoUrlCache.clear()
-  skillIconCache.clear()
 }
 
 /**
@@ -83,6 +132,13 @@ export function clearSourceIconCaches(): void {
  */
 export function clearSkillIconCaches(): void {
   skillIconCache.clear()
+}
+
+/**
+ * Clear status icon caches only
+ */
+export function clearStatusIconCaches(): void {
+  statusIconCache.clear()
 }
 
 // ============================================================================
@@ -106,11 +162,11 @@ export async function loadSourceIcon(
   const cached = sourceIconCache.get(cacheKey)
   if (cached) return cached
 
-  // Check if iconUrl is a local path
-  const iconUrl = config.iconUrl
-  if (iconUrl?.startsWith('./')) {
+  // Check if icon is a local path (legacy format - new sources use auto-discovered icon files)
+  const icon = config.icon
+  if (icon?.startsWith('./')) {
     // Local icon - load via IPC
-    const iconFilename = iconUrl.slice(2) // Remove './'
+    const iconFilename = icon.slice(2) // Remove './'
     const relativePath = `sources/${config.slug}/${iconFilename}`
 
     try {

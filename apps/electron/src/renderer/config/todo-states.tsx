@@ -1,5 +1,7 @@
 import * as React from 'react'
-import type { StatusConfig, StatusIcon } from '@craft-agent/shared/statuses'
+import type { StatusConfig } from '@craft-agent/shared/statuses'
+import { isEmoji, ICON_EXTENSIONS } from '@craft-agent/shared/utils/icon-constants'
+import { statusIconCache, clearStatusIconCaches } from '@/lib/icon-cache'
 
 // ============================================================================
 // Types
@@ -71,12 +73,6 @@ interface ResolvedIcon {
 
 const ICON_SIZE = 'h-3.5 w-3.5'
 
-// ============================================================================
-// Icon Cache (to avoid re-reading files on every render)
-// ============================================================================
-
-const iconCache = new Map<string, string>()
-
 /**
  * Sanitize SVG content (basic XSS prevention)
  * Removes script tags and event handlers
@@ -101,82 +97,101 @@ function svgUsesCurrentColor(svgContent: string): boolean {
 }
 
 /**
+ * Try to load an icon file, checking multiple extensions.
+ * Returns { content, extension } or null if not found.
+ */
+async function tryLoadIconFile(
+  workspaceId: string,
+  statusId: string
+): Promise<{ content: string; extension: string } | null> {
+  for (const ext of ICON_EXTENSIONS) {
+    const relativePath = `statuses/icons/${statusId}${ext}`
+    const cacheKey = `${workspaceId}:${relativePath}`
+
+    // Check cache first (using shared statusIconCache from lib/icon-cache)
+    const cached = statusIconCache.get(cacheKey)
+    if (cached) {
+      return { content: cached, extension: ext }
+    }
+
+    // Try to load from filesystem
+    try {
+      const content = await window.electronAPI.readWorkspaceImage(workspaceId, relativePath)
+      statusIconCache.set(cacheKey, content)
+      return { content, extension: ext }
+    } catch {
+      // File doesn't exist, try next extension
+      continue
+    }
+  }
+  return null
+}
+
+/**
  * Resolve status icon to React.ReactNode with colorability info.
- * Handles both emoji and file-based icons.
+ * Handles emoji, auto-discovered files, and fallback.
+ *
+ * Icon resolution priority:
+ * 1. Config icon (emoji set in config.json) - allows user override
+ * 2. Local file (statuses/icons/{statusId}.svg, .png, etc.)
+ * 3. Fallback bullet
  *
  * Returns { node, colorable } where:
  * - colorable=true: Icon uses currentColor, should inherit status color
  * - colorable=false: Icon has its own colors (emoji, image, hardcoded SVG)
  */
 export async function resolveStatusIcon(
-  icon: StatusIcon,
+  statusId: string,
+  icon: string | undefined,
   workspaceId: string,
   className: string = ICON_SIZE
 ): Promise<ResolvedIcon> {
-  switch (icon.type) {
-    case 'emoji':
-      // Emojis have their own colors - never apply status color
+  // Priority 1: Check if icon field is set in config (emoji takes precedence)
+  // This allows users to override default file icons by setting "icon" in config.json
+  if (icon && isEmoji(icon)) {
+    return {
+      node: <span className="text-[13px] leading-none">{icon}</span>,
+      colorable: false,
+    }
+  }
+
+  // Priority 2: Try to load local icon file (auto-discovered by ID)
+  // This includes default icons created by ensureDefaultIconFiles() and downloaded URLs
+  const iconFile = await tryLoadIconFile(workspaceId, statusId)
+  if (iconFile) {
+    if (iconFile.extension === '.svg') {
+      const sanitized = sanitizeSvg(iconFile.content)
+      const colorable = svgUsesCurrentColor(iconFile.content)
       return {
-        node: <span className="text-[13px] leading-none">{icon.value}</span>,
+        node: (
+          <div
+            className={className}
+            dangerouslySetInnerHTML={{ __html: sanitized }}
+            style={{ display: 'inline-block' }}
+          />
+        ),
+        colorable,
+      }
+    } else {
+      // PNG, JPG, etc. - images have their own colors
+      return {
+        node: (
+          <img
+            src={iconFile.content}
+            className={className}
+            alt=""
+            style={{ display: 'inline-block' }}
+          />
+        ),
         colorable: false,
       }
-
-    case 'file': {
-      // Check cache first
-      const relativePath = `statuses/icons/${icon.value}`
-      const cacheKey = `${workspaceId}:${relativePath}`
-      let fileContent = iconCache.get(cacheKey)
-
-      if (!fileContent) {
-        try {
-          fileContent = await window.electronAPI.readWorkspaceImage(workspaceId, relativePath)
-          iconCache.set(cacheKey, fileContent)
-        } catch (error) {
-          console.error(`[resolveStatusIcon] Failed to load icon ${icon.value}:`, error)
-          // Fallback to bullet - colorable since it's just text
-          return {
-            node: <span className={className}>●</span>,
-            colorable: true,
-          }
-        }
-      }
-
-      // Detect file type by extension
-      if (icon.value.endsWith('.svg')) {
-        const sanitized = sanitizeSvg(fileContent)
-        const colorable = svgUsesCurrentColor(fileContent)
-        return {
-          node: (
-            <div
-              className={className}
-              dangerouslySetInnerHTML={{ __html: sanitized }}
-              style={{ display: 'inline-block' }}
-            />
-          ),
-          colorable,
-        }
-      } else {
-        // PNG, JPG, etc. - images have their own colors
-        return {
-          node: (
-            <img
-              src={fileContent}
-              className={className}
-              alt=""
-              style={{ display: 'inline-block' }}
-            />
-          ),
-          colorable: false,
-        }
-      }
     }
+  }
 
-    default:
-      // Fallback bullet - colorable
-      return {
-        node: <span className={className}>●</span>,
-        colorable: true,
-      }
+  // Priority 3: Fallback bullet - colorable
+  return {
+    node: <span className={className}>●</span>,
+    colorable: true,
   }
 }
 
@@ -185,7 +200,8 @@ export async function resolveStatusIcon(
  * Use this in components that need synchronous rendering with async icon loading
  */
 export function useStatusIcon(
-  icon: StatusIcon,
+  statusId: string,
+  icon: string | undefined,
   workspaceId: string,
   className: string = ICON_SIZE
 ): React.ReactNode {
@@ -196,8 +212,8 @@ export function useStatusIcon(
   React.useEffect(() => {
     // Extract just the node from ResolvedIcon, discarding colorable info
     // (useStatusIcon is only used for simple icon rendering, not full status state)
-    resolveStatusIcon(icon, workspaceId, className).then(resolved => setResolvedIcon(resolved.node))
-  }, [icon, workspaceId, className])
+    resolveStatusIcon(statusId, icon, workspaceId, className).then(resolved => setResolvedIcon(resolved.node))
+  }, [statusId, icon, workspaceId, className])
 
   return resolvedIcon
 }
@@ -210,7 +226,7 @@ export async function statusConfigToTodoState(
   config: StatusConfig,
   workspaceId: string
 ): Promise<TodoState> {
-  const resolvedIcon = await resolveStatusIcon(config.icon, workspaceId)
+  const resolvedIcon = await resolveStatusIcon(config.id, config.icon, workspaceId)
 
   return {
     id: config.id,
@@ -285,5 +301,5 @@ export function getState(
  * Clear icon cache (useful when statuses are updated)
  */
 export function clearIconCache(): void {
-  iconCache.clear()
+  clearStatusIconCaches()
 }

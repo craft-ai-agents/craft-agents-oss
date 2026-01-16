@@ -33,6 +33,7 @@
     "./utils/logo": "./src/utils/logo.ts",
     "./utils/service-url": "./src/utils/service-url.ts",
     "./utils/icon": "./src/utils/icon.ts",
+    "./utils/icon-constants": "./src/utils/icon-constants.ts",
     "./validation": "./src/validation/index.ts",
     "./version": "./src/version/index.ts",
     "./branding": "./src/branding.ts",

@@ -44,6 +44,18 @@ import { generateSessionTitle, regenerateSessionTitle, formatPathsToRelative, fo
 import { DEFAULT_MODEL } from '@craft-agent/shared/config'
 
 /**
+ * Sanitize message content for use as session title.
+ * Strips XML blocks (e.g. <edit_request>) and normalizes whitespace.
+ */
+function sanitizeForTitle(content: string): string {
+  return content
+    .replace(/<edit_request>[\s\S]*?<\/edit_request>/g, '') // Strip entire edit_request blocks
+    .replace(/<[^>]+>/g, '')     // Strip remaining XML/HTML tags
+    .replace(/\s+/g, ' ')        // Collapse whitespace
+    .trim()
+}
+
+/**
  * Feature flags for agent behavior
  */
 export const AGENT_FLAGS = {
@@ -2005,7 +2017,9 @@ export class SessionManager {
       // AI generation will enhance it later, but we always have a title from the start
       const isFirstUserMessage = managed.messages.filter(m => m.role === 'user').length === 1
       if (isFirstUserMessage && !managed.name) {
-        const initialTitle = message.slice(0, 50) + (message.length > 50 ? '…' : '')
+        // Sanitize message to remove XML blocks (e.g. <edit_request>) before using as title
+        const sanitized = sanitizeForTitle(message)
+        const initialTitle = sanitized.slice(0, 50) + (sanitized.length > 50 ? '…' : '')
         managed.name = initialTitle
         this.persistSession(managed)
         // Flush immediately so disk is authoritative before notifying renderer

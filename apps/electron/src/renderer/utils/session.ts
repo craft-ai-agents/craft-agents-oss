@@ -5,6 +5,18 @@ import type { SessionMeta } from "../atoms/sessions"
 type SessionLike = Pick<Session, 'name' | 'preview'> & { messages?: Session['messages'] }
 
 /**
+ * Sanitize content for display as session title.
+ * Strips XML blocks (e.g. <edit_request>) and normalizes whitespace.
+ */
+function sanitizePreview(content: string): string {
+  return content
+    .replace(/<edit_request>[\s\S]*?<\/edit_request>/g, '') // Strip entire edit_request blocks
+    .replace(/<[^>]+>/g, '')     // Strip remaining XML/HTML tags
+    .replace(/\s+/g, ' ')        // Collapse whitespace
+    .trim()
+}
+
+/**
  * Get display title for a session.
  * Priority: custom name > first user message > preview (from metadata) > "New chat"
  * Works with both Session (full) and SessionMeta (lightweight)
@@ -18,19 +30,21 @@ export function getSessionTitle(session: SessionLike | SessionMeta): string {
   if ('messages' in session && session.messages) {
     const firstUserMessage = session.messages.find(m => m.role === 'user')
     if (firstUserMessage?.content) {
-      const trimmed = firstUserMessage.content.slice(0, 50)
-      return trimmed.length < firstUserMessage.content.length
-        ? trimmed + '…'
-        : trimmed
+      const sanitized = sanitizePreview(firstUserMessage.content)
+      if (sanitized) {
+        const trimmed = sanitized.slice(0, 50)
+        return trimmed.length < sanitized.length ? trimmed + '…' : trimmed
+      }
     }
   }
 
   // Fall back to preview from JSONL header (for lazy-loaded sessions and SessionMeta)
   if (session.preview) {
-    const trimmed = session.preview.slice(0, 50)
-    return trimmed.length < session.preview.length
-      ? trimmed + '…'
-      : trimmed
+    const sanitized = sanitizePreview(session.preview)
+    if (sanitized) {
+      const trimmed = sanitized.slice(0, 50)
+      return trimmed.length < sanitized.length ? trimmed + '…' : trimmed
+    }
   }
 
   return 'New chat'

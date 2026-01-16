@@ -21,6 +21,13 @@ import { validateSourceConfig } from '../config/validators.ts';
 import { debug } from '../utils/debug.ts';
 import { expandPath, toPortablePath } from '../utils/paths.ts';
 import { getWorkspaceSourcesPath } from '../workspaces/storage.ts';
+import {
+  validateIconValue,
+  findIconFile,
+  downloadIcon,
+  needsIconDownload,
+  isIconUrl,
+} from '../utils/icon.ts';
 
 // ============================================================
 // Directory Utilities
@@ -241,35 +248,45 @@ export function saveSourceGuide(
 }
 
 // ============================================================
-// Icon Operations
+// Icon Operations (uses shared utilities from utils/icon.ts)
 // ============================================================
-
-/** Icon file extensions we recognize */
-const ICON_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.svg', '.webp', '.ico', '.gif'];
-
-/**
- * Find an icon file in a directory
- * Looks for files named "icon" with common image extensions
- */
-export function findIconInDir(dir: string): string | null {
-  if (!existsSync(dir)) return null;
-
-  const entries = readdirSync(dir);
-  for (const ext of ICON_EXTENSIONS) {
-    const iconName = `icon${ext}`;
-    if (entries.includes(iconName)) {
-      return join(dir, iconName);
-    }
-  }
-  return null;
-}
 
 /**
  * Find icon file for a source
+ * Returns absolute path to icon file or undefined
  */
-export function findSourceIcon(workspaceRootPath: string, sourceSlug: string): string | null {
-  return findIconInDir(getSourcePath(workspaceRootPath, sourceSlug));
+export function findSourceIcon(workspaceRootPath: string, sourceSlug: string): string | undefined {
+  return findIconFile(getSourcePath(workspaceRootPath, sourceSlug));
 }
+
+/**
+ * Download an icon from a URL and save it to the source directory.
+ * Returns the path to the downloaded icon, or null on failure.
+ */
+export async function downloadSourceIcon(
+  workspaceRootPath: string,
+  sourceSlug: string,
+  iconUrl: string
+): Promise<string | null> {
+  const sourceDir = getSourcePath(workspaceRootPath, sourceSlug);
+  return downloadIcon(sourceDir, iconUrl, 'Sources');
+}
+
+/**
+ * Check if a source needs its icon downloaded.
+ * Returns true if config has a URL icon and no local icon file exists.
+ */
+export function sourceNeedsIconDownload(
+  workspaceRootPath: string,
+  sourceSlug: string,
+  config: FolderSourceConfig
+): boolean {
+  const iconPath = findSourceIcon(workspaceRootPath, sourceSlug);
+  return needsIconDownload(config.icon, iconPath);
+}
+
+// Re-export icon utilities for convenience
+export { isIconUrl } from '../utils/icon.ts';
 
 // ============================================================
 // Load Operations
@@ -428,33 +445,38 @@ export async function createSource(
       break;
   }
 
+  // Validate and store icon (emoji or URL)
+  // URL icons are downloaded on first config change via watcher
+  if (input.icon) {
+    const validatedIcon = validateIconValue(input.icon, 'Sources');
+    if (validatedIcon) {
+      config.icon = validatedIcon;
+    }
+  }
+
   // Save config first to create the directory
   saveSourceConfig(workspaceRootPath, config);
 
-  // Cache icon locally
+  // If icon is a URL, download it immediately
+  // (watcher will also handle this, but doing it here provides immediate feedback)
   const sourcePath = getSourcePath(workspaceRootPath, slug);
-  if (input.iconUrl) {
-    // User-provided URL: download and cache it
-    const { cacheIcon } = await import('../utils/logo.ts');
-    const cached = await cacheIcon(input.iconUrl, sourcePath);
-    if (cached) {
-      config.iconUrl = cached;
-      config.iconSourceUrl = input.iconUrl;
-      saveSourceConfig(workspaceRootPath, config);
-    } else {
-      config.iconUrl = input.iconUrl; // Fallback to URL if download fails
+  if (config.icon && isIconUrl(config.icon)) {
+    const iconPath = await downloadIcon(sourcePath, config.icon, 'Sources');
+    if (iconPath) {
+      debug(`[createSource] Icon downloaded for ${slug}: ${iconPath}`);
     }
-  } else {
-    // Auto-fetch from service URL
-    const { deriveServiceUrl, getHighQualityLogoUrl, cacheIcon } = await import('../utils/logo.ts');
+  } else if (!config.icon) {
+    // No icon provided - try to auto-fetch from service URL
+    const { deriveServiceUrl, getHighQualityLogoUrl } = await import('../utils/logo.ts');
+    const { downloadIcon } = await import('../utils/icon.ts');
     const serviceUrl = deriveServiceUrl(input);
     if (serviceUrl) {
       const logoUrl = await getHighQualityLogoUrl(serviceUrl, input.provider);
       if (logoUrl) {
-        const cached = await cacheIcon(logoUrl, sourcePath);
-        if (cached) {
-          config.iconUrl = cached;
-          config.iconSourceUrl = logoUrl;
+        const iconPath = await downloadIcon(sourcePath, logoUrl, `createSource:${slug}`);
+        if (iconPath) {
+          // Store the source URL for reference (not the cached path)
+          config.icon = logoUrl;
           saveSourceConfig(workspaceRootPath, config);
         }
       }
@@ -518,57 +540,3 @@ export function sourceExists(workspaceRootPath: string, sourceSlug: string): boo
 
 export { parseGuideMarkdown };
 
-// ============================================================
-// Icon Migration
-// ============================================================
-
-/**
- * Migrate a source's remote iconUrl to a locally cached icon.
- * Returns true if migration was performed, false if skipped.
- */
-export async function migrateSourceIcon(
-  workspaceRootPath: string,
-  sourceSlug: string
-): Promise<boolean> {
-  const config = loadSourceConfig(workspaceRootPath, sourceSlug);
-
-  if (!config?.iconUrl) return false;
-
-  // Skip if already a relative path (already cached)
-  if (config.iconUrl.startsWith('./')) return false;
-
-  const sourcePath = getSourcePath(workspaceRootPath, sourceSlug);
-
-  const { cacheIcon } = await import('../utils/logo.ts');
-  const cached = await cacheIcon(config.iconUrl, sourcePath);
-
-  if (cached) {
-    config.iconSourceUrl = config.iconUrl;
-    config.iconUrl = cached;
-    saveSourceConfig(workspaceRootPath, config);
-    return true;
-  }
-
-  return false;
-}
-
-/**
- * Migrate all sources in a workspace to use locally cached icons.
- * Returns count of migrated sources.
- */
-export async function migrateWorkspaceIcons(workspaceRootPath: string): Promise<number> {
-  let migrated = 0;
-
-  const sourcesDir = getWorkspaceSourcesPath(workspaceRootPath);
-  if (existsSync(sourcesDir)) {
-    for (const entry of readdirSync(sourcesDir, { withFileTypes: true })) {
-      if (entry.isDirectory()) {
-        if (await migrateSourceIcon(workspaceRootPath, entry.name)) {
-          migrated++;
-        }
-      }
-    }
-  }
-
-  return migrated;
-}

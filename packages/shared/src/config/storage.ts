@@ -9,7 +9,7 @@ import {
   createWorkspaceAtPath,
   isValidWorkspace,
 } from '../workspaces/storage.ts';
-import { findIconInDir } from '../sources/storage.ts';
+import { findIconFile } from '../utils/icon.ts';
 import { initializeDocs } from '../docs/index.ts';
 import { expandPath, toPortablePath } from '../utils/paths.ts';
 import type { StoredAttachment, StoredMessage } from '@craft-agent/core/types';
@@ -365,7 +365,7 @@ export function generateWorkspaceId(): string {
  * Returns absolute path to icon file if found, null otherwise
  */
 export function findWorkspaceIcon(rootPath: string): string | null {
-  return findIconInDir(rootPath);
+  return findIconFile(rootPath) ?? null;
 }
 
 export function getWorkspaces(): Workspace[] {

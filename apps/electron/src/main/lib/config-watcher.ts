@@ -19,34 +19,33 @@ import { watch, existsSync, readdirSync, statSync, readFileSync, mkdirSync } fro
 import { join, dirname, basename, relative } from 'path';
 import { homedir } from 'os';
 import type { FSWatcher } from 'fs';
-import { debug } from '../utils/debug.ts';
-import { perf } from '../utils/perf.ts';
-import { loadStoredConfig, type StoredConfig } from './storage.ts';
+import { debug, perf } from '@craft-agent/shared/utils';
+import { loadStoredConfig, type StoredConfig } from '@craft-agent/shared/config';
 import {
   validateConfig,
   validatePreferences,
   validateSource,
   type ValidationResult,
-} from './validators.ts';
-import type { LoadedSource, SourceGuide } from '../sources/types.ts';
+} from '@craft-agent/shared/config';
+import type { LoadedSource, SourceGuide } from '@craft-agent/shared/sources';
 import {
   loadSource,
   loadWorkspaceSources,
   loadSourceGuide,
   sourceNeedsIconDownload,
   downloadSourceIcon,
-} from '../sources/storage.ts';
-import { permissionsConfigCache, getAppPermissionsDir } from '../agent/permissions-config.ts';
-import { getWorkspacePath, getWorkspaceSourcesPath, getWorkspaceSkillsPath } from '../workspaces/storage.ts';
-import type { LoadedSkill } from '../skills/types.ts';
-import { loadSkill, loadWorkspaceSkills, skillNeedsIconDownload, downloadSkillIcon } from '../skills/storage.ts';
+} from '@craft-agent/shared/sources';
+import { permissionsConfigCache, getAppPermissionsDir } from '@craft-agent/shared/agent';
+import { getWorkspacePath, getWorkspaceSourcesPath, getWorkspaceSkillsPath } from '@craft-agent/shared/workspaces';
+import type { LoadedSkill } from '@craft-agent/shared/skills';
+import { loadSkill, loadWorkspaceSkills, skillNeedsIconDownload, downloadSkillIcon } from '@craft-agent/shared/skills';
 import {
   loadStatusConfig,
   statusNeedsIconDownload,
   downloadStatusIcon,
-} from '../statuses/storage.ts';
-import { loadAppTheme, loadPresetThemes, loadPresetTheme, getAppThemesDir } from './storage.ts';
-import type { ThemeOverrides, PresetTheme } from './theme.ts';
+} from '@craft-agent/shared/statuses';
+import { loadAppTheme, loadPresetThemes, loadPresetTheme, getAppThemesDir } from '@craft-agent/shared/config';
+import type { ThemeOverrides, PresetTheme } from '@craft-agent/shared/config';
 
 // ============================================================
 // Constants

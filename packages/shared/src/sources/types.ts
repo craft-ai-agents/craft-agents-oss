@@ -304,11 +304,10 @@ export interface FolderSourceConfig {
   api?: ApiSourceConfig;
   local?: LocalSourceConfig;
 
-  // Icon: relative path to cached icon (e.g., "./icon.png")
-  iconUrl?: string;
-
-  // Original URL the icon was downloaded from (for re-fetching if needed)
-  iconSourceUrl?: string;
+  // Icon: emoji or URL (auto-downloaded to icon.* file)
+  // Local icon files (icon.svg, icon.png) are auto-discovered
+  // Priority: local file > URL (downloaded) > emoji
+  icon?: string;
 
   // Short description for agent context (e.g., "Issue tracking, bugs, tasks, sprints")
   // If not set, extracted from guide.md first paragraph
@@ -372,7 +371,7 @@ export interface CreateSourceInput {
   mcp?: McpSourceConfig;
   api?: ApiSourceConfig;
   local?: LocalSourceConfig;
-  iconUrl?: string;
+  icon?: string; // Emoji or URL (auto-downloaded)
   enabled?: boolean;
 }
 

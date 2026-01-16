@@ -41,7 +41,9 @@ export {
   saveSourceGuide,
   // Icon operations
   findSourceIcon,
-  findIconInDir,
+  downloadSourceIcon,
+  sourceNeedsIconDownload,
+  isIconUrl,
   // Load operations
   loadSource,
   loadWorkspaceSources,

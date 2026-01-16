@@ -8,6 +8,7 @@
  * - config.json: Main app configuration
  * - preferences.json: User preferences
  * - sources/{slug}/config.json: Workspace-scoped source configs
+ * - permissions.json: Permission rules for Explore mode
  */
 
 import { z } from 'zod';
@@ -267,7 +268,7 @@ export function validatePreferences(): ValidationResult {
 /**
  * Validate all config files
  * @param workspaceId - Optional workspace ID for source validation
- * @param workspaceRoot - Optional workspace root path for skill validation
+ * @param workspaceRoot - Optional workspace root path for skill and status validation
  */
 export function validateAll(workspaceId?: string, workspaceRoot?: string): ValidationResult {
   const results: ValidationResult[] = [
@@ -280,9 +281,11 @@ export function validateAll(workspaceId?: string, workspaceRoot?: string): Valid
     results.push(validateAllSources(workspaceId));
   }
 
-  // Include skill validation if workspaceRoot is provided
+  // Include skill, status, and permissions validation if workspaceRoot is provided
   if (workspaceRoot) {
     results.push(validateAllSkills(workspaceRoot));
+    results.push(validateStatuses(workspaceRoot));
+    results.push(validateAllPermissions(workspaceRoot));
   }
 
   const allErrors = results.flatMap(r => r.errors);
@@ -529,6 +532,7 @@ export function validateAllSources(workspaceId: string): ValidationResult {
 import matter from 'gray-matter';
 import { getWorkspaceSkillsPath } from '../workspaces/storage.ts';
 import { basename, extname } from 'path';
+import type { WorkspaceStatusConfig, StatusConfig } from '../statuses/types.ts';
 
 /**
  * Schema for skill metadata (SKILL.md frontmatter)
@@ -731,6 +735,352 @@ export function validateAllSkills(workspaceRoot: string): ValidationResult {
     const result = validateSkill(workspaceRoot, folder);
     errors.push(...result.errors);
     warnings.push(...result.warnings);
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    warnings,
+  };
+}
+
+// ============================================================
+// Status Validators
+// ============================================================
+
+const STATUS_CONFIG_DIR = 'statuses';
+const STATUS_CONFIG_FILE = 'statuses/config.json';
+const STATUS_ICONS_DIR = 'statuses/icons';
+
+/** Required fixed statuses that must always exist */
+const REQUIRED_FIXED_STATUS_IDS = ['todo', 'done', 'cancelled'] as const;
+
+/**
+ * Zod schema for status icon configuration
+ * Supports two formats:
+ * - Simple string (emoji or URL) - stored directly in icon field
+ * - Object with type/value (for explicit file references)
+ */
+const StatusIconSchema = z.union([
+  // Simple string: emoji or URL
+  z.string(),
+  // Object format: { type: "file" | "emoji", value: "..." }
+  z.object({
+    type: z.enum(['file', 'emoji']),
+    value: z.string().min(1),
+  }),
+]);
+
+/**
+ * Zod schema for individual status configuration
+ */
+const StatusConfigSchema = z.object({
+  id: z.string().regex(/^[a-z0-9-]+$/, 'Status ID must be lowercase alphanumeric with hyphens'),
+  label: z.string().min(1, 'Status label is required'),
+  color: z.string().optional(),
+  icon: StatusIconSchema.optional(),
+  category: z.enum(['open', 'closed']),
+  isFixed: z.boolean(),
+  isDefault: z.boolean(),
+  order: z.number().int().min(0),
+});
+
+/**
+ * Zod schema for workspace status configuration
+ */
+const WorkspaceStatusConfigSchema = z.object({
+  version: z.number().int().min(1),
+  statuses: z.array(StatusConfigSchema),
+  defaultStatusId: z.string().min(1),
+});
+
+/**
+ * Validate statuses configuration for a workspace
+ * @param workspaceRoot - Absolute path to workspace root folder
+ */
+export function validateStatuses(workspaceRoot: string): ValidationResult {
+  const configPath = join(workspaceRoot, STATUS_CONFIG_FILE);
+  const iconsDir = join(workspaceRoot, STATUS_ICONS_DIR);
+  const file = STATUS_CONFIG_FILE;
+
+  const errors: ValidationIssue[] = [];
+  const warnings: ValidationIssue[] = [];
+
+  // Check if config file exists (optional - defaults are used if missing)
+  if (!existsSync(configPath)) {
+    return {
+      valid: true,
+      errors: [],
+      warnings: [{
+        file,
+        path: '',
+        message: 'Status config does not exist (using defaults)',
+        severity: 'warning',
+        suggestion: 'Statuses will use default configuration. Edit to customize.',
+      }],
+    };
+  }
+
+  // Parse JSON
+  let content: unknown;
+  try {
+    const raw = readFileSync(configPath, 'utf-8');
+    content = JSON.parse(raw);
+  } catch (e) {
+    return {
+      valid: false,
+      errors: [{
+        file,
+        path: '',
+        message: `Invalid JSON: ${e instanceof Error ? e.message : 'Unknown error'}`,
+        severity: 'error',
+      }],
+      warnings: [],
+    };
+  }
+
+  // Validate schema
+  const result = WorkspaceStatusConfigSchema.safeParse(content);
+  if (!result.success) {
+    errors.push(...zodErrorToIssues(result.error, file));
+    return { valid: false, errors, warnings };
+  }
+
+  const config = result.data;
+
+  // Semantic validations
+
+  // 1. Check required fixed statuses exist
+  const statusIds = new Set(config.statuses.map(s => s.id));
+  for (const requiredId of REQUIRED_FIXED_STATUS_IDS) {
+    if (!statusIds.has(requiredId)) {
+      errors.push({
+        file,
+        path: 'statuses',
+        message: `Required fixed status '${requiredId}' is missing`,
+        severity: 'error',
+        suggestion: `Add the '${requiredId}' status - it's required for the system to function`,
+      });
+    }
+  }
+
+  // 2. Check for duplicate IDs
+  const seenIds = new Set<string>();
+  for (const status of config.statuses) {
+    if (seenIds.has(status.id)) {
+      errors.push({
+        file,
+        path: `statuses[id=${status.id}]`,
+        message: `Duplicate status ID '${status.id}'`,
+        severity: 'error',
+        suggestion: 'Each status must have a unique ID',
+      });
+    }
+    seenIds.add(status.id);
+  }
+
+  // 3. Check defaultStatusId references an existing status
+  if (!statusIds.has(config.defaultStatusId)) {
+    errors.push({
+      file,
+      path: 'defaultStatusId',
+      message: `Default status '${config.defaultStatusId}' does not exist in statuses array`,
+      severity: 'error',
+      suggestion: 'Set defaultStatusId to an existing status ID (typically "todo")',
+    });
+  }
+
+  // 4. Check fixed statuses have correct isFixed flag
+  for (const status of config.statuses) {
+    const shouldBeFixed = (REQUIRED_FIXED_STATUS_IDS as readonly string[]).includes(status.id);
+    if (shouldBeFixed && !status.isFixed) {
+      warnings.push({
+        file,
+        path: `statuses[id=${status.id}].isFixed`,
+        message: `Status '${status.id}' should have isFixed: true`,
+        severity: 'warning',
+        suggestion: 'This is a required system status and should be marked as fixed',
+      });
+    }
+  }
+
+  // 5. Validate icon file references exist
+  for (const status of config.statuses) {
+    if (status.icon && typeof status.icon === 'object' && status.icon.type === 'file') {
+      const iconPath = join(iconsDir, status.icon.value);
+      if (!existsSync(iconPath)) {
+        warnings.push({
+          file,
+          path: `statuses[id=${status.id}].icon`,
+          message: `Icon file '${status.icon.value}' not found`,
+          severity: 'warning',
+          suggestion: `Create the icon file at ${STATUS_ICONS_DIR}/${status.icon.value}`,
+        });
+      }
+    }
+  }
+
+  // 6. Check that at least one status is in each category
+  const hasOpen = config.statuses.some(s => s.category === 'open');
+  const hasClosed = config.statuses.some(s => s.category === 'closed');
+  if (!hasOpen) {
+    errors.push({
+      file,
+      path: 'statuses',
+      message: 'No status with category "open" - sessions will not appear in inbox',
+      severity: 'error',
+    });
+  }
+  if (!hasClosed) {
+    warnings.push({
+      file,
+      path: 'statuses',
+      message: 'No status with category "closed" - sessions cannot be archived',
+      severity: 'warning',
+    });
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    warnings,
+  };
+}
+
+// ============================================================
+// Permissions Validators
+// ============================================================
+
+import { PermissionsConfigSchema } from '../agent/mode-types.ts';
+import {
+  validatePermissionsConfig,
+  getWorkspacePermissionsPath,
+  getSourcePermissionsPath,
+  getAppPermissionsDir,
+} from '../agent/permissions-config.ts';
+
+/**
+ * Internal: Validate a single permissions.json file
+ * Checks JSON syntax, Zod schema, and regex pattern validity.
+ */
+function validatePermissionsFile(filePath: string, displayFile: string): ValidationResult {
+  const errors: ValidationIssue[] = [];
+  const warnings: ValidationIssue[] = [];
+
+  // File is optional - missing is just a warning
+  if (!existsSync(filePath)) {
+    return {
+      valid: true,
+      errors: [],
+      warnings: [{
+        file: displayFile,
+        path: '',
+        message: 'Permissions file does not exist (using defaults)',
+        severity: 'warning',
+      }],
+    };
+  }
+
+  // Parse JSON
+  let content: unknown;
+  try {
+    const raw = readFileSync(filePath, 'utf-8');
+    content = JSON.parse(raw);
+  } catch (e) {
+    return {
+      valid: false,
+      errors: [{
+        file: displayFile,
+        path: '',
+        message: `Invalid JSON: ${e instanceof Error ? e.message : 'Unknown error'}`,
+        severity: 'error',
+      }],
+      warnings: [],
+    };
+  }
+
+  // Validate schema
+  const result = PermissionsConfigSchema.safeParse(content);
+  if (!result.success) {
+    errors.push(...zodErrorToIssues(result.error, displayFile));
+    return { valid: false, errors, warnings };
+  }
+
+  // Validate regex patterns (semantic validation)
+  const regexErrors = validatePermissionsConfig(result.data);
+  for (const regexError of regexErrors) {
+    errors.push({
+      file: displayFile,
+      path: regexError.split(':')[0] || '',
+      message: regexError,
+      severity: 'error',
+    });
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    warnings,
+  };
+}
+
+/**
+ * Validate workspace-level permissions.json
+ * @param workspaceRoot - Absolute path to workspace root folder
+ */
+export function validateWorkspacePermissions(workspaceRoot: string): ValidationResult {
+  const permissionsPath = getWorkspacePermissionsPath(workspaceRoot);
+  return validatePermissionsFile(permissionsPath, 'permissions.json');
+}
+
+/**
+ * Validate source-level permissions.json
+ * @param workspaceRoot - Absolute path to workspace root folder
+ * @param sourceSlug - Source slug
+ */
+export function validateSourcePermissions(workspaceRoot: string, sourceSlug: string): ValidationResult {
+  const permissionsPath = getSourcePermissionsPath(workspaceRoot, sourceSlug);
+  return validatePermissionsFile(permissionsPath, `sources/${sourceSlug}/permissions.json`);
+}
+
+/**
+ * Validate app-level default permissions
+ */
+export function validateDefaultPermissions(): ValidationResult {
+  const permissionsPath = join(getAppPermissionsDir(), 'default.json');
+  return validatePermissionsFile(permissionsPath, 'permissions/default.json');
+}
+
+/**
+ * Validate all permissions files in a workspace
+ * Includes: app-level default, workspace-level, and all source-level permissions
+ */
+export function validateAllPermissions(workspaceRoot: string): ValidationResult {
+  const errors: ValidationIssue[] = [];
+  const warnings: ValidationIssue[] = [];
+
+  // Validate app-level default permissions
+  const defaultResult = validateDefaultPermissions();
+  errors.push(...defaultResult.errors);
+  warnings.push(...defaultResult.warnings);
+
+  // Validate workspace-level permissions
+  const wsResult = validateWorkspacePermissions(workspaceRoot);
+  errors.push(...wsResult.errors);
+  warnings.push(...wsResult.warnings);
+
+  // Validate all source-level permissions
+  const sourcesDir = join(workspaceRoot, 'sources');
+  if (existsSync(sourcesDir)) {
+    const entries = readdirSync(sourcesDir);
+    for (const entry of entries) {
+      const entryPath = join(sourcesDir, entry);
+      if (statSync(entryPath).isDirectory()) {
+        const srcResult = validateSourcePermissions(workspaceRoot, entry);
+        errors.push(...srcResult.errors);
+        warnings.push(...srcResult.warnings);
+      }
+    }
   }
 
   return {

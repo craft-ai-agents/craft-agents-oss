@@ -17,6 +17,13 @@ export interface SkillMetadata {
   globs?: string[];
   /** Optional tools to always allow when skill is active */
   alwaysAllow?: string[];
+  /**
+   * Optional icon - emoji or URL only.
+   * - Emoji: rendered directly in UI (e.g., "🔧")
+   * - URL: auto-downloaded to icon.{ext} file
+   * Note: Relative paths and inline SVG are NOT supported.
+   */
+  icon?: string;
 }
 
 /**

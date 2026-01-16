@@ -35,6 +35,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { StyledDropdownMenuContent, StyledDropdownMenuItem } from '@/components/ui/styled-dropdown'
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
 import { applySmartTypography } from '@/lib/smart-typography'
 import { AttachmentPreview } from '../AttachmentPreview'
@@ -1318,7 +1319,7 @@ function getRecentDirs(): string[] {
 
 function addRecentDir(path: string): void {
   const recent = getRecentDirs().filter(p => p !== path)
-  const updated = [path, ...recent].slice(0, 5)
+  const updated = [path, ...recent].slice(0, 25)
   storage.set(storage.KEYS.recentWorkingDirs, updated)
 }
 
@@ -1336,6 +1337,7 @@ function formatPathForDisplay(path: string, homeDir: string): string {
 
 /**
  * WorkingDirectoryBadge - Context badge for selecting working directory
+ * Uses cmdk for filterable folder list when there are more than 5 recent folders.
  */
 function WorkingDirectoryBadge({
   workingDirectory,
@@ -1349,8 +1351,10 @@ function WorkingDirectoryBadge({
   isEmptySession?: boolean
 }) {
   const [recentDirs, setRecentDirs] = React.useState<string[]>([])
-  const [dropdownOpen, setDropdownOpen] = React.useState(false)
+  const [popoverOpen, setPopoverOpen] = React.useState(false)
   const [homeDir, setHomeDir] = React.useState<string>('')
+  const [filter, setFilter] = React.useState('')
+  const inputRef = React.useRef<HTMLInputElement>(null)
 
   // Load home directory and recent directories on mount
   React.useEffect(() => {
@@ -1360,8 +1364,21 @@ function WorkingDirectoryBadge({
     })
   }, [])
 
+  // Reset filter and focus input when popover opens
+  React.useEffect(() => {
+    if (popoverOpen) {
+      setFilter('')
+      // Focus input after popover animation completes (only if filter is shown)
+      const timer = setTimeout(() => {
+        inputRef.current?.focus()
+      }, 0)
+      return () => clearTimeout(timer)
+    }
+  }, [popoverOpen])
+
   const handleChooseFolder = async () => {
     if (!window.electronAPI) return
+    setPopoverOpen(false)
     const selectedPath = await window.electronAPI.openFolderDialog()
     if (selectedPath) {
       addRecentDir(selectedPath)
@@ -1374,18 +1391,42 @@ function WorkingDirectoryBadge({
     addRecentDir(path) // Move to top of recent list
     setRecentDirs(getRecentDirs())
     onWorkingDirectoryChange(path)
+    setPopoverOpen(false)
   }
 
-  // Filter out current directory from recent list
-  const filteredRecent = recentDirs.filter(p => p !== workingDirectory)
+  const handleReset = () => {
+    if (sessionFolderPath) {
+      onWorkingDirectoryChange(sessionFolderPath)
+      setPopoverOpen(false)
+    }
+  }
+
+  // Filter out current directory from recent list and sort alphabetically by folder name
+  const filteredRecent = recentDirs
+    .filter(p => p !== workingDirectory)
+    .sort((a, b) => {
+      const nameA = (a.split('/').pop() || '').toLowerCase()
+      const nameB = (b.split('/').pop() || '').toLowerCase()
+      return nameA.localeCompare(nameB)
+    })
+  // Show filter input only when more than 5 recent folders
+  const showFilter = filteredRecent.length > 5
 
   // Determine label - "Work in Folder" if not set or at session root, otherwise folder name
   const hasFolder = !!workingDirectory && workingDirectory !== sessionFolderPath
   const folderName = hasFolder ? (workingDirectory.split('/').pop() || 'Folder') : 'Work in Folder'
 
+  // Show reset option when a folder is selected and it differs from session folder
+  const showReset = hasFolder && sessionFolderPath && sessionFolderPath !== workingDirectory
+
+  // Styles matching todo-filter-menu.tsx for consistency
+  const MENU_CONTAINER_STYLE = 'min-w-[200px] max-w-[400px] overflow-hidden rounded-[8px] bg-background text-foreground shadow-modal-small p-0'
+  const MENU_LIST_STYLE = 'max-h-[200px] overflow-y-auto p-1 [&_[cmdk-list-sizer]]:space-y-px'
+  const MENU_ITEM_STYLE = 'flex cursor-pointer select-none items-center gap-2 rounded-[6px] px-3 py-1.5 text-[13px] outline-none'
+
   return (
-    <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
-      <DropdownMenuTrigger asChild>
+    <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+      <PopoverTrigger asChild>
         <span>
           <FreeFormInputContextBadge
             icon={<Icon_Folder className="h-4 w-4" strokeWidth={1.75} />}
@@ -1393,7 +1434,7 @@ function WorkingDirectoryBadge({
             isExpanded={isEmptySession}
             hasSelection={hasFolder}
             showChevron={true}
-            isOpen={dropdownOpen}
+            isOpen={popoverOpen}
             tooltip={
               hasFolder ? (
                 <span className="flex flex-col gap-0.5">
@@ -1404,55 +1445,92 @@ function WorkingDirectoryBadge({
             }
           />
         </span>
-      </DropdownMenuTrigger>
-      <StyledDropdownMenuContent side="top" align="start" sideOffset={8} className="w-auto min-w-[200px] max-w-[400px]">
-        {/* Current Folder Display */}
-        {hasFolder && (
-          <>
-            <StyledDropdownMenuItem className="text-sm pointer-events-none">
-              <Icon_Folder className="text-muted-foreground" strokeWidth={1.75} />
-              <span className="flex-1 min-w-0">
-                <span className="font-medium">{folderName}</span>
-                <span className="text-muted-foreground text-xs ml-1.5">{formatPathForDisplay(workingDirectory, homeDir)}</span>
-              </span>
-              <Check />
-            </StyledDropdownMenuItem>
-            <div className="h-px bg-border my-1" />
-          </>
-        )}
-        {/* Recent Directories */}
-        {filteredRecent.length > 0 && (
-          <>
+      </PopoverTrigger>
+      <PopoverContent side="top" align="start" sideOffset={8} className={MENU_CONTAINER_STYLE}>
+        <CommandPrimitive shouldFilter={showFilter}>
+          {/* Filter input - only shown when more than 5 recent folders */}
+          {showFilter && (
+            <div className="border-b border-border/50 px-3 py-2">
+              <CommandPrimitive.Input
+                ref={inputRef}
+                value={filter}
+                onValueChange={setFilter}
+                placeholder="Filter folders..."
+                className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
+              />
+            </div>
+          )}
+
+          <CommandPrimitive.List className={MENU_LIST_STYLE}>
+            {/* Current Folder Display - shown at top with checkmark */}
+            {hasFolder && (
+              <CommandPrimitive.Item
+                value={`current-${workingDirectory}`}
+                className={cn(MENU_ITEM_STYLE, 'pointer-events-none bg-foreground/5')}
+                disabled
+              >
+                <Icon_Folder className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.75} />
+                <span className="flex-1 min-w-0 truncate">
+                  <span>{folderName}</span>
+                  <span className="text-muted-foreground ml-1.5">{formatPathForDisplay(workingDirectory, homeDir)}</span>
+                </span>
+                <Check className="h-4 w-4 shrink-0" />
+              </CommandPrimitive.Item>
+            )}
+
+            {/* Separator after current folder */}
+            {hasFolder && filteredRecent.length > 0 && (
+              <div className="h-px bg-border my-1 mx-1" />
+            )}
+
+            {/* Recent Directories - filterable (current directory already filtered out via filteredRecent) */}
             {filteredRecent.map((path) => {
               const recentFolderName = path.split('/').pop() || 'Folder'
               return (
-                <StyledDropdownMenuItem
+                <CommandPrimitive.Item
                   key={path}
-                  onClick={() => handleSelectRecent(path)}
-                  className="text-sm"
+                  value={`${recentFolderName} ${path}`}
+                  onSelect={() => handleSelectRecent(path)}
+                  className={cn(MENU_ITEM_STYLE, 'data-[selected=true]:bg-foreground/5')}
                 >
-                  <Icon_Folder className="text-muted-foreground" strokeWidth={1.75} />
-                  <span className="flex-1 min-w-0 whitespace-nowrap">
-                    <span className="font-medium">{recentFolderName}</span>
-                    <span className="text-muted-foreground text-xs ml-1.5">{formatPathForDisplay(path, homeDir)}</span>
+                  <Icon_Folder className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.75} />
+                  <span className="flex-1 min-w-0 truncate">
+                    <span>{recentFolderName}</span>
+                    <span className="text-muted-foreground ml-1.5">{formatPathForDisplay(path, homeDir)}</span>
                   </span>
-                </StyledDropdownMenuItem>
+                </CommandPrimitive.Item>
               )
             })}
-            <div className="h-px bg-border my-1" />
-          </>
-        )}
-        {/* Reset option - only show when a folder is selected */}
-        {hasFolder && sessionFolderPath && sessionFolderPath !== workingDirectory && (
-          <StyledDropdownMenuItem onClick={() => onWorkingDirectoryChange(sessionFolderPath)}>
-            Reset
-          </StyledDropdownMenuItem>
-        )}
-        {/* Choose Folder option */}
-        <StyledDropdownMenuItem onClick={handleChooseFolder}>
-          Choose Folder...
-        </StyledDropdownMenuItem>
-      </StyledDropdownMenuContent>
-    </DropdownMenu>
+
+            {/* Empty state when filtering */}
+            {showFilter && (
+              <CommandPrimitive.Empty className="py-3 text-center text-sm text-muted-foreground">
+                No folders found
+              </CommandPrimitive.Empty>
+            )}
+          </CommandPrimitive.List>
+
+          {/* Bottom actions - always visible, outside scrollable area */}
+          <div className="border-t border-border/50 p-1">
+            <button
+              type="button"
+              onClick={handleChooseFolder}
+              className={cn(MENU_ITEM_STYLE, 'w-full hover:bg-foreground/5')}
+            >
+              Choose Folder...
+            </button>
+            {showReset && (
+              <button
+                type="button"
+                onClick={handleReset}
+                className={cn(MENU_ITEM_STYLE, 'w-full hover:bg-foreground/5')}
+              >
+                Reset
+              </button>
+            )}
+          </div>
+        </CommandPrimitive>
+      </PopoverContent>
+    </Popover>
   )
 }

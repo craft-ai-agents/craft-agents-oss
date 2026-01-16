@@ -358,7 +358,7 @@ Each source folder contains:
 - \`config.json\` - Source configuration (required)
 - \`guide.md\` - Usage documentation for Claude (optional)
 - \`permissions.json\` - Custom permission rules for Explore mode (optional)
-- \`icon.png\` or \`icon.svg\` - Source icon (optional)
+- \`icon.svg\`, \`icon.png\`, \`icon.jpg\`, or \`icon.jpeg\` - Source icon (optional)
 
 ## config.json Schema
 
@@ -396,9 +396,9 @@ Each source folder contains:
   "connectionStatus": "connected" | "needs_auth" | "failed" | "untested",
   "lastTestedAt": 1704067200000,
 
-  // Icon handling:
-  "iconUrl": "./icon.png",           // Relative path to cached icon
-  "iconSourceUrl": "https://...",    // Original URL for re-fetching
+  // Icon: emoji or URL (auto-downloaded to local icon.* file)
+  // Local icon files are auto-discovered, no config needed
+  "icon": "🔧",                      // Emoji icon (optional)
 
   // Timestamps:
   "createdAt": 1704067200000,
@@ -969,7 +969,6 @@ Every skill should have a visually relevant icon. This helps users quickly ident
 **How to get an icon:**
 
 1. **Search online icon libraries:**
-   - [Lucide Icons](https://lucide.dev/) - MIT licensed, great for dev tools
    - [Heroicons](https://heroicons.com/) - MIT licensed
    - [Feather Icons](https://feathericons.com/) - MIT licensed
    - [Simple Icons](https://simpleicons.org/) - Brand icons (git, npm, etc.)
@@ -1033,7 +1032,7 @@ When creating commits:
    Always include: \`Co-Authored-By: Claude <noreply@anthropic.com>\`
 \`\`\`
 
-**Recommended icon**: Git commit icon from Lucide or Simple Icons
+**Recommended icon**: Git commit icon from Heroicons or Simple Icons
 
 ### Team Standards Skill
 
@@ -1550,7 +1549,6 @@ Session statuses represent workflow states. Each workspace has its own status co
     {
       "id": "todo",
       "label": "Todo",
-      "icon": { "type": "file", "value": "todo.svg" },
       "category": "open",
       "isFixed": true,
       "isDefault": false,
@@ -1561,6 +1559,8 @@ Session statuses represent workflow states. Each workspace has its own status co
 }
 \`\`\`
 
+**Note:** The \`icon\` field is optional. Default statuses use auto-discovered SVG files from \`statuses/icons/{id}.svg\`.
+
 ## Status Properties
 
 | Property | Type | Description |
@@ -1568,7 +1568,7 @@ Session statuses represent workflow states. Each workspace has its own status co
 | \`id\` | string | Unique slug (lowercase, hyphens) |
 | \`label\` | string | Display name |
 | \`color\` | string? | Optional color (hex or Tailwind class). Uses design system default if omitted. |
-| \`icon\` | object | Icon config (see below) |
+| \`icon\` | string? | Optional emoji (e.g., \`"🔥"\`) or URL. Omit to use auto-discovered file. |
 | \`category\` | \`"open"\` \\| \`"closed"\` | Inbox vs archive |
 | \`isFixed\` | boolean | Cannot delete/rename if true |
 | \`isDefault\` | boolean | Ships with app, cannot delete |
@@ -1576,19 +1576,28 @@ Session statuses represent workflow states. Each workspace has its own status co
 
 ## Icon Configuration
 
-**File-based SVG:**
-\`\`\`json
-{ "type": "file", "value": "my-status.svg" }
-\`\`\`
-Place SVG in \`statuses/icons/\` directory.
+Icon resolution priority:
+1. **Local file** - Auto-discovered from \`statuses/icons/{id}.svg\` (or .png, .jpg, .jpeg)
+2. **Emoji** - If \`icon\` field is an emoji string (e.g., \`"🔥"\`)
+3. **Fallback** - Bullet character if no icon found
 
-**Emoji:**
+**File-based icons (recommended for default statuses):**
+- Place SVG in \`statuses/icons/{status-id}.svg\`
+- No config needed - auto-discovered by status ID
+- Example: \`statuses/icons/blocked.svg\` for status ID \`blocked\`
+
+**Emoji icons (quick and easy):**
 \`\`\`json
-{ "type": "emoji", "value": "🔥" }
+"icon": "🔥"
 \`\`\`
+
+**URL icons (auto-downloaded):**
+\`\`\`json
+"icon": "https://example.com/icon.svg"
+\`\`\`
+URLs are automatically downloaded to \`statuses/icons/{id}.{ext}\`.
 
 **⚠️ Icon Sourcing Rules:**
-- **NEVER** use Lucide icons or any code-level icon libraries (they may not be imported)
 - **DO** generate custom SVG files following the guidelines below
 - **DO** download icons from the web (e.g., Heroicons, Feather, Simple Icons)
 - **DO** use emoji for quick, universal icons
@@ -1602,7 +1611,7 @@ Edit the workspace's \`statuses/config.json\`:
   "id": "blocked",
   "label": "Blocked",
   "color": "#EF4444",
-  "icon": { "type": "emoji", "value": "🚫" },
+  "icon": "🚫",
   "category": "open",
   "isFixed": false,
   "isDefault": false,
@@ -1628,7 +1637,20 @@ Adjust \`order\` values for existing statuses as needed.
 
 ## Validation
 
-Required fixed statuses (\`todo\`, \`done\`, \`cancelled\`) must exist. Invalid configs return defaults.
+**IMPORTANT**: Always validate after creating or editing statuses:
+
+\`\`\`
+config_validate({ target: "statuses" })
+\`\`\`
+
+This validates:
+- Required fixed statuses exist (\`todo\`, \`done\`, \`cancelled\`)
+- No duplicate status IDs
+- \`defaultStatusId\` references an existing status
+- Icon files exist when referenced
+- At least one status in each category (open/closed)
+
+Invalid configs will fall back to defaults at runtime, but validation catches issues before they cause problems.
 `;
 
 /**
