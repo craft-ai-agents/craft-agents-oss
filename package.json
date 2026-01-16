@@ -68,7 +68,7 @@
     "autoprefixer": "^10.4.23",
     "concurrently": "^9.2.1",
     "electron": "^39.2.7",
-    "electron-builder": "^26.0.12",
+    "electron-builder": "24.13.1",
     "esbuild": "^0.24.0",
     "eslint": "^9.39.2",
     "eslint-plugin-react": "^7.37.5",
