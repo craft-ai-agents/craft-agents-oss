@@ -107,11 +107,11 @@ win:
 
 nsis:
   oneClick: false
-  # IMPORTANT: Must install to %LOCALAPPDATA%, NOT Program Files!
-  # Bun.exe needs write access to its directory which Program Files blocks.
+  # Default to per-user install (%LOCALAPPDATA%\Programs\), but allow Program Files too.
+  # Bun env vars (BUN_INSTALL_CACHE_DIR, BUN_TMPDIR) are set in sessions.ts to ensure
+  # Bun writes to user-writable directories regardless of install location.
   perMachine: false
-  # Don't allow changing install dir - Program Files would break bun
-  allowToChangeInstallationDirectory: false
+  allowToChangeInstallationDirectory: true
   deleteAppDataOnUninstall: true
 
 linux:

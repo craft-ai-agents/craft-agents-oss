@@ -524,6 +524,15 @@ export class SessionManager {
       }
       sessionLog.info('Setting executable:', bunPath)
       setExecutable(bunPath)
+
+      // On Windows, configure Bun to use writable directories for temp/cache.
+      // This allows the app to be installed in Program Files (which is read-only).
+      if (process.platform === 'win32') {
+        const bunCacheDir = join(app.getPath('userData'), 'bun-cache')
+        process.env.BUN_INSTALL_CACHE_DIR = bunCacheDir
+        process.env.BUN_TMPDIR = app.getPath('temp')
+        sessionLog.info('Configured Bun env for Windows:', { BUN_INSTALL_CACHE_DIR: bunCacheDir, BUN_TMPDIR: app.getPath('temp') })
+      }
     } else if (process.platform === 'win32') {
       // On Windows in development, use 'node' instead of 'bun' as bun may crash
       // due to architecture emulation issues (e.g., x64 bun on ARM64 Windows)
