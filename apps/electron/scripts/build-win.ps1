@@ -12,6 +12,49 @@ $BunVersion = "bun-v1.3.5"  # Pinned version for reproducible builds
 
 Write-Host "=== Building Craft Agent Windows Installer using electron-builder ===" -ForegroundColor Cyan
 
+# Debug: System information
+Write-Host ""
+Write-Host "=== Debug: System Information ===" -ForegroundColor Magenta
+Write-Host "OS: $([System.Environment]::OSVersion.VersionString)"
+Write-Host "PowerShell: $($PSVersionTable.PSVersion)"
+Write-Host "Hostname: $env:COMPUTERNAME"
+Write-Host "User: $env:USERNAME"
+Write-Host "Temp: $env:TEMP"
+Write-Host "Working Dir: $(Get-Location)"
+
+# Debug: Check Windows Defender status
+Write-Host ""
+Write-Host "=== Debug: Windows Defender Status ===" -ForegroundColor Magenta
+try {
+    $defenderStatus = Get-MpComputerStatus -ErrorAction SilentlyContinue
+    if ($defenderStatus) {
+        Write-Host "Real-time Protection: $($defenderStatus.RealTimeProtectionEnabled)"
+        Write-Host "Antivirus Enabled: $($defenderStatus.AntivirusEnabled)"
+        Write-Host "On Access Protection: $($defenderStatus.OnAccessProtectionEnabled)"
+        Write-Host "IO AV Protection: $($defenderStatus.IoavProtectionEnabled)"
+    } else {
+        Write-Host "Could not get Defender status"
+    }
+} catch {
+    Write-Host "Defender status check failed: $_"
+}
+
+# Debug: List exclusions
+Write-Host ""
+Write-Host "=== Debug: Defender Exclusions ===" -ForegroundColor Magenta
+try {
+    $prefs = Get-MpPreference -ErrorAction SilentlyContinue
+    if ($prefs.ExclusionPath) {
+        Write-Host "Path Exclusions: $($prefs.ExclusionPath -join ', ')"
+    }
+    if ($prefs.ExclusionProcess) {
+        Write-Host "Process Exclusions: $($prefs.ExclusionProcess -join ', ')"
+    }
+} catch {
+    Write-Host "Could not get exclusions: $_"
+}
+Write-Host ""
+
 # 1. Clean previous build artifacts (with retry for locked files)
 Write-Host "Cleaning previous builds..."
 $foldersToClean = @(
@@ -205,12 +248,60 @@ try {
 # 7. Package with electron-builder
 Write-Host "Packaging app with electron-builder..."
 
+# Debug: Show bun.exe file info
+Write-Host ""
+Write-Host "=== Debug: bun.exe File Info ===" -ForegroundColor Magenta
+$BunExe = "$ElectronDir\vendor\bun\bun.exe"
+if (Test-Path $BunExe) {
+    $fileInfo = Get-Item $BunExe
+    Write-Host "Path: $($fileInfo.FullName)"
+    Write-Host "Size: $([math]::Round($fileInfo.Length / 1MB, 2)) MB"
+    Write-Host "Created: $($fileInfo.CreationTime)"
+    Write-Host "Modified: $($fileInfo.LastWriteTime)"
+    Write-Host "Attributes: $($fileInfo.Attributes)"
+
+    # Check Zone.Identifier (Mark of the Web)
+    $zoneFile = "$BunExe`:Zone.Identifier"
+    if (Test-Path $zoneFile -ErrorAction SilentlyContinue) {
+        Write-Host "Zone.Identifier: EXISTS (file may be blocked)" -ForegroundColor Yellow
+    } else {
+        Write-Host "Zone.Identifier: None (file is unblocked)"
+    }
+
+    # Check file hash
+    $hash = (Get-FileHash $BunExe -Algorithm SHA256).Hash
+    Write-Host "SHA256: $hash"
+} else {
+    Write-Host "ERROR: bun.exe not found at $BunExe" -ForegroundColor Red
+}
+
+# Debug: List vendor directory contents
+Write-Host ""
+Write-Host "=== Debug: vendor/bun Directory ===" -ForegroundColor Magenta
+Get-ChildItem "$ElectronDir\vendor\bun" -ErrorAction SilentlyContinue | ForEach-Object {
+    Write-Host "  $($_.Name) - $($_.Length) bytes"
+}
+
+# Debug: Check for processes that might have files open
+Write-Host ""
+Write-Host "=== Debug: Potentially Relevant Processes ===" -ForegroundColor Magenta
+$relevantProcesses = Get-Process | Where-Object {
+    $_.ProcessName -match 'node|npm|bun|electron|defender|antimalware|mpcmdrun'
+} | Select-Object ProcessName, Id, CPU, WorkingSet64
+if ($relevantProcesses) {
+    $relevantProcesses | ForEach-Object {
+        Write-Host "  $($_.ProcessName) (PID: $($_.Id)) - Memory: $([math]::Round($_.WorkingSet64 / 1MB, 1)) MB"
+    }
+} else {
+    Write-Host "  No relevant processes found"
+}
+Write-Host ""
+
 # Wait for file system to settle - Windows can hold file locks briefly after operations
 Write-Host "  Waiting for file system to settle..."
 Start-Sleep -Seconds 5
 
 # Verify bun.exe is accessible (not locked by another process)
-$BunExe = "$ElectronDir\vendor\bun\bun.exe"
 Write-Host "  Verifying $BunExe is accessible..."
 $retryCount = 0
 $maxRetries = 6
