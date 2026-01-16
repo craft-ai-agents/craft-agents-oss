@@ -86,9 +86,83 @@ Copy-Item $InterceptorSource "$ElectronDir\packages\shared\src\"
 
 # 6. Build Electron app
 Write-Host "Building Electron app..."
+
+# Build main process with OAuth credentials
+Write-Host "  Building main process..."
+$MainArgs = @(
+    "apps/electron/src/main/index.ts",
+    "--bundle",
+    "--platform=node",
+    "--format=cjs",
+    "--outfile=apps/electron/dist/main.cjs",
+    "--external:electron"
+)
+# Add OAuth defines if env vars are set
+if ($env:GOOGLE_OAUTH_CLIENT_ID) {
+    $MainArgs += "--define:process.env.GOOGLE_OAUTH_CLIENT_ID=`"'$env:GOOGLE_OAUTH_CLIENT_ID'`""
+}
+if ($env:GOOGLE_OAUTH_CLIENT_SECRET) {
+    $MainArgs += "--define:process.env.GOOGLE_OAUTH_CLIENT_SECRET=`"'$env:GOOGLE_OAUTH_CLIENT_SECRET'`""
+}
+if ($env:SLACK_OAUTH_CLIENT_ID) {
+    $MainArgs += "--define:process.env.SLACK_OAUTH_CLIENT_ID=`"'$env:SLACK_OAUTH_CLIENT_ID'`""
+}
+if ($env:SLACK_OAUTH_CLIENT_SECRET) {
+    $MainArgs += "--define:process.env.SLACK_OAUTH_CLIENT_SECRET=`"'$env:SLACK_OAUTH_CLIENT_SECRET'`""
+}
+if ($env:MICROSOFT_OAUTH_CLIENT_ID) {
+    $MainArgs += "--define:process.env.MICROSOFT_OAUTH_CLIENT_ID=`"'$env:MICROSOFT_OAUTH_CLIENT_ID'`""
+}
+if ($env:MICROSOFT_OAUTH_CLIENT_SECRET) {
+    $MainArgs += "--define:process.env.MICROSOFT_OAUTH_CLIENT_SECRET=`"'$env:MICROSOFT_OAUTH_CLIENT_SECRET'`""
+}
 Push-Location $RootDir
 try {
-    bun run electron:build:win
+    & npx esbuild @MainArgs
+    if ($LASTEXITCODE -ne 0) { throw "Main process build failed" }
+} finally {
+    Pop-Location
+}
+
+# Build preload
+Write-Host "  Building preload..."
+Push-Location $RootDir
+try {
+    bun run electron:build:preload
+    if ($LASTEXITCODE -ne 0) { throw "Preload build failed" }
+} finally {
+    Pop-Location
+}
+
+# Build renderer (frontend)
+Write-Host "  Building renderer (frontend)..."
+Push-Location $RootDir
+try {
+    # Clean previous renderer build
+    $RendererDir = "$ElectronDir\dist\renderer"
+    if (Test-Path $RendererDir) { Remove-Item -Recurse -Force $RendererDir }
+
+    # Run vite build
+    npx vite build --config apps/electron/vite.config.ts
+    if ($LASTEXITCODE -ne 0) { throw "Renderer build failed" }
+
+    # Verify renderer was built
+    if (-not (Test-Path "$RendererDir\index.html")) {
+        throw "Renderer build verification failed: index.html not found"
+    }
+    Write-Host "  Renderer build verified: $RendererDir" -ForegroundColor Green
+} finally {
+    Pop-Location
+}
+
+# Copy resources
+Write-Host "  Copying resources..."
+Push-Location $RootDir
+try {
+    $ResourcesSrc = "$ElectronDir\resources"
+    $ResourcesDst = "$ElectronDir\dist\resources"
+    if (Test-Path $ResourcesDst) { Remove-Item -Recurse -Force $ResourcesDst }
+    Copy-Item -Recurse $ResourcesSrc $ResourcesDst
 } finally {
     Pop-Location
 }

@@ -75,61 +75,64 @@ if (-not $installerUrl) {
 
 Write-Info "Expected checksum: $($checksum.Substring(0, 16))..."
 
-# Download installer with progress bar
+# Download installer with progress
 $installerPath = Join-Path $DOWNLOAD_DIR $filename
 $fileSize = $binaryInfo.size
+$fileSizeMB = [math]::Round($fileSize / 1MB, 1)
 
 # Clean up any partial download from previous attempts
 Remove-Item -Path $installerPath -Force -ErrorAction SilentlyContinue
 
-Write-Info "Downloading $filename ($([math]::Round($fileSize / 1MB, 1)) MB)..."
-Write-Host ""
+Write-Info "Downloading $filename ($fileSizeMB MB)..."
 
-$webClient = $null
 try {
-    $webClient = New-Object System.Net.WebClient
-    $downloadComplete = $false
-    $downloadError = $null
+    # Use WebRequest for download with progress
+    $webRequest = [System.Net.HttpWebRequest]::Create($installerUrl)
+    $webRequest.Timeout = 600000  # 10 minutes
+    $response = $webRequest.GetResponse()
+    $responseStream = $response.GetResponseStream()
+    $fileStream = [System.IO.File]::Create($installerPath)
 
-    # Progress event handler
-    $webClient.add_DownloadProgressChanged({
-        param($sender, $e)
-        $percent = $e.ProgressPercentage
-        $downloaded = [math]::Round($e.BytesReceived / 1MB, 1)
-        $total = [math]::Round($e.TotalBytesToReceive / 1MB, 1)
-        Write-Progress -Activity "Downloading Craft Agent" -Status "$downloaded MB / $total MB" -PercentComplete $percent
-    })
+    $buffer = New-Object byte[] 65536
+    $totalRead = 0
+    $lastPercent = -1
 
-    $webClient.add_DownloadFileCompleted({
-        param($sender, $e)
-        $script:downloadComplete = $true
-        if ($e.Error) { $script:downloadError = $e.Error }
-    })
+    while (($read = $responseStream.Read($buffer, 0, $buffer.Length)) -gt 0) {
+        $fileStream.Write($buffer, 0, $read)
+        $totalRead += $read
 
-    # Start async download
-    $webClient.DownloadFileAsync([Uri]$installerUrl, $installerPath)
-
-    # Wait for completion
-    while (-not $downloadComplete) {
-        Start-Sleep -Milliseconds 100
+        if ($fileSize -gt 0) {
+            $percent = [math]::Floor(($totalRead / $fileSize) * 100)
+            if ($percent -ne $lastPercent) {
+                $downloadedMB = [math]::Round($totalRead / 1MB, 1)
+                $barWidth = 40
+                $filled = [math]::Floor($percent / (100 / $barWidth))
+                $bar = "[" + ("#" * $filled) + ("-" * ($barWidth - $filled)) + "]"
+                Write-Host -NoNewline ("`r  $bar $percent% ($downloadedMB / $fileSizeMB MB)   ")
+                $lastPercent = $percent
+            }
+        }
     }
 
-    Write-Progress -Activity "Downloading Craft Agent" -Completed
+    $fileStream.Close()
+    $responseStream.Close()
+    $response.Close()
 
-    if ($downloadError) {
-        throw $downloadError
-    }
+    Write-Host ""
+    Write-Success "Download complete!"
 } catch {
     # Clean up partial download on failure
+    if ($fileStream) { $fileStream.Close() }
+    if ($responseStream) { $responseStream.Close() }
+    if ($response) { $response.Close() }
     Remove-Item -Path $installerPath -Force -ErrorAction SilentlyContinue
     Write-Err "Download failed: $_"
-} finally {
-    # Dispose WebClient
-    if ($webClient) {
-        $webClient.Dispose()
-    }
 }
-Write-Host ""
+
+# Verify file was downloaded
+if (-not (Test-Path $installerPath)) {
+    Write-Err "Download failed: file not found"
+}
 
 # Verify checksum
 Write-Info "Verifying checksum..."
@@ -151,17 +154,55 @@ if ($process) {
 }
 
 # Run the installer
-Write-Info "Running installer..."
-Write-Host ""
+Write-Info "Running installer (follow the installer prompts)..."
+
 try {
-    Start-Process -FilePath $installerPath -Wait
+    $installerProcess = Start-Process -FilePath $installerPath -PassThru
+    $spinner = @('|', '/', '-', '\')
+    $i = 0
+
+    while (-not $installerProcess.HasExited) {
+        Write-Host -NoNewline ("`r  Installing... " + $spinner[$i % 4] + "   ")
+        Start-Sleep -Milliseconds 200
+        $i++
+    }
+
+    Write-Host -NoNewline "`r                      `r"
+
+    if ($installerProcess.ExitCode -ne 0) {
+        Write-Err "Installation failed with exit code: $($installerProcess.ExitCode)"
+    }
 } catch {
     Write-Err "Installation failed: $_"
 }
 
-# Clean up
+# Clean up installer
 Write-Info "Cleaning up..."
 Remove-Item -Path $installerPath -Force -ErrorAction SilentlyContinue
+
+# Add command line shortcut
+Write-Info "Adding 'craft-agents' command to PATH..."
+
+$binDir = "$env:LOCALAPPDATA\Craft Agent\bin"
+$cmdFile = "$binDir\craft-agents.cmd"
+$exePath = "$env:LOCALAPPDATA\Programs\Craft Agent\Craft Agent.exe"
+
+# Create bin directory
+New-Item -ItemType Directory -Force -Path $binDir | Out-Null
+
+# Create batch file launcher
+$cmdContent = "@echo off`r`nstart `"`" `"$exePath`" %*"
+Set-Content -Path $cmdFile -Value $cmdContent -Encoding ASCII
+
+# Add to user PATH if not already there
+$userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+if ($userPath -notlike "*$binDir*") {
+    $newPath = "$userPath;$binDir"
+    [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
+    Write-Success "Added to PATH (restart terminal to use 'craft-agents' command)"
+} else {
+    Write-Success "Command 'craft-agents' is ready"
+}
 
 Write-Host ""
 Write-Host "---------------------------------------------------------------------"
@@ -170,5 +211,7 @@ Write-Success "Installation complete!"
 Write-Host ""
 Write-Host "  Craft Agent has been installed."
 Write-Host ""
-Write-Host "  You can launch it from the Start Menu or desktop shortcut."
+Write-Host "  Launch from:"
+Write-Host "    - Start Menu or desktop shortcut"
+Write-Host "    - Command line: craft-agents (restart terminal first)"
 Write-Host ""
