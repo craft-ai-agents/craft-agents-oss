@@ -21,6 +21,27 @@ import { FileTypeIcon, getFileTypeLabel } from './attachment-helpers'
 // Using simple characters since SVG rendering may not work in all contexts
 const SKILL_ICON_TEXT = '✦'
 const SOURCE_ICON_TEXT = '⊕'
+const CONTEXT_ICON_TEXT = '⚙'
+
+/**
+ * Check if a badge is an edit_request badge (identified by XML tag in rawText)
+ */
+function isEditRequestBadge(badge: ContentBadge): boolean {
+  return badge.type === 'context' && !!badge.rawText?.includes('<edit_request>')
+}
+
+/**
+ * EditRequestBadge - Standalone badge rendered above the user message bubble
+ * Taller and with larger corner radius than inline badges for visual distinction
+ */
+function EditRequestBadge({ badge }: { badge: ContentBadge }) {
+  const displayLabel = badge.collapsedLabel || badge.label
+  return (
+    <span className="inline-flex items-center h-[28px] px-2.5 rounded-[8px] bg-background shadow-minimal text-[13px] text-muted-foreground">
+      {displayLabel}
+    </span>
+  )
+}
 
 /**
  * InlineBadge - Renders a single content badge inline with text
@@ -40,7 +61,7 @@ function InlineBadge({ badge }: { badge: ContentBadge }) {
         />
       ) : (
         <span className="h-[12px] w-[12px] rounded-[2px] bg-foreground/5 flex items-center justify-center text-foreground/50 shrink-0 text-[8px]">
-          {badge.type === 'skill' ? SKILL_ICON_TEXT : SOURCE_ICON_TEXT}
+          {badge.type === 'skill' ? SKILL_ICON_TEXT : badge.type === 'context' ? CONTEXT_ICON_TEXT : SOURCE_ICON_TEXT}
         </span>
       )}
       <span className="truncate max-w-[200px]">{badge.label}</span>
@@ -49,8 +70,35 @@ function InlineBadge({ badge }: { badge: ContentBadge }) {
 }
 
 /**
+ * ContextBadge - Renders a context badge that collapses hidden content
+ * Shows collapsed label and hides the raw content from display
+ * Note: edit_request badges are handled separately by EditRequestBadge
+ */
+function ContextBadge({ badge }: { badge: ContentBadge }) {
+  const displayLabel = badge.collapsedLabel || badge.label
+
+  return (
+    <span
+      className="inline-flex items-center gap-1 h-[22px] px-1.5 mr-1 rounded-[5px] bg-background shadow-minimal text-[12px] align-middle"
+      style={{ verticalAlign: 'middle', transform: 'translateY(-1px)' }}
+      title="Context badge"
+    >
+      <span className="h-[12px] w-[12px] rounded-[2px] bg-foreground/5 flex items-center justify-center text-foreground/50 shrink-0 text-[8px]">
+        {CONTEXT_ICON_TEXT}
+      </span>
+      <span className="truncate max-w-[200px] text-muted-foreground">{displayLabel}</span>
+    </span>
+  )
+}
+
+/**
  * Render content with badges inserted at their positions.
  * Text segments between badges are rendered as Markdown.
+ *
+ * Context badges (type='context') are special:
+ * - They completely hide the marked content range
+ * - They show a collapsed badge with the collapsedLabel
+ * - Used for EditPopover metadata that shouldn't be visible to users
  */
 function renderContentWithBadges(
   content: string,
@@ -90,8 +138,14 @@ function renderContentWithBadges(
       }
     }
 
-    // Add the badge
-    elements.push(<InlineBadge key={`badge-${i}`} badge={badge} />)
+    // Context badges hide content and show collapsed label
+    // Source/skill badges show inline with the original text
+    // Note: edit_request badges are filtered out and rendered above the bubble separately
+    if (badge.type === 'context') {
+      elements.push(<ContextBadge key={`badge-${i}`} badge={badge} />)
+    } else {
+      elements.push(<InlineBadge key={`badge-${i}`} badge={badge} />)
+    }
 
     lastEnd = badge.end
   })
@@ -142,7 +196,25 @@ export function UserMessageBubble({
   isQueued,
 }: UserMessageBubbleProps) {
   const hasAttachments = attachments && attachments.length > 0
-  const hasBadges = badges && badges.length > 0
+
+  // Separate edit_request badges (rendered above bubble) from other badges (rendered inline)
+  const editRequestBadges = badges?.filter(isEditRequestBadge) ?? []
+  const inlineBadges = badges?.filter(b => !isEditRequestBadge(b)) ?? []
+  const hasEditRequestBadges = editRequestBadges.length > 0
+  const hasInlineBadges = inlineBadges.length > 0
+
+  // Strip edit_request content from the displayed text
+  // Each badge has start/end positions marking where to remove content
+  let displayContent = content
+  if (hasEditRequestBadges) {
+    // Sort badges by start position descending so we can remove from end to start
+    // (this preserves positions for earlier removals)
+    const sortedBadges = [...editRequestBadges].sort((a, b) => b.start - a.start)
+    for (const badge of sortedBadges) {
+      displayContent = displayContent.slice(0, badge.start) + displayContent.slice(badge.end)
+    }
+    displayContent = displayContent.trim()
+  }
 
   return (
     <div className={cn("flex flex-col items-end gap-3 w-full", className)}>
@@ -205,6 +277,15 @@ export function UserMessageBubble({
         </div>
       )}
 
+      {/* Edit request badges - rendered above the text bubble */}
+      {hasEditRequestBadges && (
+        <div className="flex gap-2 justify-end max-w-[80%] flex-wrap">
+          {editRequestBadges.map((badge, i) => (
+            <EditRequestBadge key={`edit-badge-${i}`} badge={badge} />
+          ))}
+        </div>
+      )}
+
       {/* Text content bubble */}
       <div
         className={cn(
@@ -212,8 +293,8 @@ export function UserMessageBubble({
           isPending && "animate-shimmer"
         )}
       >
-        {hasBadges
-          ? renderContentWithBadges(content, badges!, onUrlClick, onFileClick)
+        {hasInlineBadges
+          ? renderContentWithBadges(displayContent, inlineBadges, onUrlClick, onFileClick)
           : (
             <Markdown
               mode="minimal"
@@ -221,7 +302,7 @@ export function UserMessageBubble({
               onFileClick={onFileClick}
               className="text-sm [&_a]:underline [&_code]:bg-foreground/10"
             >
-              {content}
+              {displayContent}
             </Markdown>
           )
         }

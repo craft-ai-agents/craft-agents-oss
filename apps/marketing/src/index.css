@@ -14,6 +14,8 @@
 ============================================================================= */
 
 :root {
+  /* Override accent to match electron app (ui package has slightly different value) */
+  --accent: oklch(0.62 0.13 293);
   /* Override background for marketing page outer area */
   --marketing-bg: var(--foreground-2);
 }

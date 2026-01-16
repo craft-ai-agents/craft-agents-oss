@@ -2,19 +2,21 @@
  * PermissionsSettingsPage
  *
  * Displays permissions configuration for Explore mode.
- * Shows both default patterns (from SAFE_MODE_CONFIG) and custom workspace additions.
+ * Shows both default patterns (from ~/.craft-agent/permissions/default.json)
+ * and custom workspace additions (from workspace permissions.json).
  *
- * Default patterns are read-only - they show what's built into Explore mode.
- * Custom patterns can be edited via permissions.json file.
+ * Default patterns can be edited by the user in ~/.craft-agent/permissions/default.json.
+ * Custom patterns can be edited via workspace permissions.json file.
  */
 
 import * as React from 'react'
 import { useState, useEffect, useMemo } from 'react'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { HeaderMenu } from '@/components/ui/HeaderMenu'
 import { Loader2 } from 'lucide-react'
-import { useAppShellContext } from '@/context/AppShellContext'
-import { SAFE_MODE_CONFIG, type PermissionsConfigFile } from '@craft-agent/shared/agent/modes'
+import { useAppShellContext, useActiveWorkspace } from '@/context/AppShellContext'
+import { type PermissionsConfigFile } from '@craft-agent/shared/agent/modes'
 import {
   PermissionsDataTable,
   type PermissionRow,
@@ -23,6 +25,8 @@ import {
   SettingsSection,
   SettingsCard,
 } from '@/components/settings'
+import { EditPopover, EditButton, getEditConfig } from '@/components/ui/EditPopover'
+import { routes } from '@/lib/navigate'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 
 export const meta: DetailsPageMeta = {
@@ -31,100 +35,49 @@ export const meta: DetailsPageMeta = {
 }
 
 /**
- * Convert RegExp patterns to display strings with categorization.
- * Strips regex delimiters for cleaner display.
+ * Build default permissions data from ~/.craft-agent/permissions/default.json.
+ * These are the Explore mode patterns that can be customized by the user.
+ * Patterns can include comments which are displayed in the table.
+ *
+ * Note: We only show allowed patterns here. Anything not on this list is implicitly denied.
  */
-function regexToDisplayString(regex: RegExp): string {
-  // Get the source pattern without the leading ^ if present (common in command patterns)
-  const source = regex.source
-  return source
-}
+function buildDefaultPermissionsData(config: PermissionsConfigFile | null): PermissionRow[] {
+  if (!config) return []
 
-/**
- * Categorize bash patterns for better organization.
- * Returns a human-readable comment based on the pattern.
- */
-function categorizeBashPattern(pattern: string): string {
-  // File operations
-  if (/^(ls|ll|la|tree|file|stat|du|df|wc|head|tail|cat|less|more|bat)\b/.test(pattern)) {
-    return 'File listing and inspection'
-  }
-  // Search
-  if (/^(find|locate|which|whereis|type|grep|rg|ag|ack|fd|fzf)\b/.test(pattern)) {
-    return 'Search and find'
-  }
-  // Git
-  if (/^git\s/.test(pattern)) {
-    return 'Git read operations'
-  }
-  // GitHub CLI
-  if (/^gh\s/.test(pattern)) {
-    return 'GitHub CLI read operations'
-  }
-  // Package managers
-  if (/^(npm|yarn|pnpm|bun|pip|pip3|cargo|go|composer|gem|bundle)\s/.test(pattern)) {
-    return 'Package manager read operations'
-  }
-  // System info
-  if (/^(pwd|whoami|id|groups|uname|hostname|date|uptime|env|printenv|echo\s+\$|ps|top|htop|free|vmstat|iostat|lscpu|lsmem|lsblk|lsusb|lspci)\b/.test(pattern)) {
-    return 'System info'
-  }
-  // Docker
-  if (/^docker/.test(pattern)) {
-    return 'Docker read operations'
-  }
-  // Kubernetes
-  if (/^kubectl/.test(pattern)) {
-    return 'Kubernetes read operations'
-  }
-  // Text processing
-  if (/^(sed|sort|uniq|cut|tr|column|jq|yq|xq|xmllint|json_pp|python\s+-m\s+json\.tool)\b/.test(pattern)) {
-    return 'Text processing (read-only)'
-  }
-  // Network
-  if (/^(ping|traceroute|tracepath|mtr|dig|nslookup|host|netstat|ss|ip\s|ifconfig)\b/.test(pattern)) {
-    return 'Network diagnostics'
-  }
-  // Version checks
-  if (/--version|-[vV]\b/.test(pattern) || /\bversion\b/.test(pattern)) {
-    return 'Version checks'
-  }
-  // Help
-  if (/--help|-h\b|^man\b/.test(pattern)) {
-    return 'Help commands'
-  }
-  return ''
-}
-
-/**
- * Build default permissions data from SAFE_MODE_CONFIG.
- * These are the built-in Explore mode patterns (allowed commands only).
- * We don't show default blocked tools as that's confusing - blocking is the default behavior.
- */
-function buildDefaultPermissionsData(): PermissionRow[] {
   const rows: PermissionRow[] = []
 
-  // Read-only bash patterns (allowed)
-  SAFE_MODE_CONFIG.readOnlyBashPatterns.forEach((regex) => {
-    const pattern = regexToDisplayString(regex)
-    const comment = categorizeBashPattern(pattern)
-    rows.push({
-      access: 'allowed',
-      type: 'bash',
-      pattern,
-      comment: comment || null,
-    })
+  // Helper to extract pattern and comment from string or object format
+  const extractPatternInfo = (item: string | { pattern: string; comment?: string }): { pattern: string; comment: string | null } => {
+    if (typeof item === 'string') {
+      return { pattern: item, comment: null }
+    }
+    return { pattern: item.pattern, comment: item.comment || null }
+  }
+
+  // Note: We don't show blockedTools here - anything not on the allowed list is implicitly denied
+
+  // Allowed bash patterns
+  config.allowedBashPatterns?.forEach((item) => {
+    const { pattern, comment } = extractPatternInfo(item)
+    rows.push({ access: 'allowed', type: 'bash', pattern, comment })
   })
 
-  // Read-only MCP patterns (allowed)
-  SAFE_MODE_CONFIG.readOnlyMcpPatterns.forEach((regex) => {
-    const pattern = regexToDisplayString(regex)
-    rows.push({
-      access: 'allowed',
-      type: 'mcp',
-      pattern,
-      comment: 'MCP read operation',
-    })
+  // Allowed MCP patterns
+  config.allowedMcpPatterns?.forEach((item) => {
+    const { pattern, comment } = extractPatternInfo(item)
+    rows.push({ access: 'allowed', type: 'mcp', pattern, comment })
+  })
+
+  // API endpoints
+  config.allowedApiEndpoints?.forEach((item) => {
+    const pattern = `${item.method} ${item.path}`
+    rows.push({ access: 'allowed', type: 'api', pattern, comment: item.comment || null })
+  })
+
+  // Write paths
+  config.allowedWritePaths?.forEach((item) => {
+    const { pattern, comment } = extractPatternInfo(item)
+    rows.push({ access: 'allowed', type: 'tool', pattern: `Write to: ${pattern}`, comment })
   })
 
   return rows
@@ -138,8 +91,10 @@ function buildCustomPermissionsData(config: PermissionsConfigFile): PermissionRo
   const rows: PermissionRow[] = []
 
   // Additional blocked tools
-  config.blockedTools?.forEach((tool) => {
-    rows.push({ access: 'blocked', type: 'tool', pattern: tool, comment: 'Custom blocked tool' })
+  config.blockedTools?.forEach((item) => {
+    const pattern = typeof item === 'string' ? item : item.pattern
+    const comment = typeof item === 'string' ? 'Custom blocked tool' : (item.comment || 'Custom blocked tool')
+    rows.push({ access: 'blocked', type: 'tool', pattern, comment })
   })
 
   // Additional bash patterns
@@ -175,34 +130,45 @@ function buildCustomPermissionsData(config: PermissionsConfigFile): PermissionRo
 
 export default function PermissionsSettingsPage() {
   const { activeWorkspaceId } = useAppShellContext()
+  const activeWorkspace = useActiveWorkspace()
 
   // Loading and data state
   const [isLoading, setIsLoading] = useState(true)
+  const [defaultConfig, setDefaultConfig] = useState<PermissionsConfigFile | null>(null)
+  const [defaultPermissionsPath, setDefaultPermissionsPath] = useState<string | null>(null)
   const [customConfig, setCustomConfig] = useState<PermissionsConfigFile | null>(null)
 
-  // Build default permissions data (memoized since SAFE_MODE_CONFIG is static)
-  const defaultPermissionsData = useMemo(() => buildDefaultPermissionsData(), [])
+  // Build default permissions data from ~/.craft-agent/permissions/default.json
+  const defaultPermissionsData = useMemo(() => buildDefaultPermissionsData(defaultConfig), [defaultConfig])
 
-  // Build custom permissions data
+  // Build custom permissions data from workspace permissions.json
   const customPermissionsData = useMemo(() => {
     if (!customConfig) return []
     return buildCustomPermissionsData(customConfig)
   }, [customConfig])
 
-  // Load workspace permissions config
+  // Load both default and workspace permissions configs
   useEffect(() => {
     const loadPermissions = async () => {
-      if (!window.electronAPI || !activeWorkspaceId) {
+      if (!window.electronAPI) {
         setIsLoading(false)
         return
       }
 
       setIsLoading(true)
       try {
-        const config = await window.electronAPI.getWorkspacePermissionsConfig(activeWorkspaceId)
-        setCustomConfig(config)
+        // Load default permissions (app-level) - returns both config and path
+        const { config: defaults, path: defaultsPath } = await window.electronAPI.getDefaultPermissionsConfig()
+        setDefaultConfig(defaults)
+        setDefaultPermissionsPath(defaultsPath)
+
+        // Load workspace permissions if we have an active workspace
+        if (activeWorkspaceId) {
+          const workspace = await window.electronAPI.getWorkspacePermissionsConfig(activeWorkspaceId)
+          setCustomConfig(workspace)
+        }
       } catch (error) {
-        console.error('Failed to load workspace permissions:', error)
+        console.error('Failed to load permissions:', error)
       } finally {
         setIsLoading(false)
       }
@@ -211,9 +177,22 @@ export default function PermissionsSettingsPage() {
     loadPermissions()
   }, [activeWorkspaceId])
 
+  // Listen for default permissions changes (file watcher)
+  useEffect(() => {
+    if (!window.electronAPI?.onDefaultPermissionsChanged) return
+
+    const unsubscribe = window.electronAPI.onDefaultPermissionsChanged(async () => {
+      // Reload default permissions when the file changes
+      const { config: defaults } = await window.electronAPI.getDefaultPermissionsConfig()
+      setDefaultConfig(defaults)
+    })
+
+    return unsubscribe
+  }, [])
+
   return (
     <div className="h-full flex flex-col">
-      <PanelHeader title="Permissions" />
+      <PanelHeader title="Permissions" actions={<HeaderMenu route={routes.view.settings('permissions')} />} />
       <div className="flex-1 min-h-0 mask-fade-y">
         <ScrollArea className="h-full">
           <div className="px-5 py-7 max-w-3xl mx-auto">
@@ -226,22 +205,68 @@ export default function PermissionsSettingsPage() {
                 <>
                   {/* Default Permissions Section */}
                   <SettingsSection
-                    title="Default Allowed Commands"
-                    description="Built-in patterns that are always allowed in Explore mode. These cannot be modified."
+                    title="Default Permissions"
+                    description="App-level patterns allowed in Explore mode. Commands not on this list are blocked."
+                    action={
+                      // EditPopover for AI-assisted default permissions editing
+                      defaultPermissionsPath ? (
+                        <EditPopover
+                          trigger={<EditButton />}
+                          {...getEditConfig('default-permissions', defaultPermissionsPath)}
+                          secondaryAction={{
+                            label: 'Edit File',
+                            onClick: () => {
+                              window.electronAPI.openFile(defaultPermissionsPath)
+                            },
+                          }}
+                        />
+                      ) : null
+                    }
                   >
                     <SettingsCard className="p-0">
-                      <PermissionsDataTable
-                        data={defaultPermissionsData}
-                        searchable
-                        maxHeight={350}
-                      />
+                      {defaultPermissionsData.length > 0 ? (
+                        <PermissionsDataTable
+                          data={defaultPermissionsData}
+                          searchable
+                          maxHeight={350}
+                          fullscreen
+                          fullscreenTitle="Default Permissions"
+                        />
+                      ) : (
+                        <div className="p-8 text-center text-muted-foreground">
+                          <p className="text-sm">No default permissions found.</p>
+                          <p className="text-xs mt-1 text-foreground/40">
+                            Default permissions should be at <code className="bg-foreground/5 px-1 rounded">~/.craft-agent/permissions/default.json</code>
+                          </p>
+                        </div>
+                      )}
                     </SettingsCard>
                   </SettingsSection>
 
                   {/* Custom Permissions Section */}
                   <SettingsSection
                     title="Workspace Customizations"
-                    description="Additional patterns from permissions.json. These extend the defaults."
+                    description="Workspace-level patterns that extend the app defaults above."
+                    action={
+                      (() => {
+                        // Get centralized edit config - all strings defined in EditPopover.tsx
+                        const { context, example } = getEditConfig('workspace-permissions', activeWorkspace?.rootPath || '')
+                        return (
+                          <EditPopover
+                            trigger={<EditButton />}
+                            example={example}
+                            context={context}
+                            secondaryAction={activeWorkspace ? {
+                              label: 'Edit File',
+                              onClick: () => {
+                                const permissionsPath = `${activeWorkspace.rootPath}/permissions.json`
+                                window.electronAPI.openFile(permissionsPath)
+                              },
+                            } : undefined}
+                          />
+                        )
+                      })()
+                    }
                   >
                     <SettingsCard className="p-0">
                       {customPermissionsData.length > 0 ? (
@@ -249,6 +274,8 @@ export default function PermissionsSettingsPage() {
                           data={customPermissionsData}
                           searchable
                           maxHeight={350}
+                          fullscreen
+                          fullscreenTitle="Workspace Customizations"
                         />
                       ) : (
                         <div className="p-8 text-center text-muted-foreground">

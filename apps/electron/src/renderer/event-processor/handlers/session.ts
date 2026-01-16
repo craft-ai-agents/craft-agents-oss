@@ -663,10 +663,15 @@ export function handleUsageUpdate(
 ): ProcessResult {
   const { session, streaming } = state
 
-  // Merge usage update into existing tokenUsage
+  // Merge usage update into existing tokenUsage, providing defaults for required fields
   const updatedTokenUsage = {
-    ...session.tokenUsage,
     inputTokens: event.tokenUsage.inputTokens,
+    outputTokens: session.tokenUsage?.outputTokens ?? 0,
+    totalTokens: session.tokenUsage?.totalTokens ?? 0,
+    contextTokens: session.tokenUsage?.contextTokens ?? 0,
+    costUsd: session.tokenUsage?.costUsd ?? 0,
+    ...(session.tokenUsage?.cacheReadTokens !== undefined && { cacheReadTokens: session.tokenUsage.cacheReadTokens }),
+    ...(session.tokenUsage?.cacheCreationTokens !== undefined && { cacheCreationTokens: session.tokenUsage.cacheCreationTokens }),
     ...(event.tokenUsage.contextWindow && { contextWindow: event.tokenUsage.contextWindow }),
   }
 

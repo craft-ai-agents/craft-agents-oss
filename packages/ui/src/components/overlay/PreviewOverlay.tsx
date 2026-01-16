@@ -18,6 +18,7 @@ import * as ReactDOM from 'react-dom'
 import { X, type LucideIcon } from 'lucide-react'
 import { useOverlayMode, OVERLAY_LAYOUT } from '../../lib/layout'
 import { PreviewHeader, PreviewHeaderBadge, type PreviewBadgeVariant } from '../ui/PreviewHeader'
+import { usePlatform } from '../../context/PlatformContext'
 
 /** Badge color variants - re-export for backwards compatibility */
 export type BadgeVariant = PreviewBadgeVariant
@@ -78,6 +79,15 @@ export function PreviewOverlay({
 }: PreviewOverlayProps) {
   const responsiveMode = useOverlayMode()
   const isModal = responsiveMode === 'modal'
+  const { onSetTrafficLightsVisible } = usePlatform()
+
+  // Hide macOS traffic lights when overlay opens, restore when it closes
+  useEffect(() => {
+    if (!isOpen) return
+
+    onSetTrafficLightsVisible?.(false)
+    return () => onSetTrafficLightsVisible?.(true)
+  }, [isOpen, onSetTrafficLightsVisible])
 
   // Handle Escape key
   useEffect(() => {

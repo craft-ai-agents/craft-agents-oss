@@ -938,6 +938,16 @@ html.dark[data-scenic] .fullscreen-overlay-background {
   border-radius: inherit;
 }
 
+/* Text shimmer - subtle opacity pulse for inline text (title regeneration, etc.) */
+.animate-shimmer-text {
+  animation: shimmer-text 1.2s ease-in-out infinite;
+}
+
+@keyframes shimmer-text {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
 /* =============================================================================
    SHAKE ANIMATION
 

@@ -8,11 +8,8 @@
 
 import * as React from 'react'
 import { useEffect, useState, useCallback } from 'react'
-import {
-  Check,
-  X,
-  Minus,
-} from 'lucide-react'
+import { Check, X, Minus } from 'lucide-react'
+import { EditPopover, EditButton, getEditConfig } from '@/components/ui/EditPopover'
 import { toast } from 'sonner'
 import { SkillMenu } from '@/components/app-shell/SkillMenu'
 import { SkillAvatar } from '@/components/ui/skill-avatar'
@@ -168,7 +165,20 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
           />
 
           {/* Metadata */}
-          <Info_Section title="Metadata">
+          <Info_Section
+            title="Metadata"
+            actions={
+              // EditPopover for AI-assisted metadata editing (name, description in frontmatter)
+              <EditPopover
+                trigger={<EditButton />}
+                {...getEditConfig('skill-metadata', skill.path)}
+                secondaryAction={{
+                  label: 'Edit File',
+                  onClick: handleEdit,
+                }}
+              />
+            }
+          >
             <Info_Table>
               <Info_Table.Row label="Slug" value={skill.slug} />
               <Info_Table.Row label="Name">{skill.metadata.name}</Info_Table.Row>
@@ -228,12 +238,15 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
           <Info_Section
             title="Instructions"
             actions={
-              <button
-                onClick={handleEdit}
-                className="transition-colors text-[13px] cursor-pointer text-muted-foreground hover:text-foreground hover:underline focus:outline-none focus-visible:underline"
-              >
-                Edit
-              </button>
+              // EditPopover for AI-assisted editing with "Edit File" as secondary action
+              <EditPopover
+                trigger={<EditButton />}
+                {...getEditConfig('skill-instructions', skill.path)}
+                secondaryAction={{
+                  label: 'Edit File',
+                  onClick: handleEdit,
+                }}
+              />
             }
           >
             <Info_Markdown maxHeight={540} fullscreen>

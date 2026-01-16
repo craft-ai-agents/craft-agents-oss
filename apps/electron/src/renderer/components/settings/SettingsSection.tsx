@@ -22,6 +22,8 @@ export interface SettingsSectionProps {
   className?: string
   /** Variant for different visual treatments */
   variant?: 'default' | 'danger'
+  /** Optional action element (e.g., Edit button) shown at the right of the header */
+  action?: React.ReactNode
 }
 
 /**
@@ -38,21 +40,25 @@ export function SettingsSection({
   children,
   className,
   variant = 'default',
+  action,
 }: SettingsSectionProps) {
   return (
     <section className={cn('space-y-3', className)}>
-      <div className="space-y-0.5 pl-1">
-        <h3
-          className={cn(
-            'text-base font-semibold',
-            variant === 'danger' && 'text-destructive'
+      <div className="flex items-start justify-between gap-4 pl-1">
+        <div className="space-y-0.5">
+          <h3
+            className={cn(
+              'text-base font-semibold',
+              variant === 'danger' && 'text-destructive'
+            )}
+          >
+            {title}
+          </h3>
+          {description && (
+            <p className="text-sm text-muted-foreground">{description}</p>
           )}
-        >
-          {title}
-        </h3>
-        {description && (
-          <p className="text-sm text-muted-foreground">{description}</p>
-        )}
+        </div>
+        {action && <div className="shrink-0">{action}</div>}
       </div>
       {children}
     </section>

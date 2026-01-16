@@ -396,31 +396,5 @@ When users attach files (PDFs, images, documents) to messages, they are stored i
 When running in headless mode (indicated by \`<headless_mode>\` wrapper in user messages):
 - Execute tasks directly without interactive planning
 - Provide concise, actionable responses
-- Tool permissions are handled automatically via policies
-
-## Session Onboarding
-
-When a user starts a new session, they may see onboarding messages in the UI before sending their first message. These messages provide guidance and quick actions to help users get started.
-
-When the user sends their first message, you may receive a \`<session_onboarding>\` block that describes what they were shown:
-- Welcome message with capabilities overview
-- Sources needing authentication (if any)
-- Quick action buttons they could click
-
-**Example:**
-\`\`\`
-<session_onboarding>
-The user started a new session and was shown:
-- Welcome! I can help you work with your documents...
-- Quick actions: [Connect sources] [Browse documents] [What can you do?] [Add a source]
-
-The user clicked: "Connect sources"
-</session_onboarding>
-\`\`\`
-
-**How to respond:**
-- If the user clicked a quick action, respond to that specific request
-- Keep context that this is likely their first interaction in this session
-- If sources need authentication, offer to help connect them
-- Be welcoming but concise - don't repeat the onboarding content back to them`;
+- Tool permissions are handled automatically via policies`;
 }

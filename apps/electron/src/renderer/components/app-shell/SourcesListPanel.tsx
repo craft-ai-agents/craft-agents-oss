@@ -24,12 +24,14 @@ import {
 } from '@/components/ui/styled-context-menu'
 import { DropdownMenuProvider, ContextMenuProvider } from '@/components/ui/menu-context'
 import { SourceMenu } from './SourceMenu'
+import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
 import { cn } from '@/lib/utils'
 import type { LoadedSource, SourceConnectionStatus } from '../../../shared/types'
 
 export interface SourcesListPanelProps {
   sources: LoadedSource[]
-  onAddSource: () => void
+  /** Workspace root path for EditPopover context */
+  workspaceRootPath?: string
   onDeleteSource: (sourceName: string) => void
   onSourceClick: (source: LoadedSource) => void
   selectedSourceSlug?: string | null
@@ -40,7 +42,7 @@ export interface SourcesListPanelProps {
 
 export function SourcesListPanel({
   sources,
-  onAddSource,
+  workspaceRootPath,
   onDeleteSource,
   onSourceClick,
   selectedSourceSlug,
@@ -55,12 +57,16 @@ export function SourcesListPanel({
             <p className="text-sm text-muted-foreground">
               No sources configured.
             </p>
-            <button
-              onClick={onAddSource}
-              className="mt-2 text-sm text-foreground hover:underline"
-            >
-              Add your first source
-            </button>
+            {workspaceRootPath && (
+              <EditPopover
+                trigger={
+                  <button className="mt-2 text-sm text-foreground hover:underline">
+                    Add your first source
+                  </button>
+                }
+                {...getEditConfig('add-source', workspaceRootPath)}
+              />
+            )}
           </div>
         ) : (
           <div className="pt-2">

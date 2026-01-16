@@ -194,7 +194,9 @@ export function resolveStatusIconSync(
   )
 
   React.useEffect(() => {
-    resolveStatusIcon(icon, workspaceId, className).then(setResolvedIcon)
+    // Extract just the node from ResolvedIcon, discarding colorable info
+    // (useStatusIcon is only used for simple icon rendering, not full status state)
+    resolveStatusIcon(icon, workspaceId, className).then(resolved => setResolvedIcon(resolved.node))
   }, [icon, workspaceId, className])
 
   return resolvedIcon

@@ -19,6 +19,7 @@ import {
   SettingsInput,
   SettingsTextarea,
 } from '@/components/settings'
+import { EditPopover, EditButton, getEditConfig } from '@/components/ui/EditPopover'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 
 export const meta: DetailsPageMeta = {
@@ -85,6 +86,7 @@ function serializePreferences(state: PreferencesFormState): string {
 export default function PreferencesPage() {
   const [formState, setFormState] = useState<PreferencesFormState>(emptyFormState)
   const [isLoading, setIsLoading] = useState(true)
+  const [preferencesPath, setPreferencesPath] = useState<string | null>(null)
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isInitialLoadRef = useRef(true)
   const formStateRef = useRef(formState)
@@ -102,6 +104,7 @@ export default function PreferencesPage() {
         const result = await window.electronAPI.readPreferences()
         const parsed = parsePreferences(result.content)
         setFormState(parsed)
+        setPreferencesPath(result.path)
         lastSavedRef.current = serializePreferences(parsed)
       } catch (err) {
         console.error('Failed to load stored user preferences:', err)
@@ -174,6 +177,12 @@ export default function PreferencesPage() {
   ) => {
     setFormState(prev => ({ ...prev, [field]: value }))
   }, [])
+
+  // Handle opening preferences file in editor
+  const handleEditPreferences = useCallback(async () => {
+    if (!preferencesPath) return
+    await window.electronAPI.openFile(preferencesPath)
+  }, [preferencesPath])
 
   if (isLoading) {
     return (
@@ -251,6 +260,19 @@ export default function PreferencesPage() {
           <SettingsSection
             title="Notes"
             description="Free-form context that helps Craft Agent understand your preferences."
+            action={
+              // EditPopover for AI-assisted notes editing with "Edit File" as secondary action
+              preferencesPath ? (
+                <EditPopover
+                  trigger={<EditButton />}
+                  {...getEditConfig('preferences-notes', preferencesPath)}
+                  secondaryAction={{
+                    label: 'Edit File',
+                    onClick: handleEditPreferences,
+                  }}
+                />
+              ) : null
+            }
           >
             <SettingsCard divided={false}>
               <SettingsTextarea

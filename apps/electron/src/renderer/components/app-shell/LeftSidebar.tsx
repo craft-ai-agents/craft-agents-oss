@@ -1,9 +1,31 @@
 import type { LucideIcon } from "lucide-react"
 import * as React from "react"
+import { useState } from "react"
 import { AnimatePresence, motion, type Variants } from "motion/react"
 import { ChevronRight } from "lucide-react"
 
 import { cn, isHexColor } from "@/lib/utils"
+import {
+  ContextMenu,
+  ContextMenuTrigger,
+  StyledContextMenuContent,
+} from '@/components/ui/styled-context-menu'
+import { ContextMenuProvider } from '@/components/ui/menu-context'
+import { SidebarMenu, type SidebarMenuType } from './SidebarMenu'
+
+/** Context menu configuration for sidebar items */
+export interface SidebarContextMenuConfig {
+  /** Type of sidebar item (determines available menu items) */
+  type: SidebarMenuType
+  /** Status ID for status items (e.g., 'todo', 'done') - not currently used but kept for future */
+  statusId?: string
+  /** Handler for "Configure Statuses" action - for allChats/status/flagged types */
+  onConfigureStatuses?: () => void
+  /** Handler for "Add Source" action - for sources type */
+  onAddSource?: () => void
+  /** Handler for "Add Skill" action - for skills type */
+  onAddSkill?: () => void
+}
 
 export interface LinkItem {
   id: string            // Unique ID for navigation (e.g., 'nav:allChats')
@@ -19,9 +41,11 @@ export interface LinkItem {
   expandable?: boolean
   expanded?: boolean
   onToggle?: () => void
-  items?: LinkItem[]    // Subitems as data (rendered as nested LeftSidebar)
+  items?: SidebarItem[]    // Subitems as data (rendered as nested LeftSidebar) - supports separators
   // Tutorial system
   dataTutorial?: string // data-tutorial attribute for tutorial targeting
+  // Context menu configuration (optional - if provided, right-click shows context menu)
+  contextMenu?: SidebarContextMenuConfig
 }
 
 export interface SeparatorItem {
@@ -197,10 +221,9 @@ export function LeftSidebar({ links, isCollapsed, getItemProps, focusedItemId, i
             </button>
           )
 
-          // Expandable items: wrap in group/section so parent + children share hover state for labels
-          // Non-expandable items: wrap in group/section so each item has its own hover state
-          const content = (
-            <div className="group/section">
+          // Inner content: button and expandable children
+          const innerContent = (
+            <>
               {buttonElement}
               {/* Expandable subitems with animation */}
               {link.expandable && link.items && (
@@ -224,6 +247,33 @@ export function LeftSidebar({ links, isCollapsed, getItemProps, focusedItemId, i
                   )}
                 </AnimatePresence>
               )}
+            </>
+          )
+
+          // Wrap with context menu if configured, otherwise just group/section wrapper
+          // Context menus enable right-click actions like "Edit Statuses" and "Open in New Window"
+          const content = link.contextMenu ? (
+            <ContextMenu modal={true}>
+              <ContextMenuTrigger asChild>
+                <div className="group/section">
+                  {innerContent}
+                </div>
+              </ContextMenuTrigger>
+              <StyledContextMenuContent>
+                <ContextMenuProvider>
+                  <SidebarMenu
+                    type={link.contextMenu.type}
+                    statusId={link.contextMenu.statusId}
+                    onConfigureStatuses={link.contextMenu.onConfigureStatuses}
+                    onAddSource={link.contextMenu.onAddSource}
+                    onAddSkill={link.contextMenu.onAddSkill}
+                  />
+                </ContextMenuProvider>
+              </StyledContextMenuContent>
+            </ContextMenu>
+          ) : (
+            <div className="group/section">
+              {innerContent}
             </div>
           )
 

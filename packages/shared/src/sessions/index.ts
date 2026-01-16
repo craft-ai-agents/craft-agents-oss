@@ -83,12 +83,4 @@ export {
 // Word lists (for customization if needed)
 export { ADJECTIVES, NOUNS } from './word-lists.ts';
 
-// Onboarding
-export {
-  generateOnboardingMessages,
-  formatOnboardingContext,
-  type OnboardingContext,
-  type QuickAction,
-  type SourceNeedingAuth,
-} from './onboarding.ts';
 

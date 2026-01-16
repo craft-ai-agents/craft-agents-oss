@@ -37,6 +37,13 @@ import {
   StyledDropdownMenuItem,
   StyledDropdownMenuSeparator,
 } from "@/components/ui/styled-dropdown"
+import {
+  ContextMenu,
+  ContextMenuTrigger,
+  StyledContextMenuContent,
+} from "@/components/ui/styled-context-menu"
+import { ContextMenuProvider } from "@/components/ui/menu-context"
+import { SidebarMenu } from "./SidebarMenu"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { FadingText } from "@/components/ui/fading-text"
 import {
@@ -82,6 +89,7 @@ import type { SettingsSubpage } from "../../../shared/types"
 import { SourcesListPanel } from "./SourcesListPanel"
 import { SkillsListPanel } from "./SkillsListPanel"
 import { PanelHeader } from "./PanelHeader"
+import { EditPopover, getEditConfig } from "@/components/ui/EditPopover"
 import SettingsNavigator from "@/pages/settings/SettingsNavigator"
 import { RightSidebar } from "./RightSidebar"
 import type { RichTextInputHandle } from "@/components/ui/rich-text-input"
@@ -397,6 +405,7 @@ function AppShellContent({
     label: string
     color: string
     icon: React.ReactNode
+    iconColorable: boolean
     category?: 'open' | 'closed'
     isFixed?: boolean
     isDefault?: boolean
@@ -463,8 +472,8 @@ function AppShellContent({
           contextValue.onSessionOptionsChange(session.selected, { permissionMode: nextMode })
         }
       }, when: () => !document.querySelector('[role="dialog"]') && document.activeElement?.tagName !== 'TEXTAREA' },
-      // Sidebar toggle
-      { key: 'b', cmd: true, action: () => setIsSidebarVisible(v => !v) },
+      // Sidebar toggle (CMD+\ like VS Code, avoids conflict with CMD+B for bold)
+      { key: '\\', cmd: true, action: () => setIsSidebarVisible(v => !v) },
       // New chat
       { key: 'n', cmd: true, action: () => handleNewChat(true) },
       // Settings
@@ -780,6 +789,34 @@ function AppShellContent({
     navigate(routes.view.settings(subpage))
   }, [])
 
+  // ============================================================================
+  // EDIT POPOVER STATE
+  // ============================================================================
+  // State to control which EditPopover is open (triggered from context menus).
+  // We use controlled popovers instead of deep links so the user can type
+  // their request in the popover UI before opening a new chat window.
+  const [editPopoverOpen, setEditPopoverOpen] = useState<'statuses' | 'add-source' | 'add-skill' | null>(null)
+
+  // Handler for "Configure Statuses" context menu action
+  // Opens the EditPopover for status configuration
+  // Uses setTimeout to delay opening until after context menu closes,
+  // preventing the popover from immediately closing due to focus shift
+  const openConfigureStatuses = useCallback(() => {
+    setTimeout(() => setEditPopoverOpen('statuses'), 50)
+  }, [])
+
+  // Handler for "Add Source" context menu action
+  // Opens the EditPopover for adding a new source
+  const openAddSource = useCallback(() => {
+    setTimeout(() => setEditPopoverOpen('add-source'), 50)
+  }, [])
+
+  // Handler for "Add Skill" context menu action
+  // Opens the EditPopover for adding a new skill
+  const openAddSkill = useCallback(() => {
+    setTimeout(() => setEditPopoverOpen('add-skill'), 50)
+  }, [])
+
   // Create a new chat and select it
   const handleNewChat = useCallback(async (_useCurrentAgent: boolean = true) => {
     if (!activeWorkspace) return
@@ -788,12 +825,6 @@ function AppShellContent({
     // Navigate to the new session via central routing
     navigate(routes.view.allChats(newSession.id))
   }, [activeWorkspace, onCreateSession])
-
-  // Add Source - create a new chat with add-source onboarding
-  const handleAddSource = useCallback(() => {
-    // Navigate using route with onboarding param - NavigationContext handles session creation
-    navigate(routes.action.newChat({ onboarding: 'add-source' }))
-  }, [])
 
   // Delete Source - simplified since agents system is removed
   const handleDeleteSource = useCallback(async (sourceName: string) => {
@@ -1053,17 +1084,26 @@ function AppShellContent({
             <div className="flex h-full flex-col pt-[50px] select-none">
               {/* Sidebar Top Section */}
               <div className="flex-1 flex flex-col min-h-0">
-                {/* New Chat Button - Gmail-style */}
+                {/* New Chat Button - Gmail-style, with context menu for "Open in New Window" */}
                 <div className="px-2 pt-1 pb-2">
-                  <Button
-                    variant="ghost"
-                    onClick={() => handleNewChat(true)}
-                    className="w-full justify-start gap-2 py-[7px] px-2 text-[13px] font-normal rounded-[6px] shadow-minimal bg-background"
-                    data-tutorial="new-chat-button"
-                  >
-                    <SquarePenRounded className="h-3.5 w-3.5 shrink-0" />
-                    New Chat
-                  </Button>
+                  <ContextMenu modal={true}>
+                    <ContextMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        onClick={() => handleNewChat(true)}
+                        className="w-full justify-start gap-2 py-[7px] px-2 text-[13px] font-normal rounded-[6px] shadow-minimal bg-background"
+                        data-tutorial="new-chat-button"
+                      >
+                        <SquarePenRounded className="h-3.5 w-3.5 shrink-0" />
+                        New Chat
+                      </Button>
+                    </ContextMenuTrigger>
+                    <StyledContextMenuContent>
+                      <ContextMenuProvider>
+                        <SidebarMenu type="newChat" />
+                      </ContextMenuProvider>
+                    </StyledContextMenuContent>
+                  </ContextMenu>
                 </div>
                 {/* Primary Nav: All Chats (with expandable submenu), Sources */}
                 <LeftSidebar
@@ -1081,6 +1121,11 @@ function AppShellContent({
                       expandable: true,
                       expanded: isExpanded('nav:allChats'),
                       onToggle: () => toggleExpanded('nav:allChats'),
+                      // Context menu: Configure Statuses
+                      contextMenu: {
+                        type: 'allChats',
+                        onConfigureStatuses: openConfigureStatuses,
+                      },
                       items: [
                         // Dynamic status items from todoStates
                         ...todoStates.map(state => ({
@@ -1092,6 +1137,12 @@ function AppShellContent({
                           iconColorable: state.iconColorable,
                           variant: (chatFilter?.kind === 'state' && chatFilter.stateId === state.id ? "default" : "ghost") as "default" | "ghost",
                           onClick: () => handleTodoStateClick(state.id),
+                          // Context menu for each status: Configure Statuses
+                          contextMenu: {
+                            type: 'status' as const,
+                            statusId: state.id,
+                            onConfigureStatuses: openConfigureStatuses,
+                          },
                         })),
                         // Separator before Flagged
                         { id: "separator:before-flagged", type: "separator" },
@@ -1104,6 +1155,11 @@ function AppShellContent({
                           iconColor: "text-info",
                           variant: chatFilter?.kind === 'flagged' ? "default" : "ghost",
                           onClick: handleFlaggedClick,
+                          // Context menu for Flagged: Configure Statuses
+                          contextMenu: {
+                            type: 'flagged' as const,
+                            onConfigureStatuses: openConfigureStatuses,
+                          },
                         },
                       ],
                     },
@@ -1115,6 +1171,11 @@ function AppShellContent({
                       variant: isSourcesNavigation(navState) ? "default" : "ghost",
                       onClick: handleSourcesClick,
                       dataTutorial: "sources-nav",
+                      // Context menu: Add Source
+                      contextMenu: {
+                        type: 'sources',
+                        onAddSource: openAddSource,
+                      },
                     },
                     {
                       id: "nav:skills",
@@ -1123,6 +1184,11 @@ function AppShellContent({
                       icon: Zap,
                       variant: isSkillsNavigation(navState) ? "default" : "ghost",
                       onClick: handleSkillsClick,
+                      // Context menu: Add Skill
+                      contextMenu: {
+                        type: 'skills',
+                        onAddSkill: openAddSkill,
+                      },
                     },
                     { id: "separator:skills-settings", type: "separator" },
                     {
@@ -1131,6 +1197,7 @@ function AppShellContent({
                       icon: Settings,
                       variant: isSettingsNavigation(navState) ? "default" : "ghost",
                       onClick: () => handleSettingsClick('app'),
+                      // No context menu for Settings
                     },
                   ]}
                 />
@@ -1283,12 +1350,29 @@ function AppShellContent({
                     </DropdownMenu>
                   )}
                   {/* Add Source button (only for sources mode) */}
-                  {isSourcesNavigation(navState) && (
-                    <HeaderIconButton
-                      icon={<Plus className="h-4 w-4" />}
-                      onClick={handleAddSource}
-                      tooltip="Add Source"
-                      data-tutorial="add-source-button"
+                  {isSourcesNavigation(navState) && activeWorkspace && (
+                    <EditPopover
+                      trigger={
+                        <HeaderIconButton
+                          icon={<Plus className="h-4 w-4" />}
+                          tooltip="Add Source"
+                          data-tutorial="add-source-button"
+                        />
+                      }
+                      {...getEditConfig('add-source', activeWorkspace.rootPath)}
+                    />
+                  )}
+                  {/* Add Skill button (only for skills mode) */}
+                  {isSkillsNavigation(navState) && activeWorkspace && (
+                    <EditPopover
+                      trigger={
+                        <HeaderIconButton
+                          icon={<Plus className="h-4 w-4" />}
+                          tooltip="Add Skill"
+                          data-tutorial="add-skill-button"
+                        />
+                      }
+                      {...getEditConfig('add-skill', activeWorkspace.rootPath)}
                     />
                   )}
                 </>
@@ -1299,7 +1383,7 @@ function AppShellContent({
               /* Sources List */
               <SourcesListPanel
                 sources={sources}
-                onAddSource={handleAddSource}
+                workspaceRootPath={activeWorkspace?.rootPath}
                 onDeleteSource={handleDeleteSource}
                 onSourceClick={handleSourceSelect}
                 selectedSourceSlug={isSourcesNavigation(navState) && navState.details ? navState.details.sourceSlug : null}
@@ -1311,6 +1395,7 @@ function AppShellContent({
               <SkillsListPanel
                 skills={skills}
                 workspaceId={activeWorkspaceId}
+                workspaceRootPath={activeWorkspace?.rootPath}
                 onSkillClick={handleSkillSelect}
                 onDeleteSkill={handleDeleteSkill}
                 selectedSkillSlug={isSkillsNavigation(navState) && navState.details ? navState.details.skillSlug : null}
@@ -1500,6 +1585,67 @@ function AppShellContent({
           )}
         </div>
       </div>
+
+      {/* ============================================================================
+       * CONTEXT MENU TRIGGERED EDIT POPOVERS
+       * ============================================================================
+       * These EditPopovers are opened programmatically from sidebar context menus.
+       * They use controlled state (editPopoverOpen) and invisible anchors for positioning.
+       * Positioned near the sidebar (left side) since that's where context menus originate.
+       * modal={true} prevents auto-close when focus shifts after context menu closes.
+       */}
+      {activeWorkspace && (
+        <>
+          {/* Configure Statuses EditPopover - anchored near sidebar */}
+          <EditPopover
+            open={editPopoverOpen === 'statuses'}
+            onOpenChange={(isOpen) => setEditPopoverOpen(isOpen ? 'statuses' : null)}
+            modal={true}
+            trigger={
+              <div
+                className="fixed top-[120px] w-0 h-0 pointer-events-none"
+                style={{ left: sidebarWidth + 20 }}
+                aria-hidden="true"
+              />
+            }
+            side="bottom"
+            align="start"
+            {...getEditConfig('edit-statuses', activeWorkspace.rootPath)}
+          />
+          {/* Add Source EditPopover */}
+          <EditPopover
+            open={editPopoverOpen === 'add-source'}
+            onOpenChange={(isOpen) => setEditPopoverOpen(isOpen ? 'add-source' : null)}
+            modal={true}
+            trigger={
+              <div
+                className="fixed top-[120px] w-0 h-0 pointer-events-none"
+                style={{ left: sidebarWidth + 20 }}
+                aria-hidden="true"
+              />
+            }
+            side="bottom"
+            align="start"
+            {...getEditConfig('add-source', activeWorkspace.rootPath)}
+          />
+          {/* Add Skill EditPopover */}
+          <EditPopover
+            open={editPopoverOpen === 'add-skill'}
+            onOpenChange={(isOpen) => setEditPopoverOpen(isOpen ? 'add-skill' : null)}
+            modal={true}
+            trigger={
+              <div
+                className="fixed top-[120px] w-0 h-0 pointer-events-none"
+                style={{ left: sidebarWidth + 20 }}
+                aria-hidden="true"
+              />
+            }
+            side="bottom"
+            align="start"
+            {...getEditConfig('add-skill', activeWorkspace.rootPath)}
+          />
+        </>
+      )}
 
       </TooltipProvider>
     </AppShellProvider>

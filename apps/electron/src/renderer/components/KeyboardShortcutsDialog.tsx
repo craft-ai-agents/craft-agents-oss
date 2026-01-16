@@ -4,6 +4,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { useRegisterModal } from "@/context/ModalContext"
 
 interface KeyboardShortcutsDialogProps {
   open: boolean
@@ -32,7 +33,7 @@ const sections: ShortcutSection[] = [
       { keys: [cmdKey, '3'], description: 'Focus chat input' },
       { keys: [cmdKey, 'N'], description: 'New chat' },
       { keys: [cmdKey, 'Shift', 'N'], description: 'New window' },
-      { keys: [cmdKey, 'B'], description: 'Toggle sidebar' },
+      { keys: [cmdKey, '\\'], description: 'Toggle sidebar' },
       { keys: [cmdKey, ','], description: 'Open settings' },
       { keys: [cmdKey, '/'], description: 'Show this dialog' },
     ],
@@ -84,6 +85,9 @@ function Kbd({ children }: { children: React.ReactNode }) {
 }
 
 export function KeyboardShortcutsDialog({ open, onOpenChange }: KeyboardShortcutsDialogProps) {
+  // Register with modal context so X button / Cmd+W closes this dialog first
+  useRegisterModal(open, () => onOpenChange(false))
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px] max-h-[80vh] overflow-y-auto">

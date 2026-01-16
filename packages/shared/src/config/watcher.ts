@@ -30,7 +30,7 @@ import {
 } from './validators.ts';
 import type { LoadedSource, SourceGuide } from '../sources/types.ts';
 import { loadSource, loadWorkspaceSources, loadSourceGuide } from '../sources/storage.ts';
-import { permissionsConfigCache } from '../agent/permissions-config.ts';
+import { permissionsConfigCache, getAppPermissionsDir } from '../agent/permissions-config.ts';
 import { getWorkspacePath, getWorkspaceSourcesPath, getWorkspaceSkillsPath } from '../workspaces/storage.ts';
 import type { LoadedSkill } from '../skills/types.ts';
 import { loadSkill, loadWorkspaceSkills } from '../skills/storage.ts';
@@ -92,6 +92,8 @@ export interface ConfigWatcherCallbacks {
   onSkillsListChange?: (skills: LoadedSkill[]) => void;
 
   // Permissions callbacks
+  /** Called when app-level default permissions change (~/.craft-agent/permissions/default.json) */
+  onDefaultPermissionsChange?: () => void;
   /** Called when workspace permissions.json changes */
   onWorkspacePermissionsChange?: (workspaceId: string) => void;
   /** Called when a source's permissions.json changes */
@@ -218,6 +220,10 @@ export class ConfigWatcher {
     // Watch app-level themes directory
     this.watchAppThemesDir();
     span.mark('watchAppThemesDir');
+
+    // Watch app-level permissions directory
+    this.watchAppPermissionsDir();
+    span.mark('watchAppPermissionsDir');
 
     // Initial scan to populate known sources, skills, and themes
     this.scanSources();
@@ -762,6 +768,48 @@ export class ConfigWatcher {
     } catch (error) {
       debug('[ConfigWatcher] Error watching app themes directory:', error);
     }
+  }
+
+  /**
+   * Watch app-level permissions directory (~/.craft-agent/permissions/)
+   * Watches for changes to default.json which contains the default read-only patterns
+   */
+  private watchAppPermissionsDir(): void {
+    const permissionsDir = getAppPermissionsDir();
+
+    // Create permissions directory if it doesn't exist
+    if (!existsSync(permissionsDir)) {
+      mkdirSync(permissionsDir, { recursive: true });
+    }
+
+    try {
+      const watcher = watch(permissionsDir, (eventType, filename) => {
+        if (!filename) return;
+
+        // Only watch default.json - this is where the default patterns live
+        if (filename === 'default.json') {
+          this.debounce('default-permissions', () => this.handleDefaultPermissionsChange());
+        }
+      });
+
+      this.watchers.push(watcher);
+      debug('[ConfigWatcher] Watching app permissions directory:', permissionsDir);
+    } catch (error) {
+      debug('[ConfigWatcher] Error watching app permissions directory:', error);
+    }
+  }
+
+  /**
+   * Handle default.json permissions change (app-level)
+   */
+  private handleDefaultPermissionsChange(): void {
+    debug('[ConfigWatcher] Default permissions changed');
+
+    // Invalidate the cache so next getMergedConfig() reloads from file
+    permissionsConfigCache.invalidateDefaults();
+
+    // Notify callback
+    this.callbacks.onDefaultPermissionsChange?.();
   }
 
   /**

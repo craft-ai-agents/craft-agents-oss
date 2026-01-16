@@ -15,7 +15,9 @@ import { ResetConfirmationDialog } from '@/components/ResetConfirmationDialog'
 import { SplashScreen } from '@/components/SplashScreen'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { FocusProvider } from '@/context/FocusContext'
+import { ModalProvider } from '@/context/ModalContext'
 import { useGlobalShortcuts } from '@/hooks/keyboard'
+import { useWindowCloseHandler } from '@/hooks/useWindowCloseHandler'
 import { useOnboarding } from '@/hooks/useOnboarding'
 import { useNotifications } from '@/hooks/useNotifications'
 import { useSession } from '@/hooks/useSession'
@@ -39,7 +41,7 @@ import { sourcesAtom } from '@/atoms/sources'
 import { skillsAtom } from '@/atoms/skills'
 import { extractBadges } from '@/lib/mentions'
 import { getDefaultStore } from 'jotai'
-import { ShikiThemeProvider } from '@craft-agent/ui'
+import { ShikiThemeProvider, PlatformProvider } from '@craft-agent/ui'
 
 type AppState = 'loading' | 'onboarding' | 'reauth' | 'ready'
 
@@ -1033,14 +1035,23 @@ export default function App() {
       // 2. Update React state to trigger re-renders
       setWindowWorkspaceId(workspaceId)
 
-      // 3. Clear pending permissions/credentials (not relevant to new workspace)
+      // 3. Clear selected session - the old session belongs to the previous workspace
+      // and should not remain selected when switching to a new workspace.
+      // This prevents showing stale session data from the wrong workspace.
+      setSession({ selected: null })
+
+      // 4. Navigate to allChats view without a specific session selected
+      // This ensures the UI is in a clean state for the new workspace
+      navigate(routes.view.allChats())
+
+      // 5. Clear pending permissions/credentials (not relevant to new workspace)
       setPendingPermissions(new Map())
       setPendingCredentials(new Map())
 
-      // Note: Agents and theme will reload automatically due to windowWorkspaceId dependency
+      // Note: Sessions and theme will reload automatically due to windowWorkspaceId dependency
       // in useEffect hooks
     }
-  }, [windowWorkspaceId])
+  }, [windowWorkspaceId, setSession])
 
   // Handle workspace refresh (e.g., after icon upload)
   const handleRefreshWorkspaces = useCallback(() => {
@@ -1130,6 +1141,18 @@ export default function App() {
     openNewChat,
   ])
 
+  // Platform actions for @craft-agent/ui components (overlays, etc.)
+  // Memoized to prevent re-renders when these callbacks don't change
+  // NOTE: Must be defined before early returns to maintain consistent hook order
+  const platformActions = useMemo(() => ({
+    onOpenFile: handleOpenFile,
+    onOpenUrl: handleOpenUrl,
+    // Hide/show macOS traffic lights when fullscreen overlays are open
+    onSetTrafficLightsVisible: (visible: boolean) => {
+      window.electronAPI.setTrafficLightsVisible(visible)
+    },
+  }), [handleOpenFile, handleOpenUrl])
+
   // Loading state - show splash screen
   if (appState === 'loading') {
     return <SplashScreen isExiting={false} />
@@ -1176,8 +1199,10 @@ export default function App() {
 
   // Ready state - main app with splash overlay during data loading
   return (
+    <PlatformProvider actions={platformActions}>
     <ShikiThemeProvider shikiTheme={shikiTheme}>
       <FocusProvider>
+        <ModalProvider>
         <TooltipProvider>
         <NavigationProvider
           workspaceId={windowWorkspaceId}
@@ -1185,6 +1210,9 @@ export default function App() {
           onInputChange={handleInputChange}
           isReady={appState === 'ready'}
         >
+          {/* Handle window close requests (X button, Cmd+W) - close modal first if open */}
+          <WindowCloseHandler />
+
           {/* Splash screen overlay - fades out when fully ready */}
           {showSplash && (
             <SplashScreen
@@ -1211,7 +1239,18 @@ export default function App() {
           </div>
         </NavigationProvider>
         </TooltipProvider>
+        </ModalProvider>
       </FocusProvider>
     </ShikiThemeProvider>
+    </PlatformProvider>
   )
+}
+
+/**
+ * Component that handles window close requests.
+ * Must be inside ModalProvider to access the modal registry.
+ */
+function WindowCloseHandler() {
+  useWindowCloseHandler()
+  return null
 }

@@ -1,5 +1,4 @@
 import { Markdown } from '@craft-agent/ui/markdown'
-import { CRAFT_LOGO } from '@craft-agent/shared/branding'
 
 const article = `
 # Craft Agent
@@ -26,10 +25,13 @@ curl -fsSL https://agents.craft.do/install-app.sh | bash
 export default function App() {
   return (
     <main className="min-h-screen bg-foreground-2 flex flex-col items-center justify-center p-6">
-      {/* ASCII logo from OAuth callback page */}
-      <pre className="text-accent font-mono text-[6px] leading-none whitespace-pre mt-8 mb-16" style={{ letterSpacing: '-0.05em' }}>
-        {CRAFT_LOGO.join('\n')}
-      </pre>
+      {/* Craft colorful C logo */}
+      <svg className="w-12 h-12 mt-8 mb-16" viewBox="0 0 299 300" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M137.879,300.001 L137.875,300.001 C62.3239,300.001 0.966154,239.232 0.0117188,163.908 L0,162.126 L137.879,162.126 L137.879,300.001 Z" fill="#06367A"/>
+        <path d="M137.879,0 L137.875,0 C61.729,0 0,61.729 0,137.875 L0,137.878 L137.879,137.878 L137.879,0 Z" fill="#FF51FF"/>
+        <path d="M160.558,137.883 L160.561,137.883 C236.707,137.883 298.436,76.1537 298.436,0.00758561 L298.436,0.00562043 L160.558,0.00562043 L160.558,137.883 Z" fill="#007CFF"/>
+        <path d="M160.558,162.123 L160.561,162.123 C236.112,162.123 297.471,222.891 298.426,298.216 L298.436,299.998 L160.558,299.998 L160.558,162.123 Z" fill="#0A377B"/>
+      </svg>
       <div className="bg-background rounded-[20px] shadow-strong max-w-3xl w-full p-8 md:p-12 text-[13px]">
         <Markdown>
           {article}

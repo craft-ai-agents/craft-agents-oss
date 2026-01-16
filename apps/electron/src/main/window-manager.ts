@@ -269,7 +269,19 @@ export class WindowManager {
       }
     })
 
-    // Handle window close - clean up theme listener first, then internal state
+    // Handle window close request (X button, Cmd+W) - intercept to allow modal closing first
+    // The renderer can respond via WINDOW_CONFIRM_CLOSE to actually close the window
+    window.on('close', (event) => {
+      // Check if renderer is ready (mainFrame exists) - if not, allow close directly
+      if (!window.webContents.isDestroyed() && window.webContents.mainFrame) {
+        event.preventDefault()
+        // Send close request to renderer - it will either close a modal or confirm close
+        window.webContents.send(IPC_CHANNELS.WINDOW_CLOSE_REQUESTED)
+      }
+      // If renderer not ready, allow default close behavior
+    })
+
+    // Handle window closed - clean up theme listener and internal state
     window.on('closed', () => {
       nativeTheme.removeListener('updated', themeHandler)
       this.windows.delete(webContentsId)
@@ -321,12 +333,25 @@ export class WindowManager {
   }
 
   /**
-   * Close window by webContents.id
+   * Close window by webContents.id (triggers close event which may be intercepted)
    */
   closeWindow(webContentsId: number): void {
     const managed = this.windows.get(webContentsId)
     if (managed && !managed.window.isDestroyed()) {
       managed.window.close()
+    }
+  }
+
+  /**
+   * Force close window by webContents.id (bypasses close event interception).
+   * Used when renderer confirms the close action (no modals to close).
+   */
+  forceCloseWindow(webContentsId: number): void {
+    const managed = this.windows.get(webContentsId)
+    if (managed && !managed.window.isDestroyed()) {
+      // Remove close listener temporarily to avoid infinite loop,
+      // then destroy the window directly
+      managed.window.destroy()
     }
   }
 
@@ -460,6 +485,26 @@ export class WindowManager {
           !managed.window.webContents.isDestroyed() &&
           managed.window.webContents.mainFrame) {
         managed.window.webContents.send(channel, ...args)
+      }
+    }
+  }
+
+  /**
+   * Show or hide macOS traffic light buttons (close/minimize/maximize).
+   * Used to hide them when fullscreen overlays are open to prevent accidental clicks.
+   * No-op on non-macOS platforms.
+   */
+  setTrafficLightsVisible(webContentsId: number, visible: boolean): void {
+    if (process.platform !== 'darwin') return
+
+    const managed = this.windows.get(webContentsId)
+    if (managed && !managed.window.isDestroyed()) {
+      managed.window.setWindowButtonVisibility(visible)
+      // Re-apply custom traffic light position after showing buttons
+      // setWindowButtonVisibility can reset position to default, so we need
+      // to restore the custom position using the modern setWindowButtonPosition API
+      if (visible) {
+        managed.window.setWindowButtonPosition({ x: 18, y: 18 })
       }
     }
   }

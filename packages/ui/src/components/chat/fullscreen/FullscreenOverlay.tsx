@@ -11,6 +11,7 @@ import ReactDOM from 'react-dom'
 import { Check, Copy, ListTodo, X } from 'lucide-react'
 import { cn } from '../../../lib/utils'
 import { Markdown } from '../../markdown'
+import { usePlatform } from '../../../context/PlatformContext'
 
 // Z-index for fullscreen overlays - must be above app chrome (z-overlay: 300)
 // Uses CSS variable when available, falls back to hardcoded value
@@ -42,6 +43,15 @@ export function FullscreenOverlay({
 }: FullscreenOverlayProps) {
   // Copy state
   const [copied, setCopied] = useState(false)
+  const { onSetTrafficLightsVisible } = usePlatform()
+
+  // Hide macOS traffic lights when overlay opens, restore when it closes
+  useEffect(() => {
+    if (!isOpen) return
+
+    onSetTrafficLightsVisible?.(false)
+    return () => onSetTrafficLightsVisible?.(true)
+  }, [isOpen, onSetTrafficLightsVisible])
 
   // Handle escape key
   useEffect(() => {

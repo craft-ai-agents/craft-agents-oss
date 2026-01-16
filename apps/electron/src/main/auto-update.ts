@@ -275,6 +275,9 @@ async function doDownloadUpdate(): Promise<void> {
   updateInfo = { ...updateInfo, downloadState: 'downloading', downloadProgress: 0 }
   broadcastUpdateInfo()
 
+  // Declare installerPath outside try block so it's accessible in catch for cleanup
+  let installerPath: string | undefined
+
   try {
     // Create temp directory for download
     const tempDir = join(app.getPath('temp'), 'craft-agent-updates')
@@ -286,7 +289,7 @@ async function doDownloadUpdate(): Promise<void> {
     const extension = process.platform === 'darwin' ? 'dmg' :
                       process.platform === 'win32' ? 'exe' :
                       'AppImage'
-    const installerPath = join(tempDir, `Craft-Agent-${latestVersion}.${extension}`)
+    installerPath = join(tempDir, `Craft-Agent-${latestVersion}.${extension}`)
 
     // Remove existing file if present
     if (existsSync(installerPath)) {

@@ -23,7 +23,6 @@
  *   - mcp: MCP client, connection validation
  *   - prompts: System prompt generation
  *   - sources: Workspace-scoped source management (MCP, API, local)
- *   - subscription: Billing/subscription checks
  *   - utils: Debug logging, file handling, summarization
  *   - validation: URL validation
  *   - version: Version and installation management

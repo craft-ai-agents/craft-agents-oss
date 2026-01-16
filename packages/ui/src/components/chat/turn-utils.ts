@@ -42,10 +42,6 @@ export function storedToMessage(stored: StoredMessage): Message {
     errorCanRetry: stored.errorCanRetry,
     ultrathink: stored.ultrathink,
     planPath: stored.planPath,
-    onboardingId: stored.onboardingId,
-    onboardingWidget: stored.onboardingWidget,
-    onboardingData: stored.onboardingData,
-    onboardingSent: stored.onboardingSent,
     // Auth-request fields
     authRequestId: stored.authRequestId,
     authRequestType: stored.authRequestType,
@@ -95,13 +91,6 @@ export interface SystemTurn {
   timestamp: number
 }
 
-/** Represents an onboarding message (welcome, hints, quick actions) */
-export interface OnboardingTurn {
-  type: 'onboarding'
-  message: Message
-  timestamp: number
-}
-
 /** Represents an auth request (credential input, OAuth flow) */
 export interface AuthRequestTurn {
   type: 'auth-request'
@@ -109,7 +98,7 @@ export interface AuthRequestTurn {
   timestamp: number
 }
 
-export type Turn = AssistantTurn | UserTurn | SystemTurn | OnboardingTurn | AuthRequestTurn
+export type Turn = AssistantTurn | UserTurn | SystemTurn | AuthRequestTurn
 
 // ============================================================================
 // Helper Functions
@@ -299,17 +288,6 @@ export function groupMessagesByTurn(messages: Message[]): Turn[] {
   }
 
   for (const message of sortedMessages) {
-    // Onboarding messages are standalone turns (shown at start of session)
-    if (message.role === 'onboarding') {
-      flushCurrentTurn()
-      turns.push({
-        type: 'onboarding',
-        message,
-        timestamp: message.timestamp,
-      })
-      continue
-    }
-
     // Auth-request messages are standalone turns (credential input, OAuth flows)
     if (message.role === 'auth-request') {
       flushCurrentTurn()

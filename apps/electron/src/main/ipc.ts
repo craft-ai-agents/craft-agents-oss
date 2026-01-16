@@ -189,9 +189,20 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     return 'main'
   })
 
-  // Close the calling window
+  // Close the calling window (triggers close event which may be intercepted)
   ipcMain.handle(IPC_CHANNELS.CLOSE_WINDOW, (event) => {
     windowManager.closeWindow(event.sender.id)
+  })
+
+  // Confirm close - force close the window (bypasses interception).
+  // Called by renderer when it has no modals to close and wants to proceed.
+  ipcMain.handle(IPC_CHANNELS.WINDOW_CONFIRM_CLOSE, (event) => {
+    windowManager.forceCloseWindow(event.sender.id)
+  })
+
+  // Show/hide macOS traffic light buttons (for fullscreen overlays)
+  ipcMain.handle(IPC_CHANNELS.WINDOW_SET_TRAFFIC_LIGHTS, (event, visible: boolean) => {
+    windowManager.setTrafficLightsVisible(event.sender.id, visible)
   })
 
   // Switch workspace in current window (in-window switching)
@@ -959,9 +970,9 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   ipcMain.handle(IPC_CHANNELS.PREFERENCES_READ, async () => {
     const path = getPreferencesPath()
     if (!existsSync(path)) {
-      return { content: '{}', exists: false }
+      return { content: '{}', exists: false, path }
     }
-    return { content: readFileSync(path, 'utf-8'), exists: true }
+    return { content: readFileSync(path, 'utf-8'), exists: true, path }
   })
 
   // Write user preferences file (validates JSON before saving)
@@ -1206,6 +1217,25 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     } catch (error) {
       ipcLog.error('Error reading workspace permissions config:', error)
       return null
+    }
+  })
+
+  // Get default permissions from ~/.craft-agent/permissions/default.json
+  // Returns raw JSON for UI display (patterns with comments), plus the file path
+  ipcMain.handle(IPC_CHANNELS.DEFAULT_PERMISSIONS_GET, async () => {
+    const { existsSync, readFileSync } = await import('fs')
+    const { getAppPermissionsDir } = await import('@craft-agent/shared/agent')
+    const { join } = await import('path')
+
+    const defaultPath = join(getAppPermissionsDir(), 'default.json')
+    if (!existsSync(defaultPath)) return { config: null, path: defaultPath }
+
+    try {
+      const content = readFileSync(defaultPath, 'utf-8')
+      return { config: JSON.parse(content), path: defaultPath }
+    } catch (error) {
+      ipcLog.error('Error reading default permissions config:', error)
+      return { config: null, path: defaultPath }
     }
   })
 

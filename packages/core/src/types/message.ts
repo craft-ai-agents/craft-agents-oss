@@ -15,7 +15,6 @@ export type MessageRole =
   | 'info'
   | 'warning'
   | 'plan'
-  | 'onboarding'
   | 'auth-request';
 
 /**
@@ -69,7 +68,7 @@ export interface MessageAttachment {
  */
 export interface ContentBadge {
   /** Badge type - used for fallback icon if iconBase64 not available */
-  type: 'source' | 'skill';
+  type: 'source' | 'skill' | 'context';
   /** Display label (e.g., "Linear", "Commit") */
   label: string;
   /** Original text pattern (e.g., "@linear", "@commit") */
@@ -80,6 +79,12 @@ export interface ContentBadge {
   start: number;
   /** End position in content string */
   end: number;
+  /**
+   * Collapsed label for context badges (e.g., "Edit: Permissions")
+   * When set, the badge replaces the entire marked range with this label
+   * and hides the original content
+   */
+  collapsedLabel?: string;
 }
 
 /**
@@ -155,11 +160,6 @@ export interface Message {
   ultrathink?: boolean;
   // Plan-specific fields (for role='plan')
   planPath?: string;  // Path to the plan markdown file
-  // Onboarding-specific fields (for role='onboarding')
-  onboardingId?: string;
-  onboardingWidget?: 'quick-actions' | 'source-auth';
-  onboardingData?: Record<string, unknown>;
-  onboardingSent?: boolean;
   // Auth-request-specific fields (for role='auth-request')
   authRequestId?: string;         // Unique ID for the auth request
   authRequestType?: AuthRequestType;
@@ -225,11 +225,6 @@ export interface StoredMessage {
   ultrathink?: boolean;
   // Plan-specific fields (for role='plan')
   planPath?: string;
-  // Onboarding-specific fields (for role='onboarding')
-  onboardingId?: string;
-  onboardingWidget?: 'quick-actions' | 'source-auth';
-  onboardingData?: Record<string, unknown>;
-  onboardingSent?: boolean;
   // Auth-request-specific fields (for role='auth-request')
   authRequestId?: string;
   authRequestType?: AuthRequestType;

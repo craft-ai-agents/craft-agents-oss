@@ -36,10 +36,8 @@ import { useFocusZone } from "@/hooks/keyboard"
 import { useTheme } from "@/hooks/useTheme"
 import type { Session, Message, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, LoadedSource, LoadedSkill } from "../../../shared/types"
 import type { PermissionMode } from "@craft-agent/shared/agent/modes"
-import { TurnCard, UserMessageBubble, groupMessagesByTurn, formatTurnAsMarkdown, formatActivityAsMarkdown, type Turn, type AssistantTurn, type UserTurn, type SystemTurn, type OnboardingTurn, type AuthRequestTurn } from "@craft-agent/ui"
-import { MemoizedOnboardingBubble } from "@/components/chat/OnboardingBubble"
+import { TurnCard, UserMessageBubble, groupMessagesByTurn, formatTurnAsMarkdown, formatActivityAsMarkdown, type Turn, type AssistantTurn, type UserTurn, type SystemTurn, type AuthRequestTurn } from "@craft-agent/ui"
 import { MemoizedAuthRequestCard } from "@/components/chat/AuthRequestCard"
-import type { SourceNeedingAuth } from "@craft-agent/shared/sessions"
 import { ActiveOptionBadges } from "./ActiveOptionBadges"
 import { InputContainer, type StructuredInputState, type StructuredResponse, type PermissionResponse } from "./input"
 import type { RichTextInputHandle } from "@/components/ui/rich-text-input"
@@ -628,26 +626,6 @@ export function ChatDisplay({
                     </div>
                   )}
                   {turns.map((turn, index) => {
-                    // Onboarding turns - render at the start of new sessions
-                    if (turn.type === 'onboarding') {
-                      return (
-                        <div key={`onboarding-${turn.message.id}`} className="px-3">
-                          <MemoizedOnboardingBubble
-                            message={turn.message}
-                            onQuickAction={(prompt) => {
-                              // Send the quick action prompt as a message
-                              onSendMessage(prompt)
-                            }}
-                            onConnectSources={(sources) => {
-                              // Send a message to connect sources
-                              const sourceNames = sources.map(s => s.name).join(', ')
-                              onSendMessage(`Help me connect these sources: ${sourceNames}`)
-                            }}
-                          />
-                        </div>
-                      )
-                    }
-
                     // User turns - render with MemoizedMessageBubble
                     // Extra padding creates visual separation from AI responses
                     if (turn.type === 'user') {

@@ -119,6 +119,7 @@ export {
   MultiDiffPreviewOverlay,
   TerminalPreviewOverlay,
   GenericOverlay,
+  DataTableOverlay,
   detectLanguageFromPath,
   type CodePreviewOverlayProps,
   type DiffPreviewOverlayProps,
@@ -126,6 +127,7 @@ export {
   type FileChange,
   type TerminalPreviewOverlayProps,
   type GenericOverlayProps,
+  type DataTableOverlayProps,
 } from './components/overlay'
 
 // Utilities

@@ -47,7 +47,7 @@ function formatToolName(name: string): string {
 /**
  * Get user-friendly display name for a tool.
  *
- * @param toolName - The internal tool name (e.g., "mcp__craft__blocks_get")
+ * @param toolName - The internal tool name (e.g., "mcp__linear__list_issues")
  * @returns User-friendly display name
  */
 export function getToolDisplayName(toolName: string): string {
@@ -57,7 +57,7 @@ export function getToolDisplayName(toolName: string): string {
   }
 
   // For MCP tools, also check mapping with just the base tool name
-  // e.g., "mcp__craft__blocks_get" -> check "blocks_get"
+  // e.g., "mcp__linear__list_issues" -> check "list_issues"
   if (toolName.startsWith('mcp__')) {
     const parts = toolName.split('__');
     const baseName = parts[parts.length - 1] || toolName;

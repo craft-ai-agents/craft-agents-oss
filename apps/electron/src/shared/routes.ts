@@ -34,9 +34,14 @@ export const routes = {
   // Action Routes - Trigger actions
   // ============================================
   action: {
-    /** Create a new chat session */
-    newChat: (params?: { input?: string; name?: string; onboarding?: 'add-source' | 'connect-sources' | 'welcome' }) =>
-      `action/new-chat${toQueryString(params)}` as const,
+    /**
+     * Create a new chat session
+     * @param input - Optional initial message to pre-fill or send
+     * @param name - Optional session name
+     * @param send - If true and input is provided, immediately sends the message
+     */
+    newChat: (params?: { input?: string; name?: string; send?: boolean }) =>
+      `action/new-chat${toQueryString(params ? { ...params, send: params.send ? 'true' : undefined } : undefined)}` as const,
 
     /** Rename a session */
     renameSession: (sessionId: string, name: string) =>

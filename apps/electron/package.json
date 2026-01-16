@@ -17,7 +17,7 @@
     "build:renderer": "vite build",
     "build:resources": "cp -r resources dist/",
     "build:resources:win": "xcopy resources dist\\resources /E /I /Y",
-    "build": "bun run build:main && bun run build:preload && bun run build:renderer && bun run build:resources",
+    "build": "bun run lint && bun run build:main && bun run build:preload && bun run build:renderer && bun run build:resources",
     "build:win": "bun run build:main:win && bun run build:preload && bun run build:renderer && bun run build:resources:win",
     "start": "bun run build && electron .",
     "start:win": "bun run build:win && electron .",

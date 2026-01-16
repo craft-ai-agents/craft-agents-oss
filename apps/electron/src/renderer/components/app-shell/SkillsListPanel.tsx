@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/styled-context-menu'
 import { DropdownMenuProvider, ContextMenuProvider } from '@/components/ui/menu-context'
 import { SkillMenu } from './SkillMenu'
+import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
 import { cn } from '@/lib/utils'
 import type { LoadedSkill } from '../../../shared/types'
 
@@ -32,6 +33,8 @@ export interface SkillsListPanelProps {
   onSkillClick: (skill: LoadedSkill) => void
   selectedSkillSlug?: string | null
   workspaceId?: string
+  /** Workspace root path for EditPopover context */
+  workspaceRootPath?: string
   className?: string
 }
 
@@ -41,6 +44,7 @@ export function SkillsListPanel({
   onSkillClick,
   selectedSkillSlug,
   workspaceId,
+  workspaceRootPath,
   className,
 }: SkillsListPanelProps) {
   return (
@@ -51,9 +55,16 @@ export function SkillsListPanel({
             <p className="text-sm text-muted-foreground">
               No skills configured.
             </p>
-            <p className="mt-2 text-xs text-muted-foreground">
-              Skills are created by the agent in the workspace/skills/ folder.
-            </p>
+            {workspaceRootPath && (
+              <EditPopover
+                trigger={
+                  <button className="mt-2 text-sm text-foreground hover:underline">
+                    Add your first skill
+                  </button>
+                }
+                {...getEditConfig('add-skill', workspaceRootPath)}
+              />
+            )}
           </div>
         ) : (
           <div className="pt-2">

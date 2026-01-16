@@ -10,6 +10,7 @@ import type {
   Workspace as CoreWorkspace,
   SessionMetadata as CoreSessionMetadata,
   StoredAttachment as CoreStoredAttachment,
+  ContentBadge,
 } from '@craft-agent/core/types';
 
 // Import mode types from dedicated subpath export (avoids pulling in SDK)
@@ -25,6 +26,7 @@ export type {
   CoreWorkspace as Workspace,
   CoreSessionMetadata as SessionMetadata,
   CoreStoredAttachment as StoredAttachment,
+  ContentBadge,
 };
 
 // Import and re-export auth types for onboarding
@@ -324,10 +326,18 @@ export interface Session {
 
 /**
  * Options for creating a new session
+ * Note: Session creation itself has no options - auto-send is handled by NavigationContext
  */
 export interface CreateSessionOptions {
-  /** Onboarding context to show welcome/guidance messages */
-  onboarding?: 'add-source' | 'connect-sources' | 'welcome'
+  /** Initial permission mode for the session (overrides workspace default) */
+  permissionMode?: PermissionMode
+  /**
+   * Working directory for the session:
+   * - 'user_default' or undefined: Use workspace's configured default working directory
+   * - 'none': No working directory (session folder only)
+   * - Absolute path string: Use this specific path
+   */
+  workingDirectory?: string | 'user_default' | 'none'
 }
 
 // Events sent from main to renderer
@@ -453,6 +463,11 @@ export const IPC_CHANNELS = {
   OPEN_SESSION_IN_NEW_WINDOW: 'window:openSessionInNewWindow',
   SWITCH_WORKSPACE: 'window:switchWorkspace',
   CLOSE_WINDOW: 'window:close',
+  // Close request events (main → renderer, for intercepting X button / Cmd+W)
+  WINDOW_CLOSE_REQUESTED: 'window:closeRequested',
+  WINDOW_CONFIRM_CLOSE: 'window:confirmClose',
+  // Traffic light visibility (macOS only - hide when fullscreen overlays are open)
+  WINDOW_SET_TRAFFIC_LIGHTS: 'window:setTrafficLights',
 
   // Events from main to renderer
   SESSION_EVENT: 'session:event',
@@ -553,6 +568,10 @@ export const IPC_CHANNELS = {
   SOURCES_GET_PERMISSIONS: 'sources:getPermissions',
   // Workspace permissions config (for Explore mode)
   WORKSPACE_GET_PERMISSIONS: 'workspace:getPermissions',
+  // Default permissions from ~/.craft-agent/permissions/default.json
+  DEFAULT_PERMISSIONS_GET: 'permissions:getDefaults',
+  // Broadcast when default permissions change (file watcher)
+  DEFAULT_PERMISSIONS_CHANGED: 'permissions:defaultsChanged',
   // MCP tools listing
   SOURCES_GET_MCP_TOOLS: 'sources:getMcpTools',
 
@@ -641,6 +660,11 @@ export interface ElectronAPI {
   openSessionInNewWindow(workspaceId: string, sessionId: string): Promise<void>
   switchWorkspace(workspaceId: string): Promise<void>
   closeWindow(): Promise<void>
+  confirmCloseWindow(): Promise<void>
+  /** Listen for close requests (X button, Cmd+W). Returns cleanup function. */
+  onCloseRequested(callback: () => void): () => void
+  /** Show/hide macOS traffic light buttons (for fullscreen overlays) */
+  setTrafficLightsVisible(visible: boolean): Promise<void>
 
   // Event listeners
   onSessionEvent(callback: (event: SessionEvent) => void): () => void
@@ -725,7 +749,7 @@ export interface ElectronAPI {
   openFolderDialog(): Promise<string | null>
 
   // User Preferences
-  readPreferences(): Promise<{ content: string; exists: boolean }>
+  readPreferences(): Promise<{ content: string; exists: boolean; path: string }>
   writePreferences(content: string): Promise<{ success: boolean; error?: string }>
 
   // Session Drafts (persisted input text)
@@ -747,10 +771,14 @@ export interface ElectronAPI {
   saveSourceCredentials(workspaceId: string, sourceSlug: string, credential: string): Promise<void>
   getSourcePermissionsConfig(workspaceId: string, sourceSlug: string): Promise<import('@craft-agent/shared/agent').PermissionsConfigFile | null>
   getWorkspacePermissionsConfig(workspaceId: string): Promise<import('@craft-agent/shared/agent').PermissionsConfigFile | null>
+  getDefaultPermissionsConfig(): Promise<{ config: import('@craft-agent/shared/agent').PermissionsConfigFile | null; path: string }>
   getMcpTools(workspaceId: string, sourceSlug: string): Promise<McpToolsResult>
 
   // Sources change listener (live updates when sources are added/removed)
   onSourcesChanged(callback: (sources: LoadedSource[]) => void): () => void
+
+  // Default permissions change listener (live updates when default.json changes)
+  onDefaultPermissionsChanged(callback: () => void): () => void
 
   // Skills
   getSkills(workspaceId: string): Promise<LoadedSkill[]>

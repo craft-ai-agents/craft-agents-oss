@@ -68,6 +68,13 @@ export interface PlatformActions {
    * Open activity details in a new window/modal
    */
   onOpenActivityDetails?: (sessionId: string, activityId: string) => void
+
+  /**
+   * Show/hide macOS traffic light buttons (close/minimize/maximize).
+   * Used to hide them when fullscreen overlays are open to prevent accidental clicks.
+   * No-op on non-macOS platforms or in web viewer.
+   */
+  onSetTrafficLightsVisible?: (visible: boolean) => void
 }
 
 const PlatformContext = createContext<PlatformActions>({})

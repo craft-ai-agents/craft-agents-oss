@@ -901,15 +901,26 @@ Read-only exploration mode. You can read, search, and explore but cannot make ch
 
 | Operation | Allowed? | Notes |
 |-----------|----------|-------|
-| Read Craft documents | ✅ | blocks_get, document_search, etc. |
+| Read MCP sources | ✅ | search, list, get operations |
 | File exploration | ✅ | Read, Glob, Grep |
 | Web search/fetch | ✅ | WebSearch, WebFetch |
 | API GET requests | ✅ | Read-only API calls |
 | **Plans folder** | ✅ | Write/Edit allowed to session plans folder |
-| **Read-only Bash** | ✅ | ls, cat, git status, grep, etc. |
+| **Read-only Bash** | ✅ | See list below |
 | File writes/edits | ❌ | ${blockedTools} blocked (except plans folder) |
-| Craft modifications | ❌ | blocks_add, blocks_update blocked |
+| MCP mutations | ❌ | create, update, delete operations blocked |
 | API mutations | ❌ | POST, PUT, DELETE blocked |
+
+**Read-only Bash commands allowed in Explore mode:**
+- **File exploration**: ls, tree, cat, head, tail, file, stat, wc, du, df
+- **Search**: find, grep, rg, ag, fd, locate, which
+- **Git**: git status, git log, git diff, git show, git branch, git blame, git history, git reflog
+- **GitHub CLI**: gh pr view/list, gh issue view/list, gh repo view
+- **Package managers**: npm ls/list/outdated, yarn list, pip list, cargo tree
+- **System info**: pwd, whoami, env, ps, uname, hostname, date
+- **Text processing**: jq, yq, sort, uniq, cut, column
+- **Network diagnostics**: ping, dig, nslookup, netstat
+- **Version checks**: node --version, python --version, etc.
 
 **When ready to implement:** Don't ask the user to switch modes. Instead, write a plan and use \`SubmitPlan\` - the "Accept Plan" button switches to ${PERMISSION_MODE_CONFIG['allow-all'].displayName} mode automatically.
 
@@ -920,7 +931,7 @@ Default interactive mode. Prompts before edits, but read-only operations run fre
 | Operation | Allowed? | Notes |
 |-----------|----------|-------|
 | All file operations | ✅ | Write, Edit, Read, etc. |
-| All Craft operations | ✅ | blocks_add, blocks_update, etc. |
+| All MCP operations | ✅ | search, list, create, update, etc. |
 | All API operations | ✅ | GET, POST, PUT, DELETE |
 | Read-only Bash | ✅ | ls, git status, grep, etc. (same as ${PERMISSION_MODE_CONFIG['safe'].displayName}) |
 | Other Bash commands | ⚠️ | Prompts for approval (can click "Always allow") |
@@ -977,5 +988,16 @@ When in ${PERMISSION_MODE_CONFIG['safe'].displayName} mode and ready to implemen
 3. The user can click "Accept Plan" to exit ${PERMISSION_MODE_CONFIG['safe'].displayName} mode and begin implementation
 4. Once accepted, proceed with the implementation steps
 
-This is the recommended way to transition from exploration to implementation.`;
+This is the recommended way to transition from exploration to implementation.
+
+### Customizing Explore Mode Permissions
+
+You can customize Explore mode via \`permissions.json\` files - extend what's allowed (bash patterns, MCP tools, API endpoints) or block specific tools entirely.
+
+| Level | Path | Scope |
+|-------|------|-------|
+| Workspace | \`{workspaceRoot}/permissions.json\` | All sources in workspace |
+| Per-source | \`{workspaceRoot}/sources/{slug}/permissions.json\` | That source only (auto-scoped) |
+
+**Before editing**: Read \`~/.craft-agent/docs/permissions.md\` for the full schema and examples.`;
 }

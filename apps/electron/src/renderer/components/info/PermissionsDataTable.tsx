@@ -2,14 +2,20 @@
  * PermissionsDataTable
  *
  * Typed Data Table for displaying source permissions.
- * Features: searchable patterns, sortable columns, max-height scroll.
+ * Features: searchable patterns, sortable columns, max-height scroll, fullscreen view.
  */
 
 import * as React from 'react'
+import { useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
+import { Maximize2 } from 'lucide-react'
 import { Info_DataTable, SortableHeader } from './Info_DataTable'
 import { Info_Badge } from './Info_Badge'
 import { Info_StatusBadge } from './Info_StatusBadge'
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
+import { DataTableOverlay } from '@craft-agent/ui'
+import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
 
 export type PermissionAccess = 'allowed' | 'blocked'
 export type PermissionType = 'tool' | 'bash' | 'api' | 'mcp'
@@ -29,7 +35,51 @@ interface PermissionsDataTableProps {
   searchable?: boolean
   /** Max height with scroll */
   maxHeight?: number
+  /** Enable fullscreen button (shows Maximize2 icon on hover) */
+  fullscreen?: boolean
+  /** Title for the fullscreen overlay header */
+  fullscreenTitle?: string
   className?: string
+}
+
+/**
+ * PatternBadge - Clickable pattern badge with truncation and tooltip
+ * - Dynamic width with max-width of 240px
+ * - CSS truncation via text-ellipsis
+ * - Tooltip shows full pattern on hover (only for patterns 30+ chars)
+ * - Click to copy pattern to clipboard with toast notification
+ */
+function PatternBadge({ pattern }: { pattern: string }) {
+  const handleClick = async () => {
+    try {
+      await navigator.clipboard.writeText(pattern)
+      toast.success('Pattern copied to clipboard')
+    } catch {
+      toast.error('Failed to copy pattern')
+    }
+  }
+
+  const badge = (
+    <button type="button" onClick={handleClick} className="text-left">
+      <Info_Badge color="muted" className="font-mono select-none">
+        <span className="block overflow-hidden whitespace-nowrap text-ellipsis max-w-[240px]">
+          {pattern}
+        </span>
+      </Info_Badge>
+    </button>
+  )
+
+  // Only show tooltip for longer patterns (30+ chars)
+  if (pattern.length >= 30) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>{badge}</TooltipTrigger>
+        <TooltipContent className="font-mono max-w-md break-all">{pattern}</TooltipContent>
+      </Tooltip>
+    )
+  }
+
+  return badge
 }
 
 // Column definitions with sorting
@@ -61,9 +111,7 @@ const columnsWithType: ColumnDef<PermissionRow>[] = [
     header: ({ column }) => <SortableHeader column={column} title="Pattern" />,
     cell: ({ row }) => (
       <div className="p-1.5 pl-2.5">
-        <Info_Badge color="muted" className="font-mono whitespace-nowrap">
-          {row.original.pattern}
-        </Info_Badge>
+        <PatternBadge pattern={row.original.pattern} />
       </div>
     ),
     minSize: 100,
@@ -99,9 +147,7 @@ const columnsWithoutType: ColumnDef<PermissionRow>[] = [
     header: ({ column }) => <SortableHeader column={column} title="Pattern" />,
     cell: ({ row }) => (
       <div className="p-1.5 pl-2.5">
-        <Info_Badge color="muted" className="font-mono whitespace-nowrap">
-          {row.original.pattern}
-        </Info_Badge>
+        <PatternBadge pattern={row.original.pattern} />
       </div>
     ),
     minSize: 100,
@@ -126,18 +172,58 @@ export function PermissionsDataTable({
   hideTypeColumn = false,
   searchable = false,
   maxHeight = 400,
+  fullscreen = false,
+  fullscreenTitle = 'Permissions',
   className,
 }: PermissionsDataTableProps) {
+  const [isFullscreen, setIsFullscreen] = useState(false)
   const columns = hideTypeColumn ? columnsWithoutType : columnsWithType
 
+  // Fullscreen button for toolbar - shown on hover
+  const fullscreenButton = fullscreen ? (
+    <button
+      onClick={() => setIsFullscreen(true)}
+      className={cn(
+        'p-1 rounded-[6px] transition-all',
+        'opacity-0 group-hover:opacity-100',
+        'bg-background/80 backdrop-blur-sm shadow-minimal',
+        'text-muted-foreground/50 hover:text-foreground',
+        'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:opacity-100'
+      )}
+      title="View Fullscreen"
+    >
+      <Maximize2 className="w-3.5 h-3.5" />
+    </button>
+  ) : undefined
+
   return (
-    <Info_DataTable
-      columns={columns}
-      data={data}
-      searchable={searchable ? { placeholder: 'Search patterns...' } : false}
-      maxHeight={maxHeight}
-      emptyContent="No permissions configured"
-      className={className}
-    />
+    <>
+      <Info_DataTable
+        columns={columns}
+        data={data}
+        searchable={searchable ? { placeholder: 'Search patterns...' } : false}
+        maxHeight={maxHeight}
+        emptyContent="No permissions configured"
+        floatingAction={fullscreenButton}
+        className={cn(fullscreen && 'group', className)}
+      />
+
+      {/* Fullscreen overlay - renders the table without scroll constraints */}
+      {fullscreen && (
+        <DataTableOverlay
+          isOpen={isFullscreen}
+          onClose={() => setIsFullscreen(false)}
+          title={fullscreenTitle}
+          subtitle={`${data.length} ${data.length === 1 ? 'rule' : 'rules'}`}
+        >
+          <Info_DataTable
+            columns={columns}
+            data={data}
+            searchable={searchable ? { placeholder: 'Search patterns...' } : false}
+            emptyContent="No permissions configured"
+          />
+        </DataTableOverlay>
+      )}
+    </>
   )
 }

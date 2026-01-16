@@ -10,3 +10,4 @@ export { DiffPreviewOverlay, type DiffPreviewOverlayProps } from './DiffPreviewO
 export { MultiDiffPreviewOverlay, type MultiDiffPreviewOverlayProps, type FileChange } from './MultiDiffPreviewOverlay'
 export { TerminalPreviewOverlay, type TerminalPreviewOverlayProps } from './TerminalPreviewOverlay'
 export { GenericOverlay, detectLanguageFromPath, type GenericOverlayProps } from './GenericOverlay'
+export { DataTableOverlay, type DataTableOverlayProps } from './DataTableOverlay'

@@ -20,6 +20,8 @@ export interface SlashCommand {
   description: string
   icon: React.ReactNode
   shortcut?: string
+  /** Optional color for the command (hex color string) */
+  color?: string
 }
 
 /** Folder item for the slash menu */

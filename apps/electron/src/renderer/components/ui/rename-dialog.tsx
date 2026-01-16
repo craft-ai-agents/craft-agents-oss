@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
+import { useRegisterModal } from "@/context/ModalContext"
 
 interface RenameDialogProps {
   open: boolean
@@ -29,6 +30,9 @@ export function RenameDialog({
   placeholder = "Enter a name...",
 }: RenameDialogProps) {
   const inputRef = useRef<HTMLInputElement>(null)
+
+  // Register with modal context so X button / Cmd+W closes this dialog first
+  useRegisterModal(open, () => onOpenChange(false))
 
   // Focus input after dialog opens (avoids Radix Dialog focus race condition)
   useEffect(() => {

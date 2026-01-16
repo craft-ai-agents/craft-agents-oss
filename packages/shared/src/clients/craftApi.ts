@@ -92,31 +92,6 @@ export class CraftApi {
         });
     }
 
-    async createStripeCheckout(params: {
-        authToken: string;
-        priceId: string;
-        teamId: string;
-        successUrl: string;
-        cancelUrl: string;
-        environment?: 'live' | 'sandbox';
-        country?: string;
-        locale?: string;
-    }) {
-        const { authToken, priceId, teamId, successUrl, cancelUrl, environment = 'live', country, locale } = params;
-        const queryParams: Record<string, string> = { environment };
-        if (country) queryParams.country = country;
-        if (locale) queryParams.locale = locale;
-        return this.fetch({
-            method: 'POST',
-            path: '/subscription/teams/stripe/checkout',
-            queryParams,
-            authToken,
-            body: { priceId, teamId, successUrl, cancelUrl },
-            responseParser: async (response) => {
-                return stripeCheckoutResponseSchema.parse(JSON.parse(response));
-            },
-        });
-    }
 }
 
 const profileResponseSchema = z.object({
@@ -138,24 +113,4 @@ const profileResponseSchema = z.object({
     })),
 });
 
-const stripeCheckoutResponseSchema = z.object({
-    checkoutUrl: z.string(),
-});
-
 export type ProfileResponse = z.infer<typeof profileResponseSchema>;
-
-export function getTeamIdFromProfile(profile: ProfileResponse): string | null {
-    // First try: find a private team where user is admin
-    const privateTeam = profile.teams.find(t => t.isPrivate && t.role === 'admin');
-    if (privateTeam) {
-        return privateTeam.id;
-    }
-
-    // Fallback: find team via personal space (where spaceId === userId)
-    const personalSpace = profile.spaces.find(s => s.id === profile.userId);
-    if (personalSpace?.teamId) {
-        return personalSpace.teamId;
-    }
-
-    return null;
-}

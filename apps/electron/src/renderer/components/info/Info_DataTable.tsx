@@ -32,6 +32,12 @@ export interface Info_DataTableProps<TData, TValue> {
   error?: string
   /** Empty state content */
   emptyContent?: React.ReactNode
+  /**
+   * Floating action rendered OVER the table header (e.g., fullscreen button).
+   * Uses absolute positioning inside scroll container - appears on hover via group-hover.
+   * Parent should have 'group' class for hover detection.
+   */
+  floatingAction?: React.ReactNode
   /** Additional class names */
   className?: string
 }
@@ -65,6 +71,7 @@ export function Info_DataTable<TData, TValue>({
   loading = false,
   error,
   emptyContent,
+  floatingAction,
   className,
 }: Info_DataTableProps<TData, TValue>) {
   const [searchValue, setSearchValue] = React.useState('')
@@ -105,9 +112,22 @@ export function Info_DataTable<TData, TValue>({
 
   return (
     <div
-      className={cn(maxHeight && 'overflow-y-auto', className)}
+      className={cn(
+        maxHeight && 'overflow-y-auto',
+        className
+      )}
       style={maxHeight ? { maxHeight } : undefined}
     >
+      {/* Floating action - sticky positioned to stay at top-right while scrolling.
+          Uses sticky + float instead of absolute because parent SettingsCard has
+          overflow-hidden which clips absolute elements. Sticky respects overflow containers.
+          Height 0 ensures it doesn't add vertical space to the layout. */}
+      {floatingAction && (
+        <div className="sticky top-2.5 float-right mr-1.5 z-20 h-0">
+          {floatingAction}
+        </div>
+      )}
+
       <DataTable
         columns={columns}
         data={data}

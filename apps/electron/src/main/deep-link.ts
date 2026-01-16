@@ -17,7 +17,8 @@
  *   craftagents://workspace/{workspaceId}/action/{actionName}[?params]
  *
  * Actions:
- *   new-chat                  - Create new chat, optional ?input=text&name=name
+ *   new-chat                  - Create new chat, optional ?input=text&name=name&send=true
+ *                               If send=true is provided with input, immediately sends the message
  *   resume-sdk-session/{id}   - Resume Claude Code session by SDK session ID
  *   delete-session/{id}       - Delete session
  *   flag-session/{id}         - Flag session

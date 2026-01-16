@@ -49,6 +49,7 @@ import type {
   NavigationState,
   ChatFilter,
   RightSidebarPanel,
+  ContentBadge,
 } from '../../shared/types'
 import {
   isChatsNavigation,
@@ -199,9 +200,16 @@ export function NavigationProvider({
 
       switch (parsed.name) {
         case 'new-chat': {
-          // Pass onboarding option if provided
-          const onboardingOption = parsed.params.onboarding as 'add-source' | 'connect-sources' | 'welcome' | undefined
-          const session = await onCreateSession(workspaceId, onboardingOption ? { onboarding: onboardingOption } : undefined)
+          // Create session with optional permission mode and working directory from params
+          const createOptions: import('../../shared/types').CreateSessionOptions = {}
+          if (parsed.params.mode && ['safe', 'ask', 'allow-all'].includes(parsed.params.mode)) {
+            createOptions.permissionMode = parsed.params.mode as 'safe' | 'ask' | 'allow-all'
+          }
+          // Handle workdir param: 'user_default', 'none', or absolute path
+          if (parsed.params.workdir) {
+            createOptions.workingDirectory = parsed.params.workdir as 'user_default' | 'none' | string
+          }
+          const session = await onCreateSession(workspaceId, createOptions)
 
           // Rename session if name provided
           if (parsed.params.name) {
@@ -216,11 +224,37 @@ export function NavigationProvider({
             details: { type: 'chat', sessionId: session.id },
           })
 
-          // Pre-fill input if provided
-          if (parsed.params.input && onInputChange) {
-            setTimeout(() => {
-              onInputChange(session.id, parsed.params.input!)
-            }, 100)
+          // Parse badges from params (JSON-encoded, used for EditPopover context hiding)
+          let badges: ContentBadge[] | undefined
+          if (parsed.params.badges) {
+            try {
+              badges = JSON.parse(parsed.params.badges) as ContentBadge[]
+            } catch (e) {
+              console.warn('[Navigation] Failed to parse badges param:', e)
+            }
+          }
+
+          // Handle input: either auto-send (if send=true) or pre-fill
+          if (parsed.params.input) {
+            const shouldSend = parsed.params.send === 'true'
+            if (shouldSend) {
+              // Auto-send the message immediately after session is ready
+              // Pass badges in options so they're stored with the message
+              setTimeout(() => {
+                window.electronAPI.sendMessage(
+                  session.id,
+                  parsed.params.input!,
+                  undefined, // attachments
+                  undefined, // storedAttachments
+                  badges ? { badges } : undefined
+                )
+              }, 100)
+            } else if (onInputChange) {
+              // Pre-fill input box without sending
+              setTimeout(() => {
+                onInputChange(session.id, parsed.params.input!)
+              }, 100)
+            }
           }
           break
         }

@@ -77,6 +77,10 @@ export {
   loadSourcePermissionsConfig,
   getWorkspacePermissionsPath,
   getSourcePermissionsPath,
+  // App-level default permissions (at ~/.craft-agent/permissions/)
+  getAppPermissionsDir,
+  ensureDefaultPermissions,
+  loadDefaultPermissions,
   // Cache singleton
   permissionsConfigCache,
   // Types

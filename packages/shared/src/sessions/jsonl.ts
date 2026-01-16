@@ -142,12 +142,21 @@ function extractLastMessageRole(messages: StoredMessage[]): SessionHeader['lastM
 
 /**
  * Extract preview from first user message.
- * Returns first 150 chars with newlines replaced by spaces.
+ * Sanitizes by stripping special blocks and normalizing whitespace.
+ * Returns first 150 chars.
  */
 function extractPreview(messages: StoredMessage[]): string | undefined {
   const firstUserMessage = messages.find(m => m.type === 'user');
   if (!firstUserMessage?.content) return undefined;
-  return firstUserMessage.content.replace(/\n/g, ' ').substring(0, 150);
+
+  // Sanitize: strip special blocks and tags, normalize whitespace
+  const sanitized = firstUserMessage.content
+    .replace(/<edit_request>[\s\S]*?<\/edit_request>/g, '') // Strip entire edit_request blocks
+    .replace(/<[^>]+>/g, '')     // Strip remaining XML/HTML tags
+    .replace(/\s+/g, ' ')        // Collapse whitespace (including newlines)
+    .trim();
+
+  return sanitized.substring(0, 150) || undefined;
 }
 
 /**

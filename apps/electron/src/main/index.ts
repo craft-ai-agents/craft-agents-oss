@@ -13,6 +13,7 @@ import { WindowManager } from './window-manager'
 import { loadWindowState, saveWindowState } from './window-state'
 import { getWorkspaces } from '@craft-agent/shared/config'
 import { initializeDocs } from '@craft-agent/shared/docs'
+import { ensureDefaultPermissions } from '@craft-agent/shared/agent/permissions-config'
 import { handleDeepLink } from './deep-link'
 import log, { isDebugMode, mainLog, getLogFilePath } from './logger'
 import { setPerfEnabled, enableDebug } from '@craft-agent/shared/utils'
@@ -142,6 +143,10 @@ app.whenReady().then(async () => {
 
   // Initialize bundled docs
   initializeDocs()
+
+  // Ensure default permissions file exists (copies bundled default.json on first run)
+  const bundledPermissionsDir = join(__dirname, 'resources/permissions')
+  ensureDefaultPermissions(bundledPermissionsDir)
 
   // Check for pending update and auto-install if available
   // This must happen early, before creating windows

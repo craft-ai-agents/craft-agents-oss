@@ -8,6 +8,7 @@
 import * as React from 'react'
 import { useEffect, useState, useMemo, useCallback } from 'react'
 import { AlertCircle } from 'lucide-react'
+import { EditPopover, EditButton, getEditConfig } from '@/components/ui/EditPopover'
 import { SourceAvatar } from '@/components/ui/source-avatar'
 import { SourceMenu } from '@/components/app-shell/SourceMenu'
 import { cn } from '@/lib/utils'
@@ -72,8 +73,10 @@ function buildApiPermissionsData(config: PermissionsConfigFile): PermissionRow[]
   const rows: PermissionRow[] = []
 
   // Blocked Tools
-  config.blockedTools?.forEach((tool) => {
-    rows.push({ access: 'blocked', type: 'tool', pattern: tool, comment: null })
+  config.blockedTools?.forEach((item) => {
+    const pattern = typeof item === 'string' ? item : item.pattern
+    const comment = typeof item === 'string' ? null : item.comment
+    rows.push({ access: 'blocked', type: 'tool', pattern, comment })
   })
 
   // Allowed Bash Patterns
@@ -100,8 +103,10 @@ function buildMcpPermissionsData(config: PermissionsConfigFile): PermissionRow[]
   const rows: PermissionRow[] = []
 
   // Blocked Tools
-  config.blockedTools?.forEach((tool) => {
-    rows.push({ access: 'blocked', type: 'mcp', pattern: tool, comment: null })
+  config.blockedTools?.forEach((item) => {
+    const pattern = typeof item === 'string' ? item : item.pattern
+    const comment = typeof item === 'string' ? null : item.comment
+    rows.push({ access: 'blocked', type: 'mcp', pattern, comment })
   })
 
   // Allowed MCP Patterns
@@ -333,6 +338,22 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
     await window.electronAPI.openFile(guidePath)
   }, [source])
 
+  // Handle editing config.json - opens in system default text editor
+  const handleEditConfig = useCallback(async () => {
+    if (!source) return
+
+    const configPath = `${source.folderPath}/config.json`
+    await window.electronAPI.openFile(configPath)
+  }, [source])
+
+  // Handle editing permissions.json - opens in system default text editor
+  const handleEditPermissions = useCallback(async () => {
+    if (!source) return
+
+    const permissionsPath = `${source.folderPath}/permissions.json`
+    await window.electronAPI.openFile(permissionsPath)
+  }, [source])
+
   // Handle deleting source
   const handleDelete = useCallback(async () => {
     if (!source) return
@@ -396,7 +417,21 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
           )}
 
           {/* Connection */}
-          <Info_Section title="Connection" description={getConnectionDescription(source)}>
+          <Info_Section
+            title="Connection"
+            description={getConnectionDescription(source)}
+            actions={
+              // EditPopover for AI-assisted config.json editing with "Edit File" as secondary action
+              <EditPopover
+                trigger={<EditButton />}
+                {...getEditConfig('source-config', source.folderPath)}
+                secondaryAction={{
+                  label: 'Edit File',
+                  onClick: handleEditConfig,
+                }}
+              />
+            }
+          >
             <Info_Table
               footer={source.config.connectionError && (
                 <div className="px-4 py-2 border-t border-border/30 bg-destructive/5">
@@ -424,14 +459,42 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
 
           {/* Permissions - for API and local sources */}
           {source.config.type !== 'mcp' && permissionsConfig && apiPermissionsData.length > 0 && (
-            <Info_Section title="Permissions" description={getPermissionsDescription(source)}>
-              <PermissionsDataTable data={apiPermissionsData} />
+            <Info_Section
+              title="Permissions"
+              description={getPermissionsDescription(source)}
+              actions={
+                // EditPopover for AI-assisted permissions.json editing
+                <EditPopover
+                  trigger={<EditButton />}
+                  {...getEditConfig('source-permissions', source.folderPath)}
+                  secondaryAction={{
+                    label: 'Edit File',
+                    onClick: handleEditPermissions,
+                  }}
+                />
+              }
+            >
+              <PermissionsDataTable data={apiPermissionsData} fullscreen fullscreenTitle="Permissions" />
             </Info_Section>
           )}
 
           {/* Tools - for MCP sources */}
           {source.config.type === 'mcp' && (
-            <Info_Section title="Tools" description="Operations exposed by this server.">
+            <Info_Section
+              title="Tools"
+              description="Operations exposed by this server."
+              actions={
+                // EditPopover for AI-assisted tool permissions editing
+                <EditPopover
+                  trigger={<EditButton />}
+                  {...getEditConfig('source-tool-permissions', source.folderPath)}
+                  secondaryAction={{
+                    label: 'Edit File',
+                    onClick: handleEditPermissions,
+                  }}
+                />
+              }
+            >
               <ToolsDataTable
                 data={toolsData}
                 loading={mcpToolsLoading}
@@ -442,8 +505,22 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
 
           {/* Permissions - for MCP sources */}
           {source.config.type === 'mcp' && permissionsConfig && mcpPermissionsData.length > 0 && (
-            <Info_Section title="Permissions" description={getPermissionsDescription(source)}>
-              <PermissionsDataTable data={mcpPermissionsData} hideTypeColumn />
+            <Info_Section
+              title="Permissions"
+              description={getPermissionsDescription(source)}
+              actions={
+                // EditPopover for AI-assisted permissions.json editing
+                <EditPopover
+                  trigger={<EditButton />}
+                  {...getEditConfig('source-permissions', source.folderPath)}
+                  secondaryAction={{
+                    label: 'Edit File',
+                    onClick: handleEditPermissions,
+                  }}
+                />
+              }
+            >
+              <PermissionsDataTable data={mcpPermissionsData} hideTypeColumn fullscreen fullscreenTitle="Permissions" />
             </Info_Section>
           )}
 
@@ -453,16 +530,15 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
               title="Documentation"
               description="Context and guidelines for the agent."
               actions={
-                <button
-                  onClick={handleEditGuide}
-                  className={cn(
-                    "transition-colors text-[13px] cursor-pointer",
-                    "text-muted-foreground hover:text-foreground hover:underline",
-                    "focus:outline-none focus-visible:underline"
-                  )}
-                >
-                  Edit
-                </button>
+                // EditPopover for AI-assisted guide.md editing with "Edit File" as secondary action
+                <EditPopover
+                  trigger={<EditButton />}
+                  {...getEditConfig('source-guide', source.folderPath)}
+                  secondaryAction={{
+                    label: 'Edit File',
+                    onClick: handleEditGuide,
+                  }}
+                />
               }
             >
               <Info_Markdown maxHeight={540} fullscreen>
