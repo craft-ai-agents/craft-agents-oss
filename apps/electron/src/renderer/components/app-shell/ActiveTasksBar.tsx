@@ -8,7 +8,7 @@
 import React from 'react'
 import { cn } from '@/lib/utils'
 import { Spinner } from '@craft-agent/ui'
-import { TaskActionMenu } from './TaskActionMenu'
+import { TaskActionMenu, type TerminalOverlayData } from './TaskActionMenu'
 
 export interface BackgroundTask {
   /** Task or shell ID */
@@ -34,6 +34,8 @@ export interface ActiveTasksBarProps {
   onKillTask?: (taskId: string) => void
   /** Callback to insert message into input field */
   onInsertMessage?: (text: string) => void
+  /** Callback to show terminal output overlay */
+  onShowTerminalOverlay?: (data: TerminalOverlayData) => void
   /** Additional class name */
   className?: string
 }
@@ -61,7 +63,7 @@ function shortenId(id: string): string {
  * Styled to match ActiveOptionBadges for visual consistency
  * Only renders when there are active tasks
  */
-export function ActiveTasksBar({ tasks, sessionId, onKillTask, onInsertMessage, className }: ActiveTasksBarProps) {
+export function ActiveTasksBar({ tasks, sessionId, onKillTask, onInsertMessage, onShowTerminalOverlay, className }: ActiveTasksBarProps) {
   // Don't render if no tasks
   if (tasks.length === 0) return null
 
@@ -74,6 +76,7 @@ export function ActiveTasksBar({ tasks, sessionId, onKillTask, onInsertMessage, 
           sessionId={sessionId}
           onKillTask={onKillTask || (() => {})}
           onInsertMessage={onInsertMessage}
+          onShowTerminalOverlay={onShowTerminalOverlay}
           className={className}
         />
       ))}

@@ -1,5 +1,5 @@
 import * as React from "react"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo, useCallback } from "react"
 import {
   AlertTriangle,
   CheckCircle2,
@@ -16,10 +16,25 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 import { Markdown, CollapsibleMarkdownProvider, StreamingMarkdown, type RenderMode } from "@/components/markdown"
 import { AnimatedCollapsibleContent } from "@/components/ui/collapsible"
-import { Spinner, parseReadResult, parseBashResult, parseGrepResult, parseGlobResult } from "@craft-agent/ui"
+import {
+  Spinner,
+  parseReadResult,
+  parseBashResult,
+  parseGrepResult,
+  parseGlobResult,
+  extractOverlayData,
+  CodePreviewOverlay,
+  DiffPreviewOverlay,
+  MultiDiffPreviewOverlay,
+  TerminalPreviewOverlay,
+  GenericOverlay,
+  type ActivityItem,
+  type OverlayData,
+  type FileChange,
+} from "@craft-agent/ui"
 import { useFocusZone } from "@/hooks/keyboard"
 import { useTheme } from "@/hooks/useTheme"
-import type { Session, Message, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, LoadedSource, LoadedSkill, FileChange } from "../../../shared/types"
+import type { Session, Message, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, LoadedSource, LoadedSkill } from "../../../shared/types"
 import type { PermissionMode } from "@craft-agent/shared/agent/modes"
 import { TurnCard, UserMessageBubble, groupMessagesByTurn, formatTurnAsMarkdown, formatActivityAsMarkdown, type Turn, type AssistantTurn, type UserTurn, type SystemTurn, type OnboardingTurn, type AuthRequestTurn } from "@craft-agent/ui"
 import { MemoizedOnboardingBubble } from "@/components/chat/OnboardingBubble"
@@ -30,6 +45,32 @@ import { InputContainer, type StructuredInputState, type StructuredResponse, typ
 import type { RichTextInputHandle } from "@/components/ui/rich-text-input"
 import { useBackgroundTasks } from "@/hooks/useBackgroundTasks"
 import { CHAT_LAYOUT } from "@/config/layout"
+
+// ============================================================================
+// Overlay State Types
+// ============================================================================
+
+/** State for multi-diff overlay (Edit/Write activities) */
+interface MultiDiffOverlayState {
+  type: 'multi-diff'
+  changes: FileChange[]
+  consolidated: boolean
+  focusedChangeId?: string
+}
+
+/** State for markdown overlay (pop-out, turn details, generic activities) */
+interface MarkdownOverlayState {
+  type: 'markdown'
+  content: string
+  title: string
+}
+
+/** Union of all overlay states, or null for no overlay */
+type OverlayState =
+  | { type: 'activity'; activity: ActivityItem }
+  | MultiDiffOverlayState
+  | MarkdownOverlayState
+  | null
 
 interface ChatDisplayProps {
   session: Session | null
@@ -315,7 +356,7 @@ export function ChatDisplay({
   const internalTextareaRef = React.useRef<RichTextInputHandle>(null)
   const textareaRef = externalTextareaRef || internalTextareaRef
 
-  // Get isDark from useTheme hook for preview windows
+  // Get isDark from useTheme hook for overlay theme
   // This accounts for scenic themes (like Haze) that force dark mode
   const { isDark } = useTheme()
 
@@ -339,21 +380,34 @@ export function ChatDisplay({
     }
   }, [session?.id, isFocused])
 
-  // Pop-out handler - opens message in a new preview window (read-only)
-  const handlePopOut = React.useCallback((message: Message) => {
+  // ============================================================================
+  // Overlay State Management
+  // ============================================================================
+
+  // Overlay state - controls which overlay is shown (if any)
+  const [overlayState, setOverlayState] = useState<OverlayState>(null)
+
+  // Close overlay handler
+  const handleCloseOverlay = useCallback(() => {
+    setOverlayState(null)
+  }, [])
+
+  // Extract overlay data for activity-based overlays
+  // Uses the shared extractOverlayData parser from @craft-agent/ui
+  const overlayData: OverlayData | null = useMemo(() => {
+    if (!overlayState || overlayState.type !== 'activity') return null
+    return extractOverlayData(overlayState.activity)
+  }, [overlayState])
+
+  // Pop-out handler - opens message in overlay (read-only markdown)
+  const handlePopOut = useCallback((message: Message) => {
     if (!session) return
-    window.electronAPI.openPreview({
-      mode: 'markdown',
-      sessionId: session.id,
-      previewId: message.id,
-      resolvedTheme: isDark ? 'dark' : 'light',
-      markdown: {
-        mode: 'readOnly',
-        content: message.content,
-        title: 'Message Preview',
-      },
+    setOverlayState({
+      type: 'markdown',
+      content: message.content,
+      title: 'Message Preview',
     })
-  }, [session, isDark])
+  }, [session])
 
   // Ref to track total turn count for scroll handler
   const totalTurnCountRef = React.useRef(0)
@@ -661,235 +715,98 @@ export function ChatDisplay({
                           }))
                         }}
                         onPopOut={(text) => {
-                          if (session) {
-                            window.electronAPI.openPreview({
-                              mode: 'markdown',
-                              sessionId: session.id,
-                              previewId: turn.turnId,
-                              resolvedTheme: isDark ? 'dark' : 'light',
-                              markdown: {
-                                mode: 'readOnly',
-                                content: text,
-                                title: 'Response Preview',
-                              },
-                            })
-                          }
+                          // Open response text in markdown overlay
+                          setOverlayState({
+                            type: 'markdown',
+                            content: text,
+                            title: 'Response Preview',
+                          })
                         }}
                         onOpenDetails={() => {
-                          if (session) {
-                            const markdown = formatTurnAsMarkdown(turn)
-                            window.electronAPI.openPreview({
-                              mode: 'markdown',
-                              sessionId: session.id,
-                              previewId: `details-${turn.turnId}`,
-                              resolvedTheme: isDark ? 'dark' : 'light',
-                              markdown: {
-                                mode: 'readOnly',
-                                content: markdown,
-                                title: 'Turn Details',
-                              },
-                            })
-                          }
+                          // Open turn details in markdown overlay
+                          const markdown = formatTurnAsMarkdown(turn)
+                          setOverlayState({
+                            type: 'markdown',
+                            content: markdown,
+                            title: 'Turn Details',
+                          })
                         }}
                         onOpenActivityDetails={(activity) => {
-                          if (session) {
-                            const input = activity.toolInput as Record<string, unknown> | undefined
-
-                            // Edit/Write tool → Multi-file diff (ungrouped, focused on this change)
-                            if ((activity.toolName === 'Edit' || activity.toolName === 'Write') && input) {
-                              // Collect all Edit/Write activities from this turn
-                              const changes: FileChange[] = []
-                              console.log('[DEBUG] onOpenActivityDetails - Edit/Write clicked', {
-                                activityId: activity.id,
-                                toolName: activity.toolName,
-                                toolInput: activity.toolInput,
-                                turnActivities: turn.activities.length,
-                              })
-                              for (const a of turn.activities) {
-                                const actInput = a.toolInput as Record<string, unknown> | undefined
-                                console.log('[DEBUG] Processing activity', {
-                                  id: a.id,
-                                  toolName: a.toolName,
-                                  hasToolInput: !!a.toolInput,
-                                  toolInputKeys: a.toolInput ? Object.keys(a.toolInput) : [],
-                                  old_string: a.toolInput?.old_string ? (a.toolInput.old_string as string).slice(0, 100) + '...' : 'N/A',
-                                  new_string: a.toolInput?.new_string ? (a.toolInput.new_string as string).slice(0, 100) + '...' : 'N/A',
-                                })
-                                if (a.toolName === 'Edit' && actInput) {
-                                  changes.push({
-                                    id: a.id,
-                                    filePath: (actInput.file_path as string) || 'unknown',
-                                    toolType: 'Edit',
-                                    original: (actInput.old_string as string) || '',
-                                    modified: (actInput.new_string as string) || '',
-                                    error: a.error || undefined,
-                                  })
-                                } else if (a.toolName === 'Write' && actInput) {
-                                  changes.push({
-                                    id: a.id,
-                                    filePath: (actInput.file_path as string) || 'unknown',
-                                    toolType: 'Write',
-                                    original: '',
-                                    modified: (actInput.content as string) || '',
-                                    error: a.error || undefined,
-                                  })
-                                }
-                              }
-
-                              if (changes.length > 0) {
-                                window.electronAPI.openPreview({
-                                  mode: 'multi-diff',
-                                  sessionId: session.id,
-                                  previewId: `multi-${turn.turnId}-${activity.id}`,
-                                  resolvedTheme: isDark ? 'dark' : 'light',
-                                  multiDiff: {
-                                    turnId: turn.turnId,
-                                    changes,
-                                    consolidated: false, // Ungrouped mode
-                                    focusedChangeId: activity.id, // Focus on clicked activity
-                                  },
-                                })
-                              }
-                            }
-                            // Read tool → Code preview (read mode)
-                            else if (activity.toolName === 'Read' && input) {
-                              // Always use input.file_path as the absolute path for opening files
-                              const filePath = (input.file_path as string) || 'unknown'
-                              const parsed = parseReadResult(activity.content || '')
-
-                              window.electronAPI.openPreview({
-                                mode: 'view',
-                                sessionId: session.id,
-                                previewId: `code-${activity.id}`,
-                                resolvedTheme: isDark ? 'dark' : 'light',
-                                view: {
-                                  filePath,
-                                  content: parsed.content,
-                                  toolType: 'read',
-                                  numLines: parsed.numLines,
-                                  startLine: parsed.startLine,
-                                  totalLines: parsed.totalLines,
-                                },
-                              })
-                            }
-                            // Bash tool → Terminal preview
-                            else if (activity.toolName === 'Bash' && input) {
-                              const command = (input.command as string) || ''
-                              const description = (input.description as string) || undefined
-                              const parsed = parseBashResult(activity.content || '')
-
-                              window.electronAPI.openPreview({
-                                mode: 'terminal',
-                                sessionId: session.id,
-                                previewId: `terminal-${activity.id}`,
-                                resolvedTheme: isDark ? 'dark' : 'light',
-                                terminal: {
-                                  command,
-                                  output: parsed.output,
-                                  description,
-                                  exitCode: parsed.exitCode,
-                                  toolType: 'bash',
-                                },
-                              })
-                            }
-                            // Grep tool → Terminal preview (search results)
-                            else if (activity.toolName === 'Grep' && input) {
-                              const pattern = (input.pattern as string) || ''
-                              const searchPath = (input.path as string) || '.'
-                              const outputMode = (input.output_mode as string) || 'files_with_matches'
-                              const parsed = parseGrepResult(activity.content || '', pattern, searchPath, outputMode)
-
-                              window.electronAPI.openPreview({
-                                mode: 'terminal',
-                                sessionId: session.id,
-                                previewId: `terminal-${activity.id}`,
-                                resolvedTheme: isDark ? 'dark' : 'light',
-                                terminal: {
-                                  command: parsed.command,
-                                  output: parsed.output,
-                                  description: parsed.description,
-                                  toolType: 'grep',
-                                },
-                              })
-                            }
-                            // Glob tool → Terminal preview (file list)
-                            else if (activity.toolName === 'Glob' && input) {
-                              const pattern = (input.pattern as string) || '*'
-                              const searchPath = (input.path as string) || '.'
-                              const parsed = parseGlobResult(activity.content || '', pattern, searchPath)
-
-                              window.electronAPI.openPreview({
-                                mode: 'terminal',
-                                sessionId: session.id,
-                                previewId: `terminal-${activity.id}`,
-                                resolvedTheme: isDark ? 'dark' : 'light',
-                                terminal: {
-                                  command: parsed.command,
-                                  output: parsed.output,
-                                  description: parsed.description,
-                                  toolType: 'glob',
-                                },
-                              })
-                            }
-                            // Default → Markdown preview
-                            else {
-                              const markdown = formatActivityAsMarkdown(activity)
-                              window.electronAPI.openPreview({
-                                mode: 'markdown',
-                                sessionId: session.id,
-                                previewId: `activity-${activity.id}`,
-                                resolvedTheme: isDark ? 'dark' : 'light',
-                                markdown: {
-                                  mode: 'readOnly',
-                                  content: markdown,
-                                  title: 'Activity Details',
-                                },
-                              })
-                            }
-                          }
-                        }}
-                        hasEditOrWriteActivities={turn.activities.some(a =>
-                          a.toolName === 'Edit' || a.toolName === 'Write'
-                        )}
-                        onOpenMultiFileDiff={() => {
-                          if (session) {
-                            // Collect all Edit/Write activities from this turn
+                          // Edit/Write tool → Multi-file diff overlay (ungrouped, focused on this change)
+                          if (activity.toolName === 'Edit' || activity.toolName === 'Write') {
+                            // Collect all Edit/Write activities from this turn for context
                             const changes: FileChange[] = []
                             for (const a of turn.activities) {
-                              const input = a.toolInput as Record<string, unknown> | undefined
-                              if (a.toolName === 'Edit' && input) {
+                              const actInput = a.toolInput as Record<string, unknown> | undefined
+                              if (a.toolName === 'Edit' && actInput) {
                                 changes.push({
                                   id: a.id,
-                                  filePath: (input.file_path as string) || 'unknown',
+                                  filePath: (actInput.file_path as string) || 'unknown',
                                   toolType: 'Edit',
-                                  original: (input.old_string as string) || '',
-                                  modified: (input.new_string as string) || '',
+                                  original: (actInput.old_string as string) || '',
+                                  modified: (actInput.new_string as string) || '',
                                   error: a.error || undefined,
                                 })
-                              } else if (a.toolName === 'Write' && input) {
+                              } else if (a.toolName === 'Write' && actInput) {
                                 changes.push({
                                   id: a.id,
-                                  filePath: (input.file_path as string) || 'unknown',
+                                  filePath: (actInput.file_path as string) || 'unknown',
                                   toolType: 'Write',
                                   original: '',
-                                  modified: (input.content as string) || '',
+                                  modified: (actInput.content as string) || '',
                                   error: a.error || undefined,
                                 })
                               }
                             }
 
                             if (changes.length > 0) {
-                              window.electronAPI.openPreview({
-                                mode: 'multi-diff',
-                                sessionId: session.id,
-                                previewId: `multi-${turn.turnId}`,
-                                resolvedTheme: isDark ? 'dark' : 'light',
-                                multiDiff: {
-                                  turnId: turn.turnId,
-                                  changes,
-                                },
+                              setOverlayState({
+                                type: 'multi-diff',
+                                changes,
+                                consolidated: false, // Ungrouped mode - show individual changes
+                                focusedChangeId: activity.id, // Focus on clicked activity
                               })
                             }
+                          } else {
+                            // All other tools → Use extractOverlayData for appropriate overlay
+                            setOverlayState({ type: 'activity', activity })
+                          }
+                        }}
+                        hasEditOrWriteActivities={turn.activities.some(a =>
+                          a.toolName === 'Edit' || a.toolName === 'Write'
+                        )}
+                        onOpenMultiFileDiff={() => {
+                          // Collect all Edit/Write activities from this turn
+                          const changes: FileChange[] = []
+                          for (const a of turn.activities) {
+                            const input = a.toolInput as Record<string, unknown> | undefined
+                            if (a.toolName === 'Edit' && input) {
+                              changes.push({
+                                id: a.id,
+                                filePath: (input.file_path as string) || 'unknown',
+                                toolType: 'Edit',
+                                original: (input.old_string as string) || '',
+                                modified: (input.new_string as string) || '',
+                                error: a.error || undefined,
+                              })
+                            } else if (a.toolName === 'Write' && input) {
+                              changes.push({
+                                id: a.id,
+                                filePath: (input.file_path as string) || 'unknown',
+                                toolType: 'Write',
+                                original: '',
+                                modified: (input.content as string) || '',
+                                error: a.error || undefined,
+                              })
+                            }
+                          }
+
+                          if (changes.length > 0) {
+                            setOverlayState({
+                              type: 'multi-diff',
+                              changes,
+                              consolidated: true, // Consolidated mode - group by file
+                            })
                           }
                         }}
                       />
@@ -973,6 +890,88 @@ export function ChatDisplay({
           </div>
         </div>
       ) : null}
+
+      {/* ================================================================== */}
+      {/* Preview Overlays - Rendered outside the main chat flow            */}
+      {/* ================================================================== */}
+
+      {/* Code preview overlay (Read tool) */}
+      {overlayData?.type === 'code' && (
+        <CodePreviewOverlay
+          isOpen={!!overlayState}
+          onClose={handleCloseOverlay}
+          content={overlayData.content}
+          filePath={overlayData.filePath}
+          mode={overlayData.mode}
+          startLine={overlayData.startLine}
+          totalLines={overlayData.totalLines}
+          numLines={overlayData.numLines}
+          theme={isDark ? 'dark' : 'light'}
+          error={overlayData.error}
+          onOpenFile={onOpenFile}
+        />
+      )}
+
+      {/* Diff preview overlay (single Edit tool) */}
+      {overlayData?.type === 'diff' && (
+        <DiffPreviewOverlay
+          isOpen={!!overlayState}
+          onClose={handleCloseOverlay}
+          original={overlayData.original}
+          modified={overlayData.modified}
+          filePath={overlayData.filePath}
+          theme={isDark ? 'dark' : 'light'}
+          error={overlayData.error}
+          onOpenFile={onOpenFile}
+        />
+      )}
+
+      {/* Multi-diff preview overlay (multiple Edit/Write tools) */}
+      {overlayState?.type === 'multi-diff' && (
+        <MultiDiffPreviewOverlay
+          isOpen={true}
+          onClose={handleCloseOverlay}
+          changes={overlayState.changes}
+          consolidated={overlayState.consolidated}
+          focusedChangeId={overlayState.focusedChangeId}
+          theme={isDark ? 'dark' : 'light'}
+          onOpenFile={onOpenFile}
+        />
+      )}
+
+      {/* Terminal preview overlay (Bash/Grep/Glob tools) */}
+      {overlayData?.type === 'terminal' && (
+        <TerminalPreviewOverlay
+          isOpen={!!overlayState}
+          onClose={handleCloseOverlay}
+          command={overlayData.command}
+          output={overlayData.output}
+          exitCode={overlayData.exitCode}
+          toolType={overlayData.toolType}
+          description={overlayData.description}
+          theme={isDark ? 'dark' : 'light'}
+        />
+      )}
+
+      {/* Markdown preview overlay (pop-out, turn details, generic activities) */}
+      {overlayState?.type === 'markdown' && (
+        <GenericOverlay
+          isOpen={true}
+          onClose={handleCloseOverlay}
+          content={overlayState.content}
+          title={overlayState.title}
+        />
+      )}
+
+      {/* Generic overlay for unknown tool types */}
+      {overlayData?.type === 'generic' && (
+        <GenericOverlay
+          isOpen={!!overlayState}
+          onClose={handleCloseOverlay}
+          content={overlayData.content}
+          title={overlayData.title}
+        />
+      )}
     </div>
   )
 }

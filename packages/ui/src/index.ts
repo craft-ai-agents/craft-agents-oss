@@ -116,11 +116,14 @@ export {
   // Specialized overlays
   CodePreviewOverlay,
   DiffPreviewOverlay,
+  MultiDiffPreviewOverlay,
   TerminalPreviewOverlay,
   GenericOverlay,
   detectLanguageFromPath,
   type CodePreviewOverlayProps,
   type DiffPreviewOverlayProps,
+  type MultiDiffPreviewOverlayProps,
+  type FileChange,
   type TerminalPreviewOverlayProps,
   type GenericOverlayProps,
 } from './components/overlay'

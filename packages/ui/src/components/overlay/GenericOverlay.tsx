@@ -33,57 +33,17 @@ export interface GenericOverlayProps {
 
 /**
  * Auto-detect language from content patterns.
+ * For GenericOverlay (commentary/thinking), we default to markdown
+ * since the content is typically natural language text.
  */
 function detectLanguage(content: string): string {
-  // Check for code block markers at the start
+  // Check for code block markers at the start - only case where we override markdown
   const codeBlockMatch = content.match(/^```(\w+)/)
   if (codeBlockMatch && codeBlockMatch[1]) {
     return codeBlockMatch[1]
   }
 
-  // TypeScript/JavaScript patterns
-  if (
-    /import\s+{/.test(content) ||
-    /export\s+(default\s+)?function/.test(content) ||
-    /const\s+\w+\s*=\s*\(/.test(content) ||
-    /interface\s+\w+/.test(content) ||
-    /type\s+\w+\s*=/.test(content)
-  ) {
-    return 'typescript'
-  }
-
-  // JSON
-  if (/^\s*{[\s\S]*}$/.test(content.trim()) || /^\s*\[[\s\S]*\]$/.test(content.trim())) {
-    try {
-      JSON.parse(content)
-      return 'json'
-    } catch {
-      // Not valid JSON, continue
-    }
-  }
-
-  // Python
-  const firstLine = content.split('\n')[0] ?? ''
-  if (/^(def|class|import|from)\s+/.test(content) || /:\s*$/.test(firstLine)) {
-    return 'python'
-  }
-
-  // Bash/Shell
-  if (/^#!/.test(content) || /^\s*(cd|ls|mkdir|rm|echo|export)\s+/.test(content)) {
-    return 'bash'
-  }
-
-  // HTML
-  if (/<(!DOCTYPE|html|head|body|div|span|p|a)\b/i.test(content)) {
-    return 'html'
-  }
-
-  // CSS
-  if (/^[\w.#][\w\s.#,-]*{[\s\S]*}/.test(content)) {
-    return 'css'
-  }
-
-  // Default to markdown for general text content
+  // Default to markdown for GenericOverlay content (commentary, thinking, etc.)
   return 'markdown'
 }
 

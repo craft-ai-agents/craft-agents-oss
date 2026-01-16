@@ -33,6 +33,8 @@ export interface CodePreviewOverlayProps {
   theme?: 'light' | 'dark'
   /** Error message if tool failed */
   error?: string
+  /** Callback to open file in external editor */
+  onOpenFile?: (filePath: string) => void
 }
 
 export function CodePreviewOverlay({
@@ -47,6 +49,7 @@ export function CodePreviewOverlay({
   numLines,
   theme = 'light',
   error,
+  onOpenFile,
 }: CodePreviewOverlayProps) {
   const backgroundColor = theme === 'dark' ? '#1e1e1e' : '#ffffff'
 
@@ -67,6 +70,7 @@ export function CodePreviewOverlay({
         variant: mode === 'write' ? 'amber' : 'blue',
       }}
       title={truncateFilePath(filePath)}
+      onTitleClick={onOpenFile ? () => onOpenFile(filePath) : undefined}
       subtitle={subtitle}
       error={error ? { label: mode === 'write' ? 'Write Failed' : 'Read Failed', message: error } : undefined}
       backgroundColor={backgroundColor}

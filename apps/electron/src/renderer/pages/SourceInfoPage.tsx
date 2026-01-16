@@ -13,7 +13,6 @@ import { SourceMenu } from '@/components/app-shell/SourceMenu'
 import { cn } from '@/lib/utils'
 import { routes, navigate } from '@/lib/navigate'
 import { toast } from 'sonner'
-import { useTheme } from '@/hooks/useTheme'
 import {
   Info_Page,
   Info_Section,
@@ -172,9 +171,6 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
   const [mcpToolsError, setMcpToolsError] = useState<string | null>(null)
   const [localMcpEnabled, setLocalMcpEnabled] = useState(true)
 
-  // Get isDark from useTheme hook for preview windows
-  // This accounts for scenic themes (like Haze) that force dark mode
-  const { isDark } = useTheme()
 
   // Load source data
   useEffect(() => {
@@ -329,24 +325,13 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
     }
   }, [source])
 
-  // Handle editing guide.md in Monaco markdown editor
+  // Handle editing guide.md - opens in system default text editor
   const handleEditGuide = useCallback(async () => {
     if (!source) return
 
     const guidePath = `${source.folderPath}/guide.md`
-
-    await window.electronAPI.openPreview({
-      mode: 'markdown',
-      sessionId: 'workspace',
-      previewId: `source-guide:${sourceSlug}`,
-      resolvedTheme: isDark ? 'dark' : 'light',
-      markdown: {
-        mode: 'readWrite',
-        filePath: guidePath,
-        title: `${source.config.name} - guide.md`,
-      },
-    })
-  }, [source, sourceSlug, isDark])
+    await window.electronAPI.openFile(guidePath)
+  }, [source])
 
   // Handle deleting source
   const handleDelete = useCallback(async () => {

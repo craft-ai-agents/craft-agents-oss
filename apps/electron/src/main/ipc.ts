@@ -7,9 +7,8 @@ import { randomUUID } from 'crypto'
 import { SessionManager } from './sessions'
 import { ipcLog, windowLog } from './logger'
 import { WindowManager } from './window-manager'
-import { UnifiedPreviewWindowManager } from './unified-preview-window'
 import { registerOnboardingHandlers } from './onboarding'
-import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type AuthType, type BillingMethodInfo, type SendMessageOptions, type PreviewData } from '../shared/types'
+import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type AuthType, type BillingMethodInfo, type SendMessageOptions } from '../shared/types'
 import { readFileAttachment, perf, validateImageForClaudeAPI, IMAGE_LIMITS } from '@craft-agent/shared/utils'
 import { getAuthType, setAuthType, getPreferencesPath, getModel, setModel, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getDefaultPermissionMode, setDefaultPermissionMode, getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, type Workspace } from '@craft-agent/shared/config'
 import { getSessionAttachmentsPath } from '@craft-agent/shared/sessions'
@@ -112,7 +111,7 @@ async function validateFilePath(filePath: string): Promise<string> {
   return realPath
 }
 
-export function registerIpcHandlers(sessionManager: SessionManager, windowManager: WindowManager, unifiedPreviewWindowManager: UnifiedPreviewWindowManager): void {
+export function registerIpcHandlers(sessionManager: SessionManager, windowManager: WindowManager): void {
   // Get all sessions
   ipcMain.handle(IPC_CHANNELS.GET_SESSIONS, async () => {
     const end = perf.start('ipc.getSessions')
@@ -1069,37 +1068,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     }
   })
 
-  // ============================================================
-  // Unified Preview Window (all modes: markdown, view, diff, multi-diff, terminal)
-  // ============================================================
-
-  // Open unified preview window
-  ipcMain.handle(IPC_CHANNELS.PREVIEW_OPEN, async (_event, data: PreviewData) => {
-    await unifiedPreviewWindowManager.openPreview(data)
-  })
-
-  // Get data for preview (called from preview window on mount)
-  ipcMain.handle(IPC_CHANNELS.PREVIEW_GET_DATA, async (_event, sessionId: string, previewId: string) => {
-    return unifiedPreviewWindowManager.getData(sessionId, previewId)
-  })
-
-  // Save content (for markdown readWrite mode)
-  ipcMain.handle(IPC_CHANNELS.PREVIEW_SAVE, async (_event, sessionId: string, previewId: string, content: string) => {
-    await unifiedPreviewWindowManager.save(sessionId, previewId, content)
-  })
-
-  // Read a file for preview (full file view)
-  ipcMain.handle(IPC_CHANNELS.PREVIEW_READ_FILE, async (_event, filePath: string) => {
-    try {
-      const absolutePath = resolve(filePath)
-      const validPath = await validateFilePath(absolutePath)
-      const content = await readFile(validPath, 'utf-8')
-      return content
-    } catch (err) {
-      ipcLog.error('Error reading file for preview:', err)
-      return null
-    }
-  })
+  // Preview windows removed - now using in-app overlays (see ChatDisplay.tsx)
 
   // ============================================================
   // Sources

@@ -39,6 +39,8 @@ export interface PreviewOverlayProps {
 
   /** Main title (e.g., file path) */
   title: string
+  /** Callback when title is clicked (e.g., to open file) */
+  onTitleClick?: () => void
   /** Optional subtitle (e.g., line range info) */
   subtitle?: ReactNode
 
@@ -66,6 +68,7 @@ export function PreviewOverlay({
   theme = 'light',
   badge,
   title,
+  onTitleClick,
   subtitle,
   error,
   headerActions,
@@ -104,7 +107,7 @@ export function PreviewOverlay({
         label={badge.label}
         variant={badge.variant}
       />
-      <PreviewHeaderBadge label={title} shrinkable />
+      <PreviewHeaderBadge label={title} onClick={onTitleClick} shrinkable />
       {subtitle && <PreviewHeaderBadge label={String(subtitle)} />}
       {headerActions}
     </PreviewHeader>
@@ -122,11 +125,11 @@ export function PreviewOverlay({
 
   const content = <div className="flex-1 min-h-0">{children}</div>
 
-  // Fullscreen mode
+  // Fullscreen mode - covers entire viewport
   if (!isModal) {
     return ReactDOM.createPortal(
       <div
-        className="fixed inset-0 z-50 flex flex-col bg-background"
+        className="fixed inset-0 z-fullscreen flex flex-col bg-background"
         style={{ backgroundColor: bgColor, color: txtColor }}
       >
         {header}
@@ -137,7 +140,7 @@ export function PreviewOverlay({
     )
   }
 
-  // Modal mode
+  // Modal mode - uses portal to center on viewport
   return ReactDOM.createPortal(
     <div
       className={`fixed inset-0 z-50 flex items-center justify-center ${OVERLAY_LAYOUT.modalBackdropClass}`}

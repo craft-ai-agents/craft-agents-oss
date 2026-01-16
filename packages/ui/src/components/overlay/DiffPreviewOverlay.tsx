@@ -29,6 +29,8 @@ export interface DiffPreviewOverlayProps {
   theme?: 'light' | 'dark'
   /** Error message if tool failed */
   error?: string
+  /** Callback to open file in external editor */
+  onOpenFile?: (filePath: string) => void
 }
 
 export function DiffPreviewOverlay({
@@ -41,6 +43,7 @@ export function DiffPreviewOverlay({
   diffStyle = 'unified',
   theme = 'light',
   error,
+  onOpenFile,
 }: DiffPreviewOverlayProps) {
   const backgroundColor = theme === 'dark' ? '#1e1e1e' : '#ffffff'
 
@@ -55,6 +58,7 @@ export function DiffPreviewOverlay({
         variant: 'orange',
       }}
       title={truncateFilePath(filePath)}
+      onTitleClick={onOpenFile ? () => onOpenFile(filePath) : undefined}
       error={error ? { label: 'Edit Failed', message: error } : undefined}
       backgroundColor={backgroundColor}
     >

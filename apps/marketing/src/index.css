@@ -1,24 +1,28 @@
-@import "tailwindcss";
+/**
+ * Marketing site styles
+ * Imports shared theme from @craft-agent/ui for 1-to-1 matching with app
+ */
+
+@import "@craft-agent/ui/styles";
 
 /* Scan source files for Tailwind classes */
-@source "../src/**/*.{tsx,ts}";
+@source "./**/*.{tsx,ts}";
+@source "../../../packages/ui/src/**/*.{tsx,ts}";
 
-/* Custom theme variables */
+/* =============================================================================
+   MARKETING-SPECIFIC OVERRIDES
+============================================================================= */
+
 :root {
-  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  /* Override background for marketing page outer area */
+  --marketing-bg: var(--foreground-2);
 }
 
-/* Base styles */
-html {
-  font-family: var(--font-sans);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+/* Markdown content wrapper - remove first/last child margins */
+.markdown-content > :first-child {
+  margin-top: 0;
 }
 
-html, body, #root {
-  height: 100%;
-}
-
-body {
-  margin: 0;
+.markdown-content > :last-child {
+  margin-bottom: 0;
 }

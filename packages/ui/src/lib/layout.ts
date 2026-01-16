@@ -11,7 +11,8 @@
  */
 export const OVERLAY_LAYOUT = {
   /** Minimum viewport width for modal display (below this = fullscreen) */
-  modalBreakpoint: 1200,
+  /** Set very high to always use fullscreen mode */
+  modalBreakpoint: 99999,
   /** Modal max width */
   modalMaxWidth: 1100,
   /** Modal max height as percentage of viewport */

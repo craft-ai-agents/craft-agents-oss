@@ -7,6 +7,7 @@ import type { BackgroundTask } from '@/components/app-shell/ActiveTasksBar'
 import { ActiveOptionBadges } from '@/components/app-shell/ActiveOptionBadges'
 import { InputContainer } from '@/components/app-shell/input'
 import type { StructuredResponse } from '@/components/app-shell/input/structured/types'
+import { EmptyStateHint, getHintCount, getHintTemplate } from '@/components/chat/EmptyStateHint'
 import { Button } from '@/components/ui/button'
 import { motion } from 'motion/react'
 import { ArrowUp, Paperclip, ChevronDown, Sparkles } from 'lucide-react'
@@ -625,7 +626,31 @@ function PermissionInputToggle({ autoToggle = false, autoToggleInterval = 3000, 
   )
 }
 
+// Generate variants for all hints dynamically
+const emptyStateHintVariants = Array.from({ length: getHintCount() }, (_, i) => ({
+  name: `Hint ${i + 1}`,
+  description: getHintTemplate(i).slice(0, 50) + '...',
+  props: { hintIndex: i },
+}))
+
 export const chatComponents: ComponentEntry[] = [
+  {
+    id: 'empty-state-hint',
+    name: 'EmptyStateHint',
+    category: 'Chat',
+    description: 'Rotating workflow suggestions for empty chat state with inline entity badges (sources, files, folders, skills)',
+    component: EmptyStateHint,
+    props: [
+      {
+        name: 'hintIndex',
+        description: 'Specific hint to display (0-14). Leave empty for random.',
+        control: { type: 'number', min: 0, max: 14, step: 1 },
+        defaultValue: 0,
+      },
+    ],
+    variants: emptyStateHintVariants,
+    mockData: () => ({}),
+  },
   {
     id: 'attachment-preview',
     name: 'AttachmentPreview',

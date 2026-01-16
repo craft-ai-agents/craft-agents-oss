@@ -1,64 +1,40 @@
+import { Markdown } from '@craft-agent/ui/markdown'
+import { CRAFT_LOGO } from '@craft-agent/shared/branding'
+
+const article = `
+# Craft Agent
+
+Craft Agent is an AI-powered desktop application that helps you work seamlessly across your data sources. Built on Claude, it connects your documents, code repositories, APIs, and tools into a unified conversational interface where you can search, analyze, and create without switching contexts.
+
+## Connect Everything
+
+Whether it's your Craft documents, GitHub repositories, Linear issues, Obsidian notes, or custom REST APIs—Craft Agent brings them all together. Configure MCP servers or connect directly to services with OAuth, and let AI traverse your entire knowledge graph to find answers and complete tasks.
+
+## Work Naturally
+
+Instead of learning different interfaces for each tool, just describe what you need. Craft Agent understands context, maintains conversation history, and can execute multi-step workflows that span multiple data sources. It's like having a research assistant who knows where everything is.
+
+## Built for macOS
+
+A native desktop experience with multi-session inbox management, keyboard-first navigation, and seamless integration with your existing workflow. Install with a single command and start connecting your world.
+
+\`\`\`bash
+curl -fsSL https://agents.craft.do/install-app.sh | bash
+\`\`\`
+`
+
 export default function App() {
   return (
-    <main className="min-h-screen bg-white">
-      {/* Hero Section */}
-      <section className="flex flex-col items-center justify-center min-h-screen px-6 text-center">
-        <h1 className="text-5xl font-bold tracking-tight text-gray-900 sm:text-6xl">
-          Craft Agent
-        </h1>
-        <p className="mt-6 text-lg leading-8 text-gray-600 max-w-2xl">
-          Connect your data sources and let AI help you work across them.
-          Bring together your documents, code, and tools in one powerful interface.
-        </p>
-        <div className="mt-10 flex items-center justify-center gap-x-6">
-          <a
-            href="https://agents.craft.do/install-app.sh"
-            className="rounded-md bg-gray-900 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-gray-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-900"
-          >
-            Download for macOS
-          </a>
-          <a
-            href="#features"
-            className="text-sm font-semibold leading-6 text-gray-900"
-          >
-            Learn more <span aria-hidden="true">→</span>
-          </a>
-        </div>
-      </section>
-
-      {/* Features Section */}
-      <section id="features" className="py-24 px-6 bg-gray-50">
-        <div className="mx-auto max-w-4xl">
-          <h2 className="text-3xl font-bold tracking-tight text-gray-900 text-center">
-            Features
-          </h2>
-          <div className="mt-16 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
-            <article className="p-6 bg-white rounded-lg shadow-sm">
-              <h3 className="text-lg font-semibold text-gray-900">Connect Sources</h3>
-              <p className="mt-2 text-gray-600">
-                MCP servers, REST APIs, local filesystems. Integrate Linear, GitHub, Notion, and more.
-              </p>
-            </article>
-            <article className="p-6 bg-white rounded-lg shadow-sm">
-              <h3 className="text-lg font-semibold text-gray-900">AI-Powered</h3>
-              <p className="mt-2 text-gray-600">
-                Powered by Claude. Get intelligent assistance across all your connected data.
-              </p>
-            </article>
-            <article className="p-6 bg-white rounded-lg shadow-sm">
-              <h3 className="text-lg font-semibold text-gray-900">Desktop App</h3>
-              <p className="mt-2 text-gray-600">
-                Native macOS experience with multi-session inbox management.
-              </p>
-            </article>
-          </div>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="py-12 px-6 text-center text-gray-500 text-sm">
-        <p>&copy; {new Date().getFullYear()} Craft Agent. All rights reserved.</p>
-      </footer>
+    <main className="min-h-screen bg-foreground-2 flex flex-col items-center justify-center p-6">
+      {/* ASCII logo from OAuth callback page */}
+      <pre className="text-accent font-mono text-[6px] leading-none whitespace-pre mt-8 mb-16" style={{ letterSpacing: '-0.05em' }}>
+        {CRAFT_LOGO.join('\n')}
+      </pre>
+      <div className="bg-background rounded-[20px] shadow-strong max-w-3xl w-full p-8 md:p-12 text-[13px]">
+        <Markdown>
+          {article}
+        </Markdown>
+      </div>
     </main>
   )
 }

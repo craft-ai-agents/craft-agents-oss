@@ -85,6 +85,7 @@ import { PanelHeader } from "./PanelHeader"
 import SettingsNavigator from "@/pages/settings/SettingsNavigator"
 import { RightSidebar } from "./RightSidebar"
 import type { RichTextInputHandle } from "@/components/ui/rich-text-input"
+import { hasOpenOverlay } from "@/lib/overlay-detection"
 
 /**
  * AppShellProps - Minimal props interface for AppShell component
@@ -487,8 +488,9 @@ function AppShellContent({
           }
         }
       }, when: () => {
-        // Only active when no dialog is open and session is processing
-        if (document.querySelector('[role="dialog"]')) return false
+        // Only active when no overlay is open and session is processing
+        // Overlays (dialogs, menus, popovers, etc.) should handle their own Escape
+        if (hasOpenOverlay()) return false
         if (!session.selected) return false
         const meta = sessionMetaMap.get(session.selected)
         return meta?.isProcessing ?? false

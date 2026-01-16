@@ -10,7 +10,6 @@ import { SessionManager } from './sessions'
 import { registerIpcHandlers } from './ipc'
 import { createApplicationMenu } from './menu'
 import { WindowManager } from './window-manager'
-import { UnifiedPreviewWindowManager } from './unified-preview-window'
 import { loadWindowState, saveWindowState } from './window-state'
 import { getWorkspaces } from '@craft-agent/shared/config'
 import { initializeDocs } from '@craft-agent/shared/docs'
@@ -35,7 +34,6 @@ const DEEPLINK_SCHEME = 'craftagents'
 
 let windowManager: WindowManager | null = null
 let sessionManager: SessionManager | null = null
-let unifiedPreviewWindowManager: UnifiedPreviewWindowManager | null = null
 
 // Store pending deep link if app not ready yet (cold start)
 let pendingDeepLink: string | null = null
@@ -172,10 +170,6 @@ app.whenReady().then(async () => {
     // Create the application menu (needs windowManager for New Window action)
     createApplicationMenu(windowManager)
 
-    // Initialize unified preview window manager (all preview types)
-    unifiedPreviewWindowManager = new UnifiedPreviewWindowManager()
-    unifiedPreviewWindowManager.setWindowManager(windowManager)
-
     // Initialize session manager
     sessionManager = new SessionManager()
     sessionManager.setWindowManager(windowManager)
@@ -184,7 +178,7 @@ app.whenReady().then(async () => {
     initNotificationService(windowManager)
 
     // Register IPC handlers (must happen before window creation)
-    registerIpcHandlers(sessionManager, windowManager, unifiedPreviewWindowManager)
+    registerIpcHandlers(sessionManager, windowManager)
 
     // Create initial windows (restores from saved state or opens first workspace)
     await createInitialWindows()
