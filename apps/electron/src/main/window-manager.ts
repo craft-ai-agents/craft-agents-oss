@@ -108,8 +108,8 @@ export class WindowManager {
       ...(isWindows && {
         frame: true, // Keep native frame for better UX
         autoHideMenuBar: true, // Hide menu bar but accessible via Alt key
+        // Note: Don't use transparent:true with backgroundMaterial - it hides the window frame
         ...(windowsBackgroundMaterial && {
-          transparent: true,
           backgroundMaterial: windowsBackgroundMaterial,
         }),
       }),
