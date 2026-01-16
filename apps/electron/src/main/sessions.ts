@@ -513,7 +513,10 @@ export class SessionManager {
     if (app.isPackaged) {
       // Use platform-specific binary name (bun.exe on Windows, bun on macOS/Linux)
       const bunBinary = process.platform === 'win32' ? 'bun.exe' : 'bun'
-      const bunPath = join(basePath, 'vendor', 'bun', bunBinary)
+      // On Windows, bun.exe is in extraResources (process.resourcesPath) to avoid EBUSY errors.
+      // On macOS/Linux, bun is in the app files (basePath). See electron-builder.yml for details.
+      const bunBasePath = process.platform === 'win32' ? process.resourcesPath : basePath
+      const bunPath = join(bunBasePath, 'vendor', 'bun', bunBinary)
       if (!existsSync(bunPath)) {
         const error = `Bundled Bun runtime not found at ${bunPath}. The app package may be corrupted.`
         sessionLog.error(error)

@@ -309,20 +309,9 @@ if ($relevantProcesses) {
 }
 Write-Host ""
 
-# Pre-create destination and copy bun.exe BEFORE electron-builder runs
-# This avoids electron-builder's internal copy which races with the npm node module collector
-Write-Host "  Pre-copying bun.exe to release directory..."
-$destDir = "$ElectronDir\release\win-unpacked\resources\app\vendor\bun"
-New-Item -ItemType Directory -Force -Path $destDir | Out-Null
-robocopy "$ElectronDir\vendor\bun" $destDir "bun.exe" /R:5 /W:3 /NP /NFL /NDL
-if ($LASTEXITCODE -ge 8) {
-    Write-Host "WARNING: Pre-copy failed with exit code $LASTEXITCODE" -ForegroundColor Yellow
-}
-Write-Host "  Pre-copy complete"
-
-# Wait for file system to settle - Windows can hold file locks briefly after operations
-Write-Host "  Waiting for file system to settle..."
-Start-Sleep -Seconds 3
+# NOTE: bun.exe is now copied via extraResources in electron-builder.yml
+# This avoids EBUSY errors from the npm node module collector.
+# See electron-builder.yml for details.
 
 # Verify bun.exe is accessible (not locked by another process)
 Write-Host "  Verifying $BunExe is accessible..."

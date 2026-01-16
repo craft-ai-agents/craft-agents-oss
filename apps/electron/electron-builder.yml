@@ -88,12 +88,22 @@ win:
   # Disable code signing (causes EBUSY file locking issues in CI)
   # Re-enable when we have a proper Windows code signing certificate
   signAndEditExecutable: false
-  # Exclude ripgrep binaries for other platforms
   files:
+    # Exclude ripgrep binaries for other platforms
     - "!node_modules/@anthropic-ai/claude-agent-sdk/vendor/ripgrep/arm64-linux"
     - "!node_modules/@anthropic-ai/claude-agent-sdk/vendor/ripgrep/x64-linux"
     - "!node_modules/@anthropic-ai/claude-agent-sdk/vendor/ripgrep/arm64-darwin"
     - "!node_modules/@anthropic-ai/claude-agent-sdk/vendor/ripgrep/x64-darwin"
+    # WORKAROUND: Exclude bun from regular files on Windows.
+    # electron-builder's npm node module collector causes EBUSY errors when copying
+    # bun.exe because it scans/locks files while simultaneously trying to copy them.
+    # Moving bun to extraResources avoids this by copying it before the collector runs.
+    # See: https://github.com/electron-userland/electron-builder/issues/8250
+    - "!vendor/bun/**/*"
+  # Copy bun.exe as extraResource to avoid EBUSY file locking (see comment above)
+  extraResources:
+    - from: vendor/bun/bun.exe
+      to: vendor/bun/bun.exe
 
 nsis:
   oneClick: false
