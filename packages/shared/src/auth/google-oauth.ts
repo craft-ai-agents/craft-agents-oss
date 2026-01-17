@@ -23,8 +23,9 @@ export type { GoogleService };
 // Google OAuth configuration - must be set via environment variables
 // These are baked into the build at compile time
 // Used for all Google services (Gmail, Calendar, Drive, etc.)
-// Note: Using PKCE (RFC 7636) allows us to omit client_secret for Desktop apps
+// Note: Google requires client_secret for Desktop apps despite PKCE support
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_OAUTH_CLIENT_ID || '';
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_OAUTH_CLIENT_SECRET || '';
 
 // Google OAuth endpoints
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
@@ -108,6 +109,7 @@ async function exchangeCodeForTokens(
 ): Promise<{ accessToken: string; refreshToken?: string; expiresIn?: number }> {
   const params = new URLSearchParams({
     client_id: GOOGLE_CLIENT_ID,
+    client_secret: GOOGLE_CLIENT_SECRET,
     code,
     code_verifier: codeVerifier,
     grant_type: 'authorization_code',
@@ -163,6 +165,7 @@ export async function refreshGoogleToken(refreshToken: string): Promise<{
 }> {
   const params = new URLSearchParams({
     client_id: GOOGLE_CLIENT_ID,
+    client_secret: GOOGLE_CLIENT_SECRET,
     grant_type: 'refresh_token',
     refresh_token: refreshToken,
   });
@@ -189,10 +192,10 @@ export async function refreshGoogleToken(refreshToken: string): Promise<{
 }
 
 /**
- * Check if Google OAuth is configured (client ID is set)
+ * Check if Google OAuth is configured (client ID and secret are set)
  */
 export function isGoogleOAuthConfigured(): boolean {
-  return Boolean(GOOGLE_CLIENT_ID);
+  return Boolean(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET);
 }
 
 /**
@@ -246,7 +249,8 @@ export async function startGoogleOAuth(
     if (!isGoogleOAuthConfigured()) {
       return {
         success: false,
-        error: 'Google OAuth not configured. Set GOOGLE_OAUTH_CLIENT_ID environment variable.',
+        error:
+          'Google OAuth not configured. Set GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET environment variables.',
       };
     }
 

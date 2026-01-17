@@ -192,6 +192,9 @@ $MainArgs = @(
 if ($env:GOOGLE_OAUTH_CLIENT_ID) {
     $MainArgs += "--define:process.env.GOOGLE_OAUTH_CLIENT_ID=`"'$env:GOOGLE_OAUTH_CLIENT_ID'`""
 }
+if ($env:GOOGLE_OAUTH_CLIENT_SECRET) {
+    $MainArgs += "--define:process.env.GOOGLE_OAUTH_CLIENT_SECRET=`"'$env:GOOGLE_OAUTH_CLIENT_SECRET'`""
+}
 if ($env:SLACK_OAUTH_CLIENT_ID) {
     $MainArgs += "--define:process.env.SLACK_OAUTH_CLIENT_ID=`"'$env:SLACK_OAUTH_CLIENT_ID'`""
 }
