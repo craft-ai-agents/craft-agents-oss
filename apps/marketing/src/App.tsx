@@ -1,4 +1,5 @@
 import { Markdown } from '@craft-agent/ui/markdown'
+import { BayerDitherBackground } from './components/BayerDitherBackground'
 
 const article = `
 # Craft Agent
@@ -24,7 +25,13 @@ curl -fsSL https://agents.craft.do/install-app.sh | bash
 
 export default function App() {
   return (
-    <main className="min-h-screen bg-foreground-2 flex flex-col items-center justify-center p-6">
+    <main className="relative min-h-screen bg-foreground-2 flex flex-col items-center justify-center p-6">
+      <BayerDitherBackground
+        color={[0.45, 0.28, 0.65]}
+        bgColor={[0.08, 0.08, 0.10]}
+        pixelSize={4}
+        shape="square"
+      />
       {/* Craft colorful C logo */}
       <svg className="w-12 h-12 mt-8 mb-16" viewBox="0 0 299 300" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M137.879,300.001 L137.875,300.001 C62.3239,300.001 0.966154,239.232 0.0117188,163.908 L0,162.126 L137.879,162.126 L137.879,300.001 Z" fill="#06367A"/>
@@ -32,7 +39,7 @@ export default function App() {
         <path d="M160.558,137.883 L160.561,137.883 C236.707,137.883 298.436,76.1537 298.436,0.00758561 L298.436,0.00562043 L160.558,0.00562043 L160.558,137.883 Z" fill="#007CFF"/>
         <path d="M160.558,162.123 L160.561,162.123 C236.112,162.123 297.471,222.891 298.426,298.216 L298.436,299.998 L160.558,299.998 L160.558,162.123 Z" fill="#0A377B"/>
       </svg>
-      <div className="bg-background rounded-[20px] shadow-strong max-w-3xl w-full p-8 md:p-12 text-[13px]">
+      <div className="rounded-[20px] max-w-2xl w-full p-8 md:p-12 text-[14px]">
         <Markdown>
           {article}
         </Markdown>

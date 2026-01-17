@@ -14,13 +14,12 @@
 import { z } from 'zod';
 import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
-import { homedir } from 'os';
+import { CONFIG_DIR } from './paths.ts';
 
 // ============================================================
 // Config Directory
 // ============================================================
 
-const CONFIG_DIR = join(homedir(), '.craft-agent');
 const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
 const PREFERENCES_FILE = join(CONFIG_DIR, 'preferences.json');
 

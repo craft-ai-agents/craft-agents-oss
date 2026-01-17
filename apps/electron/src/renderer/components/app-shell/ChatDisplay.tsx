@@ -1047,6 +1047,7 @@ function MessageBubble({
         badges={message.badges}
         isPending={message.isPending}
         isQueued={message.isQueued}
+        ultrathink={message.ultrathink}
         onUrlClick={onOpenUrl}
         onFileClick={onOpenFile}
       />

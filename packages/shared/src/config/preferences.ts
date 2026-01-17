@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'fs';
-import { homedir } from 'os';
 import { join } from 'path';
 import { ensureConfigDir } from './storage.ts';
+import { CONFIG_DIR } from './paths.ts';
 
 export interface UserLocation {
   city?: string;
@@ -20,7 +20,6 @@ export interface UserPreferences {
   updatedAt?: number;
 }
 
-const CONFIG_DIR = join(homedir(), '.craft-agent');
 const PREFERENCES_FILE = join(CONFIG_DIR, 'preferences.json');
 
 export function loadPreferences(): UserPreferences {

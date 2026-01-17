@@ -44,6 +44,23 @@ function EditRequestBadge({ badge }: { badge: ContentBadge }) {
 }
 
 /**
+ * UltrathinkBadge - Indicates the message was sent with ultrathink enabled
+ * Styled with gradient to match the input area ultrathink badge
+ */
+function UltrathinkBadge() {
+  return (
+    <span
+      className="inline-flex items-center h-[28px] px-2.5 rounded-[8px] shadow-tinted bg-gradient-to-r from-blue-600/10 via-purple-600/10 to-pink-600/10 text-xs font-medium"
+      style={{ '--shadow-color': '147, 51, 234' } as React.CSSProperties}
+    >
+      <span className="bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
+        Ultrathink
+      </span>
+    </span>
+  )
+}
+
+/**
  * InlineBadge - Renders a single content badge inline with text
  * Styled to match the input field badges (bg-background with shadow)
  */
@@ -183,6 +200,8 @@ export interface UserMessageBubbleProps {
   isPending?: boolean
   /** Whether the message is queued (badge shown) */
   isQueued?: boolean
+  /** Whether the message was sent with ultrathink enabled */
+  ultrathink?: boolean
 }
 
 export function UserMessageBubble({
@@ -194,6 +213,7 @@ export function UserMessageBubble({
   badges,
   isPending,
   isQueued,
+  ultrathink,
 }: UserMessageBubbleProps) {
   const hasAttachments = attachments && attachments.length > 0
 
@@ -277,9 +297,10 @@ export function UserMessageBubble({
         </div>
       )}
 
-      {/* Edit request badges - rendered above the text bubble */}
-      {hasEditRequestBadges && (
+      {/* Badges row - ultrathink and edit request badges above text bubble */}
+      {(ultrathink || hasEditRequestBadges) && (
         <div className="flex gap-2 justify-end max-w-[80%] flex-wrap">
+          {ultrathink && <UltrathinkBadge />}
           {editRequestBadges.map((badge, i) => (
             <EditRequestBadge key={`edit-badge-${i}`} badge={badge} />
           ))}

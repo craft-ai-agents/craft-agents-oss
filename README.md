@@ -125,6 +125,20 @@ bun run typecheck:all
 # Logs are automatically enabled in development
 ```
 
+### Multi-Instance Development
+
+Run multiple instances simultaneously by cloning to numbered folders:
+
+```bash
+git clone ... craft-tui-agent-1
+git clone ... craft-tui-agent-2
+
+cd craft-tui-agent-1 && bun run electron:dev  # Port 1173, config ~/.craft-agent-1/
+cd craft-tui-agent-2 && bun run electron:dev  # Port 2173, config ~/.craft-agent-2/
+```
+
+Each instance auto-detects from folder name and uses separate ports, config directories, and displays a dock badge to identify the instance.
+
 ### Environment Variables
 
 OAuth integrations require credentials. Set up via 1Password CLI:

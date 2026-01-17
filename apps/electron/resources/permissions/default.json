@@ -2,13 +2,6 @@
   "name": "Default Permissions",
   "description": "Default read-only bash and MCP patterns for Explore mode. Edit this file to customize which commands are allowed without prompting.",
 
-  "blockedTools": [
-    { "pattern": "Write", "comment": "Block file creation" },
-    { "pattern": "Edit", "comment": "Block file editing" },
-    { "pattern": "MultiEdit", "comment": "Block multi-file editing" },
-    { "pattern": "NotebookEdit", "comment": "Block Jupyter notebook editing" }
-  ],
-
   "allowedBashPatterns": [
     { "pattern": "^ls\\b", "comment": "List directory contents" },
     { "pattern": "^ll\\b", "comment": "Long listing (ls -l alias)" },
@@ -38,7 +31,7 @@
     { "pattern": "^fd\\b", "comment": "Fast and user-friendly find alternative" },
     { "pattern": "^fzf\\b", "comment": "Fuzzy finder for files and commands" },
 
-    { "pattern": "^git\\s+(status|log|diff|show|branch|tag|remote|stash\\s+list|describe|rev-parse|config\\s+--get|config\\s+-l|ls-files|ls-tree|shortlog|blame|annotate|reflog|cherry|whatchanged|ls-remote|history)\\b", "comment": "Git read-only operations: view status, history, branches, diffs" },
+    { "pattern": "^git\\s+((-[A-Za-z]|--[a-z][-a-z]*)(\\s+[^\\s-][^\\s]*)?\\s+)*(status|log|diff|show|branch|tag|remote|stash\\s+list|describe|rev-parse|config\\s+--get|config\\s+-l|ls-files|ls-tree|shortlog|blame|annotate|reflog|cherry|whatchanged|ls-remote|history)\\b", "comment": "Git read-only operations (supports flags like -C, --no-pager before subcommand)" },
 
     { "pattern": "^gh\\s+(pr|issue|repo|release|run|workflow|gist|project)\\s+(view|list|status|diff|checks|comments)\\b", "comment": "GitHub CLI read operations: view PRs, issues, releases" },
     { "pattern": "^gh\\s+api\\b.*--method\\s+GET\\b", "comment": "GitHub API with explicit GET method" },
@@ -58,6 +51,7 @@
     { "pattern": "^gem\\s+(list|info|dependency|environment)\\b", "comment": "RubyGems read operations: list gems, show info" },
     { "pattern": "^bundle\\s+(list|info|outdated)\\b", "comment": "Bundler read operations: list gems, check outdated" },
 
+    { "pattern": "^cd\\b", "comment": "Change directory (affects shell session only)" },
     { "pattern": "^pwd\\b", "comment": "Print current working directory" },
     { "pattern": "^whoami\\b", "comment": "Print current username" },
     { "pattern": "^id\\b", "comment": "Print user and group IDs" },

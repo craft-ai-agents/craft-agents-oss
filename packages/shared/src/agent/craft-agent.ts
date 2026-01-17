@@ -39,7 +39,7 @@ import {
   PERMISSION_MODE_CONFIG,
   SAFE_MODE_CONFIG,
 } from './mode-manager.ts';
-import type { PermissionsContext } from './permissions-config.ts';
+import { type PermissionsContext, permissionsConfigCache } from './permissions-config.ts';
 import { getSessionPlansPath, getSessionPath } from '../sessions/storage.ts';
 import { expandPath } from '../utils/paths.ts';
 import {
@@ -1228,7 +1228,9 @@ export class CraftAgent {
                 const baseCommand = this.getBaseCommand(commandStr);
 
                 // Auto-allow read-only commands (same ones allowed in Explore mode)
-                const isReadOnly = SAFE_MODE_CONFIG.readOnlyBashPatterns.some(pattern => pattern.test(commandStr.trim()));
+                // Use merged config to get actual patterns from default.json (SAFE_MODE_CONFIG has empty arrays)
+                const mergedConfig = permissionsConfigCache.getMergedConfig(permissionsContext);
+                const isReadOnly = mergedConfig.readOnlyBashPatterns.some(pattern => pattern.regex.test(commandStr.trim()));
                 if (isReadOnly) {
                   this.onDebug?.(`Auto-allowing read-only command: ${baseCommand}`);
                   return { continue: true };

@@ -41,6 +41,8 @@
   },
   "dependencies": {
     "@craft-agent/core": "workspace:*",
+    "bash-parser": "^0.5.0",
+    "incr-regex-package": "^1.0.4",
     "shell-quote": "^1.8.3"
   },
   "peerDependencies": {

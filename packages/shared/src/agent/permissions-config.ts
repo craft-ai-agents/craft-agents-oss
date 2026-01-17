@@ -11,10 +11,10 @@
  * Rules are additive - custom configs extend the defaults (more permissive).
  */
 
-import { existsSync, readFileSync, mkdirSync, writeFileSync, readdirSync } from 'fs';
+import { existsSync, readFileSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
-import { homedir } from 'os';
 import { debug } from '../utils/debug.ts';
+import { CONFIG_DIR } from '../config/paths.ts';
 import { getSourcePath } from '../sources/storage.ts';
 import {
   SAFE_MODE_CONFIG,
@@ -22,13 +22,14 @@ import {
   type ApiEndpointRule,
   type PermissionsConfigFile,
   type CompiledApiEndpointRule,
+  type CompiledBashPattern,
+  type PermissionPaths,
 } from './mode-types.ts';
 
 // ============================================================
 // App-level Permissions Directory
 // ============================================================
 
-const CONFIG_DIR = join(homedir(), '.craft-agent');
 const APP_PERMISSIONS_DIR = join(CONFIG_DIR, 'permissions');
 
 /**
@@ -102,6 +103,8 @@ export {
   type ApiEndpointRule,
   type PermissionsConfigFile,
   type CompiledApiEndpointRule,
+  type CompiledBashPattern,
+  type PermissionPaths,
 };
 
 // ============================================================
@@ -109,13 +112,24 @@ export {
 // ============================================================
 
 /**
+ * Pattern entry with optional comment for error messages.
+ * Preserves the comment from permissions.json so we can show helpful hints.
+ */
+export interface PatternWithComment {
+  pattern: string;
+  comment?: string;
+}
+
+/**
  * Parsed and normalized permissions configuration
+ *
+ * Note: blockedTools (Write, Edit, MultiEdit, NotebookEdit) are hardcoded in
+ * SAFE_MODE_CONFIG and not configurable here - they're fundamental write
+ * operations that must always be blocked in Explore mode.
  */
 export interface PermissionsCustomConfig {
-  /** Additional tools to block */
-  blockedTools: string[];
-  /** Additional bash patterns to allow (as regex strings) */
-  allowedBashPatterns: string[];
+  /** Additional bash patterns to allow (with optional comments for error messages) */
+  allowedBashPatterns: PatternWithComment[];
   /** Additional MCP patterns to allow (as regex strings) */
   allowedMcpPatterns: string[];
   /** API endpoint rules for fine-grained control */
@@ -128,11 +142,10 @@ export interface PermissionsCustomConfig {
  * Merged permissions config for runtime use
  */
 export interface MergedPermissionsConfig {
-  /** All blocked tools (safe mode defaults + custom) - used in safe mode */
+  /** Blocked tools (Write, Edit, MultiEdit, NotebookEdit) - hardcoded, not configurable */
   blockedTools: Set<string>;
-  /** Only tools blocked via permissions.json - used in ask/allow-all modes */
-  customBlockedTools: Set<string>;
-  readOnlyBashPatterns: RegExp[];
+  /** Read-only bash patterns with metadata for helpful error messages */
+  readOnlyBashPatterns: CompiledBashPattern[];
   readOnlyMcpPatterns: RegExp[];
   /** Fine-grained API endpoint rules */
   allowedApiEndpoints: CompiledApiEndpointRule[];
@@ -142,6 +155,8 @@ export interface MergedPermissionsConfig {
   displayName: string;
   /** Keyboard shortcut hint */
   shortcutHint: string;
+  /** Paths to permission files for actionable error messages */
+  permissionPaths?: PermissionPaths;
 }
 
 /**
@@ -162,7 +177,6 @@ export interface PermissionsContext {
  */
 export function parsePermissionsJson(content: string): PermissionsCustomConfig {
   const emptyConfig: PermissionsCustomConfig = {
-    blockedTools: [],
     allowedBashPatterns: [],
     allowedMcpPatterns: [],
     allowedApiEndpoints: [],
@@ -184,15 +198,25 @@ export function parsePermissionsJson(content: string): PermissionsCustomConfig {
 
     const data = result.data;
 
-    // Normalize patterns (extract string from pattern objects)
+    // Normalize patterns (extract string from pattern objects, but NOT for bash - preserve comments)
     const normalizePatterns = (patterns: Array<string | { pattern: string; comment?: string }> | undefined): string[] => {
       if (!patterns) return [];
       return patterns.map(p => typeof p === 'string' ? p : p.pattern);
     };
 
+    // For bash patterns, preserve comments for helpful error messages
+    const normalizeBashPatterns = (patterns: Array<string | { pattern: string; comment?: string }> | undefined): PatternWithComment[] => {
+      if (!patterns) return [];
+      return patterns.map(p => {
+        if (typeof p === 'string') {
+          return { pattern: p };
+        }
+        return { pattern: p.pattern, comment: p.comment };
+      });
+    };
+
     return {
-      blockedTools: normalizePatterns(data.blockedTools),
-      allowedBashPatterns: normalizePatterns(data.allowedBashPatterns),
+      allowedBashPatterns: normalizeBashPatterns(data.allowedBashPatterns),
       allowedMcpPatterns: normalizePatterns(data.allowedMcpPatterns),
       allowedApiEndpoints: data.allowedApiEndpoints ?? [],
       allowedWritePaths: normalizePatterns(data.allowedWritePaths),
@@ -449,16 +473,23 @@ class PermissionsConfigCache {
   private buildMergedConfig(context: PermissionsContext): MergedPermissionsConfig {
     const defaults = SAFE_MODE_CONFIG;
 
-    // Start with hardcoded fallback defaults (blocked tools, display settings)
+    // Start with hardcoded fallback defaults (blocked tools are fixed, display settings)
+    // blockedTools (Write, Edit, MultiEdit, NotebookEdit) come from SAFE_MODE_CONFIG
+    // and cannot be modified via permissions.json
     const merged: MergedPermissionsConfig = {
       blockedTools: new Set(defaults.blockedTools),
-      customBlockedTools: new Set(), // Empty - only from permissions.json
       readOnlyBashPatterns: [...defaults.readOnlyBashPatterns],
       readOnlyMcpPatterns: [...defaults.readOnlyMcpPatterns],
       allowedApiEndpoints: [],
       allowedWritePaths: [],
       displayName: defaults.displayName,
       shortcutHint: defaults.shortcutHint,
+      // Add permission file paths for actionable error messages
+      permissionPaths: {
+        workspacePath: getWorkspacePermissionsPath(context.workspaceRootPath),
+        appDefaultPath: join(getAppPermissionsDir(), 'default.json'),
+        docsPath: join(CONFIG_DIR, 'docs', 'permissions.md'),
+      },
     };
 
     // Load and apply app-level default permissions from JSON
@@ -490,23 +521,21 @@ class PermissionsConfigCache {
 
   /**
    * Apply app-level default config (from default.json)
-   * Unlike custom configs, blocked tools from defaults go ONLY to blockedTools,
-   * not to customBlockedTools (since they're system defaults, not user overrides)
+   * This adds bash/MCP patterns from the JSON config. Blocked tools are hardcoded
+   * in SAFE_MODE_CONFIG and not loaded from JSON.
    */
   private applyDefaultConfig(merged: MergedPermissionsConfig, config: PermissionsCustomConfig): void {
-    // Add blocked tools from defaults (these are system defaults, not custom overrides)
-    for (const tool of config.blockedTools) {
-      merged.blockedTools.add(tool);
-      // Note: NOT adding to customBlockedTools - these are defaults, not user customizations
-    }
-
-    // Add allowed bash patterns
-    for (const pattern of config.allowedBashPatterns) {
-      const regex = validateRegex(pattern);
+    // Add allowed bash patterns (as CompiledBashPattern with metadata for error messages)
+    for (const patternEntry of config.allowedBashPatterns) {
+      const regex = validateRegex(patternEntry.pattern);
       if (regex) {
-        merged.readOnlyBashPatterns.push(regex);
+        merged.readOnlyBashPatterns.push({
+          regex,
+          source: patternEntry.pattern,
+          comment: patternEntry.comment,
+        });
       } else {
-        debug(`[Permissions] Invalid default bash pattern, skipping: ${pattern}`);
+        debug(`[Permissions] Invalid default bash pattern, skipping: ${patternEntry.pattern}`);
       }
     }
 
@@ -538,19 +567,17 @@ class PermissionsConfigCache {
   }
 
   private applyCustomConfig(merged: MergedPermissionsConfig, custom: PermissionsCustomConfig): void {
-    // Add blocked tools to both sets (blockedTools for safe mode, customBlockedTools for ask/allow-all)
-    for (const tool of custom.blockedTools) {
-      merged.blockedTools.add(tool);
-      merged.customBlockedTools.add(tool);
-    }
-
     // Add allowed bash patterns (making config more permissive)
-    for (const pattern of custom.allowedBashPatterns) {
-      const regex = validateRegex(pattern);
+    for (const patternEntry of custom.allowedBashPatterns) {
+      const regex = validateRegex(patternEntry.pattern);
       if (regex) {
-        merged.readOnlyBashPatterns.push(regex);
+        merged.readOnlyBashPatterns.push({
+          regex,
+          source: patternEntry.pattern,
+          comment: patternEntry.comment,
+        });
       } else {
-        debug(`[Permissions] Invalid bash pattern, skipping: ${pattern}`);
+        debug(`[Permissions] Invalid bash pattern, skipping: ${patternEntry.pattern}`);
       }
     }
 
@@ -594,12 +621,7 @@ class PermissionsConfigCache {
     custom: PermissionsCustomConfig,
     sourceSlug: string
   ): void {
-    // Blocked tools and write paths - apply normally (global effect)
-    for (const tool of custom.blockedTools) {
-      merged.blockedTools.add(tool);
-      merged.customBlockedTools.add(tool);
-    }
-
+    // Write paths - apply normally (global effect)
     for (const pattern of custom.allowedWritePaths) {
       merged.allowedWritePaths.push(pattern);
     }
@@ -619,12 +641,16 @@ class PermissionsConfigCache {
     }
 
     // Bash patterns - apply normally (not source-specific)
-    for (const pattern of custom.allowedBashPatterns) {
-      const regex = validateRegex(pattern);
+    for (const patternEntry of custom.allowedBashPatterns) {
+      const regex = validateRegex(patternEntry.pattern);
       if (regex) {
-        merged.readOnlyBashPatterns.push(regex);
+        merged.readOnlyBashPatterns.push({
+          regex,
+          source: patternEntry.pattern,
+          comment: patternEntry.comment,
+        });
       } else {
-        debug(`[Permissions] Invalid bash pattern, skipping: ${pattern}`);
+        debug(`[Permissions] Invalid bash pattern, skipping: ${patternEntry.pattern}`);
       }
     }
 

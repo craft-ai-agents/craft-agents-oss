@@ -138,6 +138,14 @@ export function SessionMenu({
     window.electronAPI.sessionCommand(sessionId, { type: 'showInFinder' })
   }
 
+  const handleCopyPath = async () => {
+    const result = await window.electronAPI.sessionCommand(sessionId, { type: 'copyPath' }) as { success: boolean; path?: string } | undefined
+    if (result?.success && result.path) {
+      await navigator.clipboard.writeText(result.path)
+      toast.success('Path copied to clipboard')
+    }
+  }
+
   const handleRefreshTitle = async () => {
     const result = await window.electronAPI.sessionCommand(sessionId, { type: 'refreshTitle' }) as { success: boolean; title?: string; error?: string } | undefined
     if (result?.success) {
@@ -283,6 +291,12 @@ export function SessionMenu({
       <MenuItem onClick={handleShowInFinder}>
         <FolderOpen className="h-3.5 w-3.5" />
         <span className="flex-1">View in Finder</span>
+      </MenuItem>
+
+      {/* Copy Path */}
+      <MenuItem onClick={handleCopyPath}>
+        <Copy className="h-3.5 w-3.5" />
+        <span className="flex-1">Copy Path</span>
       </MenuItem>
 
       <Separator />

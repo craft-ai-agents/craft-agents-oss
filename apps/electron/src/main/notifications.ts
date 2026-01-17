@@ -17,6 +17,7 @@ let windowManager: WindowManager | null = null
 let baseIconPath: string | null = null
 let baseIconDataUrl: string | null = null
 let currentBadgeCount: number = 0
+let instanceNumber: number | null = null  // Multi-instance dev: instance number for dock badge
 
 /**
  * Initialize the notification service with window manager reference
@@ -241,4 +242,31 @@ export function clearBadgeCount(): void {
 export function isAnyWindowFocused(): boolean {
   const focusedWindow = BrowserWindow.getFocusedWindow()
   return focusedWindow !== null && !focusedWindow.isDestroyed()
+}
+
+/**
+ * Initialize instance badge for multi-instance development.
+ *
+ * When running from a numbered folder (e.g., craft-tui-agent-1), this shows
+ * a permanent badge on the dock icon to distinguish between instances.
+ * Uses macOS dock.setBadge() for text-based badge display.
+ *
+ * @param number - Instance number (1, 2, etc.) or null for default instance
+ */
+export function initInstanceBadge(number: number): void {
+  if (process.platform !== 'darwin') {
+    // Instance badge only supported on macOS for now
+    return
+  }
+
+  instanceNumber = number
+
+  try {
+    // Use dock.setBadge() for simple text badge
+    // This shows the number in a red badge on the dock icon
+    app.dock?.setBadge(String(number))
+    mainLog.info(`Instance badge set: ${number}`)
+  } catch (error) {
+    mainLog.error('Failed to set instance badge:', error)
+  }
 }

@@ -54,10 +54,12 @@ const PatternSchema = z.union([
 
 /**
  * Permissions JSON configuration schema
+ *
+ * Note: blockedTools (Write, Edit, MultiEdit, NotebookEdit) are hardcoded in
+ * SAFE_MODE_CONFIG and cannot be configured via JSON. These represent fundamental
+ * write operations that must always be blocked in Explore mode.
  */
 export const PermissionsConfigSchema = z.object({
-  /** Additional tools to block (supports plain strings or { pattern, comment } objects) */
-  blockedTools: z.array(PatternSchema).optional(),
   /** Bash command patterns to allow (regex strings) */
   allowedBashPatterns: z.array(PatternSchema).optional(),
   /** MCP tool patterns to allow (regex strings) */
@@ -83,15 +85,61 @@ export interface CompiledApiEndpointRule {
 }
 
 /**
+ * Compiled bash pattern with metadata for error messages.
+ * Stores the original pattern string and comment alongside the compiled RegExp
+ * so we can provide helpful error messages when commands don't match.
+ */
+export interface CompiledBashPattern {
+  /** Compiled regex for matching */
+  regex: RegExp;
+  /** Original pattern string (for error messages) */
+  source: string;
+  /** Human-readable comment explaining what this pattern allows */
+  comment?: string;
+}
+
+/**
+ * Analysis of why a command didn't match a pattern.
+ * Used by incr-regex-package to provide detailed diagnostics showing
+ * exactly WHERE matching failed and what was expected.
+ */
+export interface MismatchAnalysis {
+  /** How much of the command matched before failure */
+  matchedPrefix: string;
+  /** Character position where matching stopped */
+  failedAtPosition: number;
+  /** The token/word that caused the mismatch */
+  failedToken: string;
+  /** The pattern that got closest to matching */
+  bestMatchPattern?: {
+    source: string;
+    comment?: string;
+  };
+  /** Actionable suggestion for the user/agent */
+  suggestion?: string;
+}
+
+/**
+ * Paths to permissions configuration files.
+ * Used in error messages to guide the agent on how to customize permissions.
+ */
+export interface PermissionPaths {
+  /** Path to workspace-level permissions.json */
+  workspacePath: string;
+  /** Path to app-level default.json */
+  appDefaultPath: string;
+  /** Path to permissions documentation */
+  docsPath: string;
+}
+
+/**
  * Safe mode configuration - defines behavior for read-only mode
  */
 export interface ModeConfig {
-  /** Tools that are always blocked in safe mode (Write, Edit, etc.) */
+  /** Tools that are always blocked in safe mode (Write, Edit, etc.) - hardcoded, not configurable */
   blockedTools: Set<string>;
-  /** Tools blocked via permissions.json only - used in ask/allow-all modes */
-  customBlockedTools?: Set<string>;
-  /** Read-only Bash command patterns (commands matching these are allowed) */
-  readOnlyBashPatterns: RegExp[];
+  /** Read-only Bash command patterns with metadata for helpful error messages */
+  readOnlyBashPatterns: CompiledBashPattern[];
   /** Read-only MCP patterns (tools matching these are allowed) */
   readOnlyMcpPatterns: RegExp[];
   /** Fine-grained API endpoint rules (method + path pattern) */
@@ -102,6 +150,8 @@ export interface ModeConfig {
   displayName: string;
   /** Keyboard shortcut hint */
   shortcutHint: string;
+  /** Paths to permission files for actionable error messages */
+  permissionPaths?: PermissionPaths;
 }
 
 // ============================================================

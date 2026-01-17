@@ -392,6 +392,7 @@ export type SessionCommand =
   | { type: 'updateWorkingDirectory'; dir: string }
   | { type: 'setSources'; sourceSlugs: string[] }
   | { type: 'showInFinder' }
+  | { type: 'copyPath' }
   | { type: 'shareToViewer' }
   | { type: 'updateShare' }
   | { type: 'revokeShare' }

@@ -1,5 +1,4 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, statSync } from 'fs';
-import { homedir } from 'os';
 import { join, dirname } from 'path';
 import { getCredentialManager } from '../credentials/index.ts';
 import { getOrCreateLatestSession, type SessionConfig } from '../sessions/index.ts';
@@ -12,9 +11,13 @@ import {
 import { findIconFile } from '../utils/icon.ts';
 import { initializeDocs } from '../docs/index.ts';
 import { expandPath, toPortablePath } from '../utils/paths.ts';
+import { CONFIG_DIR } from './paths.ts';
 import type { StoredAttachment, StoredMessage } from '@craft-agent/core/types';
 import type { Plan } from '../agent/plan-types.ts';
 import type { PermissionMode } from '../agent/mode-manager.ts';
+
+// Re-export CONFIG_DIR for convenience (centralized in paths.ts)
+export { CONFIG_DIR } from './paths.ts';
 
 // Re-export base types from core (single source of truth)
 export type {
@@ -63,7 +66,6 @@ export interface StoredConfig {
   pendingUpdate?: PendingUpdate;  // Update ready for auto-install on next launch
 }
 
-const CONFIG_DIR = join(homedir(), '.craft-agent');
 const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
 
 export function ensureConfigDir(): void {

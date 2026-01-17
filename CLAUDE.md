@@ -30,6 +30,35 @@ bun run viewer:dev           # Web viewer at http://localhost:5174
 bun run typecheck:all        # Type check all packages
 ```
 
+## Multi-Instance Development
+
+Run multiple instances simultaneously by cloning to numbered folders:
+
+```bash
+# Clone to numbered folders
+git clone ... craft-tui-agent-1
+git clone ... craft-tui-agent-2
+
+# Each instance auto-detects from folder name
+cd craft-tui-agent-1 && bun run electron:dev  # Port 1173, config ~/.craft-agent-1/
+cd craft-tui-agent-2 && bun run electron:dev  # Port 2173, config ~/.craft-agent-2/
+```
+
+**Auto-detected settings per instance:**
+
+| Folder Suffix | Vite Port | Config Dir | App Name | Dock Badge |
+|---------------|-----------|------------|----------|------------|
+| (none) | 5173 | `~/.craft-agent/` | Craft Agents | - |
+| `-1` | 1173 | `~/.craft-agent-1/` | Craft Agents [1] | "1" |
+| `-2` | 2173 | `~/.craft-agent-2/` | Craft Agents [2] | "2" |
+
+**Environment variables** (set by `scripts/detect-instance.sh`):
+- `CRAFT_VITE_PORT` - Vite dev server port
+- `CRAFT_CONFIG_DIR` - Config directory path
+- `CRAFT_APP_NAME` - App display name
+- `CRAFT_INSTANCE_NUMBER` - Instance number for dock badge
+- `CRAFT_DEEPLINK_SCHEME` - Deep link URL scheme (craftagents, craftagents1, etc.)
+
 ## Releasing
 
 ### Electron Desktop App (Multi-Platform)

@@ -17,8 +17,8 @@
 
 import { watch, existsSync, readdirSync, statSync, readFileSync, mkdirSync } from 'fs';
 import { join, dirname, basename, relative } from 'path';
-import { homedir } from 'os';
 import type { FSWatcher } from 'fs';
+import { CONFIG_DIR } from './paths.ts';
 import { debug } from '../utils/debug.ts';
 import { perf } from '../utils/perf.ts';
 import { loadStoredConfig, type StoredConfig } from './storage.ts';
@@ -52,7 +52,6 @@ import type { ThemeOverrides, PresetTheme } from './theme.ts';
 // Constants
 // ============================================================
 
-const CONFIG_DIR = join(homedir(), '.craft-agent');
 const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
 const PREFERENCES_FILE = join(CONFIG_DIR, 'preferences.json');
 
