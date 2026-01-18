@@ -175,6 +175,19 @@ export async function rebuildMenu(): Promise<void> {
               mainLog.error('[debug-menu] Install failed:', err)
             }
           }
+        },
+        { type: 'separator' as const },
+        {
+          label: 'Reset to Defaults...',
+          click: async () => {
+            const { dialog } = await import('electron')
+            await dialog.showMessageBox({
+              type: 'info',
+              message: 'Reset to Defaults',
+              detail: 'To reset Craft Agent to defaults, quit the app and run:\n\nbun run fresh-start\n\nThis will delete all configuration, credentials, workspaces, and sessions.',
+              buttons: ['OK']
+            })
+          }
         }
       ]
     }] : []),
@@ -187,15 +200,6 @@ export async function rebuildMenu(): Promise<void> {
           label: 'Keyboard Shortcuts',
           accelerator: 'CmdOrCtrl+/',
           click: () => sendToRenderer(IPC_CHANNELS.MENU_KEYBOARD_SHORTCUTS)
-        },
-        {
-          label: 'Documentation',
-          click: () => sendToRenderer(IPC_CHANNELS.MENU_OPEN_HELP)
-        },
-        { type: 'separator' as const },
-        {
-          label: 'Open Craft App',
-          click: () => shell.openExternal('craftdocs://')
         }
       ]
     }

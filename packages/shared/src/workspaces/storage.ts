@@ -20,6 +20,8 @@ import { homedir } from 'os';
 import { randomUUID } from 'crypto';
 import { expandPath, toPortablePath } from '../utils/paths.ts';
 import { getDefaultStatusConfig, saveStatusConfig, ensureDefaultIconFiles } from '../statuses/storage.ts';
+import { loadConfigDefaults } from '../config/storage.ts';
+import { DEFAULT_MODEL } from '../config/models.ts';
 import type {
   WorkspaceConfig,
   CreateWorkspaceInput,
@@ -242,10 +244,18 @@ export function createWorkspaceAtPath(
   const now = Date.now();
   const slug = generateSlug(name);
 
-  // Default workingDirectory to rootPath if not specified
+  // Load global defaults from config-defaults.json
+  const globalDefaults = loadConfigDefaults();
+
+  // Merge global defaults with provided defaults
   const workspaceDefaults: WorkspaceConfig['defaults'] = {
+    model: DEFAULT_MODEL,
+    permissionMode: globalDefaults.workspaceDefaults.permissionMode,
+    cyclablePermissionModes: globalDefaults.workspaceDefaults.cyclablePermissionModes,
+    thinkingLevel: globalDefaults.workspaceDefaults.thinkingLevel,
+    enabledSourceSlugs: [],
     workingDirectory: rootPath,
-    ...defaults,
+    ...defaults, // User-provided defaults override global defaults
   };
 
   const config: WorkspaceConfig = {
@@ -253,6 +263,7 @@ export function createWorkspaceAtPath(
     name,
     slug,
     defaults: workspaceDefaults,
+    localMcpServers: globalDefaults.workspaceDefaults.localMcpServers,
     createdAt: now,
     updatedAt: now,
   };

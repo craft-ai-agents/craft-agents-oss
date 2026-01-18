@@ -44,7 +44,7 @@ function getOAuthIconVariant(status: CredentialStatus): StepIconVariant {
 const OAUTH_STATUS_CONTENT: Record<CredentialStatus, { title: string; description: string }> = {
   idle: {
     title: 'Connect Claude Account',
-    description: 'Sign in with your Claude Pro or Max subscription to continue.',
+    description: 'Use your Claude subscription to power multi-agent workflows.',
   },
   validating: {
     title: 'Connecting...',
@@ -205,7 +205,10 @@ export function CredentialsStep({
       <form id="api-key-form" onSubmit={handleSubmit}>
         <div className="space-y-2">
           <Label htmlFor="api-key">Anthropic API Key</Label>
-          <div className="relative">
+          <div className={cn(
+            "relative rounded-md shadow-minimal transition-colors",
+            "bg-foreground-2 focus-within:bg-background"
+          )}>
             <Input
               id="api-key"
               type={showValue ? 'text' : 'password'}
@@ -213,8 +216,8 @@ export function CredentialsStep({
               onChange={(e) => setValue(e.target.value)}
               placeholder="sk-ant-..."
               className={cn(
-                "pr-10",
-                status === 'error' && "border-destructive focus-visible:ring-destructive"
+                "pr-10 border-0 bg-transparent shadow-none",
+                status === 'error' && "focus-visible:ring-destructive"
               )}
               disabled={status === 'validating'}
               autoFocus

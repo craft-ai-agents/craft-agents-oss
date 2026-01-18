@@ -10,7 +10,7 @@ import {
   loadStoredConfig,
   getWorkspaces,
   getWorkspaceByNameOrId,
-  getDefaultPermissionMode,
+  loadConfigDefaults,
   type Workspace,
 } from '@craft-agent/shared/config'
 import { loadWorkspaceConfig } from '@craft-agent/shared/workspaces'
@@ -1077,12 +1077,18 @@ export class SessionManager {
 
     // Get new session defaults from workspace config (with global fallback)
     // Options.permissionMode overrides the workspace default (used by EditPopover for auto-execute)
-    const defaultPermissionMode = options?.permissionMode ?? getDefaultPermissionMode()
     const workspaceRootPath = workspace.rootPath
     const wsConfig = loadWorkspaceConfig(workspaceRootPath)
+    const globalDefaults = loadConfigDefaults()
+
+    // Read permission mode from workspace config, fallback to global defaults
+    const defaultPermissionMode = options?.permissionMode
+      ?? wsConfig?.defaults?.permissionMode
+      ?? globalDefaults.workspaceDefaults.permissionMode
+
     const userDefaultWorkingDir = wsConfig?.defaults?.workingDirectory || undefined
-    // Get default thinking level from workspace config, fallback to 'think'
-    const defaultThinkingLevel = wsConfig?.defaults?.thinkingLevel ?? DEFAULT_THINKING_LEVEL
+    // Get default thinking level from workspace config, fallback to global defaults
+    const defaultThinkingLevel = wsConfig?.defaults?.thinkingLevel ?? globalDefaults.workspaceDefaults.thinkingLevel
 
     // Resolve working directory from options:
     // - 'user_default' or undefined: Use workspace's configured default

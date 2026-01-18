@@ -6,7 +6,7 @@ import { getSystemPrompt, getDateTimeContext, getWorkingDirectoryContext } from 
 // Plan types are used by UI components; not needed in craft-agent.ts since Safe Mode is user-controlled
 import { parseError, type AgentError } from './errors.ts';
 import { runErrorDiagnostics } from './diagnostics.ts';
-import { loadStoredConfig, getDefaultPermissionMode, type Workspace } from '../config/storage.ts';
+import { loadStoredConfig, loadConfigDefaults, type Workspace } from '../config/storage.ts';
 import { isLocalMcpEnabled } from '../workspaces/storage.ts';
 import { loadPlanFromPath, type SessionConfig as Session } from '../sessions/storage.ts';
 import { DEFAULT_MODEL } from '../config/models.ts';
@@ -439,7 +439,8 @@ export class CraftAgent {
     // Initialize permission mode state with callbacks
     const sessionId = this.modeSessionId;
     // Get initial mode: from session, or from global default
-    const initialMode: PermissionMode = config.session?.permissionMode ?? getDefaultPermissionMode();
+    const globalDefaults = loadConfigDefaults();
+    const initialMode: PermissionMode = config.session?.permissionMode ?? globalDefaults.workspaceDefaults.permissionMode;
 
     initializeModeState(sessionId, initialMode, {
       onStateChange: (state) => {

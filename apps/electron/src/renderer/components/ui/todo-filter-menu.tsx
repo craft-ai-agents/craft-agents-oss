@@ -32,7 +32,7 @@ function StateItemContent({ state }: { state: TodoState }) {
     <>
       <span
         className={cn(
-          "shrink-0 flex items-center mt-px",
+          "shrink-0 flex items-center",
           applyColor && !isHexColor(state.color) && (state.color || "text-muted-foreground")
         )}
         style={applyColor && isHexColor(state.color) ? { color: state.color } : undefined}

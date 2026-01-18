@@ -33,17 +33,6 @@ export interface OAuthCredentials {
   tokenType: string;
 }
 
-// Token display mode for status bar
-export type TokenDisplayMode = 'hidden' | 'total' | 'separate';
-
-// Global cumulative usage tracking across all workspaces
-export interface CumulativeUsage {
-  totalCostUsd: number;
-  totalInputTokens: number;
-  totalOutputTokens: number;
-  lastUpdated: number;
-}
-
 // Config stored in JSON file (credentials stored in encrypted file, not here)
 export interface StoredConfig {
   authType?: AuthType;
@@ -51,8 +40,5 @@ export interface StoredConfig {
   activeWorkspaceId: string | null;
   activeSessionId: string | null;  // Currently active session (primary scope)
   model?: string;
-  tokenDisplay?: TokenDisplayMode;  // How to show tokens in status bar
-  showCost?: boolean;  // Whether to show cost in status bar
-  cumulativeUsage?: CumulativeUsage;  // Global cumulative cost
 }
 

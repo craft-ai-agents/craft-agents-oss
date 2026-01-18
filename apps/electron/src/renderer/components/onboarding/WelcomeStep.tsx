@@ -1,9 +1,8 @@
 import { CraftAgentsSymbol } from "@/components/icons/CraftAgentsSymbol"
-import { StepFormLayout, BackButton, ContinueButton } from "./primitives"
+import { StepFormLayout, ContinueButton } from "./primitives"
 
 interface WelcomeStepProps {
   onContinue: () => void
-  onCancel?: () => void
   /** Whether this is an existing user updating settings */
   isExistingUser?: boolean
 }
@@ -17,7 +16,6 @@ interface WelcomeStepProps {
  */
 export function WelcomeStep({
   onContinue,
-  onCancel,
   isExistingUser = false
 }: WelcomeStepProps) {
   return (
@@ -30,16 +28,13 @@ export function WelcomeStep({
       title={isExistingUser ? 'Update Settings' : 'Welcome to Craft Agents'}
       description={
         isExistingUser
-          ? 'You can update your billing method or connect a different Craft space.'
-          : <>A new way to manage your<br />work, knowledge, and tools.</>
+          ? 'Update billing or change your setup.'
+          : 'Agents with the UX they deserve. Connect anything. Organize your sessions. Everything you need to do the work of your life!'
       }
       actions={
-        <>
-          {onCancel && <BackButton onClick={onCancel}>Cancel</BackButton>}
-          <ContinueButton onClick={onContinue} className={onCancel ? undefined : "w-full"}>
-            {isExistingUser ? 'Continue' : 'Get Started'}
-          </ContinueButton>
-        </>
+        <ContinueButton onClick={onContinue} className="w-full">
+          {isExistingUser ? 'Continue' : 'Get Started'}
+        </ContinueButton>
       }
     />
   )

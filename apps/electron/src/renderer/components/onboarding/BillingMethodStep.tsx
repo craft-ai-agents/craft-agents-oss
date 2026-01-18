@@ -23,7 +23,7 @@ const BILLING_OPTIONS: BillingOption[] = [
   {
     id: 'api_key',
     name: 'Anthropic API Key',
-    description: 'Pay-as-you-go with your own API key from console.anthropic.com',
+    description: 'Pay-as-you-go with your own API key.',
     icon: <Key className="size-4" />,
   },
 ]
@@ -51,7 +51,7 @@ export function BillingMethodStep({
   return (
     <StepFormLayout
       title="Choose Billing Method"
-      description="Select how you'd like to pay for AI usage."
+      description="Select how you'd like to power your AI agents."
       actions={
         <>
           <BackButton onClick={onBack} />
@@ -69,11 +69,12 @@ export function BillingMethodStep({
               key={option.id}
               onClick={() => onSelect(option.id)}
               className={cn(
-                "flex w-full items-start gap-4 rounded-xl border p-4 text-left transition-all",
-                "hover:bg-foreground/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "flex w-full items-start gap-4 rounded-xl p-4 text-left transition-all",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "hover:bg-foreground/[0.02] shadow-minimal",
                 isSelected
-                  ? "border-foreground bg-foreground/5"
-                  : "border-border"
+                  ? "bg-background"
+                  : "bg-foreground-2"
               )}
             >
               {/* Icon */}

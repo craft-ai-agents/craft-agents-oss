@@ -10,7 +10,7 @@ import { WindowManager } from './window-manager'
 import { registerOnboardingHandlers } from './onboarding'
 import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type AuthType, type BillingMethodInfo, type SendMessageOptions } from '../shared/types'
 import { readFileAttachment, perf, validateImageForClaudeAPI, IMAGE_LIMITS } from '@craft-agent/shared/utils'
-import { getAuthType, setAuthType, getPreferencesPath, getModel, setModel, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getDefaultPermissionMode, setDefaultPermissionMode, getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, type Workspace } from '@craft-agent/shared/config'
+import { getAuthType, setAuthType, getPreferencesPath, getModel, setModel, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, type Workspace } from '@craft-agent/shared/config'
 import { getSessionAttachmentsPath } from '@craft-agent/shared/sessions'
 import { loadWorkspaceSources, getSourcesBySlugs, type LoadedSource } from '@craft-agent/shared/sources'
 import { isValidThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
@@ -934,6 +934,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       name: config?.name,
       model: config?.defaults?.model,
       permissionMode: config?.defaults?.permissionMode,
+      cyclablePermissionModes: config?.defaults?.cyclablePermissionModes,
       thinkingLevel: config?.defaults?.thinkingLevel,
       workingDirectory: config?.defaults?.workingDirectory,
       localMcpEnabled: config?.localMcpServers?.enabled ?? true,
@@ -941,12 +942,12 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   })
 
   // Update a workspace setting
-  // Valid keys: 'name', 'model', 'enabledSourceSlugs', 'permissionMode', 'thinkingLevel', 'workingDirectory', 'localMcpEnabled'
+  // Valid keys: 'name', 'model', 'enabledSourceSlugs', 'permissionMode', 'cyclablePermissionModes', 'thinkingLevel', 'workingDirectory', 'localMcpEnabled'
   ipcMain.handle(IPC_CHANNELS.WORKSPACE_SETTINGS_UPDATE, async (_event, workspaceId: string, key: string, value: unknown) => {
     const workspace = getWorkspaceOrThrow(workspaceId)
 
     // Validate key is a known workspace setting
-    const validKeys = ['name', 'model', 'enabledSourceSlugs', 'permissionMode', 'thinkingLevel', 'workingDirectory', 'localMcpEnabled']
+    const validKeys = ['name', 'model', 'enabledSourceSlugs', 'permissionMode', 'cyclablePermissionModes', 'thinkingLevel', 'workingDirectory', 'localMcpEnabled']
     if (!validKeys.includes(key)) {
       throw new Error(`Invalid workspace setting key: ${key}. Valid keys: ${validKeys.join(', ')}`)
     }
@@ -1720,16 +1721,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     return isAnyWindowFocused()
   })
 
-  // Get enabled permission modes for SHIFT+TAB cycling
-  ipcMain.handle(IPC_CHANNELS.MODE_CYCLING_GET_ENABLED, async () => {
-    const { getEnabledPermissionModes } = await import('@craft-agent/shared/config/storage')
-    return getEnabledPermissionModes()
-  })
-
-  // Set enabled permission modes for SHIFT+TAB cycling
-  ipcMain.handle(IPC_CHANNELS.MODE_CYCLING_SET_ENABLED, async (_event, modes: string[]) => {
-    const { setEnabledPermissionModes } = await import('@craft-agent/shared/config/storage')
-    setEnabledPermissionModes(modes as ('safe' | 'ask' | 'allow-all')[])
-  })
+  // Note: Permission mode cycling settings (cyclablePermissionModes) are now workspace-level
+  // and managed via WORKSPACE_SETTINGS_GET/UPDATE channels
 
 }

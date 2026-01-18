@@ -9,9 +9,6 @@ export {
   type StepIconVariant,
 } from './primitives'
 
-// Step indicator
-export { StepIndicator, type OnboardingStep } from './StepIndicator'
-
 // Individual steps
 export { WelcomeStep } from './WelcomeStep'
 export { BillingMethodStep, type BillingMethod } from './BillingMethodStep'
@@ -20,12 +17,13 @@ export { CompletionStep } from './CompletionStep'
 export { ReauthScreen } from './ReauthScreen'
 
 // Main wizard container
-export { OnboardingWizard, type OnboardingState, type LoginStatus } from './OnboardingWizard'
+export { OnboardingWizard, type OnboardingState, type OnboardingStep, type LoginStatus } from './OnboardingWizard'
 
 // Re-export all types for convenient import
 export type {
   OnboardingStep as OnboardingStepType,
-} from './StepIndicator'
+  OnboardingState as OnboardingStateType,
+} from './OnboardingWizard'
 
 export type {
   BillingMethod as BillingMethodType,
@@ -34,7 +32,3 @@ export type {
 export type {
   CredentialStatus as CredentialStatusType,
 } from './CredentialsStep'
-
-export type {
-  OnboardingState as OnboardingStateType,
-} from './OnboardingWizard'

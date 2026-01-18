@@ -32,7 +32,7 @@ export function ReauthScreen({ onLogin, onReset }: ReauthScreenProps) {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-background">
+    <div className="flex min-h-screen flex-col bg-foreground-2">
       {/* Draggable title bar region for transparent window (macOS) */}
       <div className="titlebar-drag-region fixed top-0 left-0 right-0 h-[50px] z-titlebar" />
 
@@ -61,7 +61,7 @@ export function ReauthScreen({ onLogin, onReset }: ReauthScreenProps) {
               <Button
                 onClick={handleLogin}
                 disabled={isLoading}
-                className="w-full"
+                className="w-full max-w-[320px] bg-background shadow-minimal text-foreground hover:bg-foreground/5 rounded-lg"
                 size="lg"
               >
                 {isLoading ? (
@@ -80,7 +80,7 @@ export function ReauthScreen({ onLogin, onReset }: ReauthScreenProps) {
                 variant="ghost"
                 onClick={onReset}
                 disabled={isLoading}
-                className="w-full text-muted-foreground"
+                className="w-full max-w-[320px] bg-foreground-2 shadow-minimal text-foreground hover:bg-foreground/5 rounded-lg"
                 size="sm"
               >
                 Reset app and start fresh...

@@ -125,11 +125,6 @@ const api: ElectronAPI = {
     ipcRenderer.on(IPC_CHANNELS.MENU_KEYBOARD_SHORTCUTS, handler)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.MENU_KEYBOARD_SHORTCUTS, handler)
   },
-  onMenuOpenHelp: (callback: () => void) => {
-    const handler = () => callback()
-    ipcRenderer.on(IPC_CHANNELS.MENU_OPEN_HELP, handler)
-    return () => ipcRenderer.removeListener(IPC_CHANNELS.MENU_OPEN_HELP, handler)
-  },
 
   // Deep link navigation listener (for external craftagents:// URLs)
   onDeepLinkNavigate: (callback: (nav: import('../shared/types').DeepLinkNavigation) => void) => {
@@ -322,11 +317,6 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_GET_ENABLED) as Promise<boolean>,
   setNotificationsEnabled: (enabled: boolean) =>
     ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_SET_ENABLED, enabled),
-  // Mode cycling
-  getEnabledPermissionModes: () =>
-    ipcRenderer.invoke(IPC_CHANNELS.MODE_CYCLING_GET_ENABLED) as Promise<('safe' | 'ask' | 'allow-all')[]>,
-  setEnabledPermissionModes: (modes: ('safe' | 'ask' | 'allow-all')[]) =>
-    ipcRenderer.invoke(IPC_CHANNELS.MODE_CYCLING_SET_ENABLED, modes),
   updateBadgeCount: (count: number) =>
     ipcRenderer.invoke(IPC_CHANNELS.BADGE_UPDATE, count),
   clearBadgeCount: () =>

@@ -15,6 +15,7 @@ import { CONFIG_DIR } from './paths.ts';
 import type { StoredAttachment, StoredMessage } from '@craft-agent/core/types';
 import type { Plan } from '../agent/plan-types.ts';
 import type { PermissionMode } from '../agent/mode-manager.ts';
+import { BUNDLED_CONFIG_DEFAULTS, type ConfigDefaults } from './config-defaults-schema.ts';
 
 // Re-export CONFIG_DIR for convenience (centralized in paths.ts)
 export { CONFIG_DIR } from './paths.ts';
@@ -25,12 +26,10 @@ export type {
   McpAuthType,
   AuthType,
   OAuthCredentials,
-  TokenDisplayMode,
-  CumulativeUsage,
 } from '@craft-agent/core/types';
 
 // Import for local use
-import type { Workspace, AuthType, TokenDisplayMode, CumulativeUsage } from '@craft-agent/core/types';
+import type { Workspace, AuthType } from '@craft-agent/core/types';
 
 /**
  * Pending update info for auto-install on next launch
@@ -48,17 +47,8 @@ export interface StoredConfig {
   activeWorkspaceId: string | null;
   activeSessionId: string | null;  // Currently active session (primary scope)
   model?: string;
-  tokenDisplay?: TokenDisplayMode;  // How to show tokens in status bar: hidden, total, or separate in/out
-  showCost?: boolean;  // Whether to show cost in status bar (only relevant for API Key auth)
-  showClock?: boolean;  // Whether to show clock with timezone in header
-  cumulativeUsage?: CumulativeUsage;  // Global cumulative cost across all workspaces
-  // New session defaults
-  defaultPermissionMode?: PermissionMode;  // Default permission mode for new sessions ('safe', 'ask', 'allow-all')
-  // Note: defaultWorkingDirectory is stored per-workspace in workspace config.json, not here
   // Notifications
   notificationsEnabled?: boolean;  // Desktop notifications for task completion (default: true)
-  // Mode cycling
-  enabledPermissionModes?: PermissionMode[];  // Modes to include in SHIFT+TAB cycling (min 2, default: all 3)
   // Appearance
   colorTheme?: string;  // ID of selected preset theme (e.g., 'dracula', 'nord'). Default: 'default'
   // Auto-update
@@ -67,13 +57,62 @@ export interface StoredConfig {
 }
 
 const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
+const CONFIG_DEFAULTS_FILE = join(CONFIG_DIR, 'config-defaults.json');
 
-export function ensureConfigDir(): void {
+/**
+ * Load config defaults from file, or use bundled defaults as fallback.
+ */
+export function loadConfigDefaults(): ConfigDefaults {
+  try {
+    if (existsSync(CONFIG_DEFAULTS_FILE)) {
+      const content = readFileSync(CONFIG_DEFAULTS_FILE, 'utf-8');
+      return JSON.parse(content) as ConfigDefaults;
+    }
+  } catch {
+    // Fall through to bundled defaults
+  }
+  return BUNDLED_CONFIG_DEFAULTS;
+}
+
+/**
+ * Ensure config-defaults.json exists (copy from bundled if not).
+ */
+export function ensureConfigDefaults(bundledDefaultsPath?: string): void {
+  if (existsSync(CONFIG_DEFAULTS_FILE)) {
+    return; // Already exists, don't overwrite
+  }
+
+  // Try to copy from bundled resources
+  if (bundledDefaultsPath && existsSync(bundledDefaultsPath)) {
+    try {
+      const content = readFileSync(bundledDefaultsPath, 'utf-8');
+      writeFileSync(CONFIG_DEFAULTS_FILE, content, 'utf-8');
+      return;
+    } catch {
+      // Fall through to write bundled defaults
+    }
+  }
+
+  // Fallback: write bundled defaults directly
+  writeFileSync(
+    CONFIG_DEFAULTS_FILE,
+    JSON.stringify(BUNDLED_CONFIG_DEFAULTS, null, 2),
+    'utf-8'
+  );
+}
+
+export function ensureConfigDir(bundledResourcesDir?: string): void {
   if (!existsSync(CONFIG_DIR)) {
     mkdirSync(CONFIG_DIR, { recursive: true });
   }
   // Initialize bundled docs (creates ~/.craft-agent/docs/ with sources.md, agents.md, permissions.md)
   initializeDocs();
+
+  // Initialize config defaults
+  const bundledDefaultsPath = bundledResourcesDir
+    ? join(bundledResourcesDir, 'config-defaults.json')
+    : undefined;
+  ensureConfigDefaults(bundledDefaultsPath);
 }
 
 export function loadStoredConfig(): StoredConfig | null {
@@ -163,7 +202,11 @@ export async function updateApiKey(newApiKey: string): Promise<boolean> {
 
 export function getAuthType(): AuthType {
   const config = loadStoredConfig();
-  return config?.authType || 'api_key';
+  if (config?.authType !== undefined) {
+    return config.authType;
+  }
+  const defaults = loadConfigDefaults();
+  return defaults.defaults.authType;
 }
 
 export function setAuthType(authType: AuthType): void {
@@ -185,51 +228,6 @@ export function setModel(model: string): void {
   saveConfig(config);
 }
 
-export function getTokenDisplay(): TokenDisplayMode {
-  const config = loadStoredConfig();
-  return config?.tokenDisplay || 'hidden';
-}
-
-export function setTokenDisplay(mode: TokenDisplayMode): void {
-  const config = loadStoredConfig();
-  if (!config) return;
-  config.tokenDisplay = mode;
-  saveConfig(config);
-}
-
-export function getShowCost(): boolean {
-  const config = loadStoredConfig();
-  // Default to true if not set
-  return config?.showCost !== false;
-}
-
-export function setShowCost(show: boolean): void {
-  const config = loadStoredConfig();
-  if (!config) return;
-  config.showCost = show;
-  saveConfig(config);
-}
-
-// New session defaults getters/setters
-
-/**
- * Get the default permission mode for new sessions.
- * Defaults to 'safe' if not set.
- */
-export function getDefaultPermissionMode(): PermissionMode {
-  const config = loadStoredConfig();
-  return config?.defaultPermissionMode ?? 'ask';
-}
-
-/**
- * Set the default permission mode for new sessions.
- */
-export function setDefaultPermissionMode(mode: PermissionMode): void {
-  const config = loadStoredConfig();
-  if (!config) return;
-  config.defaultPermissionMode = mode;
-  saveConfig(config);
-}
 
 /**
  * Get whether desktop notifications are enabled.
@@ -237,7 +235,11 @@ export function setDefaultPermissionMode(mode: PermissionMode): void {
  */
 export function getNotificationsEnabled(): boolean {
   const config = loadStoredConfig();
-  return config?.notificationsEnabled !== false; // Default to true
+  if (config?.notificationsEnabled !== undefined) {
+    return config.notificationsEnabled;
+  }
+  const defaults = loadConfigDefaults();
+  return defaults.defaults.notificationsEnabled;
 }
 
 /**
@@ -252,72 +254,8 @@ export function setNotificationsEnabled(enabled: boolean): void {
 
 // Note: getDefaultWorkingDirectory/setDefaultWorkingDirectory removed
 // Working directory is now stored per-workspace in workspace config.json (defaults.workingDirectory)
-
-/**
- * Get the enabled permission modes for SHIFT+TAB cycling.
- * Defaults to all 3 modes if not set.
- */
-export function getEnabledPermissionModes(): PermissionMode[] {
-  const config = loadStoredConfig();
-  return config?.enabledPermissionModes ?? ['safe', 'ask', 'allow-all'];
-}
-
-/**
- * Set the enabled permission modes for SHIFT+TAB cycling.
- * @throws Error if fewer than 2 modes are provided
- */
-export function setEnabledPermissionModes(modes: PermissionMode[]): void {
-  if (modes.length < 2) {
-    throw new Error('At least 2 permission modes must be enabled');
-  }
-  const config = loadStoredConfig();
-  if (!config) return;
-  config.enabledPermissionModes = modes;
-  saveConfig(config);
-}
-
-export function getCumulativeUsage(): CumulativeUsage {
-  const config = loadStoredConfig();
-  return config?.cumulativeUsage ?? {
-    totalCostUsd: 0,
-    totalInputTokens: 0,
-    totalOutputTokens: 0,
-    lastUpdated: 0,
-  };
-}
-
-/**
- * Add to cumulative usage (called when workspace token usage changes).
- * Pass the delta (difference from previous), not the absolute values.
- */
-export function addToCumulativeUsage(delta: {
-  costUsd: number;
-  inputTokens: number;
-  outputTokens: number;
-}): CumulativeUsage {
-  const config = loadStoredConfig();
-  if (!config) {
-    return getCumulativeUsage();
-  }
-
-  const current = config.cumulativeUsage ?? {
-    totalCostUsd: 0,
-    totalInputTokens: 0,
-    totalOutputTokens: 0,
-    lastUpdated: 0,
-  };
-
-  const updated: CumulativeUsage = {
-    totalCostUsd: current.totalCostUsd + delta.costUsd,
-    totalInputTokens: current.totalInputTokens + delta.inputTokens,
-    totalOutputTokens: current.totalOutputTokens + delta.outputTokens,
-    lastUpdated: Date.now(),
-  };
-
-  config.cumulativeUsage = updated;
-  saveConfig(config);
-  return updated;
-}
+// Note: getDefaultPermissionMode/getEnabledPermissionModes removed
+// Permission settings are now stored per-workspace in workspace config.json (defaults.permissionMode, defaults.cyclablePermissionModes)
 
 export function getConfigPath(): string {
   return CONFIG_FILE;
@@ -1059,7 +997,11 @@ export function resetPresetTheme(id: string, bundledThemesDir?: string): boolean
  */
 export function getColorTheme(): string {
   const config = loadStoredConfig();
-  return config?.colorTheme || 'default';
+  if (config?.colorTheme !== undefined) {
+    return config.colorTheme;
+  }
+  const defaults = loadConfigDefaults();
+  return defaults.defaults.colorTheme;
 }
 
 /**

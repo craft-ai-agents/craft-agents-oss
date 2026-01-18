@@ -495,7 +495,6 @@ export const IPC_CHANNELS = {
   MENU_NEW_WINDOW: 'menu:newWindow',
   MENU_OPEN_SETTINGS: 'menu:openSettings',
   MENU_KEYBOARD_SHORTCUTS: 'menu:keyboardShortcuts',
-  MENU_OPEN_HELP: 'menu:openHelp',
   // Deep link navigation (main → renderer, for external craftagents:// URLs)
   DEEP_LINK_NAVIGATE: 'deeplink:navigate',
 
@@ -597,10 +596,6 @@ export const IPC_CHANNELS = {
   NOTIFICATION_GET_ENABLED: 'notification:getEnabled',
   NOTIFICATION_SET_ENABLED: 'notification:setEnabled',
 
-  // Mode cycling settings
-  MODE_CYCLING_GET_ENABLED: 'modeCycling:getEnabled',
-  MODE_CYCLING_SET_ENABLED: 'modeCycling:setEnabled',
-
   BADGE_UPDATE: 'badge:update',
   BADGE_CLEAR: 'badge:clear',
   BADGE_SET_ICON: 'badge:setIcon',
@@ -684,7 +679,6 @@ export interface ElectronAPI {
   onMenuNewChat(callback: () => void): () => void
   onMenuOpenSettings(callback: () => void): () => void
   onMenuKeyboardShortcuts(callback: () => void): () => void
-  onMenuOpenHelp(callback: () => void): () => void
 
   // Deep link navigation listener (for external craftagents:// URLs)
   onDeepLinkNavigate(callback: (nav: DeepLinkNavigation) => void): () => void
@@ -797,10 +791,6 @@ export interface ElectronAPI {
   getNotificationsEnabled(): Promise<boolean>
   setNotificationsEnabled(enabled: boolean): Promise<void>
 
-  // Mode cycling
-  getEnabledPermissionModes(): Promise<PermissionMode[]>
-  setEnabledPermissionModes(modes: PermissionMode[]): Promise<void>
-
   updateBadgeCount(count: number): Promise<void>
   clearBadgeCount(): Promise<void>
   setDockIconWithBadge(dataUrl: string): Promise<void>
@@ -858,6 +848,8 @@ export interface WorkspaceSettings {
   name?: string
   model?: string
   permissionMode?: PermissionMode
+  /** Permission modes available for SHIFT+TAB cycling (min 2 modes) */
+  cyclablePermissionModes?: PermissionMode[]
   /** Default thinking level for new sessions ('off', 'think', 'max'). Defaults to 'think'. */
   thinkingLevel?: ThinkingLevel
   workingDirectory?: string

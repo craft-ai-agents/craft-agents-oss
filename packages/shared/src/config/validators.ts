@@ -59,31 +59,14 @@ const WorkspaceSchema = z.object({
 
 const AuthTypeSchema = z.enum(['api_key', 'oauth_token']);
 
-const TokenDisplayModeSchema = z.enum(['hidden', 'total', 'separate']);
-
-const ModeSchema = z.enum(['safe']);
-
-const CumulativeUsageSchema = z.object({
-  totalCostUsd: z.number().min(0),
-  totalInputTokens: z.number().int().min(0),
-  totalOutputTokens: z.number().int().min(0),
-  lastUpdated: z.number().int().min(0),
-});
-
-// Permission mode for sessions
-const PermissionModeSchema = z.enum(['safe', 'ask', 'allow-all']);
-
 export const StoredConfigSchema = z.object({
   authType: AuthTypeSchema.optional(),
   workspaces: z.array(WorkspaceSchema).min(0),
   activeWorkspaceId: z.string().nullable(),
   activeSessionId: z.string().nullable(),
   model: z.string().optional(),
-  tokenDisplay: TokenDisplayModeSchema.optional(),
-  showCost: z.boolean().optional(),
-  cumulativeUsage: CumulativeUsageSchema.optional(),
-  defaultPermissionMode: PermissionModeSchema.optional(),
-  // Note: defaultWorkingDirectory is now per-workspace in workspace config.json
+  // Note: tokenDisplay, showCost, cumulativeUsage, defaultPermissionMode removed
+  // Permission mode and cyclable modes are now per-workspace in workspace config.json
 });
 
 // --- preferences.json ---

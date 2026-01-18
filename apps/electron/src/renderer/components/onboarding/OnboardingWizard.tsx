@@ -1,9 +1,14 @@
 import { cn } from "@/lib/utils"
-import { StepIndicator, type OnboardingStep } from "./StepIndicator"
 import { WelcomeStep } from "./WelcomeStep"
 import { BillingMethodStep, type BillingMethod } from "./BillingMethodStep"
 import { CredentialsStep, type CredentialStatus } from "./CredentialsStep"
 import { CompletionStep } from "./CompletionStep"
+
+export type OnboardingStep =
+  | 'welcome'
+  | 'billing-method'
+  | 'credentials'
+  | 'complete'
 
 export type LoginStatus = 'idle' | 'waiting' | 'success' | 'error'
 
@@ -22,7 +27,6 @@ interface OnboardingWizardProps {
   state: OnboardingState
 
   // Event handlers
-  onCancel?: () => void
   onContinue: () => void
   onBack: () => void
   onSelectBillingMethod: (method: BillingMethod) => void
@@ -49,7 +53,6 @@ interface OnboardingWizardProps {
  */
 export function OnboardingWizard({
   state,
-  onCancel,
   onContinue,
   onBack,
   onSelectBillingMethod,
@@ -68,7 +71,6 @@ export function OnboardingWizard({
           <WelcomeStep
             isExistingUser={state.isExistingUser}
             onContinue={onContinue}
-            onCancel={onCancel}
           />
         )
 
@@ -113,20 +115,13 @@ export function OnboardingWizard({
   return (
     <div
       className={cn(
-        "flex min-h-screen flex-col bg-background",
+        "flex flex-col bg-foreground-2",
+        !className?.includes('h-full') && "min-h-screen",
         className
       )}
     >
       {/* Draggable title bar region for transparent window (macOS) */}
       <div className="titlebar-drag-region fixed top-0 left-0 right-0 h-[50px] z-titlebar" />
-
-      {/* Header with progress indicator */}
-      <header className="flex h-14 items-center justify-center px-4">
-        <StepIndicator
-          currentStep={state.step}
-          isExistingUser={state.isExistingUser}
-        />
-      </header>
 
       {/* Main content */}
       <main className="flex flex-1 items-center justify-center p-8">

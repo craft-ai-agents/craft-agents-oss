@@ -327,23 +327,16 @@ function AppShellContent({
   // Enabled permission modes for Shift+Tab cycling (min 2 modes)
   const [enabledModes, setEnabledModes] = React.useState<PermissionMode[]>(['safe', 'ask', 'allow-all'])
 
-  // Load enabled permission modes on mount
-  React.useEffect(() => {
-    window.electronAPI.getEnabledPermissionModes().then((modes) => {
-      if (modes && modes.length >= 2) {
-        setEnabledModes(modes)
-      }
-    }).catch((err) => {
-      console.error('[Chat] Failed to load enabled permission modes:', err)
-    })
-  }, [])
-
-  // Load workspace settings (for localMcpEnabled) on workspace change
+  // Load workspace settings (for localMcpEnabled and cyclablePermissionModes) on workspace change
   React.useEffect(() => {
     if (!activeWorkspaceId) return
     window.electronAPI.getWorkspaceSettings(activeWorkspaceId).then((settings) => {
       if (settings) {
         setLocalMcpEnabled(settings.localMcpEnabled ?? true)
+        // Load cyclablePermissionModes from workspace settings
+        if (settings.cyclablePermissionModes && settings.cyclablePermissionModes.length >= 2) {
+          setEnabledModes(settings.cyclablePermissionModes)
+        }
       }
     }).catch((err) => {
       console.error('[Chat] Failed to load workspace settings:', err)
@@ -1047,8 +1040,6 @@ function AppShellContent({
             onOpenSettings={onOpenSettings}
             onOpenKeyboardShortcuts={onOpenKeyboardShortcuts}
             onOpenStoredUserPreferences={onOpenStoredUserPreferences}
-            onOpenHelp={() => window.electronAPI.openUrl('https://agents.craft.do/docs')}
-            onOpenCraft={() => window.electronAPI.openUrl('craftdocs://')}
             onReset={onReset}
             onBack={goBack}
             onForward={goForward}

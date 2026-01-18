@@ -8,8 +8,6 @@ export type {
   McpAuthType,
   AuthType,
   OAuthCredentials,
-  TokenDisplayMode,
-  CumulativeUsage,
   StoredConfig,
 } from './workspace.ts';
 

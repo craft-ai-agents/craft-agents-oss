@@ -67,20 +67,6 @@ export default function WorkspaceSettingsPage() {
   const [enabledModes, setEnabledModes] = useState<PermissionMode[]>(['safe', 'ask', 'allow-all'])
   const [modeCyclingError, setModeCyclingError] = useState<string | null>(null)
 
-  // Load mode cycling settings on mount
-  useEffect(() => {
-    const loadModes = async () => {
-      if (!window.electronAPI) return
-      try {
-        const modes = await window.electronAPI.getEnabledPermissionModes()
-        setEnabledModes(modes)
-      } catch (error) {
-        console.error('Failed to load mode cycling settings:', error)
-      }
-    }
-    loadModes()
-  }, [])
-
   // Load workspace settings when active workspace changes
   useEffect(() => {
     const loadWorkspaceSettings = async () => {
@@ -100,6 +86,10 @@ export default function WorkspaceSettingsPage() {
           setPermissionMode(settings.permissionMode || 'ask')
           setWorkingDirectory(settings.workingDirectory || '')
           setLocalMcpEnabled(settings.localMcpEnabled ?? true)
+          // Load cyclable permission modes from workspace settings
+          if (settings.cyclablePermissionModes && settings.cyclablePermissionModes.length >= 2) {
+            setEnabledModes(settings.cyclablePermissionModes)
+          }
         }
 
         // Try to load workspace icon (check common extensions)
@@ -282,12 +272,12 @@ export default function WorkspaceSettingsPage() {
       setEnabledModes(newModes)
       setModeCyclingError(null)
       try {
-        await window.electronAPI.setEnabledPermissionModes(newModes)
+        await updateWorkspaceSetting('cyclablePermissionModes', newModes)
       } catch (error) {
         console.error('Failed to save mode cycling settings:', error)
       }
     },
-    [enabledModes]
+    [enabledModes, updateWorkspaceSetting]
   )
 
   // Show empty state if no workspace is active
@@ -479,7 +469,7 @@ export default function WorkspaceSettingsPage() {
             <SettingsSection title="Advanced">
               <SettingsCard>
                 <SettingsRow
-                  label="Working Directory"
+                  label="Default Working Directory"
                   description={workingDirectory || 'Not set (uses session folder)'}
                   action={
                     <div className="flex items-center gap-2">

@@ -222,7 +222,7 @@ export function StepActions({ children, variant = 'stack', className }: StepActi
       className={cn(
         "step-actions mt-8",
         variant === 'stack' && "flex flex-col gap-3",
-        variant === 'flex' && "flex gap-3",
+        variant === 'flex' && "flex gap-3 justify-center",
         className
       )}
     >
@@ -244,7 +244,7 @@ interface BackButtonProps extends Omit<ButtonProps, 'variant' | 'children'> {
  */
 export function BackButton({ children = 'Back', className, ...props }: BackButtonProps) {
   return (
-    <Button variant="ghost" className={cn("flex-1 bg-foreground/5 hover:bg-foreground/10", className)} {...props}>
+    <Button variant="ghost" className={cn("flex-1 max-w-[320px] bg-foreground-2 shadow-minimal text-foreground hover:bg-foreground/5 rounded-lg", className)} {...props}>
       {children}
     </Button>
   )
@@ -268,7 +268,7 @@ export function ContinueButton({
   ...props
 }: ContinueButtonProps) {
   return (
-    <Button className={cn("flex-1", className)} disabled={disabled || loading} {...props}>
+    <Button className={cn("flex-1 max-w-[320px] bg-background shadow-minimal text-foreground hover:bg-foreground/5 rounded-lg", className)} disabled={disabled || loading} {...props}>
       {loading ? (
         <>
           <Spinner className="mr-2" />

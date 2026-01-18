@@ -34,6 +34,7 @@
     "electron:dev:menu": "bash scripts/electron-dev.sh",
     "electron:dev:logs": "pgrep -f 'tail -f.*Craft Agents/main.log' > /dev/null || osascript -e \"tell application \\\"Terminal\\\" to do script \\\"$PWD/scripts/tail-electron-logs.sh\\\"\"",
     "sync-secrets": "bash scripts/sync-secrets.sh",
+    "fresh-start": "bun run scripts/fresh-start.ts",
     "electron:dev:vite": "vite dev --config apps/electron/vite.config.ts --port ${CRAFT_VITE_PORT:-5173}",
     "electron:dev:main": "source .env 2>/dev/null || true; esbuild apps/electron/src/main/index.ts --bundle --platform=node --format=cjs --outfile=apps/electron/dist/main.cjs --external:electron --define:process.env.GOOGLE_OAUTH_CLIENT_ID=\\\"${GOOGLE_OAUTH_CLIENT_ID:-}\\\" --define:process.env.GOOGLE_OAUTH_CLIENT_SECRET=\\\"${GOOGLE_OAUTH_CLIENT_SECRET:-}\\\" --define:process.env.SLACK_OAUTH_CLIENT_ID=\\\"${SLACK_OAUTH_CLIENT_ID:-}\\\" --define:process.env.SLACK_OAUTH_CLIENT_SECRET=\\\"${SLACK_OAUTH_CLIENT_SECRET:-}\\\" --define:process.env.MICROSOFT_OAUTH_CLIENT_ID=\\\"${MICROSOFT_OAUTH_CLIENT_ID:-}\\\" --define:process.env.MICROSOFT_OAUTH_CLIENT_SECRET=\\\"${MICROSOFT_OAUTH_CLIENT_SECRET:-}\\\" --watch",
     "electron:dev:main:win": "esbuild apps/electron/src/main/index.ts --bundle --platform=node --format=cjs --outfile=apps/electron/dist/main.cjs --external:electron --watch",

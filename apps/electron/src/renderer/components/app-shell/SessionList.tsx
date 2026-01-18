@@ -241,6 +241,10 @@ function SessionItem({
                 aria-haspopup="menu"
                 aria-expanded={todoMenuOpen}
                 aria-label="Change todo state"
+                onContextMenu={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                }}
               >
                 <div className="w-4 h-4 flex items-center justify-center [&>svg]:w-full [&>svg]:h-full [&>img]:w-full [&>img]:h-full [&>span]:text-base">
                   {getStateIcon(currentTodoState, todoStates)}
@@ -253,6 +257,10 @@ function SessionItem({
             align="start"
             side="bottom"
             sideOffset={4}
+            onContextMenu={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+            }}
           >
             <TodoStateMenu
               activeState={currentTodoState}

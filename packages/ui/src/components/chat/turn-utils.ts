@@ -282,6 +282,24 @@ export function groupMessagesByTurn(messages: Message[]): Turn[] {
         currentTurn.isStreaming = false
         currentTurn.isComplete = true
       }
+
+      // If no response but we have intermediate text, promote the last one to response
+      // Don't do this for interrupted turns - respect user interruptions
+      // Only promote when turn is complete (processing indicator hidden)
+      if (!interrupted && !currentTurn.response && currentTurn.isComplete && currentTurn.activities.length > 0) {
+        // Find the last intermediate text activity (reverse to get most recent)
+        const lastTextActivity = [...currentTurn.activities]
+          .reverse()
+          .find(a => a.type === 'intermediate' && a.content)
+
+        if (lastTextActivity?.content) {
+          currentTurn.response = {
+            text: lastTextActivity.content,
+            isStreaming: false,
+          }
+        }
+      }
+
       turns.push(currentTurn)
       currentTurn = null
     }
@@ -290,6 +308,8 @@ export function groupMessagesByTurn(messages: Message[]): Turn[] {
   for (const message of sortedMessages) {
     // Auth-request messages are standalone turns (credential input, OAuth flows)
     if (message.role === 'auth-request') {
+      // If there's a current turn, it's complete (something follows it)
+      if (currentTurn) currentTurn.isComplete = true
       flushCurrentTurn()
       turns.push({
         type: 'auth-request',
@@ -301,6 +321,8 @@ export function groupMessagesByTurn(messages: Message[]): Turn[] {
 
     // User messages are their own turn
     if (message.role === 'user') {
+      // If there's a current turn, it's complete (something follows it)
+      if (currentTurn) currentTurn.isComplete = true
       flushCurrentTurn()
       turns.push({
         type: 'user',
@@ -360,6 +382,8 @@ export function groupMessagesByTurn(messages: Message[]): Turn[] {
     if (message.role === 'error' || message.role === 'info' || message.role === 'warning') {
       // Flush current turn first (mark as interrupted if info message)
       const isInterruption = message.role === 'info'
+      // For error/warning (not info), the previous turn is complete
+      if (currentTurn && !isInterruption) currentTurn.isComplete = true
       flushCurrentTurn(isInterruption)
       turns.push({
         type: 'system',

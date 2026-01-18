@@ -125,7 +125,7 @@ export function PanelHeader({
                 {/* Chevron is the actual trigger anchor point */}
                 <DropdownMenuTrigger asChild>
                   <span className="shrink-0 flex items-center justify-center">
-                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground translate-y-[1px]" />
                   </span>
                 </DropdownMenuTrigger>
               </button>

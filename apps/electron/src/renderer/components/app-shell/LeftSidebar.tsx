@@ -230,9 +230,9 @@ export function LeftSidebar({ links, isCollapsed, getItemProps, focusedItemId, i
                 <AnimatePresence initial={false}>
                   {link.expanded && (
                     <motion.div
-                      initial={{ height: 0, opacity: 0, marginBottom: 0 }}
-                      animate={{ height: 'auto', opacity: 1, marginBottom: 8 }}
-                      exit={{ height: 0, opacity: 0, marginBottom: 0 }}
+                      initial={{ height: 0, opacity: 0, marginTop: 0, marginBottom: 0 }}
+                      animate={{ height: 'auto', opacity: 1, marginTop: 2, marginBottom: 8 }}
+                      exit={{ height: 0, opacity: 0, marginTop: 0, marginBottom: 0 }}
                       transition={{ duration: 0.2, ease: 'easeInOut' }}
                       className="overflow-hidden"
                     >

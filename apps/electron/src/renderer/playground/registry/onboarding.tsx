@@ -1,5 +1,4 @@
 import type { ComponentEntry } from './types'
-import { StepIndicator } from '@/components/onboarding/StepIndicator'
 import { WelcomeStep } from '@/components/onboarding/WelcomeStep'
 import { BillingMethodStep } from '@/components/onboarding/BillingMethodStep'
 import { CredentialsStep } from '@/components/onboarding/CredentialsStep'
@@ -21,44 +20,6 @@ const noopHandler = () => console.log('[Playground] Action triggered')
 
 export const onboardingComponents: ComponentEntry[] = [
   {
-    id: 'step-indicator',
-    name: 'StepIndicator',
-    category: 'Onboarding',
-    description: 'Progress dots showing current step in the onboarding flow',
-    component: StepIndicator,
-    props: [
-      {
-        name: 'currentStep',
-        description: 'Current step in the flow',
-        control: {
-          type: 'select',
-          options: [
-            { label: 'Welcome', value: 'welcome' },
-            { label: 'Billing Method', value: 'billing-method' },
-            { label: 'Credentials', value: 'credentials' },
-            { label: 'Complete', value: 'complete' },
-          ],
-        },
-        defaultValue: 'welcome',
-      },
-      {
-        name: 'isExistingUser',
-        description: 'Show fewer steps for existing users',
-        control: { type: 'boolean' },
-        defaultValue: false,
-      },
-    ],
-    variants: [
-      { name: 'New User - Welcome', props: { currentStep: 'welcome', isExistingUser: false } },
-      { name: 'New User - Billing', props: { currentStep: 'billing-method', isExistingUser: false } },
-      { name: 'New User - Credentials', props: { currentStep: 'credentials', isExistingUser: false } },
-      { name: 'New User - Complete', props: { currentStep: 'complete', isExistingUser: false } },
-      { name: 'Existing User - Welcome', props: { currentStep: 'welcome', isExistingUser: true } },
-      { name: 'Existing User - Billing', props: { currentStep: 'billing-method', isExistingUser: true } },
-      { name: 'Existing User - Complete', props: { currentStep: 'complete', isExistingUser: true } },
-    ],
-  },
-  {
     id: 'welcome-step',
     name: 'WelcomeStep',
     category: 'Onboarding',
@@ -78,7 +39,6 @@ export const onboardingComponents: ComponentEntry[] = [
     ],
     mockData: () => ({
       onContinue: noopHandler,
-      onCancel: noopHandler,
     }),
   },
   {
@@ -286,7 +246,6 @@ export const onboardingComponents: ComponentEntry[] = [
     mockData: () => ({
       state: createOnboardingState(),
       className: 'min-h-0 h-full',
-      onCancel: noopHandler,
       onContinue: noopHandler,
       onBack: noopHandler,
       onSelectBillingMethod: (method: string) => console.log('[Playground] Selected billing:', method),

@@ -39,17 +39,12 @@ export function CompletionStep({
         isSaving ? (
           'Saving your configuration...'
         ) : (
-          <>
-            {spaceName && (
-              <>Connected to <span className="font-medium text-foreground">{spaceName}</span>. </>
-            )}
-            Start chatting with Claude to manage your Craft documents.
-          </>
+          'Just start a chat and get to work.'
         )
       }
       actions={
         status === 'complete' ? (
-          <Button onClick={onFinish} className="w-full" size="lg">
+          <Button onClick={onFinish} className="w-full max-w-[320px] bg-background shadow-minimal text-foreground hover:bg-foreground/5 rounded-lg" size="lg">
             Get Started
           </Button>
         ) : undefined
