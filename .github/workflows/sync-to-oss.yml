@@ -13,6 +13,11 @@ on:
         required: false
         type: string
         default: 'main'
+      create_release:
+        description: 'Create a GitHub release with changelog'
+        required: false
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -20,6 +25,9 @@ permissions:
 jobs:
   sync:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      synced: ${{ steps.sync.outputs.synced }}
     steps:
       - name: Checkout source repository
         uses: actions/checkout@v4
@@ -31,15 +39,113 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
+      - name: Extract version
+        id: version
+        run: |
+          VERSION=$(grep -oP "APP_VERSION = '\K[^']+" packages/shared/src/version/app-version.ts)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Detected version: $VERSION"
+
       - name: Run sync (dry run)
         if: ${{ inputs.dry_run }}
         run: bash scripts/sync-to-oss.sh --dry-run --branch "${{ inputs.branch }}"
 
       - name: Run sync
+        id: sync
         if: ${{ !inputs.dry_run }}
         run: |
           # Use HTTPS with GITHUB_TOKEN for authentication
           TARGET_REPO="https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/lukilabs/craft-agents-oss.git"
 
           # Run sync in non-interactive mode
-          bash scripts/sync-to-oss.sh --target "$TARGET_REPO" --branch "${{ inputs.branch }}" --yes
+          if bash scripts/sync-to-oss.sh --target "$TARGET_REPO" --branch "${{ inputs.branch }}" --yes; then
+            echo "synced=true" >> $GITHUB_OUTPUT
+          else
+            echo "synced=false" >> $GITHUB_OUTPUT
+          fi
+
+  release:
+    needs: sync
+    if: ${{ !inputs.dry_run && inputs.create_release && needs.sync.outputs.synced == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get commits since last release
+        id: commits
+        run: |
+          # Get the last tag, or use initial commit if no tags exist
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD)
+          echo "Last tag/ref: $LAST_TAG"
+
+          # Get commit messages since last tag
+          COMMITS=$(git log "$LAST_TAG"..HEAD --pretty=format:"- %s" --no-merges | head -50)
+
+          # Write to file for multi-line handling
+          echo "$COMMITS" > /tmp/commits.txt
+          echo "commits_file=/tmp/commits.txt" >> $GITHUB_OUTPUT
+
+      - name: Generate changelog with Haiku
+        id: changelog
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          COMMITS=$(cat /tmp/commits.txt)
+          VERSION="${{ needs.sync.outputs.version }}"
+
+          # Call Anthropic API with Haiku to generate changelog
+          RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
+            -H "Content-Type: application/json" \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01" \
+            -d "$(jq -n \
+              --arg commits "$COMMITS" \
+              --arg version "$VERSION" \
+              '{
+                model: "claude-haiku-4-20250514",
+                max_tokens: 1024,
+                messages: [{
+                  role: "user",
+                  content: "You are writing a changelog for version \($version) of Craft Agents, an AI-powered desktop app for document management.\n\nHere are the commits since the last release:\n\($commits)\n\nWrite a concise changelog with only HIGH-LEVEL USER-FACING changes. Group into categories like Features, Improvements, Bug Fixes if applicable. Ignore internal changes, refactoring, CI/CD updates, dependency bumps (unless significant like SDK upgrades). Use bullet points. Keep it brief - max 5-10 items. Start directly with the content, no intro text."
+                }]
+              }')")
+
+          # Extract the text content from the response
+          CHANGELOG=$(echo "$RESPONSE" | jq -r '.content[0].text // "No changelog generated"')
+
+          # Write to file for multi-line handling
+          echo "$CHANGELOG" > /tmp/changelog.md
+          echo "Generated changelog:"
+          cat /tmp/changelog.md
+
+      - name: Checkout OSS repository
+        uses: actions/checkout@v4
+        with:
+          repository: lukilabs/craft-agents-oss
+          token: ${{ secrets.GITHUB_TOKEN }}
+          path: oss-repo
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd oss-repo
+          VERSION="${{ needs.sync.outputs.version }}"
+          CHANGELOG=$(cat /tmp/changelog.md)
+
+          # Check if release already exists
+          if gh release view "v$VERSION" &>/dev/null; then
+            echo "Release v$VERSION already exists, skipping"
+            exit 0
+          fi
+
+          # Create the release
+          gh release create "v$VERSION" \
+            --title "v$VERSION" \
+            --notes "$CHANGELOG" \
+            --target "${{ inputs.branch }}"
+
+          echo "Created release v$VERSION"
