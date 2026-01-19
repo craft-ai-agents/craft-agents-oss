@@ -250,24 +250,67 @@ unset ELECTRON_RUN_AS_NODE
 unset NODE_OPTIONS
 unset VITE_DEV_SERVER_URL
 
-# Launch with minimal clean environment
-env -i HOME="$HOME" USER="$USER" PATH="/usr/bin:/bin:/usr/sbin:/sbin" open -n -a "Craft Agent"
+# Launch using bundle ID (more reliable than app name which may vary)
+# Use -n to open new instance, -b for bundle ID
+launch_app() {
+    env -i HOME="$HOME" USER="$USER" PATH="/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin" \
+        open -n -b "$APP_BUNDLE_ID" 2>&1
+}
+
+log "Attempting to launch app via bundle ID..."
+launch_output=$(launch_app)
+launch_exit=$?
+
+if [ $launch_exit -ne 0 ]; then
+    log "First launch attempt failed (exit $launch_exit): $launch_output"
+    log "Retrying with app path..."
+    # Fallback: launch directly via app path
+    launch_output=$(env -i HOME="$HOME" USER="$USER" PATH="/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin" \
+        open -n "$INSTALL_DIR/$APP_NAME" 2>&1)
+    launch_exit=$?
+    if [ $launch_exit -ne 0 ]; then
+        log "Second launch attempt failed (exit $launch_exit): $launch_output"
+    fi
+fi
 
 # Wait briefly to see if the app launches successfully
 sleep 3
 
 # Verify the new app launched (check if running)
-if lsappinfo info -only pid -app "$APP_BUNDLE_ID" 2>/dev/null | grep -q "pid"; then
+verify_launch() {
+    lsappinfo info -only pid -app "$APP_BUNDLE_ID" 2>/dev/null | grep -q "pid"
+}
+
+if verify_launch; then
     log "New version launched successfully"
     # Clean up backup and DMG only after successful launch
     rm -rf "$BACKUP_DIR" 2>/dev/null || true
     rm -f "$DMG_PATH" 2>/dev/null || true
     log "Cleanup complete"
 else
-    log "WARNING: Could not verify new app launch"
-    # Keep backup and DMG for manual recovery
-    log "Backup kept at: $BACKUP_DIR"
-    log "DMG kept at: $DMG_PATH"
+    log "WARNING: App not running after launch attempt, retrying..."
+
+    # Retry launch
+    launch_output=$(launch_app)
+    sleep 3
+
+    if verify_launch; then
+        log "App launched on retry"
+        rm -rf "$BACKUP_DIR" 2>/dev/null || true
+        rm -f "$DMG_PATH" 2>/dev/null || true
+        log "Cleanup complete"
+    else
+        log "ERROR: Could not launch app after multiple attempts"
+        # Keep backup and DMG for manual recovery
+        log "Backup kept at: $BACKUP_DIR"
+        log "DMG kept at: $DMG_PATH"
+
+        # Show prominent notification to user
+        osascript -e 'display notification "Update installed but app failed to restart. Please launch Craft Agent manually." with title "Craft Agent Update" sound name "Basso"' 2>/dev/null || true
+
+        # Also try to show an alert dialog as a last resort
+        osascript -e 'display dialog "Craft Agent was updated but could not restart automatically.\n\nPlease launch it manually from Applications." buttons {"OK"} default button "OK" with title "Craft Agent Update" with icon caution' 2>/dev/null || true
+    fi
 fi
 
 log "Update complete!"

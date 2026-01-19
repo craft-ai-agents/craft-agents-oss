@@ -520,6 +520,21 @@ export class ConfigWatcher {
   private handleSourceConfigChange(slug: string): void {
     debug('[ConfigWatcher] Source config changed:', slug);
 
+    // Check if source folder still exists (might have been deleted)
+    const sourcePath = join(this.sourcesDir, slug);
+    if (!existsSync(sourcePath)) {
+      debug('[ConfigWatcher] Source folder deleted:', slug);
+      // Remove from known sources and notify deletion
+      if (this.knownSources.has(slug)) {
+        this.knownSources.delete(slug);
+        this.callbacks.onSourceChange?.(slug, null);
+        // Also notify list change
+        const allSources = loadWorkspaceSources(this.workspaceDir);
+        this.callbacks.onSourcesListChange?.(allSources);
+      }
+      return;
+    }
+
     const validation = validateSource(this.workspaceDir, slug);
     if (!validation.valid) {
       debug('[ConfigWatcher] Source validation failed:', slug, validation.errors);
