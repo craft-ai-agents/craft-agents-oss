@@ -759,35 +759,51 @@ export class SourceCredentialManager {
 // ============================================================
 
 /**
+ * Check if a single source needs authentication.
+ * Returns true if the source requires auth but isn't yet authenticated.
+ *
+ * This correctly handles:
+ * - MCP sources with authType: "none" → never needs auth
+ * - MCP sources with stdio transport → never needs auth (runs locally)
+ * - MCP sources with oauth/bearer → needs auth if not authenticated
+ * - API sources with authType: "none" → never needs auth
+ * - API sources with bearer/basic/header/query auth → needs auth if not authenticated
+ */
+export function sourceNeedsAuthentication(source: LoadedSource): boolean {
+  const mcp = source.config.mcp;
+  const api = source.config.api;
+
+  // MCP sources with oauth/bearer auth (stdio transport never needs auth)
+  if (source.config.type === 'mcp' && mcp) {
+    if (mcp.transport === 'stdio') {
+      // Stdio sources run locally and don't need authentication
+      return false;
+    }
+    // Only require auth if authType is explicitly set to 'oauth' or 'bearer'
+    // Undefined or 'none' means no authentication required
+    if (mcp.authType && mcp.authType !== 'none' && !source.config.isAuthenticated) {
+      return true;
+    }
+  }
+
+  // API sources with auth requirements
+  if (source.config.type === 'api' && api) {
+    if (api.authType !== 'none' && api.authType !== undefined && !source.config.isAuthenticated) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
  * Get sources that need authentication
  * Returns enabled sources that require auth but aren't yet authenticated
  */
 export function getSourcesNeedingAuth(sources: LoadedSource[]): LoadedSource[] {
   return sources.filter((source) => {
     if (!source.config.enabled) return false;
-
-    const mcp = source.config.mcp;
-    const api = source.config.api;
-
-    // MCP sources with oauth/bearer auth (stdio transport never needs auth)
-    if (source.config.type === 'mcp' && mcp) {
-      if (mcp.transport === 'stdio') {
-        // Stdio sources run locally and don't need authentication
-        return false;
-      }
-      if (mcp.authType !== 'none' && !source.config.isAuthenticated) {
-        return true;
-      }
-    }
-
-    // API sources with auth requirements
-    if (source.config.type === 'api' && api) {
-      if (api.authType !== 'none' && api.authType !== undefined && !source.config.isAuthenticated) {
-        return true;
-      }
-    }
-
-    return false;
+    return sourceNeedsAuthentication(source);
   });
 }
 

@@ -37,7 +37,23 @@ export default function App() {
 
       <main className="relative z-10 min-h-screen flex flex-col items-center justify-center p-6 pt-[48px] pb-[128px]">
         {/* Craft Agents logo */}
-        <img src={agentsLogo} alt="Craft Agents" className="w-[224px] mb-12" />
+        <img src={agentsLogo} alt="Craft Agents" className="w-[224px] mb-8" />
+
+        {/* Action buttons - matching card width and style */}
+        <div className="flex gap-3 max-w-2xl w-full mb-12">
+          <a
+            href="https://github.com/lukilabs/craft-agents/releases"
+            className="flex-1 bg-background rounded-[12px] shadow-strong py-3 px-6 text-center text-[14px] font-medium hover:opacity-90 transition-opacity"
+          >
+            Download
+          </a>
+          <a
+            href="https://github.com/lukilabs/craft-agents"
+            className="flex-1 bg-background rounded-[12px] shadow-strong py-3 px-6 text-center text-[14px] font-medium hover:opacity-90 transition-opacity"
+          >
+            View Source Code
+          </a>
+        </div>
 
         {/* Hero screenshot */}
         <img

@@ -50,6 +50,7 @@ import {
 import type { ValidationIssue } from '../config/validators.ts';
 import { type ThinkingLevel, getThinkingTokens, DEFAULT_THINKING_LEVEL } from './thinking-levels.ts';
 import type { LoadedSource } from '../sources/types.ts';
+import { sourceNeedsAuthentication } from '../sources/credential-manager.ts';
 
 // Re-export permission mode functions for application usage
 export {
@@ -2019,11 +2020,14 @@ export class CraftAgent {
     }
 
     // Inactive sources with reason
+    // Use sourceNeedsAuthentication() to correctly check if auth is required,
+    // not just whether isAuthenticated is set. Sources with authType: "none"
+    // should show "inactive" not "needs auth".
     if (inactiveSources.length > 0) {
       const inactiveList = inactiveSources.map((s) => {
         const reason = !s.config.enabled
           ? 'disabled'
-          : !s.config.isAuthenticated
+          : sourceNeedsAuthentication(s)
             ? 'needs auth'
             : 'inactive';
         return `${s.config.slug} (${reason})`;
