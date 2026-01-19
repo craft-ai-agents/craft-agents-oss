@@ -40,6 +40,22 @@ describe('isValidMentionTrigger', () => {
       expect(isValidMentionTrigger('hello   @', 8)).toBe(true);
       expect(isValidMentionTrigger('hello\n\n@', 7)).toBe(true);
     });
+
+    it('returns true when @ is preceded by opening parenthesis', () => {
+      expect(isValidMentionTrigger('(@', 1)).toBe(true);
+      expect(isValidMentionTrigger('use (@skill)', 5)).toBe(true);
+      expect(isValidMentionTrigger('call(@mention', 5)).toBe(true);
+    });
+
+    it('returns true when @ is preceded by double quote', () => {
+      expect(isValidMentionTrigger('"@', 1)).toBe(true);
+      expect(isValidMentionTrigger('say "@skill"', 5)).toBe(true);
+    });
+
+    it('returns true when @ is preceded by single quote', () => {
+      expect(isValidMentionTrigger("'@", 1)).toBe(true);
+      expect(isValidMentionTrigger("use '@skill'", 5)).toBe(true);
+    });
   });
 
   describe('invalid triggers (should NOT open menu)', () => {
@@ -60,10 +76,11 @@ describe('isValidMentionTrigger', () => {
       expect(isValidMentionTrigger('99@bottles', 2)).toBe(false);
     });
 
-    it('returns false when @ is preceded by punctuation', () => {
+    it('returns false when @ is preceded by other punctuation (not quotes/parens)', () => {
       expect(isValidMentionTrigger('hello.@', 6)).toBe(false);
       expect(isValidMentionTrigger('test-@user', 5)).toBe(false);
       expect(isValidMentionTrigger('foo_@bar', 4)).toBe(false);
+      expect(isValidMentionTrigger('end)@start', 4)).toBe(false); // closing paren is not allowed
     });
 
     it('returns false for negative position', () => {
