@@ -19,25 +19,11 @@ curl -fsSL https://agents.craft.do/install-app.sh | bash
 irm https://agents.craft.do/install-app.ps1 | iex
 ```
 
-### Direct Download
-
-Download the latest release for your platform:
-
-| Platform | Download |
-|----------|----------|
-| macOS (Apple Silicon) | [Craft-Agent-arm64.dmg](https://agents.craft.do/electron/latest/Craft-Agent-arm64.dmg) |
-| macOS (Intel) | [Craft-Agent-x64.dmg](https://agents.craft.do/electron/latest/Craft-Agent-x64.dmg) |
-| Windows | [Craft-Agent-x64.exe](https://agents.craft.do/electron/latest/Craft-Agent-x64.exe) |
-| Linux (x64) | [Craft-Agent-x64.AppImage](https://agents.craft.do/electron/latest/Craft-Agent-x64.AppImage) |
-| Linux (ARM64) | [Craft-Agent-arm64.AppImage](https://agents.craft.do/electron/latest/Craft-Agent-arm64.AppImage) |
-
-Or browse all versions at [agents.craft.do/electron/](https://agents.craft.do/electron/)
-
 ### Build from Source
 
 ```bash
-git clone https://github.com/lukilabs/craft-agents.git
-cd craft-agents
+git clone https://github.com/lukilabs/craft-agents-oss.git
+cd craft-agents-oss
 bun install
 bun run electron:start
 ```

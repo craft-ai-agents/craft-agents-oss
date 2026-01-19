@@ -128,6 +128,25 @@ jobs:
           token: ${{ secrets.OSS_REPO_TOKEN }}
           path: oss-repo
 
+      - name: Download release binaries
+        run: |
+          VERSION="${{ needs.sync.outputs.version }}"
+          BASE_URL="https://agents.craft.do/electron/$VERSION"
+
+          mkdir -p /tmp/binaries
+          cd /tmp/binaries
+
+          echo "Downloading binaries for v$VERSION..."
+
+          # Download all platform binaries (continue on failure for missing platforms)
+          curl -fsSL -o "Craft-Agents-$VERSION-mac-arm64.dmg" "$BASE_URL/Craft-Agent-arm64.dmg" || echo "Warning: arm64 DMG not found"
+          curl -fsSL -o "Craft-Agents-$VERSION-mac-x64.dmg" "$BASE_URL/Craft-Agent-x64.dmg" || echo "Warning: x64 DMG not found"
+          curl -fsSL -o "Craft-Agents-$VERSION-win-x64.exe" "$BASE_URL/Craft-Agent-x64.exe" || echo "Warning: Windows EXE not found"
+          curl -fsSL -o "Craft-Agents-$VERSION-linux-x64.AppImage" "$BASE_URL/Craft-Agent-x64.AppImage" || echo "Warning: x64 AppImage not found"
+
+          echo "Downloaded files:"
+          ls -la
+
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.OSS_REPO_TOKEN }}
@@ -149,3 +168,14 @@ jobs:
             --target "${{ inputs.branch }}"
 
           echo "Created release v$VERSION"
+
+          # Upload binaries to the release
+          echo "Uploading binaries..."
+          for file in /tmp/binaries/*; do
+            if [[ -f "$file" && -s "$file" ]]; then
+              echo "Uploading $(basename "$file")..."
+              gh release upload "v$VERSION" "$file" --clobber || echo "Warning: Failed to upload $(basename "$file")"
+            fi
+          done
+
+          echo "Release v$VERSION complete with binaries"
