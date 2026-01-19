@@ -32,7 +32,7 @@ export interface SourcesListPanelProps {
   sources: LoadedSource[]
   /** Workspace root path for EditPopover context */
   workspaceRootPath?: string
-  onDeleteSource: (sourceName: string) => void
+  onDeleteSource: (sourceSlug: string) => void
   onSourceClick: (source: LoadedSource) => void
   selectedSourceSlug?: string | null
   /** Whether local MCP servers are enabled (affects stdio source status) */
@@ -78,7 +78,7 @@ export function SourcesListPanel({
                 isFirst={index === 0}
                 localMcpEnabled={localMcpEnabled}
                 onClick={() => onSourceClick(source)}
-                onDelete={() => onDeleteSource(source.config.name)}
+                onDelete={() => onDeleteSource(source.config.slug)}
               />
             ))}
           </div>

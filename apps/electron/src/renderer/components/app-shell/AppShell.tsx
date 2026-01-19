@@ -820,11 +820,11 @@ function AppShellContent({
   }, [activeWorkspace, onCreateSession])
 
   // Delete Source - simplified since agents system is removed
-  const handleDeleteSource = useCallback(async (sourceName: string) => {
+  const handleDeleteSource = useCallback(async (sourceSlug: string) => {
     if (!activeWorkspace) return
     try {
-      await window.electronAPI.deleteSource(activeWorkspace.id, sourceName)
-      toast.success(`Deleted source: ${sourceName}`)
+      await window.electronAPI.deleteSource(activeWorkspace.id, sourceSlug)
+      toast.success(`Deleted source`)
     } catch (error) {
       console.error('[Chat] Failed to delete source:', error)
       toast.error('Failed to delete source')

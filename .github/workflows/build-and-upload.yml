@@ -347,6 +347,24 @@ jobs:
           echo "==========================="
           bun run scripts/upload.ts $FLAGS
 
+      - name: Create git tag
+        if: github.ref == 'refs/heads/main'
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          TAG="v${VERSION}"
+
+          # Check if tag already exists
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists, skipping"
+          else
+            echo "Creating tag $TAG"
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git tag -a "$TAG" -m "Release $TAG"
+            git push origin "$TAG"
+            echo "Tag $TAG created and pushed"
+          fi
+
       - name: Create GitHub Release
         if: ${{ inputs.createRelease }}
         env:
