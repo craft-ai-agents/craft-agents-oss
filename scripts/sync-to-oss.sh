@@ -19,6 +19,7 @@ TARGET_REPO="$DEFAULT_TARGET"
 DRY_RUN=false
 BRANCH="main"
 AUTO_CONFIRM=false
+SKIP_CONTRIBUTION_CHECK=false
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -38,8 +39,19 @@ while [[ $# -gt 0 ]]; do
       AUTO_CONFIRM=true
       shift
       ;;
+    --force)
+      SKIP_CONTRIBUTION_CHECK=true
+      shift
+      ;;
     --help)
-      echo "Usage: $0 [--target <repo-url>] [--branch <branch>] [--dry-run] [--yes]"
+      echo "Usage: $0 [--target <repo-url>] [--branch <branch>] [--dry-run] [--yes] [--force]"
+      echo ""
+      echo "Options:"
+      echo "  --target <url>   Target repository URL (default: $DEFAULT_TARGET)"
+      echo "  --branch <name>  Target branch (default: main)"
+      echo "  --dry-run        Show what would be synced without pushing"
+      echo "  --yes, -y        Auto-confirm push (for CI)"
+      echo "  --force          Skip unmerged contribution check (use with caution)"
       exit 0
       ;;
     *)
@@ -56,6 +68,54 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
+
+# Check for unmerged OSS contributions
+# Returns 0 if no contributions found, 1 if contributions need to be merged
+check_oss_contributions() {
+  local oss_dir="$1"
+
+  cd "$oss_dir"
+
+  # Find commits that are NOT sync commits (external contributions)
+  # Sync commits have "Sync from internal repository" in the message
+  local contribution_commits
+  contribution_commits=$(git log --oneline --all --invert-grep --grep="Sync from internal repository" --grep="Initial commit" 2>/dev/null | head -20)
+
+  if [[ -n "$contribution_commits" ]]; then
+    echo ""
+    echo -e "${RED}════════════════════════════════════════════════════════════════${NC}"
+    echo -e "${RED}ERROR: Unmerged OSS contributions detected!${NC}"
+    echo -e "${RED}════════════════════════════════════════════════════════════════${NC}"
+    echo ""
+    echo "The following commits in the OSS repo need to be cherry-picked to internal first:"
+    echo ""
+    echo "$contribution_commits"
+    echo ""
+    echo -e "${YELLOW}To merge these contributions:${NC}"
+    echo ""
+    echo "  1. Add the OSS repo as a remote (one-time setup):"
+    echo "     git remote add oss https://github.com/lukilabs/craft-agents-oss.git"
+    echo ""
+    echo "  2. Fetch the latest from OSS:"
+    echo "     git fetch oss"
+    echo ""
+    echo "  3. Cherry-pick each contribution commit:"
+    while IFS= read -r line; do
+      local hash="${line%% *}"
+      echo "     git cherry-pick $hash"
+    done <<< "$contribution_commits"
+    echo ""
+    echo "  4. Push to internal repo:"
+    echo "     git push origin main"
+    echo ""
+    echo "  5. Re-run the sync workflow"
+    echo ""
+    echo -e "${RED}════════════════════════════════════════════════════════════════${NC}"
+    return 1
+  fi
+
+  return 0
+}
 
 # Build rsync include/exclude patterns from allow-list
 build_rsync_patterns() {
@@ -166,10 +226,22 @@ main() {
   TEMP_DIR=$(mktemp -d)
   echo "Working directory: $TEMP_DIR"
 
-  # Clone target repo
+  # Clone target repo (full history needed for contribution check)
   echo "Cloning target repository..."
-  git clone --depth=1 --branch="$BRANCH" "$TARGET_REPO" "$TEMP_DIR/target" 2>/dev/null || \
+  git clone --branch="$BRANCH" "$TARGET_REPO" "$TEMP_DIR/target" 2>/dev/null || \
     git clone "$TARGET_REPO" "$TEMP_DIR/target"
+
+  # Check for unmerged OSS contributions before proceeding
+  if $SKIP_CONTRIBUTION_CHECK; then
+    echo -e "${YELLOW}Skipping contribution check (--force)${NC}"
+  else
+    echo "Checking for unmerged OSS contributions..."
+    if ! check_oss_contributions "$TEMP_DIR/target"; then
+      exit 1
+    fi
+    echo -e "${GREEN}No unmerged contributions found.${NC}"
+  fi
+  cd "$REPO_ROOT"
 
   # Remove only files that are managed by allow-list (preserves OSS-only files like custom workflows)
   echo "Cleaning managed files in target..."
@@ -199,6 +271,12 @@ main() {
     mkdir -p "$(dirname "$dest")"
     cp "$REPO_ROOT/$file" "$dest"
   done
+
+  # Rename README_FOR_OSS.md to README.md
+  if [[ -f "$TEMP_DIR/target/README_FOR_OSS.md" ]]; then
+    mv "$TEMP_DIR/target/README_FOR_OSS.md" "$TEMP_DIR/target/README.md"
+    echo "Renamed README_FOR_OSS.md → README.md"
+  fi
 
   # Show diff
   cd "$TEMP_DIR/target"

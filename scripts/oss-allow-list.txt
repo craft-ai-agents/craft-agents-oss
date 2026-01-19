@@ -15,8 +15,7 @@ tsconfig.json
 LICENSE
 NOTICE
 TRADEMARK.md
-README.md
-CLAUDE.md
+README_FOR_OSS.md
 CODE_OF_CONDUCT.md
 CONTRIBUTING.md
 SECURITY.md
@@ -31,7 +30,6 @@ apps/electron/eslint.config.mjs
 apps/electron/components.json
 apps/electron/electron-builder.yml
 apps/electron/README.md
-apps/electron/CLAUDE.md
 apps/electron/.gitignore
 
 # Electron source code

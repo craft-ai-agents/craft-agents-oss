@@ -54,8 +54,8 @@ jobs:
         id: sync
         if: ${{ !inputs.dry_run }}
         run: |
-          # Use HTTPS with GITHUB_TOKEN for authentication
-          TARGET_REPO="https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/lukilabs/craft-agents-oss.git"
+          # Use HTTPS with OSS_REPO_TOKEN for cross-repo authentication
+          TARGET_REPO="https://x-access-token:${{ secrets.OSS_REPO_TOKEN }}@github.com/lukilabs/craft-agents-oss.git"
 
           # Run sync in non-interactive mode
           if bash scripts/sync-to-oss.sh --target "$TARGET_REPO" --branch "${{ inputs.branch }}" --yes; then
@@ -125,12 +125,12 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: lukilabs/craft-agents-oss
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.OSS_REPO_TOKEN }}
           path: oss-repo
 
       - name: Create GitHub Release
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.OSS_REPO_TOKEN }}
         run: |
           cd oss-repo
           VERSION="${{ needs.sync.outputs.version }}"
