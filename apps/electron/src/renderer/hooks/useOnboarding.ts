@@ -44,6 +44,10 @@ interface UseOnboardingReturn {
   existingClaudeToken: string | null
   isClaudeCliInstalled: boolean
   handleUseExistingClaudeToken: () => void
+  // Two-step OAuth flow
+  isWaitingForCode: boolean
+  handleSubmitAuthCode: (code: string) => void
+  handleCancelOAuth: () => void
 
   // Completion
   handleFinish: () => void
@@ -186,6 +190,8 @@ export function useOnboarding({
   const [existingClaudeToken, setExistingClaudeToken] = useState<string | null>(null)
   const [isClaudeCliInstalled, setIsClaudeCliInstalled] = useState(false)
   const [claudeOAuthChecked, setClaudeOAuthChecked] = useState(false)
+  // Two-step OAuth flow state
+  const [isWaitingForCode, setIsWaitingForCode] = useState(false)
 
   // Check for existing Claude token when reaching credentials step with oauth billing
   useEffect(() => {
@@ -231,24 +237,52 @@ export function useOnboarding({
     }
   }, [existingClaudeToken, handleSaveConfig])
 
-  // Start Claude OAuth (run claude setup-token)
+  // Start Claude OAuth (native browser-based OAuth with PKCE - two-step flow)
   const handleStartOAuth = useCallback(async () => {
-    setState(s => ({ ...s, credentialStatus: 'validating', errorMessage: undefined }))
+    setState(s => ({ ...s, errorMessage: undefined }))
 
     try {
-      if (!isClaudeCliInstalled) {
+      // Start OAuth flow - this opens the browser
+      const result = await window.electronAPI.startClaudeOAuth()
+
+      if (result.success) {
+        // Browser opened successfully, now waiting for user to copy the code
+        setIsWaitingForCode(true)
+      } else {
         setState(s => ({
           ...s,
           credentialStatus: 'error',
-          errorMessage: 'Claude CLI is not installed. Please install it first: npm install -g @anthropic-ai/claude-code',
+          errorMessage: result.error || 'Failed to start OAuth',
         }))
-        return
       }
+    } catch (error) {
+      setState(s => ({
+        ...s,
+        credentialStatus: 'error',
+        errorMessage: error instanceof Error ? error.message : 'OAuth failed',
+      }))
+    }
+  }, [])
 
-      const result = await window.electronAPI.runClaudeSetupToken()
+  // Submit authorization code (second step of OAuth flow)
+  const handleSubmitAuthCode = useCallback(async (code: string) => {
+    if (!code.trim()) {
+      setState(s => ({
+        ...s,
+        credentialStatus: 'error',
+        errorMessage: 'Please enter the authorization code',
+      }))
+      return
+    }
+
+    setState(s => ({ ...s, credentialStatus: 'validating', errorMessage: undefined }))
+
+    try {
+      const result = await window.electronAPI.exchangeClaudeCode(code.trim())
 
       if (result.success && result.token) {
         setExistingClaudeToken(result.token)
+        setIsWaitingForCode(false)
         await handleSaveConfig(result.token)
 
         setState(s => ({
@@ -260,17 +294,25 @@ export function useOnboarding({
         setState(s => ({
           ...s,
           credentialStatus: 'error',
-          errorMessage: result.error || 'OAuth failed - token not found after setup',
+          errorMessage: result.error || 'Failed to exchange code',
         }))
       }
     } catch (error) {
       setState(s => ({
         ...s,
         credentialStatus: 'error',
-        errorMessage: error instanceof Error ? error.message : 'OAuth failed',
+        errorMessage: error instanceof Error ? error.message : 'Failed to exchange code',
       }))
     }
-  }, [isClaudeCliInstalled, handleSaveConfig])
+  }, [handleSaveConfig])
+
+  // Cancel OAuth flow
+  const handleCancelOAuth = useCallback(async () => {
+    setIsWaitingForCode(false)
+    setState(s => ({ ...s, credentialStatus: 'idle', errorMessage: undefined }))
+    // Clear OAuth state on backend
+    await window.electronAPI.clearClaudeOAuthState()
+  }, [])
 
   // Finish onboarding
   const handleFinish = useCallback(() => {
@@ -296,6 +338,7 @@ export function useOnboarding({
     setExistingClaudeToken(null)
     setIsClaudeCliInstalled(false)
     setClaudeOAuthChecked(false)
+    setIsWaitingForCode(false)
   }, [])
 
   return {
@@ -308,6 +351,10 @@ export function useOnboarding({
     existingClaudeToken,
     isClaudeCliInstalled,
     handleUseExistingClaudeToken,
+    // Two-step OAuth flow
+    isWaitingForCode,
+    handleSubmitAuthCode,
+    handleCancelOAuth,
     handleFinish,
     handleCancel,
     reset,

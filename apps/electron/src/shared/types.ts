@@ -524,6 +524,11 @@ export const IPC_CHANNELS = {
   ONBOARDING_GET_EXISTING_CLAUDE_TOKEN: 'onboarding:getExistingClaudeToken',
   ONBOARDING_IS_CLAUDE_CLI_INSTALLED: 'onboarding:isClaudeCliInstalled',
   ONBOARDING_RUN_CLAUDE_SETUP_TOKEN: 'onboarding:runClaudeSetupToken',
+  // Native Claude OAuth (two-step flow)
+  ONBOARDING_START_CLAUDE_OAUTH: 'onboarding:startClaudeOAuth',
+  ONBOARDING_EXCHANGE_CLAUDE_CODE: 'onboarding:exchangeClaudeCode',
+  ONBOARDING_HAS_CLAUDE_OAUTH_STATE: 'onboarding:hasClaudeOAuthState',
+  ONBOARDING_CLEAR_CLAUDE_OAUTH_STATE: 'onboarding:clearClaudeOAuthState',
 
   // Settings - Billing
   SETTINGS_GET_BILLING_METHOD: 'settings:getBillingMethod',
@@ -717,6 +722,11 @@ export interface ElectronAPI {
   getExistingClaudeToken(): Promise<string | null>
   isClaudeCliInstalled(): Promise<boolean>
   runClaudeSetupToken(): Promise<ClaudeOAuthResult>
+  // Native Claude OAuth (two-step flow)
+  startClaudeOAuth(): Promise<{ success: boolean; authUrl?: string; error?: string }>
+  exchangeClaudeCode(code: string): Promise<ClaudeOAuthResult>
+  hasClaudeOAuthState(): Promise<boolean>
+  clearClaudeOAuthState(): Promise<{ success: boolean }>
 
   // Settings - Billing
   getBillingMethod(): Promise<BillingMethodInfo>

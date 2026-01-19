@@ -38,6 +38,10 @@ interface OnboardingWizardProps {
   existingClaudeToken?: string | null
   isClaudeCliInstalled?: boolean
   onUseExistingClaudeToken?: () => void
+  // Two-step OAuth flow
+  isWaitingForCode?: boolean
+  onSubmitAuthCode?: (code: string) => void
+  onCancelOAuth?: () => void
 
   className?: string
 }
@@ -62,6 +66,10 @@ export function OnboardingWizard({
   existingClaudeToken,
   isClaudeCliInstalled,
   onUseExistingClaudeToken,
+  // Two-step OAuth flow
+  isWaitingForCode,
+  onSubmitAuthCode,
+  onCancelOAuth,
   className
 }: OnboardingWizardProps) {
   const renderStep = () => {
@@ -96,6 +104,9 @@ export function OnboardingWizard({
             existingClaudeToken={existingClaudeToken}
             isClaudeCliInstalled={isClaudeCliInstalled}
             onUseExistingClaudeToken={onUseExistingClaudeToken}
+            isWaitingForCode={isWaitingForCode}
+            onSubmitAuthCode={onSubmitAuthCode}
+            onCancelOAuth={onCancelOAuth}
           />
         )
 

@@ -14,6 +14,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { HeaderMenu } from '@/components/ui/HeaderMenu'
 import { useTheme } from '@/context/ThemeContext'
@@ -154,9 +155,8 @@ function ApiKeyDialogContent({ value, onChange, onSave, onCancel, isSaving, hasE
 // Claude OAuth Dialog Content
 // ============================================
 
-interface ClaudeOAuthDialogProps {
+interface ClaudeOAuthDialogBaseProps {
   existingToken: string | null
-  isCliInstalled: boolean
   isLoading: boolean
   onUseExisting: () => void
   onStartOAuth: () => void
@@ -165,16 +165,14 @@ interface ClaudeOAuthDialogProps {
   errorMessage?: string
 }
 
-function ClaudeOAuthDialogContent({
-  existingToken,
-  isCliInstalled,
-  isLoading,
-  onUseExisting,
-  onStartOAuth,
-  onCancel,
-  status,
-  errorMessage,
-}: ClaudeOAuthDialogProps) {
+type ClaudeOAuthDialogProps = ClaudeOAuthDialogBaseProps & (
+  | { isWaitingForCode: false }
+  | { isWaitingForCode: true; authCode: string; onAuthCodeChange: (code: string) => void; onSubmitAuthCode: (code: string) => void }
+)
+
+function ClaudeOAuthDialogContent(props: ClaudeOAuthDialogProps) {
+  const { existingToken, isLoading, onUseExisting, onStartOAuth, onCancel, status, errorMessage } = props
+
   if (status === 'success') {
     return (
       <div className="space-y-4">
@@ -186,31 +184,65 @@ function ClaudeOAuthDialogContent({
     )
   }
 
-  if (!isCliInstalled && !existingToken) {
+  // Waiting for authorization code entry
+  if (props.isWaitingForCode) {
+    const { authCode, onAuthCodeChange, onSubmitAuthCode } = props
+    const trimmedCode = authCode.trim()
+
+    const handleSubmit = () => {
+      if (trimmedCode) {
+        onSubmitAuthCode(trimmedCode)
+      }
+    }
+
     return (
       <div className="space-y-4">
         <p className="text-sm text-muted-foreground">
-          Use your Claude Pro or Max subscription. Requires Claude Code CLI.{' '}
-          <a
-            href="https://docs.anthropic.com/claude-code/getting-started"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-foreground hover:underline inline-flex items-center gap-0.5"
-            onClick={(e) => {
-              e.preventDefault()
-              window.electronAPI?.openUrl('https://docs.anthropic.com/claude-code/getting-started')
-            }}
-          >
-            Install Claude Code
-            <ExternalLink className="size-3" />
-          </a>
+          Copy the authorization code from your browser and paste it below.
         </p>
-        <div className="flex items-center gap-2 pt-2">
+        <div className="space-y-2">
+          <Label htmlFor="auth-code">Authorization Code</Label>
+          <div className="relative rounded-md shadow-minimal transition-colors bg-foreground-2 focus-within:bg-background">
+            <Input
+              id="auth-code"
+              type="text"
+              value={authCode}
+              onChange={(e) => onAuthCodeChange(e.target.value)}
+              placeholder="Paste your authorization code here"
+              className="border-0 bg-transparent shadow-none font-mono text-sm"
+              disabled={status === 'loading'}
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleSubmit()
+                }
+              }}
+            />
+          </div>
+          {status === 'error' && errorMessage && (
+            <p className="text-sm text-destructive">{errorMessage}</p>
+          )}
+        </div>
+        <div className="flex items-center justify-end gap-2 pt-2">
           <Button
             variant="ghost"
             onClick={onCancel}
+            disabled={status === 'loading'}
           >
             Cancel
+          </Button>
+          <Button
+            onClick={handleSubmit}
+            disabled={!trimmedCode || status === 'loading'}
+          >
+            {status === 'loading' ? (
+              <>
+                <Spinner className="mr-1.5" />
+                Connecting...
+              </>
+            ) : (
+              'Connect'
+            )}
           </Button>
         </div>
       </div>
@@ -222,7 +254,7 @@ function ClaudeOAuthDialogContent({
       <p className="text-sm text-muted-foreground">
         Use your Claude Pro or Max subscription for unlimited access.
       </p>
-      <div className="flex items-center gap-2 pt-2">
+      <div className="flex items-center justify-end gap-2 pt-2">
         {existingToken ? (
           <Button
             onClick={onUseExisting}
@@ -248,7 +280,7 @@ function ClaudeOAuthDialogContent({
             {status === 'loading' ? (
               <>
                 <Spinner className="mr-1.5" />
-                Connecting...
+                Starting...
               </>
             ) : (
               <>
@@ -266,6 +298,18 @@ function ClaudeOAuthDialogContent({
           Cancel
         </Button>
       </div>
+      {existingToken && (
+        <div className="text-center">
+          <Button
+            variant="link"
+            onClick={onStartOAuth}
+            disabled={isLoading}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            Or sign in with a different account
+          </Button>
+        </div>
+      )}
       {errorMessage && (
         <p className="text-xs text-destructive">{errorMessage}</p>
       )}
@@ -299,9 +343,10 @@ export default function AppSettingsPage() {
 
   // Claude OAuth state
   const [existingClaudeToken, setExistingClaudeToken] = useState<string | null>(null)
-  const [isClaudeCliInstalled, setIsClaudeCliInstalled] = useState(false)
   const [claudeOAuthStatus, setClaudeOAuthStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [claudeOAuthError, setClaudeOAuthError] = useState<string | undefined>()
+  const [isWaitingForCode, setIsWaitingForCode] = useState(false)
+  const [authCode, setAuthCode] = useState('')
 
   // Notifications state
   const [notificationsEnabled, setNotificationsEnabled] = useState(true)
@@ -359,24 +404,20 @@ export default function AppSettingsPage() {
     loadThemes()
   }, [])
 
-  // Check Claude OAuth availability when expanding oauth_token option
+  // Check for existing Claude token when expanding oauth_token option
   useEffect(() => {
     if (expandedMethod !== 'oauth_token') return
 
-    const checkClaudeAuth = async () => {
+    const checkExistingToken = async () => {
       if (!window.electronAPI) return
       try {
-        const [token, cliInstalled] = await Promise.all([
-          window.electronAPI.getExistingClaudeToken(),
-          window.electronAPI.isClaudeCliInstalled(),
-        ])
+        const token = await window.electronAPI.getExistingClaudeToken()
         setExistingClaudeToken(token)
-        setIsClaudeCliInstalled(cliInstalled)
       } catch (error) {
-        console.error('Failed to check Claude auth:', error)
+        console.error('Failed to check existing Claude token:', error)
       }
     }
-    checkClaudeAuth()
+    checkExistingToken()
   }, [expandedMethod])
 
   // Handle clicking on a billing method option
@@ -439,27 +480,78 @@ export default function AppSettingsPage() {
     }
   }, [existingClaudeToken])
 
-  // Start Claude OAuth flow
+  // Start Claude OAuth flow (native browser-based)
   const handleStartClaudeOAuth = useCallback(async () => {
     if (!window.electronAPI) return
 
     setClaudeOAuthStatus('loading')
     setClaudeOAuthError(undefined)
+
     try {
-      const result = await window.electronAPI.runClaudeSetupToken()
+      // Start OAuth flow - this opens the browser
+      const result = await window.electronAPI.startClaudeOAuth()
+
+      if (result.success) {
+        // Browser opened successfully, now waiting for user to copy the code
+        setIsWaitingForCode(true)
+        setClaudeOAuthStatus('idle')
+      } else {
+        setClaudeOAuthStatus('error')
+        setClaudeOAuthError(result.error || 'Failed to start OAuth')
+      }
+    } catch (error) {
+      setClaudeOAuthStatus('error')
+      setClaudeOAuthError(error instanceof Error ? error.message : 'OAuth failed')
+    }
+  }, [])
+
+  // Submit authorization code from browser
+  const handleSubmitAuthCode = useCallback(async (code: string) => {
+    if (!window.electronAPI || !code.trim()) {
+      setClaudeOAuthError('Please enter the authorization code')
+      return
+    }
+
+    setClaudeOAuthStatus('loading')
+    setClaudeOAuthError(undefined)
+
+    try {
+      const result = await window.electronAPI.exchangeClaudeCode(code.trim())
+
       if (result.success && result.token) {
         await window.electronAPI.updateBillingMethod('oauth_token', result.token)
         setAuthType('oauth_token')
         setHasCredential(true)
         setClaudeOAuthStatus('success')
+        setIsWaitingForCode(false)
+        setAuthCode('')
         setExpandedMethod(null)
       } else {
         setClaudeOAuthStatus('error')
-        setClaudeOAuthError(result.error || 'OAuth failed')
+        setClaudeOAuthError(result.error || 'Failed to exchange code')
       }
     } catch (error) {
       setClaudeOAuthStatus('error')
-      setClaudeOAuthError(error instanceof Error ? error.message : 'OAuth failed')
+      setClaudeOAuthError(error instanceof Error ? error.message : 'Failed to exchange code')
+    }
+  }, [])
+
+  // Cancel OAuth flow and clear state
+  const handleCancelOAuth = useCallback(async () => {
+    setIsWaitingForCode(false)
+    setAuthCode('')
+    setClaudeOAuthStatus('idle')
+    setClaudeOAuthError(undefined)
+    setExpandedMethod(null)
+
+    // Clear OAuth state on backend
+    if (window.electronAPI) {
+      try {
+        await window.electronAPI.clearClaudeOAuthState()
+      } catch (error) {
+        // Non-critical: state cleanup failed, but UI is already reset
+        console.error('Failed to clear OAuth state:', error)
+      }
     }
   }, [])
 
@@ -572,7 +664,7 @@ export default function AppSettingsPage() {
               </Dialog>
 
               {/* Claude OAuth Dialog */}
-              <Dialog open={expandedMethod === 'oauth_token'} onOpenChange={(open) => !open && handleCancel()}>
+              <Dialog open={expandedMethod === 'oauth_token'} onOpenChange={(open) => !open && handleCancelOAuth()}>
                 <DialogContent>
                   <DialogHeader>
                     <DialogTitle>Claude Max</DialogTitle>
@@ -580,16 +672,32 @@ export default function AppSettingsPage() {
                       Connect your Claude subscription
                     </DialogDescription>
                   </DialogHeader>
-                  <ClaudeOAuthDialogContent
-                    existingToken={existingClaudeToken}
-                    isCliInstalled={isClaudeCliInstalled}
-                    isLoading={claudeOAuthStatus === 'loading'}
-                    onUseExisting={handleUseExistingClaudeToken}
-                    onStartOAuth={handleStartClaudeOAuth}
-                    onCancel={handleCancel}
-                    status={claudeOAuthStatus}
-                    errorMessage={claudeOAuthError}
-                  />
+                  {isWaitingForCode ? (
+                    <ClaudeOAuthDialogContent
+                      existingToken={existingClaudeToken}
+                      isLoading={claudeOAuthStatus === 'loading'}
+                      onUseExisting={handleUseExistingClaudeToken}
+                      onStartOAuth={handleStartClaudeOAuth}
+                      onCancel={handleCancelOAuth}
+                      status={claudeOAuthStatus}
+                      errorMessage={claudeOAuthError}
+                      isWaitingForCode={true}
+                      authCode={authCode}
+                      onAuthCodeChange={setAuthCode}
+                      onSubmitAuthCode={handleSubmitAuthCode}
+                    />
+                  ) : (
+                    <ClaudeOAuthDialogContent
+                      existingToken={existingClaudeToken}
+                      isLoading={claudeOAuthStatus === 'loading'}
+                      onUseExisting={handleUseExistingClaudeToken}
+                      onStartOAuth={handleStartClaudeOAuth}
+                      onCancel={handleCancelOAuth}
+                      status={claudeOAuthStatus}
+                      errorMessage={claudeOAuthError}
+                      isWaitingForCode={false}
+                    />
+                  )}
                 </DialogContent>
               </Dialog>
             </SettingsSection>

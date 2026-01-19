@@ -241,13 +241,41 @@ export function isTokenExpired(expiresAt?: number): boolean {
 }
 
 /**
+ * Build extended PATH with common installation locations
+ * This is necessary because when running from Finder/Dock, the PATH
+ * may not include directories where claude CLI is installed
+ */
+function getExtendedPath(): string {
+  const home = homedir();
+  const extendedPaths = [
+    '/opt/homebrew/bin',
+    '/usr/local/bin',
+    `${home}/.local/bin`,
+    `${home}/.bun/bin`,
+    `${home}/.cargo/bin`,
+    '/opt/local/bin',
+    `${home}/.nvm/versions/node/*/bin`, // Common Node.js installations
+  ].filter(Boolean);
+
+  const currentPath = process.env.PATH || '';
+  return [...extendedPaths, ...currentPath.split(':')].join(':');
+}
+
+/**
  * Check if Claude CLI is installed (cross-platform)
+ * Uses extended PATH to find claude even when running from Finder/Dock
  */
 export function isClaudeCliInstalled(): boolean {
   try {
     // Use 'where' on Windows, 'which' on Unix-like systems
     const command = process.platform === 'win32' ? 'where claude' : 'which claude';
-    execSync(command, { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
+    const fullPath = getExtendedPath();
+
+    execSync(command, {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: { ...process.env, PATH: fullPath }
+    });
     return true;
   } catch {
     return false;
@@ -255,8 +283,11 @@ export function isClaudeCliInstalled(): boolean {
 }
 
 /**
- * Run `claude setup-token` interactively
+ * Run `claude setup-token` to authenticate with Claude
  * Returns a promise that resolves when the process completes
+ *
+ * Note: Uses pipe for stdio instead of inherit to prevent hanging in non-TTY
+ * environments (like Electron apps launched from Finder/Dock)
  */
 export function runClaudeSetupToken(
   onStatus: (message: string) => void
@@ -264,28 +295,68 @@ export function runClaudeSetupToken(
   return new Promise((resolve) => {
     onStatus('Starting Claude setup-token...');
 
+    const fullPath = getExtendedPath();
+
     const child = spawn('claude', ['setup-token'], {
-      stdio: 'inherit', // Allow interactive terminal
+      // Don't use 'inherit' - it causes hang in non-TTY environments
+      // Use 'ignore' for stdin and 'pipe' for stdout/stderr
+      stdio: ['ignore', 'pipe', 'pipe'],
       shell: true,
+      env: { ...process.env, PATH: fullPath },
     });
 
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout?.on('data', (data: Buffer) => {
+      const text = data.toString();
+      stdout += text;
+      onStatus(text.trim());
+    });
+
+    child.stderr?.on('data', (data: Buffer) => {
+      stderr += data.toString();
+    });
+
+    // Timeout after 2 minutes to prevent indefinite hang
+    const timeout = setTimeout(() => {
+      child.kill();
+      resolve({
+        success: false,
+        error: 'Authentication timed out after 2 minutes. Please try again.',
+      });
+    }, 120000);
+
     child.on('error', (err) => {
-      resolve({ success: false, error: err.message });
+      clearTimeout(timeout);
+      resolve({
+        success: false,
+        error: `Failed to start claude setup-token: ${err.message}`,
+      });
     });
 
     child.on('close', (code) => {
+      clearTimeout(timeout);
+
       if (code === 0) {
-        // Wait a moment for the token to be written
+        // Wait a moment for the token to be written to keychain
         setTimeout(() => {
           const token = getExistingClaudeToken();
           if (token) {
             resolve({ success: true, token });
           } else {
-            resolve({ success: false, error: 'Token not found after setup' });
+            resolve({
+              success: false,
+              error: 'Token not found after setup. The authentication may have failed.',
+            });
           }
         }, 500);
       } else {
-        resolve({ success: false, error: `Process exited with code ${code}` });
+        const errorDetail = stderr.trim() || `Process exited with code ${code}`;
+        resolve({
+          success: false,
+          error: errorDetail,
+        });
       }
     });
   });

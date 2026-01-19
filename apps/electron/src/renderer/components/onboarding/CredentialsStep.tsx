@@ -21,6 +21,10 @@ interface CredentialsStepProps {
   existingClaudeToken?: string | null
   isClaudeCliInstalled?: boolean
   onUseExistingClaudeToken?: () => void
+  // Two-step OAuth flow
+  isWaitingForCode?: boolean
+  onSubmitAuthCode?: (code: string) => void
+  onCancelOAuth?: () => void
 }
 
 function getOAuthIcon(status: CredentialStatus): React.ReactNode {
@@ -76,9 +80,14 @@ export function CredentialsStep({
   existingClaudeToken,
   isClaudeCliInstalled,
   onUseExistingClaudeToken,
+  // Two-step OAuth flow
+  isWaitingForCode,
+  onSubmitAuthCode,
+  onCancelOAuth,
 }: CredentialsStepProps) {
   const [value, setValue] = useState('')
   const [showValue, setShowValue] = useState(false)
+  const [authCode, setAuthCode] = useState('')
 
   const isApiKey = billingMethod === 'api_key'
   const isOAuth = billingMethod === 'claude_oauth'
@@ -90,14 +99,69 @@ export function CredentialsStep({
     }
   }
 
+  // Handle auth code submission
+  const handleAuthCodeSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (authCode.trim() && onSubmitAuthCode) {
+      onSubmitAuthCode(authCode.trim())
+    }
+  }
+
   // OAuth flow
   if (isOAuth) {
     const content = OAUTH_STATUS_CONTENT[status]
 
-    // Check if we have options to show
+    // Check if we have existing token from keychain
     const hasExistingToken = !!existingClaudeToken
-    const hasCliOption = isClaudeCliInstalled
-    const hasNoOptions = !hasExistingToken && !hasCliOption
+
+    // Waiting for authorization code entry
+    if (isWaitingForCode) {
+      return (
+        <StepFormLayout
+          title="Enter Authorization Code"
+          description="Copy the code from the browser page and paste it below."
+          actions={
+            <>
+              <BackButton onClick={onCancelOAuth} disabled={status === 'validating'}>Cancel</BackButton>
+              <ContinueButton
+                type="submit"
+                form="auth-code-form"
+                disabled={!authCode.trim()}
+                loading={status === 'validating'}
+                loadingText="Connecting..."
+              />
+            </>
+          }
+        >
+          <form id="auth-code-form" onSubmit={handleAuthCodeSubmit}>
+            <div className="space-y-2">
+              <Label htmlFor="auth-code">Authorization Code</Label>
+              <div className={cn(
+                "relative rounded-md shadow-minimal transition-colors",
+                "bg-foreground-2 focus-within:bg-background"
+              )}>
+                <Input
+                  id="auth-code"
+                  type="text"
+                  value={authCode}
+                  onChange={(e) => setAuthCode(e.target.value)}
+                  placeholder="Paste your authorization code here"
+                  className={cn(
+                    "border-0 bg-transparent shadow-none font-mono text-sm",
+                    status === 'error' && "focus-visible:ring-destructive"
+                  )}
+                  disabled={status === 'validating'}
+                  autoFocus
+                />
+              </div>
+              {status === 'error' && errorMessage && (
+                <p className="text-sm text-destructive">{errorMessage}</p>
+              )}
+            </div>
+          </form>
+        </StepFormLayout>
+      )
+    }
 
     const actions = (
       <>
@@ -109,12 +173,12 @@ export function CredentialsStep({
                 <CheckCircle2 className="size-4" />
                 Use Existing Token
               </ContinueButton>
-            ) : hasCliOption ? (
+            ) : (
               <ContinueButton onClick={onStartOAuth} className="gap-2">
                 <ExternalLink className="size-4" />
                 Sign in with Claude
               </ContinueButton>
-            ) : null}
+            )}
           </>
         )}
 
@@ -133,7 +197,7 @@ export function CredentialsStep({
       </>
     )
 
-    // Dynamic description based on available options
+    // Dynamic description based on state
     let description = content.description
     if (status === 'idle') {
       if (hasExistingToken && existingClaudeToken) {
@@ -142,10 +206,8 @@ export function CredentialsStep({
           ? `${existingClaudeToken.slice(0, 20)}...`
           : existingClaudeToken
         description = `Found existing token: ${tokenPreview}`
-      } else if (hasCliOption) {
-        description = 'This will open Claude CLI to authenticate with your Claude subscription.'
-      } else if (hasNoOptions) {
-        description = 'Claude Code is not installed. Install it with: curl -fsSL https://claude.ai/install.sh | bash'
+      } else {
+        description = 'Click below to sign in with your Claude Pro or Max subscription.'
       }
     }
 
@@ -157,14 +219,14 @@ export function CredentialsStep({
         description={status === 'error' ? (errorMessage || 'Something went wrong. Please try again.') : description}
         actions={actions}
       >
-        {/* Show secondary option if both are available */}
-        {status === 'idle' && hasExistingToken && hasCliOption && (
+        {/* Show secondary option if we have an existing token */}
+        {status === 'idle' && hasExistingToken && (
           <div className="text-center">
             <button
               onClick={onStartOAuth}
               className="text-sm text-muted-foreground hover:text-foreground underline"
             >
-              Or run claude setup-token to get a new token
+              Or sign in with a different account
             </button>
           </div>
         )}

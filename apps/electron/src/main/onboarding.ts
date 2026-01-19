@@ -11,7 +11,8 @@ import { saveConfig, loadStoredConfig, generateWorkspaceId, type AuthType, type 
 import { getDefaultWorkspacesDir } from '@craft-agent/shared/workspaces'
 import { CraftOAuth, getMcpBaseUrl } from '@craft-agent/shared/auth'
 import { validateMcpConnection } from '@craft-agent/shared/mcp'
-import { getExistingClaudeToken, getExistingClaudeCredentials, isClaudeCliInstalled, runClaudeSetupToken } from '@craft-agent/shared/auth'
+import { getExistingClaudeToken, getExistingClaudeCredentials, isClaudeCliInstalled, runClaudeSetupToken, startClaudeOAuth, exchangeClaudeCode, hasValidOAuthState, clearOAuthState } from '@craft-agent/shared/auth'
+import { getCredentialManager as getCredentialManagerFn } from '@craft-agent/shared/credentials'
 import {
   IPC_CHANNELS,
   type OnboardingSaveResult,
@@ -235,7 +236,10 @@ export function registerOnboardingHandlers(sessionManager: SessionManager): void
   // Get existing Claude OAuth token from keychain/credentials file
   ipcMain.handle(IPC_CHANNELS.ONBOARDING_GET_EXISTING_CLAUDE_TOKEN, async () => {
     try {
-      return getExistingClaudeToken()
+      mainLog.info('[Onboarding] Checking for existing Claude token...')
+      const token = getExistingClaudeToken()
+      mainLog.info('[Onboarding] Existing Claude token:', token ? `found (${token.length} chars)` : 'not found')
+      return token
     } catch (error) {
       mainLog.error('[Onboarding] Get existing Claude token error:', error)
       return null
@@ -245,7 +249,11 @@ export function registerOnboardingHandlers(sessionManager: SessionManager): void
   // Check if Claude CLI is installed
   ipcMain.handle(IPC_CHANNELS.ONBOARDING_IS_CLAUDE_CLI_INSTALLED, async () => {
     try {
-      return isClaudeCliInstalled()
+      mainLog.info('[Onboarding] Checking if Claude CLI is installed...')
+      mainLog.info('[Onboarding] Current PATH (first 300 chars):', (process.env.PATH || '').substring(0, 300))
+      const installed = isClaudeCliInstalled()
+      mainLog.info('[Onboarding] Claude CLI installed:', installed)
+      return installed
     } catch (error) {
       mainLog.error('[Onboarding] Check Claude CLI error:', error)
       return false
@@ -255,14 +263,81 @@ export function registerOnboardingHandlers(sessionManager: SessionManager): void
   // Run claude setup-token to get OAuth token
   ipcMain.handle(IPC_CHANNELS.ONBOARDING_RUN_CLAUDE_SETUP_TOKEN, async () => {
     try {
+      mainLog.info('[Onboarding] Starting claude setup-token...')
       const result = await runClaudeSetupToken((status) => {
         mainLog.info('[Onboarding] Claude setup-token status:', status)
+      })
+      mainLog.info('[Onboarding] Claude setup-token result:', {
+        success: result.success,
+        hasToken: !!result.token,
+        error: result.error,
       })
       return result
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
-      mainLog.error('[Onboarding] Run Claude setup-token error:', message)
+      mainLog.error('[Onboarding] Run Claude setup-token error:', message, error)
       return { success: false, error: message }
     }
+  })
+
+  // Start Claude OAuth flow (opens browser, returns URL)
+  ipcMain.handle(IPC_CHANNELS.ONBOARDING_START_CLAUDE_OAUTH, async () => {
+    try {
+      mainLog.info('[Onboarding] Starting Claude OAuth flow...')
+
+      const authUrl = await startClaudeOAuth((status) => {
+        mainLog.info('[Onboarding] Claude OAuth status:', status)
+      })
+
+      mainLog.info('[Onboarding] Claude OAuth URL generated, browser opened')
+      return { success: true, authUrl }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      mainLog.error('[Onboarding] Start Claude OAuth error:', message)
+      return { success: false, error: message }
+    }
+  })
+
+  // Exchange authorization code for tokens
+  ipcMain.handle(IPC_CHANNELS.ONBOARDING_EXCHANGE_CLAUDE_CODE, async (_event, authorizationCode: string) => {
+    try {
+      mainLog.info('[Onboarding] Exchanging Claude authorization code...')
+
+      // Check if we have valid state
+      if (!hasValidOAuthState()) {
+        mainLog.error('[Onboarding] No valid OAuth state found')
+        return { success: false, error: 'OAuth session expired. Please start again.' }
+      }
+
+      const tokens = await exchangeClaudeCode(authorizationCode, (status) => {
+        mainLog.info('[Onboarding] Claude code exchange status:', status)
+      })
+
+      // Save credentials with refresh token support
+      const manager = getCredentialManagerFn()
+      await manager.setClaudeOAuthCredentials({
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        expiresAt: tokens.expiresAt,
+      })
+
+      mainLog.info('[Onboarding] Claude OAuth successful')
+      return { success: true, token: tokens.accessToken }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      mainLog.error('[Onboarding] Exchange Claude code error:', message)
+      return { success: false, error: message }
+    }
+  })
+
+  // Check if there's a valid OAuth state in progress
+  ipcMain.handle(IPC_CHANNELS.ONBOARDING_HAS_CLAUDE_OAUTH_STATE, async () => {
+    return hasValidOAuthState()
+  })
+
+  // Clear OAuth state (for cancel/reset)
+  ipcMain.handle(IPC_CHANNELS.ONBOARDING_CLEAR_CLAUDE_OAUTH_STATE, async () => {
+    clearOAuthState()
+    return { success: true }
   })
 }

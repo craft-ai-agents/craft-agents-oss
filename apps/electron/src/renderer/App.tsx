@@ -1229,6 +1229,9 @@ export default function App() {
         existingClaudeToken={onboarding.existingClaudeToken}
         isClaudeCliInstalled={onboarding.isClaudeCliInstalled}
         onUseExistingClaudeToken={onboarding.handleUseExistingClaudeToken}
+        isWaitingForCode={onboarding.isWaitingForCode}
+        onSubmitAuthCode={onboarding.handleSubmitAuthCode}
+        onCancelOAuth={onboarding.handleCancelOAuth}
       />
     )
   }
