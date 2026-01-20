@@ -23,6 +23,38 @@ const SOURCE_GUIDES_DIR = join(DOCS_DIR, 'source-guides');
 let sourceGuidesInitialized = false;
 
 // ============================================================
+// Version Helpers (duplicated from index.ts to avoid circular dependency)
+// ============================================================
+
+/**
+ * Extract version from a guide file's first line.
+ * Expected format: <!-- version: X.Y.Z -->
+ */
+function extractVersion(content: string): string | null {
+  const match = content.match(/^<!--\s*version:\s*([^\s]+)\s*-->/);
+  return match?.[1] ?? null;
+}
+
+/**
+ * Compare semver versions. Returns:
+ *  1 if a > b
+ *  0 if a == b
+ * -1 if a < b
+ */
+function compareVersions(a: string, b: string): number {
+  const partsA = a.split('.').map(Number);
+  const partsB = b.split('.').map(Number);
+
+  for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
+    const numA = partsA[i] || 0;
+    const numB = partsB[i] || 0;
+    if (numA > numB) return 1;
+    if (numA < numB) return -1;
+  }
+  return 0;
+}
+
+// ============================================================
 // Types
 // ============================================================
 
@@ -293,14 +325,33 @@ export function initializeSourceGuides(): void {
     const versionedContent = `<!-- version: ${appVersion} -->\n${content}`;
 
     if (!existsSync(guidePath)) {
+      // File doesn't exist - create it
       writeFileSync(guidePath, versionedContent, 'utf-8');
       console.log(`[source-guides] Created ${filename} (v${appVersion})`);
       continue;
     }
 
     if (debugMode) {
+      // Debug mode - always overwrite
       writeFileSync(guidePath, versionedContent, 'utf-8');
       console.log(`[source-guides] Updated ${filename} (v${appVersion}, debug mode)`);
+      continue;
+    }
+
+    // Production - check version
+    try {
+      const existingContent = readFileSync(guidePath, 'utf-8');
+      const installedVersion = extractVersion(existingContent);
+
+      if (!installedVersion || compareVersions(appVersion, installedVersion) > 0) {
+        // No version or bundled is newer - update
+        writeFileSync(guidePath, versionedContent, 'utf-8');
+        console.log(`[source-guides] Updated ${filename} (v${installedVersion || 'none'} → v${appVersion})`);
+      }
+    } catch {
+      // Error reading - overwrite
+      writeFileSync(guidePath, versionedContent, 'utf-8');
+      console.log(`[source-guides] Recreated ${filename} (v${appVersion})`);
     }
   }
 }
@@ -398,6 +449,7 @@ Each block can have:
 - Note any frequently used smart folders
 
 ### Configuration Notes
+- **MCP URL**: \`https://mcp.craft.do/my/mcp\`
 - Craft MCP uses OAuth authentication
 - Rate limits: Check MCP server response headers
 `;
