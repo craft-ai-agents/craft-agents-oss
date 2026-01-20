@@ -90,7 +90,7 @@ const integrationIcons = [
 const article = `
 Craft Agents is a tool we built so we can work effectively with agents. It enables intuitive multitasking, no-fluff connection to any API or Service, and a more document (vs code) centric workflow - in a beautiful and fluid UI.
 
-It leans on Claude Code through the [Claude Agent SDK](https://docs.anthropic.com/en/docs/claude-code/sdk) - follow what we found great, and improves areas where we've desired improvements.
+It leans on Claude Code through the [Claude Agent SDK](https://docs.anthropic.com/en/docs/claude-code/sdk) - follows what we found great, and improves areas where we've desired improvements.
 
 It's built with [Agent Native](https://every.to/guides/agent-native) software principles in mind, and is highly customisable out of the box. One of the first of its kind.
 
