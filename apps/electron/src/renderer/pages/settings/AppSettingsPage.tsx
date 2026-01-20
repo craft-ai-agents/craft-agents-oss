@@ -351,6 +351,10 @@ export default function AppSettingsPage() {
   // Notifications state
   const [notificationsEnabled, setNotificationsEnabled] = useState(true)
 
+  // API configuration state
+  const [anthropicBaseUrl, setAnthropicBaseUrl] = useState('https://api.z.ai/api/anthropic')
+  const [isSavingAnthropicBaseUrl, setIsSavingAnthropicBaseUrl] = useState(false)
+
   // Auto-update state
   const updateChecker = useUpdateChecker()
   const [isCheckingForUpdates, setIsCheckingForUpdates] = useState(false)
@@ -369,13 +373,15 @@ export default function AppSettingsPage() {
     const loadSettings = async () => {
       if (!window.electronAPI) return
       try {
-        const [billing, notificationsOn] = await Promise.all([
+        const [billing, notificationsOn, baseUrl] = await Promise.all([
           window.electronAPI.getBillingMethod(),
           window.electronAPI.getNotificationsEnabled(),
+          window.electronAPI.getAnthropicBaseUrl(),
         ])
         setAuthType(billing.authType)
         setHasCredential(billing.hasCredential)
         setNotificationsEnabled(notificationsOn)
+        if (baseUrl) setAnthropicBaseUrl(baseUrl)
       } catch (error) {
         console.error('Failed to load settings:', error)
       } finally {
@@ -560,6 +566,19 @@ export default function AppSettingsPage() {
     await window.electronAPI.setNotificationsEnabled(enabled)
   }, [])
 
+  const handleSaveAnthropicBaseUrl = useCallback(async () => {
+    if (!window.electronAPI) return
+    const trimmed = anthropicBaseUrl.trim()
+    if (!trimmed) return
+    setIsSavingAnthropicBaseUrl(true)
+    try {
+      await window.electronAPI.setAnthropicBaseUrl(trimmed)
+      setAnthropicBaseUrl(trimmed)
+    } finally {
+      setIsSavingAnthropicBaseUrl(false)
+    }
+  }, [anthropicBaseUrl])
+
   return (
     <div className="h-full flex flex-col">
       <PanelHeader title="App Settings" actions={<HeaderMenu route={routes.view.settings('app')} />} />
@@ -700,6 +719,45 @@ export default function AppSettingsPage() {
                   )}
                 </DialogContent>
               </Dialog>
+            </SettingsSection>
+
+            {/* API Configuration */}
+            <SettingsSection
+              title="API Configuration"
+              description="Advanced settings for the underlying Anthropic-compatible API"
+            >
+              <SettingsCard>
+                <SettingsRow
+                  label="Anthropic Base URL"
+                  description="Base URL for Anthropic API requests. Default: https://api.z.ai/api/anthropic"
+                >
+                  <div className="flex items-center gap-2 w-full">
+                    <Input
+                      value={anthropicBaseUrl}
+                      onChange={(e) => setAnthropicBaseUrl(e.target.value)}
+                      onBlur={handleSaveAnthropicBaseUrl}
+                      placeholder="https://api.z.ai/api/anthropic"
+                      className="font-mono"
+                      disabled={isSavingAnthropicBaseUrl}
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleSaveAnthropicBaseUrl}
+                      disabled={isSavingAnthropicBaseUrl || !anthropicBaseUrl.trim()}
+                    >
+                      {isSavingAnthropicBaseUrl ? (
+                        <>
+                          <Spinner className="mr-1.5" />
+                          Saving...
+                        </>
+                      ) : (
+                        'Save'
+                      )}
+                    </Button>
+                  </div>
+                </SettingsRow>
+              </SettingsCard>
             </SettingsSection>
 
             {/* About */}

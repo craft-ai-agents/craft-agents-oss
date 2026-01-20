@@ -14,6 +14,7 @@ export interface ConfigDefaults {
     authType: AuthType;
     notificationsEnabled: boolean;
     colorTheme: string;
+    anthropicBaseUrl: string;
   };
   workspaceDefaults: {
     thinkingLevel: ThinkingLevel;
@@ -36,6 +37,7 @@ export const BUNDLED_CONFIG_DEFAULTS: ConfigDefaults = {
     authType: 'api_key',
     notificationsEnabled: true,
     colorTheme: 'default',
+    anthropicBaseUrl: 'https://api.z.ai/api/anthropic',
   },
   workspaceDefaults: {
     thinkingLevel: 'think',

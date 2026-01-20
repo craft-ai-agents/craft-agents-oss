@@ -51,6 +51,8 @@ export interface StoredConfig {
   notificationsEnabled?: boolean;  // Desktop notifications for task completion (default: true)
   // Appearance
   colorTheme?: string;  // ID of selected preset theme (e.g., 'dracula', 'nord'). Default: 'default'
+  // API
+  anthropicBaseUrl?: string; // Default: https://api.z.ai/api/anthropic
   // Auto-update
   dismissedUpdateVersion?: string;  // Version that user dismissed (skip notifications for this version)
   pendingUpdate?: PendingUpdate;  // Update ready for auto-install on next launch
@@ -249,6 +251,28 @@ export function setNotificationsEnabled(enabled: boolean): void {
   const config = loadStoredConfig();
   if (!config) return;
   config.notificationsEnabled = enabled;
+  saveConfig(config);
+}
+
+/**
+ * Get Anthropic base URL for Claude Code SDK / API calls.
+ */
+export function getAnthropicBaseUrl(): string {
+  const config = loadStoredConfig();
+  if (config?.anthropicBaseUrl) {
+    return config.anthropicBaseUrl;
+  }
+  const defaults = loadConfigDefaults();
+  return defaults.defaults.anthropicBaseUrl;
+}
+
+/**
+ * Set Anthropic base URL.
+ */
+export function setAnthropicBaseUrl(url: string): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+  config.anthropicBaseUrl = url;
   saveConfig(config);
 }
 

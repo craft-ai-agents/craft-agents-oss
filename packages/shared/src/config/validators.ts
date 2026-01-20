@@ -302,7 +302,7 @@ const McpSourceConfigSchema = z.object({
   // Stdio fields
   command: z.string().optional(),
   args: z.array(z.string()).optional(),
-  env: z.record(z.string()).optional(),
+  env: z.record(z.string(), z.string()).optional(),
 }).refine(
   (data) => {
     if (data.transport === 'stdio') {
@@ -328,8 +328,8 @@ const ApiSourceConfigSchema = z.object({
     .object({
       method: z.enum(['GET', 'POST']),
       path: z.string(),
-      body: z.record(z.unknown()).optional(),
-      headers: z.record(z.string()).optional(),
+      body: z.record(z.string(), z.unknown()).optional(),
+      headers: z.record(z.string(), z.string()).optional(),
     })
     .optional(),
   googleService: z.enum(['gmail', 'calendar', 'drive', 'docs', 'sheets']).optional(),

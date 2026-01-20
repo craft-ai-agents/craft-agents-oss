@@ -4,7 +4,8 @@
   "defaults": {
     "authType": "api_key",
     "notificationsEnabled": true,
-    "colorTheme": "default"
+    "colorTheme": "default",
+    "anthropicBaseUrl": "https://api.z.ai/api/anthropic"
   },
   "workspaceDefaults": {
     "thinkingLevel": "think",

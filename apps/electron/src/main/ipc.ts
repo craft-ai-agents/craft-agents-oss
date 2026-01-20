@@ -908,6 +908,28 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     ipcLog.info(`Model updated to: ${model}`)
   })
 
+  // ============================================================
+  // Settings - Anthropic Base URL
+  // ============================================================
+
+  ipcMain.handle(IPC_CHANNELS.ANTHROPIC_BASE_URL_GET, async (): Promise<string> => {
+    const { getAnthropicBaseUrl } = await import('@craft-agent/shared/config/storage')
+    return getAnthropicBaseUrl()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.ANTHROPIC_BASE_URL_SET, async (_event, url: string): Promise<void> => {
+    const { setAnthropicBaseUrl } = await import('@craft-agent/shared/config/storage')
+    setAnthropicBaseUrl(url)
+
+    // Ensure SDK subprocess env picks up the new base URL
+    try {
+      await sessionManager.reinitializeAuth()
+      ipcLog.info('Reinitialized auth after anthropicBaseUrl update')
+    } catch (authError) {
+      ipcLog.error('Failed to reinitialize auth after anthropicBaseUrl update:', authError)
+    }
+  })
+
   // Get session-specific model
   ipcMain.handle(IPC_CHANNELS.SESSION_GET_MODEL, async (_event, sessionId: string, _workspaceId: string): Promise<string | null> => {
     const session = await sessionManager.getSession(sessionId)

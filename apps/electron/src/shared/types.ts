@@ -540,6 +540,10 @@ export const IPC_CHANNELS = {
   SESSION_GET_MODEL: 'session:getModel',
   SESSION_SET_MODEL: 'session:setModel',
 
+  // Settings - Anthropic Base URL
+  ANTHROPIC_BASE_URL_GET: 'anthropicBaseUrl:get',
+  ANTHROPIC_BASE_URL_SET: 'anthropicBaseUrl:set',
+
   // Folder dialog (for selecting working directory)
   OPEN_FOLDER_DIALOG: 'dialog:openFolder',
 
@@ -738,6 +742,10 @@ export interface ElectronAPI {
   // Session-specific model (overrides global)
   getSessionModel(sessionId: string, workspaceId: string): Promise<string | null>
   setSessionModel(sessionId: string, workspaceId: string, model: string | null): Promise<void>
+
+  // Settings - Anthropic Base URL
+  getAnthropicBaseUrl(): Promise<string>
+  setAnthropicBaseUrl(url: string): Promise<void>
 
   // Workspace Settings (per-workspace configuration)
   getWorkspaceSettings(workspaceId: string): Promise<WorkspaceSettings | null>

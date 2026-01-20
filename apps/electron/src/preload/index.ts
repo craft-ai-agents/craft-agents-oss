@@ -178,6 +178,10 @@ const api: ElectronAPI = {
   setSessionModel: (sessionId: string, workspaceId: string, model: string | null) =>
     ipcRenderer.invoke(IPC_CHANNELS.SESSION_SET_MODEL, sessionId, workspaceId, model),
 
+  // Settings - Anthropic Base URL
+  getAnthropicBaseUrl: () => ipcRenderer.invoke(IPC_CHANNELS.ANTHROPIC_BASE_URL_GET),
+  setAnthropicBaseUrl: (url: string) => ipcRenderer.invoke(IPC_CHANNELS.ANTHROPIC_BASE_URL_SET, url),
+
   // Workspace Settings (per-workspace configuration)
   getWorkspaceSettings: (workspaceId: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.WORKSPACE_SETTINGS_GET, workspaceId),

@@ -503,6 +503,11 @@ export class SessionManager {
       } else {
         sessionLog.error('No authentication configured!')
       }
+
+      // Ensure Claude Code SDK subprocess uses configured Anthropic base URL
+      const { getAnthropicBaseUrl } = await import('@craft-agent/shared/config/storage')
+      const baseUrl = getAnthropicBaseUrl()
+      setAnthropicOptionsEnv({ ANTHROPIC_BASE_URL: baseUrl })
     } catch (error) {
       sessionLog.error('Failed to reinitialize auth:', error)
       throw error
