@@ -8,6 +8,8 @@ import multitaskingScreenshot from './assets/desktop/Multitasking.webp'
 import multitaskingScreenshot2x from './assets/desktop/Multitasking@2x.webp'
 import planScreenshot from './assets/desktop/plan.webp'
 import planScreenshot2x from './assets/desktop/plan@2x.webp'
+import sharedSessionsScreenshot from './assets/desktop/shared_sessions.webp'
+import sharedSessionsScreenshot2x from './assets/desktop/shared_sessions@2x.webp'
 import agentsLogo from './assets/agents_logo.svg'
 
 // Integration icons - locally served
@@ -348,6 +350,46 @@ export default function App() {
             <div className="bg-background rounded-[12px] shadow-minimal p-6">
               <h3 className="font-semibold mb-2">Auto mode</h3>
               <p className="text-[14px] text-foreground/70">Once aligned, switch to auto. The agent executes without interruption. Review the results when done, just like reviewing delivered work from a teammate.</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Sharing section */}
+        <div className="text-left max-w-4xl w-full py-8 mt-8">
+          <h2 className="text-2xl font-extrabold leading-tight mb-4">
+            Share your plans, decisions and logic. Your entire conversation.
+          </h2>
+          <p className="text-[18px] text-foreground/70 leading-relaxed">
+            With AI, conversations become the documentation. Every decision, rationale, and implementation detail lives in the thread. Attach sessions to tickets, issues, or PRs. Share with your team so they understand not just what changed, but why.
+          </p>
+          {/* Image + description side by side */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8">
+            <a
+              href="https://agents.craft.do/s/xW1SfMIhfMvMfRL2pJKMI"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block"
+            >
+              <img
+                src={sharedSessionsScreenshot}
+                srcSet={`${sharedSessionsScreenshot} 1x, ${sharedSessionsScreenshot2x} 2x`}
+                alt="Shared session interface"
+                className="w-full rounded-[12px] shadow-strong aspect-square md:aspect-auto object-cover object-top hover:opacity-90 transition-opacity cursor-pointer"
+              />
+            </a>
+            <div className="bg-background rounded-[12px] shadow-minimal p-6 pl-[26px] flex flex-col">
+              <h3 className="font-semibold mb-[10px]">Decisions with context</h3>
+              <p className="text-[14px] text-foreground/70 mb-4">
+                The conversation captures every trade-off considered, alternative rejected, and reason behind each choice. Context that usually gets lost is preserved.
+              </p>
+              <h3 className="font-semibold mt-1 mb-[10px]">Link to your workflow</h3>
+              <p className="text-[14px] text-foreground/70 mb-4">
+                Attach shared sessions to Linear issues, GitHub PRs, or Confluence pages. Reviewers see the full reasoning, not just the end result.
+              </p>
+              <h3 className="font-semibold mt-1 mb-[10px]">Host it yourself</h3>
+              <p className="text-[14px] text-foreground/70">
+                Deploy the viewer on your own infrastructure. Keep everything internal and maintain full control over where your data lives.
+              </p>
             </div>
           </div>
         </div>
