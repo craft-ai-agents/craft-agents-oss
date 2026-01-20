@@ -11,9 +11,9 @@
  * - Pending/queued states (Electron only)
  */
 
-import type { ReactNode } from 'react'
+import { useState, useCallback, type ReactNode } from 'react'
 import type { StoredAttachment, ContentBadge } from '@craft-agent/core'
-import { FileText } from 'lucide-react'
+import { FileText, Copy, Check } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { Markdown } from '../markdown'
 import { FileTypeIcon, getFileTypeLabel } from './attachment-helpers'
@@ -272,6 +272,19 @@ export function UserMessageBubble({
 }: UserMessageBubbleProps) {
   const hasAttachments = attachments && attachments.length > 0
 
+  // Copy to clipboard state
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(content)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (err) {
+      console.error('Failed to copy:', err)
+    }
+  }, [content])
+
   // Separate edit_request badges (rendered above bubble) from other badges (rendered inline)
   const editRequestBadges = badges?.filter(isEditRequestBadge) ?? []
   const inlineBadges = badges?.filter(b => !isEditRequestBadge(b)) ?? []
@@ -362,26 +375,50 @@ export function UserMessageBubble({
         </div>
       )}
 
-      {/* Text content bubble */}
-      <div
-        className={cn(
-          "max-w-[80%] bg-foreground/5 rounded-[16px] px-5 py-3.5 break-words min-w-0 select-text [&_p]:m-0",
-          isPending && "animate-shimmer"
-        )}
-      >
-        {hasInlineBadges
-          ? renderContentWithBadges(displayContent, inlineBadges, onUrlClick, onFileClick)
-          : (
-            <Markdown
-              mode="minimal"
-              onUrlClick={onUrlClick}
-              onFileClick={onFileClick}
-              className="text-sm [&_a]:underline [&_code]:bg-foreground/10"
-            >
-              {displayContent}
-            </Markdown>
-          )
-        }
+      {/* Text content bubble with copy button */}
+      <div className="group relative max-w-[80%]">
+        <div
+          className={cn(
+            "bg-foreground/5 rounded-[16px] px-5 py-3.5 break-words min-w-0 select-text [&_p]:m-0",
+            isPending && "animate-shimmer"
+          )}
+        >
+          {hasInlineBadges
+            ? renderContentWithBadges(displayContent, inlineBadges, onUrlClick, onFileClick)
+            : (
+              <Markdown
+                mode="minimal"
+                onUrlClick={onUrlClick}
+                onFileClick={onFileClick}
+                className="text-sm [&_a]:underline [&_code]:bg-foreground/10"
+              >
+                {displayContent}
+              </Markdown>
+            )
+          }
+        </div>
+        {/* Copy button - appears on hover */}
+        <button
+          onClick={handleCopy}
+          className={cn(
+            "absolute -bottom-1 right-2 translate-y-full",
+            "flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px]",
+            "opacity-0 group-hover:opacity-100 transition-opacity",
+            copied ? "text-success" : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          {copied ? (
+            <>
+              <Check className="w-3 h-3" />
+              <span>Copied</span>
+            </>
+          ) : (
+            <>
+              <Copy className="w-3 h-3" />
+              <span>Copy</span>
+            </>
+          )}
+        </button>
       </div>
 
       {/* Queued badge */}

@@ -3,8 +3,10 @@
  *
  * Routes:
  * - /electron/* → R2 bucket (installers, manifests)
+ * - /cli/* → R2 bucket (CLI binaries, install script)
  * - /install-app.sh → R2 bucket (macOS/Linux install script)
  * - /install-app.ps1 → R2 bucket (Windows install script)
+ * - /s/* → Session viewer Pages site
  * - /* → Proxy to Pages marketing site
  */
 
@@ -18,7 +20,7 @@ export default {
     const path = url.pathname;
 
     // R2 paths: serve from bucket
-    if (path.startsWith('/electron/') || path === '/install-app.sh' || path === '/install-app.ps1') {
+    if (path.startsWith('/electron/') || path.startsWith('/cli/') || path === '/install-app.sh' || path === '/install-app.ps1') {
       const key = path.slice(1);
       const object = await env.DOWNLOADS.get(key);
 
@@ -34,6 +36,15 @@ export default {
       }
 
       return new Response(object.body, { headers });
+    }
+
+    // Session viewer: /s/* routes
+    if (path.startsWith('/s/')) {
+      return fetch(`https://craft-agents-session-viewer.pages.dev${path}${url.search}`, {
+        method: request.method,
+        headers: request.headers,
+        body: request.body,
+      });
     }
 
     // Everything else → Pages marketing site

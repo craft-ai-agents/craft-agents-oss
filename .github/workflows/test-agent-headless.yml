@@ -26,7 +26,7 @@ jobs:
 
     steps:
       - name: Install Craft CLI
-        run: curl -fsSL https://agents.craft.do/install.sh | bash
+        run: curl -fsSL https://agents.craft.do/cli/install.sh | bash
 
       - name: Run Test Agent
         timeout-minutes: 10
