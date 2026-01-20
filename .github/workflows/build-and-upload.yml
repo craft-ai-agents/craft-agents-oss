@@ -268,6 +268,53 @@ jobs:
           SLACK_OAUTH_CLIENT_SECRET: ${{ secrets.SLACK_OAUTH_CLIENT_SECRET }}
           MICROSOFT_OAUTH_CLIENT_ID: ${{ secrets.MICROSOFT_OAUTH_CLIENT_ID }}
 
+      # Windows code signing with Azure Key Vault
+      - name: Sign Windows executable
+        if: steps.check-artifact.outputs.skip != 'true' && matrix.platform == 'win32' && env.AZURE_CERT_KVU != ''
+        env:
+          AZURE_CERT_KVU: ${{ secrets.AZURE_CERT_KVU }}
+          AZURE_CERT_KVC: ${{ secrets.AZURE_CERT_KVC }}
+          AZURE_CERT_KVI: ${{ secrets.AZURE_CERT_KVI }}
+          AZURE_CERT_KVS: ${{ secrets.AZURE_CERT_KVS }}
+          AZURE_CERT_KVT: ${{ secrets.AZURE_CERT_KVT }}
+        shell: powershell
+        run: |
+          Write-Host "Installing AzureSignTool..."
+          dotnet tool install --global AzureSignTool
+
+          $ExePath = Get-ChildItem -Path "apps/electron/release" -Filter "*.exe" | Select-Object -First 1
+          if (-not $ExePath) {
+            Write-Host "ERROR: No exe found to sign" -ForegroundColor Red
+            exit 1
+          }
+
+          Write-Host "Signing $($ExePath.FullName)..."
+          AzureSignTool sign `
+            --azure-key-vault-url "$env:AZURE_CERT_KVU" `
+            --azure-key-vault-client-id "$env:AZURE_CERT_KVI" `
+            --azure-key-vault-client-secret "$env:AZURE_CERT_KVS" `
+            --azure-key-vault-tenant-id "$env:AZURE_CERT_KVT" `
+            --azure-key-vault-certificate "$env:AZURE_CERT_KVC" `
+            --timestamp-rfc3161 "http://timestamp.digicert.com" `
+            --timestamp-digest sha256 `
+            --file-digest sha256 `
+            --description "Craft Agent" `
+            --description-url "https://agents.craft.do" `
+            "$($ExePath.FullName)"
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "ERROR: Code signing failed" -ForegroundColor Red
+            exit 1
+          }
+
+          Write-Host "Code signing successful" -ForegroundColor Green
+
+          # Verify the signature
+          Write-Host "Verifying signature..."
+          $sig = Get-AuthenticodeSignature "$($ExePath.FullName)"
+          Write-Host "Status: $($sig.Status)"
+          Write-Host "Signer: $($sig.SignerCertificate.Subject)"
+
       # Linux builds
       - name: Build Electron app (Linux)
         if: steps.check-artifact.outputs.skip != 'true' && matrix.platform == 'linux'
