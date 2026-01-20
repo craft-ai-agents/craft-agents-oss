@@ -5,7 +5,7 @@
 
 Craft Agents is a tool we built so that we (at craft.do) can work effectively with agents. It enables intuitive multitasking, no-fluff connection to any API or Service, sharing sessions, and a more document (vs code) centric workflow - in a beautiful and fluid UI.
 
-It leans on Claude Code through the Claude Agent SDK - follow what we found great, and improves areas where we've desired improvements.
+It leans on Claude Code through the Claude Agent SDK - follows what we found great, and improves areas where we've desired improvements.
 
 It's built with Agent Native software principles in mind, and is highly customisable out of the box. One of the first of its kind.
 

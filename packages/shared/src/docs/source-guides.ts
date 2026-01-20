@@ -11,6 +11,7 @@
 import { join } from 'path';
 import { homedir } from 'os';
 import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'fs';
+import * as semver from 'semver';
 import { isDebugEnabled } from '../utils/debug.ts';
 import { getAppVersion } from '../version/app-version.ts';
 
@@ -21,6 +22,19 @@ const SOURCE_GUIDES_DIR = join(DOCS_DIR, 'source-guides');
 
 // Track if source guides have been initialized this session (prevents re-init on hot reload)
 let sourceGuidesInitialized = false;
+
+// ============================================================
+// Version Helpers
+// ============================================================
+
+/**
+ * Extract version from a guide file's first line.
+ * Expected format: <!-- version: X.Y.Z -->
+ */
+function extractVersion(content: string): string | null {
+  const match = content.match(/^<!--\s*version:\s*([^\s]+)\s*-->/);
+  return match?.[1] ?? null;
+}
 
 // ============================================================
 // Types
@@ -293,14 +307,33 @@ export function initializeSourceGuides(): void {
     const versionedContent = `<!-- version: ${appVersion} -->\n${content}`;
 
     if (!existsSync(guidePath)) {
+      // File doesn't exist - create it
       writeFileSync(guidePath, versionedContent, 'utf-8');
       console.log(`[source-guides] Created ${filename} (v${appVersion})`);
       continue;
     }
 
     if (debugMode) {
+      // Debug mode - always overwrite
       writeFileSync(guidePath, versionedContent, 'utf-8');
       console.log(`[source-guides] Updated ${filename} (v${appVersion}, debug mode)`);
+      continue;
+    }
+
+    // Production - check version
+    try {
+      const existingContent = readFileSync(guidePath, 'utf-8');
+      const installedVersion = extractVersion(existingContent);
+
+      if (!installedVersion || semver.gt(appVersion, installedVersion)) {
+        // No version or bundled is newer - update
+        writeFileSync(guidePath, versionedContent, 'utf-8');
+        console.log(`[source-guides] Updated ${filename} (v${installedVersion || 'none'} → v${appVersion})`);
+      }
+    } catch {
+      // Error reading - overwrite
+      writeFileSync(guidePath, versionedContent, 'utf-8');
+      console.log(`[source-guides] Recreated ${filename} (v${appVersion})`);
     }
   }
 }
@@ -398,6 +431,7 @@ Each block can have:
 - Note any frequently used smart folders
 
 ### Configuration Notes
+- **MCP URL**: \`https://mcp.craft.do/my/mcp\`
 - Craft MCP uses OAuth authentication
 - Rate limits: Check MCP server response headers
 `;
