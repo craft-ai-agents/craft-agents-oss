@@ -69,52 +69,142 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Check for unmerged OSS contributions
+# Check if a commit's changes are already applied in internal repo
+# Returns 0 if changes are already in internal, 1 otherwise
+check_patch_already_applied() {
+  local commit_hash="$1"
+  local oss_dir="$2"
+
+  cd "$oss_dir"
+
+  # Try applying the patch in reverse - if it succeeds, changes are already in target
+  if git format-patch -1 --stdout "$commit_hash" | git -C "$REPO_ROOT" apply --check --reverse &>/dev/null; then
+    return 0  # Changes already applied
+  fi
+
+  return 1  # Changes not applied
+}
+
+# Check for unmerged OSS contributions with intelligent cherry-pick detection
 # Returns 0 if no contributions found, 1 if contributions need to be merged
 check_oss_contributions() {
   local oss_dir="$1"
 
   cd "$oss_dir"
 
-  # Find commits that are NOT sync commits (external contributions)
-  # Sync commits have "Sync from internal repository" in the message
-  local contribution_commits
-  contribution_commits=$(git log --oneline --all --invert-grep --grep="Sync from internal repository" --grep="Initial commit" 2>/dev/null | head -20)
+  # Add internal repo as remote if not already added
+  if ! git remote | grep -q "^internal$"; then
+    git remote add internal "$REPO_ROOT" 2>/dev/null || true
+  fi
+  git fetch internal &>/dev/null || true
 
-  if [[ -n "$contribution_commits" ]]; then
-    echo ""
-    echo -e "${RED}════════════════════════════════════════════════════════════════${NC}"
-    echo -e "${RED}ERROR: Unmerged OSS contributions detected!${NC}"
-    echo -e "${RED}════════════════════════════════════════════════════════════════${NC}"
-    echo ""
-    echo "The following commits in the OSS repo need to be cherry-picked to internal first:"
-    echo ""
-    echo "$contribution_commits"
-    echo ""
-    echo -e "${YELLOW}To merge these contributions:${NC}"
-    echo ""
-    echo "  1. Add the OSS repo as a remote (one-time setup):"
-    echo "     git remote add oss https://github.com/lukilabs/craft-agents-oss.git"
-    echo ""
-    echo "  2. Fetch the latest from OSS:"
-    echo "     git fetch oss"
-    echo ""
-    echo "  3. Cherry-pick each contribution commit:"
-    while IFS= read -r line; do
-      local hash="${line%% *}"
-      echo "     git cherry-pick $hash"
-    done <<< "$contribution_commits"
-    echo ""
-    echo "  4. Push to internal repo:"
-    echo "     git push origin main"
-    echo ""
-    echo "  5. Re-run the sync workflow"
-    echo ""
-    echo -e "${RED}════════════════════════════════════════════════════════════════${NC}"
-    return 1
+  # Use git's cherry-pick detection to compare OSS main with internal main
+  # Format: <mark> <hash> <subject>
+  # Markers: > = only in OSS (potential contribution), = = cherry-picked (already synced)
+  local cherry_output
+  cherry_output=$(git log --cherry-mark --right-only --no-merges --oneline internal/main...main 2>/dev/null || echo "")
+
+  if [[ -z "$cherry_output" ]]; then
+    return 0  # No commits unique to OSS
   fi
 
-  return 0
+  # Separate commits by their status
+  local needs_sync=()
+  local already_synced=()
+  local needs_review=()
+
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+
+    local mark="${line:0:1}"
+    local rest="${line:2}"  # Skip mark and space
+    local hash="${rest%% *}"
+    local subject="${rest#* }"
+
+    # Skip sync commits
+    if [[ "$subject" == *"Sync from internal repository"* ]] || [[ "$subject" == "Initial commit" ]]; then
+      continue
+    fi
+
+    if [[ "$mark" == "=" ]]; then
+      # Git detected this as cherry-picked
+      already_synced+=("$hash $subject (cherry-picked by Git)")
+    elif [[ "$mark" == ">" ]]; then
+      # Commit only in OSS - check if changes are already applied
+      if check_patch_already_applied "$hash" "$oss_dir"; then
+        already_synced+=("$hash $subject (changes already applied)")
+      else
+        # Check if it would apply cleanly or conflict
+        if git format-patch -1 --stdout "$hash" | git -C "$REPO_ROOT" apply --check &>/dev/null; then
+          needs_sync+=("$hash $subject")
+        else
+          needs_review+=("$hash $subject (conflicts detected)")
+        fi
+      fi
+    fi
+  done <<< "$cherry_output"
+
+  # Display results
+  if [[ ${#already_synced[@]} -gt 0 ]]; then
+    echo ""
+    echo -e "${GREEN}✅ Already Synced (${#already_synced[@]} commits):${NC}"
+    for item in "${already_synced[@]}"; do
+      echo "  = $item"
+    done
+  fi
+
+  if [[ ${#needs_sync[@]} -eq 0 && ${#needs_review[@]} -eq 0 ]]; then
+    return 0  # Nothing needs syncing
+  fi
+
+  # Report commits that need attention
+  echo ""
+  echo -e "${RED}════════════════════════════════════════════════════════════════${NC}"
+  echo -e "${RED}ERROR: Unmerged OSS contributions detected!${NC}"
+  echo -e "${RED}════════════════════════════════════════════════════════════════${NC}"
+
+  if [[ ${#needs_sync[@]} -gt 0 ]]; then
+    echo ""
+    echo -e "${YELLOW}⚠️  Needs Sync (${#needs_sync[@]} commits):${NC}"
+    for item in "${needs_sync[@]}"; do
+      echo "  > $item"
+    done
+  fi
+
+  if [[ ${#needs_review[@]} -gt 0 ]]; then
+    echo ""
+    echo -e "${YELLOW}❓ Needs Review (${#needs_review[@]} commits - conflicts detected):${NC}"
+    for item in "${needs_review[@]}"; do
+      echo "  > $item"
+    done
+  fi
+
+  echo ""
+  echo -e "${YELLOW}To merge these contributions:${NC}"
+  echo ""
+  echo "  1. Add the OSS repo as a remote (one-time setup):"
+  echo "     git remote add oss https://github.com/lukilabs/craft-agents-oss.git"
+  echo ""
+  echo "  2. Fetch the latest from OSS:"
+  echo "     git fetch oss"
+  echo ""
+  echo "  3. Cherry-pick each contribution commit:"
+  for item in "${needs_sync[@]}" "${needs_review[@]}"; do
+    local hash="${item%% *}"
+    echo "     git cherry-pick $hash"
+  done
+  echo ""
+  echo "  4. Resolve any conflicts for commits marked 'needs review'"
+  echo ""
+  echo "  5. Push to internal repo:"
+  echo "     git push origin main"
+  echo ""
+  echo "  6. Re-run the sync workflow"
+  echo ""
+  echo -e "${YELLOW}Summary: ${#needs_sync[@]} ready to sync, ${#needs_review[@]} need review, ${#already_synced[@]} already synced${NC}"
+  echo -e "${RED}════════════════════════════════════════════════════════════════${NC}"
+
+  return 1
 }
 
 # Build rsync include/exclude patterns from allow-list
