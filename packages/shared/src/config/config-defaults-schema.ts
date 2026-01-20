@@ -37,7 +37,7 @@ export const BUNDLED_CONFIG_DEFAULTS: ConfigDefaults = {
     authType: 'api_key',
     notificationsEnabled: true,
     colorTheme: 'default',
-    anthropicBaseUrl: 'https://api.z.ai/api/anthropic',
+    anthropicBaseUrl: 'https://api.anthropic.com',
   },
   workspaceDefaults: {
     thinkingLevel: 'think',

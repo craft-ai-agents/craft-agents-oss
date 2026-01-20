@@ -352,7 +352,7 @@ export default function AppSettingsPage() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true)
 
   // API configuration state
-  const [anthropicBaseUrl, setAnthropicBaseUrl] = useState('https://api.z.ai/api/anthropic')
+  const [anthropicBaseUrl, setAnthropicBaseUrl] = useState('https://api.anthropic.com')
   const [isSavingAnthropicBaseUrl, setIsSavingAnthropicBaseUrl] = useState(false)
 
   // Auto-update state
@@ -729,14 +729,14 @@ export default function AppSettingsPage() {
               <SettingsCard>
                 <SettingsRow
                   label="Anthropic Base URL"
-                  description="Base URL for Anthropic API requests. Default: https://api.z.ai/api/anthropic"
+                  description="Base URL for Anthropic API requests. Default: https://api.anthropic.com"
                 >
                   <div className="flex items-center gap-2 w-full">
                     <Input
                       value={anthropicBaseUrl}
                       onChange={(e) => setAnthropicBaseUrl(e.target.value)}
                       onBlur={handleSaveAnthropicBaseUrl}
-                      placeholder="https://api.z.ai/api/anthropic"
+                      placeholder="https://api.anthropic.com"
                       className="font-mono"
                       disabled={isSavingAnthropicBaseUrl}
                     />
