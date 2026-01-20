@@ -10,6 +10,10 @@ import planScreenshot from './assets/desktop/plan.webp'
 import planScreenshot2x from './assets/desktop/plan@2x.webp'
 import sharedSessionsScreenshot from './assets/desktop/shared_sessions.webp'
 import sharedSessionsScreenshot2x from './assets/desktop/shared_sessions@2x.webp'
+import themingScreenshot from './assets/desktop/theming.webp'
+import themingScreenshot2x from './assets/desktop/theming@2x.webp'
+import agentNativeScreenshot from './assets/desktop/agent_native.webp'
+import agentNativeScreenshot2x from './assets/desktop/agent_native@2x.webp'
 import agentsLogo from './assets/agents_logo.svg'
 
 // Integration icons - locally served
@@ -393,10 +397,137 @@ export default function App() {
             </div>
           </div>
         </div>
+
+        {/* Customization section */}
+        <div className="text-left max-w-4xl w-full py-8 mt-8">
+          <h2 className="text-2xl font-extrabold leading-tight mb-4">
+            Make Craft Agents yours
+          </h2>
+          <p className="text-[18px] text-foreground/70 leading-relaxed">
+            Craft Agents adapts to how you work. Customize themes, create your own skills, and configure behaviors to match your preferences. Everything is a file you can edit, version, and share.
+          </p>
+        </div>
+
+        {/* Theming hero image */}
+        <img
+          src={themingScreenshot}
+          srcSet={`${themingScreenshot} 1x, ${themingScreenshot2x} 2x`}
+          alt="Custom theming interface"
+          className="max-w-6xl w-full rounded-[12px] shadow-hero"
+        />
+
+        {/* Customization cards */}
+        <div className="max-w-4xl w-full py-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-background rounded-[12px] shadow-minimal p-6">
+              <h3 className="font-semibold mb-2">Look, feel, and behavior</h3>
+              <p className="text-[14px] text-foreground/70">Themes, statuses, workflows, permissions. Everything lives in files the agent can edit in real time. Make it truly yours.</p>
+            </div>
+            <div className="bg-background rounded-[12px] shadow-minimal p-6">
+              <h3 className="font-semibold mb-2">Skills</h3>
+              <p className="text-[14px] text-foreground/70">Claude Code skills, built in. Create reusable prompts and workflows that the agent follows for specific tasks. Your shortcuts, your way.</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Agent Native section */}
+        <div className="text-left max-w-4xl w-full py-8 mt-8">
+          <h2 className="text-2xl font-extrabold leading-tight mb-4">
+            Agent Native Architecture
+          </h2>
+          <p className="text-[18px] text-foreground/70 leading-relaxed">
+            Software is changing. Instead of rigid, predetermined systems, applications can now grow and adapt with you. We built Craft Agents with{' '}
+            <a
+              href="https://every.to/chain-of-thought/agent-native-architectures-how-to-build-apps-after-the-end-of-code"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-foreground transition-colors"
+            >
+              Agent Native
+            </a>{' '}
+            principles: the agent isn't a feature, it's the foundation.
+          </p>
+          {/* Image + description side by side */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8">
+            <img
+              src={agentNativeScreenshot}
+              srcSet={`${agentNativeScreenshot} 1x, ${agentNativeScreenshot2x} 2x`}
+              alt="Agent native architecture"
+              className="w-full rounded-[12px] shadow-strong aspect-square md:aspect-auto object-cover object-top"
+            />
+            <div className="bg-background rounded-[12px] shadow-minimal p-6 pl-[26px] flex flex-col">
+              <h3 className="font-semibold mb-[10px]">Specification over implementation</h3>
+              <p className="text-[14px] text-foreground/70 mb-4">
+                Describe what you want, not how to build it. Features become prompts, not code. The agent handles the complexity.
+              </p>
+              <h3 className="font-semibold mt-1 mb-[10px]">Flexible by design</h3>
+              <p className="text-[14px] text-foreground/70 mb-4">
+                Modify behavior through natural language. No complex settings UIs. Just describe the change and it happens.
+              </p>
+              <h3 className="font-semibold mt-1 mb-[10px]">True flexibility</h3>
+              <p className="text-[14px] text-foreground/70">
+                Modify every angle, from UI to behavior to integrations. Craft Agents is built entirely with Craft Agents. Every feature, every fix starts as a conversation.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Closing CTA section */}
+        <div className="text-center max-w-xl py-2 mt-16">
+          <h2 className="text-3xl font-extrabold leading-tight mb-4">
+            The future of personal software is remixing
+          </h2>
+          <p className="text-[18px] text-foreground/70 leading-relaxed">
+            We can't wait to see how you make it yours, shape it to your workflow, and build something that reflects your own taste.
+          </p>
+        </div>
+
+        {/* CTA buttons */}
+        <div className="flex gap-3 max-w-xl w-full mt-8 mb-8">
+          {/* Download dropdown */}
+          <div className="relative flex-1">
+            <button
+              onClick={() => setDownloadOpen(!downloadOpen)}
+              className="w-full bg-foreground text-background rounded-[12px] shadow-strong py-3 px-6 text-center text-[14px] font-medium hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              Download Craft Agents
+            </button>
+            {downloadOpen && (
+              <div className="absolute top-full left-0 right-0 mt-2 bg-foreground text-background rounded-[12px] shadow-modal-small overflow-hidden z-20">
+                {downloads.map((download) => (
+                  <a
+                    key={download.label}
+                    href={download.url}
+                    className="flex items-center gap-3 px-4 py-3 hover:bg-background/10 transition-colors text-[13px]"
+                  >
+                    {download.icon}
+                    {download.label}
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+          <a
+            href="https://github.com/lukilabs/craft-agents-oss"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 bg-background rounded-[12px] shadow-strong py-3 px-6 text-center text-[14px] font-medium hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+            </svg>
+            View Source Code
+          </a>
+        </div>
       </main>
 
       {/* Footer */}
-      <footer className="relative z-10 px-6 pb-8 flex items-center justify-between max-w-4xl mx-auto text-[12px] text-foreground/50">
+      <footer className="relative z-10 px-6 pb-8 flex items-center justify-between max-w-4xl w-full mx-auto text-[12px] text-foreground/50">
         <span>© 2026 Craft Docs Limited, Inc. All rights reserved.</span>
         <div className="flex items-center gap-4">
           <a href="https://github.com/lukilabs/craft-agents-oss" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">
