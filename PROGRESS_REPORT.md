@@ -1,8 +1,8 @@
 # Chinese Localization - Progress Report
 
 **Last Updated:** 2026-01-21
-**Status:** Phase 0-5 Complete ✅ | Phase 3d,6 Pending ⏳
-**Overall Progress:** ~55%
+**Status:** Phase 0-5 Complete ✅ | Phase 3d In Progress ⏳ | Phase 6 Pending ⏳
+**Overall Progress:** ~60%
 
 ---
 
@@ -41,7 +41,7 @@
 - ✅ LanguageSwitcher component created
 - ✅ Provider wraps entire app
 
-### Phase 3a-3c: Component Integration (5/132 Complete)
+### Phase 3a-3c: Component Integration (5/9 Complete)
 
 **✅ AppShell Component**
 - Navigation labels: All Chats, Settings, Flagged, Sources, Skills
@@ -72,6 +72,42 @@
 - All form labels, descriptions, and placeholders
 - Edit button: "Edit File"
 - Commit: `41f3e52`
+
+### Phase 3d: Remaining Components (In Progress - 9/135 complete)
+
+**✅ Onboarding Components (5/7 complete)**
+- WelcomeStep.tsx - Welcome screen with new/existing user flows
+- BillingMethodStep.tsx - Billing selection (Claude Pro/Max vs API Key)
+- CredentialsStep.tsx - API key and OAuth credential entry
+- CompletionStep.tsx - Success screen after setup
+- ReauthScreen.tsx - Re-authentication for expired sessions
+- Commit: `1fdec63`
+
+**Translation Keys Added (200+ keys):**
+- Onboarding (10 keys)
+- App menu (15 keys)
+- Chat components (4 keys)
+- Panels (8 keys)
+- Input components (10 keys)
+- Settings components (20 keys)
+- Data tables (15 keys)
+- Tools & permissions (12 keys)
+- File viewer (5 keys)
+- Markdown (4 keys)
+- And more...
+
+**Remaining Work:**
+- ⏳ OnboardingWizard.tsx, primitives.tsx (2 components - minimal text)
+- ⏳ Chat components (~10 components)
+- ⏳ App-shell components (~25 components)
+- ⏳ Dialog/Modal components (~15 components)
+- ⏳ Settings components (~10 components)
+- ⏳ UI components (~50 components)
+- ⏳ Utility components (~23 components)
+
+**Total Components:** 135
+**Translated:** 9 (6.7%)
+**Remaining:** 126 (93.3%)
 
 **✅ Phase 4: Date/Time Utilities**
 - Created i18n-dates.ts utility with 8 formatters
