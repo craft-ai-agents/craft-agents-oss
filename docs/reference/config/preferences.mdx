@@ -1,0 +1,136 @@
+---
+title: "Preferences"
+description: "Reference for ~/.craft-agent/preferences.json"
+---
+
+The preferences file stores personal settings that customize how the agent interacts with you.
+
+## Location
+
+```
+~/.craft-agent/preferences.json
+```
+
+## Structure
+
+```json
+{
+  "name": "Alex",
+  "timezone": "America/New_York",
+  "location": "New York, USA",
+  "language": "English",
+  "notes": "I prefer concise responses"
+}
+```
+
+## Fields
+
+### name
+
+Your name or how you'd like to be addressed.
+
+```json
+"name": "Alex"
+```
+
+The agent may use this in greetings or personalized responses.
+
+### timezone
+
+Your timezone in [IANA format](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones).
+
+```json
+"timezone": "America/New_York"
+```
+
+Used for:
+- Accurate date/time references ("today", "this week")
+- Daily note access
+- Task due dates
+
+**Common values:**
+- `America/New_York`
+- `America/Los_Angeles`
+- `Europe/London`
+- `Europe/Berlin`
+- `Asia/Tokyo`
+- `Australia/Sydney`
+
+### location
+
+Your general location.
+
+```json
+"location": "New York, USA"
+```
+
+Used for location-aware responses like weather, local events, or time-sensitive information.
+
+### language
+
+Your preferred language for responses.
+
+```json
+"language": "English"
+```
+
+The agent will respond in this language when possible.
+
+### notes
+
+Free-form notes about your preferences.
+
+```json
+"notes": "I prefer bullet points over paragraphs. Technical background."
+```
+
+These notes are included in the agent's context and influence response style.
+
+## Editing Preferences
+
+### Using the Command
+
+```
+> /prefs
+```
+
+Opens an interactive editor for your preferences.
+
+### Manual Editing
+
+Edit the file directly:
+
+```bash
+nano ~/.craft-agent/preferences.json
+```
+
+Changes take effect on the next conversation (after `/clear` or restart).
+
+## How Preferences Are Used
+
+Preferences are included in the system prompt, so the agent knows:
+
+- What to call you
+- Your current time and timezone
+- Where you're located
+- How to communicate with you
+
+This context makes responses more relevant and personalized.
+
+## Example
+
+```json
+{
+  "name": "Jordan",
+  "timezone": "Europe/Berlin",
+  "location": "Berlin, Germany",
+  "language": "English",
+  "notes": "Software engineer. Prefer code examples over descriptions. Use metric units."
+}
+```
+
+With these preferences, the agent will:
+- Use Berlin time for scheduling references
+- Respond in English
+- Lean toward showing code
+- Use kilometers, Celsius, etc.

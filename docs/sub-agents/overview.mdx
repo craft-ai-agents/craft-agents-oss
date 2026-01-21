@@ -1,0 +1,134 @@
+---
+title: "Sub-Agents Overview"
+description: "Create specialized AI assistants for specific tasks"
+---
+
+Sub-agents are custom AI assistants defined entirely through Craft documents. Write what you want an agent to do, and it becomes a working assistant—no code, no complex setup. Each sub-agent can have its own personality, instructions, and capabilities, making it an expert in a specific domain or task.
+
+## Why Use Sub-Agents?
+
+The main Craft Agent is a generalist - it can do many things but doesn't have specialized knowledge and connections to other services or tools. Sub-agents let you create focused assistants for specific use cases and workflows, empowered by their own connected tools:
+
+- <h4>Research Assistant</h4>Connected to Exa for deep web search, pulls relevant findings into your Craft docs automatically.
+- <h4>Code Dashboard</h4>Connected to GitHub—checks PRs, summarizes issues, and updates your project notes in Craft.
+- <h4>Daily Briefing</h4>Pulls from your calendar API, Slack, and task manager to generate a morning summary.
+- <h4>Content Pipeline</h4>Drafts in Craft, pushes to your CMS via API, notifies the team in Slack.
+
+<Tip>
+Each agent can connect to multiple services. Build workflows that span your entire stack—pull data from one tool, process it, push results to another.
+</Tip>
+
+<Note>
+The simplest agent is just a document with instructions. You can start with plain text describing how you want it to behave, then add service connections later as needed.
+</Note>
+
+## How Sub-Agents Work
+
+Sub-agents are stored as regular Craft documents in a folder called **Agents** in your workspace. Each document defines one agent through its content:
+
+```
+📁 Agents/
+├── 📄 Research          ← Sub-agent document
+├── 📄 Writer            ← Sub-agent document
+└── 📁 Work/
+    ├── 📄 Code Dashboard ← Nested sub-agent
+    └── 📄 Sprint Plan    ← Nested sub-agent
+```
+
+When you activate a sub-agent, Craft Agents reads its definition from the document and adjusts its behavior accordingly.
+
+## What Sub-Agents Can Have
+
+Beyond custom instructions, agents can connect to external services—giving them access to your tools and enabling workflows across your stack.
+
+Each sub-agent document can define:
+
+### Custom Instructions
+
+The core of your sub-agent - written instructions that define its personality, expertise, and behavior patterns.
+
+```markdown
+You are a research assistant that helps find and synthesize information.
+
+## Key Behaviors
+- Always cite your sources
+- Present multiple perspectives on controversial topics
+- Summarize findings in bullet points
+
+## Expertise
+- Academic research
+- Market analysis
+- Competitive intelligence
+```
+
+### MCP Server Connections
+
+Connect your sub-agent to external MCP servers for additional capabilities:
+
+```yaml
+servers:
+  - name: exa
+    url: https://api.exa.ai/v1/mcp
+    requiresAuth: true
+```
+
+### REST API Integrations
+
+Give your agent access to external APIs. The easiest way is to paste a documentation link:
+
+```
+https://docs.example.com/api/search
+```
+
+If the page isn't accessible, paste the relevant docs content or use curl examples instead. Craft Agents automatically detects API definitions and creates tools the agent can use.
+
+## Activating Sub-Agents
+
+Switch to a sub-agent using the `@` mention syntax:
+
+```
+> @research Find recent papers about large language models
+```
+
+Or activate first, then chat:
+
+```
+> @research
+Switched to Research agent.
+
+> Find recent papers about large language models
+```
+
+For nested agents, use the full path:
+
+```
+> @work/code-review Check this pull request
+```
+
+Return to the main agent anytime:
+
+```
+> @main
+```
+
+## Quick Reference
+
+| Action | Command |
+|--------|---------|
+| List all agents | `/agent list` |
+| Activate an agent | `@agent-name` or `/agent activate agent-name` |
+| Return to main | `@main` |
+| Reload agent instructions | `/agent reload` |
+| Refresh agent list | `/agent refresh` |
+| View active agent info | `/agent info` |
+
+## Next Steps
+
+<Card
+  title="Create your first sub-agent"
+  icon="plus"
+  href="/sub-agents/creating-agents"
+  horizontal
+>
+  Step-by-step guide to building a sub-agent in your Craft workspace.
+</Card>

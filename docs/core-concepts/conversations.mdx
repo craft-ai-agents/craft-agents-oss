@@ -1,0 +1,120 @@
+---
+title: "Conversations"
+description: "How conversation history and sessions work"
+---
+
+Craft Agents maintains conversation history so you can have natural, contextual discussions about your documents and tasks.
+
+## How Conversations Work
+
+Each conversation is tied to a workspace. When you chat with Craft Agents:
+
+- The agent remembers what you discussed earlier in the session
+- You can reference previous topics ("summarize that document", "add another task like before")
+- Context builds up naturally as you work
+
+```
+> Find my project planning document
+Found "Project Planning Q4" - here's an overview...
+
+> Add a new section called "Timeline"
+Added "Timeline" section to Project Planning Q4.
+
+> Now add three tasks to that section
+Added 3 tasks to the Timeline section:
+1. Define milestones
+2. Set deadlines
+3. Assign owners
+```
+
+## Session Continuity
+
+Conversations persist across sessions within the same workspace. When you close and reopen Craft Agents:
+
+- Your previous conversation context is available
+- You can continue where you left off
+- The agent remembers recent document references
+
+## Clearing Conversations
+
+To start fresh with a clean slate:
+
+```
+> /clear
+```
+
+This clears the conversation history for the current workspace. Your documents, configurations, and sub-agents are not affected.
+
+## Context with Sub-Agents
+
+Sub-agents share the same conversation history as the main assistant. When you activate a sub-agent, it continues in the same session with access to everything discussed previously:
+
+```
+> Find my project planning document
+Found "Project Planning Q4" - here's an overview...
+
+> @research Find background research on our Q4 goals
+Switched to Research agent.
+[Research agent can reference the project planning document from the previous exchange]
+
+> @main
+Switched back to main assistant.
+[Main assistant remembers both the original document search and the research results]
+```
+
+This means:
+- Sub-agents can reference documents and context from earlier in the conversation
+- Switching between agents preserves the full conversation flow
+- You can ask one agent to build on work done by another
+
+## Long Conversations
+
+For extended work sessions, Craft Agents automatically manages conversation length:
+
+- Recent context is prioritized
+- Older messages are summarized to preserve key information
+- The agent maintains awareness of the overall conversation arc
+
+You don't need to manage this manually - the system handles it transparently.
+
+## Conversation Across Workspaces
+
+Each workspace has independent conversation history:
+
+| Workspace | Conversation |
+|-----------|--------------|
+| Personal Notes | Separate history |
+| Work Projects | Separate history |
+| Shared Team Space | Separate history |
+
+Switching workspaces switches to that workspace's conversation context.
+
+## Tips for Effective Conversations
+
+<AccordionGroup>
+  <Accordion title="Use references">
+    Say "that document" or "the task we just created" instead of repeating full names. The agent tracks what you're discussing.
+  </Accordion>
+
+  <Accordion title="Build on previous actions">
+    After creating something, you can immediately modify it: "now add a due date" or "change the title".
+  </Accordion>
+
+  <Accordion title="Ask for clarification">
+    If the agent misunderstands, just clarify: "no, I meant the other project" or "the one from last week".
+  </Accordion>
+
+  <Accordion title="Clear when switching topics">
+    If you're starting completely unrelated work and want a fresh start, use `/clear` to reset context.
+  </Accordion>
+</AccordionGroup>
+
+## Viewing Conversation State
+
+To see information about your current session:
+
+```
+> /debug
+```
+
+This shows session details including conversation length and workspace context.

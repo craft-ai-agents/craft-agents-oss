@@ -1,0 +1,170 @@
+---
+title: "Configuration File"
+description: "Reference for ~/.craft-agent/config.json"
+---
+
+Craft Agents stores configuration in your home directory:
+
+| File | Purpose |
+|------|---------|
+| `~/.craft-agent/config.json` | Workspaces, model selection, display settings |
+| `~/.craft-agent/credentials.enc` | Encrypted API keys and tokens |
+| `~/.craft-agent/preferences.json` | Name, timezone, location preferences |
+
+---
+
+The main configuration file stores your workspace connections, model preferences, and display settings.
+
+## Location
+
+```
+~/.craft-agent/config.json
+```
+
+## Structure
+
+```json
+{
+  "authType": "craft_oauth",
+  "model": "claude-sonnet-4-20250514",
+  "workspaces": [
+    {
+      "id": "ws-abc123",
+      "name": "Personal Notes",
+      "mcpUrl": "https://...",
+      "mcpAuthType": "workspace_oauth"
+    }
+  ],
+  "activeWorkspaceId": "ws-abc123",
+  "extendedCacheTtl": null,
+  "tokenDisplay": "total",
+  "showCost": true
+}
+```
+
+## Fields
+
+### authType
+
+How you authenticate with Claude AI.
+
+| Value | Description |
+|-------|-------------|
+| `craft_oauth` | Signed in via Craft account |
+| `api_key` | Using Anthropic API key |
+| `oauth_token` | Using Claude OAuth |
+| `craft_credits` | Using Craft AI credits |
+
+### model
+
+The default Claude model to use.
+
+| Value | Model |
+|-------|-------|
+| `claude-opus-4-5-20251101` | Claude Opus |
+| `claude-sonnet-4-20250514` | Claude Sonnet |
+| `claude-haiku-4-5-20251001` | Claude Haiku |
+
+### workspaces
+
+Array of connected Craft workspaces.
+
+```json
+{
+  "id": "ws-abc123",
+  "name": "Personal Notes",
+  "mcpUrl": "https://www.craft.do/...",
+  "mcpAuthType": "workspace_oauth"
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `id` | Unique identifier for the workspace |
+| `name` | Display name you assigned |
+| `mcpUrl` | MCP server URL for this workspace |
+| `mcpAuthType` | Authentication method for MCP connection |
+
+**mcpAuthType values:**
+
+| Value | Description |
+|-------|-------------|
+| `workspace_oauth` | OAuth authentication through Craft |
+| `workspace_bearer` | Static bearer token |
+| `public` | No authentication required |
+
+### activeWorkspaceId
+
+The ID of the currently active workspace.
+
+### extendedCacheTtl
+
+Controls prompt caching duration for cost optimization.
+
+| Value | Behavior |
+|-------|----------|
+| `null` | Auto - 1 hour for Opus, 5 minutes for others |
+| `true` | Force 1-hour cache for all models |
+| `false` | Force 5-minute cache for all models |
+
+### tokenDisplay
+
+How to show token usage in the interface.
+
+| Value | Display |
+|-------|---------|
+| `hidden` | Don't show token counts |
+| `total` | Show total tokens |
+| `separate` | Show input/output/cache separately |
+
+### showCost
+
+Whether to display estimated cost after each response.
+
+| Value | Behavior |
+|-------|----------|
+| `true` | Show cost in USD |
+| `false` | Hide cost |
+
+## Example Configuration
+
+```json
+{
+  "authType": "craft_oauth",
+  "model": "claude-sonnet-4-20250514",
+  "workspaces": [
+    {
+      "id": "ws-personal",
+      "name": "Personal Notes",
+      "mcpUrl": "https://www.craft.do/s/abc123/mcp",
+      "mcpAuthType": "workspace_oauth"
+    },
+    {
+      "id": "ws-work",
+      "name": "Work Projects",
+      "mcpUrl": "https://www.craft.do/s/def456/mcp",
+      "mcpAuthType": "workspace_oauth"
+    }
+  ],
+  "activeWorkspaceId": "ws-personal",
+  "extendedCacheTtl": null,
+  "tokenDisplay": "total",
+  "showCost": true
+}
+```
+
+## Modifying Configuration
+
+Most settings can be changed through the app:
+
+| Setting | Command |
+|---------|---------|
+| Model | `/model` |
+| Workspace | `/workspace` |
+| Token display | `/settings` |
+
+For advanced changes, edit the file directly while Craft Agents is not running.
+
+<Warning>
+Back up your config file before manual edits. Invalid JSON will prevent Craft Agents from starting.
+</Warning>

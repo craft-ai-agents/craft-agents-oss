@@ -1,0 +1,81 @@
+---
+title: "Installation"
+description: "Install Craft Agents on your machine"
+---
+
+## Prerequisites
+
+Before installing Craft Agents, you'll need:
+
+<Steps>
+  <Step title="Supported system">
+    Craft Agents runs on **macOS** and **Linux** (x86_64 or ARM64).
+
+    <Note>
+    Windows installation currently requires the use of WSL (Windows Subsystem for Linux), Git bash or similar bash scripting support.
+    </Note>
+  </Step>
+  <Step title="Craft account">
+    You'll need a [Craft](https://www.craft.do) account to connect to your documents.
+
+    <Note>
+    Advanced users can also connect using a direct Craft MCP workflow link instead of signing in.
+    </Note>
+  </Step>
+</Steps>
+
+## Install Craft Agents
+
+Run the installer script:
+
+```bash
+curl -fsSL https://agents.craft.do/install.sh | bash
+```
+
+This downloads and installs the `craft` command to `~/.local/bin`.
+
+<Accordion title="Manual PATH setup">
+If `~/.local/bin` is not in your PATH, add it to your shell configuration:
+
+```bash
+# For bash (~/.bashrc or ~/.bash_profile)
+export PATH="$HOME/.local/bin:$PATH"
+
+# For zsh (~/.zshrc)
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+Then restart your terminal or run `source ~/.zshrc` (or `~/.bashrc`).
+</Accordion>
+
+## Verify Installation
+
+Test that everything is working:
+
+```bash
+craft --help
+```
+
+You should see the available options and flags:
+
+```
+Usage: craft [options] [prompt]
+
+Options:
+  --model, -m          Choose model (opus, sonnet, haiku)
+  --agent, -a          Activate an agent
+  --workspace, -w      Select workspace
+  --debug              Enable debug logging
+  --help               Show this help
+```
+
+## Next Steps
+
+<Card
+  title="Run the setup wizard"
+  icon="wand-magic-sparkles"
+  href="/getting-started/quickstart"
+  horizontal
+>
+  Configure your API key, workspace, and preferences.
+</Card>

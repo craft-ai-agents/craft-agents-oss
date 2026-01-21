@@ -1,0 +1,314 @@
+---
+title: "Slash Commands"
+description: "Complete reference for all available commands"
+---
+
+Craft Agents supports slash commands for quick actions. Type `/` to see available commands, or use `/help` for a full list.
+
+## General Commands
+
+### /help
+
+Show all available commands and their descriptions.
+
+```
+> /help
+```
+
+### /clear
+
+Clear the current conversation history and start fresh.
+
+```
+> /clear
+```
+
+<Note>
+This doesn't affect your Craft documents - only the conversation memory.
+</Note>
+
+### /exit
+
+Exit Craft Agents.
+
+```
+> /exit
+```
+
+You can also press `Ctrl+C` to exit.
+
+---
+
+## Agent Commands
+
+### /agent list
+
+Show all available sub-agents in your workspace.
+
+```
+> /agent list
+Available agents:
+  • research
+  • writer
+  • work/code-review
+  • work/sprint-planning
+```
+
+### /agent activate
+
+Activate a sub-agent by name. You can also use the `@` shorthand.
+
+```
+> /agent activate research
+```
+
+Equivalent to:
+
+```
+> @research
+```
+
+### /agent clear
+
+Return to the main assistant, deactivating any active sub-agent.
+
+```
+> /agent clear
+```
+
+Equivalent to:
+
+```
+> @main
+```
+
+### /agent reload
+
+Reload the current agent's instructions from its Craft document. Use this after editing the agent document.
+
+```
+> /agent reload
+```
+
+### /agent refresh
+
+Rescan the Agents folder for new or removed agents.
+
+```
+> /agent refresh
+```
+
+### /agent info
+
+Show details about the currently active agent.
+
+```
+> /agent info
+```
+
+---
+
+## Workspace Commands
+
+### /workspace
+
+Show the current workspace and available workspaces.
+
+```
+> /workspace
+Current: Personal Notes
+Available:
+  • Personal Notes (active)
+  • Work Projects
+```
+
+### /workspace add
+
+Add a new workspace connection.
+
+```
+> /workspace add
+```
+
+This starts an interactive prompt to configure the new workspace.
+
+### /workspace rename
+
+Rename the current workspace.
+
+```
+> /workspace rename
+New name: My Personal Space
+```
+
+### /workspace remove
+
+Remove a workspace from your configuration.
+
+```
+> /workspace remove
+```
+
+<Warning>
+This removes the workspace from Craft Agents, but doesn't affect your actual Craft workspace.
+</Warning>
+
+---
+
+## Model Commands
+
+### /model
+
+Change the AI model. Opens a selection menu.
+
+```
+> /model
+Select model:
+  • claude-sonnet-4 (current)
+  • claude-opus-4
+  • claude-haiku-4
+```
+
+Or specify directly:
+
+```
+> /model opus
+> /model sonnet
+> /model haiku
+```
+
+---
+
+## Settings Commands
+
+### /settings
+
+Open the settings menu for configuration options.
+
+```
+> /settings
+```
+
+### /prefs
+
+Edit your user preferences (name, timezone, location, language).
+
+```
+> /prefs
+```
+
+These preferences are included in the system prompt so the agent can personalize responses.
+
+---
+
+## Tools and Debugging
+
+### /tools
+
+List all available MCP tools.
+
+```
+> /tools
+```
+
+For detailed information about each tool:
+
+```
+> /tools -v
+```
+
+### /debug
+
+Show debug information including file paths and configuration.
+
+```
+> /debug
+Config: ~/.craft-agent/config.json
+Credentials: ~/.craft-agent/credentials.enc
+Debug log: /tmp/craft-debug.log
+```
+
+---
+
+## Billing and Credits
+
+### /credits
+
+View your current billing method and credit balance.
+
+```
+> /credits
+```
+
+### /balance
+
+Open the Craft AI Credits top-up page in your browser.
+
+```
+> /balance
+```
+
+---
+
+## Other Commands
+
+### /paste
+
+Paste content from your clipboard (files or images).
+
+```
+> /paste
+```
+
+### /logout
+
+Clear all settings and credentials. This resets Craft Agents to its initial state.
+
+```
+> /logout
+```
+
+<Warning>
+This removes all stored credentials and workspace configurations. You'll need to run setup again.
+</Warning>
+
+### /feedback
+
+Send feedback with your session transcript attached.
+
+```
+> /feedback
+```
+
+Opens your email client with a pre-filled message.
+
+---
+
+## Command Summary
+
+| Command | Description |
+|---------|-------------|
+| `/help` | Show all commands |
+| `/clear` | Clear conversation |
+| `/exit` | Exit application |
+| `/agent list` | List sub-agents |
+| `/agent activate <name>` | Activate sub-agent |
+| `/agent clear` | Return to main agent |
+| `/agent reload` | Reload agent instructions |
+| `/agent refresh` | Rescan agents folder |
+| `/agent info` | Show active agent info |
+| `/workspace` | Show workspaces |
+| `/workspace add` | Add workspace |
+| `/workspace rename` | Rename workspace |
+| `/workspace remove` | Remove workspace |
+| `/model` | Change AI model |
+| `/settings` | Open settings |
+| `/prefs` | Edit preferences |
+| `/tools` | List MCP tools |
+| `/tools -v` | List tools with details |
+| `/debug` | Show debug info |
+| `/credits` | View billing info |
+| `/balance` | Top up credits |
+| `/paste` | Paste from clipboard |
+| `/logout` | Clear all settings |
+| `/feedback` | Send feedback |

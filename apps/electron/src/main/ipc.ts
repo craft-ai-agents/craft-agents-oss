@@ -4,6 +4,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { normalize, isAbsolute, join, basename, dirname, resolve } from 'path'
 import { homedir, tmpdir } from 'os'
 import { randomUUID } from 'crypto'
+import { execSync } from 'child_process'
 import { SessionManager } from './sessions'
 import { ipcLog, windowLog } from './logger'
 import { WindowManager } from './window-manager'
@@ -670,6 +671,22 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // Check if running in debug mode (from source)
   ipcMain.handle(IPC_CHANNELS.IS_DEBUG_MODE, () => {
     return !app.isPackaged
+  })
+
+  // Get git branch for a directory (returns null if not a git repo or git unavailable)
+  ipcMain.handle(IPC_CHANNELS.GET_GIT_BRANCH, (_event, dirPath: string) => {
+    try {
+      const branch = execSync('git rev-parse --abbrev-ref HEAD', {
+        cwd: dirPath,
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],  // Suppress stderr output
+        timeout: 5000,  // 5 second timeout
+      }).trim()
+      return branch || null
+    } catch {
+      // Not a git repo, git not installed, or other error
+      return null
+    }
   })
 
   // Auto-update handlers

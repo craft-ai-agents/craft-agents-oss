@@ -1,0 +1,361 @@
+---
+title: "API Detection"
+description: "Format API documentation for automatic detection"
+---
+
+Craft Agents extracts API definitions from your agent instructions using smart discovery. There are three ways to add APIs, from easiest to most explicit.
+
+## Documentation Links
+
+The simplest way to add an API - just paste the documentation URL:
+
+~~~markdown
+## Exa Search
+
+https://docs.exa.ai/reference/search
+~~~
+
+Craft Agents fetches the page and automatically extracts:
+- Available endpoints
+- HTTP methods and parameters
+- Authentication requirements
+- Request/response formats
+
+This works with most API documentation formats including OpenAPI/Swagger pages, developer portals, and standard reference docs.
+
+<Note>
+Some documentation pages can't be accessed by the agent (login-required, JavaScript-heavy, or bot-protected). If this happens, copy-paste the relevant documentation content directly instead.
+</Note>
+
+## Pasted Documentation
+
+If a doc link doesn't work, copy the relevant parts from the API documentation into your agent document:
+
+~~~markdown
+## Exa Search API
+
+**Base URL:** https://api.exa.ai
+
+### Search
+`POST /search`
+
+Request body:
+- `query` (required): Search query string
+- `numResults`: Number of results (default: 10)
+- `type`: "neural" or "keyword"
+
+Headers:
+- `x-api-key: {api_key}`
+
+Returns a list of search results with URLs, titles, and snippets.
+~~~
+
+This gives the agent all the information it needs to construct API calls without needing to fetch external pages.
+
+## Curl Examples
+
+For precise control over how APIs are detected, use curl examples.
+
+### Basic Structure
+
+A curl example that Craft Agents can parse:
+
+```bash
+curl -X POST https://api.example.com/endpoint \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"param": "value"}'
+```
+
+## Supported Curl Options
+
+| Option | Purpose | Example |
+|--------|---------|---------|
+| `-X` | HTTP method | `-X POST`, `-X GET`, `-X DELETE` |
+| `-H` | Headers | `-H "Authorization: Bearer KEY"` |
+| `-d` | Request body | `-d '{"query": "search"}'` |
+| `--data` | Request body (long form) | `--data '{"query": "search"}'` |
+
+## Examples by HTTP Method
+
+### GET Request
+
+```bash
+curl "https://api.example.com/items?limit=10&offset=0" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+### POST Request
+
+```bash
+curl -X POST https://api.example.com/items \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "New Item",
+    "description": "Item description"
+  }'
+```
+
+### PUT Request
+
+```bash
+curl -X PUT https://api.example.com/items/123 \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Updated Name"}'
+```
+
+### DELETE Request
+
+```bash
+curl -X DELETE https://api.example.com/items/123 \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+## Authentication Patterns
+
+### Bearer Token
+
+```bash
+curl https://api.example.com/data \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+### API Key Header
+
+```bash
+curl https://api.example.com/data \
+  -H "X-API-Key: YOUR_API_KEY"
+```
+
+### Basic Auth
+
+```bash
+curl https://api.example.com/data \
+  -H "Authorization: Basic YOUR_BASE64_CREDENTIALS"
+```
+
+### Query Parameter Auth
+
+```bash
+curl "https://api.example.com/data?api_key=YOUR_API_KEY"
+```
+
+## Multiple Endpoints
+
+Document multiple endpoints for a complete API integration:
+
+~~~markdown
+## Search API
+
+### Search
+```bash
+curl -X POST https://api.exa.ai/search \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "search query",
+    "numResults": 10
+  }'
+```
+
+### Get Contents
+```bash
+curl -X POST https://api.exa.ai/contents \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "ids": ["url1", "url2"],
+    "text": true
+  }'
+```
+~~~
+
+This creates two tools: one for searching, one for fetching content.
+
+## Naming Your APIs
+
+Add a heading or description to help Craft Agents name the generated tools:
+
+~~~markdown
+## Slack API
+
+### Post Message
+```bash
+curl -X POST https://slack.com/api/chat.postMessage \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{"channel": "C123", "text": "Hello"}'
+```
+~~~
+
+This creates a tool named something like `slack_post_message`.
+
+## Tips for Better Detection
+
+<AccordionGroup>
+  <Accordion title="Use placeholder values">
+    Use clear placeholders like `YOUR_API_KEY`, `YOUR_TOKEN`, or `{api_key}` for credentials. Craft Agents will prompt for actual values.
+  </Accordion>
+
+  <Accordion title="Include example bodies">
+    JSON bodies help the agent understand what parameters are available:
+    ```bash
+    -d '{"query": "search term", "limit": 10, "filters": {}}'
+    ```
+  </Accordion>
+
+  <Accordion title="Add context with headings">
+    Use markdown headings to describe what each endpoint does:
+    ```markdown
+    ### Search for Articles
+    ```bash
+    curl ...
+    ```
+  </Accordion>
+
+  <Accordion title="Group related endpoints">
+    Put related endpoints under a common heading so tools are logically grouped.
+  </Accordion>
+</AccordionGroup>
+
+## Real-World Examples
+
+### Using Documentation Links
+
+The quickest way to integrate popular APIs:
+
+~~~markdown
+## Exa Search
+
+https://docs.exa.ai/reference/search
+
+## GitHub Issues
+
+https://docs.github.com/en/rest/issues
+~~~
+
+### Using Pasted Documentation
+
+If doc links don't work, paste the relevant content:
+
+~~~markdown
+## Stripe Charges API
+
+**Base URL:** https://api.stripe.com/v1
+
+### Create a Charge
+`POST /charges`
+
+Parameters:
+- `amount` (required): Amount in cents
+- `currency` (required): Three-letter ISO currency code
+- `source`: Payment source token
+- `description`: Description of the charge
+
+Headers:
+- `Authorization: Bearer {stripe_secret_key}`
+~~~
+
+### Using Curl Examples
+
+For precise control:
+
+~~~markdown
+## Exa Search API
+
+Search the web for relevant content:
+
+```bash
+curl -X POST https://api.exa.ai/search \
+  -H "x-api-key: YOUR_EXA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "your search query",
+    "numResults": 10,
+    "type": "neural",
+    "useAutoprompt": true
+  }'
+```
+~~~
+
+### OpenAI Chat Completion
+
+~~~markdown
+## OpenAI API
+
+Generate text with GPT:
+
+```bash
+curl https://api.openai.com/v1/chat/completions \
+  -H "Authorization: Bearer YOUR_OPENAI_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4",
+    "messages": [{"role": "user", "content": "Hello"}]
+  }'
+```
+~~~
+
+### GitHub API
+
+~~~markdown
+## GitHub API
+
+### List Repository Issues
+```bash
+curl https://api.github.com/repos/{owner}/{repo}/issues \
+  -H "Authorization: Bearer YOUR_GITHUB_TOKEN" \
+  -H "Accept: application/vnd.github+json"
+```
+
+### Create Issue
+```bash
+curl -X POST https://api.github.com/repos/{owner}/{repo}/issues \
+  -H "Authorization: Bearer YOUR_GITHUB_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Issue title",
+    "body": "Issue description"
+  }'
+```
+~~~
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Documentation link not accessible">
+    Some pages can't be fetched by the agent:
+    - **Login-required pages** - need authentication to view
+    - **JavaScript-heavy pages** - content loads dynamically
+    - **Bot-protected pages** - block automated access
+
+    **Solution:** Copy-paste the relevant documentation content directly into your agent document instead of using a link.
+  </Accordion>
+
+  <Accordion title="API not detected from pasted docs">
+    - Make sure you include the base URL or full endpoint URLs
+    - Include HTTP methods (GET, POST, etc.)
+    - List required parameters and headers
+    - Add authentication details
+  </Accordion>
+
+  <Accordion title="API not detected from curl">
+    - Make sure the curl is in a code block marked as `bash`
+    - Check the URL is complete and valid
+    - Verify quotes are balanced in the JSON body
+  </Accordion>
+
+  <Accordion title="Wrong parameters extracted">
+    - Use valid JSON in the `-d` body
+    - Include all common parameters in your example
+    - Add descriptions around the curl to provide context
+    - For complex APIs, try pasting documentation or curl examples instead of doc links
+  </Accordion>
+
+  <Accordion title="Authentication not working">
+    - Use clear placeholder text for credentials
+    - Verify the header name matches what the API expects
+    - Check the authentication format (Bearer vs API key)
+  </Accordion>
+</AccordionGroup>

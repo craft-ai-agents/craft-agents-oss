@@ -50,7 +50,8 @@
     "viewer:preview": "vite preview --config apps/viewer/vite.config.ts",
     "marketing:dev": "vite dev --config apps/marketing/vite.config.ts",
     "marketing:build": "vite build --config apps/marketing/vite.config.ts",
-    "marketing:preview": "vite preview --config apps/marketing/vite.config.ts"
+    "marketing:preview": "vite preview --config apps/marketing/vite.config.ts",
+    "docs:dev": "npx mintlify dev docs"
   },
   "devDependencies": {
     "@aws-sdk/client-s3": "^3.947.0",

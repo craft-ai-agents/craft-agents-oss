@@ -1,0 +1,248 @@
+---
+title: "Automation Scripts"
+description: "Build automated workflows with Craft Agents"
+---
+
+Combine headless mode with scripting to create powerful automated workflows that interact with your Craft workspace.
+
+## Script Patterns
+
+### Morning Briefing
+
+Generate a daily summary and save it to a file:
+
+```bash
+#!/bin/bash
+# morning-briefing.sh
+
+DATE=$(date +%Y-%m-%d)
+OUTPUT="$HOME/briefings/$DATE.md"
+
+craft -p "Create a morning briefing with:
+1. Tasks due today
+2. Any overdue items
+3. Calendar events if mentioned in my notes
+4. Key priorities from my current projects
+
+Format as markdown." > "$OUTPUT"
+
+echo "Briefing saved to $OUTPUT"
+```
+
+### Weekly Review
+
+Automate your weekly review process:
+
+```bash
+#!/bin/bash
+# weekly-review.sh
+
+echo "=== Weekly Review ==="
+
+echo -e "\n## Completed This Week"
+craft -p "List tasks I completed this week based on my daily notes"
+
+echo -e "\n## Still In Progress"
+craft -p "What tasks are still in progress?"
+
+echo -e "\n## Upcoming Deadlines"
+craft -p "What deadlines do I have in the next 2 weeks?"
+```
+
+### Content Pipeline
+
+Process content through multiple agents:
+
+```bash
+#!/bin/bash
+# content-pipeline.sh
+
+TOPIC="$1"
+OUTDIR="./content"
+
+# Research phase
+echo "Researching..."
+craft -p "@research Find key information about: $TOPIC" > "$OUTDIR/research.md"
+
+# Writing phase
+echo "Writing draft..."
+craft -p "@writer Using this research, write a blog post draft:
+$(cat $OUTDIR/research.md)" > "$OUTDIR/draft.md"
+
+echo "Pipeline complete. Check $OUTDIR/"
+```
+
+## Cron Jobs
+
+### Daily Task Reminder
+
+Add to your crontab (`crontab -e`):
+
+```cron
+# Run at 9 AM every weekday
+0 9 * * 1-5 /usr/local/bin/craft -p "What are my top 3 priorities today?" | mail -s "Daily Priorities" you@email.com
+```
+
+### Weekly Backup Summary
+
+```cron
+# Run every Sunday at 8 PM
+0 20 * * 0 /usr/local/bin/craft -p "Summarize what I worked on this week" >> ~/weekly-logs.txt
+```
+
+## Integration Examples
+
+### Slack Notification
+
+Post task summaries to Slack:
+
+```bash
+#!/bin/bash
+# slack-tasks.sh
+
+WEBHOOK_URL="https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+
+TASKS=$(craft -p "List my tasks due today, formatted as a bulleted list")
+
+curl -X POST "$WEBHOOK_URL" \
+  -H "Content-Type: application/json" \
+  -d "{\"text\": \"*Today's Tasks*\n$TASKS\"}"
+```
+
+### Git Pre-Commit Hook
+
+Summarize changes before committing:
+
+```bash
+#!/bin/bash
+# .git/hooks/pre-commit
+
+CHANGES=$(git diff --cached --stat)
+
+if [ -n "$CHANGES" ]; then
+  echo "Generating commit summary..."
+  craft -p "Suggest a commit message for these changes:
+$CHANGES"
+fi
+```
+
+### Alfred/Raycast Integration
+
+Quick capture script for launchers:
+
+```bash
+#!/bin/bash
+# quick-capture.sh
+
+NOTE="$1"
+craft -p "Add this to my Inbox document: $NOTE"
+echo "Added to Inbox"
+```
+
+## Working with JSON Output
+
+Parse structured responses for further processing:
+
+```bash
+#!/bin/bash
+# task-count.sh
+
+RESULT=$(craft -p "How many incomplete tasks do I have? Reply with just the number." --output-format json)
+
+COUNT=$(echo "$RESULT" | jq -r '.response' | tr -dc '0-9')
+
+if [ "$COUNT" -gt 10 ]; then
+  echo "Warning: You have $COUNT incomplete tasks!"
+fi
+```
+
+## Multi-Workspace Scripts
+
+Work across different workspaces:
+
+```bash
+#!/bin/bash
+# cross-workspace-report.sh
+
+echo "=== Personal ==="
+craft -w "Personal" -p "Summarize my personal projects"
+
+echo -e "\n=== Work ==="
+craft -w "Work" -p "Summarize my work projects"
+```
+
+## Error Handling
+
+Robust scripts should handle failures:
+
+```bash
+#!/bin/bash
+set -e
+
+run_craft() {
+  local result
+  if ! result=$(craft -p "$1" 2>&1); then
+    echo "Error: $result" >&2
+    return 1
+  fi
+  echo "$result"
+}
+
+# Usage
+if TASKS=$(run_craft "List today's tasks"); then
+  echo "$TASKS"
+else
+  echo "Failed to fetch tasks"
+  exit 1
+fi
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use specific prompts">
+    Headless mode can't ask for clarification. Make prompts unambiguous:
+
+    ```bash
+    # Too vague
+    craft -p "Check my tasks"
+
+    # Better
+    craft -p "List all incomplete tasks due this week, sorted by due date"
+    ```
+  </Accordion>
+
+  <Accordion title="Set timeouts for long operations">
+    Prevent scripts from hanging:
+
+    ```bash
+    timeout 60 craft -p "Analyze my project documents" || echo "Timed out"
+    ```
+  </Accordion>
+
+  <Accordion title="Use appropriate models">
+    Use Haiku for simple queries to save cost and time:
+
+    ```bash
+    craft --model haiku -p "How many tasks do I have?"
+    ```
+  </Accordion>
+
+  <Accordion title="Log output for debugging">
+    Keep logs when running automated scripts:
+
+    ```bash
+    craft -p "Daily summary" 2>&1 | tee -a ~/craft-logs/$(date +%Y-%m-%d).log
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Go Further
+
+<Note>
+**Run scripts automatically with scheduling.** Use GitHub Actions or cloud cron services to run your agents daily, weekly, or on any schedule. See [Daily and Scheduled Jobs](/go-further/background-jobs).
+</Note>
+
+<Note>
+**Chat with your agent from anywhere.** Access your agents from Slack, Telegram, or your phone by hosting a simple webhook server. See [Chat from Anywhere](/go-further/chat-from-anywhere).
+</Note>

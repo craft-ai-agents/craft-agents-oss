@@ -1,0 +1,247 @@
+---
+title: "Connect to Anything"
+description: "Integrate services without MCP servers using API aggregators"
+---
+
+Some services you want to connect to don't have public MCP servers, and getting API access isn't straightforward. This guide shows you how to connect to virtually any service using API aggregators.
+
+## The Challenge
+
+Services like Google (Gmail, Calendar, Drive) and Microsoft (Outlook, Teams, OneDrive) don't offer simple API tokens. To connect directly, you'd need to:
+
+1. Create an OAuth client in their developer console
+2. Configure redirect URIs and scopes
+3. Implement the OAuth flow to get tokens
+4. Handle token refresh when access tokens expire
+5. Manage credential storage and updates
+
+This is complex to set up and maintain - especially for personal automation.
+
+<Note>
+Better native support for OAuth-based services in Craft Agents may be coming in the future. For now, API aggregators are the recommended approach.
+</Note>
+
+## The Solution: API Aggregators
+
+API aggregators handle all the OAuth complexity for you. They've already registered OAuth clients with thousands of services, so you just sign in with your account and get instant API access.
+
+Even better - several aggregators now offer **MCP servers** that you can connect directly to your Craft Agents.
+
+## Aggregator Options
+
+### Zapier
+
+[Zapier MCP](https://zapier.com/mcp) connects your agents to 8,000+ apps with 30,000+ actions.
+
+**What you get:** A hosted MCP server URL that works with Craft Agents!
+
+**Setup:**
+
+<Steps>
+  <Step title="Create a Zapier account">
+    Sign up at [zapier.com](https://zapier.com) if you don't have an account. Free tier available.
+  </Step>
+  <Step title="Go to the MCP page">
+    Visit [zapier.com/mcp](https://zapier.com/mcp) and click "Start building".
+  </Step>
+  <Step title="Connect your apps">
+    Add the services you want to use (Gmail, Google Calendar, Slack, etc.). Zapier walks you through OAuth for each.
+  </Step>
+  <Step title="Get your MCP server URL">
+    Zapier generates a unique MCP server URL for your account. Copy this URL.
+  </Step>
+  <Step title="Add to your Craft Agent">
+    In your agent's Instructions, add the MCP server:
+
+    ```json
+    {
+      "mcpServers": {
+        "zapier": {
+          "url": "https://mcp.zapier.com/your-unique-id"
+        }
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+**Pricing:** Included in all Zapier plans (including free). Each MCP tool call uses 2 tasks from your quota.
+
+---
+
+### Composio
+
+[Composio](https://composio.dev) offers MCP servers for 250+ tools, with a universal server called **Rube** that can connect to any supported app.
+
+**What you get:** Individual MCP servers per service, or a universal MCP server for all your connected apps.
+
+**Setup:**
+
+<Steps>
+  <Step title="Create a Composio account">
+    Sign up at [composio.dev](https://composio.dev).
+  </Step>
+  <Step title="Connect your apps">
+    From the dashboard, connect the services you need (Google, Slack, Jira, Linear, etc.).
+  </Step>
+  <Step title="Get MCP server details">
+    Composio provides MCP server URLs for each connected service. For the universal Rube server, you'll get a single endpoint.
+  </Step>
+  <Step title="Add to your Craft Agent">
+    Add the MCP configuration to your agent's Instructions:
+
+    ```json
+    {
+      "mcpServers": {
+        "composio": {
+          "url": "https://mcp.composio.dev/your-connection"
+        }
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+**Key feature:** Rube is a universal MCP server with just 7 tools that can communicate with any connected app on demand.
+
+---
+
+### Make
+
+[Make](https://www.make.com) (formerly Integromat) offers a cloud-based MCP server that turns your Make scenarios into tools AI agents can call.
+
+**What you get:** An MCP server URL with your token embedded, exposing your scenarios as callable tools.
+
+**Setup:**
+
+<Steps>
+  <Step title="Create a Make account">
+    Sign up at [make.com](https://www.make.com).
+  </Step>
+  <Step title="Create scenarios">
+    Build Make scenarios for the actions you want your agent to perform (e.g., "Send email", "Create calendar event").
+  </Step>
+  <Step title="Generate your MCP token">
+    Go to your Make profile settings and generate an MCP Token.
+  </Step>
+  <Step title="Build your MCP server URL">
+    Combine your zone and token into the URL format:
+    ```
+    https://<ZONE>.make.com/mcp/u/<TOKEN>/stateless
+    ```
+    For example: `https://eu2.make.com/mcp/u/abc123xyz/stateless`
+  </Step>
+  <Step title="Add to your Craft Agent">
+    ```json
+    {
+      "mcpServers": {
+        "make": {
+          "url": "https://eu2.make.com/mcp/u/your-token/stateless"
+        }
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+**Key feature:** Your Make scenarios become callable tools - the AI discovers what inputs they need and what outputs they produce.
+
+---
+
+### Pipedream
+
+[Pipedream](https://pipedream.com) provides MCP servers for 2,500+ APIs with built-in authentication.
+
+**What you get:** Hosted MCP servers for each connected service, with secure credential isolation.
+
+**Setup:**
+
+<Steps>
+  <Step title="Create a Pipedream account">
+    Sign up at [pipedream.com](https://pipedream.com). Free for personal use.
+  </Step>
+  <Step title="Visit the MCP page">
+    Go to [mcp.pipedream.com](https://mcp.pipedream.com) to access your MCP servers.
+  </Step>
+  <Step title="Connect services">
+    Add the services you want to use. Pipedream handles OAuth for each.
+  </Step>
+  <Step title="Get your MCP configuration">
+    Pipedream provides MCP server details for your connected services.
+  </Step>
+  <Step title="Add to your Craft Agent">
+    ```json
+    {
+      "mcpServers": {
+        "pipedream": {
+          "url": "https://mcp.pipedream.com/your-config"
+        }
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+**Key feature:** 10,000+ pre-built tools across 2,500+ APIs, all with managed authentication.
+
+---
+
+## Comparison
+
+| Feature | Zapier | Composio | Make | Pipedream |
+|---------|--------|----------|------|-----------|
+| Apps | 8,000+ | 250+ | 1,500+ | 2,500+ |
+| MCP Server | Cloud-hosted | Cloud-hosted | Cloud-hosted | Cloud-hosted |
+| Free tier | Yes (limited) | Yes | Yes (limited) | Yes |
+| Best for | Broadest app coverage | Developer-focused | Visual workflow builders | API-first users |
+
+## Example: Gmail + Google Calendar Agent
+
+Here's a complete example connecting an agent to Google services via Zapier:
+
+~~~markdown
+You are a personal assistant that helps manage email and calendar.
+
+## Capabilities
+- Read and search emails
+- Send emails and replies
+- View calendar events
+- Create and update calendar events
+
+## MCP Servers
+
+```json
+{
+  "mcpServers": {
+    "zapier": {
+      "url": "https://mcp.zapier.com/abc123"
+    }
+  }
+}
+```
+
+## Guidelines
+- Always confirm before sending emails
+- Include relevant context when creating calendar events
+- Summarize email threads concisely
+~~~
+
+## Tips
+
+<AccordionGroup>
+  <Accordion title="Start with one aggregator">
+    Pick the one with the best coverage for your needs. You can always add more later.
+  </Accordion>
+
+  <Accordion title="Check rate limits">
+    Each aggregator has usage limits on their free tier. Monitor your usage if running agents frequently.
+  </Accordion>
+
+  <Accordion title="Test connections first">
+    Before building complex agents, verify the MCP connection works with a simple test prompt.
+  </Accordion>
+
+  <Accordion title="Review available actions">
+    Each aggregator exposes different actions per service. Check what's available before assuming a specific capability exists.
+  </Accordion>
+</AccordionGroup>

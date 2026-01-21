@@ -1,0 +1,278 @@
+---
+title: "Creating Sub-Agents"
+description: "Build your first custom sub-agent step by step"
+---
+
+This guide walks you through creating a sub-agent from scratch. By the end, you'll have a working custom agent with its own instructions and capabilities.
+
+Agents become most powerful when connected to multiple services. Start simple with instructions, then add connections to build workflows across your stack.
+
+## Quick Start: Instructions Only
+
+The simplest agent needs nothing but instructions. Here's a Writing Coach in under a minute:
+
+1. Create an **Agents** folder in your workspace
+2. Add a document called **Writing Coach**
+3. Write your instructions directly in the document:
+
+```markdown
+You are a writing coach that helps improve clarity and style.
+
+- Point out wordy phrases and suggest concise alternatives
+- Flag passive voice when active would be stronger
+- Keep feedback encouraging and specific
+```
+
+4. Run `/agent refresh` and activate with `@writing-coach`
+
+That's it—no API keys, no configuration. The document *is* the agent.
+
+---
+
+## Document Structure
+
+Every sub-agent is defined by a Craft document. The document title becomes the agent's name, and the content defines its behavior:
+
+```
+📄 Agent Name
+└── Your agent's instructions, MCP configs, and API definitions
+```
+
+<Tip>
+You can also create an **Instructions** subpage if you want to keep your instructions separate from other content in the document (like workflow results the agent might save). Both approaches work—the agent reads instructions from either location.
+</Tip>
+
+## Step-by-Step: Create a Research Agent
+
+Let's create a research assistant that can search the web using the Exa API.
+
+<Steps>
+  <Step title="Create the Agents folder">
+    In your Craft workspace, create a folder called **Agents** at the root level. This is where Craft Agents looks for sub-agent definitions.
+
+    ```
+    📁 Your Workspace
+    └── 📁 Agents     ← Create this folder
+    ```
+  </Step>
+
+  <Step title="Create the agent document">
+    Inside the Agents folder, create a new document. Name it **Research** - this becomes the agent's name.
+
+    ```
+    📁 Agents
+    └── 📄 Research   ← Create this document
+    ```
+  </Step>
+
+  <Step title="Write the agent instructions">
+    In your agent document, write what you want your agent to do:
+
+    ```markdown
+    You are a research assistant that helps find, analyze, and synthesize information from the web.
+
+    ## Your Approach
+    - Always search for multiple sources on a topic
+    - Prioritize recent and authoritative sources
+    - Summarize findings clearly with bullet points
+    - Include source links for verification
+
+    ## What You're Good At
+    - Finding recent news and articles
+    - Academic and technical research
+    - Market and competitive analysis
+    - Fact-checking claims
+
+    ## How to Respond
+    - Start with a brief answer, then provide details
+    - Use clear headings to organize information
+    - Always cite your sources with links
+    ```
+  </Step>
+
+  <Step title="Add API access (optional)">
+    Craft Agents has built-in web search, so your agent can already find information online. But if you want more powerful and customizable web search for critical research tasks—like neural search, domain filtering, or full content extraction—you can add a dedicated search API. The simplest way is to paste a documentation link:
+
+    ~~~markdown
+    ## Web Search API
+
+    https://docs.exa.ai/reference/search
+    ~~~
+
+    If the doc link isn't accessible to the agent, paste the relevant documentation:
+
+    ~~~markdown
+    ## Web Search API
+
+    **Base URL:** https://api.exa.ai
+
+    ### Search
+    `POST /search`
+
+    Body: `query` (required), `numResults`, `type` ("neural" or "keyword")
+    Headers: `x-api-key: {api_key}`
+    ~~~
+
+    Or use a curl example for precise control:
+
+    ~~~markdown
+    ```bash
+    curl -X POST https://api.exa.ai/search \
+      -H "x-api-key: YOUR_EXA_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{"query": "search query", "numResults": 10}'
+    ```
+    ~~~
+
+    Craft Agents automatically detects API definitions and creates tools the agent can use.
+  </Step>
+
+  <Step title="Refresh and activate">
+    In Craft Agents, refresh the agent list and activate your new agent:
+
+    ```
+    > /agent refresh
+    Found 1 agent: Research
+
+    > @research
+    Switched to Research agent.
+
+    > Find recent articles about AI agents
+    ```
+
+    The first time you activate an agent with an API, you'll be prompted for the API key.
+  </Step>
+</Steps>
+
+<Tip>
+**Going further:** This agent connects to one service. But you can add multiple—combine Exa search with Linear to automatically create issues from research findings, or add Slack to share results with your team.
+</Tip>
+
+## Complete Example: Research Agent
+
+Here's the full agent document content for reference:
+
+```markdown
+You are a research assistant that helps find, analyze, and synthesize
+information from the web.
+
+## Your Approach
+- Always search for multiple sources on a topic
+- Prioritize recent and authoritative sources
+- Summarize findings clearly with bullet points
+- Include source links for verification
+
+## What You're Good At
+- Finding recent news and articles
+- Academic and technical research
+- Market and competitive analysis
+- Fact-checking claims
+
+## How to Respond
+- Start with a brief answer, then provide details
+- Use clear headings to organize information
+- Always cite your sources with links
+
+---
+
+## Web Search API
+
+This agent can search the web using Exa:
+
+```bash
+curl -X POST https://api.exa.ai/search \
+  -H "x-api-key: YOUR_EXA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "search query",
+    "numResults": 10,
+    "type": "neural"
+  }'
+```
+
+```bash
+curl -X POST https://api.exa.ai/contents \
+  -H "x-api-key: YOUR_EXA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "ids": ["url1", "url2"],
+    "text": true
+  }'
+```
+
+## Organizing Multiple Agents
+
+Use folders to organize related agents:
+
+```
+📁 Agents
+├── 📄 Research
+├── 📄 Writer
+└── 📁 Work
+    ├── 📄 Code Review
+    ├── 📄 Sprint Planning
+    └── 📄 Standup
+```
+
+Access nested agents with their path:
+
+```
+> @work/code-review
+> @work/sprint-planning
+```
+
+You can nest up to 3 levels deep.
+
+## Updating Agent Instructions
+
+Agents can update their own instructions based on your feedback. If you say:
+
+```
+> Remember that I prefer APA citation format
+```
+
+The agent may offer to save this preference to its instructions for future conversations.
+
+You can also manually edit the agent document in Craft - changes take effect when you reload:
+
+```
+> /agent reload
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Agent not appearing in list">
+    - Make sure the document is in the **Agents** folder (exact name)
+    - Run `/agent refresh` to rescan
+  </Accordion>
+
+  <Accordion title="API not working">
+    - Check that your curl example has the correct URL and headers
+    - Verify your API key is correct when prompted
+    - Look for error messages in the tool call output
+  </Accordion>
+
+  <Accordion title="Instructions not updating">
+    - After editing in Craft, run `/agent reload`
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<Columns cols={2}>
+  <Card
+    title="Writing better instructions"
+    icon="pen-fancy"
+    href="/sub-agents/agent-instructions"
+  >
+    Tips for crafting effective agent prompts.
+  </Card>
+  <Card
+    title="Connect MCP servers"
+    icon="plug"
+    href="/integrations/mcp-servers/overview"
+  >
+    Add more capabilities with external MCP servers.
+  </Card>
+</Columns>

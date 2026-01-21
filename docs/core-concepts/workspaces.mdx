@@ -1,0 +1,96 @@
+---
+title: "Workspaces"
+description: "Connect and manage multiple Craft workspaces"
+---
+
+Craft Agents supports connecting to multiple Craft workspaces, allowing you to switch between personal notes, work projects, and shared spaces without reconfiguring.
+
+## Understanding Workspaces
+
+A workspace in Craft Agents represents a connection to a Craft workspace. Each workspace has:
+
+- Its own MCP connection to your Craft documents
+- Separate conversation history
+- Independent sub-agent configurations
+- Stored credentials for that workspace's services
+
+## Adding a Workspace
+
+During initial setup, you connect your first workspace automatically. To add more:
+
+```
+> /workspace add
+```
+
+This walks you through:
+1. Entering a name for the workspace
+2. Entering the Craft MCP URL for that workspace
+
+<Note>
+Craft workspace picker coming soon - for now you'll need the MCP URL from your Craft workspace.
+</Note>
+
+## Switching Workspaces
+
+View your connected workspaces:
+
+```
+> /workspace
+ Select Workspace (Current: Personal Notes)
+Available:
+  • Personal Notes (active)
+  • Work Projects
+  • Shared Team Space
+  + Add new workspace
+```
+
+Switch to a different workspace:
+
+```
+> /workspace Work Projects
+Switched to Work Projects
+```
+
+Or use the CLI flag when starting:
+
+```bash
+craft -w "Work Projects"
+```
+
+## Managing Workspaces
+
+use the following key commands in `/workspace` menu
+```
+a add | r rename | d remove
+```
+
+<Warning>
+Removing a workspace deletes its local configuration and conversation history. Your actual Craft workspace and documents are not affected.
+</Warning>
+
+## Workspace-Specific Configuration
+
+Each workspace maintains its own:
+
+| Data | Description |
+|------|-------------|
+| **Conversation history** | Chat history is per-workspace |
+| **Sub-agents** | Agents defined in that workspace's Agents folder |
+| **API credentials** | Keys for services used by that workspace's agents |
+| **Session state** | Resumed conversations stay within their workspace |
+
+## Use Cases
+
+<AccordionGroup>
+  <Accordion title="Personal vs Work separation">
+    Keep your personal notes separate from work documents. Switch contexts without mixing conversations or accidentally accessing the wrong documents.
+  </Accordion>
+
+  <Accordion title="Client projects">
+    Consultants and freelancers can set up separate workspaces for each client, with dedicated agents and API connections per project.
+  </Accordion>
+
+  <Accordion title="Shared team spaces">
+    Connect to shared Craft workspaces for team collaboration while maintaining your personal workspace for private notes.
+  </Accordion>
+</AccordionGroup>

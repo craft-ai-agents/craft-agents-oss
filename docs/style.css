@@ -1,0 +1,80 @@
+/* Background color - RGB values without rgb() wrapper */
+:root {
+  --background-light: 249 250 251;
+}
+
+/* Smaller font size for content */
+.prose {
+  font-size: 0.875rem !important;
+  line-height: 1.5 !important;
+}
+
+.prose p,
+.prose li,
+.prose td {
+  font-size: 0.875rem !important;
+}
+
+main p,
+main li {
+  font-size: 0.875rem !important;
+}
+
+/* Wider content area */
+#content-area {
+  max-width: 60rem !important; /* ~960px, between 4xl (56rem) and 5xl (64rem) */
+}
+
+/* Smaller left menu items */
+#sidebar-group {
+  gap: 0 !important;
+}
+
+#sidebar-group a {
+  padding-top: 0.125rem !important;
+  padding-bottom: 0.125rem !important;
+  font-size: 0.85rem !important;
+}
+
+#sidebar-group li {
+  margin-bottom: 0 !important;
+  margin-top: 0 !important;
+}
+
+/* Table of contents */
+#table-of-contents > button {
+  font-family: Inter, sans-serif !important;
+}
+
+/* H3 in content should be mono */
+#content h3 {
+  font-family: 'JetBrains Mono', monospace !important;
+}
+
+/* H4 in content should be mono and bold */
+#content h4 {
+  font-family: 'JetBrains Mono', monospace !important;
+  font-weight: 700 !important;
+}
+
+/* Header subtitle opacity */
+#header > div.mt-2 {
+  opacity: 0.6 !important;
+}
+
+/* Fix cropped card icons */
+.card svg,
+[class*="card"] svg {
+  overflow: visible !important;
+}
+
+#table-of-contents a {
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 0.825rem !important;
+  padding-top: 0.15rem !important;
+  padding-bottom: 0.15rem !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  display: block !important;
+}

@@ -1,0 +1,151 @@
+---
+title: "Craft Capabilities"
+description: "What you can access and do with your Craft documents"
+---
+
+Craft Agents connects to your Craft workspace through the Model Context Protocol (MCP), giving you natural language access to your documents, collections, and tasks.
+
+## What You Can Access
+
+### Documents
+
+Search, read, and navigate your Craft documents:
+
+```
+> Find my documents about project planning
+> Show me the contents of "Q4 Goals"
+> What did I write about the marketing budget?
+```
+
+The agent can access document content, including nested pages and blocks within documents.
+
+### Daily Notes
+
+Access your daily notes for journaling and time-based information:
+
+```
+> What's in today's daily note?
+> Show me yesterday's notes
+> Search my daily notes for mentions of "team meeting"
+```
+
+### Collections
+
+Work with Craft collections (structured databases):
+
+```
+> Show me my Expenses collection
+> What items are in my Reading List?
+> List all entries in the Projects collection
+```
+
+### Tasks
+
+View and manage tasks across your workspace:
+
+```
+> What tasks do I have due this week?
+> Show me all incomplete tasks
+> Find tasks related to the website redesign
+```
+
+## What You Can Create and Modify
+
+### Adding Content
+
+Create new documents and add content to existing ones:
+
+```
+> Create a new document called "Meeting Notes - Dec 11"
+> Add a bullet point to my project plan: "Review designs with team"
+> Insert a heading "Next Steps" in my Q4 Goals document
+```
+
+### Updating Content
+
+Modify existing blocks and documents:
+
+```
+> Update the status in my project tracker to "In Progress"
+> Change the due date on that task to next Friday
+> Edit the first paragraph to include the new metrics
+```
+
+### Managing Collections
+
+Add and update collection items:
+
+```
+> Add a new expense: $45 for lunch, category meals
+> Update the status of "Website Redesign" to completed
+> Add a book to my Reading List: "The Design of Everyday Things"
+```
+
+### Working with Tasks
+
+Create and update tasks:
+
+```
+> Add a task: "Send follow-up email" due tomorrow
+> Mark the "Review PR" task as complete
+> Add a subtask to "Website Redesign": "Finalize color palette"
+```
+
+<Tip>
+These same document skills apply to building custom agents. Your instructions become the agent's behavior—no code needed. See [Sub-Agents](/sub-agents/overview).
+</Tip>
+
+## Content Operations
+
+The agent performs these types of operations on your Craft content:
+
+| Operation | Examples |
+|-----------|----------|
+| **Search** | Find documents by title, search content, filter by date |
+| **Read** | Get document contents, list blocks, retrieve collection items |
+| **Create** | New documents, blocks, collection items, tasks |
+| **Update** | Modify text, change properties, update task status |
+| **Delete** | Remove blocks, delete collection items, remove tasks |
+
+<Warning>
+Delete operations permanently remove content from your Craft workspace. The agent will confirm before performing destructive actions.
+</Warning>
+
+## Working with Document Structure
+
+Craft documents have a hierarchical structure of blocks. The agent understands this structure and can:
+
+- Navigate between pages and subpages
+- Work with different block types (text, headings, lists, code blocks)
+- Understand the relationship between parent and child blocks
+- Reference specific sections within documents
+
+## Tips for Better Results
+
+<AccordionGroup>
+  <Accordion title="Be specific about document names">
+    Instead of "find my notes", try "find my notes about the product launch" or reference documents by their exact title.
+  </Accordion>
+
+  <Accordion title="Use context from the conversation">
+    After finding a document, you can say "summarize that" or "add a task to it" - the agent remembers what you were discussing.
+  </Accordion>
+
+  <Accordion title="Specify collections explicitly">
+    When working with collections, name them: "add to my Expenses collection" rather than just "track this expense".
+  </Accordion>
+
+  <Accordion title="Confirm destructive actions">
+    For important changes, ask the agent to show you what it will do before executing: "show me what you'll delete" or "preview the changes".
+  </Accordion>
+</AccordionGroup>
+
+## Current Limitations
+
+Some Craft features are not yet accessible through Craft Agents:
+
+- Comments
+- Document sharing and permissions
+- Real-time collaboration features
+- Export functionality
+

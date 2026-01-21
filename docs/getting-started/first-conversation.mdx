@@ -1,0 +1,192 @@
+---
+title: "First Conversation"
+description: "Learn how to interact with your Craft documents"
+---
+
+Now that you're set up, let's explore what you can do with Craft Agents. This page covers common interactions and helps you understand how the agent works with your documents.
+
+## Basic Queries
+
+Start by asking about your documents:
+
+```
+> What documents do I have?
+```
+
+The agent searches your workspace and lists what it finds. You'll see tool calls appear as the agent works, then the results.
+
+## Searching Documents
+
+Find specific content across your workspace:
+
+```
+> Search for documents about "quarterly review"
+```
+
+```
+> Find my notes from last week's team meeting
+```
+
+```
+> What did I write about the marketing budget?
+```
+
+## Reading Document Content
+
+Ask about specific documents:
+
+```
+> Show me what's in my Project Planning document
+```
+
+```
+> Summarize my Q4 Goals
+```
+
+```
+> What are the key points from the Meeting Notes - Dec 10?
+```
+
+## Working with Daily Notes
+
+Access your daily notes:
+
+```
+> What's in today's daily note?
+```
+
+```
+> Show me yesterday's daily note
+```
+
+```
+> Search my daily notes for mentions of "client meeting"
+```
+
+## Creating Content
+
+Add new content to your documents:
+
+```
+> Add a new task to my Project Planning: "Review Q4 metrics"
+```
+
+```
+> Create a new document called "2024 Retrospective"
+```
+
+```
+> Add a bullet point to my meeting notes: "Follow up with design team"
+```
+
+<Warning>
+Write operations modify your actual Craft documents. The agent will show you what it's about to do before making changes.
+</Warning>
+
+<Tip>
+The documents you create can also become custom agents. Write instructions in a document, and Craft Agents brings it to life. Learn more in [Sub-Agents](/sub-agents/overview).
+</Tip>
+
+## Working with Collections
+
+If you use Craft collections (databases):
+
+```
+> Show me my Expenses collection
+```
+
+```
+> Add a new item to Expenses: $45 for lunch, category: meals
+```
+
+```
+> What expenses do I have this month?
+```
+
+## Managing Tasks
+
+View and manage tasks across your documents:
+
+```
+> What tasks do I have due this week?
+```
+
+```
+> Mark the "Review PR" task as complete
+```
+
+```
+> Add a task: "Send follow-up email" due tomorrow
+```
+
+## Running Commands
+
+Execute shell commands when needed:
+
+```
+> What's the current git status of this directory?
+```
+
+For potentially dangerous commands, you'll see a permission prompt asking you to approve the action. See [Permissions](/core-concepts/permissions) for details.
+
+## Slash Commands
+
+Use slash commands for quick actions:
+
+| Command | What it does |
+|---------|--------------|
+| `/help` | Show all available commands |
+| `/tools` | List available MCP tools |
+| `/model` | Change AI model |
+| `/clear` | Clear conversation history |
+| `/agent` | Manage sub-agents |
+| `/workspace` | Switch workspaces |
+
+Type `/help` to see the full list.
+
+## Tips for Better Results
+
+<AccordionGroup>
+  <Accordion title="Be specific">
+    Instead of "find my notes", try "find my notes about the product launch from last month".
+  </Accordion>
+
+  <Accordion title="Use context">
+    The agent remembers your conversation. You can say "summarize that document" after finding one.
+  </Accordion>
+
+  <Accordion title="Ask for clarification">
+    If results aren't what you expected, ask the agent to refine the search or try a different approach.
+  </Accordion>
+
+  <Accordion title="Watch the tool calls">
+    The tool call boxes show exactly what the agent is doing. This helps you understand how it interprets your requests.
+  </Accordion>
+</AccordionGroup>
+
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `↑` / `↓` | Navigate command history |
+| `Ctrl+C` | Cancel current operation or exit |
+| `Tab` | Auto-complete agent names (`@wo...`) |
+
+## Next Steps
+
+<Columns cols={2}>
+  <Card
+    title="Learn about sub-agents"
+    icon="robot"
+    href="/sub-agents/overview"
+  >
+    Turn Craft documents into custom agents—just write what you want them to do.
+  </Card>
+  <Card
+    title="Explore all commands"
+    icon="terminal"
+    href="/reference/cli/commands"
+  >
+    See the complete reference for slash commands and CLI options.
+  </Card>
+</Columns>

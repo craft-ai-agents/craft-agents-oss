@@ -1,0 +1,90 @@
+---
+title: "Quickstart"
+description: "Configure Craft Agents and start your first conversation"
+---
+
+When you run `craft` for the first time, you'll be guided through a setup wizard that configures your authentication and workspace connection.
+
+## Run the Craft Agents app
+
+Start `craft` on the command line / terminal:
+
+```bash
+craft
+```
+
+## Setup Steps
+
+The wizard walks you through these configuration steps:
+
+<Steps>
+  <Step title="Sign in to Craft">
+    A browser window opens for you to sign in to your Craft account. After authenticating, you're automatically redirected back to the terminal.
+  </Step>
+
+  <Step title="Choose your Craft space">
+    Select which Craft space to connect from your available spaces. Craft Agents will automatically create a connection to access your documents.
+
+    <Note>
+    If your space already has MCP connections configured, you'll be asked to select one or create a new one.
+    </Note>
+  </Step>
+
+  <Step title="Set up billing">
+    Choose how to pay for Claude AI usage:
+
+    | Option | Description |
+    |--------|-------------|
+    | **Craft Credits** | Use your Craft subscription's AI credits - simplest option |
+    | **Anthropic API Key** | Use your own key from [console.anthropic.com](https://console.anthropic.com) |
+    | **Claude Pro/Max** | Use your existing Claude subscription |
+
+    <Accordion title="Using Craft Credits">
+    Craft Credits are the easiest way to get started - no additional setup required. You can purchase credits directly through the app and they'll be used for all your AI interactions.
+    </Accordion>
+
+    <Accordion title="Using an Anthropic API key">
+    If you have the `ANTHROPIC_API_KEY` environment variable configured, Craft Agent will detect and use it automatically.
+
+    Otherwise, paste your API key when prompted:
+
+    ```
+    Enter your Anthropic API key: sk-ant-api03-...
+    ```
+
+    Your key is stored securely in an encrypted file at `~/.craft-agent/credentials.enc`.
+    </Accordion>
+
+    <Accordion title="Using Claude Pro/Max subscription">
+    If you have a Claude Pro or Max subscription, select this option to sign in with your Claude account. A browser window opens for authentication.
+    </Accordion>
+  </Step>
+
+  <Step title="Ready to go!">
+    Once setup completes, you'll see the chat interface with:
+
+    - A prompt where you can type messages or commands
+    - A status bar showing your connection, billing method, model, and workspace
+
+    Type a message to start chatting, or `/help` to see available commands.
+
+    <Tip>
+    Once you're comfortable with the basics, try creating custom agents—just write instructions in a Craft document and it becomes a working agent.
+    </Tip>
+  </Step>
+</Steps>
+
+<Note>
+To reconfigure everything from scratch, run `craft` and type `/logout`. This removes all settings and credentials.
+</Note>
+
+## Next Steps
+
+<Card
+  title="Start your first conversation"
+  icon="message"
+  href="/getting-started/first-conversation"
+  horizontal
+>
+  Learn what you can ask and how to interact with your documents.
+</Card>

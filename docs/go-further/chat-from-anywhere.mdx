@@ -1,0 +1,342 @@
+---
+title: "Chat from Anywhere"
+description: "Access your agents from Slack, Telegram, or any chat platform"
+---
+
+Want to chat with your Craft Agent from your phone? Or get responses in Slack without opening a terminal? This guide shows you how to make your agent accessible from any chat platform.
+
+## How It Works
+
+The architecture is simple:
+
+1. **Host your agent** as an HTTP service on a cloud platform
+2. **Connect chat platforms** via webhooks
+3. **Messages flow**: Chat app → Your server → Craft Agent → Response back
+
+<Frame>
+  <img src="/images/chat-anywhere-architecture.svg" alt="Chat from anywhere architecture diagram" />
+</Frame>
+
+---
+
+## Step 1: Wrap Your Agent as an HTTP Service
+
+Create a simple server that calls the Craft CLI:
+
+```javascript
+// server.js
+import express from "express";
+import { execFile } from "child_process";
+
+const app = express();
+app.use(express.json());
+
+app.post("/chat", (req, res) => {
+  const message = req.body.message ?? "";
+  const agent = req.body.agent ?? ""; // optional: specific sub-agent
+
+  const args = [
+    "-w", process.env.CRAFT_MCP_URL,
+    "-p", message,
+    "--output-format", "text"
+  ];
+
+  if (agent) {
+    args.push("-a", agent);
+  }
+
+  execFile("craft", args, { timeout: 120000 }, (err, stdout, stderr) => {
+    if (err) {
+      console.error("Agent error:", err, stderr);
+      return res.status(500).json({ error: "agent_failed" });
+    }
+    res.json({ reply: stdout.trim() });
+  });
+});
+
+const port = process.env.PORT || 3000;
+app.listen(port, () => console.log(`Agent server on :${port}`));
+```
+
+Now you have a single endpoint: `POST /chat { message } → { reply }`
+
+---
+
+## Step 2: Deploy to a Cloud Platform
+
+### Render (Recommended)
+
+[Render](https://render.com) is the easiest option - push your repo and it just works.
+
+<Steps>
+  <Step title="Create a Web Service">
+    In Render dashboard, create a new **Web Service** and connect your Git repo.
+  </Step>
+  <Step title="Configure build settings">
+    - **Build Command**: `curl -fsSL https://agents.craft.do/install.sh | bash && npm install`
+    - **Start Command**: `node server.js`
+  </Step>
+  <Step title="Add environment variables">
+    - `CRAFT_ANTHROPIC_API_KEY` - Your Anthropic API key
+    - `CRAFT_MCP_URL` - Your workspace MCP URL
+  </Step>
+  <Step title="Deploy">
+    Render builds and deploys automatically. You'll get a URL like `https://your-bot.onrender.com`
+  </Step>
+</Steps>
+
+<Note>
+Render's free tier spins down after 15 minutes of inactivity. The first request after sleep takes ~30 seconds. For always-on service, use a paid plan (~$7/month).
+</Note>
+
+### Railway
+
+[Railway](https://railway.com) is similar - Git deploy with a simple dashboard.
+
+<Steps>
+  <Step title="Create a project">
+    Connect your GitHub repo to a new Railway project.
+  </Step>
+  <Step title="Add environment variables">
+    Set `CRAFT_ANTHROPIC_API_KEY` and `CRAFT_MCP_URL` in the Variables tab.
+  </Step>
+  <Step title="Configure start command">
+    Railway auto-detects Node.js. Set start command if needed.
+  </Step>
+</Steps>
+
+**Pricing:** Pay-per-use with a free trial. Hobby plan ~$5/month.
+
+---
+
+## Step 3: Connect Chat Platforms
+
+### Slack
+
+Best for team/workspace use. No app review needed for internal bots.
+
+<Steps>
+  <Step title="Create a Slack App">
+    Go to [api.slack.com/apps](https://api.slack.com/apps) and create a new app.
+  </Step>
+  <Step title="Enable Event Subscriptions">
+    - Turn on **Event Subscriptions**
+    - Set Request URL: `https://your-bot.onrender.com/slack/events`
+    - Subscribe to `message.channels` and/or `message.im` events
+  </Step>
+  <Step title="Add bot permissions">
+    Under **OAuth & Permissions**, add scopes:
+    - `chat:write` - to send messages
+    - `channels:history` - to read channel messages
+    - `im:history` - to read DMs
+  </Step>
+  <Step title="Install to workspace">
+    Install the app and copy the **Bot User OAuth Token**.
+  </Step>
+</Steps>
+
+Add a Slack handler to your server:
+
+```javascript
+import fetch from "node-fetch";
+
+const SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN;
+
+app.post("/slack/events", async (req, res) => {
+  // Slack URL verification
+  if (req.body.type === "url_verification") {
+    return res.json({ challenge: req.body.challenge });
+  }
+
+  const event = req.body.event;
+
+  // Ignore bot messages to prevent loops
+  if (event.bot_id || event.subtype === "bot_message") {
+    return res.sendStatus(200);
+  }
+
+  // Acknowledge immediately (Slack times out after 3s)
+  res.sendStatus(200);
+
+  // Process message async
+  const message = event.text;
+  const channel = event.channel;
+
+  try {
+    // Call your /chat endpoint
+    const response = await fetch("http://localhost:3000/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message })
+    });
+
+    const { reply } = await response.json();
+
+    // Send reply to Slack
+    await fetch("https://slack.com/api/chat.postMessage", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${SLACK_BOT_TOKEN}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ channel, text: reply })
+    });
+  } catch (err) {
+    console.error("Slack handler error:", err);
+  }
+});
+```
+
+---
+
+### Telegram
+
+Very bot-friendly with minimal setup.
+
+<Steps>
+  <Step title="Create a bot">
+    Message [@BotFather](https://t.me/botfather) on Telegram and use `/newbot` to create your bot. Save the token.
+  </Step>
+  <Step title="Set webhook">
+    Call the Telegram API to point at your server:
+    ```bash
+    curl "https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://your-bot.onrender.com/telegram/webhook"
+    ```
+  </Step>
+</Steps>
+
+Add a Telegram handler:
+
+```javascript
+const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
+
+app.post("/telegram/webhook", async (req, res) => {
+  const message = req.body.message;
+  if (!message?.text) return res.sendStatus(200);
+
+  const chatId = message.chat.id;
+  const text = message.text;
+
+  res.sendStatus(200);
+
+  try {
+    const response = await fetch("http://localhost:3000/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: text })
+    });
+
+    const { reply } = await response.json();
+
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, text: reply })
+    });
+  } catch (err) {
+    console.error("Telegram handler error:", err);
+  }
+});
+```
+
+---
+
+### Discord
+
+Discord supports HTTP interactions for webhook-based bots.
+
+<Steps>
+  <Step title="Create a Discord Application">
+    Go to [Discord Developer Portal](https://discord.com/developers/applications) and create an app.
+  </Step>
+  <Step title="Configure interactions endpoint">
+    Set **Interactions Endpoint URL** to `https://your-bot.onrender.com/discord/interactions`
+  </Step>
+  <Step title="Add bot to server">
+    Generate an OAuth2 URL with `bot` and `applications.commands` scopes.
+  </Step>
+</Steps>
+
+Discord requires signature verification - see [Discord's interaction documentation](https://discord.com/developers/docs/interactions/receiving-and-responding) for the full handler setup.
+
+---
+
+### Messenger (Facebook/Instagram)
+
+More setup steps, but doable:
+
+1. Create a Meta app at [developers.facebook.com](https://developers.facebook.com)
+2. Add the Messenger product
+3. Connect to a Facebook Page
+4. Configure webhook URL and verify token
+5. Handle incoming messages via the webhook, reply via Send API
+
+<Note>
+Some Messenger features require app review for public use. For personal/testing use, you can skip review.
+</Note>
+
+---
+
+### WhatsApp
+
+<Warning>
+**Not recommended for AI chatbots.** Meta's updated WhatsApp Business API terms (effective January 15, 2026) prohibit general-purpose AI assistants. Only structured bots for specific business functions (support, bookings, notifications) are allowed.
+</Warning>
+
+If your use case fits within "business support bot" rather than "general AI assistant," you can use the WhatsApp Cloud API, but it requires:
+- Meta Business account
+- WhatsApp Business account verification
+- Cloud API setup
+
+---
+
+## Platform Comparison
+
+| Platform | Setup Difficulty | Best For |
+|----------|-----------------|----------|
+| **Slack** | Easy | Team/workspace use |
+| **Telegram** | Easiest | Personal use, public bots |
+| **Discord** | Moderate | Communities, servers |
+| **Messenger** | Moderate | Facebook/Instagram users |
+| **WhatsApp** | Hard + restricted | Business support only |
+
+---
+
+## Tips
+
+<AccordionGroup>
+  <Accordion title="Start with Slack or Telegram">
+    These are the easiest to set up. Get one working before adding more platforms.
+  </Accordion>
+
+  <Accordion title="Handle timeouts gracefully">
+    Chat platforms expect quick responses (Slack times out after 3 seconds). Acknowledge immediately and process async.
+  </Accordion>
+
+  <Accordion title="Add rate limiting">
+    Prevent abuse by limiting requests per user/channel. Simple in-memory tracking works for low-volume bots.
+  </Accordion>
+
+  <Accordion title="Log everything">
+    Log incoming messages and responses for debugging. Cloud platforms provide built-in logging.
+  </Accordion>
+
+  <Accordion title="Consider cold start latency">
+    Free tier hosts spin down when idle. Either upgrade to paid, or set up a health check ping to keep the service warm.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Cost Summary
+
+For light personal use:
+
+| Component | Cost |
+|-----------|------|
+| Render/Railway (free tier) | $0 (with sleep) |
+| Render/Railway (always-on) | ~$5-7/month |
+| Slack/Telegram/Discord | Free |
+| Anthropic API | Pay per use |
+
+Total: **$0-7/month** + API costs

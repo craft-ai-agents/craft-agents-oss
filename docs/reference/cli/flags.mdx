@@ -1,0 +1,185 @@
+---
+title: "CLI Flags"
+description: "Command-line options for the craft command"
+---
+
+The `craft` command accepts various flags to customize its behavior. Use these when starting Craft Agents from the terminal.
+
+## Usage
+
+```bash
+craft [flags] [prompt]
+```
+
+If you provide a prompt, Craft Agents starts with that message. Otherwise, it opens the interactive interface.
+
+## Available Flags
+
+### --help
+
+Show help information and exit.
+
+```bash
+craft --help
+```
+
+### --model, -m
+
+Select which Claude model to use.
+
+```bash
+craft --model opus
+craft -m sonnet
+craft -m haiku
+```
+
+| Value | Model |
+|-------|-------|
+| `opus` | Claude Opus - most capable |
+| `sonnet` | Claude Sonnet - balanced (default) |
+| `haiku` | Claude Haiku - fastest |
+
+### --agent, -a
+
+Activate a sub-agent immediately on startup.
+
+```bash
+craft --agent research
+craft -a research "Find articles about AI"
+```
+
+For nested agents, use the full path:
+
+```bash
+craft -a work/code-review
+```
+
+### --workspace, -w
+
+Select which workspace to use.
+
+```bash
+craft --workspace "Work Projects"
+craft -w Personal
+```
+
+Uses the workspace name as configured in your settings.
+
+### --debug
+
+Enable debug logging. Writes detailed logs to `/tmp/craft-debug.log`.
+
+```bash
+craft --debug
+```
+
+Useful for troubleshooting connection issues or unexpected behavior.
+
+### --print, -p
+
+Print mode - outputs response and exits. Useful for scripting and automation.
+
+```bash
+craft -p "List my tasks due today"
+craft --print "What's in my daily note?"
+```
+
+The response is written to stdout, making it easy to pipe to other commands:
+
+```bash
+craft -p "Summarize my meeting notes" > summary.txt
+```
+
+### --url
+
+Override the MCP server URL. For advanced users connecting to custom MCP endpoints.
+
+```bash
+craft --url "https://custom.mcp.server/endpoint"
+```
+
+### --token
+
+Provide a bearer token for MCP authentication. Used with `--url` for custom connections.
+
+```bash
+craft --url "https://..." --token "your-bearer-token"
+```
+
+## Combining Flags
+
+Flags can be combined:
+
+```bash
+# Use Opus model with Research agent
+craft -m opus -a research
+
+# Print mode with specific workspace
+craft -w Work -p "Show my tasks"
+
+# Debug mode with custom model
+craft --debug -m haiku "Quick question"
+```
+
+## Examples
+
+### Quick Query
+
+Get information without entering interactive mode:
+
+```bash
+craft -p "What tasks do I have due this week?"
+```
+
+### Scripted Automation
+
+Use in shell scripts:
+
+```bash
+#!/bin/bash
+TASKS=$(craft -p "List incomplete tasks as JSON")
+echo "$TASKS" | jq '.tasks[]'
+```
+
+### Workspace-Specific Command
+
+Run a command in a specific workspace:
+
+```bash
+craft -w "Client Project" -p "Summarize recent updates"
+```
+
+### Agent with Prompt
+
+Activate an agent and send a prompt immediately:
+
+```bash
+craft -a research "Find recent news about renewable energy"
+```
+
+### Debug Session
+
+Start with debugging enabled:
+
+```bash
+craft --debug
+# Then check /tmp/craft-debug.log for details
+```
+
+## Environment Variables
+
+Some behavior can also be controlled via environment variables:
+
+| Variable | Purpose |
+|----------|---------|
+| `ANTHROPIC_API_KEY` | Anthropic API key (alternative to stored credential) |
+| `DISABLE_AUTOUPDATER` | Set to `1` to disable auto-updates |
+
+## Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| `0` | Success |
+| `1` | Error (check output for details) |
+
+In print mode (`-p`), the exit code indicates whether the request completed successfully.

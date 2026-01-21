@@ -1,0 +1,68 @@
+---
+title: "Introduction"
+description: "A terminal agent for your Craft documents and connected services"
+---
+
+Craft Agents is a terminal-based AI agent that connects your Craft workspace with the outside world. At its simplest, it lets you search, read, and reorganize your documents and folders using natural language. But it also opens up an entirely new way to use Craft—by creating custom agents that execute complex workflows tailored to your specific needs.
+
+The key? Your Craft documents become the instructions. Write what you want an agent to do in a document, and it becomes a working agent. No code required, no complex setup—just your words defining how the agent should behave. This makes building powerful, personalized workflows and automations more accessible than ever.
+
+## What You Can Do
+
+- <h4>Work with your documents</h4>Search across your workspace, read and summarize content, reorganize folders, and manage your documents—all through conversation.
+- <h4>Create and edit content</h4>Add new documents, update existing blocks, manage collections, and keep your workspace organized.
+- <h4>Build custom agents</h4>Turn any Craft document into a specialized agent with its own instructions, behaviors, and external integrations.
+- <h4>Connect your stack</h4>Give agents access to GitHub, Slack, Linear, databases, or any service with an API—and orchestrate workflows across them.
+- <h4>Automate complex workflows</h4>Chain actions together, pull data from one service and push to another, and build automations that work exactly the way you need them to.
+
+## How It Works
+
+Craft Agents uses the [Model Context Protocol (MCP)](https://modelcontextprotocol.io) to connect to your Craft workspace. This gives the AI assistant direct access to your documents while keeping your data secure - everything runs locally on your machine.
+
+<Frame>
+  <img src="/images/architecture.svg" alt="Craft Agents architecture diagram" />
+</Frame>
+
+The agent uses Claude (Anthropic's AI) to understand your requests and determine which actions to take. You choose the model - Opus for complex tasks, Sonnet for balanced performance, or Haiku for quick queries.
+
+## Key Features
+
+### Multi-Workspace Support
+
+Connect to multiple Craft workspaces and switch between them seamlessly. Each workspace maintains its own conversation history and configuration.
+
+### Sub-Agents
+
+Create specialized agents stored as documents in your Craft workspace. Each sub-agent can have:
+
+- Custom instructions defining its behavior and expertise
+- Connections to any service in your stack—GitHub, Slack, databases, search engines, internal tools
+- Works with MCP servers or any REST API (just paste the docs)
+
+### Local Machine Integration
+
+Craft Agents runs on your machine and can interact with your local environment:
+
+- Read and write local files (with your permission)
+- Execute code and shell commands
+- Search the web for up-to-date information
+- Generate outputs in any format you need
+
+This means you can build workflows that combine your Craft documents, local files, and external data - all from natural language commands.
+
+### Security First
+
+- Dangerous commands (like `rm`, `sudo`, file modifications) require explicit approval
+- Credentials are encrypted locally using AES-256-GCM
+- Your data never leaves your machine except to communicate with the AI model
+
+## Next Steps
+
+<Card
+  title="Install Craft Agents"
+  icon="download"
+  href="/getting-started/installation"
+  horizontal
+>
+  Get up and running in under 5 minutes.
+</Card>

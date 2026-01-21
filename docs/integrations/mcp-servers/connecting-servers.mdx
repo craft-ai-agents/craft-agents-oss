@@ -1,0 +1,180 @@
+---
+title: "Connecting MCP Servers"
+description: "Add MCP server connections to your sub-agents"
+---
+
+This guide shows you how to connect MCP servers to your sub-agents, giving them access to external tools and services.
+
+## Flexible Configuration
+
+Craft Agents uses smart discovery to find MCP server configurations in your agent document. You can write configurations in any common format - Claude Code JSON, VS Code format, or others. The discovery process will find and parse them automatically.
+
+<Note>
+This documentation uses Claude Code format for consistency, but you can paste configurations from any MCP-compatible tool.
+</Note>
+
+## Basic Configuration
+
+Add MCP servers to your agent document in a JSON code block:
+
+```json
+{
+  "mcpServers": {
+    "exa": {
+      "url": "https://mcp.exa.ai"
+    }
+  }
+}
+```
+
+### Configuration Fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `url` | Yes | Full URL to the MCP server endpoint |
+| `headers` | No | Custom headers including authentication |
+
+## Example: Advanced Web Search with Exa
+
+Craft Agents includes built-in web search, but for research-intensive tasks you may want more powerful capabilities. Here's a complete example adding Exa's neural search and content extraction to a research agent:
+
+**Agent document content:**
+
+~~~markdown
+You are a research assistant that helps find and analyze information from the web.
+
+## Capabilities
+- Search the web for current information
+- Find relevant articles and sources
+- Summarize findings with citations
+
+## MCP Servers
+
+```json
+{
+  "mcpServers": {
+    "exa": {
+      "url": "https://mcp.exa.ai"
+    }
+  }
+}
+```
+~~~
+
+When you first activate this agent, you'll be prompted for your Exa API key.
+
+## Multiple Servers
+
+You can connect multiple MCP servers to a single agent:
+
+```json
+{
+  "mcpServers": {
+    "exa": {
+      "url": "https://mcp.exa.ai"
+    },
+    "github": {
+      "url": "https://mcp.github.com"
+    },
+    "internal": {
+      "url": "https://internal.company.com/mcp",
+      "headers": {
+        "Authorization": "Bearer static-token-here"
+      }
+    }
+  }
+}
+```
+
+Each server's tools become available to the agent, and it can use them together:
+
+```
+> @devagent Find the latest issues in our repo and search for solutions
+
+Using github_list_issues...
+Found 3 open issues.
+
+Using exa_search to find solutions for "React hydration mismatch"...
+Found several relevant articles...
+```
+
+## Server Discovery
+
+When you activate an agent with MCP servers, Craft Agents:
+
+1. Connects to each configured server
+2. Queries available tools from each server
+3. Makes tools available with prefixed names (e.g., `exa_search`, `github_list_repos`)
+
+View connected tools with:
+
+```
+> /tools -v
+```
+
+## Refreshing Connections
+
+If a server's tools change or you need to reconnect:
+
+```
+> /agent reload
+```
+
+This re-reads the agent configuration and re-establishes MCP connections.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Server not connecting">
+    - Verify the URL is correct and accessible
+    - Check if the server requires authentication
+    - Ensure your network allows the connection
+    - Try accessing the URL directly in a browser
+  </Accordion>
+
+  <Accordion title="Tools not appearing">
+    - Run `/agent reload` to refresh the connection
+    - Check `/tools -v` to see what's available
+    - Verify the YAML syntax is correct
+    - Make sure the code block is marked as `yaml`
+  </Accordion>
+
+  <Accordion title="Authentication errors">
+    - Confirm your API key or token is correct
+    - Check if the key has the required permissions
+    - Some servers need specific scopes - check their documentation
+  </Accordion>
+
+  <Accordion title="JSON parsing errors">
+    - Ensure valid JSON syntax (commas between items, no trailing commas)
+    - Check that URLs are properly quoted
+    - Verify the `mcpServers` key is present
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use descriptive names">
+    Choose server names that describe their purpose: `web-search`, `github-repo`, `company-wiki` rather than `server1`, `server2`.
+  </Accordion>
+
+  <Accordion title="Limit servers per agent">
+    Connect only the servers an agent needs. Too many tools can confuse the agent about which to use.
+  </Accordion>
+
+  <Accordion title="Document in instructions">
+    Mention connected services in the agent's instructions so it knows what tools are available and when to use them.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<Card
+  title="Configure authentication"
+  icon="key"
+  href="/integrations/mcp-servers/authentication"
+  horizontal
+>
+  Learn about OAuth, bearer tokens, and API key authentication for MCP servers.
+</Card>

@@ -488,6 +488,9 @@ export const IPC_CHANNELS = {
   GET_HOME_DIR: 'system:homeDir',
   IS_DEBUG_MODE: 'system:isDebugMode',
 
+  // Git
+  GET_GIT_BRANCH: 'git:branch',
+
   // Auto-update
   UPDATE_CHECK: 'update:check',
   UPDATE_GET_INFO: 'update:getInfo',
@@ -680,6 +683,9 @@ export interface ElectronAPI {
   getVersions(): { node: string; chrome: string; electron: string }
   getHomeDir(): Promise<string>
   isDebugMode(): Promise<boolean>
+
+  // Git
+  getGitBranch(path: string): Promise<string | null>
 
   // Auto-update
   checkForUpdates(): Promise<UpdateInfo>

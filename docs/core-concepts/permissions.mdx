@@ -1,0 +1,136 @@
+---
+title: "Permissions"
+description: "How Craft Agents handles sensitive operations"
+---
+
+Craft Agents can execute powerful operations on your behalf - reading files, running commands, and modifying documents. To keep you in control, certain actions require explicit approval.
+
+## Permission Model
+
+Operations are categorized by risk level:
+
+| Category | Approval Required | Examples |
+|----------|-------------------|----------|
+| **Read operations** | No | Searching documents, reading files, listing tasks |
+| **Write operations** | No | Adding content, updating blocks, creating tasks |
+| **Dangerous commands** | Yes | Shell commands, file deletion, system changes |
+| **Destructive actions** | Yes | Deleting documents, removing collection items |
+
+## Dangerous Commands
+
+When the agent needs to run a shell command that could modify your system, you'll see a permission prompt showing the command and asking for approval.
+
+Your options:
+- **y (yes)** - Allow this specific execution
+- **n (no)** - Deny the request
+- **a (always)** - Allow this command for the rest of the session
+
+### Commands Requiring Approval
+
+These command patterns always require permission:
+
+```
+rm, rmdir           # File/directory deletion
+sudo, su            # Privilege escalation
+chmod, chown, chgrp # Permission changes
+mv, cp              # File operations (can overwrite)
+dd, mkfs, fdisk     # Disk operations
+kill, killall, pkill # Process termination
+reboot, shutdown    # System control
+curl, wget          # Network requests
+ssh, scp, rsync     # Remote operations
+git push            # Remote repository changes
+git reset           # History modification
+git rebase          # History rewriting
+```
+
+### Safe Commands
+
+These commands run without prompting:
+
+```
+ls, pwd, echo       # Information display
+cat, head, tail     # Reading files
+grep, find, which   # Searching
+git status, git log # Non-destructive git
+git diff, git branch # Repository info
+node, npm, bun      # Development tools (read operations)
+```
+
+## Session-Wide Permissions
+
+When you select "always" for a command, it's whitelisted for the current session. Future uses of that command won't prompt again. This whitelist resets when you restart Craft Agents.
+
+## File Access
+
+The agent can read and write files on your local machine:
+
+### Reading Files
+
+Reading files generally doesn't require approval:
+
+```
+> Read my package.json file
+```
+
+### Writing Files
+
+Creating or modifying files shows you what will change and asks for confirmation before proceeding.
+
+## Craft Document Operations
+
+Operations on your Craft documents follow the standard permission model:
+
+| Operation | Requires Approval |
+|-----------|-------------------|
+| Reading documents | No |
+| Searching content | No |
+| Adding content | No |
+| Updating content | No |
+| Deleting blocks | Yes (confirmation) |
+| Deleting documents | Yes (confirmation) |
+
+## API and MCP Credentials
+
+Credentials for external services are handled securely:
+
+- Stored encrypted in `~/.craft-agent/credentials.enc`
+- Never displayed in plain text after entry
+- Scoped to specific workspaces and agents
+- You control which services each agent can access
+
+When an agent needs to use a new API, you're prompted to provide credentials. These are then stored securely for future use.
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Review before approving">
+    Take a moment to read what command will run before approving, especially for unfamiliar operations.
+  </Accordion>
+
+  <Accordion title="Use 'always' judiciously">
+    Only whitelist commands you trust and understand. Common development commands like `npm install` are usually safe to whitelist.
+  </Accordion>
+
+  <Accordion title="Be careful with wildcards">
+    Commands like `rm -rf *` are particularly dangerous. The agent tries to be specific, but always verify.
+  </Accordion>
+
+  <Accordion title="Check the working directory">
+    Before approving file operations, make sure you know what directory you're in. Use `/debug` to see current paths.
+  </Accordion>
+</AccordionGroup>
+
+## Disabling Permissions
+
+<Warning>
+Not recommended for normal use.
+</Warning>
+
+For automated workflows where you trust all operations, you can run in permissive mode:
+
+```bash
+craft --allow-dangerous
+```
+
+This bypasses permission prompts. Only use this for trusted, controlled automation scenarios.

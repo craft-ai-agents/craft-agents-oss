@@ -1,0 +1,137 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "linden",
+  "name": "Craft Agents",
+  "colors": {
+    "primary": "#8B5CF6",
+    "light": "#A78BFA",
+    "dark": "#7C3AED"
+  },
+  "fonts": {
+    "heading": {
+      "family": "Inter"
+    },
+    "body": {
+      "family": "JetBrains Mono"
+    }
+  },
+  "favicon": "/favicon.svg",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Guide",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "getting-started/introduction",
+              "getting-started/installation",
+              "getting-started/quickstart",
+              "getting-started/first-conversation"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "core-concepts/workspaces",
+              "core-concepts/craft-capabilities",
+              "core-concepts/conversations",
+              "core-concepts/permissions"
+            ]
+          },
+          {
+            "group": "Sub-Agents",
+            "pages": [
+              "sub-agents/overview",
+              "sub-agents/creating-agents"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "pages": [
+              "integrations/overview",
+              {
+                "group": "MCP Servers",
+                "pages": [
+                  "integrations/mcp-servers/overview",
+                  "integrations/mcp-servers/connecting-servers",
+                  "integrations/mcp-servers/authentication"
+                ]
+              },
+              {
+                "group": "APIs",
+                "pages": [
+                  "integrations/apis/overview",
+                  "integrations/apis/curl-examples"
+                ]
+              }
+            ]
+          },
+          {
+            "group": "Automation",
+            "pages": [
+              "automation/headless-mode",
+              "automation/scripts"
+            ]
+          },
+          {
+            "group": "Go Further",
+            "pages": [
+              "go-further/connect-to-anything",
+              "go-further/background-jobs",
+              "go-further/chat-from-anywhere"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Reference",
+        "groups": [
+          {
+            "group": "CLI Reference",
+            "pages": [
+              "reference/cli/commands",
+              "reference/cli/flags"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "reference/config/config-file",
+              "reference/config/preferences",
+              "reference/config/credentials",
+              "reference/config/environment-variables"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg"
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "Support",
+        "href": "mailto:support@craft.do"
+      }
+    ]
+  },
+  "footer": {
+    "socials": {
+      "x": "https://x.com/craftdocsapp",
+      "reddit": "https://www.reddit.com/r/CraftDocs/",
+      "instagram": "https://www.instagram.com/craftdocs/"
+    }
+  },
+  "metadata": {
+    "og:image": "/images/og-image.png"
+  },
+  "integrations": {
+    "plausible": {
+      "domain": "agents.craft.do/docs"
+    }
+  }
+}

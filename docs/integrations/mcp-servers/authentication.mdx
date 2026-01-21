@@ -1,0 +1,220 @@
+---
+title: "MCP Authentication"
+description: "Configure authentication for MCP server connections"
+---
+
+MCP servers often require authentication to access their tools. Craft Agents supports several authentication methods to securely connect to protected servers.
+
+## Authentication Methods
+
+| Method | Use Case | How It Works |
+|--------|----------|--------------|
+| **OAuth** | Interactive login, user-scoped access | Prompted automatically when server requires it |
+| **Bearer Token** | Static tokens, API keys | Enter when prompted |
+| **Public** | No authentication needed | No configuration required |
+
+## OAuth Authentication
+
+For servers that support OAuth, Craft Agents detects this automatically and initiates the flow:
+
+```json
+{
+  "mcpServers": {
+    "github": {
+      "url": "https://mcp.github.com"
+    }
+  }
+}
+```
+
+When you first activate the agent:
+
+1. Craft Agents detects the server needs authentication
+2. A browser window opens for you to authorize access
+3. After approval, you're redirected back to the terminal
+4. The OAuth token is stored securely for future use
+
+### Token Refresh
+
+OAuth tokens are automatically refreshed when they expire. If a refresh fails, you'll be prompted to re-authenticate.
+
+## Bearer Token Authentication
+
+For servers that use static API keys or bearer tokens, you have two options:
+
+### Prompted Entry (Recommended)
+
+Just specify the server URL - Craft Agents prompts you for credentials when needed:
+
+```json
+{
+  "mcpServers": {
+    "exa": {
+      "url": "https://mcp.exa.ai"
+    }
+  }
+}
+```
+
+```
+The Research agent needs credentials for "exa".
+Enter bearer token: ****************************
+
+✓ Stored securely
+```
+
+This is the recommended approach - credentials are stored encrypted locally in `~/.craft-agent/credentials.enc`, not in your Craft document.
+
+### Include in Configuration
+
+Alternatively, add the token directly in the headers:
+
+```json
+{
+  "mcpServers": {
+    "internal-api": {
+      "url": "https://api.company.com/mcp",
+      "headers": {
+        "Authorization": "Bearer your-api-key-here"
+      }
+    }
+  }
+}
+```
+
+<Warning>
+Tokens in your configuration are stored in your Craft document. For sensitive credentials, use the prompted approach above.
+</Warning>
+
+## Public Servers
+
+Some MCP servers don't require authentication:
+
+```json
+{
+  "mcpServers": {
+    "public-tools": {
+      "url": "https://public.example.com/mcp"
+    }
+  }
+}
+```
+
+No additional configuration needed.
+
+## Credential Management
+
+### Viewing Stored Credentials
+
+You can't view the actual credential values, but you can see what's stored:
+
+```
+> /debug
+```
+
+Shows credential scopes like:
+```
+Credentials:
+  mcp_oauth::ws-abc123::research::github
+  mcp_bearer::ws-abc123::research::exa
+```
+
+### Removing Credentials
+
+To clear credentials for a specific agent, remove and re-add the agent, or use `/logout` to clear all credentials.
+
+### Credential Scoping
+
+Credentials are scoped hierarchically:
+
+```
+mcp_oauth::{workspace_id}::{agent_name}::{server_name}
+```
+
+This means:
+- Different workspaces have separate credentials
+- Different agents can have different access to the same service
+- Removing an agent removes its credentials
+
+## Example: Multi-Auth Agent
+
+An agent connecting to multiple servers with different auth methods:
+
+~~~markdown
+## MCP Servers
+
+```json
+{
+  "mcpServers": {
+    "github": {
+      "url": "https://mcp.github.com"
+    },
+    "exa": {
+      "url": "https://mcp.exa.ai"
+    },
+    "internal": {
+      "url": "https://internal.company.com/mcp",
+      "headers": {
+        "Authorization": "Bearer static-internal-token"
+      }
+    },
+    "public-data": {
+      "url": "https://public-api.example.com/mcp"
+    }
+  }
+}
+```
+
+- **github** - OAuth, will prompt for browser login
+- **exa** - Will prompt for API key on first use
+- **internal** - Static token in configuration
+- **public-data** - No auth needed
+~~~
+
+## Troubleshooting Authentication
+
+<AccordionGroup>
+  <Accordion title="OAuth window doesn't open">
+    - Check your default browser is working
+    - Try running `craft` from a terminal with GUI access
+    - Firewall may be blocking the local callback server (port 8914)
+  </Accordion>
+
+  <Accordion title="Token rejected by server">
+    - Verify the token has required permissions/scopes
+    - Check if the token has expired
+    - Confirm the server URL is correct
+  </Accordion>
+
+  <Accordion title="Re-authenticate after it was working">
+    - Token may have been revoked
+    - Credentials file may have been corrupted
+    - Try `/logout` and set up again
+  </Accordion>
+
+  <Accordion title="Wrong account authenticated">
+    - Clear credentials with `/logout`
+    - Re-authenticate with the correct account
+    - Check you're logged into the right account in your browser
+  </Accordion>
+</AccordionGroup>
+
+## Security Best Practices
+
+<AccordionGroup>
+  <Accordion title="Prefer OAuth over static tokens">
+    OAuth tokens can be scoped, revoked, and rotated. Static tokens are harder to manage securely.
+  </Accordion>
+
+  <Accordion title="Use prompted tokens instead of inline">
+    Omit the `headers` with tokens and let Craft Agents prompt you - this avoids storing secrets in Craft documents.
+  </Accordion>
+
+  <Accordion title="Limit token scopes">
+    When creating API keys or authorizing OAuth, grant only the permissions the agent needs.
+  </Accordion>
+
+  <Accordion title="Rotate credentials periodically">
+    For sensitive services, periodically clear and re-enter credentials to ensure they're current.
+  </Accordion>
+</AccordionGroup>

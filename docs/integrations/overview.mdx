@@ -1,0 +1,63 @@
+---
+title: "Overview"
+description: "Give your agents access to external tools and services"
+---
+
+One of the most powerful features of Craft Agents is the ability to connect your agents to external services. GitHub, Slack, Linear, databases, search engines, internal tools—if it has an API, your agent can use it.
+
+This enables workflows that span your entire stack: pull data from one service, process it, push results to another. Your agents become the glue between your tools.
+
+## Two Ways to Connect
+
+<CardGroup cols={2}>
+  <Card title="MCP Servers" icon="plug" href="/integrations/mcp-servers/overview">
+    The standard for AI tool integration. Many services offer MCP servers with rich, pre-built capabilities.
+
+    **Best for:** Services with official MCP support (GitHub, Exa, databases)
+  </Card>
+  <Card title="APIs" icon="code" href="/integrations/apis/overview">
+    Connect to any service with API documentation. Just paste the docs and your agent can use it.
+
+    **Best for:** Any service with an API—internal tools, third-party services, custom backends
+  </Card>
+</CardGroup>
+
+## How It Works
+
+When you connect a service to an agent, Craft Agents:
+
+1. **Reads the configuration** from your agent document
+2. **Discovers capabilities** available from that service
+3. **Creates tools** the agent can call during conversations
+4. **Handles authentication** by securely storing credentials per agent
+
+The agent then uses these tools naturally based on your requests—no manual invocation needed.
+
+## Multi-Service Workflows
+
+Each agent can connect to multiple services simultaneously. This is where things get powerful:
+
+- **Research agent**: Exa for web search + GitHub for code search + Slack to share findings
+- **Code dashboard**: GitHub for PRs and issues + Linear for project tracking + Craft to update your notes
+- **Daily briefing**: Calendar API + Slack + task manager to generate morning summaries
+
+<Tip>
+Start simple—add one service connection and see how it works. Then layer on more services to build workflows that match how you actually work.
+</Tip>
+
+## Security
+
+- **Scoped credentials**: Each agent has its own stored credentials. Agents cannot access each other's connections.
+- **Encrypted storage**: All credentials are encrypted locally on your machine.
+- **Explicit approval**: You control which services each agent can access.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="MCP Servers" icon="plug" href="/integrations/mcp-servers/overview">
+    Connect to services with MCP support
+  </Card>
+  <Card title="APIs" icon="code" href="/integrations/apis/overview">
+    Connect to any service with an API
+  </Card>
+</CardGroup>

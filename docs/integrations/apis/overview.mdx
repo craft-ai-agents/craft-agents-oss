@@ -1,0 +1,163 @@
+---
+title: "Overview"
+description: "Give your agents access to any API"
+---
+
+Not every service has an MCP server, but almost every service has an API. This means your agents can connect to virtually anything—internal tools, third-party services, custom backends. If it has API docs, your agent can use it.
+
+Craft Agents automatically detects API definitions in your agent instructions and creates tools the agent can call.
+
+## How It Works
+
+When you include API documentation in your agent document - whether as curl examples, fetch calls, or API descriptions - Craft Agents:
+
+1. **Detects** the API endpoints from your documentation
+2. **Extracts** the URL, method, headers, and parameters
+3. **Creates tools** the agent can call during conversations
+4. **Handles auth** by prompting for API keys when needed
+
+The result: your agent can call any API you document, without writing any code.
+
+## Quick Example
+
+Add this to your agent document:
+
+~~~markdown
+## Weather API
+
+https://developer.weather.com/data/default/introduction
+~~~
+
+Or include a curl example:
+
+~~~markdown
+```bash
+curl "https://api.weather.com/v1/current?location=NYC" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+~~~
+
+Now the agent can check the weather:
+
+```
+> @weather What's the weather in New York?
+
+Calling weather API...
+Current conditions in New York: 45°F, partly cloudy.
+```
+
+## Why Use APIs?
+
+- <h4>Universal Compatibility</h4>Any service with an API can be integrated - no MCP server needed.
+- <h4>Quick Setup</h4>Just paste curl examples from API documentation.
+- <h4>Flexible Detection</h4>Supports multiple formats: curl, fetch, inline docs.
+- <h4>Secure Credentials</h4>API keys are stored encrypted, not in your documents.
+
+<Tip>
+Combine multiple APIs in one agent: connect your CRM, email service, and calendar to build an agent that manages customer follow-ups across your entire workflow.
+</Tip>
+
+## Detection Formats
+
+Craft Agents can detect APIs from several formats, from easiest to most explicit:
+
+### API Documentation Links
+
+The simplest approach - just paste a link to the API documentation:
+
+```
+https://developer.example.com/api/reference
+```
+
+Craft Agents fetches and parses the documentation page to discover available endpoints, parameters, and authentication requirements.
+
+<Note>
+Some documentation pages can't be accessed by the agent (login-required, JavaScript-heavy, or bot-protected). If this happens, copy-paste the relevant documentation content directly instead.
+</Note>
+
+### Pasted Documentation
+
+If a doc link doesn't work, copy the relevant parts from the API documentation into your agent document:
+
+~~~markdown
+## Weather API
+
+**Base URL:** https://api.weather.com/v1
+
+### Get Current Weather
+`GET /current`
+
+Query parameters:
+- `location` (required): City name or coordinates
+- `units`: "metric" or "imperial" (default: metric)
+
+Headers:
+- `Authorization: Bearer {api_key}`
+
+Response: Returns current temperature, conditions, humidity, wind speed.
+~~~
+
+This gives the agent all the information it needs to construct API calls.
+
+### Curl Examples
+
+For precise control over how APIs are detected, use curl examples:
+
+```bash
+curl -X POST https://api.example.com/search \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: YOUR_KEY" \
+  -d '{"query": "search term"}'
+```
+
+### Other Formats
+
+Craft Agents also recognizes fetch/axios calls and inline endpoint descriptions.
+
+## API Naming
+
+Craft Agents creates tool names from your API definitions:
+
+| API Description | Generated Tool |
+|----------------|----------------|
+| Exa search endpoint | `exa_search` |
+| GitHub list repos | `github_list_repos` |
+| Slack post message | `slack_post_message` |
+
+The agent uses these tools naturally based on your requests.
+
+## Response Handling
+
+API responses are processed intelligently:
+
+- **JSON responses** are parsed and presented clearly
+- **Large responses** (>10k tokens) are automatically summarized
+- **Errors** are reported with helpful context
+- **URLs and IDs** in responses are preserved for follow-up actions
+
+## Comparison: MCP vs APIs
+
+| Feature | MCP Servers | APIs |
+|---------|-------------|------|
+| Setup complexity | Need MCP server URL | Paste curl example |
+| Tool discovery | Automatic from server | Extracted from docs |
+| Auth handling | OAuth or bearer | Bearer/API key |
+| Streaming | Supported | Not supported |
+| Best for | Services with MCP support | Any service with an API |
+
+Use MCP when available for richer integration. Use APIs for services without MCP support.
+
+<Note>
+**Need to connect Google, Microsoft, or other OAuth-heavy services?** These require complex OAuth flows that are hard to manage manually. API aggregators like Zapier and Composio handle this for you and provide MCP servers you can connect directly. See [Connect to Anything](/go-further/connect-to-anything).
+</Note>
+
+## Next Steps
+
+<Card
+  title="API Detection Formats"
+  icon="code"
+  href="/integrations/apis/curl-examples"
+  horizontal
+>
+  Detailed guide to doc links, curl examples, and other detection formats.
+</Card>

@@ -1,0 +1,109 @@
+---
+title: "Overview"
+description: "Connect your agents to services via MCP"
+---
+
+Connect your agents to the services you use every day—GitHub, search engines, databases, internal tools, and more. MCP (Model Context Protocol) is the standard that makes this possible, and many services now offer MCP support out of the box.
+
+## What Can You Connect?
+
+When you connect an MCP server to a sub-agent, it gains access to that service's capabilities. Connect GitHub and your agent can check PR status, summarize issues, and update your Craft docs automatically. Connect a database and it can query your data directly. Connect Slack and it can post updates to your team.
+
+Each connection adds new tools the agent can use naturally in conversation—no code required.
+
+## Why Use MCP Servers?
+
+- <h4>Connect Your Stack</h4>GitHub, Slack, databases, search engines, internal tools—if it has MCP support, your agent can use it.
+- <h4>Build Real Workflows</h4>Chain services together: pull data from one, process it, push to another.
+- <h4>Standardized & Secure</h4>MCP provides consistent integration patterns with scoped credentials per agent.
+- <h4>Growing Ecosystem</h4>More services add MCP support regularly—check the [MCP Server Registry](https://github.com/modelcontextprotocol/servers).
+
+## How It Works in Craft Agents
+
+Sub-agents can connect to MCP servers through their agent document. Craft Agents uses smart discovery to find server configurations - you can write them in any common format:
+
+```json
+{
+  "mcpServers": {
+    "exa": {
+      "url": "https://mcp.exa.ai"
+    }
+  }
+}
+```
+
+The discovery process recognizes configurations from Claude Code, VS Code, and other common formats. You can paste them in a code block or even describe them in plain text.
+
+<Note>
+Throughout this documentation, we use Claude Code format for consistency. You can use whichever format you prefer.
+</Note>
+
+When you activate the agent, Craft Agents:
+
+1. Reads the server configuration from the agent document
+2. Establishes connections to each server
+3. Discovers available tools from each server
+4. Makes those tools available to the agent
+
+The agent can then use these tools naturally in conversation:
+
+```
+> @research Find recent articles about climate technology
+
+Using exa_search to find articles...
+Found 10 relevant articles about climate technology:
+...
+```
+
+## Supported Server Types
+
+Craft Agents supports remote MCP servers (both Streamable HTTP or SSE):
+
+| Type | Support | Notes |
+|------|---------|-------|
+| HTTP(S) (Streamable / SSE) | Yes | Full support with authentication |
+| Local servers (stdio) | No | Not supported in terminal environment |
+
+## Finding MCP Servers
+
+Many services provide MCP servers. Some places to find them:
+
+- [MCP Server Registry](https://github.com/modelcontextprotocol/servers) - Official list of available servers
+- Service documentation - Many APIs now offer MCP endpoints
+- Self-hosted - Run your own MCP servers for internal tools
+
+<Note>
+**Need to connect Google, Microsoft, or other OAuth-heavy services?** These don't have simple MCP servers, but you can use API aggregators like Zapier or Composio to get MCP access. See [Connect to Anything](/go-further/connect-to-anything) for setup guides.
+</Note>
+
+## Security Considerations
+
+When connecting MCP servers to your agents:
+
+- **Servers and credentials are scoped** - Each agent has access to only its own MCP servers and has its own stored credentials. Agents cannot access credentials or MCP servers of other agents
+- **Credentials are encrypted** - Stored securely in `~/.craft-agent/credentials.enc`
+<Note>
+**Combining agents**: You can still combine agents while your work, through either
+- the shared conversation history within a single workspace (the output of a previous agent is seen by the next agent activated),
+- or using you local file to store intermediate results.
+- for frequent use cases that combine agents, you can also consider merging them to create a new agent with the combined capabilities of all of them
+</Note>
+
+## Next Steps
+
+<Columns cols={2}>
+  <Card
+    title="Connect a server"
+    icon="link"
+    href="/integrations/mcp-servers/connecting-servers"
+  >
+    Step-by-step guide to adding MCP servers to your agents.
+  </Card>
+  <Card
+    title="Authentication"
+    icon="key"
+    href="/integrations/mcp-servers/authentication"
+  >
+    Configure OAuth, bearer tokens, and API keys.
+  </Card>
+</Columns>

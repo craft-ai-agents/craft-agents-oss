@@ -1,0 +1,171 @@
+---
+title: "Headless Mode"
+description: "Run Craft Agents non-interactively for automation"
+---
+
+Headless mode lets you run Craft Agents without the interactive terminal interface - perfect for scripts, scheduled background jobs, and automated workflows.
+
+## Basic Usage
+
+Pass your prompt directly via the `-p` flag:
+
+```bash
+craft -p "What tasks do I have due today?"
+```
+
+The agent processes your request and outputs the response to stdout, then exits.
+
+## Common Flags for Headless Mode
+
+| Flag | Description |
+|------|-------------|
+| `-p "prompt"` | The prompt to execute |
+| `-a "agent"` | Activate a sub-agent by name |
+| `-w "workspace"` | Select workspace by name |
+| `--model` | Choose model (opus, sonnet, haiku) |
+| `--output-format` | Output format (text, json, stream-json) |
+| `--max-turns` | Limit conversation turns |
+
+## Output Formats
+
+### Text (Default)
+
+Returns the agent's response as plain text:
+
+```bash
+craft -p "Summarize my project notes" --output-format text
+```
+
+### JSON
+
+Returns structured JSON with the response and metadata:
+
+```bash
+craft -p "List my tasks" --output-format json
+```
+
+```json
+{
+  "response": "Here are your tasks:\n1. Review PR #123\n2. Update documentation",
+  "model": "claude-sonnet-4-20250514",
+  "tokens": {
+    "input": 1250,
+    "output": 89
+  }
+}
+```
+
+### Stream JSON
+
+Outputs JSON objects as they're generated - useful for real-time processing:
+
+```bash
+craft -p "Analyze this document" --output-format stream-json
+```
+
+## Using with Sub-Agents
+
+Activate a specific agent for your headless task:
+
+```bash
+craft -p "@research Find recent news about AI regulation"
+```
+
+Or specify the agent separately:
+
+```bash
+craft --agent research -p "Find recent news about AI regulation"
+```
+
+## Examples
+
+### Daily Task Summary
+
+```bash
+#!/bin/bash
+# daily-summary.sh
+
+craft -p "Give me a summary of tasks due today and any overdue items" \
+  --output-format text
+```
+
+### Export to File
+
+```bash
+craft -p "List all items in my Reading List collection" > reading-list.txt
+```
+
+### Pipe to Other Commands
+
+```bash
+craft -p "List my incomplete tasks as JSON" --output-format json | jq '.response'
+```
+
+### Conditional Logic
+
+```bash
+#!/bin/bash
+
+TASKS=$(craft -p "Do I have any tasks due today? Reply with just YES or NO")
+
+if [[ "$TASKS" == *"YES"* ]]; then
+  craft -p "Show me today's tasks with details"
+fi
+```
+
+## Environment Variables
+
+Set API credentials via environment variables for server deployments:
+
+```bash
+# to use a different Anthropic key for Craft Agents than system's default
+export CRAFT_ANTHROPIC_API_KEY="sk-ant-..."
+# or use the standard named env var (fallback if above is not defined)
+export ANTHROPIC_API_KEY="sk-ant-..."
+
+craft -w "Work Projects" -p "Run the quick status check"
+```
+
+<Note>
+Workspace and model selection must be done via CLI flags (`-w`, `--model`). Only API credentials support environment variables.
+</Note>
+
+## Limitations
+
+- No interactive prompts - the agent cannot ask clarifying questions
+- Permission prompts are auto-denied unless `--allow-dangerous` is set
+- OAuth flows requiring browser interaction will fail
+
+<Warning>
+Use `--allow-dangerous` with caution in automated scripts. It bypasses all permission checks for shell commands.
+</Warning>
+
+## Error Handling
+
+Headless mode returns appropriate exit codes:
+
+| Exit Code | Meaning |
+|-----------|---------|
+| 0 | Success |
+| 1 | General error |
+| 2 | Authentication error |
+| 3 | Workspace not found |
+
+```bash
+craft -p "Check my tasks" || echo "Craft Agents failed"
+```
+
+## Next Steps
+
+<Card
+  title="Automation scripts"
+  icon="code"
+  href="/automation/scripts"
+  horizontal
+>
+  Build complete automation workflows with Craft Agents.
+</Card>
+
+<Note>
+**Want to run agents on a schedule?** Set up daily briefings, automated reports, or CI jobs using GitHub Actions or cloud cron services. See [Daily and Scheduled Jobs](/go-further/background-jobs).
+</Note>

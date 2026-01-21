@@ -1,0 +1,238 @@
+---
+title: "Daily and Scheduled Jobs"
+description: "Run agents automatically on a schedule"
+---
+
+Some of the most powerful agent workflows run without you. Set up scheduled jobs to automate recurring tasks - from morning briefings to CI pipelines.
+
+## Use Case Ideas
+
+<AccordionGroup>
+  <Accordion title="Daily personalized newsletter">
+    An agent that scans your subscribed sources, summarizes what's relevant to you, and adds a digest to your daily note each morning.
+  </Accordion>
+
+  <Accordion title="Company dashboard updates">
+    Aggregate metrics from various sources (analytics, CRM, support tickets) and update a dashboard document with the latest numbers.
+  </Accordion>
+
+  <Accordion title="Task hygiene">
+    Move overdue tasks, archive completed ones, or flag items that have been stuck too long.
+  </Accordion>
+
+  <Accordion title="Email triage">
+    Scan incoming emails, categorize them, and create tasks for ones that need action.
+  </Accordion>
+
+  <Accordion title="Documentation updates">
+    A CI job that reviews code changes and updates relevant documentation, keeping docs in sync with code.
+  </Accordion>
+
+  <Accordion title="Release notes collection">
+    Automatically compile release notes from merged PRs and commit messages before each release.
+  </Accordion>
+
+  <Accordion title="Meeting prep">
+    Before recurring meetings, gather relevant context from your documents and prepare talking points.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Option 1: GitHub Actions
+
+The simplest way to run scheduled agents - no infrastructure to manage, and it's free for public repos (with generous limits for private repos).
+
+### Basic Scheduled Workflow
+
+Create `.github/workflows/daily-agent.yml`:
+
+```yaml
+name: Daily Agent Run
+
+on:
+  # Run every day at 7am UTC
+  schedule:
+    - cron: '0 7 * * *'
+  # Allow manual trigger for testing
+  workflow_dispatch:
+
+jobs:
+  run-agent:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install Craft CLI
+        run: curl -fsSL https://agents.craft.do/install.sh | bash
+
+      - name: Run Agent
+        timeout-minutes: 10
+        env:
+          CRAFT_ANTHROPIC_API_KEY: ${{ secrets.CRAFT_ANTHROPIC_API_KEY }}
+        run: |
+          craft \
+            -w "${{ secrets.CRAFT_MCP_URL }}" \
+            -p "Generate my daily briefing and add it to today's daily note" \
+            --output-format stream-json
+```
+
+### With a Specific Sub-Agent
+
+```yaml
+      - name: Run Daily Briefing Agent
+        timeout-minutes: 10
+        env:
+          CRAFT_ANTHROPIC_API_KEY: ${{ secrets.CRAFT_ANTHROPIC_API_KEY }}
+        run: |
+          craft \
+            -w "${{ secrets.CRAFT_MCP_URL }}" \
+            -a "@daily-briefing" \
+            -p "please do your daily run" \
+            --output-format stream-json \
+            -m claude-sonnet-4-20250514
+```
+
+### Weekday-Only Schedule
+
+For work-related tasks, run only on weekdays:
+
+```yaml
+on:
+  schedule:
+    # Mon-Fri at 8am UTC
+    - cron: '0 8 * * 1-5'
+```
+
+### Setting Up Secrets
+
+1. Go to your repository → **Settings** → **Secrets and variables** → **Actions**
+2. Add these secrets:
+   - `CRAFT_ANTHROPIC_API_KEY` - Your Anthropic API key
+   - `CRAFT_MCP_URL` - Your workspace MCP URL (from Craft Agents setup)
+
+<Note>
+GitHub Actions runs on UTC time. Adjust the cron expression for your timezone.
+</Note>
+
+### Debugging Workflow Runs
+
+Add a debug step to see what happened:
+
+```yaml
+      - name: Show debug log
+        if: always()
+        run: cat /tmp/craft-debug.log || echo "No debug log found"
+```
+
+---
+
+## Option 2: Cloud Hosting with Cron
+
+For more control or complex scheduling, deploy Craft Agents to a cloud platform with built-in cron support.
+
+### Render
+
+[Render](https://render.com) offers native cron jobs that run on a schedule.
+
+**Setup:**
+
+<Steps>
+  <Step title="Create a cron job service">
+    In Render dashboard, create a new **Cron Job** service.
+  </Step>
+  <Step title="Configure the build">
+    - **Environment**: Docker or Native
+    - **Build Command**: `curl -fsSL https://agents.craft.do/install.sh | bash`
+    - **Start Command**: Your craft command (see below)
+  </Step>
+  <Step title="Set the schedule">
+    Use cron syntax: `0 7 * * *` for daily at 7am UTC
+  </Step>
+  <Step title="Add environment variables">
+    - `CRAFT_ANTHROPIC_API_KEY` - Your API key
+    - `CRAFT_MCP_URL` - Your workspace MCP URL
+  </Step>
+</Steps>
+
+**Start command example:**
+```bash
+craft -w "$CRAFT_MCP_URL" -a "@daily-tasks" -p "run your daily check"
+```
+
+**Pricing:** Cron jobs are billed by execution time. Simple agent runs cost ~$0.01-0.05 per run.
+
+---
+
+### Railway
+
+[Railway](https://railway.com) also supports native cron jobs.
+
+**Setup:**
+
+<Steps>
+  <Step title="Create a new project">
+    In Railway dashboard, create a new project and add a service.
+  </Step>
+  <Step title="Configure as cron job">
+    In service settings, enable **Cron Schedule** and set your expression.
+  </Step>
+  <Step title="Set the start command">
+    ```bash
+    curl -fsSL https://agents.craft.do/install.sh | bash && craft -w "$CRAFT_MCP_URL" -p "your prompt"
+    ```
+  </Step>
+  <Step title="Add environment variables">
+    Add your API key and MCP URL in the Variables tab.
+  </Step>
+</Steps>
+
+<Note>
+Railway cron jobs run in UTC. They may vary by a few minutes from the scheduled time.
+</Note>
+
+---
+
+### Fly.io
+
+[Fly.io](https://fly.io) offers several options for scheduled tasks.
+
+**Cron Manager** (recommended): A small app that spins up temporary machines for each job, then tears them down. Each job runs in isolation.
+
+**Supercronic**: A simpler option - add cron behavior to any app with minimal setup.
+
+See [Fly.io task scheduling guide](https://fly.io/docs/blueprints/task-scheduling/) for detailed setup instructions.
+
+---
+
+## Comparison
+
+| Platform | Setup Complexity | Cost | Best For |
+|----------|-----------------|------|----------|
+| **GitHub Actions** | Easiest | Free (limits apply) | Simple daily/weekly jobs |
+| **Render** | Easy | ~$5/month minimum | Reliable scheduled tasks |
+| **Railway** | Easy | Pay per use | Flexible scheduling |
+| **Fly.io** | Moderate | Pay per use | Complex job orchestration |
+
+## Tips
+
+<AccordionGroup>
+  <Accordion title="Start with GitHub Actions">
+    It's free and requires no infrastructure. Only move to cloud hosting if you hit limits or need more control.
+  </Accordion>
+
+  <Accordion title="Use appropriate timeouts">
+    Set `timeout-minutes` in GitHub Actions or equivalent in cloud platforms. Agent runs typically complete in 1-5 minutes.
+  </Accordion>
+
+  <Accordion title="Choose the right model">
+    Use Haiku for simple tasks (cheaper, faster). Use Sonnet or Opus for complex analysis.
+  </Accordion>
+
+  <Accordion title="Test manually first">
+    Use `workflow_dispatch` in GitHub Actions or manual triggers in cloud platforms to test before relying on the schedule.
+  </Accordion>
+
+  <Accordion title="Monitor your runs">
+    Check logs periodically to ensure jobs are completing successfully. Set up notifications for failures.
+  </Accordion>
+</AccordionGroup>

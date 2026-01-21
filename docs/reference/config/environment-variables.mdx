@@ -1,0 +1,89 @@
+---
+title: "Environment Variables"
+description: "Configure Craft Agents through environment variables"
+---
+
+Environment variables provide credentials for automation and server deployment scenarios.
+
+## Supported Variables
+
+### CRAFT_ANTHROPIC_API_KEY
+
+Provide an Anthropic API key without storing it locally. This takes precedence over the standard variable.
+
+```bash
+export CRAFT_ANTHROPIC_API_KEY="sk-ant-api03-..."
+craft -p "Check my tasks"
+```
+
+### ANTHROPIC_API_KEY
+
+Standard Anthropic API key variable. Used as fallback if `CRAFT_ANTHROPIC_API_KEY` is not set.
+
+```bash
+export ANTHROPIC_API_KEY="sk-ant-api03-..."
+craft -p "Check my tasks"
+```
+
+### CRAFT_CLAUDE_OAUTH_TOKEN
+
+Provide a Claude OAuth token directly for Claude Pro/Max authentication.
+
+```bash
+export CRAFT_CLAUDE_OAUTH_TOKEN="token..."
+```
+
+## Precedence
+
+For API credentials, the lookup order is:
+
+1. `CRAFT_ANTHROPIC_API_KEY` environment variable
+2. `ANTHROPIC_API_KEY` environment variable
+3. Stored credential in `~/.craft-agent/credentials.enc`
+4. Interactive prompt (if running interactively)
+
+## Usage Examples
+
+### CI/CD Pipeline
+
+```bash
+#!/bin/bash
+export CRAFT_ANTHROPIC_API_KEY="${SECRETS_ANTHROPIC_KEY}"
+
+craft -w "Work" -p "Generate release notes from recent commits"
+```
+
+### Docker Container
+
+```dockerfile
+ENV CRAFT_ANTHROPIC_API_KEY=${CRAFT_ANTHROPIC_API_KEY}
+
+CMD ["craft", "-w", "default", "-p", "..."]
+```
+
+### Temporary Override
+
+Use a different API key for one command:
+
+```bash
+CRAFT_ANTHROPIC_API_KEY="sk-ant-different-key" craft -p "Quick check"
+```
+
+## Security Notes
+
+<Warning>
+Avoid putting API keys directly in shell history or scripts. Use secret managers or secure environment injection.
+</Warning>
+
+Secure alternatives:
+
+```bash
+# Read from file
+export CRAFT_ANTHROPIC_API_KEY=$(cat ~/.secrets/anthropic-key)
+
+# Read from secret manager
+export CRAFT_ANTHROPIC_API_KEY=$(aws secretsmanager get-secret-value --secret-id anthropic-key --query SecretString --output text)
+
+# Use .env file (not committed to git)
+source .env && craft -p "..."
+```

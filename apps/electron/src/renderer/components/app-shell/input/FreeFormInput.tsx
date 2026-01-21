@@ -1452,6 +1452,7 @@ function WorkingDirectoryBadge({
   const [recentDirs, setRecentDirs] = React.useState<string[]>([])
   const [popoverOpen, setPopoverOpen] = React.useState(false)
   const [homeDir, setHomeDir] = React.useState<string>('')
+  const [gitBranch, setGitBranch] = React.useState<string | null>(null)
   const [filter, setFilter] = React.useState('')
   const inputRef = React.useRef<HTMLInputElement>(null)
 
@@ -1462,6 +1463,17 @@ function WorkingDirectoryBadge({
       if (dir) setHomeDir(dir)
     })
   }, [])
+
+  // Fetch git branch when working directory changes
+  React.useEffect(() => {
+    if (workingDirectory) {
+      window.electronAPI?.getGitBranch?.(workingDirectory).then((branch: string | null) => {
+        setGitBranch(branch)
+      })
+    } else {
+      setGitBranch(null)
+    }
+  }, [workingDirectory])
 
   // Reset filter and focus input when popover opens
   React.useEffect(() => {
@@ -1539,6 +1551,7 @@ function WorkingDirectoryBadge({
                 <span className="flex flex-col gap-0.5">
                   <span className="font-medium">Working directory</span>
                   <span className="text-xs opacity-70">{formatPathForDisplay(workingDirectory, homeDir)}</span>
+                  {gitBranch && <span className="text-xs opacity-70">on {gitBranch}</span>}
                 </span>
               ) : "Choose working directory"
             }
