@@ -1,8 +1,8 @@
 # Chinese Localization - Progress Report
 
 **Last Updated:** 2026-01-21
-**Status:** Phase 0-3c Complete ✅ | Phase 3d-6 Pending ⏳
-**Overall Progress:** ~45%
+**Status:** Phase 0-4 Complete ✅ | Phase 3d,5-6 Pending ⏳
+**Overall Progress:** ~50%
 
 ---
 
@@ -73,16 +73,29 @@
 - Edit button: "Edit File"
 - Commit: `41f3e52`
 
+**✅ Phase 4: Date/Time Utilities**
+- Created i18n-dates.ts utility with 8 formatters
+- formatDate() - Today/Yesterday or full date (年月日 format for Chinese)
+- formatDateTime() - Date and time with 12h (EN) / 24h (ZH) format
+- formatTime() - Time only with locale-appropriate formatting
+- formatRelativeTime() - Relative time (2小时前 / 2 hours ago)
+- formatShortDate() - Compact date format
+- formatMonthYear() - Month and year only
+- is24HourFormat() - Check locale format preference
+- 24 test cases with 100% pass rate
+- Added 6 new translation keys (weeksAgo, monthsAgo, yearsAgo, justNow, atTime)
+- Commit: `9363efe`
+
 ---
 
 ## 📊 Statistics
 
 ### Code Changes
 ```
-Commits: 7 (5 feature commits)
-Files Modified: 17 (5 components + infrastructure)
-Lines Added: ~1,400 LOC
-Lines Modified: ~150 LOC
+Commits: 9 (7 feature commits)
+Files Modified: 19 (5 components + infrastructure + utilities)
+Lines Added: ~1,900 LOC
+Lines Modified: ~170 LOC
 Bundle Impact: 0KB (simple dictionary approach)
 ```
 
@@ -144,31 +157,31 @@ Low Priority: 0/112 pending ⏳
 - Toast messages (use `t()` wrapper)
 - Empty states (similar pattern)
 
-### Phase 4: Date/Time Utilities
+### ~~Phase 4: Date/Time Utilities~~ ✅ COMPLETED
 
-**Estimated Time:** 2-3 hours
+**Completed Tasks:**
+- ✅ Create `src/renderer/lib/i18n-dates.ts`
+- ✅ Implement `formatDate()` using Intl.DateTimeFormat
+- ✅ Implement `formatRelativeTime()` using Intl.RelativeTimeFormat
+- ✅ Support Chinese date format (Year-Month-Day)
+- ✅ Support 24-hour time format for Chinese
+- ✅ Add test suite with 24 test cases (100% passing)
 
-**Tasks:**
-- [ ] Create `src/renderer/lib/i18n-dates.ts`
-- [ ] Implement `formatDate()` using Intl.DateTimeFormat
-- [ ] Implement `formatRelativeTime()` using Intl.RelativeTimeFormat
-- [ ] Support Chinese date format (Year-Month-Day)
-- [ ] Support 24-hour time format for Chinese
+**Files Created:**
+- `src/renderer/lib/i18n-dates.ts` ✅ (220 LOC, 8 formatters)
+- `src/renderer/lib/__tests__/i18n-dates.test.ts` ✅ (180 LOC, 24 tests)
+
+**Features Implemented:**
+- formatDate() - Today/Yesterday or full date (2026年1月21日)
+- formatDateTime() - Date + time (12h EN / 24h ZH)
+- formatTime() - Time only
+- formatRelativeTime() - 2小时前 / 2 hours ago
+- formatShortDate() - Compact format
+- formatMonthYear() - Month + year
+- is24HourFormat() - Locale format check
 
 **Implementation:**
-```typescript
-export function formatDate(date: Date, locale: 'en' | 'zh'): string {
-  if (isToday(date)) return locale === 'zh' ? '今天' : 'Today'
-  if (isYesterday(date)) return locale === 'zh' ? '昨天' : 'Yesterday'
-
-  return new Intl.DateTimeFormat(locale, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour12: locale === 'en'  // 24-hour for Chinese
-  }).format(date)
-}
-```
+All formatters use Intl API with proper locale handling.
 
 ### Phase 5: Agent Integration
 
@@ -242,8 +255,8 @@ UI elements and labels are displayed in ${userLanguage}.
 | Error Messages | ~30 | ~15 | 50% |
 | Settings Labels | ~40 | ~40 | 100% ✅ |
 | Accessibility Labels | ~58 | 0 | 0% |
-| Date/Time Labels | ~54 | 0 | 0% |
-| **Total** | **~350** | **~114** | **~33%** |
+| Date/Time Labels | ~54 | ~12 | 22% ✅ |
+| **Total** | **~350** | **~126** | **~36%** |
 
 ---
 
@@ -403,6 +416,11 @@ grep -r "Delete" src/renderer/components --include="*.tsx" -l
 ## 🔄 Git History
 
 ```bash
+9363efe feat(i18n): Add date/time formatting utilities with Intl API
+1028707 docs(i18n): Update plan - Mark Phase 0-3c complete
+0a18ec0 docs(i18n): Update progress report - Phase 3c complete
+41f3e52 feat(i18n): Integrate translations in Settings components
+75da518 docs(i18n): Add comprehensive progress report for Chinese localization
 46e0ebe feat(i18n): Integrate translations in SessionMenu component
 6f6943d feat(i18n): Integrate translations in SessionList component
 f9e25f6 feat(i18n): Integrate translations in AppShell component
@@ -425,13 +443,13 @@ f9e25f6 feat(i18n): Integrate translations in AppShell component
 | Phase 3b: SessionList/Menu | 3 hours | ✅ Complete | 0 hours |
 | Phase 3c: Settings | 3 hours | ✅ Complete | 0 hours |
 | Phase 3d: Remaining Components | 30 hours | ⏳ Pending | 30 hours |
-| Phase 4: Date/Time Utilities | 3 hours | ⏳ Pending | 3 hours |
+| Phase 4: Date/Time Utilities | 3 hours | ✅ Complete | 0 hours |
 | Phase 5: Agent Integration | 4 hours | ⏳ Pending | 4 hours |
 | Phase 6: Testing & Launch | 10 hours | ⏳ Pending | 10 hours |
-| **Total** | **~62 hours** | | **~50 hours** |
+| **Total** | **~62 hours** | | **~47 hours** |
 
 **Current Velocity:** ~3 components per hour
-**Time to 100%:** ~17 hours of focused work
+**Time to 100%:** ~16 hours of focused work
 
 ---
 
@@ -440,6 +458,7 @@ f9e25f6 feat(i18n): Integrate translations in AppShell component
 - [x] **Milestone 1:** Infrastructure ready (Phase 0-2) ✅
 - [x] **Milestone 2:** High-priority components done (5/5) ✅
 - [x] **Milestone 3:** Settings page translated ✅
+- [x] **Milestone 3.5:** Date/time utilities complete ✅
 - [ ] **Milestone 4:** All user-facing components translated
 - [ ] **Milestone 5:** Agent integration complete
 - [ ] **Milestone 6:** Production ready (native speaker approved)
@@ -447,6 +466,6 @@ f9e25f6 feat(i18n): Integrate translations in AppShell component
 ---
 
 **Last Updated:** 2026-01-21
-**Next Review:** After Phase 4 (Date/Time Utilities) completion
+**Next Review:** After Phase 5 (Agent Integration) completion
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
