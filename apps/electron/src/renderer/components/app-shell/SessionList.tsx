@@ -43,6 +43,7 @@ import { useFocusContext } from "@/context/FocusContext"
 import { getSessionTitle } from "@/utils/session"
 import type { SessionMeta } from "@/atoms/sessions"
 import { PERMISSION_MODE_CONFIG, type PermissionMode } from "@craft-agent/shared/agent/modes"
+import { useTranslation } from "@/i18n"
 
 // Pagination constants
 const INITIAL_DISPLAY_LIMIT = 20
@@ -347,17 +348,17 @@ function SessionItem({
                     </StyledDropdownMenuItem>
                     <StyledDropdownMenuItem onClick={async () => {
                       await navigator.clipboard.writeText(item.sharedUrl!)
-                      toast.success('Link copied to clipboard')
+                      toast.success(t('linkCopiedToClipboard' as any))
                     }}>
                       <Copy />
-                      Copy Link
+                      {t('copy' as any)} Link
                     </StyledDropdownMenuItem>
                     <StyledDropdownMenuItem onClick={async () => {
                       const result = await window.electronAPI.sessionCommand(item.id, { type: 'updateShare' })
                       if (result?.success) {
-                        toast.success('Share updated')
+                        toast.success(t('shareUpdated' as any))
                       } else {
-                        toast.error('Failed to update share', { description: result?.error })
+                        toast.error(t('failedToUpdateShare' as any), { description: result?.error })
                       }
                     }}>
                       <RefreshCw />
@@ -367,9 +368,9 @@ function SessionItem({
                     <StyledDropdownMenuItem onClick={async () => {
                       const result = await window.electronAPI.sessionCommand(item.id, { type: 'revokeShare' })
                       if (result?.success) {
-                        toast.success('Sharing stopped')
+                        toast.success(t('sharingStopped' as any))
                       } else {
-                        toast.error('Failed to stop sharing', { description: result?.error })
+                        toast.error(t('failedToStopSharing' as any), { description: result?.error })
                       }
                     }} variant="destructive">
                       <Link2Off />
@@ -533,6 +534,7 @@ export function SessionList({
   const [session] = useSession()
   const { navigate } = useNavigation()
   const navState = useNavigationState()
+  const { t } = useTranslation()
 
   // Get current filter from navigation state (for preserving context in tab routes)
   const currentFilter = isChatsNavigation(navState) ? navState.filter : undefined
@@ -781,7 +783,7 @@ export function SessionList({
                 value={searchQuery}
                 onChange={(e) => onSearchChange?.(e.target.value)}
                 onKeyDown={handleSearchKeyDown}
-                placeholder="Search conversations..."
+                placeholder={t('searchConversations' as any)}
                 className="w-full h-8 pl-8 pr-8 text-sm bg-foreground/5 border-0 rounded-[8px] outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50"
               />
               <button
@@ -804,7 +806,7 @@ export function SessionList({
           {/* No results message when searching */}
           {searchActive && searchQuery && flatItems.length === 0 && (
             <div className="flex flex-col items-center justify-center py-12 px-4">
-              <p className="text-sm text-muted-foreground">No conversations found</p>
+              <p className="text-sm text-muted-foreground">{t('noConversationsFound' as any)}</p>
               <button
                 onClick={() => onSearchChange?.('')}
                 className="text-xs text-foreground hover:underline mt-1"
@@ -876,7 +878,7 @@ export function SessionList({
         value={renameName}
         onValueChange={setRenameName}
         onSubmit={handleRenameSubmit}
-        placeholder="Enter a name..."
+        placeholder={t('enterYourName' as any)}
       />
     </>
   )
