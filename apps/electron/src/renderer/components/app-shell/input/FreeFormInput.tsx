@@ -1457,6 +1457,7 @@ function WorkingDirectoryBadge({
   sessionFolderPath?: string
   isEmptySession?: boolean
 }) {
+  const { t } = useTranslation()
   const [recentDirs, setRecentDirs] = React.useState<string[]>([])
   const [popoverOpen, setPopoverOpen] = React.useState(false)
   const [homeDir, setHomeDir] = React.useState<string>('')

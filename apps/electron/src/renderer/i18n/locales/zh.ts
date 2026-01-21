@@ -418,6 +418,11 @@ export default {
   browse: '浏览',
   creating: '创建中...',
   createdWorkspace: '已创建工作空间 "{{name}}"',
+  chooseExistingFolder: '选择现有文件夹',
+  chooseExistingFolderDesc: '选择任意文件夹作为工作空间。',
+  noFolderSelected: '未选择文件夹',
+  opening: '打开中...',
+  open: '打开',
 
   // Chat Display / 聊天显示
   responsePreview: '响应预览',

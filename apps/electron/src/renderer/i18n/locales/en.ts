@@ -419,6 +419,11 @@ export default {
   browse: 'Browse',
   creating: 'Creating...',
   createdWorkspace: 'Created workspace "{{name}}"',
+  chooseExistingFolder: 'Choose existing folder',
+  chooseExistingFolderDesc: 'Choose any folder to use as workspace.',
+  noFolderSelected: 'No folder selected',
+  opening: 'Opening...',
+  open: 'Open',
 
   // Chat Display / 聊天显示
   responsePreview: 'Response Preview',
