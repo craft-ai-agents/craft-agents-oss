@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react"
 import { X } from "lucide-react"
+import { useTranslation } from "@/i18n"
 import { motion } from "motion/react"
 import { Dithering } from "@paper-design/shaders-react"
 import { FullscreenOverlayBase } from "@craft-agent/ui"
@@ -33,6 +34,7 @@ export function WorkspaceCreationScreen({
   onClose,
   className
 }: WorkspaceCreationScreenProps) {
+  const { t } = useTranslation()
   const [step, setStep] = useState<CreationStep>('choice')
   const [isCreating, setIsCreating] = useState(false)
   const [dimensions, setDimensions] = useState({ width: 1920, height: 1080 })
@@ -163,7 +165,7 @@ export function WorkspaceCreationScreen({
               "mr-[-8px] mt-2",
               isCreating && "opacity-50 cursor-not-allowed"
             )}
-            aria-label="Close"
+            aria-label={t('close' as any)}
           >
             <X className="h-4 w-4" />
           </motion.button>
