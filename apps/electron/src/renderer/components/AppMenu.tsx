@@ -6,6 +6,7 @@ import {
   StyledDropdownMenuItem,
   StyledDropdownMenuSeparator,
 } from "@/components/ui/styled-dropdown"
+import { useTranslation } from "@/i18n"
 import { Settings, Keyboard, RotateCcw, User, ChevronLeft, ChevronRight } from "lucide-react"
 import { CraftAgentsSymbol } from "./icons/CraftAgentsSymbol"
 import { SquarePenRounded } from "./icons/SquarePenRounded"
@@ -45,12 +46,14 @@ export function AppMenu({
   onToggleSidebar,
   isSidebarVisible = true,
 }: AppMenuProps) {
+  const { t } = useTranslation()
+
   return (
     <div className="flex items-center gap-[5px] w-full">
       {/* Craft Logo Menu */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <TopBarButton aria-label="Craft menu">
+          <TopBarButton aria-label={t('craftMenu' as any)}>
             <CraftAgentsSymbol className="h-4 text-accent" />
           </TopBarButton>
         </DropdownMenuTrigger>
@@ -58,7 +61,7 @@ export function AppMenu({
           {/* Primary action */}
           <StyledDropdownMenuItem onClick={onNewChat}>
             <SquarePenRounded className="h-3.5 w-3.5" />
-            New Chat
+            {t('newChat' as any)}
             <DropdownMenuShortcut className="pl-6">⌘N</DropdownMenuShortcut>
           </StyledDropdownMenuItem>
 
@@ -67,17 +70,17 @@ export function AppMenu({
           {/* Settings and preferences */}
           <StyledDropdownMenuItem onClick={onOpenSettings}>
             <Settings className="h-3.5 w-3.5" />
-            Settings...
+            {t('settings' as any)}...
             <DropdownMenuShortcut className="pl-6">⌘,</DropdownMenuShortcut>
           </StyledDropdownMenuItem>
           <StyledDropdownMenuItem onClick={onOpenKeyboardShortcuts}>
             <Keyboard className="h-3.5 w-3.5" />
-            Keyboard Shortcuts
+            {t('keyboardShortcuts' as any)}
             <DropdownMenuShortcut className="pl-6">⌘/</DropdownMenuShortcut>
           </StyledDropdownMenuItem>
           <StyledDropdownMenuItem onClick={onOpenStoredUserPreferences}>
             <User className="h-3.5 w-3.5" />
-            Stored User Preferences
+            {t('storedUserPreferences' as any)}
           </StyledDropdownMenuItem>
 
           <StyledDropdownMenuSeparator />
@@ -85,7 +88,7 @@ export function AppMenu({
           {/* Reset App */}
           <StyledDropdownMenuItem onClick={onReset} variant="destructive">
             <RotateCcw className="h-3.5 w-3.5" />
-            Reset App...
+            {t('resetApp' as any)}...
           </StyledDropdownMenuItem>
         </StyledDropdownMenuContent>
       </DropdownMenu>
@@ -97,7 +100,7 @@ export function AppMenu({
       <TopBarButton
         onClick={onBack}
         disabled={!canGoBack}
-        aria-label="Go back"
+        aria-label={t('goBack' as any)}
       >
         <ChevronLeft className="h-[22px] w-[22px] text-foreground/70" strokeWidth={1.5} />
       </TopBarButton>
@@ -106,7 +109,7 @@ export function AppMenu({
       <TopBarButton
         onClick={onForward}
         disabled={!canGoForward}
-        aria-label="Go forward"
+        aria-label={t('goForward' as any)}
       >
         <ChevronRight className="h-[22px] w-[22px] text-foreground/70" strokeWidth={1.5} />
       </TopBarButton>
@@ -115,7 +118,7 @@ export function AppMenu({
       {/* {onToggleSidebar && (
         <TopBarButton
           onClick={onToggleSidebar}
-          aria-label={isSidebarVisible ? "Hide sidebar" : "Show sidebar"}
+          aria-label={isSidebarVisible ? t('hideSidebar' as any) : t('showSidebar' as any)}
         >
           <PanelLeftRounded className="h-5 w-5 text-foreground/70" />
         </TopBarButton>

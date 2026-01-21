@@ -802,7 +802,7 @@ export function SessionList({
           className="flex flex-col pb-14 min-w-0"
           data-focus-zone="session-list"
           role="listbox"
-          aria-label="Sessions"
+          aria-label={t('sessions' as any)}
         >
           {/* No results message when searching */}
           {searchActive && searchQuery && flatItems.length === 0 && (

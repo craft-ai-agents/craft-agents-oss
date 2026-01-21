@@ -3,6 +3,7 @@ import * as React from "react"
 import { useState } from "react"
 import { AnimatePresence, motion, type Variants } from "motion/react"
 import { ChevronRight } from "lucide-react"
+import { useTranslation } from "@/i18n"
 
 import { cn, isHexColor } from "@/lib/utils"
 import {
@@ -126,6 +127,7 @@ const itemVariants: Variants = {
  * - Nested items have left indentation with vertical line
  */
 export function LeftSidebar({ links, isCollapsed, getItemProps, focusedItemId, isNested }: LeftSidebarProps) {
+  const { t } = useTranslation()
   // For nested sidebars, wrap in motion container for stagger effect
   const NavWrapper = isNested ? motion.nav : 'nav'
   const navProps = isNested ? {
@@ -143,7 +145,7 @@ export function LeftSidebar({ links, isCollapsed, getItemProps, focusedItemId, i
           isNested ? "pl-5 pr-0 relative" : "px-2"
         )}
         role="navigation"
-        aria-label={isNested ? "Sub navigation" : "Main navigation"}
+        aria-label={isNested ? t('subNavigation' as any) : t('mainNavigation' as any)}
         {...navProps}
       >
         {/* Vertical line for nested items - 4px left of chevron center */}

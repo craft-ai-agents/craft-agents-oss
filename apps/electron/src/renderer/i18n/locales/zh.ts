@@ -12,6 +12,11 @@ export default {
   sources: '来源',
   skills: '技能',
   workspace: '工作空间',
+  craftMenu: 'Craft 菜单',
+  keyboardShortcuts: '键盘快捷键',
+  storedUserPreferences: '存储的用户偏好设置',
+  resetApp: '重置应用',
+  sessions: '会话',
 
   // Actions / 操作
   newChat: '新建对话',
@@ -116,6 +121,8 @@ export default {
   showSidebar: '显示侧边栏',
   changeTodoState: '更改待办状态',
   openSettings: '打开设置',
+  mainNavigation: '主导航',
+  subNavigation: '子导航',
 
   // Dialog & Modal Text / 对话框和模态框文本
   confirmAction: '确认操作',

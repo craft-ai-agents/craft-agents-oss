@@ -13,6 +13,11 @@ export default {
   sources: 'Sources',
   skills: 'Skills',
   workspace: 'Workspace',
+  craftMenu: 'Craft menu',
+  keyboardShortcuts: 'Keyboard Shortcuts',
+  storedUserPreferences: 'Stored User Preferences',
+  resetApp: 'Reset App',
+  sessions: 'Sessions',
 
   // Actions
   newChat: 'New Chat',
@@ -117,6 +122,8 @@ export default {
   showSidebar: 'Show sidebar',
   changeTodoState: 'Change todo state',
   openSettings: 'Open settings',
+  mainNavigation: 'Main navigation',
+  subNavigation: 'Sub navigation',
 
   // Dialog & Modal Text
   confirmAction: 'Confirm action',
