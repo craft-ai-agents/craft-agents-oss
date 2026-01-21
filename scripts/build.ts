@@ -29,6 +29,7 @@ process.on('unhandledRejection', (reason) => {
 
 import { parseArgs } from 'util';
 import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
 import { existsSync } from 'fs';
 import {
   type BuildConfig,
@@ -125,8 +126,8 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  // Determine paths
-  const scriptDir = dirname(new URL(import.meta.url).pathname);
+  // Determine paths (use fileURLToPath for Windows compatibility)
+  const scriptDir = dirname(fileURLToPath(import.meta.url));
   const rootDir = dirname(scriptDir);
   const electronDir = join(rootDir, 'apps', 'electron');
 
