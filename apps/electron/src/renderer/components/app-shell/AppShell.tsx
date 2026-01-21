@@ -1090,7 +1090,7 @@ function AppShellContent({
                         data-tutorial="new-chat-button"
                       >
                         <SquarePenRounded className="h-3.5 w-3.5 shrink-0" />
-                        New Chat
+                        {t('newChat' as any)}
                       </Button>
                     </ContextMenuTrigger>
                     <StyledContextMenuContent>

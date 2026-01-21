@@ -314,7 +314,7 @@ export default function WorkspaceSettingsPage() {
           <div className="px-5 py-7 max-w-3xl mx-auto">
           <div className="space-y-6">
             {/* Workspace Info */}
-            <SettingsSection title="Workspace Info">
+            <SettingsSection title={t('workspaceInfo' as any)}>
               <SettingsCard>
                 <SettingsRow
                   label="Name"

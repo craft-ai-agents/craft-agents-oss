@@ -298,7 +298,7 @@ function SessionItem({
                 "font-medium font-sans line-clamp-2 min-w-0 -mb-[2px]",
                 item.isAsyncOperationOngoing && "animate-shimmer-text"
               )}>
-                {searchQuery ? highlightMatch(getSessionTitle(item), searchQuery) : getSessionTitle(item)}
+                {searchQuery ? highlightMatch(getSessionTitle(item, t), searchQuery) : getSessionTitle(item, t)}
               </div>
             </div>
             {/* Subtitle - with optional flag at start, single line with truncation */}
@@ -407,14 +407,14 @@ function SessionItem({
                 <DropdownMenuProvider>
                   <SessionMenu
                     sessionId={item.id}
-                    sessionName={getSessionTitle(item)}
+                    sessionName={getSessionTitle(item, t)}
                     isFlagged={item.isFlagged ?? false}
                     sharedUrl={item.sharedUrl}
                     hasMessages={hasMessages(item)}
                     hasUnreadMessages={hasUnreadMessages(item)}
                     currentTodoState={currentTodoState}
                     todoStates={todoStates}
-                    onRename={() => onRenameClick(item.id, getSessionTitle(item))}
+                    onRename={() => onRenameClick(item.id, getSessionTitle(item, t))}
                     onFlag={() => onFlag?.(item.id)}
                     onUnflag={() => onUnflag?.(item.id)}
                     onMarkUnread={() => onMarkUnread(item.id)}
@@ -434,14 +434,14 @@ function SessionItem({
           <ContextMenuProvider>
             <SessionMenu
               sessionId={item.id}
-              sessionName={getSessionTitle(item)}
+              sessionName={getSessionTitle(item, t)}
               isFlagged={item.isFlagged ?? false}
               sharedUrl={item.sharedUrl}
               hasMessages={hasMessages(item)}
               hasUnreadMessages={hasUnreadMessages(item)}
               currentTodoState={currentTodoState}
               todoStates={todoStates}
-              onRename={() => onRenameClick(item.id, getSessionTitle(item))}
+              onRename={() => onRenameClick(item.id, getSessionTitle(item, t))}
               onFlag={() => onFlag?.(item.id)}
               onUnflag={() => onUnflag?.(item.id)}
               onMarkUnread={() => onMarkUnread(item.id)}
@@ -567,7 +567,7 @@ export function SessionList({
     if (!searchQuery.trim()) return sortedItems
     const query = searchQuery.toLowerCase()
     return sortedItems.filter(item => {
-      const title = getSessionTitle(item).toLowerCase()
+      const title = getSessionTitle(item, t).toLowerCase()
       return title.includes(query)
     })
   }, [sortedItems, searchQuery])

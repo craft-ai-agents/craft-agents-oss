@@ -207,8 +207,8 @@ export default function PermissionsSettingsPage() {
                 <>
                   {/* Default Permissions Section */}
                   <SettingsSection
-                    title="Default Permissions"
-                    description="App-level patterns allowed in Explore mode. Commands not on this list are blocked."
+                    title={t('defaultPermissions' as any)}
+                    description={t('defaultPermissionsDescription' as any)}
                     action={
                       // EditPopover for AI-assisted default permissions editing
                       defaultPermissionsPath ? (
@@ -232,7 +232,7 @@ export default function PermissionsSettingsPage() {
                           searchable
                           maxHeight={350}
                           fullscreen
-                          fullscreenTitle="Default Permissions"
+                          fullscreenTitle={t('defaultPermissions' as any)}
                         />
                       ) : (
                         <div className="p-8 text-center text-muted-foreground">
@@ -247,8 +247,8 @@ export default function PermissionsSettingsPage() {
 
                   {/* Custom Permissions Section */}
                   <SettingsSection
-                    title="Workspace Customizations"
-                    description="Workspace-level patterns that extend the app defaults above."
+                    title={t('workspaceCustomizations' as any)}
+                    description={t('workspaceCustomizationsDescription' as any)}
                     action={
                       (() => {
                         // Get centralized edit config - all strings defined in EditPopover.tsx
@@ -277,7 +277,7 @@ export default function PermissionsSettingsPage() {
                           searchable
                           maxHeight={350}
                           fullscreen
-                          fullscreenTitle="Workspace Customizations"
+                          fullscreenTitle={t('workspaceCustomizations' as any)}
                         />
                       ) : (
                         <div className="p-8 text-center text-muted-foreground">

@@ -343,6 +343,12 @@ export default {
   billing: 'Billing',
   developer: 'Developer',
   experimental: 'Experimental',
+  defaultPermissions: 'Default Permissions',
+  defaultPermissionsDescription: 'App-level patterns allowed in Explore mode. Commands not on this list are blocked.',
+  workspaceCustomizations: 'Workspace Customizations',
+  workspaceCustomizationsDescription: 'Workspace-level patterns that extend the app defaults above.',
+  workspaceInfo: 'Workspace Info',
+  global: 'Global',
   beta: 'Beta',
 
   // Data Tables

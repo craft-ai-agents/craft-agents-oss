@@ -20,8 +20,9 @@ function sanitizePreview(content: string): string {
  * Get display title for a session.
  * Priority: custom name > first user message > preview (from metadata) > "New chat"
  * Works with both Session (full) and SessionMeta (lightweight)
+ * @param t - Optional translation function for i18n
  */
-export function getSessionTitle(session: SessionLike | SessionMeta): string {
+export function getSessionTitle(session: SessionLike | SessionMeta, t?: (key: string) => string): string {
   if (session.name) {
     return session.name
   }
@@ -47,7 +48,7 @@ export function getSessionTitle(session: SessionLike | SessionMeta): string {
     }
   }
 
-  return 'New chat'
+  return t ? t('newChat' as any) : 'New chat'
 }
 
 /**

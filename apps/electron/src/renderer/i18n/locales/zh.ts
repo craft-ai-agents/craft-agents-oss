@@ -342,6 +342,12 @@ export default {
   billing: '账单',
   developer: '开发者',
   experimental: '实验性',
+  defaultPermissions: '默认权限',
+  defaultPermissionsDescription: '在探索模式下允许的应用级模式。不在列表中的命令将被阻止。',
+  workspaceCustomizations: '工作空间自定义',
+  workspaceCustomizationsDescription: '扩展上述应用默认值的工作空间级模式。',
+  workspaceInfo: '工作空间信息',
+  global: '全局',
   beta: '测试版',
 
   // Data Tables / 数据表
