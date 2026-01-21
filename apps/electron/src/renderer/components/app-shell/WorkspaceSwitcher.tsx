@@ -110,7 +110,7 @@ export function WorkspaceSwitcher({
   const handleWorkspaceCreated = (workspace: Workspace) => {
     setShowCreationScreen(false)
     setFullscreenOverlayOpen(false)
-    toast.success(`Created workspace "${workspace.name}"`)
+    toast.success(t('createdWorkspace' as any, { name: workspace.name }))
     onWorkspaceCreated?.(workspace)
     onSelect(workspace.id)
   }
@@ -143,7 +143,7 @@ export function WorkspaceSwitcher({
             "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
             isCollapsed && "h-9 w-9 shrink-0 justify-center p-0"
           )}
-          aria-label="Select workspace"
+          aria-label={t('selectWorkspace' as any)}
         >
           {/* Workspace Avatar: Image with crossfade, border, first letter fallback */}
           <CrossfadeAvatar
@@ -198,7 +198,7 @@ export function WorkspaceSwitcher({
                     e.stopPropagation()
                     onSelect(workspace.id, true)
                   }}
-                  title="Open in new window"
+                  title={t('openInNewWindow' as any)}
                 >
                   <ExternalLink className="h-3.5 w-3.5" />
                 </button>

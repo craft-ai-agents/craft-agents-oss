@@ -396,4 +396,49 @@ export default {
   describeWhatToChange: '描述您想要更改的内容...',
   editFile: '编辑文件',
 
+  // Status Messages / 状态消息
+  contemplating: '思考中...',
+  workingOnIt: '处理中...',
+  connectingDots: '整合信息...',
+  mullingItOver: '斟酌中...',
+  deepInThought: '深入思考...',
+  gettingThere: '即将完成...',
+
+  // Workspace UI / 工作空间界面
+  selectWorkspace: '选择工作空间',
+  createWorkspace: '创建工作空间',
+  createWorkspaceDesc: '输入名称并选择工作空间的存储位置。',
+  workspaceName: '工作空间名称',
+  myWorkspace: '我的工作空间',
+  location: '位置',
+  defaultLocation: '默认位置',
+  underCraftAgentFolder: '在 .craft-agent 文件夹下',
+  chooseLocation: '选择位置',
+  pickPlaceForWorkspace: '选择放置新工作空间的位置。',
+  browse: '浏览',
+  creating: '创建中...',
+  createdWorkspace: '已创建工作空间 "{{name}}"',
+
+  // Chat Display / 聊天显示
+  responsePreview: '响应预览',
+  turnDetails: '轮次详情',
+  showTechnicalDetails: '显示技术详情',
+  hideTechnicalDetails: '隐藏技术详情',
+  openInNewWindow: '在新窗口中打开',
+
+  // Session List / 会话列表
+  newBadge: '新',
+  planBadge: '计划',
+  conversationFlagged: '会话已标记',
+  addedToFlagged: '已添加到您的标记项',
+  flagRemoved: '标记已移除',
+  removedFromFlagged: '已从标记项中移除',
+  undo: '撤销',
+
+  // Source Status / 来源状态
+  needsAuth: '需要认证',
+  failed: '失败',
+  notTested: '未测试',
+  disabled: '已禁用',
+
 } as const;

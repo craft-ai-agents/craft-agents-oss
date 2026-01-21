@@ -8,6 +8,7 @@
 import * as React from 'react'
 import { useState } from 'react'
 import { MoreHorizontal } from 'lucide-react'
+import { useTranslation } from '@/i18n'
 import { SourceAvatar } from '@/components/ui/source-avatar'
 import { deriveConnectionStatus } from '@/components/ui/source-status-indicator'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -133,18 +134,18 @@ function getSourceTypeBadgeClasses(type: string): string {
  * Get status badge info for non-connected sources
  * Returns null if source is connected (no badge needed)
  */
-function getStatusBadge(status: SourceConnectionStatus): { label: string; classes: string } | null {
+function getStatusBadge(status: SourceConnectionStatus, t: (key: string) => string): { label: string; classes: string } | null {
   switch (status) {
     case 'connected':
       return null // No badge for connected sources
     case 'needs_auth':
-      return { label: 'Needs Auth', classes: 'bg-info/10 text-info' }
+      return { label: t('needsAuth' as any), classes: 'bg-info/10 text-info' }
     case 'failed':
-      return { label: 'Failed', classes: 'bg-destructive/10 text-destructive' }
+      return { label: t('failed' as any), classes: 'bg-destructive/10 text-destructive' }
     case 'untested':
-      return { label: 'Not Tested', classes: 'bg-foreground/10 text-foreground/50' }
+      return { label: t('notTested' as any), classes: 'bg-foreground/10 text-foreground/50' }
     case 'local_disabled':
-      return { label: 'Disabled', classes: 'bg-foreground/10 text-foreground/50' }
+      return { label: t('disabled' as any), classes: 'bg-foreground/10 text-foreground/50' }
     default:
       return null
   }
@@ -154,13 +155,14 @@ function SourceItem({ source, isSelected, isFirst, localMcpEnabled, onClick, onD
   const [menuOpen, setMenuOpen] = useState(false)
   const [contextMenuOpen, setContextMenuOpen] = useState(false)
   const { config } = source
+  const { t } = useTranslation()
 
   // Build subtitle text: provider or tagline
   const subtitle = config.tagline || config.provider || ''
 
   // Get connection status and badge info (pass localMcpEnabled for stdio sources)
   const connectionStatus = deriveConnectionStatus(source, localMcpEnabled)
-  const statusBadge = getStatusBadge(connectionStatus)
+  const statusBadge = getStatusBadge(connectionStatus, t)
 
   return (
     <div className="source-item" data-selected={isSelected || undefined} data-tutorial={isFirst ? "source-item-first" : undefined}>

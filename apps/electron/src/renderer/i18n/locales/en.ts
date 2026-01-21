@@ -397,4 +397,49 @@ export default {
   describeWhatToChange: 'Describe what you\'d like to change...',
   editFile: 'Edit File',
 
+  // Status Messages / 状态消息
+  contemplating: 'Contemplating...',
+  workingOnIt: 'Working on it...',
+  connectingDots: 'Connecting dots...',
+  mullingItOver: 'Mulling it over...',
+  deepInThought: 'Deep in thought...',
+  gettingThere: 'Getting there...',
+
+  // Workspace UI / 工作空间界面
+  selectWorkspace: 'Select workspace',
+  createWorkspace: 'Create workspace',
+  createWorkspaceDesc: 'Enter a name and choose where to store your workspace.',
+  workspaceName: 'Workspace name',
+  myWorkspace: 'My Workspace',
+  location: 'Location',
+  defaultLocation: 'Default location',
+  underCraftAgentFolder: 'under .craft-agent folder',
+  chooseLocation: 'Choose a location',
+  pickPlaceForWorkspace: 'Pick a place to put your new workspace.',
+  browse: 'Browse',
+  creating: 'Creating...',
+  createdWorkspace: 'Created workspace "{{name}}"',
+
+  // Chat Display / 聊天显示
+  responsePreview: 'Response Preview',
+  turnDetails: 'Turn Details',
+  showTechnicalDetails: 'Show technical details',
+  hideTechnicalDetails: 'Hide technical details',
+  openInNewWindow: 'Open in new window',
+
+  // Session List / 会话列表
+  newBadge: 'New',
+  planBadge: 'Plan',
+  conversationFlagged: 'Conversation flagged',
+  addedToFlagged: 'Added to your flagged items',
+  flagRemoved: 'Flag removed',
+  removedFromFlagged: 'Removed from flagged items',
+  undo: 'Undo',
+
+  // Source Status / 来源状态
+  needsAuth: 'Needs Auth',
+  failed: 'Failed',
+  notTested: 'Not Tested',
+  disabled: 'Disabled',
+
 } as const;

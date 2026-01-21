@@ -242,7 +242,7 @@ function SessionItem({
                 role="button"
                 aria-haspopup="menu"
                 aria-expanded={todoMenuOpen}
-                aria-label="Change todo state"
+                aria-label={t('changeTodoState' as any)}
                 onContextMenu={(e) => {
                   e.preventDefault()
                   e.stopPropagation()
@@ -308,7 +308,7 @@ function SessionItem({
               )}
               {!item.isProcessing && hasUnreadMessages(item) && (
                 <span className="shrink-0 px-1.5 py-0.5 text-[10px] font-medium rounded bg-accent text-white">
-                  New
+                  {t('newBadge' as any)}
                 </span>
               )}
               {item.isFlagged && (
@@ -316,7 +316,7 @@ function SessionItem({
               )}
               {item.lastMessageRole === 'plan' && (
                 <span className="shrink-0 px-1.5 py-0.5 text-[10px] font-medium rounded bg-success/10 text-success">
-                  Plan
+                  {t('planBadge' as any)}
                 </span>
               )}
               {permissionMode && (
@@ -651,36 +651,36 @@ export function SessionList({
   const handleFlagWithToast = useCallback((sessionId: string) => {
     if (!onFlag) return
     onFlag(sessionId)
-    toast('Conversation flagged', {
-      description: 'Added to your flagged items',
+    toast(t('conversationFlagged' as any), {
+      description: t('addedToFlagged' as any),
       action: onUnflag ? {
-        label: 'Undo',
+        label: t('undo' as any),
         onClick: () => onUnflag(sessionId),
       } : undefined,
     })
-  }, [onFlag, onUnflag])
+  }, [onFlag, onUnflag, t])
 
   const handleUnflagWithToast = useCallback((sessionId: string) => {
     if (!onUnflag) return
     onUnflag(sessionId)
-    toast('Flag removed', {
-      description: 'Removed from flagged items',
+    toast(t('flagRemoved' as any), {
+      description: t('removedFromFlagged' as any),
       action: onFlag ? {
-        label: 'Undo',
+        label: t('undo' as any),
         onClick: () => onFlag(sessionId),
       } : undefined,
     })
-  }, [onFlag, onUnflag])
+  }, [onFlag, onUnflag, t])
 
   const handleDeleteWithToast = useCallback(async (sessionId: string): Promise<boolean> => {
     // Confirmation dialog is shown by handleDeleteSession in App.tsx
     // We await so toast only shows after successful deletion (if user confirmed)
     const deleted = await onDelete(sessionId)
     if (deleted) {
-      toast('Conversation deleted')
+      toast(t('conversationDeleted' as any))
     }
     return deleted
-  }, [onDelete])
+  }, [onDelete, t])
 
   // Roving tabindex for keyboard navigation
   const {
