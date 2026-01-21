@@ -1,8 +1,8 @@
 # Chinese Localization - Progress Report
 
 **Last Updated:** 2026-01-21
-**Status:** Phase 0-3b Complete ✅ | Phase 3c-6 Pending ⏳
-**Overall Progress:** ~40%
+**Status:** Phase 0-3c Complete ✅ | Phase 3d-6 Pending ⏳
+**Overall Progress:** ~45%
 
 ---
 
@@ -41,7 +41,7 @@
 - ✅ LanguageSwitcher component created
 - ✅ Provider wraps entire app
 
-### Phase 3a-3b: Component Integration (3/132 Complete)
+### Phase 3a-3c: Component Integration (5/132 Complete)
 
 **✅ AppShell Component**
 - Navigation labels: All Chats, Settings, Flagged, Sources, Skills
@@ -60,32 +60,47 @@
 - Action labels: Open, Copy
 - Commit: `46e0ebe`
 
+**✅ SettingsNavigator Component**
+- Settings section labels: App, Workspace, Permissions, Shortcuts, Preferences
+- Section descriptions translated
+- "Open in New Window" action
+- Commit: `41f3e52`
+
+**✅ PreferencesPage Component**
+- Page title: "Preferences"
+- Section titles: Basic Info, Location, Notes
+- All form labels, descriptions, and placeholders
+- Edit button: "Edit File"
+- Commit: `41f3e52`
+
 ---
 
 ## 📊 Statistics
 
 ### Code Changes
 ```
-Commits: 5 (3 feature commits)
-Files Modified: 14 (3 components + infrastructure)
-Lines Added: ~1,200 LOC
-Lines Modified: ~100 LOC
+Commits: 7 (5 feature commits)
+Files Modified: 17 (5 components + infrastructure)
+Lines Added: ~1,400 LOC
+Lines Modified: ~150 LOC
 Bundle Impact: 0KB (simple dictionary approach)
 ```
 
 ### Component Progress
 ```
-High Priority: 3/3 complete ✅
-  ├─ AppShell        ✅ Complete
-  ├─ SessionList     ✅ Complete
-  └─ SessionMenu     ✅ Complete
+High Priority: 5/5 complete ✅
+  ├─ AppShell          ✅ Complete
+  ├─ SessionList       ✅ Complete
+  ├─ SessionMenu       ✅ Complete
+  ├─ SettingsNavigator ✅ Complete
+  └─ PreferencesPage   ✅ Complete
 
 Medium Priority: 0/15 pending ⏳
   ├─ Onboarding      ⏳ Pending
   ├─ Chat components  ⏳ Pending
   └─ Toast dialogs   ⏳ Pending
 
-Low Priority: 0/114 pending ⏳
+Low Priority: 0/112 pending ⏳
   └─ Utility components ⏳ Pending
 ```
 
@@ -93,21 +108,22 @@ Low Priority: 0/114 pending ⏳
 
 ## ⏳ Remaining Work
 
-### Phase 3c: Settings Pages (High Priority)
+### ~~Phase 3c: Settings Pages~~ ✅ COMPLETED
 
-**Estimated Time:** 2-4 hours
+**Completed Tasks:**
+- ✅ Integrate LanguageSwitcher into Settings page
+- ✅ Translate all settings labels and descriptions
+- ✅ Update SettingsNavigator component
+- ✅ Update PreferencesPage component
+- ✅ Test settings page in both languages
 
-**Tasks:**
-- [ ] Integrate LanguageSwitcher into Settings page
-- [ ] Translate all settings labels and descriptions
-- [ ] Update SettingsNavigator component
-- [ ] Test settings page in both languages
+**Files Modified:**
+- `src/renderer/pages/settings/SettingsNavigator.tsx` ✅
+- `src/renderer/pages/settings/PreferencesPage.tsx` ✅
+- `src/renderer/i18n/locales/en.ts` (+38 keys) ✅
+- `src/renderer/i18n/locales/zh.ts` (+38 keys) ✅
 
-**Files:**
-- `src/renderer/pages/settings/SettingsNavigator.tsx`
-- All settings page components
-
-### Phase 3d: Remaining Components (129 components)
+### Phase 3d: Remaining Components (127 components)
 
 **Estimated Time:** 20-30 hours
 
@@ -118,7 +134,7 @@ Low Priority: 0/114 pending ⏳
    - Dialog/Modal components
    - Toast notification components
 
-2. **Low Priority** (114 components, ~12-22 hours):
+2. **Low Priority** (112 components, ~12-22 hours):
    - Utility components
    - Playground components
    - Test components
@@ -220,14 +236,14 @@ UI elements and labels are displayed in ${userLanguage}.
 | Category | Total | Translated | Progress |
 |----------|-------|------------|----------|
 | Navigation Labels | 6 | 6 | 100% ✅ |
-| Action Buttons | ~50 | ~15 | 30% |
+| Action Buttons | ~50 | ~20 | 40% |
 | Toast Messages | ~42 | ~25 | 60% |
 | Empty States | ~20 | ~8 | 40% |
 | Error Messages | ~30 | ~15 | 50% |
-| Settings Labels | ~40 | 0 | 0% |
+| Settings Labels | ~40 | ~40 | 100% ✅ |
 | Accessibility Labels | ~58 | 0 | 0% |
 | Date/Time Labels | ~54 | 0 | 0% |
-| **Total** | **~300** | **~69** | **~23%** |
+| **Total** | **~350** | **~114** | **~33%** |
 
 ---
 
@@ -323,6 +339,8 @@ grep -r "Delete" src/renderer/components --include="*.tsx" -l
 - `src/renderer/components/app-shell/AppShell.tsx` - ✅ Complete example
 - `src/renderer/components/app-shell/SessionList.tsx` - ✅ Complete example
 - `src/renderer/components/app-shell/SessionMenu.tsx` - ✅ Complete example
+- `src/renderer/pages/settings/SettingsNavigator.tsx` - ✅ Complete example
+- `src/renderer/pages/settings/PreferencesPage.tsx` - ✅ Complete example
 
 ---
 
@@ -330,10 +348,10 @@ grep -r "Delete" src/renderer/components --include="*.tsx" -l
 
 ### Immediate Actions (Today)
 
-1. **Update Settings Page** (2-3 hours)
-   - Integrate LanguageSwitcher component
-   - Translate all settings labels
-   - Test language switching in Settings
+1. ~~**Update Settings Page** (2-3 hours)~~ ✅ COMPLETED
+   - ✅ Integrate LanguageSwitcher component
+   - ✅ Translate all settings labels
+   - ✅ Test language switching in Settings
 
 2. **Create Date/Time Utilities** (1-2 hours)
    - Build `i18n-dates.ts` utility
@@ -405,23 +423,23 @@ f9e25f6 feat(i18n): Integrate translations in AppShell component
 | Phase 2: App Integration | 2 hours | ✅ Complete | 0 hours |
 | Phase 3a: AppShell | 2 hours | ✅ Complete | 0 hours |
 | Phase 3b: SessionList/Menu | 3 hours | ✅ Complete | 0 hours |
-| Phase 3c: Settings | 3 hours | ⏳ Pending | 3 hours |
+| Phase 3c: Settings | 3 hours | ✅ Complete | 0 hours |
 | Phase 3d: Remaining Components | 30 hours | ⏳ Pending | 30 hours |
 | Phase 4: Date/Time Utilities | 3 hours | ⏳ Pending | 3 hours |
 | Phase 5: Agent Integration | 4 hours | ⏳ Pending | 4 hours |
 | Phase 6: Testing & Launch | 10 hours | ⏳ Pending | 10 hours |
-| **Total** | **~62 hours** | | **~53 hours** |
+| **Total** | **~62 hours** | | **~50 hours** |
 
 **Current Velocity:** ~3 components per hour
-**Time to 100%:** ~18 hours of focused work
+**Time to 100%:** ~17 hours of focused work
 
 ---
 
 ## 🎯 Milestones
 
 - [x] **Milestone 1:** Infrastructure ready (Phase 0-2) ✅
-- [x] **Milestone 2:** High-priority components done (3/3) ✅
-- [ ] **Milestone 3:** Settings page translated
+- [x] **Milestone 2:** High-priority components done (5/5) ✅
+- [x] **Milestone 3:** Settings page translated ✅
 - [ ] **Milestone 4:** All user-facing components translated
 - [ ] **Milestone 5:** Agent integration complete
 - [ ] **Milestone 6:** Production ready (native speaker approved)
@@ -429,6 +447,6 @@ f9e25f6 feat(i18n): Integrate translations in AppShell component
 ---
 
 **Last Updated:** 2026-01-21
-**Next Review:** After Phase 3c (Settings) completion
+**Next Review:** After Phase 4 (Date/Time Utilities) completion
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
