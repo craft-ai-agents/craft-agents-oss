@@ -100,7 +100,11 @@ export function SourcesListPanel({
                     Add your first source
                   </button>
                 }
-                {...getEditConfig('add-source', workspaceRootPath)}
+                {...getEditConfig(
+                  // Use filter-aware edit config key when a type filter is active
+                  sourceFilter?.kind === 'type' ? `add-source-${sourceFilter.sourceType}` : 'add-source',
+                  workspaceRootPath
+                )}
               />
             )}
           </div>

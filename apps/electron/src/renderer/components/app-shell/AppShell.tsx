@@ -819,7 +819,8 @@ function AppShellContent({
   // State to control which EditPopover is open (triggered from context menus).
   // We use controlled popovers instead of deep links so the user can type
   // their request in the popover UI before opening a new chat window.
-  const [editPopoverOpen, setEditPopoverOpen] = useState<'statuses' | 'add-source' | 'add-skill' | null>(null)
+  // add-source variants: add-source (generic), add-source-api, add-source-mcp, add-source-local
+  const [editPopoverOpen, setEditPopoverOpen] = useState<'statuses' | 'add-source' | 'add-source-api' | 'add-source-mcp' | 'add-source-local' | 'add-skill' | null>(null)
 
   // Handler for "Configure Statuses" context menu action
   // Opens the EditPopover for status configuration
@@ -831,8 +832,10 @@ function AppShellContent({
 
   // Handler for "Add Source" context menu action
   // Opens the EditPopover for adding a new source
-  const openAddSource = useCallback(() => {
-    setTimeout(() => setEditPopoverOpen('add-source'), 50)
+  // Optional sourceType param allows filter-aware context (from subcategory menus or filtered views)
+  const openAddSource = useCallback((sourceType?: 'api' | 'mcp' | 'local') => {
+    const key = sourceType ? `add-source-${sourceType}` as const : 'add-source' as const
+    setTimeout(() => setEditPopoverOpen(key), 50)
   }, [])
 
   // Handler for "Add Skill" context menu action
@@ -1204,6 +1207,7 @@ function AppShellContent({
                         onAddSource: openAddSource,
                       },
                       // Subcategories for source types: APIs, MCPs, Local Folders
+                      // Each subcategory passes its type to openAddSource for filter-aware context
                       items: [
                         {
                           id: "nav:sources:api",
@@ -1214,7 +1218,7 @@ function AppShellContent({
                           onClick: handleSourcesApiClick,
                           contextMenu: {
                             type: 'sources' as const,
-                            onAddSource: openAddSource,
+                            onAddSource: () => openAddSource('api'),
                           },
                         },
                         {
@@ -1226,7 +1230,7 @@ function AppShellContent({
                           onClick: handleSourcesMcpClick,
                           contextMenu: {
                             type: 'sources' as const,
-                            onAddSource: openAddSource,
+                            onAddSource: () => openAddSource('mcp'),
                           },
                         },
                         {
@@ -1238,7 +1242,7 @@ function AppShellContent({
                           onClick: handleSourcesLocalClick,
                           contextMenu: {
                             type: 'sources' as const,
-                            onAddSource: openAddSource,
+                            onAddSource: () => openAddSource('local'),
                           },
                         },
                       ],
@@ -1415,7 +1419,7 @@ function AppShellContent({
                       </StyledDropdownMenuContent>
                     </DropdownMenu>
                   )}
-                  {/* Add Source button (only for sources mode) */}
+                  {/* Add Source button (only for sources mode) - uses filter-aware edit config */}
                   {isSourcesNavigation(navState) && activeWorkspace && (
                     <EditPopover
                       trigger={
@@ -1425,7 +1429,10 @@ function AppShellContent({
                           data-tutorial="add-source-button"
                         />
                       }
-                      {...getEditConfig('add-source', activeWorkspace.rootPath)}
+                      {...getEditConfig(
+                        sourceFilter?.kind === 'type' ? `add-source-${sourceFilter.sourceType}` : 'add-source',
+                        activeWorkspace.rootPath
+                      )}
                     />
                   )}
                   {/* Add Skill button (only for skills mode) */}
@@ -1679,22 +1686,27 @@ function AppShellContent({
             align="start"
             {...getEditConfig('edit-statuses', activeWorkspace.rootPath)}
           />
-          {/* Add Source EditPopover */}
-          <EditPopover
-            open={editPopoverOpen === 'add-source'}
-            onOpenChange={(isOpen) => setEditPopoverOpen(isOpen ? 'add-source' : null)}
-            modal={true}
-            trigger={
-              <div
-                className="fixed top-[120px] w-0 h-0 pointer-events-none"
-                style={{ left: sidebarWidth + 20 }}
-                aria-hidden="true"
-              />
-            }
-            side="bottom"
-            align="start"
-            {...getEditConfig('add-source', activeWorkspace.rootPath)}
-          />
+          {/* Add Source EditPopovers - one for each variant (generic + filter-specific)
+           * editPopoverOpen can be: 'add-source', 'add-source-api', 'add-source-mcp', 'add-source-local'
+           * Each variant uses its corresponding EditContextKey for filter-aware agent context */}
+          {(['add-source', 'add-source-api', 'add-source-mcp', 'add-source-local'] as const).map((variant) => (
+            <EditPopover
+              key={variant}
+              open={editPopoverOpen === variant}
+              onOpenChange={(isOpen) => setEditPopoverOpen(isOpen ? variant : null)}
+              modal={true}
+              trigger={
+                <div
+                  className="fixed top-[120px] w-0 h-0 pointer-events-none"
+                  style={{ left: sidebarWidth + 20 }}
+                  aria-hidden="true"
+                />
+              }
+              side="bottom"
+              align="start"
+              {...getEditConfig(variant, activeWorkspace.rootPath)}
+            />
+          ))}
           {/* Add Skill EditPopover */}
           <EditPopover
             open={editPopoverOpen === 'add-skill'}

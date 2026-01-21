@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Self-update script for Craft Agent Electron app (Linux AppImage)
+# Self-update script for Craft Agentss Electron app (Linux AppImage)
 # This script is spawned by the app before quitting to install updates
 #
 # Usage: self-update-linux.sh <new_appimage_path> <current_appimage_path>
@@ -29,7 +29,7 @@ log() {
 show_notification() {
     # Try notify-send first (most common on Linux)
     if command -v notify-send &> /dev/null; then
-        notify-send "Craft Agent" "$1" 2>/dev/null || true
+        notify-send "Craft Agents" "$1" 2>/dev/null || true
     fi
 }
 
@@ -173,7 +173,7 @@ if kill -0 "$APP_PID" 2>/dev/null; then
     rm -f "$BACKUP_PATH" 2>/dev/null || true
     log "Cleanup complete"
 else
-    # PID not running - check if any Craft Agent process is running with the exact path
+    # PID not running - check if any Craft Agents process is running with the exact path
     # Use exact path match to avoid false positives from other AppImages
     if pgrep -f "^$CURRENT_APPIMAGE" > /dev/null 2>&1; then
         log "App is running (found process matching exact path)"

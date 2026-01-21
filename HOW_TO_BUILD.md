@@ -1,6 +1,6 @@
-# How to Build Craft Agent
+# How to Build Craft Agents
 
-This guide covers building the Craft Agent Electron desktop app for macOS, Windows, and Linux.
+This guide covers building the Craft Agents Electron desktop app for macOS, Windows, and Linux.
 
 ## Prerequisites (All Platforms)
 

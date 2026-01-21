@@ -118,7 +118,7 @@ esac
 # Set platform-specific variables
 if [ "$OS_TYPE" = "darwin" ]; then
     platform="darwin-${arch}"
-    APP_NAME="Craft Agent.app"
+    APP_NAME="Craft Agents.app"
     INSTALL_DIR="/Applications"
     ext="dmg"
 else
@@ -213,22 +213,22 @@ if [ "$OS_TYPE" = "darwin" ]; then
 
     # Quit the app if it's running (use bundle ID for reliability)
     APP_BUNDLE_ID="com.lukilabs.craft-agent"
-    if pgrep -x "Craft Agent" >/dev/null 2>&1; then
-        info "Quitting Craft Agent..."
+    if pgrep -x "Craft Agents" >/dev/null 2>&1; then
+        info "Quitting Craft Agents..."
         osascript -e "tell application id \"$APP_BUNDLE_ID\" to quit" 2>/dev/null || true
         # Wait for app to quit (max 5 seconds) - POSIX compatible loop
         i=0
         while [ $i -lt 10 ]; do
-            if ! pgrep -x "Craft Agent" >/dev/null 2>&1; then
+            if ! pgrep -x "Craft Agents" >/dev/null 2>&1; then
                 break
             fi
             sleep 0.5
             i=$((i + 1))
         done
         # Force kill if still running
-        if pgrep -x "Craft Agent" >/dev/null 2>&1; then
+        if pgrep -x "Craft Agents" >/dev/null 2>&1; then
             warn "App didn't quit gracefully. Force quitting (unsaved data may be lost)..."
-            pkill -9 -x "Craft Agent" 2>/dev/null || true
+            pkill -9 -x "Craft Agents" 2>/dev/null || true
             # Wait longer for macOS to release file handles
             sleep 3
         fi
@@ -275,10 +275,10 @@ if [ "$OS_TYPE" = "darwin" ]; then
     echo ""
     success "Installation complete!"
     echo ""
-    printf "%b\n" "  Craft Agent has been installed to ${BOLD}$INSTALL_DIR/$APP_NAME${NC}"
+    printf "%b\n" "  Craft Agents has been installed to ${BOLD}$INSTALL_DIR/$APP_NAME${NC}"
     echo ""
     printf "%b\n" "  You can launch it from ${BOLD}Applications${NC} or by running:"
-    printf "%b\n" "    ${BOLD}open -a 'Craft Agent'${NC}"
+    printf "%b\n" "    ${BOLD}open -a 'Craft Agents'${NC}"
     echo ""
 
 else
@@ -292,7 +292,7 @@ else
 
     # Kill the app if it's running
     if pgrep -f "Craft-Agent.*AppImage" >/dev/null 2>&1; then
-        info "Stopping Craft Agent..."
+        info "Stopping Craft Agents..."
         pkill -f "Craft-Agent.*AppImage" 2>/dev/null || true
         sleep 2
     fi

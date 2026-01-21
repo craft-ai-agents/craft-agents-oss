@@ -1,4 +1,4 @@
-# Self-update script for Craft Agent Electron app (Windows)
+# Self-update script for Craft Agents Electron app (Windows)
 # This script is spawned by the app before quitting to install updates
 #
 # Usage: powershell -ExecutionPolicy Bypass -File self-update.ps1 -InstallerPath <path> -AppPath <path>
@@ -61,19 +61,19 @@ Log "App: $AppPath"
 # Validate installer path
 if (-not (Test-Path -Path $InstallerPath -PathType Leaf)) {
     Log "ERROR: Installer not found at: $InstallerPath"
-    Show-Notification -Title "Craft Agent" -Message "Update failed: installer not found."
+    Show-Notification -Title "Craft Agents" -Message "Update failed: installer not found."
     exit 1
 }
 
 # Validate installer is an exe
 if (-not $InstallerPath.EndsWith(".exe")) {
     Log "ERROR: Installer is not an exe file: $InstallerPath"
-    Show-Notification -Title "Craft Agent" -Message "Update failed: invalid installer."
+    Show-Notification -Title "Craft Agents" -Message "Update failed: invalid installer."
     exit 1
 }
 
 # Show progress notification
-Show-Notification -Title "Craft Agent" -Message "Installing update, please wait..."
+Show-Notification -Title "Craft Agents" -Message "Installing update, please wait..."
 
 # Wait for app to quit (max 10 seconds)
 # Use the executable path to find the process, not a hardcoded name
@@ -136,13 +136,13 @@ try {
 
         if ($exitCode -ne 0) {
             Log "ERROR: Installer failed with exit code $exitCode"
-            Show-Notification -Title "Craft Agent" -Message "Update failed: installation error."
+            Show-Notification -Title "Craft Agents" -Message "Update failed: installation error."
             exit 1
         }
     }
 } catch {
     Log "ERROR: Failed to run installer: $_"
-    Show-Notification -Title "Craft Agent" -Message "Update failed: could not run installer."
+    Show-Notification -Title "Craft Agents" -Message "Update failed: could not run installer."
     exit 1
 }
 
@@ -160,9 +160,9 @@ try {
     } else {
         # Try common install locations
         $installPaths = @(
-            "$env:LOCALAPPDATA\Programs\Craft Agent\Craft Agent.exe",
-            "$env:ProgramFiles\Craft Agent\Craft Agent.exe",
-            "${env:ProgramFiles(x86)}\Craft Agent\Craft Agent.exe"
+            "$env:LOCALAPPDATA\Programs\Craft Agents\Craft Agents.exe",
+            "$env:ProgramFiles\Craft Agents\Craft Agents.exe",
+            "${env:ProgramFiles(x86)}\Craft Agents\Craft Agents.exe"
         )
 
         $foundPath = $null

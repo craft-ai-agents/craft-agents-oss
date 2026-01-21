@@ -15,7 +15,7 @@
 
 set -e
 
-APP_NAME="Craft Agent.app"
+APP_NAME="Craft Agents.app"
 INSTALL_DIR="/Applications"
 APP_BUNDLE_ID="com.lukilabs.craft-agent"
 BACKUP_DIR="/tmp/craft-agent-backup-$$"
@@ -50,14 +50,14 @@ error_with_rollback() {
         if mv "$BACKUP_DIR/$APP_NAME" "$INSTALL_DIR/$APP_NAME" 2>/dev/null; then
             log "Rollback successful - old version restored"
             # Try to launch the restored app
-            open -a "Craft Agent" 2>/dev/null || true
+            open -a "Craft Agents" 2>/dev/null || true
         else
             log "Rollback failed - manual intervention required"
         fi
     fi
 
     # Show notification on failure (keep DMG for manual retry)
-    osascript -e 'display notification "Update failed. Your previous version has been restored." with title "Craft Agent"' 2>/dev/null || true
+    osascript -e 'display notification "Update failed. Your previous version has been restored." with title "Craft Agents"' 2>/dev/null || true
     exit 1
 }
 
@@ -70,14 +70,14 @@ log "App path: $APP_PATH"
 # 1. Dialog owned by System Events can't be closed programmatically
 # 2. Notification is non-blocking and auto-dismisses
 # 3. No orphan windows if update completes quickly
-osascript -e 'display notification "Installing update, please wait..." with title "Craft Agent" subtitle "The app will restart automatically"' 2>/dev/null || true
+osascript -e 'display notification "Installing update, please wait..." with title "Craft Agents" subtitle "The app will restart automatically"' 2>/dev/null || true
 log "Showed update notification"
 
 # Validate DMG path - must be non-empty, exist, and be a safe path
 # Security: prevent command injection via malicious environment variables
 if [ -z "$DMG_PATH" ]; then
     log "ERROR: DMG path is empty"
-    osascript -e 'display notification "Update failed: installer not found." with title "Craft Agent"' 2>/dev/null || true
+    osascript -e 'display notification "Update failed: installer not found." with title "Craft Agents"' 2>/dev/null || true
     exit 1
 fi
 
@@ -85,20 +85,20 @@ fi
 # Allow only alphanumeric, slash, dot, dash, underscore, and space
 if ! echo "$DMG_PATH" | grep -qE '^[a-zA-Z0-9/._ -]+$'; then
     log "ERROR: DMG path contains invalid characters: $DMG_PATH"
-    osascript -e 'display notification "Update failed: invalid installer path." with title "Craft Agent"' 2>/dev/null || true
+    osascript -e 'display notification "Update failed: invalid installer path." with title "Craft Agents"' 2>/dev/null || true
     exit 1
 fi
 
 # Validate path is absolute
 if [ "${DMG_PATH:0:1}" != "/" ]; then
     log "ERROR: DMG path must be absolute: $DMG_PATH"
-    osascript -e 'display notification "Update failed: invalid installer path." with title "Craft Agent"' 2>/dev/null || true
+    osascript -e 'display notification "Update failed: invalid installer path." with title "Craft Agents"' 2>/dev/null || true
     exit 1
 fi
 
 if [ ! -f "$DMG_PATH" ]; then
     log "ERROR: DMG file not found: $DMG_PATH"
-    osascript -e 'display notification "Update failed: installer not found." with title "Craft Agent"' 2>/dev/null || true
+    osascript -e 'display notification "Update failed: installer not found." with title "Craft Agents"' 2>/dev/null || true
     exit 1
 fi
 
@@ -131,7 +131,7 @@ mount_exit_code=$?
 
 if [ $mount_exit_code -ne 0 ]; then
     log "Failed to mount DMG: $mount_output"
-    osascript -e 'display notification "Update failed: could not open installer." with title "Craft Agent"' 2>/dev/null || true
+    osascript -e 'display notification "Update failed: could not open installer." with title "Craft Agents"' 2>/dev/null || true
     exit 1
 fi
 
@@ -139,7 +139,7 @@ mount_point=$(echo "$mount_output" | tail -1 | awk '{print $NF}')
 
 if [ -z "$mount_point" ] || [ ! -d "$mount_point" ]; then
     log "Failed to find mount point in output: $mount_output"
-    osascript -e 'display notification "Update failed: could not mount installer." with title "Craft Agent"' 2>/dev/null || true
+    osascript -e 'display notification "Update failed: could not mount installer." with title "Craft Agents"' 2>/dev/null || true
     exit 1
 fi
 
@@ -151,7 +151,7 @@ app_source=$(find "$mount_point" -maxdepth 1 -name "*.app" -type d | head -1)
 if [ -z "$app_source" ]; then
     hdiutil detach "$mount_point" -quiet 2>/dev/null || true
     log "No .app found in DMG"
-    osascript -e 'display notification "Update failed: invalid installer package." with title "Craft Agent"' 2>/dev/null || true
+    osascript -e 'display notification "Update failed: invalid installer package." with title "Craft Agents"' 2>/dev/null || true
     exit 1
 fi
 
@@ -176,7 +176,7 @@ if [ $codesign_exit -eq 0 ]; then
     if ! codesign --verify --deep --strict "$app_source" 2>/dev/null; then
         hdiutil detach "$mount_point" -quiet 2>/dev/null || true
         log "ERROR: Code signature verification failed - signature is invalid or tampered"
-        osascript -e 'display notification "Update failed: app signature is invalid." with title "Craft Agent"' 2>/dev/null || true
+        osascript -e 'display notification "Update failed: app signature is invalid." with title "Craft Agents"' 2>/dev/null || true
         exit 1
     fi
 
@@ -186,7 +186,7 @@ if [ $codesign_exit -eq 0 ]; then
         if [ "$team_id" != "$EXPECTED_TEAM_ID" ]; then
             hdiutil detach "$mount_point" -quiet 2>/dev/null || true
             log "ERROR: Code signature Team ID mismatch - expected $EXPECTED_TEAM_ID, got $team_id"
-            osascript -e 'display notification "Update failed: app signed by unknown developer." with title "Craft Agent"' 2>/dev/null || true
+            osascript -e 'display notification "Update failed: app signed by unknown developer." with title "Craft Agents"' 2>/dev/null || true
             exit 1
         fi
         log "Code signature verified: Team ID $team_id"
@@ -202,7 +202,7 @@ else
             # Current app is signed by us - don't allow unsigned update (security risk)
             hdiutil detach "$mount_point" -quiet 2>/dev/null || true
             log "ERROR: Cannot update signed app with unsigned version"
-            osascript -e 'display notification "Update failed: new version is not properly signed." with title "Craft Agent"' 2>/dev/null || true
+            osascript -e 'display notification "Update failed: new version is not properly signed." with title "Craft Agents"' 2>/dev/null || true
             exit 1
         fi
     fi
@@ -218,7 +218,7 @@ if [ -d "$INSTALL_DIR/$APP_NAME" ]; then
     if ! mv "$INSTALL_DIR/$APP_NAME" "$BACKUP_DIR/$APP_NAME"; then
         hdiutil detach "$mount_point" -quiet 2>/dev/null || true
         log "Failed to create backup"
-        osascript -e 'display notification "Update failed: could not backup existing app." with title "Craft Agent"' 2>/dev/null || true
+        osascript -e 'display notification "Update failed: could not backup existing app." with title "Craft Agents"' 2>/dev/null || true
         exit 1
     fi
     log "Backup created successfully"
@@ -324,7 +324,7 @@ else
     fi
 
     # Also try to show an alert dialog as a last resort
-    if ! osascript -e 'display dialog "Craft Agent was updated but could not restart automatically.\n\nPlease launch it manually from Applications." buttons {"OK"} default button "OK" with title "Craft Agent Update" with icon caution' 2>&1; then
+    if ! osascript -e 'display dialog "Craft Agents was updated but could not restart automatically.\n\nPlease launch it manually from Applications." buttons {"OK"} default button "OK" with title "Craft Agents Update" with icon caution' 2>&1; then
         log "WARNING: Failed to show dialog"
     fi
 fi

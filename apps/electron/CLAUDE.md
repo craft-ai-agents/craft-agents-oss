@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-This is the Electron desktop app for Craft Agent - the primary interface for the application. It provides a multi-session inbox with chat interface for interacting with Claude via Craft workspaces.
+This is the Electron desktop app for Craft Agents - the primary interface for the application. It provides a multi-session inbox with chat interface for interacting with Claude via Craft workspaces.
 
 **Note:** This app reuses the `@craft-agent/shared` package for core business logic. Dependencies are managed in the root `package.json`.
 
