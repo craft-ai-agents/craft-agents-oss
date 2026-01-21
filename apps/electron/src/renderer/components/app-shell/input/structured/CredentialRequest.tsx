@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 import type { CredentialRequest as CredentialRequestType, CredentialResponse } from '../../../../../shared/types'
+import { useTranslation } from '@/i18n'
 
 interface CredentialRequestProps {
   request: CredentialRequestType
@@ -23,6 +24,7 @@ interface CredentialRequestProps {
  * - query: API Key for query parameter auth
  */
 export function CredentialRequest({ request, onResponse, unstyled = false }: CredentialRequestProps) {
+  const { t } = useTranslation()
   const [value, setValue] = useState('')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -85,7 +87,7 @@ export function CredentialRequest({ request, onResponse, unstyled = false }: Cre
           <div className="flex-1 min-w-0 space-y-1">
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium text-foreground">
-                Authentication Required
+                {t('authRequestTitle' as any)}
               </span>
               <span className="text-xs text-muted-foreground">
                 ({request.sourceName})
@@ -201,7 +203,7 @@ export function CredentialRequest({ request, onResponse, unstyled = false }: Cre
           disabled={!isValid}
         >
           <Check className="h-3.5 w-3.5" />
-          Save
+          {t('save' as any)}
         </Button>
         <Button
           size="sm"
@@ -210,13 +212,13 @@ export function CredentialRequest({ request, onResponse, unstyled = false }: Cre
           onClick={handleCancel}
         >
           <X className="h-3.5 w-3.5" />
-          Cancel
+          {t('cancel' as any)}
         </Button>
 
         <div className="flex-1" />
 
         <span className="text-[10px] text-muted-foreground">
-          Credentials are encrypted at rest
+          {t('credentialRequest' as any)}
         </span>
       </div>
     </div>

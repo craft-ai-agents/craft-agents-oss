@@ -12,6 +12,7 @@ import * as React from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { cn } from '@/lib/utils'
 import { Kbd } from '@/components/ui/kbd'
+import { useTranslation } from '@/i18n'
 
 interface EscapeInterruptOverlayProps {
   /** Whether the overlay should be visible */
@@ -24,6 +25,8 @@ export function EscapeInterruptOverlay({
   isVisible,
   className,
 }: EscapeInterruptOverlayProps) {
+  const { t } = useTranslation()
+
   return (
     <AnimatePresence>
       {isVisible && (
@@ -54,7 +57,7 @@ export function EscapeInterruptOverlay({
           } as React.CSSProperties}
         >
           <span className="text-sm font-medium flex items-center gap-1.5">
-            Press <Kbd className="text-inherit bg-current/10">Esc</Kbd> again to interrupt
+            {t('interruptAndContinue' as any)} <Kbd className="text-inherit bg-current/10">Esc</Kbd>
           </span>
         </motion.div>
       )}

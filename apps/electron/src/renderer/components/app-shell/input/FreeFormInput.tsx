@@ -14,6 +14,7 @@ import {
 import { Icon_Folder } from '@craft-agent/ui'
 
 import * as storage from '@/lib/local-storage'
+import { useTranslation } from '@/i18n'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -156,7 +157,7 @@ export interface FreeFormInputProps {
  * - Active option badges
  */
 export function FreeFormInput({
-  placeholder = 'Message...',
+  placeholder,
   disabled = false,
   isProcessing = false,
   onSubmit,
@@ -189,6 +190,10 @@ export function FreeFormInput({
   isEmptySession = false,
   contextStatus,
 }: FreeFormInputProps) {
+  const { t } = useTranslation()
+
+  // Use translated placeholder if provided
+  const translatedPlaceholder = placeholder || t('typeMessage' as any)
   // Performance optimization: Always use internal state for typing to avoid parent re-renders
   // Sync FROM parent on mount/change (for restoring drafts)
   // Sync TO parent on blur/submit (debounced persistence)
@@ -255,6 +260,14 @@ export function FreeFormInput({
   const [sourceFilter, setSourceFilter] = React.useState('')
   const [isFocused, setIsFocused] = React.useState(false)
   const [inputMaxHeight, setInputMaxHeight] = React.useState(540)
+
+  // Translation helper function
+  const fileCount = attachments.length
+  const getFileLabel = () => {
+    if (fileCount === 0) return t('attachFile' as any)
+    if (fileCount === 1) return `1 ${t('attachment' as any)}`
+    return `${fileCount} ${t('attachment' as any)}`
+  }
 
   // Double-Esc interrupt: show warning overlay on first Esc, interrupt on second
   const { showEscapeOverlay } = useEscapeInterrupt()
@@ -1024,7 +1037,7 @@ export function FreeFormInput({
             setIsFocused(false)
             onFocusChange?.(false)
           }}
-          placeholder={placeholder}
+          placeholder={translatedPlaceholder}
           disabled={disabled}
           skills={skills}
           sources={sources}
@@ -1045,17 +1058,12 @@ export function FreeFormInput({
           <FreeFormInputContextBadge
             icon={<Paperclip className="h-4 w-4" />}
             // Show count ("1 file" / "X files") instead of filename for cleaner UI
-            label={attachments.length > 0
-              ? attachments.length === 1
-                ? "1 file"
-                : `${attachments.length} files`
-              : "Attach Files"
-            }
+            label={getFileLabel()}
             isExpanded={isEmptySession}
             hasSelection={attachments.length > 0}
             showChevron={false}
             onClick={handleAttachClick}
-            tooltip="Attach files"
+            tooltip={t('attachFile' as any)}
             disabled={disabled}
           />
 

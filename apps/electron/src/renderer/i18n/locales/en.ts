@@ -181,7 +181,6 @@ export default {
   updateSettings: 'Update Settings',
   welcomeToCraftAgentsLong: 'Agents with the UX they deserve. Connect anything. Organize your sessions. Everything you need to do the work of your life!',
   updateBillingOrChangeSetup: 'Update billing or change your setup.',
-  chooseBillingMethod: 'Choose Billing Method',
   selectHowToPowerAgents: 'Select how you\'d like to power your AI agents.',
   claudeProOrMax: 'Claude Pro/Max',
   useClaudeSubscription: 'Use your Claude subscription for unlimited access.',
@@ -221,7 +220,6 @@ export default {
 
   // App Menu
   file: 'File',
-  edit: 'Edit',
   view: 'View',
   window: 'Window',
   help: 'Help',
@@ -377,5 +375,9 @@ export default {
   codeCopied: 'Code copied!',
   tableOfContents: 'Table of Contents',
   jumpToSection: 'Jump to section',
+
+  // Data Table Pagination
+  total: 'total',
+  pageInfo: 'Page {{current}} of {{total}}',
 
 } as const;

@@ -45,6 +45,7 @@ import { InputContainer, type StructuredInputState, type StructuredResponse, typ
 import type { RichTextInputHandle } from "@/components/ui/rich-text-input"
 import { useBackgroundTasks } from "@/hooks/useBackgroundTasks"
 import { CHAT_LAYOUT } from "@/config/layout"
+import { useTranslation } from "@/i18n"
 
 // ============================================================================
 // Overlay State Types
@@ -348,6 +349,7 @@ export function ChatDisplay({
   // Tutorial
   disableSend = false,
 }: ChatDisplayProps) {
+  const { t } = useTranslation()
   // Input is only disabled when explicitly disabled (e.g., agent needs activation)
   // User can type during streaming - submitting will stop the stream and send
   const isInputDisabled = disabled
@@ -853,7 +855,7 @@ export function ChatDisplay({
               onInsertMessage={onInputChange}
             />
             <InputContainer
-              placeholder={`Message ${session.workspaceName || 'Chat'}...`}
+              placeholder={t('typeMessage' as any).replace('...', '')}
               disabled={isInputDisabled}
               isProcessing={session.isProcessing}
               onSubmit={handleSubmit}

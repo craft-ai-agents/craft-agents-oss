@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { AlertTriangle } from "lucide-react"
 import { useRegisterModal } from "@/context/ModalContext"
+import { useTranslation } from "@/i18n"
 
 interface ResetConfirmationDialogProps {
   open: boolean
@@ -29,6 +30,7 @@ export function ResetConfirmationDialog({
   onConfirm,
   onCancel,
 }: ResetConfirmationDialogProps) {
+  const { t } = useTranslation()
   const [answer, setAnswer] = useState("")
 
   // Register with modal context so X button / Cmd+W closes this dialog first
@@ -61,10 +63,10 @@ export function ResetConfirmationDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-destructive">
             <AlertTriangle className="h-5 w-5" />
-            Reset App
+            {t('resetWorkspace' as any)}
           </DialogTitle>
           <DialogDescription className="text-left pt-2">
-            This will <strong>permanently delete</strong>:
+            {t('resetWorkspaceDescription' as any)}
           </DialogDescription>
         </DialogHeader>
 
@@ -103,14 +105,14 @@ export function ResetConfirmationDialog({
 
         <DialogFooter className="gap-2 sm:gap-0">
           <Button variant="outline" onClick={handleCancel}>
-            Cancel
+            {t('cancel' as any)}
           </Button>
           <Button
             variant="destructive"
             disabled={!isCorrect}
             onClick={handleConfirm}
           >
-            Reset App
+            {t('resetButton' as any)}
           </Button>
         </DialogFooter>
       </DialogContent>

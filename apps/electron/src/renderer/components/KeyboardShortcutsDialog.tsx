@@ -5,6 +5,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { useRegisterModal } from "@/context/ModalContext"
+import { useTranslation } from "@/i18n"
 
 interface KeyboardShortcutsDialogProps {
   open: boolean
@@ -85,6 +86,8 @@ function Kbd({ children }: { children: React.ReactNode }) {
 }
 
 export function KeyboardShortcutsDialog({ open, onOpenChange }: KeyboardShortcutsDialogProps) {
+  const { t } = useTranslation()
+
   // Register with modal context so X button / Cmd+W closes this dialog first
   useRegisterModal(open, () => onOpenChange(false))
 
@@ -92,7 +95,7 @@ export function KeyboardShortcutsDialog({ open, onOpenChange }: KeyboardShortcut
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px] max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Keyboard Shortcuts</DialogTitle>
+          <DialogTitle>{t('keyboardShortcuts' as any)}</DialogTitle>
         </DialogHeader>
         <div className="space-y-6 py-2">
           {sections.map((section) => (

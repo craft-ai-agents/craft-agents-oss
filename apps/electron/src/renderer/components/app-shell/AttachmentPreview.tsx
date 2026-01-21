@@ -3,6 +3,7 @@ import { X, Image as ImageIcon } from "lucide-react"
 import { Spinner, FileTypeIcon, getFileTypeLabel } from "@craft-agent/ui"
 import { cn } from "@/lib/utils"
 import type { FileAttachment } from "../../../shared/types"
+import { useTranslation } from "@/i18n"
 
 // Re-export for backward compatibility
 export { FileTypeIcon, getFileTypeLabel }

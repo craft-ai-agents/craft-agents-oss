@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { PermissionRequest as PermissionRequestType } from '../../../../../shared/types'
 import type { PermissionResponse } from './types'
+import { useTranslation } from '@/i18n'
 
 interface PermissionRequestProps {
   request: PermissionRequestType
@@ -22,6 +23,7 @@ interface PermissionRequestProps {
  * - Action buttons: Allow, Always Allow, Deny
  */
 export function PermissionRequest({ request, onResponse, unstyled = false }: PermissionRequestProps) {
+  const { t } = useTranslation()
 
   const handleAllow = () => {
     onResponse({ type: 'permission', allowed: true, alwaysAllow: false })
@@ -55,7 +57,7 @@ export function PermissionRequest({ request, onResponse, unstyled = false }: Per
           <div className="flex-1 min-w-0 space-y-1">
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium text-foreground">
-                Permission Required
+                {t('permissionRequest' as any)}
               </span>
               <span className="text-xs text-muted-foreground">({request.toolName})</span>
             </div>
@@ -81,7 +83,7 @@ export function PermissionRequest({ request, onResponse, unstyled = false }: Per
           data-tutorial="permission-allow-button"
         >
           <Check className="h-3.5 w-3.5" />
-          Allow
+          {t('allowCommand' as any)}
         </Button>
         <Button
           size="sm"
@@ -90,7 +92,7 @@ export function PermissionRequest({ request, onResponse, unstyled = false }: Per
           onClick={handleAlwaysAllow}
         >
           <RefreshCw className="h-3.5 w-3.5" />
-          Always Allow
+          {t('allowAlways' as any)}
         </Button>
         <Button
           size="sm"
@@ -99,7 +101,7 @@ export function PermissionRequest({ request, onResponse, unstyled = false }: Per
           onClick={handleDeny}
         >
           <X className="h-3.5 w-3.5" />
-          Deny
+          {t('denyCommand' as any)}
         </Button>
 
         {/* Spacer */}

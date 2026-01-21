@@ -27,11 +27,12 @@ import {
   Eye,
   EyeOff,
   Check,
+  RotateCcw,
   ExternalLink,
   CheckCircle2,
 } from 'lucide-react'
 import { Spinner } from '@craft-agent/ui'
-import type { AuthType } from '../../../shared/types'
+import type { AuthType, SdkEnvSettingsUpdate } from '../../../shared/types'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 
 import {
@@ -42,10 +43,13 @@ import {
   SettingsSegmentedControl,
   SettingsMenuSelectRow,
   SettingsMenuSelect,
+  SettingsInputRow,
+  SettingsSecretInput,
 } from '@/components/settings'
 import { useUpdateChecker } from '@/hooks/useUpdateChecker'
 import { useAppShellContext } from '@/context/AppShellContext'
 import type { PresetTheme } from '@config/theme'
+import { useTranslation } from '@/i18n'
 import {
   Dialog,
   DialogContent,
@@ -57,6 +61,20 @@ import {
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
   slug: 'app',
+}
+
+interface SdkEnvFormState {
+  baseUrl: string
+  apiTimeoutMs: string
+  model: string
+  authToken: string
+}
+
+const emptySdkEnvState: SdkEnvFormState = {
+  baseUrl: '',
+  apiTimeoutMs: '',
+  model: '',
+  authToken: '',
 }
 
 // ============================================
@@ -322,6 +340,7 @@ function ClaudeOAuthDialogContent(props: ClaudeOAuthDialogProps) {
 // ============================================
 
 export default function AppSettingsPage() {
+  const { t } = useTranslation()
   const { mode, setMode, colorTheme, setColorTheme, setPreviewColorTheme, font, setFont } = useTheme()
 
   // Get workspace ID from context for loading preset themes
@@ -351,6 +370,15 @@ export default function AppSettingsPage() {
   // Notifications state
   const [notificationsEnabled, setNotificationsEnabled] = useState(true)
 
+  // SDK env overrides state
+  const [sdkEnvState, setSdkEnvState] = useState<SdkEnvFormState>(emptySdkEnvState)
+  const [sdkEnvOriginal, setSdkEnvOriginal] = useState<SdkEnvFormState>(emptySdkEnvState)
+  const [sdkHasAuthToken, setSdkHasAuthToken] = useState(false)
+  const [sdkClearAuthToken, setSdkClearAuthToken] = useState(false)
+  const [sdkEnvErrors, setSdkEnvErrors] = useState<{ baseUrl?: string; apiTimeoutMs?: string }>({})
+  const [sdkSaveStatus, setSdkSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle')
+  const [sdkSaveError, setSdkSaveError] = useState<string | null>(null)
+
   // Auto-update state
   const updateChecker = useUpdateChecker()
   const [isCheckingForUpdates, setIsCheckingForUpdates] = useState(false)
@@ -369,13 +397,26 @@ export default function AppSettingsPage() {
     const loadSettings = async () => {
       if (!window.electronAPI) return
       try {
-        const [billing, notificationsOn] = await Promise.all([
+        const [billing, notificationsOn, sdkEnv] = await Promise.all([
           window.electronAPI.getBillingMethod(),
           window.electronAPI.getNotificationsEnabled(),
+          window.electronAPI.getSdkEnvSettings(),
         ])
         setAuthType(billing.authType)
         setHasCredential(billing.hasCredential)
         setNotificationsEnabled(notificationsOn)
+
+        const nextSdkState: SdkEnvFormState = {
+          baseUrl: sdkEnv.baseUrl ?? '',
+          apiTimeoutMs: sdkEnv.apiTimeoutMs ? String(sdkEnv.apiTimeoutMs) : '',
+          model: sdkEnv.model ?? '',
+          authToken: '',
+        }
+        setSdkEnvState(nextSdkState)
+        setSdkEnvOriginal(nextSdkState)
+        setSdkHasAuthToken(sdkEnv.hasAuthToken)
+        setSdkClearAuthToken(false)
+        setSdkEnvErrors({})
       } catch (error) {
         console.error('Failed to load settings:', error)
       } finally {
@@ -560,15 +601,108 @@ export default function AppSettingsPage() {
     await window.electronAPI.setNotificationsEnabled(enabled)
   }, [])
 
+  const sdkIsDirty = (
+    sdkEnvState.baseUrl !== sdkEnvOriginal.baseUrl ||
+    sdkEnvState.apiTimeoutMs !== sdkEnvOriginal.apiTimeoutMs ||
+    sdkEnvState.model !== sdkEnvOriginal.model ||
+    sdkEnvState.authToken.trim().length > 0 ||
+    sdkClearAuthToken
+  )
+
+  const updateSdkField = useCallback(<K extends keyof SdkEnvFormState>(field: K, value: SdkEnvFormState[K]) => {
+    setSdkEnvState(prev => ({ ...prev, [field]: value }))
+    if (field === 'authToken') {
+      setSdkClearAuthToken(false)
+    }
+    setSdkSaveStatus('idle')
+    setSdkSaveError(null)
+  }, [])
+
+  const handleRevertSdkEnv = useCallback(() => {
+    setSdkEnvState(sdkEnvOriginal)
+    setSdkClearAuthToken(false)
+    setSdkEnvErrors({})
+    setSdkSaveStatus('idle')
+    setSdkSaveError(null)
+  }, [sdkEnvOriginal])
+
+  const handleSaveSdkEnv = useCallback(async () => {
+    if (!window.electronAPI) return
+
+    const errors: { baseUrl?: string; apiTimeoutMs?: string } = {}
+    const trimmedBaseUrl = sdkEnvState.baseUrl.trim()
+    if (trimmedBaseUrl) {
+      try {
+        const parsed = new URL(trimmedBaseUrl)
+        if (!['http:', 'https:'].includes(parsed.protocol)) {
+          errors.baseUrl = 'URL must start with http:// or https://'
+        }
+      } catch {
+        errors.baseUrl = 'Invalid URL'
+      }
+    }
+
+    const trimmedTimeout = sdkEnvState.apiTimeoutMs.trim()
+    let apiTimeoutMs: number | null = null
+    if (trimmedTimeout) {
+      const parsed = Number.parseInt(trimmedTimeout, 10)
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        errors.apiTimeoutMs = 'Timeout must be a positive number'
+      } else {
+        apiTimeoutMs = parsed
+      }
+    }
+
+    setSdkEnvErrors(errors)
+    if (Object.keys(errors).length > 0) {
+      return
+    }
+
+    setSdkSaveStatus('saving')
+    setSdkSaveError(null)
+    try {
+      const payload: SdkEnvSettingsUpdate = {
+        baseUrl: trimmedBaseUrl ? trimmedBaseUrl : null,
+        apiTimeoutMs,
+        model: sdkEnvState.model.trim() ? sdkEnvState.model.trim() : null,
+      }
+
+      const trimmedAuthToken = sdkEnvState.authToken.trim()
+      if (trimmedAuthToken) {
+        payload.authToken = trimmedAuthToken
+      } else if (sdkClearAuthToken) {
+        payload.authToken = null
+      }
+
+      const result = await window.electronAPI.updateSdkEnvSettings(payload)
+      const nextState: SdkEnvFormState = {
+        baseUrl: result.baseUrl ?? '',
+        apiTimeoutMs: result.apiTimeoutMs ? String(result.apiTimeoutMs) : '',
+        model: result.model ?? '',
+        authToken: '',
+      }
+      setSdkEnvState(nextState)
+      setSdkEnvOriginal(nextState)
+      setSdkHasAuthToken(result.hasAuthToken)
+      setSdkClearAuthToken(false)
+      setSdkSaveStatus('success')
+      setTimeout(() => setSdkSaveStatus('idle'), 2000)
+    } catch (error) {
+      console.error('Failed to update SDK env settings:', error)
+      setSdkSaveStatus('error')
+      setSdkSaveError(error instanceof Error ? error.message : 'Failed to update SDK settings')
+    }
+  }, [sdkEnvState, sdkClearAuthToken])
+
   return (
     <div className="h-full flex flex-col">
-      <PanelHeader title="App Settings" actions={<HeaderMenu route={routes.view.settings('app')} />} />
+      <PanelHeader title={t('settings' as any)} actions={<HeaderMenu route={routes.view.settings('app')} />} />
       <div className="flex-1 min-h-0 mask-fade-y">
         <ScrollArea className="h-full">
           <div className="px-5 py-7 max-w-3xl mx-auto">
           <div className="space-y-6">
             {/* Appearance */}
-            <SettingsSection title="Appearance">
+            <SettingsSection title={t('appearance' as any)}>
               <SettingsCard>
                 <SettingsRow label="Mode">
                   <SettingsSegmentedControl
@@ -610,10 +744,10 @@ export default function AppSettingsPage() {
             </SettingsSection>
 
             {/* Notifications */}
-            <SettingsSection title="Notifications">
+            <SettingsSection title={t('notifications' as any)}>
               <SettingsCard>
                 <SettingsToggle
-                  label="Desktop notifications"
+                  label={t('notifications' as any)}
                   description="Get notified when AI finishes working in a chat."
                   checked={notificationsEnabled}
                   onCheckedChange={handleNotificationsEnabledChange}
@@ -622,7 +756,7 @@ export default function AppSettingsPage() {
             </SettingsSection>
 
             {/* Billing */}
-            <SettingsSection title="Billing" description="Choose how you pay for AI usage">
+            <SettingsSection title={t('billing' as any)} description="Choose how you pay for AI usage">
               <SettingsCard>
                 <SettingsMenuSelectRow
                   label="Payment method"
@@ -702,8 +836,103 @@ export default function AppSettingsPage() {
               </Dialog>
             </SettingsSection>
 
+            {/* SDK Overrides */}
+            <SettingsSection
+              title={t('developer' as any)}
+              description="Advanced: Override Claude Agent SDK environment variables (leave blank for defaults)."
+            >
+              <SettingsCard>
+                <SettingsInputRow
+                  label="Base URL"
+                  description="Sets ANTHROPIC_BASE_URL"
+                  value={sdkEnvState.baseUrl}
+                  onChange={(value) => updateSdkField('baseUrl', value)}
+                  placeholder="https://api.anthropic.com"
+                  type="url"
+                  error={sdkEnvErrors.baseUrl}
+                />
+                <SettingsInputRow
+                  label="API timeout (ms)"
+                  description="Sets API_TIMEOUT_MS"
+                  value={sdkEnvState.apiTimeoutMs}
+                  onChange={(value) => updateSdkField('apiTimeoutMs', value)}
+                  placeholder="600000"
+                  error={sdkEnvErrors.apiTimeoutMs}
+                />
+                <SettingsInputRow
+                  label="Model override"
+                  description="Sets ANTHROPIC_MODEL and MODEL (e.g., glm-4.7)"
+                  value={sdkEnvState.model}
+                  onChange={(value) => updateSdkField('model', value)}
+                  placeholder="claude-sonnet-4-5-20250929"
+                />
+                <SettingsSecretInput
+                  label="Auth token"
+                  description="Sets ANTHROPIC_AUTH_TOKEN (bearer)"
+                  value={sdkEnvState.authToken}
+                  onChange={(value) => updateSdkField('authToken', value)}
+                  placeholder="Paste token here"
+                  hasExistingValue={sdkHasAuthToken}
+                  inCard
+                />
+                {sdkHasAuthToken && !sdkEnvState.authToken && (
+                  <SettingsRow
+                    label="Stored auth token"
+                    description={sdkClearAuthToken ? 'Token will be cleared when you save.' : 'Token stored securely.'}
+                    action={(
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setSdkClearAuthToken(prev => !prev)}
+                      >
+                        {sdkClearAuthToken ? 'Keep Token' : 'Clear Token'}
+                      </Button>
+                    )}
+                  />
+                )}
+                {sdkSaveError && (
+                  <div className="px-4 pb-3 text-sm text-destructive">
+                    {sdkSaveError}
+                  </div>
+                )}
+                <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-border/40">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleRevertSdkEnv}
+                    disabled={!sdkIsDirty || sdkSaveStatus === 'saving'}
+                  >
+                    <RotateCcw className="size-3 mr-1.5" />
+                    {t('clear' as any)}
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={handleSaveSdkEnv}
+                    disabled={!sdkIsDirty || sdkSaveStatus === 'saving'}
+                  >
+                    {sdkSaveStatus === 'saving' ? (
+                      <>
+                        <Spinner className="mr-1.5" />
+                        {t('loading' as any)}
+                      </>
+                    ) : sdkSaveStatus === 'success' ? (
+                      <>
+                        <Check className="size-3 mr-1.5" />
+                        {t('save' as any)}
+                      </>
+                    ) : (
+                      <>
+                        <Check className="size-3 mr-1.5" />
+                        {t('save' as any)}
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </SettingsCard>
+            </SettingsSection>
+
             {/* About */}
-            <SettingsSection title="About">
+            <SettingsSection title={t('about' as any)}>
               <SettingsCard>
                 <SettingsRow label="Version">
                   <div className="flex items-center gap-2">

@@ -17,6 +17,7 @@ import { Panel } from './Panel'
 import { cn } from '@/lib/utils'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { StoplightProvider } from '@/context/StoplightContext'
+import { useTranslation } from '@/i18n'
 import {
   useNavigationState,
   isChatsNavigation,
@@ -38,6 +39,7 @@ export function MainContentPanel({
   isFocusedMode = false,
   className,
 }: MainContentPanelProps) {
+  const { t } = useTranslation()
   const navState = useNavigationState()
   const { activeWorkspaceId } = useAppShellContext()
 
@@ -101,7 +103,7 @@ export function MainContentPanel({
     return wrapWithStoplight(
       <Panel variant="grow" className={className}>
         <div className="flex items-center justify-center h-full text-muted-foreground">
-          <p className="text-sm">No sources configured</p>
+          <p className="text-sm">{t('noSourcesConfigured' as any)}</p>
         </div>
       </Panel>
     )
@@ -123,7 +125,7 @@ export function MainContentPanel({
     return wrapWithStoplight(
       <Panel variant="grow" className={className}>
         <div className="flex items-center justify-center h-full text-muted-foreground">
-          <p className="text-sm">No skills configured</p>
+          <p className="text-sm">{t('noSkillsConfigured' as any)}</p>
         </div>
       </Panel>
     )
@@ -144,8 +146,8 @@ export function MainContentPanel({
         <div className="flex items-center justify-center h-full text-muted-foreground">
           <p className="text-sm">
             {navState.filter.kind === 'flagged'
-              ? 'No flagged conversations'
-              : 'No conversations yet'}
+              ? t('noConversationsFound' as any)
+              : t('noConversationsYet' as any)}
           </p>
         </div>
       </Panel>
@@ -156,7 +158,7 @@ export function MainContentPanel({
   return wrapWithStoplight(
     <Panel variant="grow" className={className}>
       <div className="flex items-center justify-center h-full text-muted-foreground">
-        <p className="text-sm">Select a conversation to get started</p>
+        <p className="text-sm">{t('noConversationsFound' as any)}</p>
       </div>
     </Panel>
   )

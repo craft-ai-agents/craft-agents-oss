@@ -180,7 +180,6 @@ export default {
   updateSettings: '更新设置',
   welcomeToCraftAgentsLong: '当之无愧的智能体体验。连接任何事物。组织您的会话。完成您毕生工作所需的一切！',
   updateBillingOrChangeSetup: '更新账单或更改您的设置。',
-  chooseBillingMethod: '选择付费方式',
   selectHowToPowerAgents: '选择您想要为 AI 智能体供电的方式。',
   claudeProOrMax: 'Claude Pro/Max',
   useClaudeSubscription: '使用您的 Claude 订阅无限访问。',
@@ -220,7 +219,6 @@ export default {
 
   // App Menu / 应用菜单
   file: '文件',
-  edit: '编辑',
   view: '视图',
   window: '窗口',
   help: '帮助',
@@ -376,5 +374,9 @@ export default {
   codeCopied: '代码已复制！',
   tableOfContents: '目录',
   jumpToSection: '跳转到章节',
+
+  // Data Table Pagination / 数据表分页
+  total: '总计',
+  pageInfo: '第 {{current}} 页，共 {{total}} 页',
 
 } as const;

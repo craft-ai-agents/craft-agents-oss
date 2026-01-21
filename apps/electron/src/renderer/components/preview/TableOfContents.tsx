@@ -2,6 +2,7 @@ import * as React from 'react'
 import { useMemo } from 'react'
 import { cn } from '@/lib/utils'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { useTranslation } from '@/i18n'
 
 interface TocHeading {
   text: string
@@ -54,6 +55,7 @@ export function TableOfContents({
   onHeadingClick,
   className,
 }: TableOfContentsProps) {
+  const { t } = useTranslation()
   // Extract headings with line numbers from markdown content
   const headings = useMemo(() => {
     const lines = content.split('\n')
