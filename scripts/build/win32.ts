@@ -30,6 +30,36 @@ async function killLockingProcesses(): Promise<void> {
 }
 
 /**
+ * Safely remove a directory with exponential backoff retry
+ * Windows file locking can cause transient failures
+ */
+async function safeRmDir(dir: string, maxRetries = 5): Promise<void> {
+  if (!existsSync(dir)) return;
+
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      rmSync(dir, { recursive: true, force: true });
+      // Verify it's actually gone
+      if (!existsSync(dir)) {
+        return;
+      }
+    } catch (error) {
+      lastError = error as Error;
+    }
+
+    // Exponential backoff: 500ms, 1s, 2s, 4s, 8s
+    const delay = 500 * Math.pow(2, attempt);
+    console.log(`    Directory still locked, retrying in ${delay}ms...`);
+    await Bun.sleep(delay);
+  }
+
+  if (existsSync(dir)) {
+    throw new Error(`Failed to remove ${dir} after ${maxRetries} attempts: ${lastError?.message}`);
+  }
+}
+
+/**
  * Build main process with OAuth defines (Windows-specific inline build)
  */
 async function buildMainProcess(config: BuildConfig): Promise<void> {
@@ -127,8 +157,7 @@ export async function packageWindows(config: BuildConfig): Promise<string> {
     const releaseDir = join(electronDir, 'release');
     if (existsSync(releaseDir)) {
       console.log('  Cleaning release directory...');
-      rmSync(releaseDir, { recursive: true, force: true });
-      await Bun.sleep(1000);
+      await safeRmDir(releaseDir);
     }
 
     try {

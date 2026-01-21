@@ -22,10 +22,10 @@ on:
         type: boolean
         default: true
       update_latest:
-        description: 'Update /latest endpoint'
+        description: 'Update /latest endpoint (auto-enabled for tag pushes)'
         required: false
         type: boolean
-        default: true
+        default: false
       force_rebuild:
         description: 'Force rebuild even if artifact exists in S3'
         required: false
@@ -55,6 +55,13 @@ jobs:
         id: version
         run: |
           VERSION=$(grep "APP_VERSION = " packages/shared/src/version/app-version.ts | sed "s/.*= '\([^']*\)'.*/\1/")
+
+          # Validate semver format
+          if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "ERROR: Invalid version format: $VERSION (expected X.Y.Z)"
+            exit 1
+          fi
+
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Version: $VERSION"
 
@@ -312,14 +319,33 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           VERSION="${{ needs.prepare.outputs.version }}"
+
+          # Collect available artifacts (some platforms may not have built)
+          ARTIFACTS=""
+          for ext in dmg exe AppImage; do
+            for file in apps/electron/release/*.$ext; do
+              if [[ -f "$file" ]]; then
+                ARTIFACTS="$ARTIFACTS $file"
+              fi
+            done
+          done
+
+          if [[ -z "$ARTIFACTS" ]]; then
+            echo "WARNING: No artifacts found to upload"
+          fi
+
           if gh release view "v${VERSION}" &>/dev/null; then
-            gh release upload "v${VERSION}" apps/electron/release/*.dmg apps/electron/release/*.exe apps/electron/release/*.AppImage --clobber 2>/dev/null || true
+            echo "Release v${VERSION} exists, uploading artifacts..."
+            if [[ -n "$ARTIFACTS" ]]; then
+              gh release upload "v${VERSION}" $ARTIFACTS --clobber
+            fi
           else
-            gh release create "v${VERSION}" \
-              --title "v${VERSION}" \
-              --generate-notes \
-              apps/electron/release/*.dmg apps/electron/release/*.exe apps/electron/release/*.AppImage 2>/dev/null || \
-            gh release create "v${VERSION}" --title "v${VERSION}" --generate-notes
+            echo "Creating release v${VERSION}..."
+            if [[ -n "$ARTIFACTS" ]]; then
+              gh release create "v${VERSION}" --title "v${VERSION}" --generate-notes $ARTIFACTS
+            else
+              gh release create "v${VERSION}" --title "v${VERSION}" --generate-notes
+            fi
           fi
 
   # Sync to OSS repository

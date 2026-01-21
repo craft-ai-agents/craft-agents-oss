@@ -20,6 +20,11 @@ export interface BuildConfig {
   electronDir: string;
 }
 
+/**
+ * Bun version to bundle with the app.
+ * Update this when upgrading Bun. Check latest at: https://github.com/oven-sh/bun/releases
+ * This should match or be close to the version used in CI (setup-bun action).
+ */
 export const BUN_VERSION = 'bun-v1.3.5';
 
 /**
@@ -27,8 +32,8 @@ export const BUN_VERSION = 'bun-v1.3.5';
  */
 export function getBunDownloadName(platform: Platform, arch: Arch): string {
   const archMap: Record<Arch, string> = {
-    x64: platform === 'darwin' ? 'x64' : 'x64',
-    arm64: platform === 'darwin' ? 'aarch64' : 'aarch64',
+    x64: 'x64',
+    arm64: 'aarch64',
   };
 
   const platformMap: Record<Platform, string> = {

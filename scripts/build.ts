@@ -32,7 +32,6 @@ import {
   buildElectronApp,
   createManifest,
   uploadToS3,
-  getArtifactName,
 } from './build/common';
 import { packageDarwin } from './build/darwin';
 import { packageLinux } from './build/linux';

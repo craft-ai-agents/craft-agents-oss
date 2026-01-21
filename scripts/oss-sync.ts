@@ -13,6 +13,7 @@
 
 import { $ } from 'bun';
 import { parseArgs } from 'util';
+import { createInterface } from 'readline';
 import { readFileSync, existsSync, mkdirSync, rmSync, cpSync, readdirSync, statSync } from 'fs';
 import { dirname, join, relative } from 'path';
 
@@ -332,7 +333,9 @@ async function main(): Promise<void> {
 
     try {
       await $`git clone --branch=${options.branch} ${options.target} ${targetDir}`.quiet();
-    } catch {
+    } catch (error) {
+      // Branch might not exist yet (first sync), try without branch
+      console.log(`  Branch '${options.branch}' not found, cloning default branch...`);
       await $`git clone ${options.target} ${targetDir}`.quiet();
     }
 
@@ -396,11 +399,13 @@ async function main(): Promise<void> {
     console.log('');
     let shouldPush = options.autoConfirm;
     if (!shouldPush) {
-      process.stdout.write(`Push these changes to ${options.target}? [y/N] `);
-      for await (const line of console) {
-        shouldPush = line.toLowerCase().startsWith('y');
-        break;
-      }
+      const rl = createInterface({ input: process.stdin, output: process.stdout });
+      shouldPush = await new Promise<boolean>((resolve) => {
+        rl.question(`Push these changes to ${options.target}? [y/N] `, (answer) => {
+          rl.close();
+          resolve(answer.toLowerCase().startsWith('y'));
+        });
+      });
     }
 
     if (shouldPush) {
