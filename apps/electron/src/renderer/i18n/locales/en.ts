@@ -104,6 +104,11 @@ export default {
   daysAgo: '{{count}} days ago',
   minutesAgo: '{{count}} minutes ago',
   secondsAgo: '{{count}} seconds ago',
+  weeksAgo: '{{count}} weeks ago',
+  monthsAgo: '{{count}} months ago',
+  yearsAgo: '{{count}} years ago',
+  justNow: 'Just now',
+  atTime: 'at {{time}}',
 
   // Accessibility Labels
   goBack: 'Go back',

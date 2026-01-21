@@ -103,6 +103,11 @@ export default {
   daysAgo: '{{count}}天前',
   minutesAgo: '{{count}}分钟前',
   secondsAgo: '{{count}}秒前',
+  weeksAgo: '{{count}}周前',
+  monthsAgo: '{{count}}个月前',
+  yearsAgo: '{{count}}年前',
+  justNow: '刚刚',
+  atTime: '{{time}}',
 
   // Accessibility Labels / 无障碍标签
   goBack: '返回',
