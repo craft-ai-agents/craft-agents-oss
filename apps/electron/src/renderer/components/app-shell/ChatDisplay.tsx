@@ -722,7 +722,7 @@ export function ChatDisplay({
                           setOverlayState({
                             type: 'markdown',
                             content: text,
-                            title: 'Response Preview',
+                            title: t('responsePreview' as any),
                           })
                         }}
                         onOpenDetails={() => {
@@ -731,7 +731,7 @@ export function ChatDisplay({
                           setOverlayState({
                             type: 'markdown',
                             content: markdown,
-                            title: 'Turn Details',
+                            title: t('turnDetails' as any),
                           })
                         }}
                         onOpenActivityDetails={(activity) => {
@@ -1050,7 +1050,7 @@ function ErrorMessage({ message }: { message: Message }) {
               className="flex items-center gap-1 text-xs text-destructive/70 hover:text-destructive transition-colors"
             >
               {detailsOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-              <span>{detailsOpen ? 'Hide' : 'Show'} technical details</span>
+              <span>{detailsOpen ? t('hideTechnicalDetails' as any) : t('showTechnicalDetails' as any)}</span>
             </button>
 
             <AnimatedCollapsibleContent isOpen={detailsOpen} className="overflow-hidden">
@@ -1103,7 +1103,7 @@ function MessageBubble({
             <button
               onClick={() => onPopOut(message)}
               className="absolute top-2 right-2 p-1.5 rounded-md opacity-0 group-hover:opacity-100 transition-opacity hover:bg-foreground/5"
-              title="Open in new window"
+              title={t('openInNewWindow' as any)}
             >
               <ExternalLink className="w-4 h-4 text-muted-foreground hover:text-foreground" />
             </button>
