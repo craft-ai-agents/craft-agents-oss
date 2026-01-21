@@ -31,6 +31,12 @@ interface OnboardingWizardProps {
   onBack: () => void
   onSelectBillingMethod: (method: BillingMethod) => void
   onSubmitCredential: (credential: string) => void
+  onSubmitCustom?: (settings: {
+    baseUrl: string
+    apiTimeoutMs: string
+    model: string
+    authToken: string
+  }) => void
   onStartOAuth?: () => void
   onFinish: () => void
 
@@ -51,7 +57,7 @@ interface OnboardingWizardProps {
  *
  * Manages the step-by-step flow for setting up Craft Agent:
  * 1. Welcome
- * 2. Billing Method (choose: API Key / Claude OAuth)
+ * 2. Billing Method (choose: API Key / Claude OAuth / Custom)
  * 3. Credentials (API Key or Claude OAuth)
  * 4. Completion
  */
@@ -61,6 +67,7 @@ export function OnboardingWizard({
   onBack,
   onSelectBillingMethod,
   onSubmitCredential,
+  onSubmitCustom,
   onStartOAuth,
   onFinish,
   existingClaudeToken,
@@ -99,6 +106,7 @@ export function OnboardingWizard({
             status={state.credentialStatus}
             errorMessage={state.errorMessage}
             onSubmit={onSubmitCredential}
+            onSubmitCustom={onSubmitCustom}
             onStartOAuth={onStartOAuth}
             onBack={onBack}
             existingClaudeToken={existingClaudeToken}

@@ -19,7 +19,7 @@ export interface Workspace {
   mcpAuthType?: McpAuthType;
 }
 
-export type AuthType = 'api_key' | 'oauth_token';
+export type AuthType = 'api_key' | 'oauth_token' | 'custom';
 
 /**
  * OAuth credentials from a fresh authentication flow.
@@ -40,5 +40,9 @@ export interface StoredConfig {
   activeWorkspaceId: string | null;
   activeSessionId: string | null;  // Currently active session (primary scope)
   model?: string;
+  sdkEnv?: {
+    baseUrl?: string;
+    apiTimeoutMs?: number;
+    model?: string;
+  };
 }
-

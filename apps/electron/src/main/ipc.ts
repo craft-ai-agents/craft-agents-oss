@@ -8,9 +8,9 @@ import { SessionManager } from './sessions'
 import { ipcLog, windowLog } from './logger'
 import { WindowManager } from './window-manager'
 import { registerOnboardingHandlers } from './onboarding'
-import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type AuthType, type BillingMethodInfo, type SendMessageOptions } from '../shared/types'
+import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type AuthType, type BillingMethodInfo, type SendMessageOptions, type SdkEnvSettings, type SdkEnvSettingsUpdate } from '../shared/types'
 import { readFileAttachment, perf, validateImageForClaudeAPI, IMAGE_LIMITS } from '@craft-agent/shared/utils'
-import { getAuthType, setAuthType, getPreferencesPath, getModel, setModel, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, type Workspace } from '@craft-agent/shared/config'
+import { getAuthType, setAuthType, getPreferencesPath, getModel, setModel, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, getSdkEnvConfig, updateSdkEnvConfig, type Workspace } from '@craft-agent/shared/config'
 import { getSessionAttachmentsPath } from '@craft-agent/shared/sessions'
 import { loadWorkspaceSources, getSourcesBySlugs, type LoadedSource } from '@craft-agent/shared/sources'
 import { isValidThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
@@ -836,6 +836,8 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       hasCredential = !!(await manager.getApiKey())
     } else if (authType === 'oauth_token') {
       hasCredential = !!(await manager.getClaudeOAuth())
+    } else if (authType === 'custom') {
+      hasCredential = !!(await manager.get({ type: 'anthropic_auth_token' }))
     }
 
     return { authType, hasCredential }
@@ -852,6 +854,8 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
         await manager.delete({ type: 'anthropic_api_key' })
       } else if (oldAuthType === 'oauth_token') {
         await manager.delete({ type: 'claude_oauth' })
+      } else if (oldAuthType === 'custom') {
+        await manager.delete({ type: 'anthropic_auth_token' })
       }
     }
 
@@ -878,6 +882,9 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
           await manager.setClaudeOAuth(credential)
           ipcLog.info('Saved Claude OAuth access token only')
         }
+      } else if (authType === 'custom') {
+        await manager.set({ type: 'anthropic_auth_token' }, { value: credential })
+        ipcLog.info('Saved Anthropic auth token')
       }
     }
 
@@ -886,10 +893,65 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     // Reinitialize SessionManager auth to pick up new credentials
     try {
       await sessionManager.reinitializeAuth()
+      await sessionManager.reinitializeSdkEnvOverrides()
       ipcLog.info('Reinitialized auth after billing update')
     } catch (authError) {
       ipcLog.error('Failed to reinitialize auth:', authError)
       // Don't fail the whole operation if auth reinit fails
+    }
+  })
+
+  // ============================================================
+  // Settings - SDK Env Overrides
+  // ============================================================
+
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_GET_SDK_ENV, async (): Promise<SdkEnvSettings> => {
+    const sdkEnv = getSdkEnvConfig()
+    const manager = getCredentialManager()
+    const authToken = await manager.get({ type: 'anthropic_auth_token' })
+
+    return {
+      baseUrl: sdkEnv.baseUrl ?? null,
+      apiTimeoutMs: sdkEnv.apiTimeoutMs ?? null,
+      model: sdkEnv.model ?? null,
+      hasAuthToken: !!authToken?.value,
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_UPDATE_SDK_ENV, async (_event, updates: SdkEnvSettingsUpdate): Promise<SdkEnvSettings> => {
+    const manager = getCredentialManager()
+
+    const envUpdates: {
+      baseUrl?: string | null
+      apiTimeoutMs?: number | null
+      model?: string | null
+    } = {}
+    if ('baseUrl' in updates) envUpdates.baseUrl = updates.baseUrl
+    if ('apiTimeoutMs' in updates) envUpdates.apiTimeoutMs = updates.apiTimeoutMs
+    if ('model' in updates) envUpdates.model = updates.model
+
+    const nextEnv = updateSdkEnvConfig(envUpdates)
+
+    if ('authToken' in updates) {
+      if (updates.authToken) {
+        await manager.set({ type: 'anthropic_auth_token' }, { value: updates.authToken })
+      } else {
+        await manager.delete({ type: 'anthropic_auth_token' })
+      }
+    }
+
+    try {
+      await sessionManager.reinitializeSdkEnvOverrides()
+    } catch (error) {
+      ipcLog.error('Failed to reinitialize SDK env overrides:', error)
+    }
+
+    const authToken = await manager.get({ type: 'anthropic_auth_token' })
+    return {
+      baseUrl: nextEnv.baseUrl ?? null,
+      apiTimeoutMs: nextEnv.apiTimeoutMs ?? null,
+      model: nextEnv.model ?? null,
+      hasAuthToken: !!authToken?.value,
     }
   })
 

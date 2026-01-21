@@ -47,6 +47,12 @@ export interface StoredConfig {
   activeWorkspaceId: string | null;
   activeSessionId: string | null;  // Currently active session (primary scope)
   model?: string;
+  // SDK environment overrides (optional)
+  sdkEnv?: {
+    baseUrl?: string;
+    apiTimeoutMs?: number;
+    model?: string;
+  };
   // Notifications
   notificationsEnabled?: boolean;  // Desktop notifications for task completion (default: true)
   // Appearance
@@ -226,6 +232,59 @@ export function setModel(model: string): void {
   if (!config) return;
   config.model = model;
   saveConfig(config);
+}
+
+export interface SdkEnvConfig {
+  baseUrl?: string;
+  apiTimeoutMs?: number;
+  model?: string;
+}
+
+export function getSdkEnvConfig(): SdkEnvConfig {
+  const config = loadStoredConfig();
+  return config?.sdkEnv ?? {};
+}
+
+export function updateSdkEnvConfig(updates: {
+  baseUrl?: string | null;
+  apiTimeoutMs?: number | null;
+  model?: string | null;
+}): SdkEnvConfig {
+  const config = loadStoredConfig();
+  if (!config) return {};
+
+  const next: SdkEnvConfig = { ...(config.sdkEnv ?? {}) };
+
+  if ('baseUrl' in updates) {
+    const value = updates.baseUrl?.trim();
+    if (value) {
+      next.baseUrl = value;
+    } else {
+      delete next.baseUrl;
+    }
+  }
+
+  if ('apiTimeoutMs' in updates) {
+    const value = updates.apiTimeoutMs;
+    if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+      next.apiTimeoutMs = value;
+    } else {
+      delete next.apiTimeoutMs;
+    }
+  }
+
+  if ('model' in updates) {
+    const value = updates.model?.trim();
+    if (value) {
+      next.model = value;
+    } else {
+      delete next.model;
+    }
+  }
+
+  config.sdkEnv = Object.keys(next).length ? next : undefined;
+  saveConfig(config);
+  return next;
 }
 
 

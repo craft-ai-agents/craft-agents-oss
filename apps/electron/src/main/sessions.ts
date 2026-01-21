@@ -11,6 +11,7 @@ import {
   getWorkspaces,
   getWorkspaceByNameOrId,
   loadConfigDefaults,
+  getSdkEnvConfig,
   type Workspace,
 } from '@craft-agent/shared/config'
 import { loadWorkspaceConfig } from '@craft-agent/shared/workspaces'
@@ -495,11 +496,16 @@ export class SessionManager {
         process.env.CLAUDE_CODE_OAUTH_TOKEN = billing.claudeOAuthToken
         delete process.env.ANTHROPIC_API_KEY
         sessionLog.info('Set Claude Max OAuth Token')
-      } else if (billing.apiKey) {
+      } else if (billing.type === 'api_key' && billing.apiKey) {
         // Use API key (pay-as-you-go)
         process.env.ANTHROPIC_API_KEY = billing.apiKey
         delete process.env.CLAUDE_CODE_OAUTH_TOKEN
         sessionLog.info('Set Anthropic API Key')
+      } else if (billing.type === 'custom') {
+        // Custom billing uses SDK env overrides (auth token/base URL)
+        delete process.env.ANTHROPIC_API_KEY
+        delete process.env.CLAUDE_CODE_OAUTH_TOKEN
+        sessionLog.info('Using custom billing (SDK overrides)')
       } else {
         sessionLog.error('No authentication configured!')
       }
@@ -507,6 +513,33 @@ export class SessionManager {
       sessionLog.error('Failed to reinitialize auth:', error)
       throw error
     }
+  }
+
+  /**
+   * Apply SDK environment overrides (base URL, auth token, timeout, model)
+   * Stored in config and credentials, merged into SDK subprocess env.
+   */
+  async reinitializeSdkEnvOverrides(): Promise<void> {
+    const sdkEnv = getSdkEnvConfig()
+    const manager = getCredentialManager()
+    const authToken = await manager.get({ type: 'anthropic_auth_token' })
+
+    const env: Record<string, string> = {}
+    if (sdkEnv.baseUrl) env.ANTHROPIC_BASE_URL = sdkEnv.baseUrl
+    if (sdkEnv.apiTimeoutMs) env.API_TIMEOUT_MS = String(sdkEnv.apiTimeoutMs)
+    if (sdkEnv.model) {
+      env.ANTHROPIC_MODEL = sdkEnv.model
+      env.MODEL = sdkEnv.model
+    }
+    if (authToken?.value) env.ANTHROPIC_AUTH_TOKEN = authToken.value
+
+    setAnthropicOptionsEnv(env)
+    sessionLog.info('Applied SDK env overrides', {
+      hasBaseUrl: !!sdkEnv.baseUrl,
+      hasTimeout: !!sdkEnv.apiTimeoutMs,
+      hasModel: !!sdkEnv.model,
+      hasAuthToken: !!authToken?.value,
+    })
   }
 
   async initialize(): Promise<void> {
@@ -565,6 +598,7 @@ export class SessionManager {
 
     // Set up authentication environment variables (critical for SDK to work)
     await this.reinitializeAuth()
+    await this.reinitializeSdkEnvOverrides()
 
     // Load existing sessions from disk
     this.loadSessionsFromDisk()

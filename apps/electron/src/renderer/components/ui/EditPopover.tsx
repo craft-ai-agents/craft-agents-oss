@@ -12,6 +12,7 @@ import { ArrowUp } from 'lucide-react'
 import { Popover, PopoverTrigger, PopoverContent } from './popover'
 import { Button } from './button'
 import { cn } from '@/lib/utils'
+import { useTranslation } from '@/i18n'
 import type { ContentBadge } from '../../../shared/types'
 
 /**
@@ -410,9 +411,10 @@ export function EditPopover({
   onOpenChange: controlledOnOpenChange,
   modal = false,
 }: EditPopoverProps) {
+  const { t } = useTranslation()
   // Build placeholder: use override if provided, otherwise default to "change" wording
   // overridePlaceholder allows contexts like add-source/add-skill to say "add" instead of "change"
-  const basePlaceholder = overridePlaceholder ?? "Describe what you'd like to change..."
+  const basePlaceholder = overridePlaceholder ?? t('describeWhatToChange' as any)
   const placeholder = example
     ? `${basePlaceholder.replace(/\.{3}$/, '')}, e.g., "${example}"`
     : basePlaceholder
@@ -568,6 +570,7 @@ export const EditButton = React.forwardRef<
   HTMLButtonElement,
   React.ComponentPropsWithoutRef<typeof Button>
 >(function EditButton({ className, ...props }, ref) {
+  const { t } = useTranslation()
   return (
     <Button
       ref={ref}
@@ -577,7 +580,7 @@ export const EditButton = React.forwardRef<
       className={cn("h-8 px-3 rounded-[6px] bg-background shadow-minimal text-foreground/70 hover:text-foreground", className)}
       {...props}
     >
-      Edit
+      {t('editFile' as any)}
     </Button>
   )
 })

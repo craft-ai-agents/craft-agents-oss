@@ -33,6 +33,8 @@ export interface AuthState {
     apiKey: string | null;
     /** Claude Max OAuth token (if using oauth_token auth type) */
     claudeOAuthToken: string | null;
+    /** Anthropic auth token (if using custom auth type) */
+    authToken: string | null;
   };
 
   /** Workspace/MCP configuration */
@@ -133,6 +135,7 @@ export async function getAuthState(): Promise<AuthState> {
   const craftToken = await manager.getCraftOAuth();
   const apiKey = await manager.getApiKey();
   const claudeOAuth = await getValidClaudeOAuthToken();
+  const authToken = await manager.get({ type: 'anthropic_auth_token' });
   const activeWorkspace = getActiveWorkspace();
 
   // Determine if billing credentials are satisfied based on auth type
@@ -141,6 +144,8 @@ export async function getAuthState(): Promise<AuthState> {
     hasCredentials = !!apiKey;
   } else if (config?.authType === 'oauth_token') {
     hasCredentials = !!claudeOAuth;
+  } else if (config?.authType === 'custom') {
+    hasCredentials = !!authToken?.value;
   }
 
   return {
@@ -153,6 +158,7 @@ export async function getAuthState(): Promise<AuthState> {
       hasCredentials,
       apiKey,
       claudeOAuthToken: claudeOAuth,
+      authToken: authToken?.value ?? null,
     },
     workspace: {
       hasWorkspace: !!activeWorkspace,

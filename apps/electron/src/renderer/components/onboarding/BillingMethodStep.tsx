@@ -1,9 +1,9 @@
 import { cn } from "@/lib/utils"
-import { Check, CreditCard, Key } from "lucide-react"
+import { Check, CreditCard, Key, Settings } from "lucide-react"
 import { StepFormLayout, BackButton, ContinueButton } from "./primitives"
 import { useTranslation } from "@/i18n"
 
-export type BillingMethod = 'api_key' | 'claude_oauth'
+export type BillingMethod = 'api_key' | 'claude_oauth' | 'custom'
 
 interface BillingOption {
   id: BillingMethod
@@ -23,9 +23,10 @@ interface BillingMethodStepProps {
 /**
  * BillingMethodStep - Choose how to pay for AI usage
  *
- * Two options:
+ * Options:
  * - Claude Pro/Max (recommended) - Uses Claude subscription
  * - API Key - Pay-as-you-go via Anthropic
+ * - Custom / Anthropic Compatible - Custom endpoint + auth token
  */
 export function BillingMethodStep({
   selectedMethod,
@@ -48,6 +49,12 @@ export function BillingMethodStep({
       name: t('anthropicApiKey' as any),
       description: t('payAsYouGo' as any),
       icon: <Key className="size-4" />,
+    },
+    {
+      id: 'custom',
+      name: t('customAnthropicCompatible' as any),
+      description: t('customAnthropicCompatibleDescription' as any),
+      icon: <Settings className="size-4" />,
     },
   ]
 

@@ -185,6 +185,8 @@ export default {
   useClaudeSubscription: '使用您的 Claude 订阅无限访问。',
   anthropicApiKey: 'Anthropic API 密钥',
   payAsYouGo: '使用您自己的 API 密钥按需付费。',
+  customAnthropicCompatible: '自定义 / Anthropic 兼容',
+  customAnthropicCompatibleDescription: '使用兼容的端点与鉴权令牌。',
   recommended: '推荐',
   billingSetup: '账单设置',
   billingSetupDescription: '添加您的凭据以继续。',
@@ -194,6 +196,10 @@ export default {
   apiKey: 'API 密钥',
   apiKeyDescription: '您从控制台获取的 Anthropic API 密钥。',
   apiKeyPlaceholder: 'sk-ant-...',
+  baseUrl: 'Base URL',
+  apiTimeoutMs: 'API 超时（毫秒）',
+  modelOverride: '模型覆盖',
+  authToken: '鉴权令牌',
   learnMoreAboutApiKeys: '了解有关 API 密钥的更多信息',
   credentialsStepSuccess: '凭据保存成功！',
   credentialsStepError: '保存凭据失败，请重试。',
@@ -378,5 +384,16 @@ export default {
   // Data Table Pagination / 数据表分页
   total: '总计',
   pageInfo: '第 {{current}} 页，共 {{total}} 页',
+
+  // Input Placeholders / 输入占位符 (additional)
+  searchSources: '搜索来源...',
+  filterFolders: '筛选文件夹...',
+  chooseWorkingDirectory: '选择工作目录',
+  workingDirectory: '工作目录',
+  addSourcesInSettings: '在设置中添加来源',
+
+  // EditPopover / 编辑弹窗
+  describeWhatToChange: '描述您想要更改的内容...',
+  editFile: '编辑文件',
 
 } as const;

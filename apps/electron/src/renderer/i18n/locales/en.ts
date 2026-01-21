@@ -186,6 +186,8 @@ export default {
   useClaudeSubscription: 'Use your Claude subscription for unlimited access.',
   anthropicApiKey: 'Anthropic API Key',
   payAsYouGo: 'Pay-as-you-go with your own API key.',
+  customAnthropicCompatible: 'Custom / Anthropic Compatible',
+  customAnthropicCompatibleDescription: 'Use a compatible endpoint and auth token.',
   recommended: 'Recommended',
   billingSetup: 'Billing Setup',
   billingSetupDescription: 'Add your credentials to continue.',
@@ -195,6 +197,10 @@ export default {
   apiKey: 'API Key',
   apiKeyDescription: 'Your Anthropic API key from the console.',
   apiKeyPlaceholder: 'sk-ant-...',
+  baseUrl: 'Base URL',
+  apiTimeoutMs: 'API timeout (ms)',
+  modelOverride: 'Model override',
+  authToken: 'Auth token',
   learnMoreAboutApiKeys: 'Learn more about API keys',
   credentialsStepSuccess: 'Credentials saved successfully!',
   credentialsStepError: 'Failed to save credentials. Please try again.',
@@ -379,5 +385,16 @@ export default {
   // Data Table Pagination
   total: 'total',
   pageInfo: 'Page {{current}} of {{total}}',
+
+  // Input Placeholders (additional)
+  searchSources: 'Search sources...',
+  filterFolders: 'Filter folders...',
+  chooseWorkingDirectory: 'Choose working directory',
+  workingDirectory: 'Working directory',
+  addSourcesInSettings: 'Add sources in Settings',
+
+  // EditPopover / 编辑弹窗
+  describeWhatToChange: 'Describe what you\'d like to change...',
+  editFile: 'Edit File',
 
 } as const;

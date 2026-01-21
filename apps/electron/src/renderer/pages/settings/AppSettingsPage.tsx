@@ -27,7 +27,6 @@ import {
   Eye,
   EyeOff,
   Check,
-  RotateCcw,
   ExternalLink,
   CheckCircle2,
 } from 'lucide-react'
@@ -472,6 +471,11 @@ export default function AppSettingsPage() {
     setApiKeyError(undefined)
     setClaudeOAuthStatus('idle')
     setClaudeOAuthError(undefined)
+    if (method === 'custom') {
+      setSdkSaveStatus('idle')
+      setSdkSaveError(null)
+      setSdkEnvErrors({})
+    }
   }, [authType, hasCredential])
 
   // Cancel billing method expansion
@@ -482,6 +486,15 @@ export default function AppSettingsPage() {
     setClaudeOAuthStatus('idle')
     setClaudeOAuthError(undefined)
   }, [])
+
+  const handleCancelCustom = useCallback(() => {
+    setExpandedMethod(null)
+    setSdkEnvState(sdkEnvOriginal)
+    setSdkClearAuthToken(false)
+    setSdkEnvErrors({})
+    setSdkSaveStatus('idle')
+    setSdkSaveError(null)
+  }, [sdkEnvOriginal])
 
   // Save API key
   const handleSaveApiKey = useCallback(async () => {
@@ -609,6 +622,8 @@ export default function AppSettingsPage() {
     sdkClearAuthToken
   )
 
+  const sdkCanSave = sdkIsDirty || authType !== 'custom'
+
   const updateSdkField = useCallback(<K extends keyof SdkEnvFormState>(field: K, value: SdkEnvFormState[K]) => {
     setSdkEnvState(prev => ({ ...prev, [field]: value }))
     if (field === 'authToken') {
@@ -617,14 +632,6 @@ export default function AppSettingsPage() {
     setSdkSaveStatus('idle')
     setSdkSaveError(null)
   }, [])
-
-  const handleRevertSdkEnv = useCallback(() => {
-    setSdkEnvState(sdkEnvOriginal)
-    setSdkClearAuthToken(false)
-    setSdkEnvErrors({})
-    setSdkSaveStatus('idle')
-    setSdkSaveError(null)
-  }, [sdkEnvOriginal])
 
   const handleSaveSdkEnv = useCallback(async () => {
     if (!window.electronAPI) return
@@ -675,6 +682,9 @@ export default function AppSettingsPage() {
       }
 
       const result = await window.electronAPI.updateSdkEnvSettings(payload)
+      if (authType !== 'custom') {
+        await window.electronAPI.updateBillingMethod('custom')
+      }
       const nextState: SdkEnvFormState = {
         baseUrl: result.baseUrl ?? '',
         apiTimeoutMs: result.apiTimeoutMs ? String(result.apiTimeoutMs) : '',
@@ -685,6 +695,9 @@ export default function AppSettingsPage() {
       setSdkEnvOriginal(nextState)
       setSdkHasAuthToken(result.hasAuthToken)
       setSdkClearAuthToken(false)
+      setAuthType('custom')
+      setHasCredential(result.hasAuthToken)
+      setExpandedMethod(null)
       setSdkSaveStatus('success')
       setTimeout(() => setSdkSaveStatus('idle'), 2000)
     } catch (error) {
@@ -692,7 +705,7 @@ export default function AppSettingsPage() {
       setSdkSaveStatus('error')
       setSdkSaveError(error instanceof Error ? error.message : 'Failed to update SDK settings')
     }
-  }, [sdkEnvState, sdkClearAuthToken])
+  }, [sdkEnvState, sdkClearAuthToken, authType])
 
   return (
     <div className="h-full flex flex-col">
@@ -765,13 +778,18 @@ export default function AppSettingsPage() {
                       ? 'API key configured'
                       : authType === 'oauth_token' && hasCredential
                         ? 'Claude connected'
-                        : 'Select a method'
+                        : authType === 'custom' && hasCredential
+                          ? 'Custom configured'
+                          : authType === 'custom'
+                            ? 'Custom (missing token)'
+                            : 'Select a method'
                   }
                   value={authType}
                   onValueChange={(v) => handleMethodClick(v as AuthType)}
                   options={[
                     { value: 'oauth_token', label: 'Claude Pro/Max', description: 'Use your Pro or Max subscription' },
                     { value: 'api_key', label: 'API Key', description: 'Pay-as-you-go with your Anthropic key' },
+                    { value: 'custom', label: 'Custom / Anthropic Compatible', description: 'Use ANTHROPIC_AUTH_TOKEN + base URL' },
                   ]}
                 />
               </SettingsCard>
@@ -834,101 +852,99 @@ export default function AppSettingsPage() {
                   )}
                 </DialogContent>
               </Dialog>
-            </SettingsSection>
 
-            {/* SDK Overrides */}
-            <SettingsSection
-              title={t('developer' as any)}
-              description="Advanced: Override Claude Agent SDK environment variables (leave blank for defaults)."
-            >
-              <SettingsCard>
-                <SettingsInputRow
-                  label="Base URL"
-                  description="Sets ANTHROPIC_BASE_URL"
-                  value={sdkEnvState.baseUrl}
-                  onChange={(value) => updateSdkField('baseUrl', value)}
-                  placeholder="https://api.anthropic.com"
-                  type="url"
-                  error={sdkEnvErrors.baseUrl}
-                />
-                <SettingsInputRow
-                  label="API timeout (ms)"
-                  description="Sets API_TIMEOUT_MS"
-                  value={sdkEnvState.apiTimeoutMs}
-                  onChange={(value) => updateSdkField('apiTimeoutMs', value)}
-                  placeholder="600000"
-                  error={sdkEnvErrors.apiTimeoutMs}
-                />
-                <SettingsInputRow
-                  label="Model override"
-                  description="Sets ANTHROPIC_MODEL and MODEL (e.g., glm-4.7)"
-                  value={sdkEnvState.model}
-                  onChange={(value) => updateSdkField('model', value)}
-                  placeholder="claude-sonnet-4-5-20250929"
-                />
-                <SettingsSecretInput
-                  label="Auth token"
-                  description="Sets ANTHROPIC_AUTH_TOKEN (bearer)"
-                  value={sdkEnvState.authToken}
-                  onChange={(value) => updateSdkField('authToken', value)}
-                  placeholder="Paste token here"
-                  hasExistingValue={sdkHasAuthToken}
-                  inCard
-                />
-                {sdkHasAuthToken && !sdkEnvState.authToken && (
-                  <SettingsRow
-                    label="Stored auth token"
-                    description={sdkClearAuthToken ? 'Token will be cleared when you save.' : 'Token stored securely.'}
-                    action={(
+              {/* Custom Billing Dialog */}
+              <Dialog open={expandedMethod === 'custom'} onOpenChange={(open) => !open && handleCancelCustom()}>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Custom / Anthropic Compatible</DialogTitle>
+                    <DialogDescription>
+                      Configure ANTHROPIC-compatible settings and token
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <SettingsInputRow
+                      label="Base URL"
+                      description="Sets ANTHROPIC_BASE_URL"
+                      value={sdkEnvState.baseUrl}
+                      onChange={(value) => updateSdkField('baseUrl', value)}
+                      placeholder="https://api.anthropic.com"
+                      type="url"
+                      error={sdkEnvErrors.baseUrl}
+                      inCard={false}
+                    />
+                    <SettingsInputRow
+                      label="API timeout (ms)"
+                      description="Sets API_TIMEOUT_MS"
+                      value={sdkEnvState.apiTimeoutMs}
+                      onChange={(value) => updateSdkField('apiTimeoutMs', value)}
+                      placeholder="600000"
+                      error={sdkEnvErrors.apiTimeoutMs}
+                      inCard={false}
+                    />
+                    <SettingsInputRow
+                      label="Model override"
+                      description="Sets ANTHROPIC_MODEL and MODEL (e.g., glm-4.7)"
+                      value={sdkEnvState.model}
+                      onChange={(value) => updateSdkField('model', value)}
+                      placeholder="claude-sonnet-4-5-20250929"
+                      inCard={false}
+                    />
+                    <SettingsSecretInput
+                      label="Auth token"
+                      description="Sets ANTHROPIC_AUTH_TOKEN (bearer)"
+                      value={sdkEnvState.authToken}
+                      onChange={(value) => updateSdkField('authToken', value)}
+                      placeholder="Paste token here"
+                      hasExistingValue={sdkHasAuthToken}
+                    />
+                    {sdkHasAuthToken && !sdkEnvState.authToken && (
+                      <div className="text-xs text-muted-foreground">
+                        Stored token detected{sdkClearAuthToken ? ' (will be cleared on save).' : '.'}
+                      </div>
+                    )}
+                    {sdkHasAuthToken && !sdkEnvState.authToken && (
+                      <div className="flex justify-end">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setSdkClearAuthToken(prev => !prev)}
+                        >
+                          {sdkClearAuthToken ? 'Keep Token' : 'Clear Token'}
+                        </Button>
+                      </div>
+                    )}
+                    {sdkSaveError && (
+                      <p className="text-sm text-destructive">{sdkSaveError}</p>
+                    )}
+                    <div className="flex items-center justify-end gap-2 pt-2">
                       <Button
                         variant="ghost"
-                        size="sm"
-                        onClick={() => setSdkClearAuthToken(prev => !prev)}
+                        onClick={handleCancelCustom}
+                        disabled={sdkSaveStatus === 'saving'}
                       >
-                        {sdkClearAuthToken ? 'Keep Token' : 'Clear Token'}
+                        Cancel
                       </Button>
-                    )}
-                  />
-                )}
-                {sdkSaveError && (
-                  <div className="px-4 pb-3 text-sm text-destructive">
-                    {sdkSaveError}
+                      <Button
+                        onClick={handleSaveSdkEnv}
+                        disabled={!sdkCanSave || sdkSaveStatus === 'saving'}
+                      >
+                        {sdkSaveStatus === 'saving' ? (
+                          <>
+                            <Spinner className="mr-1.5" />
+                            Saving...
+                          </>
+                        ) : (
+                          <>
+                            <Check className="size-3 mr-1.5" />
+                            Save
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   </div>
-                )}
-                <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-border/40">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleRevertSdkEnv}
-                    disabled={!sdkIsDirty || sdkSaveStatus === 'saving'}
-                  >
-                    <RotateCcw className="size-3 mr-1.5" />
-                    {t('clear' as any)}
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={handleSaveSdkEnv}
-                    disabled={!sdkIsDirty || sdkSaveStatus === 'saving'}
-                  >
-                    {sdkSaveStatus === 'saving' ? (
-                      <>
-                        <Spinner className="mr-1.5" />
-                        {t('loading' as any)}
-                      </>
-                    ) : sdkSaveStatus === 'success' ? (
-                      <>
-                        <Check className="size-3 mr-1.5" />
-                        {t('save' as any)}
-                      </>
-                    ) : (
-                      <>
-                        <Check className="size-3 mr-1.5" />
-                        {t('save' as any)}
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </SettingsCard>
+                </DialogContent>
+              </Dialog>
             </SettingsSection>
 
             {/* About */}

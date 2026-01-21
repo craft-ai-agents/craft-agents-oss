@@ -1158,9 +1158,9 @@ export function FreeFormInput({
                   >
                     {sources.length === 0 ? (
                       <div className="text-xs text-muted-foreground p-3">
-                        No sources configured.
+                        {t('noSourcesConfigured' as any)}
                         <br />
-                        Add sources in Settings.
+                        {t('addSourcesInSettings' as any)}
                       </div>
                     ) : (
                       <CommandPrimitive
@@ -1172,7 +1172,7 @@ export function FreeFormInput({
                             ref={sourceFilterInputRef}
                             value={sourceFilter}
                             onValueChange={setSourceFilter}
-                            placeholder="Search sources..."
+                            placeholder={t('searchSources' as any)}
                             className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
                           />
                         </div>
@@ -1545,10 +1545,10 @@ function WorkingDirectoryBadge({
             tooltip={
               hasFolder ? (
                 <span className="flex flex-col gap-0.5">
-                  <span className="font-medium">Working directory</span>
+                  <span className="font-medium">{t('workingDirectory' as any)}</span>
                   <span className="text-xs opacity-70">{formatPathForDisplay(workingDirectory, homeDir)}</span>
                 </span>
-              ) : "Choose working directory"
+              ) : t('chooseWorkingDirectory' as any)
             }
           />
         </span>
@@ -1562,7 +1562,7 @@ function WorkingDirectoryBadge({
                 ref={inputRef}
                 value={filter}
                 onValueChange={setFilter}
-                placeholder="Filter folders..."
+                placeholder={t('filterFolders' as any)}
                 className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
               />
             </div>

@@ -533,6 +533,9 @@ export const IPC_CHANNELS = {
   // Settings - Billing
   SETTINGS_GET_BILLING_METHOD: 'settings:getBillingMethod',
   SETTINGS_UPDATE_BILLING_METHOD: 'settings:updateBillingMethod',
+  // Settings - SDK env overrides
+  SETTINGS_GET_SDK_ENV: 'settings:getSdkEnv',
+  SETTINGS_UPDATE_SDK_ENV: 'settings:updateSdkEnv',
 
   // Settings - Model
   SETTINGS_GET_MODEL: 'settings:getModel',
@@ -731,6 +734,9 @@ export interface ElectronAPI {
   // Settings - Billing
   getBillingMethod(): Promise<BillingMethodInfo>
   updateBillingMethod(authType: AuthType, credential?: string): Promise<void>
+  // Settings - SDK env overrides
+  getSdkEnvSettings(): Promise<SdkEnvSettings>
+  updateSdkEnvSettings(settings: SdkEnvSettingsUpdate): Promise<SdkEnvSettings>
 
   // Settings - Model (global default)
   getModel(): Promise<string | null>
@@ -847,6 +853,23 @@ export interface ClaudeOAuthResult {
 export interface BillingMethodInfo {
   authType: AuthType
   hasCredential: boolean
+}
+
+/**
+ * SDK environment overrides for Claude Agent SDK
+ */
+export interface SdkEnvSettings {
+  baseUrl: string | null
+  apiTimeoutMs: number | null
+  model: string | null
+  hasAuthToken: boolean
+}
+
+export interface SdkEnvSettingsUpdate {
+  baseUrl?: string | null
+  apiTimeoutMs?: number | null
+  model?: string | null
+  authToken?: string | null
 }
 
 /**

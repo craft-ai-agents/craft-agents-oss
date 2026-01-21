@@ -168,6 +168,10 @@ const api: ElectronAPI = {
   getBillingMethod: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET_BILLING_METHOD),
   updateBillingMethod: (authType: AuthType, credential?: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_UPDATE_BILLING_METHOD, authType, credential),
+  // Settings - SDK env overrides
+  getSdkEnvSettings: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET_SDK_ENV),
+  updateSdkEnvSettings: (settings: import('../shared/types').SdkEnvSettingsUpdate) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_UPDATE_SDK_ENV, settings),
 
   // Settings - Model (global default)
   getModel: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET_MODEL),

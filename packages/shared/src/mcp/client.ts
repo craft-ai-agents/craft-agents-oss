@@ -41,6 +41,7 @@ export type McpClientConfig = HttpMcpClientConfig | StdioMcpClientConfig;
 const BLOCKED_ENV_VARS = [
   // Craft Agent auth (set by the app itself)
   'ANTHROPIC_API_KEY',
+  'ANTHROPIC_AUTH_TOKEN',
   'CLAUDE_CODE_OAUTH_TOKEN',
 
   // AWS credentials

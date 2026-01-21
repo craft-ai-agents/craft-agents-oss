@@ -9,6 +9,7 @@
  *
  * Examples:
  *   - anthropic_api_key::global
+ *   - anthropic_auth_token::global
  *   - claude_oauth::global
  *   - craft_oauth::global (for Craft API, not MCP)
  *   - source_oauth::{workspaceId}::{sourceId}
@@ -20,6 +21,7 @@
 /** Types of credentials we store */
 export type CredentialType =
   | 'anthropic_api_key'
+  | 'anthropic_auth_token'
   | 'claude_oauth'
   | 'craft_oauth'
   | 'workspace_oauth'
@@ -35,6 +37,7 @@ export type CredentialType =
 /** Valid credential types for validation */
 const VALID_CREDENTIAL_TYPES: readonly CredentialType[] = [
   'anthropic_api_key',
+  'anthropic_auth_token',
   'claude_oauth',
   'craft_oauth',
   'workspace_oauth',

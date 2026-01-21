@@ -1,5 +1,4 @@
 import { useState } from "react"
-import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
@@ -8,6 +7,7 @@ import { Spinner } from "@craft-agent/ui"
 import type { BillingMethod } from "./BillingMethodStep"
 import { StepFormLayout, BackButton, ContinueButton, type StepIconVariant } from "./primitives"
 import { useTranslation } from "@/i18n"
+import { SettingsSecretInput } from "@/components/settings"
 
 export type CredentialStatus = 'idle' | 'validating' | 'success' | 'error'
 
@@ -18,6 +18,13 @@ interface CredentialsStepProps {
   onSubmit: (credential: string) => void
   onStartOAuth?: () => void
   onBack: () => void
+  // Custom billing
+  onSubmitCustom?: (settings: {
+    baseUrl: string
+    apiTimeoutMs: string
+    model: string
+    authToken: string
+  }) => void
   // Claude OAuth specific
   existingClaudeToken?: string | null
   isClaudeCliInstalled?: boolean
@@ -47,10 +54,11 @@ function getOAuthIconVariant(status: CredentialStatus): StepIconVariant {
 }
 
 /**
- * CredentialsStep - Enter API key or start OAuth flow
+ * CredentialsStep - Enter API key, start OAuth, or set custom endpoint
  *
  * For API Key: Shows input field with validation
  * For Claude OAuth: Shows button to start OAuth flow
+ * For Custom: Shows base URL, timeout, model, and auth token inputs
  */
 export function CredentialsStep({
   billingMethod,
@@ -71,9 +79,14 @@ export function CredentialsStep({
   const [value, setValue] = useState('')
   const [showValue, setShowValue] = useState(false)
   const [authCode, setAuthCode] = useState('')
+  const [customBaseUrl, setCustomBaseUrl] = useState('')
+  const [customTimeout, setCustomTimeout] = useState('')
+  const [customModel, setCustomModel] = useState('')
+  const [customAuthToken, setCustomAuthToken] = useState('')
 
   const isApiKey = billingMethod === 'api_key'
   const isOAuth = billingMethod === 'claude_oauth'
+  const isCustom = billingMethod === 'custom'
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -88,6 +101,17 @@ export function CredentialsStep({
     if (authCode.trim() && onSubmitAuthCode) {
       onSubmitAuthCode(authCode.trim())
     }
+  }
+
+  const handleCustomSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!onSubmitCustom) return
+    onSubmitCustom({
+      baseUrl: customBaseUrl.trim(),
+      apiTimeoutMs: customTimeout.trim(),
+      model: customModel.trim(),
+      authToken: customAuthToken.trim(),
+    })
   }
 
   // OAuth flow
@@ -232,6 +256,84 @@ export function CredentialsStep({
             </button>
           </div>
         )}
+      </StepFormLayout>
+    )
+  }
+
+  if (isCustom) {
+    return (
+      <StepFormLayout
+        title={t('customAnthropicCompatible' as any)}
+        description={t('customAnthropicCompatibleDescription' as any)}
+        actions={
+          <>
+            <BackButton onClick={onBack} disabled={status === 'validating'} />
+            <ContinueButton
+              type="submit"
+              form="custom-billing-form"
+              disabled={!customAuthToken.trim()}
+              loading={status === 'validating'}
+              loadingText={t('loading' as any) + '...'}
+            />
+          </>
+        }
+      >
+        <form id="custom-billing-form" onSubmit={handleCustomSubmit}>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="custom-base-url">{t('baseUrl' as any)}</Label>
+              <Input
+                id="custom-base-url"
+                type="text"
+                value={customBaseUrl}
+                onChange={(e) => setCustomBaseUrl(e.target.value)}
+                placeholder="https://open.bigmodel.cn/api/anthropic"
+                className="border-0 bg-foreground-2 shadow-minimal focus-visible:ring-2 focus-visible:ring-ring"
+                disabled={status === 'validating'}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="custom-timeout">{t('apiTimeoutMs' as any)}</Label>
+              <Input
+                id="custom-timeout"
+                type="number"
+                min={1}
+                value={customTimeout}
+                onChange={(e) => setCustomTimeout(e.target.value)}
+                placeholder="3000000"
+                className="border-0 bg-foreground-2 shadow-minimal focus-visible:ring-2 focus-visible:ring-ring"
+                disabled={status === 'validating'}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="custom-model">{t('modelOverride' as any)}</Label>
+              <Input
+                id="custom-model"
+                type="text"
+                value={customModel}
+                onChange={(e) => setCustomModel(e.target.value)}
+                placeholder="glm-4.7"
+                className="border-0 bg-foreground-2 shadow-minimal focus-visible:ring-2 focus-visible:ring-ring"
+                disabled={status === 'validating'}
+              />
+            </div>
+
+            <SettingsSecretInput
+              label={t('authToken' as any)}
+              value={customAuthToken}
+              onChange={setCustomAuthToken}
+              placeholder="ANTHROPIC_AUTH_TOKEN"
+              disabled={status === 'validating'}
+              className="pt-1"
+            />
+
+            {status === 'error' && errorMessage && (
+              <p className="text-sm text-destructive">{errorMessage}</p>
+            )}
+          </div>
+        </form>
       </StepFormLayout>
     )
   }

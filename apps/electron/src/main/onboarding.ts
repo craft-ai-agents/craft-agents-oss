@@ -120,6 +120,10 @@ export function registerOnboardingHandlers(sessionManager: SessionManager): void
             await manager.setClaudeOAuth(config.credential)
             mainLog.info('[Onboarding:Main] Claude OAuth saved (access token only)')
           }
+        } else if (config.authType === 'custom') {
+          mainLog.info('[Onboarding:Main] Saving custom auth token...')
+          await manager.set({ type: 'anthropic_auth_token' }, { value: config.credential })
+          mainLog.info('[Onboarding:Main] Custom auth token saved')
         }
       } else {
         mainLog.info('[Onboarding:Main] Skipping credential save', {

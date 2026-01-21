@@ -47,7 +47,7 @@ export function useTranslation(): UseTranslationReturn {
         return saved;
       }
     }
-    return 'en';
+    return 'zh';
   });
 
   // Load saved language on mount

@@ -1230,6 +1230,7 @@ export default function App() {
           onBack={onboarding.handleBack}
           onSelectBillingMethod={onboarding.handleSelectBillingMethod}
           onSubmitCredential={onboarding.handleSubmitCredential}
+          onSubmitCustom={onboarding.handleSubmitCustom}
           onStartOAuth={onboarding.handleStartOAuth}
           onFinish={onboarding.handleFinish}
           existingClaudeToken={onboarding.existingClaudeToken}

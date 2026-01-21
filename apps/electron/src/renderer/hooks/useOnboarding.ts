@@ -4,7 +4,7 @@
  * Manages the state machine for the onboarding wizard.
  * Simplified billing-only flow:
  * 1. Welcome
- * 2. Billing Method (API Key / Claude OAuth)
+ * 2. Billing Method (API Key / Claude OAuth / Custom)
  * 3. Credentials (API Key or Claude OAuth)
  * 4. Complete
  */
@@ -38,6 +38,12 @@ interface UseOnboardingReturn {
 
   // Credentials
   handleSubmitCredential: (credential: string) => void
+  handleSubmitCustom: (settings: {
+    baseUrl: string
+    apiTimeoutMs: string
+    model: string
+    authToken: string
+  }) => void
   handleStartOAuth: () => void
 
   // Claude OAuth
@@ -62,6 +68,7 @@ function billingMethodToAuthType(method: BillingMethod): AuthType {
   switch (method) {
     case 'api_key': return 'api_key'
     case 'claude_oauth': return 'oauth_token'
+    case 'custom': return 'custom'
   }
 }
 
@@ -185,6 +192,72 @@ export function useOnboarding({
       }))
     }
   }, [handleSaveConfig])
+
+  const handleSubmitCustom = useCallback(async (settings: {
+    baseUrl: string
+    apiTimeoutMs: string
+    model: string
+    authToken: string
+  }) => {
+    setState(s => ({
+      ...s,
+      credentialStatus: 'validating',
+      completionStatus: 'saving',
+      errorMessage: undefined,
+    }))
+
+    try {
+      if (!settings.authToken.trim()) {
+        setState(s => ({
+          ...s,
+          credentialStatus: 'error',
+          errorMessage: 'Please enter a valid auth token',
+        }))
+        return
+      }
+
+      const timeoutValue = settings.apiTimeoutMs.trim()
+      const parsedTimeout = timeoutValue ? Number(timeoutValue) : null
+      if (timeoutValue && (!Number.isFinite(parsedTimeout) || parsedTimeout <= 0)) {
+        setState(s => ({
+          ...s,
+          credentialStatus: 'error',
+          errorMessage: 'API timeout must be a positive number',
+        }))
+        return
+      }
+
+      const result = await window.electronAPI.saveOnboardingConfig({ authType: 'custom' })
+      if (!result.success) {
+        setState(s => ({
+          ...s,
+          credentialStatus: 'error',
+          errorMessage: result.error || 'Failed to save configuration',
+        }))
+        return
+      }
+
+      await window.electronAPI.updateSdkEnvSettings({
+        baseUrl: settings.baseUrl || null,
+        apiTimeoutMs: parsedTimeout,
+        model: settings.model || null,
+        authToken: settings.authToken,
+      })
+
+      setState(s => ({
+        ...s,
+        credentialStatus: 'success',
+        completionStatus: 'complete',
+        step: 'complete',
+      }))
+    } catch (error) {
+      setState(s => ({
+        ...s,
+        credentialStatus: 'error',
+        errorMessage: error instanceof Error ? error.message : 'Failed to save settings',
+      }))
+    }
+  }, [])
 
   // Claude OAuth state
   const [existingClaudeToken, setExistingClaudeToken] = useState<string | null>(null)
@@ -347,6 +420,7 @@ export function useOnboarding({
     handleBack,
     handleSelectBillingMethod,
     handleSubmitCredential,
+    handleSubmitCustom,
     handleStartOAuth,
     existingClaudeToken,
     isClaudeCliInstalled,
