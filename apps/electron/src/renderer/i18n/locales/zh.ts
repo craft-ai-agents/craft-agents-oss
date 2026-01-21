@@ -269,6 +269,8 @@ export default {
   createSkillToGetStarted: '创建技能以开始使用',
   addYourFirstSource: '添加您的第一个来源',
   addYourFirstSkill: '添加您的第一个技能',
+  workspaceTagline: '您的想法与工具相遇，成就无限可能。',
+  startFreshWorkspace: '创建一个空白工作空间，从头开始。',
 
   // Workspace Switcher / 工作空间切换器
   switchWorkspace: '切换工作空间',

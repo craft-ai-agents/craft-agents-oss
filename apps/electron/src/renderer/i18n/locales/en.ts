@@ -270,6 +270,8 @@ export default {
   createSkillToGetStarted: 'Create a skill to get started',
   addYourFirstSource: 'Add your first source',
   addYourFirstSkill: 'Add your first skill',
+  workspaceTagline: 'Where your ideas meet the tools to make them happen.',
+  startFreshWorkspace: 'Start fresh with an empty workspace.',
 
   // Workspace Switcher
   switchWorkspace: 'Switch Workspace',
