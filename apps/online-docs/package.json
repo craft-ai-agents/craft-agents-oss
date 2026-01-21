@@ -6,5 +6,6 @@
   },
   "devDependencies": {
     "mintlify": "^4"
-  }
+  },
+  "version": "0.2.24"
 }
