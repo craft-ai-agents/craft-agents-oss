@@ -39,6 +39,7 @@ import { cn, isHexColor } from '@/lib/utils'
 import { useMenuComponents } from '@/components/ui/menu-context'
 import { getStateColor, getStateIcon, type TodoStateId } from '@/config/todo-states'
 import type { TodoState } from '@/config/todo-states'
+import { useTranslation } from '@/i18n'
 
 export interface SessionMenuProps {
   /** Session ID */
@@ -88,20 +89,22 @@ export function SessionMenu({
   onOpenInNewWindow,
   onDelete,
 }: SessionMenuProps) {
+  const { t } = useTranslation()
+
   // Share handlers
   const handleShare = async () => {
     const result = await window.electronAPI.sessionCommand(sessionId, { type: 'shareToViewer' }) as { success: boolean; url?: string; error?: string } | undefined
     if (result?.success && result.url) {
       await navigator.clipboard.writeText(result.url)
-      toast.success('Link copied to clipboard', {
+      toast.success(t('linkCopiedToClipboard' as any), {
         description: result.url,
         action: {
-          label: 'Open',
+          label: t('open' as any),
           onClick: () => window.electronAPI.openUrl(result.url!),
         },
       })
     } else {
-      toast.error('Failed to share', { description: result?.error || 'Unknown error' })
+      toast.error(t('failedToShare' as any), { description: result?.error || t('unknownError' as any) })
     }
   }
 
@@ -112,25 +115,25 @@ export function SessionMenu({
   const handleCopyLink = async () => {
     if (sharedUrl) {
       await navigator.clipboard.writeText(sharedUrl)
-      toast.success('Link copied to clipboard')
+      toast.success(t('linkCopiedToClipboard' as any))
     }
   }
 
   const handleUpdateShare = async () => {
     const result = await window.electronAPI.sessionCommand(sessionId, { type: 'updateShare' })
     if (result?.success) {
-      toast.success('Share updated')
+      toast.success(t('shareUpdated' as any))
     } else {
-      toast.error('Failed to update share', { description: result?.error })
+      toast.error(t('failedToUpdateShare' as any), { description: result?.error })
     }
   }
 
   const handleRevokeShare = async () => {
     const result = await window.electronAPI.sessionCommand(sessionId, { type: 'revokeShare' })
     if (result?.success) {
-      toast.success('Sharing stopped')
+      toast.success(t('sharingStopped' as any))
     } else {
-      toast.error('Failed to stop sharing', { description: result?.error })
+      toast.error(t('failedToStopSharing' as any), { description: result?.error })
     }
   }
 
@@ -142,16 +145,16 @@ export function SessionMenu({
     const result = await window.electronAPI.sessionCommand(sessionId, { type: 'copyPath' }) as { success: boolean; path?: string } | undefined
     if (result?.success && result.path) {
       await navigator.clipboard.writeText(result.path)
-      toast.success('Path copied to clipboard')
+      toast.success(t('linkCopiedToClipboard' as any))
     }
   }
 
   const handleRefreshTitle = async () => {
     const result = await window.electronAPI.sessionCommand(sessionId, { type: 'refreshTitle' }) as { success: boolean; title?: string; error?: string } | undefined
     if (result?.success) {
-      toast.success('Title refreshed', { description: result.title })
+      toast.success(t('titleRefreshed' as any), { description: result.title })
     } else {
-      toast.error('Failed to refresh title', { description: result?.error || 'Unknown error' })
+      toast.error(t('unknownError' as any), { description: result?.error || t('unknownError' as any) })
     }
   }
 
@@ -164,7 +167,7 @@ export function SessionMenu({
       {!sharedUrl ? (
         <MenuItem onClick={handleShare}>
           <CloudUpload className="h-3.5 w-3.5" />
-          <span className="flex-1">Share</span>
+          <span className="flex-1">{t('share' as any)}</span>
         </MenuItem>
       ) : (
         <Sub>
@@ -179,7 +182,7 @@ export function SessionMenu({
             </MenuItem>
             <MenuItem onClick={handleCopyLink}>
               <Copy className="h-3.5 w-3.5" />
-              <span className="flex-1">Copy Link</span>
+              <span className="flex-1">{t('copy' as any)} Link</span>
             </MenuItem>
             <MenuItem onClick={handleUpdateShare}>
               <RefreshCw className="h-3.5 w-3.5" />
@@ -270,7 +273,7 @@ export function SessionMenu({
       {/* Rename */}
       <MenuItem onClick={onRename}>
         <Pencil className="h-3.5 w-3.5" />
-        <span className="flex-1">Rename</span>
+        <span className="flex-1">{t('rename' as any)}</span>
       </MenuItem>
 
       {/* Regenerate Title - AI-generate based on recent messages */}
@@ -296,7 +299,7 @@ export function SessionMenu({
       {/* Copy Path */}
       <MenuItem onClick={handleCopyPath}>
         <Copy className="h-3.5 w-3.5" />
-        <span className="flex-1">Copy Path</span>
+        <span className="flex-1">{t('copy' as any)} Path</span>
       </MenuItem>
 
       <Separator />
@@ -304,7 +307,7 @@ export function SessionMenu({
       {/* Delete */}
       <MenuItem onClick={onDelete} variant="destructive">
         <Trash2 className="h-3.5 w-3.5" />
-        <span className="flex-1">Delete</span>
+        <span className="flex-1">{t('delete' as any)}</span>
       </MenuItem>
     </>
   )
