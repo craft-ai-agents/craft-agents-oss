@@ -20,6 +20,7 @@
     "./auth/callback-page": "./src/auth/callback-page.ts",
     "./auth/types": "./src/auth/types.ts",
     "./config": "./src/config/index.ts",
+    "./docs": "./src/docs/index.ts",
     "./config/types": "./src/config/types.ts",
     "./credentials": "./src/credentials/index.ts",
     "./headless": "./src/headless/index.ts",
