@@ -1334,11 +1334,8 @@ function AppShellContent({
               title={isSidebarVisible ? listTitle : undefined}
               compensateForStoplight={!isSidebarVisible}
               badge={
-                // Help icon next to the title for different views
-                isSourcesNavigation(navState) ? <HelpPopover feature="sources" side="bottom" /> :
-                isSkillsNavigation(navState) ? <HelpPopover feature="skills" side="bottom" /> :
-                isChatsNavigation(navState) ? <HelpPopover feature="statuses" side="bottom" /> :
-                undefined
+                // Help icon next to the title only for chat views (Sources/Skills have it in the sidebar)
+                isChatsNavigation(navState) ? <HelpPopover feature="statuses" side="bottom" /> : undefined
               }
               actions={
                 <>
