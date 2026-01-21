@@ -52,7 +52,11 @@
     "marketing:dev": "vite dev --config apps/marketing/vite.config.ts",
     "marketing:build": "vite build --config apps/marketing/vite.config.ts",
     "marketing:preview": "vite preview --config apps/marketing/vite.config.ts",
-    "docs:dev": "cd apps/online-docs && npm install && npx mintlify dev"
+    "docs:dev": "cd apps/online-docs && npm install && npx mintlify dev",
+    "build": "bun run scripts/build.ts",
+    "release": "bun run scripts/release.ts",
+    "check-version": "bun run scripts/check-version.ts",
+    "oss:sync": "bun run scripts/oss-sync.ts"
   },
   "devDependencies": {
     "@aws-sdk/client-s3": "^3.947.0",

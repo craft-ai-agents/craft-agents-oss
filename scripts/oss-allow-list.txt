@@ -79,3 +79,7 @@ packages/ui/**/*
 scripts/sync-version.ts
 scripts/install-app.sh
 scripts/install-app.ps1
+scripts/build.ts
+scripts/build/**/*
+scripts/release.ts
+scripts/check-version.ts

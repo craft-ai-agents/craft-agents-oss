@@ -196,9 +196,11 @@ async function uploadElectronBuilds(version: string) {
   console.log(`  ✓ ${manifestKey}`);
   console.log(`  Final platforms in manifest: ${Object.keys(electronManifest.binaries).join(', ')}`);
 
-  // If --latest, update electron/latest
+  // If --latest, update electron/latest and copy files to /latest/ folder
   if (isLatest) {
     console.log('Updating electron/latest...');
+
+    // Update version pointer (for install scripts)
     await s3.send(new PutObjectCommand({
       Bucket: BUCKET,
       Key: 'electron/latest',
@@ -207,6 +209,35 @@ async function uploadElectronBuilds(version: string) {
       CacheControl: 'no-cache, no-store, must-revalidate',
     }));
     console.log('  ✓ electron/latest');
+
+    // Copy all installers to /latest/ folder for direct download URLs
+    // This enables stable URLs like: https://agents.craft.do/electron/latest/Craft-Agent-arm64.dmg
+    console.log('Copying installers to electron/latest/...');
+    for (const installerFile of installerFiles) {
+      const filePath = join(electronReleaseDir, installerFile);
+      const content = readFileSync(filePath);
+      const contentType = getContentType(installerFile);
+      const latestKey = `electron/latest/${installerFile}`;
+
+      await s3.send(new PutObjectCommand({
+        Bucket: BUCKET,
+        Key: latestKey,
+        Body: content,
+        ContentType: contentType,
+        CacheControl: 'no-cache, no-store, must-revalidate',
+      }));
+      console.log(`  ✓ ${latestKey}`);
+    }
+
+    // Also copy manifest to /latest/
+    await s3.send(new PutObjectCommand({
+      Bucket: BUCKET,
+      Key: 'electron/latest/manifest.json',
+      Body: JSON.stringify(electronManifest, null, 2),
+      ContentType: 'application/json',
+      CacheControl: 'no-cache, no-store, must-revalidate',
+    }));
+    console.log('  ✓ electron/latest/manifest.json');
   }
 
   // Upload install scripts if --script is set

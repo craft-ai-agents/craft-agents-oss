@@ -1,0 +1,441 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: 'Platforms to build (comma-separated: darwin,win32,linux or "all")'
+        required: false
+        type: string
+        default: 'all'
+      sync_oss:
+        description: 'Sync to OSS repository after build'
+        required: false
+        type: boolean
+        default: true
+      create_release:
+        description: 'Create GitHub release with binaries'
+        required: false
+        type: boolean
+        default: true
+      update_latest:
+        description: 'Update /latest endpoint'
+        required: false
+        type: boolean
+        default: true
+      force_rebuild:
+        description: 'Force rebuild even if artifact exists in S3'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # Determine what to build
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      is_tag: ${{ steps.check.outputs.is_tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version
+        id: version
+        run: |
+          VERSION=$(grep "APP_VERSION = " packages/shared/src/version/app-version.ts | sed "s/.*= '\([^']*\)'.*/\1/")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Version: $VERSION"
+
+      - name: Check trigger type
+        id: check
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            echo "is_tag=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_tag=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build matrix
+        id: matrix
+        run: |
+          PLATFORMS="${{ inputs.platforms || 'all' }}"
+
+          # For tag triggers, always build all platforms
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            PLATFORMS="all"
+          fi
+
+          MATRIX='{"include":['
+          FIRST=true
+
+          # macOS arm64
+          if [[ "$PLATFORMS" == "all" || "$PLATFORMS" == *"darwin"* ]]; then
+            if [ "$FIRST" = true ]; then FIRST=false; else MATRIX+=','; fi
+            MATRIX+='{"os":"macos-14","platform":"darwin","arch":"arm64","ext":"dmg"}'
+            MATRIX+=','
+            MATRIX+='{"os":"macos-15-intel","platform":"darwin","arch":"x64","ext":"dmg"}'
+          fi
+
+          # Windows
+          if [[ "$PLATFORMS" == "all" || "$PLATFORMS" == *"win32"* ]]; then
+            if [ "$FIRST" = true ]; then FIRST=false; else MATRIX+=','; fi
+            MATRIX+='{"os":"windows-2019","platform":"win32","arch":"x64","ext":"exe"}'
+          fi
+
+          # Linux
+          if [[ "$PLATFORMS" == "all" || "$PLATFORMS" == *"linux"* ]]; then
+            if [ "$FIRST" = true ]; then FIRST=false; else MATRIX+=','; fi
+            MATRIX+='{"os":"ubuntu-latest","platform":"linux","arch":"x64","ext":"AppImage"}'
+          fi
+
+          MATRIX+=']}'
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+          echo "Matrix: $MATRIX"
+
+  # Build for each platform in parallel
+  build:
+    needs: prepare
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check if artifact exists
+        id: check
+        shell: bash
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          ARTIFACT="Craft-Agent-${{ matrix.arch }}.${{ matrix.ext }}"
+          URL="https://agents.craft.do/electron/${VERSION}/${ARTIFACT}"
+
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --head --connect-timeout 10 "$URL" || echo "000")
+
+          if [ "$HTTP_STATUS" = "200" ] && [ "${{ inputs.force_rebuild }}" != "true" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download existing artifact
+        if: steps.check.outputs.skip == 'true'
+        shell: bash
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          ARTIFACT="Craft-Agent-${{ matrix.arch }}.${{ matrix.ext }}"
+          URL="https://agents.craft.do/electron/${VERSION}/${ARTIFACT}"
+
+          mkdir -p apps/electron/release
+          curl -fsSL "$URL" -o "apps/electron/release/${ARTIFACT}"
+
+      - name: Setup Bun
+        if: steps.check.outputs.skip != 'true'
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache dependencies
+        if: steps.check.outputs.skip != 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+
+      - name: Install dependencies
+        if: steps.check.outputs.skip != 'true'
+        run: bun install
+
+      # macOS code signing
+      - name: Import Code Signing Certificate (macOS)
+        if: steps.check.outputs.skip != 'true' && matrix.platform == 'darwin' && env.APPLE_CERTIFICATE_BASE64 != ''
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH=$RUNNER_TEMP/build.keychain-db
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 24)
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          CERT_PATH=$RUNNER_TEMP/certificate.p12
+          echo "$APPLE_CERTIFICATE_BASE64" | base64 --decode > "$CERT_PATH"
+          security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          rm "$CERT_PATH"
+
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
+          security default-keychain -s "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+      # Build using unified build script
+      - name: Build (macOS)
+        if: steps.check.outputs.skip != 'true' && matrix.platform == 'darwin'
+        run: bun run scripts/build.ts --platform=darwin --arch=${{ matrix.arch }}
+        env:
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          SLACK_OAUTH_CLIENT_ID: ${{ secrets.SLACK_OAUTH_CLIENT_ID }}
+          SLACK_OAUTH_CLIENT_SECRET: ${{ secrets.SLACK_OAUTH_CLIENT_SECRET }}
+          MICROSOFT_OAUTH_CLIENT_ID: ${{ secrets.MICROSOFT_OAUTH_CLIENT_ID }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+
+      - name: Configure Defender exclusions (Windows)
+        if: steps.check.outputs.skip != 'true' && matrix.platform == 'win32'
+        shell: powershell
+        run: |
+          Add-MpPreference -ExclusionPath "${{ github.workspace }}" -ErrorAction SilentlyContinue
+          Add-MpPreference -ExclusionProcess "bun.exe" -ErrorAction SilentlyContinue
+
+      - name: Build (Windows)
+        if: steps.check.outputs.skip != 'true' && matrix.platform == 'win32'
+        run: bun run scripts/build.ts --platform=win32 --arch=${{ matrix.arch }}
+        env:
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          SLACK_OAUTH_CLIENT_ID: ${{ secrets.SLACK_OAUTH_CLIENT_ID }}
+          SLACK_OAUTH_CLIENT_SECRET: ${{ secrets.SLACK_OAUTH_CLIENT_SECRET }}
+          MICROSOFT_OAUTH_CLIENT_ID: ${{ secrets.MICROSOFT_OAUTH_CLIENT_ID }}
+
+      # Windows code signing with Azure Key Vault
+      - name: Sign Windows executable
+        if: steps.check.outputs.skip != 'true' && matrix.platform == 'win32' && env.AZURE_CERT_KVU != ''
+        env:
+          AZURE_CERT_KVU: ${{ secrets.AZURE_CERT_KVU }}
+          AZURE_CERT_KVC: ${{ secrets.AZURE_CERT_KVC }}
+          AZURE_CERT_KVI: ${{ secrets.AZURE_CERT_KVI }}
+          AZURE_CERT_KVS: ${{ secrets.AZURE_CERT_KVS }}
+          AZURE_CERT_KVT: ${{ secrets.AZURE_CERT_KVT }}
+        shell: powershell
+        run: |
+          dotnet tool install --global AzureSignTool
+          $ExePath = Get-ChildItem -Path "apps/electron/release" -Filter "*.exe" | Select-Object -First 1
+          AzureSignTool sign `
+            --azure-key-vault-url "$env:AZURE_CERT_KVU" `
+            --azure-key-vault-client-id "$env:AZURE_CERT_KVI" `
+            --azure-key-vault-client-secret "$env:AZURE_CERT_KVS" `
+            --azure-key-vault-tenant-id "$env:AZURE_CERT_KVT" `
+            --azure-key-vault-certificate "$env:AZURE_CERT_KVC" `
+            --timestamp-rfc3161 "http://timestamp.digicert.com" `
+            --file-digest sha256 `
+            "$($ExePath.FullName)"
+
+      - name: Build (Linux)
+        if: steps.check.outputs.skip != 'true' && matrix.platform == 'linux'
+        run: bun run scripts/build.ts --platform=linux --arch=${{ matrix.arch }}
+        env:
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          SLACK_OAUTH_CLIENT_ID: ${{ secrets.SLACK_OAUTH_CLIENT_ID }}
+          SLACK_OAUTH_CLIENT_SECRET: ${{ secrets.SLACK_OAUTH_CLIENT_SECRET }}
+          MICROSOFT_OAUTH_CLIENT_ID: ${{ secrets.MICROSOFT_OAUTH_CLIENT_ID }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.platform }}-${{ matrix.arch }}
+          path: apps/electron/release/Craft-Agent-${{ matrix.arch }}.${{ matrix.ext }}
+          retention-days: 7
+
+  # Upload to S3 and create GitHub release
+  upload:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: apps/electron/release
+          pattern: build-*
+          merge-multiple: true
+
+      - name: Upload to S3
+        env:
+          S3_VERSIONS_BUCKET_ENDPOINT: ${{ secrets.S3_VERSIONS_BUCKET_ENDPOINT }}
+          S3_VERSIONS_BUCKET_ACCESS_KEY_ID: ${{ secrets.S3_VERSIONS_BUCKET_ACCESS_KEY_ID }}
+          S3_VERSIONS_BUCKET_SECRET_ACCESS_KEY: ${{ secrets.S3_VERSIONS_BUCKET_SECRET_ACCESS_KEY }}
+        run: |
+          FLAGS=""
+          # Update latest for tag pushes or if explicitly requested
+          if [[ "${{ needs.prepare.outputs.is_tag }}" == "true" ]] || [[ "${{ inputs.update_latest }}" == "true" ]]; then
+            FLAGS="$FLAGS --latest --script"
+          fi
+          bun run scripts/upload.ts $FLAGS
+
+      - name: Create git tag (if not already a tag push)
+        if: needs.prepare.outputs.is_tag != 'true' && github.ref == 'refs/heads/main'
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          TAG="v${VERSION}"
+
+          if git ls-remote --tags origin | grep -q "refs/tags/${TAG}$"; then
+            echo "Tag $TAG already exists"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git tag -a "$TAG" -m "Release $TAG"
+            git push origin "$TAG"
+          fi
+
+      - name: Create GitHub Release
+        if: inputs.create_release != false
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          if gh release view "v${VERSION}" &>/dev/null; then
+            gh release upload "v${VERSION}" apps/electron/release/*.dmg apps/electron/release/*.exe apps/electron/release/*.AppImage --clobber 2>/dev/null || true
+          else
+            gh release create "v${VERSION}" \
+              --title "v${VERSION}" \
+              --generate-notes \
+              apps/electron/release/*.dmg apps/electron/release/*.exe apps/electron/release/*.AppImage 2>/dev/null || \
+            gh release create "v${VERSION}" --title "v${VERSION}" --generate-notes
+          fi
+
+  # Sync to OSS repository
+  oss-sync:
+    needs: [prepare, upload]
+    if: inputs.sync_oss != false
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Sync to OSS
+        run: |
+          TARGET="https://x-access-token:${{ secrets.OSS_REPO_TOKEN }}@github.com/lukilabs/craft-agents-oss.git"
+          bun run scripts/oss-sync.ts --target "$TARGET" --yes --force
+
+  # Create OSS release with changelog
+  oss-release:
+    needs: [prepare, oss-sync]
+    if: inputs.create_release != false && inputs.sync_oss != false
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get commits since last release
+        id: commits
+        run: |
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD)
+          git log "$LAST_TAG"..HEAD --pretty=format:"- %s" --no-merges | head -50 > /tmp/commits.txt
+
+      - name: Generate changelog
+        id: changelog
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          COMMITS=$(cat /tmp/commits.txt)
+          VERSION="${{ needs.prepare.outputs.version }}"
+
+          RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
+            -H "Content-Type: application/json" \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01" \
+            -d "$(jq -n \
+              --arg commits "$COMMITS" \
+              --arg version "$VERSION" \
+              '{
+                model: "claude-haiku-4-20250514",
+                max_tokens: 1024,
+                messages: [{
+                  role: "user",
+                  content: "Write a changelog for version \($version) of Craft Agents. Commits:\n\($commits)\n\nInclude only user-facing changes. Group into Features, Improvements, Bug Fixes. Keep it brief (5-10 items max). Start directly with content."
+                }]
+              }')")
+
+          echo "$RESPONSE" | jq -r '.content[0].text // "No changelog generated"' > /tmp/changelog.md
+
+      - name: Download binaries
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          BASE_URL="https://agents.craft.do/electron/$VERSION"
+          mkdir -p /tmp/binaries
+
+          curl -fsSL -o "/tmp/binaries/Craft-Agents-$VERSION-mac-arm64.dmg" "$BASE_URL/Craft-Agent-arm64.dmg" || true
+          curl -fsSL -o "/tmp/binaries/Craft-Agents-$VERSION-mac-x64.dmg" "$BASE_URL/Craft-Agent-x64.dmg" || true
+          curl -fsSL -o "/tmp/binaries/Craft-Agents-$VERSION-win-x64.exe" "$BASE_URL/Craft-Agent-x64.exe" || true
+          curl -fsSL -o "/tmp/binaries/Craft-Agents-$VERSION-linux-x64.AppImage" "$BASE_URL/Craft-Agent-x64.AppImage" || true
+
+      - name: Create OSS Release
+        env:
+          GH_TOKEN: ${{ secrets.OSS_REPO_TOKEN }}
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          CHANGELOG=$(cat /tmp/changelog.md)
+
+          cd /tmp
+          git clone "https://x-access-token:${{ secrets.OSS_REPO_TOKEN }}@github.com/lukilabs/craft-agents-oss.git" oss
+          cd oss
+
+          if gh release view "v$VERSION" &>/dev/null; then
+            echo "Release v$VERSION already exists"
+            exit 0
+          fi
+
+          gh release create "v$VERSION" --title "v$VERSION" --notes "$CHANGELOG"
+
+          for file in /tmp/binaries/*; do
+            if [[ -f "$file" && -s "$file" ]]; then
+              gh release upload "v$VERSION" "$file" --clobber || true
+            fi
+          done
+
+      - name: Print summary
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          echo ""
+          echo "=========================================="
+          echo "  Release v$VERSION Complete"
+          echo "=========================================="
+          echo ""
+          echo "Install:"
+          echo "  macOS/Linux: curl -fsSL https://agents.craft.do/install-app.sh | bash"
+          echo "  Windows:     irm https://agents.craft.do/install-app.ps1 | iex"

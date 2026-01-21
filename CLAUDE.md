@@ -63,84 +63,142 @@ cd craft-tui-agent-2 && bun run electron:dev  # Port 2173, config ~/.craft-agent
 
 ## Releasing
 
-### Electron Desktop App (Multi-Platform)
+### Quick Release (Recommended)
 
-**Via GitHub Actions (recommended):**
-1. Go to Actions → "Build and Upload" → Run workflow
-2. Check/uncheck platforms to build (macOS, Windows, Linux - all enabled by default)
-3. Optionally check "upload to /latest" and "upload install.sh"
-4. Builds run in parallel across selected platforms/architectures
+```bash
+# Bump version, commit, and push (triggers CI build)
+bun run release patch                  # 0.2.24 → 0.2.25
+bun run release minor                  # 0.2.24 → 0.3.0
+bun run release major                  # 0.2.24 → 1.0.0
+
+# With options
+bun run release patch --tag --push     # Also create and push git tag
+bun run release patch --oss            # Also sync to OSS repo
+bun run release --oss-only             # Just sync existing version to OSS
+```
+
+### Tag-Based Release (Zero Commands)
+
+Push a version tag to trigger the full release pipeline:
+
+```bash
+git tag v0.2.25 && git push --tags
+# → Builds all platforms (macOS, Windows, Linux)
+# → Uploads to S3
+# → Syncs to OSS repository
+# → Creates GitHub releases on both repos
+```
+
+### Manual Build
+
+```bash
+# Unified build script for all platforms
+bun run build --platform=darwin --arch=arm64
+bun run build --platform=darwin --arch=x64
+bun run build --platform=win32 --arch=x64
+bun run build --platform=linux --arch=x64
+
+# With upload
+bun run build --platform=darwin --arch=arm64 --upload --latest
+```
+
+### Via GitHub Actions
+
+1. Go to Actions → "Release" → Run workflow
+2. Configure platforms and options
+3. Builds run in parallel, then upload and sync
 
 **Supported platforms:**
 
 | Platform | Architecture | Output | Runner |
 |----------|--------------|--------|--------|
 | macOS | arm64 | `.dmg` | `macos-14` |
-| macOS | x64 | `.dmg` | `macos-13` |
-| Windows | x64 | `.exe` | `windows-latest` |
+| macOS | x64 | `.dmg` | `macos-15-intel` |
+| Windows | x64 | `.exe` | `windows-2019` |
 | Linux | x64 | `.AppImage` | `ubuntu-latest` |
-| Linux | arm64 | `.AppImage` | `ubuntu-24.04-arm64` |
 
-**Local build:**
+### OSS Sync
+
+Sync allowed files to the public OSS repo:
+
 ```bash
-# macOS
-bash apps/electron/scripts/build-dmg.sh arm64
-bash apps/electron/scripts/build-dmg.sh x64
-
-# Windows (from PowerShell)
-powershell -ExecutionPolicy Bypass -File apps/electron/scripts/build-win.ps1
-
-# Linux
-bash apps/electron/scripts/build-linux.sh x64
-bash apps/electron/scripts/build-linux.sh arm64
-
-# Build and upload to S3 (any platform)
-bash apps/electron/scripts/build-dmg.sh arm64 --upload --latest --script
+bun run oss:sync                       # Sync to OSS
+bun run oss:sync --dry-run             # Preview changes
+bun run oss:sync --force               # Skip contribution check
 ```
 
-**Build script options:**
-- `arm64` or `x64` - Target architecture (default varies by platform)
-- `--upload` - Upload installer to S3 after building
-- `--latest` - Also update `electron/latest` (requires --upload)
-- `--script` - Also upload install scripts (requires --upload)
+The OSS sync uses `scripts/oss-allow-list.txt` to control which files are public.
 
-**Environment variables for build:**
-- `APPLE_SIGNING_IDENTITY` - Code signing identity (macOS, optional)
-- `APPLE_ID` - Apple ID for notarization (macOS, optional)
-- `APPLE_TEAM_ID` - Apple Team ID (macOS, optional)
-- `APPLE_APP_SPECIFIC_PASSWORD` - App-specific password (macOS, optional)
-- `S3_VERSIONS_BUCKET_ENDPOINT` - S3 endpoint (for --upload)
-- `S3_VERSIONS_BUCKET_ACCESS_KEY_ID` - S3 access key (for --upload)
-- `S3_VERSIONS_BUCKET_SECRET_ACCESS_KEY` - S3 secret key (for --upload)
+### Environment Variables
 
-**S3 structure after build:**
+**Code Signing (macOS):**
+- `APPLE_SIGNING_IDENTITY` - Code signing identity
+- `APPLE_ID` - Apple ID for notarization
+- `APPLE_TEAM_ID` - Apple Team ID
+- `APPLE_APP_SPECIFIC_PASSWORD` - App-specific password
+
+**OAuth Credentials (baked into build):**
+- `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET`
+- `SLACK_OAUTH_CLIENT_ID` / `SLACK_OAUTH_CLIENT_SECRET`
+- `MICROSOFT_OAUTH_CLIENT_ID`
+
+**S3 Upload:**
+- `S3_VERSIONS_BUCKET_ENDPOINT`
+- `S3_VERSIONS_BUCKET_ACCESS_KEY_ID`
+- `S3_VERSIONS_BUCKET_SECRET_ACCESS_KEY`
+
+### S3 Structure
+
 ```
 agents-craft-do/
 ├── electron/
-│   ├── {version}/
-│   │   ├── Craft-Agent-arm64.dmg      # macOS Apple Silicon
-│   │   ├── Craft-Agent-x64.dmg        # macOS Intel
-│   │   ├── Craft-Agent-x64.exe        # Windows
-│   │   ├── Craft-Agent-x64.AppImage   # Linux x64
-│   │   ├── Craft-Agent-arm64.AppImage # Linux ARM64
+│   ├── {version}/                    # Versioned releases
+│   │   ├── Craft-Agent-arm64.dmg
+│   │   ├── Craft-Agent-x64.dmg
+│   │   ├── Craft-Agent-x64.exe
+│   │   ├── Craft-Agent-x64.AppImage
 │   │   └── manifest.json
-│   ├── latest
-│   ├── install-app.sh
-│   └── install-app.ps1
+│   ├── latest/                       # Always points to current version
+│   │   ├── Craft-Agent-arm64.dmg     # ← Use for marketing site
+│   │   ├── Craft-Agent-x64.dmg
+│   │   ├── Craft-Agent-x64.exe
+│   │   ├── Craft-Agent-x64.AppImage
+│   │   └── manifest.json
+│   └── latest                        # JSON: { "version": "X.Y.Z" }
+├── install-app.sh
+└── install-app.ps1
 ```
 
-**Install:**
-- **macOS:** `curl -fsSL https://agents.craft.do/install-app.sh | bash`
-- **Windows:** `irm https://agents.craft.do/install-app.ps1 | iex`
+### Download URLs (for Marketing Site)
 
-### Version Sync
+Use `/latest/` URLs for stable links that auto-update with each release:
 
-When bumping the version:
+| Platform | Stable URL |
+|----------|------------|
+| macOS (Apple Silicon) | `https://agents.craft.do/electron/latest/Craft-Agent-arm64.dmg` |
+| macOS (Intel) | `https://agents.craft.do/electron/latest/Craft-Agent-x64.dmg` |
+| Windows | `https://agents.craft.do/electron/latest/Craft-Agent-x64.exe` |
+| Linux | `https://agents.craft.do/electron/latest/Craft-Agent-x64.AppImage` |
 
-1. Update `packages/shared/src/version/app-version.ts` → `APP_VERSION = 'X.Y.Z'`
-2. Run `bun run scripts/sync-version.ts` to sync all package.json files
+### Install Commands
 
-The sync script reads APP_VERSION and updates all package.json files in the monorepo.
+```bash
+# macOS / Linux
+curl -fsSL https://agents.craft.do/install-app.sh | bash
+
+# Windows (PowerShell)
+irm https://agents.craft.do/install-app.ps1 | iex
+```
+
+### Version Management
+
+**Source of truth:** `packages/shared/src/version/app-version.ts`
+
+```bash
+bun run release patch         # Bump + sync + commit
+bun run check-version         # Verify all package.json match
+bun run scripts/sync-version.ts  # Manual sync
+```
 
 ## Architecture
 
