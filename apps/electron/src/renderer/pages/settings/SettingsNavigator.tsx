@@ -17,6 +17,7 @@ import {
   StyledDropdownMenuItem,
 } from '@/components/ui/styled-dropdown'
 import { DropdownMenuProvider } from '@/components/ui/menu-context'
+import { useTranslation } from '@/i18n'
 /** Custom app settings icon */
 const AppSettingsIcon = ({ className }: { className?: string }) => (
   <svg
@@ -121,38 +122,41 @@ interface SettingsItem {
   description: string
 }
 
-const settingsItems: SettingsItem[] = [
-  {
-    id: 'app',
-    label: 'App',
-    icon: AppSettingsIcon,
-    description: 'Appearance, notifications, billing',
-  },
-  {
-    id: 'workspace',
-    label: 'Workspace',
-    icon: WorkspaceIcon,
-    description: 'Model, mode cycling, advanced',
-  },
-  {
-    id: 'permissions',
-    label: 'Permissions',
-    icon: ShieldIcon,
-    description: 'Allowed commands in Explore mode',
-  },
-  {
-    id: 'shortcuts',
-    label: 'Shortcuts',
-    icon: KeyboardIcon,
-    description: 'Keyboard shortcuts reference',
-  },
-  {
-    id: 'preferences',
-    label: 'Preferences',
-    icon: PreferencesIcon,
-    description: 'Your personal preferences',
-  },
-]
+// Helper function to get settings items with translations
+function getSettingsItems(t: (key: any) => string): SettingsItem[] {
+  return [
+    {
+      id: 'app',
+      label: t('settingsApp' as any),
+      icon: AppSettingsIcon,
+      description: t('settingsAppDescription' as any),
+    },
+    {
+      id: 'workspace',
+      label: t('settingsWorkspace' as any),
+      icon: WorkspaceIcon,
+      description: t('settingsWorkspaceDescription' as any),
+    },
+    {
+      id: 'permissions',
+      label: t('settingsPermissions' as any),
+      icon: ShieldIcon,
+      description: t('settingsPermissionsDescription' as any),
+    },
+    {
+      id: 'shortcuts',
+      label: t('settingsShortcuts' as any),
+      icon: KeyboardIcon,
+      description: t('settingsShortcutsDescription' as any),
+    },
+    {
+      id: 'preferences',
+      label: t('settingsPreferences' as any),
+      icon: PreferencesIcon,
+      description: t('settingsPreferencesDescription' as any),
+    },
+  ]
+}
 
 interface SettingsItemRowProps {
   item: SettingsItem
@@ -167,6 +171,7 @@ interface SettingsItemRowProps {
  */
 function SettingsItemRow({ item, isSelected, isFirst, onSelect }: SettingsItemRowProps) {
   const [menuOpen, setMenuOpen] = useState(false)
+  const { t } = useTranslation()
   const Icon = item.icon
 
   // Open settings page in a new window via deep link
@@ -241,7 +246,7 @@ function SettingsItemRow({ item, isSelected, isFirst, onSelect }: SettingsItemRo
                 <DropdownMenuProvider>
                   <StyledDropdownMenuItem onClick={handleOpenInNewWindow}>
                     <AppWindow className="h-3.5 w-3.5" />
-                    <span className="flex-1">Open in New Window</span>
+                    <span className="flex-1">{t('openInNewWindow' as any)}</span>
                   </StyledDropdownMenuItem>
                 </DropdownMenuProvider>
               </StyledDropdownMenuContent>
@@ -257,6 +262,9 @@ export default function SettingsNavigator({
   selectedSubpage,
   onSelectSubpage,
 }: SettingsNavigatorProps) {
+  const { t } = useTranslation()
+  const settingsItems = getSettingsItems(t)
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto">

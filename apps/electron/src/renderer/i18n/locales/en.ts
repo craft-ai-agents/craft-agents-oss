@@ -133,4 +133,43 @@ export default {
   // Keyboard Shortcuts
   pressKToSearch: 'Press ⌘K to search',
 
+  // Settings Navigator
+  settingsApp: 'App',
+  settingsAppDescription: 'Appearance, notifications, billing',
+  settingsWorkspace: 'Workspace',
+  settingsWorkspaceDescription: 'Model, mode cycling, advanced',
+  settingsPermissions: 'Permissions',
+  settingsPermissionsDescription: 'Allowed commands in Explore mode',
+  settingsShortcuts: 'Shortcuts',
+  settingsShortcutsDescription: 'Keyboard shortcuts reference',
+  settingsPreferences: 'Preferences',
+  settingsPreferencesDescription: 'Your personal preferences',
+  openInNewWindow: 'Open in New Window',
+
+  // Preferences Page
+  preferencesTitle: 'Preferences',
+  basicInfo: 'Basic Info',
+  basicInfoDescription: 'Help Craft Agent personalize responses to you.',
+  nameLabel: 'Name',
+  nameDescription: 'How Craft Agent should address you.',
+  namePlaceholder: 'Your name',
+  timezoneLabel: 'Timezone',
+  timezoneDescription: 'Used for relative dates like "tomorrow" or "next week".',
+  timezonePlaceholder: 'e.g., America/New_York',
+  languageLabel: 'Language',
+  languageDescription: 'Preferred language for Craft Agent\'s responses.',
+  languagePlaceholder: 'e.g., English',
+  locationTitle: 'Location',
+  locationDescription: 'Enables location-aware responses like weather, local time, and regional context.',
+  cityLabel: 'City',
+  cityDescription: 'Your city for local information and context.',
+  cityPlaceholder: 'e.g., New York',
+  countryLabel: 'Country',
+  countryDescription: 'Your country for regional formatting and context.',
+  countryPlaceholder: 'e.g., USA',
+  notesTitle: 'Notes',
+  notesDescription: 'Free-form context that helps Craft Agent understand your preferences.',
+  notesPlaceholder: 'Any additional context you\'d like Craft Agent to know...',
+  editFile: 'Edit File',
+
 } as const;

@@ -194,6 +194,7 @@ function SessionItem({
   searchQuery,
   todoStates,
 }: SessionItemProps) {
+  const { t } = useTranslation()
   const [menuOpen, setMenuOpen] = useState(false)
   const [contextMenuOpen, setContextMenuOpen] = useState(false)
   const [todoMenuOpen, setTodoMenuOpen] = useState(false)

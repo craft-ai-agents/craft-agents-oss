@@ -132,4 +132,43 @@ export default {
   // Keyboard Shortcuts / 键盘快捷键
   pressKToSearch: '按 ⌘K 搜索',
 
+  // Settings Navigator / 设置导航器
+  settingsApp: '应用',
+  settingsAppDescription: '外观、通知、账单',
+  settingsWorkspace: '工作区',
+  settingsWorkspaceDescription: '模型、模式循环、高级',
+  settingsPermissions: '权限',
+  settingsPermissionsDescription: '探索模式中允许的命令',
+  settingsShortcuts: '快捷键',
+  settingsShortcutsDescription: '键盘快捷键参考',
+  settingsPreferences: '偏好设置',
+  settingsPreferencesDescription: '您的个人偏好',
+  openInNewWindow: '在新窗口中打开',
+
+  // Preferences Page / 偏好设置页面
+  preferencesTitle: '偏好设置',
+  basicInfo: '基本信息',
+  basicInfoDescription: '帮助 Craft Agent 为您个性化响应。',
+  nameLabel: '姓名',
+  nameDescription: 'Craft Agent 应该如何称呼您。',
+  namePlaceholder: '您的姓名',
+  timezoneLabel: '时区',
+  timezoneDescription: '用于相对日期,如"明天"或"下周"。',
+  timezonePlaceholder: '例如: America/New_York',
+  languageLabel: '语言',
+  languageDescription: 'Craft Agent 响应的首选语言。',
+  languagePlaceholder: '例如: English',
+  locationTitle: '位置',
+  locationDescription: '启用位置感知响应,如天气、本地时间和区域上下文。',
+  cityLabel: '城市',
+  cityDescription: '您的城市,用于本地信息和上下文。',
+  cityPlaceholder: '例如: New York',
+  countryLabel: '国家',
+  countryDescription: '您的国家,用于区域格式化和上下文。',
+  countryPlaceholder: '例如: USA',
+  notesTitle: '备注',
+  notesDescription: '自由格式的上下文,帮助 Craft Agent 了解您的偏好。',
+  notesPlaceholder: '您希望 Craft Agent 了解的任何其他上下文...',
+  editFile: '编辑文件',
+
 } as const;
