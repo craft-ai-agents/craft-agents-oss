@@ -44,6 +44,7 @@ export default {
   deleteConversationMessage: '确定要删除"{{name}}"吗？此操作无法撤销。',
   conversationDeleted: '对话已删除',
   renameConversation: '重命名对话',
+  renameChat: '重命名对话',
   untitled: '无标题',
   noConversationsYet: '还没有对话',
   noSessionSelected: '未选择会话',
@@ -266,6 +267,8 @@ export default {
   addSourceToGetStarted: '添加来源以开始使用',
   noSkillsAvailable: '没有可用的技能',
   createSkillToGetStarted: '创建技能以开始使用',
+  addYourFirstSource: '添加您的第一个来源',
+  addYourFirstSkill: '添加您的第一个技能',
 
   // Workspace Switcher / 工作空间切换器
   switchWorkspace: '切换工作空间',

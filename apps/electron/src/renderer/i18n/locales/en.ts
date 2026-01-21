@@ -45,6 +45,7 @@ export default {
   deleteConversationMessage: 'Are you sure you want to delete "{{name}}"? This action cannot be undone.',
   conversationDeleted: 'Conversation deleted',
   renameConversation: 'Rename conversation',
+  renameChat: 'Rename Chat',
   untitled: 'Untitled',
   noConversationsYet: 'No conversations yet',
   noSessionSelected: 'No session selected',
@@ -267,6 +268,8 @@ export default {
   addSourceToGetStarted: 'Add a source to get started',
   noSkillsAvailable: 'No skills available',
   createSkillToGetStarted: 'Create a skill to get started',
+  addYourFirstSource: 'Add your first source',
+  addYourFirstSkill: 'Add your first skill',
 
   // Workspace Switcher
   switchWorkspace: 'Switch Workspace',

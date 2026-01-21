@@ -50,19 +50,21 @@ export function SourcesListPanel({
   localMcpEnabled = true,
   className,
 }: SourcesListPanelProps) {
+  const { t } = useTranslation()
+
   return (
     <ScrollArea className={cn('flex-1', className)}>
       <div className="pb-2">
         {sources.length === 0 ? (
           <div className="px-4 py-8 text-center">
             <p className="text-sm text-muted-foreground">
-              No sources configured.
+              {t('noSourcesConfigured' as any)}
             </p>
             {workspaceRootPath && (
               <EditPopover
                 trigger={
                   <button className="mt-2 text-sm text-foreground hover:underline">
-                    Add your first source
+                    {t('addYourFirstSource' as any)}
                   </button>
                 }
                 {...getEditConfig('add-source', workspaceRootPath)}

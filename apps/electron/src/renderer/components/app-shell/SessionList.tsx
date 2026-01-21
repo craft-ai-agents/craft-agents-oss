@@ -763,7 +763,7 @@ export function SessionList({
     return (
       <div className="flex items-center justify-center h-full">
         <p className="text-sm text-muted-foreground">
-          No conversations yet
+          {t('noConversationsYet' as any)}
         </p>
       </div>
     )
@@ -790,7 +790,7 @@ export function SessionList({
               <button
                 onClick={onSearchClose}
                 className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 hover:bg-foreground/10 rounded"
-                title="Close search"
+                title={t('close' as any)}
               >
                 <X className="h-3.5 w-3.5 text-muted-foreground" />
               </button>
@@ -875,7 +875,7 @@ export function SessionList({
       <RenameDialog
         open={renameDialogOpen}
         onOpenChange={setRenameDialogOpen}
-        title="Rename conversation"
+        title={t('renameConversation' as any)}
         value={renameName}
         onValueChange={setRenameName}
         onSubmit={handleRenameSubmit}

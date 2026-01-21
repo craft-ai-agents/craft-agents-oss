@@ -8,6 +8,7 @@
 import * as React from 'react'
 import { useState } from 'react'
 import { MoreHorizontal } from 'lucide-react'
+import { useTranslation } from '@/i18n'
 import { SkillAvatar } from '@/components/ui/skill-avatar'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
@@ -47,19 +48,21 @@ export function SkillsListPanel({
   workspaceRootPath,
   className,
 }: SkillsListPanelProps) {
+  const { t } = useTranslation()
+
   return (
     <ScrollArea className={cn('flex-1', className)}>
       <div className="pb-2">
         {skills.length === 0 ? (
           <div className="px-4 py-8 text-center">
             <p className="text-sm text-muted-foreground">
-              No skills configured.
+              {t('noSkillsConfigured' as any)}
             </p>
             {workspaceRootPath && (
               <EditPopover
                 trigger={
                   <button className="mt-2 text-sm text-foreground hover:underline">
-                    Add your first skill
+                    {t('addYourFirstSkill' as any)}
                   </button>
                 }
                 {...getEditConfig('add-skill', workspaceRootPath)}

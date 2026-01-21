@@ -67,6 +67,7 @@ export function CredentialsStep({
   onSubmit,
   onStartOAuth,
   onBack,
+  onSubmitCustom,
   existingClaudeToken,
   isClaudeCliInstalled,
   onUseExistingClaudeToken,
