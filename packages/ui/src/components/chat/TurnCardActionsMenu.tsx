@@ -27,6 +27,8 @@ export function TurnCardActionsMenu({
   hasEditOrWriteActivities,
   className,
 }: TurnCardActionsMenuProps) {
+  const [isOpen, setIsOpen] = React.useState(false)
+
   // Don't render if no actions available
   if (!onOpenDetails && !onOpenMultiFileDiff) {
     return null
@@ -35,6 +37,7 @@ export function TurnCardActionsMenu({
   return (
     <SimpleDropdown
       align="end"
+      onOpenChange={setIsOpen}
       trigger={
         <div
           role="button"
@@ -45,6 +48,7 @@ export function TurnCardActionsMenu({
             "bg-background shadow-minimal",
             "text-muted-foreground/50 hover:text-foreground",
             "focus:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:opacity-100",
+            isOpen && "opacity-100 text-foreground",
             className
           )}
           onKeyDown={(e) => {

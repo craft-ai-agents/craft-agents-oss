@@ -66,6 +66,8 @@ export interface SimpleDropdownProps {
   className?: string
   /** Whether the dropdown is disabled */
   disabled?: boolean
+  /** Callback when open state changes */
+  onOpenChange?: (open: boolean) => void
 }
 
 export function SimpleDropdown({
@@ -74,8 +76,20 @@ export function SimpleDropdown({
   align = 'end',
   className,
   disabled = false,
+  onOpenChange,
 }: SimpleDropdownProps) {
   const [isOpen, setIsOpen] = useState(false)
+
+  // Notify parent of open state changes
+  const setIsOpenWithCallback = useCallback((open: boolean | ((prev: boolean) => boolean)) => {
+    setIsOpen(prev => {
+      const newValue = typeof open === 'function' ? open(prev) : open
+      if (newValue !== prev) {
+        onOpenChange?.(newValue)
+      }
+      return newValue
+    })
+  }, [onOpenChange])
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null)
   const triggerRef = useRef<HTMLDivElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -116,12 +130,12 @@ export function SimpleDropdown({
         setPosition({ top, left })
       }
     }
-    setIsOpen(prev => !prev)
+    setIsOpenWithCallback(prev => !prev)
   }, [disabled, isOpen, align])
 
   const handleClose = useCallback(() => {
-    setIsOpen(false)
-  }, [])
+    setIsOpenWithCallback(false)
+  }, [setIsOpenWithCallback])
 
   // Update position when opening (for edge cases like window resize)
   useEffect(() => {

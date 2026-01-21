@@ -84,6 +84,7 @@ export function SettingsMenuSelect({
             'bg-background shadow-minimal',
             'hover:bg-foreground/[0.02] transition-colors',
             'disabled:cursor-not-allowed disabled:opacity-50',
+            isOpen && 'bg-foreground/[0.02]',
             className
           )}
         >
@@ -92,7 +93,7 @@ export function SettingsMenuSelect({
         </button>
       </PopoverTrigger>
       <PopoverContent
-        align="start"
+        align="end"
         sideOffset={4}
         collisionPadding={8}
         className="p-1.5"

@@ -264,6 +264,7 @@ export function FreeFormInput({
   const [sourceFilter, setSourceFilter] = React.useState('')
   const [isFocused, setIsFocused] = React.useState(false)
   const [inputMaxHeight, setInputMaxHeight] = React.useState(540)
+  const [modelDropdownOpen, setModelDropdownOpen] = React.useState(false)
 
   // Double-Esc interrupt: show warning overlay on first Esc, interrupt on second
   const { showEscapeOverlay } = useEscapeInterrupt()
@@ -1242,13 +1243,16 @@ export function FreeFormInput({
           <div className="flex-1" />
 
           {/* 5. Model Selector - Radix DropdownMenu for automatic positioning and submenu support */}
-          <DropdownMenu>
+          <DropdownMenu open={modelDropdownOpen} onOpenChange={setModelDropdownOpen}>
             <Tooltip>
               <TooltipTrigger asChild>
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
-                    className="inline-flex items-center h-7 px-1.5 gap-0.5 text-[13px] shrink-0 rounded-[6px] hover:bg-foreground/5 transition-colors data-[state=open]:bg-foreground/5 select-none"
+                    className={cn(
+                      "inline-flex items-center h-7 px-1.5 gap-0.5 text-[13px] shrink-0 rounded-[6px] hover:bg-foreground/5 transition-colors select-none",
+                      modelDropdownOpen && "bg-foreground/5"
+                    )}
                   >
                     {getModelShortName(currentModel)}
                     <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />
