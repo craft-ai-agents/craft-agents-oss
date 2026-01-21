@@ -1,5 +1,6 @@
 import { CraftAgentsSymbol } from "@/components/icons/CraftAgentsSymbol"
 import { StepFormLayout, ContinueButton } from "./primitives"
+import { useTranslation } from "@/i18n"
 
 interface WelcomeStepProps {
   onContinue: () => void
@@ -18,6 +19,8 @@ export function WelcomeStep({
   onContinue,
   isExistingUser = false
 }: WelcomeStepProps) {
+  const { t } = useTranslation()
+
   return (
     <StepFormLayout
       iconElement={
@@ -25,15 +28,15 @@ export function WelcomeStep({
           <CraftAgentsSymbol className="size-10 text-accent" />
         </div>
       }
-      title={isExistingUser ? 'Update Settings' : 'Welcome to Craft Agents'}
+      title={isExistingUser ? t('updateSettings' as any) : t('welcomeToCraftAgents' as any)}
       description={
         isExistingUser
-          ? 'Update billing or change your setup.'
-          : 'Agents with the UX they deserve. Connect anything. Organize your sessions. Everything you need to do the work of your life!'
+          ? t('updateBillingOrChangeSetup' as any)
+          : t('welcomeToCraftAgentsLong' as any)
       }
       actions={
         <ContinueButton onClick={onContinue} className="w-full">
-          {isExistingUser ? 'Continue' : 'Get Started'}
+          {isExistingUser ? t('continue' as any) : t('getStarted' as any)}
         </ContinueButton>
       }
     />

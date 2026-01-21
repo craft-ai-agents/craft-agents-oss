@@ -177,4 +177,205 @@ export default {
   notesPlaceholder: 'Any additional context you\'d like Craft Agent to know...',
   editFile: 'Edit File',
 
+  // Onboarding
+  updateSettings: 'Update Settings',
+  welcomeToCraftAgentsLong: 'Agents with the UX they deserve. Connect anything. Organize your sessions. Everything you need to do the work of your life!',
+  updateBillingOrChangeSetup: 'Update billing or change your setup.',
+  chooseBillingMethod: 'Choose Billing Method',
+  selectHowToPowerAgents: 'Select how you\'d like to power your AI agents.',
+  claudeProOrMax: 'Claude Pro/Max',
+  useClaudeSubscription: 'Use your Claude subscription for unlimited access.',
+  anthropicApiKey: 'Anthropic API Key',
+  payAsYouGo: 'Pay-as-you-go with your own API key.',
+  recommended: 'Recommended',
+  billingSetup: 'Billing Setup',
+  billingSetupDescription: 'Add your credentials to continue.',
+  claudeEmail: 'Claude Email',
+  claudeEmailDescription: 'Your Claude account email address.',
+  claudeEmailPlaceholder: 'you@example.com',
+  apiKey: 'API Key',
+  apiKeyDescription: 'Your Anthropic API key from the console.',
+  apiKeyPlaceholder: 'sk-ant-...',
+  learnMoreAboutApiKeys: 'Learn more about API keys',
+  credentialsStepSuccess: 'Credentials saved successfully!',
+  credentialsStepError: 'Failed to save credentials. Please try again.',
+  completionTitle: 'You\'re all set!',
+  completionDescription: 'Your workspace is ready. Start by creating a new chat or exploring sources.',
+  goToWorkspace: 'Go to Workspace',
+  reauthRequired: 'Reauthentication Required',
+  reauthDescription: 'Please sign in again to continue.',
+  reauthButton: 'Sign In',
+
+  // Keyboard Shortcuts Dialog
+  keyboardShortcuts: 'Keyboard Shortcuts',
+  keyboardShortcutsDescription: 'Quick reference for keyboard shortcuts',
+
+  // Reset Confirmation Dialog
+  resetWorkspace: 'Reset Workspace',
+  resetWorkspaceDescription: 'This will delete all your sessions and settings. This action cannot be undone.',
+  resetWorkspaceConfirm: 'Are you sure you want to reset your workspace?',
+  resetButton: 'Reset',
+
+  // Splash Screen
+  loadingCraftAgents: 'Loading Craft Agents...',
+
+  // App Menu
+  file: 'File',
+  edit: 'Edit',
+  view: 'View',
+  window: 'Window',
+  help: 'Help',
+  quit: 'Quit',
+  about: 'About',
+  preferences: 'Preferences',
+  hide: 'Hide',
+  hideOthers: 'Hide Others',
+  showAll: 'Show All',
+  bringToFront: 'Bring All to Front',
+  zoom: 'Zoom',
+  speak: 'Speak',
+  speech: 'Speech',
+  startSpeaking: 'Start Speaking',
+  stopSpeaking: 'Stop Speaking',
+  checkForUpdates: 'Check for Updates...',
+
+  // Chat Components
+  authRequestTitle: 'Authentication Required',
+  authRequestDescription: 'You need to authenticate to perform this action.',
+  authenticate: 'Authenticate',
+  emptyStateTitle: 'No messages yet',
+  emptyStateDescription: 'Start a conversation by typing a message below.',
+  emptyStateAction: 'Send your first message',
+
+  // Panels
+  sourcesPanel: 'Sources',
+  sourcesPanelDescription: 'Manage your external data connections',
+  skillsPanel: 'Skills',
+  skillsPanelDescription: 'Custom skills and automations',
+  noSourcesAvailable: 'No sources available',
+  addSourceToGetStarted: 'Add a source to get started',
+  noSkillsAvailable: 'No skills available',
+  createSkillToGetStarted: 'Create a skill to get started',
+
+  // Workspace Switcher
+  switchWorkspace: 'Switch Workspace',
+  noWorkspacesAvailable: 'No workspaces available',
+  createNewWorkspace: 'Create New Workspace',
+
+  // Setup Auth Banner
+  setupRequired: 'Setup Required',
+  setupRequiredDescription: 'Complete your setup to continue using Craft Agents.',
+  completeSetup: 'Complete Setup',
+
+  // Active Tasks Bar
+  activeTasks: 'Active Tasks',
+  noActiveTasks: 'No active tasks',
+
+  // Attachment Preview
+  attachment: 'Attachment',
+  removeAttachment: 'Remove attachment',
+  downloadAttachment: 'Download',
+
+  // Input Components
+  typeMessage: 'Type a message...',
+  sendMessage: 'Send message',
+  attachFile: 'Attach file',
+  stopGenerating: 'Stop generating',
+  interruptAndContinue: 'Interrupt and continue',
+  permissionRequest: 'Permission Request',
+  credentialRequest: 'Credential Request',
+  allowCommand: 'Allow command',
+  denyCommand: 'Deny command',
+  allowAlways: 'Always allow',
+  denyAlways: 'Always deny',
+  provideCredential: 'Provide credential',
+  skipCredential: 'Skip',
+
+  // Session Files
+  sessionFiles: 'Session Files',
+  noFilesAttached: 'No files attached',
+  attachFiles: 'Attach Files',
+
+  // Session Metadata
+  sessionMetadata: 'Session Details',
+  createdAt: 'Created',
+  lastModified: 'Last Modified',
+  messageCount: 'Messages',
+
+  // Settings Components
+  search: 'Search',
+  searchPlaceholder: 'Search...',
+  clear: 'Clear',
+  select: 'Select',
+  selectOption: 'Select an option',
+  noOptions: 'No options available',
+  loading: 'Loading...',
+  enabled: 'Enabled',
+  disabled: 'Disabled',
+  on: 'On',
+  off: 'Off',
+  yes: 'Yes',
+  no: 'No',
+  advanced: 'Advanced',
+  basic: 'Basic',
+  general: 'General',
+  appearance: 'Appearance',
+  behavior: 'Behavior',
+  privacy: 'Privacy',
+  security: 'Security',
+  notifications: 'Notifications',
+  integration: 'Integration',
+  account: 'Account',
+  billing: 'Billing',
+  developer: 'Developer',
+  experimental: 'Experimental',
+  beta: 'Beta',
+
+  // Data Tables
+  name: 'Name',
+  type: 'Type',
+  status: 'Status',
+  actions: 'Actions',
+  description: 'Description',
+  value: 'Value',
+  url: 'URL',
+  path: 'Path',
+  version: 'Version',
+  size: 'Size',
+  date: 'Date',
+  created: 'Created',
+  modified: 'Modified',
+  owner: 'Owner',
+  permission: 'Permission',
+
+  // Tools & Permissions
+  tool: 'Tool',
+  tools: 'Tools',
+  command: 'Command',
+  commands: 'Commands',
+  allowed: 'Allowed',
+  blocked: 'Blocked',
+  pattern: 'Pattern',
+  patterns: 'Patterns',
+  endpoint: 'Endpoint',
+  method: 'Method',
+  scope: 'Scope',
+  read: 'Read',
+  write: 'Write',
+  execute: 'Execute',
+  none: 'None',
+
+  // File Viewer
+  fileViewerTitle: 'File Preview',
+  fileViewerError: 'Error loading file',
+  fileViewerTooLarge: 'File is too large to preview',
+  downloadFile: 'Download file',
+  copyPath: 'Copy path',
+
+  // Markdown
+  copyCode: 'Copy code',
+  codeCopied: 'Code copied!',
+  tableOfContents: 'Table of Contents',
+  jumpToSection: 'Jump to section',
+
 } as const;

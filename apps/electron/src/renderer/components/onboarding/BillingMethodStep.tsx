@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils"
 import { Check, CreditCard, Key } from "lucide-react"
 import { StepFormLayout, BackButton, ContinueButton } from "./primitives"
+import { useTranslation } from "@/i18n"
 
 export type BillingMethod = 'api_key' | 'claude_oauth'
 
@@ -11,22 +12,6 @@ interface BillingOption {
   icon: React.ReactNode
   recommended?: boolean
 }
-
-const BILLING_OPTIONS: BillingOption[] = [
-  {
-    id: 'claude_oauth',
-    name: 'Claude Pro/Max',
-    description: 'Use your Claude subscription for unlimited access.',
-    icon: <CreditCard className="size-4" />,
-    recommended: true,
-  },
-  {
-    id: 'api_key',
-    name: 'Anthropic API Key',
-    description: 'Pay-as-you-go with your own API key.',
-    icon: <Key className="size-4" />,
-  },
-]
 
 interface BillingMethodStepProps {
   selectedMethod: BillingMethod | null
@@ -48,10 +33,28 @@ export function BillingMethodStep({
   onContinue,
   onBack
 }: BillingMethodStepProps) {
+  const { t } = useTranslation()
+
+  const BILLING_OPTIONS: BillingOption[] = [
+    {
+      id: 'claude_oauth',
+      name: t('claudeProOrMax' as any),
+      description: t('useClaudeSubscription' as any),
+      icon: <CreditCard className="size-4" />,
+      recommended: true,
+    },
+    {
+      id: 'api_key',
+      name: t('anthropicApiKey' as any),
+      description: t('payAsYouGo' as any),
+      icon: <Key className="size-4" />,
+    },
+  ]
+
   return (
     <StepFormLayout
-      title="Choose Billing Method"
-      description="Select how you'd like to power your AI agents."
+      title={t('chooseBillingMethod' as any)}
+      description={t('selectHowToPowerAgents' as any)}
       actions={
         <>
           <BackButton onClick={onBack} />
@@ -93,7 +96,7 @@ export function BillingMethodStep({
                   <span className="font-medium text-sm">{option.name}</span>
                   {option.recommended && (
                     <span className="bg-foreground/5 px-2 py-0.5 text-[11px] font-medium text-foreground/70">
-                      Recommended
+                      {t('recommended' as any)}
                     </span>
                   )}
                 </div>

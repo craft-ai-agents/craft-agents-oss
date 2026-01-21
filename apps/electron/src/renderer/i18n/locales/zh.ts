@@ -176,4 +176,205 @@ export default {
   notesPlaceholder: '您希望 Craft Agent 了解的任何其他上下文...',
   editFile: '编辑文件',
 
+  // Onboarding / 引导流程
+  updateSettings: '更新设置',
+  welcomeToCraftAgentsLong: '当之无愧的智能体体验。连接任何事物。组织您的会话。完成您毕生工作所需的一切！',
+  updateBillingOrChangeSetup: '更新账单或更改您的设置。',
+  chooseBillingMethod: '选择付费方式',
+  selectHowToPowerAgents: '选择您想要为 AI 智能体供电的方式。',
+  claudeProOrMax: 'Claude Pro/Max',
+  useClaudeSubscription: '使用您的 Claude 订阅无限访问。',
+  anthropicApiKey: 'Anthropic API 密钥',
+  payAsYouGo: '使用您自己的 API 密钥按需付费。',
+  recommended: '推荐',
+  billingSetup: '账单设置',
+  billingSetupDescription: '添加您的凭据以继续。',
+  claudeEmail: 'Claude 邮箱',
+  claudeEmailDescription: '您的 Claude 账户邮箱地址。',
+  claudeEmailPlaceholder: 'you@example.com',
+  apiKey: 'API 密钥',
+  apiKeyDescription: '您从控制台获取的 Anthropic API 密钥。',
+  apiKeyPlaceholder: 'sk-ant-...',
+  learnMoreAboutApiKeys: '了解有关 API 密钥的更多信息',
+  credentialsStepSuccess: '凭据保存成功！',
+  credentialsStepError: '保存凭据失败，请重试。',
+  completionTitle: '准备就绪！',
+  completionDescription: '您的工作空间已准备就绪。开始创建新对话或探索来源。',
+  goToWorkspace: '前往工作空间',
+  reauthRequired: '需要重新认证',
+  reauthDescription: '请再次登录以继续。',
+  reauthButton: '登录',
+
+  // Keyboard Shortcuts Dialog / 键盘快捷键对话框
+  keyboardShortcuts: '键盘快捷键',
+  keyboardShortcutsDescription: '键盘快捷键快速参考',
+
+  // Reset Confirmation Dialog / 重置确认对话框
+  resetWorkspace: '重置工作空间',
+  resetWorkspaceDescription: '这将删除您的所有会话和设置。此操作无法撤销。',
+  resetWorkspaceConfirm: '确定要重置您的工作空间吗？',
+  resetButton: '重置',
+
+  // Splash Screen / 启动屏幕
+  loadingCraftAgents: '正在加载 Craft Agents...',
+
+  // App Menu / 应用菜单
+  file: '文件',
+  edit: '编辑',
+  view: '视图',
+  window: '窗口',
+  help: '帮助',
+  quit: '退出',
+  about: '关于',
+  preferences: '偏好设置',
+  hide: '隐藏',
+  hideOthers: '隐藏其他',
+  showAll: '显示全部',
+  bringToFront: '全部置于前台',
+  zoom: '缩放',
+  speak: '朗读',
+  speech: '语音',
+  startSpeaking: '开始朗读',
+  stopSpeaking: '停止朗读',
+  checkForUpdates: '检查更新...',
+
+  // Chat Components / 聊天组件
+  authRequestTitle: '需要认证',
+  authRequestDescription: '您需要认证才能执行此操作。',
+  authenticate: '认证',
+  emptyStateTitle: '还没有消息',
+  emptyStateDescription: '在下方输入消息开始对话。',
+  emptyStateAction: '发送您的第一条消息',
+
+  // Panels / 面板
+  sourcesPanel: '来源',
+  sourcesPanelDescription: '管理您的外部数据连接',
+  skillsPanel: '技能',
+  skillsPanelDescription: '自定义技能和自动化',
+  noSourcesAvailable: '没有可用的来源',
+  addSourceToGetStarted: '添加来源以开始使用',
+  noSkillsAvailable: '没有可用的技能',
+  createSkillToGetStarted: '创建技能以开始使用',
+
+  // Workspace Switcher / 工作空间切换器
+  switchWorkspace: '切换工作空间',
+  noWorkspacesAvailable: '没有可用的工作空间',
+  createNewWorkspace: '创建新工作空间',
+
+  // Setup Auth Banner / 设置认证横幅
+  setupRequired: '需要设置',
+  setupRequiredDescription: '完成您的设置以继续使用 Craft Agents。',
+  completeSetup: '完成设置',
+
+  // Active Tasks Bar / 活动任务栏
+  activeTasks: '活动任务',
+  noActiveTasks: '没有活动任务',
+
+  // Attachment Preview / 附件预览
+  attachment: '附件',
+  removeAttachment: '移除附件',
+  downloadAttachment: '下载',
+
+  // Input Components / 输入组件
+  typeMessage: '输入消息...',
+  sendMessage: '发送消息',
+  attachFile: '附加文件',
+  stopGenerating: '停止生成',
+  interruptAndContinue: '中断并继续',
+  permissionRequest: '权限请求',
+  credentialRequest: '凭据请求',
+  allowCommand: '允许命令',
+  denyCommand: '拒绝命令',
+  allowAlways: '始终允许',
+  denyAlways: '始终拒绝',
+  provideCredential: '提供凭据',
+  skipCredential: '跳过',
+
+  // Session Files / 会话文件
+  sessionFiles: '会话文件',
+  noFilesAttached: '没有附加文件',
+  attachFiles: '附加文件',
+
+  // Session Metadata / 会话元数据
+  sessionMetadata: '会话详情',
+  createdAt: '创建时间',
+  lastModified: '最后修改',
+  messageCount: '消息',
+
+  // Settings Components / 设置组件
+  search: '搜索',
+  searchPlaceholder: '搜索...',
+  clear: '清除',
+  select: '选择',
+  selectOption: '选择一个选项',
+  noOptions: '没有可用选项',
+  loading: '加载中...',
+  enabled: '已启用',
+  disabled: '已禁用',
+  on: '开',
+  off: '关',
+  yes: '是',
+  no: '否',
+  advanced: '高级',
+  basic: '基本',
+  general: '常规',
+  appearance: '外观',
+  behavior: '行为',
+  privacy: '隐私',
+  security: '安全',
+  notifications: '通知',
+  integration: '集成',
+  account: '账户',
+  billing: '账单',
+  developer: '开发者',
+  experimental: '实验性',
+  beta: '测试版',
+
+  // Data Tables / 数据表
+  name: '名称',
+  type: '类型',
+  status: '状态',
+  actions: '操作',
+  description: '描述',
+  value: '值',
+  url: 'URL',
+  path: '路径',
+  version: '版本',
+  size: '大小',
+  date: '日期',
+  created: '创建时间',
+  modified: '修改时间',
+  owner: '所有者',
+  permission: '权限',
+
+  // Tools & Permissions / 工具和权限
+  tool: '工具',
+  tools: '工具',
+  command: '命令',
+  commands: '命令',
+  allowed: '已允许',
+  blocked: '已阻止',
+  pattern: '模式',
+  patterns: '模式',
+  endpoint: '端点',
+  method: '方法',
+  scope: '范围',
+  read: '读取',
+  write: '写入',
+  execute: '执行',
+  none: '无',
+
+  // File Viewer / 文件查看器
+  fileViewerTitle: '文件预览',
+  fileViewerError: '加载文件时出错',
+  fileViewerTooLarge: '文件太大，无法预览',
+  downloadFile: '下载文件',
+  copyPath: '复制路径',
+
+  // Markdown / Markdown
+  copyCode: '复制代码',
+  codeCopied: '代码已复制！',
+  tableOfContents: '目录',
+  jumpToSection: '跳转到章节',
+
 } as const;

@@ -7,6 +7,7 @@ import { Eye, EyeOff, ExternalLink, CheckCircle2, XCircle } from "lucide-react"
 import { Spinner } from "@craft-agent/ui"
 import type { BillingMethod } from "./BillingMethodStep"
 import { StepFormLayout, BackButton, ContinueButton, type StepIconVariant } from "./primitives"
+import { useTranslation } from "@/i18n"
 
 export type CredentialStatus = 'idle' | 'validating' | 'success' | 'error'
 
@@ -45,25 +46,6 @@ function getOAuthIconVariant(status: CredentialStatus): StepIconVariant {
   }
 }
 
-const OAUTH_STATUS_CONTENT: Record<CredentialStatus, { title: string; description: string }> = {
-  idle: {
-    title: 'Connect Claude Account',
-    description: 'Use your Claude subscription to power multi-agent workflows.',
-  },
-  validating: {
-    title: 'Connecting...',
-    description: 'Waiting for authentication to complete...',
-  },
-  success: {
-    title: 'Connected!',
-    description: 'Your Claude account is connected.',
-  },
-  error: {
-    title: 'Connection failed',
-    description: '', // Will use errorMessage prop
-  },
-}
-
 /**
  * CredentialsStep - Enter API key or start OAuth flow
  *
@@ -85,6 +67,7 @@ export function CredentialsStep({
   onSubmitAuthCode,
   onCancelOAuth,
 }: CredentialsStepProps) {
+  const { t } = useTranslation()
   const [value, setValue] = useState('')
   const [showValue, setShowValue] = useState(false)
   const [authCode, setAuthCode] = useState('')
@@ -109,6 +92,25 @@ export function CredentialsStep({
 
   // OAuth flow
   if (isOAuth) {
+    const OAUTH_STATUS_CONTENT: Record<CredentialStatus, { title: string; description: string }> = {
+      idle: {
+        title: t('billingSetup' as any),
+        description: t('billingSetupDescription' as any),
+      },
+      validating: {
+        title: t('loading' as any) + '...',
+        description: t('loadingCraftAgents' as any),
+      },
+      success: {
+        title: t('credentialsStepSuccess' as any),
+        description: t('credentialsStepSuccess' as any),
+      },
+      error: {
+        title: t('credentialsStepError' as any).split(' ')[0] + ' failed',
+        description: '',
+      },
+    }
+
     const content = OAUTH_STATUS_CONTENT[status]
 
     // Check if we have existing token from keychain
@@ -118,24 +120,24 @@ export function CredentialsStep({
     if (isWaitingForCode) {
       return (
         <StepFormLayout
-          title="Enter Authorization Code"
-          description="Copy the code from the browser page and paste it below."
+          title={t('apiKey' as any)}
+          description={t('apiKeyDescription' as any)}
           actions={
             <>
-              <BackButton onClick={onCancelOAuth} disabled={status === 'validating'}>Cancel</BackButton>
+              <BackButton onClick={onCancelOAuth} disabled={status === 'validating'}>{t('cancel' as any)}</BackButton>
               <ContinueButton
                 type="submit"
                 form="auth-code-form"
                 disabled={!authCode.trim()}
                 loading={status === 'validating'}
-                loadingText="Connecting..."
+                loadingText={t('loading' as any) + '...'}
               />
             </>
           }
         >
           <form id="auth-code-form" onSubmit={handleAuthCodeSubmit}>
             <div className="space-y-2">
-              <Label htmlFor="auth-code">Authorization Code</Label>
+              <Label htmlFor="auth-code">{t('apiKey' as any)}</Label>
               <div className={cn(
                 "relative rounded-md shadow-minimal transition-colors",
                 "bg-foreground-2 focus-within:bg-background"
@@ -145,7 +147,7 @@ export function CredentialsStep({
                   type="text"
                   value={authCode}
                   onChange={(e) => setAuthCode(e.target.value)}
-                  placeholder="Paste your authorization code here"
+                  placeholder={t('apiKeyPlaceholder' as any)}
                   className={cn(
                     "border-0 bg-transparent shadow-none font-mono text-sm",
                     status === 'error' && "focus-visible:ring-destructive"
@@ -171,26 +173,26 @@ export function CredentialsStep({
             {hasExistingToken ? (
               <ContinueButton onClick={onUseExistingClaudeToken} className="gap-2">
                 <CheckCircle2 className="size-4" />
-                Use Existing Token
+                {t('allow' as any)} {t('apiKey' as any)}
               </ContinueButton>
             ) : (
               <ContinueButton onClick={onStartOAuth} className="gap-2">
                 <ExternalLink className="size-4" />
-                Sign in with Claude
+                {t('authenticate' as any)}
               </ContinueButton>
             )}
           </>
         )}
 
         {status === 'validating' && (
-          <BackButton onClick={onBack} className="w-full">Cancel</BackButton>
+          <BackButton onClick={onBack} className="w-full">{t('cancel' as any)}</BackButton>
         )}
 
         {status === 'error' && (
           <>
             <BackButton onClick={onBack} />
             <ContinueButton onClick={hasExistingToken ? onUseExistingClaudeToken : onStartOAuth}>
-              Try Again
+              {t('continue' as any)}
             </ContinueButton>
           </>
         )}
@@ -207,7 +209,7 @@ export function CredentialsStep({
           : existingClaudeToken
         description = `Found existing token: ${tokenPreview}`
       } else {
-        description = 'Click below to sign in with your Claude Pro or Max subscription.'
+        description = t('selectHowToPowerAgents' as any)
       }
     }
 
@@ -216,7 +218,7 @@ export function CredentialsStep({
         icon={getOAuthIcon(status)}
         iconVariant={getOAuthIconVariant(status)}
         title={content.title}
-        description={status === 'error' ? (errorMessage || 'Something went wrong. Please try again.') : description}
+        description={status === 'error' ? (errorMessage || t('credentialsStepError' as any)) : description}
         actions={actions}
       >
         {/* Show secondary option if we have an existing token */}
@@ -237,10 +239,10 @@ export function CredentialsStep({
   // API Key flow
   return (
     <StepFormLayout
-      title="Enter API Key"
+      title={t('apiKey' as any)}
       description={
         <>
-          Get your API key from{' '}
+          {t('learnMoreAboutApiKeys' as any)}{' '}
           <a
             href="https://console.anthropic.com"
             target="_blank"
@@ -259,14 +261,14 @@ export function CredentialsStep({
             form="api-key-form"
             disabled={!value.trim()}
             loading={status === 'validating'}
-            loadingText="Validating..."
+            loadingText={t('loading' as any) + '...'}
           />
         </>
       }
     >
       <form id="api-key-form" onSubmit={handleSubmit}>
         <div className="space-y-2">
-          <Label htmlFor="api-key">Anthropic API Key</Label>
+          <Label htmlFor="api-key">{t('apiKey' as any)}</Label>
           <div className={cn(
             "relative rounded-md shadow-minimal transition-colors",
             "bg-foreground-2 focus-within:bg-background"
@@ -276,7 +278,7 @@ export function CredentialsStep({
               type={showValue ? 'text' : 'password'}
               value={value}
               onChange={(e) => setValue(e.target.value)}
-              placeholder="sk-ant-..."
+              placeholder={t('apiKeyPlaceholder' as any)}
               className={cn(
                 "pr-10 border-0 bg-transparent shadow-none",
                 status === 'error' && "focus-visible:ring-destructive"
