@@ -5,6 +5,7 @@ node_modules
 out
 dist
 *.tgz
+*.tar.gz
 .build
 apps/electron/release
 

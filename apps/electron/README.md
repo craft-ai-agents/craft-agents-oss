@@ -174,6 +174,7 @@ bun run electron:build:main      # Bundle main process (esbuild)
 bun run electron:build:preload   # Bundle preload script (esbuild)
 bun run electron:build:renderer  # Bundle React app (Vite)
 bun run electron:build:resources # Copy icons
+bun run electron:build:vosk      # Download voice-recognition model
 bun run electron:build           # All of the above
 ```
 
@@ -184,6 +185,10 @@ Enable console logging by checking the terminal where you ran `electron:start`. 
 - `[IPC]` - Inter-process communication
 
 DevTools opens automatically (configured in `index.ts`). Remove `mainWindow.webContents.openDevTools()` for production.
+
+## Renderer CSP
+
+The renderer `Content-Security-Policy` includes `unsafe-eval`. This is required for the current `vosk-browser` bundle because the Emscripten-generated WASM glue uses `new Function`, which is blocked without `unsafe-eval`. If speech recognition is disabled or Vosk is replaced with a CSP-safe build, consider removing `unsafe-eval` from `apps/electron/src/renderer/index.html` and `apps/electron/src/renderer/playground.html`.
 
 ## Current Limitations
 

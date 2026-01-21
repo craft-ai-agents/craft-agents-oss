@@ -1,0 +1,97 @@
+import { createHash } from "crypto";
+import { mkdtemp, rm, stat, writeFile, mkdir } from "fs/promises";
+import { join, dirname } from "path";
+import { tmpdir } from "os";
+import { spawn } from "child_process";
+import * as tar from "tar";
+
+const MODEL_URL =
+  "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip";
+const MODEL_MD5 = "09ab50ccd62b674cbaa231b825f9c1cb";
+const MODEL_SHA256 =
+  "30f26242c4eb449f948e42cb302dd7a686cb29a3423a8367f99ff41780942498";
+const MODEL_ARCHIVE_NAME = "vosk-model-small-en-us-0.15.tar.gz";
+const MODEL_FOLDER_NAME = "vosk-model-small-en-us-0.15";
+
+const repoRoot = join(import.meta.dirname, "..", "..", "..", "..");
+const modelArchivePath = join(
+  repoRoot,
+  "apps",
+  "electron",
+  "src",
+  "renderer",
+  "assets",
+  MODEL_ARCHIVE_NAME,
+);
+
+async function runCommand(command: string, args: string[]) {
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(command, args, { stdio: "inherit" });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`${command} exited with code ${code}`));
+    });
+  });
+}
+
+function hashBuffer(buffer: Buffer, algorithm: "md5" | "sha256") {
+  return createHash(algorithm).update(buffer).digest("hex");
+}
+
+async function ensureModelArchive() {
+  try {
+    const fileStats = await stat(modelArchivePath);
+    if (fileStats.size > 0) {
+      return;
+    }
+  } catch {}
+
+  await mkdir(dirname(modelArchivePath), { recursive: true });
+
+  const workingDirectory = await mkdtemp(join(tmpdir(), "vosk-model-"));
+  const zipPath = join(workingDirectory, "model.zip");
+  const extractPath = join(workingDirectory, "extract");
+
+  try {
+    const response = await fetch(MODEL_URL);
+    if (!response.ok) {
+      throw new Error(`Failed to download model: ${response.statusText}`);
+    }
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+    const md5Hash = hashBuffer(buffer, "md5");
+    const sha256Hash = hashBuffer(buffer, "sha256");
+
+    if (md5Hash !== MODEL_MD5 || sha256Hash !== MODEL_SHA256) {
+      throw new Error(`Checksum mismatch. md5=${md5Hash} sha256=${sha256Hash}`);
+    }
+
+    await writeFile(zipPath, buffer);
+    await mkdir(extractPath, { recursive: true });
+
+    if (process.platform === "win32") {
+      await runCommand("powershell", [
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        `Expand-Archive -Path "${zipPath}" -DestinationPath "${extractPath}" -Force`,
+      ]);
+    } else {
+      await runCommand("unzip", ["-q", zipPath, "-d", extractPath]);
+    }
+
+    await tar.c(
+      {
+        gzip: true,
+        file: modelArchivePath,
+        cwd: extractPath,
+      },
+      [MODEL_FOLDER_NAME],
+    );
+  } finally {
+    await rm(workingDirectory, { recursive: true, force: true });
+  }
+}
+
+void ensureModelArchive();

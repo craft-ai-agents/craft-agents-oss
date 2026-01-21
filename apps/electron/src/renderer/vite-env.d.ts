@@ -20,3 +20,8 @@ declare module "*.svg" {
   const src: string
   export default src
 }
+
+declare module "*.tar.gz" {
+  const src: string
+  export default src
+}

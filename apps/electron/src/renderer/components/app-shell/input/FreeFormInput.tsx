@@ -10,6 +10,7 @@ import {
   DatabaseZap,
   ChevronDown,
   Loader2,
+  Mic,
 } from 'lucide-react'
 import { Icon_Folder } from '@craft-agent/ui'
 
@@ -56,6 +57,8 @@ import { PERMISSION_MODE_ORDER } from '@craft-agent/shared/agent/modes'
 import { type ThinkingLevel, THINKING_LEVELS, getThinkingLevelName } from '@craft-agent/shared/agent/thinking-levels'
 import { useEscapeInterrupt } from '@/context/EscapeInterruptContext'
 import { EscapeInterruptOverlay } from './EscapeInterruptOverlay'
+import { useVoskSpeechRecognition } from '@/hooks/useVoskSpeechRecognition'
+import voskModelUrl from '@/assets/vosk-model-small-en-us-0.15.tar.gz'
 
 /**
  * Format token count for display (e.g., 1500 -> "1.5k", 200000 -> "200k")
@@ -117,6 +120,8 @@ export interface FreeFormInputProps {
   enabledSourceSlugs?: string[]
   /** Callback when source selection changes */
   onSourcesChange?: (slugs: string[]) => void
+  /** Optional audio stream factory for speech recognition (used in playground demos) */
+  speechAudioStreamFactory?: () => Promise<MediaStream>
   // Skill selection (for @mentions)
   /** Available skills for @mention autocomplete */
   skills?: LoadedSkill[]
@@ -179,6 +184,7 @@ export function FreeFormInput({
   sources = [],
   enabledSourceSlugs = [],
   onSourcesChange,
+  speechAudioStreamFactory,
   skills = [],
   workspaceId,
   workingDirectory,
@@ -237,6 +243,9 @@ export function FreeFormInput({
   const inputRef = React.useRef(input)
   inputRef.current = input // Keep ref in sync with state
 
+  const speechBaseInputRef = React.useRef<string | null>(null)
+  const speechPartialRef = React.useRef<string | null>(null)
+
   React.useEffect(() => {
     return () => {
       // Cancel pending debounced sync
@@ -269,6 +278,70 @@ export function FreeFormInput({
     window.addEventListener('resize', updateMaxHeight)
     return () => window.removeEventListener('resize', updateMaxHeight)
   }, [])
+
+  const handleSpeechPartial = React.useCallback(
+    (text: string) => {
+      if (!text) return
+      if (speechBaseInputRef.current === null) {
+        speechBaseInputRef.current = inputRef.current
+      }
+      speechPartialRef.current = text
+      const base = speechBaseInputRef.current ?? ''
+      const nextValue = base ? `${base} ${text}` : text
+      setInput(nextValue)
+      syncToParent(nextValue)
+    },
+    [syncToParent],
+  )
+
+  const handleSpeechFinal = React.useCallback(
+    (text: string) => {
+      if (!text) return
+      const base = speechBaseInputRef.current ?? inputRef.current
+      const nextValue = base ? `${base} ${text}` : text
+      speechBaseInputRef.current = nextValue
+      speechPartialRef.current = null
+      setInput(nextValue)
+      syncToParent(nextValue)
+    },
+    [syncToParent],
+  )
+
+  const {
+    isSupported: isSpeechSupported,
+    isLoading: isSpeechLoading,
+    isListening: isSpeechListening,
+    error: speechError,
+    toggleListening: toggleSpeechListening,
+    stopListening: stopSpeechListening,
+  } = useVoskSpeechRecognition({
+    modelUrl: voskModelUrl,
+    getAudioStream: speechAudioStreamFactory,
+    onPartialResult: handleSpeechPartial,
+    onFinalResult: handleSpeechFinal,
+  })
+
+  React.useEffect(() => {
+    if (!speechError) return
+    toast.error(`Speech recognition error: ${speechError}`)
+  }, [speechError])
+
+  React.useEffect(() => {
+    if (isSpeechListening || isSpeechLoading) return
+    if (speechPartialRef.current && speechBaseInputRef.current !== null) {
+      setInput(speechBaseInputRef.current)
+      syncToParent(speechBaseInputRef.current)
+    }
+    speechPartialRef.current = null
+    speechBaseInputRef.current = null
+  }, [isSpeechListening, isSpeechLoading, syncToParent])
+
+  const micDisabled = disabled || isProcessing || !isSpeechSupported || !!speechError
+  const micTooltip = !isSpeechSupported
+    ? 'Speech recognition unavailable'
+    : isSpeechListening
+      ? 'Stop dictation'
+      : 'Start dictation'
 
   const dragCounterRef = React.useRef(0)
   const containerRef = React.useRef<HTMLDivElement>(null)
@@ -791,6 +864,9 @@ export function FreeFormInput({
       attachments.length > 0 ? attachments : undefined,
       mentions.skills.length > 0 ? mentions.skills : undefined
     )
+    void stopSpeechListening()
+    speechBaseInputRef.current = null
+    speechPartialRef.current = null
     setInput('')
     setAttachments([])
     // Clear draft immediately (cancel any pending debounced sync)
@@ -804,7 +880,21 @@ export function FreeFormInput({
     })
 
     return true
-  }, [input, attachments, disabled, disableSend, onInputChange, onSubmit, skills, sources, optimisticSourceSlugs, onSourcesChange, onWorkingDirectoryChange, homeDir])
+  }, [
+    input,
+    attachments,
+    disabled,
+    disableSend,
+    onInputChange,
+    onSubmit,
+    skills,
+    sources,
+    optimisticSourceSlugs,
+    onSourcesChange,
+    onWorkingDirectoryChange,
+    homeDir,
+    stopSpeechListening,
+  ])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -1379,6 +1469,31 @@ export function FreeFormInput({
               </Tooltip>
             )
           })()}
+
+            {isSpeechSupported && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="secondary"
+                    className="h-7 w-7 rounded-full shrink-0 ml-2"
+                    onClick={() => void toggleSpeechListening()}
+                    disabled={micDisabled}
+                    aria-label={micTooltip}
+                  >
+                    {isSpeechLoading ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : isSpeechListening ? (
+                      <Square className="h-3.5 w-3.5" />
+                    ) : (
+                      <Mic className="h-3.5 w-3.5" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top">{micTooltip}</TooltipContent>
+              </Tooltip>
+            )}
 
           {/* 6. Send/Stop Button - Always show stop when processing */}
           {isProcessing ? (

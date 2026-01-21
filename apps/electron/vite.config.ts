@@ -9,7 +9,7 @@ export default defineConfig({
   base: './',
   build: {
     outDir: resolve(__dirname, 'dist/renderer'),
-    emptyDirBeforeWrite: true,
+    emptyOutDir: true,
     rollupOptions: {
       input: {
         main: resolve(__dirname, 'src/renderer/index.html'),
@@ -17,6 +17,7 @@ export default defineConfig({
       }
     }
   },
+  assetsInclude: ['**/*.tar.gz'],
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src/renderer'),
