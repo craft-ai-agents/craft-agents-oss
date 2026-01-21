@@ -1,8 +1,8 @@
 # Chinese Localization - Progress Report
 
 **Last Updated:** 2026-01-21
-**Status:** Phase 0-4 Complete ✅ | Phase 3d,5-6 Pending ⏳
-**Overall Progress:** ~50%
+**Status:** Phase 0-5 Complete ✅ | Phase 3d,6 Pending ⏳
+**Overall Progress:** ~55%
 
 ---
 
@@ -86,16 +86,27 @@
 - Added 6 new translation keys (weeksAgo, monthsAgo, yearsAgo, justNow, atTime)
 - Commit: `9363efe`
 
+**✅ Phase 5: Agent Integration**
+- Added createGetAppLanguageTool() - Returns current language setting
+- Added createSetAppLanguageTool() - Changes language with Zod validation
+- Registered tools in getSessionScopedTools() for all sessions
+- Enhanced formatPreferencesForPrompt() with language-specific instructions:
+  - Use 24-hour time format for Chinese (15:30 not 3:30 PM)
+  - Use Chinese date format: 年月日 (2026年1月21日)
+- Updated getDateTimeContext() to accept userLanguage parameter
+- Agents now receive locale-appropriate date/time in context
+- Commit: `d6b4873`
+
 ---
 
 ## 📊 Statistics
 
 ### Code Changes
 ```
-Commits: 9 (7 feature commits)
-Files Modified: 19 (5 components + infrastructure + utilities)
-Lines Added: ~1,900 LOC
-Lines Modified: ~170 LOC
+Commits: 11 (9 feature commits)
+Files Modified: 22 (5 components + infrastructure + utilities + agent tools)
+Lines Added: ~2,000 LOC
+Lines Modified: ~180 LOC
 Bundle Impact: 0KB (simple dictionary approach)
 ```
 
@@ -183,15 +194,23 @@ Low Priority: 0/112 pending ⏳
 **Implementation:**
 All formatters use Intl API with proper locale handling.
 
-### Phase 5: Agent Integration
+### ~~Phase 5: Agent Integration~~ ✅ COMPLETED
 
-**Estimated Time:** 3-4 hours
+**Completed Tasks:**
+- ✅ Add `get_app_language` tool to agent tools
+- ✅ Add `set_app_language` tool to agent tools
+- ✅ Inject language state into agent system prompt
+- ✅ Update date/time context for agent responses
 
-**Tasks:**
-- [ ] Add `get_app_language` tool to agent tools
-- [ ] Add `set_app_language` tool to agent tools
-- [ ] Inject language state into agent system prompt
-- [ ] Update date/time context for agent responses
+**Files Modified:**
+- `packages/shared/src/agent/session-scoped-tools.ts` ✅
+  - Added createGetAppLanguageTool() (28 LOC)
+  - Added createSetAppLanguageTool() (45 LOC)
+  - Registered tools in getSessionScopedTools()
+- `packages/shared/src/config/preferences.ts` ✅
+  - Enhanced formatPreferencesForPrompt() with language instructions (8 LOC)
+- `packages/shared/src/prompts/system.ts` ✅
+  - Updated getDateTimeContext() to accept userLanguage (20 LOC)
 
 **Agent Tools Implementation:**
 ```typescript
@@ -217,17 +236,17 @@ tool(
 ```
 
 **System Prompt Update:**
-```typescript
-export function getSystemPrompt(userLanguage?: string): string {
-  const langContext = userLanguage && userLanguage !== 'en'
-    ? `## Language Configuration
-The user's preferred language is **${userLanguage}**.
-UI elements and labels are displayed in ${userLanguage}.
-`
-    : ''
-  return `${langContext}${basePrompt}`
-}
-```
+Enhanced formatPreferencesForPrompt() to include:
+- Language name in user-friendly format (Chinese / English)
+- Instructions for agents on language-specific responses
+- Date/time formatting guidance (24-hour for Chinese, 12-hour for English)
+- Date format guidance (年月日 for Chinese)
+
+**Date/Time Context Update:**
+- getDateTimeContext() now accepts optional userLanguage parameter
+- Formats dates in locale-appropriate style (zh-CN vs en-US)
+- Uses 24-hour format for Chinese, 12-hour for English
+- Adds language note when non-English locale is detected
 
 ### Phase 6: Testing & Launch
 
@@ -416,6 +435,7 @@ grep -r "Delete" src/renderer/components --include="*.tsx" -l
 ## 🔄 Git History
 
 ```bash
+d6b4873 feat(i18n): Add language tools and context for agents (Phase 5)
 9363efe feat(i18n): Add date/time formatting utilities with Intl API
 1028707 docs(i18n): Update plan - Mark Phase 0-3c complete
 0a18ec0 docs(i18n): Update progress report - Phase 3c complete
@@ -444,12 +464,12 @@ f9e25f6 feat(i18n): Integrate translations in AppShell component
 | Phase 3c: Settings | 3 hours | ✅ Complete | 0 hours |
 | Phase 3d: Remaining Components | 30 hours | ⏳ Pending | 30 hours |
 | Phase 4: Date/Time Utilities | 3 hours | ✅ Complete | 0 hours |
-| Phase 5: Agent Integration | 4 hours | ⏳ Pending | 4 hours |
+| Phase 5: Agent Integration | 4 hours | ✅ Complete | 0 hours |
 | Phase 6: Testing & Launch | 10 hours | ⏳ Pending | 10 hours |
-| **Total** | **~62 hours** | | **~47 hours** |
+| **Total** | **~62 hours** | | **~40 hours** |
 
 **Current Velocity:** ~3 components per hour
-**Time to 100%:** ~16 hours of focused work
+**Time to 100%:** ~40 hours remaining (Component translation + Testing)
 
 ---
 
@@ -459,13 +479,13 @@ f9e25f6 feat(i18n): Integrate translations in AppShell component
 - [x] **Milestone 2:** High-priority components done (5/5) ✅
 - [x] **Milestone 3:** Settings page translated ✅
 - [x] **Milestone 3.5:** Date/time utilities complete ✅
-- [ ] **Milestone 4:** All user-facing components translated
-- [ ] **Milestone 5:** Agent integration complete
+- [x] **Milestone 4:** Agent integration complete ✅
+- [ ] **Milestone 5:** All user-facing components translated
 - [ ] **Milestone 6:** Production ready (native speaker approved)
 
 ---
 
 **Last Updated:** 2026-01-21
-**Next Review:** After Phase 5 (Agent Integration) completion
+**Next Review:** After Phase 3d (Component Integration) or Phase 6 (Testing)
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
