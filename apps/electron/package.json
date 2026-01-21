@@ -47,6 +47,7 @@
     "@radix-ui/react-switch": "^1.2.6",
     "@tanstack/react-table": "^8.21.3",
     "cmdk": "^1.1.1",
+    "dompurify": "^3.3.1",
     "electron-log": "^5.4.3",
     "jotai-family": "^1.0.1",
     "motion": "^12.23.26",
@@ -59,5 +60,8 @@
     "strip-markdown": "^6.0.0",
     "unist-util-visit": "^5.0.0",
     "vaul": "^1.1.2"
+  },
+  "devDependencies": {
+    "@types/dompurify": "^3.2.0"
   }
 }
