@@ -6,7 +6,7 @@ import {
   StyledDropdownMenuItem,
   StyledDropdownMenuSeparator,
 } from "@/components/ui/styled-dropdown"
-import { Settings, Keyboard, RotateCcw, User, ChevronLeft, ChevronRight } from "lucide-react"
+import { Settings, Keyboard, RotateCcw, User, ChevronLeft, ChevronRight, HelpCircle, ExternalLink } from "lucide-react"
 import { CraftAgentsSymbol } from "./icons/CraftAgentsSymbol"
 import { SquarePenRounded } from "./icons/SquarePenRounded"
 import { PanelLeftRounded } from "./icons/PanelLeftRounded"
@@ -78,6 +78,15 @@ export function AppMenu({
           <StyledDropdownMenuItem onClick={onOpenStoredUserPreferences}>
             <User className="h-3.5 w-3.5" />
             Stored User Preferences
+          </StyledDropdownMenuItem>
+
+          <StyledDropdownMenuSeparator />
+
+          {/* Help */}
+          <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl('https://agents.craft.do/docs')}>
+            <HelpCircle className="h-3.5 w-3.5" />
+            Help & Documentation
+            <ExternalLink className="h-3 w-3 ml-auto text-muted-foreground" />
           </StyledDropdownMenuItem>
 
           <StyledDropdownMenuSeparator />
