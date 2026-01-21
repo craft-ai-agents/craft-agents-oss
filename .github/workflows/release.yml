@@ -316,7 +316,8 @@ jobs:
   # Sync to OSS repository
   oss-sync:
     needs: [prepare, upload]
-    if: inputs.sync_oss != false
+    # Run for tag pushes (always) or manual dispatch (if not disabled)
+    if: github.event_name == 'push' || inputs.sync_oss != false
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -344,7 +345,8 @@ jobs:
   # Create OSS release with changelog
   oss-release:
     needs: [prepare, oss-sync]
-    if: inputs.create_release != false && inputs.sync_oss != false
+    # Run for tag pushes (always) or manual dispatch (if not disabled)
+    if: github.event_name == 'push' || (inputs.create_release != false && inputs.sync_oss != false)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
