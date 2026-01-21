@@ -70,6 +70,7 @@ export default {
   processing: 'Processing...',
   complete: 'Complete',
   errorStatus: 'Error',
+  noStatusFound: 'No status found',
 
   // Toast Messages
   linkCopiedToClipboard: 'Link copied to clipboard',

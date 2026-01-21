@@ -69,6 +69,7 @@ export default {
   processing: '处理中...',
   complete: '完成',
   errorStatus: '错误',
+  noStatusFound: '未找到状态',
 
   // Toast Messages / 提示消息
   linkCopiedToClipboard: '链接已复制到剪贴板',
