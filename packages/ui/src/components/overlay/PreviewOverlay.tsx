@@ -123,7 +123,7 @@ export function PreviewOverlay({
     </div>
   )
 
-  const contentArea = <div className="flex-1 min-h-0 flex flex-col overflow-hidden">{children}</div>
+  const contentArea = <div className="flex-1 min-h-0 relative">{children}</div>
 
   // Fullscreen mode - uses FullscreenOverlayBase for portal, traffic lights, and ESC handling
   if (!isModal) {

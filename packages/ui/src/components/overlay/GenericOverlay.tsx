@@ -136,7 +136,7 @@ export function GenericOverlay({
       }}
       title={title}
     >
-      <div className="h-full overflow-auto p-4">
+      <div className="absolute inset-0 overflow-auto p-4">
         {diffMode ? (
           // Side-by-side diff view
           <div className="flex gap-4 h-full">
