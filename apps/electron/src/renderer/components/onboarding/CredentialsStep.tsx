@@ -106,6 +106,7 @@ export function CredentialsStep({
 
   const isApiKey = billingMethod === 'api_key'
   const isOAuth = billingMethod === 'claude_oauth'
+  const isOpenRouter = billingMethod === 'openrouter'
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -245,6 +246,79 @@ export function CredentialsStep({
             </button>
           </div>
         )}
+      </StepFormLayout>
+    )
+  }
+
+  // OpenRouter API Key flow
+  if (isOpenRouter) {
+    return (
+      <StepFormLayout
+        title="Enter OpenRouter API Key"
+        description={
+          <>
+            Get your API key from{' '}
+            <a
+              href="https://openrouter.ai/keys"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-foreground hover:underline"
+            >
+              openrouter.ai/keys
+            </a>
+          </>
+        }
+        actions={
+          <>
+            <BackButton onClick={onBack} disabled={status === 'validating'} />
+            <ContinueButton
+              type="submit"
+              form="openrouter-key-form"
+              disabled={!value.trim()}
+              loading={status === 'validating'}
+              loadingText="Saving..."
+            />
+          </>
+        }
+      >
+        <form id="openrouter-key-form" onSubmit={handleSubmit}>
+          <div className="space-y-2">
+            <Label htmlFor="openrouter-key">OpenRouter API Key</Label>
+            <div className={cn(
+              "relative rounded-md shadow-minimal transition-colors",
+              "bg-foreground-2 focus-within:bg-background"
+            )}>
+              <Input
+                id="openrouter-key"
+                type={showValue ? 'text' : 'password'}
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                placeholder="sk-or-..."
+                className={cn(
+                  "pr-10 border-0 bg-transparent shadow-none",
+                  status === 'error' && "focus-visible:ring-destructive"
+                )}
+                disabled={status === 'validating'}
+                autoFocus
+              />
+              <button
+                type="button"
+                onClick={() => setShowValue(!showValue)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                tabIndex={-1}
+              >
+                {showValue ? (
+                  <EyeOff className="size-4" />
+                ) : (
+                  <Eye className="size-4" />
+                )}
+              </button>
+            </div>
+            {status === 'error' && errorMessage && (
+              <p className="text-sm text-destructive">{errorMessage}</p>
+            )}
+          </div>
+        </form>
       </StepFormLayout>
     )
   }

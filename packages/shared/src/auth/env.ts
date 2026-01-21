@@ -16,9 +16,14 @@ export interface ClaudeMaxCredentials {
   oauthToken: string;
 }
 
+export interface OpenRouterCredentials {
+  apiKey: string;
+}
+
 export type AuthCredentials =
   | { type: 'api_key'; credentials: ApiKeyCredentials }
-  | { type: 'oauth_token'; credentials: ClaudeMaxCredentials };
+  | { type: 'oauth_token'; credentials: ClaudeMaxCredentials }
+  | { type: 'openrouter'; credentials: OpenRouterCredentials };
 
 /**
  * Set environment variables for the specified auth type.
@@ -32,6 +37,7 @@ export function setAuthEnvironment(auth: AuthCredentials): void {
   // Clear all auth-related env vars first
   delete process.env.ANTHROPIC_API_KEY;
   delete process.env.ANTHROPIC_BASE_URL;
+  delete process.env.ANTHROPIC_AUTH_TOKEN;
   delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
 
   switch (auth.type) {
@@ -45,6 +51,16 @@ export function setAuthEnvironment(auth: AuthCredentials): void {
     case 'oauth_token':
       process.env.CLAUDE_CODE_OAUTH_TOKEN = auth.credentials.oauthToken;
       break;
+
+    case 'openrouter':
+      // OpenRouter requires specific env vars per their documentation:
+      // https://openrouter.ai/docs/guides/guides/claude-code-integration
+      process.env.ANTHROPIC_BASE_URL = 'https://openrouter.ai/api';
+      process.env.ANTHROPIC_AUTH_TOKEN = auth.credentials.apiKey;
+      // IMPORTANT: Must explicitly set ANTHROPIC_API_KEY to empty string
+      // (not undefined) to prevent SDK from using default auth
+      process.env.ANTHROPIC_API_KEY = '';
+      break;
   }
 }
 
@@ -54,5 +70,6 @@ export function setAuthEnvironment(auth: AuthCredentials): void {
 export function clearAuthEnvironment(): void {
   delete process.env.ANTHROPIC_API_KEY;
   delete process.env.ANTHROPIC_BASE_URL;
+  delete process.env.ANTHROPIC_AUTH_TOKEN;
   delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
 }

@@ -181,6 +181,17 @@ export class CredentialManager {
     await this.set({ type: 'anthropic_api_key' }, { value: key });
   }
 
+  /** Get OpenRouter API key */
+  async getOpenRouterApiKey(): Promise<string | null> {
+    const cred = await this.get({ type: 'openrouter_api_key' });
+    return cred?.value || null;
+  }
+
+  /** Set OpenRouter API key */
+  async setOpenRouterApiKey(key: string): Promise<void> {
+    await this.set({ type: 'openrouter_api_key' }, { value: key });
+  }
+
   /** Get Claude OAuth token */
   async getClaudeOAuth(): Promise<string | null> {
     const cred = await this.get({ type: 'claude_oauth' });

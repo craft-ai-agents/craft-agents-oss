@@ -175,7 +175,30 @@ export async function getClaudeOAuthToken(): Promise<string | null> {
   return manager.getClaudeOAuth();
 }
 
+/**
+ * Get the OpenRouter API key from credential store
+ */
+export async function getOpenRouterApiKey(): Promise<string | null> {
+  const manager = getCredentialManager();
+  return manager.getOpenRouterApiKey();
+}
 
+/**
+ * Update OpenRouter API key and set auth type to 'openrouter'
+ */
+export async function updateOpenRouterApiKey(newApiKey: string): Promise<boolean> {
+  const config = loadStoredConfig();
+  if (!config) return false;
+
+  // Save API key to credential store
+  const manager = getCredentialManager();
+  await manager.setOpenRouterApiKey(newApiKey);
+
+  // Update auth type in config (but not the key itself)
+  config.authType = 'openrouter';
+  saveConfig(config);
+  return true;
+}
 
 export function saveConfig(config: StoredConfig): void {
   ensureConfigDir();

@@ -1,8 +1,9 @@
 import { cn } from "@/lib/utils"
 import { Check, CreditCard, Key } from "lucide-react"
 import { StepFormLayout, BackButton, ContinueButton } from "./primitives"
+import openRouterLogo from "@/assets/openrouter.svg"
 
-export type BillingMethod = 'api_key' | 'claude_oauth'
+export type BillingMethod = 'api_key' | 'claude_oauth' | 'openrouter'
 
 interface BillingOption {
   id: BillingMethod
@@ -26,6 +27,12 @@ const BILLING_OPTIONS: BillingOption[] = [
     description: 'Pay-as-you-go with your own API key.',
     icon: <Key className="size-4" />,
   },
+  {
+    id: 'openrouter',
+    name: 'OpenRouter',
+    description: 'Access multiple AI models through OpenRouter.',
+    icon: <img src={openRouterLogo} alt="OpenRouter" className="size-4" />,
+  },
 ]
 
 interface BillingMethodStepProps {
@@ -38,9 +45,10 @@ interface BillingMethodStepProps {
 /**
  * BillingMethodStep - Choose how to pay for AI usage
  *
- * Two options:
+ * Three options:
  * - Claude Pro/Max (recommended) - Uses Claude subscription
  * - API Key - Pay-as-you-go via Anthropic
+ * - OpenRouter - Access multiple AI models through OpenRouter
  */
 export function BillingMethodStep({
   selectedMethod,

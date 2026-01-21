@@ -26,6 +26,7 @@ import {
   Moon,
   ExternalLink,
   CheckCircle2,
+  Check,
 } from 'lucide-react'
 import { Spinner } from '@craft-agent/ui'
 import type { AuthType } from '../../../shared/types'
@@ -374,6 +375,11 @@ export default function AppSettingsPage() {
   const [isTestingConnection, setIsTestingConnection] = useState(false)
   const [testConnectionResult, setTestConnectionResult] = useState<{ success: boolean; error?: string; modelCount?: number } | null>(null)
 
+  // OpenRouter API Key state
+  const [openRouterKeyValue, setOpenRouterKeyValue] = useState('')
+  const [isSavingOpenRouterKey, setIsSavingOpenRouterKey] = useState(false)
+  const [openRouterKeyError, setOpenRouterKeyError] = useState<string | undefined>()
+
   // Claude OAuth state
   const [existingClaudeToken, setExistingClaudeToken] = useState<string | null>(null)
   const [claudeOAuthStatus, setClaudeOAuthStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
@@ -512,9 +518,37 @@ export default function AppSettingsPage() {
 
     setExpandedMethod(method)
     setApiKeyError(undefined)
+    setOpenRouterKeyError(undefined)
     setClaudeOAuthStatus('idle')
     setClaudeOAuthError(undefined)
-  }, [authType, hasCredential, apiKeyValue])
+  }, [authType, hasCredential, apiKeyValue, baseUrlValue, customModelNames])
+
+  // Cancel OpenRouter dialog and clear local state
+  const handleCancel = useCallback(() => {
+    setExpandedMethod(null)
+    setOpenRouterKeyValue('')
+    setOpenRouterKeyError(undefined)
+  }, [])
+
+  // Save OpenRouter API key
+  const handleSaveOpenRouterKey = useCallback(async () => {
+    if (!window.electronAPI || !openRouterKeyValue.trim()) return
+
+    setIsSavingOpenRouterKey(true)
+    setOpenRouterKeyError(undefined)
+    try {
+      await window.electronAPI.updateBillingMethod('openrouter', openRouterKeyValue.trim())
+      setAuthType('openrouter')
+      setHasCredential(true)
+      setOpenRouterKeyValue('')
+      setExpandedMethod(null)
+    } catch (error) {
+      console.error('Failed to save OpenRouter API key:', error)
+      setOpenRouterKeyError(error instanceof Error ? error.message : 'Invalid API key. Please check and try again.')
+    } finally {
+      setIsSavingOpenRouterKey(false)
+    }
+  }, [openRouterKeyValue])
 
   // Use existing Claude token
   const handleUseExistingClaudeToken = useCallback(async () => {
@@ -685,13 +719,16 @@ export default function AppSettingsPage() {
                       ? 'API key configured'
                       : authType === 'oauth_token' && hasCredential
                         ? 'Claude connected'
-                        : 'Select a method'
+                        : authType === 'openrouter' && hasCredential
+                          ? 'OpenRouter configured'
+                          : 'Select a method'
                   }
                   value={authType}
                   onValueChange={(v) => handleMethodClick(v as AuthType)}
                   options={[
                     { value: 'oauth_token', label: 'Claude Pro/Max', description: 'Use your Pro or Max subscription' },
                     { value: 'api_key', label: 'API Key', description: 'Pay-as-you-go with your Anthropic key' },
+                    { value: 'openrouter', label: 'OpenRouter', description: 'Use OpenRouter to access multiple AI models' },
                   ]}
                 />
               </SettingsCard>
@@ -840,6 +877,81 @@ export default function AppSettingsPage() {
                       isWaitingForCode={false}
                     />
                   )}
+                </DialogContent>
+              </Dialog>
+
+              {/* OpenRouter API Key Dialog */}
+              <Dialog open={expandedMethod === 'openrouter'} onOpenChange={(open) => !open && handleCancel()}>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>OpenRouter</DialogTitle>
+                    <DialogDescription>
+                      Configure your OpenRouter API key
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    {/* Description */}
+                    <p className="text-sm text-muted-foreground">
+                      Access multiple AI models through OpenRouter.{' '}
+                      <a
+                        href="https://openrouter.ai/keys"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-foreground hover:underline inline-flex items-center gap-0.5"
+                        onClick={(e) => {
+                          e.preventDefault()
+                          window.electronAPI?.openUrl('https://openrouter.ai/keys')
+                        }}
+                      >
+                        Get an API key from OpenRouter
+                        <ExternalLink className="size-3" />
+                      </a>
+                    </p>
+
+                    {/* Input */}
+                    <div className="relative">
+                      <Input
+                        type="password"
+                        value={openRouterKeyValue}
+                        onChange={(e) => setOpenRouterKeyValue(e.target.value)}
+                        placeholder={authType === 'openrouter' && hasCredential ? '••••••••••••••••' : 'sk-or-...'}
+                        className={cn("pr-10", openRouterKeyError && "border-destructive")}
+                        disabled={isSavingOpenRouterKey}
+                      />
+                    </div>
+
+                    {/* Error message */}
+                    {openRouterKeyError && (
+                      <p className="text-xs text-destructive">{openRouterKeyError}</p>
+                    )}
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-2 pt-2">
+                      <Button
+                        onClick={handleSaveOpenRouterKey}
+                        disabled={!openRouterKeyValue.trim() || isSavingOpenRouterKey}
+                      >
+                        {isSavingOpenRouterKey ? (
+                          <>
+                            <Spinner className="mr-1.5" />
+                            Saving...
+                          </>
+                        ) : (
+                          <>
+                            <Check className="size-3 mr-1.5" />
+                            {authType === 'openrouter' && hasCredential ? 'Update Key' : 'Save'}
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        onClick={handleCancel}
+                        disabled={isSavingOpenRouterKey}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
                 </DialogContent>
               </Dialog>
             </SettingsSection>

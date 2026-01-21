@@ -19,11 +19,32 @@ const MAX_SUMMARIZATION_INPUT = 100000;
 let anthropicClient: Anthropic | null = null;
 
 /**
+ * Clear the cached Anthropic client.
+ * Should be called when authentication changes (e.g., switching from Anthropic to OpenRouter).
+ */
+export function clearAnthropicClient(): void {
+  anthropicClient = null;
+}
+
+/**
  * Get or create Anthropic client for summarization.
- * Supports auth types: api_key and oauth_token.
+ * Supports auth types: api_key, oauth_token, and openrouter.
  */
 async function getAnthropicClient(): Promise<Anthropic | null> {
   if (anthropicClient) {
+    return anthropicClient;
+  }
+
+  // Check for OpenRouter configuration first (has higher priority when set)
+  const baseUrl = process.env.ANTHROPIC_BASE_URL;
+  const authToken = process.env.ANTHROPIC_AUTH_TOKEN;
+  if (baseUrl && authToken) {
+    // OpenRouter mode: use custom base URL and auth token
+    anthropicClient = new Anthropic({
+      apiKey: authToken,
+      baseURL: baseUrl,
+    });
+    debug('[summarize] Using OpenRouter for summarization');
     return anthropicClient;
   }
 
@@ -53,6 +74,19 @@ async function getAnthropicClient(): Promise<Anthropic | null> {
 
   // Fallback: try credential manager (for cases where env vars aren't set yet)
   const manager = getCredentialManager();
+
+  // Try OpenRouter API key first
+  const openRouterKey = await manager.getOpenRouterApiKey();
+  if (openRouterKey) {
+    anthropicClient = new Anthropic({
+      apiKey: openRouterKey,
+      baseURL: 'https://openrouter.ai/api',
+    });
+    debug('[summarize] Using OpenRouter API key from credential manager for summarization');
+    return anthropicClient;
+  }
+
+  // Try Anthropic API key
   const apiKey = await manager.getApiKey();
   if (apiKey) {
     const baseUrl = process.env.ANTHROPIC_BASE_URL?.trim();

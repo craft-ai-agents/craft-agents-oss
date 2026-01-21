@@ -68,6 +68,7 @@ function billingMethodToAuthType(method: BillingMethod): AuthType {
   switch (method) {
     case 'api_key': return 'api_key'
     case 'claude_oauth': return 'oauth_token'
+    case 'openrouter': return 'openrouter'
   }
 }
 

@@ -46,7 +46,7 @@ import { setAnthropicOptionsEnv, setPathToClaudeCodeExecutable, setInterceptorPa
 import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { CraftMcpClient } from '@craft-agent/shared/mcp'
 import { type Session, type Message, type SessionEvent, type FileAttachment, type StoredAttachment, type SendMessageOptions, IPC_CHANNELS, generateMessageId } from '../shared/types'
-import { generateSessionTitle, regenerateSessionTitle, formatPathsToRelative, formatToolInputPaths, perf } from '@craft-agent/shared/utils'
+import { generateSessionTitle, regenerateSessionTitle, formatPathsToRelative, formatToolInputPaths, perf, clearAnthropicClient } from '@craft-agent/shared/utils'
 import { DEFAULT_MODEL } from '@craft-agent/shared/config'
 import { type ThinkingLevel, DEFAULT_THINKING_LEVEL } from '@craft-agent/shared/agent/thinking-levels'
 
@@ -492,23 +492,36 @@ export class SessionManager {
 
       sessionLog.info('Reinitializing auth with billing type:', billing.type)
 
+      // Clear cached Anthropic client (important when switching auth types)
+      clearAnthropicClient()
+
+      // Clear all auth-related env vars first
+      delete process.env.ANTHROPIC_API_KEY
+      delete process.env.CLAUDE_CODE_OAUTH_TOKEN
+      delete process.env.ANTHROPIC_BASE_URL
+      delete process.env.ANTHROPIC_AUTH_TOKEN
+
       if (billing.type === 'oauth_token' && billing.claudeOAuthToken) {
         // Use Claude Max subscription via OAuth token
         process.env.CLAUDE_CODE_OAUTH_TOKEN = billing.claudeOAuthToken
-        delete process.env.ANTHROPIC_API_KEY
         sessionLog.info('Set Claude Max OAuth Token')
+      } else if (billing.type === 'openrouter' && billing.openRouterApiKey) {
+        // Use OpenRouter API
+        // Per OpenRouter docs: https://openrouter.ai/docs/guides/guides/claude-code-integration
+        process.env.ANTHROPIC_BASE_URL = 'https://openrouter.ai/api'
+        process.env.ANTHROPIC_AUTH_TOKEN = billing.openRouterApiKey
+        // IMPORTANT: Must explicitly set to empty string (not delete)
+        process.env.ANTHROPIC_API_KEY = ''
+        sessionLog.info('Set OpenRouter API Key')
       } else if (billing.apiKey) {
         // Use API key (pay-as-you-go)
         process.env.ANTHROPIC_API_KEY = billing.apiKey
-        delete process.env.CLAUDE_CODE_OAUTH_TOKEN
 
         // Set custom base URL if configured
         const baseUrl = getAnthropicBaseUrl()
         if (baseUrl) {
           process.env.ANTHROPIC_BASE_URL = baseUrl
           sessionLog.info(`Set Anthropic Base URL: ${baseUrl}`)
-        } else {
-          delete process.env.ANTHROPIC_BASE_URL
         }
 
         sessionLog.info('Set Anthropic API Key')

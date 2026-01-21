@@ -124,6 +124,10 @@ export function registerOnboardingHandlers(sessionManager: SessionManager): void
             await manager.setClaudeOAuth(config.credential)
             mainLog.info('[Onboarding:Main] Claude OAuth saved (access token only)')
           }
+        } else if (config.authType === 'openrouter') {
+          mainLog.info('[Onboarding:Main] Calling manager.setOpenRouterApiKey...')
+          await manager.setOpenRouterApiKey(config.credential)
+          mainLog.info('[Onboarding:Main] OpenRouter API key saved successfully')
         }
       } else {
         mainLog.info('[Onboarding:Main] Skipping credential save', {

@@ -861,6 +861,8 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       hasCredential = !!apiKey
     } else if (authType === 'oauth_token') {
       hasCredential = !!(await manager.getClaudeOAuth())
+    } else if (authType === 'openrouter') {
+      hasCredential = !!(await manager.getOpenRouterApiKey())
     }
 
     return {
@@ -883,6 +885,8 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
         await manager.delete({ type: 'anthropic_api_key' })
       } else if (oldAuthType === 'oauth_token') {
         await manager.delete({ type: 'claude_oauth' })
+      } else if (oldAuthType === 'openrouter') {
+        await manager.delete({ type: 'openrouter_api_key' })
       }
     }
 
@@ -934,6 +938,9 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
           await manager.setClaudeOAuth(credential)
           ipcLog.info('Saved Claude OAuth access token only')
         }
+      } else if (authType === 'openrouter') {
+        await manager.setOpenRouterApiKey(credential)
+        ipcLog.info('Saved OpenRouter API key')
       }
     } else if (credential === '') {
       // Empty string means user explicitly cleared the credential

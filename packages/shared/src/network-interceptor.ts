@@ -129,10 +129,12 @@ function debugLog(...args: unknown[]) {
 
 
 /**
- * Check if URL is Anthropic API
+ * Check if URL is Anthropic API (including OpenRouter which is API-compatible)
  */
 function isAnthropicMessagesUrl(url: string): boolean {
-  return url.includes('api.anthropic.com') && url.includes('/messages');
+  const isAnthropic = url.includes('api.anthropic.com') && url.includes('/messages');
+  const isOpenRouter = url.includes('openrouter.ai/api') && url.includes('/messages');
+  return isAnthropic || isOpenRouter;
 }
 
 /**
@@ -207,7 +209,9 @@ function addMetadataToMcpTools(body: Record<string, unknown>): Record<string, un
  * Check if URL should have API errors captured
  */
 function shouldCaptureApiErrors(url: string): boolean {
-  return url.includes('api.anthropic.com') && url.includes('/messages');
+  const isAnthropic = url.includes('api.anthropic.com') && url.includes('/messages');
+  const isOpenRouter = url.includes('openrouter.ai/api') && url.includes('/messages');
+  return isAnthropic || isOpenRouter;
 }
 
 const originalFetch = globalThis.fetch.bind(globalThis);
