@@ -22,6 +22,10 @@ export interface ParsedMentions {
   skills: string[]
   /** Source slugs mentioned via @src:slug */
   sources: string[]
+  /** File paths mentioned via [file:path] */
+  files: string[]
+  /** Folder paths mentioned via [folder:path] */
+  folders: string[]
 }
 
 export interface MentionMatch {
@@ -57,6 +61,8 @@ export function parseMentions(
   const result: ParsedMentions = {
     skills: [],
     sources: [],
+    files: [],
+    folders: [],
   }
 
   // Match source mentions: [source:slug]
@@ -75,6 +81,24 @@ export function parseMentions(
     const slug = match[1]
     if (availableSkillSlugs.includes(slug) && !result.skills.includes(slug)) {
       result.skills.push(slug)
+    }
+  }
+
+  // Match file mentions: [file:path]
+  const filePattern = /\[file:([^\]]+)\]/g
+  while ((match = filePattern.exec(text)) !== null) {
+    const filePath = match[1]
+    if (!result.files.includes(filePath)) {
+      result.files.push(filePath)
+    }
+  }
+
+  // Match folder mentions: [folder:path]
+  const folderPattern = /\[folder:([^\]]+)\]/g
+  while ((match = folderPattern.exec(text)) !== null) {
+    const folderPath = match[1]
+    if (!result.folders.includes(folderPath)) {
+      result.folders.push(folderPath)
     }
   }
 
@@ -125,6 +149,28 @@ export function findMentionMatches(
     }
   }
 
+  // Match file mentions: [file:path]
+  const filePattern = /(\[file:([^\]]+)\])/g
+  while ((match = filePattern.exec(text)) !== null) {
+    matches.push({
+      type: 'file',
+      id: match[2],
+      fullMatch: match[1],
+      startIndex: match.index,
+    })
+  }
+
+  // Match folder mentions: [folder:path]
+  const folderPattern = /(\[folder:([^\]]+)\])/g
+  while ((match = folderPattern.exec(text)) !== null) {
+    matches.push({
+      type: 'folder',
+      id: match[2],
+      fullMatch: match[1],
+      startIndex: match.index,
+    })
+  }
+
   // Sort by position
   return matches.sort((a, b) => a.startIndex - b.startIndex)
 }
@@ -143,6 +189,12 @@ export function removeMention(text: string, type: MentionItemType, id: string): 
   switch (type) {
     case 'source':
       pattern = new RegExp(`\\[source:${escapeRegExp(id)}\\]`, 'g')
+      break
+    case 'file':
+      pattern = new RegExp(`\\[file:${escapeRegExp(id)}\\]`, 'g')
+      break
+    case 'folder':
+      pattern = new RegExp(`\\[folder:${escapeRegExp(id)}\\]`, 'g')
       break
     case 'skill':
     default:
@@ -168,6 +220,10 @@ export function stripAllMentions(text: string): string {
     .replace(/\[source:[\w-]+\]/g, '')
     // Remove [skill:slug]
     .replace(/\[skill:[\w-]+\]/g, '')
+    // Remove [file:path]
+    .replace(/\[file:[^\]]+\]/g, '')
+    // Remove [folder:path]
+    .replace(/\[folder:[^\]]+\]/g, '')
     .replace(/\s+/g, ' ')
     .trim()
 }
@@ -181,7 +237,7 @@ export function hasMentions(
   availableSourceSlugs: string[]
 ): boolean {
   const mentions = parseMentions(text, availableSkillSlugs, availableSourceSlugs)
-  return mentions.skills.length > 0 || mentions.sources.length > 0
+  return mentions.skills.length > 0 || mentions.sources.length > 0 || mentions.files.length > 0 || mentions.folders.length > 0
 }
 
 // ============================================================================
@@ -248,10 +304,18 @@ export function extractBadges(
 
       // Get cached icon as data URL (preserves mime type for SVG, PNG, etc.)
       iconDataUrl = getSourceIconSync(workspaceId, match.id) ?? undefined
+    } else if (match.type === 'file') {
+      // Extract file name from path as label
+      const fileName = match.id.split('/').pop() || match.id
+      label = fileName
+    } else if (match.type === 'folder') {
+      // Extract folder name from path as label
+      const folderName = match.id.split('/').pop() || match.id
+      label = folderName
     }
 
     return {
-      type: match.type as 'source' | 'skill',
+      type: match.type as 'source' | 'skill' | 'file' | 'folder',
       label,
       rawText: match.fullMatch,
       iconDataUrl,

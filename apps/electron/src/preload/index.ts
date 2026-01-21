@@ -189,6 +189,10 @@ const api: ElectronAPI = {
   // Folder dialog
   openFolderDialog: () => ipcRenderer.invoke(IPC_CHANNELS.OPEN_FOLDER_DIALOG),
 
+  // File search (for @ mention file selection)
+  searchFiles: (basePath: string, query: string) => 
+    ipcRenderer.invoke(IPC_CHANNELS.SEARCH_FILES, basePath, query),
+
   // User Preferences
   readPreferences: () => ipcRenderer.invoke(IPC_CHANNELS.PREFERENCES_READ),
   writePreferences: (content: string) => ipcRenderer.invoke(IPC_CHANNELS.PREFERENCES_WRITE, content),

@@ -68,12 +68,17 @@ const SKILL_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="10" heigh
 
 const SOURCE_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>`
 
+const FILE_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`
+
+const FOLDER_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>`
+
 function renderBadgeHTML(
   type: MentionItemType,
   label: string,
   skill?: LoadedSkill,
   source?: LoadedSource,
-  workspaceId?: string
+  workspaceId?: string,
+  tooltip?: string
 ): string {
   // Try to get cached icon first
   let iconHtml = ''
@@ -94,14 +99,19 @@ function renderBadgeHTML(
       iconHtml = `<span class="h-[12px] w-[12px] rounded-[2px] bg-foreground/5 flex items-center justify-center text-foreground/50 shrink-0">${SKILL_ICON_SVG}</span>`
     } else if (type === 'source') {
       iconHtml = `<span class="h-[12px] w-[12px] rounded-[2px] bg-foreground/5 flex items-center justify-center text-foreground/50 shrink-0">${SOURCE_ICON_SVG}</span>`
+    } else if (type === 'file') {
+      iconHtml = `<span class="h-[12px] w-[12px] rounded-[2px] bg-foreground/5 flex items-center justify-center text-foreground/50 shrink-0">${FILE_ICON_SVG}</span>`
+    } else if (type === 'folder') {
+      iconHtml = `<span class="h-[12px] w-[12px] rounded-[2px] bg-foreground/5 flex items-center justify-center text-foreground/50 shrink-0">${FOLDER_ICON_SVG}</span>`
     }
   }
 
   const escapedLabel = label.replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const titleAttr = tooltip ? ` title="${tooltip.replace(/"/g, '&quot;')}"` : ''
 
   // Line height is increased when badges are present (see hasMentions in component)
   // Use transform for upward shift - doesn't affect layout flow (works even at start of line)
-  return `<span contenteditable="false" data-mention="true" class="mention-badge inline-flex items-center gap-1 h-[22px] px-1.5 mx-1 rounded-[5px] bg-background shadow-minimal text-[12px] text-foreground [&_*]:selection:bg-transparent selection:bg-transparent" style="vertical-align: middle; transform: translateY(-1px)">${iconHtml}<span class="truncate max-w-[200px]">${escapedLabel}</span></span>`
+  return `<span contenteditable="false" data-mention="true"${titleAttr} class="mention-badge inline-flex items-center gap-1 h-[22px] px-1.5 ml-1.5 mr-1.5 rounded-[5px] bg-background shadow-minimal text-[12px] text-foreground select-none [&_*]:selection:bg-transparent selection:bg-transparent" style="vertical-align: middle; transform: translateY(-1px);">${iconHtml}<span class="truncate max-w-[200px]">${escapedLabel}</span></span>`
 }
 
 // ============================================================================
@@ -140,7 +150,7 @@ function getTextFromElement(element: HTMLElement): string {
         // We detect this by checking if a top-level DIV is immediately followed
         // by a mention badge sibling. If so, skip adding the newline.
         if (isTopLevel) {
-          // Check if this DIV is followed by a mention badge at top level.
+          // Check if this DIV is followed          // the DIV wrapper and the badge span.
           // Skip over ZWS-only text nodes - browser may preserve them between
           // the DIV wrapper and the badge span.
           let nextSibling: Node | null = el.nextSibling
@@ -241,8 +251,30 @@ function setCursorPosition(element: HTMLElement, targetPosition: number): void {
       if (el.getAttribute('data-mention') === 'true') {
         const mentionText = el.getAttribute('data-mention-text') || ''
         const mentionLength = mentionText.length
+        // Check if target is within or right after the badge
         if (currentPos + mentionLength >= targetPosition) {
-          // Position cursor after the badge
+          // Position cursor after the badge - find next sibling text node
+          const nextSibling = el.nextSibling
+          if (nextSibling && nextSibling.nodeType === Node.TEXT_NODE) {
+            const text = nextSibling.textContent || ''
+            // Calculate how far past the badge end we need to go
+            const offsetIntoNextNode = targetPosition - (currentPos + mentionLength)
+            let offset = 0
+            let modelCount = 0
+            // Skip ZWS and count real characters to reach target
+            while (offset < text.length && modelCount < offsetIntoNextNode) {
+              if (text[offset] !== '\u200B') {
+                modelCount++
+              }
+              offset++
+            }
+            // Skip any trailing ZWS at target position
+            while (offset < text.length && text[offset] === '\u200B') {
+              offset++
+            }
+            return { node: nextSibling, offset }
+          }
+          // Fallback: position at parent's child index after badge
           return { node: el.parentNode!, offset: Array.from(el.parentNode!.childNodes).indexOf(el) + 1 }
         }
         currentPos += mentionLength
@@ -319,6 +351,8 @@ function textToHTML(
     html += '\u200B'
   }
 
+
+
   for (const match of matches) {
     // Add escaped text before this mention
     if (match.startIndex > lastIndex) {
@@ -330,22 +364,34 @@ function textToHTML(
     let skill: LoadedSkill | undefined
     let source: LoadedSource | undefined
 
+    let tooltip: string | undefined
+
     if (match.type === 'skill') {
       skill = skills.find(s => s.slug === match.id)
       label = skill?.metadata.name || match.id
     } else if (match.type === 'source') {
       source = sources.find(s => s.config.slug === match.id)
       label = source?.config.name || match.id
+    } else if (match.type === 'file') {
+      // Extract file name from path as label, show full path in tooltip
+      label = match.id.split('/').pop() || match.id
+      tooltip = match.id
+    } else if (match.type === 'folder') {
+      // Extract folder name from path as label, show full path in tooltip
+      label = match.id.split('/').pop() || match.id
+      tooltip = match.id
     }
 
     // Render badge with data-mention-text storing the original text
-    const badgeHtml = renderBadgeHTML(match.type, label, skill, source, workspaceId)
+    const badgeHtml = renderBadgeHTML(match.type, label, skill, source, workspaceId, tooltip)
     // Add data-mention-text attribute to store original text for extraction
     const withMentionText = badgeHtml.replace(
       'data-mention="true"',
       `data-mention="true" data-mention-text="${match.fullMatch.replace(/"/g, '&quot;')}"`
     )
     html += withMentionText
+    // Add zero-width space after badge to ensure cursor can be placed after it
+    html += '\u200B'
 
     lastIndex = match.startIndex + match.fullMatch.length
   }
@@ -612,6 +658,119 @@ export const RichTextInput = React.forwardRef<RichTextInputHandle, RichTextInput
       onBlur?.(e)
     }, [onBlur])
 
+    // Handle keydown - intercept Backspace/Delete near badges for atomic deletion
+    const handleKeyDownInternal = React.useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+      // 1. Navigation handling (ArrowLeft / ArrowRight)
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        const selection = window.getSelection()
+        if (!selection || selection.rangeCount === 0 || !divRef.current) {
+          onKeyDown?.(e)
+          return
+        }
+        
+        const cursorPos = getCursorPosition(divRef.current, 0)
+        const text = lastValueRef.current
+        const matches = findMentionMatches(text, skillSlugs, sourceSlugs)
+
+        for (const match of matches) {
+           const mentionStart = match.startIndex
+           const mentionEnd = match.startIndex + match.fullMatch.length
+
+           if (e.key === 'ArrowLeft' && cursorPos === mentionEnd) {
+             e.preventDefault()
+             // Jump to start of mention (skipping ZWS/badge)
+             const imperativeHandle = {
+                setSelectionRange: (start: number, end: number) => {
+                  if (divRef.current) setCursorPosition(divRef.current, start)
+                }
+             }
+             imperativeHandle.setSelectionRange(mentionStart, mentionStart)
+             return
+           }
+
+           if (e.key === 'ArrowRight' && cursorPos === mentionStart) {
+             e.preventDefault()
+             // Jump to end of mention
+             const imperativeHandle = {
+                setSelectionRange: (start: number, end: number) => {
+                  if (divRef.current) setCursorPosition(divRef.current, start)
+                }
+             }
+             imperativeHandle.setSelectionRange(mentionEnd, mentionEnd)
+             return
+           }
+        }
+      }
+
+      // 2. Deletion handling (Backspace / Delete)
+      if (e.key === 'Backspace' || e.key === 'Delete') {
+        const selection = window.getSelection()
+        if (!selection || selection.rangeCount === 0 || !divRef.current) {
+          onKeyDown?.(e)
+          return
+        }
+
+        const range = selection.getRangeAt(0)
+        if (!range.collapsed) {
+          // Selection exists, let default behavior handle it
+          onKeyDown?.(e)
+          return
+        }
+
+        // Check if cursor is adjacent to a badge
+        const cursorPos = getCursorPosition(divRef.current, 0)
+        const text = lastValueRef.current
+        const matches = findMentionMatches(text, skillSlugs, sourceSlugs)
+
+        for (const match of matches) {
+          const mentionStart = match.startIndex
+          const mentionEnd = match.startIndex + match.fullMatch.length
+
+          // Backspace: cursor right after mention end (or within ZWS range)
+          // We allow +1 tolerance in case a phantom char is counted, but usually strict match works 
+          // if we trust getCursorPosition. Given user feedback, we'll check precise match first.
+          if (e.key === 'Backspace' && cursorPos === mentionEnd) {
+            e.preventDefault()
+            const before = text.slice(0, mentionStart)
+            const after = text.slice(mentionEnd) 
+            const newText = before + after
+            
+            // Update value and cursor
+            lastValueRef.current = newText
+            lastMentionSignatureRef.current = getMentionSignature(newText, skillSlugs, sourceSlugs)
+            isInternalUpdate.current = true
+            const html = textToHTML(newText, skills, sources, workspaceId)
+            divRef.current.innerHTML = html || '<br>'
+            setCursorPosition(divRef.current, mentionStart)
+            isInternalUpdate.current = false
+            onChange(newText)
+            return
+          }
+
+          // Delete: cursor right before mention start
+          if (e.key === 'Delete' && cursorPos === mentionStart) {
+            e.preventDefault()
+            const before = text.slice(0, mentionStart)
+            const after = text.slice(mentionEnd) 
+            const newText = before + after
+            
+            lastValueRef.current = newText
+            lastMentionSignatureRef.current = getMentionSignature(newText, skillSlugs, sourceSlugs)
+            isInternalUpdate.current = true
+            const html = textToHTML(newText, skills, sources, workspaceId)
+            divRef.current.innerHTML = html || '<br>'
+            setCursorPosition(divRef.current, mentionStart)
+            isInternalUpdate.current = false
+            onChange(newText)
+            return
+          }
+        }
+      }
+
+      // Pass through to external handler
+      onKeyDown?.(e)
+    }, [onKeyDown, onChange, skills, sources, skillSlugs, sourceSlugs, workspaceId])
+
     // Sync value from props (when parent updates value externally)
     React.useEffect(() => {
       if (!divRef.current) return
@@ -699,7 +858,7 @@ export const RichTextInput = React.forwardRef<RichTextInputHandle, RichTextInput
     // Check if value contains any mentions (badges) to adjust line height
     const hasMentions = React.useMemo(() => {
       const mentions = parseMentions(value, skillSlugs, sourceSlugs)
-      return mentions.skills.length > 0 || mentions.sources.length > 0
+      return mentions.skills.length > 0 || mentions.sources.length > 0 || mentions.files.length > 0
     }, [value, skillSlugs, sourceSlugs])
 
     return (
@@ -720,7 +879,7 @@ export const RichTextInput = React.forwardRef<RichTextInputHandle, RichTextInput
           // Use inline style for line-height to override text-sm's built-in line-height
           style={{ lineHeight: 1.25 }}
           onInput={handleInput}
-          onKeyDown={onKeyDown}
+          onKeyDown={handleKeyDownInternal}
           onFocus={handleFocus}
           onBlur={handleBlur}
           onPaste={handlePasteInternal}

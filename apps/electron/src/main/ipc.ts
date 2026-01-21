@@ -689,6 +689,82 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     }
   })
 
+  // File search for @ mention file selection
+  // Searches for files/directories matching query within basePath
+  ipcMain.handle(IPC_CHANNELS.SEARCH_FILES, async (_event, basePath: string, query: string) => {
+    const { readdir, stat } = await import('fs/promises')
+    const { join, relative } = await import('path')
+    
+    // Limit results and depth for performance
+    const MAX_RESULTS = 50
+    const MAX_DEPTH = 5
+    const results: Array<{ name: string; path: string; type: 'file' | 'directory'; relativePath: string }> = []
+    
+    // Skip these directories for performance
+    const SKIP_DIRS = new Set([
+      'node_modules', '.git', '.svn', '.hg', 'dist', 'build', 
+      '.next', '.nuxt', '.cache', '__pycache__', 'vendor',
+      '.idea', '.vscode', 'coverage', '.nyc_output'
+    ])
+    
+    const lowerQuery = query.toLowerCase()
+    
+    async function searchDir(dirPath: string, depth: number): Promise<void> {
+      if (depth > MAX_DEPTH || results.length >= MAX_RESULTS) return
+      
+      try {
+        const entries = await readdir(dirPath, { withFileTypes: true })
+        
+        for (const entry of entries) {
+          if (results.length >= MAX_RESULTS) break
+          
+          const entryPath = join(dirPath, entry.name)
+          const relativePath = relative(basePath, entryPath)
+          const lowerName = entry.name.toLowerCase()
+          
+          // Check if name matches query (fuzzy: contains)
+          if (lowerName.includes(lowerQuery)) {
+            results.push({
+              name: entry.name,
+              path: entryPath,
+              type: entry.isDirectory() ? 'directory' : 'file',
+              relativePath,
+            })
+          }
+          
+          // Recurse into directories (skip common large dirs)
+          if (entry.isDirectory() && !SKIP_DIRS.has(entry.name) && !entry.name.startsWith('.')) {
+            await searchDir(entryPath, depth + 1)
+          }
+        }
+      } catch (err) {
+        // Ignore permission errors, etc.
+        ipcLog.debug('searchFiles: skipping dir due to error:', dirPath, err)
+      }
+    }
+    
+    try {
+      // Validate basePath exists and is a directory
+      const baseStat = await stat(basePath)
+      if (!baseStat.isDirectory()) {
+        return []
+      }
+      
+      await searchDir(basePath, 0)
+      
+      // Sort: directories first, then by name length (shorter = better match)
+      results.sort((a, b) => {
+        if (a.type !== b.type) return a.type === 'directory' ? -1 : 1
+        return a.name.length - b.name.length
+      })
+      
+      return results
+    } catch (err) {
+      ipcLog.error('searchFiles error:', err)
+      return []
+    }
+  })
+
   // Auto-update handlers
   // Manual check from UI - don't auto-download (user might be on metered connection)
   ipcMain.handle(IPC_CHANNELS.UPDATE_CHECK, async () => {

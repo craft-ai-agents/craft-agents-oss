@@ -71,6 +71,16 @@ export interface SessionFile {
   children?: SessionFile[]  // Recursive children for directories
 }
 
+/**
+ * File search result for @ mention file selection
+ */
+export interface FileSearchResult {
+  name: string
+  path: string
+  type: 'file' | 'directory'
+  relativePath: string  // Path relative to search base
+}
+
 // Import auth request types for unified auth flow
 import type { AuthRequest as SharedAuthRequest, CredentialInputMode as SharedCredentialInputMode, CredentialAuthRequest as SharedCredentialAuthRequest } from '@craft-agent/shared/agent';
 export type { SharedAuthRequest as AuthRequest };
@@ -546,6 +556,9 @@ export const IPC_CHANNELS = {
   // Folder dialog (for selecting working directory)
   OPEN_FOLDER_DIALOG: 'dialog:openFolder',
 
+  // File search (for @ mention file selection)
+  SEARCH_FILES: 'files:search',
+
   // User Preferences
   PREFERENCES_READ: 'preferences:read',
   PREFERENCES_WRITE: 'preferences:write',
@@ -750,6 +763,9 @@ export interface ElectronAPI {
 
   // Folder dialog
   openFolderDialog(): Promise<string | null>
+
+  // File search (for @ mention file selection)
+  searchFiles(basePath: string, query: string): Promise<FileSearchResult[]>
 
   // User Preferences
   readPreferences(): Promise<{ content: string; exists: boolean; path: string }>

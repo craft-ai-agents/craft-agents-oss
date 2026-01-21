@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { File, Folder, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SkillAvatar } from '@/components/ui/skill-avatar'
 import { SourceAvatar } from '@/components/ui/source-avatar'
@@ -8,7 +9,7 @@ import type { LoadedSkill, LoadedSource } from '../../../shared/types'
 // Types
 // ============================================================================
 
-export type MentionItemType = 'skill' | 'source'
+export type MentionItemType = 'skill' | 'source' | 'file' | 'folder'
 
 export interface MentionItem {
   id: string
@@ -18,6 +19,7 @@ export interface MentionItem {
   // Type-specific data
   skill?: LoadedSkill
   source?: LoadedSource
+  file?: { path: string; type: 'file' | 'directory'; relativePath: string }
 }
 
 export interface MentionSection {
@@ -36,6 +38,8 @@ export interface InlineMentionMenuProps {
   workspaceId?: string
   maxWidth?: number
   className?: string
+  /** Whether file search is in progress */
+  isSearching?: boolean
 }
 
 // ============================================================================
@@ -147,6 +151,7 @@ export function InlineMentionMenu({
   workspaceId,
   maxWidth = 280,
   className,
+  isSearching = false,
 }: InlineMentionMenuProps) {
   const menuRef = React.useRef<HTMLDivElement>(null)
   const listRef = React.useRef<HTMLDivElement>(null)
@@ -216,8 +221,9 @@ export function InlineMentionMenu({
     }
   }, [selectedIndex])
 
-  // Hide if no results or not open
-  if (!open || flatItems.length === 0) return null
+  // Hide if not open, or if no results and not searching
+  if (!open) return null
+  if (flatItems.length === 0 && !isSearching) return null
 
   // Calculate bottom position from window height (menu appears above cursor)
   const bottomPosition = typeof window !== 'undefined'
@@ -275,6 +281,11 @@ export function InlineMentionMenu({
                     {item.type === 'source' && item.source && (
                       <SourceAvatar source={item.source} size="sm" />
                     )}
+                    {(item.type === 'file' || item.type === 'folder') && (
+                      item.type === 'folder'
+                        ? <Folder className="size-4" strokeWidth={1.75} />
+                        : <File className="size-4" strokeWidth={1.75} />
+                    )}
                   </div>
 
                   {/* Label and description */}
@@ -296,6 +307,14 @@ export function InlineMentionMenu({
             )}
           </React.Fragment>
         ))}
+
+        {/* Loading indicator when searching */}
+        {isSearching && flatItems.length === 0 && (
+          <div className="flex items-center justify-center gap-2 py-3 text-[13px] text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" />
+            <span>Searching...</span>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -318,14 +337,19 @@ export interface UseInlineMentionOptions {
   inputRef: React.RefObject<MentionInputElement | null>
   skills: LoadedSkill[]
   sources: LoadedSource[]
+  /** Base path for file search (workingDirectory) */
+  basePath?: string
   onSelect: (item: MentionItem) => void
 }
+
 
 export interface UseInlineMentionReturn {
   isOpen: boolean
   filter: string
   position: { x: number; y: number }
   sections: MentionSection[]
+  /** Whether file search is in progress */
+  isSearching: boolean
   handleInputChange: (value: string, cursorPosition: number) => void
   close: () => void
   handleSelect: (item: MentionItem) => { value: string; cursorPosition: number }
@@ -335,14 +359,27 @@ export function useInlineMention({
   inputRef,
   skills,
   sources,
+  basePath,
   onSelect,
 }: UseInlineMentionOptions): UseInlineMentionReturn {
   const [isOpen, setIsOpen] = React.useState(false)
   const [filter, setFilter] = React.useState('')
   const [position, setPosition] = React.useState({ x: 0, y: 0 })
   const [atStart, setAtStart] = React.useState(-1)
+  const [fileResults, setFileResults] = React.useState<MentionItem[]>([])
+  const [isSearching, setIsSearching] = React.useState(false)
+  const fileSearchTimeout = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   // Store current input state for handleSelect
   const currentInputRef = React.useRef({ value: '', cursorPosition: 0 })
+
+  // Cleanup pending timeout on unmount
+  React.useEffect(() => {
+    return () => {
+      if (fileSearchTimeout.current) {
+        clearTimeout(fileSearchTimeout.current)
+      }
+    }
+  }, [])
 
   // Build sections from available data (skills and sources only - folders moved to slash menu)
   const sections = React.useMemo((): MentionSection[] => {
@@ -380,8 +417,17 @@ export function useInlineMention({
       })
     }
 
+    // Files section (from search results)
+    if (fileResults.length > 0) {
+      result.push({
+        id: 'files',
+        label: 'Files',
+        items: fileResults,
+      })
+    }
+
     return result
-  }, [skills, sources])
+  }, [skills, sources, fileResults])
 
   const handleInputChange = React.useCallback((value: string, cursorPosition: number) => {
     // Store current state for handleSelect
@@ -392,32 +438,48 @@ export function useInlineMention({
     // This triggers on typing @ and shows menu while typing the filter
     const atMatch = textBeforeCursor.match(/@([\w\-/]*)$/)
 
-    // Only show menu if we have at least one section with items
-    const hasItems = sections.some(s => s.items.length > 0)
-
-    // Check if this is a valid @ mention trigger:
-    // - Must have @ match and items to show
-    // - @ must be at start of input OR preceded by whitespace (not mid-word like emails)
+    // Check if this is a valid @ mention trigger
     const matchStart = atMatch ? textBeforeCursor.lastIndexOf('@') : -1
-    const isValidTrigger = atMatch && hasItems && isValidMentionTrigger(textBeforeCursor, matchStart)
+    const isValidTrigger = atMatch && isValidMentionTrigger(textBeforeCursor, matchStart)
 
     if (isValidTrigger) {
       const filterText = atMatch[1] || ''
-      // Check if there are any filtered results before opening menu
-      // This ensures Enter key works normally when no matches exist
-      const filteredSections = filterSections(sections, filterText)
-      const hasFilteredItems = filteredSections.some(s => s.items.length > 0)
-
-      if (!hasFilteredItems) {
-        // No results after filtering - close menu to allow normal Enter handling
-        setIsOpen(false)
-        setFilter('')
-        setAtStart(-1)
-        return
-      }
-
       setAtStart(matchStart)
       setFilter(filterText)
+
+      // Trigger file search if basePath is available and filter exists
+      if (basePath && filterText.length >= 1) {
+        if (fileSearchTimeout.current) clearTimeout(fileSearchTimeout.current)
+        setIsSearching(true)
+        fileSearchTimeout.current = setTimeout(async () => {
+          try {
+            console.log('[mention] Searching files:', basePath, filterText)
+            const results = await window.electronAPI.searchFiles(basePath, filterText)
+            console.log('[mention] File search results:', results.length)
+            const items: MentionItem[] = results.slice(0, 20).map(f => ({
+              id: f.path,
+              type: f.type === 'directory' ? 'folder' as const : 'file' as const,
+              label: f.name,
+              description: f.relativePath,
+              file: { path: f.path, type: f.type, relativePath: f.relativePath },
+            }))
+            setFileResults(items)
+          } catch (err) {
+            console.error('[mention] File search error:', err)
+          } finally {
+            setIsSearching(false)
+          }
+        }, 150)
+      } else {
+        // Cancel any pending file search when filter becomes empty
+        if (fileSearchTimeout.current) {
+          clearTimeout(fileSearchTimeout.current)
+          fileSearchTimeout.current = null
+        }
+        setFileResults([])
+        setIsSearching(false)
+      }
+
 
       if (inputRef.current) {
         // Try to get actual caret position from the input element
@@ -447,7 +509,7 @@ export function useInlineMention({
       setFilter('')
       setAtStart(-1)
     }
-  }, [inputRef, sections])
+  }, [inputRef, sections, basePath])
 
   const handleSelect = React.useCallback((item: MentionItem): { value: string; cursorPosition: number } => {
     let result = ''
@@ -464,6 +526,10 @@ export function useInlineMention({
         mentionText = `[skill:${item.id}] `
       } else if (item.type === 'source') {
         mentionText = `[source:${item.id}] `
+      } else if (item.type === 'file') {
+        mentionText = `[file:${item.file?.relativePath || item.id}] `
+      } else if (item.type === 'folder') {
+        mentionText = `[folder:${item.file?.relativePath || item.id}] `
       } else {
         mentionText = `[skill:${item.id}] `
       }
@@ -489,6 +555,7 @@ export function useInlineMention({
     filter,
     position,
     sections,
+    isSearching,
     handleInputChange,
     close,
     handleSelect,

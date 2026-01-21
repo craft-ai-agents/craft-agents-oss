@@ -549,8 +549,8 @@ export function FreeFormInput({
     homeDir,
   })
 
-  // Handle mention selection (sources, skills - folders moved to slash menu)
-  const handleMentionSelect = React.useCallback((item: MentionItem) => {
+  // Handle mention selection (sources, skills, files)
+  const handleMentionSelect = React.useCallback(async (item: MentionItem) => {
     // For sources: enable the source immediately
     if (item.type === 'source' && item.source && onSourcesChange) {
       const slug = item.source.config.slug
@@ -561,14 +561,19 @@ export function FreeFormInput({
       }
     }
 
+    // Files via @ mention: no need to add to attachments
+    // The [file:path] syntax in text is enough, badge renders inline
+    // Only dragged/pasted/external files should appear in attachments preview
+
     // Skills don't need special handling - just the text insertion
   }, [optimisticSourceSlugs, onSourcesChange])
 
-  // Inline mention hook (for skills and sources only)
+  // Inline mention hook (for skills, sources, and files)
   const inlineMention = useInlineMention({
     inputRef: richInputRef,
     skills,
     sources,
+    basePath: workingDirectory,
     onSelect: handleMentionSelect,
   })
 
@@ -960,10 +965,12 @@ export function FreeFormInput({
     const { value: newValue, cursorPosition } = inlineMention.handleSelect(item)
     setInput(newValue)
     syncToParent(newValue)
-    // Focus input and restore cursor position after badge renders
+    // Set cursor position via setSelectionRange - this sets pendingCursorRef
+    // which the effect will use after updating the DOM
+    richInputRef.current?.setSelectionRange(cursorPosition, cursorPosition)
+    // Focus after render to ensure input is ready
     setTimeout(() => {
       richInputRef.current?.focus()
-      richInputRef.current?.setSelectionRange(cursorPosition, cursorPosition)
     }, 0)
   }, [inlineMention, syncToParent])
 
@@ -1007,6 +1014,7 @@ export function FreeFormInput({
           position={inlineMention.position}
           workspaceId={workspaceId}
           maxWidth={280}
+          isSearching={inlineMention.isSearching}
         />
 
         {/* Attachment Preview */}
