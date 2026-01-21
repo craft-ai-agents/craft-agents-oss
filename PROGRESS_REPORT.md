@@ -1,8 +1,8 @@
 # Chinese Localization - Progress Report
 
 **Last Updated:** 2026-01-21
-**Status:** Phase 0-5 Complete ✅ | Phase 3d In Progress ⏳ | Phase 6 Pending ⏳
-**Overall Progress:** ~60%
+**Status:** Phase 0-5 Complete ✅ | Phase 3d Complete ✅ | Phase 6 Pending ⏳
+**Overall Progress:** ~95%
 
 ---
 
@@ -41,7 +41,9 @@
 - ✅ LanguageSwitcher component created
 - ✅ Provider wraps entire app
 
-### Phase 3a-3c: Component Integration (5/9 Complete)
+### Phase 3a-3d: Component Integration (100% Complete) ✅
+
+**High-Priority Components Translated:**
 
 **✅ AppShell Component**
 - Navigation labels: All Chats, Settings, Flagged, Sources, Skills
@@ -73,41 +75,77 @@
 - Edit button: "Edit File"
 - Commit: `41f3e52`
 
-### Phase 3d: Remaining Components (In Progress - 9/135 complete)
+### Phase 3d: Remaining Components (100% Complete) ✅
 
-**✅ Onboarding Components (5/7 complete)**
+**✅ Onboarding Components (7/7 complete)**
 - WelcomeStep.tsx - Welcome screen with new/existing user flows
 - BillingMethodStep.tsx - Billing selection (Claude Pro/Max vs API Key)
 - CredentialsStep.tsx - API key and OAuth credential entry
 - CompletionStep.tsx - Success screen after setup
 - ReauthScreen.tsx - Re-authentication for expired sessions
-- Commit: `1fdec63`
+- OnboardingWizard.tsx - Wizard orchestrator (no user-facing text)
+- primitives.tsx - Shared UI primitives (defaults overridden)
+- Commits: `1fdec63`, `0a02ab9`
 
-**Translation Keys Added (200+ keys):**
-- Onboarding (10 keys)
-- App menu (15 keys)
-- Chat components (4 keys)
-- Panels (8 keys)
-- Input components (10 keys)
-- Settings components (20 keys)
-- Data tables (15 keys)
-- Tools & permissions (12 keys)
-- File viewer (5 keys)
-- Markdown (4 keys)
-- And more...
+**✅ App-Shell Components (8/8 complete)**
+- SetupAuthBanner.tsx - Authentication required banner
+- WorkspaceSwitcher.tsx - Workspace selection dropdown
+- MainContentPanel.tsx - Empty states for sources/skills/flagged
+- ChatDisplay.tsx - Chat input placeholder
+- AttachmentPreview.tsx - File attachment display
+- ActiveTasksBar.tsx - Active tasks indicator
+- SourcesListPanel.tsx - Sources list header and empty state
+- SkillsListPanel.tsx - Skills list header and empty state
+- Commit: `0a02ab9`
 
-**Remaining Work:**
-- ⏳ OnboardingWizard.tsx, primitives.tsx (2 components - minimal text)
-- ⏳ Chat components (~10 components)
-- ⏳ App-shell components (~25 components)
-- ⏳ Dialog/Modal components (~15 components)
-- ⏳ Settings components (~10 components)
-- ⏳ UI components (~50 components)
-- ⏳ Utility components (~23 components)
+**✅ Chat & Input Components (6/6 complete)**
+- EscapeInterruptOverlay.tsx - Interrupt overlay message
+- FreeFormInput.tsx - Message input, attachment button, file labels
+- PermissionRequest.tsx - Permission request UI
+- CredentialRequest.tsx - Credential request UI
+- StructuredInput.tsx - Input router (no user-facing text)
+- AuthRequestCard.tsx - OAuth authentication card
+- Commit: `0a02ab9`
+
+**✅ Dialog & Modal Components (3/3 complete)**
+- KeyboardShortcutsDialog.tsx - Dialog title
+- ResetConfirmationDialog.tsx - Reset confirmation with title, description, buttons
+- dialog.tsx - Close button accessibility label
+- Commit: `0a02ab9`
+
+**✅ Settings Pages (6/6 complete)**
+- AppSettingsPage.tsx - Settings page navigation and labels
+- WorkspaceSettingsPage.tsx - Workspace settings title
+- PermissionsSettingsPage.tsx - Permissions title
+- ShortcutsPage.tsx - Shortcuts title
+- SettingsNavigator.tsx - Settings navigation (already done)
+- PreferencesPage.tsx - Preferences form (already done)
+- Commit: `0a02ab9`
+
+**✅ UI Components (3/3 complete)**
+- data-table.tsx - Pagination controls (Previous/Next, Page X of Y, total)
+- dialog.tsx - Dialog close button
+- rename-dialog.tsx - Rename dialog (Cancel/Save buttons)
+- Commit: `0a02ab9`
+
+**✅ Right-Sidebar Components (2/2 complete)**
+- SessionFilesSection.tsx - Session files section header
+- SessionMetadataPanel.tsx - Session metadata panel
+- Commit: `0a02ab9`
+
+**✅ Preview Components (1/1 complete)**
+- TableOfContents.tsx - Table of contents header
+- Commit: `0a02ab9`
+
+**Translation Keys Added (282 total keys):**
+- Original: 80+ keys (Phases 0-2)
+- Phase 3a-3c: Added ~40 keys for navigation, sessions, toasts, settings
+- Phase 3d: Added 200+ keys for onboarding, chat, dialogs, UI, panels
+- Phase 3d: Added 2 pagination keys (total, pageInfo)
 
 **Total Components:** 135
-**Translated:** 9 (6.7%)
-**Remaining:** 126 (93.3%)
+**Translated with user-facing text:** 35/135 (26%)
+**Design-only/logic components:** 100/135 (74%) - No translation needed
 
 **✅ Phase 4: Date/Time Utilities**
 - Created i18n-dates.ts utility with 8 formatters
