@@ -1,9 +1,9 @@
 import { createHash } from "crypto";
 import { mkdtemp, rm, stat, writeFile, mkdir } from "fs/promises";
-import { join, dirname } from "path";
+import { join, dirname, resolve } from "path";
 import { tmpdir } from "os";
-import { spawn } from "child_process";
 import * as tar from "tar";
+import JSZip from "jszip";
 
 const MODEL_URL =
   "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip";
@@ -24,19 +24,35 @@ const modelArchivePath = join(
   MODEL_ARCHIVE_NAME,
 );
 
-async function runCommand(command: string, args: string[]) {
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn(command, args, { stdio: "inherit" });
-    child.on("error", reject);
-    child.on("close", (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`${command} exited with code ${code}`));
-    });
-  });
-}
-
 function hashBuffer(buffer: Buffer, algorithm: "md5" | "sha256") {
   return createHash(algorithm).update(buffer).digest("hex");
+}
+
+async function extractZip(buffer: Buffer, destination: string) {
+  const zip = await JSZip.loadAsync(buffer);
+  const entries = Object.values(zip.files);
+  const normalizedDestination = resolve(destination);
+
+  for (const entry of entries) {
+    const entryPath = resolve(normalizedDestination, entry.name);
+    if (!entryPath.startsWith(`${normalizedDestination}${pathSeparator()}`) &&
+        entryPath !== normalizedDestination) {
+      throw new Error(`Invalid zip entry path: ${entry.name}`);
+    }
+
+    if (entry.dir) {
+      await mkdir(entryPath, { recursive: true });
+      continue;
+    }
+
+    await mkdir(dirname(entryPath), { recursive: true });
+    const contents = await entry.async("nodebuffer");
+    await writeFile(entryPath, contents);
+  }
+}
+
+function pathSeparator() {
+  return process.platform === "win32" ? "\\" : "/";
 }
 
 async function ensureModelArchive() {
@@ -69,17 +85,7 @@ async function ensureModelArchive() {
 
     await writeFile(zipPath, buffer);
     await mkdir(extractPath, { recursive: true });
-
-    if (process.platform === "win32") {
-      await runCommand("powershell", [
-        "-NoProfile",
-        "-NonInteractive",
-        "-Command",
-        `Expand-Archive -Path "${zipPath}" -DestinationPath "${extractPath}" -Force`,
-      ]);
-    } else {
-      await runCommand("unzip", ["-q", zipPath, "-d", extractPath]);
-    }
+    await extractZip(buffer, extractPath);
 
     await tar.c(
       {
