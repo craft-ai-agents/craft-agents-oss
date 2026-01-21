@@ -33,6 +33,10 @@ export interface AuthState {
     apiKey: string | null;
     /** Claude Max OAuth token (if using oauth_token auth type) */
     claudeOAuthToken: string | null;
+    /** Custom API key (if using custom_api auth type) */
+    customApiKey: string | null;
+    /** Custom API base URL (if using custom_api auth type, e.g., "https://llm.chip.com.vn/v1") */
+    customApiBaseUrl: string | null;
   };
 
   /** Workspace/MCP configuration */
@@ -133,6 +137,7 @@ export async function getAuthState(): Promise<AuthState> {
   const craftToken = await manager.getCraftOAuth();
   const apiKey = await manager.getApiKey();
   const claudeOAuth = await getValidClaudeOAuthToken();
+  const customApiCreds = await manager.getCustomApiCredentials();
   const activeWorkspace = getActiveWorkspace();
 
   // Determine if billing credentials are satisfied based on auth type
@@ -141,6 +146,8 @@ export async function getAuthState(): Promise<AuthState> {
     hasCredentials = !!apiKey;
   } else if (config?.authType === 'oauth_token') {
     hasCredentials = !!claudeOAuth;
+  } else if (config?.authType === 'custom_api') {
+    hasCredentials = !!customApiCreds;
   }
 
   return {
@@ -153,6 +160,8 @@ export async function getAuthState(): Promise<AuthState> {
       hasCredentials,
       apiKey,
       claudeOAuthToken: claudeOAuth,
+      customApiKey: customApiCreds?.apiKey ?? null,
+      customApiBaseUrl: customApiCreds?.baseUrl ?? null,
     },
     workspace: {
       hasWorkspace: !!activeWorkspace,

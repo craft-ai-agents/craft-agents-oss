@@ -230,6 +230,36 @@ export class CredentialManager {
     });
   }
 
+  /** Get Custom API credentials (API key + base URL for OpenRouter, etc.) */
+  async getCustomApiCredentials(): Promise<{
+    apiKey: string;
+    baseUrl: string;
+  } | null> {
+    const cred = await this.get({ type: 'custom_api' });
+    if (!cred || !cred.baseUrl) return null;
+
+    return {
+      apiKey: cred.value,
+      baseUrl: cred.baseUrl,
+    };
+  }
+
+  /** Set Custom API credentials (API key + base URL for OpenRouter, etc.) */
+  async setCustomApiCredentials(credentials: {
+    apiKey: string;
+    baseUrl: string;
+  }): Promise<void> {
+    await this.set({ type: 'custom_api' }, {
+      value: credentials.apiKey,
+      baseUrl: credentials.baseUrl,
+    });
+  }
+
+  /** Delete Custom API credentials */
+  async deleteCustomApiCredentials(): Promise<boolean> {
+    return this.delete({ type: 'custom_api' });
+  }
+
   /** Get Craft OAuth token */
   async getCraftOAuth(): Promise<string | null> {
     const cred = await this.get({ type: 'craft_oauth' });

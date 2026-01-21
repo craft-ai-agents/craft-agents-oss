@@ -200,6 +200,33 @@ export async function updateApiKey(newApiKey: string): Promise<boolean> {
   return true;
 }
 
+/**
+ * Update custom API credentials (for OpenRouter, custom endpoints, etc.)
+ * @param apiKey - The API key for the custom provider
+ * @param baseUrl - The base URL for the API (e.g., "https://llm.chip.com.vn/v1")
+ */
+export async function updateCustomApi(apiKey: string, baseUrl: string): Promise<boolean> {
+  const config = loadStoredConfig();
+  if (!config) return false;
+
+  // Save custom API credentials to credential store
+  const manager = getCredentialManager();
+  await manager.setCustomApiCredentials({ apiKey, baseUrl });
+
+  // Update auth type in config
+  config.authType = 'custom_api';
+  saveConfig(config);
+  return true;
+}
+
+/**
+ * Get custom API credentials
+ */
+export async function getCustomApiCredentials(): Promise<{ apiKey: string; baseUrl: string } | null> {
+  const manager = getCredentialManager();
+  return manager.getCustomApiCredentials();
+}
+
 export function getAuthType(): AuthType {
   const config = loadStoredConfig();
   if (config?.authType !== undefined) {

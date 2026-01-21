@@ -15,9 +15,15 @@ export interface ClaudeMaxCredentials {
   oauthToken: string;
 }
 
+export interface CustomApiCredentials {
+  apiKey: string;
+  baseUrl: string;  // e.g., "https://llm.chip.com.vn/v1" or "https://openrouter.ai/api"
+}
+
 export type AuthCredentials =
   | { type: 'api_key'; credentials: ApiKeyCredentials }
-  | { type: 'oauth_token'; credentials: ClaudeMaxCredentials };
+  | { type: 'oauth_token'; credentials: ClaudeMaxCredentials }
+  | { type: 'custom_api'; credentials: CustomApiCredentials };
 
 /**
  * Set environment variables for the specified auth type.
@@ -30,6 +36,7 @@ export type AuthCredentials =
 export function setAuthEnvironment(auth: AuthCredentials): void {
   // Clear all auth-related env vars first
   delete process.env.ANTHROPIC_API_KEY;
+  delete process.env.ANTHROPIC_BASE_URL;
   delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
 
   switch (auth.type) {
@@ -40,6 +47,12 @@ export function setAuthEnvironment(auth: AuthCredentials): void {
     case 'oauth_token':
       process.env.CLAUDE_CODE_OAUTH_TOKEN = auth.credentials.oauthToken;
       break;
+
+    case 'custom_api':
+      // Set both API key and custom base URL for providers like OpenRouter
+      process.env.ANTHROPIC_API_KEY = auth.credentials.apiKey;
+      process.env.ANTHROPIC_BASE_URL = auth.credentials.baseUrl;
+      break;
   }
 }
 
@@ -48,5 +61,6 @@ export function setAuthEnvironment(auth: AuthCredentials): void {
  */
 export function clearAuthEnvironment(): void {
   delete process.env.ANTHROPIC_API_KEY;
+  delete process.env.ANTHROPIC_BASE_URL;
   delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
 }
