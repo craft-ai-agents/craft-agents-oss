@@ -18,6 +18,7 @@ export const MODELS: ModelDefinition[] = [
   { id: 'claude-opus-4-5-20251101', name: 'Opus 4.5', shortName: 'Opus', description: 'Most capable' },
   { id: 'claude-sonnet-4-5-20250929', name: 'Sonnet 4.5', shortName: 'Sonnet', description: 'Balanced' },
   { id: 'claude-haiku-4-5-20251001', name: 'Haiku 4.5', shortName: 'Haiku', description: 'Fast & efficient' },
+  { id: 'voila-gpt4', name: 'Voila GPT-4', shortName: 'Voila', description: 'Custom GPT-4 model' },
 ];
 
 // ============================================
