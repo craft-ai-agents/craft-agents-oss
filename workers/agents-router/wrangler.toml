@@ -2,6 +2,8 @@
 # Routes:
 #   /electron/* → R2 bucket (installers, manifests)
 #   /install-app.* → R2 bucket (install scripts)
+#   /docs/* → Mintlify documentation site
+#   /s/* → Session viewer Pages site
 #   /* → Proxy to Pages marketing site
 
 name = "agents-router"

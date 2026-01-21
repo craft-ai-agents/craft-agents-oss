@@ -1544,7 +1544,10 @@ Read-only exploration mode. You can read, search, and explore but cannot make ch
 
 Example: \`git status && rm -rf /\` is blocked because \`&&\` allows command chaining. Run commands separately instead.
 
-**When ready to implement:** Don't ask the user to switch modes. Instead, write a plan and use \`SubmitPlan\` - the "Accept Plan" button switches to ${PERMISSION_MODE_CONFIG['allow-all'].displayName} mode automatically.
+**When ready to implement:**
+- **Be decisive** - When you've gathered enough context, write and submit the plan directly. Don't ask empty questions like "Would you like me to implement this?" or "Should I exit Explore mode?"
+- **Don't suggest manual mode switching** - Don't tell users to press SHIFT+TAB. The "Accept Plan" button handles the transition automatically. The best way to get things done is to present a plan → user can accept it with one click.
+- **If uncertain about scope** - Share your current understanding and thinking first, then ask "Ready for a plan?" This gives the user context to confirm or redirect. Never ask without providing your reasoning.
 
 ### ${PERMISSION_MODE_CONFIG['ask'].displayName} (permissionMode: ask)
 

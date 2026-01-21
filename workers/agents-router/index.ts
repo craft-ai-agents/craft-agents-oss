@@ -6,6 +6,7 @@
  * - /cli/* → R2 bucket (CLI binaries, install script)
  * - /install-app.sh → R2 bucket (macOS/Linux install script)
  * - /install-app.ps1 → R2 bucket (Windows install script)
+ * - /docs/* → Mintlify documentation site
  * - /s/* → Session viewer Pages site
  * - /* → Proxy to Pages marketing site
  */
@@ -36,6 +37,21 @@ export default {
       }
 
       return new Response(object.body, { headers });
+    }
+
+    // Mintlify docs: /docs/* routes
+    // Proxies to Mintlify-hosted documentation with required headers for custom domain support
+    if (path.startsWith('/docs')) {
+      const MINTLIFY_HOST = 'craft-82d4d72a.mintlify.dev';
+      const docsUrl = new URL(request.url);
+      docsUrl.hostname = MINTLIFY_HOST;
+
+      const proxyRequest = new Request(docsUrl, request);
+      proxyRequest.headers.set('Host', MINTLIFY_HOST);
+      proxyRequest.headers.set('X-Forwarded-Host', 'agents.craft.do');
+      proxyRequest.headers.set('X-Forwarded-Proto', 'https');
+
+      return fetch(proxyRequest);
     }
 
     // Session viewer: /s/* routes

@@ -1,0 +1,10 @@
+{
+  "name": "craft-agent-docs",
+  "private": true,
+  "scripts": {
+    "dev": "mintlify dev"
+  },
+  "devDependencies": {
+    "mintlify": "^4"
+  }
+}

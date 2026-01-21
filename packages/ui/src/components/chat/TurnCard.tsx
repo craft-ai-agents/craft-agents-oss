@@ -16,6 +16,8 @@ import {
   Maximize2,
   CircleCheck,
   ListTodo,
+  Pencil,
+  FilePenLine,
 } from 'lucide-react'
 import * as ReactDOM from 'react-dom'
 import { cn } from '../../lib/utils'
@@ -443,8 +445,8 @@ function getPreviewText(
 // Sub-Components
 // ============================================================================
 
-/** Status icon for an activity */
-function ActivityStatusIcon({ status }: { status: ActivityStatus }) {
+/** Status icon for an activity - Edit/Write tools show tool-specific icons when completed */
+function ActivityStatusIcon({ status, toolName }: { status: ActivityStatus; toolName?: string }) {
   switch (status) {
     case 'pending':
       return <Circle className={cn(SIZE_CONFIG.iconSize, "shrink-0 text-muted-foreground/50")} />
@@ -461,6 +463,13 @@ function ActivityStatusIcon({ status }: { status: ActivityStatus }) {
         </div>
       )
     case 'completed':
+      // Edit and Write tools get their own icons with accent color instead of green checkmark
+      if (toolName === 'Edit') {
+        return <Pencil className={cn(SIZE_CONFIG.iconSize, "shrink-0 text-accent")} />
+      }
+      if (toolName === 'Write') {
+        return <FilePenLine className={cn(SIZE_CONFIG.iconSize, "shrink-0 text-accent")} />
+      }
       return <CheckCircle2 className={cn(SIZE_CONFIG.iconSize, "shrink-0 text-success")} />
     case 'error':
       return <XCircle className={cn(SIZE_CONFIG.iconSize, "shrink-0 text-destructive")} />
@@ -608,7 +617,7 @@ function ActivityRow({ activity, onOpenDetails, isLastChild }: ActivityRowProps)
         )}
         onClick={onOpenDetails && isComplete ? onOpenDetails : undefined}
       >
-        <ActivityStatusIcon status={activity.status} />
+        <ActivityStatusIcon status={activity.status} toolName={activity.toolName} />
         {/* Tool name (always shown, darker) - underlined when clickable */}
         <span className={cn("shrink-0", onOpenDetails && isComplete && "group-hover/row:underline")}>{toolName}</span>
         {/* Background task info (task/shell ID + elapsed time) */}
@@ -736,7 +745,7 @@ function ActivityGroupRow({ group, expandedGroups: externalExpandedGroups, onExp
         </motion.div>
 
         {/* Status icon - aligned with tool call icons */}
-        <ActivityStatusIcon status={group.parent.status} />
+        <ActivityStatusIcon status={group.parent.status} toolName={group.parent.toolName} />
 
         {/* Subagent type badge */}
         <span className="shrink-0 px-1.5 py-0.5 rounded-[4px] bg-background shadow-minimal text-[10px] font-medium">
