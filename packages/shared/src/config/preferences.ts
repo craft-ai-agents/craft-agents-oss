@@ -88,7 +88,13 @@ export function formatPreferencesForPrompt(): string {
   }
 
   if (prefs.language) {
-    lines.push(`- Preferred language: ${prefs.language}`);
+    const languageName = prefs.language === 'zh' ? 'Chinese (中文)' : 'English';
+    lines.push(`- Preferred language: ${prefs.language} (${languageName})`);
+    lines.push(`  - When responding in ${languageName}, use that language for all user-facing text`);
+    if (prefs.language === 'zh') {
+      lines.push(`  - Use 24-hour time format for Chinese (e.g., 15:30 not 3:30 PM)`);
+      lines.push(`  - Use Chinese date format: 年月日 (e.g., 2026年1月21日)`);
+    }
   }
 
   if (prefs.notes) {

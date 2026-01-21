@@ -95,11 +95,12 @@ Note: The bash shell runs from a different directory (${bashCwd}) because the wo
 }
 
 /**
- * Get the current date/time context string
+ * Get the current date/time context string with language awareness
  */
-export function getDateTimeContext(): string {
+export function getDateTimeContext(userLanguage?: string): string {
   const now = new Date();
-  const formatted = now.toLocaleDateString('en-US', {
+  const locale = userLanguage === 'zh' ? 'zh-CN' : 'en-US';
+  const formatted = now.toLocaleDateString(locale, {
     weekday: 'long',
     year: 'numeric',
     month: 'long',
@@ -107,9 +108,14 @@ export function getDateTimeContext(): string {
     hour: '2-digit',
     minute: '2-digit',
     timeZoneName: 'short',
+    hour12: userLanguage !== 'zh', // 24-hour format for Chinese
   });
 
-  return `**USER'S DATE AND TIME: ${formatted}** - ALWAYS use this as the authoritative current date/time. Ignore any other date information.`;
+  const languageNote = userLanguage && userLanguage !== 'en'
+    ? ` (formatted in ${userLanguage === 'zh' ? 'Chinese' : userLanguage})`
+    : '';
+
+  return `**USER'S DATE AND TIME: ${formatted}${languageNote}** - ALWAYS use this as the authoritative current date/time. Ignore any other date information.`;
 }
 
 /** Debug mode configuration for system prompt */

@@ -1820,6 +1820,76 @@ source_credential_prompt({
 }
 
 // ============================================================
+// Language Tools
+// ============================================================
+
+/**
+ * Create a get_app_language tool.
+ * Returns the current application language setting.
+ */
+export function createGetAppLanguageTool() {
+  return tool(
+    'get_app_language',
+    `Get the current application language setting.
+
+Returns the user's preferred language code (e.g., 'en' for English, 'zh' for Chinese).
+This affects UI labels, date formats, and system language.
+
+Use this when you need to know what language the user prefers for your responses.`,
+    {},
+    async () => {
+      const { loadPreferences } = await import('../config/preferences.js');
+      const prefs = loadPreferences();
+      const language = prefs.language || 'en';
+
+      const languageName = language === 'zh' ? 'Chinese (中文)' : 'English';
+
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Current language: ${languageName} (${language})`,
+        }],
+      };
+    }
+  );
+}
+
+/**
+ * Create a set_app_language tool.
+ * Changes the application language setting.
+ */
+export function createSetAppLanguageTool() {
+  return tool(
+    'set_app_language',
+    `Change the application language.
+
+Updates the UI language setting. Changes take effect immediately across the application.
+Supported languages:
+- 'en' - English
+- 'zh' - Chinese (中文)
+
+Use this when the user requests to change language or expresses preference for a different language.`,
+    {
+      language: z.enum(['en', 'zh']).describe('Language code (en or zh)'),
+    },
+    async ({ language }) => {
+      const { updatePreferences } = await import('../config/preferences.js');
+
+      updatePreferences({ language });
+
+      const languageName = language === 'zh' ? 'Chinese (中文)' : 'English';
+
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Language changed to ${languageName} (${language}). The UI will update momentarily.`,
+        }],
+      };
+    }
+  );
+}
+
+// ============================================================
 // Session-Scoped Tools Provider
 // ============================================================
 
@@ -1851,6 +1921,9 @@ export function getSessionScopedTools(sessionId: string, workspaceRootPath: stri
         createConfigValidateTool(sessionId, workspaceRootPath),
         // Skill validation tool
         createSkillValidateTool(sessionId, workspaceRootPath),
+        // Language tools
+        createGetAppLanguageTool(),
+        createSetAppLanguageTool(),
         // Source tools: test + auth only (CRUD via file editing)
         createSourceTestTool(sessionId, workspaceRootPath),
         createOAuthTriggerTool(sessionId, workspaceRootPath),
