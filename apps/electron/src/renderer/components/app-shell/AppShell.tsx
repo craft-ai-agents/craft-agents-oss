@@ -94,6 +94,7 @@ import SettingsNavigator from "@/pages/settings/SettingsNavigator"
 import { RightSidebar } from "./RightSidebar"
 import type { RichTextInputHandle } from "@/components/ui/rich-text-input"
 import { hasOpenOverlay } from "@/lib/overlay-detection"
+import { useTranslation } from "@/i18n"
 
 /**
  * AppShellProps - Minimal props interface for AppShell component
@@ -178,6 +179,9 @@ function AppShellContent({
     onSendMessage,
     openNewChat,
   } = contextValue
+
+  // Translation hook
+  const { t } = useTranslation()
 
   const [isSidebarVisible, setIsSidebarVisible] = React.useState(() => {
     return storage.get(storage.KEYS.sidebarVisible, !defaultCollapsed)
@@ -1104,7 +1108,7 @@ function AppShellContent({
                   links={[
                     {
                       id: "nav:allChats",
-                      title: "All Chats",
+                      title: t('allChats' as any),
                       label: String(workspaceSessionMetas.length),
                       icon: Inbox,
                       variant: chatFilter?.kind === 'allChats' ? "default" : "ghost",
@@ -1140,7 +1144,7 @@ function AppShellContent({
                         // Flagged at the bottom
                         {
                           id: "nav:flagged",
-                          title: "Flagged",
+                          title: t('flagged' as any),
                           label: String(flaggedCount),
                           icon: <Flag className="h-3.5 w-3.5 fill-current" />,
                           iconColor: "text-info",
@@ -1156,7 +1160,7 @@ function AppShellContent({
                     },
                     {
                       id: "nav:sources",
-                      title: "Sources",
+                      title: t('sources' as any),
                       label: String(sources.length),
                       icon: DatabaseZap,
                       variant: isSourcesNavigation(navState) ? "default" : "ghost",
@@ -1170,7 +1174,7 @@ function AppShellContent({
                     },
                     {
                       id: "nav:skills",
-                      title: "Skills",
+                      title: t('skills' as any),
                       label: String(skills.length),
                       icon: Zap,
                       variant: isSkillsNavigation(navState) ? "default" : "ghost",
@@ -1184,7 +1188,7 @@ function AppShellContent({
                     { id: "separator:skills-settings", type: "separator" },
                     {
                       id: "nav:settings",
-                      title: "Settings",
+                      title: t('settings' as any),
                       icon: Settings,
                       variant: isSettingsNavigation(navState) ? "default" : "ghost",
                       onClick: () => handleSettingsClick('app'),
