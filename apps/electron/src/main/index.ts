@@ -144,6 +144,12 @@ async function createInitialWindows(): Promise<void> {
 }
 
 app.whenReady().then(async () => {
+  // Provide a bundled workspace template for new workspaces
+  const workspaceTemplateDir = join(__dirname, 'resources/workspace-template')
+  if (existsSync(workspaceTemplateDir)) {
+    process.env.CRAFT_WORKSPACE_TEMPLATE_DIR = workspaceTemplateDir
+  }
+
   // Initialize bundled docs
   initializeDocs()
 

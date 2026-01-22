@@ -14,6 +14,7 @@ import {
   readdirSync,
   rmSync,
   statSync,
+  copyFileSync,
 } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
@@ -31,6 +32,17 @@ import type {
 
 const CONFIG_DIR = join(homedir(), '.craft-agent');
 const DEFAULT_WORKSPACES_DIR = join(CONFIG_DIR, 'workspaces');
+const WORKSPACE_TEMPLATE_ENV = 'CRAFT_WORKSPACE_TEMPLATE_DIR';
+const TEMPLATE_ENTRY_ALLOWLIST = new Set([
+  'agents',
+  'commands',
+  'contexts',
+  'hooks',
+  'rules',
+  'skills',
+  'mcp-configs',
+  'plugins',
+]);
 
 // ============================================================
 // Path Utilities
@@ -67,6 +79,80 @@ export function getWorkspacePath(workspaceId: string): string {
  */
 export function getWorkspaceSourcesPath(rootPath: string): string {
   return join(rootPath, 'sources');
+}
+
+// ============================================================
+// Workspace Template
+// ============================================================
+
+function resolveWorkspaceTemplateDir(): string | null {
+  const envValue = process.env[WORKSPACE_TEMPLATE_ENV];
+  if (!envValue) return null;
+
+  const expanded = expandPath(envValue);
+  if (!existsSync(expanded)) return null;
+
+  try {
+    if (!statSync(expanded).isDirectory()) return null;
+  } catch {
+    return null;
+  }
+
+  return expanded;
+}
+
+function isDirectoryEmpty(dirPath: string): boolean {
+  try {
+    const entries = readdirSync(dirPath).filter((entry) => entry !== '.DS_Store' && entry !== '.gitkeep');
+    return entries.length === 0;
+  } catch {
+    return false;
+  }
+}
+
+function copyTemplateDir(sourceDir: string, targetDir: string): void {
+  if (!existsSync(targetDir)) {
+    mkdirSync(targetDir, { recursive: true });
+  }
+
+  const entries = readdirSync(sourceDir, { withFileTypes: true });
+  for (const entry of entries) {
+    const sourcePath = join(sourceDir, entry.name);
+    const targetPath = join(targetDir, entry.name);
+
+    if (entry.isDirectory()) {
+      copyTemplateDir(sourcePath, targetPath);
+      continue;
+    }
+
+    if (!existsSync(targetPath)) {
+      copyFileSync(sourcePath, targetPath);
+    }
+  }
+}
+
+function applyWorkspaceTemplate(rootPath: string): void {
+  const templateDir = resolveWorkspaceTemplateDir();
+  if (!templateDir) return;
+
+  if (!isDirectoryEmpty(rootPath)) return;
+
+  const entries = readdirSync(templateDir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (!TEMPLATE_ENTRY_ALLOWLIST.has(entry.name)) continue;
+
+    const sourcePath = join(templateDir, entry.name);
+    const targetPath = join(rootPath, entry.name);
+
+    if (entry.isDirectory()) {
+      copyTemplateDir(sourcePath, targetPath);
+      continue;
+    }
+
+    if (!existsSync(targetPath)) {
+      copyFileSync(sourcePath, targetPath);
+    }
+  }
 }
 
 /**
@@ -270,6 +356,7 @@ export function createWorkspaceAtPath(
 
   // Create workspace directory structure
   mkdirSync(rootPath, { recursive: true });
+  applyWorkspaceTemplate(rootPath);
   mkdirSync(getWorkspaceSourcesPath(rootPath), { recursive: true });
   mkdirSync(getWorkspaceSessionsPath(rootPath), { recursive: true });
   mkdirSync(getWorkspaceSkillsPath(rootPath), { recursive: true });
