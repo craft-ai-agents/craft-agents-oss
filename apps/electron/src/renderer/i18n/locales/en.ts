@@ -613,6 +613,17 @@ export default {
   flagRemoved: 'Flag removed',
   removedFromFlagged: 'Removed from flagged items',
   undo: 'Undo',
+  shared: 'Shared',
+  openInBrowser: 'Open in Browser',
+  copyLink: 'Copy Link',
+  updateShare: 'Update Share',
+  stopSharing: 'Stop Sharing',
+  flag: 'Flag',
+  unflag: 'Unflag',
+  markAsUnread: 'Mark as Unread',
+  regenerateTitle: 'Regenerate Title',
+  viewInFinder: 'View in Finder',
+  copyPath: 'Copy Path',
 
   // Source Status / 来源状态
   needsAuth: 'Needs Auth',

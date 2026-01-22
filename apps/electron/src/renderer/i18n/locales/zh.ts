@@ -604,6 +604,17 @@ export default {
   flagRemoved: '标记已移除',
   removedFromFlagged: '已从标记项中移除',
   undo: '撤销',
+  shared: '已分享',
+  openInBrowser: '在浏览器中打开',
+  copyLink: '复制链接',
+  updateShare: '更新分享',
+  stopSharing: '停止分享',
+  flag: '标记',
+  unflag: '取消标记',
+  markAsUnread: '标记为未读',
+  regenerateTitle: '重新生成标题',
+  viewInFinder: '在 Finder 中查看',
+  copyPath: '复制路径',
 
   // Source Status / 来源状态
   needsAuth: '需要认证',

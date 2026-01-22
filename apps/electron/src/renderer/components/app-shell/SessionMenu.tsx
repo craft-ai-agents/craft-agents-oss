@@ -173,24 +173,24 @@ export function SessionMenu({
         <Sub>
           <SubTrigger>
             <CloudUpload className="h-3.5 w-3.5" />
-            <span className="flex-1">Shared</span>
+            <span className="flex-1">{t('shared' as any)}</span>
           </SubTrigger>
           <SubContent>
             <MenuItem onClick={handleOpenInBrowser}>
               <Globe className="h-3.5 w-3.5" />
-              <span className="flex-1">Open in Browser</span>
+              <span className="flex-1">{t('openInBrowser' as any)}</span>
             </MenuItem>
             <MenuItem onClick={handleCopyLink}>
               <Copy className="h-3.5 w-3.5" />
-              <span className="flex-1">{t('copy' as any)} Link</span>
+              <span className="flex-1">{t('copyLink' as any)}</span>
             </MenuItem>
             <MenuItem onClick={handleUpdateShare}>
               <RefreshCw className="h-3.5 w-3.5" />
-              <span className="flex-1">Update Share</span>
+              <span className="flex-1">{t('updateShare' as any)}</span>
             </MenuItem>
             <MenuItem onClick={handleRevokeShare} variant="destructive">
               <Link2Off className="h-3.5 w-3.5" />
-              <span className="flex-1">Stop Sharing</span>
+              <span className="flex-1">{t('stopSharing' as any)}</span>
             </MenuItem>
           </SubContent>
         </Sub>
@@ -215,7 +215,7 @@ export function SessionMenu({
           >
             {getStateIcon(currentTodoState, todoStates)}
           </span>
-          <span className="flex-1">Status</span>
+          <span className="flex-1">{t('status' as any)}</span>
         </SubTrigger>
         <SubContent>
           {todoStates.map((state) => {
@@ -249,12 +249,12 @@ export function SessionMenu({
           {!isFlagged ? (
             <MenuItem onClick={onFlag}>
               <Flag className="h-3.5 w-3.5 text-info" />
-              <span className="flex-1">Flag</span>
+              <span className="flex-1">{t('flag' as any)}</span>
             </MenuItem>
           ) : (
             <MenuItem onClick={onUnflag}>
               <FlagOff className="h-3.5 w-3.5" />
-              <span className="flex-1">Unflag</span>
+              <span className="flex-1">{t('unflag' as any)}</span>
             </MenuItem>
           )}
         </SubContent>
@@ -264,7 +264,7 @@ export function SessionMenu({
       {!hasUnreadMessages && hasMessages && (
         <MenuItem onClick={onMarkUnread}>
           <MailOpen className="h-3.5 w-3.5" />
-          <span className="flex-1">Mark as Unread</span>
+          <span className="flex-1">{t('markAsUnread' as any)}</span>
         </MenuItem>
       )}
 
@@ -279,7 +279,7 @@ export function SessionMenu({
       {/* Regenerate Title - AI-generate based on recent messages */}
       <MenuItem onClick={handleRefreshTitle}>
         <RefreshCw className="h-3.5 w-3.5" />
-        <span className="flex-1">Regenerate Title</span>
+        <span className="flex-1">{t('regenerateTitle' as any)}</span>
       </MenuItem>
 
       <Separator />
@@ -287,19 +287,19 @@ export function SessionMenu({
       {/* Open in New Window */}
       <MenuItem onClick={onOpenInNewWindow}>
         <AppWindow className="h-3.5 w-3.5" />
-        <span className="flex-1">Open in New Window</span>
+        <span className="flex-1">{t('openInNewWindow' as any)}</span>
       </MenuItem>
 
       {/* View in Finder */}
       <MenuItem onClick={handleShowInFinder}>
         <FolderOpen className="h-3.5 w-3.5" />
-        <span className="flex-1">View in Finder</span>
+        <span className="flex-1">{t('viewInFinder' as any)}</span>
       </MenuItem>
 
       {/* Copy Path */}
       <MenuItem onClick={handleCopyPath}>
         <Copy className="h-3.5 w-3.5" />
-        <span className="flex-1">{t('copy' as any)} Path</span>
+        <span className="flex-1">{t('copyPath' as any)}</span>
       </MenuItem>
 
       <Separator />
