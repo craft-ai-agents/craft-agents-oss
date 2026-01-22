@@ -3301,14 +3301,34 @@ To view this task's output:
       return { error: 'No stories found in PRD' }
     }
 
-    // Ensure agent is initialized
-    if (!managed.agent) {
-      return { error: 'Agent not initialized. Send a message first to initialize the session.' }
+    // Auto-initialize agent if needed (same as sendMessage flow)
+    let agent
+    try {
+      agent = await this.getOrCreateAgent(managed)
+
+      // Set up sources (same as sendMessage flow)
+      const workspaceRootPath = managed.workspace.rootPath
+      const allSources = loadAllSources(workspaceRootPath)
+      agent.setAllSources(allSources)
+
+      // Apply source servers if any are enabled
+      if (managed.enabledSourceSlugs?.length) {
+        const sources = getSourcesBySlugs(workspaceRootPath, managed.enabledSourceSlugs)
+        const { mcpServers, apiServers, errors } = await buildServersFromSources(sources)
+        if (errors.length > 0) {
+          sessionLog.warn(`Source build errors for loop:`, errors)
+        }
+        const intendedSlugs = sources.filter(s => s.config.enabled && s.config.isAuthenticated).map(s => s.config.slug)
+        agent.setSourceServers(mcpServers, apiServers, intendedSlugs)
+      }
+    } catch (error) {
+      sessionLog.error('Failed to initialize agent or sources for loop:', error)
+      return { error: `Failed to initialize agent: ${error instanceof Error ? error.message : String(error)}` }
     }
 
     // Create the loop runner
     const workingDirectory = managed.workingDirectory || managed.workspace.rootPath
-    const runner = createLoopRunner(sessionId, managed.agent, workingDirectory, config)
+    const runner = createLoopRunner(sessionId, agent, workingDirectory, config)
 
     // Wire up event handlers
     runner.on('progress', (state) => {
