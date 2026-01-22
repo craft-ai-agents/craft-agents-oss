@@ -1493,7 +1493,7 @@ export function getPermissionModesDocumentation(): string {
 
   return `## Permission Modes
 
-Craft Agent has four permission modes that control tool execution. The user can cycle through the first three modes with SHIFT+TAB.
+Vesper has four permission modes that control tool execution. The user can cycle through the first three modes with SHIFT+TAB.
 
 | Mode | Color | Description |
 |------|-------|-------------|
