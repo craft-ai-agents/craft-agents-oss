@@ -512,12 +512,22 @@ export class SessionManager {
   async initialize(): Promise<void> {
     // Set path to Claude Code executable (cli.js from SDK)
     // In packaged app: use app.getAppPath() (points to app folder, ASAR is disabled)
-    // In development: use process.cwd()
+    // In development: check both monorepo root (for hoisted deps) and local node_modules
     const basePath = app.isPackaged ? app.getAppPath() : process.cwd()
 
-    const cliPath = join(basePath, 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'cli.js')
-    if (!existsSync(cliPath)) {
-      const error = `Claude Code SDK not found at ${cliPath}. The app package may be corrupted.`
+    // In development monorepo, dependencies are hoisted to root node_modules
+    // Try monorepo root first (2 levels up from apps/electron), then local
+    const monorepoRoot = join(basePath, '..', '..')
+    const cliPathMonorepo = join(monorepoRoot, 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'cli.js')
+    const cliPathLocal = join(basePath, 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'cli.js')
+
+    let cliPath: string
+    if (!app.isPackaged && existsSync(cliPathMonorepo)) {
+      cliPath = cliPathMonorepo
+    } else if (existsSync(cliPathLocal)) {
+      cliPath = cliPathLocal
+    } else {
+      const error = `Claude Code SDK not found at ${cliPathLocal} or ${cliPathMonorepo}. The app package may be corrupted.`
       sessionLog.error(error)
       throw new Error(error)
     }
@@ -526,9 +536,17 @@ export class SessionManager {
 
     // Set path to fetch interceptor for SDK subprocess
     // This interceptor captures API errors and adds metadata to MCP tool schemas
-    const interceptorPath = join(basePath, 'packages', 'shared', 'src', 'network-interceptor.ts')
-    if (!existsSync(interceptorPath)) {
-      const error = `Network interceptor not found at ${interceptorPath}. The app package may be corrupted.`
+    // In development monorepo, the shared package is at the root level
+    const interceptorPathMonorepo = join(monorepoRoot, 'packages', 'shared', 'src', 'network-interceptor.ts')
+    const interceptorPathLocal = join(basePath, 'packages', 'shared', 'src', 'network-interceptor.ts')
+
+    let interceptorPath: string
+    if (!app.isPackaged && existsSync(interceptorPathMonorepo)) {
+      interceptorPath = interceptorPathMonorepo
+    } else if (existsSync(interceptorPathLocal)) {
+      interceptorPath = interceptorPathLocal
+    } else {
+      const error = `Network interceptor not found at ${interceptorPathLocal} or ${interceptorPathMonorepo}. The app package may be corrupted.`
       sessionLog.error(error)
       throw new Error(error)
     }
