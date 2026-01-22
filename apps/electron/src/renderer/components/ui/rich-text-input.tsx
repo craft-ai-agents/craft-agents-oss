@@ -960,7 +960,7 @@ export const RichTextInput = React.forwardRef<RichTextInputHandle, RichTextInput
             placeholders={placeholderArray}
             intervalMs={5000}
             className={cn(
-              'absolute inset-0 text-sm text-muted-foreground pointer-events-none',
+              'absolute inset-0 text-sm text-muted-foreground pointer-events-none select-none',
               className
             )}
           />

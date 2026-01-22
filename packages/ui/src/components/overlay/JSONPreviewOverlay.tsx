@@ -87,7 +87,8 @@ export function JSONPreviewOverlay({
             {/* Custom copy icon using lucide-react */}
             <JsonView.Copied
               render={(props) => {
-                const isCopied = props['data-copied']
+                // Type assertion needed - @uiw/react-json-view types don't include data-copied
+                const isCopied = (props as Record<string, unknown>)['data-copied']
                 return isCopied ? (
                   <Check
                     className="ml-1.5 inline-flex cursor-pointer text-green-500"

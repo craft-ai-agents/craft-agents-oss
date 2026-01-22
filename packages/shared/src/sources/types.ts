@@ -359,6 +359,12 @@ export interface LoadedSource {
    * Used for credential lookups: source_oauth::{workspaceId}::{sourceSlug}
    */
   workspaceId: string;
+
+  /**
+   * Whether this is a built-in source (e.g., craft-agents-docs).
+   * Built-in sources are always available and not shown in the sources UI.
+   */
+  isBuiltin?: boolean;
 }
 
 /**

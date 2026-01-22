@@ -55,9 +55,9 @@ const PatternSchema = z.union([
 /**
  * Permissions JSON configuration schema
  *
- * Note: blockedTools (Write, Edit, MultiEdit, NotebookEdit) are hardcoded in
- * SAFE_MODE_CONFIG and cannot be configured via JSON. These represent fundamental
- * write operations that must always be blocked in Explore mode.
+ * Note: Core write tools (Write, Edit, MultiEdit, NotebookEdit) are hardcoded in
+ * SAFE_MODE_CONFIG and always blocked in Explore mode. The blockedTools field
+ * allows users to block additional tools beyond these defaults.
  */
 export const PermissionsConfigSchema = z.object({
   /** Bash command patterns to allow (regex strings) */
@@ -68,6 +68,8 @@ export const PermissionsConfigSchema = z.object({
   allowedApiEndpoints: z.array(ApiEndpointRuleSchema).optional(),
   /** File paths to allow writes in Explore mode (glob patterns) */
   allowedWritePaths: z.array(PatternSchema).optional(),
+  /** Additional tools to block (extends the hardcoded defaults) */
+  blockedTools: z.array(PatternSchema).optional(),
 });
 
 export type PermissionsConfigFile = z.infer<typeof PermissionsConfigSchema>;

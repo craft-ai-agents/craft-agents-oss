@@ -37,7 +37,7 @@ import {
   type SessionMetadata,
   type TodoState,
 } from '@craft-agent/shared/sessions'
-import { loadWorkspaceSources, getSourcesBySlugs, type LoadedSource, type McpServerConfig, getSourcesNeedingAuth, getSourceCredentialManager, getSourceServerBuilder, type SourceWithCredential, isApiOAuthProvider, SERVER_BUILD_ERRORS } from '@craft-agent/shared/sources'
+import { loadWorkspaceSources, loadAllSources, getSourcesBySlugs, type LoadedSource, type McpServerConfig, getSourcesNeedingAuth, getSourceCredentialManager, getSourceServerBuilder, type SourceWithCredential, isApiOAuthProvider, SERVER_BUILD_ERRORS } from '@craft-agent/shared/sources'
 import { ConfigWatcher, type ConfigWatcherCallbacks } from '@craft-agent/shared/config'
 import { getAuthState } from '@craft-agent/shared/auth'
 import { setAnthropicOptionsEnv, setPathToClaudeCodeExecutable, setInterceptorPath, setExecutable } from '@craft-agent/shared/agent'
@@ -463,8 +463,8 @@ export class SessionManager {
     const workspaceRootPath = managed.workspace.rootPath
     sessionLog.info(`Reloading sources for session ${managed.id}`)
 
-    // Reload all sources from disk
-    const allSources = loadWorkspaceSources(workspaceRootPath)
+    // Reload all sources from disk (craft-agents-docs is always available as MCP server)
+    const allSources = loadAllSources(workspaceRootPath)
     managed.agent.setAllSources(allSources)
 
     // Rebuild MCP and API servers for session's enabled sources
@@ -1746,8 +1746,8 @@ export class SessionManager {
         sessionLog.warn(`Source build errors:`, errors)
       }
 
-      // Set all sources for context (agent sees full list with descriptions)
-      const allSources = loadWorkspaceSources(workspaceRootPath)
+      // Set all sources for context (agent sees full list with descriptions, including built-ins)
+      const allSources = loadAllSources(workspaceRootPath)
       managed.agent.setAllSources(allSources)
 
       // Set active source servers (tools are only available from these)
@@ -2140,9 +2140,9 @@ export class SessionManager {
     const agent = await this.getOrCreateAgent(managed)
     sendSpan.mark('agent.ready')
 
-    // Always set all sources for context (even if none are enabled)
+    // Always set all sources for context (even if none are enabled), including built-ins
     const workspaceRootPath = managed.workspace.rootPath
-    const allSources = loadWorkspaceSources(workspaceRootPath)
+    const allSources = loadAllSources(workspaceRootPath)
     agent.setAllSources(allSources)
     sendSpan.mark('sources.loaded')
 

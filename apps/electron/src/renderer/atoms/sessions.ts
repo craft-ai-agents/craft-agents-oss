@@ -113,6 +113,14 @@ export const sessionIdsAtom = atom<string[]>([])
 export const loadedSessionsAtom = atom<Set<string>>(new Set<string>())
 
 /**
+ * Promise cache for deduplicating concurrent session load requests.
+ * Prevents race condition where multiple calls (e.g., from React re-renders)
+ * start loading before the first completes and marks the session as loaded.
+ * Module-level map since it tracks in-flight promises, not React state.
+ */
+const sessionLoadingPromises = new Map<string, Promise<Session | null>>()
+
+/**
  * Currently active session ID - the session displayed in the main content area
  * This replaces the tab-based session selection
  */
@@ -382,7 +390,8 @@ export const syncSessionsToAtomsAtom = atom(
 
 /**
  * Action atom: Load session messages if not already loaded
- * Returns the loaded session or current session if already loaded
+ * Returns the loaded session or current session if already loaded.
+ * Uses promise deduplication to prevent redundant IPC calls from concurrent requests.
  */
 export const ensureSessionMessagesLoadedAtom = atom(
   null,
@@ -394,27 +403,46 @@ export const ensureSessionMessagesLoadedAtom = atom(
       return get(sessionAtomFamily(sessionId))
     }
 
-    // Fetch messages from main process
-    const loadedSession = await window.electronAPI.getSessionMessages(sessionId)
-    if (!loadedSession) {
-      return get(sessionAtomFamily(sessionId))
+    // Check if already loading - return existing promise to deduplicate concurrent calls
+    const existingPromise = sessionLoadingPromises.get(sessionId)
+    if (existingPromise) {
+      return existingPromise
     }
 
-    // Update the atom with the full session (including messages)
-    set(sessionAtomFamily(sessionId), loadedSession)
+    // Create the loading promise with all the fetch and update logic
+    const loadPromise = (async (): Promise<Session | null> => {
+      // Fetch messages from main process
+      const loadedSession = await window.electronAPI.getSessionMessages(sessionId)
+      if (!loadedSession) {
+        return get(sessionAtomFamily(sessionId))
+      }
 
-    // Update metadata
-    const metaMap = get(sessionMetaMapAtom)
-    const newMetaMap = new Map(metaMap)
-    newMetaMap.set(sessionId, extractSessionMeta(loadedSession))
-    set(sessionMetaMapAtom, newMetaMap)
+      // Update the atom with the full session (including messages)
+      set(sessionAtomFamily(sessionId), loadedSession)
 
-    // Mark as loaded
-    const newLoadedSessions = new Set(loadedSessions)
-    newLoadedSessions.add(sessionId)
-    set(loadedSessionsAtom, newLoadedSessions)
+      // Update metadata
+      const metaMap = get(sessionMetaMapAtom)
+      const newMetaMap = new Map(metaMap)
+      newMetaMap.set(sessionId, extractSessionMeta(loadedSession))
+      set(sessionMetaMapAtom, newMetaMap)
 
-    return loadedSession
+      // Mark as loaded
+      const newLoadedSessions = new Set(get(loadedSessionsAtom))
+      newLoadedSessions.add(sessionId)
+      set(loadedSessionsAtom, newLoadedSessions)
+
+      return loadedSession
+    })()
+
+    // Cache the promise before awaiting
+    sessionLoadingPromises.set(sessionId, loadPromise)
+
+    try {
+      return await loadPromise
+    } finally {
+      // Always clean up the cache, whether success or failure
+      sessionLoadingPromises.delete(sessionId)
+    }
   }
 )
 

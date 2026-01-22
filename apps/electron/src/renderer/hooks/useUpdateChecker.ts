@@ -66,9 +66,11 @@ export function useUpdateChecker(): UseUpdateCheckerResult {
     try {
       // Dismiss the update toast first
       toast.dismiss(UPDATE_TOAST_ID)
+      // Use longer duration since app is about to quit - user should see this until the app closes.
+      // Don't promise automatic restart as the external update script may fail to relaunch.
       toast.info('Installing update...', {
-        description: 'The app will restart automatically.',
-        duration: 3000,
+        description: 'Closing app. It will reopen shortly.',
+        duration: 30000,
       })
       await window.electronAPI.installUpdate()
     } catch (error) {

@@ -481,11 +481,18 @@ async function installMacOS(): Promise<void> {
 
   child.unref()
 
-  // Clear pending update since install script is now running
+  // Small delay to ensure the detached script process has fully started before we exit.
+  // This prevents a race condition where the app exits before the script is ready.
+  await new Promise(resolve => setTimeout(resolve, 500))
+
+  // Clear pending update only after delay - if something goes wrong before this point,
+  // the pending update will be preserved for retry on next launch.
   clearPendingUpdate()
 
-  mainLog.info('[auto-update] Quitting app for macOS update...')
-  app.quit()
+  mainLog.info('[auto-update] Exiting app for macOS update...')
+  // Use app.exit() instead of app.quit() to avoid window close handlers potentially
+  // intercepting or delaying the quit, which could cause race conditions with the update script.
+  app.exit(0)
 }
 
 /**
@@ -510,6 +517,7 @@ async function installWindows(): Promise<void> {
   }
 
   const child = spawn('powershell.exe', [
+    '-WindowStyle', 'Hidden', // Prevent console window from briefly appearing
     '-ExecutionPolicy', 'Bypass',
     '-File', scriptPath,
     '-InstallerPath', downloadedInstallerPath,
@@ -521,11 +529,15 @@ async function installWindows(): Promise<void> {
 
   child.unref()
 
-  // Clear pending update since install script is now running
+  // Small delay to ensure the detached script process has fully started before we exit.
+  await new Promise(resolve => setTimeout(resolve, 500))
+
+  // Clear pending update only after delay
   clearPendingUpdate()
 
-  mainLog.info('[auto-update] Quitting app for Windows update...')
-  app.quit()
+  mainLog.info('[auto-update] Exiting app for Windows update...')
+  // Use app.exit() to avoid window close handlers potentially intercepting the quit
+  app.exit(0)
 }
 
 /**
@@ -571,11 +583,15 @@ async function installLinux(): Promise<void> {
 
   child.unref()
 
-  // Clear pending update since install script is now running
+  // Small delay to ensure the detached script process has fully started before we exit.
+  await new Promise(resolve => setTimeout(resolve, 500))
+
+  // Clear pending update only after delay
   clearPendingUpdate()
 
-  mainLog.info('[auto-update] Quitting app for Linux update...')
-  app.quit()
+  mainLog.info('[auto-update] Exiting app for Linux update...')
+  // Use app.exit() to avoid window close handlers potentially intercepting the quit
+  app.exit(0)
 }
 
 /**

@@ -1036,7 +1036,7 @@ export function ResponseCard({
           <button
             onClick={() => setIsFullscreen(true)}
             className={cn(
-              "absolute top-2 right-2 p-1 rounded-[6px] transition-all z-10",
+              "absolute top-2 right-2 p-1 rounded-[6px] transition-all z-10 select-none",
               "opacity-0 group-hover:opacity-100",
               "bg-background shadow-minimal",
               "text-muted-foreground/50 hover:text-foreground",
@@ -1051,7 +1051,7 @@ export function ResponseCard({
           {isPlan && (
             <div
               className={cn(
-                "px-4 py-2 border-b border-border/30 flex items-center gap-2 bg-success/5",
+                "px-4 py-2 border-b border-border/30 flex items-center gap-2 bg-success/5 select-none",
                 SIZE_CONFIG.fontSize
               )}
             >
@@ -1091,7 +1091,7 @@ export function ResponseCard({
               <button
                 onClick={handleCopy}
                 className={cn(
-                  "flex items-center gap-1.5 transition-colors",
+                  "flex items-center gap-1.5 transition-colors select-none",
                   copied ? "text-success" : "text-muted-foreground hover:text-foreground",
                   "focus:outline-none focus-visible:underline"
                 )}
@@ -1112,7 +1112,7 @@ export function ResponseCard({
                 <button
                   onClick={onPopOut}
                   className={cn(
-                    "flex items-center gap-1.5 transition-colors",
+                    "flex items-center gap-1.5 transition-colors select-none",
                     "text-muted-foreground hover:text-foreground",
                     "focus:outline-none focus-visible:underline"
                   )}

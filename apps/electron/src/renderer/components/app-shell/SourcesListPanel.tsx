@@ -25,7 +25,6 @@ import {
 import { DropdownMenuProvider, ContextMenuProvider } from '@/components/ui/menu-context'
 import { SourceMenu } from './SourceMenu'
 import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
-import { HelpPopover } from '@/components/ui/HelpPopover'
 import { cn } from '@/lib/utils'
 import type { LoadedSource, SourceConnectionStatus, SourceFilter } from '../../../shared/types'
 
@@ -94,19 +93,22 @@ export function SourcesListPanel({
             <p className="text-sm text-muted-foreground">
               {emptyMessage}
             </p>
-            <div className="mt-3 flex items-center justify-center gap-3">
-              {workspaceRootPath && (
+            {workspaceRootPath && (
+              <div className="mt-3 flex items-center justify-center">
                 <EditPopover
                   trigger={
                     <button className="text-sm text-foreground hover:underline">
                       Add your first source
                     </button>
                   }
-                  {...getEditConfig('add-source', workspaceRootPath)}
+                  {...getEditConfig(
+                    // Use filter-aware edit config key when a type filter is active
+                    sourceFilter?.kind === 'type' ? `add-source-${sourceFilter.sourceType}` : 'add-source',
+                    workspaceRootPath
+                  )}
                 />
-              )}
-              <HelpPopover feature="sources" side="bottom" />
-            </div>
+              </div>
+            )}
           </div>
         ) : (
           <div className="pt-2">

@@ -72,7 +72,7 @@ function AttachmentBubble({ attachment, onRemove, disabled }: AttachmentBubblePr
       : null
 
   return (
-    <div className="relative group shrink-0">
+    <div className="relative group shrink-0 select-none">
       {/* Remove button - appears on hover */}
       {!disabled && (
         <button

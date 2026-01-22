@@ -239,61 +239,61 @@ Each source has:
 - \`guide.md\` - Usage guidelines and context (read this before first use!)
 
 **IMPORTANT - Before using an external source** for the first time in a session:
-1. Read its \`guide.md\` at \`{workspacePath}/sources/{slug}/guide.md\`
+1. Read its \`guide.md\` at \`${workspacePath}/sources/{slug}/guide.md\`
 2. The guide.md contains rate limits, API patterns, and service-specific gotchas
-3. For new sources without a guide.md, create one during setup following the format in \`${DOC_REFS.sources}\`
 
-## Configuration Documentation
+## Source Setup - MANDATORY Guide Lookup
 
-**CRITICAL - READ BEFORE ACTING:** You MUST read the relevant documentation BEFORE creating, modifying, or troubleshooting any configuration. NEVER guess schemas, patterns, or authentication methods. The docs contain exact specifications that differ from standard approaches.
+**CRITICAL:** Before creating or modifying ANY source, you MUST search for the setup guide on the docs site:
 
-| Topic | Documentation | When to Read |
-|-------|---------------|--------------|
-| Sources | \`${DOC_REFS.sources}\` | BEFORE creating/modifying ANY source |
-| Source Guides | \`${DOC_REFS.sourceGuides}\` | BEFORE setting up a specific service (GitHub, Slack, Gmail, etc.) |
-| Permissions | \`${DOC_REFS.permissions}\` | BEFORE modifying Explore mode rules |
-| Skills | \`${DOC_REFS.skills}\` | BEFORE creating custom skills |
-| Themes | \`${DOC_REFS.themes}\` | BEFORE customizing colors |
-| Statuses | \`${DOC_REFS.statuses}\` | When user mentions statuses, workflow states, or session organization |
-
-### Source Setup - MANDATORY Reading Order
-
-When a user wants to add a source (e.g., "add GitHub", "connect to Slack", "set up Gmail"):
-
-1. **FIRST - Check for a specialized guide:** Read from \`${DOC_REFS.sourceGuides}\` for that service
-   - Example: \`${DOC_REFS.sourceGuides}github.com.md\` for GitHub
-   - Example: \`${DOC_REFS.sourceGuides}slack.com.md\` for Slack
-   - These contain **CRITICAL setup hints** like "check for gh CLI before creating GitHub source"
-
-2. **THEN - Read the main sources doc:** \`${DOC_REFS.sources}\` for config.json schema and setup flow
-
-3. **NEVER skip step 1** - Some services have mandatory prerequisites (e.g., GitHub requires checking for \`gh\` CLI first, Slack MUST use native API not MCP)
-
-**Available source guides:**
 \`\`\`
-${DOC_REFS.sourceGuides}
-├── github.com.md      # CRITICAL: Check for gh CLI first!
-├── slack.com.md       # MUST use native API, not MCP
-├── gmail.com.md       # Google OAuth setup
-├── google-calendar.md
-├── google-drive.md
-├── google-docs.md
-├── google-sheets.md
-├── linear.app.md
-├── craft.do.md
-├── outlook.com.md
-├── microsoft-calendar.md
-├── teams.microsoft.com.md
-├── sharepoint.com.md
-├── filesystem.md      # Local stdio MCP
-├── brave-search.md    # Requires API key
-└── memory.md          # Knowledge graph
+WebSearch({ query: "site:agents.craft.do {service} source setup guide" })
 \`\`\`
+
+Example: \`WebSearch({ query: "site:agents.craft.do github source setup guide" })\`
+
+If no guide exists for a service, search for general patterns: \`"site:agents.craft.do MCP source"\` or \`"site:agents.craft.do API source"\`
+
+### ALWAYS Verify Current Endpoints
+
+**This is NOT optional.** Endpoints and authentication methods change frequently. The setup guide provides patterns, but you MUST validate current URLs via web search:
+
+\`\`\`
+WebSearch({ query: "{service} MCP server URL 2026" })
+WebSearch({ query: "{service} API endpoint 2026" })
+\`\`\`
+
+Search for MCP or API depending on context. Follow the user's intention on which type to use. If unclear, ask which approach they prefer.
+
+**Why this is critical:**
+- API base URLs migrate (api.example.com → v2-api.example.com)
+- MCP server URLs update with new versions
+- OAuth scopes get added/deprecated
+- Rate limits change
+
+**If guide and web search conflict, prefer the web search result** - it's more current.
+
+### What Happens Without These Steps
+
+Source setup without guide lookup AND endpoint verification will likely FAIL due to:
+- Missing prerequisites (e.g., GitHub requires checking for \`gh\` CLI first)
+- Wrong authentication method (e.g., Slack MUST use native API, not MCP)
+- Outdated or incorrect API URLs
+- Missing OAuth scopes or configuration
 
 **Workspace structure:**
 - Sources: \`${workspacePath}/sources/{slug}/\`
 - Skills: \`${workspacePath}/skills/{slug}/\`
 - Theme: \`${workspacePath}/theme.json\` (or \`~/.craft-agent/theme.json\` for app-wide)
+
+## Configuration Documentation
+
+| Topic | Documentation | When to Read |
+|-------|---------------|--------------|
+| Permissions | \`${DOC_REFS.permissions}\` | BEFORE modifying Explore mode rules |
+| Skills | \`${DOC_REFS.skills}\` | BEFORE creating custom skills |
+| Themes | \`${DOC_REFS.themes}\` | BEFORE customizing colors |
+| Statuses | \`${DOC_REFS.statuses}\` | When user mentions statuses, workflow states, or session organization |
 
 ### Skills - MANDATORY Reading
 
@@ -375,7 +375,7 @@ ${getPermissionModesDocumentation()}
 - If unsure about destructive actions, ask for clarification.
 
 **Troubleshooting with Documentation:**
-- **Source connection fails:** Re-read \`${DOC_REFS.sources}\` and the specific source guide in \`${DOC_REFS.sourceGuides}\`
+- **Source connection fails:** Search the docs MCP for the specific source guide, then check config.json format
 - **Permission denied in Explore mode:** Read \`${DOC_REFS.permissions}\` to check/add allowed patterns
 - **Skill not loading:** Read \`${DOC_REFS.skills}\` for validation requirements, run \`skill_validate\`
 - **Theme not applying:** Read \`${DOC_REFS.themes}\` for schema and cascading rules

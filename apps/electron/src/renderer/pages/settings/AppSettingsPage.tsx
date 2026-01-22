@@ -30,7 +30,6 @@ import {
   ExternalLink,
   CheckCircle2,
 } from 'lucide-react'
-import { HelpPopover } from '@/components/ui/HelpPopover'
 import { Spinner } from '@craft-agent/ui'
 import type { AuthType } from '../../../shared/types'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
@@ -563,7 +562,7 @@ export default function AppSettingsPage() {
 
   return (
     <div className="h-full flex flex-col">
-      <PanelHeader title="App Settings" actions={<><HelpPopover feature="app-settings" /><HeaderMenu route={routes.view.settings('app')} /></>} />
+      <PanelHeader title="App Settings" actions={<HeaderMenu route={routes.view.settings('app')} helpFeature="app-settings" />} />
       <div className="flex-1 min-h-0 mask-fade-y">
         <ScrollArea className="h-full">
           <div className="px-5 py-7 max-w-3xl mx-auto">

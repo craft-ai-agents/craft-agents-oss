@@ -24,7 +24,6 @@ import {
 import { DropdownMenuProvider, ContextMenuProvider } from '@/components/ui/menu-context'
 import { SkillMenu } from './SkillMenu'
 import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
-import { HelpPopover } from '@/components/ui/HelpPopover'
 import { cn } from '@/lib/utils'
 import type { LoadedSkill } from '../../../shared/types'
 
@@ -56,8 +55,8 @@ export function SkillsListPanel({
             <p className="text-sm text-muted-foreground">
               No skills configured.
             </p>
-            <div className="mt-3 flex items-center justify-center gap-3">
-              {workspaceRootPath && (
+            {workspaceRootPath && (
+              <div className="mt-3 flex items-center justify-center">
                 <EditPopover
                   trigger={
                     <button className="text-sm text-foreground hover:underline">
@@ -66,9 +65,8 @@ export function SkillsListPanel({
                   }
                   {...getEditConfig('add-skill', workspaceRootPath)}
                 />
-              )}
-              <HelpPopover feature="skills" side="bottom" />
-            </div>
+              </div>
+            )}
           </div>
         ) : (
           <div className="pt-2">

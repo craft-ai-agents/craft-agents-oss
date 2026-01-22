@@ -12,7 +12,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
       theme={resolvedMode as ToasterProps["theme"]}
       position="top-right"
       closeButton
-      swipeDirection="right"
+      swipeDirections={["right"]}
       className="toaster group"
       icons={{
         success: <NoIcon />,

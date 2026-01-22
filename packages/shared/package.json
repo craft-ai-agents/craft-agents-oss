@@ -1,8 +1,8 @@
 {
   "name": "@craft-agent/shared",
-  "version": "0.2.24",
+  "version": "0.2.25",
   "license": "Apache-2.0",
-  "description": "Shared business logic for Craft Agent - agent, auth, config, credentials, MCP integration",
+  "description": "Shared business logic for Craft Agents - agent, auth, config, credentials, MCP integration",
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",

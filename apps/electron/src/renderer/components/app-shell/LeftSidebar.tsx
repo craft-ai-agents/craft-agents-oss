@@ -25,6 +25,8 @@ export interface SidebarContextMenuConfig {
   onAddSource?: () => void
   /** Handler for "Add Skill" action - for skills type */
   onAddSkill?: () => void
+  /** Source type filter for "Learn More" link - determines which docs page to open */
+  sourceType?: 'api' | 'mcp' | 'local'
 }
 
 export interface LinkItem {
@@ -267,6 +269,7 @@ export function LeftSidebar({ links, isCollapsed, getItemProps, focusedItemId, i
                     onConfigureStatuses={link.contextMenu.onConfigureStatuses}
                     onAddSource={link.contextMenu.onAddSource}
                     onAddSkill={link.contextMenu.onAddSkill}
+                    sourceType={link.contextMenu.sourceType}
                   />
                 </ContextMenuProvider>
               </StyledContextMenuContent>

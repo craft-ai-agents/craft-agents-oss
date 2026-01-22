@@ -19,6 +19,7 @@ import type {
 } from './types.ts';
 import { validateSourceConfig } from '../config/validators.ts';
 import { debug } from '../utils/debug.ts';
+import { getBuiltinSources, isBuiltinSource, getDocsSource } from './builtin-sources.ts';
 import { expandPath, toPortablePath } from '../utils/paths.ts';
 import { getWorkspaceSourcesPath } from '../workspaces/storage.ts';
 import {
@@ -348,17 +349,44 @@ export function getEnabledSources(workspaceRootPath: string): LoadedSource[] {
 }
 
 /**
- * Get sources by slugs for a workspace
+ * Get sources by slugs for a workspace.
+ * Includes both user-configured sources from disk and builtin sources
+ * (like craft-agents-docs) that don't have filesystem folders.
  */
 export function getSourcesBySlugs(workspaceRootPath: string, slugs: string[]): LoadedSource[] {
+  const workspaceId = basename(workspaceRootPath);
   const sources: LoadedSource[] = [];
   for (const slug of slugs) {
+    // Check builtin sources first (they don't exist on disk)
+    if (isBuiltinSource(slug)) {
+      // Currently only craft-agents-docs is a builtin source
+      if (slug === 'craft-agents-docs') {
+        sources.push(getDocsSource(workspaceId, workspaceRootPath));
+      }
+      continue;
+    }
+    // Load user-configured source from disk
     const source = loadSource(workspaceRootPath, slug);
     if (source) {
       sources.push(source);
     }
   }
   return sources;
+}
+
+/**
+ * Load all sources for a workspace INCLUDING built-in sources.
+ * Built-in sources (like craft-agents-docs) are always available and merged
+ * with user-configured sources from the workspace.
+ *
+ * Use this when the agent needs visibility into all available sources,
+ * including system-provided ones that don't live on disk.
+ */
+export function loadAllSources(workspaceRootPath: string): LoadedSource[] {
+  const workspaceId = basename(workspaceRootPath);
+  const userSources = loadWorkspaceSources(workspaceRootPath);
+  const builtinSources = getBuiltinSources(workspaceId, workspaceRootPath);
+  return [...userSources, ...builtinSources];
 }
 
 // ============================================================
@@ -483,18 +511,9 @@ export async function createSource(
     }
   }
 
-  // Create guide.md - use bundled guide if available, otherwise skeleton
-  const { getSourceGuide } = await import('../docs/source-guides.ts');
-  const bundledGuide = getSourceGuide(config);
-
-  let guideContent: string;
-  if (bundledGuide) {
-    // Use bundled knowledge section as starting point
-    guideContent = `# ${input.name}\n\n${bundledGuide.knowledge}`;
-    debug(`[createSource] Using bundled guide for ${slug}`);
-  } else {
-    // Fallback to skeleton
-    guideContent = `# ${input.name}
+  // Create guide.md with skeleton template
+  // (bundled guides removed - agent should search craft-agents-docs MCP for service-specific guidance)
+  const guideContent = `# ${input.name}
 
 ## Guidelines
 
@@ -504,7 +523,6 @@ export async function createSource(
 
 (Add context about this source)
 `;
-  }
   saveSourceGuide(workspaceRootPath, slug, { raw: guideContent });
 
   return config;

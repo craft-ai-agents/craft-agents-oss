@@ -130,7 +130,7 @@ export function LoadingIndicator({
 
       {/* Elapsed time */}
       {showElapsed && elapsed >= 1000 && (
-        <span className="text-muted-foreground/60">
+        <span className="text-muted-foreground/60 tabular-nums">
           ({formatDuration(elapsed)})
         </span>
       )}

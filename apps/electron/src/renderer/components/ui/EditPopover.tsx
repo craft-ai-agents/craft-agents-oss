@@ -61,6 +61,9 @@ export type EditContextKey =
   | 'source-tool-permissions'
   | 'preferences-notes'
   | 'add-source'
+  | 'add-source-api'   // Filter-specific: user is viewing APIs
+  | 'add-source-mcp'   // Filter-specific: user is viewing MCPs
+  | 'add-source-local' // Filter-specific: user is viewing Local Folders
   | 'add-skill'
   | 'edit-statuses'
 
@@ -231,6 +234,59 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
     },
     example: 'Connect to my Craft space',
     overridePlaceholder: 'What would you like to connect?',
+  }),
+
+  // Filter-specific add-source contexts: user is viewing a filtered list and wants to add that type
+  'add-source-api': (location) => ({
+    context: {
+      label: 'Add API',
+      filePath: `${location}/sources/`,
+      context:
+        'The user is viewing API sources and wants to add a new REST API. ' +
+        'Default to creating an API source (type: "api") unless they specify otherwise. ' +
+        'APIs connect to REST endpoints with authentication (bearer, header, basic, or query). ' +
+        'Ask about the API endpoint URL and auth type. ' +
+        'Create the source folder and config.json in the workspace sources directory. ' +
+        'Follow the patterns in ~/.craft-agent/docs/sources.md. ' +
+        'After creating the source, call source_test with the source slug to verify the configuration.',
+    },
+    example: 'Connect to the OpenAI API',
+    overridePlaceholder: 'What API would you like to connect?',
+  }),
+
+  'add-source-mcp': (location) => ({
+    context: {
+      label: 'Add MCP Server',
+      filePath: `${location}/sources/`,
+      context:
+        'The user is viewing MCP sources and wants to add a new MCP server. ' +
+        'Default to creating an MCP source (type: "mcp") unless they specify otherwise. ' +
+        'MCP servers can use HTTP/SSE transport (remote) or stdio transport (local subprocess). ' +
+        'Ask about the service they want to connect to and whether it\'s a remote URL or local command. ' +
+        'Create the source folder and config.json in the workspace sources directory. ' +
+        'Follow the patterns in ~/.craft-agent/docs/sources.md. ' +
+        'After creating the source, call source_test with the source slug to verify the configuration.',
+    },
+    example: 'Connect to Linear',
+    overridePlaceholder: 'What MCP server would you like to connect?',
+  }),
+
+  'add-source-local': (location) => ({
+    context: {
+      label: 'Add Local Folder',
+      filePath: `${location}/sources/`,
+      context:
+        'The user wants to add a local folder source. ' +
+        'First, look up the guide: mcp__craft-agents-docs__SearchCraftAgents({ query: "filesystem" }). ' +
+        'Local folders are bookmarks - use type: "local" with a local.path field. ' +
+        'They use existing Read, Write, Glob, Grep tools - no MCP server needed. ' +
+        'If unclear, ask about the folder path they want to connect. ' +
+        'Create the source folder and config.json in the workspace sources directory. ' +
+        'Follow the patterns in ~/.craft-agent/docs/sources.md. ' +
+        'After creating the source, call source_test with the source slug to verify the configuration.',
+    },
+    example: 'Connect to my Obsidian vault',
+    overridePlaceholder: 'What folder would you like to connect?',
   }),
 
   'add-skill': (location) => ({

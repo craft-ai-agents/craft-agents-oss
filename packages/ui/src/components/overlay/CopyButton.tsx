@@ -38,7 +38,7 @@ export function CopyButton({ content, title = 'Copy', className }: CopyButtonPro
     <button
       onClick={handleCopy}
       className={cn(
-        'flex items-center justify-center w-7 h-7 rounded-[6px] transition-colors shrink-0',
+        'flex items-center justify-center w-7 h-7 rounded-[6px] transition-colors shrink-0 select-none',
         copied
           ? 'text-success'
           : 'text-muted-foreground hover:text-foreground hover:bg-foreground/5',

@@ -20,8 +20,10 @@ import {
   AppWindow,
   Settings2,
   Plus,
+  ExternalLink,
 } from 'lucide-react'
 import { useMenuComponents } from '@/components/ui/menu-context'
+import { getDocUrl, type DocFeature } from '@craft-agent/shared/docs/doc-links'
 
 export type SidebarMenuType = 'allChats' | 'flagged' | 'status' | 'sources' | 'skills' | 'newChat'
 
@@ -36,6 +38,8 @@ export interface SidebarMenuProps {
   onAddSource?: () => void
   /** Handler for "Add Skill" action - only for skills type */
   onAddSkill?: () => void
+  /** Source type filter for "Learn More" link - determines which docs page to open */
+  sourceType?: 'api' | 'mcp' | 'local'
 }
 
 /**
@@ -48,9 +52,10 @@ export function SidebarMenu({
   onConfigureStatuses,
   onAddSource,
   onAddSkill,
+  sourceType,
 }: SidebarMenuProps) {
   // Get menu components from context (works with both DropdownMenu and ContextMenu)
-  const { MenuItem } = useMenuComponents()
+  const { MenuItem, Separator } = useMenuComponents()
 
   // New Chat: only shows "Open in New Window"
   if (type === 'newChat') {
@@ -72,13 +77,36 @@ export function SidebarMenu({
     )
   }
 
-  // Sources: show "Add Source"
-  if (type === 'sources' && onAddSource) {
+  // Sources: show "Add Source" and "Learn More"
+  if (type === 'sources') {
+    // Determine which docs page to open based on source type filter
+    const docFeature: DocFeature = sourceType
+      ? `sources-${sourceType}` as DocFeature
+      : 'sources'
+
+    // Display label varies by source type
+    const learnMoreLabel = sourceType === 'api'
+      ? 'Learn More about APIs'
+      : sourceType === 'mcp'
+        ? 'Learn More about MCP'
+        : sourceType === 'local'
+          ? 'Learn More about Local Folders'
+          : 'Learn More about Sources'
+
     return (
-      <MenuItem onClick={onAddSource}>
-        <Plus className="h-3.5 w-3.5" />
-        <span className="flex-1">Add Source</span>
-      </MenuItem>
+      <>
+        {onAddSource && (
+          <MenuItem onClick={onAddSource}>
+            <Plus className="h-3.5 w-3.5" />
+            <span className="flex-1">Add Source</span>
+          </MenuItem>
+        )}
+        <Separator />
+        <MenuItem onClick={() => window.electronAPI.openUrl(getDocUrl(docFeature))}>
+          <ExternalLink className="h-3.5 w-3.5" />
+          <span className="flex-1">{learnMoreLabel}</span>
+        </MenuItem>
+      </>
     )
   }
 

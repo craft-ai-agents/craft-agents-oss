@@ -7,6 +7,9 @@ const DOC_BASE_URL = 'https://agents.craft.do/docs'
 
 export type DocFeature =
   | 'sources'
+  | 'sources-api'
+  | 'sources-mcp'
+  | 'sources-local'
   | 'skills'
   | 'statuses'
   | 'permissions'
@@ -30,6 +33,24 @@ export const DOCS: Record<DocFeature, DocInfo> = {
     title: 'Sources',
     summary:
       'Connect external data like MCP servers, REST APIs, and local filesystems. Sources give your agent tools to access services like GitHub, Linear, or your Obsidian vault.',
+  },
+  'sources-api': {
+    path: '/sources/apis/overview',
+    title: 'APIs',
+    summary:
+      'Connect to any REST API with flexible authentication. Make HTTP requests to external services directly from your conversations.',
+  },
+  'sources-mcp': {
+    path: '/sources/mcp-servers/overview',
+    title: 'MCP Servers',
+    summary:
+      'Connect to Model Context Protocol servers for rich tool integrations. MCP servers provide structured access to services like GitHub, Linear, and Notion.',
+  },
+  'sources-local': {
+    path: '/sources/local-filesystems',
+    title: 'Local Folders',
+    summary:
+      'Give your agent access to local directories like Obsidian vaults, code repositories, or data folders on your machine.',
   },
   skills: {
     path: '/skills/overview',

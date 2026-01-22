@@ -271,7 +271,7 @@ function ProcessingIndicator({ startTime, statusMessage }: ProcessingIndicatorPr
           </motion.span>
         </AnimatePresence>
         {elapsed >= 1 && (
-          <span className="text-muted-foreground/60 ml-1">
+          <span className="text-muted-foreground/60 ml-1 tabular-nums">
             {formatElapsed(elapsed)}
           </span>
         )}
@@ -1178,7 +1178,7 @@ function MessageBubble({
     const Icon = config.icon
 
     return (
-      <div className={cn('flex items-center gap-2 px-3 py-1 text-[13px]', config.className)}>
+      <div className={cn('flex items-center gap-2 px-3 py-1 text-[13px] select-none', config.className)}>
         <div className="w-3 h-3 flex items-center justify-center shrink-0">
           <Icon className="w-3 h-3" />
         </div>
@@ -1191,7 +1191,7 @@ function MessageBubble({
   if (message.role === 'warning') {
     return (
       <div className="flex justify-start">
-        <div className="max-w-[80%] bg-info/10 rounded-[8px] pl-5 pr-4 pt-2 pb-2.5 break-words">
+        <div className="max-w-[80%] bg-info/10 rounded-[8px] pl-5 pr-4 pt-2 pb-2.5 break-words select-none">
           <div className="text-xs text-info/50 mb-0.5 font-semibold">
             Warning
           </div>
