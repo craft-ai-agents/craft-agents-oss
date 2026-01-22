@@ -203,12 +203,12 @@ export default function PreferencesPage() {
           {/* Basic Info */}
           <SettingsSection
             title="Basic Info"
-            description="Help Craft Agent personalize responses to you."
+            description="Help Vesper personalize responses to you."
           >
             <SettingsCard divided>
               <SettingsInput
                 label="Name"
-                description="How Craft Agent should address you."
+                description="How Vesper should address you."
                 value={formState.name}
                 onChange={(v) => updateField('name', v)}
                 placeholder="Your name"
@@ -224,7 +224,7 @@ export default function PreferencesPage() {
               />
               <SettingsInput
                 label="Language"
-                description="Preferred language for Craft Agent's responses."
+                description="Preferred language for Vesper's responses."
                 value={formState.language}
                 onChange={(v) => updateField('language', v)}
                 placeholder="e.g., English"
@@ -261,7 +261,7 @@ export default function PreferencesPage() {
           {/* Notes */}
           <SettingsSection
             title="Notes"
-            description="Free-form context that helps Craft Agent understand your preferences."
+            description="Free-form context that helps Vesper understand your preferences."
             action={
               // EditPopover for AI-assisted notes editing with "Edit File" as secondary action
               preferencesPath ? (
@@ -280,7 +280,7 @@ export default function PreferencesPage() {
               <SettingsTextarea
                 value={formState.notes}
                 onChange={(v) => updateField('notes', v)}
-                placeholder="Any additional context you'd like Craft Agent to know..."
+                placeholder="Any additional context you'd like Vesper to know..."
                 rows={5}
                 inCard
               />

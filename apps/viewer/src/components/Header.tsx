@@ -5,7 +5,7 @@
 import { Sun, Moon, X } from 'lucide-react'
 
 /**
- * CraftAgentLogo - The Craft Agent "C" logo
+ * CraftAgentLogo - The Vesper "C" logo (legacy branding)
  */
 function CraftAgentLogo({ className }: { className?: string }) {
   return (
@@ -40,7 +40,7 @@ export function Header({ hasSession, sessionTitle, isDark, onToggleTheme, onClea
       <a
         href="https://agents.craft.do"
         className="hover:opacity-80 transition-opacity"
-        title="Craft Agent"
+        title="Vesper"
       >
         <CraftAgentLogo className="w-6 h-6 text-[#9570BE]" />
       </a>

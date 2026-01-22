@@ -31,7 +31,7 @@ export interface ConfigDefaults {
  */
 export const BUNDLED_CONFIG_DEFAULTS: ConfigDefaults = {
   version: '1.0',
-  description: 'Default configuration values for Craft Agent',
+  description: 'Default configuration values for Vesper',
   defaults: {
     authType: 'api_key',
     notificationsEnabled: true,

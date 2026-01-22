@@ -27,18 +27,18 @@ export function getBuiltinSources(_workspaceId: string, _workspaceRootPath: stri
 }
 
 /**
- * Get the built-in Craft Agents docs source.
+ * Get the built-in Vesper docs source.
  *
- * @deprecated craft-agents-docs is now an always-available MCP server
+ * @deprecated vesper-docs is now an always-available MCP server
  * configured directly in craft-agent.ts. This function is kept for
  * backwards compatibility but returns a placeholder.
  */
 export function getDocsSource(workspaceId: string, workspaceRootPath: string): LoadedSource {
   // Return a placeholder - this shouldn't be called anymore
   const placeholderConfig: FolderSourceConfig = {
-    id: 'builtin-craft-agents-docs',
-    name: 'Craft Agents Docs',
-    slug: 'craft-agents-docs',
+    id: 'builtin-vesper-docs',
+    name: 'Vesper Docs',
+    slug: 'vesper-docs',
     enabled: false,
     provider: 'mintlify',
     type: 'mcp',
@@ -47,7 +47,7 @@ export function getDocsSource(workspaceId: string, workspaceRootPath: string): L
       url: 'https://agents.craft.do/docs/mcp',
       authType: 'none',
     },
-    tagline: 'Search Craft Agents documentation and source setup guides',
+    tagline: 'Search Vesper documentation and source setup guides',
     icon: '📚',
     isAuthenticated: true,
     connectionStatus: 'connected',

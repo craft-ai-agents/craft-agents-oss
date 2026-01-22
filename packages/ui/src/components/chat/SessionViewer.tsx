@@ -49,7 +49,7 @@ export interface SessionViewerProps {
 }
 
 /**
- * CraftAgentLogo - The Craft Agent "C" logo for branding
+ * CraftAgentLogo - The Vesper "C" logo for branding (legacy component name)
  */
 function CraftAgentLogo({ className }: { className?: string }) {
   return (

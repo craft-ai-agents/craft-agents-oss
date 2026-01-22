@@ -22,7 +22,7 @@ export interface OAuthCallbacks {
 
 const CALLBACK_PORT = 8914;
 const CALLBACK_PATH = '/oauth/callback';
-const CLIENT_NAME = 'Craft Agent';
+const CLIENT_NAME = 'Vesper';
 
 /**
  * Generate a styled OAuth callback page with terminal emulator aesthetic

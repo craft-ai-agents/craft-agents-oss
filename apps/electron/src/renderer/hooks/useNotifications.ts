@@ -217,7 +217,7 @@ export function useNotifications({
     const title = session.name || 'New message'
 
     // Get message preview (truncate if needed)
-    let body = messagePreview || 'Craft Agent has a new message for you'
+    let body = messagePreview || 'Vesper has a new message for you'
     if (body.length > 100) {
       body = body.substring(0, 97) + '...'
     }

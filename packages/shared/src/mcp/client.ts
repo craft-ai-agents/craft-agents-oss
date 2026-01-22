@@ -39,7 +39,7 @@ export type McpClientConfig = HttpMcpClientConfig | StdioMcpClientConfig;
  * and shouldn't have access to.
  */
 const BLOCKED_ENV_VARS = [
-  // Craft Agent auth (set by the app itself)
+  // Vesper auth (set by the app itself)
   'ANTHROPIC_API_KEY',
   'CLAUDE_CODE_OAUTH_TOKEN',
 
