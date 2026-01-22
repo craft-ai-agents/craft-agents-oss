@@ -1144,9 +1144,9 @@ export function setCustomModelNames(names: { opus?: string; sonnet?: string; hai
  */
 function getModelFamilyKey(modelId: string): 'opus' | 'sonnet' | 'haiku' | null {
   // Match standard Anthropic model ID format: claude-{family}-{version}
-  // e.g., claude-opus-4-5-20251101, claude-sonnet-4-5-20250929
-  const match = modelId.match(/^claude-(opus|sonnet|haiku)-/);
-  return (match?.[1] as 'opus' | 'sonnet' | 'haiku') ?? null;
+  // Also matches legacy/detailed versions like claude-3-5-sonnet-20240620
+  const match = modelId.match(/claude(?:-[3-9]-[0-9])?-(opus|sonnet|haiku)/i);
+  return (match?.[1]?.toLowerCase() as 'opus' | 'sonnet' | 'haiku') ?? null;
 }
 
 /**

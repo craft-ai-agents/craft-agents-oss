@@ -8,6 +8,7 @@
 import { query, type McpServerStatus } from '@anthropic-ai/claude-agent-sdk';
 import { spawn, type ChildProcess } from 'child_process';
 import { getDefaultOptions } from '../agent/options.ts';
+import { resolveModelId } from '../config/storage.ts';
 import { CraftMcpClient } from './client.js';
 import { debug } from '../utils/debug.ts';
 import { DEFAULT_MODEL } from '../config/models.ts';
@@ -180,7 +181,7 @@ export async function validateMcpConnection(
       options: {
         ...getDefaultOptions(),
         mcpServers,
-        model: config.model || DEFAULT_MODEL,
+        model: resolveModelId(config.model || DEFAULT_MODEL),
         abortController,
       },
     });

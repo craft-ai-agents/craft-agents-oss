@@ -6,6 +6,7 @@
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import { getDefaultOptions } from '../agent/options.ts';
 import { SUMMARIZATION_MODEL } from '../config/models.ts';
+import { resolveModelId } from '../config/storage.ts';
 
 /**
  * Generate a task-focused title (2-5 words) from the user's first message.
@@ -34,7 +35,7 @@ export async function generateSessionTitle(
     const defaultOptions = getDefaultOptions();
     const options = {
       ...defaultOptions,
-      model: SUMMARIZATION_MODEL,
+      model: resolveModelId(SUMMARIZATION_MODEL),
       maxTurns: 1,
     };
 
@@ -102,7 +103,7 @@ export async function regenerateSessionTitle(
     const defaultOptions = getDefaultOptions();
     const options = {
       ...defaultOptions,
-      model: SUMMARIZATION_MODEL,
+      model: resolveModelId(SUMMARIZATION_MODEL),
       maxTurns: 1,
     };
 
