@@ -1867,7 +1867,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     setColorTheme(themeId)
   })
 
-  // System theme integration (e.g., omarchy on Linux)
+  // System theme integration 
   ipcMain.handle(IPC_CHANNELS.THEME_SYSTEM_AVAILABLE, async () => {
     const { isSystemThemeAvailable } = await import('@craft-agent/shared/config/system-theme')
     return isSystemThemeAvailable()

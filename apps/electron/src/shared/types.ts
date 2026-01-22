@@ -607,7 +607,7 @@ export const IPC_CHANNELS = {
   THEME_BROADCAST_PREFERENCES: 'theme:broadcastPreferences',  // Send preferences to main for broadcast
   THEME_PREFERENCES_CHANGED: 'theme:preferencesChanged',  // Broadcast: preferences changed in another window
 
-  // System theme integration (e.g., omarchy on Linux)
+  // System theme integration 
   THEME_SYSTEM_AVAILABLE: 'theme:systemAvailable',
   THEME_SYSTEM_GET: 'theme:systemGet',
   THEME_SYSTEM_CHANGED: 'theme:systemChanged',  // Broadcast: system theme changed
@@ -819,7 +819,7 @@ export interface ElectronAPI {
   getColorTheme(): Promise<string>
   setColorTheme(themeId: string): Promise<void>
 
-  // System theme integration (e.g., omarchy on Linux)
+  // System theme integration 
   // Note: These are distinct from getSystemTheme/onSystemThemeChange which handle dark/light mode detection
   isSystemThemeAvailable(): Promise<boolean>
   loadSystemThemeFile(): Promise<ThemeFile | null>

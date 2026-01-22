@@ -460,7 +460,7 @@ export default function AppSettingsPage() {
     loadThemes()
   }, [])
 
-  // Check if system theme is available (e.g., omarchy on Linux)
+  // Check if system theme is available 
   useEffect(() => {
     const checkSystemTheme = async () => {
       if (!window.electronAPI?.isSystemThemeAvailable) {

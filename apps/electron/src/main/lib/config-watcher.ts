@@ -122,7 +122,7 @@ export interface ConfigWatcherCallbacks {
   onPresetThemeChange?: (themeId: string, theme: PresetTheme | null) => void;
   /** Called when the preset themes list changes (add/remove files) */
   onPresetThemesListChange?: (themes: PresetTheme[]) => void;
-  /** Called when system theme changes (e.g., omarchy on Linux) */
+  /** Called when system theme changes */
   onSystemThemeChange?: (theme: ThemeFile | null) => void;
 
   // Error callbacks
@@ -240,7 +240,7 @@ export class ConfigWatcher {
     this.watchAppPermissionsDir();
     span.mark('watchAppPermissionsDir');
 
-    // Watch system theme (e.g., omarchy on Linux)
+    // Watch system theme
     this.watchSystemTheme();
     span.mark('watchSystemTheme');
 
@@ -849,7 +849,7 @@ export class ConfigWatcher {
   }
 
   /**
-   * Watch system theme for changes (e.g., omarchy on Linux)
+   * Watch system theme for changes
    * Uses the generic system-theme module which abstracts provider-specific details
    */
   private watchSystemTheme(): void {

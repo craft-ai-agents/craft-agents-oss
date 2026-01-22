@@ -303,7 +303,7 @@ const api: ElectronAPI = {
   getColorTheme: () => ipcRenderer.invoke(IPC_CHANNELS.THEME_GET_COLOR_THEME),
   setColorTheme: (themeId: string) => ipcRenderer.invoke(IPC_CHANNELS.THEME_SET_COLOR_THEME, themeId),
 
-  // System theme integration (e.g., omarchy on Linux)
+  // System theme integration 
   // Note: These are distinct from getSystemTheme/onSystemThemeChange which handle dark/light mode detection
   isSystemThemeAvailable: () => ipcRenderer.invoke(IPC_CHANNELS.THEME_SYSTEM_AVAILABLE) as Promise<boolean>,
   loadSystemThemeFile: () => ipcRenderer.invoke(IPC_CHANNELS.THEME_SYSTEM_GET) as Promise<ThemeFile | null>,

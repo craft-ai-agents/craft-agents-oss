@@ -123,7 +123,7 @@ export interface ConfigWatcherCallbacks {
   onPresetThemeChange?: (themeId: string, theme: PresetTheme | null) => void;
   /** Called when the preset themes list changes (add/remove files) */
   onPresetThemesListChange?: (themes: PresetTheme[]) => void;
-  /** Called when system theme changes (e.g., omarchy desktop theme) */
+  /** Called when system theme changes  */
   onSystemThemeChange?: (theme: ThemeFile | null) => void;
 
   // Error callbacks
@@ -241,7 +241,7 @@ export class ConfigWatcher {
     this.watchAppPermissionsDir();
     span.mark('watchAppPermissionsDir');
 
-    // Watch system theme (e.g., omarchy on Linux)
+    // Watch system theme 
     this.watchSystemTheme();
     span.mark('watchSystemTheme');
 
@@ -902,7 +902,6 @@ export class ConfigWatcher {
 
   /**
    * Watch system theme for changes.
-   * Currently supports omarchy on Linux. Additional providers can be added.
    */
   private watchSystemTheme(): void {
     if (!isSystemThemeAvailable()) {
