@@ -228,13 +228,11 @@ export function ThemeProvider({
 
     // Handle themeMismatch - set solid background when:
     // 1. Theme doesn't support current mode (e.g., dark-only Dracula in light mode), OR
-    // 2. Effective rendered mode differs from system preference (vibrancy mismatch)
-    // Note: We use effectiveMode (not resolvedMode) because dark-only themes force dark mode
-    // regardless of user preference, and vibrancy needs to match the ACTUAL rendered mode.
+    // 2. Resolved mode differs from system preference (vibrancy mismatch)
     const supportedModes = presetTheme?.supportedModes
     const currentMode = isDarkFromMode ? 'dark' : 'light'
     const themeModeUnsupported = supportedModes && supportedModes.length > 0 && !supportedModes.includes(currentMode)
-    const vibrancyMismatch = effectiveMode !== systemPreference
+    const vibrancyMismatch = resolvedMode !== systemPreference
 
     if (themeModeUnsupported || vibrancyMismatch) {
       root.dataset.themeMismatch = 'true'

@@ -38,7 +38,9 @@ export type {
 // Use types-only subpaths to avoid pulling in Node.js dependencies
 import type { AuthState, SetupNeeds } from '@craft-agent/shared/auth/types';
 import type { AuthType } from '@craft-agent/shared/config/types';
+import type { ThemeOverrides, ThemeFile, PresetTheme } from '@craft-agent/shared/config';
 export type { AuthState, SetupNeeds, AuthType };
+export type { ThemeOverrides, ThemeFile, PresetTheme };
 
 // Import source types for session source selection
 import type { LoadedSource, FolderSourceConfig, SourceConnectionStatus } from '@craft-agent/shared/sources/types';
@@ -810,21 +812,21 @@ export interface ElectronAPI {
   writeWorkspaceImage(workspaceId: string, relativePath: string, base64: string, mimeType: string): Promise<void>
 
   // Theme (app-level only)
-  getAppTheme(): Promise<import('@config/theme').ThemeOverrides | null>
+  getAppTheme(): Promise<ThemeOverrides | null>
   // Preset themes (app-level)
-  loadPresetThemes(): Promise<import('@config/theme').PresetTheme[]>
-  loadPresetTheme(themeId: string): Promise<import('@config/theme').PresetTheme | null>
+  loadPresetThemes(): Promise<PresetTheme[]>
+  loadPresetTheme(themeId: string): Promise<PresetTheme | null>
   getColorTheme(): Promise<string>
   setColorTheme(themeId: string): Promise<void>
 
   // System theme integration (e.g., omarchy on Linux)
   // Note: These are distinct from getSystemTheme/onSystemThemeChange which handle dark/light mode detection
   isSystemThemeAvailable(): Promise<boolean>
-  loadSystemThemeFile(): Promise<import('@config/theme').ThemeFile | null>
-  onSystemThemeFileChange(callback: (theme: import('@config/theme').ThemeFile | null) => void): () => void
+  loadSystemThemeFile(): Promise<ThemeFile | null>
+  onSystemThemeFileChange(callback: (theme: ThemeFile | null) => void): () => void
 
   // Theme change listeners (live updates when theme.json files change)
-  onAppThemeChange(callback: (theme: import('@config/theme').ThemeOverrides | null) => void): () => void
+  onAppThemeChange(callback: (theme: ThemeOverrides | null) => void): () => void
 
   // Logo URL resolution (uses Node.js filesystem cache for provider domains)
   getLogoUrl(serviceUrl: string, provider?: string): Promise<string | null>

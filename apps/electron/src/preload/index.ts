@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { IPC_CHANNELS, type SessionEvent, type ElectronAPI, type FileAttachment, type AuthType } from '../shared/types'
+import { IPC_CHANNELS, type SessionEvent, type ElectronAPI, type FileAttachment, type AuthType, type ThemeFile, type ThemeOverrides } from '../shared/types'
 
 const api: ElectronAPI = {
   // Session management
@@ -306,9 +306,9 @@ const api: ElectronAPI = {
   // System theme integration (e.g., omarchy on Linux)
   // Note: These are distinct from getSystemTheme/onSystemThemeChange which handle dark/light mode detection
   isSystemThemeAvailable: () => ipcRenderer.invoke(IPC_CHANNELS.THEME_SYSTEM_AVAILABLE) as Promise<boolean>,
-  loadSystemThemeFile: () => ipcRenderer.invoke(IPC_CHANNELS.THEME_SYSTEM_GET) as Promise<import('@craft-agent/shared/config').ThemeFile | null>,
-  onSystemThemeFileChange: (callback: (theme: import('@craft-agent/shared/config').ThemeFile | null) => void) => {
-    const handler = (_event: Electron.IpcRendererEvent, theme: import('@craft-agent/shared/config').ThemeFile | null) => {
+  loadSystemThemeFile: () => ipcRenderer.invoke(IPC_CHANNELS.THEME_SYSTEM_GET) as Promise<ThemeFile | null>,
+  onSystemThemeFileChange: (callback: (theme: ThemeFile | null) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, theme: ThemeFile | null) => {
       callback(theme)
     }
     ipcRenderer.on(IPC_CHANNELS.THEME_SYSTEM_CHANGED, handler)
@@ -322,8 +322,8 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.LOGO_GET_URL, serviceUrl, provider),
 
   // Theme change listeners (live updates when theme.json files change)
-  onAppThemeChange: (callback: (theme: import('@craft-agent/shared/config').ThemeOverrides | null) => void) => {
-    const handler = (_event: Electron.IpcRendererEvent, theme: import('@craft-agent/shared/config').ThemeOverrides | null) => {
+  onAppThemeChange: (callback: (theme: ThemeOverrides | null) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, theme: ThemeOverrides | null) => {
       callback(theme)
     }
     ipcRenderer.on(IPC_CHANNELS.THEME_APP_CHANGED, handler)
