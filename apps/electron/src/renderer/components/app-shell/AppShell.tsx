@@ -71,7 +71,7 @@ import { getResizeGradientStyle } from "@/hooks/useResizeGradient"
 import { useFocusZone, useGlobalShortcuts } from "@/hooks/keyboard"
 import { useFocusContext } from "@/context/FocusContext"
 import { getSessionTitle } from "@/utils/session"
-import { useSetAtom } from "jotai"
+import { useSetAtom, useAtom } from "jotai"
 import type { Session, Workspace, FileAttachment, PermissionRequest, TodoState, LoadedSource, LoadedSkill, PermissionMode, SourceFilter } from "../../../shared/types"
 import { sessionMetaMapAtom, type SessionMeta } from "@/atoms/sessions"
 import { sourcesAtom } from "@/atoms/sources"
@@ -105,6 +105,8 @@ import { VectorSearch } from "@/components/vector-search/VectorSearch"
 import { ScheduleList } from "@/components/scheduler/ScheduleList"
 import type { RichTextInputHandle } from "@/components/ui/rich-text-input"
 import { hasOpenOverlay } from "@/lib/overlay-detection"
+import { CommandPalette } from "@/components/command-palette/CommandPalette"
+import { commandPaletteOpenAtom } from "@/atoms/command-palette"
 
 /**
  * AppShellProps - Minimal props interface for AppShell component
@@ -234,6 +236,9 @@ function AppShellContent({
 
   // Double-Esc interrupt feature: first Esc shows warning, second Esc interrupts
   const { handleEscapePress } = useEscapeInterrupt()
+
+  // Command palette state
+  const [, setCommandPaletteOpen] = useAtom(commandPaletteOpenAtom)
 
   // UNIFIED NAVIGATION STATE - single source of truth from NavigationContext
   // All sidebar/navigator/main panel state is derived from this
@@ -492,6 +497,8 @@ function AppShellContent({
       // History navigation
       { key: '[', cmd: true, action: goBack },
       { key: ']', cmd: true, action: goForward },
+      // Command palette (CMD+K)
+      { key: 'k', cmd: true, action: () => setCommandPaletteOpen(prev => !prev) },
       // ESC to stop processing - requires double-press within 1 second
       // First press shows warning overlay, second press interrupts
       { key: 'Escape', action: () => {
@@ -553,6 +560,15 @@ function AppShellContent({
 
     document.addEventListener('paste', handleGlobalPaste)
     return () => document.removeEventListener('paste', handleGlobalPaste)
+  }, [])
+
+  // Listen for command palette toggle sidebar event
+  React.useEffect(() => {
+    const handleToggleSidebar = () => {
+      setIsSidebarVisible(prev => !prev)
+    }
+    window.addEventListener('command-palette:toggle-sidebar', handleToggleSidebar)
+    return () => window.removeEventListener('command-palette:toggle-sidebar', handleToggleSidebar)
   }, [])
 
   // Resize effect for sidebar, session list, and right sidebar
@@ -1844,6 +1860,9 @@ function AppShellContent({
           />
         </>
       )}
+
+      {/* Command Palette */}
+      <CommandPalette />
 
       </TooltipProvider>
     </AppShellProvider>
