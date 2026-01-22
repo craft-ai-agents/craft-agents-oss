@@ -1,5 +1,0 @@
-# Build artifacts for DMG packaging
-vendor/
-packages/
-release/
-node_modules/@anthropic-ai/

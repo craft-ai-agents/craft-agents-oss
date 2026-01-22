@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Skill">
-  <rect width="64" height="64" rx="12" fill="#111827"/>
-  <rect x="18" y="16" width="28" height="4" fill="#F9FAFB"/>
-  <rect x="18" y="28" width="28" height="4" fill="#F9FAFB"/>
-  <rect x="18" y="36" width="28" height="4" fill="#F9FAFB"/>
-  <rect x="18" y="44" width="20" height="4" fill="#F9FAFB"/>
-</svg>
