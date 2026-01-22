@@ -2,15 +2,21 @@ import { cn } from "@/lib/utils"
 import { WelcomeStep } from "./WelcomeStep"
 import { BillingMethodStep, type BillingMethod } from "./BillingMethodStep"
 import { CredentialsStep, type CredentialStatus } from "./CredentialsStep"
+import { CustomEndpointStep, type CustomEndpointStatus } from "./CustomEndpointStep"
 import { CompletionStep } from "./CompletionStep"
+import type { CustomEndpointUploadResult } from "../../../shared/types"
 
 export type OnboardingStep =
   | 'welcome'
   | 'billing-method'
   | 'credentials'
+  | 'custom-endpoint'
   | 'complete'
 
 export type LoginStatus = 'idle' | 'waiting' | 'success' | 'error'
+
+// Re-export CustomEndpointStatus for use in other components
+export type { CustomEndpointStatus }
 
 export interface OnboardingState {
   step: OnboardingStep
@@ -43,11 +49,9 @@ interface OnboardingWizardProps {
   onSubmitAuthCode?: (code: string) => void
   onCancelOAuth?: () => void
 
-  // Advanced API options
-  baseUrl?: string
-  onBaseUrlChange?: (value: string) => void
-  customModelNames?: { opus: string; sonnet: string; haiku: string }
-  onCustomModelNamesChange?: (names: { opus: string; sonnet: string; haiku: string }) => void
+  // Custom endpoint
+  customEndpointStatus?: CustomEndpointStatus
+  onUploadCustomEndpoint?: (jsonContent: string) => Promise<CustomEndpointUploadResult>
 
   className?: string
 }
@@ -57,8 +61,8 @@ interface OnboardingWizardProps {
  *
  * Manages the step-by-step flow for setting up Craft Agent:
  * 1. Welcome
- * 2. Billing Method (choose: API Key / Claude OAuth)
- * 3. Credentials (API Key or Claude OAuth)
+ * 2. Billing Method (choose: API Key / Claude OAuth / Custom Endpoint)
+ * 3. Credentials (API Key or Claude OAuth) OR Custom Endpoint (upload config)
  * 4. Completion
  */
 export function OnboardingWizard({
@@ -76,11 +80,9 @@ export function OnboardingWizard({
   isWaitingForCode,
   onSubmitAuthCode,
   onCancelOAuth,
-  // Advanced API options
-  baseUrl,
-  onBaseUrlChange,
-  customModelNames,
-  onCustomModelNamesChange,
+  // Custom endpoint
+  customEndpointStatus = 'idle',
+  onUploadCustomEndpoint,
   className
 }: OnboardingWizardProps) {
   const renderStep = () => {
@@ -118,10 +120,17 @@ export function OnboardingWizard({
             isWaitingForCode={isWaitingForCode}
             onSubmitAuthCode={onSubmitAuthCode}
             onCancelOAuth={onCancelOAuth}
-            baseUrl={baseUrl}
-            onBaseUrlChange={onBaseUrlChange}
-            customModelNames={customModelNames}
-            onCustomModelNamesChange={onCustomModelNamesChange}
+          />
+        )
+
+      case 'custom-endpoint':
+        return (
+          <CustomEndpointStep
+            status={customEndpointStatus}
+            errorMessage={state.errorMessage}
+            onUploadConfig={onUploadCustomEndpoint!}
+            onBack={onBack}
+            onContinue={onContinue}
           />
         )
 

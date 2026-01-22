@@ -4,8 +4,8 @@
  * Manages the state machine for the onboarding wizard.
  * Simplified billing-only flow:
  * 1. Welcome
- * 2. Billing Method (API Key / Claude OAuth)
- * 3. Credentials (API Key or Claude OAuth)
+ * 2. Billing Method (API Key / Claude OAuth / Custom Endpoint)
+ * 3. Credentials (API Key or Claude OAuth) OR Custom Endpoint (upload config)
  * 4. Complete
  */
 import { useState, useCallback, useEffect } from 'react'
@@ -15,8 +15,9 @@ import type {
   LoginStatus,
   CredentialStatus,
   BillingMethod,
+  CustomEndpointStatus,
 } from '@/components/onboarding'
-import type { AuthType, SetupNeeds } from '../../shared/types'
+import type { AuthType, SetupNeeds, CustomEndpointUploadResult } from '../../shared/types'
 
 interface UseOnboardingOptions {
   /** Called when onboarding is complete */
@@ -49,11 +50,9 @@ interface UseOnboardingReturn {
   handleSubmitAuthCode: (code: string) => void
   handleCancelOAuth: () => void
 
-  // Advanced API options
-  baseUrl: string
-  setBaseUrl: (value: string) => void
-  customModelNames: { opus: string; sonnet: string; haiku: string }
-  setCustomModelNames: (names: { opus: string; sonnet: string; haiku: string }) => void
+  // Custom endpoint
+  customEndpointStatus: CustomEndpointStatus
+  handleUploadCustomEndpoint: (jsonContent: string) => Promise<CustomEndpointUploadResult>
 
   // Completion
   handleFinish: () => void
@@ -68,6 +67,7 @@ function billingMethodToAuthType(method: BillingMethod): AuthType {
   switch (method) {
     case 'api_key': return 'api_key'
     case 'claude_oauth': return 'oauth_token'
+    case 'custom_endpoint': return 'api_key'  // Custom endpoint uses api_key auth internally
   }
 }
 
@@ -85,15 +85,10 @@ export function useOnboarding({
     isExistingUser: initialSetupNeeds?.needsBillingConfig ?? false,
   })
 
-  // Advanced API options
-  const [baseUrl, setBaseUrl] = useState('')
-  const [customModelNames, setCustomModelNames] = useState({
-    opus: '',
-    sonnet: '',
-    haiku: '',
-  })
+  // Custom endpoint state
+  const [customEndpointStatus, setCustomEndpointStatus] = useState<CustomEndpointStatus>('idle')
 
-  // Save configuration
+  // Save configuration (for API Key and OAuth flows - custom endpoint handles its own saving)
   const handleSaveConfig = useCallback(async (credential?: string) => {
     if (!state.billingMethod) {
       console.log('[Onboarding] No billing method, returning early')
@@ -106,13 +101,12 @@ export function useOnboarding({
       const authType = billingMethodToAuthType(state.billingMethod)
       console.log('[Onboarding] Saving config with authType:', authType)
 
-      const hasAnyModel = Object.values(customModelNames).some(v => v.trim())
-
+      // For simple API Key or OAuth, no base URL or custom model names
       const result = await window.electronAPI.saveOnboardingConfig({
         authType,
         credential,
-        anthropicBaseUrl: baseUrl.trim() || null,
-        customModelNames: hasAnyModel ? customModelNames : null,
+        anthropicBaseUrl: null,
+        customModelNames: null,
       })
 
       if (result.success) {
@@ -133,7 +127,7 @@ export function useOnboarding({
         errorMessage: error instanceof Error ? error.message : 'Failed to save configuration',
       }))
     }
-  }, [state.billingMethod, baseUrl, customModelNames])
+  }, [state.billingMethod])
 
   // Continue to next step
   const handleContinue = useCallback(async () => {
@@ -143,12 +137,20 @@ export function useOnboarding({
         break
 
       case 'billing-method':
-        // Go to credentials step for API Key or Claude OAuth
-        setState(s => ({ ...s, step: 'credentials' }))
+        // Go to appropriate step based on billing method
+        if (state.billingMethod === 'custom_endpoint') {
+          setState(s => ({ ...s, step: 'custom-endpoint' }))
+        } else {
+          setState(s => ({ ...s, step: 'credentials' }))
+        }
         break
 
       case 'credentials':
         // Handled by handleSubmitCredential
+        break
+
+      case 'custom-endpoint':
+        // Handled by handleUploadCustomEndpoint
         break
 
       case 'complete':
@@ -165,6 +167,10 @@ export function useOnboarding({
         break
       case 'credentials':
         setState(s => ({ ...s, step: 'billing-method', credentialStatus: 'idle', errorMessage: undefined }))
+        break
+      case 'custom-endpoint':
+        setState(s => ({ ...s, step: 'billing-method', errorMessage: undefined }))
+        setCustomEndpointStatus('idle')
         break
     }
   }, [state.step])
@@ -332,6 +338,47 @@ export function useOnboarding({
     await window.electronAPI.clearClaudeOAuthState()
   }, [])
 
+  // Upload custom endpoint configuration
+  // This uses the same IPC handler as the settings page
+  const handleUploadCustomEndpoint = useCallback(async (jsonContent: string): Promise<CustomEndpointUploadResult> => {
+    setCustomEndpointStatus('validating')
+    setState(s => ({ ...s, errorMessage: undefined }))
+
+    try {
+      // Upload and validate the config via IPC
+      const result = await window.electronAPI.uploadCustomEndpointConfig(jsonContent)
+
+      if (result.success) {
+        setCustomEndpointStatus('success')
+        // Move to complete step after short delay to show success state
+        setTimeout(() => {
+          setState(s => ({
+            ...s,
+            completionStatus: 'complete',
+            step: 'complete',
+          }))
+        }, 500)
+      } else {
+        setCustomEndpointStatus('error')
+        setState(s => ({
+          ...s,
+          errorMessage: result.error || 'Configuration failed',
+        }))
+      }
+
+      return result
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Upload failed'
+      setCustomEndpointStatus('error')
+      setState(s => ({ ...s, errorMessage }))
+
+      return {
+        success: false,
+        error: errorMessage,
+      }
+    }
+  }, [])
+
   // Finish onboarding
   const handleFinish = useCallback(() => {
     onComplete()
@@ -357,8 +404,7 @@ export function useOnboarding({
     setIsClaudeCliInstalled(false)
     setClaudeOAuthChecked(false)
     setIsWaitingForCode(false)
-    setBaseUrl('')
-    setCustomModelNames({ opus: '', sonnet: '', haiku: '' })
+    setCustomEndpointStatus('idle')
   }, [])
 
   return {
@@ -375,11 +421,9 @@ export function useOnboarding({
     isWaitingForCode,
     handleSubmitAuthCode,
     handleCancelOAuth,
-    // Advanced API options
-    baseUrl,
-    setBaseUrl,
-    customModelNames,
-    setCustomModelNames,
+    // Custom endpoint
+    customEndpointStatus,
+    handleUploadCustomEndpoint,
     handleFinish,
     handleCancel,
     reset,

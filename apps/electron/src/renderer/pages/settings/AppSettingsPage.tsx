@@ -26,8 +26,8 @@ import {
   Moon,
   ExternalLink,
   CheckCircle2,
-  ChevronDown,
-  ChevronRight,
+  Upload,
+  Settings2,
 } from 'lucide-react'
 import { Spinner } from '@craft-agent/ui'
 import type { AuthType } from '../../../shared/types'
@@ -51,8 +51,9 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog'
-import { SettingsSecretInput, SettingsInput } from '@/components/settings'
-import { SearchableModelInput } from '@/components/settings/SearchableModelInput'
+import { SettingsSecretInput } from '@/components/settings'
+import { CustomEndpointValidationDialog } from '@/components/settings/CustomEndpointValidationDialog'
+import { ViewCustomEndpointConfigDialog } from '@/components/settings/ViewCustomEndpointConfigDialog'
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
@@ -360,26 +361,23 @@ export default function AppSettingsPage() {
   const [presetThemes, setPresetThemes] = useState<PresetTheme[]>([])
 
   // Billing state
+  // paymentMethod is the UI-level concept: 'oauth_token', 'api_key', or 'custom_endpoint'
+  // authType is the storage-level concept: 'api_key' or 'oauth_token' (custom_endpoint uses api_key)
+  type PaymentMethod = 'oauth_token' | 'api_key' | 'custom_endpoint'
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('api_key')
   const [authType, setAuthType] = useState<AuthType>('api_key')
   const [expandedMethod, setExpandedMethod] = useState<AuthType | null>(null)
   const [hasCredential, setHasCredential] = useState(false)
 
-  // API Key state
+  // API Key state (simple Anthropic API key, no advanced settings)
   const [apiKeyValue, setApiKeyValue] = useState('')
-  const [baseUrlValue, setBaseUrlValue] = useState('')
-  // 3-tier model names for custom APIs (OpenRouter, Ollama, etc.)
-  const [opusModelValue, setOpusModelValue] = useState('')
-  const [sonnetModelValue, setSonnetModelValue] = useState('')
-  const [haikuModelValue, setHaikuModelValue] = useState('')
   const [apiKeyError, setApiKeyError] = useState<string | undefined>()
-  // Advanced settings expanded state
-  const [showAdvancedSettings, setShowAdvancedSettings] = useState(false)
-  // Model fetching state
-  const [availableModels, setAvailableModels] = useState<Array<{ id: string; name?: string }>>([])
-  const [isFetchingModels, setIsFetchingModels] = useState(false)
-  // Test connection state
-  const [isTestingConnection, setIsTestingConnection] = useState(false)
-  const [testConnectionResult, setTestConnectionResult] = useState<{ success: boolean; error?: string; modelCount?: number } | null>(null)
+
+  // Custom endpoint state
+  const [hasCustomEndpoint, setHasCustomEndpoint] = useState(false)
+  const [showValidationDialog, setShowValidationDialog] = useState(false)
+  const [showViewConfigDialog, setShowViewConfigDialog] = useState(false)
+  const [pendingConfigJson, setPendingConfigJson] = useState('')
 
   // Claude OAuth state
   const [existingClaudeToken, setExistingClaudeToken] = useState<string | null>(null)
@@ -404,15 +402,11 @@ export default function AppSettingsPage() {
     }
   }, [updateChecker])
 
-  // API Key auto-save hook
+  // API Key auto-save hook (simplified - no base URL or model names)
   const { handleBlur } = useApiKeyAutoSave({
     apiKey: apiKeyValue,
-    baseUrl: baseUrlValue,
-    customModelNames: {
-      opus: opusModelValue,
-      sonnet: sonnetModelValue,
-      haiku: haikuModelValue,
-    },
+    baseUrl: '',  // Not used for simple API key mode
+    customModelNames: { opus: '', sonnet: '', haiku: '' },  // Not used for simple API key mode
     authType,
     hasCredential,
     onSaveSuccess: () => {
@@ -428,22 +422,28 @@ export default function AppSettingsPage() {
     const loadSettings = async () => {
       if (!window.electronAPI) return
       try {
-        const [billing, notificationsOn] = await Promise.all([
+        const [billing, customEndpoint, notificationsOn] = await Promise.all([
           window.electronAPI.getBillingMethod(),
+          window.electronAPI.getCustomEndpointConfig(),
           window.electronAPI.getNotificationsEnabled(),
         ])
         setAuthType(billing.authType)
         setHasCredential(billing.hasCredential)
-        setApiKeyValue(billing.apiKey || '')
-        setBaseUrlValue(billing.anthropicBaseUrl || '')
-        setOpusModelValue(billing.customModelNames?.opus || '')
-        setSonnetModelValue(billing.customModelNames?.sonnet || '')
-        setHaikuModelValue(billing.customModelNames?.haiku || '')
         setNotificationsEnabled(notificationsOn)
 
-        // Auto-expand advanced settings if any advanced field is configured
-        const hasAdvancedSettings = !!(billing.anthropicBaseUrl || billing.customModelNames?.opus || billing.customModelNames?.sonnet || billing.customModelNames?.haiku)
-        setShowAdvancedSettings(hasAdvancedSettings)
+        // Determine payment method based on config
+        // If custom endpoint is configured (has base URL), use custom_endpoint
+        // Otherwise use the authType directly
+        if (customEndpoint.hasConfig) {
+          setPaymentMethod('custom_endpoint')
+          setHasCustomEndpoint(true)
+          // Don't set apiKeyValue for custom endpoint (it's managed separately)
+        } else if (billing.authType === 'oauth_token') {
+          setPaymentMethod('oauth_token')
+        } else {
+          setPaymentMethod('api_key')
+          setApiKeyValue(billing.apiKey || '')
+        }
       } catch (error) {
         console.error('Failed to load settings:', error)
       }
@@ -486,29 +486,28 @@ export default function AppSettingsPage() {
     checkExistingToken()
   }, [expandedMethod])
 
-  // Handle clicking on a billing method option
-  const handleMethodClick = useCallback(async (method: AuthType) => {
+  // Handle clicking on a payment method option
+  // PaymentMethod is 'oauth_token', 'api_key', or 'custom_endpoint'
+  const handleMethodClick = useCallback(async (method: PaymentMethod) => {
+    // Switching to API Key mode (simple Anthropic API key)
     if (method === 'api_key') {
-      if (authType !== 'api_key') {
+      // First clear any custom endpoint config if present
+      if (hasCustomEndpoint) {
         try {
-          // Switch to api_key mode using current frontend state (don't reload from backend)
+          await window.electronAPI.clearCustomEndpointConfig()
+          setHasCustomEndpoint(false)
+        } catch (error) {
+          console.error('Failed to clear custom endpoint config:', error)
+        }
+      }
+
+      // Switch to api_key mode
+      if (authType !== 'api_key' || paymentMethod !== 'api_key') {
+        try {
           const trimmedKey = apiKeyValue.trim() || undefined
-
-          // Build custom model names object
-          const modelNames = {
-            opus: opusModelValue.trim() || undefined,
-            sonnet: sonnetModelValue.trim() || undefined,
-            haiku: haikuModelValue.trim() || undefined,
-          }
-          const hasModelNames = modelNames.opus || modelNames.sonnet || modelNames.haiku
-
-          await window.electronAPI.updateBillingMethod(
-            'api_key',
-            trimmedKey,
-            baseUrlValue.trim() || null,
-            hasModelNames ? modelNames : null
-          )
+          await window.electronAPI.updateBillingMethod('api_key', trimmedKey, null, null)
           setAuthType('api_key')
+          setPaymentMethod('api_key')
           setHasCredential(!!trimmedKey)
         } catch (error) {
           console.error('Failed to switch to API key mode:', error)
@@ -517,16 +516,25 @@ export default function AppSettingsPage() {
       return
     }
 
-    if (method === authType && hasCredential) {
-      setExpandedMethod(null)
+    // Switching to Custom Endpoint mode
+    if (method === 'custom_endpoint') {
+      setPaymentMethod('custom_endpoint')
+      // Don't change authType yet - it will be set when config is uploaded
       return
     }
 
-    setExpandedMethod(method)
-    setApiKeyError(undefined)
-    setClaudeOAuthStatus('idle')
-    setClaudeOAuthError(undefined)
-  }, [authType, hasCredential, apiKeyValue, baseUrlValue, opusModelValue, sonnetModelValue, haikuModelValue])
+    // OAuth token mode - show dialog
+    if (method === 'oauth_token') {
+      if (method === authType && hasCredential) {
+        setExpandedMethod(null)
+        return
+      }
+      setExpandedMethod('oauth_token')
+      setApiKeyError(undefined)
+      setClaudeOAuthStatus('idle')
+      setClaudeOAuthError(undefined)
+    }
+  }, [authType, paymentMethod, hasCredential, apiKeyValue, hasCustomEndpoint])
 
   // Use existing Claude token
   const handleUseExistingClaudeToken = useCallback(async () => {
@@ -537,6 +545,7 @@ export default function AppSettingsPage() {
     try {
       await window.electronAPI.updateBillingMethod('oauth_token', existingClaudeToken)
       setAuthType('oauth_token')
+      setPaymentMethod('oauth_token')
       setHasCredential(true)
       setClaudeOAuthStatus('success')
       setExpandedMethod(null)
@@ -587,6 +596,7 @@ export default function AppSettingsPage() {
       if (result.success && result.token) {
         await window.electronAPI.updateBillingMethod('oauth_token', result.token)
         setAuthType('oauth_token')
+        setPaymentMethod('oauth_token')
         setHasCredential(true)
         setClaudeOAuthStatus('success')
         setIsWaitingForCode(false)
@@ -624,6 +634,43 @@ export default function AppSettingsPage() {
   const handleNotificationsEnabledChange = useCallback(async (enabled: boolean) => {
     setNotificationsEnabled(enabled)
     await window.electronAPI.setNotificationsEnabled(enabled)
+  }, [])
+
+  // Handle file upload for custom endpoint config
+  const handleUploadConfig = useCallback(async () => {
+    // Open file picker for JSON files
+    // openFileDialog returns string[] (array of file paths)
+    const result = await window.electronAPI.openFileDialog()
+    if (!result || result.length === 0) return
+
+    const filePath = result[0]
+    if (!filePath.endsWith('.json')) {
+      console.error('Please select a JSON file')
+      return
+    }
+
+    // Read the file content
+    try {
+      const content = await window.electronAPI.readFile(filePath)
+      setPendingConfigJson(content)
+      setShowValidationDialog(true)
+    } catch (error) {
+      console.error('Failed to read config file:', error)
+    }
+  }, [])
+
+  // Handle successful config validation
+  const handleConfigValidationSuccess = useCallback(() => {
+    setHasCustomEndpoint(true)
+    setAuthType('api_key')  // Custom endpoint uses api_key auth type internally
+    setHasCredential(true)
+    setPendingConfigJson('')
+  }, [])
+
+  // Handle config cleared
+  const handleConfigCleared = useCallback(() => {
+    setHasCustomEndpoint(false)
+    setHasCredential(false)
   }, [])
 
   return (
@@ -693,24 +740,27 @@ export default function AppSettingsPage() {
                 <SettingsMenuSelectRow
                   label="Payment method"
                   description={
-                    authType === 'api_key' && hasCredential
-                      ? 'API key configured'
-                      : authType === 'oauth_token' && hasCredential
-                        ? 'Claude connected'
-                        : 'Select a method'
+                    paymentMethod === 'custom_endpoint' && hasCustomEndpoint
+                      ? 'Custom endpoint configured'
+                      : paymentMethod === 'api_key' && hasCredential
+                        ? 'API key configured'
+                        : paymentMethod === 'oauth_token' && hasCredential
+                          ? 'Claude connected'
+                          : 'Select a method'
                   }
-                  value={authType}
-                  onValueChange={(v) => handleMethodClick(v as AuthType)}
+                  value={paymentMethod}
+                  onValueChange={(v) => handleMethodClick(v as PaymentMethod)}
                   options={[
                     { value: 'oauth_token', label: 'Claude Pro/Max', description: 'Use your Pro or Max subscription' },
-                    { value: 'api_key', label: 'API Key', description: 'Pay-as-you-go with your Anthropic key' },
+                    { value: 'api_key', label: 'Anthropic API Key', description: 'Pay-as-you-go with your Anthropic key' },
+                    { value: 'custom_endpoint', label: 'Custom Endpoint', description: 'OpenRouter, Ollama, or compatible APIs' },
                   ]}
                 />
               </SettingsCard>
 
-              {/* API Key Inline Config */}
-              {authType === 'api_key' && (
-                <SettingsCard className="mt-2" divided>
+              {/* API Key Inline Config (simple - no advanced settings) */}
+              {paymentMethod === 'api_key' && (
+                <SettingsCard className="mt-2">
                   <SettingsSecretInput
                     label="API Key"
                     description="Your Anthropic API key for Claude"
@@ -721,189 +771,61 @@ export default function AppSettingsPage() {
                     inCard
                     error={apiKeyError}
                   />
+                </SettingsCard>
+              )}
 
-                  {/* Advanced Settings Toggle */}
-                  <div className="px-4 py-3 border-t border-border/50">
-                    <button
-                      type="button"
-                      className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-                      onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
-                    >
-                      {showAdvancedSettings ? (
-                        <ChevronDown className="size-4" />
-                      ) : (
-                        <ChevronRight className="size-4" />
-                      )}
-                      Advanced Settings
-                      {(baseUrlValue || opusModelValue || sonnetModelValue || haikuModelValue) && (
-                        <span className="text-xs bg-green-500/20 text-green-600 dark:text-green-400 px-1.5 py-0.5 rounded">configured</span>
-                      )}
-                    </button>
-                  </div>
-
-                  {/* Advanced Settings Content */}
-                  {showAdvancedSettings && (
-                    <>
-                      <SettingsInput
-                        label="API Base URL"
-                        description="For OpenRouter, Ollama, or other compatible APIs"
-                        value={baseUrlValue}
-                        onChange={setBaseUrlValue}
-                        onBlur={handleBlur}
-                        placeholder="https://openrouter.ai/api"
-                        inCard
-                      />
-
-                      {/* 3-Tier Model Names */}
-                      <div className="px-4 py-3.5 space-y-4">
-                        <div>
-                          <Label className="text-sm font-medium">Model Names</Label>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Map each model tier to a custom model name for your API
-                          </p>
-                        </div>
-
-                        {/* Sonnet Model (primary) */}
-                        <div className="space-y-1.5">
-                          <Label className="text-xs text-muted-foreground">Sonnet (primary)</Label>
-                          <SearchableModelInput
-                            placeholder="e.g., anthropic/claude-3.5-sonnet"
-                            value={sonnetModelValue}
-                            onChange={setSonnetModelValue}
-                            onBlur={handleBlur}
-                            models={availableModels}
-                            isLoading={isFetchingModels}
-                            fetchDisabled={!baseUrlValue?.trim()}
-                            onFetchModels={async () => {
-                              if (!baseUrlValue?.trim()) return
-                              setIsFetchingModels(true)
-                              try {
-                                const models = await window.electronAPI.fetchModels(
-                                  baseUrlValue.trim(),
-                                  apiKeyValue.trim() || undefined
-                                )
-                                setAvailableModels(models)
-                              } catch (error) {
-                                console.error('Failed to fetch models:', error)
-                              } finally {
-                                setIsFetchingModels(false)
-                              }
-                            }}
-                          />
-                        </div>
-
-                        {/* Opus Model */}
-                        <div className="space-y-1.5">
-                          <Label className="text-xs text-muted-foreground">Opus (most capable)</Label>
-                          <SearchableModelInput
-                            placeholder="e.g., anthropic/claude-3-opus"
-                            value={opusModelValue}
-                            onChange={setOpusModelValue}
-                            onBlur={handleBlur}
-                            models={availableModels}
-                            isLoading={isFetchingModels}
-                            fetchDisabled={!baseUrlValue?.trim()}
-                            onFetchModels={async () => {
-                              if (!baseUrlValue?.trim()) return
-                              setIsFetchingModels(true)
-                              try {
-                                const models = await window.electronAPI.fetchModels(
-                                  baseUrlValue.trim(),
-                                  apiKeyValue.trim() || undefined
-                                )
-                                setAvailableModels(models)
-                              } catch (error) {
-                                console.error('Failed to fetch models:', error)
-                              } finally {
-                                setIsFetchingModels(false)
-                              }
-                            }}
-                          />
-                        </div>
-
-                        {/* Haiku Model */}
-                        <div className="space-y-1.5">
-                          <Label className="text-xs text-muted-foreground">Haiku (fast & efficient)</Label>
-                          <SearchableModelInput
-                            placeholder="e.g., anthropic/claude-3-haiku"
-                            value={haikuModelValue}
-                            onChange={setHaikuModelValue}
-                            onBlur={handleBlur}
-                            models={availableModels}
-                            isLoading={isFetchingModels}
-                            fetchDisabled={!baseUrlValue?.trim()}
-                            onFetchModels={async () => {
-                              if (!baseUrlValue?.trim()) return
-                              setIsFetchingModels(true)
-                              try {
-                                const models = await window.electronAPI.fetchModels(
-                                  baseUrlValue.trim(),
-                                  apiKeyValue.trim() || undefined
-                                )
-                                setAvailableModels(models)
-                              } catch (error) {
-                                console.error('Failed to fetch models:', error)
-                              } finally {
-                                setIsFetchingModels(false)
-                              }
-                            }}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Test Connection Button */}
-                      <div className="px-4 py-3 border-t border-border/50">
-                        <div className="flex items-center gap-3">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={async () => {
-                              setIsTestingConnection(true)
-                              setTestConnectionResult(null)
-                              try {
-                                // Use the sonnet model (primary) for testing
-                                const result = await window.electronAPI.testApiConnection(
-                                  apiKeyValue,
-                                  baseUrlValue || undefined,
-                                  sonnetModelValue || opusModelValue || haikuModelValue || undefined
-                                )
-                                setTestConnectionResult(result)
-                              } catch (error) {
-                                setTestConnectionResult({
-                                  success: false,
-                                  error: error instanceof Error ? error.message : 'Connection failed'
-                                })
-                              } finally {
-                                setIsTestingConnection(false)
-                              }
-                            }}
-                            disabled={(!apiKeyValue?.trim() && !baseUrlValue?.trim()) || isTestingConnection}
-                          >
-                            {isTestingConnection ? (
-                              <>
-                                <Spinner className="size-3 mr-1.5" />
-                                Testing...
-                              </>
-                            ) : (
-                              'Test Connection'
-                            )}
-                          </Button>
-                          {testConnectionResult && (
-                            <span className={cn(
-                              'text-sm',
-                              testConnectionResult.success ? 'text-success' : 'text-destructive'
-                            )}>
-                              {testConnectionResult.success
-                                ? testConnectionResult.modelCount
-                                  ? `✓ Connected (${testConnectionResult.modelCount} models)`
-                                  : '✓ Connected'
-                                : `✗ ${testConnectionResult.error}`}
+              {/* Custom Endpoint Config Card */}
+              {paymentMethod === 'custom_endpoint' && (
+                <SettingsCard className="mt-2">
+                  <div className="px-4 py-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <Settings2 className="size-4 text-muted-foreground" />
+                          <span className="text-sm font-medium">
+                            {hasCustomEndpoint ? 'Configuration' : 'Upload Configuration'}
+                          </span>
+                          {hasCustomEndpoint && (
+                            <span className="text-xs bg-green-500/20 text-green-600 dark:text-green-400 px-1.5 py-0.5 rounded">
+                              configured
                             </span>
                           )}
                         </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Upload a JSON configuration file to connect to compatible APIs.{' '}
+                          <a
+                            href="#"
+                            onClick={(e) => {
+                              e.preventDefault()
+                              window.electronAPI.openUrl('https://agents.craft.do/docs/reference/config/custom-endpoint')
+                            }}
+                            className="text-primary hover:underline"
+                          >
+                            Learn more →
+                          </a>
+                        </p>
                       </div>
-                    </>
-                  )}
+                      <div className="flex items-center gap-2">
+                        {hasCustomEndpoint && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setShowViewConfigDialog(true)}
+                          >
+                            View Config
+                          </Button>
+                        )}
+                        <Button
+                          variant={hasCustomEndpoint ? 'outline' : 'default'}
+                          size="sm"
+                          onClick={handleUploadConfig}
+                        >
+                          <Upload className="size-3.5 mr-1.5" />
+                          {hasCustomEndpoint ? 'Replace' : 'Upload'}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
                 </SettingsCard>
               )}
 
@@ -944,6 +866,22 @@ export default function AppSettingsPage() {
                   )}
                 </DialogContent>
               </Dialog>
+
+              {/* Custom Endpoint Validation Dialog */}
+              <CustomEndpointValidationDialog
+                open={showValidationDialog}
+                onOpenChange={setShowValidationDialog}
+                jsonContent={pendingConfigJson}
+                onSuccess={handleConfigValidationSuccess}
+                onCancel={() => setPendingConfigJson('')}
+              />
+
+              {/* View Custom Endpoint Config Dialog */}
+              <ViewCustomEndpointConfigDialog
+                open={showViewConfigDialog}
+                onOpenChange={setShowViewConfigDialog}
+                onClear={handleConfigCleared}
+              />
             </SettingsSection>
 
             {/* About */}

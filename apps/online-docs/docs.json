@@ -91,6 +91,7 @@
               "reference/config/config-file",
               "reference/config/preferences",
               "reference/config/credentials",
+              "reference/config/custom-endpoint",
               "reference/config/environment-variables"
             ]
           }

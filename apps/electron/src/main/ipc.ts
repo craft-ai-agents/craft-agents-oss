@@ -1135,6 +1135,195 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   })
 
   // ============================================================
+  // Settings - Custom Endpoint Config (File Upload Workflow)
+  // ============================================================
+
+  // Upload and validate custom endpoint configuration from JSON
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_UPLOAD_CUSTOM_ENDPOINT, async (_event, jsonContent: string): Promise<import('../shared/types').CustomEndpointUploadResult> => {
+    const { parseCustomEndpointConfig } = await import('@craft-agent/shared/config/custom-endpoint-schema')
+
+    // Parse and validate the JSON config
+    const parseResult = parseCustomEndpointConfig(jsonContent)
+    if (!parseResult.valid || !parseResult.data) {
+      return {
+        success: false,
+        error: 'Invalid configuration',
+        validationErrors: parseResult.errors,
+      }
+    }
+
+    const config = parseResult.data
+    ipcLog.info(`Uploading custom endpoint config: ${config.baseUrl}`)
+
+    // Test the connection before saving
+    // Use the sonnet model for testing if available, otherwise try opus or haiku
+    const testModel = config.models?.sonnet || config.models?.opus || config.models?.haiku
+
+    let connectionTest: { success: boolean; error?: string; modelCount?: number } = { success: true }
+
+    try {
+      // Use the existing test connection logic
+      if (config.apiKey) {
+        // Test with API key
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${config.apiKey}`
+        }
+
+        if (testModel) {
+          // Test with a minimal message request
+          const response = await fetch(`${config.baseUrl}/v1/messages`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              model: testModel,
+              max_tokens: 16,
+              messages: [{ role: 'user', content: 'test' }],
+              tools: [{
+                name: 'test_tool',
+                description: 'Test tool for validation',
+                input_schema: { type: 'object', properties: {} }
+              }]
+            })
+          })
+
+          if (!response.ok) {
+            const errorText = await response.text()
+            const lowerErrorText = errorText.toLowerCase()
+
+            if (response.status === 401) {
+              connectionTest = { success: false, error: 'Invalid API key' }
+            } else if (lowerErrorText.includes('tool') && lowerErrorText.includes('not') && lowerErrorText.includes('support')) {
+              connectionTest = { success: false, error: `Model "${testModel}" does not support tool/function calling` }
+            } else if (lowerErrorText.includes('model not found') || lowerErrorText.includes('invalid model')) {
+              connectionTest = { success: false, error: `Model "${testModel}" not found` }
+            } else {
+              connectionTest = { success: false, error: `API error (${response.status}): ${errorText.slice(0, 200)}` }
+            }
+          }
+        } else {
+          // No model specified - try to list models
+          const { fetchModels } = await import('@craft-agent/shared/api/model-discovery')
+          const models = await fetchModels(config.baseUrl, config.apiKey)
+          connectionTest = { success: true, modelCount: models.length }
+        }
+      } else {
+        // No API key - try direct connection (for local APIs like Ollama)
+        const { fetchModels } = await import('@craft-agent/shared/api/model-discovery')
+        const models = await fetchModels(config.baseUrl)
+        connectionTest = { success: true, modelCount: models.length }
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      if (msg.includes('ECONNREFUSED') || msg.includes('ENOTFOUND')) {
+        connectionTest = { success: false, error: 'Cannot connect to API server' }
+      } else {
+        connectionTest = { success: false, error: `Connection failed: ${msg}` }
+      }
+    }
+
+    // If connection test failed, return error without saving
+    if (!connectionTest.success) {
+      return {
+        success: false,
+        error: connectionTest.error,
+        connectionTest,
+      }
+    }
+
+    // Save the configuration
+    try {
+      // Store API key in credential store if provided
+      if (config.apiKey) {
+        const manager = getCredentialManager()
+        await manager.setApiKey(config.apiKey)
+        ipcLog.info('Custom endpoint API key saved to credential store')
+      }
+
+      // Update config with base URL and model names
+      setAnthropicBaseUrl(config.baseUrl)
+
+      if (config.models) {
+        setCustomModelNames({
+          opus: config.models.opus,
+          sonnet: config.models.sonnet,
+          haiku: config.models.haiku,
+        })
+      } else {
+        setCustomModelNames(null)
+      }
+
+      // Set auth type to api_key (custom endpoint uses API key auth)
+      setAuthType('api_key')
+
+      // Reinitialize SessionManager auth
+      await sessionManager.reinitializeAuth()
+
+      ipcLog.info(`Custom endpoint config saved successfully: ${config.baseUrl}`)
+
+      return {
+        success: true,
+        connectionTest,
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      ipcLog.error('Failed to save custom endpoint config:', error)
+      return {
+        success: false,
+        error: `Failed to save configuration: ${msg}`,
+        connectionTest,
+      }
+    }
+  })
+
+  // Get current custom endpoint configuration (with masked API key)
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_GET_CUSTOM_ENDPOINT, async (): Promise<import('../shared/types').CustomEndpointConfigInfo> => {
+    const baseUrl = getAnthropicBaseUrl()
+    const modelNames = getCustomModelNames()
+
+    // Check if we have a custom endpoint configured
+    if (!baseUrl) {
+      return { hasConfig: false }
+    }
+
+    // Get API key from credential store and mask it
+    const manager = getCredentialManager()
+    const apiKey = await manager.getApiKey()
+
+    const { maskApiKey } = await import('@craft-agent/shared/config/custom-endpoint-schema')
+    const maskedApiKey = apiKey ? maskApiKey(apiKey) : undefined
+
+    return {
+      hasConfig: true,
+      baseUrl,
+      maskedApiKey,
+      models: modelNames ? {
+        opus: modelNames.opus,
+        sonnet: modelNames.sonnet,
+        haiku: modelNames.haiku,
+      } : undefined,
+    }
+  })
+
+  // Clear custom endpoint configuration
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_CLEAR_CUSTOM_ENDPOINT, async (): Promise<void> => {
+    ipcLog.info('Clearing custom endpoint configuration')
+
+    // Clear base URL and model names
+    setAnthropicBaseUrl(null)
+    setCustomModelNames(null)
+
+    // Clear API key from credential store
+    const manager = getCredentialManager()
+    await manager.delete({ type: 'anthropic_api_key' })
+
+    // Reinitialize SessionManager auth
+    await sessionManager.reinitializeAuth()
+
+    ipcLog.info('Custom endpoint configuration cleared')
+  })
+
+  // ============================================================
   // Settings - Model (Session-Specific)
   // ============================================================
 

@@ -1,0 +1,191 @@
+---
+title: "Custom Endpoint"
+description: "Connect to OpenRouter, Ollama, or other compatible API providers"
+---
+
+Craft Agents can connect to any API provider that's compatible with the Anthropic API format. This includes OpenRouter, Ollama, AWS Bedrock, Azure OpenAI, and other providers.
+
+## Configuration File
+
+Create a JSON configuration file with the following structure:
+
+```json
+{
+  "baseUrl": "https://openrouter.ai/api",
+  "apiKey": "sk-or-v1-your-api-key-here",
+  "models": {
+    "sonnet": "anthropic/claude-sonnet-4",
+    "opus": "anthropic/claude-opus-4",
+    "haiku": "anthropic/claude-3-haiku"
+  }
+}
+```
+
+## Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `baseUrl` | string | Yes | API endpoint URL |
+| `apiKey` | string | No | API key or bearer token |
+| `models` | object | No | Model name mappings |
+| `models.sonnet` | string | No | Primary model for most tasks |
+| `models.opus` | string | No | Most capable model for complex reasoning |
+| `models.haiku` | string | No | Fast model for quick tasks |
+
+## Provider Examples
+
+### OpenRouter
+
+```json
+{
+  "baseUrl": "https://openrouter.ai/api",
+  "apiKey": "sk-or-v1-your-openrouter-key",
+  "models": {
+    "sonnet": "anthropic/claude-sonnet-4",
+    "opus": "anthropic/claude-opus-4",
+    "haiku": "anthropic/claude-3-haiku"
+  }
+}
+```
+
+OpenRouter gives you access to multiple AI providers through a single API. Get your API key at [openrouter.ai/keys](https://openrouter.ai/keys).
+
+### Ollama (Local)
+
+```json
+{
+  "baseUrl": "http://localhost:11434/v1",
+  "models": {
+    "sonnet": "llama3.2",
+    "haiku": "llama3.2"
+  }
+}
+```
+
+Ollama runs models locally on your machine. No API key required. Install from [ollama.ai](https://ollama.ai).
+
+<Note>
+Ollama requires the model to be pulled first: `ollama pull llama3.2`
+</Note>
+
+### AWS Bedrock
+
+```json
+{
+  "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
+  "apiKey": "your-aws-access-key",
+  "models": {
+    "sonnet": "anthropic.claude-3-sonnet-20240229-v1:0",
+    "opus": "anthropic.claude-3-opus-20240229-v1:0",
+    "haiku": "anthropic.claude-3-haiku-20240307-v1:0"
+  }
+}
+```
+
+<Note>
+AWS Bedrock requires additional IAM configuration. See [AWS Bedrock documentation](https://docs.aws.amazon.com/bedrock/).
+</Note>
+
+### Azure OpenAI
+
+```json
+{
+  "baseUrl": "https://your-resource.openai.azure.com/openai/deployments/your-deployment",
+  "apiKey": "your-azure-api-key",
+  "models": {
+    "sonnet": "gpt-4o",
+    "haiku": "gpt-4o-mini"
+  }
+}
+```
+
+## How to Configure
+
+### During Setup
+
+1. In the setup wizard, select **Custom Endpoint**
+2. Click **Upload Configuration**
+3. Select your JSON configuration file
+4. The configuration will be validated automatically
+
+### In Settings
+
+1. Open **Settings** (gear icon or `Cmd+,`)
+2. Under **Billing**, select **Custom Endpoint**
+3. Click **Upload Configuration**
+4. Select your JSON configuration file
+
+## Validation
+
+When you upload a configuration, Craft Agents validates:
+
+1. **JSON syntax** - The file must be valid JSON
+2. **Schema** - Required fields must be present with correct types
+3. **Connection test** - A test request is made to verify the endpoint works
+
+If validation fails, you'll see specific error messages explaining what needs to be fixed.
+
+## Model Tiers
+
+Craft Agents uses three model tiers for different types of tasks:
+
+| Tier | Purpose | Example Usage |
+|------|---------|---------------|
+| **Sonnet** | Primary model | Most conversations, code generation |
+| **Opus** | Complex reasoning | Architecture decisions, complex analysis |
+| **Haiku** | Quick tasks | Simple queries, summaries |
+
+If you don't specify all models, the configured models will be used for all tiers.
+
+## Viewing Current Configuration
+
+To see your current custom endpoint configuration:
+
+1. Open **Settings**
+2. Under **Billing**, click **View Configuration**
+
+This shows:
+- Base URL
+- API key (masked)
+- Configured models
+
+## Clearing Configuration
+
+To remove custom endpoint configuration:
+
+1. Open **Settings**
+2. Under **Billing**, click **View Configuration**
+3. Click **Clear Configuration**
+
+This removes all custom endpoint settings, allowing you to switch to a different authentication method.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Connection test fails">
+    Verify:
+    - The `baseUrl` is correct and accessible
+    - Your API key is valid and has sufficient permissions
+    - The endpoint supports the Anthropic API format
+  </Accordion>
+
+  <Accordion title="Model not found errors">
+    Check that the model names in your config match exactly what your provider expects. Model naming varies by provider.
+  </Accordion>
+
+  <Accordion title="Authentication errors">
+    - Ensure your API key is correct
+    - Check if your key has expired
+    - Verify you have credits/quota available
+  </Accordion>
+
+  <Accordion title="Rate limiting">
+    If you hit rate limits, check your provider's usage limits and consider upgrading your plan.
+  </Accordion>
+</AccordionGroup>
+
+## Security
+
+Your API key is stored securely in the encrypted credentials file. See [Credentials](/reference/config/credentials) for details on how credentials are protected.
+
+The configuration file itself (excluding the API key) is stored in your workspace settings.

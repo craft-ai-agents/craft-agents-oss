@@ -2,13 +2,13 @@ import { cn } from "@/lib/utils"
 import { Check, CreditCard, Key } from "lucide-react"
 import { StepFormLayout, BackButton, ContinueButton } from "./primitives"
 
-export type BillingMethod = 'api_key' | 'claude_oauth'
+export type BillingMethod = 'api_key' | 'claude_oauth' | 'custom_endpoint'
 
 interface BillingOption {
   id: BillingMethod
   name: string
   description: string
-  icon: React.ReactNode
+  icon?: React.ReactNode
   recommended?: boolean
 }
 
@@ -26,6 +26,11 @@ const BILLING_OPTIONS: BillingOption[] = [
     description: 'Pay-as-you-go with your own API key.',
     icon: <Key className="size-4" />,
   },
+  {
+    id: 'custom_endpoint',
+    name: 'Custom Endpoint',
+    description: 'OpenRouter, Ollama, or other compatible APIs.',
+  },
 ]
 
 interface BillingMethodStepProps {
@@ -38,9 +43,10 @@ interface BillingMethodStepProps {
 /**
  * BillingMethodStep - Choose how to pay for AI usage
  *
- * Two options:
+ * Three options:
  * - Claude Pro/Max (recommended) - Uses Claude subscription
  * - API Key - Pay-as-you-go via Anthropic
+ * - Custom Endpoint - OpenRouter, Ollama, or compatible APIs
  */
 export function BillingMethodStep({
   selectedMethod,
@@ -77,15 +83,17 @@ export function BillingMethodStep({
                   : "bg-foreground-2"
               )}
             >
-              {/* Icon */}
-              <div
-                className={cn(
-                  "flex size-10 shrink-0 items-center justify-center rounded-lg",
-                  isSelected ? "bg-foreground/10 text-foreground" : "bg-muted text-muted-foreground"
-                )}
-              >
-                {option.icon}
-              </div>
+              {/* Icon (optional) */}
+              {option.icon && (
+                <div
+                  className={cn(
+                    "flex size-10 shrink-0 items-center justify-center rounded-lg",
+                    isSelected ? "bg-foreground/10 text-foreground" : "bg-muted text-muted-foreground"
+                  )}
+                >
+                  {option.icon}
+                </div>
+              )}
 
               {/* Content */}
               <div className="flex-1 min-w-0">

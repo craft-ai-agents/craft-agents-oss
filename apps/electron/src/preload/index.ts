@@ -172,6 +172,13 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_UPDATE_BILLING_METHOD, authType, credential, anthropicBaseUrl, customModelNames),
   testApiConnection: (apiKey: string, baseUrl?: string, modelName?: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_TEST_API_CONNECTION, apiKey, baseUrl, modelName),
+  // Custom endpoint config (file upload workflow)
+  uploadCustomEndpointConfig: (jsonContent: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_UPLOAD_CUSTOM_ENDPOINT, jsonContent),
+  getCustomEndpointConfig: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET_CUSTOM_ENDPOINT),
+  clearCustomEndpointConfig: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_CLEAR_CUSTOM_ENDPOINT),
 
   // Settings - Model (global default)
   getModel: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET_MODEL),
