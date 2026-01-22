@@ -139,6 +139,9 @@ export const routes = {
     /** Vector search view (vectorSearch navigator) */
     vectorSearch: () => 'vectorSearch' as const,
 
+    /** Schedules view (schedules navigator) */
+    schedules: () => 'schedules' as const,
+
     /** Settings view (settings navigator) */
     settings: (subpage?: 'app' | 'workspace' | 'permissions' | 'shortcuts' | 'preferences') =>
       subpage && subpage !== 'app'

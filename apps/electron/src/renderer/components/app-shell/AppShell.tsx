@@ -22,6 +22,7 @@ import {
   FolderOpen,
   HelpCircle,
   ExternalLink,
+  Clock,
 } from "lucide-react"
 import { PanelRightRounded } from "../icons/PanelRightRounded"
 import { PanelLeftRounded } from "../icons/PanelLeftRounded"
@@ -88,6 +89,7 @@ import {
   isSettingsNavigation,
   isSkillsNavigation,
   isVectorSearchNavigation,
+  isSchedulesNavigation,
   type NavigationState,
   type ChatFilter,
 } from "@/contexts/NavigationContext"
@@ -100,6 +102,7 @@ import { getDocUrl } from "@craft-agent/shared/docs/doc-links"
 import SettingsNavigator from "@/pages/settings/SettingsNavigator"
 import { RightSidebar } from "./RightSidebar"
 import { VectorSearch } from "@/components/vector-search/VectorSearch"
+import { ScheduleList } from "@/components/scheduler/ScheduleList"
 import type { RichTextInputHandle } from "@/components/ui/rich-text-input"
 import { hasOpenOverlay } from "@/lib/overlay-detection"
 
@@ -822,6 +825,11 @@ function AppShellContent({
     navigate(routes.view.vectorSearch())
   }, [])
 
+  // Handler for schedules view
+  const handleSchedulesClick = useCallback(() => {
+    navigate(routes.view.schedules())
+  }, [])
+
   // Handler for settings view
   const handleSettingsClick = useCallback((subpage: SettingsSubpage = 'app') => {
     navigate(routes.view.settings(subpage))
@@ -928,11 +936,14 @@ function AppShellContent({
     // 2.7. Vector Search nav item
     result.push({ id: 'nav:vectorSearch', type: 'nav', action: handleVectorSearchClick })
 
-    // 2.8. Settings nav item
+    // 2.8. Schedules nav item
+    result.push({ id: 'nav:schedules', type: 'nav', action: handleSchedulesClick })
+
+    // 2.9. Settings nav item
     result.push({ id: 'nav:settings', type: 'nav', action: () => handleSettingsClick('app') })
 
     return result
-  }, [handleAllChatsClick, handleFlaggedClick, handleTodoStateClick, todoStates, handleSourcesClick, handleSkillsClick, handleVectorSearchClick, handleSettingsClick])
+  }, [handleAllChatsClick, handleFlaggedClick, handleTodoStateClick, todoStates, handleSourcesClick, handleSkillsClick, handleVectorSearchClick, handleSchedulesClick, handleSettingsClick])
 
   // Toggle folder expanded state
   const handleToggleFolder = React.useCallback((path: string) => {
@@ -1287,6 +1298,13 @@ function AppShellContent({
                       variant: isVectorSearchNavigation(navState) ? "default" : "ghost",
                       onClick: handleVectorSearchClick,
                     },
+                    {
+                      id: "nav:schedules",
+                      title: "Schedules",
+                      icon: Clock,
+                      variant: isSchedulesNavigation(navState) ? "default" : "ghost",
+                      onClick: handleSchedulesClick,
+                    },
                     { id: "separator:skills-settings", type: "separator" },
                     {
                       id: "nav:settings",
@@ -1578,6 +1596,10 @@ function AppShellContent({
             {isVectorSearchNavigation(navState) && (
               /* Vector Search Navigator */
               <VectorSearch />
+            )}
+            {isSchedulesNavigation(navState) && activeWorkspaceId && (
+              /* Schedules Panel */
+              <ScheduleList workspaceId={activeWorkspaceId} />
             )}
             {isChatsNavigation(navState) && (
               /* Sessions List */

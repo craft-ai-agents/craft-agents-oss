@@ -8,6 +8,7 @@ import { execSync } from 'child_process'
 import { SessionManager } from './sessions'
 import { ipcLog, windowLog } from './logger'
 import { WindowManager } from './window-manager'
+import { getScheduler, startAllSchedulers, stopAllSchedulers } from './scheduler'
 import { registerOnboardingHandlers } from './onboarding'
 import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type AuthType, type BillingMethodInfo, type SendMessageOptions } from '../shared/types'
 import { readFileAttachment, perf, validateImageForClaudeAPI, IMAGE_LIMITS } from '@craft-agent/shared/utils'
@@ -1924,6 +1925,80 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
         }
       })
     })
+  })
+
+  // =============================================================================
+  // Scheduler Handlers
+  // =============================================================================
+
+  ipcMain.handle(IPC_CHANNELS.SCHEDULE_LIST, async (_event, workspaceId: string) => {
+    try {
+      const workspace = getWorkspaceOrThrow(workspaceId)
+      const scheduler = getScheduler(workspaceId, workspace.rootPath)
+      return scheduler.list()
+    } catch (error) {
+      ipcLog.error('Error listing schedules:', error)
+      return []
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.SCHEDULE_CREATE, async (_event, workspaceId: string, data: import('../shared/types').ScheduleFormData) => {
+    try {
+      const workspace = getWorkspaceOrThrow(workspaceId)
+      const scheduler = getScheduler(workspaceId, workspace.rootPath)
+      scheduler.setWindowManager(windowManager)
+      scheduler.setSessionManager(sessionManager)
+      return await scheduler.create(data)
+    } catch (error) {
+      ipcLog.error('Error creating schedule:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.SCHEDULE_UPDATE, async (_event, workspaceId: string, id: string, updates: Partial<import('../shared/types').ScheduleFormData>) => {
+    try {
+      const workspace = getWorkspaceOrThrow(workspaceId)
+      const scheduler = getScheduler(workspaceId, workspace.rootPath)
+      return await scheduler.update(id, updates)
+    } catch (error) {
+      ipcLog.error('Error updating schedule:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.SCHEDULE_DELETE, async (_event, workspaceId: string, id: string) => {
+    try {
+      const workspace = getWorkspaceOrThrow(workspaceId)
+      const scheduler = getScheduler(workspaceId, workspace.rootPath)
+      await scheduler.delete(id)
+    } catch (error) {
+      ipcLog.error('Error deleting schedule:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.SCHEDULE_TOGGLE, async (_event, workspaceId: string, id: string) => {
+    try {
+      const workspace = getWorkspaceOrThrow(workspaceId)
+      const scheduler = getScheduler(workspaceId, workspace.rootPath)
+      return await scheduler.toggle(id)
+    } catch (error) {
+      ipcLog.error('Error toggling schedule:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.SCHEDULE_RUN_NOW, async (_event, workspaceId: string, id: string) => {
+    try {
+      const workspace = getWorkspaceOrThrow(workspaceId)
+      const scheduler = getScheduler(workspaceId, workspace.rootPath)
+      scheduler.setWindowManager(windowManager)
+      scheduler.setSessionManager(sessionManager)
+      await scheduler.runNow(id)
+    } catch (error) {
+      ipcLog.error('Error running schedule:', error)
+      throw error
+    }
   })
 
 }

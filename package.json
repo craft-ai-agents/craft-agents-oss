@@ -107,6 +107,7 @@
     "@tailwindcss/typography": "^0.5.19",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "croner": "^9.1.0",
     "date-fns": "^4.1.0",
     "gray-matter": "^4.0.3",
     "jotai": "^2.16.0",

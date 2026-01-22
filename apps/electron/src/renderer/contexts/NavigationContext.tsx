@@ -58,6 +58,7 @@ import {
   isSettingsNavigation,
   isSkillsNavigation,
   isVectorSearchNavigation,
+  isSchedulesNavigation,
   DEFAULT_NAVIGATION_STATE,
 } from '../../shared/types'
 import { sessionMetaMapAtom, type SessionMeta } from '@/atoms/sessions'
@@ -70,7 +71,7 @@ export type { Route }
 
 // Re-export navigation state types for consumers
 export type { NavigationState, ChatFilter }
-export { isChatsNavigation, isSourcesNavigation, isSettingsNavigation, isSkillsNavigation, isVectorSearchNavigation }
+export { isChatsNavigation, isSourcesNavigation, isSettingsNavigation, isSkillsNavigation, isVectorSearchNavigation, isSchedulesNavigation }
 
 interface NavigationContextValue {
   /** Navigate to a route */

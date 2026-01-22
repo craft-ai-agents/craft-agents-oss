@@ -19,6 +19,7 @@ import log, { isDebugMode, mainLog, getLogFilePath } from './logger'
 import { setPerfEnabled, enableDebug } from '@craft-agent/shared/utils'
 import { initNotificationService, clearBadgeCount, initBadgeIcon, initInstanceBadge } from './notifications'
 import { checkForUpdatesOnLaunch, checkPendingUpdateAndInstall, setWindowManager as setAutoUpdateWindowManager } from './auto-update'
+import { startAllSchedulers, stopAllSchedulers } from './scheduler'
 
 // Initialize electron-log for renderer process support
 log.initialize()
@@ -207,6 +208,10 @@ app.whenReady().then(async () => {
     // Initialize auth (must happen after window creation for error reporting)
     await sessionManager.initialize()
 
+    // Initialize schedulers for all workspaces
+    const workspacesForSchedulers = getWorkspaces().map(ws => ({ id: ws.id, rootPath: ws.rootPath }))
+    await startAllSchedulers(workspacesForSchedulers, windowManager, sessionManager)
+
     // Initialize auto-update (check immediately on launch)
     // Skip in dev mode to avoid replacing /Applications app and launching it instead
     setAutoUpdateWindowManager(windowManager)
@@ -291,6 +296,10 @@ app.on('before-quit', async (event) => {
     // Prevent quit until sessions are flushed
     event.preventDefault()
     try {
+      // Stop all schedulers
+      await stopAllSchedulers()
+      mainLog.info('Stopped all schedulers')
+
       await sessionManager.flushAllSessions()
       mainLog.info('Flushed all pending session writes')
     } catch (error) {

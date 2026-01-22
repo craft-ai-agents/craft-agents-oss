@@ -1,317 +1,155 @@
-# feat: Cron Scheduler for Automated Agent Tasks
+# feat: Cron Scheduler for Automated Agent Tasks (v1 - Simplified)
 
 ## Overview
 
-A comprehensive scheduling system for Vesper that enables users to schedule recurring or one-off agent tasks. The scheduler supports agent chat sessions, Skill execution, and information retrieval tasks with native OS notifications and background execution via macOS launchd.
+A minimal scheduling system for Vesper that runs prompts on a schedule. Tasks execute when the app is open with native notifications on completion.
 
-**Key Capabilities:**
-- Schedule tasks from both UI and chat commands
-- SQLite persistence for schedules and execution history
-- Background execution when app is closed (via launchd)
-- Native macOS notifications for task results
-- Support for one-time and recurring (cron) schedules
+**v1 Scope:**
+- Schedule prompts to run at specific times (cron or one-time)
+- JSON file storage (no SQLite complexity)
+- Runs only when app is open (no background service)
+- Native macOS notifications
+- Simple UI with preset schedules
+
+**Explicitly NOT in v1:**
+- Background execution (launchd) - add if users request it
+- Skill execution - users can invoke skills via prompt text
+- Chat commands - UI only
+- Priority queues - sequential execution
+- Persistent sessions - always fresh
+- Complex execution history - last 10 runs inline
 
 ---
 
 ## Problem Statement
 
-Currently, Vesper users must manually initiate every agent interaction. There's no way to:
-- Run automated morning briefings or daily summaries
-- Schedule recurring code reviews or deployments
-- Set reminders that trigger agent actions
-- Execute Skills on a schedule (e.g., nightly backups, weekly reports)
-
-Users need a way to "set and forget" agent tasks that run automatically at specified times, even when the app isn't open.
+Users want to automate recurring agent tasks like morning briefings or daily summaries without manually starting each conversation.
 
 ---
 
 ## Proposed Solution
 
-### Architecture Overview
+### Architecture (Simplified)
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                         Vesper App                               │
-├─────────────────────────────────────────────────────────────────┤
-│  Renderer Process (React)                                        │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  │
-│  │ Schedule List   │  │ Schedule Editor │  │ Execution       │  │
-│  │ Component       │  │ (Cron Builder)  │  │ History View    │  │
-│  └────────┬────────┘  └────────┬────────┘  └────────┬────────┘  │
-│           │                    │                    │            │
-│           └────────────────────┼────────────────────┘            │
-│                                │ IPC                             │
-├────────────────────────────────┼────────────────────────────────┤
-│  Main Process (Electron)       │                                 │
-│  ┌─────────────────────────────▼─────────────────────────────┐  │
-│  │              Scheduler Service                             │  │
-│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │  │
-│  │  │ Cron Engine  │  │ Task Queue   │  │ Executor     │     │  │
-│  │  │ (Croner)     │  │ (Priority)   │  │ (Headless)   │     │  │
-│  │  └──────────────┘  └──────────────┘  └──────────────┘     │  │
-│  └───────────────────────────┬───────────────────────────────┘  │
-│                              │                                   │
-│  ┌───────────────────────────▼───────────────────────────────┐  │
-│  │              SQLite Database                               │  │
-│  │  schedules | execution_history | schema_version            │  │
-│  └───────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────┘
-                               │
-                               │ launchd (background)
-                               ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  macOS launchd Service                                          │
-│  com.craft-agent.scheduler.plist                                │
-│  - Spawns Vesper in headless mode when task is due              │
-│  - Runs even when main app is closed                            │
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────┐
+│                    Vesper App                        │
+├─────────────────────────────────────────────────────┤
+│  Renderer (React)                                    │
+│  ┌─────────────────┐  ┌─────────────────┐           │
+│  │ Schedule List   │  │ Schedule Modal  │           │
+│  └────────┬────────┘  └────────┬────────┘           │
+│           └───────────┬────────┘                    │
+│                       │ IPC                         │
+├───────────────────────┼─────────────────────────────┤
+│  Main Process         │                             │
+│  ┌────────────────────▼────────────────────┐        │
+│  │         SchedulerService (~200 lines)    │        │
+│  │  - Croner for scheduling                 │        │
+│  │  - JSON file for persistence             │        │
+│  │  - HeadlessRunner for execution          │        │
+│  └──────────────────────────────────────────┘        │
+│                       │                              │
+│  ~/.craft-agent/schedules.json                       │
+└─────────────────────────────────────────────────────┘
 ```
 
-### Core Components
-
-1. **Scheduler Service** (`apps/electron/src/main/scheduler/`)
-   - Manages cron jobs using Croner library
-   - Maintains task queue with priority ordering
-   - Executes tasks via HeadlessRunner
-
-2. **SQLite Database** (`~/.craft-agent/scheduler.db`)
-   - Persists schedule definitions
-   - Stores execution history
-   - Tracks schema versions for migrations
-
-3. **launchd Integration** (`apps/electron/src/main/scheduler/launchd.ts`)
-   - Generates and manages plist files
-   - Enables background execution when app is closed
-   - Handles startup recovery for missed tasks
-
-4. **UI Components** (`apps/electron/src/renderer/components/scheduler/`)
-   - Schedule list with status indicators
-   - Cron expression builder (visual)
-   - Execution history viewer
+**Note:** Tasks only run when the app is open. A small indicator shows "Schedules active" in the UI.
 
 ---
 
-## Technical Approach
+## Data Model
 
-### Phase 1: Core Infrastructure
+### Schedule (JSON)
 
-#### 1.1 SQLite Database Setup
-
-**File:** `packages/shared/src/scheduler/database.ts`
+**File:** `~/.craft-agent/workspaces/{workspaceId}/schedules.json`
 
 ```typescript
-import Database from 'better-sqlite3';
+interface Schedule {
+  id: string;
+  name: string;
+  prompt: string;
+  cron: string | null;        // null = one-time
+  scheduledFor: number | null; // Unix timestamp for one-time
+  timezone: string;
+  enabled: boolean;
+  lastRunAt: number | null;
+  lastRunStatus: 'success' | 'failed' | null;
+  lastRunError: string | null;
+  createdAt: number;
+}
+
+// Example schedules.json
+{
+  "schedules": [
+    {
+      "id": "abc123",
+      "name": "Morning Standup",
+      "prompt": "Summarize my calendar for today and list my priorities",
+      "cron": "0 9 * * 1-5",
+      "scheduledFor": null,
+      "timezone": "America/Los_Angeles",
+      "enabled": true,
+      "lastRunAt": 1737500400,
+      "lastRunStatus": "success",
+      "lastRunError": null,
+      "createdAt": 1737414000
+    }
+  ]
+}
+```
+
+**Why JSON over SQLite:**
+- Zero setup - just read/write a file
+- Human-readable - users can inspect/edit
+- Sufficient for <100 schedules
+- No native module compilation issues
+
+---
+
+## Implementation
+
+### 1. Scheduler Service
+
+**File:** `apps/electron/src/main/scheduler.ts` (~200 lines)
+
+```typescript
+import { Cron } from 'croner';
+import { readFile, writeFile } from 'fs/promises';
 import path from 'path';
 
-export interface Schedule {
+interface Schedule {
   id: string;
-  workspace_id: string;
   name: string;
-  description?: string;
-  task_type: 'chat' | 'skill' | 'retrieval';
-  prompt?: string;
-  skill_slug?: string;
-  skill_source?: 'workspace' | 'global' | 'claude-code';
-  skill_args?: string;
-  cron_expression?: string;
-  one_time_at?: number;
+  prompt: string;
+  cron: string | null;
+  scheduledFor: number | null;
   timezone: string;
-  permission_mode: 'safe' | 'ask' | 'allow-all';
-  session_mode: 'fresh' | 'persistent';
-  timeout_seconds: number;
-  max_retries: number;
-  priority: 1 | 2 | 3 | 4;
-  allow_overlap: boolean;
-  missed_execution_policy: 'skip' | 'run_once' | 'run_all';
-  notify_on_success: boolean;
-  notify_on_failure: boolean;
-  status: 'active' | 'paused' | 'invalid' | 'completed';
-  next_run_at?: number;
-  last_run_at?: number;
-  persistent_session_id?: string;
-  created_at: number;
-  updated_at: number;
-}
-
-export interface ExecutionHistory {
-  id: string;
-  schedule_id: string;
-  started_at: number;
-  completed_at?: number;
-  status: 'running' | 'success' | 'failed' | 'timeout' | 'cancelled' | 'skipped';
-  session_id?: string;
-  response_summary?: string;
-  error_message?: string;
-  error_code?: string;
-  retry_count: number;
-  duration_ms?: number;
-  input_tokens?: number;
-  output_tokens?: number;
-  tool_calls_count?: number;
-}
-```
-
-**Schema SQL:**
-
-```sql
-CREATE TABLE IF NOT EXISTS schedules (
-  id TEXT PRIMARY KEY,
-  workspace_id TEXT NOT NULL,
-  name TEXT NOT NULL,
-  description TEXT,
-  task_type TEXT NOT NULL CHECK(task_type IN ('chat', 'skill', 'retrieval')),
-  prompt TEXT,
-  skill_slug TEXT,
-  skill_source TEXT,
-  skill_args TEXT,
-  cron_expression TEXT,
-  one_time_at INTEGER,
-  timezone TEXT DEFAULT 'UTC',
-  permission_mode TEXT DEFAULT 'safe',
-  session_mode TEXT DEFAULT 'fresh',
-  timeout_seconds INTEGER DEFAULT 600,
-  max_retries INTEGER DEFAULT 3,
-  priority INTEGER DEFAULT 2,
-  allow_overlap INTEGER DEFAULT 0,
-  missed_execution_policy TEXT DEFAULT 'run_once',
-  notify_on_success INTEGER DEFAULT 1,
-  notify_on_failure INTEGER DEFAULT 1,
-  status TEXT DEFAULT 'active',
-  next_run_at INTEGER,
-  last_run_at INTEGER,
-  persistent_session_id TEXT,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS execution_history (
-  id TEXT PRIMARY KEY,
-  schedule_id TEXT NOT NULL,
-  started_at INTEGER NOT NULL,
-  completed_at INTEGER,
-  status TEXT NOT NULL,
-  session_id TEXT,
-  response_summary TEXT,
-  error_message TEXT,
-  error_code TEXT,
-  retry_count INTEGER DEFAULT 0,
-  duration_ms INTEGER,
-  input_tokens INTEGER,
-  output_tokens INTEGER,
-  tool_calls_count INTEGER,
-  FOREIGN KEY (schedule_id) REFERENCES schedules(id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS schema_version (
-  version INTEGER PRIMARY KEY,
-  applied_at INTEGER NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_schedules_workspace ON schedules(workspace_id);
-CREATE INDEX IF NOT EXISTS idx_schedules_next_run ON schedules(next_run_at) WHERE status = 'active';
-CREATE INDEX IF NOT EXISTS idx_schedules_status ON schedules(status);
-CREATE INDEX IF NOT EXISTS idx_execution_schedule ON execution_history(schedule_id);
-CREATE INDEX IF NOT EXISTS idx_execution_started ON execution_history(started_at DESC);
-```
-
-#### 1.2 Schedule CRUD Operations
-
-**File:** `packages/shared/src/scheduler/storage.ts`
-
-```typescript
-export async function createSchedule(schedule: Omit<Schedule, 'id' | 'created_at' | 'updated_at'>): Promise<Schedule>;
-export async function getSchedule(id: string): Promise<Schedule | null>;
-export async function listSchedules(workspaceId: string): Promise<Schedule[]>;
-export async function updateSchedule(id: string, updates: Partial<Schedule>): Promise<Schedule>;
-export async function deleteSchedule(id: string): Promise<void>;
-export async function pauseSchedule(id: string): Promise<void>;
-export async function resumeSchedule(id: string): Promise<void>;
-
-export async function recordExecution(execution: Omit<ExecutionHistory, 'id'>): Promise<ExecutionHistory>;
-export async function getExecutionHistory(scheduleId: string, limit?: number): Promise<ExecutionHistory[]>;
-export async function updateExecution(id: string, updates: Partial<ExecutionHistory>): Promise<void>;
-```
-
-#### 1.3 Cron Expression Handling
-
-**Dependencies:**
-- `croner` - Cron job scheduling (best performance, zero deps)
-- `cronstrue` - Human-readable cron descriptions
-- `cron-parser` - Parse and validate expressions
-
-**File:** `packages/shared/src/scheduler/cron.ts`
-
-```typescript
-import { Cron } from 'croner';
-import cronstrue from 'cronstrue';
-import { CronExpressionParser } from 'cron-parser';
-
-export function validateCronExpression(expression: string): { valid: boolean; error?: string } {
-  try {
-    CronExpressionParser.parse(expression);
-    return { valid: true };
-  } catch (e) {
-    return { valid: false, error: e.message };
-  }
-}
-
-export function getHumanReadableCron(expression: string): string {
-  return cronstrue.toString(expression);
-}
-
-export function getNextRunTimes(expression: string, count: number, timezone?: string): Date[] {
-  const cron = new Cron(expression, { timezone });
-  return cron.nextRuns(count);
-}
-
-export function calculateNextRunAt(expression: string, timezone: string): number {
-  const cron = new Cron(expression, { timezone });
-  const next = cron.nextRun();
-  return next ? Math.floor(next.getTime() / 1000) : 0;
-}
-```
-
----
-
-### Phase 2: Execution Engine
-
-#### 2.1 Scheduler Service
-
-**File:** `apps/electron/src/main/scheduler/scheduler-service.ts`
-
-```typescript
-import { Cron } from 'croner';
-import { Schedule, ExecutionHistory } from '@craft-agent/shared/scheduler';
-
-interface QueuedTask {
-  schedule: Schedule;
-  priority: number;
-  queuedAt: number;
+  enabled: boolean;
+  lastRunAt: number | null;
+  lastRunStatus: 'success' | 'failed' | null;
+  lastRunError: string | null;
+  createdAt: number;
 }
 
 export class SchedulerService {
   private jobs: Map<string, Cron> = new Map();
-  private taskQueue: QueuedTask[] = [];
-  private isProcessing = false;
-  private db: Database;
+  private schedules: Schedule[] = [];
+  private filePath: string;
+  private isExecuting = false;
+  private queue: Schedule[] = [];
 
-  constructor(dbPath: string) {
-    this.db = new Database(dbPath);
-    this.initializeSchema();
+  constructor(workspacePath: string) {
+    this.filePath = path.join(workspacePath, 'schedules.json');
   }
 
   async start(): Promise<void> {
-    // Load active schedules and create cron jobs
-    const schedules = await this.getActiveSchedules();
-    for (const schedule of schedules) {
-      this.scheduleTask(schedule);
+    await this.load();
+    for (const schedule of this.schedules) {
+      if (schedule.enabled) {
+        this.startJob(schedule);
+      }
     }
-
-    // Check for missed executions on startup
-    await this.handleMissedExecutions();
-
-    // Start queue processor
-    this.processQueue();
   }
 
   async stop(): Promise<void> {
@@ -321,573 +159,374 @@ export class SchedulerService {
     this.jobs.clear();
   }
 
-  scheduleTask(schedule: Schedule): void {
-    if (schedule.cron_expression) {
-      const job = new Cron(
-        schedule.cron_expression,
-        { timezone: schedule.timezone },
-        () => this.enqueueTask(schedule)
-      );
-      this.jobs.set(schedule.id, job);
-    } else if (schedule.one_time_at) {
-      const runAt = new Date(schedule.one_time_at * 1000);
-      const job = new Cron(runAt, () => {
-        this.enqueueTask(schedule);
-        this.jobs.delete(schedule.id);
-      });
-      this.jobs.set(schedule.id, job);
+  private async load(): Promise<void> {
+    try {
+      const data = await readFile(this.filePath, 'utf-8');
+      const parsed = JSON.parse(data);
+      this.schedules = parsed.schedules || [];
+    } catch {
+      this.schedules = [];
     }
   }
 
-  private enqueueTask(schedule: Schedule): void {
-    this.taskQueue.push({
-      schedule,
-      priority: schedule.priority,
-      queuedAt: Date.now()
-    });
-    this.taskQueue.sort((a, b) => b.priority - a.priority || a.queuedAt - b.queuedAt);
+  private async save(): Promise<void> {
+    await writeFile(
+      this.filePath,
+      JSON.stringify({ schedules: this.schedules }, null, 2)
+    );
+  }
+
+  private startJob(schedule: Schedule): void {
+    if (this.jobs.has(schedule.id)) return;
+
+    if (schedule.cron) {
+      const job = new Cron(schedule.cron, { timezone: schedule.timezone }, () => {
+        this.enqueue(schedule);
+      });
+      this.jobs.set(schedule.id, job);
+    } else if (schedule.scheduledFor) {
+      const runAt = new Date(schedule.scheduledFor * 1000);
+      if (runAt > new Date()) {
+        const job = new Cron(runAt, () => {
+          this.enqueue(schedule);
+          this.jobs.delete(schedule.id);
+        });
+        this.jobs.set(schedule.id, job);
+      }
+    }
+  }
+
+  private stopJob(scheduleId: string): void {
+    const job = this.jobs.get(scheduleId);
+    if (job) {
+      job.stop();
+      this.jobs.delete(scheduleId);
+    }
+  }
+
+  private enqueue(schedule: Schedule): void {
+    this.queue.push(schedule);
     this.processQueue();
   }
 
   private async processQueue(): Promise<void> {
-    if (this.isProcessing || this.taskQueue.length === 0) return;
+    if (this.isExecuting || this.queue.length === 0) return;
 
-    this.isProcessing = true;
-    while (this.taskQueue.length > 0) {
-      const task = this.taskQueue.shift()!;
-      await this.executeTask(task.schedule);
+    this.isExecuting = true;
+    while (this.queue.length > 0) {
+      const schedule = this.queue.shift()!;
+      await this.execute(schedule);
     }
-    this.isProcessing = false;
+    this.isExecuting = false;
   }
 
-  private async executeTask(schedule: Schedule): Promise<void> {
-    const executionId = generateId();
-    const startedAt = Math.floor(Date.now() / 1000);
-
-    // Record execution start
-    await this.recordExecution({
-      id: executionId,
-      schedule_id: schedule.id,
-      started_at: startedAt,
-      status: 'running',
-      retry_count: 0
-    });
+  private async execute(schedule: Schedule): Promise<void> {
+    const startTime = Date.now();
 
     try {
-      const result = await this.runHeadlessTask(schedule);
-
-      await this.updateExecution(executionId, {
-        completed_at: Math.floor(Date.now() / 1000),
-        status: 'success',
-        session_id: result.sessionId,
-        response_summary: result.summary?.substring(0, 500),
-        duration_ms: Date.now() - startedAt * 1000,
-        input_tokens: result.inputTokens,
-        output_tokens: result.outputTokens,
-        tool_calls_count: result.toolCalls
+      // Use existing HeadlessRunner
+      const result = await runHeadlessPrompt({
+        workspaceId: this.workspaceId,
+        prompt: schedule.prompt,
+        permissionMode: 'safe',
+        timeout: 600_000, // 10 minutes
       });
 
-      if (schedule.notify_on_success) {
-        this.showNotification(schedule, 'success', result.summary);
-      }
+      // Update schedule
+      schedule.lastRunAt = Math.floor(startTime / 1000);
+      schedule.lastRunStatus = 'success';
+      schedule.lastRunError = null;
+      await this.save();
+
+      // Show notification
+      this.showNotification(schedule.name, 'Completed successfully', result.sessionId);
     } catch (error) {
-      await this.updateExecution(executionId, {
-        completed_at: Math.floor(Date.now() / 1000),
-        status: 'failed',
-        error_message: error.message,
-        duration_ms: Date.now() - startedAt * 1000
-      });
+      schedule.lastRunAt = Math.floor(startTime / 1000);
+      schedule.lastRunStatus = 'failed';
+      schedule.lastRunError = error.message;
+      await this.save();
 
-      if (schedule.notify_on_failure) {
-        this.showNotification(schedule, 'failed', error.message);
-      }
+      this.showNotification(schedule.name, `Failed: ${error.message}`, null);
     }
 
-    // Update next_run_at for recurring schedules
-    if (schedule.cron_expression) {
-      const nextRun = calculateNextRunAt(schedule.cron_expression, schedule.timezone);
-      await this.updateSchedule(schedule.id, {
-        next_run_at: nextRun,
-        last_run_at: startedAt
+    // Disable one-time schedules after execution
+    if (!schedule.cron) {
+      schedule.enabled = false;
+      await this.save();
+    }
+  }
+
+  private showNotification(title: string, body: string, sessionId: string | null): void {
+    const notification = new Notification({ title: `Schedule: ${title}`, body });
+    if (sessionId) {
+      notification.on('click', () => {
+        // Navigate to session
+        this.windowManager.focusAndNavigate(sessionId);
       });
+    }
+    notification.show();
+  }
+
+  // CRUD operations
+  async create(data: Omit<Schedule, 'id' | 'createdAt' | 'lastRunAt' | 'lastRunStatus' | 'lastRunError'>): Promise<Schedule> {
+    const schedule: Schedule = {
+      ...data,
+      id: crypto.randomUUID(),
+      createdAt: Math.floor(Date.now() / 1000),
+      lastRunAt: null,
+      lastRunStatus: null,
+      lastRunError: null,
+    };
+    this.schedules.push(schedule);
+    await this.save();
+    if (schedule.enabled) {
+      this.startJob(schedule);
+    }
+    return schedule;
+  }
+
+  async update(id: string, updates: Partial<Schedule>): Promise<Schedule | null> {
+    const index = this.schedules.findIndex(s => s.id === id);
+    if (index === -1) return null;
+
+    const schedule = { ...this.schedules[index], ...updates };
+    this.schedules[index] = schedule;
+    await this.save();
+
+    // Restart job if timing changed
+    this.stopJob(id);
+    if (schedule.enabled) {
+      this.startJob(schedule);
+    }
+
+    return schedule;
+  }
+
+  async delete(id: string): Promise<void> {
+    this.stopJob(id);
+    this.schedules = this.schedules.filter(s => s.id !== id);
+    await this.save();
+  }
+
+  async toggle(id: string): Promise<Schedule | null> {
+    const schedule = this.schedules.find(s => s.id === id);
+    if (!schedule) return null;
+
+    schedule.enabled = !schedule.enabled;
+    await this.save();
+
+    if (schedule.enabled) {
+      this.startJob(schedule);
     } else {
-      // One-time task completed
-      await this.updateSchedule(schedule.id, {
-        status: 'completed',
-        last_run_at: startedAt
-      });
+      this.stopJob(schedule.id);
     }
+
+    return schedule;
   }
 
-  private async runHeadlessTask(schedule: Schedule): Promise<HeadlessResult> {
-    // Use existing HeadlessRunner with timeout
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), schedule.timeout_seconds * 1000);
+  list(): Schedule[] {
+    return this.schedules;
+  }
 
+  getNextRun(schedule: Schedule): Date | null {
+    if (!schedule.cron || !schedule.enabled) return null;
     try {
-      const runner = new HeadlessRunner({
-        workspaceId: schedule.workspace_id,
-        permissionMode: schedule.permission_mode,
-        signal: controller.signal
-      });
-
-      if (schedule.task_type === 'chat') {
-        return await runner.run(schedule.prompt!);
-      } else if (schedule.task_type === 'skill') {
-        const skill = await loadSkill(schedule.workspace_id, schedule.skill_slug!);
-        return await runner.runSkill(skill, schedule.skill_args);
-      }
-    } finally {
-      clearTimeout(timeout);
+      const cron = new Cron(schedule.cron, { timezone: schedule.timezone });
+      return cron.nextRun();
+    } catch {
+      return null;
     }
   }
 }
 ```
 
-#### 2.2 IPC Handlers
+### 2. IPC Handlers
 
-**File:** `apps/electron/src/main/scheduler/ipc-handlers.ts`
-
-**New IPC Channels:**
+**File:** `apps/electron/src/main/ipc.ts` (add to existing)
 
 ```typescript
-export const SCHEDULER_CHANNELS = {
-  // Schedule CRUD
-  SCHEDULE_CREATE: 'scheduler:create',
-  SCHEDULE_GET: 'scheduler:get',
-  SCHEDULE_LIST: 'scheduler:list',
-  SCHEDULE_UPDATE: 'scheduler:update',
-  SCHEDULE_DELETE: 'scheduler:delete',
-  SCHEDULE_PAUSE: 'scheduler:pause',
-  SCHEDULE_RESUME: 'scheduler:resume',
+// Add to IPC_CHANNELS
+SCHEDULE_LIST: 'schedule:list',
+SCHEDULE_CREATE: 'schedule:create',
+SCHEDULE_UPDATE: 'schedule:update',
+SCHEDULE_DELETE: 'schedule:delete',
+SCHEDULE_TOGGLE: 'schedule:toggle',
+SCHEDULE_RUN_NOW: 'schedule:run-now',
 
-  // Execution
-  SCHEDULE_RUN_NOW: 'scheduler:run-now',
-  SCHEDULE_CANCEL: 'scheduler:cancel',
-
-  // History
-  EXECUTION_HISTORY_GET: 'scheduler:history:get',
-  EXECUTION_HISTORY_LIST: 'scheduler:history:list',
-
-  // Events (main -> renderer)
-  SCHEDULE_EVENT: 'scheduler:event',
-} as const;
+// Add handlers
+ipcMain.handle('schedule:list', () => scheduler.list());
+ipcMain.handle('schedule:create', (_, data) => scheduler.create(data));
+ipcMain.handle('schedule:update', (_, id, updates) => scheduler.update(id, updates));
+ipcMain.handle('schedule:delete', (_, id) => scheduler.delete(id));
+ipcMain.handle('schedule:toggle', (_, id) => scheduler.toggle(id));
+ipcMain.handle('schedule:run-now', (_, id) => scheduler.runNow(id));
 ```
 
-**Handler Registration:**
+### 3. UI Components
 
-```typescript
-export function registerSchedulerHandlers(scheduler: SchedulerService): void {
-  ipcMain.handle(SCHEDULER_CHANNELS.SCHEDULE_CREATE, async (_, schedule) => {
-    return scheduler.createSchedule(schedule);
-  });
-
-  ipcMain.handle(SCHEDULER_CHANNELS.SCHEDULE_LIST, async (_, workspaceId) => {
-    return scheduler.listSchedules(workspaceId);
-  });
-
-  ipcMain.handle(SCHEDULER_CHANNELS.SCHEDULE_UPDATE, async (_, id, updates) => {
-    return scheduler.updateSchedule(id, updates);
-  });
-
-  ipcMain.handle(SCHEDULER_CHANNELS.SCHEDULE_DELETE, async (_, id) => {
-    return scheduler.deleteSchedule(id);
-  });
-
-  ipcMain.handle(SCHEDULER_CHANNELS.SCHEDULE_PAUSE, async (_, id) => {
-    return scheduler.pauseSchedule(id);
-  });
-
-  ipcMain.handle(SCHEDULER_CHANNELS.SCHEDULE_RESUME, async (_, id) => {
-    return scheduler.resumeSchedule(id);
-  });
-
-  ipcMain.handle(SCHEDULER_CHANNELS.SCHEDULE_RUN_NOW, async (_, id) => {
-    return scheduler.runNow(id);
-  });
-
-  ipcMain.handle(SCHEDULER_CHANNELS.EXECUTION_HISTORY_LIST, async (_, scheduleId, limit) => {
-    return scheduler.getExecutionHistory(scheduleId, limit);
-  });
-}
-```
-
----
-
-### Phase 3: Background Service (launchd)
-
-#### 3.1 launchd Plist Management
-
-**File:** `apps/electron/src/main/scheduler/launchd.ts`
-
-```typescript
-import { writeFile, unlink, mkdir } from 'fs/promises';
-import { execSync } from 'child_process';
-import path from 'path';
-
-const PLIST_DIR = path.join(process.env.HOME!, 'Library/LaunchAgents');
-const PLIST_PREFIX = 'com.craft-agent.scheduler';
-
-export async function installLaunchdService(schedule: Schedule): Promise<void> {
-  const plistName = `${PLIST_PREFIX}.${schedule.id}.plist`;
-  const plistPath = path.join(PLIST_DIR, plistName);
-
-  const plistContent = generatePlist(schedule);
-
-  await mkdir(PLIST_DIR, { recursive: true });
-  await writeFile(plistPath, plistContent);
-
-  // Load the service
-  execSync(`launchctl load "${plistPath}"`);
-}
-
-export async function uninstallLaunchdService(scheduleId: string): Promise<void> {
-  const plistName = `${PLIST_PREFIX}.${scheduleId}.plist`;
-  const plistPath = path.join(PLIST_DIR, plistName);
-
-  try {
-    execSync(`launchctl unload "${plistPath}"`);
-    await unlink(plistPath);
-  } catch (e) {
-    // Service may not be loaded
-  }
-}
-
-function generatePlist(schedule: Schedule): string {
-  const appPath = process.execPath;
-  const cronToCalendarInterval = parseCronToCalendarInterval(schedule.cron_expression!);
-
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>${PLIST_PREFIX}.${schedule.id}</string>
-
-    <key>ProgramArguments</key>
-    <array>
-        <string>${appPath}</string>
-        <string>--headless</string>
-        <string>--schedule-id=${schedule.id}</string>
-    </array>
-
-    <key>RunAtLoad</key>
-    <false/>
-
-    <key>StartCalendarInterval</key>
-    ${cronToCalendarInterval}
-
-    <key>StandardOutPath</key>
-    <string>${process.env.HOME}/.craft-agent/logs/scheduler-${schedule.id}.log</string>
-
-    <key>StandardErrorPath</key>
-    <string>${process.env.HOME}/.craft-agent/logs/scheduler-${schedule.id}.error.log</string>
-</dict>
-</plist>`;
-}
-
-function parseCronToCalendarInterval(cron: string): string {
-  // Convert cron expression to launchd StartCalendarInterval format
-  const parts = cron.split(' ');
-  const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;
-
-  let interval = '<dict>\n';
-
-  if (minute !== '*') {
-    interval += `        <key>Minute</key>\n        <integer>${minute}</integer>\n`;
-  }
-  if (hour !== '*') {
-    interval += `        <key>Hour</key>\n        <integer>${hour}</integer>\n`;
-  }
-  if (dayOfMonth !== '*') {
-    interval += `        <key>Day</key>\n        <integer>${dayOfMonth}</integer>\n`;
-  }
-  if (month !== '*') {
-    interval += `        <key>Month</key>\n        <integer>${month}</integer>\n`;
-  }
-  if (dayOfWeek !== '*') {
-    interval += `        <key>Weekday</key>\n        <integer>${dayOfWeek}</integer>\n`;
-  }
-
-  interval += '    </dict>';
-  return interval;
-}
-```
-
-#### 3.2 Headless Mode Entry Point
-
-**File:** `apps/electron/src/main/headless-entry.ts`
-
-```typescript
-import { app } from 'electron';
-import { SchedulerService } from './scheduler/scheduler-service';
-
-// Check if running in headless mode
-const args = process.argv;
-const headlessIndex = args.indexOf('--headless');
-const scheduleIdArg = args.find(arg => arg.startsWith('--schedule-id='));
-
-if (headlessIndex !== -1 && scheduleIdArg) {
-  const scheduleId = scheduleIdArg.split('=')[1];
-
-  app.whenReady().then(async () => {
-    // Run without creating windows
-    app.dock?.hide();
-
-    const scheduler = new SchedulerService(getDbPath());
-    await scheduler.runScheduleById(scheduleId);
-
-    app.quit();
-  });
-} else {
-  // Normal app startup
-  require('./index');
-}
-```
-
----
-
-### Phase 4: UI Components
-
-#### 4.1 Schedule List Component
-
-**File:** `apps/electron/src/renderer/components/scheduler/ScheduleList.tsx`
+**File:** `apps/electron/src/renderer/components/scheduler/ScheduleModal.tsx` (~150 lines)
 
 ```tsx
-import { useAtom } from 'jotai';
-import { schedulesAtom } from '../../atoms/scheduler';
-import { ScheduleCard } from './ScheduleCard';
+import { useState } from 'react';
+import { Cron } from 'croner';
 
-export function ScheduleList() {
-  const [schedules] = useAtom(schedulesAtom);
+const PRESETS = [
+  { label: 'Every hour', cron: '0 * * * *' },
+  { label: 'Daily at 9am', cron: '0 9 * * *' },
+  { label: 'Weekdays at 9am', cron: '0 9 * * 1-5' },
+  { label: 'Weekly on Monday', cron: '0 9 * * 1' },
+  { label: 'Monthly on 1st', cron: '0 9 1 * *' },
+];
 
-  return (
-    <div className="space-y-3">
-      {schedules.length === 0 ? (
-        <EmptyState />
-      ) : (
-        schedules.map(schedule => (
-          <ScheduleCard key={schedule.id} schedule={schedule} />
-        ))
-      )}
-    </div>
+interface ScheduleModalProps {
+  schedule?: Schedule;
+  onSave: (data: ScheduleFormData) => void;
+  onClose: () => void;
+}
+
+export function ScheduleModal({ schedule, onSave, onClose }: ScheduleModalProps) {
+  const [name, setName] = useState(schedule?.name || '');
+  const [prompt, setPrompt] = useState(schedule?.prompt || '');
+  const [scheduleType, setScheduleType] = useState<'recurring' | 'once'>(
+    schedule?.cron ? 'recurring' : 'once'
   );
-}
-
-function ScheduleCard({ schedule }: { schedule: Schedule }) {
-  return (
-    <div className="p-4 rounded-lg border bg-card">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="font-medium">{schedule.name}</h3>
-          <p className="text-sm text-muted-foreground">
-            {getHumanReadableCron(schedule.cron_expression)}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <StatusBadge status={schedule.status} />
-          <ScheduleActions schedule={schedule} />
-        </div>
-      </div>
-      <div className="mt-2 text-xs text-muted-foreground">
-        Next run: {formatRelativeTime(schedule.next_run_at)}
-      </div>
-    </div>
+  const [selectedPreset, setSelectedPreset] = useState<string | 'custom'>(
+    schedule?.cron && !PRESETS.find(p => p.cron === schedule.cron) ? 'custom' :
+    schedule?.cron || PRESETS[1].cron
   );
-}
-```
-
-#### 4.2 Cron Builder Component
-
-**File:** `apps/electron/src/renderer/components/scheduler/CronBuilder.tsx`
-
-Using `@vpfaiz/cron-builder-ui` for Tailwind/Radix compatibility:
-
-```tsx
-import { CronBuilder as CronBuilderUI, getCronText } from '@vpfaiz/cron-builder-ui';
-import '@vpfaiz/cron-builder-ui/styles/globals.css';
-
-interface CronBuilderProps {
-  value: string;
-  onChange: (value: string) => void;
-}
-
-export function CronBuilder({ value, onChange }: CronBuilderProps) {
-  const cronText = getCronText(value);
-
-  return (
-    <div className="space-y-4">
-      <CronBuilderUI
-        defaultValue={value}
-        onChange={onChange}
-      />
-
-      <div className="p-3 rounded-md bg-muted">
-        <p className="text-sm font-medium">Schedule Preview</p>
-        <p className="text-sm text-muted-foreground">
-          {cronText.status ? cronText.value : 'Invalid expression'}
-        </p>
-
-        <div className="mt-2">
-          <p className="text-xs font-medium">Next 5 runs:</p>
-          <ul className="text-xs text-muted-foreground">
-            {getNextRunTimes(value, 5).map((date, i) => (
-              <li key={i}>{formatDateTime(date)}</li>
-            ))}
-          </ul>
-        </div>
-      </div>
-    </div>
+  const [customCron, setCustomCron] = useState(schedule?.cron || '');
+  const [scheduledFor, setScheduledFor] = useState<string>(
+    schedule?.scheduledFor
+      ? new Date(schedule.scheduledFor * 1000).toISOString().slice(0, 16)
+      : ''
   );
-}
-```
 
-#### 4.3 Schedule Editor Modal
+  const cronExpression = selectedPreset === 'custom' ? customCron : selectedPreset;
+  const cronError = validateCron(cronExpression);
+  const nextRuns = cronError ? [] : getNextRuns(cronExpression, 3);
 
-**File:** `apps/electron/src/renderer/components/scheduler/ScheduleEditor.tsx`
+  function validateCron(expr: string): string | null {
+    if (!expr) return 'Cron expression required';
+    try {
+      new Cron(expr);
+      return null;
+    } catch (e) {
+      return e.message;
+    }
+  }
 
-```tsx
-export function ScheduleEditor({ schedule, onSave, onClose }: ScheduleEditorProps) {
-  const [form, setForm] = useState<ScheduleForm>(schedule || defaultForm);
+  function getNextRuns(expr: string, count: number): Date[] {
+    try {
+      const cron = new Cron(expr);
+      return cron.nextRuns(count);
+    } catch {
+      return [];
+    }
+  }
+
+  function handleSubmit() {
+    if (scheduleType === 'recurring' && cronError) return;
+
+    onSave({
+      name,
+      prompt,
+      cron: scheduleType === 'recurring' ? cronExpression : null,
+      scheduledFor: scheduleType === 'once' ? Math.floor(new Date(scheduledFor).getTime() / 1000) : null,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      enabled: true,
+    });
+  }
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>
-            {schedule ? 'Edit Schedule' : 'New Schedule'}
-          </DialogTitle>
+          <DialogTitle>{schedule ? 'Edit Schedule' : 'New Schedule'}</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6">
+        <div className="space-y-4">
           {/* Name */}
           <div>
             <Label>Name</Label>
             <Input
-              value={form.name}
-              onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-              placeholder="Morning Standup Summary"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="Morning Standup"
             />
           </div>
 
-          {/* Task Type */}
+          {/* Prompt */}
           <div>
-            <Label>Task Type</Label>
-            <Select
-              value={form.task_type}
-              onValueChange={v => setForm(f => ({ ...f, task_type: v }))}
-            >
-              <SelectItem value="chat">Agent Chat</SelectItem>
-              <SelectItem value="skill">Skill Execution</SelectItem>
-              <SelectItem value="retrieval">Information Retrieval</SelectItem>
-            </Select>
-          </div>
-
-          {/* Prompt (for chat type) */}
-          {form.task_type === 'chat' && (
-            <div>
-              <Label>Prompt</Label>
-              <Textarea
-                value={form.prompt}
-                onChange={e => setForm(f => ({ ...f, prompt: e.target.value }))}
-                placeholder="Summarize my calendar for today..."
-                rows={4}
-              />
-            </div>
-          )}
-
-          {/* Skill Selection (for skill type) */}
-          {form.task_type === 'skill' && (
-            <SkillSelector
-              value={form.skill_slug}
-              onChange={slug => setForm(f => ({ ...f, skill_slug: slug }))}
+            <Label>Prompt</Label>
+            <Textarea
+              value={prompt}
+              onChange={e => setPrompt(e.target.value)}
+              placeholder="Summarize my calendar for today..."
+              rows={3}
             />
-          )}
+          </div>
 
           {/* Schedule Type */}
           <div>
-            <Label>Schedule Type</Label>
-            <RadioGroup
-              value={form.schedule_type}
-              onValueChange={v => setForm(f => ({ ...f, schedule_type: v }))}
-            >
+            <Label>When to run</Label>
+            <RadioGroup value={scheduleType} onValueChange={setScheduleType}>
               <RadioGroupItem value="recurring" label="Recurring" />
-              <RadioGroupItem value="one_time" label="One-time" />
+              <RadioGroupItem value="once" label="One-time" />
             </RadioGroup>
           </div>
 
-          {/* Cron Builder (for recurring) */}
-          {form.schedule_type === 'recurring' && (
-            <CronBuilder
-              value={form.cron_expression}
-              onChange={v => setForm(f => ({ ...f, cron_expression: v }))}
-            />
+          {/* Recurring Options */}
+          {scheduleType === 'recurring' && (
+            <div className="space-y-3">
+              <Select value={selectedPreset} onValueChange={setSelectedPreset}>
+                {PRESETS.map(p => (
+                  <SelectItem key={p.cron} value={p.cron}>{p.label}</SelectItem>
+                ))}
+                <SelectItem value="custom">Custom cron...</SelectItem>
+              </Select>
+
+              {selectedPreset === 'custom' && (
+                <Input
+                  value={customCron}
+                  onChange={e => setCustomCron(e.target.value)}
+                  placeholder="0 9 * * *"
+                  className={cronError ? 'border-destructive' : ''}
+                />
+              )}
+
+              {cronError && (
+                <p className="text-xs text-destructive">{cronError}</p>
+              )}
+
+              {nextRuns.length > 0 && (
+                <div className="text-xs text-muted-foreground">
+                  <p className="font-medium">Next runs:</p>
+                  {nextRuns.map((date, i) => (
+                    <p key={i}>{date.toLocaleString()}</p>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
 
-          {/* Date/Time Picker (for one-time) */}
-          {form.schedule_type === 'one_time' && (
-            <DateTimePicker
-              value={form.one_time_at}
-              onChange={v => setForm(f => ({ ...f, one_time_at: v }))}
+          {/* One-time Options */}
+          {scheduleType === 'once' && (
+            <Input
+              type="datetime-local"
+              value={scheduledFor}
+              onChange={e => setScheduledFor(e.target.value)}
+              min={new Date().toISOString().slice(0, 16)}
             />
           )}
-
-          {/* Advanced Options (collapsible) */}
-          <Collapsible>
-            <CollapsibleTrigger>Advanced Options</CollapsibleTrigger>
-            <CollapsibleContent>
-              <div className="space-y-4 pt-4">
-                {/* Permission Mode */}
-                <div>
-                  <Label>Permission Mode</Label>
-                  <Select
-                    value={form.permission_mode}
-                    onValueChange={v => setForm(f => ({ ...f, permission_mode: v }))}
-                  >
-                    <SelectItem value="safe">Safe (Read-only)</SelectItem>
-                    <SelectItem value="ask">Ask (Default)</SelectItem>
-                    <SelectItem value="allow-all">Allow All</SelectItem>
-                  </Select>
-                  {form.permission_mode === 'allow-all' && (
-                    <p className="text-xs text-destructive mt-1">
-                      ⚠️ This allows the agent to execute any command without confirmation
-                    </p>
-                  )}
-                </div>
-
-                {/* Timeout */}
-                <div>
-                  <Label>Timeout (seconds)</Label>
-                  <Input
-                    type="number"
-                    value={form.timeout_seconds}
-                    onChange={e => setForm(f => ({ ...f, timeout_seconds: parseInt(e.target.value) }))}
-                  />
-                </div>
-
-                {/* Notification Settings */}
-                <div className="space-y-2">
-                  <Label>Notifications</Label>
-                  <Checkbox
-                    checked={form.notify_on_success}
-                    onCheckedChange={v => setForm(f => ({ ...f, notify_on_success: v }))}
-                    label="Notify on success"
-                  />
-                  <Checkbox
-                    checked={form.notify_on_failure}
-                    onCheckedChange={v => setForm(f => ({ ...f, notify_on_failure: v }))}
-                    label="Notify on failure"
-                  />
-                </div>
-              </div>
-            </CollapsibleContent>
-          </Collapsible>
         </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={() => onSave(form)}>
-            {schedule ? 'Save Changes' : 'Create Schedule'}
+          <Button
+            onClick={handleSubmit}
+            disabled={!name || !prompt || (scheduleType === 'recurring' && !!cronError)}
+          >
+            {schedule ? 'Save' : 'Create'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -896,55 +535,147 @@ export function ScheduleEditor({ schedule, onSave, onClose }: ScheduleEditorProp
 }
 ```
 
-#### 4.4 Execution History Component
-
-**File:** `apps/electron/src/renderer/components/scheduler/ExecutionHistory.tsx`
+**File:** `apps/electron/src/renderer/components/scheduler/ScheduleList.tsx` (~100 lines)
 
 ```tsx
-export function ExecutionHistory({ scheduleId }: { scheduleId: string }) {
-  const [history, setHistory] = useState<ExecutionHistory[]>([]);
+export function ScheduleList() {
+  const [schedules, setSchedules] = useState<Schedule[]>([]);
+  const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null);
+  const [showNew, setShowNew] = useState(false);
 
   useEffect(() => {
-    window.electronAPI.getExecutionHistory(scheduleId, 50).then(setHistory);
-  }, [scheduleId]);
+    window.electronAPI.scheduleList().then(setSchedules);
+  }, []);
+
+  async function handleCreate(data: ScheduleFormData) {
+    const created = await window.electronAPI.scheduleCreate(data);
+    setSchedules(prev => [...prev, created]);
+    setShowNew(false);
+  }
+
+  async function handleUpdate(data: ScheduleFormData) {
+    if (!editingSchedule) return;
+    const updated = await window.electronAPI.scheduleUpdate(editingSchedule.id, data);
+    setSchedules(prev => prev.map(s => s.id === updated.id ? updated : s));
+    setEditingSchedule(null);
+  }
+
+  async function handleDelete(id: string) {
+    await window.electronAPI.scheduleDelete(id);
+    setSchedules(prev => prev.filter(s => s.id !== id));
+  }
+
+  async function handleToggle(id: string) {
+    const updated = await window.electronAPI.scheduleToggle(id);
+    setSchedules(prev => prev.map(s => s.id === updated.id ? updated : s));
+  }
+
+  async function handleRunNow(id: string) {
+    await window.electronAPI.scheduleRunNow(id);
+  }
 
   return (
-    <div className="space-y-2">
-      {history.map(execution => (
-        <div
-          key={execution.id}
-          className="p-3 rounded-md border bg-card flex items-center justify-between"
-        >
-          <div className="flex items-center gap-3">
-            <StatusIcon status={execution.status} />
-            <div>
-              <p className="text-sm font-medium">
-                {formatDateTime(execution.started_at * 1000)}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Duration: {formatDuration(execution.duration_ms)}
-              </p>
-            </div>
-          </div>
+    <div className="p-4">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-semibold">Schedules</h2>
+        <Button onClick={() => setShowNew(true)}>
+          <Plus className="w-4 h-4 mr-2" />
+          New Schedule
+        </Button>
+      </div>
 
-          <div className="flex items-center gap-2">
-            {execution.session_id && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => navigateToSession(execution.session_id)}
-              >
-                View Session
-              </Button>
-            )}
-            {execution.error_message && (
-              <Tooltip content={execution.error_message}>
-                <AlertCircle className="w-4 h-4 text-destructive" />
-              </Tooltip>
-            )}
+      {schedules.length === 0 ? (
+        <div className="text-center py-8 text-muted-foreground">
+          <Clock className="w-12 h-12 mx-auto mb-2 opacity-50" />
+          <p>No schedules yet</p>
+          <p className="text-sm">Create a schedule to run prompts automatically</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {schedules.map(schedule => (
+            <ScheduleCard
+              key={schedule.id}
+              schedule={schedule}
+              onEdit={() => setEditingSchedule(schedule)}
+              onDelete={() => handleDelete(schedule.id)}
+              onToggle={() => handleToggle(schedule.id)}
+              onRunNow={() => handleRunNow(schedule.id)}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* App must be open notice */}
+      <p className="text-xs text-muted-foreground mt-4 text-center">
+        Schedules run when Vesper is open
+      </p>
+
+      {showNew && (
+        <ScheduleModal onSave={handleCreate} onClose={() => setShowNew(false)} />
+      )}
+
+      {editingSchedule && (
+        <ScheduleModal
+          schedule={editingSchedule}
+          onSave={handleUpdate}
+          onClose={() => setEditingSchedule(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function ScheduleCard({ schedule, onEdit, onDelete, onToggle, onRunNow }) {
+  const nextRun = schedule.enabled && schedule.cron
+    ? new Cron(schedule.cron, { timezone: schedule.timezone }).nextRun()
+    : null;
+
+  return (
+    <div className="p-3 rounded-lg border bg-card">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Switch checked={schedule.enabled} onCheckedChange={onToggle} />
+          <div>
+            <p className="font-medium">{schedule.name}</p>
+            <p className="text-xs text-muted-foreground truncate max-w-[200px]">
+              {schedule.prompt}
+            </p>
           </div>
         </div>
-      ))}
+
+        <div className="flex items-center gap-2">
+          {schedule.lastRunStatus === 'failed' && (
+            <Tooltip content={schedule.lastRunError}>
+              <AlertCircle className="w-4 h-4 text-destructive" />
+            </Tooltip>
+          )}
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm">
+                <MoreHorizontal className="w-4 h-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              <DropdownMenuItem onClick={onRunNow}>Run Now</DropdownMenuItem>
+              <DropdownMenuItem onClick={onEdit}>Edit</DropdownMenuItem>
+              <DropdownMenuItem onClick={onDelete} className="text-destructive">
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+
+      <div className="mt-2 text-xs text-muted-foreground">
+        {schedule.cron ? (
+          nextRun ? `Next: ${nextRun.toLocaleString()}` : 'Invalid schedule'
+        ) : (
+          schedule.scheduledFor
+            ? `Scheduled for: ${new Date(schedule.scheduledFor * 1000).toLocaleString()}`
+            : 'Completed'
+        )}
+      </div>
     </div>
   );
 }
@@ -952,277 +683,132 @@ export function ExecutionHistory({ scheduleId }: { scheduleId: string }) {
 
 ---
 
-### Phase 5: Chat Commands
+## File Structure (Minimal)
 
-#### 5.1 Session-Scoped Tools
-
-**File:** `packages/shared/src/agent/session-scoped-tools.ts`
-
-Add new scheduler tools:
-
-```typescript
-export const schedulerTools: Tool[] = [
-  {
-    name: 'schedule_create',
-    description: 'Create a new scheduled task',
-    input_schema: {
-      type: 'object',
-      properties: {
-        name: { type: 'string', description: 'Name for the schedule' },
-        prompt: { type: 'string', description: 'The prompt to run on schedule' },
-        cron_expression: { type: 'string', description: 'Cron expression (e.g., "0 9 * * *" for daily at 9am)' },
-        timezone: { type: 'string', description: 'IANA timezone (default: user local)' }
-      },
-      required: ['name', 'prompt', 'cron_expression']
-    }
-  },
-  {
-    name: 'schedule_list',
-    description: 'List all scheduled tasks in the current workspace',
-    input_schema: {
-      type: 'object',
-      properties: {}
-    }
-  },
-  {
-    name: 'schedule_pause',
-    description: 'Pause a scheduled task',
-    input_schema: {
-      type: 'object',
-      properties: {
-        schedule_id: { type: 'string', description: 'ID of the schedule to pause' }
-      },
-      required: ['schedule_id']
-    }
-  },
-  {
-    name: 'schedule_delete',
-    description: 'Delete a scheduled task',
-    input_schema: {
-      type: 'object',
-      properties: {
-        schedule_id: { type: 'string', description: 'ID of the schedule to delete' }
-      },
-      required: ['schedule_id']
-    }
-  }
-];
+```
+apps/electron/src/
+├── main/
+│   ├── scheduler.ts          # ~200 lines - all scheduling logic
+│   └── ipc.ts                # Add 6 handlers
+└── renderer/
+    └── components/
+        └── scheduler/
+            ├── ScheduleList.tsx   # ~100 lines
+            └── ScheduleModal.tsx  # ~150 lines
 ```
 
----
-
-## Acceptance Criteria
-
-### Functional Requirements
-
-- [ ] User can create recurring schedules with cron expressions from UI
-- [ ] User can create one-time scheduled tasks with date/time picker
-- [ ] User can schedule agent chat sessions with custom prompts
-- [ ] User can schedule Skill executions
-- [ ] User can pause, resume, and delete schedules
-- [ ] User can view execution history for each schedule
-- [ ] Schedules persist across app restarts
-- [ ] Tasks execute at scheduled times when app is open
-- [ ] Tasks execute via launchd when app is closed (macOS)
-- [ ] Native notifications shown on task completion/failure
-- [ ] User can create schedules via chat commands (/schedule)
-- [ ] Clicking notification navigates to the task's session
-
-### Non-Functional Requirements
-
-- [ ] SQLite database properly initialized on first run
-- [ ] Schema migrations run automatically on app update
-- [ ] Cron expressions validated before saving
-- [ ] Human-readable schedule descriptions shown in UI
-- [ ] Task timeout enforced (default 10 minutes)
-- [ ] Missed executions handled according to policy
-- [ ] Background service properly installed/uninstalled with schedules
-
-### Quality Gates
-
-- [ ] Unit tests for cron parsing and next-run calculation
-- [ ] Integration tests for schedule CRUD operations
-- [ ] E2E tests for creating schedule from UI
-- [ ] Test coverage for edge cases (DST, timezone changes)
-- [ ] launchd plist generation tested on macOS
+**Total: ~450 lines of code, 3 new files, 1 npm package**
 
 ---
 
 ## Dependencies
 
-### New npm Packages
+| Package | Purpose |
+|---------|---------|
+| `croner` | Cron scheduling + validation (zero deps, includes `nextRuns()`) |
 
-| Package | Version | Purpose |
-|---------|---------|---------|
-| `croner` | ^9.0.0 | Cron job scheduling |
-| `cronstrue` | ^2.50.0 | Human-readable cron |
-| `cron-parser` | ^5.0.0 | Cron validation |
-| `better-sqlite3` | ^11.0.0 | SQLite database |
-| `@vpfaiz/cron-builder-ui` | ^1.0.0 | Visual cron builder |
-
-### Existing Dependencies Used
-
-- `@anthropic-ai/claude-agent-sdk` - Agent execution
-- `electron` - Native notifications, IPC
-- `jotai` - State management
-- `@radix-ui/*` - UI components
+**No additional packages needed.** Croner handles scheduling, validation, and next-run calculation.
 
 ---
 
-## File Structure
+## Acceptance Criteria
 
-```
-apps/electron/src/
-├── main/
-│   ├── scheduler/
-│   │   ├── index.ts              # Scheduler service export
-│   │   ├── scheduler-service.ts  # Core scheduling logic
-│   │   ├── database.ts           # SQLite operations
-│   │   ├── launchd.ts            # macOS launchd integration
-│   │   ├── ipc-handlers.ts       # IPC channel handlers
-│   │   └── types.ts              # TypeScript interfaces
-│   ├── headless-entry.ts         # Headless mode entry point
-│   └── index.ts                  # Updated to init scheduler
-├── preload/
-│   └── index.ts                  # Add scheduler API exposure
-└── renderer/
-    ├── atoms/
-    │   └── scheduler.ts          # Jotai atoms for scheduler state
-    ├── components/
-    │   └── scheduler/
-    │       ├── ScheduleList.tsx
-    │       ├── ScheduleCard.tsx
-    │       ├── ScheduleEditor.tsx
-    │       ├── CronBuilder.tsx
-    │       ├── ExecutionHistory.tsx
-    │       └── index.ts
-    └── pages/
-        └── SchedulesPage.tsx     # Main schedules page
+### v1 Requirements
 
-packages/shared/src/
-├── scheduler/
-│   ├── index.ts                  # Public exports
-│   ├── types.ts                  # Shared types
-│   ├── cron.ts                   # Cron utilities
-│   └── storage.ts                # Database operations
-└── agent/
-    └── session-scoped-tools.ts   # Add scheduler tools
-```
+- [x] User can create recurring schedules from presets (hourly, daily, weekly, monthly)
+- [x] User can enter custom cron expressions
+- [x] User can create one-time scheduled tasks
+- [x] User can enable/disable schedules
+- [x] User can edit and delete schedules
+- [x] User can manually trigger "Run Now"
+- [x] Schedules persist across app restarts (JSON file)
+- [x] Tasks execute at scheduled times when app is open
+- [x] Native notification shown on task completion/failure
+- [x] UI shows next run time for each schedule
+- [x] UI shows last run status (success/failed)
+
+### Out of Scope for v1
+
+- Background execution when app is closed
+- Skill-specific scheduling (use prompts instead)
+- Chat commands for scheduling
+- Detailed execution history
+- Priority/queue ordering
+- Retry logic
 
 ---
 
-## ERD Diagram
+## Limitations & Future Improvements
 
-```mermaid
-erDiagram
-    WORKSPACE ||--o{ SCHEDULE : contains
-    SCHEDULE ||--o{ EXECUTION_HISTORY : has
-    SCHEDULE ||--o| SESSION : persistent_session
-    EXECUTION_HISTORY ||--o| SESSION : creates
+### v1 Limitations
 
-    SCHEDULE {
-        text id PK
-        text workspace_id FK
-        text name
-        text description
-        text task_type
-        text prompt
-        text skill_slug
-        text skill_source
-        text skill_args
-        text cron_expression
-        int one_time_at
-        text timezone
-        text permission_mode
-        text session_mode
-        int timeout_seconds
-        int max_retries
-        int priority
-        bool allow_overlap
-        text missed_execution_policy
-        bool notify_on_success
-        bool notify_on_failure
-        text status
-        int next_run_at
-        int last_run_at
-        text persistent_session_id FK
-        int created_at
-        int updated_at
-    }
+1. **App must be open** - Schedules only run when Vesper is running
+   - Show clear indicator in UI
+   - If users request background execution, add launchd in v2
 
-    EXECUTION_HISTORY {
-        text id PK
-        text schedule_id FK
-        int started_at
-        int completed_at
-        text status
-        text session_id FK
-        text response_summary
-        text error_message
-        text error_code
-        int retry_count
-        int duration_ms
-        int input_tokens
-        int output_tokens
-        int tool_calls_count
-    }
+2. **No execution history** - Only last run status stored
+   - Sessions are created and can be viewed
+   - Add history table in v2 if needed
 
-    SESSION {
-        text id PK
-        text workspace_id FK
-        text name
-        json messages
-        int created_at
-    }
+3. **No Skills support** - Prompts only
+   - Users can invoke skills via prompt: "Run the /commit skill"
+   - Add native Skill scheduling in v2 if needed
 
-    WORKSPACE {
-        text id PK
-        text name
-        text path
-    }
-```
+### v2 Candidates (if users request)
+
+1. Background execution via launchd (macOS)
+2. Execution history with session links
+3. Native Skill scheduling
+4. Chat commands (`/schedule`)
+5. Schedule templates
+6. Retry on failure
 
 ---
 
-## Risk Analysis
+## Testing Strategy
 
-| Risk | Impact | Likelihood | Mitigation |
-|------|--------|------------|------------|
-| launchd permission issues | HIGH | MEDIUM | Test on multiple macOS versions, provide fallback to in-app scheduling |
-| SQLite corruption | HIGH | LOW | Use WAL mode, implement backup/recovery |
-| Missed execution flood on startup | MEDIUM | MEDIUM | Implement `missed_execution_policy` with sensible defaults |
-| Long-running tasks block queue | MEDIUM | MEDIUM | Implement timeout, consider parallel execution option |
-| User creates too many schedules | LOW | LOW | UI warning at 50+ schedules, performance testing |
+### Critical Tests
+
+1. **Schedule creation** - Verify JSON file updates correctly
+2. **Cron validation** - Invalid expressions rejected
+3. **Execution flow** - Prompt runs, notification shown, status updated
+4. **One-time schedules** - Execute once, then disable
+5. **App restart** - Schedules reload and resume correctly
+
+### Manual Testing
+
+1. Create schedule, wait for execution, verify notification
+2. Create one-time schedule, verify it runs and disables
+3. Disable schedule, verify it doesn't run
+4. Close and reopen app, verify schedules persist
 
 ---
 
-## Future Considerations
+## Rollout Plan
 
-1. **Windows/Linux Support**: Implement equivalent background services (Task Scheduler on Windows, systemd on Linux)
-2. **Remote Execution**: Run scheduled tasks on Claude.ai web when local machine is offline
-3. **Schedule Templates**: Pre-built schedules for common tasks (daily standup, weekly review)
-4. **Conditional Execution**: Run only if certain conditions are met (e.g., new emails exist)
-5. **Webhook Integration**: Trigger schedules via external webhooks
-6. **Team Sharing**: Share schedules across team workspaces
+1. **Internal testing** (1 week)
+   - Team uses feature
+   - Monitor for issues
+
+2. **Ship to all users**
+   - Feature visible in sidebar/menu
+   - "Schedules run when app is open" note visible
+
+3. **Gather feedback**
+   - If >10 users request background execution, plan v2 with launchd
+   - If >10 users request Skills, plan v2 with Skill support
 
 ---
 
 ## References
 
-### Internal References
-- Session management: `apps/electron/src/main/sessions.ts`
+### Internal
 - HeadlessRunner: `packages/shared/src/headless/runner.ts`
-- Skills loading: `packages/shared/src/skills/storage.ts`
 - Notifications: `apps/electron/src/main/notifications.ts`
-- IPC channels: `apps/electron/src/shared/types.ts:493-639`
+- IPC patterns: `apps/electron/src/main/ipc.ts`
 
-### External References
-- [Croner Documentation](https://croner.56k.guru)
-- [cronstrue GitHub](https://github.com/bradymholt/cRonstrue)
-- [better-sqlite3 GitHub](https://github.com/WiseLibs/better-sqlite3)
-- [Apple launchd Documentation](https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPSystemStartup/Chapters/CreatingLaunchdJobs.html)
-- [Electron Notification API](https://www.electronjs.org/docs/latest/api/notification)
-- [cron-builder-ui](https://github.com/vpfaiz/cron-builder-ui)
+### External
+- [Croner Documentation](https://croner.56k.guru) - Scheduling, validation, next runs
 
 ---
 

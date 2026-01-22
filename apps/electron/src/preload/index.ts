@@ -381,6 +381,29 @@ const api: ElectronAPI = {
 
   // Vector Search (QMD CLI integration)
   vectorSearchExecute: (args: string[]) => ipcRenderer.invoke(IPC_CHANNELS.VECTOR_SEARCH_EXECUTE, args),
+
+  // Scheduler
+  scheduleList: (workspaceId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SCHEDULE_LIST, workspaceId),
+  scheduleCreate: (workspaceId: string, data: import('../shared/types').ScheduleFormData) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SCHEDULE_CREATE, workspaceId, data),
+  scheduleUpdate: (workspaceId: string, id: string, updates: Partial<import('../shared/types').ScheduleFormData>) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SCHEDULE_UPDATE, workspaceId, id, updates),
+  scheduleDelete: (workspaceId: string, id: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SCHEDULE_DELETE, workspaceId, id),
+  scheduleToggle: (workspaceId: string, id: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SCHEDULE_TOGGLE, workspaceId, id),
+  scheduleRunNow: (workspaceId: string, id: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SCHEDULE_RUN_NOW, workspaceId, id),
+  onScheduleEvent: (callback: (event: import('../shared/types').ScheduleEvent) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, scheduleEvent: import('../shared/types').ScheduleEvent) => {
+      callback(scheduleEvent)
+    }
+    ipcRenderer.on(IPC_CHANNELS.SCHEDULE_EVENT, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.SCHEDULE_EVENT, handler)
+    }
+  },
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)

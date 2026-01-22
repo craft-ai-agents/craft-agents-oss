@@ -489,6 +489,39 @@ export interface NewChatActionParams {
   name?: string
 }
 
+// ============================================
+// Scheduler Types
+// ============================================
+
+/**
+ * Scheduled task definition
+ */
+export interface Schedule {
+  id: string
+  name: string
+  prompt: string
+  cron: string | null        // null = one-time
+  scheduledFor: number | null // Unix timestamp for one-time
+  timezone: string
+  enabled: boolean
+  lastRunAt: number | null
+  lastRunStatus: 'success' | 'failed' | null
+  lastRunError: string | null
+  createdAt: number
+}
+
+/**
+ * Data for creating/updating a schedule
+ */
+export interface ScheduleFormData {
+  name: string
+  prompt: string
+  cron: string | null
+  scheduledFor: number | null
+  timezone: string
+  enabled: boolean
+}
+
 // IPC channel names
 export const IPC_CHANNELS = {
   // Session management
@@ -698,6 +731,15 @@ export const IPC_CHANNELS = {
 
   // Vector Search (QMD integration)
   VECTOR_SEARCH_EXECUTE: 'vector-search:execute',
+
+  // Scheduler (automated task scheduling)
+  SCHEDULE_LIST: 'schedule:list',
+  SCHEDULE_CREATE: 'schedule:create',
+  SCHEDULE_UPDATE: 'schedule:update',
+  SCHEDULE_DELETE: 'schedule:delete',
+  SCHEDULE_TOGGLE: 'schedule:toggle',
+  SCHEDULE_RUN_NOW: 'schedule:runNow',
+  SCHEDULE_EVENT: 'schedule:event',  // Broadcast: schedule execution events
 } as const
 
 // Re-import types for ElectronAPI
@@ -921,6 +963,26 @@ export interface ElectronAPI {
 
   // Vector Search (QMD CLI integration)
   vectorSearchExecute(args: string[]): Promise<VectorSearchExecuteResult>
+
+  // Scheduler (automated task scheduling)
+  scheduleList(workspaceId: string): Promise<Schedule[]>
+  scheduleCreate(workspaceId: string, data: ScheduleFormData): Promise<Schedule>
+  scheduleUpdate(workspaceId: string, id: string, updates: Partial<ScheduleFormData>): Promise<Schedule | null>
+  scheduleDelete(workspaceId: string, id: string): Promise<void>
+  scheduleToggle(workspaceId: string, id: string): Promise<Schedule | null>
+  scheduleRunNow(workspaceId: string, id: string): Promise<void>
+  onScheduleEvent(callback: (event: ScheduleEvent) => void): () => void
+}
+
+/**
+ * Schedule execution event (main → renderer)
+ */
+export interface ScheduleEvent {
+  type: 'started' | 'completed' | 'failed'
+  scheduleId: string
+  scheduleName: string
+  sessionId?: string
+  error?: string
 }
 
 /**
@@ -1113,6 +1175,15 @@ export interface VectorSearchNavigationState {
 }
 
 /**
+ * Schedules navigation state - shows ScheduleList panel
+ */
+export interface SchedulesNavigationState {
+  navigator: 'schedules'
+  /** Optional right sidebar panel state */
+  rightSidebar?: RightSidebarPanel
+}
+
+/**
  * Unified navigation state - single source of truth for all 3 panels
  *
  * From this state we can derive:
@@ -1126,6 +1197,7 @@ export type NavigationState =
   | SettingsNavigationState
   | SkillsNavigationState
   | VectorSearchNavigationState
+  | SchedulesNavigationState
 
 /**
  * Type guard to check if state is chats navigation
@@ -1163,6 +1235,13 @@ export const isVectorSearchNavigation = (
 ): state is VectorSearchNavigationState => state.navigator === 'vectorSearch'
 
 /**
+ * Type guard to check if state is schedules navigation
+ */
+export const isSchedulesNavigation = (
+  state: NavigationState
+): state is SchedulesNavigationState => state.navigator === 'schedules'
+
+/**
  * Default navigation state - allChats with no selection
  */
 export const DEFAULT_NAVIGATION_STATE: NavigationState = {
@@ -1194,6 +1273,9 @@ export const getNavigationStateKey = (state: NavigationState): string => {
   }
   if (state.navigator === 'vectorSearch') {
     return 'vectorSearch'
+  }
+  if (state.navigator === 'schedules') {
+    return 'schedules'
   }
   if (state.navigator === 'settings') {
     return `settings:${state.subpage}`
@@ -1250,6 +1332,9 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
 
   // Handle vector search
   if (key === 'vectorSearch') return { navigator: 'vectorSearch' }
+
+  // Handle schedules
+  if (key === 'schedules') return { navigator: 'schedules' }
 
   // Handle settings
   if (key === 'settings') return { navigator: 'settings', subpage: 'app' }
