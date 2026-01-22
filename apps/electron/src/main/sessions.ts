@@ -99,9 +99,13 @@ async function buildServersFromSources(sources: LoadedSource[]) {
 
         // Refresh if expired or expiring soon (within 5 min)
         if (!cred || credManager.isExpired(cred) || credManager.needsRefresh(cred)) {
-          sessionLog(`[OAuth] Refreshing token for ${source.config.slug}`)
-          const token = await credManager.refresh(source)
-          if (token) return token
+          sessionLog.debug(`[OAuth] Refreshing token for ${source.config.slug}`)
+          try {
+            const token = await credManager.refresh(source)
+            if (token) return token
+          } catch (err) {
+            sessionLog.warn(`[OAuth] Refresh failed for ${source.config.slug}: ${err}`)
+          }
         }
 
         // Use cached token if still valid
