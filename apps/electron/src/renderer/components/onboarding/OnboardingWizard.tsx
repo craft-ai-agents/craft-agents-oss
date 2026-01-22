@@ -43,6 +43,12 @@ interface OnboardingWizardProps {
   onSubmitAuthCode?: (code: string) => void
   onCancelOAuth?: () => void
 
+  // Advanced API options
+  baseUrl?: string
+  onBaseUrlChange?: (value: string) => void
+  customModelNames?: { opus: string; sonnet: string; haiku: string }
+  onCustomModelNamesChange?: (names: { opus: string; sonnet: string; haiku: string }) => void
+
   className?: string
 }
 
@@ -70,6 +76,11 @@ export function OnboardingWizard({
   isWaitingForCode,
   onSubmitAuthCode,
   onCancelOAuth,
+  // Advanced API options
+  baseUrl,
+  onBaseUrlChange,
+  customModelNames,
+  onCustomModelNamesChange,
   className
 }: OnboardingWizardProps) {
   const renderStep = () => {
@@ -107,6 +118,10 @@ export function OnboardingWizard({
             isWaitingForCode={isWaitingForCode}
             onSubmitAuthCode={onSubmitAuthCode}
             onCancelOAuth={onCancelOAuth}
+            baseUrl={baseUrl}
+            onBaseUrlChange={onBaseUrlChange}
+            customModelNames={customModelNames}
+            onCustomModelNamesChange={onCustomModelNamesChange}
           />
         )
 

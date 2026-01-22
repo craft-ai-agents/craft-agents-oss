@@ -43,6 +43,12 @@ export interface PendingUpdate {
 // Config stored in JSON file (credentials stored in encrypted file, not here)
 export interface StoredConfig {
   authType?: AuthType;
+  anthropicBaseUrl?: string;  // Custom Anthropic API base URL (for third-party compatible APIs)
+  customModelNames?: {  // Custom model name mappings for third-party APIs
+    opus?: string;
+    sonnet?: string;
+    haiku?: string;
+  };
   workspaces: Workspace[];
   activeWorkspaceId: string | null;
   activeSessionId: string | null;  // Currently active session (primary scope)
@@ -214,6 +220,25 @@ export function setAuthType(authType: AuthType): void {
   if (!config) return;
   config.authType = authType;
   saveConfig(config);
+}
+
+export function setAnthropicBaseUrl(baseUrl: string | null): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+
+  if (baseUrl) {
+    const trimmed = baseUrl.trim();
+    // URL validation deferred to Test Connection button
+    config.anthropicBaseUrl = trimmed;
+  } else {
+    delete config.anthropicBaseUrl;
+  }
+  saveConfig(config);
+}
+
+export function getAnthropicBaseUrl(): string | null {
+  const config = loadStoredConfig();
+  return config?.anthropicBaseUrl ?? null;
 }
 
 export function getModel(): string | null {
@@ -1077,4 +1102,67 @@ export function clearPendingUpdate(): void {
   if (!config) return;
   delete config.pendingUpdate;
   saveConfig(config);
+}
+
+// ============================================
+// Custom Model Names (for third-party APIs)
+// ============================================
+
+/**
+ * Get custom model name mappings for third-party APIs.
+ * Returns null if no custom names are configured.
+ */
+export function getCustomModelNames(): { opus?: string; sonnet?: string; haiku?: string } | null {
+  const config = loadStoredConfig();
+  return config?.customModelNames ?? null;
+}
+
+/**
+ * Set custom model name mappings for third-party APIs.
+ * Pass null to clear the configuration.
+ */
+export function setCustomModelNames(names: { opus?: string; sonnet?: string; haiku?: string } | null): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+
+  if (names && Object.values(names).some(v => v?.trim())) {
+    // Only save non-empty values
+    config.customModelNames = Object.fromEntries(
+      Object.entries(names).filter(([_, v]) => v?.trim())
+    ) as typeof names;
+  } else {
+    delete config.customModelNames;
+  }
+  saveConfig(config);
+}
+
+/**
+ * Get the model family key for a standard Anthropic model ID.
+ * Returns null for non-standard model IDs.
+ * @param modelId - The model ID to analyze
+ * @returns The model family key ('opus' | 'sonnet' | 'haiku') or null
+ */
+function getModelFamilyKey(modelId: string): 'opus' | 'sonnet' | 'haiku' | null {
+  // Match standard Anthropic model ID format: claude-{family}-{version}
+  // e.g., claude-opus-4-5-20251101, claude-sonnet-4-5-20250929
+  const match = modelId.match(/^claude-(opus|sonnet|haiku)-/);
+  return (match?.[1] as 'opus' | 'sonnet' | 'haiku') ?? null;
+}
+
+/**
+ * Resolve model ID based on user's custom model name configuration.
+ * For third-party APIs, users can override default model IDs with custom ones.
+ * @param defaultModelId - The default Anthropic model ID (e.g., 'claude-opus-4-5-20251101')
+ * @returns The resolved model ID (custom or default)
+ */
+export function resolveModelId(defaultModelId: string): string {
+  const customNames = getCustomModelNames();
+  if (!customNames) return defaultModelId;
+
+  // Get model family key using precise prefix matching
+  const modelKey = getModelFamilyKey(defaultModelId);
+  if (!modelKey) return defaultModelId;
+
+  // Return custom name if configured for this model family
+  return customNames[modelKey] || defaultModelId;
 }

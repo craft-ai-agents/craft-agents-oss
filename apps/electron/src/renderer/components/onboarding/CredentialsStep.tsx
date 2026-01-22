@@ -2,8 +2,9 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { cn } from "@/lib/utils"
-import { Eye, EyeOff, ExternalLink, CheckCircle2, XCircle } from "lucide-react"
+import { Eye, EyeOff, ExternalLink, CheckCircle2, XCircle, ChevronDown } from "lucide-react"
 import { Spinner } from "@craft-agent/ui"
 import type { BillingMethod } from "./BillingMethodStep"
 import { StepFormLayout, BackButton, ContinueButton, type StepIconVariant } from "./primitives"
@@ -25,6 +26,11 @@ interface CredentialsStepProps {
   isWaitingForCode?: boolean
   onSubmitAuthCode?: (code: string) => void
   onCancelOAuth?: () => void
+  // Advanced API options
+  baseUrl?: string
+  onBaseUrlChange?: (value: string) => void
+  customModelNames?: { opus: string; sonnet: string; haiku: string }
+  onCustomModelNamesChange?: (names: { opus: string; sonnet: string; haiku: string }) => void
 }
 
 function getOAuthIcon(status: CredentialStatus): React.ReactNode {
@@ -84,10 +90,19 @@ export function CredentialsStep({
   isWaitingForCode,
   onSubmitAuthCode,
   onCancelOAuth,
+  // Advanced API options
+  baseUrl = '',
+  onBaseUrlChange,
+  customModelNames = { opus: '', sonnet: '', haiku: '' },
+  onCustomModelNamesChange,
 }: CredentialsStepProps) {
   const [value, setValue] = useState('')
   const [showValue, setShowValue] = useState(false)
+  // Test connection state
+  const [isTestingConnection, setIsTestingConnection] = useState(false)
+  const [testConnectionResult, setTestConnectionResult] = useState<{ success: boolean; error?: string; modelCount?: number } | null>(null)
   const [authCode, setAuthCode] = useState('')
+  const [showAdvanced, setShowAdvanced] = useState(false)
 
   const isApiKey = billingMethod === 'api_key'
   const isOAuth = billingMethod === 'claude_oauth'
@@ -301,6 +316,148 @@ export function CredentialsStep({
             <p className="text-sm text-destructive">{errorMessage}</p>
           )}
         </div>
+
+        {/* Advanced Options */}
+        <Collapsible open={showAdvanced} onOpenChange={setShowAdvanced} className="mt-4">
+          <CollapsibleTrigger className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+            <ChevronDown className={cn("size-4 transition-transform", showAdvanced && "rotate-180")} />
+            Advanced Options
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-3 space-y-4">
+            {/* Base URL */}
+            <div className="space-y-2">
+              <Label htmlFor="base-url" className="text-xs text-muted-foreground">
+                Anthropic Base URL <span className="font-normal">(optional)</span>
+              </Label>
+              <Input
+                id="base-url"
+                type="text"
+                value={baseUrl}
+                onChange={(e) => onBaseUrlChange?.(e.target.value)}
+                placeholder="https://api.anthropic.com"
+                disabled={status === 'validating'}
+                className="text-sm"
+              />
+              <p className="text-xs text-muted-foreground">
+                For third-party Claude-compatible APIs. Leave empty for official API.
+              </p>
+            </div>
+
+            {/* Custom Model Names */}
+            <div className="space-y-3 pt-2 border-t border-border">
+              <div>
+                <Label className="text-xs text-muted-foreground">
+                  Custom Model Names <span className="font-normal">(optional)</span>
+                </Label>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Override model IDs for third-party APIs.
+                </p>
+              </div>
+
+              {/* Opus */}
+              <div className="space-y-1.5">
+                <Label htmlFor="model-opus" className="text-xs text-muted-foreground">
+                  Opus (Most capable)
+                </Label>
+                <Input
+                  id="model-opus"
+                  type="text"
+                  value={customModelNames.opus}
+                  onChange={(e) => onCustomModelNamesChange?.({ ...customModelNames, opus: e.target.value })}
+                  placeholder="claude-opus-4-5-20251101"
+                  disabled={status === 'validating'}
+                  className="font-mono text-sm"
+                />
+              </div>
+
+              {/* Sonnet */}
+              <div className="space-y-1.5">
+                <Label htmlFor="model-sonnet" className="text-xs text-muted-foreground">
+                  Sonnet (Balanced)
+                </Label>
+                <Input
+                  id="model-sonnet"
+                  type="text"
+                  value={customModelNames.sonnet}
+                  onChange={(e) => onCustomModelNamesChange?.({ ...customModelNames, sonnet: e.target.value })}
+                  placeholder="claude-sonnet-4-5-20250929"
+                  disabled={status === 'validating'}
+                  className="font-mono text-sm"
+                />
+              </div>
+
+              {/* Haiku */}
+              <div className="space-y-1.5">
+                <Label htmlFor="model-haiku" className="text-xs text-muted-foreground">
+                  Haiku (Fast &amp; efficient)
+                </Label>
+                <Input
+                  id="model-haiku"
+                  type="text"
+                  value={customModelNames.haiku}
+                  onChange={(e) => onCustomModelNamesChange?.({ ...customModelNames, haiku: e.target.value })}
+                  placeholder="claude-haiku-4-5-20251001"
+                  disabled={status === 'validating'}
+                  className="font-mono text-sm"
+                />
+              </div>
+            </div>
+
+            {/* Test Connection Button */}
+            <div className="pt-2 border-t border-border">
+              <div className="flex items-center gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    setIsTestingConnection(true)
+                    setTestConnectionResult(null)
+                    try {
+                      // Use the first available custom model name for testing
+                      const testModel = customModelNames.sonnet || customModelNames.opus || customModelNames.haiku || undefined
+                      const result = await window.electronAPI.testApiConnection(
+                        value,
+                        baseUrl || undefined,
+                        testModel
+                      )
+                      setTestConnectionResult(result)
+                    } catch (error) {
+                      setTestConnectionResult({
+                        success: false,
+                        error: error instanceof Error ? error.message : 'Connection failed'
+                      })
+                    } finally {
+                      setIsTestingConnection(false)
+                    }
+                  }}
+                  disabled={!value.trim() || isTestingConnection}
+                >
+                  {isTestingConnection ? (
+                    <>
+                      <Spinner className="size-3 mr-1.5" />
+                      Testing...
+                    </>
+                  ) : (
+                    'Test Connection'
+                  )}
+                </Button>
+                {testConnectionResult && (
+                  <span className={cn(
+                    'text-sm',
+                    testConnectionResult.success ? 'text-success' : 'text-destructive'
+                  )}>
+                    {testConnectionResult.success
+                      ? testConnectionResult.modelCount
+                        ? `✓ Connected (${testConnectionResult.modelCount} models)`
+                        : '✓ Connected'
+                      : `✗ ${testConnectionResult.error}`}
+                  </span>
+                )}
+              </div>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
       </form>
     </StepFormLayout>
   )

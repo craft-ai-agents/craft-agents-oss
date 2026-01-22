@@ -1,18 +1,13 @@
 /**
  * Credential Manager
  *
- * Main interface for credential storage. Automatically selects the best
- * available backend and provides convenience methods for common operations.
- *
- * Backend priority:
- *   1. Environment variables (server deployment, read-only)
- *   2. Encrypted file storage (cross-platform, no OS keychain prompts)
+ * Main interface for credential storage. Uses encrypted file storage
+ * for cross-platform compatibility without OS keychain prompts.
  */
 
 import type { CredentialBackend } from './backends/types.ts';
 import type { CredentialId, CredentialType, StoredCredential } from './types.ts';
 import { SecureStorageBackend } from './backends/secure-storage.ts';
-import { EnvironmentBackend } from './backends/env.ts';
 import { debug } from '../utils/debug.ts';
 
 export class CredentialManager {
@@ -52,10 +47,8 @@ export class CredentialManager {
   }
 
   private async _doInitialize(): Promise<void> {
-    // Register backends in priority order (secure storage + environment)
     const potentialBackends: CredentialBackend[] = [
       new SecureStorageBackend(),
-      new EnvironmentBackend(),
     ];
 
     // Check which backends are available
@@ -69,13 +62,13 @@ export class CredentialManager {
     // Sort by priority (highest first)
     this.backends.sort((a, b) => b.priority - a.priority);
 
-    // Find the first writable backend (not environment)
-    this.writeBackend = this.backends.find((b) => b.name !== 'environment') || null;
+    // Use the first available backend for writing
+    this.writeBackend = this.backends[0] || null;
 
     if (this.writeBackend) {
-      debug(`[CredentialManager] Using write backend: ${this.writeBackend.name}`);
+      debug(`[CredentialManager] Using backend: ${this.writeBackend.name}`);
     } else {
-      debug(`[CredentialManager] WARNING: No writable backend available.`);
+      debug(`[CredentialManager] WARNING: No backend available.`);
     }
 
     this.initialized = true;
@@ -132,8 +125,6 @@ export class CredentialManager {
 
     let deleted = false;
     for (const backend of this.backends) {
-      if (backend.name === 'environment') continue;
-
       try {
         if (await backend.delete(id)) {
           deleted = true;

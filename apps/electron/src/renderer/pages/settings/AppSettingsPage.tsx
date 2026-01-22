@@ -18,15 +18,12 @@ import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { HeaderMenu } from '@/components/ui/HeaderMenu'
 import { useTheme } from '@/context/ThemeContext'
-import { cn } from '@/lib/utils'
 import { routes } from '@/lib/navigate'
+import { cn } from '@/lib/utils'
 import {
   Monitor,
   Sun,
   Moon,
-  Eye,
-  EyeOff,
-  Check,
   ExternalLink,
   CheckCircle2,
 } from 'lucide-react'
@@ -44,7 +41,6 @@ import {
   SettingsMenuSelect,
 } from '@/components/settings'
 import { useUpdateChecker } from '@/hooks/useUpdateChecker'
-import { useAppShellContext } from '@/context/AppShellContext'
 import type { PresetTheme } from '@config/theme'
 import {
   Dialog,
@@ -53,102 +49,11 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog'
+import { SettingsSecretInput, SettingsInput } from '@/components/settings'
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
   slug: 'app',
-}
-
-// ============================================
-// API Key Dialog Content
-// ============================================
-
-interface ApiKeyDialogProps {
-  value: string
-  onChange: (value: string) => void
-  onSave: () => void
-  onCancel: () => void
-  isSaving: boolean
-  hasExistingKey: boolean
-  error?: string
-}
-
-function ApiKeyDialogContent({ value, onChange, onSave, onCancel, isSaving, hasExistingKey, error }: ApiKeyDialogProps) {
-  const [showValue, setShowValue] = useState(false)
-
-  return (
-    <div className="space-y-4">
-      {/* Description */}
-      <p className="text-sm text-muted-foreground">
-        Pay-as-you-go with your own API key.{' '}
-        <a
-          href="https://console.anthropic.com"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-foreground hover:underline inline-flex items-center gap-0.5"
-          onClick={(e) => {
-            e.preventDefault()
-            window.electronAPI?.openUrl('https://console.anthropic.com')
-          }}
-        >
-          Get one from Anthropic
-          <ExternalLink className="size-3" />
-        </a>
-      </p>
-
-      {/* Input */}
-      <div className="relative">
-        <Input
-          type={showValue ? 'text' : 'password'}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={hasExistingKey ? '••••••••••••••••' : 'sk-ant-...'}
-          className={cn("pr-10", error && "border-destructive")}
-          disabled={isSaving}
-        />
-        <button
-          type="button"
-          onClick={() => setShowValue(!showValue)}
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-          tabIndex={-1}
-        >
-          {showValue ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-        </button>
-      </div>
-
-      {/* Error message */}
-      {error && (
-        <p className="text-xs text-destructive">{error}</p>
-      )}
-
-      {/* Actions */}
-      <div className="flex items-center gap-2 pt-2">
-        <Button
-          onClick={onSave}
-          disabled={!value.trim() || isSaving}
-        >
-          {isSaving ? (
-            <>
-              <Spinner className="mr-1.5" />
-              Validating...
-            </>
-          ) : (
-            <>
-              <Check className="size-3 mr-1.5" />
-              {hasExistingKey ? 'Update Key' : 'Save'}
-            </>
-          )}
-        </Button>
-        <Button
-          variant="ghost"
-          onClick={onCancel}
-          disabled={isSaving}
-        >
-          Cancel
-        </Button>
-      </div>
-    </div>
-  )
 }
 
 // ============================================
@@ -318,14 +223,135 @@ function ClaudeOAuthDialogContent(props: ClaudeOAuthDialogProps) {
 }
 
 // ============================================
+// API Key Auto-Save Hook
+// ============================================
+
+const MIN_SAVE_DISPLAY_MS = 1500
+const DEBOUNCE_MS = 500
+
+function useApiKeyAutoSave({
+  apiKey,
+  baseUrl,
+  customModelNames,
+  authType,
+  hasCredential,
+  onSaveStart,
+  onSaveSuccess,
+  onSaveError,
+}: {
+  apiKey: string
+  baseUrl: string
+  customModelNames: { opus: string; sonnet: string; haiku: string }
+  authType: AuthType
+  hasCredential: boolean
+  onSaveStart?: () => void
+  onSaveSuccess?: () => void
+  onSaveError?: (error: string) => void
+}) {
+  const debounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastSavedRef = React.useRef<string | null>(null)
+  const isInitialLoadRef = React.useRef(true)
+  const saveStartTimeRef = React.useRef<number>(0)
+
+  const serializeConfig = React.useCallback(() => {
+    return JSON.stringify({ apiKey, baseUrl, customModelNames })
+  }, [apiKey, baseUrl, customModelNames])
+
+  const doSave = React.useCallback(async () => {
+    if (authType !== 'api_key') return
+
+    const currentConfig = serializeConfig()
+    if (currentConfig === lastSavedRef.current) return
+
+    const trimmedKey = apiKey.trim()
+
+    saveStartTimeRef.current = Date.now()
+    onSaveStart?.()
+    try {
+      const modelNames = (customModelNames.opus || customModelNames.sonnet || customModelNames.haiku)
+        ? {
+            opus: customModelNames.opus.trim() || undefined,
+            sonnet: customModelNames.sonnet.trim() || undefined,
+            haiku: customModelNames.haiku.trim() || undefined,
+          }
+        : null
+
+      await window.electronAPI.updateBillingMethod(
+        'api_key',
+        trimmedKey,  // Pass empty string to clear credential
+        baseUrl.trim() || null,
+        modelNames
+      )
+      lastSavedRef.current = currentConfig
+
+      // Ensure saving indicator shows for at least MIN_SAVE_DISPLAY_MS
+      const elapsed = Date.now() - saveStartTimeRef.current
+      const remaining = MIN_SAVE_DISPLAY_MS - elapsed
+      if (remaining > 0) {
+        setTimeout(() => onSaveSuccess?.(), remaining)
+      } else {
+        onSaveSuccess?.()
+      }
+    } catch (error) {
+      const elapsed = Date.now() - saveStartTimeRef.current
+      const remaining = MIN_SAVE_DISPLAY_MS - elapsed
+      const errorMsg = error instanceof Error ? error.message : 'Failed to save'
+      if (remaining > 0) {
+        setTimeout(() => onSaveError?.(errorMsg), remaining)
+      } else {
+        onSaveError?.(errorMsg)
+      }
+    }
+  }, [authType, apiKey, baseUrl, customModelNames, serializeConfig, onSaveStart, onSaveSuccess, onSaveError])
+
+  const handleBlur = React.useCallback(() => {
+    if (isInitialLoadRef.current) return
+    doSave()
+  }, [doSave])
+
+  // Debounce auto-save on input change
+  React.useEffect(() => {
+    if (authType !== 'api_key') return
+    if (isInitialLoadRef.current) return
+
+    // Clear previous debounce timer
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current)
+    }
+
+    // Schedule save after debounce delay
+    debounceRef.current = setTimeout(() => {
+      doSave()
+    }, DEBOUNCE_MS)
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [authType, apiKey, baseUrl, customModelNames, doSave])
+
+  // Initialize lastSavedRef when API key is first loaded from backend
+  // This effect waits for hasCredential to be set (indicating data is loaded)
+  // before setting the initial saved state and enabling auto-save
+  React.useEffect(() => {
+    if (authType === 'api_key' && isInitialLoadRef.current) {
+      // Initialize after a short delay to ensure backend data has loaded
+      // hasCredential indicates whether backend has a stored credential
+      lastSavedRef.current = serializeConfig()
+      setTimeout(() => {
+        isInitialLoadRef.current = false
+      }, 100)
+    }
+  }, [authType, hasCredential, serializeConfig])
+
+  return { handleBlur }
+}
+
+// ============================================
 // Main Component
 // ============================================
 
 export default function AppSettingsPage() {
-  const { mode, setMode, colorTheme, setColorTheme, setPreviewColorTheme, font, setFont } = useTheme()
-
-  // Get workspace ID from context for loading preset themes
-  const { activeWorkspaceId } = useAppShellContext()
+  const { mode, setMode, colorTheme, setColorTheme, font, setFont } = useTheme()
 
   // Preset themes state
   const [presetThemes, setPresetThemes] = useState<PresetTheme[]>([])
@@ -334,12 +360,19 @@ export default function AppSettingsPage() {
   const [authType, setAuthType] = useState<AuthType>('api_key')
   const [expandedMethod, setExpandedMethod] = useState<AuthType | null>(null)
   const [hasCredential, setHasCredential] = useState(false)
-  const [isLoadingBilling, setIsLoadingBilling] = useState(true)
 
   // API Key state
   const [apiKeyValue, setApiKeyValue] = useState('')
-  const [isSavingApiKey, setIsSavingApiKey] = useState(false)
+  const [baseUrlValue, setBaseUrlValue] = useState('')
+  const [customModelNames, setCustomModelNames] = useState({
+    opus: '',
+    sonnet: '',
+    haiku: ''
+  })
   const [apiKeyError, setApiKeyError] = useState<string | undefined>()
+  // Test connection state
+  const [isTestingConnection, setIsTestingConnection] = useState(false)
+  const [testConnectionResult, setTestConnectionResult] = useState<{ success: boolean; error?: string; modelCount?: number } | null>(null)
 
   // Claude OAuth state
   const [existingClaudeToken, setExistingClaudeToken] = useState<string | null>(null)
@@ -364,6 +397,21 @@ export default function AppSettingsPage() {
     }
   }, [updateChecker])
 
+  // API Key auto-save hook
+  const { handleBlur } = useApiKeyAutoSave({
+    apiKey: apiKeyValue,
+    baseUrl: baseUrlValue,
+    customModelNames,
+    authType,
+    hasCredential,
+    onSaveSuccess: () => {
+      // Could show a success indicator here if needed
+    },
+    onSaveError: (error) => {
+      setApiKeyError(error)
+    },
+  })
+
   // Load current billing method, notifications setting, and preset themes on mount
   useEffect(() => {
     const loadSettings = async () => {
@@ -375,11 +423,18 @@ export default function AppSettingsPage() {
         ])
         setAuthType(billing.authType)
         setHasCredential(billing.hasCredential)
+        setApiKeyValue(billing.apiKey || '')
+        setBaseUrlValue(billing.anthropicBaseUrl || '')
+        if (billing.customModelNames) {
+          setCustomModelNames({
+            opus: billing.customModelNames.opus || '',
+            sonnet: billing.customModelNames.sonnet || '',
+            haiku: billing.customModelNames.haiku || '',
+          })
+        }
         setNotificationsEnabled(notificationsOn)
       } catch (error) {
         console.error('Failed to load settings:', error)
-      } finally {
-        setIsLoadingBilling(false)
       }
     }
     loadSettings()
@@ -422,6 +477,34 @@ export default function AppSettingsPage() {
 
   // Handle clicking on a billing method option
   const handleMethodClick = useCallback(async (method: AuthType) => {
+    if (method === 'api_key') {
+      if (authType !== 'api_key') {
+        try {
+          // Switch to api_key mode using current frontend state (don't reload from backend)
+          const trimmedKey = apiKeyValue.trim() || undefined
+          const modelNames = (customModelNames.opus || customModelNames.sonnet || customModelNames.haiku)
+            ? {
+                opus: customModelNames.opus.trim() || undefined,
+                sonnet: customModelNames.sonnet.trim() || undefined,
+                haiku: customModelNames.haiku.trim() || undefined,
+              }
+            : null
+
+          await window.electronAPI.updateBillingMethod(
+            'api_key',
+            trimmedKey,
+            baseUrlValue.trim() || null,
+            modelNames
+          )
+          setAuthType('api_key')
+          setHasCredential(!!trimmedKey)
+        } catch (error) {
+          console.error('Failed to switch to API key mode:', error)
+        }
+      }
+      return
+    }
+
     if (method === authType && hasCredential) {
       setExpandedMethod(null)
       return
@@ -431,36 +514,7 @@ export default function AppSettingsPage() {
     setApiKeyError(undefined)
     setClaudeOAuthStatus('idle')
     setClaudeOAuthError(undefined)
-  }, [authType, hasCredential])
-
-  // Cancel billing method expansion
-  const handleCancel = useCallback(() => {
-    setExpandedMethod(null)
-    setApiKeyValue('')
-    setApiKeyError(undefined)
-    setClaudeOAuthStatus('idle')
-    setClaudeOAuthError(undefined)
-  }, [])
-
-  // Save API key
-  const handleSaveApiKey = useCallback(async () => {
-    if (!window.electronAPI || !apiKeyValue.trim()) return
-
-    setIsSavingApiKey(true)
-    setApiKeyError(undefined)
-    try {
-      await window.electronAPI.updateBillingMethod('api_key', apiKeyValue.trim())
-      setAuthType('api_key')
-      setHasCredential(true)
-      setApiKeyValue('')
-      setExpandedMethod(null)
-    } catch (error) {
-      console.error('Failed to save API key:', error)
-      setApiKeyError(error instanceof Error ? error.message : 'Invalid API key. Please check and try again.')
-    } finally {
-      setIsSavingApiKey(false)
-    }
-  }, [apiKeyValue])
+  }, [authType, hasCredential, apiKeyValue])
 
   // Use existing Claude token
   const handleUseExistingClaudeToken = useCallback(async () => {
@@ -642,26 +696,114 @@ export default function AppSettingsPage() {
                 />
               </SettingsCard>
 
-              {/* API Key Dialog */}
-              <Dialog open={expandedMethod === 'api_key'} onOpenChange={(open) => !open && handleCancel()}>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>API Key</DialogTitle>
-                    <DialogDescription>
-                      Configure your Anthropic API key
-                    </DialogDescription>
-                  </DialogHeader>
-                  <ApiKeyDialogContent
+              {/* API Key Inline Config */}
+              {authType === 'api_key' && (
+                <SettingsCard className="mt-2" divided>
+                  <SettingsSecretInput
+                    label="API Key"
+                    description="Pay-as-you-go with your Anthropic key"
                     value={apiKeyValue}
                     onChange={setApiKeyValue}
-                    onSave={handleSaveApiKey}
-                    onCancel={handleCancel}
-                    isSaving={isSavingApiKey}
-                    hasExistingKey={authType === 'api_key' && hasCredential}
+                    onBlur={handleBlur}
+                    placeholder="sk-ant-..."
+                    inCard
                     error={apiKeyError}
                   />
-                </DialogContent>
-              </Dialog>
+
+                  <SettingsInput
+                    label="Anthropic Base URL"
+                    description="For third-party Claude-compatible APIs (optional)"
+                    value={baseUrlValue}
+                    onChange={setBaseUrlValue}
+                    onBlur={handleBlur}
+                    placeholder="https://api.anthropic.com"
+                    inCard
+                  />
+
+                  <div className="px-4 py-3.5 space-y-3">
+                    <div>
+                      <Label className="text-sm font-medium">Custom Model Names</Label>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Override model IDs for third-party APIs (optional)
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-3 gap-3">
+                      <Input
+                        placeholder="Opus"
+                        value={customModelNames.opus}
+                        onChange={(e) => setCustomModelNames(prev => ({ ...prev, opus: e.target.value }))}
+                        onBlur={handleBlur}
+                      />
+                      <Input
+                        placeholder="Sonnet"
+                        value={customModelNames.sonnet}
+                        onChange={(e) => setCustomModelNames(prev => ({ ...prev, sonnet: e.target.value }))}
+                        onBlur={handleBlur}
+                      />
+                      <Input
+                        placeholder="Haiku"
+                        value={customModelNames.haiku}
+                        onChange={(e) => setCustomModelNames(prev => ({ ...prev, haiku: e.target.value }))}
+                        onBlur={handleBlur}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Test Connection Button */}
+                  <div className="px-4 py-3 border-t border-border/50">
+                    <div className="flex items-center gap-3">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={async () => {
+                          setIsTestingConnection(true)
+                          setTestConnectionResult(null)
+                          try {
+                            const testModel = customModelNames.sonnet || customModelNames.opus || customModelNames.haiku || undefined
+                            const result = await window.electronAPI.testApiConnection(
+                              apiKeyValue,
+                              baseUrlValue || undefined,
+                              testModel
+                            )
+                            setTestConnectionResult(result)
+                          } catch (error) {
+                            setTestConnectionResult({
+                              success: false,
+                              error: error instanceof Error ? error.message : 'Connection failed'
+                            })
+                          } finally {
+                            setIsTestingConnection(false)
+                          }
+                        }}
+                        disabled={!apiKeyValue?.trim() || isTestingConnection}
+                      >
+                        {isTestingConnection ? (
+                          <>
+                            <Spinner className="size-3 mr-1.5" />
+                            Testing...
+                          </>
+                        ) : (
+                          'Test Connection'
+                        )}
+                      </Button>
+                      {testConnectionResult && (
+                        <span className={cn(
+                          'text-sm',
+                          testConnectionResult.success ? 'text-success' : 'text-destructive'
+                        )}>
+                          {testConnectionResult.success
+                            ? testConnectionResult.modelCount
+                              ? `✓ Connected (${testConnectionResult.modelCount} models)`
+                              : '✓ Connected'
+                            : `✗ ${testConnectionResult.error}`}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+
+                </SettingsCard>
+              )}
 
               {/* Claude OAuth Dialog */}
               <Dialog open={expandedMethod === 'oauth_token'} onOpenChange={(open) => !open && handleCancelOAuth()}>

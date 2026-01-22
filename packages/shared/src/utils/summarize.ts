@@ -5,6 +5,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { SUMMARIZATION_MODEL } from '../config/models.ts';
+import { resolveModelId } from '../config/storage.ts';
 import { debug } from './debug.ts';
 import { getCredentialManager } from '../credentials/index.ts';
 
@@ -29,7 +30,11 @@ async function getAnthropicClient(): Promise<Anthropic | null> {
   // Option 1: Direct API key from env (set by setAuthEnvironment)
   const envApiKey = process.env.ANTHROPIC_API_KEY;
   if (envApiKey) {
-    anthropicClient = new Anthropic({ apiKey: envApiKey });
+    const baseUrl = process.env.ANTHROPIC_BASE_URL?.trim();
+    anthropicClient = new Anthropic({
+      apiKey: envApiKey,
+      ...(baseUrl ? { baseURL: baseUrl } : {})
+    });
     debug('[summarize] Using ANTHROPIC_API_KEY for summarization');
     return anthropicClient;
   }
@@ -37,7 +42,11 @@ async function getAnthropicClient(): Promise<Anthropic | null> {
   // Option 2: Claude Max OAuth token
   const oauthToken = process.env.CLAUDE_CODE_OAUTH_TOKEN;
   if (oauthToken) {
-    anthropicClient = new Anthropic({ apiKey: oauthToken });
+    const baseUrl = process.env.ANTHROPIC_BASE_URL?.trim();
+    anthropicClient = new Anthropic({
+      apiKey: oauthToken,
+      ...(baseUrl ? { baseURL: baseUrl } : {})
+    });
     debug('[summarize] Using CLAUDE_CODE_OAUTH_TOKEN for summarization');
     return anthropicClient;
   }
@@ -46,7 +55,11 @@ async function getAnthropicClient(): Promise<Anthropic | null> {
   const manager = getCredentialManager();
   const apiKey = await manager.getApiKey();
   if (apiKey) {
-    anthropicClient = new Anthropic({ apiKey });
+    const baseUrl = process.env.ANTHROPIC_BASE_URL?.trim();
+    anthropicClient = new Anthropic({
+      apiKey,
+      ...(baseUrl ? { baseURL: baseUrl } : {})
+    });
     debug('[summarize] Using API key from credential manager for summarization');
     return anthropicClient;
   }
@@ -132,7 +145,7 @@ export async function summarizeLargeResult(
 
   try {
     const result = await client.messages.create({
-      model: SUMMARIZATION_MODEL,
+      model: resolveModelId(SUMMARIZATION_MODEL),
       max_tokens: 4096,
       messages: [{
         role: 'user',

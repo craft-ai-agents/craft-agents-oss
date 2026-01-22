@@ -1233,6 +1233,10 @@ export default function App() {
           isWaitingForCode={onboarding.isWaitingForCode}
           onSubmitAuthCode={onboarding.handleSubmitAuthCode}
           onCancelOAuth={onboarding.handleCancelOAuth}
+          baseUrl={onboarding.baseUrl}
+          onBaseUrlChange={onboarding.setBaseUrl}
+          customModelNames={onboarding.customModelNames}
+          onCustomModelNamesChange={onboarding.setCustomModelNames}
         />
       </ModalProvider>
     )
