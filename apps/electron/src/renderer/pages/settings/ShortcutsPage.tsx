@@ -33,41 +33,41 @@ const cmdKey = isMac ? '⌘' : 'Ctrl'
 
 const sections: ShortcutSection[] = [
   {
-    title: 'Global',
+    title: 'shortcutsGlobal',
     shortcuts: [
-      { keys: [cmdKey, '1'], description: 'Focus sidebar' },
-      { keys: [cmdKey, '2'], description: 'Focus session list' },
-      { keys: [cmdKey, '3'], description: 'Focus chat input' },
-      { keys: [cmdKey, 'N'], description: 'New chat' },
-      { keys: [cmdKey, 'B'], description: 'Toggle sidebar' },
-      { keys: [cmdKey, ','], description: 'Open settings' },
+      { keys: [cmdKey, '1'], description: 'shortcutFocusSidebar' },
+      { keys: [cmdKey, '2'], description: 'shortcutFocusSessionList' },
+      { keys: [cmdKey, '3'], description: 'shortcutFocusChatInput' },
+      { keys: [cmdKey, 'N'], description: 'shortcutNewChat' },
+      { keys: [cmdKey, 'B'], description: 'shortcutToggleSidebar' },
+      { keys: [cmdKey, ','], description: 'shortcutOpenSettings' },
     ],
   },
   {
-    title: 'Navigation',
+    title: 'shortcutsNavigation',
     shortcuts: [
-      { keys: ['Tab'], description: 'Move to next zone' },
-      { keys: ['Shift', 'Tab'], description: 'Cycle permission mode' },
-      { keys: ['←', '→'], description: 'Move between zones (in lists)' },
-      { keys: ['↑', '↓'], description: 'Navigate items in list' },
-      { keys: ['Home'], description: 'Go to first item' },
-      { keys: ['End'], description: 'Go to last item' },
-      { keys: ['Esc'], description: 'Close dialog / blur input' },
+      { keys: ['Tab'], description: 'shortcutMoveToNextZone' },
+      { keys: ['Shift', 'Tab'], description: 'shortcutCyclePermissionMode' },
+      { keys: ['←', '→'], description: 'shortcutMoveBetweenZones' },
+      { keys: ['↑', '↓'], description: 'shortcutNavigateItems' },
+      { keys: ['Home'], description: 'shortcutGoToFirstItem' },
+      { keys: ['End'], description: 'shortcutGoToLastItem' },
+      { keys: ['Esc'], description: 'shortcutCloseDialog' },
     ],
   },
   {
-    title: 'Session List',
+    title: 'shortcutsSessionList',
     shortcuts: [
-      { keys: ['Enter'], description: 'Focus chat input' },
-      { keys: ['Delete'], description: 'Delete session' },
+      { keys: ['Enter'], description: 'shortcutFocusChatInputSession' },
+      { keys: ['Delete'], description: 'shortcutDeleteSession' },
     ],
   },
   {
-    title: 'Chat',
+    title: 'shortcutsChat',
     shortcuts: [
-      { keys: ['Enter'], description: 'Send message' },
-      { keys: ['Shift', 'Enter'], description: 'New line' },
-      { keys: [cmdKey, 'Enter'], description: 'Send message' },
+      { keys: ['Enter'], description: 'shortcutSendMessage' },
+      { keys: ['Shift', 'Enter'], description: 'shortcutNewLine' },
+      { keys: [cmdKey, 'Enter'], description: 'shortcutSendMessageCmd' },
     ],
   },
 ]
@@ -89,10 +89,10 @@ export default function ShortcutsPage() {
         <ScrollArea className="h-full">
           <div className="px-5 py-7 max-w-3xl mx-auto space-y-6">
             {sections.map((section) => (
-              <SettingsSection key={section.title} title={section.title}>
+              <SettingsSection key={section.title} title={t(section.title as any)}>
                 <SettingsCard>
                   {section.shortcuts.map((shortcut, index) => (
-                    <SettingsRow key={index} label={shortcut.description}>
+                    <SettingsRow key={index} label={t(shortcut.description as any)}>
                       <div className="flex items-center gap-1">
                         {shortcut.keys.map((key, keyIndex) => (
                           <Kbd key={keyIndex}>{key}</Kbd>

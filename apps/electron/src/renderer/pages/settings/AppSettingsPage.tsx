@@ -225,7 +225,7 @@ function ClaudeOAuthDialogContent(props: ClaudeOAuthDialogProps) {
               type="text"
               value={authCode}
               onChange={(e) => onAuthCodeChange(e.target.value)}
-              placeholder="Paste your authorization code here"
+              placeholder={t('pasteAuthCode' as any)}
               className="border-0 bg-transparent shadow-none font-mono text-sm"
               disabled={status === 'loading'}
               autoFocus
@@ -717,23 +717,23 @@ export default function AppSettingsPage() {
             {/* Appearance */}
             <SettingsSection title={t('appearance' as any)}>
               <SettingsCard>
-                <SettingsRow label="Mode">
+                <SettingsRow label={t('mode' as any)}>
                   <SettingsSegmentedControl
                     value={mode}
                     onValueChange={setMode}
                     options={[
-                      { value: 'system', label: 'System', icon: <Monitor className="w-4 h-4" /> },
-                      { value: 'light', label: 'Light', icon: <Sun className="w-4 h-4" /> },
-                      { value: 'dark', label: 'Dark', icon: <Moon className="w-4 h-4" /> },
+                      { value: 'system', label: t('system' as any), icon: <Monitor className="w-4 h-4" /> },
+                      { value: 'light', label: t('light' as any), icon: <Sun className="w-4 h-4" /> },
+                      { value: 'dark', label: t('dark' as any), icon: <Moon className="w-4 h-4" /> },
                     ]}
                   />
                 </SettingsRow>
-                <SettingsRow label="Color theme">
+                <SettingsRow label={t('colorTheme' as any)}>
                   <SettingsMenuSelect
                     value={colorTheme}
                     onValueChange={setColorTheme}
                     options={[
-                      { value: 'default', label: 'Default' },
+                      { value: 'default', label: t('defaultTheme' as any) },
                       ...presetThemes
                         .filter(t => t.id !== 'default')
                         .map(t => ({
@@ -743,13 +743,13 @@ export default function AppSettingsPage() {
                     ]}
                   />
                 </SettingsRow>
-                <SettingsRow label="Font">
+                <SettingsRow label={t('font' as any)}>
                   <SettingsSegmentedControl
                     value={font}
                     onValueChange={setFont}
                     options={[
-                      { value: 'inter', label: 'Inter' },
-                      { value: 'system', label: 'System' },
+                      { value: 'inter', label: t('interFont' as any) },
+                      { value: 'system', label: t('system' as any) },
                     ]}
                   />
                 </SettingsRow>
@@ -761,7 +761,7 @@ export default function AppSettingsPage() {
               <SettingsCard>
                 <SettingsToggle
                   label={t('notifications' as any)}
-                  description="Get notified when AI finishes working in a chat."
+                  description={t('getNotifiedDescription' as any)}
                   checked={notificationsEnabled}
                   onCheckedChange={handleNotificationsEnabledChange}
                 />
@@ -769,27 +769,27 @@ export default function AppSettingsPage() {
             </SettingsSection>
 
             {/* Billing */}
-            <SettingsSection title={t('billing' as any)} description="Choose how you pay for AI usage">
+            <SettingsSection title={t('billing' as any)} description={t('choosePaymentMethod' as any)}>
               <SettingsCard>
                 <SettingsMenuSelectRow
-                  label="Payment method"
+                  label={t('paymentMethod' as any)}
                   description={
                     authType === 'api_key' && hasCredential
-                      ? 'API key configured'
+                      ? t('apiKeyConfigured' as any)
                       : authType === 'oauth_token' && hasCredential
-                        ? 'Claude connected'
+                        ? t('claudeConnected' as any)
                         : authType === 'custom' && hasCredential
-                          ? 'Custom configured'
+                          ? t('customConfigured' as any)
                           : authType === 'custom'
-                            ? 'Custom (missing token)'
-                            : 'Select a method'
+                            ? t('customMissingToken' as any)
+                            : t('selectPaymentMethod' as any)
                   }
                   value={authType}
                   onValueChange={(v) => handleMethodClick(v as AuthType)}
                   options={[
-                    { value: 'oauth_token', label: 'Claude Pro/Max', description: 'Use your Pro or Max subscription' },
-                    { value: 'api_key', label: 'API Key', description: 'Pay-as-you-go with your Anthropic key' },
-                    { value: 'custom', label: 'Custom / Anthropic Compatible', description: 'Use ANTHROPIC_AUTH_TOKEN + base URL' },
+                    { value: 'oauth_token', label: t('claudeProMax' as any), description: t('claudeProMaxDescription' as any) },
+                    { value: 'api_key', label: t('apiKey' as any), description: t('apiKeyDescription' as any) },
+                    { value: 'custom', label: t('customAnthropicCompatible' as any), description: t('customAnthropicCompatibleDescription' as any) },
                   ]}
                 />
               </SettingsCard>
@@ -798,9 +798,9 @@ export default function AppSettingsPage() {
               <Dialog open={expandedMethod === 'api_key'} onOpenChange={(open) => !open && handleCancel()}>
                 <DialogContent>
                   <DialogHeader>
-                    <DialogTitle>API Key</DialogTitle>
+                    <DialogTitle>{t('apiKey' as any)}</DialogTitle>
                     <DialogDescription>
-                      Configure your Anthropic API key
+                      {t('configureApiKey' as any)}
                     </DialogDescription>
                   </DialogHeader>
                   <ApiKeyDialogContent
@@ -819,9 +819,9 @@ export default function AppSettingsPage() {
               <Dialog open={expandedMethod === 'oauth_token'} onOpenChange={(open) => !open && handleCancelOAuth()}>
                 <DialogContent>
                   <DialogHeader>
-                    <DialogTitle>Claude Max</DialogTitle>
+                    <DialogTitle>{t('claudeMax' as any)}</DialogTitle>
                     <DialogDescription>
-                      Connect your Claude subscription
+                      {t('connectSubscription' as any)}
                     </DialogDescription>
                   </DialogHeader>
                   {isWaitingForCode ? (
@@ -857,15 +857,15 @@ export default function AppSettingsPage() {
               <Dialog open={expandedMethod === 'custom'} onOpenChange={(open) => !open && handleCancelCustom()}>
                 <DialogContent>
                   <DialogHeader>
-                    <DialogTitle>Custom / Anthropic Compatible</DialogTitle>
+                    <DialogTitle>{t('customAnthropicCompatible' as any)}</DialogTitle>
                     <DialogDescription>
-                      Configure ANTHROPIC-compatible settings and token
+                      {t('configureCustomSettings' as any)}
                     </DialogDescription>
                   </DialogHeader>
                   <div className="space-y-4">
                     <SettingsInputRow
-                      label="Base URL"
-                      description="Sets ANTHROPIC_BASE_URL"
+                      label={t('baseUrl' as any)}
+                      description={t('setsBaseUrl' as any)}
                       value={sdkEnvState.baseUrl}
                       onChange={(value) => updateSdkField('baseUrl', value)}
                       placeholder="https://api.anthropic.com"
@@ -874,8 +874,8 @@ export default function AppSettingsPage() {
                       inCard={false}
                     />
                     <SettingsInputRow
-                      label="API timeout (ms)"
-                      description="Sets API_TIMEOUT_MS"
+                      label={t('apiTimeout' as any)}
+                      description={t('setsApiTimeout' as any)}
                       value={sdkEnvState.apiTimeoutMs}
                       onChange={(value) => updateSdkField('apiTimeoutMs', value)}
                       placeholder="600000"
@@ -883,19 +883,19 @@ export default function AppSettingsPage() {
                       inCard={false}
                     />
                     <SettingsInputRow
-                      label="Model override"
-                      description="Sets ANTHROPIC_MODEL and MODEL (e.g., glm-4.7)"
+                      label={t('modelOverride' as any)}
+                      description={t('setsModel' as any)}
                       value={sdkEnvState.model}
                       onChange={(value) => updateSdkField('model', value)}
                       placeholder="claude-sonnet-4-5-20250929"
                       inCard={false}
                     />
                     <SettingsSecretInput
-                      label="Auth token"
-                      description="Sets ANTHROPIC_AUTH_TOKEN (bearer)"
+                      label={t('authToken' as any)}
+                      description={t('setsAuthToken' as any)}
                       value={sdkEnvState.authToken}
                       onChange={(value) => updateSdkField('authToken', value)}
-                      placeholder="Paste token here"
+                      placeholder={t('pasteToken' as any)}
                       hasExistingValue={sdkHasAuthToken}
                     />
                     {sdkHasAuthToken && !sdkEnvState.authToken && (
@@ -910,7 +910,7 @@ export default function AppSettingsPage() {
                           size="sm"
                           onClick={() => setSdkClearAuthToken(prev => !prev)}
                         >
-                          {sdkClearAuthToken ? 'Keep Token' : 'Clear Token'}
+                          {sdkClearAuthToken ? t('keepToken' as any) : t('clearToken' as any)}
                         </Button>
                       </div>
                     )}
@@ -966,7 +966,7 @@ export default function AppSettingsPage() {
                     )}
                   </div>
                 </SettingsRow>
-                <SettingsRow label="Check for updates">
+                <SettingsRow label={t('checkForUpdates' as any)}>
                   <Button
                     variant="outline"
                     size="sm"
@@ -984,7 +984,7 @@ export default function AppSettingsPage() {
                   </Button>
                 </SettingsRow>
                 {updateChecker.isReadyToInstall && (
-                  <SettingsRow label="Install update">
+                  <SettingsRow label={t('installUpdate' as any)}>
                     <Button
                       size="sm"
                       onClick={updateChecker.installUpdate}
