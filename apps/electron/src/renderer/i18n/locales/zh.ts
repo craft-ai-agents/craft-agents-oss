@@ -228,6 +228,13 @@ export default {
   resetWorkspaceDescription: '这将删除您的所有会话和设置。此操作无法撤销。',
   resetWorkspaceConfirm: '确定要重置您的工作空间吗？',
   resetButton: '重置',
+  allWorkspacesAndSettings: '所有工作空间及其设置',
+  allCredentialsAndApiKeys: '所有凭据和 API 密钥',
+  allPreferencesAndSessionData: '所有偏好设置和会话数据',
+  backupDataFirst: '首先备份重要数据！',
+  actionCannotBeUndone: '此操作无法撤销。',
+  toConfirmSolve: '要确认，请解答：',
+  enterAnswer: '输入答案',
 
   // Splash Screen / 启动屏幕
   loadingCraftAgents: '正在加载 Craft Agents...',

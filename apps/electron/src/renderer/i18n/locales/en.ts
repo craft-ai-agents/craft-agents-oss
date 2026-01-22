@@ -235,6 +235,13 @@ export default {
   resetWorkspaceDescription: 'This will delete all your sessions and settings. This action cannot be undone.',
   resetWorkspaceConfirm: 'Are you sure you want to reset your workspace?',
   resetButton: 'Reset',
+  allWorkspacesAndSettings: 'All workspaces and their settings',
+  allCredentialsAndApiKeys: 'All credentials and API keys',
+  allPreferencesAndSessionData: 'All preferences and session data',
+  backupDataFirst: 'Back up any important data first!',
+  actionCannotBeUndone: 'This action cannot be undone.',
+  toConfirmSolve: 'To confirm, solve:',
+  enterAnswer: 'Enter answer',
 
   // Splash Screen
   loadingCraftAgents: 'Loading Craft Agents...',

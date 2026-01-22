@@ -71,27 +71,27 @@ export function ResetConfirmationDialog({
         </DialogHeader>
 
         <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1 pl-2">
-          <li>All workspaces and their settings</li>
-          <li>All credentials and API keys</li>
-          <li>All preferences and session data</li>
+          <li>{t('allWorkspacesAndSettings' as any)}</li>
+          <li>{t('allCredentialsAndApiKeys' as any)}</li>
+          <li>{t('allPreferencesAndSessionData' as any)}</li>
         </ul>
 
         <div className="bg-amber-500/10 border border-amber-500/30 rounded-md p-3 text-sm">
-          <strong className="text-amber-600 dark:text-amber-400">Back up any important data first!</strong>
+          <strong className="text-amber-600 dark:text-amber-400">{t('backupDataFirst' as any)}</strong>
           <p className="text-muted-foreground mt-1">
-            This action cannot be undone.
+            {t('actionCannotBeUndone' as any)}
           </p>
         </div>
 
         <div className="space-y-2 pt-2">
           <label className="text-sm font-medium">
-            To confirm, solve: {problem.a} + {problem.b} =
+            {t('toConfirmSolve' as any)} {problem.a} + {problem.b} =
           </label>
           <Input
             type="text"
             inputMode="numeric"
             pattern="[0-9]*"
-            placeholder="Enter answer"
+            placeholder={t('enterAnswer' as any)}
             value={answer}
             onChange={(e) => setAnswer(e.target.value)}
             onKeyDown={(e) => {
