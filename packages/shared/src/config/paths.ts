@@ -18,6 +18,10 @@ import { join } from 'path';
 // Falls back to default ~/.craft-agent/ for production and non-numbered dev folders
 export const CONFIG_DIR = process.env.CRAFT_CONFIG_DIR || join(homedir(), '.craft-agent');
 
-// Global skills directories
+// Global skills directories (where skills are stored)
 export const GLOBAL_SKILLS_DIR = join(CONFIG_DIR, 'global-skills');
 export const CLAUDE_CODE_SKILLS_DIR = join(homedir(), '.claude', 'skills');
+
+// Plugin root directories (parent dirs that SDK receives as plugins)
+// SDK expects: {plugin-root}/.claude-plugin/plugin.json and {plugin-root}/skills/
+export const CLAUDE_CODE_PLUGIN_DIR = join(homedir(), '.claude');
