@@ -23,7 +23,7 @@ $arch = if ([Environment]::Is64BitOperatingSystem) { "x64" } else { "x86" }
 $platform = "win32-$arch"
 
 Write-Host ""
-Write-Info "Detected platform: $platform"
+Write-Info "Detected platform: $platform (arch: $arch)"
 
 # Create download directory
 New-Item -ItemType Directory -Force -Path $DOWNLOAD_DIR | Out-Null
@@ -47,7 +47,8 @@ Write-Info "Latest version: $version"
 Write-Info "Fetching manifest..."
 try {
     $manifest = Invoke-RestMethod -Uri "$VERSIONS_URL/$version/manifest.json" -UseBasicParsing
-    $binaryInfo = $manifest.binaries.$platform
+    # Use Select-Object for property names with hyphens (dot notation doesn't work with variable)
+    $binaryInfo = $manifest.binaries | Select-Object -ExpandProperty $platform -ErrorAction SilentlyContinue
     if (-not $binaryInfo) {
         Write-Err "Platform $platform not found in manifest"
     }
