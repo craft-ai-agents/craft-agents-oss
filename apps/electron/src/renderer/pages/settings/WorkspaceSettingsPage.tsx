@@ -388,11 +388,11 @@ export default function WorkspaceSettingsPage() {
             </SettingsSection>
 
             {/* Model */}
-            <SettingsSection title="Model">
+            <SettingsSection title={t('model' as any)}>
               <SettingsCard>
                 <SettingsMenuSelectRow
-                  label="Default model"
-                  description="AI model for new chats"
+                  label={t('defaultModel' as any)}
+                  description={t('defaultModelDescription' as any)}
                   value={wsModel}
                   onValueChange={handleModelChange}
                   options={[
@@ -402,8 +402,8 @@ export default function WorkspaceSettingsPage() {
                   ]}
                 />
                 <SettingsMenuSelectRow
-                  label="Thinking level"
-                  description="Reasoning depth for new chats"
+                  label={t('thinkingLevel' as any)}
+                  description={t('thinkingLevelDescription' as any)}
                   value={wsThinkingLevel}
                   onValueChange={(v) => handleThinkingLevelChange(v as ThinkingLevel)}
                   options={THINKING_LEVELS.map(({ id, name, description }) => ({
@@ -416,11 +416,11 @@ export default function WorkspaceSettingsPage() {
             </SettingsSection>
 
             {/* Permissions */}
-            <SettingsSection title="Permissions">
+            <SettingsSection title={t('settingsPermissions' as any)}>
               <SettingsCard>
                 <SettingsMenuSelectRow
-                  label="Default mode"
-                  description="Control what AI can do"
+                  label={t('defaultMode' as any)}
+                  description={t('defaultModeDescription' as any)}
                   value={permissionMode}
                   onValueChange={(v) => handlePermissionModeChange(v as PermissionMode)}
                   options={[
@@ -434,8 +434,8 @@ export default function WorkspaceSettingsPage() {
 
             {/* Mode Cycling */}
             <SettingsSection
-              title="Mode Cycling"
-              description="Select which modes to cycle through with Shift+Tab"
+              title={t('modeCycling' as any)}
+              description={t('modeCyclingDescription' as any)}
             >
               <SettingsCard>
                 {(['safe', 'ask', 'allow-all'] as const).map((m) => {

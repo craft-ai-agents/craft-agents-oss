@@ -219,10 +219,6 @@ export default {
   reauthDescription: '请再次登录以继续。',
   reauthButton: '登录',
 
-  // Keyboard Shortcuts Dialog / 键盘快捷键对话框
-  keyboardShortcuts: '键盘快捷键',
-  keyboardShortcutsDescription: '键盘快捷键快速参考',
-
   // Reset Confirmation Dialog / 重置确认对话框
   resetWorkspace: '重置工作空间',
   resetWorkspaceDescription: '这将删除您的所有会话和设置。此操作无法撤销。',
@@ -353,6 +349,16 @@ export default {
   global: '全局',
   beta: '测试版',
 
+  // Model Settings / 模型设置 / 工作空间设置
+  defaultModel: '默认模型',
+  defaultModelDescription: '新对话使用的 AI 模型',
+  thinkingLevel: '思考级别',
+  thinkingLevelDescription: '新对话的推理深度',
+  defaultMode: '默认模式',
+  defaultModeDescription: '控制 AI 可以执行的操作',
+  modeCycling: '模式循环',
+  modeCyclingDescription: '选择使用 Shift+Tab 循环切换的模式',
+
   // Data Tables / 数据表
   name: '名称',
   type: '类型',
@@ -413,7 +419,6 @@ export default {
 
   // EditPopover / 编辑弹窗
   describeWhatToChange: '描述您想要更改的内容...',
-  editFile: '编辑文件',
 
   // Status Messages / 状态消息
   contemplating: '思考中...',
@@ -441,14 +446,12 @@ export default {
   chooseExistingFolderDesc: '选择任意文件夹作为工作空间。',
   noFolderSelected: '未选择文件夹',
   opening: '打开中...',
-  open: '打开',
 
   // Chat Display / 聊天显示
   responsePreview: '响应预览',
   turnDetails: '轮次详情',
   showTechnicalDetails: '显示技术详情',
   hideTechnicalDetails: '隐藏技术详情',
-  openInNewWindow: '在新窗口中打开',
 
   // Session List / 会话列表
   newBadge: '新',
@@ -463,6 +466,5 @@ export default {
   needsAuth: '需要认证',
   failed: '失败',
   notTested: '未测试',
-  disabled: '已禁用',
 
 } as const;

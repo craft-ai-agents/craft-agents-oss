@@ -354,6 +354,16 @@ export default {
   global: 'Global',
   beta: 'Beta',
 
+  // Model Settings / Workspace Settings
+  defaultModel: 'Default model',
+  defaultModelDescription: 'AI model for new chats',
+  thinkingLevel: 'Thinking level',
+  thinkingLevelDescription: 'Reasoning depth for new chats',
+  defaultMode: 'Default mode',
+  defaultModeDescription: 'Control what AI can do',
+  modeCycling: 'Mode Cycling',
+  modeCyclingDescription: 'Select which modes to cycle through with Shift+Tab',
+
   // Data Tables
   name: 'Name',
   type: 'Type',
