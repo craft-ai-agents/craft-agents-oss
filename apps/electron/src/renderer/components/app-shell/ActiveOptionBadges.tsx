@@ -144,6 +144,7 @@ function PermissionModeDropdown({ permissionMode, ultrathinkEnabled = false, onP
   // - safe (Explore): foreground at 60% opacity - subtle, read-only feel
   // - ask (Ask to Edit): info color - amber, prompts for edits
   // - allow-all (Auto): accent color - purple, full autonomy
+  // - ralph: warning color - orange, autonomous loop mode
   const modeStyles: Record<PermissionMode, { className: string; shadowVar: string }> = {
     'safe': {
       className: 'bg-foreground/5 text-foreground/60',
@@ -156,6 +157,10 @@ function PermissionModeDropdown({ permissionMode, ultrathinkEnabled = false, onP
     'allow-all': {
       className: 'bg-accent/5 text-accent',
       shadowVar: 'var(--accent-rgb)',
+    },
+    'ralph': {
+      className: 'bg-warning/10 text-warning',
+      shadowVar: 'var(--warning-rgb)',
     },
   }
   const currentStyle = modeStyles[optimisticMode]

@@ -9,7 +9,7 @@ import { PERMISSION_MODE_CONFIG, PERMISSION_MODE_ORDER, type PermissionMode } fr
 // Types
 // ============================================================================
 
-export type SlashCommandId = 'safe' | 'ask' | 'allow-all' | 'ultrathink'
+export type SlashCommandId = 'safe' | 'ask' | 'allow-all' | 'ralph' | 'ultrathink'
 
 /** Union type for all item types in the slash menu */
 export type SlashItemType = 'command' | 'folder'
@@ -89,6 +89,14 @@ const permissionModeCommands: SlashCommand[] = PERMISSION_MODE_ORDER.map(mode =>
   }
 })
 
+// Ralph mode is special - not in the cycle order but selectable from menu
+const ralphModeCommand: SlashCommand = {
+  id: 'ralph',
+  label: PERMISSION_MODE_CONFIG['ralph'].displayName,
+  description: PERMISSION_MODE_CONFIG['ralph'].description,
+  icon: <PermissionModeIcon mode="ralph" className={MENU_ICON_SIZE} />,
+}
+
 const ultrathinkCommand: SlashCommand = {
   id: 'ultrathink',
   label: 'Ultrathink',
@@ -98,11 +106,13 @@ const ultrathinkCommand: SlashCommand = {
 
 export const DEFAULT_SLASH_COMMANDS: SlashCommand[] = [
   ...permissionModeCommands,
+  ralphModeCommand,
   ultrathinkCommand,
 ]
 
 export const DEFAULT_SLASH_COMMAND_GROUPS: CommandGroup[] = [
   { id: 'modes', commands: permissionModeCommands },
+  { id: 'automation', commands: [ralphModeCommand] },
   { id: 'features', commands: [ultrathinkCommand] },
 ]
 
@@ -562,6 +572,13 @@ export function useInlineSlashCommand({
       id: 'modes',
       label: 'Modes',
       items: permissionModeCommands,
+    })
+
+    // Automation section (Ralph mode)
+    result.push({
+      id: 'automation',
+      label: 'Automation',
+      items: [ralphModeCommand],
     })
 
     // Features section

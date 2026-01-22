@@ -219,6 +219,7 @@ export const PERMISSION_MODE_MESSAGES: Record<PermissionMode, string> = {
   'safe': 'Safe mode active. Read-only exploration enabled.',
   'ask': 'Ask mode active. Prompts for dangerous operations.',
   'allow-all': 'Allow-all mode active. All operations permitted.',
+  'ralph': 'Ralph mode active. Autonomous execution for automated workflows.',
 };
 
 /** System prompts sent to Claude when mode changes */
@@ -226,4 +227,5 @@ export const PERMISSION_MODE_PROMPTS: Record<PermissionMode, string> = {
   'safe': 'The user has switched to Safe mode (read-only). You can read files, search, and explore the codebase, but write operations (Bash, Write, Edit, API calls) are blocked. Focus on understanding and explaining rather than making changes.',
   'ask': 'The user has switched to Ask mode. Most operations are allowed, but dangerous bash commands will prompt for user approval. You have access to write operations.',
   'allow-all': 'The user has switched to Allow-all mode. All operations are permitted without prompts. Use with care.',
+  'ralph': 'The user has switched to Ralph mode. This is an autonomous execution mode optimized for automated workflows like Ralph Loop. All operations are permitted without prompts. Execute tasks efficiently and autonomously.',
 };

@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { motion } from 'motion/react'
 import { ArrowUp, Paperclip, ChevronDown, Sparkles } from 'lucide-react'
 import type { FileAttachment, PermissionRequest } from '../../../shared/types'
+import type { PermissionMode } from '@craft-agent/shared/agent/modes'
 import { cn } from '@/lib/utils'
 import {
   ensureMockElectronAPI,
@@ -449,7 +450,7 @@ interface ActiveTasksBarContextProps {
 }
 
 function ActiveTasksBarContext({ tasks = sampleBackgroundTasks }: ActiveTasksBarContextProps) {
-  const [permissionMode, setPermissionMode] = React.useState<'safe' | 'ask' | 'allow-all'>('ask')
+  const [permissionMode, setPermissionMode] = React.useState<PermissionMode>('ask')
   const [ultrathinkEnabled, setUltrathinkEnabled] = React.useState(false)
 
   // Inject mock electronAPI for file attachments
@@ -529,7 +530,7 @@ interface PermissionInputToggleProps {
 
 function PermissionInputToggle({ autoToggle = false, autoToggleInterval = 3000, useLongCommand = false }: PermissionInputToggleProps) {
   const [showPermission, setShowPermission] = React.useState(false)
-  const [permissionMode, setPermissionMode] = React.useState<'safe' | 'ask' | 'allow-all'>('ask')
+  const [permissionMode, setPermissionMode] = React.useState<PermissionMode>('ask')
   const [ultrathinkEnabled, setUltrathinkEnabled] = React.useState(false)
 
   const permissionRequest = useLongCommand ? veryLongPermissionRequest : samplePermissionRequest

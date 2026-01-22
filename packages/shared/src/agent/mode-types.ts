@@ -18,8 +18,9 @@ import { z } from 'zod';
  * - 'safe': Read-only, blocks writes, never prompts (green)
  * - 'ask': Prompts for dangerous operations (amber)
  * - 'allow-all': Everything allowed, no prompts (violet)
+ * - 'ralph': Autonomous execution mode for Ralph Loop (orange) - like allow-all but designed for automated workflows
  */
-export type PermissionMode = 'safe' | 'ask' | 'allow-all';
+export type PermissionMode = 'safe' | 'ask' | 'allow-all' | 'ralph';
 
 /**
  * Order of modes for cycling with SHIFT+TAB
@@ -241,6 +242,18 @@ export const PERMISSION_MODE_CONFIG: Record<PermissionMode, {
       text: 'text-accent',
       bg: 'bg-accent',
       border: 'border-accent',
+    },
+  },
+  'ralph': {
+    displayName: 'Ralph',
+    shortName: 'Ralph',
+    description: 'Autonomous loop mode. Full execution, optimized for automated workflows.',
+    // Zap icon from Lucide (lightning bolt for speed/automation)
+    svgPath: 'M13 2L3 14h9l-1 8 10-12h-9l1-8z',
+    colorClass: {
+      text: 'text-warning',
+      bg: 'bg-warning',
+      border: 'border-warning',
     },
   },
 };

@@ -1257,8 +1257,9 @@ export function shouldAllowToolInMode(
     config = SAFE_MODE_CONFIG;
   }
 
-  // In 'allow-all' mode, all tools are allowed (no restrictions)
-  if (mode === 'allow-all') {
+  // In 'allow-all' or 'ralph' mode, all tools are allowed (no restrictions)
+  // Ralph mode is designed for autonomous workflows like Ralph Loop
+  if (mode === 'allow-all' || mode === 'ralph') {
     return { allowed: true };
   }
 
@@ -1492,13 +1493,14 @@ export function getPermissionModesDocumentation(): string {
 
   return `## Permission Modes
 
-Craft Agent has three permission modes that control tool execution. The user can cycle through modes with SHIFT+TAB.
+Craft Agent has four permission modes that control tool execution. The user can cycle through the first three modes with SHIFT+TAB.
 
 | Mode | Color | Description |
 |------|-------|-------------|
 | **${PERMISSION_MODE_CONFIG['safe'].displayName}** | Grey | ${PERMISSION_MODE_CONFIG['safe'].description} |
 | **${PERMISSION_MODE_CONFIG['ask'].displayName}** | Amber | ${PERMISSION_MODE_CONFIG['ask'].description} |
 | **${PERMISSION_MODE_CONFIG['allow-all'].displayName}** | Purple | ${PERMISSION_MODE_CONFIG['allow-all'].description} |
+| **${PERMISSION_MODE_CONFIG['ralph'].displayName}** | Orange | ${PERMISSION_MODE_CONFIG['ralph'].description} |
 
 You will know the current mode from the \`<session_state>\` block in your context:
 \`\`\`
@@ -1572,6 +1574,17 @@ Full autonomous mode. Everything is allowed without prompts - use when you trust
 | All operations | ✅ | No restrictions, no prompts |
 
 This mode is ideal after reviewing and accepting a plan, as it allows uninterrupted execution.
+
+### ${PERMISSION_MODE_CONFIG['ralph'].displayName} (permissionMode: ralph)
+
+Autonomous loop mode optimized for automated workflows like Ralph Loop. Like Execute mode but explicitly designed for multi-story autonomous execution.
+
+| Operation | Allowed? | Notes |
+|-----------|----------|-------|
+| All operations | ✅ | No restrictions, no prompts |
+| Tool execution | ✅ | Full access for file writes, bash commands, etc. |
+
+This mode is specifically designed for Ralph Loop and similar automation workflows where multiple stories need to be processed without interruption. It provides the same capabilities as Execute mode but signals that the session is in an automated workflow state.
 
 ## Planning (Universal)
 
