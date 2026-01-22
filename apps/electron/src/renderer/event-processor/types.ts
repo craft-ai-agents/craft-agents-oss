@@ -356,6 +356,114 @@ export interface UsageUpdateEvent {
   }
 }
 
+// ============================================================
+// Ralph Loop Events
+// ============================================================
+
+/**
+ * Loop progress event - real-time updates during loop execution
+ */
+export interface LoopProgressEvent {
+  type: 'loop_progress'
+  sessionId: string
+  loopId: string
+  currentStory: { id: string; title: string } | null
+  storyIndex: number
+  totalStories: number
+  currentIteration: number
+  maxIterations: number
+  elapsedMs: number
+  status: 'running' | 'paused'
+}
+
+/**
+ * Loop story complete event - a story finished processing
+ */
+export interface LoopStoryCompleteEvent {
+  type: 'loop_story_complete'
+  sessionId: string
+  loopId: string
+  story: { id: string; title: string }
+  result: 'success' | 'failed' | 'skipped' | 'timeout'
+  commitSha?: string
+  error?: string
+}
+
+/**
+ * Loop complete event - entire loop finished
+ */
+export interface LoopCompleteEvent {
+  type: 'loop_complete'
+  sessionId: string
+  loopId: string
+  summary: {
+    totalStories: number
+    completedStories: number
+    failedStories: number
+    skippedStories: number
+    totalTimeMs: number
+    commits: string[]
+  }
+}
+
+/**
+ * Loop started event - loop execution has begun
+ */
+export interface LoopStartedEvent {
+  type: 'loop_started'
+  sessionId: string
+  loopId: string
+  totalStories: number
+  config: {
+    maxIterationsPerStory: number
+    timeoutPerStoryMs: number
+    autoCommit: boolean
+  }
+}
+
+/**
+ * Loop paused event - loop was paused by user
+ */
+export interface LoopPausedEvent {
+  type: 'loop_paused'
+  sessionId: string
+  loopId: string
+  currentStoryIndex: number
+  completedStories: number
+}
+
+/**
+ * Loop resumed event - loop was resumed after pause
+ */
+export interface LoopResumedEvent {
+  type: 'loop_resumed'
+  sessionId: string
+  loopId: string
+}
+
+/**
+ * Loop cancelled event - loop was cancelled by user
+ */
+export interface LoopCancelledEvent {
+  type: 'loop_cancelled'
+  sessionId: string
+  loopId: string
+  completedStories: number
+  totalStories: number
+}
+
+/**
+ * Loop error event - error during loop execution
+ */
+export interface LoopErrorEvent {
+  type: 'loop_error'
+  sessionId: string
+  loopId: string
+  storyId?: string
+  error: string
+  code: 'timeout' | 'agent_error' | 'git_error' | 'permission_denied' | 'unknown'
+}
+
 /**
  * Union of all agent events
  */
@@ -391,6 +499,15 @@ export type AgentEvent =
   | AuthCompletedEvent
   | SourceActivatedEvent
   | UsageUpdateEvent
+  // Ralph Loop events
+  | LoopProgressEvent
+  | LoopStoryCompleteEvent
+  | LoopCompleteEvent
+  | LoopStartedEvent
+  | LoopPausedEvent
+  | LoopResumedEvent
+  | LoopCancelledEvent
+  | LoopErrorEvent
 
 /**
  * Side effects that need to be handled outside the pure processor

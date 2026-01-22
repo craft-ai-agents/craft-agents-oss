@@ -52,6 +52,9 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     onTodoStateChange,
     onDeleteSession,
     rightSidebarButton,
+    onPauseLoop,
+    onResumeLoop,
+    onCancelLoop,
   } = useAppShellContext()
 
   // Use the unified session options hook for clean access
@@ -351,6 +354,9 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
                 workingDirectory={sessionMeta.workingDirectory}
                 onWorkingDirectoryChange={handleWorkingDirectoryChange}
                 messagesLoading={true}
+                onPauseLoop={onPauseLoop ? () => onPauseLoop(sessionId) : undefined}
+                onResumeLoop={onResumeLoop ? () => onResumeLoop(sessionId) : undefined}
+                onCancelLoop={onCancelLoop ? () => onCancelLoop(sessionId) : undefined}
               />
             </div>
           </div>
@@ -417,6 +423,9 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
             onWorkingDirectoryChange={handleWorkingDirectoryChange}
             sessionFolderPath={session?.sessionFolderPath}
             messagesLoading={!messagesLoaded}
+            onPauseLoop={onPauseLoop ? () => onPauseLoop(sessionId) : undefined}
+            onResumeLoop={onResumeLoop ? () => onResumeLoop(sessionId) : undefined}
+            onCancelLoop={onCancelLoop ? () => onCancelLoop(sessionId) : undefined}
           />
         </div>
       </div>

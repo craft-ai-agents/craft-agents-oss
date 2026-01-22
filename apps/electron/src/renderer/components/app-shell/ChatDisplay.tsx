@@ -45,6 +45,7 @@ import { InputContainer, type StructuredInputState, type StructuredResponse, typ
 import type { RichTextInputHandle } from "@/components/ui/rich-text-input"
 import { useBackgroundTasks } from "@/hooks/useBackgroundTasks"
 import { CHAT_LAYOUT } from "@/config/layout"
+import { LoopProgressIndicator, LoopSummaryCard } from "@/components/loop"
 
 // ============================================================================
 // Overlay State Types
@@ -134,6 +135,13 @@ interface ChatDisplayProps {
   // Tutorial
   /** Disable send action (for tutorial guidance) */
   disableSend?: boolean
+  // Ralph Loop control
+  /** Callback when pause loop button is clicked */
+  onPauseLoop?: () => void
+  /** Callback when resume loop button is clicked */
+  onResumeLoop?: () => void
+  /** Callback when cancel loop button is clicked */
+  onCancelLoop?: () => void
 }
 
 /**
@@ -347,6 +355,10 @@ export function ChatDisplay({
   messagesLoading = false,
   // Tutorial
   disableSend = false,
+  // Ralph Loop control
+  onPauseLoop,
+  onResumeLoop,
+  onCancelLoop,
 }: ChatDisplayProps) {
   // Input is only disabled when explicitly disabled (e.g., agent needs activation)
   // User can type during streaming - submitting will stop the stream and send
@@ -575,6 +587,21 @@ export function ChatDisplay({
     <div ref={zoneRef} className="flex h-full flex-col min-w-0" data-focus-zone="chat">
       {session ? (
         <div className="flex flex-1 flex-col min-h-0 min-w-0 relative">
+          {/* Loop Progress Indicator - shows when a loop is active */}
+          <AnimatePresence>
+            {session.loopState?.isActive && (
+              <div className="sticky top-0 z-20 px-4 py-2">
+                <div className={cn(CHAT_LAYOUT.maxWidth, "mx-auto")}>
+                  <LoopProgressIndicator
+                    loopState={session.loopState}
+                    onPause={onPauseLoop}
+                    onResume={onResumeLoop}
+                    onCancel={onCancelLoop}
+                  />
+                </div>
+              </div>
+            )}
+          </AnimatePresence>
           {/* Content layer */}
           <div className="flex flex-1 flex-col min-h-0 min-w-0 relative z-10">
           {/* === MESSAGES AREA: Scrollable list of message bubbles === */}

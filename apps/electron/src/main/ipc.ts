@@ -1847,4 +1847,51 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // Note: Permission mode cycling settings (cyclablePermissionModes) are now workspace-level
   // and managed via WORKSPACE_SETTINGS_GET/UPDATE channels
 
+  // =============================================================================
+  // Ralph Loop Handlers
+  // =============================================================================
+
+  ipcMain.handle(IPC_CHANNELS.LOOP_START, async (_event, sessionId: string, prdContent: string, config?: import('../shared/types').LoopConfigInput) => {
+    try {
+      const result = await sessionManager.startLoop(sessionId, prdContent, config)
+      return result
+    } catch (error) {
+      ipcLog.error('Error starting loop:', error)
+      return { error: error instanceof Error ? error.message : 'Failed to start loop' }
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.LOOP_PAUSE, async (_event, sessionId: string) => {
+    try {
+      await sessionManager.pauseLoop(sessionId)
+    } catch (error) {
+      ipcLog.error('Error pausing loop:', error)
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.LOOP_RESUME, async (_event, sessionId: string) => {
+    try {
+      await sessionManager.resumeLoop(sessionId)
+    } catch (error) {
+      ipcLog.error('Error resuming loop:', error)
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.LOOP_CANCEL, async (_event, sessionId: string) => {
+    try {
+      await sessionManager.cancelLoop(sessionId)
+    } catch (error) {
+      ipcLog.error('Error cancelling loop:', error)
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.LOOP_GET_STATE, async (_event, sessionId: string) => {
+    try {
+      return sessionManager.getLoopState(sessionId)
+    } catch (error) {
+      ipcLog.error('Error getting loop state:', error)
+      return null
+    }
+  })
+
 }

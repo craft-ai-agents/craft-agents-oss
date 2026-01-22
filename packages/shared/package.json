@@ -40,7 +40,8 @@
     "./validation": "./src/validation/index.ts",
     "./version": "./src/version/index.ts",
     "./branding": "./src/branding.ts",
-    "./network-interceptor": "./src/network-interceptor.ts"
+    "./network-interceptor": "./src/network-interceptor.ts",
+    "./ralph-loop": "./src/ralph-loop/index.ts"
   },
   "dependencies": {
     "@craft-agent/core": "workspace:*",
