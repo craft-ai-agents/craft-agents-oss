@@ -97,7 +97,7 @@ export function DocumentFormattedMarkdownOverlay({
       </div>
 
       {/* Main scrollable area - fullscreen-overlay-background class enables scenic mode blur via CSS */}
-      <div className="flex-1 min-h-0 bg-foreground-3 overflow-y-auto fullscreen-overlay-background">
+      <div className="flex-1 min-h-0 bg-foreground-3 dark:bg-background overflow-y-auto fullscreen-overlay-background">
         <div className="min-h-full flex flex-col justify-center px-6 py-16">
           {/* Content card - my-auto centers vertically when content is small, flows naturally when large */}
           <div className="bg-background rounded-[16px] shadow-strong w-full max-w-[960px] h-fit mx-auto my-auto">

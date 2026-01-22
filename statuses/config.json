@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "statuses": [
+    {
+      "id": "backlog",
+      "label": "Backlog",
+      "category": "open",
+      "isFixed": false,
+      "isDefault": true,
+      "order": 0
+    },
+    {
+      "id": "todo",
+      "label": "Todo",
+      "category": "open",
+      "isFixed": true,
+      "isDefault": false,
+      "order": 1
+    },
+    {
+      "id": "needs-review",
+      "label": "Needs Review",
+      "category": "open",
+      "isFixed": false,
+      "isDefault": true,
+      "order": 2
+    },
+    {
+      "id": "done",
+      "label": "Done",
+      "category": "closed",
+      "isFixed": true,
+      "isDefault": false,
+      "order": 3
+    },
+    {
+      "id": "cancelled",
+      "label": "Cancelled",
+      "category": "closed",
+      "isFixed": true,
+      "isDefault": false,
+      "order": 4
+    }
+  ],
+  "defaultStatusId": "todo"
+}

@@ -1,0 +1,22 @@
+{
+  "id": "ws_c4f8fc39",
+  "name": "vesper",
+  "slug": "vesper",
+  "defaults": {
+    "model": "claude-sonnet-4-5-20250929",
+    "permissionMode": "safe",
+    "cyclablePermissionModes": [
+      "safe",
+      "ask",
+      "allow-all"
+    ],
+    "thinkingLevel": "think",
+    "enabledSourceSlugs": [],
+    "workingDirectory": "~/vesper"
+  },
+  "localMcpServers": {
+    "enabled": true
+  },
+  "createdAt": 1769088155055,
+  "updatedAt": 1769088155056
+}
