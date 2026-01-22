@@ -658,6 +658,12 @@ html[data-scenic] .popover-styled {
   -webkit-backdrop-filter: blur(24px);
 }
 
+/* Fullscreen overlay background: Dark mode support (non-scenic)
+   Ensures markdown overlay has proper dark background in dark mode */
+html.dark .fullscreen-overlay-background {
+  background: var(--background);
+}
+
 /* Scenic mode: Fullscreen overlay background gets glass effect
    Applied to the AI response fullscreen view background so it blends
    with the scenic background image when viewing expanded content. */

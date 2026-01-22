@@ -12,7 +12,7 @@
  * Used by: CodePreviewOverlay, DiffPreviewOverlay, TerminalPreviewOverlay, GenericOverlay
  */
 
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import * as ReactDOM from 'react-dom'
 import { X, type LucideIcon } from 'lucide-react'
 import { useOverlayMode, OVERLAY_LAYOUT } from '../../lib/layout'
@@ -65,7 +65,7 @@ export interface PreviewOverlayProps {
 export function PreviewOverlay({
   isOpen,
   onClose,
-  theme = 'light',
+  theme: themeProp,
   badge,
   title,
   onTitleClick,
@@ -78,6 +78,20 @@ export function PreviewOverlay({
 }: PreviewOverlayProps) {
   const responsiveMode = useOverlayMode()
   const isModal = responsiveMode === 'modal'
+  const [isDarkMode, setIsDarkMode] = useState(false)
+
+  // Detect dark mode from document class
+  useEffect(() => {
+    const checkDarkMode = () => {
+      setIsDarkMode(document.documentElement.classList.contains('dark'))
+    }
+    checkDarkMode()
+
+    // Observe class changes on documentElement for theme switches
+    const observer = new MutationObserver(checkDarkMode)
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+    return () => observer.disconnect()
+  }, [])
 
   // Handle Escape key for modal mode only (fullscreen mode uses FullscreenOverlayBase which handles ESC)
   useEffect(() => {
@@ -95,6 +109,8 @@ export function PreviewOverlay({
 
   if (!isOpen) return null
 
+  // Use provided theme or detect from dark mode
+  const theme = themeProp || (isDarkMode ? 'dark' : 'light')
   const defaultBg = theme === 'dark' ? '#1e1e1e' : '#ffffff'
   const defaultText = theme === 'dark' ? '#e4e4e4' : '#1a1a1a'
   const bgColor = backgroundColor ?? defaultBg
