@@ -16,19 +16,19 @@
 @property --background {
   syntax: "<color>";
   inherits: true;
-  initial-value: oklch(0.98 0.003 265);
+  initial-value: oklch(0.98 0.01 55);
 }
 
 @property --foreground {
   syntax: "<color>";
   inherits: true;
-  initial-value: oklch(0.185 0.01 270);
+  initial-value: oklch(0.25 0.02 300);
 }
 
 @property --accent {
   syntax: "<color>";
   inherits: true;
-  initial-value: oklch(0.62 0.13 293);
+  initial-value: oklch(0.68 0.16 55);
 }
 
 @property --info {
@@ -50,12 +50,15 @@
 }
 
 /* =============================================================================
-   CRAFT AGENT THEME - 6 Color System
+   VESPER THEME - 6 Color System
+
+   Golden Hour to Twilight: Where AI Companions work tirelessly into the night
+   while Humans do the Orchestration and Creative Thinking.
 
    Base colors:
    - background: Light/dark surface
    - foreground: Text and icons
-   - accent: Brand purple (highlights, Auto mode)
+   - accent: Golden amber (light) / Twilight purple (dark)
    - info: Amber (warnings, Ask mode)
    - success: Green (connected, checkmarks)
    - destructive: Red (errors, failed)
@@ -67,14 +70,14 @@
    Example: bg-foreground/10, text-accent, bg-foreground-60
 ============================================================================= */
 
-/* Light Mode */
+/* Light Mode - Golden Hour */
 :root {
   /* === 6 BASE COLORS === */
-  --background: oklch(0.98 0.003 265);
-  --foreground: oklch(0.185 0.01 270);
-  --foreground-rgb: 38, 36, 42;             /* RGB for shadow borders */
-  --accent: oklch(0.62 0.13 293);           /* purple - brand, Auto mode */
-  --accent-rgb: 104, 78, 133;               /* darkened RGB for shadow-tinted (70% of accent) */
+  --background: oklch(0.98 0.01 55);        /* Warm cream */
+  --foreground: oklch(0.25 0.02 300);       /* Deep purple-gray */
+  --foreground-rgb: 61, 47, 69;             /* RGB for shadow borders */
+  --accent: oklch(0.68 0.16 55);            /* Golden amber - brand, Auto mode */
+  --accent-rgb: 162, 117, 56;               /* darkened RGB for shadow-tinted (70% of accent) */
   --info: oklch(0.75 0.16 70);              /* amber - warnings, Ask mode */
   --info-rgb: 180, 120, 40;                 /* RGB for shadow-tinted */
   --success: oklch(0.55 0.17 145);          /* green - connected, checkmarks */
@@ -205,14 +208,14 @@
 
 }
 
-/* Dark Mode */
+/* Dark Mode - Twilight */
 .dark {
   /* === 6 BASE COLORS === */
-  --background: oklch(0.2 0.005 270);
-  --foreground: oklch(0.92 0.005 270);
-  --foreground-rgb: 227, 226, 229;           /* RGB for shadow borders */
-  --accent: oklch(0.68 0.13 293);            /* brighter purple in dark */
-  --accent-rgb: 118, 92, 147;                /* darkened RGB for shadow-tinted (70% of accent) */
+  --background: oklch(0.18 0.02 300);        /* Deep twilight purple */
+  --foreground: oklch(0.92 0.01 55);         /* Warm light */
+  --foreground-rgb: 248, 244, 237;           /* RGB for shadow borders */
+  --accent: oklch(0.65 0.18 300);            /* Twilight purple */
+  --accent-rgb: 115, 83, 140;                /* darkened RGB for shadow-tinted (70% of accent) */
   --info: oklch(0.70 0.16 70);               /* amber */
   --info-rgb: 200, 140, 60;                  /* RGB for shadow-tinted */
   --success: oklch(0.60 0.17 145);           /* green */
@@ -331,7 +334,7 @@ html[data-scenic][data-theme-override]::before {
 /* Scenic mode: Make background color semi-transparent for glass effect
    Panels with bg-background will become translucent glass */
 html[data-scenic] {
-  --background: oklch(0.2 0.005 270 / 0.55);
+  --background: oklch(0.18 0.02 300 / 0.55);
 }
 
 /* Inter Font - Opt-in via data-font="inter" attribute

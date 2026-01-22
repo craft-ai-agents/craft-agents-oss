@@ -1,5 +1,5 @@
 appId: com.lukilabs.craft-agent
-productName: Craft Agents
+productName: Vesper
 copyright: Copyright © 2025 Craft Docs Ltd.
 
 electronVersion: "39.2.7"
@@ -71,8 +71,8 @@ mac:
   #   teamId: ${APPLE_TEAM_ID}
 
 dmg:
-  # Use predictable naming: Craft-Agent-arm64.dmg, Craft-Agent-x64.dmg
-  artifactName: "Craft-Agent-${arch}.dmg"
+  # Use predictable naming: Vesper-arm64.dmg, Vesper-x64.dmg
+  artifactName: "Vesper-${arch}.dmg"
   contents:
     - x: 130
       y: 220
@@ -90,8 +90,8 @@ win:
     - target: nsis
       arch:
         - x64
-  # Use predictable naming: Craft-Agent-x64.exe
-  artifactName: "Craft-Agent-${arch}.${ext}"
+  # Use predictable naming: Vesper-x64.exe
+  artifactName: "Vesper-${arch}.${ext}"
   files:
     # Exclude ripgrep binaries for other platforms
     - "!node_modules/@anthropic-ai/claude-agent-sdk/vendor/ripgrep/arm64-linux"
@@ -127,7 +127,7 @@ linux:
     - target: AppImage
       arch:
         - x64
-  artifactName: "Craft-Agent-${arch}.${ext}"
+  artifactName: "Vesper-${arch}.${ext}"
   # Exclude ripgrep binaries for other platforms
   files:
     - "!node_modules/@anthropic-ai/claude-agent-sdk/vendor/ripgrep/arm64-darwin"
