@@ -1087,3 +1087,12 @@ html.dark[data-scenic] .fullscreen-overlay-background {
   background: linear-gradient(rgba(var(--success-rgb), 0.15), rgba(var(--success-rgb), 0.15)),
     oklch(from var(--popover) l c h / 0.8) !important;
 }
+
+/* =============================================================================
+   MENTION BADGE TOOLTIP
+
+   CSS-based tooltip for file/folder badges with immediate display on hover.
+   Uses [title] attribute content via CSS attr() function.
+============================================================================= */
+
+/* CSS tooltip removed - now using React Portal with system-level z-index */

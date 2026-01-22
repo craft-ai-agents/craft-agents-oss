@@ -291,6 +291,7 @@ export function extractBadges(
   return matches.map(match => {
     let label = match.id
     let iconDataUrl: string | undefined
+    let filePath: string | undefined
 
     if (match.type === 'skill') {
       const skill = skills.find(s => s.slug === match.id)
@@ -305,13 +306,15 @@ export function extractBadges(
       // Get cached icon as data URL (preserves mime type for SVG, PNG, etc.)
       iconDataUrl = getSourceIconSync(workspaceId, match.id) ?? undefined
     } else if (match.type === 'file') {
-      // Extract file name from path as label
+      // Extract file name from path as label, store full path for tooltip
       const fileName = match.id.split('/').pop() || match.id
       label = fileName
+      filePath = match.id
     } else if (match.type === 'folder') {
-      // Extract folder name from path as label
+      // Extract folder name from path as label, store full path for tooltip
       const folderName = match.id.split('/').pop() || match.id
       label = folderName
+      filePath = match.id
     }
 
     return {
@@ -319,6 +322,7 @@ export function extractBadges(
       label,
       rawText: match.fullMatch,
       iconDataUrl,
+      filePath,
       start: match.startIndex,
       end: match.startIndex + match.fullMatch.length,
     }

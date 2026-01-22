@@ -13,10 +13,11 @@
 
 import { useState, useCallback, type ReactNode } from 'react'
 import type { StoredAttachment, ContentBadge } from '@craft-agent/core'
-import { FileText, Copy, Check } from 'lucide-react'
+import { FileText, File, Folder, Copy, Check } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { Markdown } from '../markdown'
 import { FileTypeIcon, getFileTypeLabel } from './attachment-helpers'
+import { Tooltip, TooltipContent, TooltipTrigger } from '../tooltip'
 
 // Fallback text icons for badges without iconDataUrl
 // Using simple characters since SVG rendering may not work in all contexts
@@ -24,7 +25,6 @@ const SKILL_ICON_TEXT = '✦'
 const SOURCE_ICON_TEXT = '⊕'
 const CONTEXT_ICON_TEXT = '⚙'
 const COMMAND_ICON_TEXT = '/'
-const FILE_ICON_TEXT = '📄'
 
 /**
  * Check if a badge is an edit_request badge (identified by XML tag in rawText)
@@ -64,29 +64,86 @@ function UltrathinkBadge() {
 }
 
 /**
+ * Get the appropriate icon text based on badge type
+ * Note: file and folder types use lucide icons instead (see BadgeIcon)
+ */
+function getBadgeIconText(type: string): string {
+  switch (type) {
+    case 'skill': return SKILL_ICON_TEXT
+    case 'source': return SOURCE_ICON_TEXT
+    case 'context': return CONTEXT_ICON_TEXT
+    default: return SOURCE_ICON_TEXT
+  }
+}
+
+/**
+ * Render the appropriate icon for a badge based on its type
+ */
+function BadgeIcon({ type, iconDataUrl }: { type: string; iconDataUrl?: string }) {
+  // Use custom icon if provided
+  if (iconDataUrl) {
+    return (
+      <img
+        src={iconDataUrl}
+        alt=""
+        className="h-[12px] w-[12px] rounded-[2px] shrink-0"
+      />
+    )
+  }
+
+  // File and folder use lucide icons (matching input field style)
+  if (type === 'file') {
+    return <File className="h-[12px] w-[12px] shrink-0 text-foreground/50" strokeWidth={1.75} />
+  }
+  if (type === 'folder') {
+    return <Folder className="h-[12px] w-[12px] shrink-0 text-foreground/50" strokeWidth={1.75} />
+  }
+
+  // Other types use text fallback
+  return (
+    <span className="h-[12px] w-[12px] rounded-[2px] bg-foreground/5 flex items-center justify-center text-foreground/50 shrink-0 text-[8px]">
+      {getBadgeIconText(type)}
+    </span>
+  )
+}
+
+/**
  * InlineBadge - Renders a single content badge inline with text
  * Styled to match the input field badges (bg-background with shadow)
  */
 function InlineBadge({ badge }: { badge: ContentBadge }) {
-  return (
+  // For file/folder badges, show the path as tooltip and enable pointer cursor
+  const isFileBadge = badge.type === 'file' || badge.type === 'folder'
+
+  const badgeContent = (
     <span
-      className="inline-flex items-center gap-1 h-[22px] px-1.5 mx-0.5 rounded-[5px] bg-background shadow-minimal text-[12px] align-middle"
+      className={cn(
+        "mention-badge inline-flex items-center gap-1 h-[22px] px-1.5 mx-0.5 rounded-[5px] bg-background shadow-minimal text-[12px] align-middle transition-colors",
+        "hover:bg-foreground/5",
+        isFileBadge && "cursor-pointer"
+      )}
       style={{ verticalAlign: 'middle', transform: 'translateY(-1px)' }}
     >
-      {badge.iconDataUrl ? (
-        <img
-          src={badge.iconDataUrl}
-          alt=""
-          className="h-[12px] w-[12px] rounded-[2px] shrink-0"
-        />
-      ) : (
-        <span className="h-[12px] w-[12px] rounded-[2px] bg-foreground/5 flex items-center justify-center text-foreground/50 shrink-0 text-[8px]">
-          {badge.type === 'skill' ? SKILL_ICON_TEXT : badge.type === 'context' ? CONTEXT_ICON_TEXT : SOURCE_ICON_TEXT}
-        </span>
-      )}
+      <BadgeIcon type={badge.type} iconDataUrl={badge.iconDataUrl} />
       <span className="truncate max-w-[200px]">{badge.label}</span>
     </span>
   )
+
+  // Wrap file/folder badges with Tooltip
+  if (isFileBadge && badge.filePath) {
+    return (
+      <Tooltip delayDuration={400}>
+        <TooltipTrigger asChild>
+          {badgeContent}
+        </TooltipTrigger>
+        <TooltipContent side="top" sideOffset={6}>
+          {badge.filePath}
+        </TooltipContent>
+      </Tooltip>
+    )
+  }
+
+  return badgeContent
 }
 
 /**
@@ -213,9 +270,8 @@ function renderContentWithBadges(
       elements.push(<ContextBadge key={`badge-${i}`} badge={badge} />)
     } else if (badge.type === 'command') {
       elements.push(<CommandBadge key={`badge-${i}`} badge={badge} />)
-    } else if (badge.type === 'file') {
-      elements.push(<InlineFileBadge key={`badge-${i}`} badge={badge} onFileClick={onFileClick} />)
     } else {
+      // file, folder, source, skill 都使用 InlineBadge（支持 Tooltip）
       elements.push(<InlineBadge key={`badge-${i}`} badge={badge} />)
     }
 

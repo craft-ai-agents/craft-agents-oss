@@ -77,6 +77,14 @@ export {
   type PreviewBadgeVariant,
 } from './components/ui'
 
+// Tooltip
+export {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  TooltipProvider,
+} from './components/tooltip'
+
 // Code viewer components
 export {
   ShikiCodeViewer,

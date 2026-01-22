@@ -722,8 +722,9 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
           const relativePath = relative(basePath, entryPath)
           const lowerName = entry.name.toLowerCase()
           
-          // Check if name matches query (fuzzy: contains)
-          if (lowerName.includes(lowerQuery)) {
+          // Check if name OR relativePath matches query (fuzzy: contains)
+          const lowerRelative = relativePath.toLowerCase()
+          if (lowerName.includes(lowerQuery) || lowerRelative.includes(lowerQuery)) {
             results.push({
               name: entry.name,
               path: entryPath,

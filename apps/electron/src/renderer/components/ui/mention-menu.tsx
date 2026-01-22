@@ -434,9 +434,9 @@ export function useInlineMention({
     currentInputRef.current = { value, cursorPosition }
 
     const textBeforeCursor = value.slice(0, cursorPosition)
-    // Match @ anywhere, followed by optional word chars, hyphens, and slashes
+    // Match @ anywhere, followed by optional word chars, hyphens, slashes, and dots
     // This triggers on typing @ and shows menu while typing the filter
-    const atMatch = textBeforeCursor.match(/@([\w\-/]*)$/)
+    const atMatch = textBeforeCursor.match(/@([\w\-\/.]+)?$/)
 
     // Check if this is a valid @ mention trigger
     const matchStart = atMatch ? textBeforeCursor.lastIndexOf('@') : -1

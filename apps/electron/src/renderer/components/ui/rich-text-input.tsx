@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
 import { findMentionMatches, parseMentions, type MentionMatch } from '@/lib/mentions'
 import {
@@ -111,7 +112,10 @@ function renderBadgeHTML(
 
   // Line height is increased when badges are present (see hasMentions in component)
   // Use transform for upward shift - doesn't affect layout flow (works even at start of line)
-  return `<span contenteditable="false" data-mention="true"${titleAttr} class="mention-badge inline-flex items-center gap-1 h-[22px] px-1.5 ml-1.5 mr-1.5 rounded-[5px] bg-background shadow-minimal text-[12px] text-foreground select-none [&_*]:selection:bg-transparent selection:bg-transparent" style="vertical-align: middle; transform: translateY(-1px);">${iconHtml}<span class="truncate max-w-[200px]">${escapedLabel}</span></span>`
+  // Add cursor-pointer and hover effect for file/folder types
+  const isFileBadge = type === 'file' || type === 'folder'
+  const interactiveClasses = isFileBadge ? ' cursor-pointer hover:bg-foreground/5' : ''
+  return `<span contenteditable="false" data-mention="true"${titleAttr} class="mention-badge inline-flex items-center gap-1 h-[22px] px-1.5 ml-1.5 mr-1.5 rounded-[5px] bg-background shadow-minimal text-[12px] text-foreground select-none [&_*]:selection:bg-transparent selection:bg-transparent transition-colors${interactiveClasses}" style="vertical-align: middle; transform: translateY(-1px);">${iconHtml}<span class="truncate max-w-[200px]">${escapedLabel}</span></span>`
 }
 
 // ============================================================================
@@ -499,6 +503,12 @@ export const RichTextInput = React.forwardRef<RichTextInputHandle, RichTextInput
     // Pending cursor position to restore after external value update (e.g., after @mention selection)
     const pendingCursorRef = React.useRef<number | null>(null)
 
+    // Tooltip state for file/folder badges
+    const [tooltip, setTooltip] = React.useState<{ content: string; x: number; y: number } | null>(null)
+    const tooltipTimerRef = React.useRef<number | null>(null)
+    const setTooltipRef = React.useRef(setTooltip)
+    setTooltipRef.current = setTooltip
+
     const skillSlugs = React.useMemo(() => skills.map(s => s.slug), [skills])
     const sourceSlugs = React.useMemo(() => sources.map(s => s.config.slug), [sources])
 
@@ -518,6 +528,59 @@ export const RichTextInput = React.forwardRef<RichTextInputHandle, RichTextInput
         }
       }
     }, [sources, skills, workspaceId])
+
+    // Tooltip hover handling for file/folder badges
+    React.useEffect(() => {
+      const div = divRef.current
+      if (!div) return
+
+      const handleMouseOver = (e: MouseEvent) => {
+        const target = e.target as HTMLElement
+        // Check if target or its parent is a mention-badge
+        const badge = target.closest('.mention-badge') as HTMLElement
+        if (badge && badge.getAttribute('title')) {
+          const title = badge.getAttribute('title')
+          if (title) {
+            // Clear any existing timer
+            if (tooltipTimerRef.current !== null) {
+              clearTimeout(tooltipTimerRef.current)
+            }
+            // Set timer for 400ms delay
+            tooltipTimerRef.current = window.setTimeout(() => {
+              const rect = badge.getBoundingClientRect()
+              setTooltipRef.current({
+                content: title,
+                x: rect.left + rect.width / 2,
+                y: rect.top - 6
+              })
+            }, 400)
+          }
+        }
+      }
+
+      const handleMouseOut = (e: MouseEvent) => {
+        const target = e.target as HTMLElement
+        const badge = target.closest('.mention-badge') as HTMLElement
+        if (badge) {
+          if (tooltipTimerRef.current !== null) {
+            clearTimeout(tooltipTimerRef.current)
+            tooltipTimerRef.current = null
+          }
+          setTooltipRef.current(null)
+        }
+      }
+
+      div.addEventListener('mouseover', handleMouseOver)
+      div.addEventListener('mouseout', handleMouseOut)
+
+      return () => {
+        div.removeEventListener('mouseover', handleMouseOver)
+        div.removeEventListener('mouseout', handleMouseOut)
+        if (tooltipTimerRef.current !== null) {
+          clearTimeout(tooltipTimerRef.current)
+        }
+      }
+    }, [])
 
     // Expose imperative handle
     React.useImperativeHandle(forwardedRef, () => ({
@@ -901,6 +964,21 @@ export const RichTextInput = React.forwardRef<RichTextInputHandle, RichTextInput
               className
             )}
           />
+        )}
+        {/* Portal tooltip for file/folder badges - system-level z-index */}
+        {tooltip && createPortal(
+          <div
+            className="fixed z-[99999] px-2.5 py-1.5 text-xs rounded-[8px] bg-background/80 backdrop-blur-xl backdrop-saturate-150 border border-border/50 text-foreground animate-in fade-in-0 duration-150 pointer-events-none"
+            style={{
+              left: tooltip.x,
+              top: tooltip.y,
+              transform: 'translate(-50%, -100%)',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)'
+            }}
+          >
+            {tooltip.content}
+          </div>,
+          document.body
         )}
       </div>
     )
