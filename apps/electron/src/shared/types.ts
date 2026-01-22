@@ -1104,6 +1104,15 @@ export interface SkillsNavigationState {
 }
 
 /**
+ * Vector search navigation state - shows VectorSearch panel
+ */
+export interface VectorSearchNavigationState {
+  navigator: 'vectorSearch'
+  /** Optional right sidebar panel state */
+  rightSidebar?: RightSidebarPanel
+}
+
+/**
  * Unified navigation state - single source of truth for all 3 panels
  *
  * From this state we can derive:
@@ -1116,6 +1125,7 @@ export type NavigationState =
   | SourcesNavigationState
   | SettingsNavigationState
   | SkillsNavigationState
+  | VectorSearchNavigationState
 
 /**
  * Type guard to check if state is chats navigation
@@ -1146,6 +1156,13 @@ export const isSkillsNavigation = (
 ): state is SkillsNavigationState => state.navigator === 'skills'
 
 /**
+ * Type guard to check if state is vector search navigation
+ */
+export const isVectorSearchNavigation = (
+  state: NavigationState
+): state is VectorSearchNavigationState => state.navigator === 'vectorSearch'
+
+/**
  * Default navigation state - allChats with no selection
  */
 export const DEFAULT_NAVIGATION_STATE: NavigationState = {
@@ -1174,6 +1191,9 @@ export const getNavigationStateKey = (state: NavigationState): string => {
       return `skills/skill/${state.details.skillSlug}`
     }
     return 'skills'
+  }
+  if (state.navigator === 'vectorSearch') {
+    return 'vectorSearch'
   }
   if (state.navigator === 'settings') {
     return `settings:${state.subpage}`
@@ -1227,6 +1247,9 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
     }
     return { navigator: 'skills', details: null }
   }
+
+  // Handle vector search
+  if (key === 'vectorSearch') return { navigator: 'vectorSearch' }
 
   // Handle settings
   if (key === 'settings') return { navigator: 'settings', subpage: 'app' }

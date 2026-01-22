@@ -34,7 +34,7 @@ export interface ParsedRoute {
 // Compound Route Types (new format)
 // =============================================================================
 
-export type NavigatorType = 'chats' | 'sources' | 'skills' | 'settings'
+export type NavigatorType = 'chats' | 'sources' | 'skills' | 'settings' | 'vectorSearch'
 
 export interface ParsedCompoundRoute {
   /** The navigator type */
@@ -58,7 +58,7 @@ export interface ParsedCompoundRoute {
  * Known prefixes that indicate a compound route
  */
 const COMPOUND_ROUTE_PREFIXES = [
-  'allChats', 'flagged', 'state', 'sources', 'skills', 'settings'
+  'allChats', 'flagged', 'state', 'sources', 'skills', 'settings', 'vectorSearch'
 ]
 
 /**
@@ -153,6 +153,11 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
     }
 
     return null
+  }
+
+  // Vector Search navigator
+  if (first === 'vectorSearch') {
+    return { navigator: 'vectorSearch', details: null }
   }
 
   // Chats navigator (allChats, flagged, state)
@@ -443,6 +448,11 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
     }
   }
 
+  // Vector Search
+  if (compound.navigator === 'vectorSearch') {
+    return { navigator: 'vectorSearch' }
+  }
+
   // Chats
   const filter = compound.chatFilter || { kind: 'allChats' as const }
   if (compound.details) {
@@ -573,6 +583,10 @@ export function buildRouteFromNavigationState(state: NavigationState): string {
       return `skills/skill/${state.details.skillSlug}`
     }
     return 'skills'
+  }
+
+  if (state.navigator === 'vectorSearch') {
+    return 'vectorSearch'
   }
 
   // Chats

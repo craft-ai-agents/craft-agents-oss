@@ -87,6 +87,7 @@ import {
   isSourcesNavigation,
   isSettingsNavigation,
   isSkillsNavigation,
+  isVectorSearchNavigation,
   type NavigationState,
   type ChatFilter,
 } from "@/contexts/NavigationContext"
@@ -98,6 +99,7 @@ import { EditPopover, getEditConfig } from "@/components/ui/EditPopover"
 import { getDocUrl } from "@craft-agent/shared/docs/doc-links"
 import SettingsNavigator from "@/pages/settings/SettingsNavigator"
 import { RightSidebar } from "./RightSidebar"
+import { VectorSearch } from "@/components/vector-search/VectorSearch"
 import type { RichTextInputHandle } from "@/components/ui/rich-text-input"
 import { hasOpenOverlay } from "@/lib/overlay-detection"
 
@@ -333,8 +335,9 @@ function AppShellContent({
   // Whether local MCP servers are enabled (affects stdio source status)
   const [localMcpEnabled, setLocalMcpEnabled] = React.useState(true)
 
-  // Enabled permission modes for Shift+Tab cycling (min 2 modes)
-  const [enabledModes, setEnabledModes] = React.useState<PermissionMode[]>(['safe', 'ask', 'allow-all'])
+  // Enabled permission modes for Shift+Tab cycling (min 2 modes, includes 'ralph' for Ralph Loop)
+  const DEFAULT_CYCLABLE_MODES: PermissionMode[] = ['safe', 'ask', 'allow-all', 'ralph']
+  const [enabledModes, setEnabledModes] = React.useState<PermissionMode[]>(DEFAULT_CYCLABLE_MODES)
 
   // Load workspace settings (for localMcpEnabled and cyclablePermissionModes) on workspace change
   React.useEffect(() => {
@@ -342,9 +345,12 @@ function AppShellContent({
     window.electronAPI.getWorkspaceSettings(activeWorkspaceId).then((settings) => {
       if (settings) {
         setLocalMcpEnabled(settings.localMcpEnabled ?? true)
-        // Load cyclablePermissionModes from workspace settings
+        // Load cyclablePermissionModes from workspace settings, or reset to defaults
         if (settings.cyclablePermissionModes && settings.cyclablePermissionModes.length >= 2) {
           setEnabledModes(settings.cyclablePermissionModes)
+        } else {
+          // Reset to default modes (including 'ralph') when not configured
+          setEnabledModes(DEFAULT_CYCLABLE_MODES)
         }
       }
     }).catch((err) => {
@@ -465,8 +471,8 @@ function AppShellContent({
         if (session.selected) {
           const currentOptions = contextValue.sessionOptions.get(session.selected)
           const currentMode = currentOptions?.permissionMode ?? 'ask'
-          // Cycle through enabled permission modes
-          const modes = enabledModes.length >= 2 ? enabledModes : ['safe', 'ask', 'allow-all'] as PermissionMode[]
+          // Cycle through enabled permission modes (fallback includes 'ralph' for Ralph Loop)
+          const modes = enabledModes.length >= 2 ? enabledModes : DEFAULT_CYCLABLE_MODES
           const currentIndex = modes.indexOf(currentMode)
           // If current mode not in enabled list, jump to first enabled mode
           const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % modes.length
@@ -811,6 +817,11 @@ function AppShellContent({
     navigate(routes.view.skills())
   }, [])
 
+  // Handler for vector search view
+  const handleVectorSearchClick = useCallback(() => {
+    navigate(routes.view.vectorSearch())
+  }, [])
+
   // Handler for settings view
   const handleSettingsClick = useCallback((subpage: SettingsSubpage = 'app') => {
     navigate(routes.view.settings(subpage))
@@ -914,11 +925,14 @@ function AppShellContent({
     // 2.6. Skills nav item
     result.push({ id: 'nav:skills', type: 'nav', action: handleSkillsClick })
 
-    // 2.7. Settings nav item
+    // 2.7. Vector Search nav item
+    result.push({ id: 'nav:vectorSearch', type: 'nav', action: handleVectorSearchClick })
+
+    // 2.8. Settings nav item
     result.push({ id: 'nav:settings', type: 'nav', action: () => handleSettingsClick('app') })
 
     return result
-  }, [handleAllChatsClick, handleFlaggedClick, handleTodoStateClick, todoStates, handleSourcesClick, handleSkillsClick, handleSettingsClick])
+  }, [handleAllChatsClick, handleFlaggedClick, handleTodoStateClick, todoStates, handleSourcesClick, handleSkillsClick, handleVectorSearchClick, handleSettingsClick])
 
   // Toggle folder expanded state
   const handleToggleFolder = React.useCallback((path: string) => {
@@ -1266,6 +1280,13 @@ function AppShellContent({
                         onAddSkill: openAddSkill,
                       },
                     },
+                    {
+                      id: "nav:vectorSearch",
+                      title: "Search Docs",
+                      icon: Search,
+                      variant: isVectorSearchNavigation(navState) ? "default" : "ghost",
+                      onClick: handleVectorSearchClick,
+                    },
                     { id: "separator:skills-settings", type: "separator" },
                     {
                       id: "nav:settings",
@@ -1553,6 +1574,10 @@ function AppShellContent({
                 selectedSubpage={navState.subpage}
                 onSelectSubpage={(subpage) => handleSettingsClick(subpage)}
               />
+            )}
+            {isVectorSearchNavigation(navState) && (
+              /* Vector Search Navigator */
+              <VectorSearch />
             )}
             {isChatsNavigation(navState) && (
               /* Sessions List */

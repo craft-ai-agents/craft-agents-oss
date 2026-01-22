@@ -136,6 +136,9 @@ export const routes = {
         ? `skills/skill/${skillSlug}` as const
         : 'skills' as const,
 
+    /** Vector search view (vectorSearch navigator) */
+    vectorSearch: () => 'vectorSearch' as const,
+
     /** Settings view (settings navigator) */
     settings: (subpage?: 'app' | 'workspace' | 'permissions' | 'shortcuts' | 'preferences') =>
       subpage && subpage !== 'app'
