@@ -1,4 +1,4 @@
-import craftLogo from "@/assets/craft_logo_c.svg"
+import { VesperAppIcon } from "./VesperAppIcon"
 
 interface CraftAppIconProps {
   className?: string
@@ -6,16 +6,9 @@ interface CraftAppIconProps {
 }
 
 /**
- * CraftAppIcon - Displays the Craft logo (colorful "C" icon)
+ * @deprecated Use VesperAppIcon instead
+ * CraftAppIcon - Legacy alias for VesperAppIcon
  */
-export function CraftAppIcon({ className, size = 64 }: CraftAppIconProps) {
-  return (
-    <img
-      src={craftLogo}
-      alt="Craft"
-      width={size}
-      height={size}
-      className={className}
-    />
-  )
+export function CraftAppIcon(props: CraftAppIconProps) {
+  return <VesperAppIcon {...props} />
 }
