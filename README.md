@@ -1,17 +1,15 @@
-# Vesper
+# Vespr
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
 
-Vesper is a tool we built so that we (at craft.do) can work effectively with agents. It enables intuitive multitasking, no-fluff connection to any API or Service, sharing sessions, and a more document (vs code) centric workflow - in a beautiful and fluid UI.
+Vespr is an open-source AI agent platform built by Tin from Ather Labs. It enables intuitive multitasking, no-fluff connection to any API or Service, sharing sessions, and a more document-centric workflow in a beautiful and fluid desktop experience.
 
-It leans on Claude Code through the Claude Agent SDK - follows what we found great, and improves areas where we've desired improvements.
+Vespr leverages the Claude Agent SDK and Claude Code, combining what works great while adding significant improvements for agentic workflows. It's built with Agent Native software principles in mind and is highly customizable out of the box—one of the first of its kind.
 
-It's built with Agent Native software principles in mind, and is highly customisable out of the box. One of the first of its kind.
+Vespr is open source under the Apache 2.0 license—you're free to remix and modify anything. We're building Vespr with Vespr itself, no code editors required—any customization is just a prompt away.
 
-Vesper is open source under the Apache 2.0 license - so you are free to remix, change anything. And that's actually possible. We ourselves are building Vesper with Vesper only - no code editors - so really, any customisation is just a prompt away.
-
-We built Vesper because we wanted a better, more opinionated (and preferably non-CLI way) of working with the most powerful agents in the world. We'll continue to improve it, based on our experiences and intuition.
+We built Vespr because we wanted a better, more opinionated approach to working with the world's most powerful AI agents. We continue to improve it based on real-world usage and intuition.
 
 <img width="1578" height="894" alt="image" src="https://github.com/user-attachments/assets/3f1f2fe8-7cf6-4487-99ff-76f6c8c0a3fb" />
 
@@ -21,19 +19,19 @@ We built Vesper because we wanted a better, more opinionated (and preferably non
 
 **macOS / Linux:**
 ```bash
-curl -fsSL https://agents.craft.do/install-app.sh | bash
+curl -fsSL https://vespr.atherslabs.com/install-app.sh | bash
 ```
 
 **Windows (PowerShell):**
 ```powershell
-irm https://agents.craft.do/install-app.ps1 | iex
+irm https://vespr.atherslabs.com/install-app.ps1 | iex
 ```
 
 ### Build from Source
 
 ```bash
-git clone https://github.com/lukilabs/craft-agents-oss.git
-cd craft-agents-oss
+git clone https://github.com/atherslabs/vespr.git
+cd vespr
 bun install
 bun run electron:start
 ```
@@ -42,10 +40,14 @@ bun run electron:start
 
 - **Multi-Session Inbox**: Desktop app with session management, status workflow, and flagging
 - **Claude Code Experience**: Streaming responses, tool visualization, real-time updates
-- **Craft MCP Integration**: Access to 32+ Craft document tools (blocks, collections, search, tasks)
-- **Sources**: Connect to MCP servers, REST APIs (Google, Slack, Microsoft), and local filesystems
+- **Command Palette**: Fast navigation with CMD+K command palette for session management
+- **Vector Search**: Semantic search over markdown documentation using QMD with collection management
+- **Document Viewer**: Integrated document preview for search results with rich formatting
+- **Cron Scheduler**: Visual cron-based scheduling for automated agent tasks with time picker and preset schedules
+- **MCP Integration**: Connect to MCP servers (Craft, Linear, GitHub, Notion, custom)
+- **Sources**: Connect to REST APIs (Google, Slack, Microsoft) and local filesystems
 - **Permission Modes**: Three-level system (Explore, Ask to Edit, Auto) with customizable rules
-- **Background Tasks**: Run long-running operations with progress tracking
+- **Background Tasks**: Run long-running operations with progress tracking and real-time UI sync
 - **Dynamic Status System**: Customizable session workflow states (Todo, In Progress, Done, etc.)
 - **Theme System**: Cascading themes at app and workspace levels
 - **Multi-File Diff**: VS Code-style window for viewing all file changes in a turn
@@ -94,6 +96,7 @@ Use **SHIFT+TAB** to cycle through modes in the chat interface.
 
 | Shortcut | Action |
 |----------|--------|
+| `Cmd+K` | Open command palette |
 | `Cmd+N` | New chat |
 | `Cmd+1/2/3` | Focus sidebar/list/chat |
 | `Cmd+/` | Keyboard shortcuts dialog |
@@ -104,7 +107,7 @@ Use **SHIFT+TAB** to cycle through modes in the chat interface.
 ## Architecture
 
 ```
-craft-agent/
+vespr/
 ├── apps/
 │   └── electron/              # Desktop GUI (primary)
 │       └── src/
@@ -115,7 +118,7 @@ craft-agent/
     ├── core/                  # Shared types
     └── shared/                # Business logic
         └── src/
-            ├── agent/         # CraftAgent, permissions
+            ├── agent/         # VesperAgent, permissions
             ├── auth/          # OAuth, tokens
             ├── config/        # Storage, preferences, themes
             ├── credentials/   # AES-256-GCM encrypted storage
@@ -156,10 +159,10 @@ See [Google Cloud Console](https://console.cloud.google.com/apis/credentials) to
 
 ## Configuration
 
-Configuration is stored at `~/.craft-agent/`:
+Configuration is stored at `~/.vespr/`:
 
 ```
-~/.craft-agent/
+~/.vespr/
 ├── config.json              # Main config (workspaces, auth type)
 ├── credentials.enc          # Encrypted credentials (AES-256-GCM)
 ├── preferences.json         # User preferences
@@ -182,14 +185,14 @@ Tool responses exceeding ~60KB are automatically summarized using Claude Haiku w
 
 ### Deep Linking
 
-External apps can navigate using `craftagents://` URLs:
+External apps can navigate using `vespr://` URLs:
 
 ```
-craftagents://allChats                    # All chats view
-craftagents://allChats/chat/session123    # Specific chat
-craftagents://settings                    # Settings
-craftagents://sources/source/github       # Source info
-craftagents://action/new-chat             # Create new chat
+vespr://allChats                    # All chats view
+vespr://allChats/chat/session123    # Specific chat
+vespr://settings                    # Settings
+vespr://sources/source/github       # Source info
+vespr://action/new-chat             # Create new chat
 ```
 
 ## Tech Stack
@@ -213,7 +216,7 @@ This project uses the [Claude Agent SDK](https://www.npmjs.com/package/@anthropi
 
 ### Trademark
 
-"Craft" and "Vesper" are trademarks of Craft Docs Ltd. See [TRADEMARK.md](TRADEMARK.md) for usage guidelines.
+"Vespr" is a trademark of Ather Labs. See [TRADEMARK.md](TRADEMARK.md) for usage guidelines.
 
 ## Contributing
 
