@@ -370,6 +370,14 @@ const api: ElectronAPI = {
       ipcRenderer.removeListener(IPC_CHANNELS.NOTIFICATION_NAVIGATE, handler)
     }
   },
+
+  // Ralph Loop (autonomous coding loops)
+  loopStart: (sessionId: string, prdContent: string, config?: import('../shared/types').LoopConfigInput) =>
+    ipcRenderer.invoke(IPC_CHANNELS.LOOP_START, sessionId, prdContent, config),
+  loopPause: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.LOOP_PAUSE, sessionId),
+  loopResume: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.LOOP_RESUME, sessionId),
+  loopCancel: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.LOOP_CANCEL, sessionId),
+  loopGetState: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.LOOP_GET_STATE, sessionId),
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)

@@ -1098,6 +1098,19 @@ export default function App() {
     onboarding.handleCancel()
   }, [onboarding])
 
+  // Ralph Loop control handlers
+  const handlePauseLoop = useCallback((sessionId: string) => {
+    window.electronAPI.loopPause(sessionId)
+  }, [])
+
+  const handleResumeLoop = useCallback((sessionId: string) => {
+    window.electronAPI.loopResume(sessionId)
+  }, [])
+
+  const handleCancelLoop = useCallback((sessionId: string) => {
+    window.electronAPI.loopCancel(sessionId)
+  }, [])
+
   // Build context value for AppShell component
   // This is memoized to prevent unnecessary re-renders
   // IMPORTANT: Must be before early returns to maintain consistent hook order
@@ -1142,6 +1155,10 @@ export default function App() {
     onInputChange: handleInputChange,
     // New chat (via deep link navigation)
     openNewChat,
+    // Ralph Loop control
+    onPauseLoop: handlePauseLoop,
+    onResumeLoop: handleResumeLoop,
+    onCancelLoop: handleCancelLoop,
   }), [
     // NOTE: sessions removed to prevent memory leaks - components use atoms instead
     workspaces,
@@ -1174,6 +1191,9 @@ export default function App() {
     handleSessionOptionsChange,
     handleInputChange,
     openNewChat,
+    handlePauseLoop,
+    handleResumeLoop,
+    handleCancelLoop,
   ])
 
   // Platform actions for @craft-agent/ui components (overlays, etc.)

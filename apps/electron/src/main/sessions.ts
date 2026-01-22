@@ -3242,4 +3242,228 @@ To view this task's output:
 
     sessionLog.info('Cleanup complete')
   }
+
+  // =============================================================================
+  // Ralph Loop Methods
+  // =============================================================================
+
+  /** Map of session ID -> running RalphLoopRunner */
+  private loopRunners: Map<string, import('@craft-agent/shared/ralph-loop').RalphLoopRunner> = new Map()
+
+  /**
+   * Start a Ralph Loop for a session
+   */
+  async startLoop(
+    sessionId: string,
+    prdContent: string,
+    config?: import('../shared/types').LoopConfigInput
+  ): Promise<{ loopId: string } | { error: string }> {
+    const managed = this.sessions.get(sessionId)
+    if (!managed) {
+      return { error: 'Session not found' }
+    }
+
+    // Check if a loop is already running
+    if (this.loopRunners.has(sessionId)) {
+      return { error: 'A loop is already running for this session' }
+    }
+
+    // Lazy-load loop module to avoid startup cost
+    const { parsePRD, validatePRD, createLoopRunner } = await import('@craft-agent/shared/ralph-loop')
+
+    // Validate the PRD
+    const validation = validatePRD(prdContent)
+    if (!validation.isValid) {
+      return { error: validation.error || 'Invalid PRD format' }
+    }
+
+    // Parse the PRD
+    const prd = parsePRD(prdContent)
+    if (prd.stories.length === 0) {
+      return { error: 'No stories found in PRD' }
+    }
+
+    // Ensure agent is initialized
+    if (!managed.agent) {
+      return { error: 'Agent not initialized. Send a message first to initialize the session.' }
+    }
+
+    // Create the loop runner
+    const workingDirectory = managed.workingDirectory || managed.workspace.rootPath
+    const runner = createLoopRunner(sessionId, managed.agent, workingDirectory, config)
+
+    // Wire up event handlers
+    runner.on('progress', (state) => {
+      this.sendEvent({
+        type: 'loop_progress',
+        sessionId,
+        loopId: state.id,
+        currentStory: state.currentStory ? { id: state.currentStory.id, title: state.currentStory.title } : null,
+        storyIndex: state.prd.stories.findIndex((s: { id: string }) => s.id === state.currentStory?.id) + 1,
+        totalStories: state.prd.metadata.totalStories,
+        currentIteration: state.currentIteration,
+        maxIterations: state.config.maxIterationsPerStory,
+        elapsedMs: Date.now() - state.startTime,
+        status: state.status as 'running' | 'paused',
+      }, managed.workspace.id)
+    })
+
+    runner.on('story_start', (story) => {
+      sessionLog.info(`Loop story started: ${story.id} - ${story.title}`)
+    })
+
+    runner.on('story_complete', (story, result) => {
+      this.sendEvent({
+        type: 'loop_story_complete',
+        sessionId,
+        loopId: runner.getState()?.id || '',
+        story: { id: story.id, title: story.title },
+        result: result.result,
+        commitSha: result.commitSha,
+        error: result.error,
+      }, managed.workspace.id)
+    })
+
+    runner.on('error', (error) => {
+      this.sendEvent({
+        type: 'loop_error',
+        sessionId,
+        loopId: runner.getState()?.id || '',
+        storyId: error.storyId,
+        error: error.message,
+        code: error.code,
+      }, managed.workspace.id)
+    })
+
+    runner.on('complete', (result) => {
+      this.sendEvent({
+        type: 'loop_complete',
+        sessionId,
+        loopId: result.loopId,
+        summary: result.summary,
+      }, managed.workspace.id)
+      // Clean up
+      this.loopRunners.delete(sessionId)
+    })
+
+    runner.on('paused', (state) => {
+      this.sendEvent({
+        type: 'loop_paused',
+        sessionId,
+        loopId: state.id,
+        currentStoryIndex: state.prd.stories.findIndex((s: { id: string }) => s.id === state.currentStory?.id),
+        completedStories: state.storiesCompleted,
+      }, managed.workspace.id)
+    })
+
+    runner.on('resumed', (state) => {
+      this.sendEvent({
+        type: 'loop_resumed',
+        sessionId,
+        loopId: state.id,
+      }, managed.workspace.id)
+    })
+
+    // Forward agent events during loop execution
+    runner.on('agent_event', (event) => {
+      // Forward to UI for display
+      this.sendEvent(event as import('../shared/types').SessionEvent, managed.workspace.id)
+    })
+
+    // Store the runner
+    this.loopRunners.set(sessionId, runner)
+
+    // Send started event
+    const loopId = `loop-${Date.now()}`
+    this.sendEvent({
+      type: 'loop_started',
+      sessionId,
+      loopId,
+      totalStories: prd.stories.length,
+      config: {
+        maxIterationsPerStory: config?.maxIterationsPerStory ?? 5,
+        timeoutPerStoryMs: config?.timeoutPerStoryMs ?? 600000,
+        autoCommit: config?.autoCommit ?? true,
+      },
+    }, managed.workspace.id)
+
+    // Start the loop (don't await - runs in background)
+    runner.start(prd).catch(error => {
+      sessionLog.error('Loop execution error:', error)
+      this.loopRunners.delete(sessionId)
+    })
+
+    return { loopId }
+  }
+
+  /**
+   * Pause a running loop
+   */
+  async pauseLoop(sessionId: string): Promise<void> {
+    const runner = this.loopRunners.get(sessionId)
+    if (runner) {
+      runner.pause()
+    }
+  }
+
+  /**
+   * Resume a paused loop
+   */
+  async resumeLoop(sessionId: string): Promise<void> {
+    const runner = this.loopRunners.get(sessionId)
+    if (runner) {
+      await runner.resume()
+    }
+  }
+
+  /**
+   * Cancel a running loop
+   */
+  async cancelLoop(sessionId: string): Promise<void> {
+    const runner = this.loopRunners.get(sessionId)
+    const managed = this.sessions.get(sessionId)
+    if (runner && managed) {
+      runner.cancel()
+      const state = runner.getState()
+      if (state) {
+        this.sendEvent({
+          type: 'loop_cancelled',
+          sessionId,
+          loopId: state.id,
+          completedStories: state.storiesCompleted,
+          totalStories: state.prd.metadata.totalStories,
+        }, managed.workspace.id)
+      }
+      this.loopRunners.delete(sessionId)
+    }
+  }
+
+  /**
+   * Get current loop state for a session
+   */
+  getLoopState(sessionId: string): import('../shared/types').LoopStateUI | null {
+    const runner = this.loopRunners.get(sessionId)
+    if (!runner) {
+      return null
+    }
+
+    const state = runner.getState()
+    if (!state) {
+      return null
+    }
+
+    return {
+      isActive: state.status === 'running' || state.status === 'paused',
+      loopId: state.id,
+      status: state.status as 'running' | 'paused' | 'completed' | 'cancelled' | 'error',
+      currentStory: state.currentStory ? { id: state.currentStory.id, title: state.currentStory.title } : undefined,
+      progress: {
+        currentStoryIndex: state.prd.stories.findIndex(s => s.id === state.currentStory?.id) + 1,
+        totalStories: state.prd.metadata.totalStories,
+        currentIteration: state.currentIteration,
+        maxIterations: state.config.maxIterationsPerStory,
+      },
+      elapsedMs: Date.now() - state.startTime,
+    }
+  }
 }

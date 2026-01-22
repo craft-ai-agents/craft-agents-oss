@@ -305,6 +305,43 @@ export interface Session {
     /** Model's context window size in tokens (from SDK modelUsage) */
     contextWindow?: number
   }
+  // Ralph Loop state (when a loop is active)
+  loopState?: LoopStateUI
+}
+
+/**
+ * Ralph Loop state for UI display
+ */
+export interface LoopStateUI {
+  /** Whether a loop is currently active */
+  isActive: boolean
+  /** Loop ID for tracking */
+  loopId?: string
+  /** Current status */
+  status?: 'running' | 'paused' | 'completed' | 'cancelled' | 'error'
+  /** Current story being processed */
+  currentStory?: {
+    id: string
+    title: string
+  }
+  /** Progress tracking */
+  progress?: {
+    currentStoryIndex: number
+    totalStories: number
+    currentIteration: number
+    maxIterations: number
+  }
+  /** Elapsed time in milliseconds */
+  elapsedMs?: number
+  /** Summary (available after completion) */
+  summary?: {
+    totalStories: number
+    completedStories: number
+    failedStories: number
+    skippedStories: number
+    totalTimeMs: number
+    commits: string[]
+  }
 }
 
 /**
@@ -371,6 +408,15 @@ export type SessionEvent =
   | { type: 'source_activated'; sessionId: string; sourceSlug: string; originalMessage: string }
   // Real-time usage update during processing (for context display)
   | { type: 'usage_update'; sessionId: string; tokenUsage: { inputTokens: number; contextWindow?: number } }
+  // Ralph Loop events
+  | { type: 'loop_started'; sessionId: string; loopId: string; totalStories: number; config: { maxIterationsPerStory: number; timeoutPerStoryMs: number; autoCommit: boolean } }
+  | { type: 'loop_progress'; sessionId: string; loopId: string; currentStory: { id: string; title: string } | null; storyIndex: number; totalStories: number; currentIteration: number; maxIterations: number; elapsedMs: number; status: 'running' | 'paused' }
+  | { type: 'loop_story_complete'; sessionId: string; loopId: string; story: { id: string; title: string }; result: 'success' | 'failed' | 'skipped' | 'timeout'; commitSha?: string; error?: string }
+  | { type: 'loop_complete'; sessionId: string; loopId: string; summary: { totalStories: number; completedStories: number; failedStories: number; skippedStories: number; totalTimeMs: number; commits: string[] } }
+  | { type: 'loop_paused'; sessionId: string; loopId: string; currentStoryIndex: number; completedStories: number }
+  | { type: 'loop_resumed'; sessionId: string; loopId: string }
+  | { type: 'loop_cancelled'; sessionId: string; loopId: string; completedStories: number; totalStories: number }
+  | { type: 'loop_error'; sessionId: string; loopId: string; storyId?: string; error: string; code: 'timeout' | 'agent_error' | 'git_error' | 'permission_denied' | 'unknown' }
 
 // Options for sendMessage
 export interface SendMessageOptions {
@@ -622,6 +668,13 @@ export const IPC_CHANNELS = {
   BADGE_DRAW: 'badge:draw',  // Broadcast: { count: number, iconDataUrl: string }
   WINDOW_FOCUS_STATE: 'window:focusState',  // Broadcast: boolean (isFocused)
   WINDOW_GET_FOCUS_STATE: 'window:getFocusState',
+
+  // Ralph Loop (autonomous coding loops)
+  LOOP_START: 'loop:start',
+  LOOP_PAUSE: 'loop:pause',
+  LOOP_RESUME: 'loop:resume',
+  LOOP_CANCEL: 'loop:cancel',
+  LOOP_GET_STATE: 'loop:getState',
 } as const
 
 // Re-import types for ElectronAPI
@@ -835,6 +888,23 @@ export interface ElectronAPI {
   // Theme preferences sync across windows (mode, colorTheme, font)
   broadcastThemePreferences(preferences: { mode: string; colorTheme: string; font: string }): Promise<void>
   onThemePreferencesChange(callback: (preferences: { mode: string; colorTheme: string; font: string }) => void): () => void
+
+  // Ralph Loop (autonomous coding loops)
+  loopStart(sessionId: string, prdContent: string, config?: LoopConfigInput): Promise<{ loopId: string } | { error: string }>
+  loopPause(sessionId: string): Promise<void>
+  loopResume(sessionId: string): Promise<void>
+  loopCancel(sessionId: string): Promise<void>
+  loopGetState(sessionId: string): Promise<LoopStateUI | null>
+}
+
+/**
+ * Loop configuration input from UI
+ */
+export interface LoopConfigInput {
+  maxIterationsPerStory?: number
+  timeoutPerStoryMs?: number
+  autoCommit?: boolean
+  commitMessagePrefix?: string
 }
 
 /**

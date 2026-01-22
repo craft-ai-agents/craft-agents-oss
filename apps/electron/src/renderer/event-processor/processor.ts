@@ -39,6 +39,16 @@ import {
   handleAuthCompleted,
   handleUsageUpdate,
 } from './handlers/session'
+import {
+  handleLoopStarted,
+  handleLoopProgress,
+  handleLoopStoryComplete,
+  handleLoopComplete,
+  handleLoopPaused,
+  handleLoopResumed,
+  handleLoopCancelled,
+  handleLoopError,
+} from './handlers/loop'
 
 /**
  * Process an agent event, returning new state and any side effects
@@ -172,6 +182,47 @@ export function processEvent(
 
     case 'usage_update':
       return handleUsageUpdate(state, event)
+
+    // Ralph Loop events
+    case 'loop_started': {
+      const newState = handleLoopStarted(state, event)
+      return { state: newState, effects: [] }
+    }
+
+    case 'loop_progress': {
+      const newState = handleLoopProgress(state, event)
+      return { state: newState, effects: [] }
+    }
+
+    case 'loop_story_complete': {
+      const newState = handleLoopStoryComplete(state, event)
+      return { state: newState, effects: [] }
+    }
+
+    case 'loop_complete': {
+      const newState = handleLoopComplete(state, event)
+      return { state: newState, effects: [] }
+    }
+
+    case 'loop_paused': {
+      const newState = handleLoopPaused(state, event)
+      return { state: newState, effects: [] }
+    }
+
+    case 'loop_resumed': {
+      const newState = handleLoopResumed(state, event)
+      return { state: newState, effects: [] }
+    }
+
+    case 'loop_cancelled': {
+      const newState = handleLoopCancelled(state, event)
+      return { state: newState, effects: [] }
+    }
+
+    case 'loop_error': {
+      const newState = handleLoopError(state, event)
+      return { state: newState, effects: [] }
+    }
 
     default: {
       // Unknown event type - return state unchanged but as new reference

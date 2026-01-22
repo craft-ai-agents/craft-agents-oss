@@ -113,6 +113,14 @@ export interface AppShellContextType {
 
   // Right sidebar button (for page headers)
   rightSidebarButton?: React.ReactNode
+
+  // Ralph Loop control
+  /** Pause a running loop for a session */
+  onPauseLoop?: (sessionId: string) => void
+  /** Resume a paused loop for a session */
+  onResumeLoop?: (sessionId: string) => void
+  /** Cancel a running or paused loop for a session */
+  onCancelLoop?: (sessionId: string) => void
 }
 
 const AppShellContext = createContext<AppShellContextType | null>(null)
