@@ -1894,4 +1894,35 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     }
   })
 
+  // ============================================================
+  // Vector Search (QMD CLI integration)
+  // ============================================================
+
+  ipcMain.handle(IPC_CHANNELS.VECTOR_SEARCH_EXECUTE, async (_event, args: string[]) => {
+    const { execFile } = await import('child_process')
+
+    // Sanitize args to prevent shell injection
+    const sanitized = args.map(arg =>
+      arg.replace(/[`$(){}|;&]/g, '').slice(0, 1000)
+    )
+
+    return new Promise<{ stdout: string; stderr: string }>((resolve) => {
+      execFile('qmd', sanitized, { shell: false, timeout: 30000 }, (error, stdout, stderr) => {
+        if (error && (error as NodeJS.ErrnoException).code === 'ENOENT') {
+          resolve({
+            stdout: '',
+            stderr: 'QMD not installed. Run: bun install -g https://github.com/tobi/qmd'
+          })
+        } else if (error) {
+          resolve({
+            stdout: '',
+            stderr: stderr || error.message
+          })
+        } else {
+          resolve({ stdout, stderr })
+        }
+      })
+    })
+  })
+
 }

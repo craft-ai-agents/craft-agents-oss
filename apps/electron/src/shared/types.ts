@@ -695,6 +695,9 @@ export const IPC_CHANNELS = {
   LOOP_RESUME: 'loop:resume',
   LOOP_CANCEL: 'loop:cancel',
   LOOP_GET_STATE: 'loop:getState',
+
+  // Vector Search (QMD integration)
+  VECTOR_SEARCH_EXECUTE: 'vector-search:execute',
 } as const
 
 // Re-import types for ElectronAPI
@@ -915,6 +918,9 @@ export interface ElectronAPI {
   loopResume(sessionId: string): Promise<void>
   loopCancel(sessionId: string): Promise<void>
   loopGetState(sessionId: string): Promise<LoopStateUI | null>
+
+  // Vector Search (QMD CLI integration)
+  vectorSearchExecute(args: string[]): Promise<VectorSearchExecuteResult>
 }
 
 /**
@@ -925,6 +931,24 @@ export interface LoopConfigInput {
   timeoutPerStoryMs?: number
   autoCommit?: boolean
   commitMessagePrefix?: string
+}
+
+/**
+ * Result from QMD CLI execution
+ */
+export interface VectorSearchExecuteResult {
+  stdout: string
+  stderr: string
+}
+
+/**
+ * Search result from QMD
+ */
+export interface VectorSearchResult {
+  filePath: string
+  snippet: string
+  score: number
+  collection: string
 }
 
 /**

@@ -1,0 +1,41 @@
+/**
+ * Vector Search Atoms
+ *
+ * Simple atoms for storing vector search state.
+ * Uses QMD CLI for semantic search across markdown documents.
+ */
+
+import { atom } from 'jotai'
+import type { VectorSearchResult } from '../../shared/types'
+
+/**
+ * Search mode types supported by QMD
+ */
+export type SearchMode = 'keyword' | 'semantic' | 'hybrid'
+
+/**
+ * Search state for the vector search feature
+ */
+export interface SearchState {
+  query: string
+  mode: SearchMode
+  results: VectorSearchResult[]
+  error: string | null
+  isSearching: boolean
+}
+
+/**
+ * Main search state atom
+ */
+export const searchStateAtom = atom<SearchState>({
+  query: '',
+  mode: 'hybrid',
+  results: [],
+  error: null,
+  isSearching: false
+})
+
+/**
+ * Collections list atom (names of registered QMD collections)
+ */
+export const collectionsAtom = atom<string[]>([])

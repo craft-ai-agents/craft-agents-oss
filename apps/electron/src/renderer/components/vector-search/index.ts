@@ -1,0 +1,1 @@
+export { VectorSearch } from './VectorSearch'

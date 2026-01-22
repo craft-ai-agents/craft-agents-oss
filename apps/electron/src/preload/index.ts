@@ -378,6 +378,9 @@ const api: ElectronAPI = {
   loopResume: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.LOOP_RESUME, sessionId),
   loopCancel: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.LOOP_CANCEL, sessionId),
   loopGetState: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.LOOP_GET_STATE, sessionId),
+
+  // Vector Search (QMD CLI integration)
+  vectorSearchExecute: (args: string[]) => ipcRenderer.invoke(IPC_CHANNELS.VECTOR_SEARCH_EXECUTE, args),
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)
