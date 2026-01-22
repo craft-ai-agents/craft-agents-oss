@@ -110,14 +110,14 @@ export async function buildElectronAppWindows(config: BuildConfig): Promise<void
   console.log('  Building preload...');
   await $`cd ${rootDir} && bun run electron:build:preload`;
 
-  // Build renderer
+  // Build renderer - invoke vite directly via node to avoid bun/npx Windows issues
   console.log('  Building renderer...');
   const rendererDir = join(electronDir, 'dist', 'renderer');
   if (existsSync(rendererDir)) {
     rmSync(rendererDir, { recursive: true, force: true });
   }
-  // Use bunx to avoid Windows path space issues
-  await $`cd ${rootDir} && bunx vite build --config apps/electron/vite.config.ts`;
+  // Use node to run vite directly - most reliable on Windows
+  await $`cd ${rootDir} && node ./node_modules/vite/bin/vite.js build --config apps/electron/vite.config.ts`;
 
   // Verify renderer was built
   if (!existsSync(join(rendererDir, 'index.html'))) {
