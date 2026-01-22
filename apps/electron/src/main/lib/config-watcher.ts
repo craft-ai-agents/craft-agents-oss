@@ -122,8 +122,8 @@ export interface ConfigWatcherCallbacks {
   onPresetThemeChange?: (themeId: string, theme: PresetTheme | null) => void;
   /** Called when the preset themes list changes (add/remove files) */
   onPresetThemesListChange?: (themes: PresetTheme[]) => void;
-  /** Called when omarchy system theme changes */
-  onOmarchyThemeChange?: (theme: ThemeFile | null) => void;
+  /** Called when system theme changes (e.g., omarchy on Linux) */
+  onSystemThemeChange?: (theme: ThemeFile | null) => void;
 
   // Error callbacks
   /** Called when a validation error occurs */
@@ -173,8 +173,8 @@ export class ConfigWatcher {
   private knownSkills: Set<string> = new Set();
   private knownThemes: Set<string> = new Set();
 
-  // Omarchy theme watcher cleanup function
-  private omarchyCleanup: (() => void) | null = null;
+  // System theme watcher cleanup function
+  private systemThemeCleanup: (() => void) | null = null;
 
   // Computed paths
   private workspaceDir: string;
@@ -240,9 +240,9 @@ export class ConfigWatcher {
     this.watchAppPermissionsDir();
     span.mark('watchAppPermissionsDir');
 
-    // Watch omarchy system theme (if available)
-    this.watchOmarchyTheme();
-    span.mark('watchOmarchyTheme');
+    // Watch system theme (e.g., omarchy on Linux)
+    this.watchSystemTheme();
+    span.mark('watchSystemTheme');
 
     // Initial scan to populate known sources, skills, and themes
     this.scanSources();
@@ -280,10 +280,10 @@ export class ConfigWatcher {
     }
     this.watchers = [];
 
-    // Clean up omarchy theme watcher
-    if (this.omarchyCleanup) {
-      this.omarchyCleanup();
-      this.omarchyCleanup = null;
+    // Clean up system theme watcher
+    if (this.systemThemeCleanup) {
+      this.systemThemeCleanup();
+      this.systemThemeCleanup = null;
     }
 
     this.knownSources.clear();
@@ -849,35 +849,28 @@ export class ConfigWatcher {
   }
 
   /**
-   * Watch omarchy system theme directory for changes
-   * Uses the omarchy-theme module's watchOmarchyTheme function
+   * Watch system theme for changes (e.g., omarchy on Linux)
+   * Uses the generic system-theme module which abstracts provider-specific details
    */
-  private watchOmarchyTheme(): void {
-    // Dynamic import to avoid issues if omarchy is not available
-    // Note: Must use '@craft-agent/shared/config' not '/omarchy-theme' - subpath not exported
+  private watchSystemTheme(): void {
+    // Dynamic import to avoid issues if system theme provider is not available
     import('@craft-agent/shared/config').then((module) => {
-      const { isOmarchyAvailable, watchOmarchyTheme } = module;
+      const { isSystemThemeAvailable, watchSystemTheme } = module;
 
-      if (!isOmarchyAvailable) {
+      if (!isSystemThemeAvailable()) {
+        debug('[ConfigWatcher] System theme not available, skipping theme watch');
         return;
       }
 
-      const available = isOmarchyAvailable();
-
-      if (!available) {
-        debug('[ConfigWatcher] Omarchy not available, skipping theme watch');
-        return;
-      }
-
-      debug('[ConfigWatcher] Watching omarchy theme');
+      debug('[ConfigWatcher] Watching system theme');
 
       // Start watching and store the cleanup function
-      this.omarchyCleanup = watchOmarchyTheme((theme) => {
-        debug('[ConfigWatcher] Omarchy theme changed:', theme?.name);
-        this.callbacks.onOmarchyThemeChange?.(theme);
+      this.systemThemeCleanup = watchSystemTheme((theme) => {
+        debug('[ConfigWatcher] System theme changed:', theme?.name);
+        this.callbacks.onSystemThemeChange?.(theme);
       });
     }).catch((error) => {
-      debug('[ConfigWatcher] Error setting up omarchy theme watcher:', error);
+      debug('[ConfigWatcher] Error setting up system theme watcher:', error);
     });
   }
 
