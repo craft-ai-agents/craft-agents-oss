@@ -2,7 +2,8 @@ import { query, createSdkMcpServer, tool, AbortError, type Query, type SDKMessag
 import { getDefaultOptions } from './options.ts';
 import type { ContentBlockParam } from '@anthropic-ai/sdk/resources';
 import { z } from 'zod';
-import { existsSync } from 'fs';
+import { existsSync, mkdirSync, writeFileSync } from 'fs';
+import { join } from 'path';
 import { GLOBAL_SKILLS_DIR, CLAUDE_CODE_SKILLS_DIR } from '../config/paths.ts';
 import { getSystemPrompt, getDateTimeContext, getWorkingDirectoryContext } from '../prompts/system.ts';
 // Plan types are used by UI components; not needed in craft-agent.ts since Safe Mode is user-controlled
@@ -389,9 +390,35 @@ export class CraftAgent {
   }
 
   /**
+   * Ensure a plugin manifest exists for a directory.
+   * The SDK requires .claude-plugin/plugin.json to recognize a plugin.
+   */
+  private ensurePluginManifestForDir(dirPath: string, pluginName: string): void {
+    const pluginDir = join(dirPath, '.claude-plugin');
+    const manifestPath = join(pluginDir, 'plugin.json');
+
+    if (existsSync(manifestPath)) return;
+
+    // Create .claude-plugin directory
+    if (!existsSync(pluginDir)) {
+      mkdirSync(pluginDir, { recursive: true });
+    }
+
+    // Create minimal plugin manifest
+    const manifest = {
+      name: pluginName,
+      version: '1.0.0',
+    };
+
+    writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+    debug(`[CraftAgent] Created plugin manifest for: ${dirPath}`);
+  }
+
+  /**
    * Build the plugins configuration array for the SDK.
    * Includes workspace, global skills, and Claude Code skills directories.
    * Only includes directories that exist to avoid SDK errors.
+   * Ensures plugin manifests exist for global skill directories.
    */
   private buildPluginConfigs(): Array<{ type: 'local'; path: string }> {
     const configs: Array<{ type: 'local'; path: string }> = [
@@ -400,11 +427,13 @@ export class CraftAgent {
 
     // Add global skills directory if it exists (user-installed skills)
     if (existsSync(GLOBAL_SKILLS_DIR)) {
+      this.ensurePluginManifestForDir(GLOBAL_SKILLS_DIR, 'craft-global-skills');
       configs.push({ type: 'local' as const, path: GLOBAL_SKILLS_DIR });
     }
 
     // Add Claude Code skills directory if it exists (CLI-installed skills)
     if (existsSync(CLAUDE_CODE_SKILLS_DIR)) {
+      this.ensurePluginManifestForDir(CLAUDE_CODE_SKILLS_DIR, 'claude-code-skills');
       configs.push({ type: 'local' as const, path: CLAUDE_CODE_SKILLS_DIR });
     }
 
