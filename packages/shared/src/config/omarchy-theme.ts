@@ -13,7 +13,8 @@
 import { existsSync, readFileSync, watch, type FSWatcher } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
-import type { ThemeFile, ThemeOverrides } from './theme.ts';
+import type { ThemeFile, ThemeOverrides, PresetTheme } from './theme.ts';
+import { loadPresetThemes } from './storage.ts';
 
 // Omarchy configuration paths
 const OMARCHY_CONFIG_DIR = join(homedir(), '.config', 'omarchy');
@@ -107,21 +108,48 @@ export function getOmarchyThemeName(): string | null {
 }
 
 /**
- * Check if the current omarchy theme is light mode
+ * Parse a hex color and return its luminance (0-1).
+ * Uses the relative luminance formula for sRGB.
+ */
+function getColorLuminance(hex: string): number {
+  // Remove # prefix if present
+  const cleanHex = hex.replace(/^#/, '');
+  if (cleanHex.length !== 6) return 0.5;
+
+  const r = parseInt(cleanHex.slice(0, 2), 16) / 255;
+  const g = parseInt(cleanHex.slice(2, 4), 16) / 255;
+  const b = parseInt(cleanHex.slice(4, 6), 16) / 255;
+
+  // Simplified luminance (good enough for light/dark detection)
+  return 0.299 * r + 0.587 * g + 0.114 * b;
+}
+
+/**
+ * Check if the current omarchy theme is light mode.
+ * First checks the light.mode file, then falls back to analyzing background color.
  */
 export function isOmarchyLightMode(): boolean {
-  if (!existsSync(OMARCHY_LIGHT_MODE_FILE)) {
-    // Default to light mode if file doesn't exist
-    return true;
+  // First, check the light.mode file if it exists
+  if (existsSync(OMARCHY_LIGHT_MODE_FILE)) {
+    try {
+      const content = readFileSync(OMARCHY_LIGHT_MODE_FILE, 'utf-8');
+      // File typically contains "prefer-light" or similar
+      return content.toLowerCase().includes('light');
+    } catch {
+      // Fall through to color analysis
+    }
   }
 
-  try {
-    const content = readFileSync(OMARCHY_LIGHT_MODE_FILE, 'utf-8');
-    // File typically contains "prefer-light" or similar
-    return content.toLowerCase().includes('light');
-  } catch {
-    return true;
+  // Fall back to analyzing the background color
+  const colors = loadOmarchyColors();
+  if (colors?.background) {
+    const luminance = getColorLuminance(colors.background);
+    // If luminance > 0.5, it's a light background
+    return luminance > 0.5;
   }
+
+  // Default to light mode if we can't determine
+  return true;
 }
 
 /**
@@ -132,19 +160,93 @@ export function isOmarchyAvailable(): boolean {
 }
 
 /**
- * Convert omarchy colors to craft-agent theme format
+ * Normalize a theme name for comparison.
+ * Converts to lowercase and replaces spaces with hyphens.
+ * This allows matching "Rose Pine" with "rose-pine", "Tokyo Night" with "tokyo-night", etc.
+ */
+function normalizeThemeName(name: string): string {
+  return name.toLowerCase().replace(/\s+/g, '-');
+}
+
+/**
+ * Find a matching preset theme for the given omarchy theme name.
+ * Matches by:
+ * 1. Exact ID match (case-insensitive, spaces → hyphens)
+ * 2. Exact name match (case-insensitive, spaces → hyphens)
+ * 3. Prefix match - omarchy theme starts with preset ID (e.g., "catppuccin-latte" matches "catppuccin")
+ *
+ * @returns The matching preset theme, or null if no match found
+ */
+function findMatchingPresetTheme(omarchyThemeName: string): PresetTheme | null {
+  const presetThemes = loadPresetThemes();
+  if (presetThemes.length === 0) {
+    return null;
+  }
+
+  const nameNormalized = normalizeThemeName(omarchyThemeName);
+
+  // First try exact ID match (IDs are already kebab-case)
+  let match = presetThemes.find(p => p.id.toLowerCase() === nameNormalized);
+  if (match) return match;
+
+  // Then try exact name match (normalize both sides)
+  match = presetThemes.find(p => {
+    const presetName = p.theme.name;
+    return presetName && normalizeThemeName(presetName) === nameNormalized;
+  });
+  if (match) return match;
+
+  // Then try prefix match (omarchy name starts with preset ID)
+  // Sort by ID length descending to prefer longer matches (e.g., "catppuccin-mocha" over "catppuccin")
+  const sortedByIdLength = [...presetThemes].sort((a, b) => b.id.length - a.id.length);
+  match = sortedByIdLength.find(p => nameNormalized.startsWith(p.id.toLowerCase()));
+  if (match) return match;
+
+  // Also try prefix match with preset name (normalize both sides)
+  match = sortedByIdLength.find(p => {
+    const presetName = p.theme.name;
+    return presetName && nameNormalized.startsWith(normalizeThemeName(presetName));
+  });
+  if (match) return match;
+
+  return null;
+}
+
+/**
+ * Convert omarchy colors to craft-agent theme format.
+ *
+ * First checks if the omarchy theme name matches a Craft Agents preset theme.
+ * If a match is found, returns the preset theme for better color accuracy.
+ * Otherwise, extracts colors from omarchy's colors.toml.
  */
 export function loadOmarchyTheme(): ThemeFile | null {
   if (!isOmarchyAvailable()) {
     return null;
   }
 
+  const themeName = getOmarchyThemeName() || 'System';
+
+  // Check if omarchy theme name matches a Craft Agents preset theme
+  const matchingPreset = findMatchingPresetTheme(themeName);
+  if (matchingPreset) {
+    const isLight = isOmarchyLightMode();
+    // Return the preset theme with updated metadata
+    // Override supportedModes to match omarchy's current light/dark mode
+    // This ensures the app uses the correct mode for the matched preset
+    return {
+      ...matchingPreset.theme,
+      name: themeName,
+      description: `System theme (using ${matchingPreset.theme.name || matchingPreset.id} preset)`,
+      supportedModes: [isLight ? 'light' : 'dark'],
+    };
+  }
+
+  // No matching preset found - extract colors from omarchy
   const colors = loadOmarchyColors();
   if (!colors) {
     return null;
   }
 
-  const themeName = getOmarchyThemeName() || 'System';
   const isLight = isOmarchyLightMode();
 
   // Map omarchy colors to craft-agent theme colors
