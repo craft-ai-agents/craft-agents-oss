@@ -40,7 +40,7 @@ import {
   type TodoState,
 } from '@craft-agent/shared/sessions'
 import { loadWorkspaceSources, loadAllSources, getSourcesBySlugs, type LoadedSource, type McpServerConfig, getSourcesNeedingAuth, getSourceCredentialManager, getSourceServerBuilder, type SourceWithCredential, isApiOAuthProvider, SERVER_BUILD_ERRORS } from '@craft-agent/shared/sources'
-import { ConfigWatcher, type ConfigWatcherCallbacks } from '@craft-agent/shared/config'
+import { ConfigWatcher, type ConfigWatcherCallbacks, type ThemeFile } from '@craft-agent/shared/config'
 import { getAuthState } from '@craft-agent/shared/auth'
 import { setAnthropicOptionsEnv, setPathToClaudeCodeExecutable, setInterceptorPath, setExecutable } from '@craft-agent/shared/agent'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
@@ -442,7 +442,7 @@ export class SessionManager {
   /**
    * Broadcast system theme changed event to all windows
    */
-  private broadcastSystemThemeChanged(theme: import('@craft-agent/shared/config').ThemeFile | null): void {
+  private broadcastSystemThemeChanged(theme: ThemeFile | null): void {
     if (!this.windowManager) return
     sessionLog.info(`Broadcasting system theme changed: ${theme?.name || 'null'}`)
     this.windowManager.broadcastToAll(IPC_CHANNELS.THEME_SYSTEM_CHANGED, theme)

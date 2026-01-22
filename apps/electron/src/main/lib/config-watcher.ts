@@ -45,7 +45,7 @@ import {
   downloadStatusIcon,
 } from '@craft-agent/shared/statuses';
 import { loadAppTheme, loadPresetThemes, loadPresetTheme, getAppThemesDir } from '@craft-agent/shared/config';
-import type { ThemeOverrides, PresetTheme } from '@craft-agent/shared/config';
+import type { ThemeOverrides, PresetTheme, ThemeFile } from '@craft-agent/shared/config';
 
 // ============================================================
 // Constants
@@ -123,7 +123,7 @@ export interface ConfigWatcherCallbacks {
   /** Called when the preset themes list changes (add/remove files) */
   onPresetThemesListChange?: (themes: PresetTheme[]) => void;
   /** Called when omarchy system theme changes */
-  onOmarchyThemeChange?: (theme: import('@craft-agent/shared/config').ThemeFile | null) => void;
+  onOmarchyThemeChange?: (theme: ThemeFile | null) => void;
 
   // Error callbacks
   /** Called when a validation error occurs */
@@ -855,23 +855,14 @@ export class ConfigWatcher {
   private watchOmarchyTheme(): void {
     // Dynamic import to avoid issues if omarchy is not available
     // Note: Must use '@craft-agent/shared/config' not '/omarchy-theme' - subpath not exported
-    console.log('[ConfigWatcher] Attempting to set up omarchy theme watcher...');
     import('@craft-agent/shared/config').then((module) => {
-      console.log('[ConfigWatcher] Module imported, checking functions:', {
-        hasIsOmarchyAvailable: typeof module.isOmarchyAvailable === 'function',
-        hasWatchOmarchyTheme: typeof module.watchOmarchyTheme === 'function',
-        hasLoadOmarchyTheme: typeof module.loadOmarchyTheme === 'function',
-      });
-
-      const { isOmarchyAvailable, watchOmarchyTheme, loadOmarchyTheme } = module;
+      const { isOmarchyAvailable, watchOmarchyTheme } = module;
 
       if (!isOmarchyAvailable) {
-        console.log('[ConfigWatcher] isOmarchyAvailable function not found in module');
         return;
       }
 
       const available = isOmarchyAvailable();
-      console.log('[ConfigWatcher] isOmarchyAvailable() returned:', available);
 
       if (!available) {
         debug('[ConfigWatcher] Omarchy not available, skipping theme watch');
@@ -879,19 +870,14 @@ export class ConfigWatcher {
       }
 
       debug('[ConfigWatcher] Watching omarchy theme');
-      console.log('[ConfigWatcher] Starting omarchy theme watcher...');
 
       // Start watching and store the cleanup function
       this.omarchyCleanup = watchOmarchyTheme((theme) => {
         debug('[ConfigWatcher] Omarchy theme changed:', theme?.name);
-        console.log('[ConfigWatcher] Omarchy theme changed:', theme?.name);
         this.callbacks.onOmarchyThemeChange?.(theme);
       });
-
-      console.log('[ConfigWatcher] Omarchy theme watcher started successfully');
     }).catch((error) => {
       debug('[ConfigWatcher] Error setting up omarchy theme watcher:', error);
-      console.error('[ConfigWatcher] Error setting up omarchy theme watcher:', error);
     });
   }
 

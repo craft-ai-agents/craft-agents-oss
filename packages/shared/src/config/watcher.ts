@@ -46,7 +46,7 @@ import {
   downloadStatusIcon,
 } from '../statuses/storage.ts';
 import { loadAppTheme, loadPresetThemes, loadPresetTheme, getAppThemesDir } from './storage.ts';
-import type { ThemeOverrides, PresetTheme } from './theme.ts';
+import type { ThemeOverrides, PresetTheme, ThemeFile } from './theme.ts';
 
 // ============================================================
 // Constants
@@ -123,7 +123,7 @@ export interface ConfigWatcherCallbacks {
   /** Called when the preset themes list changes (add/remove files) */
   onPresetThemesListChange?: (themes: PresetTheme[]) => void;
   /** Called when system theme changes (e.g., omarchy desktop theme) */
-  onSystemThemeChange?: (theme: import('./theme.ts').ThemeFile | null) => void;
+  onSystemThemeChange?: (theme: ThemeFile | null) => void;
 
   // Error callbacks
   /** Called when a validation error occurs */
