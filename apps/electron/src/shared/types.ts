@@ -342,6 +342,26 @@ export interface LoopStateUI {
     totalTimeMs: number
     commits: string[]
   }
+  /** Completed stories list for progressive display */
+  completedStories?: Array<{
+    id: string
+    title: string
+    result: 'success' | 'failed' | 'skipped' | 'timeout'
+    commitSha?: string
+    error?: string
+  }>
+  /** Recent tool activity (last 10 executions) */
+  recentActivity?: Array<{
+    toolName: string
+    timestamp: number
+    summary: string
+  }>
+  /** Errors encountered during loop */
+  errors?: Array<{
+    storyId?: string
+    message: string
+    timestamp: number
+  }>
 }
 
 /**

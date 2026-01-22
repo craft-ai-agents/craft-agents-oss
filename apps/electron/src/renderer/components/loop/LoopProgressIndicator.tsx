@@ -6,8 +6,9 @@
  */
 
 import * as React from 'react'
+import { useState } from 'react'
 import { motion } from 'motion/react'
-import { Pause, Play, X, CheckCircle2, RefreshCw, AlertCircle } from 'lucide-react'
+import { Pause, Play, X, CheckCircle2, RefreshCw, AlertCircle, ChevronDown, CheckCircle, XCircle, Ban } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@craft-agent/ui'
@@ -95,8 +96,12 @@ export function LoopProgressIndicator({
   onCancel,
   className,
 }: LoopProgressIndicatorProps) {
-  const { progress, currentStory, status, elapsedMs = 0 } = loopState
+  const { progress, currentStory, status, elapsedMs = 0, completedStories = [], errors = [] } = loopState
   const statusConfig = getStatusConfig(status)
+
+  // Expandable sections state
+  const [showCompleted, setShowCompleted] = useState(false)
+  const [showErrors, setShowErrors] = useState(errors.length > 0) // Auto-expand if errors exist
 
   // Calculate progress percentage
   const progressPercent = progress
@@ -111,11 +116,13 @@ export function LoopProgressIndicator({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -10 }}
       className={cn(
-        'flex items-center gap-3 rounded-lg border border-border/50 bg-background/80 backdrop-blur-sm px-3 py-2',
+        'flex flex-col gap-2 rounded-lg border border-border/50 bg-background/80 backdrop-blur-sm',
         'shadow-sm',
         className
       )}
     >
+      {/* Main progress bar */}
+      <div className="flex items-center gap-3 px-3 py-2">
       {/* Status indicator */}
       <div className={cn('flex items-center gap-1.5', statusConfig.color)}>
         {statusConfig.icon}
@@ -212,6 +219,67 @@ export function LoopProgressIndicator({
             </Button>
           </div>
         </>
+      )}
+      </div>
+
+      {/* Completed Stories Section */}
+      {completedStories.length > 0 && (
+        <div className="border-t border-border/30">
+          <button
+            onClick={() => setShowCompleted(!showCompleted)}
+            className="flex items-center justify-between w-full px-3 py-2 text-xs hover:bg-foreground/5 transition-colors"
+          >
+            <span className="font-medium">
+              Completed Stories ({completedStories.length}/{progress?.totalStories || 0})
+            </span>
+            <ChevronDown className={cn('h-3 w-3 transition-transform', showCompleted && 'rotate-180')} />
+          </button>
+          {showCompleted && (
+            <div className="px-3 pb-2 space-y-1">
+              {completedStories.map((story, idx) => (
+                <div key={idx} className="flex items-center gap-2 text-xs py-1">
+                  {story.result === 'success' && <CheckCircle className="h-3 w-3 text-success flex-shrink-0" />}
+                  {story.result === 'failed' && <XCircle className="h-3 w-3 text-destructive flex-shrink-0" />}
+                  {story.result === 'skipped' && <Ban className="h-3 w-3 text-foreground/40 flex-shrink-0" />}
+                  <span className="font-mono text-accent">{story.id}</span>
+                  <span className="text-foreground/70 truncate">{story.title}</span>
+                  {story.commitSha && (
+                    <span className="font-mono text-foreground/40 text-[10px] ml-auto">
+                      {story.commitSha.slice(0, 7)}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Errors Section */}
+      {errors.length > 0 && (
+        <div className="border-t border-destructive/30 bg-destructive/5">
+          <button
+            onClick={() => setShowErrors(!showErrors)}
+            className="flex items-center justify-between w-full px-3 py-2 text-xs hover:bg-destructive/10 transition-colors"
+          >
+            <span className="font-medium text-destructive">
+              Errors ({errors.length})
+            </span>
+            <ChevronDown className={cn('h-3 w-3 transition-transform text-destructive', showErrors && 'rotate-180')} />
+          </button>
+          {showErrors && (
+            <div className="px-3 pb-2 space-y-2">
+              {errors.map((error, idx) => (
+                <div key={idx} className="text-xs bg-background/50 rounded p-2">
+                  {error.storyId && (
+                    <div className="font-mono text-accent mb-1">{error.storyId}</div>
+                  )}
+                  <div className="text-destructive">{error.message}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
     </motion.div>
   )

@@ -39,6 +39,10 @@ export function handleLoopStarted(
           maxIterations: event.config.maxIterationsPerStory,
         },
         elapsedMs: 0,
+        // Initialize empty arrays for progressive display
+        completedStories: [],
+        recentActivity: [],
+        errors: [],
       },
     },
   }
@@ -80,9 +84,26 @@ export function handleLoopStoryComplete(
   state: SessionState,
   event: LoopStoryCompleteEvent
 ): SessionState {
-  // Story completion doesn't change the overall loop state significantly
-  // The progress event will update with the next story
-  return state
+  return {
+    ...state,
+    session: {
+      ...state.session,
+      loopState: {
+        ...state.session.loopState,
+        // Accumulate completed stories for progressive display
+        completedStories: [
+          ...(state.session.loopState?.completedStories || []),
+          {
+            id: event.story.id,
+            title: event.story.title,
+            result: event.result,
+            commitSha: event.commitSha,
+            error: event.error,
+          },
+        ],
+      },
+    },
+  }
 }
 
 /**
@@ -199,7 +220,15 @@ export function handleLoopError(
         ...state.session.loopState,
         isActive: state.session.loopState?.status === 'running',
         loopId: event.loopId,
-        // Don't change status here - let loop_complete/cancelled handle final state
+        // Accumulate errors for progressive display
+        errors: [
+          ...(state.session.loopState?.errors || []),
+          {
+            storyId: event.storyId,
+            message: event.error,
+            timestamp: Date.now(),
+          },
+        ],
       },
     },
   }
