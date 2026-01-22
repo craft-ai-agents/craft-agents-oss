@@ -967,7 +967,8 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       name: config?.name,
       model: config?.defaults?.model,
       permissionMode: config?.defaults?.permissionMode,
-      cyclablePermissionModes: config?.defaults?.cyclablePermissionModes,
+      // Fallback to default modes including 'ralph' for workspaces without this setting
+      cyclablePermissionModes: config?.defaults?.cyclablePermissionModes ?? ['safe', 'ask', 'allow-all', 'ralph'],
       thinkingLevel: config?.defaults?.thinkingLevel,
       workingDirectory: config?.defaults?.workingDirectory,
       localMcpEnabled: config?.localMcpServers?.enabled ?? true,

@@ -63,8 +63,8 @@ export default function WorkspaceSettingsPage() {
   const [localMcpEnabled, setLocalMcpEnabled] = useState(true)
   const [isLoadingWorkspace, setIsLoadingWorkspace] = useState(true)
 
-  // Mode cycling state
-  const [enabledModes, setEnabledModes] = useState<PermissionMode[]>(['safe', 'ask', 'allow-all'])
+  // Mode cycling state (includes 'ralph' for Ralph Loop support)
+  const [enabledModes, setEnabledModes] = useState<PermissionMode[]>(['safe', 'ask', 'allow-all', 'ralph'])
   const [modeCyclingError, setModeCyclingError] = useState<string | null>(null)
 
   // Load workspace settings when active workspace changes
@@ -86,9 +86,12 @@ export default function WorkspaceSettingsPage() {
           setPermissionMode(settings.permissionMode || 'ask')
           setWorkingDirectory(settings.workingDirectory || '')
           setLocalMcpEnabled(settings.localMcpEnabled ?? true)
-          // Load cyclable permission modes from workspace settings
+          // Load cyclable permission modes from workspace settings, or reset to defaults
           if (settings.cyclablePermissionModes && settings.cyclablePermissionModes.length >= 2) {
             setEnabledModes(settings.cyclablePermissionModes)
+          } else {
+            // Reset to default modes (including 'ralph') when not configured
+            setEnabledModes(['safe', 'ask', 'allow-all', 'ralph'])
           }
         }
 

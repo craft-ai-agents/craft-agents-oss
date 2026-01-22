@@ -179,7 +179,7 @@ export function FreeFormInput({
   onUltrathinkChange,
   permissionMode = 'ask',
   onPermissionModeChange,
-  enabledModes = ['safe', 'ask', 'allow-all'],
+  enabledModes = ['safe', 'ask', 'allow-all', 'ralph'],
   inputValue,
   onInputChange,
   unstyled = false,
