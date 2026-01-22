@@ -1,1 +1,1 @@
-preload = ["./packages/shared/src/network-interceptor.ts", "./scripts/system-prompt/capture-interceptor.ts"]
+preload = ["./packages/shared/src/network-interceptor.ts"]
