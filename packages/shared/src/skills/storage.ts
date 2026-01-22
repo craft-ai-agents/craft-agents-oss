@@ -16,7 +16,7 @@ import { join } from 'path';
 import matter from 'gray-matter';
 import type { LoadedSkill, SkillMetadata, SkillSource } from './types.ts';
 import { getWorkspaceSkillsPath } from '../workspaces/storage.ts';
-import { GLOBAL_SKILLS_DIR, CLAUDE_CODE_SKILLS_DIR } from '../config/paths.ts';
+import { GLOBAL_SKILLS_DIR, CLAUDE_CODE_SKILLS_DIR, CLAUDE_CODE_COMMANDS_DIR } from '../config/paths.ts';
 import {
   validateIconValue,
   findIconFile,
@@ -211,8 +211,82 @@ export function loadSkillsFromDir(skillsDir: string, source: SkillSource): Loade
 }
 
 /**
- * Load global skills from ~/.craft-agent/global-skills/ and ~/.claude/skills/
- * Claude Code skills are read-only, global skills are user-installed
+ * Load Claude Code commands from ~/.claude/commands/ and convert them to skills.
+ * Commands are markdown files with YAML frontmatter (name, description, argument-hint).
+ * Searches recursively to include commands in subdirectories like workflows/.
+ */
+function loadCommandsAsSkills(): LoadedSkill[] {
+  if (!existsSync(CLAUDE_CODE_COMMANDS_DIR)) {
+    return [];
+  }
+
+  const skills: LoadedSkill[] = [];
+
+  /**
+   * Recursively scan a directory for .md files and convert them to skills
+   */
+  function scanDirectory(dirPath: string): void {
+    try {
+      const entries = readdirSync(dirPath, { withFileTypes: true });
+
+      for (const entry of entries) {
+        const fullPath = join(dirPath, entry.name);
+
+        // Skip hidden files and directories
+        if (entry.name.startsWith('.')) continue;
+
+        if (entry.isDirectory()) {
+          // Recurse into subdirectories
+          scanDirectory(fullPath);
+        } else if (entry.isFile() && entry.name.endsWith('.md')) {
+          // Process markdown file as command
+          try {
+            const content = readFileSync(fullPath, 'utf-8');
+            const parsed = matter(content);
+
+            // Commands must have name and description in frontmatter
+            if (!parsed.data.name || !parsed.data.description) {
+              continue;
+            }
+
+            // Generate slug from the command name (e.g., "workflows:plan" → "workflows-plan")
+            // Or from the file path if no name (e.g., "workflows/plan.md" → "workflows-plan")
+            const slug = parsed.data.name
+              ? (parsed.data.name as string).replace(/:/g, '-')
+              : fullPath
+                  .replace(CLAUDE_CODE_COMMANDS_DIR + '/', '')
+                  .replace(/\.md$/, '')
+                  .replace(/\//g, '-');
+
+            skills.push({
+              slug,
+              metadata: {
+                name: parsed.data.name as string,
+                description: parsed.data.description as string,
+                icon: '⚡', // Default icon for commands
+              },
+              content: parsed.content,
+              path: fullPath,
+              source: 'claude-code',
+            });
+          } catch {
+            // Skip files that can't be parsed
+          }
+        }
+      }
+    } catch {
+      // Ignore errors scanning directories
+    }
+  }
+
+  scanDirectory(CLAUDE_CODE_COMMANDS_DIR);
+  return skills;
+}
+
+/**
+ * Load global skills from ~/.craft-agent/global-skills/, ~/.claude/skills/,
+ * and ~/.claude/commands/ (auto-converted to skills).
+ * Claude Code skills and commands are read-only, global skills are user-installed.
  */
 export function loadGlobalSkills(): LoadedSkill[] {
   const skills: LoadedSkill[] = [];
@@ -221,9 +295,13 @@ export function loadGlobalSkills(): LoadedSkill[] {
   const globalSkills = loadSkillsFromDir(GLOBAL_SKILLS_DIR, 'global');
   skills.push(...globalSkills);
 
-  // Load from ~/.claude/skills/ (Claude Code CLI)
+  // Load from ~/.claude/skills/ (Claude Code CLI standalone skills)
   const claudeCodeSkills = loadSkillsFromDir(CLAUDE_CODE_SKILLS_DIR, 'claude-code');
   skills.push(...claudeCodeSkills);
+
+  // Load from ~/.claude/commands/ (Claude Code slash commands auto-converted to skills)
+  const commandSkills = loadCommandsAsSkills();
+  skills.push(...commandSkills);
 
   return skills;
 }

@@ -143,7 +143,10 @@ export const routes = {
         : 'vectorSearch' as const,
 
     /** Schedules view (schedules navigator) */
-    schedules: () => 'schedules' as const,
+    schedules: (scheduleId?: string) =>
+      scheduleId
+        ? `schedules/schedule/${encodeURIComponent(scheduleId)}` as const
+        : 'schedules' as const,
 
     /** Settings view (settings navigator) */
     settings: (subpage?: 'app' | 'workspace' | 'permissions' | 'shortcuts' | 'preferences') =>

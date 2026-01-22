@@ -15,6 +15,9 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { ScheduleModal } from './ScheduleModal'
+import { navigate, routes } from '@/lib/navigate'
+import { useNavigationState, isSchedulesNavigation } from '@/contexts/NavigationContext'
+import { cn } from '@/lib/utils'
 import type { Schedule, ScheduleFormData, ScheduleEvent } from '../../../shared/types'
 
 interface ScheduleListProps {
@@ -25,6 +28,12 @@ export function ScheduleList({ workspaceId }: ScheduleListProps) {
   const [schedules, setSchedules] = useState<Schedule[]>([])
   const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null)
   const [showNew, setShowNew] = useState(false)
+  const navState = useNavigationState()
+
+  // Get selected schedule ID from navigation state
+  const selectedScheduleId = isSchedulesNavigation(navState) && navState.details
+    ? navState.details.scheduleId
+    : null
 
   useEffect(() => {
     window.electronAPI.scheduleList(workspaceId).then(setSchedules)
@@ -93,6 +102,8 @@ export function ScheduleList({ workspaceId }: ScheduleListProps) {
             <ScheduleCard
               key={schedule.id}
               schedule={schedule}
+              isSelected={schedule.id === selectedScheduleId}
+              onSelect={() => navigate(routes.view.schedules(schedule.id))}
               onEdit={() => setEditingSchedule(schedule)}
               onDelete={() => handleDelete(schedule.id)}
               onToggle={() => handleToggle(schedule.id)}
@@ -142,22 +153,36 @@ function StatusBadge({ status }: { status: Schedule['lastRunStatus'] }) {
 
 interface ScheduleCardProps {
   schedule: Schedule
+  isSelected: boolean
+  onSelect: () => void
   onEdit: () => void
   onDelete: () => void
   onToggle: () => void
   onRunNow: () => void
 }
 
-function ScheduleCard({ schedule, onEdit, onDelete, onToggle, onRunNow }: ScheduleCardProps) {
+function ScheduleCard({ schedule, isSelected, onSelect, onEdit, onDelete, onToggle, onRunNow }: ScheduleCardProps) {
   const nextRun = schedule.enabled && schedule.cron
     ? getNextRun(schedule.cron, schedule.timezone)
     : null
 
   return (
-    <div className="p-3 rounded-lg border bg-card">
+    <div
+      className={cn(
+        "p-3 rounded-lg border transition-colors cursor-pointer",
+        isSelected
+          ? "bg-primary/10 border-primary hover:bg-primary/15"
+          : "bg-card border-border hover:bg-muted/30"
+      )}
+      onClick={onSelect}
+    >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Switch checked={schedule.enabled} onCheckedChange={onToggle} />
+          <Switch
+            checked={schedule.enabled}
+            onCheckedChange={onToggle}
+            onClick={(e) => e.stopPropagation()}
+          />
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <StatusBadge status={schedule.lastRunStatus} />
@@ -169,7 +194,7 @@ function ScheduleCard({ schedule, onEdit, onDelete, onToggle, onRunNow }: Schedu
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
           {schedule.lastRunStatus === 'failed' && (
             <Tooltip>
               <TooltipTrigger asChild>

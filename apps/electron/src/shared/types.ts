@@ -507,6 +507,7 @@ export interface Schedule {
   lastRunAt: number | null
   lastRunStatus: 'success' | 'failed' | null
   lastRunError: string | null
+  lastRunSessionId: string | null // Session ID created by last run
   createdAt: number
 }
 
@@ -714,6 +715,10 @@ export const IPC_CHANNELS = {
   NOTIFICATION_NAVIGATE: 'notification:navigate',  // Broadcast: { workspaceId, sessionId }
   NOTIFICATION_GET_ENABLED: 'notification:getEnabled',
   NOTIFICATION_SET_ENABLED: 'notification:setEnabled',
+
+  // Developer tools
+  AGENTATION_GET_ENABLED: 'agentation:getEnabled',
+  AGENTATION_SET_ENABLED: 'agentation:setEnabled',
 
   BADGE_UPDATE: 'badge:update',
   BADGE_CLEAR: 'badge:clear',
@@ -942,6 +947,10 @@ export interface ElectronAPI {
   showNotification(title: string, body: string, workspaceId: string, sessionId: string): Promise<void>
   getNotificationsEnabled(): Promise<boolean>
   setNotificationsEnabled(enabled: boolean): Promise<void>
+
+  // Developer tools
+  getAgentationEnabled(): Promise<boolean>
+  setAgentationEnabled(enabled: boolean): Promise<void>
 
   updateBadgeCount(count: number): Promise<void>
   clearBadgeCount(): Promise<void>
@@ -1200,6 +1209,8 @@ export interface VectorSearchNavigationState {
  */
 export interface SchedulesNavigationState {
   navigator: 'schedules'
+  /** Selected schedule details, or null for list only */
+  details: { type: 'schedule'; scheduleId: string } | null
   /** Optional right sidebar panel state */
   rightSidebar?: RightSidebarPanel
 }
@@ -1299,6 +1310,9 @@ export const getNavigationStateKey = (state: NavigationState): string => {
     return 'vectorSearch'
   }
   if (state.navigator === 'schedules') {
+    if (state.details) {
+      return `schedules/schedule/${encodeURIComponent(state.details.scheduleId)}`
+    }
     return 'schedules'
   }
   if (state.navigator === 'settings') {
@@ -1365,7 +1379,14 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
   }
 
   // Handle schedules
-  if (key === 'schedules') return { navigator: 'schedules' }
+  if (key === 'schedules') return { navigator: 'schedules', details: null }
+  if (key.startsWith('schedules/schedule/')) {
+    const scheduleId = decodeURIComponent(key.slice(19))
+    if (scheduleId) {
+      return { navigator: 'schedules', details: { type: 'schedule', scheduleId } }
+    }
+    return { navigator: 'schedules', details: null }
+  }
 
   // Handle settings
   if (key === 'settings') return { navigator: 'settings', subpage: 'app' }

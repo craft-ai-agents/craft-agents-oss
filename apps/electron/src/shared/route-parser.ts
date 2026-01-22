@@ -175,6 +175,19 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
 
   // Schedules navigator
   if (first === 'schedules') {
+    if (segments.length === 1) {
+      return { navigator: 'schedules', details: null }
+    }
+
+    // schedules/schedule/{scheduleId}
+    if (segments[1] === 'schedule' && segments[2]) {
+      const scheduleId = decodeURIComponent(segments[2])
+      return {
+        navigator: 'schedules',
+        details: { type: 'schedule', id: scheduleId },
+      }
+    }
+
     return { navigator: 'schedules', details: null }
   }
 
@@ -479,7 +492,13 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
 
   // Schedules
   if (compound.navigator === 'schedules') {
-    return { navigator: 'schedules' }
+    if (compound.details) {
+      return {
+        navigator: 'schedules',
+        details: { type: 'schedule', scheduleId: compound.details.id },
+      }
+    }
+    return { navigator: 'schedules', details: null }
   }
 
   // Chats
@@ -622,6 +641,9 @@ export function buildRouteFromNavigationState(state: NavigationState): string {
   }
 
   if (state.navigator === 'schedules') {
+    if (state.details) {
+      return `schedules/schedule/${encodeURIComponent(state.details.scheduleId)}`
+    }
     return 'schedules'
   }
 

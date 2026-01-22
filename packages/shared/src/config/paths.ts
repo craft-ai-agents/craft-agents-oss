@@ -22,6 +22,10 @@ export const CONFIG_DIR = process.env.CRAFT_CONFIG_DIR || join(homedir(), '.craf
 export const GLOBAL_SKILLS_DIR = join(CONFIG_DIR, 'global-skills');
 export const CLAUDE_CODE_SKILLS_DIR = join(homedir(), '.claude', 'skills');
 
+// Claude Code commands directory (where slash commands are stored)
+// Commands at ~/.claude/commands/ will be auto-loaded as skills
+export const CLAUDE_CODE_COMMANDS_DIR = join(homedir(), '.claude', 'commands');
+
 // Plugin root directories (parent dirs that SDK receives as plugins)
 // SDK expects: {plugin-root}/.claude-plugin/plugin.json and {plugin-root}/skills/
 export const CLAUDE_CODE_PLUGIN_DIR = join(homedir(), '.claude');

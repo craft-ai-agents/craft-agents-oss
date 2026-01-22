@@ -24,9 +24,11 @@ import {
   isSettingsNavigation,
   isSkillsNavigation,
   isVectorSearchNavigation,
+  isSchedulesNavigation,
 } from '@/contexts/NavigationContext'
 import { AppSettingsPage, WorkspaceSettingsPage, PermissionsSettingsPage, PreferencesPage, ShortcutsPage, SourceInfoPage, ChatPage, DocumentViewerPage } from '@/pages'
 import SkillInfoPage from '@/pages/SkillInfoPage'
+import { ScheduleDetailPanel } from '@/components/scheduler/ScheduleDetailPanel'
 
 export interface MainContentPanelProps {
   /** Whether the app is in focused mode (single chat, no sidebar) */
@@ -149,6 +151,18 @@ export function MainContentPanel({
     )
   }
 
+  // Schedules navigator - show schedule detail panel or empty state
+  if (isSchedulesNavigation(navState)) {
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        <ScheduleDetailPanelWrapper
+          scheduleId={navState.details?.scheduleId || null}
+          workspaceId={activeWorkspaceId || ''}
+        />
+      </Panel>
+    )
+  }
+
   // Chats navigator - show chat or empty state
   if (isChatsNavigation(navState)) {
     if (navState.details) {
@@ -179,5 +193,52 @@ export function MainContentPanel({
         <p className="text-sm">Select a conversation to get started</p>
       </div>
     </Panel>
+  )
+}
+
+/**
+ * Wrapper component that fetches schedule data and passes it to ScheduleDetailPanel
+ */
+interface ScheduleDetailPanelWrapperProps {
+  scheduleId: string | null
+  workspaceId: string
+}
+
+function ScheduleDetailPanelWrapper({ scheduleId, workspaceId }: ScheduleDetailPanelWrapperProps) {
+  const [schedules, setSchedules] = React.useState<import('../../../shared/types').Schedule[]>([])
+
+  React.useEffect(() => {
+    if (!workspaceId) return
+    window.electronAPI.scheduleList(workspaceId).then(setSchedules)
+  }, [workspaceId])
+
+  // Listen for schedule events to refresh the list
+  React.useEffect(() => {
+    if (!workspaceId) return
+    const cleanup = window.electronAPI.onScheduleEvent(() => {
+      window.electronAPI.scheduleList(workspaceId).then(setSchedules)
+    })
+    return cleanup
+  }, [workspaceId])
+
+  const selectedSchedule = schedules.find(s => s.id === scheduleId) || null
+
+  const handleUpdate = async (id: string, updates: { prompt: string }) => {
+    const updated = await window.electronAPI.scheduleUpdate(workspaceId, id, updates)
+    if (updated) {
+      setSchedules(prev => prev.map(s => s.id === updated.id ? updated : s))
+    }
+  }
+
+  const handleRunNow = async (id: string) => {
+    await window.electronAPI.scheduleRunNow(workspaceId, id)
+  }
+
+  return (
+    <ScheduleDetailPanel
+      schedule={selectedSchedule}
+      onUpdate={handleUpdate}
+      onRunNow={handleRunNow}
+    />
   )
 }

@@ -220,6 +220,7 @@ export class SchedulerService {
         this.schedules[idx].lastRunAt = Math.floor(startTime / 1000)
         this.schedules[idx].lastRunStatus = 'success'
         this.schedules[idx].lastRunError = null
+        this.schedules[idx].lastRunSessionId = session.id
         await this.save()
       }
 
@@ -249,6 +250,7 @@ export class SchedulerService {
         this.schedules[idx].lastRunAt = Math.floor(startTime / 1000)
         this.schedules[idx].lastRunStatus = 'failed'
         this.schedules[idx].lastRunError = errorMessage
+        this.schedules[idx].lastRunSessionId = null
         await this.save()
       }
 
@@ -337,6 +339,7 @@ export class SchedulerService {
       lastRunAt: null,
       lastRunStatus: null,
       lastRunError: null,
+      lastRunSessionId: null,
     }
     this.schedules.push(schedule)
     await this.save()
