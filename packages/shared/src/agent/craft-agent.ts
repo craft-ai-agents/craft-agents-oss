@@ -2,6 +2,8 @@ import { query, createSdkMcpServer, tool, AbortError, type Query, type SDKMessag
 import { getDefaultOptions } from './options.ts';
 import type { ContentBlockParam } from '@anthropic-ai/sdk/resources';
 import { z } from 'zod';
+import { existsSync } from 'fs';
+import { GLOBAL_SKILLS_DIR, CLAUDE_CODE_SKILLS_DIR } from '../config/paths.ts';
 import { getSystemPrompt, getDateTimeContext, getWorkingDirectoryContext } from '../prompts/system.ts';
 // Plan types are used by UI components; not needed in craft-agent.ts since Safe Mode is user-controlled
 import { parseError, type AgentError } from './errors.ts';
@@ -384,6 +386,30 @@ export class CraftAgent {
    */
   private get workspaceRootPath(): string {
     return this.config.workspace.rootPath;
+  }
+
+  /**
+   * Build the plugins configuration array for the SDK.
+   * Includes workspace, global skills, and Claude Code skills directories.
+   * Only includes directories that exist to avoid SDK errors.
+   */
+  private buildPluginConfigs(): Array<{ type: 'local'; path: string }> {
+    const configs: Array<{ type: 'local'; path: string }> = [
+      { type: 'local' as const, path: this.workspaceRootPath },
+    ];
+
+    // Add global skills directory if it exists (user-installed skills)
+    if (existsSync(GLOBAL_SKILLS_DIR)) {
+      configs.push({ type: 'local' as const, path: GLOBAL_SKILLS_DIR });
+    }
+
+    // Add Claude Code skills directory if it exists (CLI-installed skills)
+    if (existsSync(CLAUDE_CODE_SKILLS_DIR)) {
+      configs.push({ type: 'local' as const, path: CLAUDE_CODE_SKILLS_DIR });
+    }
+
+    debug(`[CraftAgent] Loading plugins from: ${configs.map(c => c.path).join(', ')}`);
+    return configs;
   }
 
   // Callback for permission requests - set by application to receive permission prompts
@@ -1463,8 +1489,8 @@ export class CraftAgent {
         },
         // Selectively disable tools - file tools are disabled (use MCP), web/code controlled by settings
         disallowedTools,
-        // Load workspace as SDK plugin (enables skills, commands, agents from workspace)
-        plugins: [{ type: 'local' as const, path: this.workspaceRootPath }],
+        // Load workspace and global skills as SDK plugins (enables skills, commands, agents)
+        plugins: this.buildPluginConfigs(),
       };
 
       // Track whether we're trying to resume a session (for error handling)
