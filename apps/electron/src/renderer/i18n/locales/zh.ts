@@ -256,7 +256,6 @@ export default {
   speech: '语音',
   startSpeaking: '开始朗读',
   stopSpeaking: '停止朗读',
-  checkForUpdates: '检查更新...',
 
   // Chat Components / 聊天组件
   authRequestTitle: '需要认证',
@@ -438,13 +437,11 @@ export default {
   shortcutSendMessageCmd: '发送消息',
 
   // Chat Page / 聊天页面
-  renameChat: '重命名对话',
   enterChatName: '输入对话名称...',
   chatTitle: '聊天',
 
   // Workspace Settings (remaining) / 工作空间设置（剩余）
   workspaceSettingsTitle: '工作空间设置',
-  advanced: '高级',
   renameWorkspace: '重命名工作空间',
   enterWorkspaceName: '输入工作空间名称...',
   defaultWorkingDirectory: '默认工作目录',
@@ -456,13 +453,7 @@ export default {
   connection: '连接',
   permissions: '权限',
   documentation: '文档',
-  type: '类型',
-  url: 'URL',
   lastTested: '最后测试',
-  slug: '标识符',
-  description: '描述',
-  instructions: '说明',
-  permissionModes: '权限模式',
 
   // Table Headers / 表格标题
   access: '访问',
@@ -516,17 +507,10 @@ export default {
   localMcpServersDisabled: '本地 MCP 服务器已在设置 > 高级中禁用。启用它们以使用此来源。',
   agentDocumentation: '文档',
   agentDocumentationDescription: '代理的上下文和指南。',
-  access: '访问',
-  description: '描述',
   comment: '备注',
   noToolsAvailable: '无可用工具',
-  patternCopiedToClipboard: '模式已复制到剪贴板',
-  failedToCopyPattern: '复制模式失败',
   skillNotFound: '未找到技能',
   metadata: '元数据',
-  slug: '标识符',
-  location: '位置',
-  permissionModes: '权限模式',
   permissionModesDescription: '"始终允许的工具"如何与权限模式交互：',
   explore: '探索',
   blockedInExplore: '已阻止 — 写入工具无论如何都被阻止',
@@ -534,7 +518,6 @@ export default {
   autoApprovedInAsk: '自动批准 — 允许的工具无需提示',
   auto: '自动',
   noEffectInAuto: '无影响 — 所有工具已自动批准',
-  instructions: '指令',
   noInstructionsProvided: '*未提供指令。*',
 
   // File Viewer / 文件查看器
@@ -542,7 +525,6 @@ export default {
   fileViewerError: '加载文件时出错',
   fileViewerTooLarge: '文件太大，无法预览',
   downloadFile: '下载文件',
-  copyPath: '复制路径',
 
   // Markdown / Markdown
   copyCode: '复制代码',
