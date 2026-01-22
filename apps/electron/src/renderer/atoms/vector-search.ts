@@ -14,6 +14,17 @@ import type { VectorSearchResult } from '../../shared/types'
 export type SearchMode = 'keyword' | 'semantic' | 'hybrid'
 
 /**
+ * Collection info from QMD
+ */
+export interface CollectionInfo {
+  name: string
+  url: string
+  pattern: string
+  files: number
+  updated: string
+}
+
+/**
  * Search state for the vector search feature
  */
 export interface SearchState {
@@ -36,6 +47,6 @@ export const searchStateAtom = atom<SearchState>({
 })
 
 /**
- * Collections list atom (names of registered QMD collections)
+ * Collections list atom (info about registered QMD collections)
  */
-export const collectionsAtom = atom<string[]>([])
+export const collectionsAtom = atom<CollectionInfo[]>([])

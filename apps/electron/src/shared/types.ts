@@ -1011,6 +1011,7 @@ export interface VectorSearchResult {
   snippet: string
   score: number
   collection: string
+  title?: string
 }
 
 /**

@@ -1902,14 +1902,51 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
   ipcMain.handle(IPC_CHANNELS.VECTOR_SEARCH_EXECUTE, async (_event, args: string[]) => {
     const { execFile } = await import('child_process')
+    const { homedir } = await import('os')
+    const path = await import('path')
 
-    // Sanitize args to prevent shell injection
+    // Validate subcommand allowlist
+    const allowedSubcommands = ['search', 'vsearch', 'query', 'collection', 'ls', 'status', 'embed', 'update']
+    const subcommand = args[0]?.toLowerCase()
+    if (!subcommand || !allowedSubcommands.includes(subcommand)) {
+      return { stdout: '', stderr: `Invalid QMD subcommand: ${subcommand}` }
+    }
+
+    // Sanitize args to prevent shell injection (includes newlines, null bytes)
     const sanitized = args.map(arg =>
-      arg.replace(/[`$(){}|;&]/g, '').slice(0, 1000)
+      arg.replace(/[`$(){}|;&\n\r\0]/g, '').slice(0, 1000)
     )
 
+    // Resolve QMD path - check common locations since Electron may not have full PATH
+    const home = homedir()
+    const qmdPaths = [
+      path.join(home, '.bun/bin/qmd'),
+      path.join(home, '.local/bin/qmd'),
+      '/usr/local/bin/qmd',
+      '/opt/homebrew/bin/qmd',
+      'qmd' // fallback to PATH lookup
+    ]
+
+    let qmdPath = 'qmd'
+    const fs = await import('fs')
+    for (const p of qmdPaths) {
+      if (p !== 'qmd' && fs.existsSync(p)) {
+        qmdPath = p
+        break
+      }
+    }
+
+    // Longer timeout for embed operations (can take minutes for large collections)
+    const timeout = subcommand === 'embed' ? 300000 : 60000
+
+    // Ensure PATH includes common bin directories for any child processes QMD spawns
+    const env = {
+      ...process.env,
+      PATH: `${home}/.bun/bin:${home}/.local/bin:/usr/local/bin:/opt/homebrew/bin:${process.env.PATH || ''}`
+    }
+
     return new Promise<{ stdout: string; stderr: string }>((resolve) => {
-      execFile('qmd', sanitized, { shell: false, timeout: 30000 }, (error, stdout, stderr) => {
+      execFile(qmdPath, sanitized, { shell: false, timeout, env }, (error, stdout, stderr) => {
         if (error && (error as NodeJS.ErrnoException).code === 'ENOENT') {
           resolve({
             stdout: '',
