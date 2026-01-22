@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
 import { Cron } from 'croner'
+import cronstrue from 'cronstrue'
 import {
   Dialog,
   DialogContent,
@@ -11,22 +12,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { PresetGrid, SCHEDULE_PRESETS, type Preset } from './PresetCard'
 import type { Schedule, ScheduleFormData } from '../../../shared/types'
-
-const PRESETS = [
-  { label: 'Every hour', cron: '0 * * * *' },
-  { label: 'Daily at 9am', cron: '0 9 * * *' },
-  { label: 'Weekdays at 9am', cron: '0 9 * * 1-5' },
-  { label: 'Weekly on Monday', cron: '0 9 * * 1' },
-  { label: 'Monthly on 1st', cron: '0 9 1 * *' },
-]
 
 interface ScheduleModalProps {
   schedule?: Schedule
@@ -40,10 +27,11 @@ export function ScheduleModal({ schedule, onSave, onClose }: ScheduleModalProps)
   const [scheduleType, setScheduleType] = useState<'recurring' | 'once'>(
     schedule?.cron ? 'recurring' : 'once'
   )
-  const [selectedPreset, setSelectedPreset] = useState<string>(
-    schedule?.cron && !PRESETS.find(p => p.cron === schedule.cron)
-      ? 'custom'
-      : schedule?.cron || PRESETS[1].cron
+  const [selectedCron, setSelectedCron] = useState<string | null>(
+    schedule?.cron || SCHEDULE_PRESETS[1].cron
+  )
+  const [isCustom, setIsCustom] = useState(
+    schedule?.cron ? !SCHEDULE_PRESETS.find(p => p.cron === schedule.cron) : false
   )
   const [customCron, setCustomCron] = useState(schedule?.cron || '')
   const [scheduledFor, setScheduledFor] = useState<string>(
@@ -52,7 +40,7 @@ export function ScheduleModal({ schedule, onSave, onClose }: ScheduleModalProps)
       : ''
   )
 
-  const cronExpression = selectedPreset === 'custom' ? customCron : selectedPreset
+  const cronExpression = isCustom ? customCron : selectedCron
 
   const cronError = useMemo(() => {
     if (scheduleType !== 'recurring') return null
@@ -66,7 +54,7 @@ export function ScheduleModal({ schedule, onSave, onClose }: ScheduleModalProps)
   }, [scheduleType, cronExpression])
 
   const nextRuns = useMemo(() => {
-    if (scheduleType !== 'recurring' || cronError) return []
+    if (scheduleType !== 'recurring' || cronError || !cronExpression) return []
     try {
       const cron = new Cron(cronExpression)
       return cron.nextRuns(3)
@@ -74,6 +62,24 @@ export function ScheduleModal({ schedule, onSave, onClose }: ScheduleModalProps)
       return []
     }
   }, [scheduleType, cronExpression, cronError])
+
+  const cronDescription = useMemo(() => {
+    if (scheduleType !== 'recurring' || !cronExpression || cronError) return null
+    try {
+      return cronstrue.toString(cronExpression)
+    } catch {
+      return null
+    }
+  }, [scheduleType, cronExpression, cronError])
+
+  function handlePresetSelect(preset: Preset) {
+    if (preset.cron === null) {
+      setIsCustom(true)
+    } else {
+      setIsCustom(false)
+      setSelectedCron(preset.cron)
+    }
+  }
 
   function handleSubmit() {
     if (scheduleType === 'recurring' && cronError) return
@@ -149,21 +155,13 @@ export function ScheduleModal({ schedule, onSave, onClose }: ScheduleModalProps)
           {/* Recurring Options */}
           {scheduleType === 'recurring' && (
             <div className="space-y-3">
-              <Select value={selectedPreset} onValueChange={setSelectedPreset}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select frequency" />
-                </SelectTrigger>
-                <SelectContent>
-                  {PRESETS.map(p => (
-                    <SelectItem key={p.cron} value={p.cron}>
-                      {p.label}
-                    </SelectItem>
-                  ))}
-                  <SelectItem value="custom">Custom cron...</SelectItem>
-                </SelectContent>
-              </Select>
+              <PresetGrid
+                selectedCron={selectedCron}
+                isCustom={isCustom}
+                onSelect={handlePresetSelect}
+              />
 
-              {selectedPreset === 'custom' && (
+              {isCustom && (
                 <Input
                   value={customCron}
                   onChange={e => setCustomCron(e.target.value)}
@@ -174,6 +172,12 @@ export function ScheduleModal({ schedule, onSave, onClose }: ScheduleModalProps)
 
               {cronError && (
                 <p className="text-xs text-destructive">{cronError}</p>
+              )}
+
+              {cronDescription && (
+                <p className="text-sm text-muted-foreground">
+                  {cronDescription}
+                </p>
               )}
 
               {nextRuns.length > 0 && (

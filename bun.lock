@@ -92,6 +92,7 @@
         "@radix-ui/react-switch": "^1.2.6",
         "@tanstack/react-table": "^8.21.3",
         "cmdk": "^1.1.1",
+        "cronstrue": "^3.9.0",
         "electron-log": "^5.4.3",
         "jotai-family": "^1.0.1",
         "motion": "^12.23.26",
@@ -1168,6 +1169,8 @@
     "crc-32": ["crc-32@1.2.2", "", { "bin": { "crc32": "bin/crc32.njs" } }, "sha512-ROmzCKrTnOwybPcJApAA6WBWij23HVfGVNKqqrZpuyZOHqK2CwHSvpGuyt/UNNvaIjEd8X5IFGp4Mh+Ie1IHJQ=="],
 
     "croner": ["croner@9.1.0", "", {}, "sha512-p9nwwR4qyT5W996vBZhdvBCnMhicY5ytZkR4D1Xj0wuTDEiMnjwR57Q3RXYY/s0EpX6Ay3vgIcfaR+ewGHsi+g=="],
+
+    "cronstrue": ["cronstrue@3.9.0", "", { "bin": { "cronstrue": "bin/cli.js" } }, "sha512-T3S35zmD0Ai2B4ko6+mEM+k9C6tipe2nB9RLiGT6QL2Wn0Vsn2cCZAC8Oeuf4CaE00GZWVdpYitbpWCNlIWqdA=="],
 
     "cross-dirname": ["cross-dirname@0.1.0", "", {}, "sha512-+R08/oI0nl3vfPcqftZRpytksBXDzOUveBq/NBVx0sUp1axwzPQrKinNx5yd5sxPu8j1wIy8AfnVQ+5eFdha6Q=="],
 

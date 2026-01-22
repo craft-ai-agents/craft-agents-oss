@@ -123,6 +123,24 @@ export function ScheduleList({ workspaceId }: ScheduleListProps) {
   )
 }
 
+function StatusBadge({ status }: { status: Schedule['lastRunStatus'] }) {
+  const config = {
+    success: { color: 'bg-green-500', label: 'Success' },
+    failed: { color: 'bg-red-500', label: 'Failed' },
+    null: { color: 'bg-gray-400', label: 'Not run yet' },
+  }
+  const { color, label } = config[status ?? 'null']
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className={`w-2 h-2 rounded-full ${color} inline-block`} />
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  )
+}
+
 interface ScheduleCardProps {
   schedule: Schedule
   onEdit: () => void
@@ -142,7 +160,10 @@ function ScheduleCard({ schedule, onEdit, onDelete, onToggle, onRunNow }: Schedu
         <div className="flex items-center gap-3">
           <Switch checked={schedule.enabled} onCheckedChange={onToggle} />
           <div className="min-w-0">
-            <p className="font-medium truncate">{schedule.name}</p>
+            <div className="flex items-center gap-2">
+              <StatusBadge status={schedule.lastRunStatus} />
+              <p className="font-medium truncate">{schedule.name}</p>
+            </div>
             <p className="text-xs text-muted-foreground truncate max-w-[200px]">
               {schedule.prompt}
             </p>

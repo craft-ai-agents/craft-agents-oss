@@ -46,6 +46,9 @@ import type { RichTextInputHandle } from "@/components/ui/rich-text-input"
 import { useBackgroundTasks } from "@/hooks/useBackgroundTasks"
 import { CHAT_LAYOUT } from "@/config/layout"
 import { LoopProgressIndicator, LoopSummaryCard } from "@/components/loop"
+import { detectScheduleIntent, parseTimeToCron } from "@/hooks/useScheduleFromChat"
+import { toast } from "sonner"
+import cronstrue from "cronstrue"
 
 // ============================================================================
 // Overlay State Types
@@ -517,7 +520,40 @@ export function ChatDisplay({
 
   // Handle message submission from InputContainer
   // Backend handles interruption and queueing if currently processing
-  const handleSubmit = (message: string, attachments?: FileAttachment[], skillSlugs?: string[]) => {
+  const handleSubmit = async (message: string, attachments?: FileAttachment[], skillSlugs?: string[]) => {
+    // Check for scheduling intent in the message
+    const scheduleIntent = detectScheduleIntent(message)
+    if (scheduleIntent && workspaceId) {
+      // Extract the prompt from the current conversation or use a default
+      // Get the last few user messages as context for the scheduled task
+      const recentMessages = session?.messages
+        .filter(m => m.role === 'user')
+        .slice(-3)
+        .map(m => typeof m.content === 'string' ? m.content : '')
+        .filter(Boolean)
+        .join('\n\n') || 'Run the scheduled task'
+
+      try {
+        const schedule = await window.electronAPI.scheduleCreate(workspaceId, {
+          name: session?.name || 'Chat Schedule',
+          prompt: recentMessages,
+          cron: scheduleIntent.cron,
+          scheduledFor: null,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          enabled: true,
+        })
+        toast.success(`Scheduled: ${scheduleIntent.description}`, {
+          description: `Created schedule "${schedule.name}"`,
+        })
+        // Don't send the scheduling message to the agent, just confirm to user
+        return
+      } catch (error) {
+        toast.error('Failed to create schedule', {
+          description: error instanceof Error ? error.message : 'Unknown error',
+        })
+      }
+    }
+
     // Force stick-to-bottom when user sends a message
     isStickToBottomRef.current = true
     onSendMessage(message, attachments, skillSlugs)
