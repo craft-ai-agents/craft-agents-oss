@@ -397,6 +397,84 @@ describe('validatePRD', () => {
     expect(result.error).toContain('Duplicate story IDs')
     expect(result.error).toContain('US-001')
   })
+
+  // ============================================================
+  // Size Limit and Security Validation Tests
+  // ============================================================
+
+  it('should reject PRD exceeding size limit (1MB)', () => {
+    // Create a PRD that exceeds 1MB
+    const largeContent = 'a'.repeat(1024 * 1024 + 100)
+    const largePRD = `### [ ] US-001: Large story\n\n${largeContent}`
+    const result = validatePRD(largePRD)
+
+    expect(result.isValid).toBe(false)
+    expect(result.error).toContain('exceeds maximum size')
+  })
+
+  it('should reject PRD with too many stories (> 500)', () => {
+    // Create a PRD with 501 stories
+    const stories = Array.from({ length: 501 }, (_, i) =>
+      `### [ ] US-${String(i + 1).padStart(3, '0')}: Story ${i + 1}\n\nContent`
+    ).join('\n\n')
+    const result = validatePRD(stories)
+
+    expect(result.isValid).toBe(false)
+    expect(result.error).toContain('exceeds maximum of 500 stories')
+  })
+
+  it('should reject story with ID exceeding max length', () => {
+    // Story ID pattern requires ending with a number, so use a valid format that's too long
+    const longId = 'VERYLONGSTORYPREFIX-' + '1'.repeat(30)
+    const prd = `### [ ] ${longId}: Story title\n\nContent`
+    const result = validatePRD(prd)
+
+    expect(result.isValid).toBe(false)
+    expect(result.error).toContain('exceeds maximum length')
+  })
+
+  it('should reject story with title exceeding max length', () => {
+    const longTitle = 'T'.repeat(300)
+    const prd = `### [ ] US-001: ${longTitle}\n\nContent`
+    const result = validatePRD(prd)
+
+    expect(result.isValid).toBe(false)
+    expect(result.error).toContain('title exceeds maximum length')
+  })
+
+  it('should reject story with null bytes in title', () => {
+    const prd = `### [ ] US-001: Story with\0null byte\n\nContent`
+    const result = validatePRD(prd)
+
+    expect(result.isValid).toBe(false)
+    expect(result.error).toContain('invalid null bytes')
+  })
+
+  it('should reject story with content exceeding max length', () => {
+    const longContent = 'C'.repeat(15000)
+    const prd = `### [ ] US-001: Story title\n\n${longContent}`
+    const result = validatePRD(prd)
+
+    expect(result.isValid).toBe(false)
+    expect(result.error).toContain('content exceeds maximum length')
+  })
+
+  it('should accept PRD at exactly the size limit', () => {
+    // Create a PRD that's just under 1MB with valid stories
+    const validPRD = `### [ ] US-001: Valid story\n\nSome content here.`
+    const result = validatePRD(validPRD)
+
+    expect(result.isValid).toBe(true)
+  })
+
+  it('should accept PRD with exactly 500 stories', () => {
+    const stories = Array.from({ length: 500 }, (_, i) =>
+      `### [ ] US-${String(i + 1).padStart(3, '0')}: Story ${i + 1}\n\nContent`
+    ).join('\n\n')
+    const result = validatePRD(stories)
+
+    expect(result.isValid).toBe(true)
+  })
 })
 
 // ============================================================

@@ -3,13 +3,23 @@
  *
  * Provides git operations for the Ralph Loop system.
  * Handles commit verification, auto-commits, and change detection.
+ *
+ * SECURITY: All git commands use execFile() instead of exec() to prevent
+ * command injection attacks. Arguments are passed as arrays, not interpolated
+ * into shell command strings.
  */
 
-import { exec } from 'child_process'
+import { execFile } from 'child_process'
 import { promisify } from 'util'
 import type { ChangeSummary } from './types.ts'
 
-const execAsync = promisify(exec)
+const execFileAsync = promisify(execFile)
+
+/** Maximum allowed length for story titles to prevent DoS */
+const MAX_TITLE_LENGTH = 256
+
+/** Maximum allowed length for story IDs */
+const MAX_STORY_ID_LENGTH = 32
 
 /**
  * Interface for git operations used by Ralph Loop
@@ -32,18 +42,50 @@ export interface GitOperations {
 }
 
 /**
- * Execute a git command in the specified working directory
+ * Validate story input for safety (defense in depth)
+ * Even though execFile() is safe from injection, we still validate input
+ * to catch malformed data early and provide clear error messages.
  */
-async function gitExec(
-  command: string,
-  workingDirectory: string
+function validateStoryInput(storyId: string, title: string): void {
+  // Story ID: alphanumeric with optional prefix and hyphen/underscore
+  if (!storyId || storyId.length > MAX_STORY_ID_LENGTH) {
+    throw new Error(
+      `Invalid story ID: must be 1-${MAX_STORY_ID_LENGTH} characters, got ${storyId?.length ?? 0}`
+    )
+  }
+
+  // Title: reasonable length, no null bytes
+  if (!title || title.length === 0 || title.length > MAX_TITLE_LENGTH) {
+    throw new Error(
+      `Story title must be 1-${MAX_TITLE_LENGTH} characters, got ${title?.length ?? 0}`
+    )
+  }
+
+  if (title.includes('\0')) {
+    throw new Error('Story title cannot contain null bytes')
+  }
+}
+
+/**
+ * Execute a git command safely using array-based argument passing.
+ * Uses execFile() instead of exec() to prevent shell injection attacks.
+ *
+ * @param args - Array of git command arguments (not including 'git')
+ * @param workingDirectory - The directory to run git commands in
+ * @param options - Optional timeout configuration
+ */
+async function gitExecSafe(
+  args: string[],
+  workingDirectory: string,
+  options: { timeout?: number } = {}
 ): Promise<{ stdout: string; stderr: string }> {
   try {
-    const result = await execAsync(`git ${command}`, {
+    const { stdout, stderr } = await execFileAsync('git', args, {
       cwd: workingDirectory,
       maxBuffer: 10 * 1024 * 1024, // 10MB buffer for large diffs
+      timeout: options.timeout || 30000, // 30s default timeout
     })
-    return result
+    return { stdout, stderr }
   } catch (error) {
     // Git commands often exit with non-zero for normal conditions
     // (e.g., no changes to commit), so we need to handle this carefully
@@ -64,17 +106,17 @@ async function gitExec(
 export function createGitOperations(workingDirectory: string): GitOperations {
   return {
     async getCurrentHead(): Promise<string> {
-      const { stdout } = await gitExec('rev-parse HEAD', workingDirectory)
+      const { stdout } = await gitExecSafe(['rev-parse', 'HEAD'], workingDirectory)
       return stdout.trim()
     },
 
     async hasUncommittedChanges(): Promise<boolean> {
-      const { stdout } = await gitExec('status --porcelain', workingDirectory)
+      const { stdout } = await gitExecSafe(['status', '--porcelain'], workingDirectory)
       return stdout.trim().length > 0
     },
 
     async getChangesSummary(): Promise<ChangeSummary> {
-      const { stdout } = await gitExec('status --porcelain', workingDirectory)
+      const { stdout } = await gitExecSafe(['status', '--porcelain'], workingDirectory)
       const lines = stdout.trim().split('\n').filter(Boolean)
 
       let filesAdded = 0
@@ -107,8 +149,11 @@ export function createGitOperations(workingDirectory: string): GitOperations {
     },
 
     async createAutoCommit(storyId: string, title: string): Promise<string> {
+      // Validate input (defense in depth)
+      validateStoryInput(storyId, title)
+
       // Stage all changes
-      await gitExec('add -A', workingDirectory)
+      await gitExecSafe(['add', '-A'], workingDirectory)
 
       // Check if there's anything to commit
       const hasChanges = await this.hasUncommittedChanges()
@@ -117,10 +162,11 @@ export function createGitOperations(workingDirectory: string): GitOperations {
       }
 
       // Create commit with Ralph Loop attribution
+      // SECURITY: Using execFile with array args - no shell interpretation
+      // The message can safely contain any characters including backticks, $(), etc.
       const message = `feat(${storyId}): ${title}\n\nAuto-committed by Ralph Loop`
-      const escapedMessage = message.replace(/"/g, '\\"')
 
-      await gitExec(`commit -m "${escapedMessage}"`, workingDirectory)
+      await gitExecSafe(['commit', '-m', message], workingDirectory)
 
       // Return the new commit SHA
       return this.getCurrentHead()
@@ -132,13 +178,13 @@ export function createGitOperations(workingDirectory: string): GitOperations {
     },
 
     async getLastCommitMessage(): Promise<string> {
-      const { stdout } = await gitExec('log -1 --pretty=%B', workingDirectory)
+      const { stdout } = await gitExecSafe(['log', '-1', '--pretty=%B'], workingDirectory)
       return stdout.trim()
     },
 
     async isGitRepository(): Promise<boolean> {
       try {
-        await gitExec('rev-parse --is-inside-work-tree', workingDirectory)
+        await gitExecSafe(['rev-parse', '--is-inside-work-tree'], workingDirectory)
         return true
       } catch {
         return false

@@ -2019,6 +2019,16 @@ export class SessionManager {
     // Clean up session-scoped tool callbacks to prevent memory accumulation
     unregisterSessionScopedToolCallbacks(sessionId)
 
+    // Clean up Ralph Loop runner if one is running for this session
+    // This prevents: orphaned loops, memory leaks, IPC events to deleted sessions
+    const loopRunner = this.loopRunners.get(sessionId)
+    if (loopRunner) {
+      loopRunner.cancel()   // Signal cancellation
+      loopRunner.destroy()  // Release all resources
+      this.loopRunners.delete(sessionId)
+      sessionLog.info(`Cleaned up loop runner for session ${sessionId}`)
+    }
+
     // Dispose agent to clean up ConfigWatchers, event listeners, MCP connections
     if (managed.agent) {
       managed.agent.dispose()
@@ -3257,6 +3267,19 @@ To view this task's output:
     for (const sessionId of this.sessions.keys()) {
       unregisterSessionScopedToolCallbacks(sessionId)
     }
+
+    // Cancel and clean up all active Ralph Loop runners
+    // Prevents: orphaned loops continuing after shutdown, dirty git state
+    for (const [sessionId, runner] of this.loopRunners.entries()) {
+      try {
+        runner.cancel()
+        runner.destroy()
+        sessionLog.info(`Cleaned up loop runner for session ${sessionId}`)
+      } catch (error) {
+        sessionLog.error(`Failed to cleanup loop runner for session ${sessionId}:`, error)
+      }
+    }
+    this.loopRunners.clear()
 
     sessionLog.info('Cleanup complete')
   }

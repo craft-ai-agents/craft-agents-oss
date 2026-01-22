@@ -105,6 +105,7 @@ export class RalphLoopRunner extends EventEmitter {
 
     // Initialize state
     const loopId = generateLoopId()
+    const startTime = Date.now()
     this.state = {
       id: loopId,
       sessionId: this.sessionId,
@@ -113,7 +114,7 @@ export class RalphLoopRunner extends EventEmitter {
       currentStory: null,
       currentIteration: 0,
       status: 'running',
-      startTime: Date.now(),
+      startTime,
       storiesCompleted: 0,
       errors: [],
       storyResults: [],
@@ -127,14 +128,35 @@ export class RalphLoopRunner extends EventEmitter {
     try {
       await this.runLoop()
     } catch (error) {
-      const loopError: LoopError = {
-        message: error instanceof Error ? error.message : 'Unknown error',
-        code: 'unknown',
-        timestamp: Date.now(),
+      // Guard against state being null (e.g., if destroy() was called during execution)
+      if (this.state) {
+        const loopError: LoopError = {
+          message: error instanceof Error ? error.message : 'Unknown error',
+          code: 'unknown',
+          timestamp: Date.now(),
+        }
+        this.state.errors.push(loopError)
+        this.state.status = 'error'
+        this.emit('error', loopError)
       }
-      this.state.errors.push(loopError)
-      this.state.status = 'error'
-      this.emit('error', loopError)
+    }
+
+    // If state was cleared by destroy(), return a minimal cancelled result
+    if (!this.state) {
+      return {
+        loopId: loopId,
+        status: 'cancelled',
+        summary: {
+          totalStories: prd.metadata.totalStories,
+          completedStories: 0,
+          failedStories: 0,
+          skippedStories: 0,
+          totalTimeMs: Date.now() - startTime,
+          commits: [],
+        },
+        storyResults: [],
+        errors: [],
+      }
     }
 
     return this.buildResult()
@@ -175,6 +197,32 @@ export class RalphLoopRunner extends EventEmitter {
       this.state.status = 'cancelled'
       this.emitProgress()
     }
+  }
+
+  /**
+   * Destroy the loop runner and release all resources.
+   * Call this when the loop runner is no longer needed (session deletion, app shutdown).
+   *
+   * Ensures:
+   * - All event listeners are removed (prevents memory leaks)
+   * - AbortController is cancelled (stops in-flight operations)
+   * - State is cleared (releases memory)
+   * - No further events will be emitted
+   */
+  destroy(): void {
+    // Cancel any in-flight operations
+    if (this.currentAbortController) {
+      this.currentAbortController.abort()
+      this.currentAbortController = null
+    }
+
+    // Remove all event listeners to prevent memory leaks
+    this.removeAllListeners()
+
+    // Clear state to release memory
+    this.state = null
+    this.isPaused = false
+    this.isCancelled = true
   }
 
   /**

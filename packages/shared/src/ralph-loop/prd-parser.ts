@@ -9,9 +9,29 @@
  *
  * ### [x] US-002: Completed story
  * Story content...
+ *
+ * Security considerations:
+ * - PRD size limits prevent DoS attacks via large documents
+ * - Story ID/title validation prevents malformed input
+ * - Story count limits prevent excessive resource usage
  */
 
 import type { PRD, Story, StoryStatus } from './types.ts'
+
+/** Maximum PRD content size in bytes (1MB) */
+const MAX_PRD_SIZE_BYTES = 1024 * 1024
+
+/** Maximum number of stories allowed in a PRD */
+const MAX_STORIES = 500
+
+/** Maximum story title length */
+const MAX_TITLE_LENGTH = 256
+
+/** Maximum story ID length */
+const MAX_STORY_ID_LENGTH = 32
+
+/** Maximum content per story in characters */
+const MAX_STORY_CONTENT_LENGTH = 10000
 
 /**
  * Regex pattern for matching story headers
@@ -21,6 +41,19 @@ import type { PRD, Story, StoryStatus } from './types.ts'
  * - ### [ ] STORY-001: Title (custom prefix)
  */
 const STORY_HEADER_PATTERN = /^###\s*\[([ xX])\]\s*([A-Za-z]*-?\d+):\s*(.+)$/
+
+/**
+ * Calculate metadata from a list of stories
+ * Helper function to DRY up metadata calculation across multiple functions
+ */
+function calculateMetadata(stories: Story[]): PRD['metadata'] {
+  return {
+    totalStories: stories.length,
+    completedStories: stories.filter((s) => s.status === 'completed').length,
+    pendingStories: stories.filter((s) => s.status === 'pending').length,
+    failedStories: stories.filter((s) => s.status === 'failed').length,
+  }
+}
 
 /**
  * Parse a PRD markdown string into a structured PRD object
@@ -76,20 +109,10 @@ export function parsePRD(markdown: string): PRD {
     } as Story)
   }
 
-  // Calculate metadata
-  const completedStories = stories.filter((s) => s.status === 'completed').length
-  const failedStories = stories.filter((s) => s.status === 'failed').length
-  const pendingStories = stories.filter((s) => s.status === 'pending').length
-
   return {
     source: markdown,
     stories,
-    metadata: {
-      totalStories: stories.length,
-      completedStories,
-      pendingStories,
-      failedStories,
-    },
+    metadata: calculateMetadata(stories),
   }
 }
 
@@ -123,20 +146,10 @@ export function markStoryComplete(prd: PRD, storyId: string): PRD {
     s.id === storyId ? { ...s, status: 'completed' as StoryStatus } : s
   )
 
-  // Recalculate metadata
-  const completedStories = newStories.filter((s) => s.status === 'completed').length
-  const failedStories = newStories.filter((s) => s.status === 'failed').length
-  const pendingStories = newStories.filter((s) => s.status === 'pending').length
-
   return {
     source: newSource,
     stories: newStories,
-    metadata: {
-      totalStories: newStories.length,
-      completedStories,
-      pendingStories,
-      failedStories,
-    },
+    metadata: calculateMetadata(newStories),
   }
 }
 
@@ -159,20 +172,10 @@ export function markStoryFailed(prd: PRD, storyId: string): PRD {
     s.id === storyId ? { ...s, status: 'failed' as StoryStatus } : s
   )
 
-  // Recalculate metadata
-  const completedStories = newStories.filter((s) => s.status === 'completed').length
-  const failedStories = newStories.filter((s) => s.status === 'failed').length
-  const pendingStories = newStories.filter((s) => s.status === 'pending').length
-
   return {
     source: prd.source,
     stories: newStories,
-    metadata: {
-      totalStories: newStories.length,
-      completedStories,
-      pendingStories,
-      failedStories,
-    },
+    metadata: calculateMetadata(newStories),
   }
 }
 
@@ -193,19 +196,10 @@ export function markStorySkipped(prd: PRD, storyId: string): PRD {
     s.id === storyId ? { ...s, status: 'skipped' as StoryStatus } : s
   )
 
-  const completedStories = newStories.filter((s) => s.status === 'completed').length
-  const failedStories = newStories.filter((s) => s.status === 'failed').length
-  const pendingStories = newStories.filter((s) => s.status === 'pending').length
-
   return {
     source: prd.source,
     stories: newStories,
-    metadata: {
-      totalStories: newStories.length,
-      completedStories,
-      pendingStories,
-      failedStories,
-    },
+    metadata: calculateMetadata(newStories),
   }
 }
 
@@ -244,6 +238,12 @@ export function getStoryIndex(prd: PRD, storyId: string): number {
 /**
  * Validate that a string is a valid PRD format
  *
+ * Performs comprehensive validation including:
+ * - Size limits (prevents DoS)
+ * - Story count limits
+ * - Story ID/title format validation
+ * - Duplicate detection
+ *
  * @param markdown - The markdown content to validate
  * @returns Object with isValid flag and optional error message
  */
@@ -252,12 +252,60 @@ export function validatePRD(markdown: string): { isValid: boolean; error?: strin
     return { isValid: false, error: 'PRD content is empty' }
   }
 
+  // Check PRD size limit (prevents DoS via large documents)
+  const sizeBytes = new TextEncoder().encode(markdown).length
+  if (sizeBytes > MAX_PRD_SIZE_BYTES) {
+    return {
+      isValid: false,
+      error: `PRD exceeds maximum size of ${MAX_PRD_SIZE_BYTES / 1024}KB (got ${Math.round(sizeBytes / 1024)}KB)`,
+    }
+  }
+
   const prd = parsePRD(markdown)
 
   if (prd.stories.length === 0) {
     return {
       isValid: false,
       error: 'No stories found. Stories should be formatted as: ### [ ] US-001: Story title',
+    }
+  }
+
+  // Check story count limit (prevents resource exhaustion)
+  if (prd.stories.length > MAX_STORIES) {
+    return {
+      isValid: false,
+      error: `PRD exceeds maximum of ${MAX_STORIES} stories (got ${prd.stories.length})`,
+    }
+  }
+
+  // Validate each story's ID and title
+  for (const story of prd.stories) {
+    if (story.id.length > MAX_STORY_ID_LENGTH) {
+      return {
+        isValid: false,
+        error: `Story ID "${story.id}" exceeds maximum length of ${MAX_STORY_ID_LENGTH} characters`,
+      }
+    }
+
+    if (story.title.length > MAX_TITLE_LENGTH) {
+      return {
+        isValid: false,
+        error: `Story "${story.id}" title exceeds maximum length of ${MAX_TITLE_LENGTH} characters`,
+      }
+    }
+
+    if (story.title.includes('\0')) {
+      return {
+        isValid: false,
+        error: `Story "${story.id}" title contains invalid null bytes`,
+      }
+    }
+
+    if (story.content.length > MAX_STORY_CONTENT_LENGTH) {
+      return {
+        isValid: false,
+        error: `Story "${story.id}" content exceeds maximum length of ${MAX_STORY_CONTENT_LENGTH} characters`,
+      }
     }
   }
 
