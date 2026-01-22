@@ -6,7 +6,7 @@
  */
 
 import * as React from 'react'
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 import { Maximize2 } from 'lucide-react'
 import { Info_DataTable, SortableHeader } from './Info_DataTable'
@@ -16,6 +16,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip
 import { DataTableOverlay } from '@craft-agent/ui'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
+import { useTranslation } from '@/i18n'
 
 export type PermissionAccess = 'allowed' | 'blocked'
 export type PermissionType = 'tool' | 'bash' | 'api' | 'mcp'
@@ -50,12 +51,14 @@ interface PermissionsDataTableProps {
  * - Click to copy pattern to clipboard with toast notification
  */
 function PatternBadge({ pattern }: { pattern: string }) {
+  const { t } = useTranslation()
+
   const handleClick = async () => {
     try {
       await navigator.clipboard.writeText(pattern)
-      toast.success('Pattern copied to clipboard')
+      toast.success(t('patternCopiedToClipboard' as any))
     } catch {
-      toast.error('Failed to copy pattern')
+      toast.error(t('failedToCopyPattern' as any))
     }
   }
 
@@ -82,91 +85,6 @@ function PatternBadge({ pattern }: { pattern: string }) {
   return badge
 }
 
-// Column definitions with sorting
-const columnsWithType: ColumnDef<PermissionRow>[] = [
-  {
-    accessorKey: 'access',
-    header: ({ column }) => <SortableHeader column={column} title="Access" />,
-    cell: ({ row }) => (
-      <div className="p-1.5 pl-2.5">
-        <Info_StatusBadge status={row.original.access} className="whitespace-nowrap" />
-      </div>
-    ),
-    minSize: 80,
-  },
-  {
-    accessorKey: 'type',
-    header: ({ column }) => <SortableHeader column={column} title="Type" />,
-    cell: ({ row }) => (
-      <div className="p-1.5 pl-2.5">
-        <Info_Badge color="muted" className="capitalize whitespace-nowrap">
-          {row.original.type}
-        </Info_Badge>
-      </div>
-    ),
-    minSize: 80,
-  },
-  {
-    accessorKey: 'pattern',
-    header: ({ column }) => <SortableHeader column={column} title="Pattern" />,
-    cell: ({ row }) => (
-      <div className="p-1.5 pl-2.5">
-        <PatternBadge pattern={row.original.pattern} />
-      </div>
-    ),
-    minSize: 100,
-  },
-  {
-    id: 'comment',
-    accessorKey: 'comment',
-    header: () => <span className="p-1.5 pl-2.5">Comment</span>,
-    cell: ({ row }) => (
-      <div className="p-1.5 pl-2.5 min-w-0">
-        <span className="truncate block">
-          {row.original.comment || '—'}
-        </span>
-      </div>
-    ),
-    meta: { fillWidth: true, truncate: true },
-  },
-]
-
-const columnsWithoutType: ColumnDef<PermissionRow>[] = [
-  {
-    accessorKey: 'access',
-    header: ({ column }) => <SortableHeader column={column} title="Access" />,
-    cell: ({ row }) => (
-      <div className="p-1.5 pl-2.5">
-        <Info_StatusBadge status={row.original.access} className="whitespace-nowrap" />
-      </div>
-    ),
-    minSize: 80,
-  },
-  {
-    accessorKey: 'pattern',
-    header: ({ column }) => <SortableHeader column={column} title="Pattern" />,
-    cell: ({ row }) => (
-      <div className="p-1.5 pl-2.5">
-        <PatternBadge pattern={row.original.pattern} />
-      </div>
-    ),
-    minSize: 100,
-  },
-  {
-    id: 'comment',
-    accessorKey: 'comment',
-    header: () => <span className="p-1.5 pl-2.5">Comment</span>,
-    cell: ({ row }) => (
-      <div className="p-1.5 pl-2.5 min-w-0">
-        <span className="truncate block">
-          {row.original.comment || '—'}
-        </span>
-      </div>
-    ),
-    meta: { fillWidth: true, truncate: true },
-  },
-]
-
 export function PermissionsDataTable({
   data,
   hideTypeColumn = false,
@@ -176,7 +94,93 @@ export function PermissionsDataTable({
   fullscreenTitle = 'Permissions',
   className,
 }: PermissionsDataTableProps) {
+  const { t } = useTranslation()
   const [isFullscreen, setIsFullscreen] = useState(false)
+
+  // Column definitions with sorting
+  const columnsWithType: ColumnDef<PermissionRow>[] = useMemo(() => [
+    {
+      accessorKey: 'access',
+      header: ({ column }) => <SortableHeader column={column} title={t('access' as any)} />,
+      cell: ({ row }) => (
+        <div className="p-1.5 pl-2.5">
+          <Info_StatusBadge status={row.original.access} className="whitespace-nowrap" />
+        </div>
+      ),
+      minSize: 80,
+    },
+    {
+      accessorKey: 'type',
+      header: ({ column }) => <SortableHeader column={column} title={t('type' as any)} />,
+      cell: ({ row }) => (
+        <div className="p-1.5 pl-2.5">
+          <Info_Badge color="muted" className="capitalize whitespace-nowrap">
+            {row.original.type}
+          </Info_Badge>
+        </div>
+      ),
+      minSize: 80,
+    },
+    {
+      accessorKey: 'pattern',
+      header: ({ column }) => <SortableHeader column={column} title={t('toolPattern' as any)} />,
+      cell: ({ row }) => (
+        <div className="p-1.5 pl-2.5">
+          <PatternBadge pattern={row.original.pattern} />
+        </div>
+      ),
+      minSize: 100,
+    },
+    {
+      id: 'comment',
+      accessorKey: 'comment',
+      header: () => <span className="p-1.5 pl-2.5">{t('comment' as any)}</span>,
+      cell: ({ row }) => (
+        <div className="p-1.5 pl-2.5 min-w-0">
+          <span className="truncate block">
+            {row.original.comment || '—'}
+          </span>
+        </div>
+      ),
+      meta: { fillWidth: true, truncate: true },
+    },
+  ], [t])
+
+  const columnsWithoutType: ColumnDef<PermissionRow>[] = useMemo(() => [
+    {
+      accessorKey: 'access',
+      header: ({ column }) => <SortableHeader column={column} title={t('access' as any)} />,
+      cell: ({ row }) => (
+        <div className="p-1.5 pl-2.5">
+          <Info_StatusBadge status={row.original.access} className="whitespace-nowrap" />
+        </div>
+      ),
+      minSize: 80,
+    },
+    {
+      accessorKey: 'pattern',
+      header: ({ column }) => <SortableHeader column={column} title={t('toolPattern' as any)} />,
+      cell: ({ row }) => (
+        <div className="p-1.5 pl-2.5">
+          <PatternBadge pattern={row.original.pattern} />
+        </div>
+      ),
+      minSize: 100,
+    },
+    {
+      id: 'comment',
+      accessorKey: 'comment',
+      header: () => <span className="p-1.5 pl-2.5">{t('comment' as any)}</span>,
+      cell: ({ row }) => (
+        <div className="p-1.5 pl-2.5 min-w-0">
+          <span className="truncate block">
+            {row.original.comment || '—'}
+          </span>
+        </div>
+      ),
+      meta: { fillWidth: true, truncate: true },
+    },
+  ], [t])
   const columns = hideTypeColumn ? columnsWithoutType : columnsWithType
 
   // Fullscreen button for toolbar - shown on hover
