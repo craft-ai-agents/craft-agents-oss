@@ -286,9 +286,9 @@ export default function WorkspaceSettingsPage() {
   if (!activeWorkspaceId) {
     return (
       <div className="h-full flex flex-col">
-        <PanelHeader title="Workspace Settings" actions={<HeaderMenu route={routes.view.settings('workspace')} />} />
+        <PanelHeader title={t('workspaceSettingsTitle' as any)} actions={<HeaderMenu route={routes.view.settings('workspace')} />} />
         <div className="flex-1 flex items-center justify-center">
-          <p className="text-sm text-muted-foreground">No workspace selected</p>
+          <p className="text-sm text-muted-foreground">{t('noWorkspaceSelected' as any)}</p>
         </div>
       </div>
     )
@@ -298,7 +298,7 @@ export default function WorkspaceSettingsPage() {
   if (isLoadingWorkspace) {
     return (
       <div className="h-full flex flex-col">
-        <PanelHeader title="Workspace Settings" actions={<HeaderMenu route={routes.view.settings('workspace')} />} />
+        <PanelHeader title={t('workspaceSettingsTitle' as any)} actions={<HeaderMenu route={routes.view.settings('workspace')} />} />
         <div className="flex-1 flex items-center justify-center">
           <Spinner className="text-muted-foreground" />
         </div>
@@ -317,8 +317,8 @@ export default function WorkspaceSettingsPage() {
             <SettingsSection title={t('workspaceInfo' as any)}>
               <SettingsCard>
                 <SettingsRow
-                  label="Name"
-                  description={wsName || 'Untitled'}
+                  label={t('name' as any)}
+                  description={wsName || t('untitled' as any)}
                   action={
                     <button
                       type="button"
@@ -328,12 +328,12 @@ export default function WorkspaceSettingsPage() {
                       }}
                       className="inline-flex items-center h-8 px-3 text-sm rounded-lg bg-background shadow-minimal hover:bg-foreground/[0.02] transition-colors"
                     >
-                      Edit
+                      {t('edit' as any)}
                     </button>
                   }
                 />
                 <SettingsRow
-                  label="Icon"
+                  label={t('icon' as any)}
                   action={
                     <label className="cursor-pointer">
                       <input
@@ -371,7 +371,7 @@ export default function WorkspaceSettingsPage() {
               <RenameDialog
                 open={renameDialogOpen}
                 onOpenChange={setRenameDialogOpen}
-                title="Rename workspace"
+                title={t('renameWorkspace' as any)}
                 value={wsNameEditing}
                 onValueChange={setWsNameEditing}
                 onSubmit={() => {
@@ -383,7 +383,7 @@ export default function WorkspaceSettingsPage() {
                   }
                   setRenameDialogOpen(false)
                 }}
-                placeholder="Enter workspace name..."
+                placeholder={t('enterWorkspaceName' as any)}
               />
             </SettingsSection>
 
@@ -468,11 +468,11 @@ export default function WorkspaceSettingsPage() {
             </SettingsSection>
 
             {/* Advanced */}
-            <SettingsSection title="Advanced">
+            <SettingsSection title={t('advanced' as any)}>
               <SettingsCard>
                 <SettingsRow
-                  label="Default Working Directory"
-                  description={workingDirectory || 'Not set (uses session folder)'}
+                  label={t('defaultWorkingDirectory' as any)}
+                  description={workingDirectory || t('workingDirectoryNotSet' as any)}
                   action={
                     <div className="flex items-center gap-2">
                       {workingDirectory && (
@@ -481,7 +481,7 @@ export default function WorkspaceSettingsPage() {
                           onClick={handleClearWorkingDirectory}
                           className="inline-flex items-center h-8 px-3 text-sm rounded-lg bg-background shadow-minimal hover:bg-foreground/[0.02] transition-colors text-foreground/60 hover:text-foreground"
                         >
-                          Clear
+                          {t('clear' as any)}
                         </button>
                       )}
                       <button
@@ -489,14 +489,14 @@ export default function WorkspaceSettingsPage() {
                         onClick={handleChangeWorkingDirectory}
                         className="inline-flex items-center h-8 px-3 text-sm rounded-lg bg-background shadow-minimal hover:bg-foreground/[0.02] transition-colors"
                       >
-                        Change...
+                        {t('change' as any)}
                       </button>
                     </div>
                   }
                 />
                 <SettingsToggle
-                  label="Local MCP Servers"
-                  description="Enable stdio subprocess servers"
+                  label={t('localMcpServers' as any)}
+                  description={t('enableLocalMcpServers' as any)}
                   checked={localMcpEnabled}
                   onCheckedChange={handleLocalMcpEnabledChange}
                 />

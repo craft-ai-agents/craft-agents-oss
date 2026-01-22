@@ -431,6 +431,60 @@ export default {
   shortcutNewLine: 'New line',
   shortcutSendMessageCmd: 'Send message',
 
+  // Preferences Page
+  preferencesPageTitle: 'Preferences',
+  basicInfo: 'Basic Info',
+  timezoneLabel: 'Timezone',
+  languageLabel: 'Language',
+  cityLabel: 'City',
+  countryLabel: 'Country',
+  yourName: 'Your name',
+  yourTimezone: 'e.g., America/New_York',
+  yourLanguage: 'e.g., English',
+  location: 'Location',
+  yourCity: 'e.g., New York',
+  yourCountry: 'e.g., USA',
+  notes: 'Notes',
+  notesPlaceholder: 'Any additional information you\'d like to share with the AI assistant...',
+
+  // Chat Page
+  renameChat: 'Rename Chat',
+  enterChatName: 'Enter chat name...',
+  chatTitle: 'Chat',
+
+  // Workspace Settings (remaining)
+  workspaceSettingsTitle: 'Workspace Settings',
+  advanced: 'Advanced',
+  renameWorkspace: 'Rename workspace',
+  enterWorkspaceName: 'Enter workspace name...',
+  defaultWorkingDirectory: 'Default Working Directory',
+  localMcpServers: 'Local MCP Servers',
+  enableLocalMcpServers: 'Enable stdio subprocess servers',
+  workingDirectoryNotSet: 'Not set (uses session folder)',
+
+  // Info Pages
+  connection: 'Connection',
+  permissions: 'Permissions',
+  documentation: 'Documentation',
+  type: 'Type',
+  url: 'URL',
+  lastTested: 'Last Tested',
+  slug: 'Slug',
+  description: 'Description',
+  instructions: 'Instructions',
+  permissionModes: 'Permission Modes',
+
+  // Table Headers
+  access: 'Access',
+  pattern: 'Pattern',
+  viewFullscreen: 'View Fullscreen',
+
+  // Conversations/Session List
+  conversations: 'Conversations',
+
+  // Dialog
+  openInFinder: 'Open in Finder',
+
   // Data Tables
   name: 'Name',
   type: 'Type',

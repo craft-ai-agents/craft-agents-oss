@@ -426,6 +426,60 @@ export default {
   shortcutNewLine: '新行',
   shortcutSendMessageCmd: '发送消息',
 
+  // Preferences Page / 偏好设置页面
+  preferencesPageTitle: '偏好设置',
+  basicInfo: '基本信息',
+  timezoneLabel: '时区',
+  languageLabel: '语言',
+  cityLabel: '城市',
+  countryLabel: '国家',
+  yourName: '您的姓名',
+  yourTimezone: '例如：America/New_York',
+  yourLanguage: '例如：English',
+  location: '位置',
+  yourCity: '例如：New York',
+  yourCountry: '例如：USA',
+  notes: '备注',
+  notesPlaceholder: '您希望与 AI 助手分享的任何其他信息...',
+
+  // Chat Page / 聊天页面
+  renameChat: '重命名对话',
+  enterChatName: '输入对话名称...',
+  chatTitle: '聊天',
+
+  // Workspace Settings (remaining) / 工作空间设置（剩余）
+  workspaceSettingsTitle: '工作空间设置',
+  advanced: '高级',
+  renameWorkspace: '重命名工作空间',
+  enterWorkspaceName: '输入工作空间名称...',
+  defaultWorkingDirectory: '默认工作目录',
+  localMcpServers: '本地 MCP 服务器',
+  enableLocalMcpServers: '启用 stdio 子进程服务器',
+  workingDirectoryNotSet: '未设置（使用会话文件夹）',
+
+  // Info Pages / 信息页面
+  connection: '连接',
+  permissions: '权限',
+  documentation: '文档',
+  type: '类型',
+  url: 'URL',
+  lastTested: '最后测试',
+  slug: '标识符',
+  description: '描述',
+  instructions: '说明',
+  permissionModes: '权限模式',
+
+  // Table Headers / 表格标题
+  access: '访问',
+  pattern: '模式',
+  viewFullscreen: '查看全屏',
+
+  // Conversations/Session List / 对话/会话列表
+  conversations: '对话',
+
+  // Dialog / 对话框
+  openInFinder: '在 Finder 中打开',
+
   // Data Tables / 数据表
   name: '名称',
   type: '类型',

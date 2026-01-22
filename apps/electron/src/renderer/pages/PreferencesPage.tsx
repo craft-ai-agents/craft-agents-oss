@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { useTranslation } from '@/i18n'
 import { Spinner } from '@craft-agent/ui'
 import { Save, RotateCcw, Check, ExternalLink } from 'lucide-react'
 import { HeaderMenu } from '@/components/ui/HeaderMenu'
@@ -114,6 +115,7 @@ function FormField({
 }
 
 export default function PreferencesPage() {
+  const { t } = useTranslation()
   const [formState, setFormState] = useState<PreferencesFormState>(emptyFormState)
   const [originalState, setOriginalState] = useState<PreferencesFormState>(emptyFormState)
   const [isLoading, setIsLoading] = useState(true)
@@ -221,61 +223,61 @@ export default function PreferencesPage() {
 
   return (
     <div className="h-full flex flex-col">
-      <PanelHeader title="Preferences" actions={headerActions} />
+      <PanelHeader title={t('preferencesPageTitle' as any)} actions={headerActions} />
       <Separator />
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-6">
           {/* Basic Info */}
           <section>
-            <SectionHeader>Basic Info</SectionHeader>
+            <SectionHeader>{t('basicInfo' as any)}</SectionHeader>
             <div className="space-y-1">
               <FormField
-                label="Name"
+                label={t('name' as any)}
                 value={formState.name}
                 onChange={(v) => updateField('name', v)}
-                placeholder="Your name"
+                placeholder={t('yourName' as any)}
               />
               <FormField
-                label="Timezone"
+                label={t('timezoneLabel' as any)}
                 value={formState.timezone}
                 onChange={(v) => updateField('timezone', v)}
-                placeholder="e.g., America/New_York"
+                placeholder={t('yourTimezone' as any)}
               />
               <FormField
-                label="Language"
+                label={t('languageLabel' as any)}
                 value={formState.language}
                 onChange={(v) => updateField('language', v)}
-                placeholder="e.g., English"
+                placeholder={t('yourLanguage' as any)}
               />
             </div>
           </section>
 
           {/* Location */}
           <section>
-            <SectionHeader>Location</SectionHeader>
+            <SectionHeader>{t('location' as any)}</SectionHeader>
             <div className="space-y-1">
               <FormField
-                label="City"
+                label={t('cityLabel' as any)}
                 value={formState.city}
                 onChange={(v) => updateField('city', v)}
-                placeholder="e.g., New York"
+                placeholder={t('yourCity' as any)}
               />
               <FormField
-                label="Country"
+                label={t('countryLabel' as any)}
                 value={formState.country}
                 onChange={(v) => updateField('country', v)}
-                placeholder="e.g., USA"
+                placeholder={t('yourCountry' as any)}
               />
             </div>
           </section>
 
           {/* Notes */}
           <section>
-            <SectionHeader>Notes</SectionHeader>
+            <SectionHeader>{t('notes' as any)}</SectionHeader>
             <Textarea
               value={formState.notes}
               onChange={(e) => updateField('notes', e.target.value)}
-              placeholder="Any additional information you'd like to share with the AI assistant..."
+              placeholder={t('notesPlaceholder' as any)}
               className="min-h-[120px] text-sm resize-y"
             />
           </section>
