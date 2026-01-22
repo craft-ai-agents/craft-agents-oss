@@ -788,7 +788,7 @@ export default function AppSettingsPage() {
                   onValueChange={(v) => handleMethodClick(v as AuthType)}
                   options={[
                     { value: 'oauth_token', label: t('claudeProMax' as any), description: t('claudeProMaxDescription' as any) },
-                    { value: 'api_key', label: t('apiKey' as any), description: t('apiKeyDescription' as any) },
+                    { value: 'api_key', label: t('apiKeyPaymentMethod' as any), description: t('apiKeyPaymentMethodDescription' as any) },
                     { value: 'custom', label: t('customAnthropicCompatible' as any), description: t('customAnthropicCompatibleDescription' as any) },
                   ]}
                 />
@@ -798,7 +798,7 @@ export default function AppSettingsPage() {
               <Dialog open={expandedMethod === 'api_key'} onOpenChange={(open) => !open && handleCancel()}>
                 <DialogContent>
                   <DialogHeader>
-                    <DialogTitle>{t('apiKey' as any)}</DialogTitle>
+                    <DialogTitle>{t('apiKeyPaymentMethod' as any)}</DialogTitle>
                     <DialogDescription>
                       {t('configureApiKey' as any)}
                     </DialogDescription>

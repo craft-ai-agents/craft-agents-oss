@@ -95,7 +95,7 @@ export function KeyboardShortcutsDialog({ open, onOpenChange }: KeyboardShortcut
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px] max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{t('keyboardShortcuts' as any)}</DialogTitle>
+          <DialogTitle>{t('keyboardShortcutsDialogTitle' as any)}</DialogTitle>
         </DialogHeader>
         <div className="space-y-6 py-2">
           {sections.map((section) => (

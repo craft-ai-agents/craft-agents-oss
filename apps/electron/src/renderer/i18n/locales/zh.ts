@@ -219,6 +219,10 @@ export default {
   reauthDescription: '请再次登录以继续。',
   reauthButton: '登录',
 
+  // Keyboard Shortcuts Dialog / 键盘快捷键对话框
+  keyboardShortcutsDialogTitle: '键盘快捷键',
+  keyboardShortcutsDescription: '键盘快捷键快速参考',
+
   // Reset Confirmation Dialog / 重置确认对话框
   resetWorkspace: '重置工作空间',
   resetWorkspaceDescription: '这将删除您的所有会话和设置。此操作无法撤销。',
@@ -379,8 +383,8 @@ export default {
   selectPaymentMethod: '选择一种方式',
   claudeProMax: 'Claude Pro/Max',
   claudeProMaxDescription: '使用您的 Pro 或 Max 订阅',
-  apiKey: 'API 密钥',
-  apiKeyDescription: '使用您自己的 Anthropic 密钥按需付费',
+  apiKeyPaymentMethod: 'API 密钥',
+  apiKeyPaymentMethodDescription: '使用您自己的 Anthropic 密钥按需付费',
   customAnthropicCompatible: '自定义 / Anthropic 兼容',
   customAnthropicCompatibleDescription: '使用 ANTHROPIC_AUTH_TOKEN + 基础 URL',
   configureApiKey: '配置您的 Anthropic API 密钥',

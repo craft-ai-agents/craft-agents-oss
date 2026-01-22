@@ -221,7 +221,7 @@ export default {
   reauthButton: 'Sign In',
 
   // Keyboard Shortcuts Dialog
-  keyboardShortcuts: 'Keyboard Shortcuts',
+  keyboardShortcutsDialogTitle: 'Keyboard Shortcuts',
   keyboardShortcutsDescription: 'Quick reference for keyboard shortcuts',
 
   // Reset Confirmation Dialog
@@ -384,8 +384,8 @@ export default {
   selectPaymentMethod: 'Select a method',
   claudeProMax: 'Claude Pro/Max',
   claudeProMaxDescription: 'Use your Pro or Max subscription',
-  apiKey: 'API Key',
-  apiKeyDescription: 'Pay-as-you-go with your Anthropic key',
+  apiKeyPaymentMethod: 'API Key',
+  apiKeyPaymentMethodDescription: 'Pay-as-you-go with your Anthropic key',
   customAnthropicCompatible: 'Custom / Anthropic Compatible',
   customAnthropicCompatibleDescription: 'Use ANTHROPIC_AUTH_TOKEN + base URL',
   configureApiKey: 'Configure your Anthropic API key',
