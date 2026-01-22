@@ -14,6 +14,7 @@ import { toast } from 'sonner'
 import { SkillMenu } from '@/components/app-shell/SkillMenu'
 import { SkillAvatar } from '@/components/ui/skill-avatar'
 import { routes, navigate } from '@/lib/navigate'
+import { useTranslation } from '@/i18n'
 import {
   Info_Page,
   Info_Section,
@@ -28,6 +29,7 @@ interface SkillInfoPageProps {
 }
 
 export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageProps) {
+  const { t } = useTranslation()
   const [skill, setSkill] = useState<LoadedSkill | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -140,7 +142,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
     <Info_Page
       loading={loading}
       error={error ?? undefined}
-      empty={!skill && !loading && !error ? 'Skill not found' : undefined}
+      empty={!skill && !loading && !error ? t('skillNotFound' as any) : undefined}
     >
       <Info_Page.Header
         title={skillName}
@@ -166,26 +168,26 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
 
           {/* Metadata */}
           <Info_Section
-            title="Metadata"
+            title={t('metadata' as any)}
             actions={
               // EditPopover for AI-assisted metadata editing (name, description in frontmatter)
               <EditPopover
                 trigger={<EditButton />}
                 {...getEditConfig('skill-metadata', skill.path)}
                 secondaryAction={{
-                  label: 'Edit File',
+                  label: t('editFile' as any),
                   onClick: handleEdit,
                 }}
               />
             }
           >
             <Info_Table>
-              <Info_Table.Row label="Slug" value={skill.slug} />
-              <Info_Table.Row label="Name">{skill.metadata.name}</Info_Table.Row>
-              <Info_Table.Row label="Description">
+              <Info_Table.Row label={t('slug' as any)} value={skill.slug} />
+              <Info_Table.Row label={t('name' as any)}>{skill.metadata.name}</Info_Table.Row>
+              <Info_Table.Row label={t('description' as any)}>
                 {skill.metadata.description}
               </Info_Table.Row>
-              <Info_Table.Row label="Location">
+              <Info_Table.Row label={t('location' as any)}>
                 <button
                   onClick={handleLocationClick}
                   className="hover:underline cursor-pointer text-left"
@@ -198,33 +200,33 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
 
           {/* Permission Modes */}
           {skill.metadata.alwaysAllow && skill.metadata.alwaysAllow.length > 0 && (
-            <Info_Section title="Permission Modes">
+            <Info_Section title={t('permissionModes' as any)}>
               <div className="space-y-2">
                 <p className="text-xs text-muted-foreground mb-3">
-                  How "Always Allowed Tools" interacts with permission modes:
+                  {t('permissionModesDescription' as any)}
                 </p>
                 <div className="rounded-[8px] border border-border/50 overflow-hidden">
                   <table className="w-full text-sm">
                     <tbody>
                       <tr className="border-b border-border/30">
-                        <td className="px-3 py-2 font-medium text-muted-foreground w-[140px]">Explore</td>
+                        <td className="px-3 py-2 font-medium text-muted-foreground w-[140px]">{t('explore' as any)}</td>
                         <td className="px-3 py-2 flex items-center gap-2">
                           <X className="h-3.5 w-3.5 text-destructive shrink-0" />
-                          <span className="text-foreground/80">Blocked — write tools blocked regardless</span>
+                          <span className="text-foreground/80">{t('blockedInExplore' as any)}</span>
                         </td>
                       </tr>
                       <tr className="border-b border-border/30">
-                        <td className="px-3 py-2 font-medium text-muted-foreground">Ask to Edit</td>
+                        <td className="px-3 py-2 font-medium text-muted-foreground">{t('askToEdit' as any)}</td>
                         <td className="px-3 py-2 flex items-center gap-2">
                           <Check className="h-3.5 w-3.5 text-success shrink-0" />
-                          <span className="text-foreground/80">Auto-approved — no prompts for allowed tools</span>
+                          <span className="text-foreground/80">{t('autoApprovedInAsk' as any)}</span>
                         </td>
                       </tr>
                       <tr>
-                        <td className="px-3 py-2 font-medium text-muted-foreground">Auto</td>
+                        <td className="px-3 py-2 font-medium text-muted-foreground">{t('auto' as any)}</td>
                         <td className="px-3 py-2 flex items-center gap-2">
                           <Minus className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          <span className="text-foreground/80">No effect — all tools already auto-approved</span>
+                          <span className="text-foreground/80">{t('noEffectInAuto' as any)}</span>
                         </td>
                       </tr>
                     </tbody>
@@ -236,21 +238,21 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
 
           {/* Instructions */}
           <Info_Section
-            title="Instructions"
+            title={t('instructions' as any)}
             actions={
               // EditPopover for AI-assisted editing with "Edit File" as secondary action
               <EditPopover
                 trigger={<EditButton />}
                 {...getEditConfig('skill-instructions', skill.path)}
                 secondaryAction={{
-                  label: 'Edit File',
+                  label: t('editFile' as any),
                   onClick: handleEdit,
                 }}
               />
             }
           >
             <Info_Markdown maxHeight={540} fullscreen>
-              {skill.content || '*No instructions provided.*'}
+              {skill.content || t('noInstructionsProvided' as any)}
             </Info_Markdown>
           </Info_Section>
 
