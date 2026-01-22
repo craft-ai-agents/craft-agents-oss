@@ -157,6 +157,19 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
 
   // Vector Search navigator
   if (first === 'vectorSearch') {
+    if (segments.length === 1) {
+      return { navigator: 'vectorSearch', details: null }
+    }
+
+    // vectorSearch/document/{filePath}
+    if (segments[1] === 'document' && segments[2]) {
+      const filePath = decodeURIComponent(segments.slice(2).join('/'))
+      return {
+        navigator: 'vectorSearch',
+        details: { type: 'document', id: filePath },
+      }
+    }
+
     return { navigator: 'vectorSearch', details: null }
   }
 
@@ -455,7 +468,13 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
 
   // Vector Search
   if (compound.navigator === 'vectorSearch') {
-    return { navigator: 'vectorSearch' }
+    if (compound.details) {
+      return {
+        navigator: 'vectorSearch',
+        details: { type: 'document', filePath: compound.details.id },
+      }
+    }
+    return { navigator: 'vectorSearch', details: null }
   }
 
   // Schedules
@@ -596,6 +615,9 @@ export function buildRouteFromNavigationState(state: NavigationState): string {
   }
 
   if (state.navigator === 'vectorSearch') {
+    if (state.details) {
+      return `vectorSearch/document/${encodeURIComponent(state.details.filePath)}`
+    }
     return 'vectorSearch'
   }
 

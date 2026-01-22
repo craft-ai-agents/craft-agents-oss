@@ -6,6 +6,7 @@
 
 export { default as ChatPage } from './ChatPage'
 export { default as SourceInfoPage } from './SourceInfoPage'
+export { default as DocumentViewerPage } from './DocumentViewerPage'
 
 // Settings pages
 export {

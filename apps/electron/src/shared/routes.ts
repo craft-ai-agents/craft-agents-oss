@@ -137,7 +137,10 @@ export const routes = {
         : 'skills' as const,
 
     /** Vector search view (vectorSearch navigator) */
-    vectorSearch: () => 'vectorSearch' as const,
+    vectorSearch: (filePath?: string) =>
+      filePath
+        ? `vectorSearch/document/${encodeURIComponent(filePath)}` as const
+        : 'vectorSearch' as const,
 
     /** Schedules view (schedules navigator) */
     schedules: () => 'schedules' as const,

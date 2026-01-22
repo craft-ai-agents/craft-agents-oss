@@ -22,6 +22,7 @@ export interface CollectionInfo {
   pattern: string
   files: number
   updated: string
+  rootPath?: string  // Absolute root path for resolving relative file paths
 }
 
 /**

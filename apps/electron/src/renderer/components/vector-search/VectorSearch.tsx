@@ -9,6 +9,9 @@ import { useAtom } from 'jotai'
 import { useEffect, useCallback } from 'react'
 import { searchStateAtom, collectionsAtom, type SearchMode, type CollectionInfo } from '../../atoms/vector-search'
 import type { VectorSearchResult } from '../../../shared/types'
+import { navigate, routes } from '@/lib/navigate'
+import { useNavigationState, isVectorSearchNavigation } from '@/contexts/NavigationContext'
+import { cn } from '@/lib/utils'
 
 /**
  * Parse collection list output from QMD CLI
@@ -121,20 +124,54 @@ function parseSearchResults(output: string): VectorSearchResult[] {
 export function VectorSearch() {
   const [state, setState] = useAtom(searchStateAtom)
   const [collections, setCollections] = useAtom(collectionsAtom)
+  const navState = useNavigationState()
+
+  // Get selected file path from navigation state (now an absolute path)
+  const selectedFilePath = isVectorSearchNavigation(navState) && navState.details
+    ? navState.details.filePath
+    : null
+
+  // Helper to resolve a relative file path to absolute using collection root paths
+  const resolveAbsolutePath = useCallback((filePath: string, collection: string): string => {
+    const collectionInfo = collections.find(c => c.name === collection)
+    if (collectionInfo?.rootPath && !filePath.startsWith('/')) {
+      return `${collectionInfo.rootPath}/${filePath}`
+    }
+    return filePath
+  }, [collections])
 
   // Load collections on mount
   useEffect(() => {
     console.debug('[VectorSearch] Loading collections...')
-    window.electronAPI.vectorSearchExecute(['collection', 'list'])
-      .then(({ stdout, stderr }) => {
+
+    // Fetch both the collection list and the config with root paths
+    Promise.all([
+      window.electronAPI.vectorSearchExecute(['collection', 'list']),
+      window.electronAPI.vectorSearchGetConfig()
+    ])
+      .then(([{ stdout, stderr }, config]) => {
         console.debug('[VectorSearch] Collection list stdout:', stdout?.slice(0, 200))
         console.debug('[VectorSearch] Collection list stderr:', stderr)
+        console.debug('[VectorSearch] Config collections:', config?.collections?.length)
+
+        // Build a map of collection name -> root path from the config
+        const rootPathMap = new Map<string, string>()
+        if (config?.collections) {
+          for (const c of config.collections) {
+            rootPathMap.set(c.name, c.path)
+          }
+        }
 
         // Try to parse collections from stdout even if there's stderr (warnings are ok)
         if (stdout) {
           const parsed = parseCollectionList(stdout)
-          console.debug('[VectorSearch] Parsed collections:', parsed.length)
-          setCollections(parsed)
+          // Merge root paths from config into collection info
+          const withRootPaths = parsed.map(c => ({
+            ...c,
+            rootPath: rootPathMap.get(c.name)
+          }))
+          console.debug('[VectorSearch] Parsed collections with root paths:', withRootPaths)
+          setCollections(withRootPaths)
         } else if (stderr) {
           // Only log as error if there's no stdout at all
           console.warn('[VectorSearch] Collection list warning:', stderr)
@@ -237,10 +274,13 @@ export function VectorSearch() {
     }
   }, [setCollections, setState])
 
-  // Memoized handler for opening files
-  const handleOpenFile = useCallback((filePath: string) => {
-    window.electronAPI.openFile(filePath)
-  }, [])
+  // Memoized handler for viewing document in navigator panel
+  // Resolves relative file paths to absolute using collection root paths
+  const handleViewDocument = useCallback((filePath: string, collection: string) => {
+    const absolutePath = resolveAbsolutePath(filePath, collection)
+    console.debug('[VectorSearch] Viewing document:', { filePath, collection, absolutePath })
+    navigate(routes.view.vectorSearch(absolutePath))
+  }, [resolveAbsolutePath])
 
   return (
     <div className="flex flex-col h-full p-4">
@@ -295,11 +335,20 @@ export function VectorSearch() {
             </p>
           </div>
         )}
-        {state.results.map((result, i) => (
+        {state.results.map((result, i) => {
+          // Compare absolute paths for selection state
+          const resultAbsolutePath = resolveAbsolutePath(result.filePath, result.collection)
+          const isSelected = selectedFilePath === resultAbsolutePath
+          return (
           <div
             key={`${result.filePath}-${i}`}
-            className="p-3 border-b border-border hover:bg-muted/50 cursor-pointer transition-colors"
-            onClick={() => handleOpenFile(result.filePath)}
+            className={cn(
+              "p-3 border-b border-border cursor-pointer transition-colors",
+              isSelected
+                ? "bg-primary/10 hover:bg-primary/15"
+                : "hover:bg-muted/50"
+            )}
+            onClick={() => handleViewDocument(result.filePath, result.collection)}
           >
             <div className="font-medium text-foreground">
               {result.title || result.filePath.split('/').pop()}
@@ -317,7 +366,7 @@ export function VectorSearch() {
               {result.collection && ` | ${result.collection}`}
             </div>
           </div>
-        ))}
+        )})}
       </div>
 
       {/* Add Collection */}

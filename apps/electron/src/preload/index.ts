@@ -381,6 +381,7 @@ const api: ElectronAPI = {
 
   // Vector Search (QMD CLI integration)
   vectorSearchExecute: (args: string[]) => ipcRenderer.invoke(IPC_CHANNELS.VECTOR_SEARCH_EXECUTE, args),
+  vectorSearchGetConfig: () => ipcRenderer.invoke(IPC_CHANNELS.VECTOR_SEARCH_GET_CONFIG),
 
   // Scheduler
   scheduleList: (workspaceId: string) =>

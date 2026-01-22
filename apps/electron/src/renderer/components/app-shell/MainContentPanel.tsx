@@ -25,7 +25,7 @@ import {
   isSkillsNavigation,
   isVectorSearchNavigation,
 } from '@/contexts/NavigationContext'
-import { AppSettingsPage, WorkspaceSettingsPage, PermissionsSettingsPage, PreferencesPage, ShortcutsPage, SourceInfoPage, ChatPage } from '@/pages'
+import { AppSettingsPage, WorkspaceSettingsPage, PermissionsSettingsPage, PreferencesPage, ShortcutsPage, SourceInfoPage, ChatPage, DocumentViewerPage } from '@/pages'
 import SkillInfoPage from '@/pages/SkillInfoPage'
 
 export interface MainContentPanelProps {
@@ -130,12 +130,20 @@ export function MainContentPanel({
     )
   }
 
-  // Vector Search navigator - main content is shown in navigator panel
+  // Vector Search navigator - show document content or empty state
   if (isVectorSearchNavigation(navState)) {
+    if (navState.details) {
+      return wrapWithStoplight(
+        <Panel variant="grow" className={className}>
+          <DocumentViewerPage filePath={navState.details.filePath} />
+        </Panel>
+      )
+    }
+    // No document selected - empty state
     return wrapWithStoplight(
       <Panel variant="grow" className={className}>
         <div className="flex items-center justify-center h-full text-muted-foreground">
-          <p className="text-sm">Search results appear in the navigator panel</p>
+          <p className="text-sm">Select a search result to view the document</p>
         </div>
       </Panel>
     )

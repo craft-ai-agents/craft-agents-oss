@@ -1964,6 +1964,42 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     })
   })
 
+  // Get QMD config (collection root paths from ~/.config/qmd/index.yml)
+  ipcMain.handle(IPC_CHANNELS.VECTOR_SEARCH_GET_CONFIG, async () => {
+    const { homedir } = await import('os')
+    const path = await import('path')
+    const fs = await import('fs/promises')
+    const yaml = await import('js-yaml')
+
+    const configPath = path.join(homedir(), '.config', 'qmd', 'index.yml')
+
+    try {
+      const content = await fs.readFile(configPath, 'utf-8')
+      const config = yaml.load(content) as {
+        collections?: Record<string, { path: string; pattern: string }>
+      }
+
+      const collections: import('../shared/types').VectorSearchCollectionConfig[] = []
+
+      if (config?.collections) {
+        for (const [name, info] of Object.entries(config.collections)) {
+          if (info && typeof info.path === 'string') {
+            collections.push({
+              name,
+              path: info.path,
+              pattern: info.pattern || '**/*.md'
+            })
+          }
+        }
+      }
+
+      return { collections }
+    } catch (error) {
+      ipcLog.warn('Failed to read QMD config:', error)
+      return { collections: [] }
+    }
+  })
+
   // =============================================================================
   // Scheduler Handlers
   // =============================================================================
