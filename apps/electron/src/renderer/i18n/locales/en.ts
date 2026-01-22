@@ -38,6 +38,7 @@ export default {
   refresh: 'Refresh',
   edit: 'Edit',
   done: 'Done',
+  openAction: 'Open',
 
   // Session Management
   deleteConversation: 'Delete conversation',
@@ -184,7 +185,12 @@ export default {
   notesTitle: 'Notes',
   notesDescription: 'Free-form context that helps Craft Agent understand your preferences.',
   notesPlaceholder: 'Any additional context you\'d like Craft Agent to know...',
-  editFile: 'Edit File',
+  yourName: 'Your name',
+  yourTimezone: 'e.g., America/New_York',
+  yourLanguage: 'e.g., English',
+  yourCity: 'e.g., New York',
+  yourCountry: 'e.g., USA',
+  preferencesEditFile: 'Edit File',
 
   // Onboarding
   updateSettings: 'Update Settings',
@@ -195,8 +201,8 @@ export default {
   useClaudeSubscription: 'Use your Claude subscription for unlimited access.',
   anthropicApiKey: 'Anthropic API Key',
   payAsYouGo: 'Pay-as-you-go with your own API key.',
-  customAnthropicCompatible: 'Custom / Anthropic Compatible',
-  customAnthropicCompatibleDescription: 'Use a compatible endpoint and auth token.',
+  onboardingCustomAnthropicCompatible: 'Custom / Anthropic Compatible',
+  onboardingCustomAnthropicCompatibleDescription: 'Use a compatible endpoint and auth token.',
   recommended: 'Recommended',
   billingSetup: 'Billing Setup',
   billingSetupDescription: 'Add your credentials to continue.',
@@ -206,10 +212,10 @@ export default {
   apiKey: 'API Key',
   apiKeyDescription: 'Your Anthropic API key from the console.',
   apiKeyPlaceholder: 'sk-ant-...',
-  baseUrl: 'Base URL',
+  onboardingBaseUrl: 'Base URL',
   apiTimeoutMs: 'API timeout (ms)',
-  modelOverride: 'Model override',
-  authToken: 'Auth token',
+  onboardingModelOverride: 'Model override',
+  onboardingAuthToken: 'Auth token',
   learnMoreAboutApiKeys: 'Learn more about API keys',
   credentialsStepSuccess: 'Credentials saved successfully!',
   credentialsStepError: 'Failed to save credentials. Please try again.',
@@ -250,7 +256,7 @@ export default {
   speech: 'Speech',
   startSpeaking: 'Start Speaking',
   stopSpeaking: 'Stop Speaking',
-  checkForUpdates: 'Check for Updates...',
+  appMenuCheckForUpdates: 'Check for Updates...',
 
   // Chat Components
   authRequestTitle: 'Authentication Required',
@@ -353,6 +359,7 @@ export default {
   workspaceInfo: 'Workspace Info',
   global: 'Global',
   beta: 'Beta',
+  settingDisabled: 'Disabled',
 
   // Model Settings / Workspace Settings
   defaultModel: 'Default model',
@@ -431,30 +438,14 @@ export default {
   shortcutNewLine: 'New line',
   shortcutSendMessageCmd: 'Send message',
 
-  // Preferences Page
-  preferencesPageTitle: 'Preferences',
-  basicInfo: 'Basic Info',
-  timezoneLabel: 'Timezone',
-  languageLabel: 'Language',
-  cityLabel: 'City',
-  countryLabel: 'Country',
-  yourName: 'Your name',
-  yourTimezone: 'e.g., America/New_York',
-  yourLanguage: 'e.g., English',
-  location: 'Location',
-  yourCity: 'e.g., New York',
-  yourCountry: 'e.g., USA',
-  notes: 'Notes',
-  notesPlaceholder: 'Any additional information you\'d like to share with the AI assistant...',
-
   // Chat Page
-  renameChat: 'Rename Chat',
+  renameChatAction: 'Rename Chat',
   enterChatName: 'Enter chat name...',
   chatTitle: 'Chat',
 
   // Workspace Settings (remaining)
   workspaceSettingsTitle: 'Workspace Settings',
-  advanced: 'Advanced',
+  workspaceSettingsAdvanced: 'Advanced',
   renameWorkspace: 'Rename workspace',
   enterWorkspaceName: 'Enter workspace name...',
   defaultWorkingDirectory: 'Default Working Directory',
@@ -465,18 +456,18 @@ export default {
   // Info Pages
   connection: 'Connection',
   permissions: 'Permissions',
-  documentation: 'Documentation',
+  infoDocumentation: 'Documentation',
   type: 'Type',
   url: 'URL',
   lastTested: 'Last Tested',
-  slug: 'Slug',
+  infoSlug: 'Slug',
   description: 'Description',
-  instructions: 'Instructions',
+  infoInstructions: 'Instructions',
   permissionModes: 'Permission Modes',
 
   // Table Headers
   access: 'Access',
-  pattern: 'Pattern',
+  tablePattern: 'Pattern',
   viewFullscreen: 'View Fullscreen',
 
   // Conversations/Session List
@@ -489,13 +480,13 @@ export default {
   deleteSkill: 'Delete Skill',
 
   // Data Tables
-  name: 'Name',
-  type: 'Type',
+  dataTableName: 'Name',
+  dataTableType: 'Type',
   status: 'Status',
   actions: 'Actions',
-  description: 'Description',
+  dataTableDescription: 'Description',
   value: 'Value',
-  url: 'URL',
+  dataTableUrl: 'URL',
   path: 'Path',
   version: 'Version',
   size: 'Size',
@@ -513,7 +504,7 @@ export default {
   commands: 'Commands',
   allowed: 'Allowed',
   blocked: 'Blocked',
-  pattern: 'Pattern',
+  toolPattern: 'Pattern',
   patterns: 'Patterns',
   endpoint: 'Endpoint',
   method: 'Method',
@@ -524,13 +515,13 @@ export default {
   none: 'None',
   sourceDisabled: 'Source Disabled',
   localMcpServersDisabled: 'Local MCP servers are disabled in Settings &gt; Advanced. Enable them to use this source.',
-  documentation: 'Documentation',
-  documentationDescription: 'Context and guidelines for the agent.',
+  agentDocumentation: 'Documentation',
+  agentDocumentationDescription: 'Context and guidelines for the agent.',
   skillNotFound: 'Skill not found',
   metadata: 'Metadata',
-  slug: 'Slug',
-  name: 'Name',
-  location: 'Location',
+  infoSlug: 'Slug',
+  infoName: 'Name',
+  infoLocation: 'Location',
   permissionModes: 'Permission Modes',
   permissionModesDescription: 'How "Always Allowed Tools" interacts with permission modes:',
   explore: 'Explore',
@@ -584,7 +575,7 @@ export default {
   createWorkspaceDesc: 'Enter a name and choose where to store your workspace.',
   workspaceName: 'Workspace name',
   myWorkspace: 'My Workspace',
-  location: 'Location',
+  workspaceLocation: 'Location',
   defaultLocation: 'Default location',
   underCraftAgentFolder: 'under .craft-agent folder',
   chooseLocation: 'Choose a location',
@@ -596,14 +587,14 @@ export default {
   chooseExistingFolderDesc: 'Choose any folder to use as workspace.',
   noFolderSelected: 'No folder selected',
   opening: 'Opening...',
-  open: 'Open',
+  workspaceOpen: 'Open',
 
   // Chat Display / 聊天显示
   responsePreview: 'Response Preview',
   turnDetails: 'Turn Details',
   showTechnicalDetails: 'Show technical details',
   hideTechnicalDetails: 'Hide technical details',
-  openInNewWindow: 'Open in new window',
+  menuItemOpenInNewWindow: 'Open in new window',
 
   // Session List / 会话列表
   newBadge: 'New',
@@ -623,12 +614,12 @@ export default {
   markAsUnread: 'Mark as Unread',
   regenerateTitle: 'Regenerate Title',
   viewInFinder: 'View in Finder',
-  copyPath: 'Copy Path',
+  sessionCopyPath: 'Copy Path',
 
   // Source Status / 来源状态
   needsAuth: 'Needs Auth',
   failed: 'Failed',
   notTested: 'Not Tested',
-  disabled: 'Disabled',
+  sourceStatusDisabled: 'Disabled',
 
 } as const;
