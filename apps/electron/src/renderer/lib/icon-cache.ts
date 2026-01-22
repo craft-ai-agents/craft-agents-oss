@@ -145,12 +145,27 @@ export function clearStatusIconCaches(): void {
 // Source Icon Loading
 // ============================================================================
 
+// Emoji detection - matches single emoji characters (including skin tones, flags, etc.)
+const EMOJI_REGEX = /^(?:\p{Emoji_Presentation}|\p{Emoji}\uFE0F)(?:\u200D(?:\p{Emoji_Presentation}|\p{Emoji}\uFE0F))*$/u
+
+function isEmoji(str: string): boolean {
+  return str.length <= 8 && EMOJI_REGEX.test(str)
+}
+
+// Special prefix for emoji icons in cache - callers check for this to render emoji
+export const EMOJI_ICON_PREFIX = 'emoji:'
+
 /**
  * Load a source icon into the cache.
- * For local icons (./path), loads via IPC.
- * For remote sources, resolves favicon URL.
  *
- * @returns Promise resolving to the icon URL (data URL or favicon URL)
+ * Resolution priority (config.icon is the source of truth):
+ * 1. Emoji in config.icon → Return emoji marker for caller to render as text
+ * 2. Local path in config.icon (./icon.svg) → Load from sources/{slug}/icon.svg
+ * 3. URL in config.icon → Use URL directly (icon file may have been auto-downloaded)
+ * 4. config.icon undefined → Auto-discover sources/{slug}/icon.{svg,png}
+ * 5. Fallback → Resolve favicon from service URL
+ *
+ * @returns Promise resolving to icon URL, emoji marker (emoji:{emoji}), or null
  */
 export async function loadSourceIcon(
   source: { config: SourceConfig; workspaceId: string },
@@ -162,30 +177,43 @@ export async function loadSourceIcon(
   const cached = sourceIconCache.get(cacheKey)
   if (cached) return cached
 
-  // Check if icon is a local path (legacy format - new sources use auto-discovered icon files)
   const icon = config.icon
+
+  // Priority 1: Emoji icon - return marker for caller to render as text
+  if (icon && isEmoji(icon)) {
+    const emojiMarker = `${EMOJI_ICON_PREFIX}${icon}`
+    sourceIconCache.set(cacheKey, emojiMarker)
+    return emojiMarker
+  }
+
+  // Priority 2: Explicit local path in config.icon (e.g., "./icon.svg")
   if (icon?.startsWith('./')) {
-    // Local icon - load via IPC
     const iconFilename = icon.slice(2) // Remove './'
     const relativePath = `sources/${config.slug}/${iconFilename}`
-
-    try {
-      const result = await window.electronAPI.readWorkspaceImage(workspaceId, relativePath)
-      // For SVG, theme and convert to data URL
-      // This injects foreground color since currentColor doesn't work in background-image
-      let url = result
-      if (relativePath.endsWith('.svg')) {
-        url = svgToThemedDataUrl(result)
-      }
-      sourceIconCache.set(cacheKey, url)
-      return url
-    } catch (error) {
-      console.error(`[IconCache] Failed to load source icon ${relativePath}:`, error)
-      return null
+    const loaded = await loadWorkspaceIcon(workspaceId, relativePath)
+    if (loaded) {
+      sourceIconCache.set(cacheKey, loaded)
+      return loaded
     }
   }
 
-  // Remote source - resolve favicon URL
+  // Priority 3 & 4: Try auto-discovered local icon files (icon.svg, icon.png)
+  // This handles both:
+  // - config.icon is a URL (icon may have been downloaded to local file)
+  // - config.icon is undefined (auto-discovery)
+  const localIconSvg = await loadWorkspaceIcon(workspaceId, `sources/${config.slug}/icon.svg`)
+  if (localIconSvg) {
+    sourceIconCache.set(cacheKey, localIconSvg)
+    return localIconSvg
+  }
+
+  const localIconPng = await loadWorkspaceIcon(workspaceId, `sources/${config.slug}/icon.png`)
+  if (localIconPng) {
+    sourceIconCache.set(cacheKey, localIconPng)
+    return localIconPng
+  }
+
+  // Priority 5: Resolve favicon from service URL
   const serviceUrl = deriveServiceUrl(config)
   if (!serviceUrl) return null
 
@@ -212,6 +240,25 @@ export async function loadSourceIcon(
   } catch (error) {
     console.error(`[IconCache] Failed to resolve logo URL:`, error)
     logoUrlCache.set(logoCacheKey, null)
+    return null
+  }
+}
+
+/**
+ * Helper to load a workspace image via IPC.
+ * Handles SVG theming and returns data URL or null on failure.
+ */
+async function loadWorkspaceIcon(workspaceId: string, relativePath: string): Promise<string | null> {
+  try {
+    const result = await window.electronAPI.readWorkspaceImage(workspaceId, relativePath)
+    // For SVG, theme and convert to data URL
+    // This injects foreground color since currentColor doesn't work in background-image
+    if (relativePath.endsWith('.svg')) {
+      return svgToThemedDataUrl(result)
+    }
+    return result
+  } catch {
+    // File doesn't exist or failed to load - this is expected for auto-discovery
     return null
   }
 }

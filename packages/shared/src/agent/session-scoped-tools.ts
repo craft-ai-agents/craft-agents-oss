@@ -19,8 +19,8 @@
 
 import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
-import { existsSync, readFileSync } from 'fs';
-import { basename } from 'path';
+import { existsSync, readFileSync, statSync } from 'fs';
+import { basename, join } from 'path';
 import { getSessionPlansPath } from '../sessions/storage.ts';
 import { debug } from '../utils/debug.ts';
 import { getCredentialManager } from '../credentials/index.ts';
@@ -855,21 +855,57 @@ After creating or editing a source's config.json, run this tool to:
         // These help the agent understand when/how to use this source
         // ============================================================
 
-        // Check for description/tagline - helps Claude understand the source's purpose
+        // Cast to check for common misnamed fields (description vs tagline)
+        // TypeScript types don't prevent extra properties at runtime, so we cast
+        // through unknown to access potential untyped fields in the JSON
+        const rawConfig = source as unknown as Record<string, unknown>;
+
+        // Check for tagline - the description shown in the UI
         if (!source.tagline) {
-          warnings.push('**⚠ Missing Description**');
-          warnings.push('  Add a `tagline` field to describe this source\'s purpose.');
-          warnings.push('  This helps Claude understand when and how to use this source.');
-          warnings.push('  Example: `"tagline": "Issue tracking for the iOS team"`');
+          // Check if user mistakenly used 'description' instead of 'tagline'
+          if (rawConfig['description'] && typeof rawConfig['description'] === 'string') {
+            warnings.push('**⚠ Wrong Field Name: "description" → "tagline"**');
+            warnings.push(`  Found: \`"description": "${rawConfig['description']}"\``);
+            warnings.push('  The UI displays the \`tagline\` field, not \`description\`.');
+            warnings.push('  Rename the field in config.json:');
+            warnings.push(`  \`"tagline": "${rawConfig['description']}"\``);
+          } else {
+            warnings.push('**⚠ Missing Tagline**');
+            warnings.push('  Add a \`tagline\` field to describe this source\'s purpose.');
+            warnings.push('  This is displayed in the UI and helps Claude understand the source.');
+            warnings.push('  Example: \`"tagline": "Issue tracking for the iOS team"\`');
+          }
+        } else {
+          // Tagline exists - report it for visibility
+          results.push(`**✓ Tagline** "${source.tagline}"`);
         }
 
         // Check for icon (supports .svg, .png, .jpg, .jpeg)
         // Only warn if no icon was found/downloaded in the previous step
         if (!localIcon && !source.icon) {
           warnings.push('**⚠ Missing Icon**');
-          warnings.push('  Use `WebSearch` to find an icon for this service:');
-          warnings.push(`  WebSearch({ query: "${source.provider || source.name} logo icon" })`);
-          warnings.push('  Save as `icon.svg`, `icon.png`, or `icon.jpg` in the source folder.');
+          warnings.push('  No icon file found in source folder (icon.svg, icon.png, icon.jpg).');
+          warnings.push('  Options to add an icon:');
+          warnings.push('  1. Place an icon file directly in the source folder');
+          warnings.push('  2. Add \`"icon": "<url>"\` to config.json (will be auto-downloaded)');
+          warnings.push('  3. Add \`"icon": "📋"\` to use an emoji');
+          warnings.push('');
+          warnings.push('  To find an icon, use WebSearch:');
+          warnings.push(`  WebSearch({ query: "${source.provider || source.name} logo svg" })`);
+        }
+
+        // Check for guide.md - essential for Claude to understand how to use the source
+        const guidePath = join(sourcePath, 'guide.md');
+        const hasGuide = existsSync(guidePath);
+        if (!hasGuide) {
+          warnings.push('**⚠ Missing guide.md**');
+          warnings.push('  Create a guide.md file to help Claude use this source effectively.');
+          warnings.push('  Include: available endpoints, authentication details, usage examples.');
+          warnings.push(`  Path: ${sourcePath}/guide.md`);
+        } else {
+          const guideStats = statSync(guidePath);
+          const guideSizeKB = (guideStats.size / 1024).toFixed(1);
+          results.push(`**✓ Guide** (guide.md, ${guideSizeKB} KB)`);
         }
 
         // ============================================================

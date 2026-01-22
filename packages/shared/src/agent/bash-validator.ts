@@ -176,14 +176,10 @@ function validateNode(
       return validateLogicalExpression(node as LogicalExpressionNode, patterns, results);
 
     case 'Pipeline':
-      // Pipelines are blocked - they transform data between commands
-      return {
-        allowed: false,
-        reason: {
-          type: 'pipeline',
-          explanation: 'Pipelines (|) transform data between commands which could be dangerous',
-        },
-      };
+      // Validate each command in the pipeline individually.
+      // If all commands are in the allowlist, the pipeline is safe.
+      // e.g., `git log | head` is allowed because both commands are read-only.
+      return validatePipeline(node as PipelineNode, patterns, results);
 
     case 'Subshell':
       return validateSubshell(node as SubshellNode, patterns, results);
@@ -346,6 +342,24 @@ function validateLogicalExpression(
     return rightResult;
   }
 
+  return { allowed: true };
+}
+
+/**
+ * Validate a Pipeline node (cmd1 | cmd2 | ...).
+ * Each command in the pipeline must be valid for the whole pipeline to be allowed.
+ */
+function validatePipeline(
+  node: PipelineNode,
+  patterns: CompiledBashPattern[],
+  results: SubcommandResult[]
+): BashValidationResult {
+  for (const cmd of node.commands) {
+    const result = validateNode(cmd, patterns, results);
+    if (!result.allowed) {
+      return result;
+    }
+  }
   return { allowed: true };
 }
 

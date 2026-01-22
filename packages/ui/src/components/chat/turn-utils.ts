@@ -26,6 +26,7 @@ export function storedToMessage(stored: StoredMessage): Message {
     toolDuration: stored.toolDuration,
     toolIntent: stored.toolIntent,
     toolDisplayName: stored.toolDisplayName,
+    toolDisplayMeta: stored.toolDisplayMeta,  // Includes base64 icon for viewer
     parentToolUseId: stored.parentToolUseId,
     taskId: stored.taskId,
     shellId: stored.shellId,
@@ -231,6 +232,7 @@ function messageToActivity(message: Message, existingActivities: ActivityItem[] 
     content: message.toolResult || message.content,
     intent: message.toolIntent,
     displayName: message.toolDisplayName,  // LLM-generated human-friendly name
+    toolDisplayMeta: message.toolDisplayMeta,  // Embedded metadata with base64 icon for viewer
     timestamp: message.timestamp,
     error: message.isError ? message.content : undefined,
     // parentId: The toolUseId of the parent tool (e.g., Task subagent).

@@ -61,6 +61,8 @@ export interface AppShellContextType {
   onUnflagSession: (sessionId: string) => void
   onMarkSessionRead: (sessionId: string) => void
   onMarkSessionUnread: (sessionId: string) => void
+  /** Track which session user is viewing (for unread state machine) */
+  onSetActiveViewingSession: (sessionId: string) => void
   onTodoStateChange: (sessionId: string, state: TodoState) => void
   onDeleteSession: (sessionId: string, skipConfirmation?: boolean) => Promise<boolean>
 

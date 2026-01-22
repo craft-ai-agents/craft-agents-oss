@@ -45,9 +45,6 @@
     "@radix-ui/react-dialog": {
       "optional": true
     },
-    "@pierre/diffs": {
-      "optional": true
-    },
     "jotai": {
       "optional": true
     }

@@ -557,13 +557,32 @@ Custom rules to extend Explore mode permissions for this source.
 
 ## Icon Handling
 
-Icons can be specified in several ways:
+The `config.icon` field controls the source icon. Resolution follows this priority:
 
-1. **Relative path:** `"iconUrl": "./icon.png"` - Already downloaded to source folder
-2. **Direct URL:** `"iconUrl": "https://example.com/logo.png"` - Will be downloaded and cached
-3. **Domain for favicon:** `"iconUrl": "linear.app"` - Fetches favicon from domain
+| `config.icon` value | Behavior |
+|---------------------|----------|
+| Emoji (e.g., `"🔧"`) | Rendered as emoji text |
+| Local path `"./icon.svg"` | Loads from `sources/{slug}/icon.svg` |
+| URL `"https://..."` | Auto-downloaded to local `icon.*` file by `source_test` |
+| Undefined/null | Auto-discovers `sources/{slug}/icon.{svg,png}`, falls back to favicon |
 
-When using URLs or domains, `source_test` will download and cache the icon locally.
+**Examples:**
+
+```json
+// Emoji icon
+{ "icon": "📝" }
+
+// Explicit local path (rarely needed - auto-discovery handles this)
+{ "icon": "./icon.svg" }
+
+// URL (downloaded automatically by source_test)
+{ "icon": "https://linear.app/static/favicon.svg" }
+
+// No icon field - auto-discovers icon.svg/icon.png or resolves favicon
+{}
+```
+
+**Best practice:** Set `icon` to a URL when creating a source. Run `source_test` to download and cache it locally. The app then uses the local file for fast, offline-capable display.
 
 ## Provider Domain Cache
 

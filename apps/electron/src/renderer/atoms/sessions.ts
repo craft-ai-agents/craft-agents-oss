@@ -34,6 +34,12 @@ export interface SessionMeta {
   sharedId?: string
   /** ID of the last final (non-intermediate) assistant message - for unread detection */
   lastFinalMessageId?: string
+  /**
+   * Explicit unread flag - single source of truth for NEW badge.
+   * Set to true when assistant message completes while user is NOT viewing.
+   * Set to false when user views the session (and not processing).
+   */
+  hasUnread?: boolean
   /** Todo state for filtering */
   todoState?: string
   /** Role/type of the last message (for badge display without loading messages) */
@@ -62,7 +68,9 @@ function findLastFinalMessageId(messages: Message[]): string | undefined {
  */
 export function extractSessionMeta(session: Session): SessionMeta {
   const messages = session.messages || []
-  const lastFinalMessageId = findLastFinalMessageId(messages)
+  // Prefer pre-computed lastFinalMessageId from session storage (available without loading messages).
+  // Fall back to computing from messages for newly created sessions or when messages are loaded.
+  const lastFinalMessageId = session.lastFinalMessageId ?? findLastFinalMessageId(messages)
 
   return {
     id: session.id,
@@ -78,6 +86,8 @@ export function extractSessionMeta(session: Session): SessionMeta {
     sharedUrl: session.sharedUrl,
     sharedId: session.sharedId,
     lastFinalMessageId,
+    // Explicit unread flag - source of truth for NEW badge
+    hasUnread: session.hasUnread,
     todoState: session.todoState,
     lastMessageRole: session.lastMessageRole,
     // Use isAsyncOperationOngoing if available, fall back to deprecated isRegeneratingTitle

@@ -520,8 +520,8 @@ import type { WorkspaceStatusConfig, StatusConfig } from '../statuses/types.ts';
  * Schema for skill metadata (SKILL.md frontmatter)
  */
 export const SkillMetadataSchema = z.object({
-  name: z.string().min(1, 'Skill name is required'),
-  description: z.string().min(1, 'Skill description is required'),
+  name: z.string().min(1, "Add a 'name' field with a human-readable title (e.g., 'Git Commit Helper')"),
+  description: z.string().min(1, "Add a 'description' field explaining what this skill does and when to use it (1-2 sentences)"),
   globs: z.array(z.string()).optional(),
   alwaysAllow: z.array(z.string()).optional(),
 });
@@ -558,12 +558,18 @@ export function validateSkill(workspaceRoot: string, slug: string): ValidationRe
 
   // 1. Validate slug format
   if (!/^[a-z0-9-]+$/.test(slug)) {
+    // Generate a suggested valid slug from the current name
+    const suggestedSlug = slug
+      .toLowerCase()
+      .replace(/[^a-z0-9-]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .replace(/-+/g, '-');
     errors.push({
       file: `skills/${slug}`,
       path: 'slug',
       message: 'Slug must be lowercase alphanumeric with hyphens',
       severity: 'error',
-      suggestion: 'Rename folder to use lowercase letters, numbers, and hyphens only',
+      suggestion: `Rename folder to '${suggestedSlug || 'valid-slug-name'}'`,
     });
   }
 
@@ -628,6 +634,7 @@ export function validateSkill(workspaceRoot: string, slug: string): ValidationRe
         path: 'frontmatter',
         message: `Invalid YAML frontmatter: ${e instanceof Error ? e.message : 'Unknown error'}`,
         severity: 'error',
+        suggestion: 'See ~/.craft-agent/docs/skills.md for SKILL.md format reference',
       }],
       warnings: [],
     };
@@ -646,11 +653,11 @@ export function validateSkill(workspaceRoot: string, slug: string): ValidationRe
       path: 'content',
       message: 'Skill content is empty (nothing after frontmatter)',
       severity: 'error',
-      suggestion: 'Add skill instructions after the YAML frontmatter',
+      suggestion: 'Add instructions after the frontmatter describing what the skill should do, with examples and constraints',
     });
   }
 
-  // 8. Validate icon if present
+  // 8. Validate icon - warn if missing, validate format if present
   const iconPath = findSkillIconForValidation(skillDir);
   if (iconPath) {
     const ext = extname(iconPath).toLowerCase();
@@ -663,6 +670,17 @@ export function validateSkill(workspaceRoot: string, slug: string): ValidationRe
         suggestion: 'Use .svg, .png, or .jpg for icons',
       });
     }
+  } else {
+    // Generate a search-friendly term from the skill name or slug
+    const skillName = metaResult.success ? metaResult.data.name : slug;
+    const searchTerm = skillName.replace(/-/g, ' ');
+    warnings.push({
+      file: `skills/${slug}/`,
+      path: 'icon',
+      message: 'No icon found',
+      severity: 'warning',
+      suggestion: `Search for '${searchTerm} icon' on heroicons.com, lucide.dev, or icons8.com. Save as icon.svg in the skill folder.`,
+    });
   }
 
   return {

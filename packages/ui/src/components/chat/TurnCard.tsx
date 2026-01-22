@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { useMemo, useEffect, useRef, useCallback, useState } from 'react'
+import type { ToolDisplayMeta } from '@craft-agent/core'
 import { motion, AnimatePresence } from 'motion/react'
 import {
   ChevronRight,
@@ -118,6 +119,7 @@ export interface ActivityItem {
   content?: string
   intent?: string
   displayName?: string  // LLM-generated human-friendly tool name (for MCP tools)
+  toolDisplayMeta?: ToolDisplayMeta  // Embedded metadata with base64 icon (for viewer compatibility)
   timestamp: number
   error?: string
   // Parent-child nesting for Task subagents
@@ -139,6 +141,10 @@ export interface ResponseContent {
   /** Whether this response is a plan (renders with plan variant) */
   isPlan?: boolean
 }
+
+// ============================================================================
+// TurnCard Props
+// ============================================================================
 
 export interface TurnCardProps {
   /** Session ID for state persistence (optional in shared context) */
@@ -418,6 +424,54 @@ function formatToolInput(
   return parts.join(' ')
 }
 
+/**
+ * Format tool display using embedded toolDisplayMeta.
+ * toolDisplayMeta is set at storage time in the main process and includes:
+ * - displayName: Human-readable name
+ * - iconDataUrl: Base64-encoded icon (for skills/sources)
+ * - description: Brief description
+ * - category: 'skill' | 'source' | 'native' | 'mcp'
+ */
+function formatToolDisplay(
+  activity: ActivityItem
+): { name: string; icon?: string; description?: string } {
+  const { toolName, displayName, toolInput, toolDisplayMeta } = activity
+
+  // Primary: Use embedded toolDisplayMeta (works in both Electron and viewer)
+  if (toolDisplayMeta) {
+    // For MCP tools, append the tool slug to the source name
+    if (toolName?.startsWith('mcp__') && toolDisplayMeta.category === 'source') {
+      const parts = toolName.match(/^mcp__([^_]+)__(.+)$/)
+      if (parts) {
+        const toolSlug = parts[2]
+        return {
+          name: `${toolDisplayMeta.displayName}: ${toolSlug}`,
+          icon: toolDisplayMeta.iconDataUrl,
+          description: toolDisplayMeta.description,
+        }
+      }
+    }
+    return {
+      name: toolDisplayMeta.displayName,
+      icon: toolDisplayMeta.iconDataUrl,
+      description: toolDisplayMeta.description,
+    }
+  }
+
+  // Fallback for Skill tool without toolDisplayMeta (legacy sessions)
+  if (toolName === 'Skill' && toolInput?.skill) {
+    const skillId = String(toolInput.skill)
+    // Extract slug from qualified name (workspaceId:slug) for display
+    const colonIdx = skillId.indexOf(':')
+    const slug = colonIdx > 0 ? skillId.slice(colonIdx + 1) : skillId
+    return { name: slug }
+  }
+
+  // Final fallback: Use LLM-generated displayName or tool name
+  const name = displayName || (toolName ? getToolDisplayName(toolName) : 'Processing')
+  return { name }
+}
+
 /** Get the primary preview text for collapsed state */
 function getPreviewText(
   activities: ActivityItem[],
@@ -490,8 +544,44 @@ function getPreviewText(
 // Sub-Components
 // ============================================================================
 
-/** Status icon for an activity - Edit/Write tools show tool-specific icons when completed */
-function ActivityStatusIcon({ status, toolName }: { status: ActivityStatus; toolName?: string }) {
+/**
+ * Status icon for an activity.
+ * Supports custom icons from skill/source metadata when completed.
+ * Edit/Write tools show tool-specific icons; others show checkmark or custom icon.
+ */
+function ActivityStatusIcon({
+  status,
+  toolName,
+  customIcon
+}: {
+  status: ActivityStatus
+  toolName?: string
+  /** Custom icon from tool metadata - emoji or data URL (base64) */
+  customIcon?: string
+}) {
+  // For completed status with custom icon, use it instead of checkmark
+  if (status === 'completed' && customIcon) {
+    // Check if it's an emoji (short string, not a URL or data URL)
+    // Emojis can be 1-4+ characters due to ZWJ sequences
+    const isLikelyEmoji = customIcon.length <= 8 && !/^(https?:\/\/|data:)/.test(customIcon)
+    if (isLikelyEmoji) {
+      return (
+        <span className={cn(SIZE_CONFIG.iconSize, "shrink-0 flex items-center justify-center text-[10px] leading-none")}>
+          {customIcon}
+        </span>
+      )
+    }
+    // Otherwise it's a data URL (base64) or HTTP URL
+    return (
+      <img
+        src={customIcon}
+        alt=""
+        className={cn(SIZE_CONFIG.iconSize, "shrink-0 rounded-sm object-contain")}
+      />
+    )
+  }
+
+  // Default icon logic
   switch (status) {
     case 'pending':
       return <Circle className={cn(SIZE_CONFIG.iconSize, "shrink-0 text-muted-foreground/50")} />
@@ -632,11 +722,11 @@ function ActivityRow({ activity, onOpenDetails, isLastChild, sessionFolderPath }
 
   // Tool activities - show with status icon
   // Format: "[DisplayName] · [Intent/Description] [Params]"
-  // - DisplayName: LLM-generated (activity.displayName) or fallback to formatted toolName
+  // - DisplayName: From toolDisplayMeta (embedded in message) or LLM-generated or fallback
   // - Intent: For MCP tools (activity.intent), for Bash (toolInput.description)
   // - Params: Remaining tool input summary
-  const toolName = activity.displayName
-    || (activity.toolName ? getToolDisplayName(activity.toolName) : null)
+  const toolDisplay = formatToolDisplay(activity)
+  const displayedName = toolDisplay.name
     || (activity.type === 'thinking' ? 'Thinking' : 'Processing')
 
   // Intent for MCP tools, description for Bash commands
@@ -664,9 +754,9 @@ function ActivityRow({ activity, onOpenDetails, isLastChild, sessionFolderPath }
         )}
         onClick={onOpenDetails && isComplete ? onOpenDetails : undefined}
       >
-        <ActivityStatusIcon status={activity.status} toolName={activity.toolName} />
+        <ActivityStatusIcon status={activity.status} toolName={activity.toolName} customIcon={toolDisplay.icon} />
         {/* Tool name (always shown, darker) - underlined when clickable */}
-        <span className={cn("shrink-0", onOpenDetails && isComplete && "group-hover/row:underline")}>{toolName}</span>
+        <span className={cn("shrink-0", onOpenDetails && isComplete && "group-hover/row:underline")}>{displayedName}</span>
         {/* Background task info (task/shell ID + elapsed time) */}
         {backgroundInfo && (
           <>

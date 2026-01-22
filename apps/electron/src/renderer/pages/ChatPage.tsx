@@ -38,6 +38,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     onRespondToCredential,
     onMarkSessionRead,
     onMarkSessionUnread,
+    onSetActiveViewingSession,
     textareaRef,
     getDraft,
     onInputChange,
@@ -95,19 +96,17 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     return cleanup
   }, [])
 
-  // Mark session as read when displayed, not processing, and window is focused
-  // This ensures badge clears when:
-  // 1. User switches to this session (sessionId changes)
-  // 2. Processing completes (isProcessing changes from true to false)
-  // 3. User returns to the app (isWindowFocused changes from false to true)
-  // Note: We intentionally use session?.id and session?.isProcessing instead of
-  // the full session object to avoid running on every message update.
+  // Track which session user is viewing (for unread state machine).
+  // This tells main process user is looking at this session, so:
+  // 1. If not processing → clear hasUnread immediately
+  // 2. If processing → when it completes, main process will clear hasUnread
+  // The main process handles all the logic; we just report viewing state.
   React.useEffect(() => {
-    if (session && !session.isProcessing && isWindowFocused) {
-      onMarkSessionRead(session.id)
+    if (session && isWindowFocused) {
+      onSetActiveViewingSession(session.id)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.id, session?.isProcessing, isWindowFocused, onMarkSessionRead])
+  }, [session?.id, isWindowFocused, onSetActiveViewingSession])
 
   // Get pending permission and credential for this session
   const pendingPermission = usePendingPermission(sessionId)

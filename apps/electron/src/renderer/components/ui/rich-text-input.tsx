@@ -6,6 +6,7 @@ import {
   loadSkillIcon,
   getSourceIconSync,
   getSkillIconSync,
+  EMOJI_ICON_PREFIX,
 } from '@/lib/icon-cache'
 import type { LoadedSkill, LoadedSource } from '../../../shared/types'
 import type { MentionItemType } from './mention-menu'
@@ -86,8 +87,14 @@ function renderBadgeHTML(
   }
 
   if (cachedIconUrl) {
-    // Use cached icon as img
-    iconHtml = `<img src="${cachedIconUrl}" class="h-[12px] w-[12px] rounded-[2px] shrink-0" alt="" />`
+    // Check for emoji marker - render as text, not image
+    if (cachedIconUrl.startsWith(EMOJI_ICON_PREFIX)) {
+      const emoji = cachedIconUrl.slice(EMOJI_ICON_PREFIX.length)
+      iconHtml = `<span class="h-[12px] w-[12px] flex items-center justify-center text-[10px] leading-none shrink-0">${emoji}</span>`
+    } else {
+      // Use cached icon as img (data URL or external URL)
+      iconHtml = `<img src="${cachedIconUrl}" class="h-[12px] w-[12px] rounded-[2px] shrink-0" alt="" />`
+    }
   } else {
     // Fall back to generic SVG icon
     if (type === 'skill') {

@@ -160,18 +160,30 @@ These commands are allowed in Explore mode without custom configuration:
 | **Network diagnostics** | `ping`, `dig`, `nslookup`, `netstat` |
 | **Version checks** | `node --version`, `python --version`, etc. |
 
+### Compound Commands
+
+Compound commands using `&&`, `||`, and `|` are **allowed** when all parts are safe:
+
+| Construct | Example | Behavior |
+|-----------|---------|----------|
+| **Logical AND** | `git status && git log` | ✅ Allowed if both commands are safe |
+| **Logical OR** | `git status \|\| echo "failed"` | ✅ Allowed if both commands are safe |
+| **Pipes** | `git log \| head` | ✅ Allowed if all commands are safe |
+
+Each command is validated independently. If any command is not in the allowlist, the entire compound command is blocked.
+
 ### Blocked Shell Constructs
 
-Even allowed commands are blocked if they contain these dangerous shell constructs:
+These constructs are always blocked, even if the base command is allowed:
 
 | Construct | Examples | Why Blocked |
 |-----------|----------|-------------|
-| **Command chaining** | `&&`, `\|\|`, `;`, `\|`, `&` | Could chain to dangerous commands |
+| **Background execution** | `&` | Runs asynchronously, could hide activity |
 | **Redirects** | `>`, `>>` | Could overwrite files |
 | **Command substitution** | `$()`, backticks, `<()`, `>()` | Execute embedded commands |
 | **Control characters** | newlines, carriage returns | Act as command separators |
 
-Example: `git status && rm -rf /` is blocked because `&&` allows command chaining. Run commands separately instead.
+Example: `git status > file.txt` is blocked because `>` could overwrite files.
 
 ## Cascading Rules
 

@@ -1,14 +1,36 @@
 import { formatPreferencesForPrompt } from '../config/preferences.ts';
 import { debug } from '../utils/debug.ts';
 import { existsSync, readFileSync, readdirSync } from 'fs';
-import { join } from 'path';
+import { join, relative } from 'path';
 import { DOC_REFS, APP_ROOT } from '../docs/index.ts';
 import { PERMISSION_MODE_CONFIG } from '../agent/mode-types.ts';
 import { APP_VERSION } from '../version/app-version.ts';
+import { globSync } from 'glob';
 import os from 'os';
 
 /** Maximum size of CLAUDE.md file to include (10KB) */
 const MAX_CONTEXT_FILE_SIZE = 10 * 1024;
+
+/** Maximum number of context files to discover in monorepo */
+const MAX_CONTEXT_FILES = 30;
+
+/**
+ * Directories to exclude when searching for context files.
+ * These are common build output, dependency, and cache directories.
+ */
+const EXCLUDED_DIRECTORIES = [
+  'node_modules',
+  '.git',
+  'dist',
+  'build',
+  '.next',
+  'coverage',
+  'vendor',
+  '.cache',
+  '.turbo',
+  'out',
+  '.output',
+];
 
 /**
  * Context file patterns to look for in working directory (in priority order).
@@ -47,6 +69,49 @@ export function findProjectContextFile(directory: string): string | null {
 }
 
 /**
+ * Find all project context files (AGENTS.md or CLAUDE.md) recursively in a directory.
+ * Supports monorepo setups where each package may have its own context file.
+ * Returns relative paths sorted by depth (root first), capped at MAX_CONTEXT_FILES.
+ */
+export function findAllProjectContextFiles(directory: string): string[] {
+  try {
+    // Build glob ignore patterns from excluded directories
+    const ignorePatterns = EXCLUDED_DIRECTORIES.map((dir) => `**/${dir}/**`);
+
+    // Search for all context files (case-insensitive via nocase option)
+    const pattern = '**/{agents,claude}.md';
+    const matches = globSync(pattern, {
+      cwd: directory,
+      nocase: true,
+      ignore: ignorePatterns,
+      absolute: false,
+    });
+
+    if (matches.length === 0) {
+      return [];
+    }
+
+    // Sort by depth (fewer slashes = shallower = higher priority), then alphabetically
+    // Root files come first, then nested packages
+    const sorted = matches.sort((a, b) => {
+      const depthA = (a.match(/\//g) || []).length;
+      const depthB = (b.match(/\//g) || []).length;
+      if (depthA !== depthB) return depthA - depthB;
+      return a.localeCompare(b);
+    });
+
+    // Cap at max files to avoid overwhelming the prompt
+    const capped = sorted.slice(0, MAX_CONTEXT_FILES);
+
+    debug(`[findAllProjectContextFiles] Found ${matches.length} files, returning ${capped.length}`);
+    return capped;
+  } catch (error) {
+    debug(`[findAllProjectContextFiles] Error searching directory:`, error);
+    return [];
+  }
+}
+
+/**
  * Read the project context file (AGENTS.md or CLAUDE.md) from a directory.
  * Matching is case-insensitive to support any casing (CLAUDE.md, claude.md, Claude.md, etc.).
  * Returns the content if found, null otherwise.
@@ -80,9 +145,11 @@ export function readProjectContextFile(directory: string): { filename: string; c
 
 /**
  * Get the working directory context string for injection into user messages.
- * Includes the working directory path. If a project context file exists, includes
- * a tag instructing the agent to read it (content not embedded to save tokens).
+ * Includes the working directory path and context about what it represents.
  * Returns empty string if no working directory is set.
+ *
+ * Note: Project context files (CLAUDE.md, AGENTS.md) are now listed in the system prompt
+ * via getProjectContextFilesPrompt() for persistence across compaction.
  *
  * @param workingDirectory - The effective working directory path (where user wants to work)
  * @param isSessionRoot - If true, this is the session folder (not a user-specified project)
@@ -120,12 +187,6 @@ Note: The bash shell runs from a different directory (${bashCwd}) because the wo
       // Normal case - working directory matches bash cwd
       parts.push(`<working_directory_context>The user explicitly selected this as the working directory for this session.</working_directory_context>`);
     }
-
-    // Check for project context file - just note it exists, agent should read it
-    const contextFilename = findProjectContextFile(workingDirectory);
-    if (contextFilename) {
-      parts.push(`<project_context_file>${contextFilename}</project_context_file>`);
-    }
   }
 
   return parts.join('\n\n');
@@ -156,6 +217,45 @@ export interface DebugModeConfig {
 }
 
 /**
+ * Get the project context files prompt section for the system prompt.
+ * Lists all discovered context files (AGENTS.md, CLAUDE.md) in the working directory.
+ * For monorepos, this includes nested package context files.
+ * Returns empty string if no working directory or no context files found.
+ */
+export function getProjectContextFilesPrompt(workingDirectory?: string): string {
+  if (!workingDirectory) {
+    return '';
+  }
+
+  const contextFiles = findAllProjectContextFiles(workingDirectory);
+  if (contextFiles.length === 0) {
+    return '';
+  }
+
+  // Format file list with (root) annotation for top-level files
+  const fileList = contextFiles
+    .map((file) => {
+      const isRoot = !file.includes('/');
+      return `- ${file}${isRoot ? ' (root)' : ''}`;
+    })
+    .join('\n');
+
+  return `
+<project_context_files working_directory="${workingDirectory}">
+${fileList}
+</project_context_files>`;
+}
+
+/** Options for getSystemPrompt */
+export interface SystemPromptOptions {
+  pinnedPreferencesPrompt?: string;
+  debugMode?: DebugModeConfig;
+  workspaceRootPath?: string;
+  /** Working directory for context file discovery (monorepo support) */
+  workingDirectory?: string;
+}
+
+/**
  * Get the full system prompt with current date/time and user preferences
  *
  * Note: Safe Mode context is injected via user messages instead of system prompt
@@ -164,17 +264,21 @@ export interface DebugModeConfig {
 export function getSystemPrompt(
   pinnedPreferencesPrompt?: string,
   debugMode?: DebugModeConfig,
-  workspaceRootPath?: string
+  workspaceRootPath?: string,
+  workingDirectory?: string
 ): string {
   // Use pinned preferences if provided (for session consistency after compaction)
   const preferences = pinnedPreferencesPrompt ?? formatPreferencesForPrompt();
   const debugContext = debugMode?.enabled ? formatDebugModeContext(debugMode.logFilePath) : '';
 
+  // Get project context files for monorepo support (lives in system prompt for persistence across compaction)
+  const projectContextFiles = getProjectContextFilesPrompt(workingDirectory);
+
   // Note: Date/time context is now added to user messages instead of system prompt
   // to enable prompt caching. The system prompt stays static and cacheable.
   // Safe Mode context is also in user messages for the same reason.
   const basePrompt = getCraftAssistantPrompt(workspaceRootPath);
-  const fullPrompt = `${basePrompt}${preferences}${debugContext}`;
+  const fullPrompt = `${basePrompt}${preferences}${debugContext}${projectContextFiles}`;
 
   debug('[getSystemPrompt] full prompt length:', fullPrompt.length);
 
@@ -287,8 +391,9 @@ Sources are external data connections. Each source has:
 
 ## Project Context
 
-When \`<project_context_file>\` appears in the message, it indicates a project-specific instructions file exists in the working directory. 
-If you haven't already, make sure to read it using the Read tool - it usually will contain architecture info, conventions, and project-specific guidance which are of very high importance to the user.
+When \`<project_context_files>\` appears in the system prompt, it lists all discovered context files (CLAUDE.md, AGENTS.md) in the working directory and its subdirectories. This supports monorepos where each package may have its own context file.
+
+Read relevant context files using the Read tool - they contain architecture info, conventions, and project-specific guidance. For monorepos, read the root context file first, then package-specific files as needed based on what you're working on.
 
 ## Configuration Documentation
 

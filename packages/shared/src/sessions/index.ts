@@ -28,6 +28,7 @@ export {
   getSessionFilePath,
   getSessionAttachmentsPath,
   getSessionPlansPath,
+  getSessionLongResponsesPath,
   ensureAttachmentsDir,
   // ID generation
   generateSessionId,

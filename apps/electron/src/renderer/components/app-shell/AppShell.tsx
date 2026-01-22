@@ -226,7 +226,7 @@ function AppShellContent({
   const rightSidebarHandleRef = React.useRef<HTMLDivElement>(null)
   const [session, setSession] = useSession()
   const { resolvedMode } = useTheme()
-  const { canGoBack, canGoForward, goBack, goForward } = useNavigation()
+  const { canGoBack, canGoForward, goBack, goForward, navigateToSource } = useNavigation()
 
   // Double-Esc interrupt feature: first Esc shows warning, second Esc interrupts
   const { handleEscapePress } = useEscapeInterrupt()
@@ -430,11 +430,11 @@ function AppShellContent({
   // Ensure session messages are loaded when selected
   const ensureMessagesLoaded = useSetAtom(ensureSessionMessagesLoadedAtom)
 
-  // Handle selecting a source from the list
+  // Handle selecting a source from the list (preserves current filter type)
   const handleSourceSelect = React.useCallback((source: LoadedSource) => {
     if (!activeWorkspaceId) return
-    navigate(routes.view.sources({ sourceSlug: source.config.slug }))
-  }, [activeWorkspaceId, navigate])
+    navigateToSource(source.config.slug)
+  }, [activeWorkspaceId, navigateToSource])
 
   // Handle selecting a skill from the list
   const handleSkillSelect = React.useCallback((skill: LoadedSkill) => {

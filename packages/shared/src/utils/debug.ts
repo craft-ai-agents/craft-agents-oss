@@ -1,5 +1,6 @@
 // Check CRAFT_DEBUG env var at module load (for SDK subprocess)
-let debugEnabled = process.env.CRAFT_DEBUG === '1';
+// Guard against browser/renderer contexts where process is undefined
+let debugEnabled = typeof process !== 'undefined' && process.env?.CRAFT_DEBUG === '1';
 
 /**
  * Runtime environment detection
@@ -7,12 +8,16 @@ let debugEnabled = process.env.CRAFT_DEBUG === '1';
 type Environment = 'electron-main' | 'electron-renderer' | 'cli';
 
 function detectEnvironment(): Environment {
+  // No process object means we're in a browser/renderer context
+  if (typeof process === 'undefined') {
+    return 'electron-renderer';
+  }
   // Electron main process
-  if (typeof process !== 'undefined' && (process as any).type === 'browser') {
+  if ((process as any).type === 'browser') {
     return 'electron-main';
   }
-  // Electron renderer process
-  if (typeof process !== 'undefined' && (process as any).type === 'renderer') {
+  // Electron renderer process (with nodeIntegration)
+  if ((process as any).type === 'renderer') {
     return 'electron-renderer';
   }
   // Default: CLI/scripts
@@ -78,9 +83,12 @@ function output(formatted: string): void {
   if (env === 'electron-renderer') {
     // Use console.log in renderer for DevTools
     console.log(formatted.trim());
-  } else {
+  } else if (typeof process !== 'undefined' && process.stderr) {
     // Use stderr in main/cli to avoid stdout interference
     process.stderr.write(formatted);
+  } else {
+    // Fallback to console for unexpected environments
+    console.log(formatted.trim());
   }
 }
 

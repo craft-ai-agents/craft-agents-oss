@@ -90,6 +90,8 @@ interface NavigationContextValue {
   updateRightSidebar: (panel: RightSidebarPanel | undefined) => void
   /** Toggle right sidebar (with optional panel) */
   toggleRightSidebar: (panel?: RightSidebarPanel) => void
+  /** Navigate to a source (or source list if no slug), preserving the current filter type */
+  navigateToSource: (sourceSlug?: string) => void
 }
 
 const NavigationContext = createContext<NavigationContextValue | null>(null)
@@ -758,6 +760,25 @@ export function NavigationProvider({
     updateRightSidebar(newPanel)
   }, [navigationState, updateRightSidebar])
 
+  // Navigate to a source (or source list) while preserving the current filter type (api/mcp/local)
+  const navigateToSource = useCallback((sourceSlug?: string) => {
+    if (isSourcesNavigation(navigationState) && navigationState.filter?.kind === 'type') {
+      switch (navigationState.filter.sourceType) {
+        case 'api':
+          navigate(routes.view.sourcesApi(sourceSlug))
+          return
+        case 'mcp':
+          navigate(routes.view.sourcesMcp(sourceSlug))
+          return
+        case 'local':
+          navigate(routes.view.sourcesLocal(sourceSlug))
+          return
+      }
+    }
+    // No filter or 'all' filter - navigate without preserving type
+    navigate(routes.view.sources(sourceSlug ? { sourceSlug } : undefined))
+  }, [navigationState, navigate])
+
   return (
     <NavigationContext.Provider
       value={{
@@ -770,6 +791,7 @@ export function NavigationProvider({
         goForward,
         updateRightSidebar,
         toggleRightSidebar,
+        navigateToSource,
       }}
     >
       {children}

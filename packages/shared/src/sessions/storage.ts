@@ -7,6 +7,7 @@
  * - session.jsonl (main data in JSONL format: line 1 = header, lines 2+ = messages)
  * - attachments/ (file attachments)
  * - plans/ (plan files for Safe Mode)
+ * - long_responses/ (full tool results that were summarized due to size limits)
  */
 
 import {
@@ -77,7 +78,7 @@ export function ensureSessionDir(workspaceRootPath: string, sessionId: string): 
   if (!existsSync(sessionDir)) {
     mkdirSync(sessionDir, { recursive: true });
   }
-  // Also create plans and attachments directories
+  // Also create plans, attachments, and long_responses directories
   const plansDir = join(sessionDir, 'plans');
   if (!existsSync(plansDir)) {
     mkdirSync(plansDir, { recursive: true });
@@ -85,6 +86,10 @@ export function ensureSessionDir(workspaceRootPath: string, sessionId: string): 
   const attachmentsDir = join(sessionDir, 'attachments');
   if (!existsSync(attachmentsDir)) {
     mkdirSync(attachmentsDir, { recursive: true });
+  }
+  const longResponsesDir = join(sessionDir, 'long_responses');
+  if (!existsSync(longResponsesDir)) {
+    mkdirSync(longResponsesDir, { recursive: true });
   }
   return sessionDir;
 }
@@ -101,6 +106,14 @@ export function getSessionAttachmentsPath(workspaceRootPath: string, sessionId: 
  */
 export function getSessionPlansPath(workspaceRootPath: string, sessionId: string): string {
   return join(getSessionPath(workspaceRootPath, sessionId), 'plans');
+}
+
+/**
+ * Get the long_responses directory for a session.
+ * Used to store full tool results that were summarized due to size limits.
+ */
+export function getSessionLongResponsesPath(workspaceRootPath: string, sessionId: string): string {
+  return join(getSessionPath(workspaceRootPath, sessionId), 'long_responses');
 }
 
 // ============================================================
@@ -372,6 +385,11 @@ function headerToMetadata(header: SessionHeader, workspaceRootPath: string): Ses
       // Shared viewer state - must be included for persistence across app restarts
       sharedUrl: header.sharedUrl,
       sharedId: header.sharedId,
+      // Unread detection fields - pre-computed for session list display without loading messages
+      lastReadMessageId: header.lastReadMessageId,
+      lastFinalMessageId: header.lastFinalMessageId,
+      // Explicit unread flag - single source of truth for NEW badge (state machine approach)
+      hasUnread: header.hasUnread,
     };
   } catch {
     return null;
@@ -468,6 +486,7 @@ export function updateSessionMetadata(
     | 'name'
     | 'todoState'
     | 'lastReadMessageId'
+    | 'hasUnread'
     | 'enabledSourceSlugs'
     | 'workingDirectory'
     | 'permissionMode'
@@ -486,6 +505,7 @@ export function updateSessionMetadata(
   if (updates.workingDirectory !== undefined) session.workingDirectory = updates.workingDirectory;
   if (updates.permissionMode !== undefined) session.permissionMode = updates.permissionMode;
   if ('lastReadMessageId' in updates) session.lastReadMessageId = updates.lastReadMessageId;
+  if ('hasUnread' in updates) session.hasUnread = updates.hasUnread;
   if ('sharedUrl' in updates) session.sharedUrl = updates.sharedUrl;
   if ('sharedId' in updates) session.sharedId = updates.sharedId;
   if (updates.model !== undefined) session.model = updates.model;

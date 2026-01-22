@@ -87,6 +87,21 @@ Key fields:
 - **`isAuthenticated`** - Whether credentials are stored
 - **`connectionStatus`** - Current state: `connected`, `needs_auth`, `failed`, `untested`, or `local_disabled`
 
+### icon.*
+
+Place an icon file in the source folder (`icon.svg`, `icon.png`) for custom branding. Icons are auto-discovered—no configuration needed.
+
+**How icons work:**
+
+| `config.icon` value | Behavior |
+|---------------------|----------|
+| Emoji (`"🔧"`) | Rendered as emoji |
+| Local path (`"./icon.svg"`) | Loads from source folder |
+| URL (`"https://..."`) | Auto-downloaded by validation |
+| Not set | Auto-discovers `icon.svg`/`icon.png`, falls back to favicon |
+
+**Best practice:** Set `icon` to a URL when creating sources, then run validation. The icon is downloaded and cached locally for fast, offline display.
+
 ### guide.md
 
 The guide file helps your agent understand how to use the source effectively:

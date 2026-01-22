@@ -70,6 +70,9 @@ export function handleComplete(
         currentStatus: undefined,  // Clear any lingering status
         // Update tokenUsage from complete event (for real-time context counter updates)
         tokenUsage: event.tokenUsage ?? session.tokenUsage,
+        // Update hasUnread flag from main process (state machine for NEW badge)
+        // Only update if explicitly provided - undefined means "don't change"
+        ...(event.hasUnread !== undefined && { hasUnread: event.hasUnread }),
       },
       streaming: null,
     },

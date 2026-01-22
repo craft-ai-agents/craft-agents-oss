@@ -5,7 +5,7 @@
  * All agent events flow through a single pure function for consistent state transitions.
  */
 
-import type { Session, Message, PermissionRequest, CredentialRequest, TypedError, PermissionMode, TodoState, AuthRequest } from '../../shared/types'
+import type { Session, Message, PermissionRequest, CredentialRequest, TypedError, PermissionMode, TodoState, AuthRequest, ToolDisplayMeta } from '../../shared/types'
 
 /**
  * Streaming state for a session - replaces streamingTextRef
@@ -60,6 +60,8 @@ export interface ToolStartEvent {
   parentToolUseId?: string
   toolIntent?: string
   toolDisplayName?: string
+  /** Tool display metadata with base64-encoded icon for viewer compatibility */
+  toolDisplayMeta?: ToolDisplayMeta
 }
 
 /**
@@ -95,6 +97,8 @@ export interface CompleteEvent {
   type: 'complete'
   sessionId: string
   tokenUsage?: Session['tokenUsage']
+  /** Explicit unread flag - set by main process based on viewing state */
+  hasUnread?: boolean
 }
 
 /**

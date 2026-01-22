@@ -8,6 +8,51 @@
 import * as React from 'react'
 import { useMemo } from 'react'
 import JsonView from '@uiw/react-json-view'
+
+/**
+ * Recursively parse stringified JSON within JSON values.
+ * Handles nested patterns like {"result": "{\"nested\": \"value\"}"}
+ * so they display as expandable tree nodes instead of plain strings.
+ */
+function deepParseJson(value: unknown): unknown {
+  // Handle null/undefined
+  if (value === null || value === undefined) return value
+
+  // If it's a string, try to parse it as JSON
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (
+      (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+      (trimmed.startsWith('[') && trimmed.endsWith(']'))
+    ) {
+      try {
+        // Recursively parse the result in case of multiple nesting levels
+        return deepParseJson(JSON.parse(trimmed))
+      } catch {
+        // Not valid JSON, return original string
+        return value
+      }
+    }
+    return value
+  }
+
+  // If it's an array, recursively process each element
+  if (Array.isArray(value)) {
+    return value.map(deepParseJson)
+  }
+
+  // If it's an object, recursively process each property
+  if (typeof value === 'object') {
+    const result: Record<string, unknown> = {}
+    for (const [key, val] of Object.entries(value)) {
+      result[key] = deepParseJson(val)
+    }
+    return result
+  }
+
+  // Primitives (number, boolean) - return as-is
+  return value
+}
 import { vscodeTheme } from '@uiw/react-json-view/vscode'
 import { githubLightTheme } from '@uiw/react-json-view/githubLight'
 import { Braces, Copy, Check } from 'lucide-react'
@@ -57,8 +102,10 @@ export function JSONPreviewOverlay({
     return theme === 'dark' ? craftAgentDarkTheme : craftAgentLightTheme
   }, [theme])
 
-  // Cast data to object for JsonView (it's already validated JSON from extractOverlayData)
-  const jsonData = data as object
+  // Recursively parse any stringified JSON within the data for better display
+  const processedData = useMemo(() => {
+    return deepParseJson(data) as object
+  }, [data])
 
   return (
     <PreviewOverlay
@@ -77,7 +124,7 @@ export function JSONPreviewOverlay({
       <div className="h-full overflow-auto p-4">
         <div className="rounded-lg bg-background shadow-minimal p-4">
           <JsonView
-            value={jsonData}
+            value={processedData}
             style={jsonTheme}
             collapsed={false}
             enableClipboard={true}

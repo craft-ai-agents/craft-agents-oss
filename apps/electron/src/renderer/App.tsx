@@ -642,19 +642,36 @@ export default function App() {
     window.electronAPI.sessionCommand(sessionId, { type: 'unflag' })
   }, [updateSessionById])
 
+  /**
+   * Set which session user is actively viewing (for unread state machine).
+   * Called when user navigates to a session. Main process uses this to determine
+   * whether to mark new assistant messages as unread.
+   */
+  const handleSetActiveViewingSession = useCallback((sessionId: string) => {
+    // Optimistic UI update: clear hasUnread immediately
+    updateSessionById(sessionId, { hasUnread: false })
+    // Tell main process user is viewing this session
+    window.electronAPI.sessionCommand(sessionId, { type: 'setActiveViewing', workspaceId: windowWorkspaceId ?? '' })
+  }, [updateSessionById, windowWorkspaceId])
+
   const handleMarkSessionRead = useCallback((sessionId: string) => {
-    // Find the session and compute the last final assistant message ID
+    // Update hasUnread flag (primary source of truth for NEW badge)
+    // Also update lastReadMessageId for backwards compatibility
     updateSessionById(sessionId, (s) => {
       const lastFinalId = s.messages.findLast(
         m => m.role === 'assistant' && !m.isIntermediate
       )?.id
-      return lastFinalId ? { lastReadMessageId: lastFinalId } : {}
+      return {
+        hasUnread: false,
+        ...(lastFinalId ? { lastReadMessageId: lastFinalId } : {}),
+      }
     })
     window.electronAPI.sessionCommand(sessionId, { type: 'markRead' })
   }, [updateSessionById])
 
   const handleMarkSessionUnread = useCallback((sessionId: string) => {
-    updateSessionById(sessionId, { lastReadMessageId: undefined })
+    // Set hasUnread flag (primary source of truth for NEW badge)
+    updateSessionById(sessionId, { hasUnread: true, lastReadMessageId: undefined })
     window.electronAPI.sessionCommand(sessionId, { type: 'markUnread' })
   }, [updateSessionById])
 
@@ -1120,6 +1137,7 @@ export default function App() {
     onUnflagSession: handleUnflagSession,
     onMarkSessionRead: handleMarkSessionRead,
     onMarkSessionUnread: handleMarkSessionUnread,
+    onSetActiveViewingSession: handleSetActiveViewingSession,
     onTodoStateChange: handleTodoStateChange,
     onDeleteSession: handleDeleteSession,
     onRespondToPermission: handleRespondToPermission,
@@ -1158,6 +1176,7 @@ export default function App() {
     handleUnflagSession,
     handleMarkSessionRead,
     handleMarkSessionUnread,
+    handleSetActiveViewingSession,
     handleTodoStateChange,
     handleDeleteSession,
     handleRespondToPermission,

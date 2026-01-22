@@ -29,15 +29,15 @@ import * as React from 'react'
 import { CrossfadeAvatar } from '@/components/ui/avatar'
 import { cn } from '@/lib/utils'
 import {
-  sourceIconCache,
   logoUrlCache,
   clearIconCaches,
-  svgToThemedDataUrl,
+  loadSourceIcon,
+  getSourceIconSync,
+  EMOJI_ICON_PREFIX,
 } from '@/lib/icon-cache'
 import { Mail, Plug, Globe, HardDrive } from 'lucide-react'
 import { McpIcon } from '@/components/icons/McpIcon'
 import { deriveServiceUrl } from '@craft-agent/shared/utils/service-url'
-import { isEmoji } from '@craft-agent/shared/utils/icon-constants'
 import type { LoadedSource } from '@craft-agent/shared/sources/types'
 import type { SourceConnectionStatus } from '../../../shared/types'
 import { SourceStatusIndicator, deriveConnectionStatus } from './source-status-indicator'
@@ -140,70 +140,87 @@ export function clearSourceIconCache(): void {
 }
 
 /**
- * Hook to load a workspace image via IPC
- * Returns the loaded image URL (data URL for binary, raw content for SVG)
- * Uses shared sourceIconCache from lib/icon-cache
+ * Hook to load source icon using centralized cache.
+ * Uses loadSourceIcon which handles all icon resolution:
+ * emoji → local path → auto-discovery → favicon fallback
+ *
+ * Returns { iconUrl, emojiIcon } where one will be set based on icon type.
  */
-function useWorkspaceImage(
-  workspaceId: string | undefined,
-  relativePath: string | undefined
-): string | null {
-  const [imageUrl, setImageUrl] = React.useState<string | null>(() => {
+function useSourceIcon(source: LoadedSource | undefined): {
+  iconUrl: string | null
+  emojiIcon: string | null
+} {
+  const [iconUrl, setIconUrl] = React.useState<string | null>(() => {
     // Check cache on initial render
-    if (workspaceId && relativePath) {
-      const cacheKey = `${workspaceId}:${relativePath}`
-      return sourceIconCache.get(cacheKey) ?? null
+    if (source) {
+      const cached = getSourceIconSync(source.workspaceId, source.config.slug)
+      if (cached && !cached.startsWith(EMOJI_ICON_PREFIX)) {
+        return cached
+      }
+    }
+    return null
+  })
+
+  const [emojiIcon, setEmojiIcon] = React.useState<string | null>(() => {
+    // Check cache for emoji on initial render
+    if (source) {
+      const cached = getSourceIconSync(source.workspaceId, source.config.slug)
+      if (cached?.startsWith(EMOJI_ICON_PREFIX)) {
+        return cached.slice(EMOJI_ICON_PREFIX.length)
+      }
     }
     return null
   })
 
   React.useEffect(() => {
-    if (!workspaceId || !relativePath) {
-      setImageUrl(null)
+    if (!source) {
+      setIconUrl(null)
+      setEmojiIcon(null)
       return
     }
 
-    const cacheKey = `${workspaceId}:${relativePath}`
-
-    // Check cache first
-    const cached = sourceIconCache.get(cacheKey)
+    // Check cache first (sync)
+    const cached = getSourceIconSync(source.workspaceId, source.config.slug)
     if (cached) {
-      setImageUrl(cached)
+      if (cached.startsWith(EMOJI_ICON_PREFIX)) {
+        setEmojiIcon(cached.slice(EMOJI_ICON_PREFIX.length))
+        setIconUrl(null)
+      } else {
+        setIconUrl(cached)
+        setEmojiIcon(null)
+      }
       return
     }
 
-    // Load via IPC
+    // Load via centralized function (async)
     let cancelled = false
-    window.electronAPI.readWorkspaceImage(workspaceId, relativePath)
+    loadSourceIcon({ config: source.config, workspaceId: source.workspaceId })
       .then((result) => {
         if (cancelled) return
-
-        // For SVG, theme and convert to data URL
-        // This injects foreground color since currentColor doesn't work in background-image
-        let url = result
-        if (relativePath.endsWith('.svg')) {
-          url = svgToThemedDataUrl(result)
+        if (result?.startsWith(EMOJI_ICON_PREFIX)) {
+          setEmojiIcon(result.slice(EMOJI_ICON_PREFIX.length))
+          setIconUrl(null)
+        } else {
+          setIconUrl(result)
+          setEmojiIcon(null)
         }
-
-        sourceIconCache.set(cacheKey, url)
-        setImageUrl(url)
       })
-      .catch((error) => {
+      .catch(() => {
         if (cancelled) return
-        console.error(`[SourceAvatar] Failed to load image ${relativePath}:`, error)
-        setImageUrl(null)
+        setIconUrl(null)
+        setEmojiIcon(null)
       })
 
     return () => {
       cancelled = true
     }
-  }, [workspaceId, relativePath])
+  }, [source])
 
-  return imageUrl
+  return { iconUrl, emojiIcon }
 }
 
 /**
- * Hook to resolve logo URL via IPC (uses Node.js filesystem cache)
+ * Hook to resolve logo URL via IPC (for direct props mode only)
  * Returns the resolved logo URL or null
  */
 function useLogoUrl(
@@ -263,56 +280,31 @@ function useLogoUrl(
 export function SourceAvatar(props: SourceAvatarProps) {
   const { size = 'md', className, showStatus } = props
 
-  // Extract type, name, logo URL, and status based on props variant
+  // Extract type, name, status based on props variant
   let type: SourceType
   let name: string
   let connectionStatus: SourceConnectionStatus | undefined
   let connectionError: string | undefined
 
-  // For local icons, we need workspaceId and relative path
-  let workspaceId: string | undefined
-  let localIconPath: string | undefined
-
-  // For emoji icons from config.icon
-  let emojiIcon: string | undefined
-
-  // For remote icons, we need serviceUrl and provider
+  // For direct props mode (no source object)
   let serviceUrl: string | null = null
   let provider: string | undefined
   let explicitLogoUrl: string | null | undefined
 
+  // Source object for LoadedSource mode
+  let source: LoadedSource | undefined
+
   if ('source' in props && props.source) {
-    // LoadedSource mode
-    const source = props.source
+    // LoadedSource mode - use centralized icon cache
+    source = props.source
     type = source.config.type as SourceType
     name = source.config.name
-    workspaceId = source.workspaceId
-    // Use slug for favicon resolution - it's more specific than generic provider names
-    // e.g., "gmail" slug maps to mail.google.com, while "google" provider has no mapping
-    provider = source.config.slug ?? source.config.provider
-
-    // Check icon field for emoji or URL
-    const icon = source.config.icon
-    if (icon && isEmoji(icon)) {
-      // Emoji icon - render as text
-      emojiIcon = icon
-    } else {
-      // Try to find local icon file (icon.svg, icon.png, etc.)
-      // The watcher downloads URL icons to local files automatically
-      // We check for common extensions - the actual file is found via IPC
-      localIconPath = `sources/${source.config.slug}/icon`
-    }
-
-    // If no icon field set, derive service URL for favicon resolution
-    if (!icon && !emojiIcon) {
-      serviceUrl = deriveServiceUrl(source.config)
-    }
 
     // Derive status from source
     connectionStatus = deriveConnectionStatus(source)
     connectionError = source.config.connectionError
   } else {
-    // Direct props mode
+    // Direct props mode - use legacy favicon resolution
     const directProps = props as DirectSourceAvatarProps
     type = directProps.type
     name = directProps.name
@@ -323,19 +315,19 @@ export function SourceAvatar(props: SourceAvatarProps) {
     connectionError = directProps.statusError
   }
 
-  // Load local icon via IPC if needed (tries icon.svg, icon.png, etc.)
-  const loadedLocalIcon = useWorkspaceImage(workspaceId, localIconPath ? localIconPath + '.svg' : undefined)
-  const loadedLocalIconPng = useWorkspaceImage(workspaceId, localIconPath && !loadedLocalIcon ? localIconPath + '.png' : undefined)
-  const finalLocalIcon = loadedLocalIcon ?? loadedLocalIconPng
+  // LoadedSource mode: Use centralized cache (handles emoji, local files, favicon)
+  const { iconUrl: sourceIconUrl, emojiIcon: sourceEmojiIcon } = useSourceIcon(source)
 
-  // Resolve logo URL via IPC (only if no local icon, no emoji, and no explicit URL)
+  // Direct props mode: Resolve logo URL via IPC (only if no source object)
   const resolvedLogoUrl = useLogoUrl(
-    !finalLocalIcon && !emojiIcon && !explicitLogoUrl ? serviceUrl : null,
+    !source && !explicitLogoUrl ? serviceUrl : null,
     provider
   )
 
-  // Final resolved URL: local icon > explicit URL > resolved URL > null
-  const finalLogoUrl = finalLocalIcon ?? explicitLogoUrl ?? resolvedLogoUrl
+  // Determine final icon URL and emoji
+  // LoadedSource mode uses centralized cache, direct props mode uses explicit/resolved URL
+  const finalLogoUrl = source ? sourceIconUrl : (explicitLogoUrl ?? resolvedLogoUrl)
+  const emojiIcon = source ? sourceEmojiIcon : null
 
   const FallbackIcon = FALLBACK_ICONS[type] ?? Plug
   const statusSize = STATUS_SIZE_CONFIG[size]
@@ -345,9 +337,8 @@ export function SourceAvatar(props: SourceAvatarProps) {
   const containerSize = hasCustomSize ? undefined : SIZE_CONFIG[size]
   const defaultClasses = hasCustomSize ? undefined : 'rounded-[4px] ring-1 ring-border/30 shrink-0'
 
-  // Priority: local file > emoji > URL > fallback
-  // If we have an emoji icon and no local file, render emoji
-  if (emojiIcon && !finalLocalIcon) {
+  // If we have an emoji icon, render as text
+  if (emojiIcon) {
     return (
       <span className="relative inline-flex shrink-0">
         <div

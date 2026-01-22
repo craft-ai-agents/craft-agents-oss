@@ -307,12 +307,16 @@ export function loadSource(workspaceRootPath: string, sourceSlug: string): Loade
   // Credentials are keyed by folder name (e.g., "046a02d0-..."), not full path
   const workspaceId = basename(workspaceRootPath);
 
+  // Pre-compute icon path for renderer (avoids fs access in browser)
+  const iconPath = findIconFile(folderPath);
+
   return {
     config,
     guide: loadSourceGuide(workspaceRootPath, sourceSlug),
     folderPath,
     workspaceRootPath,
     workspaceId,
+    iconPath,
   };
 }
 

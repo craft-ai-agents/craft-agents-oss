@@ -11,6 +11,7 @@ import type {
   SessionMetadata as CoreSessionMetadata,
   StoredAttachment as CoreStoredAttachment,
   ContentBadge,
+  ToolDisplayMeta,
 } from '@craft-agent/core/types';
 
 // Import mode types from dedicated subpath export (avoids pulling in SDK)
@@ -32,6 +33,7 @@ export type {
   CoreSessionMetadata as SessionMetadata,
   CoreStoredAttachment as StoredAttachment,
   ContentBadge,
+  ToolDisplayMeta,
 };
 
 // Import and re-export auth types for onboarding
@@ -267,6 +269,12 @@ export interface Session {
   todoState?: TodoState
   // Read/unread tracking - ID of last message user has read
   lastReadMessageId?: string
+  /**
+   * Explicit unread flag - single source of truth for NEW badge.
+   * Set to true when assistant message completes while user is NOT viewing.
+   * Set to false when user views the session (and not processing).
+   */
+  hasUnread?: boolean
   // Per-session source selection (source slugs)
   enabledSourceSlugs?: string[]
   // Working directory for this session (used by agent for bash commands)
@@ -283,6 +291,8 @@ export interface Session {
   thinkingLevel?: ThinkingLevel
   // Role/type of the last message (for badge display without loading messages)
   lastMessageRole?: 'user' | 'assistant' | 'plan' | 'tool' | 'error'
+  // ID of the last final (non-intermediate) assistant message - pre-computed for unread detection
+  lastFinalMessageId?: string
   // Whether an async operation is ongoing (sharing, updating share, revoking, title regeneration)
   // Used for shimmer effect on session title in sidebar and panel header
   isAsyncOperationOngoing?: boolean
@@ -328,12 +338,12 @@ export interface CreateSessionOptions {
 export type SessionEvent =
   | { type: 'text_delta'; sessionId: string; delta: string; turnId?: string }
   | { type: 'text_complete'; sessionId: string; text: string; isIntermediate?: boolean; turnId?: string; parentToolUseId?: string }
-  | { type: 'tool_start'; sessionId: string; toolName: string; toolUseId: string; toolInput: Record<string, unknown>; toolIntent?: string; toolDisplayName?: string; turnId?: string; parentToolUseId?: string }
+  | { type: 'tool_start'; sessionId: string; toolName: string; toolUseId: string; toolInput: Record<string, unknown>; toolIntent?: string; toolDisplayName?: string; toolDisplayMeta?: import('@craft-agent/core').ToolDisplayMeta; turnId?: string; parentToolUseId?: string }
   | { type: 'tool_result'; sessionId: string; toolUseId: string; toolName: string; result: string; turnId?: string; parentToolUseId?: string; isError?: boolean }
   | { type: 'parent_update'; sessionId: string; toolUseId: string; parentToolUseId: string }
   | { type: 'error'; sessionId: string; error: string }
   | { type: 'typed_error'; sessionId: string; error: TypedError }
-  | { type: 'complete'; sessionId: string; tokenUsage?: Session['tokenUsage'] }
+  | { type: 'complete'; sessionId: string; tokenUsage?: Session['tokenUsage']; hasUnread?: boolean }
   | { type: 'interrupted'; sessionId: string; message?: Message }
   | { type: 'status'; sessionId: string; message: string; statusType?: 'compacting' }
   | { type: 'info'; sessionId: string; message: string; statusType?: 'compaction_complete'; level?: 'info' | 'warning' | 'error' | 'success' }
@@ -397,6 +407,8 @@ export type SessionCommand =
   | { type: 'setTodoState'; state: TodoState }
   | { type: 'markRead' }
   | { type: 'markUnread' }
+  /** Track which session user is actively viewing (for unread state machine) */
+  | { type: 'setActiveViewing'; workspaceId: string }
   | { type: 'setPermissionMode'; mode: PermissionMode }
   | { type: 'setThinkingLevel'; level: ThinkingLevel }
   | { type: 'updateWorkingDirectory'; dir: string }

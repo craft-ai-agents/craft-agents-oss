@@ -365,6 +365,12 @@ export interface LoadedSource {
    * Built-in sources are always available and not shown in the sources UI.
    */
   isBuiltin?: boolean;
+
+  /**
+   * Pre-computed path to local icon file (icon.svg, icon.png, etc.) if it exists.
+   * Computed during source loading so renderer doesn't need filesystem access.
+   */
+  iconPath?: string;
 }
 
 /**

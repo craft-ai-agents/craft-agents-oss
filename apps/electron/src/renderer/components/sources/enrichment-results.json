@@ -1,0 +1,1609 @@
+{
+  "metadata": {
+    "generated_at": "2026-01-22T15:30:00Z",
+    "total_enriched": 200,
+    "source": "Parallel AI Task API"
+  },
+  "enriched_apps": [
+    {
+      "name": "1Password",
+      "domain": "1password.com",
+      "api_docs_url": "https://developer.1password.com/",
+      "capabilities": "Developers can securely store, manage, automate, and share secrets for applications and infrastructure. This includes managing SSH keys, signing Git commits, accessing secrets via APIs, integrating with AI agents, and automating administrative tasks."
+    },
+    {
+      "name": "Ably",
+      "domain": "ably.com",
+      "api_docs_url": "https://ably.com/docs/api",
+      "capabilities": "Ably provides a realtime platform that enables developers to power chat, live dashboards, notifications, collaboration features. It offers Pub/Sub, Chat, AI Transport, LiveObjects, Spaces, and LiveSync products."
+    },
+    {
+      "name": "AfterShip",
+      "domain": "aftership.com",
+      "api_docs_url": "https://www.aftership.com/docs/tracking/quickstart/api-quick-start",
+      "capabilities": "Developers can integrate AfterShip to streamline eCommerce operations by leveraging AI for accurate delivery predictions, automated shipping rules, enhanced shipment tracking, and returns management."
+    },
+    {
+      "name": "Airtable",
+      "domain": "airtable.com",
+      "api_docs_url": "https://www.airtable.com/developers/web/api/introduction",
+      "capabilities": "Developers can integrate external systems with Airtable, create, read, update, and delete records, build integrations into other applications, and create standalone tools that communicate with Airtable bases."
+    },
+    {
+      "name": "Algolia",
+      "domain": "algolia.com",
+      "api_docs_url": "https://algolia.com/doc",
+      "capabilities": "Developers can build search and discovery experiences using Algolia's API by indexing data, configuring relevance, and creating UIs. Supports semantic search, AI-powered relevance tuning, vector embeddings, and multilingual support."
+    },
+    {
+      "name": "Alpaca",
+      "domain": "alpaca.markets",
+      "api_docs_url": "https://docs.alpaca.markets/",
+      "capabilities": "Trading API for commission-free stock and crypto trading with real-time market data, paper trading, and portfolio management."
+    },
+    {
+      "name": "Amazon S3",
+      "domain": "aws.amazon.com",
+      "api_docs_url": "https://docs.aws.amazon.com/AmazonS3/latest/API/Welcome.html",
+      "capabilities": "Object storage REST API for storing and retrieving data with bucket management, access control, versioning, and lifecycle policies."
+    },
+    {
+      "name": "Amazon Selling Partner",
+      "domain": "developer-docs.amazon.com",
+      "api_docs_url": "https://developer-docs.amazon.com/sp-api/",
+      "capabilities": "APIs for sellers to manage listings, orders, inventory, fulfillment, reports, and notifications on Amazon marketplace."
+    },
+    {
+      "name": "Amplitude",
+      "domain": "amplitude.com",
+      "api_docs_url": "https://amplitude.com/docs/apis",
+      "capabilities": "Developers can use Amplitude APIs to send and receive information, extend Amplitude's functionality, upload event data, manage user identities and properties, export data, and interact with analytics features."
+    },
+    {
+      "name": "Anthropic",
+      "domain": "anthropic.com",
+      "api_docs_url": "https://docs.anthropic.com",
+      "capabilities": "Developers can build autonomous agents, create new user experiences and products, launch generative AI solutions, and leverage features like prompt caching, web search, advanced tool use, batch processing, and code execution."
+    },
+    {
+      "name": "Any.do",
+      "domain": "any.do",
+      "api_docs_url": "https://developer.any.do/",
+      "capabilities": "Task management API for creating, updating, and organizing tasks with project management and calendar integration."
+    },
+    {
+      "name": "Anyscale",
+      "domain": "anyscale.com",
+      "api_docs_url": "https://docs.anyscale.com/",
+      "capabilities": "Ray-based platform API for distributed computing, model serving, and scalable AI/ML workloads."
+    },
+    {
+      "name": "Anytype",
+      "domain": "anytype.io",
+      "api_docs_url": "https://doc.anytype.io/",
+      "capabilities": "Local-first knowledge management with open protocol for objects, relations, and types synchronization."
+    },
+    {
+      "name": "Apollo",
+      "domain": "apollo.io",
+      "api_docs_url": "https://apolloio.github.io/apollo-api-docs/",
+      "capabilities": "Sales intelligence API for contact enrichment, email sequences, account search, and CRM data sync."
+    },
+    {
+      "name": "Asana",
+      "domain": "asana.com",
+      "api_docs_url": "https://developers.asana.com/docs",
+      "capabilities": "Developers can integrate tools, automate actions, and customize workflows with Asana's platform. The API allows for reading and inputting data into Asana and reacting to changes."
+    },
+    {
+      "name": "AssemblyAI",
+      "domain": "assemblyai.com",
+      "api_docs_url": "https://assemblyai.com/docs",
+      "capabilities": "Transcription API with timestamps, speaker labels, confidence scores, streaming, speaker detection, and PII redaction."
+    },
+    {
+      "name": "Attio",
+      "domain": "attio.com",
+      "api_docs_url": "https://docs.attio.com/rest-api/overview",
+      "capabilities": "CRM REST API for workspace data with webhooks, OAuth 2.0, filtering/sorting, and App SDK for embedded applications."
+    },
+    {
+      "name": "Auth0",
+      "domain": "auth0.com",
+      "api_docs_url": "https://developer.auth0.com/",
+      "capabilities": "Developers can integrate Auth0 into any application quickly using SDKs and Quickstarts. Auth0 handles user authentication, authorization, sign-up, login, and API access token issuance."
+    },
+    {
+      "name": "AWS Bedrock",
+      "domain": "aws.amazon.com",
+      "api_docs_url": "https://docs.aws.amazon.com/bedrock/",
+      "capabilities": "Managed service API for accessing foundation models from AI21, Anthropic, Cohere, Meta, Mistral, Stability AI with fine-tuning and RAG."
+    },
+    {
+      "name": "Azure OpenAI",
+      "domain": "azure.microsoft.com",
+      "api_docs_url": "https://learn.microsoft.com/en-us/azure/ai-services/openai/",
+      "capabilities": "Azure-hosted OpenAI models API with GPT-4, DALL-E, embeddings, and enterprise security features."
+    },
+    {
+      "name": "Backblaze B2",
+      "domain": "backblaze.com",
+      "api_docs_url": "https://www.backblaze.com/docs/cloud-storage",
+      "capabilities": "S3-compatible cloud storage API for file upload, download, listing, and lifecycle management."
+    },
+    {
+      "name": "Basecamp",
+      "domain": "basecamp.com",
+      "api_docs_url": "https://github.com/basecamp/bc3-api",
+      "capabilities": "Project management REST API for projects, to-dos, messages, schedules, and file attachments."
+    },
+    {
+      "name": "Baseten",
+      "domain": "baseten.co",
+      "api_docs_url": "https://docs.baseten.co/",
+      "capabilities": "ML model deployment platform API for serving models with auto-scaling, GPU inference, and custom containers."
+    },
+    {
+      "name": "Bear",
+      "domain": "bear.app",
+      "api_docs_url": "https://bear.app/faq/x-callback-url-scheme-documentation/",
+      "capabilities": "X-callback URL scheme for creating, opening, searching notes, adding tags, and text manipulation."
+    },
+    {
+      "name": "BigCommerce",
+      "domain": "bigcommerce.com",
+      "api_docs_url": "https://developer.bigcommerce.com/docs/rest",
+      "capabilities": "E-commerce REST API for products, orders, customers, carts, payments, and storefront management."
+    },
+    {
+      "name": "Bluesky",
+      "domain": "bsky.app",
+      "api_docs_url": "https://docs.bsky.app/",
+      "capabilities": "AT Protocol API for posts, feeds, follows, notifications, and decentralized social networking."
+    },
+    {
+      "name": "Box",
+      "domain": "box.com",
+      "api_docs_url": "https://developer.box.com/reference",
+      "capabilities": "Content API for retrieving, creating, managing content with AI integration, workflow automation, and Doc Gen."
+    },
+    {
+      "name": "Brex",
+      "domain": "brex.com",
+      "api_docs_url": "https://developer.brex.com/",
+      "capabilities": "Corporate card API for expense management, transactions, card controls, and accounting integrations."
+    },
+    {
+      "name": "Buffer",
+      "domain": "buffer.com",
+      "api_docs_url": "https://buffer.com/developers/api",
+      "capabilities": "Social media management API for scheduling posts, managing profiles, and analytics across platforms."
+    },
+    {
+      "name": "Buildkite",
+      "domain": "buildkite.com",
+      "api_docs_url": "https://buildkite.com/docs/apis",
+      "capabilities": "CI/CD platform APIs including REST and GraphQL for pipelines, builds, agents, and artifacts management."
+    },
+    {
+      "name": "Bunny CDN",
+      "domain": "bunny.net",
+      "api_docs_url": "https://docs.bunny.net/reference/bunnynet-api-overview",
+      "capabilities": "CDN and storage API for pull zones, storage zones, stream video, and edge scripting."
+    },
+    {
+      "name": "Cal.com",
+      "domain": "cal.com",
+      "api_docs_url": "https://cal.com/docs/api-reference/v2/introduction",
+      "capabilities": "Open-source scheduling API for event types, bookings, availability, and calendar integrations."
+    },
+    {
+      "name": "Calendly",
+      "domain": "calendly.com",
+      "api_docs_url": "https://developer.calendly.com/api-docs",
+      "capabilities": "Three APIs: REST v2 for links/meetings/users, Embed API for iFrame integration, Webhook API for event notifications."
+    },
+    {
+      "name": "Canva",
+      "domain": "canva.com",
+      "api_docs_url": "https://www.canva.dev/docs/connect/",
+      "capabilities": "Connect APIs for assets, designs, comments sync, Design/Export/Asset/Folder APIs, and Autofill with Brand Templates."
+    },
+    {
+      "name": "Capacities",
+      "domain": "capacities.io",
+      "api_docs_url": "https://docs.capacities.io/",
+      "capabilities": "Note-taking app with API for objects, spaces, and structured data with daily notes and web clipper."
+    },
+    {
+      "name": "Chargebee",
+      "domain": "chargebee.com",
+      "api_docs_url": "https://apidocs.chargebee.com/docs/api",
+      "capabilities": "Subscription billing API for customers, subscriptions, invoices, payments, and revenue recognition."
+    },
+    {
+      "name": "Chroma",
+      "domain": "trychroma.com",
+      "api_docs_url": "https://docs.trychroma.com/",
+      "capabilities": "Open-source vector database API for embeddings storage, similarity search, and metadata filtering."
+    },
+    {
+      "name": "CircleCI",
+      "domain": "circleci.com",
+      "api_docs_url": "https://circleci.com/docs/api/v2/",
+      "capabilities": "CI/CD REST API for pipelines, workflows, jobs, artifacts, and project settings management."
+    },
+    {
+      "name": "Clearbit",
+      "domain": "clearbit.com",
+      "api_docs_url": "https://dashboard.clearbit.com/docs",
+      "capabilities": "Data enrichment API for company and person lookup, prospecting, and lead scoring."
+    },
+    {
+      "name": "Clerk",
+      "domain": "clerk.com",
+      "api_docs_url": "https://clerk.com/docs/reference/api/overview",
+      "capabilities": "Developers can implement full-stack authentication and user management with Clerk, including sign-up, sign-in, profile management, organization management, and billing using pre-built UI components and SDKs."
+    },
+    {
+      "name": "ClickUp",
+      "domain": "clickup.com",
+      "api_docs_url": "https://developer.clickup.com/",
+      "capabilities": "Project management API for connecting systems, automating tasks, data synchronization, and custom integrations."
+    },
+    {
+      "name": "Clockify",
+      "domain": "clockify.me",
+      "api_docs_url": "https://clockify.me/developers-api",
+      "capabilities": "Time tracking API for time entries, projects, clients, tags, and workspace management."
+    },
+    {
+      "name": "Close",
+      "domain": "close.com",
+      "api_docs_url": "https://developer.close.com/",
+      "capabilities": "Sales CRM API for leads, contacts, opportunities, activities, and communication tracking."
+    },
+    {
+      "name": "Cloudflare R2",
+      "domain": "cloudflare.com",
+      "api_docs_url": "https://developers.cloudflare.com/r2/api/",
+      "capabilities": "S3-compatible object storage API with zero egress fees for file storage and retrieval."
+    },
+    {
+      "name": "Cloudflare Stream",
+      "domain": "cloudflare.com",
+      "api_docs_url": "https://developers.cloudflare.com/stream/",
+      "capabilities": "Video streaming API for upload, encoding, storage, and delivery with live streaming support."
+    },
+    {
+      "name": "Cloudflare Workers",
+      "domain": "cloudflare.com",
+      "api_docs_url": "https://developers.cloudflare.com/workers/",
+      "capabilities": "Developers can build and deploy serverless applications and functions globally on Cloudflare's network, utilizing languages like JavaScript, TypeScript, Python, and Rust. Run AI models on the edge."
+    },
+    {
+      "name": "Cloudinary",
+      "domain": "cloudinary.com",
+      "api_docs_url": "https://cloudinary.com/documentation/cloudinary_references",
+      "capabilities": "Media management API for upload, transformation, optimization, and delivery of images and videos."
+    },
+    {
+      "name": "CockroachDB",
+      "domain": "cockroachlabs.com",
+      "api_docs_url": "https://www.cockroachlabs.com/docs/api/cloud/v1",
+      "capabilities": "Distributed SQL database with Cloud API for cluster management, backups, and PostgreSQL-compatible queries."
+    },
+    {
+      "name": "Coda",
+      "domain": "coda.io",
+      "api_docs_url": "https://coda.io/developers/apis/v1",
+      "capabilities": "Document platform API for docs, tables, rows, columns, formulas, and automation triggers."
+    },
+    {
+      "name": "Cohere",
+      "domain": "cohere.com",
+      "api_docs_url": "https://docs.cohere.com/reference/about",
+      "capabilities": "LLM API with Command, Embed, Rerank models for text generation, semantic search, RAG, classification, and clustering."
+    },
+    {
+      "name": "Coinbase",
+      "domain": "coinbase.com",
+      "api_docs_url": "https://docs.cdp.coinbase.com/",
+      "capabilities": "Cryptocurrency exchange API for trading, wallets, payments, and market data."
+    },
+    {
+      "name": "ConvertKit",
+      "domain": "convertkit.com",
+      "api_docs_url": "https://developers.convertkit.com/",
+      "capabilities": "Email marketing API for subscribers, forms, sequences, broadcasts, and tags management."
+    },
+    {
+      "name": "Convex",
+      "domain": "convex.dev",
+      "api_docs_url": "https://docs.convex.dev/",
+      "capabilities": "Developers can build backends using pure TypeScript for database schemas, queries, authentication, and APIs. Convex ensures real-time synchronization across frontend, backend, and database state."
+    },
+    {
+      "name": "Copper",
+      "domain": "copper.com",
+      "api_docs_url": "https://developer.copper.com/",
+      "capabilities": "RESTful CRM API for contacts, accounts, deals, leads, tasks, appointments, and sales activities with JSON responses."
+    },
+    {
+      "name": "Courier",
+      "domain": "courier.com",
+      "api_docs_url": "https://www.courier.com/docs/reference/get-started",
+      "capabilities": "Unified notification API for email, SMS, push, chat, and in-app notifications with visual template designer and routing logic."
+    },
+    {
+      "name": "Craft",
+      "domain": "craft.do",
+      "api_docs_url": "https://support.craft.do/hc/en-us/articles/23702897811612",
+      "capabilities": "API for connecting to external tools, automating workflows, triggering actions, and integrating with AI assistants."
+    },
+    {
+      "name": "CrowdStrike",
+      "domain": "crowdstrike.com",
+      "api_docs_url": "https://developer.crowdstrike.com/docs/openapi/",
+      "capabilities": "Falcon platform APIs for real-time streaming, Threat Graph queries, detections management, IOC management, and threat intelligence."
+    },
+    {
+      "name": "Datadog",
+      "domain": "datadoghq.com",
+      "api_docs_url": "https://docs.datadoghq.com/api/",
+      "capabilities": "Developers can use the Datadog API for programmatic access to monitoring and analytics, enabling them to send data, build visualizations, manage dashboards, monitors, alerts, and automate incident management workflows."
+    },
+    {
+      "name": "Day One",
+      "domain": "dayoneapp.com",
+      "api_docs_url": "https://dayoneapp.com/guides/tips-and-tutorials/day-one-url-scheme/",
+      "capabilities": "URL scheme for creating entries with text, tags, and journals, editing by UUID, and opening specific views. Zapier integration available."
+    },
+    {
+      "name": "Deepgram",
+      "domain": "deepgram.com",
+      "api_docs_url": "https://developers.deepgram.com/reference/deepgram-api-overview",
+      "capabilities": "Speech AI APIs for Voice Agents, streaming/pre-recorded transcription, text analysis, and text-to-speech."
+    },
+    {
+      "name": "Deno Deploy",
+      "domain": "deno.com",
+      "api_docs_url": "https://docs.deno.com/deploy/api/",
+      "capabilities": "Edge deployment platform API for serverless functions with TypeScript/JavaScript runtime."
+    },
+    {
+      "name": "Descope",
+      "domain": "descope.com",
+      "api_docs_url": "https://docs.descope.com/api",
+      "capabilities": "REST authentication API supporting OTP, Magic Link, Social Login via frontend or backend with multiple communication channels."
+    },
+    {
+      "name": "Descript",
+      "domain": "descript.com",
+      "api_docs_url": "https://docs.descriptapi.com/",
+      "capabilities": "Edit in Descript API for transferring audio/video content, managing files, accessing transcripts, and exporting media."
+    },
+    {
+      "name": "Discord",
+      "domain": "discord.com",
+      "api_docs_url": "https://discord.com/developers/docs/intro",
+      "capabilities": "Developers can build games, experiences, and integrations for millions of users on Discord."
+    },
+    {
+      "name": "Doppler",
+      "domain": "doppler.com",
+      "api_docs_url": "https://docs.doppler.com/reference/api",
+      "capabilities": "REST API for secrets management with CLI, Personal, Service, Service Account, SCIM, and Audit tokens."
+    },
+    {
+      "name": "Drafts",
+      "domain": "getdrafts.com",
+      "api_docs_url": "https://docs.getdrafts.com/",
+      "capabilities": "Scripting API for text capture and processing with actions, workspaces, and automation."
+    },
+    {
+      "name": "Drata",
+      "domain": "drata.com",
+      "api_docs_url": "https://developers.drata.com/",
+      "capabilities": "Compliance automation API for evidence collection, controls monitoring, and audit preparation."
+    },
+    {
+      "name": "Dropbox",
+      "domain": "dropbox.com",
+      "api_docs_url": "https://www.dropbox.com/developers/documentation/http/overview",
+      "capabilities": "HTTP API for file storage, sharing, previews, search, webhooks, metadata, and team management."
+    },
+    {
+      "name": "EasyPost",
+      "domain": "easypost.com",
+      "api_docs_url": "https://docs.easypost.com/",
+      "capabilities": "Shipping API for rate shopping across 100+ carriers, label creation, address verification, tracking, insurance, and batch processing."
+    },
+    {
+      "name": "ElevenLabs",
+      "domain": "elevenlabs.io",
+      "api_docs_url": "https://elevenlabs.io/docs/api-reference/introduction",
+      "capabilities": "Voice AI API for Text-to-Speech, Speech-to-Text, Music, Voice Agents, Dubbing, Voice Cloning, and Speech-to-Speech."
+    },
+    {
+      "name": "Etsy",
+      "domain": "etsy.com",
+      "api_docs_url": "https://developers.etsy.com/documentation/",
+      "capabilities": "Marketplace API for shops, listings, orders, reviews, and shipping with OAuth 2.0."
+    },
+    {
+      "name": "Evernote",
+      "domain": "evernote.com",
+      "api_docs_url": "https://dev.evernote.com/documentation/",
+      "capabilities": "Cloud and Local APIs for notes, notebooks, attachments, user accounts, and searches with OAuth authentication."
+    },
+    {
+      "name": "Exa",
+      "domain": "exa.ai",
+      "api_docs_url": "https://exa.ai/docs/reference/search",
+      "capabilities": "AI-focused web search API with neural, fast, auto, and deep search types, filtering by domain/date/category, and content extraction."
+    },
+    {
+      "name": "Fantastical",
+      "domain": "flexibits.com",
+      "api_docs_url": "https://flexibits.com/fantastical/help/integration",
+      "capabilities": "URL handlers for natural language event creation, calendar view navigation, Shortcuts integration, and Zapier triggers."
+    },
+    {
+      "name": "Fathom Analytics",
+      "domain": "usefathom.com",
+      "api_docs_url": "https://usefathom.com/api",
+      "capabilities": "Privacy-focused analytics API for pageviews, events, and aggregated visitor data."
+    },
+    {
+      "name": "Fauna",
+      "domain": "fauna.com",
+      "api_docs_url": "https://docs.fauna.com/fauna/current/reference/",
+      "capabilities": "Serverless database API with FQL query language, GraphQL support, and ACID transactions."
+    },
+    {
+      "name": "Figma",
+      "domain": "figma.com",
+      "api_docs_url": "https://developers.figma.com/docs/rest-api/",
+      "capabilities": "Developers can use the Figma API to access and interact with Figma's products, view and extract objects, layers, and properties from files, manage webhooks, and create plugins."
+    },
+    {
+      "name": "Firebase",
+      "domain": "firebase.google.com",
+      "api_docs_url": "https://firebase.google.com/docs",
+      "capabilities": "Firebase assists developers throughout the app development lifecycle with authentication, real-time databases, cloud storage, serverless functions, hosting, machine learning, analytics, messaging, and crash reporting."
+    },
+    {
+      "name": "Fireworks AI",
+      "domain": "fireworks.ai",
+      "api_docs_url": "https://docs.fireworks.ai/",
+      "capabilities": "Fast inference API for open-source LLMs with function calling, JSON mode, and fine-tuning."
+    },
+    {
+      "name": "Fly.io",
+      "domain": "fly.io",
+      "api_docs_url": "https://fly.io/docs/machines/api/",
+      "capabilities": "Edge deployment platform with Machines API for container orchestration and global distribution."
+    },
+    {
+      "name": "Folk",
+      "domain": "folk.app",
+      "api_docs_url": "https://developer.folk.app/",
+      "capabilities": "REST API for people, companies, deals, notes, interactions, and reminders with sync and workflow automation."
+    },
+    {
+      "name": "Framer",
+      "domain": "framer.com",
+      "api_docs_url": "https://www.framer.com/developers/reference",
+      "capabilities": "Plugin API for navigation, canvas interaction, CMS, localization, site settings, components, styles, and external data fetching."
+    },
+    {
+      "name": "Freshsales",
+      "domain": "freshworks.com",
+      "api_docs_url": "https://developers.freshworks.com/crm/api/",
+      "capabilities": "REST API for CRUD operations on contacts, accounts, deals, leads, tasks, appointments, and sales activities."
+    },
+    {
+      "name": "FullStory",
+      "domain": "fullstory.com",
+      "api_docs_url": "https://developer.fullstory.com/",
+      "capabilities": "Browser, Server, and Mobile APIs for custom events, user identity, session replays, segment info, and privacy settings."
+    },
+    {
+      "name": "Giphy",
+      "domain": "giphy.com",
+      "api_docs_url": "https://developers.giphy.com/docs/",
+      "capabilities": "API for searching, trending, translation, random GIFs, uploading content, animated emojis, and alt text."
+    },
+    {
+      "name": "GitHub",
+      "domain": "github.com",
+      "api_docs_url": "https://docs.github.com/en/rest",
+      "capabilities": "Developers can use the GitHub REST API to create integrations, retrieve data, automate workflows, build scripts and applications, triage issues, create analytics dashboards, and manage releases."
+    },
+    {
+      "name": "GitHub Actions",
+      "domain": "github.com",
+      "api_docs_url": "https://docs.github.com/en/rest/actions",
+      "capabilities": "REST API for artifacts, cache, runners, OIDC, permissions, secrets, variables, workflow jobs, runs, and workflows."
+    },
+    {
+      "name": "GitLab",
+      "domain": "gitlab.com",
+      "api_docs_url": "https://docs.gitlab.com/api/rest/",
+      "capabilities": "REST API for automation, CI/CD management, user access control, project manipulation, and custom integrations."
+    },
+    {
+      "name": "Gmail",
+      "domain": "google.com",
+      "api_docs_url": "https://developers.google.com/workspace/gmail/api/reference/rest",
+      "capabilities": "REST API for reading, sending, drafting emails, managing labels, modifying emails, searching, batch operations, and attachments."
+    },
+    {
+      "name": "GoodNotes",
+      "domain": "goodnotes.com",
+      "api_docs_url": "https://www.goodnotes.com/documentation/gntemplate",
+      "capabilities": "Template documentation for custom page templates. Uses web APIs like Ink API and Device Haptics for PWA features."
+    },
+    {
+      "name": "Google AI",
+      "domain": "ai.google.dev",
+      "api_docs_url": "https://ai.google.dev/gemini-api/docs",
+      "capabilities": "Gemini API for text, image, video, audio, and document understanding/generation with long context, function calling, and streaming."
+    },
+    {
+      "name": "Google Analytics",
+      "domain": "developers.google.com",
+      "api_docs_url": "https://developers.google.com/analytics",
+      "capabilities": "Analytics APIs for data reporting, admin management, and real-time metrics collection."
+    },
+    {
+      "name": "Google Drive",
+      "domain": "developers.google.com",
+      "api_docs_url": "https://developers.google.com/workspace/drive/api/guides/about-sdk",
+      "capabilities": "API for file upload/download, search, sharing, shortcuts, app-specific data storage, activity monitoring, and Drive UI integration."
+    },
+    {
+      "name": "Google Keep",
+      "domain": "developers.google.com",
+      "api_docs_url": "https://developers.google.com/workspace/keep/api/reference/rest",
+      "capabilities": "RESTful API for creating, listing, deleting notes, downloading attachments, and mutating permissions for enterprise data protection."
+    },
+    {
+      "name": "Grafana Cloud",
+      "domain": "grafana.com",
+      "api_docs_url": "https://grafana.com/docs/grafana-cloud/developer-resources/api-reference/",
+      "capabilities": "Observability platform APIs for dashboards, alerts, data sources, and metrics/logs/traces management."
+    },
+    {
+      "name": "Groq",
+      "domain": "groq.com",
+      "api_docs_url": "https://console.groq.com/docs/overview",
+      "capabilities": "Ultra-fast LPU inference API with OpenAI compatibility for open-source models, chat completions, and streaming."
+    },
+    {
+      "name": "Gumroad",
+      "domain": "gumroad.com",
+      "api_docs_url": "https://app.gumroad.com/api",
+      "capabilities": "OAuth 2.0 API for products, offer codes, variants, custom fields, user information, and sales notifications."
+    },
+    {
+      "name": "Habitica",
+      "domain": "habitica.com",
+      "api_docs_url": "https://habitica.com/apidoc/",
+      "capabilities": "API for habits, dailies, to-dos, rewards, groups, tags, messages, and challenges with user stats retrieval."
+    },
+    {
+      "name": "Harvest",
+      "domain": "getharvest.com",
+      "api_docs_url": "https://help.getharvest.com/api-v2/",
+      "capabilities": "REST API for time tracking, expenses, projects, users, clients, and tasks with OAuth2 and Personal Access Tokens."
+    },
+    {
+      "name": "HashiCorp Vault",
+      "domain": "hashicorp.com",
+      "api_docs_url": "https://developer.hashicorp.com/vault/api-docs",
+      "capabilities": "HTTP API for controlling every aspect of Vault including secrets management, with REST-like HTTP verbs."
+    },
+    {
+      "name": "Heap",
+      "domain": "heap.io",
+      "api_docs_url": "https://developers.heap.io/docs/api-reference",
+      "capabilities": "Client-side APIs for custom data capture beyond autocapture and user identity management across sessions and devices."
+    },
+    {
+      "name": "Height",
+      "domain": "height.app",
+      "api_docs_url": "https://height.notion.site/API-documentation-643aea5bf01742de9232e5971cb4afda",
+      "capabilities": "Project management API for tasks, lists, and workspace automation."
+    },
+    {
+      "name": "Heptabase",
+      "domain": "heptabase.com",
+      "api_docs_url": "https://support.heptabase.com/en/articles/12679581-how-to-use-heptabase-mcp",
+      "capabilities": "MCP for AI services to read, search, and write to knowledge base with semantic search, journal append, and PDF search."
+    },
+    {
+      "name": "Hootsuite",
+      "domain": "hootsuite.com",
+      "api_docs_url": "https://apidocs.hootsuite.com/docs/api/index.html",
+      "capabilities": "REST API for social media management including messages, media, members, organizations, social profiles, and teams with OAuth2."
+    },
+    {
+      "name": "Hotjar",
+      "domain": "hotjar.com",
+      "api_docs_url": "https://developer.hotjar.com/",
+      "capabilities": "Behavior analytics API for user identification, events, and attributes tracking."
+    },
+    {
+      "name": "HubSpot",
+      "domain": "hubspot.com",
+      "api_docs_url": "https://developers.hubspot.com/docs",
+      "capabilities": "Developers can build custom CRM and data-driven website experiences, integrate with HubSpot's APIs, automate workflows, manage and synchronize data, and create custom objects and workflows."
+    },
+    {
+      "name": "Hugging Face",
+      "domain": "huggingface.co",
+      "api_docs_url": "https://huggingface.co/docs/inference-providers/en/index",
+      "capabilities": "Inference Providers API for 200k+ ML models supporting text/image generation, embeddings, NER, summarization, classification."
+    },
+    {
+      "name": "Hunter",
+      "domain": "hunter.io",
+      "api_docs_url": "https://hunter.io/api-documentation",
+      "capabilities": "Email Finder API allows finding professional email addresses using a person's name and domain, returning confidence scores and sources."
+    },
+    {
+      "name": "iA Writer",
+      "domain": "ia.net",
+      "api_docs_url": "https://ia.net/writer/support/library/url-commands",
+      "capabilities": "URL commands for creating, opening documents with text manipulation and Shortcuts integration."
+    },
+    {
+      "name": "imgix",
+      "domain": "imgix.com",
+      "api_docs_url": "https://docs.imgix.com/en-US",
+      "capabilities": "Visual media platform with Rendering API for on-the-fly image processing, Video API for optimization, and Management API for account control."
+    },
+    {
+      "name": "Infisical",
+      "domain": "infisical.com",
+      "api_docs_url": "https://infisical.com/docs/api-reference/overview/introduction",
+      "capabilities": "Secrets management API for retrieving, creating, updating secrets with project and environment support."
+    },
+    {
+      "name": "Inngest",
+      "domain": "inngest.com",
+      "api_docs_url": "https://inngest.com/docs",
+      "capabilities": "Developers can build and run unbreakable workflows, agents, endpoints, and background jobs on any code. Supports automated retries, recovery, and deep observability with live traces and metrics."
+    },
+    {
+      "name": "Instapaper",
+      "domain": "instapaper.com",
+      "api_docs_url": "https://www.instapaper.com/api",
+      "capabilities": "Read-later service API for bookmarks, folders, highlights, and full text retrieval."
+    },
+    {
+      "name": "Intercom",
+      "domain": "intercom.com",
+      "api_docs_url": "https://developers.intercom.com/docs",
+      "capabilities": "Customer messaging API for retrieving/updating account data, SDKs, and enhanced messaging with multiple recipients."
+    },
+    {
+      "name": "Jira",
+      "domain": "atlassian.com",
+      "api_docs_url": "https://developer.atlassian.com/cloud/jira/platform/rest/v3/intro/",
+      "capabilities": "REST API for issues, projects, users with resource expansion, pagination, and Atlassian Document Format support."
+    },
+    {
+      "name": "Journey",
+      "domain": "journey.cloud",
+      "api_docs_url": "https://help.journey.cloud/en/article/zapier-api-docs-technical-1w3n4gy/",
+      "capabilities": "API for creating journal entries with text, tags, media attachments, location, activity, weather, and sentiment."
+    },
+    {
+      "name": "June",
+      "domain": "june.so",
+      "api_docs_url": "https://help.june.so/en/articles/9832226-api-documentation",
+      "capabilities": "Tracking API for user behavior data, Data deletions API for user/workspace removal, and Embed API for dashboard embedding."
+    },
+    {
+      "name": "Knock",
+      "domain": "knock.app",
+      "api_docs_url": "https://docs.knock.app/reference",
+      "capabilities": "Notification infrastructure API for workflows, channels, users, and cross-channel messaging."
+    },
+    {
+      "name": "LangSmith",
+      "domain": "smith.langchain.com",
+      "api_docs_url": "https://docs.langchain.com/langsmith/observability",
+      "capabilities": "LLM observability API for traces, dashboards, alerts, automations, webhooks, and OpenTelemetry integration."
+    },
+    {
+      "name": "LaunchDarkly",
+      "domain": "launchdarkly.com",
+      "api_docs_url": "https://launchdarkly.com/docs/api",
+      "capabilities": "Feature flags REST API for listing, creating, modifying flags, percentage rollouts, targeting, and custom integrations."
+    },
+    {
+      "name": "Lemon Squeezy",
+      "domain": "lemonsqueezy.com",
+      "api_docs_url": "https://docs.lemonsqueezy.com/api",
+      "capabilities": "REST API for store data, payments, orders, subscriptions, and software license keys with checkout links and discount codes."
+    },
+    {
+      "name": "Leonardo AI",
+      "domain": "leonardo.ai",
+      "api_docs_url": "https://docs.leonardo.ai/",
+      "capabilities": "Image generation API for text-to-image, image-to-image, and model fine-tuning with style customization."
+    },
+    {
+      "name": "Linear",
+      "domain": "linear.app",
+      "api_docs_url": "https://developers.linear.app",
+      "capabilities": "Developers can build custom add-ons with the Linear API. Integrations allow for automatic creation and updating of issues, tracking development progress, linking code changes to tickets."
+    },
+    {
+      "name": "LinkedIn",
+      "domain": "linkedin.com",
+      "api_docs_url": "https://learn.microsoft.com/en-us/linkedin/",
+      "capabilities": "API for profile data retrieval, messaging, content posting, company information, connection management, and Sign in with LinkedIn functionality."
+    },
+    {
+      "name": "LogRocket",
+      "domain": "logrocket.com",
+      "api_docs_url": "https://docs.logrocket.com/reference",
+      "capabilities": "User Identification API for demographic/engagement data and Galileo Highlights API for session interaction summaries."
+    },
+    {
+      "name": "Logseq",
+      "domain": "logseq.com",
+      "api_docs_url": "https://plugins-doc.logseq.com/",
+      "capabilities": "Plugin API for creating custom plugins and extending functionality with an HTTP API for plugin development."
+    },
+    {
+      "name": "Loom",
+      "domain": "loom.com",
+      "api_docs_url": "https://dev.loom.com/docs/record-sdk/getting-started",
+      "capabilities": "SDKs for video recording, previewing, embedding with oembed metadata, GIF embeds, and link replacement."
+    },
+    {
+      "name": "Mailchimp",
+      "domain": "mailchimp.com",
+      "api_docs_url": "https://mailchimp.com/developer/marketing/api/",
+      "capabilities": "Marketing API for audience management, campaign analytics, automation workflows, contact sync, and custom data integration."
+    },
+    {
+      "name": "Mailgun",
+      "domain": "mailgun.com",
+      "api_docs_url": "https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun",
+      "capabilities": "Transactional email API for sending, receiving, tracking emails with domain management, webhooks, and inbound routing."
+    },
+    {
+      "name": "Mailspring",
+      "domain": "getmailspring.com",
+      "api_docs_url": "https://foundry376.github.io/Mailspring/",
+      "capabilities": "Plugin SDK for creating powerful extensions, integrating with other tools, and developing custom packages for the email client."
+    },
+    {
+      "name": "Make",
+      "domain": "make.com",
+      "api_docs_url": "https://developers.make.com/api-documentation",
+      "capabilities": "REST API for workflow automation with visual integration builder, HTTP module for raw API requests, and authentication handling."
+    },
+    {
+      "name": "Mastodon",
+      "domain": "joinmastodon.org",
+      "api_docs_url": "https://docs.joinmastodon.org/api/",
+      "capabilities": "REST API using HTTP and JSON for reading and writing data with GET, POST, PUT, PATCH, and DELETE methods."
+    },
+    {
+      "name": "Mem",
+      "domain": "mem.ai",
+      "api_docs_url": "https://docs.mem.ai/",
+      "capabilities": "REST API with Mem It endpoint for intelligent processing, organizing, and structuring notes, articles, and transcripts."
+    },
+    {
+      "name": "Mercury",
+      "domain": "mercury.com",
+      "api_docs_url": "https://mercury.com/api",
+      "capabilities": "Banking API for account details, transaction history, recipients, ACH payments, invoicing, and accounting integrations."
+    },
+    {
+      "name": "MessageBird",
+      "domain": "messagebird.com",
+      "api_docs_url": "https://developers.messagebird.com/",
+      "capabilities": "Communications API for SMS, voice, chat apps, email, and omnichannel messaging with flow builder."
+    },
+    {
+      "name": "Meta Graph",
+      "domain": "facebook.com",
+      "api_docs_url": "https://developers.facebook.com/docs/graph-api/",
+      "capabilities": "HTTP-based API for reading and writing to Facebook social graph, posting stories, managing ads, and uploading photos."
+    },
+    {
+      "name": "Microsoft OneNote",
+      "domain": "microsoft.com",
+      "api_docs_url": "https://learn.microsoft.com/en-us/graph/integrate-with-onenote",
+      "capabilities": "Microsoft Graph API for accessing notebooks, sections, and pages, creating and updating content with HTML, images, and files."
+    },
+    {
+      "name": "Milvus",
+      "domain": "milvus.io",
+      "api_docs_url": "https://milvus.io/docs/",
+      "capabilities": "Open-source vector database API for similarity search, collections, partitions, and hybrid queries."
+    },
+    {
+      "name": "Miro",
+      "domain": "miro.com",
+      "api_docs_url": "https://developers.miro.com/docs/rest-api-reference-guide",
+      "capabilities": "REST API for boards, members, items (cards, text) with CRUD operations, connectors, and experimental mind map/flowchart features."
+    },
+    {
+      "name": "Mistral AI",
+      "domain": "mistral.ai",
+      "api_docs_url": "https://docs.mistral.ai/api",
+      "capabilities": "LLM API for chat completions, code generation, embeddings, fine-tuning, multimodal tasks with streaming and function calling."
+    },
+    {
+      "name": "Mixpanel",
+      "domain": "mixpanel.com",
+      "api_docs_url": "https://developer.mixpanel.com/docs",
+      "capabilities": "Mixpanel is a product analytics platform with real-time insights, funnel analysis, cohort analysis, user segmentation, event-based tracking, and A/B testing integrations."
+    },
+    {
+      "name": "Modal",
+      "domain": "modal.com",
+      "api_docs_url": "https://modal.com/docs/reference",
+      "capabilities": "Python package API for distributed serverless applications with Function and Cls primitives for autoscaling containers."
+    },
+    {
+      "name": "Monday.com",
+      "domain": "monday.com",
+      "api_docs_url": "https://developer.monday.com/api-reference/",
+      "capabilities": "GraphQL API for workflow interaction, process automation, and read/write operations on boards, items, columns, and users."
+    },
+    {
+      "name": "MongoDB Atlas",
+      "domain": "mongodb.com",
+      "api_docs_url": "https://www.mongodb.com/docs/atlas/api/",
+      "capabilities": "Atlas Administration API for programmatic management of databases, projects, users, and clusters (not data access)."
+    },
+    {
+      "name": "Moov",
+      "domain": "moov.io",
+      "api_docs_url": "https://docs.moov.io/api/",
+      "capabilities": "Payment infrastructure API for cards, ACH, accounts, transfers, and multi-currency support through single integration."
+    },
+    {
+      "name": "Motion",
+      "domain": "usemotion.com",
+      "api_docs_url": "https://docs.usemotion.com/docs/motion-api",
+      "capabilities": "Task and calendar management API for creating tasks, scheduling, and project organization."
+    },
+    {
+      "name": "Mux",
+      "domain": "mux.com",
+      "api_docs_url": "https://docs.mux.com/api-reference/video",
+      "capabilities": "Video API platform for ingestion, encoding, optimization, and delivery for live and on-demand streaming. Features include thumbnail/GIF generation, clips, storyboards, auto captions, transcription, AI moderation, and audio handling."
+    },
+    {
+      "name": "n8n",
+      "domain": "n8n.io",
+      "api_docs_url": "https://docs.n8n.io/api/",
+      "capabilities": "Workflow automation platform with REST API for programmatic task management including authentication, pagination, API playground, and endpoint reference."
+    },
+    {
+      "name": "Neon",
+      "domain": "neon.com",
+      "api_docs_url": "https://neon.com/docs/reference/api-reference",
+      "capabilities": "Serverless Postgres platform with APIs for project management, fleet scaling, quota controls, and Data API for querying over HTTP with browser/edge compatibility."
+    },
+    {
+      "name": "Netlify",
+      "domain": "netlify.com",
+      "api_docs_url": "https://open-api.netlify.com/",
+      "capabilities": "REST API for managing atomic deploys, form submissions, JavaScript snippet injection, DNS management, and workflow automation."
+    },
+    {
+      "name": "New Relic",
+      "domain": "newrelic.com",
+      "api_docs_url": "https://docs.newrelic.com/docs/apis/intro-apis/introduction-new-relic-apis/",
+      "capabilities": "Observability APIs including REST API, NerdGraph (GraphQL), and ingest APIs for metrics, events, logs, and traces. Supports data sending, retrieval, and configuration."
+    },
+    {
+      "name": "Notion",
+      "domain": "notion.com",
+      "api_docs_url": "https://developers.notion.com/",
+      "capabilities": "Notion is an all-in-one workspace for notes, tasks, wikis, and databases. The API allows developers to connect other software, automate workflows, and programmatically interact with databases and pages."
+    },
+    {
+      "name": "Novu",
+      "domain": "novu.co",
+      "api_docs_url": "https://docs.novu.co/api-reference/overview",
+      "capabilities": "Open-source notification infrastructure API for multi-channel notifications (in-app, email, push, SMS, chat) with workflow customization and automation."
+    },
+    {
+      "name": "Obsidian",
+      "domain": "obsidian.md",
+      "api_docs_url": "https://docs.obsidian.md/",
+      "capabilities": "Plugin API for Vault, Workspace, MetadataCache access with ribbon icons, status bar, commands, settings, and views."
+    },
+    {
+      "name": "Okta",
+      "domain": "okta.com",
+      "api_docs_url": "https://developer.okta.com/docs/api/",
+      "capabilities": "Identity platform API for user authentication, sign-in, and programmatic management of users, apps, sessions, policies, and device identities."
+    },
+    {
+      "name": "OmniFocus",
+      "domain": "omnigroup.com",
+      "api_docs_url": "https://omni-automation.com/omnifocus/",
+      "capabilities": "Omni Automation JavaScript API for tasks, projects, tags, perspectives, and custom actions."
+    },
+    {
+      "name": "OneDrive",
+      "domain": "microsoft.com",
+      "api_docs_url": "https://learn.microsoft.com/en-us/graph/onedrive-concept-overview",
+      "capabilities": "Microsoft Graph API for files hub access, real-time coauthoring, rich thumbnails, video streaming, webhooks, and working with Excel data."
+    },
+    {
+      "name": "OpenAI",
+      "domain": "openai.com",
+      "api_docs_url": "https://platform.openai.com/docs/api-reference/introduction",
+      "capabilities": "OpenAI's platform provides APIs for text generation, code generation, image and vision processing, audio and speech, function calling, and realtime interactions. Supports building agents with tools."
+    },
+    {
+      "name": "Outlook",
+      "domain": "microsoft.com",
+      "api_docs_url": "https://learn.microsoft.com/en-us/graph/outlook-mail-concept-overview",
+      "capabilities": "Microsoft Graph API for mail, calendar, contacts, and tasks with rich querying and filtering."
+    },
+    {
+      "name": "Paddle",
+      "domain": "paddle.com",
+      "api_docs_url": "https://developer.paddle.com/api-reference/overview",
+      "capabilities": "REST API for subscription billing, payment management, and integration with CRM, ERP, and accounting solutions."
+    },
+    {
+      "name": "PayPal",
+      "domain": "paypal.com",
+      "api_docs_url": "https://developer.paypal.com/docs/api/payments/v2/",
+      "capabilities": "REST API with OAuth 2.0 for authorizing, capturing, refunding payments across multiple methods and currencies."
+    },
+    {
+      "name": "Perplexity",
+      "domain": "perplexity.ai",
+      "api_docs_url": "https://docs.perplexity.ai/home",
+      "capabilities": "AI search API providing real-time ranked web search results with domain filtering, multi-query search, content extraction, and structured responses."
+    },
+    {
+      "name": "Pexels",
+      "domain": "pexels.com",
+      "api_docs_url": "https://www.pexels.com/api/documentation/",
+      "capabilities": "REST JSON API for programmatic access to photo and video library with search, curated content, and collections."
+    },
+    {
+      "name": "Pinboard",
+      "domain": "pinboard.in",
+      "api_docs_url": "https://pinboard.in/api/",
+      "capabilities": "Bookmarking API for posts, tags, notes, and user data with simple REST interface."
+    },
+    {
+      "name": "Pinecone",
+      "domain": "pinecone.io",
+      "api_docs_url": "https://docs.pinecone.io/reference/api/introduction",
+      "capabilities": "Vector database APIs for storing/querying records and generating embeddings with reranking via Inference API."
+    },
+    {
+      "name": "Pinterest",
+      "domain": "pinterest.com",
+      "api_docs_url": "https://developers.pinterest.com/docs/api/v5/",
+      "capabilities": "API for conversion tracking, content management, ad management, targeting, shopping catalogs, and analytics."
+    },
+    {
+      "name": "Pipedream",
+      "domain": "pipedream.com",
+      "api_docs_url": "https://pipedream.com/docs/rest-api/",
+      "capabilities": "Workflow platform REST API for managing workflows, sources, and connecting to 2000+ apps."
+    },
+    {
+      "name": "Pipedrive",
+      "domain": "pipedrive.com",
+      "api_docs_url": "https://developers.pipedrive.com/docs/api/v1",
+      "capabilities": "RESTful CRM API for integration, data sharing, real-time webhooks, and custom functionality via app extensions."
+    },
+    {
+      "name": "Pirsch",
+      "domain": "pirsch.io",
+      "api_docs_url": "https://docs.pirsch.io/api-sdks/api/",
+      "capabilities": "Privacy-friendly analytics API for page views, events, and statistics retrieval."
+    },
+    {
+      "name": "Plaid",
+      "domain": "plaid.com",
+      "api_docs_url": "https://plaid.com/docs/api/",
+      "capabilities": "Financial services API for accessing consumer-permissioned data including accounts, balances, transactions, payments, and identity verification."
+    },
+    {
+      "name": "PlanetScale",
+      "domain": "planetscale.com",
+      "api_docs_url": "https://planetscale.com/docs/api/reference/getting-started-with-planetscale-api",
+      "capabilities": "PlanetScale is a relational database platform offering Vitess and PostgreSQL clusters. Its API enables programmatic management of databases, including schema information, branches, and deploy requests."
+    },
+    {
+      "name": "Plausible",
+      "domain": "plausible.io",
+      "api_docs_url": "https://plausible.io/docs/stats-api",
+      "capabilities": "Privacy-focused analytics API for aggregate stats, time series, and custom event tracking."
+    },
+    {
+      "name": "Playwright",
+      "domain": "playwright.dev",
+      "api_docs_url": "https://playwright.dev/docs/api/class-playwright",
+      "capabilities": "Browser automation API for testing with cross-browser support, selectors, and screenshots."
+    },
+    {
+      "name": "Pocket",
+      "domain": "getpocket.com",
+      "api_docs_url": "https://getpocket.com/developer/",
+      "capabilities": "API for adding, retrieving, modifying, deleting items, tags management, favorites, filtering, and OAuth 2.0 authentication."
+    },
+    {
+      "name": "PostHog",
+      "domain": "posthog.com",
+      "api_docs_url": "https://posthog.com/docs/api",
+      "capabilities": "PostHog provides product analytics, including autocapture for tracking clicks and pageviews, the ability to define events retroactively, and integration with session recordings."
+    },
+    {
+      "name": "Postmark",
+      "domain": "postmarkapp.com",
+      "api_docs_url": "https://postmarkapp.com/developer/api",
+      "capabilities": "Email delivery API for single and batch emails (up to 500), domain/template management, statistics, inbound processing, and open/link tracking."
+    },
+    {
+      "name": "Printful",
+      "domain": "printful.com",
+      "api_docs_url": "https://developers.printful.com/docs/",
+      "capabilities": "Print-on-demand API for products, orders, shipping rates, and warehouse management."
+    },
+    {
+      "name": "Pusher",
+      "domain": "pusher.com",
+      "api_docs_url": "https://pusher.com/docs",
+      "capabilities": "Real-time pub/sub messaging API for triggering events on channels, managing channels, and querying application state."
+    },
+    {
+      "name": "Qdrant",
+      "domain": "qdrant.tech",
+      "api_docs_url": "https://api.qdrant.tech/api-reference",
+      "capabilities": "Vector database REST/gRPC APIs for storing, searching, and managing vectors with payloads, collections, and snapshots."
+    },
+    {
+      "name": "QStash",
+      "domain": "upstash.com",
+      "api_docs_url": "https://upstash.com/docs/qstash/api/",
+      "capabilities": "Serverless messaging API for scheduling, retrying, and routing HTTP requests with dead letter queues."
+    },
+    {
+      "name": "QuickBooks",
+      "domain": "intuit.com",
+      "api_docs_url": "https://developer.intuit.com/app/developer/qbo/docs/learn/rest-api-features",
+      "capabilities": "REST API for creating, updating, reading, and deleting accounting resources with JSON format."
+    },
+    {
+      "name": "Railway",
+      "domain": "railway.com",
+      "api_docs_url": "https://docs.railway.com/reference/public-api",
+      "capabilities": "The Railway public API is built with GraphQL and allows integration into CI/CD pipelines and other workflows. Supports Team Tokens, Account Tokens, and Project Tokens."
+    },
+    {
+      "name": "Raindrop.io",
+      "domain": "raindrop.io",
+      "api_docs_url": "https://developer.raindrop.io/",
+      "capabilities": "Bookmark manager API for collections, raindrops, tags, highlights, and backups."
+    },
+    {
+      "name": "Ramp",
+      "domain": "ramp.com",
+      "api_docs_url": "https://docs.ramp.com/developer-api/v1/introduction",
+      "capabilities": "Expense management API for virtual cards, ERP integration, transactions, and approval/payment flow customization."
+    },
+    {
+      "name": "Readwise",
+      "domain": "readwise.io",
+      "api_docs_url": "https://readwise.io/reader_api",
+      "capabilities": "Reader API for saving, fetching, updating, and deleting documents with tag management."
+    },
+    {
+      "name": "Readwise Reader",
+      "domain": "readwise.io",
+      "api_docs_url": "https://readwise.io/reader_api",
+      "capabilities": "Read-later app API for documents, highlights, and article management."
+    },
+    {
+      "name": "Reclaim",
+      "domain": "reclaim.ai",
+      "api_docs_url": "https://help.reclaim.ai",
+      "capabilities": "AI-powered scheduling API for meetings, tasks, habits, and calendar optimization with webhook support for scheduling link events."
+    },
+    {
+      "name": "Reddit",
+      "domain": "reddit.com",
+      "api_docs_url": "https://www.reddit.com/dev/api/",
+      "capabilities": "REST API for reading/writing posts, comments, upvotes, data retrieval from communities and user profiles, and moderation tools."
+    },
+    {
+      "name": "Redis Cloud",
+      "domain": "redis.com",
+      "api_docs_url": "https://redis.io/docs/latest/operate/rc/api/",
+      "capabilities": "Cloud database management API for subscriptions, databases, and access control."
+    },
+    {
+      "name": "Reflect",
+      "domain": "reflect.app",
+      "api_docs_url": "https://reflect.academy/api",
+      "capabilities": "Notes API for appending data to notes, retrieving bookmarked links, and keeping notes accessible."
+    },
+    {
+      "name": "Remember The Milk",
+      "domain": "rememberthemilk.com",
+      "api_docs_url": "https://www.rememberthemilk.com/services/api/",
+      "capabilities": "Task management API for creating, reading, updating, and deleting tasks with support for contacts, groups, lists, and multiple permission levels."
+    },
+    {
+      "name": "Render",
+      "domain": "render.com",
+      "api_docs_url": "https://api-docs.render.com",
+      "capabilities": "REST API for managing services, datastores, deploys, environments, blueprints, metrics, logs, domains, jobs, and audit logs."
+    },
+    {
+      "name": "Replicate",
+      "domain": "replicate.com",
+      "api_docs_url": "https://replicate.com/docs",
+      "capabilities": "Cloud API for running AI models without infrastructure management. Supports published, fine-tuned, and custom models for image, audio, and text tasks."
+    },
+    {
+      "name": "RescueTime",
+      "domain": "rescuetime.com",
+      "api_docs_url": "https://www.rescuetime.com/rtx/developers",
+      "capabilities": "Time tracking API for analytic data, daily summaries, alerts, highlights, focus sessions, and offline time with API key or OAuth2 authentication."
+    },
+    {
+      "name": "Resend",
+      "domain": "resend.com",
+      "api_docs_url": "https://resend.com/docs/api-reference/introduction",
+      "capabilities": "Resend is an email API for developers that enables delivery of transactional and marketing emails at scale. Provides SDKs for multiple languages, webhooks, attachments, scheduling, and batch processing."
+    },
+    {
+      "name": "Retool",
+      "domain": "retool.com",
+      "api_docs_url": "https://docs.retool.com/api/",
+      "capabilities": "REST API for programmatic organization management including users and resource configurations."
+    },
+    {
+      "name": "Roam Research",
+      "domain": "roamresearch.com",
+      "api_docs_url": "https://roamresearch.com/#/app/developer-documentation/page/tIaOPdXCj",
+      "capabilities": "API for blocks, pages, queries with createBlock, moveBlock, updateBlock, deleteBlock, createPage, updatePage, deletePage."
+    },
+    {
+      "name": "RudderStack",
+      "domain": "rudderstack.com",
+      "api_docs_url": "https://www.rudderstack.com/docs/api/http-api/",
+      "capabilities": "Customer data platform HTTP API for identify, track, page, screen, group, alias, and batch events with Segment compatibility."
+    },
+    {
+      "name": "Runway",
+      "domain": "runwayml.com",
+      "api_docs_url": "https://docs.dev.runwayml.com/",
+      "capabilities": "AI video generation API for image-to-video, text-to-video, video-to-video, and video upscaling with Gen-4 models."
+    },
+    {
+      "name": "Salesforce",
+      "domain": "salesforce.com",
+      "api_docs_url": "https://developer.salesforce.com/docs/apis",
+      "capabilities": "CRM APIs for accessing data without UI, enabling operations, integration, and data manipulation through HTTP requests."
+    },
+    {
+      "name": "Segment",
+      "domain": "segment.com",
+      "api_docs_url": "https://docs.segmentapis.com/",
+      "capabilities": "Public API for workspace management with CRUD operations on Sources, Destinations, Warehouses, and Tracking Plans."
+    },
+    {
+      "name": "SendGrid",
+      "domain": "sendgrid.com",
+      "api_docs_url": "https://www.twilio.com/docs/sendgrid/api-reference",
+      "capabilities": "Email API for sending at scale with RESTful APIs/SMTP, dynamic templates, real-time analytics, and security features."
+    },
+    {
+      "name": "Sentry",
+      "domain": "sentry.io",
+      "api_docs_url": "https://docs.sentry.io/",
+      "capabilities": "Sentry is a developer-first application monitoring service with real-time error tracking, performance monitoring, session replay, log management, uptime monitoring, and release tracking."
+    },
+    {
+      "name": "SerpAPI",
+      "domain": "serpapi.com",
+      "api_docs_url": "https://serpapi.com/search-api",
+      "capabilities": "Google search scraping API with global IPs, browser cluster, CAPTCHA solving, and structured JSON results."
+    },
+    {
+      "name": "Serper",
+      "domain": "serper.dev",
+      "api_docs_url": "https://serper.dev/",
+      "capabilities": "Fast Google Search API for web, images, news, places, videos, shopping, scholar, patents, and autocomplete."
+    },
+    {
+      "name": "Shippo",
+      "domain": "goshippo.com",
+      "api_docs_url": "https://docs.goshippo.com/",
+      "capabilities": "Shipping API for rate comparison across 40+ carriers, label creation, tracking, address verification, and returns handling."
+    },
+    {
+      "name": "Shopify",
+      "domain": "shopify.com",
+      "api_docs_url": "https://shopify.dev/docs",
+      "capabilities": "Shopify is a commerce platform with website building, product sourcing, secure checkout, automated shipping, multi-channel selling, and developer tools for building apps and custom storefronts."
+    },
+    {
+      "name": "Shortcut",
+      "domain": "shortcut.com",
+      "api_docs_url": "https://developer.shortcut.com/api/rest/v3",
+      "capabilities": "REST API for workspace data control, custom integrations, and workflow automation."
+    },
+    {
+      "name": "Simple Analytics",
+      "domain": "simpleanalytics.com",
+      "api_docs_url": "https://docs.simpleanalytics.com/api",
+      "capabilities": "Privacy-first analytics with Stats API for aggregated data, Export API for raw data, and Admin API for user/website management."
+    },
+    {
+      "name": "Simplenote",
+      "domain": "simplenote.com",
+      "api_docs_url": "https://kendersec.github.io/SimpleNote/SimpleNote-API-v2.1.3.pdf",
+      "capabilities": "Notes API for creating, retrieving, updating, deleting notes and tags with sync support and token-based authentication."
+    },
+    {
+      "name": "SingleStore",
+      "domain": "singlestore.com",
+      "api_docs_url": "https://docs.singlestore.com/cloud/reference/data-api/",
+      "capabilities": "Data API for SQL over HTTP and Management API for workspaces, connections, teams, jobs, files, secrets, and billing."
+    },
+    {
+      "name": "Slack",
+      "domain": "slack.com",
+      "api_docs_url": "https://docs.slack.dev/",
+      "capabilities": "Slack is a team collaboration platform with direct messages, channels, Slack Connect, project management features, and extensive apps and integrations with over 2,600 services."
+    },
+    {
+      "name": "Snyk",
+      "domain": "snyk.io",
+      "api_docs_url": "https://apidocs.snyk.io/",
+      "capabilities": "Security platform API for programmatic integration, workflow automation, and API/web application testing (DAST)."
+    },
+    {
+      "name": "Split",
+      "domain": "split.io",
+      "api_docs_url": "https://docs.split.io/reference/introduction",
+      "capabilities": "Feature flags API for pushing and retrieving data, building custom integrations, and extending the Split platform."
+    },
+    {
+      "name": "Spotify",
+      "domain": "spotify.com",
+      "api_docs_url": "https://developer.spotify.com/documentation/web-api",
+      "capabilities": "Web API for retrieving metadata, managing playlists, controlling playback, searching content, and accessing artist/album/show data."
+    },
+    {
+      "name": "Square",
+      "domain": "squareup.com",
+      "api_docs_url": "https://developer.squareup.com/docs",
+      "capabilities": "Commerce APIs for managing payments, orders, inventory, customer data, and money movement across online/in-person/in-app channels."
+    },
+    {
+      "name": "Stability AI",
+      "domain": "stability.ai",
+      "api_docs_url": "https://platform.stability.ai/docs/api-reference",
+      "capabilities": "Image generation API with text-to-image (Stable Image Ultra/Core, SD 3.5), upscaling, inpainting, outpainting, background removal, and style transfer."
+    },
+    {
+      "name": "Standard Notes",
+      "domain": "standardnotes.com",
+      "api_docs_url": "https://docs.standardnotes.com",
+      "capabilities": "Encrypted notes platform with API for building applications, loading/saving notes, and developing extensions via Standard File API."
+    },
+    {
+      "name": "Statsig",
+      "domain": "statsig.com",
+      "api_docs_url": "https://docs.statsig.com/http-api/overview",
+      "capabilities": "Feature flags HTTP API for real-time feature control, gradual rollouts, dynamic configuration, and personalized experiences."
+    },
+    {
+      "name": "Streaks",
+      "domain": "streaksapi.com",
+      "api_docs_url": "https://www.streaksapi.com/docs",
+      "capabilities": "Streak tracking API for fitness apps, habit trackers, and educational tools with event creation and streak calculation."
+    },
+    {
+      "name": "Stream",
+      "domain": "getstream.io",
+      "api_docs_url": "https://getstream.io/chat/docs/",
+      "capabilities": "Chat and Activity Feeds APIs with SDKs for real-time chat experiences, social feeds, and customizable UI components."
+    },
+    {
+      "name": "Stripe",
+      "domain": "stripe.com",
+      "api_docs_url": "https://docs.stripe.com/api",
+      "capabilities": "Stripe provides a unified set of REST APIs for accepting payments, managing billing and subscriptions, sending payouts, and building financial workflows. Supports multiple payment methods."
+    },
+    {
+      "name": "Stytch",
+      "domain": "stytch.com",
+      "api_docs_url": "https://stytch.com/docs/api",
+      "capabilities": "REST authentication API with magic links, passwords, OTP, OAuth, and B2B SaaS authentication support."
+    },
+    {
+      "name": "Sunsama",
+      "domain": "sunsama.com",
+      "api_docs_url": "https://help.sunsama.com",
+      "capabilities": "Task management API for creating, reading, updating, deleting tasks with user info access and project stream management."
+    },
+    {
+      "name": "Supabase",
+      "domain": "supabase.com",
+      "api_docs_url": "https://supabase.com/docs/guides/api",
+      "capabilities": "Supabase is a Postgres Development Platform offering database, Authentication, instant APIs, Realtime, Functions, Storage, and Vector embeddings. Open-source with RESTful API."
+    },
+    {
+      "name": "Tana",
+      "domain": "tana.inc",
+      "api_docs_url": "https://tana.inc/docs/input-api",
+      "capabilities": "Input API for creating nodes, fields, supertags, editing nodes, and uploading files to workspace."
+    },
+    {
+      "name": "Tavily",
+      "domain": "tavily.com",
+      "api_docs_url": "https://docs.tavily.com",
+      "capabilities": "AI search API optimized for LLMs with real-time search, extraction, crawling, mapping, and research endpoints."
+    },
+    {
+      "name": "Telegram",
+      "domain": "telegram.org",
+      "api_docs_url": "https://core.telegram.org/bots/api",
+      "capabilities": "Bot API for message-based interfaces, TDLib for custom clients, and Gateway API for verification codes."
+    },
+    {
+      "name": "Temporal",
+      "domain": "temporal.io",
+      "api_docs_url": "https://api-docs.temporal.io/",
+      "capabilities": "WorkflowService API for starting, querying, signaling, resetting, terminating, and listing workflow executions and activity tasks."
+    },
+    {
+      "name": "Things 3",
+      "domain": "culturedcode.com",
+      "api_docs_url": "https://culturedcode.com/things/support/articles/2803573/",
+      "capabilities": "URL scheme for creating to-dos and projects via JSON commands, with Apple Shortcuts and AppleScript support."
+    },
+    {
+      "name": "TickTick",
+      "domain": "ticktick.com",
+      "api_docs_url": "https://developer.ticktick.com",
+      "capabilities": "API for CRUD operations on tasks, projects, tags, and project folders with profile information access."
+    },
+    {
+      "name": "Tigris",
+      "domain": "tigrisdata.com",
+      "api_docs_url": "https://www.tigrisdata.com/docs/api/s3/",
+      "capabilities": "S3-compatible object storage API with native SDKs for client uploads and bucket management features."
+    },
+    {
+      "name": "TikTok",
+      "domain": "tiktok.com",
+      "api_docs_url": "https://developers.tiktok.com/",
+      "capabilities": "Display, Content Posting, Login Kit, Share Kit, Embed, Webhooks, Research Tools, and Business APIs for marketing."
+    },
+    {
+      "name": "Timing",
+      "domain": "timingapp.com",
+      "api_docs_url": "https://web.timingapp.com/docs/",
+      "capabilities": "Time tracking Web API for starting/stopping timers, exporting data, and connecting to billing and project management systems."
+    },
+    {
+      "name": "Todoist",
+      "domain": "todoist.com",
+      "api_docs_url": "https://developer.todoist.com/api/v1/",
+      "capabilities": "Task management API for creating, updating, deleting, completing tasks, managing projects/labels/filters, comments, reminders, and webhooks."
+    },
+    {
+      "name": "Together AI",
+      "domain": "together.ai",
+      "api_docs_url": "https://docs.together.ai/reference/inference",
+      "capabilities": "Scalable inference API for 200+ open-source models with OpenAI compatibility, streaming, function calling, JSON mode, and batch processing."
+    },
+    {
+      "name": "Toggl Track",
+      "domain": "track.toggl.com",
+      "api_docs_url": "https://developers.track.toggl.com/docs/",
+      "capabilities": "REST API v9 for time entries, projects, clients, tags, users, workspaces, Reports API, and Webhooks API."
+    },
+    {
+      "name": "Trello",
+      "domain": "trello.com",
+      "api_docs_url": "https://developer.atlassian.com/cloud/trello/rest/",
+      "capabilities": "REST API for interacting with boards, cards, lists, automating tasks, and creating custom Power-Ups."
+    },
+    {
+      "name": "Trigger.dev",
+      "domain": "trigger.dev",
+      "api_docs_url": "https://trigger.dev/docs/management/overview",
+      "capabilities": "Background jobs API for triggering tasks by identifier with JSON payloads, queuing, retries, and observability."
+    },
+    {
+      "name": "Turso",
+      "domain": "turso.tech",
+      "api_docs_url": "https://docs.turso.tech/api-reference/introduction",
+      "capabilities": "Edge database REST API for managing databases, branching, point-in-time recovery, and SQL operations via libSQL protocol."
+    },
+    {
+      "name": "Twilio",
+      "domain": "twilio.com",
+      "api_docs_url": "https://www.twilio.com/docs",
+      "capabilities": "Twilio offers CPaaS allowing businesses to embed communication channels via APIs. Supports SMS, RCS, WhatsApp, MMS, voice and video calls, emails, and user verification."
+    },
+    {
+      "name": "Twitch",
+      "domain": "twitch.tv",
+      "api_docs_url": "https://dev.twitch.tv/docs/api/",
+      "capabilities": "API for managing commercials, clips, analytics, streams, subscriptions, and real-time events via EventSub with OAuth 2.0."
+    },
+    {
+      "name": "Ulysses",
+      "domain": "ulysses.app",
+      "api_docs_url": "https://ulysses.app/kb/x-callback-url/",
+      "capabilities": "X-callback URL scheme for creating sheets/groups, inserting text, managing attachments/keywords, and retrieving content."
+    },
+    {
+      "name": "Unit",
+      "domain": "unit.co",
+      "api_docs_url": "https://unit.co/docs/api/",
+      "capabilities": "Banking infrastructure API for creating financial products including accounts, cards, payments, and customer data management."
+    },
+    {
+      "name": "Unsplash",
+      "domain": "unsplash.com",
+      "api_docs_url": "https://unsplash.com/documentation",
+      "capabilities": "Photo API for searching, retrieving random/new photos, collections, topics, user profiles, and dynamic image manipulation."
+    },
+    {
+      "name": "UpNote",
+      "domain": "getupnote.com",
+      "api_docs_url": "https://help.getupnote.com/resources/x-callback-url-endpoints",
+      "capabilities": "X-callback URL API for creating and opening notes/notebooks, viewing by tag or filter, and dynamic views."
+    },
+    {
+      "name": "Upstash",
+      "domain": "upstash.com",
+      "api_docs_url": "https://upstash.com/docs/redis/features/restapi",
+      "capabilities": "Serverless data REST API supporting Redis commands for strings, hashes, lists, sets, sorted sets, JSON, and streams over HTTP."
+    },
+    {
+      "name": "Vanta",
+      "domain": "vanta.com",
+      "api_docs_url": "https://developer.vanta.com/",
+      "capabilities": "Security compliance REST API for automating evidence collection, user/resource management, data extraction, and building integrations."
+    },
+    {
+      "name": "Vercel",
+      "domain": "vercel.com",
+      "api_docs_url": "https://docs.vercel.com/docs/rest-api/reference/welcome",
+      "capabilities": "Vercel is the AI Cloud for building and deploying modern web applications. Offers global delivery network, rolling releases, instant rollback, and observability suite."
+    },
+    {
+      "name": "Vimeo",
+      "domain": "vimeo.com",
+      "api_docs_url": "https://developer.vimeo.com/",
+      "capabilities": "Video API for flexible, high-quality video integration with custom applications."
+    },
+    {
+      "name": "Vonage",
+      "domain": "vonage.com",
+      "api_docs_url": "https://developer.vonage.com/",
+      "capabilities": "Communications APIs for voice, video, messaging (SMS, RCS, WhatsApp), AI-powered interactions, and authentication/fraud protection."
+    },
+    {
+      "name": "Wasabi",
+      "domain": "wasabi.com",
+      "api_docs_url": "https://docs.wasabi.com/apidocs/api-guides",
+      "capabilities": "S3-compatible cloud storage API with 100% AWS S3 and IAM compatibility, supporting PUT, GET, LIST, and COPY operations."
+    },
+    {
+      "name": "Weaviate",
+      "domain": "weaviate.io",
+      "api_docs_url": "https://docs.weaviate.io/weaviate/api",
+      "capabilities": "Vector database APIs including RESTful for management, GraphQL for semantic/hybrid search, and gRPC for high-performance operations."
+    },
+    {
+      "name": "Webflow",
+      "domain": "webflow.com",
+      "api_docs_url": "https://developers.webflow.com/",
+      "capabilities": "Data, Designer, and Browser APIs for creating, managing, and automating content, design, and user workflows."
+    },
+    {
+      "name": "Weights & Biases",
+      "domain": "wandb.ai",
+      "api_docs_url": "https://docs.wandb.ai/models/ref/python/public-api/api",
+      "capabilities": "Public API for querying, exporting, and updating ML experiment data including runs, artifacts, and sweeps."
+    },
+    {
+      "name": "Wise",
+      "domain": "wise.com",
+      "api_docs_url": "https://docs.wise.com/",
+      "capabilities": "Platform API for cross-border payments, multi-currency accounts, exchange rates, transfer management, and reconciliation."
+    },
+    {
+      "name": "WooCommerce",
+      "domain": "woocommerce.com",
+      "api_docs_url": "https://developer.woocommerce.com/docs/apis/rest-api/",
+      "capabilities": "REST API for reading/writing orders, products, coupons, customers, and shipping zones."
+    },
+    {
+      "name": "WorkOS",
+      "domain": "workos.com",
+      "api_docs_url": "https://workos.com/docs/reference",
+      "capabilities": "Enterprise identity REST API for AuthKit user management, Single Sign-On, Directory Sync, and Audit Logs."
+    },
+    {
+      "name": "X (Twitter)",
+      "domain": "x.com",
+      "api_docs_url": "https://docs.x.com/x-api/introduction",
+      "capabilities": "API for posts, users, Spaces, DMs, Lists, Trends with real-time streaming, full-archive search, and engagement metrics."
+    },
+    {
+      "name": "Xata",
+      "domain": "xata.io",
+      "api_docs_url": "https://xata.io/documentation",
+      "capabilities": "Serverless database REST API for data management, file handling, environments, fast search, and AI vector embeddings."
+    },
+    {
+      "name": "Xero",
+      "domain": "xero.com",
+      "api_docs_url": "https://developer.xero.com/documentation/api/accounting/overview",
+      "capabilities": "Accounting API for managing accounts, transactions, attachments with SDKs and integration tools."
+    },
+    {
+      "name": "YouTube",
+      "domain": "youtube.com",
+      "api_docs_url": "https://developers.google.com/youtube/v3/docs",
+      "capabilities": "Data API for uploading videos, managing playlists, updating channels, searching content with OAuth/API key authentication."
+    },
+    {
+      "name": "Zapier",
+      "domain": "zapier.com",
+      "api_docs_url": "https://docs.zapier.com/platform/home",
+      "capabilities": "Zapier provides workflow automation, application integration, and AI orchestration. Connects to over 8,000 applications via APIs with Zaps, Tables, Forms, AI Agents, and Chatbots."
+    },
+    {
+      "name": "Zendesk",
+      "domain": "zendesk.com",
+      "api_docs_url": "https://developer.zendesk.com/api-reference/",
+      "capabilities": "Customer service APIs for ticketing, help center, live chat, voice, sales CRM, AI agents, messaging, and custom data."
+    },
+    {
+      "name": "Zoho CRM",
+      "domain": "zoho.com",
+      "api_docs_url": "https://www.zoho.com/crm/developer/api.html",
+      "capabilities": "CRM APIs including REST for CRUD, Bulk API for large data, Notification API for changes, Query API with COQL, and GraphQL."
+    },
+    {
+      "name": "Zotero",
+      "domain": "zotero.org",
+      "api_docs_url": "https://www.zotero.org/support/dev/web_api/v3/basics",
+      "capabilities": "Web API for library access, collections, items, and searches with JSON/Atom output, OAuth authentication, and read/write operations."
+    }
+  ],
+  "stats": {
+    "apps_with_api_docs": 200,
+    "apps_without_api_docs": 0
+  }
+}

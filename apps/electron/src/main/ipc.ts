@@ -334,6 +334,9 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
         return sessionManager.markSessionRead(sessionId)
       case 'markUnread':
         return sessionManager.markSessionUnread(sessionId)
+      case 'setActiveViewing':
+        // Track which session user is actively viewing (for unread state machine)
+        return sessionManager.setActiveViewingSession(sessionId, command.workspaceId)
       case 'setPermissionMode':
         return sessionManager.setSessionPermissionMode(sessionId, command.mode)
       case 'setThinkingLevel':

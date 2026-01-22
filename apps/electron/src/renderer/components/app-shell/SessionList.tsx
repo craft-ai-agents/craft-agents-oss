@@ -96,12 +96,12 @@ function getSessionTodoState(session: SessionMeta): TodoStateId {
 }
 
 /**
- * Check if a session has unread messages
- * Compares lastFinalMessageId with lastReadMessageId
+ * Check if a session has unread messages.
+ * Uses the explicit hasUnread flag (state machine approach) as single source of truth.
+ * This avoids race conditions from comparing two independently-updated IDs.
  */
 function hasUnreadMessages(session: SessionMeta): boolean {
-  if (!session.lastFinalMessageId) return false  // No final assistant message yet
-  return session.lastFinalMessageId !== session.lastReadMessageId
+  return session.hasUnread === true
 }
 
 /**

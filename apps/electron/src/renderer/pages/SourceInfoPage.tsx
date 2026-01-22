@@ -13,6 +13,7 @@ import { SourceAvatar } from '@/components/ui/source-avatar'
 import { SourceMenu } from '@/components/app-shell/SourceMenu'
 import { cn } from '@/lib/utils'
 import { routes, navigate } from '@/lib/navigate'
+import { useNavigation } from '@/contexts/NavigationContext'
 import { toast } from 'sonner'
 import {
   Info_Page,
@@ -167,6 +168,7 @@ function getPermissionsDescription(source: LoadedSource): string {
 }
 
 export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: SourceInfoPageProps) {
+  const { navigateToSource } = useNavigation()
   const [source, setSource] = useState<LoadedSource | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -354,20 +356,20 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
     await window.electronAPI.openFile(permissionsPath)
   }, [source])
 
-  // Handle deleting source
+  // Handle deleting source (navigates to source list, preserving current filter)
   const handleDelete = useCallback(async () => {
     if (!source) return
     try {
       await window.electronAPI.deleteSource(workspaceId, sourceSlug)
       toast.success(`Deleted source: ${source.config.name}`)
-      navigate(routes.view.sources())
+      navigateToSource() // Navigate to source list, preserving filter
       onDelete?.()
     } catch (err) {
       toast.error('Failed to delete source', {
         description: err instanceof Error ? err.message : 'Unknown error',
       })
     }
-  }, [source, workspaceId, sourceSlug, onDelete])
+  }, [source, workspaceId, sourceSlug, onDelete, navigateToSource])
 
   // Handle opening in new window
   const handleOpenInNewWindow = useCallback(() => {

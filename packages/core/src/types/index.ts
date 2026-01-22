@@ -23,6 +23,7 @@ export type {
 export type {
   MessageRole,
   ToolStatus,
+  ToolDisplayMeta,
   AttachmentType,
   MessageAttachment,
   StoredAttachment,

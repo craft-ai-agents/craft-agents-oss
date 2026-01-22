@@ -64,6 +64,7 @@ export function readSessionJsonl(sessionFile: string): StoredSession | null {
       todoState: header.todoState,
       permissionMode: header.permissionMode,
       lastReadMessageId: header.lastReadMessageId,
+      hasUnread: header.hasUnread,  // Explicit unread flag for NEW badge state machine
       enabledSourceSlugs: header.enabledSourceSlugs,
       workingDirectory: workingDir,
       sdkCwd,
@@ -111,6 +112,7 @@ export function createSessionHeader(session: StoredSession): SessionHeader {
     todoState: session.todoState,
     permissionMode: session.permissionMode,
     lastReadMessageId: session.lastReadMessageId,
+    hasUnread: session.hasUnread,  // Explicit unread flag for NEW badge state machine
     enabledSourceSlugs: session.enabledSourceSlugs,
     workingDirectory: session.workingDirectory,
     sdkCwd: session.sdkCwd,
@@ -122,6 +124,7 @@ export function createSessionHeader(session: StoredSession): SessionHeader {
     lastMessageRole: extractLastMessageRole(session.messages),
     preview: extractPreview(session.messages),
     tokenUsage: session.tokenUsage,
+    lastFinalMessageId: extractLastFinalMessageId(session.messages),
   };
 }
 
@@ -136,6 +139,21 @@ function extractLastMessageRole(messages: StoredMessage[]): SessionHeader['lastM
   const role = lastMessage.type;
   if (role === 'user' || role === 'assistant' || role === 'plan' || role === 'tool' || role === 'error') {
     return role;
+  }
+  return undefined;
+}
+
+/**
+ * Extract the ID of the last final (non-intermediate) assistant message.
+ * Used for unread detection in session list without loading all messages.
+ */
+function extractLastFinalMessageId(messages: StoredMessage[]): string | undefined {
+  // Walk backwards to find the last assistant message that isn't intermediate
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg?.type === 'assistant' && !msg.isIntermediate) {
+      return msg.id;
+    }
   }
   return undefined;
 }

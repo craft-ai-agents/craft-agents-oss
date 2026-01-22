@@ -44,7 +44,9 @@ import { setAnthropicOptionsEnv, setPathToClaudeCodeExecutable, setInterceptorPa
 import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { CraftMcpClient } from '@craft-agent/shared/mcp'
 import { type Session, type Message, type SessionEvent, type FileAttachment, type StoredAttachment, type SendMessageOptions, IPC_CHANNELS, generateMessageId } from '../shared/types'
-import { generateSessionTitle, regenerateSessionTitle, formatPathsToRelative, formatToolInputPaths, perf } from '@craft-agent/shared/utils'
+import { generateSessionTitle, regenerateSessionTitle, formatPathsToRelative, formatToolInputPaths, perf, encodeIconToDataUrl, getEmojiIcon } from '@craft-agent/shared/utils'
+import { loadWorkspaceSkills, type LoadedSkill } from '@craft-agent/shared/skills'
+import type { ToolDisplayMeta } from '@craft-agent/core/types'
 import { DEFAULT_MODEL } from '@craft-agent/shared/config'
 import { type ThinkingLevel, DEFAULT_THINKING_LEVEL } from '@craft-agent/shared/agent/thinking-levels'
 
@@ -121,6 +123,105 @@ async function buildServersFromSources(sources: LoadedSource[]) {
   return result
 }
 
+/**
+ * Resolve tool display metadata for a tool call.
+ * Returns metadata with base64-encoded icon for viewer compatibility.
+ *
+ * @param toolName - Tool name from the event (e.g., "Skill", "mcp__linear__list_issues")
+ * @param toolInput - Tool input (used for Skill tool to get skill identifier)
+ * @param workspaceRootPath - Path to workspace for loading skills/sources
+ * @param sources - Loaded sources for the workspace
+ */
+function resolveToolDisplayMeta(
+  toolName: string,
+  toolInput: Record<string, unknown> | undefined,
+  workspaceRootPath: string,
+  sources: LoadedSource[]
+): ToolDisplayMeta | undefined {
+  // Check if it's an MCP source tool (format: mcp__<sourceSlug>__<toolName>)
+  if (toolName.startsWith('mcp__')) {
+    const parts = toolName.split('__')
+    if (parts.length >= 2) {
+      const sourceSlug = parts[1]
+      const source = sources.find(s => s.config.slug === sourceSlug)
+      if (source) {
+        // Try file-based icon first, fall back to emoji icon from config
+        const iconDataUrl = source.iconPath
+          ? encodeIconToDataUrl(source.iconPath)
+          : getEmojiIcon(source.config.icon)
+        return {
+          displayName: source.config.name,
+          iconDataUrl,
+          description: source.config.tagline,
+          category: 'source' as const,
+        }
+      }
+    }
+    return undefined
+  }
+
+  // Check if it's the Skill tool
+  if (toolName === 'Skill' && toolInput) {
+    // Skill input has 'skill' param with format: "skillSlug" or "workspaceId:skillSlug"
+    const skillParam = toolInput.skill as string | undefined
+    if (skillParam) {
+      // Extract skill slug (remove workspace prefix if present)
+      const skillSlug = skillParam.includes(':') ? skillParam.split(':').pop() : skillParam
+      if (skillSlug) {
+        // Load skills and find the one being invoked
+        try {
+          const skills = loadWorkspaceSkills(workspaceRootPath)
+          const skill = skills.find(s => s.slug === skillSlug)
+          if (skill) {
+            // Try file-based icon first, fall back to emoji icon from metadata
+            const iconDataUrl = skill.iconPath
+              ? encodeIconToDataUrl(skill.iconPath)
+              : getEmojiIcon(skill.metadata.icon)
+            return {
+              displayName: skill.metadata.name,
+              iconDataUrl,
+              description: skill.metadata.description,
+              category: 'skill' as const,
+            }
+          }
+        } catch {
+          // Skills loading failed, skip
+        }
+      }
+    }
+    return undefined
+  }
+
+  // Native tool display names (no icons - UI handles these with built-in icons)
+  // This ensures toolDisplayMeta is always populated for consistent display
+  const nativeToolNames: Record<string, string> = {
+    'Read': 'Read',
+    'Write': 'Write',
+    'Edit': 'Edit',
+    'Bash': 'Terminal',
+    'Grep': 'Search',
+    'Glob': 'Find Files',
+    'Task': 'Agent',
+    'WebFetch': 'Fetch URL',
+    'WebSearch': 'Web Search',
+    'TodoWrite': 'Update Todos',
+    'NotebookEdit': 'Edit Notebook',
+    'KillShell': 'Kill Shell',
+    'TaskOutput': 'Task Output',
+  }
+
+  const nativeDisplayName = nativeToolNames[toolName]
+  if (nativeDisplayName) {
+    return {
+      displayName: nativeDisplayName,
+      category: 'native' as const,
+    }
+  }
+
+  // Unknown tool - no display metadata (will fall back to tool name in UI)
+  return undefined
+}
+
 interface ManagedSession {
   id: string
   workspace: Workspace
@@ -167,6 +268,12 @@ interface ManagedSession {
   todoState?: string
   // Read/unread tracking - ID of last message user has read
   lastReadMessageId?: string
+  /**
+   * Explicit unread flag - single source of truth for NEW badge.
+   * Set to true when assistant message completes while user is NOT viewing.
+   * Set to false when user views the session (and not processing).
+   */
+  hasUnread?: boolean
   // Per-session source selection (slugs of enabled sources)
   enabledSourceSlugs?: string[]
   // Working directory for this session (used by agent for bash commands)
@@ -184,6 +291,8 @@ interface ManagedSession {
   thinkingLevel?: ThinkingLevel
   // Role/type of the last message (for badge display without loading messages)
   lastMessageRole?: 'user' | 'assistant' | 'plan' | 'tool' | 'error'
+  // ID of the last final (non-intermediate) assistant message - pre-computed for unread detection
+  lastFinalMessageId?: string
   // Whether an async operation is ongoing (sharing, updating share, revoking, title regeneration)
   // Used for shimmer effect on session title
   isAsyncOperationOngoing?: boolean
@@ -223,6 +332,8 @@ function messageToStored(msg: Message): StoredMessage {
     toolStatus: msg.toolStatus,
     toolDuration: msg.toolDuration,
     toolIntent: msg.toolIntent,
+    toolDisplayName: msg.toolDisplayName,
+    toolDisplayMeta: msg.toolDisplayMeta,  // Includes base64 icon for viewer
     parentToolUseId: msg.parentToolUseId,
     isError: msg.isError,
     attachments: msg.attachments,
@@ -270,6 +381,8 @@ function storedToMessage(stored: StoredMessage): Message {
     toolStatus: stored.toolStatus,
     toolDuration: stored.toolDuration,
     toolIntent: stored.toolIntent,
+    toolDisplayName: stored.toolDisplayName,
+    toolDisplayMeta: stored.toolDisplayMeta,  // Includes base64 icon for viewer
     parentToolUseId: stored.parentToolUseId,
     isError: stored.isError,
     attachments: stored.attachments,
@@ -322,6 +435,12 @@ export class SessionManager {
   private pendingCredentialResolvers: Map<string, (response: import('../shared/types').CredentialResponse) => void> = new Map()
   // Promise deduplication for lazy-loading messages (prevents race conditions)
   private messageLoadingPromises: Map<string, Promise<void>> = new Map()
+  /**
+   * Track which session the user is actively viewing (per workspace).
+   * Map of workspaceId -> sessionId. Used to determine if a session should be
+   * marked as unread when assistant completes - if user is viewing it, don't mark unread.
+   */
+  private activeViewingSession: Map<string, string> = new Map()
 
   setWindowManager(wm: WindowManager): void {
     this.windowManager = wm
@@ -607,7 +726,9 @@ export class SessionManager {
             sdkSessionId: meta.sdkSessionId,
             tokenUsage: undefined,  // Loaded with messages
             todoState: meta.todoState,
-            lastReadMessageId: undefined,  // Loaded with messages
+            lastReadMessageId: meta.lastReadMessageId,  // Pre-computed for unread detection
+            lastFinalMessageId: meta.lastFinalMessageId,  // Pre-computed for unread detection
+            hasUnread: meta.hasUnread,  // Explicit unread flag for NEW badge state machine
             enabledSourceSlugs: undefined,  // Loaded with messages
             workingDirectory: meta.workingDirectory ?? wsDefaultWorkingDir,
             sdkCwd: meta.sdkCwd,
@@ -652,6 +773,8 @@ export class SessionManager {
         isFlagged: managed.isFlagged,
         permissionMode: managed.permissionMode,
         todoState: managed.todoState,
+        lastReadMessageId: managed.lastReadMessageId,  // For unread detection
+        hasUnread: managed.hasUnread,  // Explicit unread flag for NEW badge state machine
         enabledSourceSlugs: managed.enabledSourceSlugs,
         workingDirectory: managed.workingDirectory,
         sdkCwd: managed.sdkCwd,
@@ -973,6 +1096,8 @@ export class SessionManager {
         thinkingLevel: m.thinkingLevel,
         todoState: m.todoState,
         lastReadMessageId: m.lastReadMessageId,
+        lastFinalMessageId: m.lastFinalMessageId,
+        hasUnread: m.hasUnread,  // Explicit unread flag for NEW badge state machine
         workingDirectory: m.workingDirectory,
         model: m.model,
         enabledSourceSlugs: m.enabledSourceSlugs,
@@ -1009,6 +1134,8 @@ export class SessionManager {
       thinkingLevel: m.thinkingLevel,
       todoState: m.todoState,
       lastReadMessageId: m.lastReadMessageId,
+      lastFinalMessageId: m.lastFinalMessageId,
+      hasUnread: m.hasUnread,  // Explicit unread flag for NEW badge state machine
       workingDirectory: m.workingDirectory,
       model: m.model,
       sessionFolderPath: getSessionStoragePath(m.workspace.rootPath, m.id),
@@ -1054,6 +1181,7 @@ export class SessionManager {
       managed.messages = (storedSession.messages || []).map(storedToMessage)
       managed.tokenUsage = storedSession.tokenUsage
       managed.lastReadMessageId = storedSession.lastReadMessageId
+      managed.hasUnread = storedSession.hasUnread  // Explicit unread flag for NEW badge state machine
       managed.enabledSourceSlugs = storedSession.enabledSourceSlugs
       managed.sharedUrl = storedSession.sharedUrl
       managed.sharedId = storedSession.sharedId
@@ -1796,36 +1924,81 @@ export class SessionManager {
   }
 
   /**
-   * Mark a session as read by setting lastReadMessageId to the last final assistant message
-   * Called when user navigates to a session
+   * Set which session the user is actively viewing.
+   * Called when user navigates to a session. Used to determine whether to mark
+   * new messages as unread - if user is viewing, don't mark unread.
    */
-  markSessionRead(sessionId: string): void {
-    const managed = this.sessions.get(sessionId)
-    if (managed && managed.messages.length > 0) {
-      const lastFinalId = this.getLastFinalAssistantMessageId(managed.messages)
-      if (!lastFinalId) return  // No final assistant message yet
-
-      // Only update if actually changed (avoid unnecessary persistence)
-      if (managed.lastReadMessageId !== lastFinalId) {
-        managed.lastReadMessageId = lastFinalId
-        // Persist to disk
-        const workspaceRootPath = managed.workspace.rootPath
-        updateSessionMetadata(workspaceRootPath, sessionId, { lastReadMessageId: lastFinalId })
+  setActiveViewingSession(sessionId: string | null, workspaceId: string): void {
+    if (sessionId) {
+      this.activeViewingSession.set(workspaceId, sessionId)
+      // When user starts viewing a session that's not processing, clear unread
+      const managed = this.sessions.get(sessionId)
+      if (managed && !managed.isProcessing && managed.hasUnread) {
+        this.markSessionRead(sessionId)
       }
+    } else {
+      this.activeViewingSession.delete(workspaceId)
     }
   }
 
   /**
-   * Mark a session as unread by clearing the lastReadMessageId
-   * Called when user manually marks a session as unread
+   * Check if a session is currently being viewed by the user
+   */
+  private isSessionBeingViewed(sessionId: string, workspaceId: string): boolean {
+    return this.activeViewingSession.get(workspaceId) === sessionId
+  }
+
+  /**
+   * Mark a session as read by setting lastReadMessageId and clearing hasUnread.
+   * Called when user navigates to a session (and it's not processing).
+   */
+  markSessionRead(sessionId: string): void {
+    const managed = this.sessions.get(sessionId)
+    if (!managed) return
+
+    // Only mark as read if not currently processing
+    // (user is viewing but we want to wait for processing to complete)
+    if (managed.isProcessing) return
+
+    let needsPersist = false
+    const updates: { lastReadMessageId?: string; hasUnread?: boolean } = {}
+
+    // Update lastReadMessageId for legacy/manual unread functionality
+    if (managed.messages.length > 0) {
+      const lastFinalId = this.getLastFinalAssistantMessageId(managed.messages)
+      if (lastFinalId && managed.lastReadMessageId !== lastFinalId) {
+        managed.lastReadMessageId = lastFinalId
+        updates.lastReadMessageId = lastFinalId
+        needsPersist = true
+      }
+    }
+
+    // Clear hasUnread flag (primary source of truth for NEW badge)
+    if (managed.hasUnread) {
+      managed.hasUnread = false
+      updates.hasUnread = false
+      needsPersist = true
+    }
+
+    // Persist changes
+    if (needsPersist) {
+      const workspaceRootPath = managed.workspace.rootPath
+      updateSessionMetadata(workspaceRootPath, sessionId, updates)
+    }
+  }
+
+  /**
+   * Mark a session as unread by setting hasUnread flag.
+   * Called when user manually marks a session as unread via context menu.
    */
   markSessionUnread(sessionId: string): void {
     const managed = this.sessions.get(sessionId)
     if (managed) {
+      managed.hasUnread = true
       managed.lastReadMessageId = undefined
-      // Persist to disk (undefined will clear the field)
+      // Persist to disk
       const workspaceRootPath = managed.workspace.rootPath
-      updateSessionMetadata(workspaceRootPath, sessionId, { lastReadMessageId: undefined })
+      updateSessionMetadata(workspaceRootPath, sessionId, { hasUnread: true, lastReadMessageId: undefined })
     }
   }
 
@@ -2383,16 +2556,41 @@ export class SessionManager {
     managed.toolToParentMap.clear()
     managed.pendingTextParent = undefined
 
-    // 2. Check queue and process or complete
+    // 2. Handle unread state based on whether user is viewing this session
+    //    This is the explicit state machine for NEW badge:
+    //    - If user is viewing: mark as read (they saw it complete)
+    //    - If user is NOT viewing: mark as unread (they have new content)
+    const isViewing = this.isSessionBeingViewed(sessionId, managed.workspace.id)
+    const hasFinalMessage = this.getLastFinalAssistantMessageId(managed.messages) !== undefined
+
+    if (reason === 'complete' && hasFinalMessage) {
+      if (isViewing) {
+        // User is watching - mark as read immediately
+        this.markSessionRead(sessionId)
+      } else {
+        // User is not watching - mark as unread for NEW badge
+        if (!managed.hasUnread) {
+          managed.hasUnread = true
+          updateSessionMetadata(managed.workspace.rootPath, sessionId, { hasUnread: true })
+        }
+      }
+    }
+
+    // 3. Check queue and process or complete
     if (managed.messageQueue.length > 0) {
       // Has queued messages - process next
       this.processNextQueuedMessage(sessionId)
     } else {
-      // No queue - emit complete to UI (include tokenUsage for real-time updates)
-      this.sendEvent({ type: 'complete', sessionId, tokenUsage: managed.tokenUsage }, managed.workspace.id)
+      // No queue - emit complete to UI (include tokenUsage and hasUnread for state updates)
+      this.sendEvent({
+        type: 'complete',
+        sessionId,
+        tokenUsage: managed.tokenUsage,
+        hasUnread: managed.hasUnread,  // Propagate unread state to renderer
+      }, managed.workspace.id)
     }
 
-    // 3. Always persist
+    // 4. Always persist
     this.persistSession(managed)
   }
 
@@ -2697,9 +2895,10 @@ To view this task's output:
         managed.streamingText = ''
         managed.pendingTextParent = undefined // Clear for next text block
 
-        // Update lastMessageRole for badge display (only for final messages)
+        // Update lastMessageRole and lastFinalMessageId for badge/unread display (only for final messages)
         if (!event.isIntermediate) {
           managed.lastMessageRole = 'assistant'
+          managed.lastFinalMessageId = assistantMessage.id
         }
 
         this.sendEvent({ type: 'text_complete', sessionId, text: event.text, isIntermediate: event.isIntermediate, turnId: event.turnId, parentToolUseId: textParentToolUseId }, workspaceId)
@@ -2715,6 +2914,15 @@ To view this task's output:
 
         // Format tool input paths to relative for better readability
         const formattedToolInput = formatToolInputPaths(event.input)
+
+        // Resolve tool display metadata (icon, displayName) for skills/sources
+        // Only resolve when we have input (second event for SDK dual-event pattern)
+        const workspaceRootPath = managed.workspace.rootPath
+        let toolDisplayMeta: ToolDisplayMeta | undefined
+        if (formattedToolInput && Object.keys(formattedToolInput).length > 0) {
+          const allSources = loadAllSources(workspaceRootPath)
+          toolDisplayMeta = resolveToolDisplayMeta(event.toolName, formattedToolInput, workspaceRootPath, allSources)
+        }
 
         // Check if a message with this toolUseId already exists FIRST
         // SDK sends two events per tool: first from stream_event (empty input),
@@ -2774,6 +2982,10 @@ To view this task's output:
           if (parentToolUseId && !existingStartMsg.parentToolUseId) {
             existingStartMsg.parentToolUseId = parentToolUseId
           }
+          // Set toolDisplayMeta if not already set (has base64 icon for viewer)
+          if (toolDisplayMeta && !existingStartMsg.toolDisplayMeta) {
+            existingStartMsg.toolDisplayMeta = toolDisplayMeta
+          }
         } else {
           // Add tool message immediately (will be updated on tool_result)
           // This ensures tool calls are persisted even if they don't complete
@@ -2788,6 +3000,7 @@ To view this task's output:
             toolStatus: 'pending',
             toolIntent: event.intent,
             toolDisplayName: event.displayName,
+            toolDisplayMeta,  // Includes base64 icon for viewer compatibility
             turnId: event.turnId,
             parentToolUseId,
           }
@@ -2804,6 +3017,7 @@ To view this task's output:
             toolInput: formattedToolInput ?? {},
             toolIntent: event.intent,
             toolDisplayName: event.displayName,
+            toolDisplayMeta,  // Includes base64 icon for viewer compatibility
             turnId: event.turnId,
             parentToolUseId,
           }, workspaceId)
@@ -2868,6 +3082,11 @@ To view this task's output:
           }
         } else {
           // Fallback: create new message if not found (shouldn't happen normally)
+          // Resolve toolDisplayMeta for MCP source tools (Skill tools need input which we don't have)
+          const fallbackWorkspaceRootPath = managed.workspace.rootPath
+          const fallbackSources = loadAllSources(fallbackWorkspaceRootPath)
+          const fallbackToolDisplayMeta = resolveToolDisplayMeta(toolName, undefined, fallbackWorkspaceRootPath, fallbackSources)
+
           const toolMessage: Message = {
             id: generateMessageId(),
             role: 'tool',
@@ -2877,6 +3096,7 @@ To view this task's output:
             toolUseId: event.toolUseId,
             toolResult: formattedResult,
             toolStatus: 'completed',
+            toolDisplayMeta: fallbackToolDisplayMeta,  // May be undefined for Skill tools (need input)
             parentToolUseId: storedParentId,
             isError: event.isError,
           }

@@ -40,7 +40,9 @@ import {
   SAFE_MODE_CONFIG,
 } from './mode-manager.ts';
 import { type PermissionsContext, permissionsConfigCache } from './permissions-config.ts';
-import { getSessionPlansPath, getSessionPath } from '../sessions/storage.ts';
+import { getSessionPlansPath, getSessionPath, getSessionLongResponsesPath } from '../sessions/storage.ts';
+import { writeFileSync, existsSync, mkdirSync } from 'fs';
+import { join } from 'path';
 import { expandPath } from '../utils/paths.ts';
 import {
   ConfigWatcher,
@@ -840,10 +842,12 @@ export class CraftAgent {
         systemPrompt: {
           type: 'preset',
           preset: 'claude_code',
+          // Working directory included for monorepo context file discovery
           append: getSystemPrompt(
             this.pinnedPreferencesPrompt ?? undefined,
             this.config.debugMode,
-            this.workspaceRootPath
+            this.workspaceRootPath,
+            this.config.session?.workingDirectory
           ),
         },
         // Use sdkCwd for SDK session storage - this is set once at session creation and never changes.
@@ -1409,6 +1413,38 @@ export class CraftAgent {
                 const explicitIntent = this.toolIntents.get(input.tool_use_id);
                 this.onDebug?.(`PostToolUse: Using intent for summarization: ${explicitIntent || '(none - will use tool params)'}`);
 
+                // Save full response to filesystem so agent can read specific details later if needed
+                let savedFilePath: string | undefined;
+                if (sessionId) {
+                  try {
+                    const longResponsesDir = getSessionLongResponsesPath(this.workspaceRootPath, sessionId);
+                    if (!existsSync(longResponsesDir)) {
+                      mkdirSync(longResponsesDir, { recursive: true });
+                    }
+                    // Generate filename: YYYYMMDD-HHMMSSMMM_toolname.json (includes milliseconds for uniqueness)
+                    const now = new Date();
+                    const timestamp = now.toISOString().replace(/[-:T.]/g, '').slice(0, 17);
+                    // Sanitize tool name for filename (replace special chars with underscore)
+                    const safeToolName = input.tool_name.replace(/[^a-zA-Z0-9_-]/g, '_');
+                    const filename = `${timestamp}_${safeToolName}.json`;
+                    savedFilePath = join(longResponsesDir, filename);
+
+                    // Write full response with metadata
+                    const fullResponseData = {
+                      timestamp: now.toISOString(),
+                      toolName: input.tool_name,
+                      input: input.tool_input,
+                      tokens,
+                      result: response,
+                    };
+                    writeFileSync(savedFilePath, JSON.stringify(fullResponseData, null, 2));
+                    this.onDebug?.(`PostToolUse: Full response saved to ${savedFilePath}`);
+                  } catch (saveError) {
+                    debug(`[PostToolUse] Failed to save full response: ${saveError}`);
+                    // Continue with summarization even if save fails
+                  }
+                }
+
                 try {
                   const summary = await summarizeLargeResult(responseStr, {
                     toolName: input.tool_name,
@@ -1417,12 +1453,20 @@ export class CraftAgent {
                     modelIntent: explicitIntent,
                   });
 
+                  // Build message with optional file path reference
+                  let message = `[Large result (~${tokens} tokens) was summarized to fit context.`;
+                  if (savedFilePath) {
+                    message += ` Full result saved to: ${savedFilePath}. Use Read, Grep, or Glob tools to look up specific information if needed.`;
+                  } else {
+                    message += ` If key details are missing, consider re-calling with more specific filters or pagination.`;
+                  }
+                  message += `]\n\n${summary}`;
+
                   return {
                     continue: true,
                     hookSpecificOutput: {
                       hookEventName: 'PostToolUse' as const,
-                      updatedMCPToolOutput: `[Large result (~${tokens} tokens) was summarized to fit context. ` +
-                        `If key details are missing, consider re-calling with more specific filters or pagination.]\n\n${summary}`,
+                      updatedMCPToolOutput: message,
                     },
                   };
                 } catch (error) {
