@@ -731,6 +731,7 @@ export const IPC_CHANNELS = {
 
   // Vector Search (QMD integration)
   VECTOR_SEARCH_EXECUTE: 'vector-search:execute',
+  VECTOR_SEARCH_GET_CONFIG: 'vector-search:getConfig',
 
   // Scheduler (automated task scheduling)
   SCHEDULE_LIST: 'schedule:list',
@@ -963,6 +964,7 @@ export interface ElectronAPI {
 
   // Vector Search (QMD CLI integration)
   vectorSearchExecute(args: string[]): Promise<VectorSearchExecuteResult>
+  vectorSearchGetConfig(): Promise<VectorSearchConfig>
 
   // Scheduler (automated task scheduling)
   scheduleList(workspaceId: string): Promise<Schedule[]>
@@ -978,7 +980,7 @@ export interface ElectronAPI {
  * Schedule execution event (main → renderer)
  */
 export interface ScheduleEvent {
-  type: 'started' | 'completed' | 'failed'
+  type: 'started' | 'completed' | 'failed' | 'created' | 'updated' | 'deleted' | 'toggled'
   scheduleId: string
   scheduleName: string
   sessionId?: string
@@ -1012,6 +1014,22 @@ export interface VectorSearchResult {
   score: number
   collection: string
   title?: string
+}
+
+/**
+ * QMD collection configuration with root paths
+ */
+export interface VectorSearchCollectionConfig {
+  name: string
+  path: string  // Absolute root path for the collection
+  pattern: string
+}
+
+/**
+ * QMD config parsed from ~/.config/qmd/index.yml
+ */
+export interface VectorSearchConfig {
+  collections: VectorSearchCollectionConfig[]
 }
 
 /**
@@ -1171,6 +1189,8 @@ export interface SkillsNavigationState {
  */
 export interface VectorSearchNavigationState {
   navigator: 'vectorSearch'
+  /** Selected document details, or null for search results only */
+  details: { type: 'document'; filePath: string } | null
   /** Optional right sidebar panel state */
   rightSidebar?: RightSidebarPanel
 }
@@ -1273,6 +1293,9 @@ export const getNavigationStateKey = (state: NavigationState): string => {
     return 'skills'
   }
   if (state.navigator === 'vectorSearch') {
+    if (state.details) {
+      return `vectorSearch/document/${encodeURIComponent(state.details.filePath)}`
+    }
     return 'vectorSearch'
   }
   if (state.navigator === 'schedules') {
@@ -1332,7 +1355,14 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
   }
 
   // Handle vector search
-  if (key === 'vectorSearch') return { navigator: 'vectorSearch' }
+  if (key === 'vectorSearch') return { navigator: 'vectorSearch', details: null }
+  if (key.startsWith('vectorSearch/document/')) {
+    const filePath = decodeURIComponent(key.slice(22))
+    if (filePath) {
+      return { navigator: 'vectorSearch', details: { type: 'document', filePath } }
+    }
+    return { navigator: 'vectorSearch', details: null }
+  }
 
   // Handle schedules
   if (key === 'schedules') return { navigator: 'schedules' }

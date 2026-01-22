@@ -345,6 +345,13 @@ export class SchedulerService {
       this.startJob(schedule)
     }
 
+    // Broadcast creation event
+    this.broadcastEvent({
+      type: 'created',
+      scheduleId: schedule.id,
+      scheduleName: schedule.name,
+    })
+
     mainLog.info(`Created schedule ${schedule.id}: ${schedule.name}`)
     return schedule
   }
@@ -366,6 +373,13 @@ export class SchedulerService {
       this.startJob(schedule)
     }
 
+    // Broadcast update event
+    this.broadcastEvent({
+      type: 'updated',
+      scheduleId: schedule.id,
+      scheduleName: schedule.name,
+    })
+
     mainLog.info(`Updated schedule ${id}`)
     return schedule
   }
@@ -374,9 +388,20 @@ export class SchedulerService {
    * Delete a schedule
    */
   async delete(id: string): Promise<void> {
+    const schedule = this.schedules.find(s => s.id === id)
     this.stopJob(id)
     this.schedules = this.schedules.filter(s => s.id !== id)
     await this.save()
+
+    // Broadcast deletion event
+    if (schedule) {
+      this.broadcastEvent({
+        type: 'deleted',
+        scheduleId: id,
+        scheduleName: schedule.name,
+      })
+    }
+
     mainLog.info(`Deleted schedule ${id}`)
   }
 
@@ -395,6 +420,13 @@ export class SchedulerService {
     } else {
       this.stopJob(schedule.id)
     }
+
+    // Broadcast toggle event
+    this.broadcastEvent({
+      type: 'toggled',
+      scheduleId: schedule.id,
+      scheduleName: schedule.name,
+    })
 
     mainLog.info(`Toggled schedule ${id}: enabled=${schedule.enabled}`)
     return schedule

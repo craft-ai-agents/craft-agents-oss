@@ -33,10 +33,9 @@ export function ScheduleList({ workspaceId }: ScheduleListProps) {
   // Listen for schedule events
   useEffect(() => {
     const cleanup = window.electronAPI.onScheduleEvent((event: ScheduleEvent) => {
-      // Refresh the list when schedules complete or fail
-      if (event.type === 'completed' || event.type === 'failed') {
-        window.electronAPI.scheduleList(workspaceId).then(setSchedules)
-      }
+      // Refresh the list on any schedule event
+      // This includes: created, updated, deleted, toggled, completed, failed, started
+      window.electronAPI.scheduleList(workspaceId).then(setSchedules)
     })
     return cleanup
   }, [workspaceId])
