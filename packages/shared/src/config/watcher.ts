@@ -122,6 +122,8 @@ export interface ConfigWatcherCallbacks {
   onPresetThemeChange?: (themeId: string, theme: PresetTheme | null) => void;
   /** Called when the preset themes list changes (add/remove files) */
   onPresetThemesListChange?: (themes: PresetTheme[]) => void;
+  /** Called when system theme changes (e.g., omarchy desktop theme) */
+  onSystemThemeChange?: (theme: import('./theme.ts').ThemeFile | null) => void;
 
   // Error callbacks
   /** Called when a validation error occurs */
@@ -170,6 +172,9 @@ export class ConfigWatcher {
   private knownSources: Set<string> = new Set();
   private knownSkills: Set<string> = new Set();
   private knownThemes: Set<string> = new Set();
+
+  // System theme watcher cleanup function
+  private systemThemeCleanup: (() => void) | null = null;
 
   // Computed paths
   private workspaceDir: string;
@@ -235,6 +240,10 @@ export class ConfigWatcher {
     this.watchAppPermissionsDir();
     span.mark('watchAppPermissionsDir');
 
+    // Watch system theme (e.g., omarchy on Linux)
+    this.watchSystemTheme();
+    span.mark('watchSystemTheme');
+
     // Initial scan to populate known sources, skills, and themes
     this.scanSources();
     span.mark('scanSources');
@@ -270,6 +279,12 @@ export class ConfigWatcher {
       watcher.close();
     }
     this.watchers = [];
+
+    // Clean up system theme watcher
+    if (this.systemThemeCleanup) {
+      this.systemThemeCleanup();
+      this.systemThemeCleanup = null;
+    }
 
     this.knownSources.clear();
     this.knownSkills.clear();
@@ -882,6 +897,30 @@ export class ConfigWatcher {
 
     // Notify callback
     this.callbacks.onDefaultPermissionsChange?.();
+  }
+
+  /**
+   * Watch system theme for changes.
+   * Currently supports omarchy on Linux. Additional providers can be added.
+   */
+  private watchSystemTheme(): void {
+    // Dynamic import to avoid issues if system theme provider is not available
+    import('./system-theme.ts').then(({ isSystemThemeAvailable, watchSystemTheme }) => {
+      if (!isSystemThemeAvailable()) {
+        debug('[ConfigWatcher] System theme not available, skipping theme watch');
+        return;
+      }
+
+      debug('[ConfigWatcher] Watching system theme');
+
+      // Start watching and store the cleanup function
+      this.systemThemeCleanup = watchSystemTheme((theme) => {
+        debug('[ConfigWatcher] System theme changed:', theme?.name);
+        this.callbacks.onSystemThemeChange?.(theme);
+      });
+    }).catch((error) => {
+      debug('[ConfigWatcher] Error setting up system theme watcher:', error);
+    });
   }
 
   /**

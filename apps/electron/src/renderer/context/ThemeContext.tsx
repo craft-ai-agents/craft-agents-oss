@@ -99,32 +99,32 @@ export function ThemeProvider({
 
   // === Preset theme state (singleton) ===
   const [presetTheme, setPresetTheme] = useState<ThemeFile | null>(null)
-  const [isOmarchyAvailable, setIsOmarchyAvailable] = useState(false)
+  const [isSystemThemeAvailable, setIsSystemThemeAvailable] = useState(false)
 
   // === Derived values ===
   const resolvedMode = mode === 'system' ? systemPreference : mode
   const effectiveColorTheme = previewColorTheme ?? colorTheme
   const isDarkFromMode = resolvedMode === 'dark'
 
-  // Check if omarchy is available on startup
+  // Check if system theme is available on startup
   useEffect(() => {
-    window.electronAPI?.isOmarchyAvailable?.().then((available) => {
-      setIsOmarchyAvailable(available)
+    window.electronAPI?.isSystemThemeAvailable?.().then((available) => {
+      setIsSystemThemeAvailable(available)
     }).catch(() => {
-      setIsOmarchyAvailable(false)
+      setIsSystemThemeAvailable(false)
     })
   }, [])
 
-  // Listen for omarchy theme changes when "system" theme is selected
+  // Listen for system theme changes when "system" theme is selected
   useEffect(() => {
-    if (effectiveColorTheme !== 'system' || !isOmarchyAvailable) return
+    if (effectiveColorTheme !== 'system' || !isSystemThemeAvailable) return
 
-    const cleanup = window.electronAPI?.onOmarchyThemeChange?.((theme) => {
+    const cleanup = window.electronAPI?.onSystemThemeChange?.((theme) => {
       setPresetTheme(theme)
     })
 
     return cleanup
-  }, [effectiveColorTheme, isOmarchyAvailable])
+  }, [effectiveColorTheme, isSystemThemeAvailable])
 
   // Load preset theme when effectiveColorTheme changes (SINGLETON - only here, not in useTheme)
   useEffect(() => {
@@ -133,10 +133,10 @@ export function ThemeProvider({
       return
     }
 
-    // Special handling for "system" theme - load omarchy theme
+    // Special handling for "system" theme - load system theme
     if (effectiveColorTheme === 'system') {
-      if (isOmarchyAvailable) {
-        window.electronAPI?.getOmarchyTheme?.().then((theme) => {
+      if (isSystemThemeAvailable) {
+        window.electronAPI?.getSystemTheme?.().then((theme) => {
           setPresetTheme(theme)
         }).catch(() => {
           setPresetTheme(null)
@@ -153,7 +153,7 @@ export function ThemeProvider({
     }).catch(() => {
       setPresetTheme(null)
     })
-  }, [effectiveColorTheme, isOmarchyAvailable])
+  }, [effectiveColorTheme, isSystemThemeAvailable])
 
   // Resolve theme (preset → final)
   const resolvedTheme = useMemo(() => {

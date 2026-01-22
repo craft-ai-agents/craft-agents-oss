@@ -386,9 +386,9 @@ export class SessionManager {
         sessionLog.info(`App theme changed`)
         this.broadcastAppThemeChanged(theme)
       },
-      onOmarchyThemeChange: (theme) => {
-        sessionLog.info(`Omarchy theme changed: ${theme?.name || 'null'}`)
-        this.broadcastOmarchyThemeChanged(theme)
+      onSystemThemeChange: (theme) => {
+        sessionLog.info(`System theme changed: ${theme?.name || 'null'}`)
+        this.broadcastSystemThemeChanged(theme)
       },
       onDefaultPermissionsChange: () => {
         sessionLog.info('Default permissions changed')
@@ -440,12 +440,12 @@ export class SessionManager {
   }
 
   /**
-   * Broadcast omarchy theme changed event to all windows
+   * Broadcast system theme changed event to all windows
    */
-  private broadcastOmarchyThemeChanged(theme: import('@craft-agent/shared/config').ThemeFile | null): void {
+  private broadcastSystemThemeChanged(theme: import('@craft-agent/shared/config').ThemeFile | null): void {
     if (!this.windowManager) return
-    sessionLog.info(`Broadcasting omarchy theme changed: ${theme?.name || 'null'}`)
-    this.windowManager.broadcastToAll(IPC_CHANNELS.THEME_OMARCHY_CHANGED, theme)
+    sessionLog.info(`Broadcasting system theme changed: ${theme?.name || 'null'}`)
+    this.windowManager.broadcastToAll(IPC_CHANNELS.THEME_SYSTEM_CHANGED, theme)
   }
 
   /**

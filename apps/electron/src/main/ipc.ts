@@ -1867,15 +1867,15 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     setColorTheme(themeId)
   })
 
-  // Omarchy system theme integration
-  ipcMain.handle(IPC_CHANNELS.THEME_OMARCHY_AVAILABLE, async () => {
-    const { isOmarchyAvailable } = await import('@craft-agent/shared/config/omarchy-theme')
-    return isOmarchyAvailable()
+  // System theme integration (e.g., omarchy on Linux)
+  ipcMain.handle(IPC_CHANNELS.THEME_SYSTEM_AVAILABLE, async () => {
+    const { isSystemThemeAvailable } = await import('@craft-agent/shared/config/system-theme')
+    return isSystemThemeAvailable()
   })
 
-  ipcMain.handle(IPC_CHANNELS.THEME_OMARCHY_GET, async () => {
-    const { loadOmarchyTheme } = await import('@craft-agent/shared/config/omarchy-theme')
-    return loadOmarchyTheme()
+  ipcMain.handle(IPC_CHANNELS.THEME_SYSTEM_GET, async () => {
+    const { loadSystemTheme } = await import('@craft-agent/shared/config/system-theme')
+    return loadSystemTheme()
   })
 
   // Broadcast theme preferences to all other windows (for cross-window sync)

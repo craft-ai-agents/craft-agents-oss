@@ -355,7 +355,7 @@ export default function AppSettingsPage() {
 
   // Preset themes state
   const [presetThemes, setPresetThemes] = useState<PresetTheme[]>([])
-  const [isOmarchyAvailable, setIsOmarchyAvailable] = useState(false)
+  const [isSystemThemeAvailable, setIsSystemThemeAvailable] = useState(false)
 
   // Billing state
   const [authType, setAuthType] = useState<AuthType>('api_key')
@@ -460,22 +460,22 @@ export default function AppSettingsPage() {
     loadThemes()
   }, [])
 
-  // Check if omarchy system theme is available
+  // Check if system theme is available (e.g., omarchy on Linux)
   useEffect(() => {
-    const checkOmarchy = async () => {
-      if (!window.electronAPI?.isOmarchyAvailable) {
-        setIsOmarchyAvailable(false)
+    const checkSystemTheme = async () => {
+      if (!window.electronAPI?.isSystemThemeAvailable) {
+        setIsSystemThemeAvailable(false)
         return
       }
       try {
-        const available = await window.electronAPI.isOmarchyAvailable()
-        setIsOmarchyAvailable(available)
+        const available = await window.electronAPI.isSystemThemeAvailable()
+        setIsSystemThemeAvailable(available)
       } catch (error) {
-        console.error('Failed to check omarchy availability:', error)
-        setIsOmarchyAvailable(false)
+        console.error('Failed to check system theme availability:', error)
+        setIsSystemThemeAvailable(false)
       }
     }
-    checkOmarchy()
+    checkSystemTheme()
   }, [])
 
   // Check for existing Claude token when expanding oauth_token option
@@ -660,8 +660,8 @@ export default function AppSettingsPage() {
                     onValueChange={setColorTheme}
                     options={[
                       { value: 'default', label: 'Default' },
-                      // Add System option when omarchy is available (syncs with desktop theme)
-                      ...(isOmarchyAvailable ? [{ value: 'system', label: 'System' }] : []),
+                      // Add System option when system theme is available (syncs with desktop theme)
+                      ...(isSystemThemeAvailable ? [{ value: 'system', label: 'System' }] : []),
                       ...presetThemes
                         .filter(t => t.id !== 'default')
                         .map(t => ({
