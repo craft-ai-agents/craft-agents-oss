@@ -11,6 +11,10 @@ Improve the cron scheduler modal UX to make creating agent task prompts, picking
 - [x] Add status badges to schedule cards (green=success, yellow=running, red=failed)
 - [x] Parse natural language scheduling commands in chat (e.g., "schedule this to run daily at 9am")
 - [x] Create scheduled task from chat message context with extracted prompt
+- [x] Add TimePicker component for selecting custom time (hour:minute AM/PM)
+- [x] Add visual CronBuilder for custom schedules (no raw cron syntax needed)
+- [x] Add day-of-week selector for weekly schedules
+- [x] Add day-of-month selector for monthly schedules
 
 ## Context
 
