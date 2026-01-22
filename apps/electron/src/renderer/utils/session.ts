@@ -1,19 +1,24 @@
 import type { Session } from "../../shared/types"
 import type { SessionMeta } from "../atoms/sessions"
+import DOMPurify from 'dompurify';
 
 /** Common session fields used by getSessionTitle */
 type SessionLike = Pick<Session, 'name' | 'preview'> & { messages?: Session['messages'] }
 
 /**
  * Sanitize content for display as session title.
- * Strips XML blocks (e.g. <edit_request>) and normalizes whitespace.
+ * Strips XML blocks (e.g. <edit_request>) and sanitizes HTML to prevent XSS.
  */
 function sanitizePreview(content: string): string {
-  return content
-    .replace(/<edit_request>[\s\S]*?<\/edit_request>/g, '') // Strip entire edit_request blocks
-    .replace(/<[^>]+>/g, '')     // Strip remaining XML/HTML tags
-    .replace(/\s+/g, ' ')        // Collapse whitespace
-    .trim()
+  // First remove edit_request blocks (specific to this app's format)
+  const withoutEditRequests = content.replace(/<edit_request>[\s\S]*?<\/edit_request>/g, '');
+
+  // Then sanitize with DOMPurify to prevent XSS
+  return DOMPurify.sanitize(withoutEditRequests, {
+    ALLOWED_TAGS: [],    // Remove all HTML tags
+    ALLOWED_ATTR: []     // Remove all attributes
+  }).replace(/\s+/g, ' ')  // Collapse whitespace
+    .trim();
 }
 
 /**

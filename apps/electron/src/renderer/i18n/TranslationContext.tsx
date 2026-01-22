@@ -5,7 +5,7 @@
  * Wraps the useTranslation hook for easy access across components
  */
 
-import React, { createContext, useContext } from 'react';
+import React, { createContext, useContext, useMemo } from 'react';
 import { useTranslation, type UseTranslationReturn } from './useTranslation';
 
 // Export the type
@@ -34,8 +34,16 @@ export interface TranslationProviderProps {
 export function TranslationProvider({ children }: TranslationProviderProps) {
   const translation = useTranslation();
 
+  // Memoize the value object to prevent unnecessary re-renders
+  const value = useMemo(() => ({
+    language: translation.language,
+    t: translation.t,
+    changeLanguage: translation.changeLanguage,
+    exists: translation.exists
+  }), [translation.language, translation.t, translation.changeLanguage, translation.exists]);
+
   return (
-    <TranslationContext.Provider value={translation}>
+    <TranslationContext.Provider value={value}>
       {children}
     </TranslationContext.Provider>
   );

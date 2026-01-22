@@ -5,7 +5,8 @@
  * Provides type-safe translation function with language switching
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
+import { sanitizeUserInput } from '@/lib/sanitization';
 import { translations, type TranslationKey, type Language } from './locales';
 
 const LANGUAGE_STORAGE_KEY = 'craft-agents-language';
@@ -40,7 +41,7 @@ export interface UseTranslationReturn {
  */
 export function useTranslation(): UseTranslationReturn {
   const [language, setLanguage] = useState<Language>(() => {
-    // Initialize from localStorage or default to 'en'
+    // Initialize from localStorage or default to 'zh'
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem(LANGUAGE_STORAGE_KEY) as Language | null;
       if (saved === 'en' || saved === 'zh') {
@@ -50,16 +51,6 @@ export function useTranslation(): UseTranslationReturn {
     return 'zh';
   });
 
-  // Load saved language on mount
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem(LANGUAGE_STORAGE_KEY) as Language | null;
-      if (saved && (saved === 'en' || saved === 'zh')) {
-        setLanguage(saved);
-      }
-    }
-  }, []);
-
   // Translation function with interpolation support
   const t = useCallback((key: TranslationKey, params?: Record<string, string | number>): string => {
     let translation: string = translations[language]?.[key] || translations.en[key] || key;
@@ -67,7 +58,11 @@ export function useTranslation(): UseTranslationReturn {
     // Handle interpolation: {{variableName}}
     if (params) {
       Object.entries(params).forEach(([paramKey, value]) => {
-        translation = translation.replace(new RegExp(`\\{\\{${paramKey}\\}\\}`, 'g'), String(value));
+        // Sanitize all string values to prevent XSS attacks
+        const sanitizedValue = typeof value === 'string'
+          ? sanitizeUserInput(value)
+          : String(value);
+        translation = translation.replace(new RegExp(`\\{\\{${paramKey}\\}\\}`, 'g'), sanitizedValue);
       });
     }
 

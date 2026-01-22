@@ -5,6 +5,7 @@ import { toast } from "sonner"
 
 import { cn, isHexColor } from "@/lib/utils"
 import { rendererPerf } from "@/lib/perf"
+import { sanitizeUserInput } from "@/lib/sanitization"
 import { Spinner } from "@craft-agent/ui"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
@@ -115,15 +116,18 @@ function hasMessages(session: SessionMeta): boolean {
 /**
  * Highlight matching text in a string
  * Returns React nodes with matched portions wrapped in a highlight span
+ *
+ * SECURITY: All user-provided text is sanitized before rendering to prevent XSS attacks.
+ * Both the text being searched and query input are sanitized.
  */
 function highlightMatch(text: string, query: string): React.ReactNode {
-  if (!query.trim()) return text
+  if (!query.trim()) return sanitizeUserInput(text)
 
   const lowerText = text.toLowerCase()
   const lowerQuery = query.toLowerCase()
   const index = lowerText.indexOf(lowerQuery)
 
-  if (index === -1) return text
+  if (index === -1) return sanitizeUserInput(text)
 
   const before = text.slice(0, index)
   const match = text.slice(index, index + query.length)
@@ -131,8 +135,8 @@ function highlightMatch(text: string, query: string): React.ReactNode {
 
   return (
     <>
-      {before}
-      <span className="bg-info/30 rounded-sm">{match}</span>
+      {sanitizeUserInput(before)}
+      <span className="bg-info/30 rounded-sm">{sanitizeUserInput(match)}</span>
       {highlightMatch(after, query)}
     </>
   )
