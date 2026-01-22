@@ -49,6 +49,12 @@
   initial-value: oklch(0.55 0.22 27);
 }
 
+@property --warning {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: oklch(0.70 0.18 50);
+}
+
 /* =============================================================================
    VESPER THEME - 6 Color System
 
@@ -84,6 +90,8 @@
   --success-rgb: 34, 120, 60;               /* RGB for shadow-tinted */
   --destructive: oklch(0.58 0.24 28);       /* red - errors, failed */
   --destructive-rgb: 180, 60, 50;           /* RGB for shadow-tinted */
+  --warning: oklch(0.70 0.18 50);           /* orange - Ralph mode */
+  --warning-rgb: 220, 130, 50;              /* RGB for shadow-tinted */
 
   /* === SHADOW OPACITY (light mode = subtle, dark mode = stronger) === */
   --shadow-border-opacity: 0.08;            /* Border ring opacity */
@@ -222,7 +230,8 @@
   --success-rgb: 50, 140, 80;                /* RGB for shadow-tinted */
   --destructive: oklch(0.70 0.19 22);        /* brighter red in dark */
   --destructive-rgb: 200, 80, 70;            /* RGB for shadow-tinted */
-
+  --warning: oklch(0.75 0.18 50);            /* orange - Ralph mode */
+  --warning-rgb: 240, 150, 60;               /* RGB for shadow-tinted */
 
   /* === MIX VARIANTS === */
   --foreground-1\.5: color-mix(in srgb, var(--foreground) 1.5%, var(--background));
