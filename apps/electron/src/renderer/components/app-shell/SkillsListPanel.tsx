@@ -24,6 +24,7 @@ import {
 import { DropdownMenuProvider, ContextMenuProvider } from '@/components/ui/menu-context'
 import { SkillMenu } from './SkillMenu'
 import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
+import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import type { LoadedSkill } from '../../../shared/types'
 
@@ -131,10 +132,20 @@ function SkillItem({ skill, isSelected, isFirst, workspaceId, onClick, onDelete 
           <div className="w-5 h-5 shrink-0" />
           {/* Content column */}
           <div className="flex flex-col gap-1 min-w-0 flex-1">
-            {/* Title - skill name */}
+            {/* Title - skill name with source badge */}
             <div className="flex items-start gap-2 w-full pr-6 min-w-0">
-              <div className="font-medium font-sans line-clamp-2 min-w-0 -mb-[2px]">
-                {skill.metadata.name}
+              <div className="font-medium font-sans line-clamp-2 min-w-0 -mb-[2px] flex items-center gap-1.5">
+                <span>{skill.metadata.name}</span>
+                {skill.source === 'claude-code' && (
+                  <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 font-medium bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20 shrink-0">
+                    CC
+                  </Badge>
+                )}
+                {skill.source === 'global' && (
+                  <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 font-medium bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20 shrink-0">
+                    Global
+                  </Badge>
+                )}
               </div>
             </div>
             {/* Subtitle - description */}

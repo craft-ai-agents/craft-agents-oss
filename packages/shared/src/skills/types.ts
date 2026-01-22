@@ -26,6 +26,9 @@ export interface SkillMetadata {
   icon?: string;
 }
 
+/** Skill source type */
+export type SkillSource = 'workspace' | 'global' | 'claude-code';
+
 /**
  * A loaded skill with parsed content
  */
@@ -40,4 +43,6 @@ export interface LoadedSkill {
   iconPath?: string;
   /** Absolute path to skill directory */
   path: string;
+  /** Source of the skill - workspace (local), global (user-installed), or claude-code (from Claude CLI) */
+  source?: SkillSource;
 }

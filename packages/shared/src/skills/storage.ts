@@ -14,8 +14,9 @@ import {
 } from 'fs';
 import { join } from 'path';
 import matter from 'gray-matter';
-import type { LoadedSkill, SkillMetadata } from './types.ts';
+import type { LoadedSkill, SkillMetadata, SkillSource } from './types.ts';
 import { getWorkspaceSkillsPath } from '../workspaces/storage.ts';
+import { GLOBAL_SKILLS_DIR, CLAUDE_CODE_SKILLS_DIR } from '../config/paths.ts';
 import {
   validateIconValue,
   findIconFile,
@@ -133,6 +134,125 @@ export function loadWorkspaceSkills(workspaceRoot: string): LoadedSkill[] {
   }
 
   return skills;
+}
+
+/**
+ * Load a single skill from any directory (not workspace-specific)
+ * @param skillDir - Absolute path to the skill directory containing SKILL.md
+ */
+export function loadSkillFromDir(skillDir: string): LoadedSkill | null {
+  const skillFile = join(skillDir, 'SKILL.md');
+
+  // Check directory exists
+  if (!existsSync(skillDir) || !statSync(skillDir).isDirectory()) {
+    return null;
+  }
+
+  // Check SKILL.md exists
+  if (!existsSync(skillFile)) {
+    return null;
+  }
+
+  // Read and parse SKILL.md
+  let content: string;
+  try {
+    content = readFileSync(skillFile, 'utf-8');
+  } catch {
+    return null;
+  }
+
+  const parsed = parseSkillFile(content);
+  if (!parsed) {
+    return null;
+  }
+
+  // Extract slug from directory name
+  const slug = skillDir.split('/').pop() || skillDir.split('\\').pop() || '';
+
+  return {
+    slug,
+    metadata: parsed.metadata,
+    content: parsed.body,
+    iconPath: findIconFile(skillDir),
+    path: skillDir,
+  };
+}
+
+/**
+ * Load all skills from a directory
+ * @param skillsDir - Absolute path to a directory containing skill subdirectories
+ * @param source - The source type to assign to loaded skills
+ */
+export function loadSkillsFromDir(skillsDir: string, source: SkillSource): LoadedSkill[] {
+  if (!existsSync(skillsDir)) {
+    return [];
+  }
+
+  const skills: LoadedSkill[] = [];
+
+  try {
+    const entries = readdirSync(skillsDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      // Skip hidden directories
+      if (entry.name.startsWith('.')) continue;
+
+      const skillDir = join(skillsDir, entry.name);
+      const skill = loadSkillFromDir(skillDir);
+      if (skill) {
+        skills.push({ ...skill, source });
+      }
+    }
+  } catch {
+    // Ignore errors reading skills directory
+  }
+
+  return skills;
+}
+
+/**
+ * Load global skills from ~/.craft-agent/global-skills/ and ~/.claude/skills/
+ * Claude Code skills are read-only, global skills are user-installed
+ */
+export function loadGlobalSkills(): LoadedSkill[] {
+  const skills: LoadedSkill[] = [];
+
+  // Load from ~/.craft-agent/global-skills/ (user-installed)
+  const globalSkills = loadSkillsFromDir(GLOBAL_SKILLS_DIR, 'global');
+  skills.push(...globalSkills);
+
+  // Load from ~/.claude/skills/ (Claude Code CLI)
+  const claudeCodeSkills = loadSkillsFromDir(CLAUDE_CODE_SKILLS_DIR, 'claude-code');
+  skills.push(...claudeCodeSkills);
+
+  return skills;
+}
+
+/**
+ * Load all skills for a workspace, merging workspace skills with global skills.
+ * Workspace skills override global skills when same slug exists.
+ * @param workspaceRoot - Absolute path to workspace root
+ */
+export function loadAllSkills(workspaceRoot: string): LoadedSkill[] {
+  // Load workspace skills first (they take priority)
+  const workspaceSkills = loadWorkspaceSkills(workspaceRoot).map((s) => ({
+    ...s,
+    source: 'workspace' as SkillSource,
+  }));
+
+  // Load global skills
+  const globalSkills = loadGlobalSkills();
+
+  // Create a set of workspace skill slugs for override detection
+  const workspaceSlugs = new Set(workspaceSkills.map((s) => s.slug));
+
+  // Merge: workspace skills first, then global skills that don't conflict
+  const merged: LoadedSkill[] = [
+    ...workspaceSkills,
+    ...globalSkills.filter((g) => !workspaceSlugs.has(g.slug)),
+  ];
+
+  return merged;
 }
 
 /**

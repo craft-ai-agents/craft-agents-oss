@@ -17,3 +17,7 @@ import { join } from 'path';
 // Allow override via environment variable for multi-instance dev
 // Falls back to default ~/.craft-agent/ for production and non-numbered dev folders
 export const CONFIG_DIR = process.env.CRAFT_CONFIG_DIR || join(homedir(), '.craft-agent');
+
+// Global skills directories
+export const GLOBAL_SKILLS_DIR = join(CONFIG_DIR, 'global-skills');
+export const CLAUDE_CODE_SKILLS_DIR = join(homedir(), '.claude', 'skills');

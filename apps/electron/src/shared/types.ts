@@ -45,8 +45,8 @@ import type { LoadedSource, FolderSourceConfig, SourceConnectionStatus } from '@
 export type { LoadedSource, FolderSourceConfig, SourceConnectionStatus };
 
 // Import skill types
-import type { LoadedSkill, SkillMetadata } from '@craft-agent/shared/skills/types';
-export type { LoadedSkill, SkillMetadata };
+import type { LoadedSkill, SkillMetadata, SkillSource } from '@craft-agent/shared/skills/types';
+export type { LoadedSkill, SkillMetadata, SkillSource };
 
 
 /**
