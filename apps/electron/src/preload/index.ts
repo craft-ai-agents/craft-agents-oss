@@ -304,9 +304,10 @@ const api: ElectronAPI = {
   setColorTheme: (themeId: string) => ipcRenderer.invoke(IPC_CHANNELS.THEME_SET_COLOR_THEME, themeId),
 
   // System theme integration (e.g., omarchy on Linux)
+  // Note: These are distinct from getSystemTheme/onSystemThemeChange which handle dark/light mode detection
   isSystemThemeAvailable: () => ipcRenderer.invoke(IPC_CHANNELS.THEME_SYSTEM_AVAILABLE) as Promise<boolean>,
-  getSystemTheme: () => ipcRenderer.invoke(IPC_CHANNELS.THEME_SYSTEM_GET) as Promise<import('@craft-agent/shared/config').ThemeFile | null>,
-  onSystemThemeChange: (callback: (theme: import('@craft-agent/shared/config').ThemeFile | null) => void) => {
+  loadSystemThemeFile: () => ipcRenderer.invoke(IPC_CHANNELS.THEME_SYSTEM_GET) as Promise<import('@craft-agent/shared/config').ThemeFile | null>,
+  onSystemThemeFileChange: (callback: (theme: import('@craft-agent/shared/config').ThemeFile | null) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, theme: import('@craft-agent/shared/config').ThemeFile | null) => {
       callback(theme)
     }

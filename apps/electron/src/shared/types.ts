@@ -818,9 +818,10 @@ export interface ElectronAPI {
   setColorTheme(themeId: string): Promise<void>
 
   // System theme integration (e.g., omarchy on Linux)
+  // Note: These are distinct from getSystemTheme/onSystemThemeChange which handle dark/light mode detection
   isSystemThemeAvailable(): Promise<boolean>
-  getSystemTheme(): Promise<import('@config/theme').ThemeFile | null>
-  onSystemThemeChange(callback: (theme: import('@config/theme').ThemeFile | null) => void): () => void
+  loadSystemThemeFile(): Promise<import('@config/theme').ThemeFile | null>
+  onSystemThemeFileChange(callback: (theme: import('@config/theme').ThemeFile | null) => void): () => void
 
   // Theme change listeners (live updates when theme.json files change)
   onAppThemeChange(callback: (theme: import('@config/theme').ThemeOverrides | null) => void): () => void

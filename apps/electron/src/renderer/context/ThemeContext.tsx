@@ -115,11 +115,11 @@ export function ThemeProvider({
     })
   }, [])
 
-  // Listen for system theme changes when "system" theme is selected
+  // Listen for system theme file changes when "system" theme is selected
   useEffect(() => {
     if (effectiveColorTheme !== 'system' || !isSystemThemeAvailable) return
 
-    const cleanup = window.electronAPI?.onSystemThemeChange?.((theme) => {
+    const cleanup = window.electronAPI?.onSystemThemeFileChange?.((theme) => {
       setPresetTheme(theme)
     })
 
@@ -133,10 +133,10 @@ export function ThemeProvider({
       return
     }
 
-    // Special handling for "system" theme - load system theme
+    // Special handling for "system" theme - load system theme file
     if (effectiveColorTheme === 'system') {
       if (isSystemThemeAvailable) {
-        window.electronAPI?.getSystemTheme?.().then((theme) => {
+        window.electronAPI?.loadSystemThemeFile?.().then((theme) => {
           setPresetTheme(theme)
         }).catch(() => {
           setPresetTheme(null)
@@ -228,11 +228,13 @@ export function ThemeProvider({
 
     // Handle themeMismatch - set solid background when:
     // 1. Theme doesn't support current mode (e.g., dark-only Dracula in light mode), OR
-    // 2. Resolved mode differs from system preference (vibrancy mismatch)
+    // 2. Effective rendered mode differs from system preference (vibrancy mismatch)
+    // Note: We use effectiveMode (not resolvedMode) because dark-only themes force dark mode
+    // regardless of user preference, and vibrancy needs to match the ACTUAL rendered mode.
     const supportedModes = presetTheme?.supportedModes
     const currentMode = isDarkFromMode ? 'dark' : 'light'
     const themeModeUnsupported = supportedModes && supportedModes.length > 0 && !supportedModes.includes(currentMode)
-    const vibrancyMismatch = resolvedMode !== systemPreference
+    const vibrancyMismatch = effectiveMode !== systemPreference
 
     if (themeModeUnsupported || vibrancyMismatch) {
       root.dataset.themeMismatch = 'true'

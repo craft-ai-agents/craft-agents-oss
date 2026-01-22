@@ -854,21 +854,44 @@ export class ConfigWatcher {
    */
   private watchOmarchyTheme(): void {
     // Dynamic import to avoid issues if omarchy is not available
-    import('@craft-agent/shared/config/omarchy-theme').then(({ isOmarchyAvailable, watchOmarchyTheme, loadOmarchyTheme }) => {
-      if (!isOmarchyAvailable()) {
+    // Note: Must use '@craft-agent/shared/config' not '/omarchy-theme' - subpath not exported
+    console.log('[ConfigWatcher] Attempting to set up omarchy theme watcher...');
+    import('@craft-agent/shared/config').then((module) => {
+      console.log('[ConfigWatcher] Module imported, checking functions:', {
+        hasIsOmarchyAvailable: typeof module.isOmarchyAvailable === 'function',
+        hasWatchOmarchyTheme: typeof module.watchOmarchyTheme === 'function',
+        hasLoadOmarchyTheme: typeof module.loadOmarchyTheme === 'function',
+      });
+
+      const { isOmarchyAvailable, watchOmarchyTheme, loadOmarchyTheme } = module;
+
+      if (!isOmarchyAvailable) {
+        console.log('[ConfigWatcher] isOmarchyAvailable function not found in module');
+        return;
+      }
+
+      const available = isOmarchyAvailable();
+      console.log('[ConfigWatcher] isOmarchyAvailable() returned:', available);
+
+      if (!available) {
         debug('[ConfigWatcher] Omarchy not available, skipping theme watch');
         return;
       }
 
       debug('[ConfigWatcher] Watching omarchy theme');
+      console.log('[ConfigWatcher] Starting omarchy theme watcher...');
 
       // Start watching and store the cleanup function
       this.omarchyCleanup = watchOmarchyTheme((theme) => {
         debug('[ConfigWatcher] Omarchy theme changed:', theme?.name);
+        console.log('[ConfigWatcher] Omarchy theme changed:', theme?.name);
         this.callbacks.onOmarchyThemeChange?.(theme);
       });
+
+      console.log('[ConfigWatcher] Omarchy theme watcher started successfully');
     }).catch((error) => {
       debug('[ConfigWatcher] Error setting up omarchy theme watcher:', error);
+      console.error('[ConfigWatcher] Error setting up omarchy theme watcher:', error);
     });
   }
 
