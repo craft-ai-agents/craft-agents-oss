@@ -410,11 +410,11 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
       <RenameDialog
         open={renameDialogOpen}
         onOpenChange={setRenameDialogOpen}
-        title="Rename Chat"
+        title={t('renameChat' as any)}
         value={renameName}
         onValueChange={setRenameName}
         onSubmit={handleRenameSubmit}
-        placeholder="Enter chat name..."
+        placeholder={t('enterChatName' as any)}
       />
     </>
   )

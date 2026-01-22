@@ -484,6 +484,9 @@ export default {
 
   // Dialog
   openInFinder: 'Open in Finder',
+  showInFinder: 'Show in Finder',
+  deleteSource: 'Delete Source',
+  deleteSkill: 'Delete Skill',
 
   // Data Tables
   name: 'Name',

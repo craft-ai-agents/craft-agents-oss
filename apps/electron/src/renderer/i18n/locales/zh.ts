@@ -479,6 +479,9 @@ export default {
 
   // Dialog / 对话框
   openInFinder: '在 Finder 中打开',
+  showInFinder: '在 Finder 中显示',
+  deleteSource: '删除来源',
+  deleteSkill: '删除技能',
 
   // Data Tables / 数据表
   name: '名称',
