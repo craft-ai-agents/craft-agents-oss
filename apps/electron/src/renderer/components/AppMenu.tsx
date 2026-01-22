@@ -7,7 +7,7 @@ import {
   StyledDropdownMenuSeparator,
 } from "@/components/ui/styled-dropdown"
 import { Settings, Keyboard, RotateCcw, User, ChevronLeft, ChevronRight, HelpCircle, ExternalLink } from "lucide-react"
-import { CraftAgentsSymbol } from "./icons/CraftAgentsSymbol"
+import { VesperSymbol } from "./icons/VesperSymbol"
 import { SquarePenRounded } from "./icons/SquarePenRounded"
 import { PanelLeftRounded } from "./icons/PanelLeftRounded"
 import { TopBarButton } from "./ui/TopBarButton"
@@ -29,7 +29,7 @@ interface AppMenuProps {
 /**
  * AppMenu - Main application dropdown menu and top bar navigation
  *
- * Contains the Craft logo dropdown, back/forward navigation, and sidebar toggle.
+ * Contains the Vesper logo dropdown, back/forward navigation, and sidebar toggle.
  * All buttons use the consistent TopBarButton component.
  */
 export function AppMenu({
@@ -47,11 +47,11 @@ export function AppMenu({
 }: AppMenuProps) {
   return (
     <div className="flex items-center gap-[5px] w-full">
-      {/* Craft Logo Menu */}
+      {/* Vesper Logo Menu */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <TopBarButton aria-label="Craft menu">
-            <CraftAgentsSymbol className="h-4 text-accent" />
+          <TopBarButton aria-label="Vesper menu">
+            <VesperSymbol className="h-4 text-accent" />
           </TopBarButton>
         </DropdownMenuTrigger>
         <StyledDropdownMenuContent align="start" minWidth="min-w-48">
