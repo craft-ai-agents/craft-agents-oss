@@ -605,6 +605,11 @@ export const IPC_CHANNELS = {
   THEME_BROADCAST_PREFERENCES: 'theme:broadcastPreferences',  // Send preferences to main for broadcast
   THEME_PREFERENCES_CHANGED: 'theme:preferencesChanged',  // Broadcast: preferences changed in another window
 
+  // Omarchy system theme integration
+  THEME_OMARCHY_AVAILABLE: 'theme:omarchyAvailable',
+  THEME_OMARCHY_GET: 'theme:omarchyGet',
+  THEME_OMARCHY_CHANGED: 'theme:omarchyChanged',  // Broadcast: omarchy theme file changed
+
   // Logo URL resolution (uses Node.js filesystem cache)
   LOGO_GET_URL: 'logo:getUrl',
 
@@ -811,6 +816,11 @@ export interface ElectronAPI {
   loadPresetTheme(themeId: string): Promise<import('@config/theme').PresetTheme | null>
   getColorTheme(): Promise<string>
   setColorTheme(themeId: string): Promise<void>
+
+  // Omarchy system theme integration
+  isOmarchyAvailable(): Promise<boolean>
+  getOmarchyTheme(): Promise<import('@config/theme').ThemeFile | null>
+  onOmarchyThemeChange(callback: (theme: import('@config/theme').ThemeFile | null) => void): () => void
 
   // Theme change listeners (live updates when theme.json files change)
   onAppThemeChange(callback: (theme: import('@config/theme').ThemeOverrides | null) => void): () => void

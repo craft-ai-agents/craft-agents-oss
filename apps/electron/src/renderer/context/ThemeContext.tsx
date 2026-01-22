@@ -99,16 +99,51 @@ export function ThemeProvider({
 
   // === Preset theme state (singleton) ===
   const [presetTheme, setPresetTheme] = useState<ThemeFile | null>(null)
+  const [isOmarchyAvailable, setIsOmarchyAvailable] = useState(false)
 
   // === Derived values ===
   const resolvedMode = mode === 'system' ? systemPreference : mode
   const effectiveColorTheme = previewColorTheme ?? colorTheme
   const isDarkFromMode = resolvedMode === 'dark'
 
+  // Check if omarchy is available on startup
+  useEffect(() => {
+    window.electronAPI?.isOmarchyAvailable?.().then((available) => {
+      setIsOmarchyAvailable(available)
+    }).catch(() => {
+      setIsOmarchyAvailable(false)
+    })
+  }, [])
+
+  // Listen for omarchy theme changes when "system" theme is selected
+  useEffect(() => {
+    if (effectiveColorTheme !== 'system' || !isOmarchyAvailable) return
+
+    const cleanup = window.electronAPI?.onOmarchyThemeChange?.((theme) => {
+      setPresetTheme(theme)
+    })
+
+    return cleanup
+  }, [effectiveColorTheme, isOmarchyAvailable])
+
   // Load preset theme when effectiveColorTheme changes (SINGLETON - only here, not in useTheme)
   useEffect(() => {
     if (!effectiveColorTheme || effectiveColorTheme === 'default') {
       setPresetTheme(null)
+      return
+    }
+
+    // Special handling for "system" theme - load omarchy theme
+    if (effectiveColorTheme === 'system') {
+      if (isOmarchyAvailable) {
+        window.electronAPI?.getOmarchyTheme?.().then((theme) => {
+          setPresetTheme(theme)
+        }).catch(() => {
+          setPresetTheme(null)
+        })
+      } else {
+        setPresetTheme(null)
+      }
       return
     }
 
@@ -118,7 +153,7 @@ export function ThemeProvider({
     }).catch(() => {
       setPresetTheme(null)
     })
-  }, [effectiveColorTheme])
+  }, [effectiveColorTheme, isOmarchyAvailable])
 
   // Resolve theme (preset → final)
   const resolvedTheme = useMemo(() => {

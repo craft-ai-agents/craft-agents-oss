@@ -355,6 +355,7 @@ export default function AppSettingsPage() {
 
   // Preset themes state
   const [presetThemes, setPresetThemes] = useState<PresetTheme[]>([])
+  const [isOmarchyAvailable, setIsOmarchyAvailable] = useState(false)
 
   // Billing state
   const [authType, setAuthType] = useState<AuthType>('api_key')
@@ -457,6 +458,24 @@ export default function AppSettingsPage() {
       }
     }
     loadThemes()
+  }, [])
+
+  // Check if omarchy system theme is available
+  useEffect(() => {
+    const checkOmarchy = async () => {
+      if (!window.electronAPI?.isOmarchyAvailable) {
+        setIsOmarchyAvailable(false)
+        return
+      }
+      try {
+        const available = await window.electronAPI.isOmarchyAvailable()
+        setIsOmarchyAvailable(available)
+      } catch (error) {
+        console.error('Failed to check omarchy availability:', error)
+        setIsOmarchyAvailable(false)
+      }
+    }
+    checkOmarchy()
   }, [])
 
   // Check for existing Claude token when expanding oauth_token option
@@ -641,6 +660,8 @@ export default function AppSettingsPage() {
                     onValueChange={setColorTheme}
                     options={[
                       { value: 'default', label: 'Default' },
+                      // Add System option when omarchy is available (syncs with desktop theme)
+                      ...(isOmarchyAvailable ? [{ value: 'system', label: 'System' }] : []),
                       ...presetThemes
                         .filter(t => t.id !== 'default')
                         .map(t => ({

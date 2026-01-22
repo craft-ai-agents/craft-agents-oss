@@ -122,6 +122,8 @@ export interface ConfigWatcherCallbacks {
   onPresetThemeChange?: (themeId: string, theme: PresetTheme | null) => void;
   /** Called when the preset themes list changes (add/remove files) */
   onPresetThemesListChange?: (themes: PresetTheme[]) => void;
+  /** Called when omarchy system theme changes */
+  onOmarchyThemeChange?: (theme: import('@craft-agent/shared/config').ThemeFile | null) => void;
 
   // Error callbacks
   /** Called when a validation error occurs */
@@ -170,6 +172,9 @@ export class ConfigWatcher {
   private knownSources: Set<string> = new Set();
   private knownSkills: Set<string> = new Set();
   private knownThemes: Set<string> = new Set();
+
+  // Omarchy theme watcher cleanup function
+  private omarchyCleanup: (() => void) | null = null;
 
   // Computed paths
   private workspaceDir: string;
@@ -235,6 +240,10 @@ export class ConfigWatcher {
     this.watchAppPermissionsDir();
     span.mark('watchAppPermissionsDir');
 
+    // Watch omarchy system theme (if available)
+    this.watchOmarchyTheme();
+    span.mark('watchOmarchyTheme');
+
     // Initial scan to populate known sources, skills, and themes
     this.scanSources();
     span.mark('scanSources');
@@ -270,6 +279,12 @@ export class ConfigWatcher {
       watcher.close();
     }
     this.watchers = [];
+
+    // Clean up omarchy theme watcher
+    if (this.omarchyCleanup) {
+      this.omarchyCleanup();
+      this.omarchyCleanup = null;
+    }
 
     this.knownSources.clear();
     this.knownSkills.clear();
@@ -831,6 +846,30 @@ export class ConfigWatcher {
     debug('[ConfigWatcher] App theme.json changed');
     const theme = loadAppTheme();
     this.callbacks.onAppThemeChange?.(theme);
+  }
+
+  /**
+   * Watch omarchy system theme directory for changes
+   * Uses the omarchy-theme module's watchOmarchyTheme function
+   */
+  private watchOmarchyTheme(): void {
+    // Dynamic import to avoid issues if omarchy is not available
+    import('@craft-agent/shared/config/omarchy-theme').then(({ isOmarchyAvailable, watchOmarchyTheme, loadOmarchyTheme }) => {
+      if (!isOmarchyAvailable()) {
+        debug('[ConfigWatcher] Omarchy not available, skipping theme watch');
+        return;
+      }
+
+      debug('[ConfigWatcher] Watching omarchy theme');
+
+      // Start watching and store the cleanup function
+      this.omarchyCleanup = watchOmarchyTheme((theme) => {
+        debug('[ConfigWatcher] Omarchy theme changed:', theme?.name);
+        this.callbacks.onOmarchyThemeChange?.(theme);
+      });
+    }).catch((error) => {
+      debug('[ConfigWatcher] Error setting up omarchy theme watcher:', error);
+    });
   }
 
   /**

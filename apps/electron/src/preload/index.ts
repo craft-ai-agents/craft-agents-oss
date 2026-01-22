@@ -303,6 +303,19 @@ const api: ElectronAPI = {
   getColorTheme: () => ipcRenderer.invoke(IPC_CHANNELS.THEME_GET_COLOR_THEME),
   setColorTheme: (themeId: string) => ipcRenderer.invoke(IPC_CHANNELS.THEME_SET_COLOR_THEME, themeId),
 
+  // Omarchy system theme integration
+  isOmarchyAvailable: () => ipcRenderer.invoke(IPC_CHANNELS.THEME_OMARCHY_AVAILABLE) as Promise<boolean>,
+  getOmarchyTheme: () => ipcRenderer.invoke(IPC_CHANNELS.THEME_OMARCHY_GET) as Promise<import('@craft-agent/shared/config').ThemeFile | null>,
+  onOmarchyThemeChange: (callback: (theme: import('@craft-agent/shared/config').ThemeFile | null) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, theme: import('@craft-agent/shared/config').ThemeFile | null) => {
+      callback(theme)
+    }
+    ipcRenderer.on(IPC_CHANNELS.THEME_OMARCHY_CHANGED, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.THEME_OMARCHY_CHANGED, handler)
+    }
+  },
+
   // Logo URL resolution (uses Node.js filesystem cache for provider domains)
   getLogoUrl: (serviceUrl: string, provider?: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.LOGO_GET_URL, serviceUrl, provider),

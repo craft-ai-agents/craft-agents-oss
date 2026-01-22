@@ -1,4 +1,5 @@
 export * from './models.ts';
+export * from './omarchy-theme.ts';
 export * from './preferences.ts';
 export * from './storage.ts';
 export * from './theme.ts';
