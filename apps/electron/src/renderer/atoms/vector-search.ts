@@ -51,3 +51,29 @@ export const searchStateAtom = atom<SearchState>({
  * Collections list atom (info about registered QMD collections)
  */
 export const collectionsAtom = atom<CollectionInfo[]>([])
+
+/**
+ * Add collection modal state atom
+ */
+export const addCollectionModalAtom = atom<boolean>(false)
+
+/**
+ * Operation types for collection management
+ */
+export type CollectionOperationType = 'add' | 'remove' | 'reindex'
+
+/**
+ * Collection operation state
+ */
+export interface CollectionOperation {
+  type: CollectionOperationType
+  status: 'in_progress' | 'success' | 'error'
+  step?: string
+  error?: string
+  collectionName?: string
+}
+
+/**
+ * Collection operation atom (tracks current operation in progress)
+ */
+export const collectionOperationAtom = atom<CollectionOperation | null>(null)

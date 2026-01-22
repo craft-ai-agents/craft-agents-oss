@@ -5,13 +5,17 @@
  * Supports keyword (BM25), semantic (vector), and hybrid search modes.
  */
 
-import { useAtom } from 'jotai'
+import { useAtom, useSetAtom } from 'jotai'
 import { useEffect, useCallback } from 'react'
-import { searchStateAtom, collectionsAtom, type SearchMode, type CollectionInfo } from '../../atoms/vector-search'
+import { Plus } from 'lucide-react'
+import { searchStateAtom, collectionsAtom, addCollectionModalAtom, type SearchMode, type CollectionInfo } from '../../atoms/vector-search'
 import type { VectorSearchResult } from '../../../shared/types'
 import { navigate, routes } from '@/lib/navigate'
 import { useNavigationState, isVectorSearchNavigation } from '@/contexts/NavigationContext'
 import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+import { AddCollectionModal } from './AddCollectionModal'
+import { CollectionList } from './CollectionList'
 
 /**
  * Parse collection list output from QMD CLI
@@ -124,6 +128,7 @@ function parseSearchResults(output: string): VectorSearchResult[] {
 export function VectorSearch() {
   const [state, setState] = useAtom(searchStateAtom)
   const [collections, setCollections] = useAtom(collectionsAtom)
+  const setAddCollectionModalOpen = useSetAtom(addCollectionModalAtom)
   const navState = useNavigationState()
 
   // Get selected file path from navigation state (now an absolute path)
@@ -234,46 +239,6 @@ export function VectorSearch() {
     setState(s => ({ ...s, mode: e.target.value as SearchMode }))
   }, [setState])
 
-  // Add collection - memoized
-  // Registers the collection AND runs embedding to index documents
-  const addCollection = useCallback(async () => {
-    try {
-      const path = await window.electronAPI.openFolderDialog()
-      if (!path) return
-
-      const name = path.split('/').pop() || 'collection'
-      console.debug('[VectorSearch] Adding collection:', name, 'from', path)
-
-      // Step 1: Register the collection
-      const addResult = await window.electronAPI.vectorSearchExecute([
-        'collection', 'add', path, '--name', name
-      ])
-      console.debug('[VectorSearch] Add result:', addResult)
-
-      if (addResult.stderr && !addResult.stderr.includes('already exists') && !addResult.stdout) {
-        setState(s => ({ ...s, error: `Failed to add collection: ${addResult.stderr}` }))
-        return
-      }
-
-      // Step 2: Run embedding to index documents (this enables semantic search)
-      console.debug('[VectorSearch] Running qmd embed to index documents...')
-      const embedResult = await window.electronAPI.vectorSearchExecute(['embed'])
-      console.debug('[VectorSearch] Embed result:', embedResult)
-
-      // Step 3: Refresh collections list
-      const listResult = await window.electronAPI.vectorSearchExecute(['collection', 'list'])
-      console.debug('[VectorSearch] List result:', listResult)
-
-      if (listResult.stdout) {
-        const parsed = parseCollectionList(listResult.stdout)
-        setCollections(parsed)
-      }
-    } catch (err) {
-      console.error('[VectorSearch] addCollection error:', err)
-      setState(s => ({ ...s, error: err instanceof Error ? err.message : 'Failed to add collection' }))
-    }
-  }, [setCollections, setState])
-
   // Memoized handler for viewing document in navigator panel
   // Resolves relative file paths to absolute using collection root paths
   const handleViewDocument = useCallback((filePath: string, collection: string) => {
@@ -369,22 +334,23 @@ export function VectorSearch() {
         )})}
       </div>
 
-      {/* Add Collection */}
-      <div className="mt-4 pt-4 border-t border-border">
-        <button
-          onClick={addCollection}
-          className="text-primary hover:text-primary/80 hover:underline text-sm"
+      {/* Collections Section */}
+      <div className="mt-4 pt-4 border-t border-border space-y-3">
+        <CollectionList />
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setAddCollectionModalOpen(true)}
+          className="w-full"
         >
-          + Add Collection
-        </button>
-        {collections.length > 0 && (
-          <span className="ml-4 text-xs text-muted-foreground">
-            Collections ({collections.length}): {collections.map(c =>
-              `${c.name} (${c.url}), Pattern: ${c.pattern}, Files: ${c.files}, Updated: ${c.updated}`
-            ).join(', ')}
-          </span>
-        )}
+          <Plus className="w-4 h-4 mr-2" />
+          Add Collection
+        </Button>
       </div>
+
+      {/* Add Collection Modal */}
+      <AddCollectionModal />
     </div>
   )
 }
