@@ -1,5 +1,5 @@
 /**
- * Omarchy Theme Integration
+ * Omarchy Theme Provider
  *
  * Reads theme colors from omarchy's current theme directory and converts
  * them to the craft-agent theme format for seamless desktop integration.
@@ -13,8 +13,9 @@
 import { existsSync, readFileSync, watch, type FSWatcher } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
-import type { ThemeFile, ThemeOverrides, PresetTheme } from './theme.ts';
-import { loadPresetThemes } from './storage.ts';
+import type { ThemeFile, ThemeOverrides, PresetTheme } from '../../theme.ts';
+import { loadPresetThemes } from '../../storage.ts';
+import type { SystemThemeProvider, SystemThemeChangeCallback } from '../types.ts';
 
 // Omarchy configuration paths
 const OMARCHY_CONFIG_DIR = join(homedir(), '.config', 'omarchy');
@@ -95,7 +96,7 @@ function loadOmarchyColors(): OmarchyColors | null {
 /**
  * Get the current omarchy theme name
  */
-export function getOmarchyThemeName(): string | null {
+function getOmarchyThemeName(): string | null {
   if (!existsSync(OMARCHY_THEME_NAME_FILE)) {
     return null;
   }
@@ -128,7 +129,7 @@ function getColorLuminance(hex: string): number {
  * Check if the current omarchy theme is light mode.
  * First checks the light.mode file, then falls back to analyzing background color.
  */
-export function isOmarchyLightMode(): boolean {
+function isOmarchyLightMode(): boolean {
   // First, check the light.mode file if it exists
   if (existsSync(OMARCHY_LIGHT_MODE_FILE)) {
     try {
@@ -155,7 +156,7 @@ export function isOmarchyLightMode(): boolean {
 /**
  * Check if omarchy theme is available on this system
  */
-export function isOmarchyAvailable(): boolean {
+function isOmarchyAvailable(): boolean {
   return existsSync(OMARCHY_CURRENT_DIR) && existsSync(OMARCHY_COLORS_FILE);
 }
 
@@ -219,7 +220,7 @@ function findMatchingPresetTheme(omarchyThemeName: string): PresetTheme | null {
  * If a match is found, returns the preset theme for better color accuracy.
  * Otherwise, extracts colors from omarchy's colors.toml.
  */
-export function loadOmarchyTheme(): ThemeFile | null {
+function loadOmarchyTheme(): ThemeFile | null {
   if (!isOmarchyAvailable()) {
     return null;
   }
@@ -306,22 +307,10 @@ export function loadOmarchyTheme(): ThemeFile | null {
 }
 
 /**
- * Get the omarchy theme directory path for watching
- */
-export function getOmarchyThemeDir(): string {
-  return OMARCHY_CURRENT_DIR;
-}
-
-/**
- * Callback type for theme change events
- */
-export type OmarchyThemeChangeCallback = (theme: ThemeFile | null) => void;
-
-/**
  * Watch for omarchy theme changes
  * Returns a cleanup function to stop watching
  */
-export function watchOmarchyTheme(callback: OmarchyThemeChangeCallback): () => void {
+function watchOmarchyTheme(callback: SystemThemeChangeCallback): () => void {
   if (!isOmarchyAvailable()) {
     return () => {};
   }
@@ -374,3 +363,13 @@ export function watchOmarchyTheme(callback: OmarchyThemeChangeCallback): () => v
     }
   };
 }
+
+/**
+ * Omarchy theme provider
+ */
+export const omarchyProvider: SystemThemeProvider = {
+  name: 'omarchy',
+  isAvailable: isOmarchyAvailable,
+  loadTheme: loadOmarchyTheme,
+  watch: watchOmarchyTheme,
+};

@@ -12,37 +12,12 @@
  * - etc.
  */
 
-import type { ThemeFile } from './theme.ts';
-import * as omarchy from './omarchy-theme.ts';
+import type { ThemeFile } from '../theme.ts';
+import type { SystemThemeProvider, SystemThemeChangeCallback } from './types.ts';
+import { omarchyProvider } from './providers/omarchy.ts';
 
-/**
- * Callback type for theme change events
- */
-export type SystemThemeChangeCallback = (theme: ThemeFile | null) => void;
-
-/**
- * Interface for system theme providers
- */
-export interface SystemThemeProvider {
-  /** Check if this provider is available on the current system */
-  isAvailable(): boolean;
-  /** Load the current system theme */
-  loadTheme(): ThemeFile | null;
-  /** Watch for theme changes, returns cleanup function */
-  watch(callback: SystemThemeChangeCallback): () => void;
-  /** Get the provider name (for display/debugging) */
-  name: string;
-}
-
-/**
- * Omarchy theme provider (Linux)
- */
-const omarchyProvider: SystemThemeProvider = {
-  name: 'omarchy',
-  isAvailable: () => omarchy.isOmarchyAvailable(),
-  loadTheme: () => omarchy.loadOmarchyTheme(),
-  watch: (callback) => omarchy.watchOmarchyTheme(callback),
-};
+// Re-export types
+export type { SystemThemeProvider, SystemThemeChangeCallback } from './types.ts';
 
 /**
  * List of available system theme providers, in priority order

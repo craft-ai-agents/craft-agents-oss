@@ -905,7 +905,7 @@ export class ConfigWatcher {
    */
   private watchSystemTheme(): void {
     // Dynamic import to avoid issues if system theme provider is not available
-    import('./system-theme.ts').then(({ isSystemThemeAvailable, watchSystemTheme }) => {
+    import('./system-theme/index.ts').then(({ isSystemThemeAvailable, watchSystemTheme }) => {
       if (!isSystemThemeAvailable()) {
         debug('[ConfigWatcher] System theme not available, skipping theme watch');
         return;
