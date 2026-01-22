@@ -47,6 +47,7 @@ import {
 } from '../statuses/storage.ts';
 import { loadAppTheme, loadPresetThemes, loadPresetTheme, getAppThemesDir } from './storage.ts';
 import type { ThemeOverrides, PresetTheme, ThemeFile } from './theme.ts';
+import { isSystemThemeAvailable, watchSystemTheme as watchSystemThemeProvider } from './system-theme/index.ts';
 
 // ============================================================
 // Constants
@@ -904,22 +905,17 @@ export class ConfigWatcher {
    * Currently supports omarchy on Linux. Additional providers can be added.
    */
   private watchSystemTheme(): void {
-    // Dynamic import to avoid issues if system theme provider is not available
-    import('./system-theme/index.ts').then(({ isSystemThemeAvailable, watchSystemTheme }) => {
-      if (!isSystemThemeAvailable()) {
-        debug('[ConfigWatcher] System theme not available, skipping theme watch');
-        return;
-      }
+    if (!isSystemThemeAvailable()) {
+      debug('[ConfigWatcher] System theme not available, skipping theme watch');
+      return;
+    }
 
-      debug('[ConfigWatcher] Watching system theme');
+    debug('[ConfigWatcher] Watching system theme');
 
-      // Start watching and store the cleanup function
-      this.systemThemeCleanup = watchSystemTheme((theme) => {
-        debug('[ConfigWatcher] System theme changed:', theme?.name);
-        this.callbacks.onSystemThemeChange?.(theme);
-      });
-    }).catch((error) => {
-      debug('[ConfigWatcher] Error setting up system theme watcher:', error);
+    // Start watching and store the cleanup function
+    this.systemThemeCleanup = watchSystemThemeProvider((theme) => {
+      debug('[ConfigWatcher] System theme changed:', theme?.name);
+      this.callbacks.onSystemThemeChange?.(theme);
     });
   }
 
