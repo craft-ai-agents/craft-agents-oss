@@ -9,7 +9,7 @@
  * - Large results (>4096 chars): Send summary + deep link to desktop session
  */
 
-import type { Message } from '@anthropic-ai/sdk/resources/messages'
+import type { Message } from '@craft-agent/core/types'
 
 export interface FormattedResult {
   /** Array of WhatsApp messages (≤4096 chars each) */
@@ -40,15 +40,13 @@ export function formatResult(
   maxChars: number = 4096,
 ): FormattedResult {
   // Extract assistant text and tool results
+  // Internal Message type has content as a string (not ContentBlock array)
   const assistantTexts: string[] = []
 
   for (const msg of sessionMessages) {
     if (msg.role === 'assistant' && msg.content) {
-      for (const block of msg.content) {
-        if (block.type === 'text') {
-          assistantTexts.push(block.text)
-        }
-      }
+      // Internal Message.content is a string
+      assistantTexts.push(msg.content)
     }
   }
 
@@ -103,20 +101,23 @@ function extractSources(sessionMessages: Message[]): string {
     // Skip if no content
     if (!msg.content) continue
 
-    // In SDK v7+, assistant role can include tool_use blocks with content
-    if (msg.role === 'assistant' || msg.role === 'user') {
-      for (const block of msg.content) {
-        // Check for tool-related blocks that might contain sources
-        const blockContent = (block as Record<string, any>).content
-        if (blockContent && typeof blockContent === 'string') {
-          // Extract URLs from content
-          const urls = blockContent.match(/https?:\/\/[^\s)>\]]+/g) || []
-          urls.forEach((url: string) => {
-            // Clean up URL if it has trailing punctuation
-            const cleaned = url.replace(/[.,;:!?"\]}\)]*$/, '')
-            sources.add(cleaned)
-          })
-        }
+    // Internal Message.content is a string
+    // Extract URLs from message content
+    if (msg.role === 'assistant' || msg.role === 'user' || msg.role === 'tool') {
+      const urls = msg.content.match(/https?:\/\/[^\s)>\]]+/g) || []
+      urls.forEach((url: string) => {
+        // Clean up URL if it has trailing punctuation
+        const cleaned = url.replace(/[.,;:!?"\]}\)]*$/, '')
+        sources.add(cleaned)
+      })
+
+      // Also check toolResult field for tool messages
+      if (msg.toolResult) {
+        const toolUrls = msg.toolResult.match(/https?:\/\/[^\s)>\]]+/g) || []
+        toolUrls.forEach((url: string) => {
+          const cleaned = url.replace(/[.,;:!?"\]}\)]*$/, '')
+          sources.add(cleaned)
+        })
       }
     }
   }

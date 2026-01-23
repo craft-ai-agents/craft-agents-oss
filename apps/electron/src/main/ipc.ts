@@ -10,6 +10,7 @@ import { ipcLog, windowLog } from './logger'
 import { WindowManager } from './window-manager'
 import { getScheduler, startAllSchedulers, stopAllSchedulers } from './scheduler'
 import { registerOnboardingHandlers } from './onboarding'
+import { registerWhatsAppHandlers } from './whatsapp-ipc'
 import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type AuthType, type BillingMethodInfo, type SendMessageOptions } from '../shared/types'
 import { readFileAttachment, perf, validateImageForClaudeAPI, IMAGE_LIMITS } from '@craft-agent/shared/utils'
 import { getAuthType, setAuthType, getPreferencesPath, getModel, setModel, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, type Workspace } from '@craft-agent/shared/config'
@@ -1818,6 +1819,9 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
   // Register onboarding handlers
   registerOnboardingHandlers(sessionManager)
+
+  // Register WhatsApp handlers
+  registerWhatsAppHandlers(sessionManager)
 
   // ============================================================
   // Theme (app-level only)

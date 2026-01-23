@@ -763,6 +763,18 @@ export const IPC_CHANNELS = {
 
   // Orchestration Events (main → renderer broadcast)
   ORCHESTRATION_EVENT: 'orchestration:event',
+
+  // WhatsApp Integration
+  WHATSAPP_CONNECT: 'whatsapp:connect',
+  WHATSAPP_DISCONNECT: 'whatsapp:disconnect',
+  WHATSAPP_STATUS: 'whatsapp:status',
+  WHATSAPP_LIST_SESSIONS: 'whatsapp:list-sessions',
+  WHATSAPP_SEND_MESSAGE: 'whatsapp:send-message',
+  // WhatsApp events (main → renderer)
+  WHATSAPP_QR_CODE: 'whatsapp:qr-code',
+  WHATSAPP_AUTHENTICATED: 'whatsapp:authenticated',
+  WHATSAPP_DISCONNECTED: 'whatsapp:disconnected',
+  WHATSAPP_ERROR: 'whatsapp:error',
 } as const
 
 // Re-import types for ElectronAPI
@@ -1020,6 +1032,18 @@ export interface ElectronAPI {
 
   // Orchestration events listener
   onOrchestrationEvent(callback: (event: any) => void): () => void
+
+  // WhatsApp Integration
+  whatsappConnect(workspaceId: string, phoneNumber: string): Promise<WhatsAppResult>
+  whatsappDisconnect(workspaceId: string, phoneNumber?: string): Promise<WhatsAppResult>
+  whatsappGetStatus(workspaceId: string): Promise<WhatsAppStatusResult>
+  whatsappListSessions(workspaceId: string): Promise<WhatsAppSessionsResult>
+  whatsappSendMessage(workspaceId: string, to: string, content: string): Promise<WhatsAppSendResult>
+  // WhatsApp event listeners
+  onWhatsAppQRCode(callback: (data: { workspaceId: string; qrCode: string }) => void): () => void
+  onWhatsAppAuthenticated(callback: (data: { workspaceId: string; phoneNumber: string }) => void): () => void
+  onWhatsAppDisconnected(callback: (data: { workspaceId: string; phoneNumber: string }) => void): () => void
+  onWhatsAppError(callback: (data: { workspaceId: string; message: string }) => void): () => void
 }
 
 /**
@@ -1031,6 +1055,58 @@ export interface ScheduleEvent {
   scheduleName: string
   sessionId?: string
   error?: string
+}
+
+// ============================================
+// WhatsApp Integration Types
+// ============================================
+
+/**
+ * WhatsApp connection status
+ */
+export interface WhatsAppConnectionStatusUI {
+  connection: 'qr' | 'open' | 'close'
+  qr?: string
+  isNewLogin?: boolean
+  shouldReconnect?: boolean
+  statusCode?: number
+}
+
+/**
+ * WhatsApp session for UI display
+ */
+export interface WhatsAppSessionUI {
+  phoneNumber: string
+  connectedAt: number
+}
+
+/**
+ * Result from WhatsApp IPC operations
+ */
+export interface WhatsAppResult {
+  success: boolean
+  error?: string
+}
+
+/**
+ * WhatsApp status result
+ */
+export interface WhatsAppStatusResult extends WhatsAppResult {
+  status?: WhatsAppConnectionStatusUI
+}
+
+/**
+ * WhatsApp sessions list result
+ */
+export interface WhatsAppSessionsResult extends WhatsAppResult {
+  sessions?: WhatsAppSessionUI[]
+}
+
+/**
+ * WhatsApp send message result
+ */
+export interface WhatsAppSendResult extends WhatsAppResult {
+  messageId?: string
 }
 
 /**

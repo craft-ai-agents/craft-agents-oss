@@ -5,7 +5,7 @@ import type { WhatsAppMessage, WhatsAppConnectionStatus, WhatsAppError, WhatsApp
 import type { CredentialManager } from '@craft-agent/shared/credentials'
 import { createMessageRouter, type WhatsAppMessageRouter } from '@craft-agent/shared/whatsapp/message-router'
 import { formatResult } from '@craft-agent/shared/whatsapp/result-formatter'
-import type { Message } from '@anthropic-ai/claude-agent-sdk'
+import type { Message } from '@craft-agent/core/types'
 
 export class WhatsAppService extends EventEmitter {
   private subprocess: ChildProcess | null = null
@@ -52,7 +52,7 @@ export class WhatsAppService extends EventEmitter {
       const windows = BrowserWindow.getAllWindows()
       for (const win of windows) {
         if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
-          win.webContents.send('whatsapp:qr_code', {
+          win.webContents.send('whatsapp:qr-code', {
             workspaceId: this.workspaceId,
             qrCode
           })

@@ -443,6 +443,56 @@ const api: ElectronAPI = {
       ipcRenderer.removeListener(IPC_CHANNELS.ORCHESTRATION_EVENT, handler)
     }
   },
+
+  // WhatsApp Integration
+  whatsappConnect: (workspaceId: string, phoneNumber: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.WHATSAPP_CONNECT, { workspaceId, phoneNumber }),
+  whatsappDisconnect: (workspaceId: string, phoneNumber?: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.WHATSAPP_DISCONNECT, { workspaceId, phoneNumber }),
+  whatsappGetStatus: (workspaceId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.WHATSAPP_STATUS, { workspaceId }),
+  whatsappListSessions: (workspaceId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.WHATSAPP_LIST_SESSIONS, { workspaceId }),
+  whatsappSendMessage: (workspaceId: string, to: string, content: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.WHATSAPP_SEND_MESSAGE, { workspaceId, to, content }),
+
+  // WhatsApp event listeners
+  onWhatsAppQRCode: (callback: (data: { workspaceId: string; qrCode: string }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: { workspaceId: string; qrCode: string }) => {
+      callback(data)
+    }
+    ipcRenderer.on(IPC_CHANNELS.WHATSAPP_QR_CODE, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.WHATSAPP_QR_CODE, handler)
+    }
+  },
+  onWhatsAppAuthenticated: (callback: (data: { workspaceId: string; phoneNumber: string }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: { workspaceId: string; phoneNumber: string }) => {
+      callback(data)
+    }
+    ipcRenderer.on(IPC_CHANNELS.WHATSAPP_AUTHENTICATED, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.WHATSAPP_AUTHENTICATED, handler)
+    }
+  },
+  onWhatsAppDisconnected: (callback: (data: { workspaceId: string; phoneNumber: string }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: { workspaceId: string; phoneNumber: string }) => {
+      callback(data)
+    }
+    ipcRenderer.on(IPC_CHANNELS.WHATSAPP_DISCONNECTED, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.WHATSAPP_DISCONNECTED, handler)
+    }
+  },
+  onWhatsAppError: (callback: (data: { workspaceId: string; message: string }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: { workspaceId: string; message: string }) => {
+      callback(data)
+    }
+    ipcRenderer.on(IPC_CHANNELS.WHATSAPP_ERROR, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.WHATSAPP_ERROR, handler)
+    }
+  },
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)

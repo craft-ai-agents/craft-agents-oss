@@ -43,7 +43,10 @@
     "./branding": "./src/branding.ts",
     "./network-interceptor": "./src/network-interceptor.ts",
     "./ralph-loop": "./src/ralph-loop/index.ts",
-    "./github": "./src/github/index.ts"
+    "./github": "./src/github/index.ts",
+    "./whatsapp": "./src/whatsapp/index.ts",
+    "./whatsapp/types": "./src/whatsapp/types.ts",
+    "./whatsapp/message-router": "./src/whatsapp/message-router.ts"
   },
   "dependencies": {
     "@craft-agent/core": "workspace:*",
