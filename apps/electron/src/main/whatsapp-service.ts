@@ -195,7 +195,7 @@ export class WhatsAppService extends EventEmitter {
       this.setPhoneNumber(phoneNumber)
     }
 
-    const workerPath = join(__dirname, 'workers', 'baileys-worker.js')
+    const workerPath = join(__dirname, 'workers', 'baileys-worker.cjs')
     this.subprocess = spawn('node', [workerPath], {
       stdio: ['pipe', 'pipe', 'pipe', 'ipc'], // IPC on channel 3
       env: { ...process.env, WORKSPACE_ID: this.workspaceId }
