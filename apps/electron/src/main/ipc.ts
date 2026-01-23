@@ -1006,9 +1006,11 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
         return { success: false, error: 'Please specify a model for custom endpoints' }
       }
 
+      // OpenAI models via providers like OpenRouter require max_tokens >= 16
+      // See: https://github.com/langgenius/dify-official-plugins/issues/1694
       await client.messages.create({
         model: testModel,
-        max_tokens: 1,
+        max_tokens: 16,
         messages: [{ role: 'user', content: 'hi' }],
         // Include a tool to validate tool/function calling support
         tools: [{

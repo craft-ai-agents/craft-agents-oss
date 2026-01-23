@@ -347,11 +347,11 @@ async function uploadElectronBuilds(version: string) {
       f.endsWith('.dmg') || f.endsWith('.exe') || f.endsWith('.AppImage')
     );
 
-    const existingManifest = await fetchExistingLegacyManifest(version);
+    // Always generate fresh manifest - don't merge with existing to ensure checksums are correct
     const legacyManifest: LegacyManifest = {
       version,
       build_time: new Date().toISOString(),
-      binaries: existingManifest?.binaries || {},
+      binaries: {},
     };
 
     for (const installerFile of installerFiles) {
