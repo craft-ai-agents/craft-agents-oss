@@ -3,6 +3,7 @@ import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu"
 import { CheckIcon, ChevronRightIcon, CircleIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import { useDialogPortalContainer } from "./dialog"
 
 function DropdownMenu({
   ...props
@@ -36,8 +37,12 @@ function DropdownMenuContent({
   sideOffset = 4,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) {
+  // Use the dialog's portal container when inside a dialog
+  // This prevents aria-hidden conflicts when DropdownMenu opens inside a Dialog
+  const dialogContainer = useDialogPortalContainer()
+
   return (
-    <DropdownMenuPrimitive.Portal>
+    <DropdownMenuPrimitive.Portal container={dialogContainer}>
       <DropdownMenuPrimitive.Content
         data-slot="dropdown-menu-content"
         sideOffset={sideOffset}

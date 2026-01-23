@@ -2,6 +2,7 @@ import * as React from "react"
 import * as PopoverPrimitive from "@radix-ui/react-popover"
 
 import { cn } from "@/lib/utils"
+import { useDialogPortalContainer } from "./dialog"
 
 function Popover({
   ...props
@@ -21,8 +22,12 @@ function PopoverContent({
   sideOffset = 4,
   ...props
 }: React.ComponentProps<typeof PopoverPrimitive.Content>) {
+  // Use the dialog's portal container when inside a dialog
+  // This prevents aria-hidden conflicts when Popover opens inside a Dialog
+  const dialogContainer = useDialogPortalContainer()
+
   return (
-    <PopoverPrimitive.Portal>
+    <PopoverPrimitive.Portal container={dialogContainer}>
       <PopoverPrimitive.Content
         data-slot="popover-content"
         align={align}

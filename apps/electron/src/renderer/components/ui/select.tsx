@@ -2,6 +2,7 @@ import * as React from "react"
 import * as SelectPrimitive from "@radix-ui/react-select"
 import { Check, ChevronDown, ChevronUp } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useDialogPortalContainer } from "./dialog"
 
 const Select = SelectPrimitive.Root
 
@@ -74,8 +75,12 @@ function SelectContent({
   position = "popper",
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Content>) {
+  // Use the dialog's portal container when inside a dialog
+  // This prevents aria-hidden conflicts when Select opens inside a Dialog
+  const dialogContainer = useDialogPortalContainer()
+
   return (
-    <SelectPrimitive.Portal>
+    <SelectPrimitive.Portal container={dialogContainer}>
       <SelectPrimitive.Content
         data-slot="select-content"
         className={cn(

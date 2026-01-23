@@ -4,6 +4,14 @@ import { XIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
+// Context to provide the dialog's portal container to child components
+// This allows Select, Popover, etc. to portal into the dialog instead of document.body
+const DialogPortalContainerContext = React.createContext<HTMLElement | null>(null)
+
+export function useDialogPortalContainer() {
+  return React.useContext(DialogPortalContainerContext)
+}
+
 function Dialog({
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Root>) {
@@ -52,10 +60,13 @@ function DialogContent({
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
 }) {
+  const [portalContainer, setPortalContainer] = React.useState<HTMLElement | null>(null)
+
   return (
     <DialogPortal data-slot="dialog-portal">
       <DialogOverlay />
       <DialogPrimitive.Content
+        ref={setPortalContainer}
         data-slot="dialog-content"
         className={cn(
           "popover-styled data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-modal grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 p-6 duration-200 outline-none sm:max-w-lg",
@@ -76,14 +87,11 @@ function DialogContent({
             e.preventDefault()
           }
         }}
-        onOpenAutoFocus={(e) => {
-          // Allow Select and other portaled components to manage focus
-          // instead of Dialog's default auto-focus behavior
-          e.preventDefault()
-        }}
         {...props}
       >
-        {children}
+        <DialogPortalContainerContext.Provider value={portalContainer}>
+          {children}
+        </DialogPortalContainerContext.Provider>
         {showCloseButton && (
           <DialogPrimitive.Close
             data-slot="dialog-close"
