@@ -1,5 +1,5 @@
 import { app, ipcMain, nativeTheme, nativeImage, dialog, shell, BrowserWindow } from 'electron'
-import { readFile, realpath, mkdir, writeFile, unlink, rm } from 'fs/promises'
+import { readFile, realpath, mkdir, writeFile, unlink, rm, readdir } from 'fs/promises'
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { normalize, isAbsolute, join, basename, dirname, resolve } from 'path'
 import { homedir, tmpdir } from 'os'
@@ -54,6 +54,82 @@ function getWorkspaceOrThrow(workspaceId: string): Workspace {
 }
 
 /**
+ * Attempts to find the real file path when QMD has normalized the path.
+ * QMD transforms paths during indexing: lowercase, underscores→hyphens, spaces→hyphens.
+ * This function tries to reverse that transformation by case-insensitive matching.
+ *
+ * @param normalizedPath The path that may have been normalized by QMD
+ * @returns The real filesystem path if found, or null if not found
+ */
+async function findRealPathCaseInsensitive(normalizedPath: string): Promise<string | null> {
+  // Split path into segments
+  const segments = normalizedPath.split('/')
+  let currentPath = ''
+
+  // Start from root
+  for (let i = 0; i < segments.length; i++) {
+    const segment = segments[i]
+
+    // Handle root and empty segments
+    if (segment === '' && i === 0) {
+      currentPath = '/'
+      continue
+    }
+    if (segment === '') continue
+
+    const parentPath = currentPath || '/'
+    const targetSegment = segment
+
+    // Check if exact path exists first
+    const exactPath = join(parentPath, targetSegment)
+    if (existsSync(exactPath)) {
+      currentPath = exactPath
+      continue
+    }
+
+    // Try case-insensitive and character-variant matching
+    try {
+      const entries = await readdir(parentPath)
+
+      // Create normalized version of target for comparison
+      // QMD normalizes: lowercase, underscores→hyphens, spaces→hyphens, dot-space→hyphen
+      const normalizeForComparison = (s: string) =>
+        s.toLowerCase()
+          .replace(/_/g, '-')
+          .replace(/ /g, '-')
+          .replace(/\. /g, '-')
+
+      const targetNormalized = normalizeForComparison(targetSegment)
+
+      // Find a matching entry
+      const match = entries.find(entry => {
+        const entryNormalized = normalizeForComparison(entry)
+        return entryNormalized === targetNormalized
+      })
+
+      if (match) {
+        currentPath = join(parentPath, match)
+      } else {
+        // No match found - path doesn't exist
+        ipcLog.debug('findRealPathCaseInsensitive: No match found for segment', {
+          parentPath,
+          targetSegment,
+          targetNormalized,
+          availableEntries: entries.slice(0, 10) // Log first 10 for debugging
+        })
+        return null
+      }
+    } catch (err) {
+      // Directory doesn't exist or can't be read
+      ipcLog.debug('findRealPathCaseInsensitive: Cannot read directory', { parentPath, error: err })
+      return null
+    }
+  }
+
+  return currentPath
+}
+
+/**
  * Validates that a file path is within allowed directories to prevent path traversal attacks.
  * Allowed directories: user's home directory and /tmp
  */
@@ -76,8 +152,19 @@ async function validateFilePath(filePath: string): Promise<string> {
   try {
     realPath = await realpath(normalizedPath)
   } catch {
-    // File doesn't exist or can't be resolved - use normalized path
-    realPath = normalizedPath
+    // File doesn't exist at exact path - try case-insensitive lookup
+    // This handles QMD's path normalization (lowercase, underscores→hyphens)
+    const foundPath = await findRealPathCaseInsensitive(normalizedPath)
+    if (foundPath && existsSync(foundPath)) {
+      ipcLog.debug('validateFilePath: Found via case-insensitive lookup', {
+        requested: normalizedPath,
+        found: foundPath
+      })
+      realPath = foundPath
+    } else {
+      // Still not found - use normalized path (will fail later with ENOENT)
+      realPath = normalizedPath
+    }
   }
 
   // Define allowed base directories
@@ -2090,7 +2177,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // GitHub OAuth
   ipcMain.handle(IPC_CHANNELS.GITHUB_START_OAUTH, async (_event) => {
     try {
-      const { startGitHubOAuth } = await import('@vespr/shared/github')
+      const { startGitHubOAuth } = await import('@craft-agent/shared/github')
       return await startGitHubOAuth()
     } catch (error) {
       ipcLog.error('Error starting GitHub OAuth:', error)
@@ -2123,6 +2210,53 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     } catch (error) {
       ipcLog.error('Error setting GitHub status:', error)
       throw error
+    }
+  })
+
+  // GitHub OAuth Credentials
+  ipcMain.handle(IPC_CHANNELS.GITHUB_SET_OAUTH_CREDENTIALS, async (_event, clientId: string | null, clientSecret: string | null) => {
+    try {
+      const { getCredentialManager } = await import('@craft-agent/shared/credentials')
+      const credManager = getCredentialManager()
+
+      if (clientId === null || clientSecret === null) {
+        // Clear credentials
+        await credManager.delete({ type: 'github_oauth_client_id' })
+        await credManager.delete({ type: 'github_oauth_client_secret' })
+        ipcLog.info('GitHub OAuth credentials cleared')
+      } else {
+        // Validate format
+        if (!clientId.trim() || !clientSecret.trim()) {
+          return { success: false, error: 'Both Client ID and Client Secret are required' }
+        }
+        if (!/^(Ov|Iv)[a-zA-Z0-9]{10,}$/.test(clientId.trim())) {
+          return { success: false, error: 'Invalid Client ID format' }
+        }
+        if (clientSecret.trim().length < 20) {
+          return { success: false, error: 'Client Secret appears too short' }
+        }
+
+        // Store as separate credentials
+        await credManager.set({ type: 'github_oauth_client_id' }, { value: clientId.trim() })
+        await credManager.set({ type: 'github_oauth_client_secret' }, { value: clientSecret.trim() })
+        ipcLog.info('GitHub OAuth credentials saved')
+      }
+      return { success: true }
+    } catch (error) {
+      ipcLog.error('Failed to save GitHub OAuth credentials:', error)
+      return { success: false, error: 'Failed to save credentials' }
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GITHUB_HAS_OAUTH_CREDENTIALS, async () => {
+    try {
+      const { getCredentialManager } = await import('@craft-agent/shared/credentials')
+      const credManager = getCredentialManager()
+      const clientId = await credManager.get({ type: 'github_oauth_client_id' })
+      const clientSecret = await credManager.get({ type: 'github_oauth_client_secret' })
+      return Boolean(clientId?.value && clientSecret?.value)
+    } catch {
+      return false
     }
   })
 

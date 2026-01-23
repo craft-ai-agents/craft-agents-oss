@@ -7,18 +7,44 @@
  * 3. Exchanges code for access token
  * 4. Returns token and user login
  *
- * GitHub OAuth App credentials must be set via environment variables.
+ * GitHub OAuth App credentials can be configured in Settings or via environment variables.
  */
 
 import { URL } from 'url';
 import open from 'open';
 import { randomBytes, createHash } from 'crypto';
 import { createCallbackServer, type AppType } from '../auth/callback-server.ts';
+import { getCredentialManager } from '../credentials/index.ts';
 import type { GitHubOAuthResult } from './types.ts';
 
-// GitHub OAuth configuration - must be set via environment variables
-const GITHUB_CLIENT_ID = process.env.GITHUB_OAUTH_CLIENT_ID || '';
-const GITHUB_CLIENT_SECRET = process.env.GITHUB_OAUTH_CLIENT_SECRET || '';
+/**
+ * Get GitHub OAuth credentials from CredentialManager or environment variables.
+ * CredentialManager takes priority, falls back to env vars.
+ */
+async function getGitHubCredentials(): Promise<{ clientId: string; clientSecret: string } | null> {
+  // Try CredentialManager first
+  try {
+    const credManager = getCredentialManager();
+    const storedId = await credManager.get({ type: 'github_oauth_client_id' });
+    const storedSecret = await credManager.get({ type: 'github_oauth_client_secret' });
+
+    if (storedId?.value && storedSecret?.value) {
+      return { clientId: storedId.value, clientSecret: storedSecret.value };
+    }
+  } catch {
+    // CredentialManager not available or error, fall through to env vars
+  }
+
+  // Fall back to environment variables
+  const envId = process.env.GITHUB_OAUTH_CLIENT_ID;
+  const envSecret = process.env.GITHUB_OAUTH_CLIENT_SECRET;
+
+  if (envId && envSecret) {
+    return { clientId: envId, clientSecret: envSecret };
+  }
+
+  return null;
+}
 
 // GitHub OAuth endpoints
 const GITHUB_AUTH_URL = 'https://github.com/login/oauth/authorize';
@@ -106,12 +132,13 @@ async function retryWithBackoff<T>(
  */
 async function exchangeCodeForToken(
   code: string,
-  redirectUri: string
+  redirectUri: string,
+  credentials: { clientId: string; clientSecret: string }
 ): Promise<{ accessToken: string; expiresIn?: number }> {
   return retryWithBackoff(async () => {
     const params = new URLSearchParams({
-      client_id: GITHUB_CLIENT_ID,
-      client_secret: GITHUB_CLIENT_SECRET,
+      client_id: credentials.clientId,
+      client_secret: credentials.clientSecret,
       code,
       redirect_uri: redirectUri,
     });
@@ -175,8 +202,9 @@ async function getGitHubUser(
 /**
  * Check if GitHub OAuth is configured
  */
-export function isGitHubOAuthConfigured(): boolean {
-  return Boolean(GITHUB_CLIENT_ID && GITHUB_CLIENT_SECRET);
+export async function isGitHubOAuthConfigured(): Promise<boolean> {
+  const creds = await getGitHubCredentials();
+  return creds !== null;
 }
 
 /**
@@ -194,12 +222,13 @@ export async function startGitHubOAuth(
   options: GitHubOAuthOptions = {}
 ): Promise<GitHubOAuthResult> {
   try {
-    // Verify OAuth credentials are configured
-    if (!isGitHubOAuthConfigured()) {
+    // Get OAuth credentials from CredentialManager or env vars
+    const credentials = await getGitHubCredentials();
+    if (!credentials) {
       return {
         success: false,
         error:
-          'GitHub OAuth not configured. Set GITHUB_OAUTH_CLIENT_ID and GITHUB_OAUTH_CLIENT_SECRET environment variables.',
+          'GitHub OAuth not configured. Add credentials in Settings or set GITHUB_OAUTH_CLIENT_ID and GITHUB_OAUTH_CLIENT_SECRET environment variables.',
       };
     }
 
@@ -217,7 +246,7 @@ export async function startGitHubOAuth(
 
     // Build authorization URL
     const authUrl = new URL(GITHUB_AUTH_URL);
-    authUrl.searchParams.set('client_id', GITHUB_CLIENT_ID);
+    authUrl.searchParams.set('client_id', credentials.clientId);
     authUrl.searchParams.set('redirect_uri', redirectUri);
     authUrl.searchParams.set('scope', scopes.join(' '));
     authUrl.searchParams.set('state', state);
@@ -255,7 +284,7 @@ export async function startGitHubOAuth(
     }
 
     // Exchange code for token
-    const tokens = await exchangeCodeForToken(code, redirectUri);
+    const tokens = await exchangeCodeForToken(code, redirectUri, credentials);
 
     // Get user info
     const user = await getGitHubUser(tokens.accessToken);

@@ -753,6 +753,8 @@ export const IPC_CHANNELS = {
   GITHUB_START_OAUTH: 'github:startOAuth',
   GITHUB_GET_STATUS: 'github:getStatus',
   GITHUB_SET_STATUS: 'github:setStatus',
+  GITHUB_SET_OAUTH_CREDENTIALS: 'github:setOAuthCredentials',
+  GITHUB_HAS_OAUTH_CREDENTIALS: 'github:hasOAuthCredentials',
 
   // Daily Reports
   REPORT_CREATE: 'report:create',
@@ -1000,9 +1002,11 @@ export interface ElectronAPI {
   onScheduleEvent(callback: (event: ScheduleEvent) => void): () => void
 
   // GitHub Integration
-  githubStartOAuth(): Promise<import('@vespr/shared/github').GitHubOAuthResult>
-  githubGetStatus(workspaceId: string): Promise<import('@vespr/shared/github').GitHubConnectionStatus | null>
-  githubSetStatus(workspaceId: string, status: import('@vespr/shared/github').GitHubConnectionStatus): Promise<import('@vespr/shared/github').GitHubConnectionStatus>
+  githubStartOAuth(): Promise<import('@craft-agent/shared/github').GitHubOAuthResult>
+  githubGetStatus(workspaceId: string): Promise<import('@craft-agent/shared/github').GitHubConnectionStatus | null>
+  githubSetStatus(workspaceId: string, status: import('@craft-agent/shared/github').GitHubConnectionStatus): Promise<import('@craft-agent/shared/github').GitHubConnectionStatus>
+  githubSetOAuthCredentials(clientId: string | null, clientSecret: string | null): Promise<{ success: boolean; error?: string }>
+  githubHasOAuthCredentials(): Promise<boolean>
 
   // Daily Reports
   reportCreate(options: {
@@ -1010,9 +1014,9 @@ export interface ElectronAPI {
     repoName: string
     sinceDays?: number
     teamCapacity?: { availableDevelopers: number; hoursPerDay: number }
-  }): Promise<import('@vespr/shared/github').DailyReport>
-  reportSubmit(report: import('@vespr/shared/github').DailyReport): Promise<import('@vespr/shared/github').DailyReport>
-  reportGetLatest(workspaceId: string): Promise<import('@vespr/shared/github').DailyReport | null>
+  }): Promise<import('@craft-agent/shared/github').DailyReport>
+  reportSubmit(report: import('@craft-agent/shared/github').DailyReport): Promise<import('@craft-agent/shared/github').DailyReport>
+  reportGetLatest(workspaceId: string): Promise<import('@craft-agent/shared/github').DailyReport | null>
 
   // Orchestration events listener
   onOrchestrationEvent(callback: (event: any) => void): () => void

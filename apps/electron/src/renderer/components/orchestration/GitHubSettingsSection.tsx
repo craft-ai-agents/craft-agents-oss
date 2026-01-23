@@ -5,9 +5,9 @@
  * Allows connecting/disconnecting GitHub and configuring repository
  */
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useAtom } from 'jotai';
-import { Github, LogOut } from 'lucide-react';
+import { Github, LogOut, Eye, EyeOff, ExternalLink } from 'lucide-react';
 import { useAppShellContext } from '@/context/AppShellContext';
 import {
   SettingsSection,
@@ -29,7 +29,15 @@ export function GitHubSettingsSection() {
   const [, setConnectModalOpen] = useAtom(githubConnectModalOpenAtom);
   const [reportForm, setReportForm] = useAtom(dailyReportFormAtom);
 
-  // Load GitHub connection status when component mounts
+  // OAuth Credentials state
+  const [clientId, setClientId] = useState('');
+  const [clientSecret, setClientSecret] = useState('');
+  const [showSecret, setShowSecret] = useState(false);
+  const [hasCredentials, setHasCredentials] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [credError, setCredError] = useState<string | null>(null);
+
+  // Load GitHub connection status and credential status when component mounts
   useEffect(() => {
     const loadGitHubStatus = async () => {
       if (!workspaceId) return;
@@ -43,8 +51,44 @@ export function GitHubSettingsSection() {
       }
     };
 
+    const loadCredentialStatus = async () => {
+      try {
+        const hasCreds = await window.electronAPI.githubHasOAuthCredentials();
+        setHasCredentials(hasCreds);
+      } catch (error) {
+        console.error('Failed to load credential status:', error);
+      }
+    };
+
     loadGitHubStatus();
+    loadCredentialStatus();
   }, [workspaceId, setConnection]);
+
+  const handleSaveCredentials = async () => {
+    setIsSaving(true);
+    setCredError(null);
+
+    const result = await window.electronAPI.githubSetOAuthCredentials(clientId, clientSecret);
+
+    if (result.success) {
+      setHasCredentials(true);
+      // Clear from memory
+      setClientId('');
+      setClientSecret('');
+    } else {
+      setCredError(result.error || 'Failed to save');
+    }
+    setIsSaving(false);
+  };
+
+  const handleClearCredentials = async () => {
+    if (!confirm('Clear GitHub OAuth credentials?')) return;
+
+    const result = await window.electronAPI.githubSetOAuthCredentials(null, null);
+    if (result.success) {
+      setHasCredentials(false);
+    }
+  };
 
   const handleDisconnect = async () => {
     if (!workspaceId) return;
@@ -64,6 +108,76 @@ export function GitHubSettingsSection() {
 
   return (
     <SettingsSection title="GitHub Integration">
+      {/* OAuth App Credentials */}
+      <SettingsCard>
+        <div className="p-4 space-y-4">
+          <div>
+            <h4 className="text-sm font-medium">GitHub OAuth App</h4>
+            <p className="text-xs text-muted-foreground">
+              <a
+                href="https://github.com/settings/developers"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline inline-flex items-center gap-1"
+              >
+                Create OAuth App <ExternalLink className="h-3 w-3" />
+              </a>
+            </p>
+          </div>
+
+          {hasCredentials ? (
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Credentials configured</span>
+              <Button variant="outline" size="sm" onClick={handleClearCredentials}>
+                Clear
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div>
+                <Label className="text-xs">Client ID</Label>
+                <Input
+                  value={clientId}
+                  onChange={(e) => setClientId(e.target.value)}
+                  placeholder="Ov23li..."
+                  className="font-mono text-sm"
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Client Secret</Label>
+                <div className="relative">
+                  <Input
+                    type={showSecret ? 'text' : 'password'}
+                    value={clientSecret}
+                    onChange={(e) => setClientSecret(e.target.value)}
+                    placeholder="Enter client secret"
+                    className="font-mono text-sm pr-10"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-0 top-0 h-full px-3"
+                    onClick={() => setShowSecret(!showSecret)}
+                  >
+                    {showSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
+              {credError && <p className="text-xs text-destructive">{credError}</p>}
+              <Button
+                size="sm"
+                onClick={handleSaveCredentials}
+                disabled={!clientId || !clientSecret || isSaving}
+              >
+                {isSaving ? 'Saving...' : 'Save Credentials'}
+              </Button>
+            </div>
+          )}
+        </div>
+      </SettingsCard>
+
+      {/* Connection Status */}
       <SettingsCard>
         {connection?.isConnected ? (
           <>
