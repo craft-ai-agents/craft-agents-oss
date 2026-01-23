@@ -205,6 +205,22 @@ interface ManagedSession {
   // Pending auth request tracking (for unified auth flow)
   pendingAuthRequestId?: string
   pendingAuthRequest?: AuthRequest
+
+  // WhatsApp-specific context
+  whatsappMetadata?: {
+    groupJid: string
+    groupName: string
+    senderJid: string
+    senderPhoneNumber: string
+    senderName: string
+    createdVia: 'whatsapp'
+  }
+
+  // Callback for result delivery when session completes
+  onSessionComplete?: (
+    sessionId: string,
+    finalMessages: Message[]
+  ) => Promise<void>
 }
 
 // Convert runtime Message to StoredMessage for persistence
@@ -1152,6 +1168,11 @@ export class SessionManager {
       messageQueue: [],
       backgroundShellCommands: new Map(),
       messagesLoaded: true,  // New sessions don't need to load messages from disk
+    }
+
+    // Preserve WhatsApp metadata if provided
+    if (options?.metadata?.type === 'whatsapp') {
+      managed.whatsappMetadata = options.metadata as typeof managed.whatsappMetadata
     }
 
     this.sessions.set(storedSession.id, managed)
@@ -2419,6 +2440,13 @@ export class SessionManager {
     } else {
       // No queue - emit complete to UI (include tokenUsage for real-time updates)
       this.sendEvent({ type: 'complete', sessionId, tokenUsage: managed.tokenUsage }, managed.workspace.id)
+
+      // Call session completion callback if set (for WhatsApp or other integrations)
+      if (managed.onSessionComplete && reason === 'complete') {
+        managed.onSessionComplete(sessionId, managed.messages).catch(err => {
+          sessionLog.error(`Error in onSessionComplete callback for session ${sessionId}:`, err)
+        })
+      }
     }
 
     // 3. Always persist
