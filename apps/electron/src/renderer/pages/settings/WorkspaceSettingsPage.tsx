@@ -34,6 +34,7 @@ import {
   SettingsMenuSelectRow,
 } from '@/components/settings'
 import { GitHubSettingsSection } from '@/components/orchestration'
+import { WhatsAppSettingsSection, QRCodeModal } from '@/components/whatsapp'
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
@@ -472,6 +473,9 @@ export default function WorkspaceSettingsPage() {
             {/* GitHub Integration */}
             <GitHubSettingsSection />
 
+            {/* WhatsApp Integration */}
+            <WhatsAppSettingsSection />
+
             {/* Advanced */}
             <SettingsSection title="Advanced">
               <SettingsCard>
@@ -512,6 +516,9 @@ export default function WorkspaceSettingsPage() {
         </div>
         </ScrollArea>
       </div>
+
+      {/* WhatsApp QR Code Modal */}
+      <QRCodeModal />
     </div>
   )
 }
