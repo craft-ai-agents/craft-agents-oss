@@ -47,6 +47,8 @@ import { type Session, type Message, type SessionEvent, type FileAttachment, typ
 import { generateSessionTitle, regenerateSessionTitle, formatPathsToRelative, formatToolInputPaths, perf } from '@craft-agent/shared/utils'
 import { DEFAULT_MODEL } from '@craft-agent/shared/config'
 import { type ThinkingLevel, DEFAULT_THINKING_LEVEL } from '@craft-agent/shared/agent/thinking-levels'
+import { createViewerService } from '@craft-agent/shared/viewer'
+import type { ViewerService } from '@craft-agent/shared/viewer'
 
 /**
  * Sanitize message content for use as session title.
@@ -340,6 +342,27 @@ export class SessionManager {
   private pendingCredentialResolvers: Map<string, (response: import('../shared/types').CredentialResponse) => void> = new Map()
   // Promise deduplication for lazy-loading messages (prevents race conditions)
   private messageLoadingPromises: Map<string, Promise<void>> = new Map()
+  // Viewer service for session sharing
+  private viewerService: ViewerService
+
+  constructor() {
+    this.viewerService = this.createViewer()
+  }
+
+  /**
+   * Create viewer service based on stored config
+   */
+  private createViewer(): ViewerService {
+    const config = loadStoredConfig()
+    return createViewerService(config?.viewer)
+  }
+
+  /**
+   * Reload viewer configuration (called when config changes)
+   */
+  reloadViewerConfig(): void {
+    this.viewerService = this.createViewer()
+  }
 
   setWindowManager(wm: WindowManager): void {
     this.windowManager = wm
@@ -1617,36 +1640,26 @@ export class SessionManager {
         return { success: false, error: 'Session file not found' }
       }
 
-      const { VIEWER_URL } = await import('@craft-agent/shared/branding')
-      const response = await fetch(`${VIEWER_URL}/s/api`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(storedSession)
-      })
+      const result = await this.viewerService.share(storedSession)
 
-      if (!response.ok) {
-        sessionLog.error(`Share failed with status ${response.status}`)
-        if (response.status === 413) {
-          return { success: false, error: 'Session file is too large to share' }
-        }
-        return { success: false, error: 'Failed to upload session' }
+      if (!result.success) {
+        sessionLog.error(`Share failed: ${result.error}`)
+        return { success: false, error: result.error || 'Failed to upload session' }
       }
 
-      const data = await response.json() as { id: string; url: string }
-
       // Store shared info in session
-      managed.sharedUrl = data.url
-      managed.sharedId = data.id
+      managed.sharedUrl = result.url
+      managed.sharedId = result.id
       const workspaceRootPath = managed.workspace.rootPath
       updateSessionMetadata(workspaceRootPath, sessionId, {
-        sharedUrl: data.url,
-        sharedId: data.id,
+        sharedUrl: result.url,
+        sharedId: result.id,
       })
 
-      sessionLog.info(`Session ${sessionId} shared at ${data.url}`)
+      sessionLog.info(`Session ${sessionId} shared at ${result.url}`)
       // Notify all windows for this workspace
-      this.sendEvent({ type: 'session_shared', sessionId, sharedUrl: data.url }, managed.workspace.id)
-      return { success: true, url: data.url }
+      this.sendEvent({ type: 'session_shared', sessionId, sharedUrl: result.url! }, managed.workspace.id)
+      return { success: true, url: result.url }
     } catch (error) {
       sessionLog.error('Share error:', error)
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
@@ -1681,19 +1694,11 @@ export class SessionManager {
         return { success: false, error: 'Session file not found' }
       }
 
-      const { VIEWER_URL } = await import('@craft-agent/shared/branding')
-      const response = await fetch(`${VIEWER_URL}/s/api/${managed.sharedId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(storedSession)
-      })
+      const result = await this.viewerService.update(managed.sharedId, storedSession)
 
-      if (!response.ok) {
-        sessionLog.error(`Update share failed with status ${response.status}`)
-        if (response.status === 413) {
-          return { success: false, error: 'Session file is too large to share' }
-        }
-        return { success: false, error: 'Failed to update shared session' }
+      if (!result.success) {
+        sessionLog.error(`Update share failed: ${result.error}`)
+        return { success: false, error: result.error || 'Failed to update shared session' }
       }
 
       sessionLog.info(`Session ${sessionId} share updated at ${managed.sharedUrl}`)
@@ -1726,15 +1731,11 @@ export class SessionManager {
     this.sendEvent({ type: 'async_operation', sessionId, isOngoing: true }, managed.workspace.id)
 
     try {
-      const { VIEWER_URL } = await import('@craft-agent/shared/branding')
-      const response = await fetch(
-        `${VIEWER_URL}/s/api/${managed.sharedId}`,
-        { method: 'DELETE' }
-      )
+      const result = await this.viewerService.revoke(managed.sharedId)
 
-      if (!response.ok) {
-        sessionLog.error(`Revoke failed with status ${response.status}`)
-        return { success: false, error: 'Failed to revoke share' }
+      if (!result.success) {
+        sessionLog.error(`Revoke failed: ${result.error}`)
+        return { success: false, error: result.error || 'Failed to revoke share' }
       }
 
       // Clear shared info

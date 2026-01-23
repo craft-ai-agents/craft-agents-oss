@@ -40,5 +40,40 @@ export interface StoredConfig {
   activeWorkspaceId: string | null;
   activeSessionId: string | null;  // Currently active session (primary scope)
   model?: string;
+
+  /**
+   * Viewer service configuration for session sharing
+   *
+   * Configures the backend used for sharing sessions publicly via URLs.
+   * Two backend types are supported:
+   *
+   * - `craft-hosted`: Uses the hosted Craft viewer service (requires craftUrl)
+   * - `static-export`: Exports sessions as static HTML files (requires exportPath, optionally uploadCommand)
+   *
+   * @example
+   * // Craft-hosted configuration
+   * {
+   *   type: 'craft-hosted',
+   *   craftUrl: 'https://viewer.craft.do'
+   * }
+   *
+   * @example
+   * // Static export with S3 upload
+   * {
+   *   type: 'static-export',
+   *   exportPath: '/Users/username/shared-sessions',
+   *   uploadCommand: 'aws s3 sync /Users/username/shared-sessions s3://my-bucket/sessions'
+   * }
+   */
+  viewer?: {
+    /** The viewer backend type */
+    type: 'craft-hosted' | 'static-export';
+    /** Base URL for the Craft-hosted viewer service (required for craft-hosted) */
+    craftUrl?: string;
+    /** Local filesystem path for static exports (required for static-export) */
+    exportPath?: string;
+    /** Optional shell command to run after static export (e.g., rsync to S3) */
+    uploadCommand?: string;
+  };
 }
 

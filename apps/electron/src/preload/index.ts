@@ -538,6 +538,13 @@ const api: ElectronAPI = {
       ipcRenderer.removeListener(IPC_CHANNELS.WHATSAPP_MESSAGE_ACTIVITY, handler)
     }
   },
+
+  // Viewer Configuration (session sharing backend)
+  getViewerConfig: () => ipcRenderer.invoke(IPC_CHANNELS.VIEWER_GET_CONFIG),
+  setViewerConfig: (config: import('../shared/types').ViewerConfig) =>
+    ipcRenderer.invoke(IPC_CHANNELS.VIEWER_SET_CONFIG, config),
+  testViewerConnection: (config: import('../shared/types').ViewerConfig) =>
+    ipcRenderer.invoke(IPC_CHANNELS.VIEWER_TEST_CONNECTION, config),
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)

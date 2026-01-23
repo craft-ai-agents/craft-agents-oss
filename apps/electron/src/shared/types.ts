@@ -805,6 +805,11 @@ export const IPC_CHANNELS = {
   WHATSAPP_DISCONNECTED: 'whatsapp:disconnected',
   WHATSAPP_ERROR: 'whatsapp:error',
   WHATSAPP_MESSAGE_ACTIVITY: 'whatsapp:message-activity',
+
+  // Viewer Configuration (session sharing backend)
+  VIEWER_GET_CONFIG: 'viewer:getConfig',
+  VIEWER_SET_CONFIG: 'viewer:setConfig',
+  VIEWER_TEST_CONNECTION: 'viewer:testConnection',
 } as const
 
 // Re-import types for ElectronAPI
@@ -1088,6 +1093,11 @@ export interface ElectronAPI {
   onWhatsAppDisconnected(callback: (data: { workspaceId: string; phoneNumber: string }) => void): () => void
   onWhatsAppError(callback: (data: { workspaceId: string; message: string }) => void): () => void
   onWhatsAppMessageActivity(callback: (data: WhatsAppMessageActivityEvent) => void): () => void
+
+  // Viewer Configuration (session sharing backend)
+  getViewerConfig(): Promise<ViewerConfigResult>
+  setViewerConfig(config: ViewerConfig): Promise<ViewerResult>
+  testViewerConnection(config: ViewerConfig): Promise<ViewerResult>
 }
 
 /**
@@ -1100,6 +1110,41 @@ export interface WhatsAppMessageActivityEvent {
   groupName?: string
   messagePreview?: string
   sessionId?: string
+}
+
+// ============================================
+// Viewer Configuration Types
+// ============================================
+
+/**
+ * Viewer backend type for session sharing
+ */
+export type ViewerType = 'craft-hosted' | 'static-export' | 'self-hosted' | 'local-viewer'
+
+/**
+ * Viewer configuration for session sharing
+ */
+export interface ViewerConfig {
+  type: ViewerType
+  craftUrl?: string
+  selfHostedUrl?: string
+  staticExportPath?: string
+  staticUploadCommand?: string
+}
+
+/**
+ * Result from viewer IPC operations
+ */
+export interface ViewerResult {
+  success: boolean
+  error?: string
+}
+
+/**
+ * Result from getViewerConfig
+ */
+export interface ViewerConfigResult extends ViewerResult {
+  config?: ViewerConfig
 }
 
 /**

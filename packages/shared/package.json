@@ -50,7 +50,8 @@
     "./whatsapp/result-formatter": "./src/whatsapp/result-formatter.ts",
     "./whatsapp/session-mapper": "./src/whatsapp/session-mapper.ts",
     "./whatsapp/directive-parser": "./src/whatsapp/directive-parser.ts",
-    "./whatsapp/message-queue": "./src/whatsapp/message-queue.ts"
+    "./whatsapp/message-queue": "./src/whatsapp/message-queue.ts",
+    "./viewer": "./src/viewer/index.ts"
   },
   "dependencies": {
     "@craft-agent/core": "workspace:*",

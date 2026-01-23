@@ -56,6 +56,25 @@ export interface StoredConfig {
   // Auto-update
   dismissedUpdateVersion?: string;  // Version that user dismissed (skip notifications for this version)
   pendingUpdate?: PendingUpdate;  // Update ready for auto-install on next launch
+  /**
+   * Viewer service configuration for session sharing
+   *
+   * Configures the backend used for sharing sessions publicly via URLs.
+   * Two backend types are supported:
+   *
+   * - `craft-hosted`: Uses the hosted Craft viewer service (requires craftUrl)
+   * - `static-export`: Exports sessions as static HTML files (requires exportPath, optionally uploadCommand)
+   */
+  viewer?: {
+    /** The viewer backend type */
+    type: 'craft-hosted' | 'static-export';
+    /** Base URL for the Craft-hosted viewer service (required for craft-hosted) */
+    craftUrl?: string;
+    /** Local filesystem path for static exports (required for static-export) */
+    exportPath?: string;
+    /** Optional shell command to run after static export (e.g., rsync to S3) */
+    uploadCommand?: string;
+  };
 }
 
 const CONFIG_FILE = join(CONFIG_DIR, 'config.json');

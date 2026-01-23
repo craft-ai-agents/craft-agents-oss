@@ -92,3 +92,6 @@ export {
   SettingsTextarea,
   type SettingsTextareaProps,
 } from './SettingsTextarea'
+
+// Feature Settings
+export { ViewerSettings } from './ViewerSettings'

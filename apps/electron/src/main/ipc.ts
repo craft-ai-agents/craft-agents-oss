@@ -2308,4 +2308,58 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     }
   })
 
+  // =============================================================================
+  // Viewer Configuration Handlers
+  // =============================================================================
+
+  // Get current viewer config
+  ipcMain.handle(IPC_CHANNELS.VIEWER_GET_CONFIG, async () => {
+    try {
+      const { loadStoredConfig } = await import('@craft-agent/shared/config/storage')
+      const config = loadStoredConfig()
+      return {
+        success: true,
+        config: config?.viewer || { type: 'craft-hosted' }
+      }
+    } catch (error) {
+      ipcLog.error('Error getting viewer config:', error)
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    }
+  })
+
+  // Set viewer config
+  ipcMain.handle(IPC_CHANNELS.VIEWER_SET_CONFIG, async (_event, viewerConfig: import('@craft-agent/shared/viewer').ViewerConfig) => {
+    try {
+      const { loadStoredConfig, saveConfig } = await import('@craft-agent/shared/config/storage')
+      const config = loadStoredConfig()
+      if (!config) {
+        return { success: false, error: 'No config found' }
+      }
+      // Update viewer section
+      config.viewer = viewerConfig
+      // Save config
+      saveConfig(config)
+      // Reload viewer in session manager
+      sessionManager.reloadViewerConfig()
+      ipcLog.info('Viewer config updated:', viewerConfig.type)
+      return { success: true }
+    } catch (error) {
+      ipcLog.error('Error setting viewer config:', error)
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    }
+  })
+
+  // Test viewer connection
+  ipcMain.handle(IPC_CHANNELS.VIEWER_TEST_CONNECTION, async (_event, viewerConfig: import('@craft-agent/shared/viewer').ViewerConfig) => {
+    try {
+      const { createViewerService } = await import('@craft-agent/shared/viewer')
+      const viewer = createViewerService(viewerConfig)
+      const healthy = await viewer.healthCheck()
+      return { success: healthy, error: healthy ? undefined : 'Connection failed' }
+    } catch (error) {
+      ipcLog.error('Error testing viewer connection:', error)
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    }
+  })
+
 }
