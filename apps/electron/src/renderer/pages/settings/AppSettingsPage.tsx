@@ -80,7 +80,7 @@ export default function AppSettingsPage() {
     if (!window.electronAPI) return
     try {
       const [billing, notificationsOn] = await Promise.all([
-        window.electronAPI.getBillingMethod(),
+        window.electronAPI.getApiSetup(),
         window.electronAPI.getNotificationsEnabled(),
       ])
       setAuthType(billing.authType)

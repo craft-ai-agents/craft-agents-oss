@@ -216,13 +216,13 @@ export const onboardingComponents: ComponentEntry[] = [
         },
       },
       {
-        name: 'Billing Method',
+        name: 'API Setup',
         props: {
           state: createOnboardingState({ step: 'api-setup' }),
         },
       },
       {
-        name: 'Billing Method (Selected)',
+        name: 'API Setup (Selected)',
         props: {
           state: createOnboardingState({ step: 'api-setup', apiSetupMethod: 'claude_oauth' }),
         },

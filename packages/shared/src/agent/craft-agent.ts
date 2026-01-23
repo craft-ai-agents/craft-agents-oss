@@ -2476,10 +2476,10 @@ Please continue the conversation naturally from where we left off.
       'server_error': {
         code: 'network_error',
         title: 'Connection Error',
-        message: 'Unable to connect to Anthropic servers. Check your internet connection.',
+        message: 'Unable to connect to the API server. Check your internet connection.',
         details: [
           'Verify your network connection is active',
-          'Check if api.anthropic.com is accessible',
+          'Check if the API endpoint is accessible',
           'Firewall or VPN may be blocking the connection',
         ],
         actions: [

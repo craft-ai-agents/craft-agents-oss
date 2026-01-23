@@ -36,7 +36,7 @@ packages/core/
 |------|-------------|
 | `Workspace` | Workspace configuration with MCP URL and auth |
 | `McpAuthType` | MCP authentication method: `workspace_oauth`, `workspace_bearer`, `public` |
-| `AuthType` | Billing method: `api_key`, `oauth_token` |
+| `AuthType` | API setup method: `api_key`, `oauth_token` |
 | `OAuthCredentials` | OAuth tokens from authentication flow |
 | `StoredConfig` | Full application configuration |
 | `CumulativeUsage` | Global token/cost tracking |

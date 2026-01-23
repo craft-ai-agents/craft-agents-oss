@@ -106,18 +106,32 @@ async function checkCapturedApiError(): Promise<CheckResult> {
 }
 
 /**
- * Check if Anthropic API is reachable.
- * Uses a simple HEAD request to check connectivity without authentication.
+ * Derive a user-facing label from the configured API base URL.
+ * Used in diagnostics messages so errors reference the correct provider.
  */
-async function checkAnthropicAvailability(): Promise<CheckResult> {
+function getProviderLabel(baseUrl: string): string {
+  if (baseUrl.includes('openrouter')) return 'OpenRouter';
+  if (baseUrl.includes('anthropic')) return 'Anthropic';
+  return 'API endpoint';
+}
+
+/**
+ * Check if the configured API endpoint is reachable.
+ * Uses a simple HEAD request to check connectivity without authentication.
+ * Respects ANTHROPIC_BASE_URL so diagnostics are meaningful for all providers.
+ */
+async function checkApiAvailability(): Promise<CheckResult> {
+  // Use the same base URL resolution as network-interceptor.ts
+  const baseUrl = process.env.ANTHROPIC_BASE_URL?.trim() || 'https://api.anthropic.com';
+  const label = getProviderLabel(baseUrl);
+
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 3000);
 
     try {
-      // Simple connectivity check to Anthropic's API endpoint
       // HEAD request doesn't require auth and checks if service is up
-      const response = await fetch('https://api.anthropic.com/v1/models', {
+      const response = await fetch(`${baseUrl}/v1/models`, {
         method: 'HEAD',
         signal: controller.signal,
       });
@@ -129,24 +143,24 @@ async function checkAnthropicAvailability(): Promise<CheckResult> {
       if (response.status >= 500) {
         return {
           ok: false,
-          detail: `✗ Anthropic API: Service error (${response.status})`,
+          detail: `✗ ${label}: Service error (${response.status})`,
           failCode: 'service_unavailable',
-          failTitle: 'Anthropic Service Error',
-          failMessage: 'The Anthropic API is experiencing issues. Please try again later.',
+          failTitle: `${label} Service Error`,
+          failMessage: `The ${label} is experiencing issues. Please try again later.`,
         };
       }
 
-      return { ok: true, detail: `✓ Anthropic API: Reachable (${response.status})` };
+      return { ok: true, detail: `✓ ${label}: Reachable (${response.status})` };
     } catch (fetchError) {
       clearTimeout(timeoutId);
 
       if (fetchError instanceof Error && fetchError.name === 'AbortError') {
         return {
           ok: false,
-          detail: '✗ Anthropic API: Timeout',
+          detail: `✗ ${label}: Timeout`,
           failCode: 'service_unavailable',
-          failTitle: 'Anthropic API Unreachable',
-          failMessage: 'Cannot connect to the Anthropic API. Check your internet connection.',
+          failTitle: `${label} Unreachable`,
+          failMessage: `Cannot connect to ${label}. Check your internet connection.`,
         };
       }
 
@@ -154,18 +168,18 @@ async function checkAnthropicAvailability(): Promise<CheckResult> {
       if (msg.includes('ECONNREFUSED') || msg.includes('ENOTFOUND') || msg.includes('fetch failed')) {
         return {
           ok: false,
-          detail: `✗ Anthropic API: Unreachable (${msg})`,
+          detail: `✗ ${label}: Unreachable (${msg})`,
           failCode: 'service_unavailable',
-          failTitle: 'Anthropic API Unreachable',
-          failMessage: 'Cannot connect to the Anthropic API. Check your internet connection.',
+          failTitle: `${label} Unreachable`,
+          failMessage: `Cannot connect to ${label}. Check your internet connection.`,
         };
       }
 
-      return { ok: true, detail: `✓ Anthropic API: Unknown (${msg})` };
+      return { ok: true, detail: `✓ ${label}: Unknown (${msg})` };
     }
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    return { ok: true, detail: `✓ Anthropic API: Check failed (${msg})` };
+    return { ok: true, detail: `✓ ${label}: Check failed (${msg})` };
   }
 }
 
@@ -335,8 +349,8 @@ export async function runErrorDiagnostics(config: DiagnosticConfig): Promise<Dia
   // This captures the actual HTTP status code from the failed request
   checks.push(withTimeout(checkCapturedApiError(), 1000, defaultResult));
 
-  // 1. Anthropic API availability check
-  checks.push(withTimeout(checkAnthropicAvailability(), 4000, defaultResult));
+  // 1. API endpoint availability check (uses configured base URL)
+  checks.push(withTimeout(checkApiAvailability(), 4000, defaultResult));
 
   // 2. API key check with validation (only for api_key auth)
   if (authType === 'api_key') {

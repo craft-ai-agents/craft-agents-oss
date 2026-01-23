@@ -86,13 +86,12 @@ export function ApiKeyInput({
     } else {
       setBaseUrl(preset.url)
     }
-    // Anthropic uses its own model routing (Sonnet/Opus/Haiku), no custom model needed
-    if (preset.key === 'anthropic') {
-      setCustomModel('')
-    }
-    // Pre-fill recommended model for Ollama
+    // Pre-fill recommended model for Ollama; clear for all others
+    // (Anthropic hides the field entirely, others default to Claude model IDs when empty)
     if (preset.key === 'ollama') {
       setCustomModel('qwen3-coder')
+    } else {
+      setCustomModel('')
     }
   }
 
@@ -216,6 +215,8 @@ export function ApiKeyInput({
           {/* Contextual help links for providers that need model format guidance */}
           {activePreset === 'openrouter' && (
             <p className="text-xs text-foreground/30">
+              Leave empty for Claude models. Only set for non-Claude models.
+              <br />
               Format: <code className="text-foreground/40">provider/model-name</code>.{' '}
               <a href="https://openrouter.ai/models" target="_blank" rel="noopener noreferrer" className="text-foreground/50 underline hover:text-foreground/70">
                 Browse models
@@ -224,6 +225,8 @@ export function ApiKeyInput({
           )}
           {activePreset === 'vercel' && (
             <p className="text-xs text-foreground/30">
+              Leave empty for Claude models. Only set for non-Claude models.
+              <br />
               Format: <code className="text-foreground/40">provider/model-name</code>.{' '}
               <a href="https://vercel.com/docs/ai-gateway" target="_blank" rel="noopener noreferrer" className="text-foreground/50 underline hover:text-foreground/70">
                 View supported models

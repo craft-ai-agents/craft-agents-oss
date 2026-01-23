@@ -237,10 +237,10 @@ export default function App() {
 
   const DRAFT_SAVE_DEBOUNCE_MS = 500
 
-  // Re-fetch custom model from billing config (called after API connection changes).
+  // Re-fetch custom model from API setup config (called after API connection changes).
   // Defined early so it can be passed to useOnboarding's onConfigSaved.
   const refreshCustomModel = useCallback(async () => {
-    const billing = await window.electronAPI.getBillingMethod()
+    const billing = await window.electronAPI.getApiSetup()
     setCustomModel(billing.customModel || null)
   }, [])
 
@@ -382,7 +382,7 @@ export default function App() {
       }
     })
     // Load custom model override from API connection settings
-    window.electronAPI.getBillingMethod().then((billing) => {
+    window.electronAPI.getApiSetup().then((billing) => {
       setCustomModel(billing.customModel || null)
     })
     // Load persisted input drafts into ref (no re-render needed)

@@ -77,7 +77,7 @@ const ERROR_DEFINITIONS: Record<ErrorCode, Omit<AgentError, 'code' | 'originalEr
     message: 'Your Claude Max session has expired.',
     actions: [
       { key: 'r', label: 'Re-authenticate', action: 'reauth' },
-      { key: 's', label: 'Switch billing method', command: '/settings', action: 'settings' },
+      { key: 's', label: 'Switch API setup', command: '/settings', action: 'settings' },
     ],
     canRetry: false,
   },

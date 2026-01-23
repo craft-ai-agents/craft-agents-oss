@@ -542,9 +542,9 @@ export const IPC_CHANNELS = {
   ONBOARDING_HAS_CLAUDE_OAUTH_STATE: 'onboarding:hasClaudeOAuthState',
   ONBOARDING_CLEAR_CLAUDE_OAUTH_STATE: 'onboarding:clearClaudeOAuthState',
 
-  // Settings - Billing
-  SETTINGS_GET_BILLING_METHOD: 'settings:getBillingMethod',
-  SETTINGS_UPDATE_BILLING_METHOD: 'settings:updateBillingMethod',
+  // Settings - API Setup
+  SETTINGS_GET_API_SETUP: 'settings:getApiSetup',
+  SETTINGS_UPDATE_API_SETUP: 'settings:updateApiSetup',
   SETTINGS_TEST_API_CONNECTION: 'settings:testApiConnection',
 
   // Settings - Model
@@ -743,9 +743,9 @@ export interface ElectronAPI {
   hasClaudeOAuthState(): Promise<boolean>
   clearClaudeOAuthState(): Promise<{ success: boolean }>
 
-  // Settings - Billing
-  getBillingMethod(): Promise<BillingMethodInfo>
-  updateBillingMethod(authType: AuthType, credential?: string, anthropicBaseUrl?: string | null, customModel?: string | null): Promise<void>
+  // Settings - API Setup
+  getApiSetup(): Promise<ApiSetupInfo>
+  updateApiSetup(authType: AuthType, credential?: string, anthropicBaseUrl?: string | null, customModel?: string | null): Promise<void>
   testApiConnection(apiKey: string, baseUrl?: string, modelName?: string): Promise<{ success: boolean; error?: string; modelCount?: number }>
 
   // Settings - Model (global default)
@@ -858,9 +858,9 @@ export interface ClaudeOAuthResult {
 }
 
 /**
- * Current billing method info for settings
+ * Current API setup info for settings
  */
-export interface BillingMethodInfo {
+export interface ApiSetupInfo {
   authType: AuthType
   hasCredential: boolean
   apiKey?: string  // The stored API key (only returned for api_key auth type)
