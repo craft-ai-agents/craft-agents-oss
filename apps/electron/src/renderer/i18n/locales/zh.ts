@@ -37,6 +37,7 @@ export default {
   refresh: '刷新',
   edit: '编辑',
   done: '完成',
+  openAction: '打开',
 
   // Session Management / 会话管理
   deleteConversation: '删除对话',
@@ -186,7 +187,12 @@ export default {
   notesTitle: '备注',
   notesDescription: '自由格式的上下文,帮助 Craft Agent 了解您的偏好。',
   notesPlaceholder: '您希望 Craft Agent 了解的任何其他上下文...',
-  editFile: '编辑文件',
+  yourName: '您的姓名',
+  yourTimezone: '例如: America/New_York',
+  yourLanguage: '例如: English',
+  yourCity: '例如: New York',
+  yourCountry: '例如: USA',
+  preferencesEditFile: '编辑文件',
 
   // Onboarding / 引导流程
   updateSettings: '更新设置',
@@ -259,6 +265,7 @@ export default {
   speech: '语音',
   startSpeaking: '开始朗读',
   stopSpeaking: '停止朗读',
+  appMenuCheckForUpdates: '检查更新...',
 
   // Chat Components / 聊天组件
   authRequestTitle: '需要认证',
@@ -361,6 +368,7 @@ export default {
   workspaceInfo: '工作空间信息',
   global: '全局',
   beta: '测试版',
+  settingDisabled: '已禁用',
 
   // Model Settings / 模型设置 / 工作空间设置
   defaultModel: '默认模型',
@@ -440,11 +448,13 @@ export default {
   shortcutSendMessageCmd: '发送消息',
 
   // Chat Page / 聊天页面
+  renameChatAction: '重命名对话',
   enterChatName: '输入对话名称...',
   chatTitle: '聊天',
 
   // Workspace Settings (remaining) / 工作空间设置（剩余）
   workspaceSettingsTitle: '工作空间设置',
+  workspaceSettingsAdvanced: '高级',
   renameWorkspace: '重命名工作空间',
   enterWorkspaceName: '输入工作空间名称...',
   defaultWorkingDirectory: '默认工作目录',
@@ -455,12 +465,18 @@ export default {
   // Info Pages / 信息页面
   connection: '连接',
   permissions: '权限',
-  documentation: '文档',
+  infoDocumentation: '文档',
+  type: '类型',
+  url: 'URL',
   lastTested: '最后测试',
+  infoSlug: '标识符',
+  description: '描述',
+  infoInstructions: '指令',
+  permissionModes: '权限模式',
 
   // Table Headers / 表格标题
   access: '访问',
-  pattern: '模式',
+  tablePattern: '模式',
   viewFullscreen: '查看全屏',
 
   // Conversations/Session List / 对话/会话列表
@@ -473,13 +489,13 @@ export default {
   deleteSkill: '删除技能',
 
   // Data Tables / 数据表
-  name: '名称',
-  type: '类型',
+  dataTableName: '名称',
+  dataTableType: '类型',
   status: '状态',
   actions: '操作',
-  description: '描述',
+  dataTableDescription: '描述',
   value: '值',
-  url: 'URL',
+  dataTableUrl: 'URL',
   path: '路径',
   version: '版本',
   size: '大小',
@@ -528,6 +544,7 @@ export default {
   fileViewerError: '加载文件时出错',
   fileViewerTooLarge: '文件太大，无法预览',
   downloadFile: '下载文件',
+  copyPath: '复制路径',
 
   // Markdown / Markdown
   copyCode: '复制代码',
@@ -548,6 +565,7 @@ export default {
 
   // EditPopover / 编辑弹窗
   describeWhatToChange: '描述您想要更改的内容...',
+  editFile: '编辑文件',
 
   // Status Messages / 状态消息
   contemplating: '思考中...',
@@ -563,7 +581,7 @@ export default {
   createWorkspaceDesc: '输入名称并选择工作空间的存储位置。',
   workspaceName: '工作空间名称',
   myWorkspace: '我的工作空间',
-  location: '位置',
+  workspaceLocation: '位置',
   defaultLocation: '默认位置',
   underCraftAgentFolder: '在 .craft-agent 文件夹下',
   chooseLocation: '选择位置',
@@ -575,12 +593,14 @@ export default {
   chooseExistingFolderDesc: '选择任意文件夹作为工作空间。',
   noFolderSelected: '未选择文件夹',
   opening: '打开中...',
+  workspaceOpen: '打开',
 
   // Chat Display / 聊天显示
   responsePreview: '响应预览',
   turnDetails: '轮次详情',
   showTechnicalDetails: '显示技术详情',
   hideTechnicalDetails: '隐藏技术详情',
+  menuItemOpenInNewWindow: '在新窗口中打开',
 
   // Session List / 会话列表
   newBadge: '新',
@@ -600,11 +620,12 @@ export default {
   markAsUnread: '标记为未读',
   regenerateTitle: '重新生成标题',
   viewInFinder: '在 Finder 中查看',
-  copyPath: '复制路径',
+  sessionCopyPath: '复制路径',
 
   // Source Status / 来源状态
   needsAuth: '需要认证',
   failed: '失败',
   notTested: '未测试',
+  sourceStatusDisabled: '已禁用',
 
 } as const;
