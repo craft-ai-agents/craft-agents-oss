@@ -2697,6 +2697,27 @@ To view this task's output:
   }
 
   /**
+   * Set a completion callback for a session.
+   * Used by WhatsApp and other integrations to receive notification when
+   * the agent finishes processing a message.
+   *
+   * @param sessionId - The session to set the callback on
+   * @param callback - Function called with (sessionId, messages) when session completes
+   */
+  setSessionCompletionCallback(
+    sessionId: string,
+    callback: (sessionId: string, messages: Message[]) => Promise<void>
+  ): void {
+    const managed = this.sessions.get(sessionId)
+    if (managed) {
+      managed.onSessionComplete = callback
+      sessionLog.info(`Session ${sessionId}: completion callback registered`)
+    } else {
+      sessionLog.warn(`Cannot set completion callback - session ${sessionId} not found`)
+    }
+  }
+
+  /**
    * Set the thinking level for a session ('off', 'think', 'max')
    * This is sticky and persisted across messages.
    */

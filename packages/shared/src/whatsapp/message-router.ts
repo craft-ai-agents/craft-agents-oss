@@ -5,9 +5,21 @@ import { getSessionId } from './session-mapper'
 import { extractDirective, type PermissionDirective } from './directive-parser'
 import type { AgentEvent } from '@craft-agent/core/types'
 
-// SessionManager type from main process IPC bridge
-// TODO: Move to shared types once IPC types are formalized
-type SessionManager = Record<string, any>
+// SessionManager interface for WhatsApp integration
+// Defines the subset of SessionManager methods used by the message router
+interface SessionManager {
+  getSession(sessionId: string): Promise<{ id: string } | null>
+  createSession(workspaceId: string, options?: {
+    name?: string
+    metadata?: Record<string, unknown>
+  }): Promise<{ id: string }>
+  sendMessage(sessionId: string, message: string, attachments?: unknown[]): Promise<void>
+  setSessionPermissionMode(sessionId: string, mode: 'safe' | 'ask' | 'allow-all'): void
+  setSessionCompletionCallback(
+    sessionId: string,
+    callback: (sessionId: string, messages: Array<{ role: string; content: string; isIntermediate?: boolean }>) => Promise<void>
+  ): void
+}
 
 /**
  * Default timeout for agent processing (5 minutes)
@@ -311,16 +323,17 @@ export class WhatsAppMessageRouter {
       // Step 4: Apply permission mode override BEFORE sending message
       await this.sessionManager.setSessionPermissionMode(sessionId, permissionMode)
 
-      // Step 5: Send stripped message to agent (directive prefix removed)
+      // Step 5: Set up completion callback BEFORE sending message
+      // This ensures we don't miss the completion event for fast responses
+      this.setupCompletionCallback(sessionId, msg)
+
+      // Step 6: Send stripped message to agent (directive prefix removed)
       // Non-blocking: don't wait for agent response
       void this.sessionManager.sendMessage(
         sessionId,
         strippedContent,
         msg.attachments
       )
-
-      // Step 6: Monitor for completion
-      this.monitorSessionForResults(sessionId, msg)
 
     } catch (error) {
       // Only send error feedback if not already sent (check if it's a routing error)
@@ -376,14 +389,69 @@ export class WhatsAppMessageRouter {
   }
 
   /**
-   * Monitor session until completion, then deliver results.
-   * Returns a promise that resolves when the agent completes processing.
+   * Set up completion callback for a session.
+   * This registers a callback with the SessionManager that will be invoked
+   * when the agent finishes processing the message.
    *
-   * This method:
-   * 1. Registers the message as pending
-   * 2. Sets up a timeout for long-running requests
-   * 3. Waits for session completion events
-   * 4. Notifies callbacks and resolves when complete
+   * @param sessionId - The session ID to monitor
+   * @param originalMsg - The original WhatsApp message for tracking
+   */
+  private setupCompletionCallback(
+    sessionId: string,
+    originalMsg: WhatsAppMessage,
+  ): void {
+    // Create timeout handler
+    const timeoutHandle = setTimeout(() => {
+      this.handleSessionTimeout(originalMsg.id, originalMsg.groupJid)
+    }, this.timeoutMs)
+
+    // Create pending message entry for tracking
+    const pending: PendingMessage = {
+      message: originalMsg,
+      sessionId,
+      startedAt: Date.now(),
+      timeoutHandle,
+      responseText: '',
+      hasError: false,
+      resolve: () => {}, // Not using promise-based flow anymore
+    }
+
+    // Register in tracking maps
+    this.pendingMessages.set(originalMsg.id, pending)
+    this.sessionToMessageId.set(sessionId, originalMsg.id)
+
+    // Register completion callback with SessionManager
+    // This callback is invoked by SessionManager.onProcessingStopped when agent completes
+    this.sessionManager.setSessionCompletionCallback(
+      sessionId,
+      async (_completedSessionId: string, messages: Array<{ role: string; content?: string; isIntermediate?: boolean }>) => {
+        // Extract response text from the last non-intermediate assistant message
+        const assistantMessages = messages
+          .filter((m): m is { role: string; content: string; isIntermediate?: boolean } =>
+            m.role === 'assistant' && !m.isIntermediate && typeof m.content === 'string'
+          )
+          .map(m => m.content)
+
+        // Get the last assistant response (or empty string if none)
+        const lastMessage = assistantMessages[assistantMessages.length - 1]
+        const responseText: string = lastMessage ?? ''
+
+        // Update pending message with response
+        const pendingMsg = this.pendingMessages.get(originalMsg.id)
+        if (pendingMsg) {
+          pendingMsg.responseText = responseText
+          // Finalize the message (notifies callbacks, cleans up tracking)
+          this.finalizeMessage(originalMsg.id, false)
+        }
+      }
+    )
+
+    console.log(`[WhatsAppRouter] Completion callback registered for session ${sessionId}, message ${originalMsg.id}`)
+  }
+
+  /**
+   * Monitor session until completion, then deliver results.
+   * @deprecated Use setupCompletionCallback instead - this method relied on handleSessionEvent which was never called
    */
   private monitorSessionForResults(
     sessionId: string,
