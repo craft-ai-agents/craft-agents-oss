@@ -1,21 +1,34 @@
 import type { WhatsAppMessage } from './types'
 import { getSessionId } from './session-mapper'
+import { extractDirective, type PermissionDirective } from './directive-parser'
+
+// SessionManager type from main process IPC bridge
+// TODO: Move to shared types once IPC types are formalized
+type SessionManager = Record<string, any>
 
 export class WhatsAppMessageRouter {
   constructor(
     private workspaceId: string,
-    private sessionManager: any, // SessionManager from main process
+    private sessionManager: SessionManager,
   ) {}
 
   /**
    * Route incoming WhatsApp message to Vespr session
    *
-   * Logic:
+   * Directive Processing Flow:
+   * 1. Extract inline permission directive from message (if present)
+   *    - Format: @vespr /safe|/ask|/allow-all <message>
+   *    - No directive → defaults to safe mode (read-only)
+   * 2. Strip directive prefix from message content before sending to agent
+   * 3. Apply permission mode override BEFORE sending message
+   *
+   * Full Logic:
    * 1. Determine session ID from (groupJid, senderJid)
    * 2. Get or create session with WhatsApp metadata
-   * 3. Enforce safe mode (hardcoded for MVP)
-   * 4. Send message to agent (non-blocking)
-   * 5. Monitor for session completion
+   * 3. Extract and parse directive (null → safe, /safe → safe, /ask → ask, /allow-all → allow-all)
+   * 4. Apply permission mode override via setSessionPermissionMode()
+   * 5. Send stripped message content to agent (non-blocking)
+   * 6. Monitor for session completion
    */
   async routeIncomingMessage(msg: WhatsAppMessage): Promise<void> {
     try {
@@ -39,26 +52,51 @@ export class WhatsAppMessageRouter {
         })
       }
 
-      // Step 3: Enforce safe mode
-      // In MVP, all WhatsApp sessions are safe mode (read-only)
-      // Phase 2b: Add directive parsing to override
-      await this.sessionManager.setSessionPermissionMode(sessionId, 'safe')
+      // Step 3: Extract and parse directive from message
+      const { directive, content: strippedContent } = extractDirective(msg.content)
 
-      // Step 4: Send message to agent
+      // Determine permission mode based on directive
+      // null → safe, /safe → safe, /ask → ask, /allow-all → allow-all
+      const permissionMode = this.getPermissionModeFromDirective(directive)
+
+      // Step 4: Apply permission mode override BEFORE sending message
+      await this.sessionManager.setSessionPermissionMode(sessionId, permissionMode)
+
+      // Step 5: Send stripped message to agent (directive prefix removed)
       // Non-blocking: don't wait for agent response
       void this.sessionManager.sendMessage(
         sessionId,
-        msg.content,
+        strippedContent,
         msg.attachments
       )
 
-      // Step 5: Monitor for completion
+      // Step 6: Monitor for completion
       this.monitorSessionForResults(sessionId, msg)
 
     } catch (error) {
       console.error('Failed to route WhatsApp message:', error)
       throw error
     }
+  }
+
+  /**
+   * Determine permission mode from directive
+   * Mapping:
+   * - null (no directive) → 'safe' (default: read-only)
+   * - 'safe' → 'safe' (read-only)
+   * - 'ask' → 'ask' (prompt for approval)
+   * - 'allow-all' → 'allow-all' (auto-approve)
+   */
+  private getPermissionModeFromDirective(
+    directive: PermissionDirective
+  ): 'safe' | 'ask' | 'allow-all' {
+    // When no directive, default to safe mode
+    if (directive === null) {
+      return 'safe'
+    }
+
+    // Directive is already a valid permission mode
+    return directive
   }
 
   /**

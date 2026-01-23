@@ -17,18 +17,29 @@ import {
 } from '../result-formatter'
 import type { Message } from '@anthropic-ai/sdk/resources/messages'
 
+// Helper to create mock Message objects with minimal required fields
+function createMockMessage(role: 'user' | 'assistant', content: any[]): Message {
+  return {
+    id: 'msg_' + Math.random().toString(36).slice(2),
+    role,
+    content,
+    model: 'claude-3-5-sonnet-20241022',
+    stop_reason: 'end_turn',
+    stop_sequence: null,
+    type: 'message',
+    usage: { input_tokens: 100, output_tokens: 100 },
+  } as Message
+}
+
 describe('formatResult', () => {
   it('small result fits in single message', () => {
-    const smallMessages: Message[] = [
-      {
-        role: 'assistant',
-        content: [
-          {
-            type: 'text',
-            text: 'Hello! This is a short response.',
-          },
-        ],
-      },
+    const smallMessages = [
+      createMockMessage('assistant', [
+        {
+          type: 'text',
+          text: 'Hello! This is a short response.',
+        },
+      ]),
     ]
 
     const result = formatResult(smallMessages, 'session-1')
@@ -40,16 +51,13 @@ describe('formatResult', () => {
 
   it('large result includes summary + link', () => {
     const largeText = 'x'.repeat(5000) // Exceeds 4096 limit
-    const largeMessages: Message[] = [
-      {
-        role: 'assistant',
-        content: [
-          {
-            type: 'text',
-            text: largeText,
-          },
-        ],
-      },
+    const largeMessages = [
+      createMockMessage('assistant', [
+        {
+          type: 'text',
+          text: largeText,
+        },
+      ]),
     ]
 
     const result = formatResult(largeMessages, 'whatsapp_group::sender')
@@ -62,16 +70,13 @@ describe('formatResult', () => {
 
   it('4096 char edge case fits in single message', () => {
     const exactLimitMessage = 'a'.repeat(4096)
-    const messages: Message[] = [
-      {
-        role: 'assistant',
-        content: [
-          {
-            type: 'text',
-            text: exactLimitMessage,
-          },
-        ],
-      },
+    const messages = [
+      createMockMessage('assistant', [
+        {
+          type: 'text',
+          text: exactLimitMessage,
+        },
+      ]),
     ]
 
     const result = formatResult(messages, 'session-1')
@@ -83,16 +88,13 @@ describe('formatResult', () => {
 
   it('4097 chars triggers truncation to summary + link', () => {
     const overLimitMessage = 'a'.repeat(4097)
-    const messages: Message[] = [
-      {
-        role: 'assistant',
-        content: [
-          {
-            type: 'text',
-            text: overLimitMessage,
-          },
-        ],
-      },
+    const messages = [
+      createMockMessage('assistant', [
+        {
+          type: 'text',
+          text: overLimitMessage,
+        },
+      ]),
     ]
 
     const result = formatResult(messages, 'session-1')
@@ -103,26 +105,20 @@ describe('formatResult', () => {
   })
 
   it('extracts and formats sources from tool results', () => {
-    const messages: Message[] = [
-      {
-        role: 'assistant',
-        content: [
-          {
-            type: 'text',
-            text: 'Found some information.',
-          },
-        ],
-      },
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'toolResult',
-            content:
-              'Result from https://example.com/article and https://test.org/page',
-          },
-        ],
-      },
+    const messages = [
+      createMockMessage('assistant', [
+        {
+          type: 'text',
+          text: 'Found some information.',
+        },
+      ]),
+      createMockMessage('user', [
+        {
+          type: 'tool_result',
+          content:
+            'Result from https://example.com/article and https://test.org/page',
+        },
+      ]),
     ]
 
     const result = formatResult(messages, 'session-1')
@@ -133,16 +129,13 @@ describe('formatResult', () => {
   })
 
   it('generates appropriate one-liner summary', () => {
-    const messages: Message[] = [
-      {
-        role: 'assistant',
-        content: [
-          {
-            type: 'text',
-            text: 'This is a detailed explanation with lots of information. It continues here. And more details.',
-          },
-        ],
-      },
+    const messages = [
+      createMockMessage('assistant', [
+        {
+          type: 'text',
+          text: 'This is a detailed explanation with lots of information. It continues here. And more details.',
+        },
+      ]),
     ]
 
     const result = formatResult(messages, 'session-1')
@@ -153,34 +146,25 @@ describe('formatResult', () => {
   })
 
   it('combines multiple assistant messages', () => {
-    const messages: Message[] = [
-      {
-        role: 'assistant',
-        content: [
-          {
-            type: 'text',
-            text: 'First part of response.',
-          },
-        ],
-      },
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'text',
-            text: 'User question',
-          },
-        ],
-      },
-      {
-        role: 'assistant',
-        content: [
-          {
-            type: 'text',
-            text: 'Second part of response.',
-          },
-        ],
-      },
+    const messages = [
+      createMockMessage('assistant', [
+        {
+          type: 'text',
+          text: 'First part of response.',
+        },
+      ]),
+      createMockMessage('user', [
+        {
+          type: 'text',
+          text: 'User question',
+        },
+      ]),
+      createMockMessage('assistant', [
+        {
+          type: 'text',
+          text: 'Second part of response.',
+        },
+      ]),
     ]
 
     const result = formatResult(messages, 'session-1')
@@ -190,11 +174,8 @@ describe('formatResult', () => {
   })
 
   it('handles empty assistant messages gracefully', () => {
-    const messages: Message[] = [
-      {
-        role: 'assistant',
-        content: [],
-      },
+    const messages = [
+      createMockMessage('assistant', []),
     ]
 
     const result = formatResult(messages, 'session-1')
@@ -204,16 +185,13 @@ describe('formatResult', () => {
   })
 
   it('respects custom maxChars parameter', () => {
-    const messages: Message[] = [
-      {
-        role: 'assistant',
-        content: [
-          {
-            type: 'text',
-            text: 'a'.repeat(1000),
-          },
-        ],
-      },
+    const messages = [
+      createMockMessage('assistant', [
+        {
+          type: 'text',
+          text: 'a'.repeat(1000),
+        },
+      ]),
     ]
 
     const result = formatResult(messages, 'session-1', 500) // Custom limit
@@ -223,16 +201,13 @@ describe('formatResult', () => {
 
   it('preserves full markdown in fullMarkdown field', () => {
     const longText = 'x'.repeat(5000)
-    const messages: Message[] = [
-      {
-        role: 'assistant',
-        content: [
-          {
-            type: 'text',
-            text: longText,
-          },
-        ],
-      },
+    const messages = [
+      createMockMessage('assistant', [
+        {
+          type: 'text',
+          text: longText,
+        },
+      ]),
     ]
 
     const result = formatResult(messages, 'session-1')
@@ -301,16 +276,13 @@ describe('chunkForWhatsApp', () => {
 
 describe('estimateWhatsAppSize', () => {
   it('calculates total size of all messages', () => {
-    const messages: Message[] = [
-      {
-        role: 'assistant',
-        content: [
-          {
-            type: 'text',
-            text: 'Short response that fits.',
-          },
-        ],
-      },
+    const messages = [
+      createMockMessage('assistant', [
+        {
+          type: 'text',
+          text: 'Short response that fits.',
+        },
+      ]),
     ]
 
     const result = formatResult(messages, 'session-1')
@@ -337,18 +309,15 @@ describe('estimateWhatsAppSize', () => {
 
 describe('edge cases', () => {
   it('handles messages with no text blocks', () => {
-    const messages: Message[] = [
-      {
-        role: 'assistant',
-        content: [
-          {
-            type: 'toolCall',
-            name: 'some_tool',
-            id: 'tool-1',
-            input: {},
-          },
-        ],
-      },
+    const messages = [
+      createMockMessage('assistant', [
+        {
+          type: 'tool_use',
+          name: 'some_tool',
+          id: 'tool-1',
+          input: {},
+        },
+      ]),
     ]
 
     const result = formatResult(messages, 'session-1')
@@ -357,25 +326,19 @@ describe('edge cases', () => {
   })
 
   it('strips trailing punctuation from URLs', () => {
-    const messages: Message[] = [
-      {
-        role: 'assistant',
-        content: [
-          {
-            type: 'text',
-            text: 'Check this out.',
-          },
-        ],
-      },
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'toolResult',
-            content: 'Visit https://example.com/article.',
-          },
-        ],
-      },
+    const messages = [
+      createMockMessage('assistant', [
+        {
+          type: 'text',
+          text: 'Check this out.',
+        },
+      ]),
+      createMockMessage('user', [
+        {
+          type: 'tool_result',
+          content: 'Visit https://example.com/article.',
+        },
+      ]),
     ]
 
     const result = formatResult(messages, 'session-1')
@@ -386,26 +349,20 @@ describe('edge cases', () => {
   })
 
   it('deduplicates sources', () => {
-    const messages: Message[] = [
-      {
-        role: 'assistant',
-        content: [
-          {
-            type: 'text',
-            text: 'Multiple sources.',
-          },
-        ],
-      },
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'toolResult',
-            content:
-              'From https://example.com and also https://example.com and https://other.com',
-          },
-        ],
-      },
+    const messages = [
+      createMockMessage('assistant', [
+        {
+          type: 'text',
+          text: 'Multiple sources.',
+        },
+      ]),
+      createMockMessage('user', [
+        {
+          type: 'tool_result',
+          content:
+            'From https://example.com and also https://example.com and https://other.com',
+        },
+      ]),
     ]
 
     const result = formatResult(messages, 'session-1')
@@ -418,16 +375,13 @@ describe('edge cases', () => {
 
   it('preserves formatting and whitespace in results', () => {
     const formattedText = '# Header\n\n- Item 1\n- Item 2\n\n**Bold** text'
-    const messages: Message[] = [
-      {
-        role: 'assistant',
-        content: [
-          {
-            type: 'text',
-            text: formattedText,
-          },
-        ],
-      },
+    const messages = [
+      createMockMessage('assistant', [
+        {
+          type: 'text',
+          text: formattedText,
+        },
+      ]),
     ]
 
     const result = formatResult(messages, 'session-1')

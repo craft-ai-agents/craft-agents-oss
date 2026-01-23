@@ -100,12 +100,17 @@ function extractSources(sessionMessages: Message[]): string {
   const sources = new Set<string>()
 
   for (const msg of sessionMessages) {
-    if (msg.role === 'user' && msg.content) {
-      // Tool results are in user messages (responses from tools)
+    // Skip if no content
+    if (!msg.content) continue
+
+    // In SDK v7+, assistant role can include tool_use blocks with content
+    if (msg.role === 'assistant' || msg.role === 'user') {
       for (const block of msg.content) {
-        if (block.type === 'toolResult' && block.content) {
-          // Extract URLs from tool result content
-          const urls = block.content.match(/https?:\/\/[^\s)>\]]+/g) || []
+        // Check for tool-related blocks that might contain sources
+        const blockContent = (block as Record<string, any>).content
+        if (blockContent && typeof blockContent === 'string') {
+          // Extract URLs from content
+          const urls = blockContent.match(/https?:\/\/[^\s)>\]]+/g) || []
           urls.forEach((url: string) => {
             // Clean up URL if it has trailing punctuation
             const cleaned = url.replace(/[.,;:!?"\]}\)]*$/, '')
