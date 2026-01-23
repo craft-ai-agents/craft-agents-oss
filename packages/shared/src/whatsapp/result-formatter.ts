@@ -6,10 +6,22 @@
  *
  * Strategy:
  * - Small results (≤4096 chars): Send as-is with citations
- * - Large results (>4096 chars): Send summary + deep link to desktop session
+ * - Medium results (4KB-16KB): Chunk into multiple messages
+ * - Large results (>16KB): Send truncated preview + deep link to desktop session
  */
 
 import type { Message } from '@craft-agent/core/types'
+
+// --- Constants for WhatsApp message size limits ---
+
+/** Maximum characters per WhatsApp message */
+export const MAX_MESSAGE_SIZE = 4096
+
+/** Maximum total size before switching to deep link (16KB) */
+export const MAX_TOTAL_SIZE = 16384
+
+/** Preview length when using deep links */
+export const PREVIEW_LENGTH = 500
 
 export interface FormattedResult {
   /** Array of WhatsApp messages (≤4096 chars each) */
@@ -20,24 +32,100 @@ export interface FormattedResult {
   fullMarkdown: string
   /** True if result was split across multiple messages or truncated */
   truncated: boolean
+  /** Deep link to view full result in desktop app (if applicable) */
+  deepLink?: string
+}
+
+// --- Deep Link Helper Functions ---
+
+/**
+ * Check if result exceeds WhatsApp's total message limit and requires a deep link
+ *
+ * Results over 16KB should use a deep link instead of chunking,
+ * as too many messages would be disruptive to the chat.
+ *
+ * @param result - The result text to check
+ * @returns True if result should use a deep link
+ */
+export function shouldUseDeepLink(result: string): boolean {
+  return result.length > MAX_TOTAL_SIZE
+}
+
+/**
+ * Generate a Vespr deep link for viewing full session details
+ *
+ * Deep links allow users to open the full session in the desktop app
+ * when WhatsApp message limits are exceeded.
+ *
+ * @param workspaceId - The workspace ID containing the session
+ * @param sessionId - The session ID to link to
+ * @returns Deep link URL in format: craftagents://session/{workspaceId}/{sessionId}
+ */
+export function generateDeepLink(workspaceId: string, sessionId: string): string {
+  return `craftagents://session/${encodeURIComponent(workspaceId)}/${encodeURIComponent(sessionId)}`
+}
+
+/**
+ * Format large results that exceed WhatsApp limits
+ *
+ * Strategy:
+ * - Results 4KB-16KB: Chunk into multiple messages
+ * - Results >16KB: Send truncated preview + deep link
+ *
+ * @param result - The full result text
+ * @param workspaceId - Workspace ID for deep link generation
+ * @param sessionId - Session ID for deep link generation
+ * @returns Array of WhatsApp-compatible messages
+ */
+export function formatLargeResult(
+  result: string,
+  workspaceId: string,
+  sessionId: string,
+): string[] {
+  // For very large results (>16KB), use preview + deep link
+  if (shouldUseDeepLink(result)) {
+    const deepLink = generateDeepLink(workspaceId, sessionId)
+    const preview = result.substring(0, PREVIEW_LENGTH).trim()
+
+    // Find a good cutoff point (end of sentence or paragraph)
+    const lastSentence = preview.match(/.*[.!?]\s*/s)
+    const truncatedPreview = lastSentence
+      ? lastSentence[0].trim()
+      : preview + '...'
+
+    return [
+      `📱 **Result Preview**\n\n` +
+        `${truncatedPreview}\n\n` +
+        `---\n` +
+        `*Result too large for WhatsApp (${Math.round(result.length / 1024)}KB)*\n\n` +
+        `🔗 [View full result in Vespr](${deepLink})`
+    ]
+  }
+
+  // For medium results (4KB-16KB), chunk into multiple messages
+  return chunkForWhatsApp(result, MAX_MESSAGE_SIZE)
 }
 
 /**
  * Format agent output for WhatsApp constraints
  *
  * WhatsApp has ~4096 character limit per message.
- * For small results, we preserve full formatting and citations.
- * For large results, we provide a summary with a deep link.
+ * Strategy based on result size:
+ * - Small results (≤4KB): Send as-is with citations
+ * - Medium results (4KB-16KB): Chunk into multiple messages
+ * - Large results (>16KB): Send truncated preview + deep link
  *
  * @param sessionMessages - Array of messages from the SDK session
- * @param sessionId - Session ID for deep linking (e.g., "whatsapp_group::sender")
+ * @param sessionId - Session ID for deep linking
+ * @param workspaceId - Workspace ID for deep linking (defaults to 'default')
  * @param maxChars - Maximum characters per WhatsApp message (default 4096)
  * @returns FormattedResult with messages, summary, and metadata
  */
 export function formatResult(
   sessionMessages: Message[],
   sessionId: string,
-  maxChars: number = 4096,
+  workspaceId: string = 'default',
+  maxChars: number = MAX_MESSAGE_SIZE,
 ): FormattedResult {
   // Extract assistant text and tool results
   // Internal Message type has content as a string (not ContentBlock array)
@@ -72,16 +160,27 @@ export function formatResult(
     }
   }
 
-  // Too large: send summary + link to full session in desktop app
+  // Handle large results using the new helper functions
+  const deepLink = generateDeepLink(workspaceId, sessionId)
+
+  // Very large results (>16KB): use preview + deep link
+  if (shouldUseDeepLink(citedText)) {
+    return {
+      messages: formatLargeResult(citedText, workspaceId, sessionId),
+      summary,
+      fullMarkdown: citedText,
+      truncated: true,
+      deepLink,
+    }
+  }
+
+  // Medium results (4KB-16KB): chunk into multiple messages
+  const chunks = chunkForWhatsApp(citedText, maxChars)
   return {
-    messages: [
-      `📱 **Research Results**\n\n` +
-        `Summary:\n${summary}\n\n` +
-        `🔗 [View full details in Vespr](vespr://session/${sessionId})`,
-    ],
+    messages: chunks,
     summary,
     fullMarkdown: citedText,
-    truncated: true,
+    truncated: chunks.length > 1,
   }
 }
 
