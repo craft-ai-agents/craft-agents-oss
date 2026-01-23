@@ -20,6 +20,7 @@ import { setPerfEnabled, enableDebug } from '@craft-agent/shared/utils'
 import { initNotificationService, clearBadgeCount, initBadgeIcon, initInstanceBadge } from './notifications'
 import { checkForUpdatesOnLaunch, checkPendingUpdateAndInstall, setWindowManager as setAutoUpdateWindowManager } from './auto-update'
 import { startAllSchedulers, stopAllSchedulers } from './scheduler'
+import { initializeAllOrchestrations, cleanupOrchestrationService } from './orchestration'
 
 // Initialize electron-log for renderer process support
 log.initialize()
@@ -211,6 +212,9 @@ app.whenReady().then(async () => {
     // Initialize schedulers for all workspaces
     const workspacesForSchedulers = getWorkspaces().map(ws => ({ id: ws.id, rootPath: ws.rootPath }))
     await startAllSchedulers(workspacesForSchedulers, windowManager, sessionManager)
+
+    // Initialize orchestration services for all workspaces
+    await initializeAllOrchestrations(workspacesForSchedulers)
 
     // Initialize auto-update (check immediately on launch)
     // Skip in dev mode to avoid replacing /Applications app and launching it instead

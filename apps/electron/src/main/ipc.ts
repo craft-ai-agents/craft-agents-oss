@@ -1822,6 +1822,19 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     }
   })
 
+  // Get Agentation enabled setting
+  ipcMain.handle(IPC_CHANNELS.AGENTATION_GET_ENABLED, async () => {
+    const { getAgentationEnabled } = await import('@craft-agent/shared/config/storage')
+    return getAgentationEnabled()
+  })
+
+  // Set Agentation enabled setting
+  ipcMain.handle(IPC_CHANNELS.AGENTATION_SET_ENABLED, async (_event, enabled: boolean) => {
+    if (typeof enabled !== 'boolean') return
+    const { setAgentationEnabled } = await import('@craft-agent/shared/config/storage')
+    setAgentationEnabled(enabled)
+  })
+
   // Update app badge count
   ipcMain.handle(IPC_CHANNELS.BADGE_UPDATE, async (_event, count: number) => {
     const { updateBadgeCount } = await import('./notifications')
@@ -2070,6 +2083,87 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       await scheduler.runNow(id)
     } catch (error) {
       ipcLog.error('Error running schedule:', error)
+      throw error
+    }
+  })
+
+  // GitHub OAuth
+  ipcMain.handle(IPC_CHANNELS.GITHUB_START_OAUTH, async (_event) => {
+    try {
+      const { startGitHubOAuth } = await import('@vespr/shared/github')
+      return await startGitHubOAuth()
+    } catch (error) {
+      ipcLog.error('Error starting GitHub OAuth:', error)
+      throw error
+    }
+  })
+
+  // GitHub Status
+  ipcMain.handle(IPC_CHANNELS.GITHUB_GET_STATUS, async (_event, workspaceId: string) => {
+    try {
+      const workspace = getWorkspaceOrThrow(workspaceId)
+      const { getOrchestrationService } = await import('./orchestration')
+      const service = getOrchestrationService(workspaceId, workspace.rootPath)
+      return await service.getStatus()
+    } catch (error) {
+      ipcLog.error('Error getting GitHub status:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GITHUB_SET_STATUS, async (_event, workspaceId: string, status: any) => {
+    try {
+      const workspace = getWorkspaceOrThrow(workspaceId)
+      const { getOrchestrationService } = await import('./orchestration')
+      const service = getOrchestrationService(workspaceId, workspace.rootPath)
+      if (windowManager) {
+        service.setWindowManager(windowManager)
+      }
+      return await service.setConnectionStatus(status)
+    } catch (error) {
+      ipcLog.error('Error setting GitHub status:', error)
+      throw error
+    }
+  })
+
+  // Daily Report Creation
+  ipcMain.handle(IPC_CHANNELS.REPORT_CREATE, async (_event, workspaceId: string, options: any) => {
+    try {
+      const workspace = getWorkspaceOrThrow(workspaceId)
+      const { getOrchestrationService } = await import('./orchestration')
+      const service = getOrchestrationService(workspaceId, workspace.rootPath)
+      return await service.createReport(options)
+    } catch (error) {
+      ipcLog.error('Error creating report:', error)
+      throw error
+    }
+  })
+
+  // Daily Report Submission
+  ipcMain.handle(IPC_CHANNELS.REPORT_SUBMIT, async (_event, workspaceId: string, report: any) => {
+    try {
+      const workspace = getWorkspaceOrThrow(workspaceId)
+      const { getOrchestrationService } = await import('./orchestration')
+      const service = getOrchestrationService(workspaceId, workspace.rootPath)
+      if (windowManager) {
+        service.setWindowManager(windowManager)
+      }
+      return await service.submitReport(report)
+    } catch (error) {
+      ipcLog.error('Error submitting report:', error)
+      throw error
+    }
+  })
+
+  // Get Latest Report
+  ipcMain.handle(IPC_CHANNELS.REPORT_GET_LATEST, async (_event, workspaceId: string) => {
+    try {
+      const workspace = getWorkspaceOrThrow(workspaceId)
+      const { getOrchestrationService } = await import('./orchestration')
+      const service = getOrchestrationService(workspaceId, workspace.rootPath)
+      return await service.getLatestReport()
+    } catch (error) {
+      ipcLog.error('Error getting latest report:', error)
       throw error
     }
   })

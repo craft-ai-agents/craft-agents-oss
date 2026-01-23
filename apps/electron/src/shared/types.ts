@@ -746,6 +746,19 @@ export const IPC_CHANNELS = {
   SCHEDULE_TOGGLE: 'schedule:toggle',
   SCHEDULE_RUN_NOW: 'schedule:runNow',
   SCHEDULE_EVENT: 'schedule:event',  // Broadcast: schedule execution events
+
+  // GitHub Integration & Orchestration
+  GITHUB_START_OAUTH: 'github:startOAuth',
+  GITHUB_GET_STATUS: 'github:getStatus',
+  GITHUB_SET_STATUS: 'github:setStatus',
+
+  // Daily Reports
+  REPORT_CREATE: 'report:create',
+  REPORT_SUBMIT: 'report:submit',
+  REPORT_GET_LATEST: 'report:getLatest',
+
+  // Orchestration Events (main → renderer broadcast)
+  ORCHESTRATION_EVENT: 'orchestration:event',
 } as const
 
 // Re-import types for ElectronAPI
