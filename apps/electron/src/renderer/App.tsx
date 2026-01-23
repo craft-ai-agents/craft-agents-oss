@@ -13,6 +13,7 @@ import type { AppShellContextType } from '@/context/AppShellContext'
 import { OnboardingWizard, ReauthScreen } from '@/components/onboarding'
 import { ResetConfirmationDialog } from '@/components/ResetConfirmationDialog'
 import { SplashScreen } from '@/components/SplashScreen'
+import { GitHubConnectModal, DailyReportModal } from '@/components/orchestration'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { FocusProvider } from '@/context/FocusContext'
 import { ModalProvider } from '@/context/ModalContext'
@@ -42,6 +43,11 @@ import { skillsAtom } from '@/atoms/skills'
 import { extractBadges } from '@/lib/mentions'
 import { getDefaultStore } from 'jotai'
 import { ShikiThemeProvider, PlatformProvider } from '@craft-agent/ui'
+
+// Lazy load Agentation for code splitting - only loaded when enabled
+const Agentation = React.lazy(() =>
+  import('agentation').then(m => ({ default: m.Agentation }))
+)
 
 type AppState = 'loading' | 'onboarding' | 'reauth' | 'ready'
 
@@ -198,6 +204,9 @@ export default function App() {
   // Notifications enabled state (from app settings)
   const [notificationsEnabled, setNotificationsEnabled] = useState(true)
 
+  // Agentation dev panel state (from app settings)
+  const [agentationEnabled, setAgentationEnabled] = useState(false)
+
   // Sources and skills for badge extraction
   const sources = useAtomValue(sourcesAtom)
   const skills = useAtomValue(skillsAtom)
@@ -333,6 +342,7 @@ export default function App() {
 
     window.electronAPI.getWorkspaces().then(setWorkspaces)
     window.electronAPI.getNotificationsEnabled().then(setNotificationsEnabled)
+    window.electronAPI.getAgentationEnabled().then(setAgentationEnabled)
     window.electronAPI.getSessions().then((loadedSessions) => {
       // Initialize per-session atoms and metadata map
       // NOTE: No sessionsAtom used - sessions are only in per-session atoms
@@ -1301,11 +1311,20 @@ export default function App() {
               onCancel={() => setShowResetDialog(false)}
             />
           </div>
+
+          {/* Orchestration Modals */}
+          <GitHubConnectModal />
+          <DailyReportModal />
         </NavigationProvider>
         </TooltipProvider>
         </ModalProvider>
       </FocusProvider>
     </ShikiThemeProvider>
+    {agentationEnabled && (
+      <React.Suspense fallback={null}>
+        <Agentation />
+      </React.Suspense>
+    )}
     </PlatformProvider>
   )
 }

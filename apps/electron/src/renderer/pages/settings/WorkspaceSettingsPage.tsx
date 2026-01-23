@@ -33,6 +33,7 @@ import {
   SettingsToggle,
   SettingsMenuSelectRow,
 } from '@/components/settings'
+import { GitHubSettingsSection } from '@/components/orchestration'
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
@@ -467,6 +468,9 @@ export default function WorkspaceSettingsPage() {
                 )}
               </AnimatePresence>
             </SettingsSection>
+
+            {/* GitHub Integration */}
+            <GitHubSettingsSection />
 
             {/* Advanced */}
             <SettingsSection title="Advanced">
