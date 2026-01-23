@@ -378,6 +378,8 @@ export interface CreateSessionOptions {
    * - Absolute path string: Use this specific path
    */
   workingDirectory?: string | 'user_default' | 'none'
+  /** Optional metadata for context-specific session creation (e.g., WhatsApp) */
+  metadata?: Record<string, any>
 }
 
 // Events sent from main to renderer
