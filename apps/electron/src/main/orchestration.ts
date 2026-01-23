@@ -27,7 +27,7 @@ import {
   submitDailyReport,
   type DailyReport,
   type GitHubConnectionStatus,
-} from '@vespr/shared/github';
+} from '@craft-agent/shared/github';
 import { IPC_CHANNELS } from '../shared/types';
 
 /**

@@ -13,13 +13,11 @@ import {
   githubOAuthStateAtom,
   githubConnectionAtom,
 } from '@/atoms/orchestration';
-import { useElectronAPI } from '@/hooks/useElectronAPI';
 
 export function GitHubConnectModal() {
   const [isOpen, setIsOpen] = useAtom(githubConnectModalOpenAtom);
   const [oauthState, setOAuthState] = useAtom(githubOAuthStateAtom);
   const [connection, setConnection] = useAtom(githubConnectionAtom);
-  const { ipcInvoke } = useElectronAPI();
 
   useEffect(() => {
     // Listen for orchestration events
@@ -52,7 +50,7 @@ export function GitHubConnectModal() {
         success: false,
       });
 
-      const result = await ipcInvoke('github:startOAuth');
+      const result = await window.electronAPI.githubStartOAuth();
 
       if (!result.success) {
         setOAuthState({

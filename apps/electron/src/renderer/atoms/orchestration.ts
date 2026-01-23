@@ -6,7 +6,7 @@
  */
 
 import { atom } from 'jotai';
-import type { GitHubConnectionStatus, DailyReport } from '@vespr/shared/github';
+import type { GitHubConnectionStatus, DailyReport } from '@craft-agent/shared/github';
 
 /**
  * GitHub connection status atom

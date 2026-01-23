@@ -18,8 +18,7 @@ import {
   reportSubmissionStateAtom,
   isGitHubConnectedAtom,
 } from '@/atoms/orchestration';
-import { useElectronAPI } from '@/hooks/useElectronAPI';
-import type { DailyReport } from '@vespr/shared/github';
+import type { DailyReport } from '@craft-agent/shared/github';
 
 export function DailyReportModal() {
   const [isOpen, setIsOpen] = useAtom(dailyReportModalOpenAtom);
@@ -28,7 +27,6 @@ export function DailyReportModal() {
   const [genState, setGenState] = useAtom(reportGenerationStateAtom);
   const [submitState, setSubmitState] = useAtom(reportSubmissionStateAtom);
   const [isConnected] = useAtom(isGitHubConnectedAtom);
-  const { ipcInvoke } = useElectronAPI();
 
   const [localForm, setLocalForm] = useState(form);
 
@@ -58,7 +56,7 @@ export function DailyReportModal() {
 
       // Note: In a real implementation, you'd get the token from secure storage
       // For now, this is a placeholder showing the pattern
-      const report = (await ipcInvoke('report:create', {
+      const report = (await window.electronAPI.reportCreate({
         repoOwner: localForm.repoOwner,
         repoName: localForm.repoName,
         sinceDays: localForm.sinceDays,
@@ -97,7 +95,7 @@ export function DailyReportModal() {
         success: false,
       });
 
-      const submitted = (await ipcInvoke('report:submit', draft)) as DailyReport;
+      const submitted = (await window.electronAPI.reportSubmit(draft)) as DailyReport;
 
       setDraft(submitted);
       setSubmitState({

@@ -7,8 +7,8 @@
 
 import { useEffect } from 'react';
 import { useAtom } from 'jotai';
-import { useParams } from 'react-router';
 import { Github, LogOut } from 'lucide-react';
+import { useAppShellContext } from '@/context/AppShellContext';
 import {
   SettingsSection,
   SettingsCard,
@@ -22,21 +22,19 @@ import {
   githubConnectModalOpenAtom,
   dailyReportFormAtom,
 } from '@/atoms/orchestration';
-import { useElectronAPI } from '@/hooks/useElectronAPI';
 
 export function GitHubSettingsSection() {
-  const { workspaceId } = useParams();
+  const { activeWorkspaceId: workspaceId } = useAppShellContext();
   const [connection, setConnection] = useAtom(githubConnectionAtom);
   const [, setConnectModalOpen] = useAtom(githubConnectModalOpenAtom);
   const [reportForm, setReportForm] = useAtom(dailyReportFormAtom);
-  const { ipcInvoke } = useElectronAPI();
 
   // Load GitHub connection status when component mounts
   useEffect(() => {
     const loadGitHubStatus = async () => {
       if (!workspaceId) return;
       try {
-        const status = await ipcInvoke('github:getStatus', workspaceId);
+        const status = await window.electronAPI.githubGetStatus(workspaceId);
         if (status) {
           setConnection(status);
         }
@@ -46,7 +44,7 @@ export function GitHubSettingsSection() {
     };
 
     loadGitHubStatus();
-  }, [workspaceId, ipcInvoke, setConnection]);
+  }, [workspaceId, setConnection]);
 
   const handleDisconnect = async () => {
     if (!workspaceId) return;
@@ -56,7 +54,7 @@ export function GitHubSettingsSection() {
         isConnected: false,
         connectedAt: undefined,
       };
-      await ipcInvoke('github:setStatus', workspaceId, status);
+      await window.electronAPI.githubSetStatus(workspaceId, status);
       setConnection(status);
       setReportForm({ repoOwner: '', repoName: '', sinceDays: 1 });
     } catch (error) {
