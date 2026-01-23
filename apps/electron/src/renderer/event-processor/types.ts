@@ -309,6 +309,15 @@ export interface SessionUnsharedEvent {
 }
 
 /**
+ * Labels changed event - session labels were updated
+ */
+export interface LabelsChangedEvent {
+  type: 'labels_changed'
+  sessionId: string
+  labelIds: string[]
+}
+
+/**
  * Auth request event - unified auth flow (credential or OAuth)
  * Adds auth-request message to session and displays inline auth UI
  */
@@ -495,6 +504,7 @@ export type AgentEvent =
   | UserMessageEvent
   | SessionSharedEvent
   | SessionUnsharedEvent
+  | LabelsChangedEvent
   | AuthRequestEvent
   | AuthCompletedEvent
   | SourceActivatedEvent

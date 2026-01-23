@@ -372,6 +372,8 @@ function headerToMetadata(header: SessionHeader, workspaceRootPath: string): Ses
       // Shared viewer state - must be included for persistence across app restarts
       sharedUrl: header.sharedUrl,
       sharedId: header.sharedId,
+      // Label IDs
+      labelIds: header.labelIds,
     };
   } catch {
     return null;
@@ -474,6 +476,7 @@ export function updateSessionMetadata(
     | 'sharedUrl'
     | 'sharedId'
     | 'model'
+    | 'labelIds'
   >>
 ): void {
   const session = loadSession(workspaceRootPath, sessionId);
@@ -489,6 +492,7 @@ export function updateSessionMetadata(
   if ('sharedUrl' in updates) session.sharedUrl = updates.sharedUrl;
   if ('sharedId' in updates) session.sharedId = updates.sharedId;
   if (updates.model !== undefined) session.model = updates.model;
+  if (updates.labelIds !== undefined) session.labelIds = updates.labelIds;
 
   saveSession(session);
 }

@@ -27,6 +27,7 @@ import type {
   UserMessageEvent,
   SessionSharedEvent,
   SessionUnsharedEvent,
+  LabelsChangedEvent,
   AuthRequestEvent,
   AuthCompletedEvent,
   UsageUpdateEvent,
@@ -581,6 +582,27 @@ export function handleSessionUnshared(
         ...session,
         sharedUrl: undefined,
         sharedId: undefined,
+      },
+      streaming,
+    },
+    effects: [],
+  }
+}
+
+/**
+ * Handle labels_changed - update session labels
+ */
+export function handleLabelsChanged(
+  state: SessionState,
+  event: LabelsChangedEvent
+): ProcessResult {
+  const { session, streaming } = state
+
+  return {
+    state: {
+      session: {
+        ...session,
+        labelIds: event.labelIds,
       },
       streaming,
     },

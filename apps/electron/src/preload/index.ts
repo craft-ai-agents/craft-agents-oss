@@ -242,6 +242,25 @@ const api: ElectronAPI = {
   listStatuses: (workspaceId: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.STATUSES_LIST, workspaceId),
 
+  // Labels management
+  listLabels: (workspaceId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.LABELS_LIST, workspaceId),
+  createLabel: (workspaceId: string, name: string, color: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.LABELS_CREATE, workspaceId, name, color),
+  updateLabel: (workspaceId: string, labelId: string, updates: { name?: string; color?: string }) =>
+    ipcRenderer.invoke(IPC_CHANNELS.LABELS_UPDATE, workspaceId, labelId, updates),
+  deleteLabel: (workspaceId: string, labelId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.LABELS_DELETE, workspaceId, labelId),
+  onLabelsChanged: (callback: (workspaceId: string) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, workspaceId: string) => {
+      callback(workspaceId)
+    }
+    ipcRenderer.on(IPC_CHANNELS.LABELS_CHANGED, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.LABELS_CHANGED, handler)
+    }
+  },
+
   // Generic workspace image loading/saving
   readWorkspaceImage: (workspaceId: string, relativePath: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.WORKSPACE_READ_IMAGE, workspaceId, relativePath),
