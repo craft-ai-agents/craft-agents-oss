@@ -46,6 +46,7 @@ bun run electron:start
 - **Cron Scheduler**: Visual cron-based scheduling for automated agent tasks with time picker and preset schedules
 - **MCP Integration**: Connect to MCP servers (Craft, Linear, GitHub, Notion, custom)
 - **Sources**: Connect to REST APIs (Google, Slack, Microsoft) and local filesystems
+- **WhatsApp Integration**: Connect WhatsApp to receive and respond to messages via AI agents with permission directives
 - **Permission Modes**: Three-level system (Explore, Ask to Edit, Auto) with customizable rules
 - **Background Tasks**: Run long-running operations with progress tracking and real-time UI sync
 - **Dynamic Status System**: Customizable session workflow states (Todo, In Progress, Done, etc.)

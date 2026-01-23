@@ -50,6 +50,27 @@ Vespr leverages the Claude Agent SDK and Claude Code while adding significant im
 - **Location:** `apps/electron/src/main/scheduler.ts`
 - **Impact:** All connected clients receive immediate updates
 
+### 5. WhatsApp Integration
+- **Location:** `apps/electron/src/renderer/components/whatsapp/` and `apps/electron/src/main/whatsapp-*.ts`
+- **Features:**
+  - QR code authentication via WhatsApp Web
+  - Session management and persistence
+  - Message routing with permission directives
+- **Key Files:**
+  - `WhatsAppSettingsSection.tsx` - Settings UI for WhatsApp connection
+  - `whatsapp-service.ts` - Main process WhatsApp service
+  - `whatsapp-ipc.ts` - IPC handlers for WhatsApp operations
+- **Backend:** `packages/shared/src/whatsapp/`
+  - `message-router` - Routes incoming messages
+  - `directive-parser` - Parses permission directives from messages
+  - `session-mapper` - Maps WhatsApp sessions to Vespr sessions
+  - `result-formatter` - Formats agent responses for WhatsApp
+
+### 6. GitHub OAuth Settings UI
+- **Location:** Settings page
+- **Feature:** Users can enter GitHub OAuth credentials directly in the UI
+- **Benefit:** Simplified OAuth setup without manual config file editing
+
 ## Project Structure
 
 ```
@@ -181,6 +202,7 @@ Key IPC handlers in `apps/electron/src/main/ipc.ts`:
 - `session:*` - Session management
 - `config:*` - Configuration updates
 - `source:*` - Data source operations
+- `whatsapp:*` - WhatsApp connection and messaging
 
 ## Recent Bug Fixes
 
@@ -188,6 +210,7 @@ Key IPC handlers in `apps/electron/src/main/ipc.ts`:
 2. **Ralph Loop Security**: Added hardening and memory leak prevention
 3. **Dark Mode Support**: Fixed markdown overlay rendering in dark mode
 4. **Global Skills Loading**: Auto-create plugin manifest for SDK integration
+5. **Dropdown Aria-Hidden Dialog Conflict**: Fixed accessibility conflict between dropdown menus and dialog components
 
 ## Common Tasks
 

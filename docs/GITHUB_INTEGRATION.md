@@ -37,7 +37,25 @@ Vespr's GitHub integration allows you to:
 
 ⚠️ **Important**: Never share your Client Secret publicly!
 
-## Step 2: Configure Environment Variables
+## Step 2: Configure OAuth Credentials
+
+You have two options for configuring your GitHub OAuth credentials:
+
+### Option A: Settings UI (Recommended)
+
+The easiest way to configure GitHub OAuth is through the Settings UI:
+
+1. Open Vespr application
+2. Go to **Settings** > **Credentials**
+3. Find the **GitHub OAuth** section
+4. Enter your **Client ID** and **Client Secret** from Step 1
+5. Click **Save**
+
+This method stores credentials securely in `~/.vespr/credentials.enc` and does not require a restart.
+
+### Option B: Environment Variables
+
+Alternatively, you can configure credentials via environment variables:
 
 1. Open `.env` file in the project root (create if it doesn't exist):
 
@@ -47,23 +65,27 @@ GITHUB_OAUTH_CLIENT_ID=your-client-id-from-step-1
 GITHUB_OAUTH_CLIENT_SECRET=your-client-secret-from-step-1
 ```
 
-2. Alternatively, add these to your `.env.example`:
+2. Or copy from the example file:
 
 ```bash
 cp .env.example .env
 # Edit .env and replace placeholder values
 ```
 
-## Step 3: Restart the Application
+> **Note**: Environment variables require an application restart to take effect. The Settings UI method (Option A) is recommended as it takes effect immediately.
 
-After updating environment variables:
+## Step 3: Restart the Application (Only for Option B)
+
+If you configured credentials via environment variables (Option B), restart the application:
 
 ```bash
-# Kill the existing process
+# Kill the existing process and restart
 bun run electron:dev    # or electron:start
 
 # The app will pick up new environment variables
 ```
+
+> **Tip**: If you used Option A (Settings UI), skip this step - your credentials are already active.
 
 ## Step 4: Connect Your Repository
 
@@ -129,9 +151,10 @@ Use environment-specific `.env` files or pass variables at runtime.
 
 **Problem**: Error when trying to connect GitHub
 **Solution**:
-1. Check that `GITHUB_OAUTH_CLIENT_ID` and `GITHUB_OAUTH_CLIENT_SECRET` are set
-2. Verify you restarted the application after setting env variables
-3. Confirm values are correct in your OAuth App on GitHub
+1. Verify credentials are configured via **Settings > Credentials** or environment variables
+2. If using environment variables, ensure you restarted the application
+3. Confirm values match your OAuth App on GitHub
+4. Try entering credentials directly in **Settings > Credentials** for immediate effect
 
 ### "Invalid redirect URI"
 
