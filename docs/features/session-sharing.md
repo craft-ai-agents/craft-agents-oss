@@ -1,8 +1,8 @@
-# Session Sharing - User Guide
+# Session Sharing
 
 **Last Updated:** 2026-01-23
 
-This guide explains how to share Vespr chat sessions with different viewer backends, giving you full control over where and how your conversations are hosted.
+This guide explains how to share Vespr chat sessions using different viewer backends, giving you full control over where and how your conversations are hosted.
 
 ---
 
@@ -12,7 +12,7 @@ This guide explains how to share Vespr chat sessions with different viewer backe
 
 Session sharing allows you to generate a public URL for any Vespr conversation, making it easy to share your AI interactions with teammates, clients, or the community. When you share a session, Vespr creates a read-only viewer that displays the full conversation history.
 
-### Why Use Different Viewer Backends?
+### Available Viewer Backends
 
 Vespr supports multiple viewer backends to give you flexibility and control:
 
@@ -34,9 +34,23 @@ Choose the backend that best fits your privacy requirements, infrastructure, and
 
 ---
 
-## Craft Hosted (Default)
+## Quick Start
 
-### How It Works
+### Default Setup (Zero Configuration)
+
+Vespr works out of the box with Craft Hosted viewer:
+
+1. Right-click any session in the session list
+2. Select "Share to Viewer"
+3. Copy the generated URL and share it
+
+No setup, no configuration files, no API keys needed.
+
+---
+
+## Viewer Backends
+
+### Craft Hosted (Default)
 
 The Craft Hosted viewer uploads your session to `https://agents.craft.do`, a service provided by the Claude Agent SDK team. This is the fastest and easiest way to share sessions with zero configuration.
 
@@ -46,17 +60,7 @@ The Craft Hosted viewer uploads your session to `https://agents.craft.do`, a ser
 - Sessions remain accessible indefinitely unless revoked
 - File size limit: ~10MB per session
 
-### Zero Configuration Required
-
-Craft Hosted works out of the box. Simply:
-
-1. Right-click any session in the session list
-2. Select "Share to Viewer"
-3. Copy the generated URL and share it
-
-No setup, no configuration files, no API keys needed.
-
-### Custom URL Option
+#### Custom URL Option
 
 If you're using a self-hosted instance of the Craft viewer that's compatible with the agents.craft.do API, you can point Vespr to your instance:
 
@@ -76,9 +80,7 @@ If you're using a self-hosted instance of the Craft viewer that's compatible wit
 
 ---
 
-## Static Export
-
-### How It Works
+### Static Export
 
 Static Export generates self-contained HTML files for each shared session. These files can be:
 
@@ -99,7 +101,7 @@ Static Export generates self-contained HTML files for each shared session. These
 - ❌ **No real-time updates** - Static snapshot at time of share
 - ❌ **No analytics** - Can't track views or access
 
-### Configuring Export Path
+#### Configuring Export Path
 
 1. Open **Settings → Sharing**
 2. Select **"Static Export"**
@@ -118,12 +120,11 @@ When you share a session, Vespr will generate an HTML file at:
 ~/vespr-shares/{session-id}.html
 ```
 
-### Upload Command Examples
+#### Upload Command Examples
 
 To automatically upload exported files to a remote host, configure the **"Upload Command"** field. This command runs after each export in the export directory.
 
-#### AWS S3
-
+**AWS S3:**
 ```bash
 aws s3 sync . s3://my-bucket/shares --delete --acl public-read
 ```
@@ -134,24 +135,7 @@ aws s3 sync . s3://my-bucket/shares --delete --acl public-read
 3. Create S3 bucket with public read access
 4. Set bucket URL in settings (optional): `https://my-bucket.s3.amazonaws.com/shares`
 
-**Recommended bucket policy:**
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "PublicReadGetObject",
-      "Effect": "Allow",
-      "Principal": "*",
-      "Action": "s3:GetObject",
-      "Resource": "arn:aws:s3:::my-bucket/shares/*"
-    }
-  ]
-}
-```
-
-#### Netlify
-
+**Netlify:**
 ```bash
 netlify deploy --dir=. --prod --site=my-vespr-shares
 ```
@@ -162,8 +146,7 @@ netlify deploy --dir=. --prod --site=my-vespr-shares
 3. Link site: `netlify link --name=my-vespr-shares`
 4. Set custom domain in Netlify dashboard (optional)
 
-#### Cloudflare R2
-
+**Cloudflare R2:**
 ```bash
 rclone sync . r2:my-bucket/shares --exclude ".*"
 ```
@@ -174,8 +157,7 @@ rclone sync . r2:my-bucket/shares --exclude ".*"
 3. Enable public access in Cloudflare dashboard
 4. Set public bucket URL
 
-#### rsync (Self-Hosted Server)
-
+**rsync (Self-Hosted Server):**
 ```bash
 rsync -avz --delete . user@server.example.com:/var/www/shares/
 ```
@@ -185,8 +167,7 @@ rsync -avz --delete . user@server.example.com:/var/www/shares/
 2. Configure web server (nginx, Apache) to serve `/var/www/shares/`
 3. Ensure directory permissions allow write access
 
-#### GitHub Pages
-
+**GitHub Pages:**
 ```bash
 git add . && git commit -m "Update shares" && git push origin gh-pages
 ```
@@ -198,7 +179,7 @@ git add . && git commit -m "Update shares" && git push origin gh-pages
 4. Enable GitHub Pages in repo settings
 5. Set custom domain (optional)
 
-### Security Considerations for Upload Commands
+#### Security Considerations for Upload Commands
 
 **Important:** Upload commands run in a shell with full system access. Follow these best practices:
 
@@ -213,47 +194,9 @@ git add . && git commit -m "Update shares" && git push origin gh-pages
 - No shell injection from session IDs (alphanumeric only)
 - Failed uploads don't mark session as "shared"
 
-### File Permissions and Access Control
-
-Exported HTML files are world-readable by default. To restrict access:
-
-#### Option 1: Server-Side Authentication
-
-Configure your web server to require authentication:
-
-**nginx example:**
-```nginx
-location /shares {
-    auth_basic "Vespr Shares";
-    auth_basic_user_file /etc/nginx/.htpasswd;
-    root /var/www;
-}
-```
-
-#### Option 2: Pre-Signed URLs (S3)
-
-Generate time-limited signed URLs instead of public access:
-
-```bash
-# Replace upload command with:
-aws s3 sync . s3://my-private-bucket/shares
-# Then generate signed URL manually:
-aws s3 presign s3://my-private-bucket/shares/{session-id}.html --expires-in 3600
-```
-
-#### Option 3: Static Site Password Protection
-
-Use services like Netlify's password protection:
-```bash
-# In Netlify dashboard:
-Site Settings → Access Control → Password Protection
-```
-
 ---
 
-## Self-Hosted Viewer
-
-### How It Works
+### Self-Hosted Viewer
 
 Run your own instance of the Craft viewer backend on your infrastructure. This gives you:
 
@@ -267,9 +210,9 @@ Run your own instance of the Craft viewer backend on your infrastructure. This g
 - Public URL with HTTPS (required for secure sharing)
 - Optional: API key authentication for additional security
 
-### Configuration
+#### Configuration
 
-1. Deploy the viewer backend (see [Self-Hosting Guide](../self-hosting/viewer-setup.md))
+1. Deploy the viewer backend (see self-hosting documentation)
 2. Open **Settings → Sharing** in Vespr
 3. Select **"Self-Hosted Viewer"**
 4. Enter your viewer URL:
@@ -280,21 +223,9 @@ Run your own instance of the Craft viewer backend on your infrastructure. This g
 6. Click **"Test Connection"** to verify
 7. Click **"Save Settings"**
 
-### Deployment Options
-
-See the [Viewer Self-Hosting Guide](../self-hosting/viewer-setup.md) for detailed deployment instructions including:
-
-- Docker Compose setup
-- Kubernetes deployment
-- Railway/Render one-click deploy
-- Custom domain configuration
-- SSL certificate setup
-
 ---
 
-## Local Viewer
-
-### How It Works
+### Local Viewer
 
 The Local Viewer runs an HTTP server on your machine (`http://localhost:3456` by default), allowing you to share sessions:
 
@@ -312,7 +243,7 @@ The Local Viewer runs an HTTP server on your machine (`http://localhost:3456` by
 - ❌ **Ephemeral** - Sessions lost when Vespr closes
 - ❌ **Single machine** - Only serves from one device at a time
 
-### Configuration
+#### Configuration
 
 1. Open **Settings → Sharing**
 2. Select **"Local Viewer"**
@@ -420,6 +351,45 @@ You can edit `~/.vespr/config.json` directly:
 - `exportPath` must be absolute or use `~` prefix
 - `uploadCommand` is optional (can be empty string or omitted)
 - `localPort` must be between 1024-65535
+
+---
+
+## Architecture Overview
+
+### Design Principles
+
+The session sharing feature was designed with Vespr's core values in mind:
+
+1. **User Ownership** - Multiple backends give users control over their data
+2. **Privacy First** - Local and static export options eliminate cloud dependency
+3. **Offline Capable** - Static export and local viewer work without internet
+4. **Simplicity** - Craft Hosted remains zero-config default
+5. **Flexibility** - Extensible architecture for new backends
+6. **Portability** - Standard formats (HTML, JSON) ensure data portability
+
+### ViewerService Pattern
+
+The implementation follows Vespr's established abstraction patterns (similar to credentials, sources, and OAuth):
+
+```
+ViewerService Interface
+├── CraftHostedViewer (default)
+├── StaticExportViewer
+├── LocalViewer
+└── SelfHostedViewer
+```
+
+Each implementation provides the same interface:
+- `share(session)` - Create shareable URL
+- `update(id, session)` - Update existing share
+- `revoke(id)` - Remove shared session
+- `healthCheck()` - Verify backend is accessible
+
+This pattern allows:
+- **Backward compatibility** - Existing shares continue working
+- **Easy extension** - New backends can be added without code changes
+- **Workspace isolation** - Different backends per workspace
+- **Graceful degradation** - Falls back to default if custom backend fails
 
 ---
 
@@ -626,17 +596,20 @@ A: Indefinitely until revoked (all backends) or until you delete the HTML file (
 
 **Q: Can I share a subset of messages, not the whole session?**
 
-A: Not currently. Shares include full conversation history. Feature request: [GitHub Issue #XXX](link).
+A: Not currently. Shares include full conversation history. This is a potential future enhancement.
 
 **Q: Does sharing affect my API usage/costs?**
 
 A: No. Sharing only uploads stored session data, doesn't call Claude API.
 
+**Q: Why was decoupling from agents.craft.do important?**
+
+A: The original implementation had a hard dependency on `https://agents.craft.do`, creating vendor lock-in and a single point of failure. The current architecture provides multiple backends while maintaining backward compatibility with Craft Hosted as the default.
+
 ---
 
 ## Related Documentation
 
-- [Self-Hosting Guide](../self-hosting/viewer-setup.md) - Deploy your own viewer backend
 - [Session Management](./sessions.md) - Working with sessions
 - [Privacy & Security](../security/privacy.md) - Data handling best practices
 - [Configuration Reference](../reference/config.md) - Complete config schema
