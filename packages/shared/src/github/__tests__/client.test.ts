@@ -141,6 +141,93 @@ describe('GitHubClient', () => {
     });
   });
 
+  describe('retry logic', () => {
+    it('should retry on 500 errors and eventually succeed', async () => {
+      let attemptCount = 0;
+      const mockFetch = mock(async () => {
+        attemptCount++;
+        if (attemptCount < 3) {
+          return new Response('Server error', { status: 500 });
+        }
+        return new Response(JSON.stringify([mockIssue]), {
+          status: 200,
+          headers: {
+            'x-ratelimit-limit': '60',
+            'x-ratelimit-remaining': '59',
+            'x-ratelimit-reset': String(Math.floor(Date.now() / 1000) + 3600),
+          },
+        });
+      });
+      global.fetch = mockFetch as any;
+
+      const issues = await client.listIssues('owner', 'repo');
+      expect(issues).toHaveLength(1);
+      expect(attemptCount).toBe(3);
+    });
+
+    it('should not retry 404 errors', async () => {
+      let attemptCount = 0;
+      const mockFetch = mock(async () => {
+        attemptCount++;
+        return new Response('Not found', { status: 404 });
+      });
+      global.fetch = mockFetch as any;
+
+      try {
+        await client.listIssues('owner', 'nonexistent');
+        expect(false).toBe(true); // Should throw
+      } catch (error) {
+        // Should fail immediately without retrying
+        expect(attemptCount).toBe(1);
+      }
+    });
+
+    it('should not retry 401 errors', async () => {
+      let attemptCount = 0;
+      const mockFetch = mock(async () => {
+        attemptCount++;
+        return new Response('Unauthorized', { status: 401 });
+      });
+      global.fetch = mockFetch as any;
+
+      try {
+        await client.listIssues('owner', 'repo');
+        expect(false).toBe(true); // Should throw
+      } catch (error) {
+        // Should fail immediately without retrying
+        expect(attemptCount).toBe(1);
+      }
+    });
+
+    it('should allow configurable retry settings', () => {
+      const customClient = new GitHubClient('token', {
+        retry: {
+          maxAttempts: 5,
+          initialDelayMs: 100,
+          maxDelayMs: 5000,
+          backoffMultiplier: 3,
+        },
+      });
+
+      const config = customClient.getRetryConfig();
+      expect(config.maxAttempts).toBe(5);
+      expect(config.initialDelayMs).toBe(100);
+      expect(config.maxDelayMs).toBe(5000);
+      expect(config.backoffMultiplier).toBe(3);
+    });
+
+    it('should allow updating retry configuration at runtime', () => {
+      client.setRetryConfig({
+        maxAttempts: 2,
+        initialDelayMs: 250,
+      });
+
+      const config = client.getRetryConfig();
+      expect(config.maxAttempts).toBe(2);
+      expect(config.initialDelayMs).toBe(250);
+    });
+  });
+
   describe('recent activity', () => {
     it('should fetch issues and PRs in parallel', async () => {
       const mockFetch = mock(async (url) => {

@@ -6,6 +6,8 @@
  * - Response caching (1 hour TTL)
  * - Batch operations for efficiency
  * - Graceful error handling
+ * - Exponential backoff retry with jitter
+ * - Transient error detection
  */
 
 import type {
@@ -35,6 +37,21 @@ interface RateLimitInfo {
 }
 
 /**
+ * Retry configuration
+ */
+interface RetryConfig {
+  maxAttempts: number;
+  initialDelayMs: number;
+  maxDelayMs: number;
+  backoffMultiplier: number;
+}
+
+/**
+ * Error classification for retry logic
+ */
+type ErrorType = 'transient' | 'rateLimit' | 'auth' | 'notFound' | 'permanent' | 'network';
+
+/**
  * GitHub REST API Client
  */
 export class GitHubClient {
@@ -42,9 +59,22 @@ export class GitHubClient {
   private cache = new Map<string, CacheEntry<unknown>>();
   private cacheTTL = 3600000; // 1 hour
   private rateLimitInfo: RateLimitInfo | null = null;
+  private retryConfig: RetryConfig = {
+    maxAttempts: 3,
+    initialDelayMs: 500,
+    maxDelayMs: 10000,
+    backoffMultiplier: 2,
+  };
+  private requestTimeoutMs = 30000; // 30 second timeout
 
-  constructor(accessToken: string) {
+  constructor(accessToken: string, config?: { timeout?: number; retry?: Partial<RetryConfig> }) {
     this.accessToken = accessToken;
+    if (config?.timeout) {
+      this.requestTimeoutMs = config.timeout;
+    }
+    if (config?.retry) {
+      this.retryConfig = { ...this.retryConfig, ...config.retry };
+    }
   }
 
   /**
@@ -74,51 +104,152 @@ export class GitHubClient {
   }
 
   /**
-   * Make authenticated GitHub API request
+   * Classify error type for retry logic
+   */
+  private classifyError(status: number, message: string): ErrorType {
+    if (status === 429) return 'rateLimit';
+    if (status === 401 || status === 403) return 'auth';
+    if (status === 404) return 'notFound';
+    if (status >= 500 || status === 408) return 'transient';
+    if (message.includes('ECONNREFUSED') || message.includes('ENOTFOUND') || message.includes('timeout')) {
+      return 'network';
+    }
+    return 'permanent';
+  }
+
+  /**
+   * Determine if an error is retryable
+   */
+  private isRetryable(errorType: ErrorType, attempt: number): boolean {
+    switch (errorType) {
+      case 'transient':
+      case 'network':
+        return attempt < this.retryConfig.maxAttempts;
+      case 'rateLimit':
+        // Retry once for rate limit, but indicate we should back off
+        return attempt < 1;
+      case 'auth':
+      case 'notFound':
+      case 'permanent':
+        return false;
+    }
+  }
+
+  /**
+   * Calculate exponential backoff delay with jitter
+   */
+  private calculateBackoffDelay(attempt: number): number {
+    const exponentialDelay = Math.min(
+      this.retryConfig.initialDelayMs * Math.pow(this.retryConfig.backoffMultiplier, attempt),
+      this.retryConfig.maxDelayMs
+    );
+    // Add jitter (±25%)
+    const jitter = exponentialDelay * 0.25 * (Math.random() * 2 - 1);
+    return Math.max(0, exponentialDelay + jitter);
+  }
+
+  /**
+   * Retry a function with exponential backoff
+   */
+  private async retry<T>(fn: () => Promise<T>, context: string = 'API request'): Promise<T> {
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt < this.retryConfig.maxAttempts; attempt++) {
+      try {
+        return await fn();
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        const errorMessage = lastError.message;
+        const status = this.extractStatusFromError(errorMessage);
+        const errorType = this.classifyError(status, errorMessage);
+
+        if (!this.isRetryable(errorType, attempt)) {
+          throw error;
+        }
+
+        const delayMs = this.calculateBackoffDelay(attempt);
+        console.debug(
+          `[GitHub] ${context} failed (${errorMessage}), retrying in ${delayMs}ms (attempt ${attempt + 1}/${this.retryConfig.maxAttempts})`
+        );
+
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+
+    throw lastError || new Error(`${context} failed after ${this.retryConfig.maxAttempts} attempts`);
+  }
+
+  /**
+   * Extract HTTP status from error message
+   */
+  private extractStatusFromError(message: string): number {
+    const match = message.match(/(\d{3})/);
+    return match && match[1] ? parseInt(match[1], 10) : 0;
+  }
+
+  /**
+   * Make authenticated GitHub API request with retry and timeout
    */
   private async request<T>(
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
-    const url = `https://api.github.com${endpoint}`;
+    return this.retry(async () => {
+      const url = `https://api.github.com${endpoint}`;
+      const controller = new AbortController();
+      const timeoutId: ReturnType<typeof setTimeout> = setTimeout(() => controller.abort(), this.requestTimeoutMs);
 
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        Authorization: `Bearer ${this.accessToken}`,
-        Accept: 'application/vnd.github.v3+json',
-        ...options.headers,
-      },
-    });
+      try {
+        const response = await fetch(url, {
+          ...options,
+          signal: controller.signal,
+          headers: {
+            Authorization: `Bearer ${this.accessToken}`,
+            Accept: 'application/vnd.github.v3+json',
+            ...options.headers,
+          },
+        });
 
-    // Update rate limit info from response headers
-    const limit = response.headers.get('x-ratelimit-limit');
-    const remaining = response.headers.get('x-ratelimit-remaining');
-    const reset = response.headers.get('x-ratelimit-reset');
+        // Update rate limit info from response headers
+        const limit = response.headers.get('x-ratelimit-limit');
+        const remaining = response.headers.get('x-ratelimit-remaining');
+        const reset = response.headers.get('x-ratelimit-reset');
 
-    if (limit && remaining && reset) {
-      this.rateLimitInfo = {
-        limit: parseInt(limit, 10),
-        remaining: parseInt(remaining, 10),
-        reset: parseInt(reset, 10) * 1000,
-      };
-    }
+        if (limit && remaining && reset) {
+          this.rateLimitInfo = {
+            limit: parseInt(limit, 10),
+            remaining: parseInt(remaining, 10),
+            reset: parseInt(reset, 10) * 1000,
+          };
+        }
 
-    if (!response.ok) {
-      if (response.status === 403 && remaining === '0') {
-        throw new Error('GitHub API rate limit exceeded');
+        if (!response.ok) {
+          if (response.status === 429 && remaining === '0') {
+            throw new Error(`GitHub API 429 rate limit exceeded (reset at ${new Date(this.rateLimitInfo?.reset || 0).toISOString()})`);
+          }
+          if (response.status === 401) {
+            throw new Error('GitHub API 401 authentication failed - token may be invalid or revoked');
+          }
+          if (response.status === 404) {
+            throw new Error(`GitHub API 404 resource not found: ${endpoint}`);
+          }
+          if (response.status >= 500) {
+            throw new Error(`GitHub API 500 server error: ${response.status} - retrying...`);
+          }
+          const text = await response.text();
+          throw new Error(`GitHub API ${response.status} error: ${text}`);
+        }
+
+        return (await response.json()) as T;
+      } catch (error) {
+        if (error instanceof TypeError && error.message.includes('aborted')) {
+          throw new Error(`GitHub API request timeout after ${this.requestTimeoutMs}ms`);
+        }
+        throw error;
+      } finally {
+        clearTimeout(timeoutId);
       }
-      if (response.status === 401) {
-        throw new Error('GitHub authentication failed');
-      }
-      if (response.status === 404) {
-        throw new Error(`GitHub resource not found: ${endpoint}`);
-      }
-      const text = await response.text();
-      throw new Error(`GitHub API error: ${response.status} ${text}`);
-    }
-
-    return (await response.json()) as T;
+    }, `${options.method || 'GET'} ${endpoint}`);
   }
 
   /**
@@ -133,6 +264,27 @@ export class GitHubClient {
    */
   isNearRateLimit(): boolean {
     return this.rateLimitInfo ? this.rateLimitInfo.remaining < 10 : false;
+  }
+
+  /**
+   * Set retry configuration
+   */
+  setRetryConfig(config: Partial<RetryConfig>): void {
+    this.retryConfig = { ...this.retryConfig, ...config };
+  }
+
+  /**
+   * Set request timeout
+   */
+  setRequestTimeout(timeoutMs: number): void {
+    this.requestTimeoutMs = timeoutMs;
+  }
+
+  /**
+   * Get current retry configuration
+   */
+  getRetryConfig(): RetryConfig {
+    return { ...this.retryConfig };
   }
 
   /**

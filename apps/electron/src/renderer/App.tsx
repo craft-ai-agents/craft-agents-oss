@@ -40,6 +40,7 @@ import {
 } from '@/atoms/sessions'
 import { sourcesAtom } from '@/atoms/sources'
 import { skillsAtom } from '@/atoms/skills'
+import { dailyReportModalOpenAtom } from '@/atoms/orchestration'
 import { extractBadges } from '@/lib/mentions'
 import { getDefaultStore } from 'jotai'
 import { ShikiThemeProvider, PlatformProvider } from '@craft-agent/ui'
@@ -157,6 +158,7 @@ export default function App() {
   const removeSession = useSetAtom(removeSessionAtom)
   const updateSessionDirect = useSetAtom(updateSessionAtom)
   const store = useStore()
+  const setDailyReportModalOpen = useSetAtom(dailyReportModalOpenAtom)
 
   // Helper to update a session by ID with partial fields
   // Uses per-session atom directly instead of updating an array
@@ -334,6 +336,19 @@ export default function App() {
     // to prevent closures from retaining full message arrays
     onNavigateToSession: handleNavigateToSession,
     enabled: notificationsEnabled,
+  })
+
+  // Register global keyboard shortcuts
+  // Cmd+Shift+R: Open daily report
+  useGlobalShortcuts({
+    shortcuts: [
+      {
+        key: 'r',
+        cmd: true,
+        shift: true,
+        action: () => setDailyReportModalOpen(true),
+      },
+    ],
   })
 
   // Load workspaces, sessions, model, notifications setting, and drafts when app is ready

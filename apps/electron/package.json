@@ -46,6 +46,7 @@
     "@radix-ui/react-popover": "^1.1.15",
     "@radix-ui/react-switch": "^1.2.6",
     "@tanstack/react-table": "^8.21.3",
+    "agentation": "^1.1.0",
     "cmdk": "^1.1.1",
     "cronstrue": "^3.9.0",
     "electron-log": "^5.4.3",

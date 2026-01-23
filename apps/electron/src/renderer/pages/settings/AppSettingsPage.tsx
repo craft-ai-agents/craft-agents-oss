@@ -351,6 +351,9 @@ export default function AppSettingsPage() {
   // Notifications state
   const [notificationsEnabled, setNotificationsEnabled] = useState(true)
 
+  // Developer tools state
+  const [agentationEnabled, setAgentationEnabled] = useState(false)
+
   // Auto-update state
   const updateChecker = useUpdateChecker()
   const [isCheckingForUpdates, setIsCheckingForUpdates] = useState(false)
@@ -369,13 +372,15 @@ export default function AppSettingsPage() {
     const loadSettings = async () => {
       if (!window.electronAPI) return
       try {
-        const [billing, notificationsOn] = await Promise.all([
+        const [billing, notificationsOn, agentationOn] = await Promise.all([
           window.electronAPI.getBillingMethod(),
           window.electronAPI.getNotificationsEnabled(),
+          window.electronAPI.getAgentationEnabled(),
         ])
         setAuthType(billing.authType)
         setHasCredential(billing.hasCredential)
         setNotificationsEnabled(notificationsOn)
+        setAgentationEnabled(agentationOn)
       } catch (error) {
         console.error('Failed to load settings:', error)
       } finally {
@@ -560,6 +565,16 @@ export default function AppSettingsPage() {
     await window.electronAPI.setNotificationsEnabled(enabled)
   }, [])
 
+  const handleAgentationEnabledChange = useCallback(async (enabled: boolean) => {
+    setAgentationEnabled(enabled)
+    try {
+      await window.electronAPI?.setAgentationEnabled(enabled)
+    } catch (error) {
+      console.error('Failed to save Agentation setting:', error)
+      setAgentationEnabled(!enabled) // Revert on failure
+    }
+  }, [])
+
   return (
     <div className="h-full flex flex-col">
       <PanelHeader title="App Settings" actions={<HeaderMenu route={routes.view.settings('app')} helpFeature="app-settings" />} />
@@ -700,6 +715,18 @@ export default function AppSettingsPage() {
                   )}
                 </DialogContent>
               </Dialog>
+            </SettingsSection>
+
+            {/* Developer */}
+            <SettingsSection title="Developer">
+              <SettingsCard>
+                <SettingsToggle
+                  label="Agent Debug Panel"
+                  description="Shows real-time agent activity, tool calls, and API requests. Useful for debugging and understanding how the AI processes requests."
+                  checked={agentationEnabled}
+                  onCheckedChange={handleAgentationEnabledChange}
+                />
+              </SettingsCard>
             </SettingsSection>
 
             {/* About */}

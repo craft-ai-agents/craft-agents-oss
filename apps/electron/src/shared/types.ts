@@ -996,6 +996,24 @@ export interface ElectronAPI {
   scheduleToggle(workspaceId: string, id: string): Promise<Schedule | null>
   scheduleRunNow(workspaceId: string, id: string): Promise<void>
   onScheduleEvent(callback: (event: ScheduleEvent) => void): () => void
+
+  // GitHub Integration
+  githubStartOAuth(): Promise<import('@vespr/shared/github').GitHubOAuthResult>
+  githubGetStatus(workspaceId: string): Promise<import('@vespr/shared/github').GitHubConnectionStatus | null>
+  githubSetStatus(workspaceId: string, status: import('@vespr/shared/github').GitHubConnectionStatus): Promise<import('@vespr/shared/github').GitHubConnectionStatus>
+
+  // Daily Reports
+  reportCreate(options: {
+    repoOwner: string
+    repoName: string
+    sinceDays?: number
+    teamCapacity?: { availableDevelopers: number; hoursPerDay: number }
+  }): Promise<import('@vespr/shared/github').DailyReport>
+  reportSubmit(report: import('@vespr/shared/github').DailyReport): Promise<import('@vespr/shared/github').DailyReport>
+  reportGetLatest(workspaceId: string): Promise<import('@vespr/shared/github').DailyReport | null>
+
+  // Orchestration events listener
+  onOrchestrationEvent(callback: (event: any) => void): () => void
 }
 
 /**

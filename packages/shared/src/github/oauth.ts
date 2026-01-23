@@ -61,70 +61,115 @@ function generateState(): string {
 }
 
 /**
- * Exchange authorization code for access token
+ * Retry helper for OAuth operations with exponential backoff
+ */
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  maxAttempts: number = 3,
+  initialDelayMs: number = 500
+): Promise<T> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+
+      // Don't retry on permanent errors
+      if (
+        lastError.message.includes('401') ||
+        lastError.message.includes('403') ||
+        lastError.message.includes('CSRF')
+      ) {
+        throw error;
+      }
+
+      // Wait before retrying (except on last attempt)
+      if (attempt < maxAttempts - 1) {
+        const delayMs = initialDelayMs * Math.pow(2, attempt);
+        const jitter = delayMs * 0.25 * (Math.random() * 2 - 1);
+        const finalDelay = Math.max(0, delayMs + jitter);
+        console.debug(
+          `[GitHub OAuth] Attempt ${attempt + 1} failed, retrying in ${Math.round(finalDelay)}ms...`
+        );
+        await new Promise((resolve) => setTimeout(resolve, finalDelay));
+      }
+    }
+  }
+
+  throw lastError || new Error('OAuth operation failed after retries');
+}
+
+/**
+ * Exchange authorization code for access token with retry
  */
 async function exchangeCodeForToken(
   code: string,
   redirectUri: string
 ): Promise<{ accessToken: string; expiresIn?: number }> {
-  const params = new URLSearchParams({
-    client_id: GITHUB_CLIENT_ID,
-    client_secret: GITHUB_CLIENT_SECRET,
-    code,
-    redirect_uri: redirectUri,
-  });
+  return retryWithBackoff(async () => {
+    const params = new URLSearchParams({
+      client_id: GITHUB_CLIENT_ID,
+      client_secret: GITHUB_CLIENT_SECRET,
+      code,
+      redirect_uri: redirectUri,
+    });
 
-  const response = await fetch(GITHUB_TOKEN_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      Accept: 'application/json',
-    },
-    body: params.toString(),
-  });
+    const response = await fetch(GITHUB_TOKEN_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Accept: 'application/json',
+      },
+      body: params.toString(),
+    });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Token exchange failed: ${errorText}`);
-  }
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Token exchange failed (${response.status}): ${errorText}`);
+    }
 
-  const data = (await response.json()) as {
-    access_token: string;
-    token_type: string;
-    expires_in?: number;
-  };
+    const data = (await response.json()) as {
+      access_token: string;
+      token_type: string;
+      expires_in?: number;
+    };
 
-  return {
-    accessToken: data.access_token,
-    expiresIn: data.expires_in,
-  };
+    return {
+      accessToken: data.access_token,
+      expiresIn: data.expires_in,
+    };
+  }, 3, 500);
 }
 
 /**
- * Get user info from access token
+ * Get user info from access token with retry
  */
 async function getGitHubUser(
   accessToken: string
 ): Promise<{ login: string; email?: string; name?: string; id: number }> {
-  const response = await fetch(GITHUB_USER_URL, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      Accept: 'application/vnd.github.v3+json',
-    },
-  });
+  return retryWithBackoff(async () => {
+    const response = await fetch(GITHUB_USER_URL, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/vnd.github.v3+json',
+      },
+    });
 
-  if (!response.ok) {
-    throw new Error('Failed to get GitHub user info');
-  }
+    if (!response.ok) {
+      throw new Error(`Failed to get GitHub user info (${response.status})`);
+    }
 
-  const data = (await response.json()) as {
-    login: string;
-    email?: string;
-    name?: string;
-    id: number;
-  };
+    const data = (await response.json()) as {
+      login: string;
+      email?: string;
+      name?: string;
+      id: number;
+    };
 
-  return data;
+    return data;
+  }, 3, 500);
 }
 
 /**

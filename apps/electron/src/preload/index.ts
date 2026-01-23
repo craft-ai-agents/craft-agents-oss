@@ -335,6 +335,13 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_GET_ENABLED) as Promise<boolean>,
   setNotificationsEnabled: (enabled: boolean) =>
     ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_SET_ENABLED, enabled),
+
+  // Developer tools
+  getAgentationEnabled: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENTATION_GET_ENABLED) as Promise<boolean>,
+  setAgentationEnabled: (enabled: boolean) =>
+    ipcRenderer.invoke(IPC_CHANNELS.AGENTATION_SET_ENABLED, enabled),
+
   updateBadgeCount: (count: number) =>
     ipcRenderer.invoke(IPC_CHANNELS.BADGE_UPDATE, count),
   clearBadgeCount: () =>
@@ -403,6 +410,33 @@ const api: ElectronAPI = {
     ipcRenderer.on(IPC_CHANNELS.SCHEDULE_EVENT, handler)
     return () => {
       ipcRenderer.removeListener(IPC_CHANNELS.SCHEDULE_EVENT, handler)
+    }
+  },
+
+  // GitHub Integration
+  githubStartOAuth: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.GITHUB_START_OAUTH),
+  githubGetStatus: (workspaceId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.GITHUB_GET_STATUS, workspaceId),
+  githubSetStatus: (workspaceId: string, status: any) =>
+    ipcRenderer.invoke(IPC_CHANNELS.GITHUB_SET_STATUS, workspaceId, status),
+
+  // Daily Reports
+  reportCreate: (options: any) =>
+    ipcRenderer.invoke(IPC_CHANNELS.REPORT_CREATE, options),
+  reportSubmit: (report: any) =>
+    ipcRenderer.invoke(IPC_CHANNELS.REPORT_SUBMIT, report),
+  reportGetLatest: (workspaceId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.REPORT_GET_LATEST, workspaceId),
+
+  // Orchestration events
+  onOrchestrationEvent: (callback: (event: any) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, event: any) => {
+      callback(event)
+    }
+    ipcRenderer.on(IPC_CHANNELS.ORCHESTRATION_EVENT, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.ORCHESTRATION_EVENT, handler)
     }
   },
 }

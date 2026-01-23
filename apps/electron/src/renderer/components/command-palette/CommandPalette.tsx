@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { Command as CommandPrimitive } from 'cmdk'
-import { useAtom, useAtomValue } from 'jotai'
+import { useAtom, useAtomValue, useSetAtom } from 'jotai'
 import { AnimatePresence, motion } from 'motion/react'
 import {
   MessageSquare,
@@ -23,6 +23,7 @@ import { useRegisterModal } from '@/context/ModalContext'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { commandPaletteOpenAtom } from '@/atoms/command-palette'
 import { activeSessionIdAtom, sessionMetaMapAtom } from '@/atoms/sessions'
+import { dailyReportModalOpenAtom } from '@/atoms/orchestration'
 
 // ============ TYPES ============
 interface PaletteCommand {
@@ -47,6 +48,7 @@ const COMMANDS: PaletteCommand[] = [
 
   // Actions
   { id: 'new-chat', label: 'New Chat', icon: Plus, shortcut: ['⌘', 'N'], category: 'actions', keywords: ['create', 'session'] },
+  { id: 'daily-report', label: 'Daily Report', icon: Calendar, shortcut: ['⌘', '⇧', 'R'], category: 'actions', keywords: ['github', 'report', 'orchestration'] },
   { id: 'toggle-sidebar', label: 'Toggle Sidebar', icon: PanelLeft, shortcut: ['⌘', '\\'], category: 'actions', keywords: ['hide', 'show', 'panel'] },
   { id: 'keyboard-shortcuts', label: 'Keyboard Shortcuts', icon: Keyboard, category: 'actions', keywords: ['hotkeys', 'help'] },
 
@@ -123,6 +125,7 @@ export function CommandPalette() {
   const { navigate } = useNavigation()
   const context = useAppShellContext()
   const inputRef = React.useRef<HTMLInputElement>(null)
+  const setDailyReportModalOpen = useSetAtom(dailyReportModalOpenAtom)
 
   // Session state
   const activeSessionId = useAtomValue(activeSessionIdAtom)
@@ -199,6 +202,9 @@ export function CommandPalette() {
         case 'new-chat':
           context.openNewChat?.()
           break
+        case 'daily-report':
+          setDailyReportModalOpen(true)
+          break
         case 'toggle-sidebar':
           // Dispatch a custom event that AppShell listens to
           window.dispatchEvent(new CustomEvent('command-palette:toggle-sidebar'))
@@ -233,7 +239,7 @@ export function CommandPalette() {
           break
       }
     },
-    [navigate, routes, setOpen, context, activeSessionId, sessionMeta]
+    [navigate, routes, setOpen, context, activeSessionId, sessionMeta, setDailyReportModalOpen]
   )
 
   // Focus input when opening

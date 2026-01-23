@@ -49,6 +49,8 @@ export interface StoredConfig {
   model?: string;
   // Notifications
   notificationsEnabled?: boolean;  // Desktop notifications for task completion (default: true)
+  // Developer tools
+  agentationEnabled?: boolean;  // Agentation dev panel for debugging (default: false)
   // Appearance
   colorTheme?: string;  // ID of selected preset theme (e.g., 'dracula', 'nord'). Default: 'default'
   // Auto-update
@@ -249,6 +251,35 @@ export function setNotificationsEnabled(enabled: boolean): void {
   const config = loadStoredConfig();
   if (!config) return;
   config.notificationsEnabled = enabled;
+  saveConfig(config);
+}
+
+/**
+ * Get whether Agentation dev panel is enabled.
+ *
+ * Agentation shows debugging tools for agent interactions including
+ * tool calls, API requests, and real-time activity monitoring.
+ *
+ * @returns true if Agentation panel should be shown, false otherwise
+ * @default false
+ */
+export function getAgentationEnabled(): boolean {
+  const config = loadStoredConfig();
+  if (config?.agentationEnabled !== undefined) {
+    return config.agentationEnabled;
+  }
+  const defaults = loadConfigDefaults();
+  return defaults.defaults.agentationEnabled;
+}
+
+/**
+ * Set whether Agentation dev panel is enabled.
+ * @param enabled - true to show the Agentation panel, false to hide it
+ */
+export function setAgentationEnabled(enabled: boolean): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+  config.agentationEnabled = enabled;
   saveConfig(config);
 }
 
