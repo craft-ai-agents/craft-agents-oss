@@ -154,12 +154,12 @@ export function ScheduleModal({ schedule, onSave, onClose }: ScheduleModalProps)
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-lg max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>{schedule ? 'Edit Schedule' : 'New Schedule'}</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="space-y-4 overflow-y-auto flex-1">
           {/* Name */}
           <div className="space-y-2">
             <Label htmlFor="name">Name</Label>
