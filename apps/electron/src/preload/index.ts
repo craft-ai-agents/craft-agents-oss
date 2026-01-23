@@ -268,8 +268,8 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.SKILLS_DELETE, workspaceId, skillSlug),
   openSkillInEditor: (workspaceId: string, skillSlug: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SKILLS_OPEN_EDITOR, workspaceId, skillSlug),
-  openSkillInFinder: (workspaceId: string, skillSlug: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.SKILLS_OPEN_FINDER, workspaceId, skillSlug),
+  openSkillInFinder: (skillPath: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SKILLS_OPEN_FINDER, skillPath),
 
   // Skills change listener (live updates when skills are added/removed/modified)
   onSkillsChanged: (callback: (skills: import('@craft-agent/shared/skills').LoadedSkill[]) => void) => {

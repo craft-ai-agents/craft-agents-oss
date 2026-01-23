@@ -91,11 +91,11 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
     if (!skill) return
 
     try {
-      await window.electronAPI.openSkillInFinder(workspaceId, skillSlug)
+      await window.electronAPI.openSkillInFinder(skill.path)
     } catch (err) {
       console.error('Failed to open skill in finder:', err)
     }
-  }, [skill, workspaceId, skillSlug])
+  }, [skill])
 
   // Handle delete
   const handleDelete = useCallback(async () => {

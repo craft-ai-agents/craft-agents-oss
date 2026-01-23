@@ -932,7 +932,7 @@ export interface ElectronAPI {
   getSkillFiles?(workspaceId: string, skillSlug: string): Promise<SkillFile[]>
   deleteSkill(workspaceId: string, skillSlug: string): Promise<void>
   openSkillInEditor(workspaceId: string, skillSlug: string): Promise<void>
-  openSkillInFinder(workspaceId: string, skillSlug: string): Promise<void>
+  openSkillInFinder(skillPath: string): Promise<void>
 
   // Skills change listener (live updates when skills are added/removed/modified)
   onSkillsChanged(callback: (skills: LoadedSkill[]) => void): () => void

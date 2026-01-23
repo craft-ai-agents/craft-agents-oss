@@ -180,9 +180,7 @@ function SkillItem({ skill, isSelected, isFirst, workspaceId, onClick, onDelete 
                       window.electronAPI.openUrl(`craftagents://skills/skill/${skill.slug}?window=focused`)
                     }}
                     onShowInFinder={() => {
-                      if (workspaceId) {
-                        window.electronAPI.openSkillInFinder(workspaceId, skill.slug)
-                      }
+                      window.electronAPI.openSkillInFinder(skill.path)
                     }}
                     onDelete={onDelete}
                   />
@@ -203,9 +201,7 @@ function SkillItem({ skill, isSelected, isFirst, workspaceId, onClick, onDelete 
                 window.electronAPI.openUrl(`craftagents://skills/skill/${skill.slug}?window=focused`)
               }}
               onShowInFinder={() => {
-                if (workspaceId) {
-                  window.electronAPI.openSkillInFinder(workspaceId, skill.slug)
-                }
+                window.electronAPI.openSkillInFinder(skill.path)
               }}
               onDelete={onDelete}
             />

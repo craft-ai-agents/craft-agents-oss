@@ -1670,17 +1670,9 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   })
 
   // Open skill folder in Finder/Explorer
-  ipcMain.handle(IPC_CHANNELS.SKILLS_OPEN_FINDER, async (_event, workspaceId: string, skillSlug: string) => {
-    const workspace = getWorkspaceByNameOrId(workspaceId)
-    if (!workspace) throw new Error('Workspace not found')
-
-    const { join } = await import('path')
+  ipcMain.handle(IPC_CHANNELS.SKILLS_OPEN_FINDER, async (_event, skillPath: string) => {
     const { shell } = await import('electron')
-    const { getWorkspaceSkillsPath } = await import('@craft-agent/shared/workspaces')
-
-    const skillsDir = getWorkspaceSkillsPath(workspace.rootPath)
-    const skillDir = join(skillsDir, skillSlug)
-    await shell.showItemInFolder(skillDir)
+    await shell.showItemInFolder(skillPath)
   })
 
   // ============================================================
