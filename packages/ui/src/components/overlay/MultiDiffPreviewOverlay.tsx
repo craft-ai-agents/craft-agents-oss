@@ -12,7 +12,9 @@ import * as React from 'react'
 import { useState, useMemo, useCallback, useEffect, type ReactNode } from 'react'
 import * as ReactDOM from 'react-dom'
 import { PencilLine, FilePlus, X, ChevronDown, Check } from 'lucide-react'
-import { ShikiDiffViewer } from '../code-viewer/ShikiDiffViewer'
+import { DiffView, DiffModeEnum } from '@git-diff-view/react'
+import { generateDiffFile } from '@git-diff-view/file'
+import '@git-diff-view/react/styles/diff-view.css'
 import { truncateFilePath } from '../code-viewer/language-map'
 import { useOverlayMode, OVERLAY_LAYOUT } from '../../lib/layout'
 import { PreviewHeader, PreviewHeaderBadge } from '../ui/PreviewHeader'
@@ -34,6 +36,38 @@ export interface FileChange {
   modified: string
   /** Error message if the tool failed */
   error?: string
+}
+
+/**
+ * Get language from file path for syntax highlighting
+ */
+function getLanguageFromPath(filePath: string): string {
+  const ext = filePath.split('.').pop()?.toLowerCase()
+
+  const languageMap: Record<string, string> = {
+    ts: 'typescript',
+    tsx: 'tsx',
+    js: 'javascript',
+    jsx: 'jsx',
+    py: 'python',
+    rb: 'ruby',
+    go: 'go',
+    rs: 'rust',
+    java: 'java',
+    cpp: 'cpp',
+    c: 'c',
+    css: 'css',
+    html: 'html',
+    json: 'json',
+    md: 'markdown',
+    yml: 'yaml',
+    yaml: 'yaml',
+    toml: 'toml',
+    sh: 'shell',
+    bash: 'bash',
+  }
+
+  return languageMap[ext || ''] || 'plaintext'
 }
 
 export interface MultiDiffPreviewOverlayProps {
@@ -386,6 +420,32 @@ export function MultiDiffPreviewOverlay({
     }
   }, [selectedEntry])
 
+  // Generate diff file for @git-diff-view
+  const diffFile = useMemo(() => {
+    if (!selectedEntry) return null
+
+    try {
+      const language = getLanguageFromPath(selectedEntry.filePath)
+      const file = generateDiffFile(
+        selectedEntry.filePath,
+        combinedDiff.original,
+        selectedEntry.filePath,
+        combinedDiff.modified,
+        language,
+        language
+      )
+
+      file.initTheme(theme)
+      file.init()
+      file.buildSplitDiffLines()
+
+      return file
+    } catch (error) {
+      console.error('Failed to generate diff file:', error)
+      return null
+    }
+  }, [selectedEntry, combinedDiff, theme])
+
   // Handle Escape key
   useEffect(() => {
     if (!isOpen) return
@@ -466,21 +526,22 @@ export function MultiDiffPreviewOverlay({
 
       {/* Main diff area */}
       <div className="flex-1 min-w-0 h-full" style={{ backgroundColor }}>
-        {selectedEntry ? (
-          <ShikiDiffViewer
+        {selectedEntry && diffFile ? (
+          <DiffView
             key={selectedKey}
-            original={combinedDiff.original}
-            modified={combinedDiff.modified}
-            filePath={selectedEntry.filePath}
-            diffStyle="unified"
-            theme={theme}
+            diffFile={diffFile}
+            diffViewMode={DiffModeEnum.Unified}
+            diffViewTheme={theme}
+            diffViewHighlight
+            diffViewWrap
+            diffViewFontSize={13}
           />
         ) : (
           <div
             className="h-full flex items-center justify-center"
             style={{ color: isDark ? '#888' : '#666' }}
           >
-            Select a file to view changes
+            {selectedEntry ? 'Failed to generate diff view' : 'Select a file to view changes'}
           </div>
         )}
       </div>
