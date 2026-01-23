@@ -420,6 +420,10 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.GITHUB_GET_STATUS, workspaceId),
   githubSetStatus: (workspaceId: string, status: any) =>
     ipcRenderer.invoke(IPC_CHANNELS.GITHUB_SET_STATUS, workspaceId, status),
+  githubSetOAuthCredentials: (clientId: string | null, clientSecret: string | null) =>
+    ipcRenderer.invoke(IPC_CHANNELS.GITHUB_SET_OAUTH_CREDENTIALS, clientId, clientSecret),
+  githubHasOAuthCredentials: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.GITHUB_HAS_OAUTH_CREDENTIALS),
 
   // Daily Reports
   reportCreate: (options: any) =>
