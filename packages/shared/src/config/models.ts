@@ -64,3 +64,13 @@ export function getModelShortName(modelId: string): string {
 export function isOpusModel(modelId: string): boolean {
   return modelId.includes('opus');
 }
+
+/**
+ * Check if a model ID refers to a Claude model.
+ * Handles both direct Anthropic IDs (e.g. "claude-sonnet-4-5-20250929")
+ * and provider-prefixed IDs (e.g. "anthropic/claude-sonnet-4" via OpenRouter).
+ */
+export function isClaudeModel(modelId: string): boolean {
+  const lower = modelId.toLowerCase();
+  return lower.startsWith('claude-') || lower.includes('/claude');
+}

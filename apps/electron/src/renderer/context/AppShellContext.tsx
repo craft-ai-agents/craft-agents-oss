@@ -133,6 +133,11 @@ export function AppShellProvider({
   return <AppShellContext.Provider value={value}>{children}</AppShellContext.Provider>
 }
 
+/** Returns context or null if outside provider (safe for optional consumers like playground) */
+export function useOptionalAppShellContext(): AppShellContextType | null {
+  return useContext(AppShellContext)
+}
+
 export function useAppShellContext(): AppShellContextType {
   const context = useContext(AppShellContext)
   if (!context) {

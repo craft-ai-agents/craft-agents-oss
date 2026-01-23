@@ -125,13 +125,14 @@ export default function AppSettingsPage() {
     setFullscreenOverlayOpen(false)
   }, [setFullscreenOverlayOpen])
 
-  // OnboardingWizard hook for editing API connection (starts at api-setup step)
+  // OnboardingWizard hook for editing API connection (starts at api-setup step).
+  // onConfigSaved fires immediately when billing is persisted, updating the model UI instantly.
   const apiSetupOnboarding = useOnboarding({
     initialStep: 'api-setup',
+    onConfigSaved: refreshCustomModel,
     onComplete: () => {
       closeApiSetup()
       loadConnectionInfo()
-      refreshCustomModel()
       apiSetupOnboarding.reset()
     },
     onDismiss: () => {
@@ -144,9 +145,8 @@ export default function AppSettingsPage() {
   const handleApiSetupFinish = useCallback(() => {
     closeApiSetup()
     loadConnectionInfo()
-    refreshCustomModel()
     apiSetupOnboarding.reset()
-  }, [closeApiSetup, loadConnectionInfo, refreshCustomModel, apiSetupOnboarding])
+  }, [closeApiSetup, loadConnectionInfo, apiSetupOnboarding])
 
   const handleNotificationsEnabledChange = useCallback(async (enabled: boolean) => {
     setNotificationsEnabled(enabled)

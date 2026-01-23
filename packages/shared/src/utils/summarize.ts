@@ -15,8 +15,18 @@ export const TOKEN_LIMIT = 15000;
 // Max tokens to send to Haiku for summarization (~400KB, Haiku handles this quickly)
 const MAX_SUMMARIZATION_INPUT = 100000;
 
-// Lazy-initialized Anthropic client for summarization
+// Lazy-initialized Anthropic client for summarization.
+// Must be reset via resetSummarizationClient() when auth/provider settings change.
 let anthropicClient: Anthropic | null = null;
+
+/**
+ * Reset the cached summarization client.
+ * Call this when auth or provider settings change so the next summarization
+ * picks up the new credentials/base URL.
+ */
+export function resetSummarizationClient(): void {
+  anthropicClient = null;
+}
 
 /**
  * Get or create Anthropic client for summarization.

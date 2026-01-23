@@ -237,12 +237,15 @@ export default function App() {
 
   const DRAFT_SAVE_DEBOUNCE_MS = 500
 
-  // Handle onboarding completion
-  const handleOnboardingComplete = useCallback(async () => {
-    // Refresh custom model state (user may have configured OpenRouter/Ollama)
+  // Re-fetch custom model from billing config (called after API connection changes).
+  // Defined early so it can be passed to useOnboarding's onConfigSaved.
+  const refreshCustomModel = useCallback(async () => {
     const billing = await window.electronAPI.getBillingMethod()
     setCustomModel(billing.customModel || null)
+  }, [])
 
+  // Handle onboarding completion
+  const handleOnboardingComplete = useCallback(async () => {
     // Reload workspaces after onboarding
     const ws = await window.electronAPI.getWorkspaces()
     if (ws.length > 0) {
@@ -258,9 +261,11 @@ export default function App() {
     setAppState('ready')
   }, [])
 
-  // Onboarding hook
+  // Onboarding hook — onConfigSaved fires immediately when billing is saved,
+  // ensuring customModel context updates before the wizard closes.
   const onboarding = useOnboarding({
     onComplete: handleOnboardingComplete,
+    onConfigSaved: refreshCustomModel,
     initialSetupNeeds: setupNeeds || undefined,
   })
 
@@ -860,12 +865,6 @@ export default function App() {
     setCurrentModel(model)
     // Persist to config so it's remembered across launches
     window.electronAPI.setModel(model)
-  }, [])
-
-  // Re-fetch custom model from billing config (called after API connection changes)
-  const refreshCustomModel = useCallback(async () => {
-    const billing = await window.electronAPI.getBillingMethod()
-    setCustomModel(billing.customModel || null)
   }, [])
 
   /**

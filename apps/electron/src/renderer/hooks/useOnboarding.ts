@@ -28,6 +28,9 @@ interface UseOnboardingOptions {
   initialStep?: OnboardingStep
   /** Called when user goes back from the initial step (dismisses the wizard) */
   onDismiss?: () => void
+  /** Called immediately after config is saved to disk (before wizard closes).
+   *  Use this to propagate billing/model changes to the UI without waiting for onComplete. */
+  onConfigSaved?: () => void
 }
 
 interface UseOnboardingReturn {
@@ -75,6 +78,7 @@ export function useOnboarding({
   initialSetupNeeds,
   initialStep = 'welcome',
   onDismiss,
+  onConfigSaved,
 }: UseOnboardingOptions): UseOnboardingReturn {
   // Main wizard state
   const [state, setState] = useState<OnboardingState>({
@@ -109,6 +113,8 @@ export function useOnboarding({
       if (result.success) {
         console.log('[Onboarding] Save successful')
         setState(s => ({ ...s, completionStatus: 'complete' }))
+        // Notify caller immediately so UI can reflect billing/model changes
+        onConfigSaved?.()
       } else {
         console.error('[Onboarding] Save failed:', result.error)
         setState(s => ({
@@ -124,7 +130,7 @@ export function useOnboarding({
         errorMessage: error instanceof Error ? error.message : 'Failed to save configuration',
       }))
     }
-  }, [state.apiSetupMethod])
+  }, [state.apiSetupMethod, onConfigSaved])
 
   // Continue to next step
   const handleContinue = useCallback(async () => {

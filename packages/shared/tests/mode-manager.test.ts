@@ -1212,6 +1212,88 @@ describe('rejection reason types for compound commands', () => {
   });
 });
 
+describe('grep with regex patterns containing shell metacharacters', () => {
+  // Config that includes grep in the allowlist
+  const grepConfig = {
+    blockedTools: new Set(['Write', 'Edit']),
+    readOnlyBashPatterns: [
+      { regex: /^grep\b/, source: '^grep\\b', comment: 'Search file contents' },
+      { regex: /^ls\b/, source: '^ls\\b', comment: 'List files' },
+    ] as CompiledBashPattern[],
+    readOnlyMcpPatterns: [],
+    allowedApiEndpoints: [],
+    allowedWritePaths: [],
+    displayName: 'Test',
+    shortcutHint: 'SHIFT+TAB',
+  };
+
+  describe('quoted regex patterns should be ALLOWED', () => {
+    const safeGrepCommands = [
+      // Double-quoted patterns with pipe (alternation)
+      'grep "model.*selector|ModelSelector" /Users/test --files-with-matches',
+      'grep "foo|bar|baz" src/',
+      'grep "error.*>.*warning" logfile.txt',
+      // Single-quoted patterns with pipe
+      "grep 'model.*selector|ModelSelector' /Users/test",
+      "grep 'foo>bar' file.txt",
+      // Patterns with other regex metacharacters
+      'grep "^import.*from" src/',
+      'grep "function\\s+\\w+" lib/',
+      // With various grep flags
+      'grep -rn "model.*selector|ModelSelector" /Users/test',
+      'grep --include="*.ts" "pattern" .',
+    ];
+
+    for (const cmd of safeGrepCommands) {
+      it(`should allow grep with quoted regex: ${cmd}`, () => {
+        const reason = getBashRejectionReason(cmd, grepConfig);
+        expect(reason).toBeNull();
+      });
+    }
+  });
+
+  describe('unquoted patterns with operators should be detected', () => {
+    it('should detect pipeline when | is unquoted in grep pattern', () => {
+      // When | is unquoted, bash-parser treats it as a pipe operator
+      // This creates a pipeline: grep model.*selector | ModelSelector ...
+      const reason = getBashRejectionReason(
+        'grep model.*selector|ModelSelector /Users/test',
+        grepConfig
+      );
+      expect(reason).not.toBeNull();
+      // "ModelSelector" is not in the allowlist, so pipeline fails
+      expect(reason?.type).toBe('no_safe_pattern');
+    });
+
+    it('should detect redirect when > is unquoted in grep argument', () => {
+      // If > appears unquoted (e.g., in a path), bash-parser treats it as redirect
+      const reason = getBashRejectionReason('grep pattern /tmp/output>file', grepConfig);
+      expect(reason).not.toBeNull();
+      expect(reason?.type).toBe('dangerous_operator');
+      if (reason?.type === 'dangerous_operator') {
+        expect(reason.operator).toBe('>');
+        expect(reason.operatorType).toBe('redirect');
+      }
+    });
+  });
+
+  describe('correctly quoted > inside patterns should be ALLOWED', () => {
+    const safeRedirectInQuotes = [
+      'grep "output > file" logfile.txt',
+      'grep "a > b" test.txt',
+      "grep '>' file.txt",
+      'grep "redirect > here" src/',
+    ];
+
+    for (const cmd of safeRedirectInQuotes) {
+      it(`should allow > inside quotes: ${cmd}`, () => {
+        const reason = getBashRejectionReason(cmd, grepConfig);
+        expect(reason).toBeNull();
+      });
+    }
+  });
+});
+
 describe('getBashRejectionReason with pattern metadata', () => {
   // Create test config with patterns that have comments
   const testPatterns: CompiledBashPattern[] = [

@@ -9,7 +9,7 @@ import { runErrorDiagnostics } from './diagnostics.ts';
 import { loadStoredConfig, loadConfigDefaults, getAnthropicBaseUrl, resolveModelId, type Workspace } from '../config/storage.ts';
 import { isLocalMcpEnabled } from '../workspaces/storage.ts';
 import { loadPlanFromPath, type SessionConfig as Session } from '../sessions/storage.ts';
-import { DEFAULT_MODEL } from '../config/models.ts';
+import { DEFAULT_MODEL, isClaudeModel } from '../config/models.ts';
 import { getCredentialManager } from '../credentials/index.ts';
 import { updatePreferences, loadPreferences, formatPreferencesForPrompt, type UserPreferences } from '../config/preferences.ts';
 import type { FileAttachment } from '../utils/files.ts';
@@ -811,6 +811,12 @@ export class CraftAgent {
       const modelConfig = this.config.model || DEFAULT_MODEL;
       const model = resolveModelId(modelConfig);
 
+      // Log provider context for diagnostics (custom base URL = third-party provider)
+      const activeBaseUrl = getAnthropicBaseUrl();
+      if (activeBaseUrl) {
+        debug(`[chat] Custom provider: baseUrl=${activeBaseUrl}, model=${model}, hasApiKey=${!!process.env.ANTHROPIC_API_KEY}`);
+      }
+
       // Determine effective thinking level: ultrathink override boosts to max for this message
       const effectiveThinkingLevel: ThinkingLevel = this.ultrathinkOverride ? 'max' : this.thinkingLevel;
       const thinkingTokens = getThinkingTokens(effectiveThinkingLevel, modelConfig);
@@ -822,9 +828,10 @@ export class CraftAgent {
       // Clear stderr buffer at start of each query
       this.lastStderrOutput = [];
 
-      // Check if using custom API provider (OpenRouter, etc.) - skip Anthropic-specific betas
-      const customBaseUrl = getAnthropicBaseUrl();
-      const useAnthropicBetas = !customBaseUrl;
+      // Detect if resolved model is Claude — non-Claude models (via OpenRouter/Ollama) don't
+      // support Anthropic-specific betas or extended thinking parameters
+      const isClaude = isClaudeModel(model);
+      const useAnthropicBetas = isClaude;
 
       const options: Options = {
         ...getDefaultOptions(),
@@ -845,7 +852,8 @@ export class CraftAgent {
         // - advanced-tool-use-2025-11-20: Enhanced tool use capabilities
         ...(useAnthropicBetas ? { betas: ['advanced-tool-use-2025-11-20'] as any } : {}),
         // Extended thinking: tokens based on effective thinking level (session level + ultrathink override)
-        maxThinkingTokens: thinkingTokens,
+        // Non-Claude models don't support extended thinking, so pass 0 to disable
+        maxThinkingTokens: isClaude ? thinkingTokens : 0,
         // Option A: Append to Claude Code's system prompt (recommended by docs)
         // Use pinned values for consistency after compaction (SDK expects stable system prompt)
         systemPrompt: {

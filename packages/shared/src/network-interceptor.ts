@@ -129,10 +129,20 @@ function debugLog(...args: unknown[]) {
 
 
 /**
- * Check if URL is Anthropic API
+ * Get the configured API base URL at request time.
+ * Reads from env var (set by auth/sessions before SDK starts) with Anthropic default fallback.
  */
-function isAnthropicMessagesUrl(url: string): boolean {
-  return url.includes('api.anthropic.com') && url.includes('/messages');
+function getConfiguredBaseUrl(): string {
+  return process.env.ANTHROPIC_BASE_URL?.trim() || 'https://api.anthropic.com';
+}
+
+/**
+ * Check if URL is a messages endpoint for the configured API provider.
+ * Works with Anthropic, OpenRouter, and any custom baseUrl.
+ */
+function isApiMessagesUrl(url: string): boolean {
+  const baseUrl = getConfiguredBaseUrl();
+  return url.startsWith(baseUrl) && url.includes('/messages');
 }
 
 /**
@@ -204,10 +214,11 @@ function addMetadataToMcpTools(body: Record<string, unknown>): Record<string, un
 }
 
 /**
- * Check if URL should have API errors captured
+ * Check if URL should have API errors captured.
+ * Uses the configured base URL so error capture works with any provider.
  */
 function shouldCaptureApiErrors(url: string): boolean {
-  return url.includes('api.anthropic.com') && url.includes('/messages');
+  return isApiMessagesUrl(url);
 }
 
 const originalFetch = globalThis.fetch.bind(globalThis);
@@ -367,7 +378,7 @@ async function interceptedFetch(
   }
 
   if (
-    isAnthropicMessagesUrl(url) &&
+    isApiMessagesUrl(url) &&
     init?.method?.toUpperCase() === 'POST' &&
     init?.body
   ) {

@@ -47,8 +47,8 @@ import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover
 import { cn } from '@/lib/utils'
 import { applySmartTypography } from '@/lib/smart-typography'
 import { AttachmentPreview } from '../AttachmentPreview'
-import { MODELS, getModelShortName } from '@config/models'
-import { useAppShellContext } from '@/context/AppShellContext'
+import { MODELS, getModelShortName, isClaudeModel } from '@config/models'
+import { useOptionalAppShellContext } from '@/context/AppShellContext'
 import { SourceAvatar } from '@/components/ui/source-avatar'
 import { FreeFormInputContextBadge } from './FreeFormInputContextBadge'
 import type { FileAttachment, LoadedSource, LoadedSkill } from '../../../../shared/types'
@@ -199,8 +199,9 @@ export function FreeFormInput({
   isEmptySession = false,
   contextStatus,
 }: FreeFormInputProps) {
-  // Read custom model from context — when set, overrides the Anthropic model selector
-  const { customModel } = useAppShellContext()
+  // Read custom model from context — when set, overrides the Anthropic model selector.
+  // Uses optional variant so playground (no provider) doesn't crash.
+  const customModel = useOptionalAppShellContext()?.customModel ?? null
 
   // Performance optimization: Always use internal state for typing to avoid parent re-renders
   // Sync FROM parent on mount/change (for restoring drafts)
@@ -1308,38 +1309,41 @@ export function FreeFormInput({
                 })
               )}
 
-              {/* Separator before thinking level */}
-              <StyledDropdownMenuSeparator className="my-1" />
+              {/* Thinking level selector — only shown for Claude models (extended thinking is Claude-specific) */}
+              {(!customModel || isClaudeModel(customModel)) && (
+                <>
+                  <StyledDropdownMenuSeparator className="my-1" />
 
-              {/* Thinking Level - Radix submenu with automatic edge detection */}
-              <DropdownMenuSub>
-                <StyledDropdownMenuSubTrigger className="flex items-center justify-between px-2 py-2 rounded-lg">
-                  <div className="text-left flex-1">
-                    <div className="font-medium text-sm">{getThinkingLevelName(thinkingLevel)}</div>
-                    <div className="text-xs text-muted-foreground">Extended reasoning depth</div>
-                  </div>
-                </StyledDropdownMenuSubTrigger>
-                <StyledDropdownMenuSubContent className="min-w-[220px]">
-                  {THINKING_LEVELS.map(({ id, name, description }) => {
-                    const isSelected = thinkingLevel === id
-                    return (
-                      <StyledDropdownMenuItem
-                        key={id}
-                        onSelect={() => onThinkingLevelChange?.(id)}
-                        className="flex items-center justify-between px-2 py-2 rounded-lg cursor-pointer"
-                      >
-                        <div className="text-left">
-                          <div className="font-medium text-sm">{name}</div>
-                          <div className="text-xs text-muted-foreground">{description}</div>
-                        </div>
-                        {isSelected && (
-                          <Check className="h-4 w-4 text-foreground shrink-0 ml-3" />
-                        )}
-                      </StyledDropdownMenuItem>
-                    )
-                  })}
-                </StyledDropdownMenuSubContent>
-              </DropdownMenuSub>
+                  <DropdownMenuSub>
+                    <StyledDropdownMenuSubTrigger className="flex items-center justify-between px-2 py-2 rounded-lg">
+                      <div className="text-left flex-1">
+                        <div className="font-medium text-sm">{getThinkingLevelName(thinkingLevel)}</div>
+                        <div className="text-xs text-muted-foreground">Extended reasoning depth</div>
+                      </div>
+                    </StyledDropdownMenuSubTrigger>
+                    <StyledDropdownMenuSubContent className="min-w-[220px]">
+                      {THINKING_LEVELS.map(({ id, name, description }) => {
+                        const isSelected = thinkingLevel === id
+                        return (
+                          <StyledDropdownMenuItem
+                            key={id}
+                            onSelect={() => onThinkingLevelChange?.(id)}
+                            className="flex items-center justify-between px-2 py-2 rounded-lg cursor-pointer"
+                          >
+                            <div className="text-left">
+                              <div className="font-medium text-sm">{name}</div>
+                              <div className="text-xs text-muted-foreground">{description}</div>
+                            </div>
+                            {isSelected && (
+                              <Check className="h-4 w-4 text-foreground shrink-0 ml-3" />
+                            )}
+                          </StyledDropdownMenuItem>
+                        )
+                      })}
+                    </StyledDropdownMenuSubContent>
+                  </DropdownMenuSub>
+                </>
+              )}
 
               {/* Context usage footer - only show when we have token data */}
               {contextStatus?.inputTokens != null && contextStatus.inputTokens > 0 && (
