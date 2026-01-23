@@ -244,6 +244,132 @@ export class CredentialManager {
     // Consider expired if within 5 minutes of expiry
     return Date.now() > credential.expiresAt - 5 * 60 * 1000;
   }
+
+  // ============================================================
+  // WhatsApp Session Methods
+  // ============================================================
+
+  /** WhatsApp session data structure */
+  private parseWhatsAppSession(value: string): WhatsAppSession | null {
+    try {
+      return JSON.parse(value) as WhatsAppSession;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Store WhatsApp session credentials (Baileys session data)
+   *
+   * @param workspaceId - Workspace ID
+   * @param phoneNumber - Phone number (used as unique identifier)
+   * @param session - WhatsApp session object
+   */
+  async setWhatsAppSession(
+    workspaceId: string,
+    phoneNumber: string,
+    session: WhatsAppSession
+  ): Promise<void> {
+    await this.set(
+      {
+        type: 'whatsapp_session',
+        workspaceId,
+        sourceId: phoneNumber,
+      },
+      {
+        value: JSON.stringify(session),
+        expiresAt: session.isExpired ? 0 : undefined,
+      }
+    );
+    debug(`[CredentialManager] Saved WhatsApp session for ${phoneNumber} in workspace ${workspaceId}`);
+  }
+
+  /**
+   * Get WhatsApp session credentials
+   *
+   * @param workspaceId - Workspace ID
+   * @param phoneNumber - Phone number
+   * @returns Session object or null if not found
+   */
+  async getWhatsAppSession(
+    workspaceId: string,
+    phoneNumber: string
+  ): Promise<WhatsAppSession | null> {
+    const cred = await this.get({
+      type: 'whatsapp_session',
+      workspaceId,
+      sourceId: phoneNumber,
+    });
+
+    if (!cred?.value) return null;
+    return this.parseWhatsAppSession(cred.value);
+  }
+
+  /**
+   * Delete WhatsApp session credentials (GDPR compliance)
+   *
+   * @param workspaceId - Workspace ID
+   * @param phoneNumber - Phone number
+   * @returns True if deleted, false if not found
+   */
+  async deleteWhatsAppSession(
+    workspaceId: string,
+    phoneNumber: string
+  ): Promise<boolean> {
+    const deleted = await this.delete({
+      type: 'whatsapp_session',
+      workspaceId,
+      sourceId: phoneNumber,
+    });
+    if (deleted) {
+      debug(`[CredentialManager] Deleted WhatsApp session for ${phoneNumber} in workspace ${workspaceId}`);
+    }
+    return deleted;
+  }
+
+  /**
+   * Get all WhatsApp sessions for a workspace
+   *
+   * @param workspaceId - Workspace ID
+   * @returns Array of session objects
+   */
+  async getAllWhatsAppSessions(workspaceId: string): Promise<WhatsAppSession[]> {
+    const allCreds = await this.list({
+      type: 'whatsapp_session',
+      workspaceId,
+    });
+
+    const sessions: WhatsAppSession[] = [];
+    for (const credId of allCreds) {
+      const cred = await this.get(credId);
+      if (cred?.value) {
+        const session = this.parseWhatsAppSession(cred.value);
+        if (session) {
+          sessions.push(session);
+        }
+      }
+    }
+
+    return sessions;
+  }
+}
+
+/**
+ * WhatsApp session data stored in credentials
+ */
+export interface WhatsAppSession {
+  /** User's JID as provided by Baileys */
+  jid: string;
+  /** Push name (display name) from Baileys */
+  pushName: string;
+  /** Full Baileys session state (opaque from storage perspective) */
+  sessionData: unknown;
+  /** Timestamp when session was created (milliseconds since epoch) */
+  createdAt: number;
+  /** Timestamp when user last connected (milliseconds since epoch) */
+  connectedAt: number;
+  /** Whether session has expired and needs re-authentication */
+  isExpired: boolean;
 }
 
 // Singleton instance

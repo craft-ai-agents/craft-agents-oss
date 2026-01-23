@@ -26,7 +26,9 @@ export type CredentialType =
   | 'source_oauth'       // OAuth tokens for MCP/API sources
   | 'source_bearer'      // Bearer tokens
   | 'source_apikey'      // API keys
-  | 'source_basic';      // Basic auth (base64 encoded user:pass)
+  | 'source_basic'       // Basic auth (base64 encoded user:pass)
+  // WhatsApp credentials (workspace-scoped)
+  | 'whatsapp_session';  // WhatsApp Baileys session data
 
 /** Valid credential types for validation */
 const VALID_CREDENTIAL_TYPES: readonly CredentialType[] = [
@@ -38,6 +40,7 @@ const VALID_CREDENTIAL_TYPES: readonly CredentialType[] = [
   'source_bearer',
   'source_apikey',
   'source_basic',
+  'whatsapp_session',
 ] as const;
 
 /** Check if a string is a valid CredentialType */
@@ -85,12 +88,13 @@ export interface StoredCredential {
 // could contain "/" (e.g., URLs like "https://api.example.com")
 const CREDENTIAL_DELIMITER = '::';
 
-/** Source credential types */
+/** Source credential types (workspace-scoped credentials) */
 const SOURCE_CREDENTIAL_TYPES = [
   'source_oauth',
   'source_bearer',
   'source_apikey',
   'source_basic',
+  'whatsapp_session',
 ] as const;
 
 /** Check if type is a source credential */
