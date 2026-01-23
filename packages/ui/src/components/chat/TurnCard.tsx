@@ -1089,17 +1089,6 @@ export function ResponseCard({
             >
               {text}
             </Markdown>
-
-            {/* File changes card - shown when there are Edit/Write activities */}
-            {fileChanges && fileChanges.length > 0 && onReviewChanges && (
-              <div className="mt-4 border-t border-border/30 pt-4">
-                <FileChangesCard
-                  changes={fileChanges}
-                  onReviewChanges={onReviewChanges}
-                  disabled={isStreaming}
-                />
-              </div>
-            )}
           </div>
 
           {/* Footer with actions */}
@@ -1621,8 +1610,17 @@ export const TurnCard = React.memo(function TurnCard({
             onAccept={onAcceptPlan}
             onAcceptWithCompact={onAcceptPlanWithCompact}
             isLastResponse={isLastResponse}
-            fileChanges={fileChanges}
+          />
+        </div>
+      )}
+
+      {/* File changes card - shown after response when there are Edit/Write activities */}
+      {fileChanges && fileChanges.length > 0 && onOpenMultiFileDiff && (
+        <div className="mt-2">
+          <FileChangesCard
+            changes={fileChanges}
             onReviewChanges={onOpenMultiFileDiff}
+            disabled={isStreaming}
           />
         </div>
       )}

@@ -150,6 +150,13 @@ export {
   type OverlayMode,
 } from './lib/layout'
 
+// Hooks
+export {
+  useFileChangeReview,
+  type UseFileChangeReviewReturn,
+  type ChangeStatus,
+} from './hooks/useFileChangeReview'
+
 // Tool result parsers
 export {
   parseReadResult,

@@ -38,47 +38,54 @@ function getParentDir(filePath: string): string {
 }
 
 /**
- * Determine the status badge for a file change
+ * Calculate addition and removal counts for a set of changes
  */
-function getFileStatus(change: FileChange): { label: string; icon: React.ReactNode; color: string } {
-  if (change.toolType === 'Write') {
-    // Write tool = Added file
-    return {
-      label: 'A',
-      icon: <FilePlus className="w-3 h-3" />,
-      color: 'text-green-600 bg-green-50 dark:text-green-400 dark:bg-green-950/30',
+function calculateStats(changes: FileChange[]) {
+  let additions = 0
+  let removals = 0
+  for (const change of changes) {
+    // Basic line count estimation
+    const addedLines = change.modified.split('\n').length
+    const removedLines = change.original.split('\n').length
+
+    if (change.toolType === 'Write') {
+      if (change.original === '') {
+        // Pure addition
+        additions += addedLines
+      } else {
+        // Replacement (Write overwriting existing)
+        additions += addedLines
+        removals += removedLines
+      }
+    } else {
+      // Edit is always a replacement of one block with another
+      additions += addedLines
+      removals += removedLines
     }
   }
+  return { additions, removals }
+}
 
-  if (change.toolType === 'Edit') {
-    // Edit tool = Modified file
-    if (change.original === '') {
-      // Empty original = new file
+/**
+ * Determine the status badge for a group of file changes
+ */
+function getGroupStatus(changes: FileChange[]): { label: string; icon: React.ReactNode; color: string } {
+  const hasWrite = changes.some(c => c.toolType === 'Write')
+  const hasEdit = changes.some(c => c.toolType === 'Edit')
+
+  if (hasWrite && !hasEdit) {
+    // If we only have writes and they all have empty original, it's Added
+    const allNew = changes.every(c => c.original === '')
+    if (allNew) {
       return {
         label: 'A',
         icon: <FilePlus className="w-3 h-3" />,
         color: 'text-green-600 bg-green-50 dark:text-green-400 dark:bg-green-950/30',
       }
     }
-
-    if (change.modified === '') {
-      // Empty modified = deleted file
-      return {
-        label: 'D',
-        icon: <FileX className="w-3 h-3" />,
-        color: 'text-red-600 bg-red-50 dark:text-red-400 dark:bg-red-950/30',
-      }
-    }
-
-    // Modified file
-    return {
-      label: 'M',
-      icon: <FileEdit className="w-3 h-3" />,
-      color: 'text-amber-600 bg-amber-50 dark:text-amber-400 dark:bg-amber-950/30',
-    }
   }
 
-  // Fallback
+  // Default to Modified for any mix or pure edits
   return {
     label: 'M',
     icon: <FileEdit className="w-3 h-3" />,
@@ -97,6 +104,16 @@ export function FileChangesCard({ changes, onReviewChanges, disabled = false }: 
     return null
   }
 
+  // Dedupe changes by filePath
+  const groupedChanges = successfulChanges.reduce((acc, change) => {
+    const list = acc[change.filePath] || []
+    list.push(change)
+    acc[change.filePath] = list
+    return acc
+  }, {} as Record<string, FileChange[]>)
+
+  const sortedPaths = Object.keys(groupedChanges).sort()
+
   return (
     <div className={cn(
       "rounded-lg border border-border/30 bg-muted/30 p-3",
@@ -108,45 +125,65 @@ export function FileChangesCard({ changes, onReviewChanges, disabled = false }: 
           Files Changed
         </h4>
         <span className="text-xs text-muted-foreground">
-          {successfulChanges.length} {successfulChanges.length === 1 ? 'file' : 'files'}
+          {sortedPaths.length} {sortedPaths.length === 1 ? 'file' : 'files'}
         </span>
       </div>
 
       {/* File list */}
-      <div className="space-y-1">
-        {successfulChanges.map((change) => {
-          const status = getFileStatus(change)
-          const fileName = getFileName(change.filePath)
-          const parentDir = getParentDir(change.filePath)
+      <div className="space-y-1.5">
+        {sortedPaths.map((filePath) => {
+          const fileGroup = groupedChanges[filePath]
+          if (!fileGroup) return null
+
+          const stats = calculateStats(fileGroup)
+          const status = getGroupStatus(fileGroup)
+          const fileName = getFileName(filePath)
+          const parentDir = getParentDir(filePath)
 
           return (
             <div
-              key={change.id}
+              key={filePath}
               className="flex items-center gap-2 text-xs"
             >
               {/* Status badge */}
               <span
                 className={cn(
                   "inline-flex items-center justify-center",
-                  "w-5 h-5 rounded",
+                  "w-5 h-5 rounded shrink-0",
                   "font-mono font-medium text-[10px]",
                   status.color
                 )}
-                title={status.label === 'M' ? 'Modified' : status.label === 'A' ? 'Added' : 'Deleted'}
+                title={status.label === 'M' ? 'Modified' : 'Added'}
               >
                 {status.label}
               </span>
 
-              {/* File path */}
-              <div className="flex-1 min-w-0 font-mono">
-                {parentDir && (
-                  <span className="text-muted-foreground/60">
-                    {parentDir}/
+              {/* File path and stats */}
+              <div className="flex-1 min-w-0 flex items-center justify-between gap-2 overflow-hidden">
+                <div className="flex-1 min-w-0 font-mono truncate">
+                  {parentDir && (
+                    <span className="text-muted-foreground/60">
+                      {parentDir}/
+                    </span>
+                  )}
+                  <span className="text-foreground/90 font-medium">
+                    {fileName}
                   </span>
-                )}
-                <span className="text-foreground/90">
-                  {fileName}
-                </span>
+                </div>
+
+                {/* Addition/Removal stats */}
+                <div className="flex items-center gap-1.5 shrink-0 font-mono text-[11px]">
+                  {stats.additions > 0 && (
+                    <span className="text-green-600 dark:text-green-400">
+                      +{stats.additions}
+                    </span>
+                  )}
+                  {stats.removals > 0 && (
+                    <span className="text-destructive">
+                      -{stats.removals}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           )
