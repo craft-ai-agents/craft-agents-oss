@@ -205,14 +205,33 @@ export class SchedulerService {
         throw new Error('SessionManager not initialized')
       }
 
-      // Create a new session for this scheduled task
-      const session = await this.sessionManager.createSession(this.workspaceId)
+      let sessionId: string | null = schedule.lastRunSessionId
 
-      // Rename the session
-      await this.sessionManager.renameSession(session.id, `Schedule: ${schedule.name}`)
+      // 1. Try to reuse the last session if it exists
+      if (sessionId) {
+        try {
+          await this.sessionManager.sendMessage(sessionId, schedule.prompt)
+          mainLog.info(`Continuing schedule ${schedule.name} in existing session ${sessionId}`)
+        } catch (e: unknown) {
+          // Session was deleted - fall back to creating new one
+          const errorMessage = e instanceof Error ? e.message : String(e)
+          if (errorMessage.includes('not found')) {
+            mainLog.info(`Session ${sessionId} not found for schedule ${schedule.name}, creating new session`)
+            sessionId = null
+          } else {
+            throw e // Re-throw other errors
+          }
+        }
+      }
 
-      // Send the prompt as the initial message
-      await this.sessionManager.sendMessage(session.id, schedule.prompt)
+      // 2. Create new session if needed (first run or session was deleted)
+      if (!sessionId) {
+        const session = await this.sessionManager.createSession(this.workspaceId)
+        sessionId = session.id
+        await this.sessionManager.renameSession(sessionId, `Schedule: ${schedule.name}`)
+        await this.sessionManager.sendMessage(sessionId, schedule.prompt)
+        mainLog.info(`Created new session ${sessionId} for schedule ${schedule.name}`)
+      }
 
       // Update schedule status
       const idx = this.schedules.findIndex(s => s.id === schedule.id)
@@ -221,13 +240,13 @@ export class SchedulerService {
         this.schedules[idx].lastRunAt = timestamp
         this.schedules[idx].lastRunStatus = 'success'
         this.schedules[idx].lastRunError = null
-        this.schedules[idx].lastRunSessionId = session.id
+        this.schedules[idx].lastRunSessionId = sessionId
 
         // Add to execution history (keep last 3)
         const execution: ScheduleExecution = {
           timestamp,
           status: 'success',
-          sessionId: session.id,
+          sessionId,
         }
         const history = this.schedules[idx].executionHistory || []
         this.schedules[idx].executionHistory = [execution, ...history].slice(0, 3)
@@ -239,7 +258,7 @@ export class SchedulerService {
       this.showNotification(
         schedule.name,
         'Completed successfully',
-        session.id
+        sessionId
       )
 
       // Broadcast completion event
@@ -247,10 +266,10 @@ export class SchedulerService {
         type: 'completed',
         scheduleId: schedule.id,
         scheduleName: schedule.name,
-        sessionId: session.id,
+        sessionId,
       })
 
-      mainLog.info(`Schedule ${schedule.id} completed successfully, session: ${session.id}`)
+      mainLog.info(`Schedule ${schedule.id} completed successfully, session: ${sessionId}`)
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
       mainLog.error(`Schedule ${schedule.id} failed:`, error)
