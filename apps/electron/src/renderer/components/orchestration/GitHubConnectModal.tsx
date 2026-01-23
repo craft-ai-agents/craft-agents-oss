@@ -20,8 +20,12 @@ export function GitHubConnectModal() {
   const [connection, setConnection] = useAtom(githubConnectionAtom);
 
   useEffect(() => {
+    if (typeof window === 'undefined' || !window.electronAPI?.onOrchestrationEvent) {
+      return;
+    }
+
     // Listen for orchestration events
-    const handleOrchestrationEvent = (_event: any, event: any) => {
+    const unsubscribe = window.electronAPI.onOrchestrationEvent((event: any) => {
       if (event.type === 'connection-status-updated') {
         setConnection(event.status);
         setOAuthState({
@@ -32,14 +36,9 @@ export function GitHubConnectModal() {
         // Close modal after successful connection
         setTimeout(() => setIsOpen(false), 1500);
       }
-    };
+    });
 
-    if (typeof window !== 'undefined' && window.electronAPI) {
-      window.electronAPI.on('orchestration:event', handleOrchestrationEvent);
-      return () => {
-        window.electronAPI.off('orchestration:event', handleOrchestrationEvent);
-      };
-    }
+    return unsubscribe;
   }, [setConnection, setOAuthState, setIsOpen]);
 
   const handleStartOAuth = async () => {
