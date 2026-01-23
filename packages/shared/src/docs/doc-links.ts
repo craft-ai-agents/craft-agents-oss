@@ -72,7 +72,7 @@ export const DOCS: Record<DocFeature, DocInfo> = {
       'Control how much autonomy your agent has. Explore mode is read-only, Ask to Edit prompts before changes, and Execute mode runs without prompts.',
   },
   labels: {
-    path: '/customisation/labels',
+    path: '/labels/overview',
     title: 'Labels',
     summary:
       'Tag sessions with colored labels for organization and filtering. Labels support hierarchical nesting, typed values, and auto-apply rules that extract data from messages using regex patterns.',
