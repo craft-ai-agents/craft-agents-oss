@@ -9,6 +9,7 @@ import { existsSync } from 'fs'
 import { SessionManager } from './sessions'
 import { registerIpcHandlers } from './ipc'
 import { registerFileChangeHandlers } from './file-changes'
+import { registerGitOperationHandlers } from './git-operations'
 import { createApplicationMenu } from './menu'
 import { WindowManager } from './window-manager'
 import { loadWindowState, saveWindowState } from './window-state'
@@ -202,6 +203,7 @@ app.whenReady().then(async () => {
     // Register IPC handlers (must happen before window creation)
     registerIpcHandlers(sessionManager, windowManager)
     registerFileChangeHandlers()
+    registerGitOperationHandlers()
 
     // Create initial windows (restores from saved state or opens first workspace)
     await createInitialWindows()

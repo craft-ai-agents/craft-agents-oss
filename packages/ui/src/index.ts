@@ -178,3 +178,10 @@ export {
   Icon_Inbox,
   type IconProps,
 } from './components/icons'
+
+// Git components
+export {
+  GitStatusIndicator,
+  type GitStatus,
+  type GitStatusIndicatorProps,
+} from './components/git'

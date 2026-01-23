@@ -9,7 +9,8 @@
  */
 
 import * as React from 'react'
-import { FileEdit, FilePlus, FileX } from 'lucide-react'
+import { useState } from 'react'
+import { FileEdit, FilePlus, FileX, GitCommit, X } from 'lucide-react'
 import { cn } from '@craft-agent/ui'
 import type { FileChange } from '@craft-agent/ui'
 
@@ -26,6 +27,12 @@ export interface DiffSummaryPanelProps {
   onRejectAll: () => void
   /** Current status of each change */
   changeStatuses?: Map<string, 'pending' | 'accepted' | 'rejected'>
+  /** Enable git integration features */
+  enableGitIntegration?: boolean
+  /** Working directory for git operations */
+  gitWorkingDir?: string
+  /** Callback when commit is created */
+  onCommitCreated?: (commitHash: string) => void
 }
 
 /**
@@ -100,9 +107,77 @@ export function DiffSummaryPanel({
   onAcceptAll,
   onRejectAll,
   changeStatuses,
+  enableGitIntegration = false,
+  gitWorkingDir,
+  onCommitCreated,
 }: DiffSummaryPanelProps) {
+  // Commit dialog state
+  const [showCommitDialog, setShowCommitDialog] = useState(false)
+  const [commitMessage, setCommitMessage] = useState('')
+  const [isCommitting, setIsCommitting] = useState(false)
+  const [commitError, setCommitError] = useState<string | null>(null)
+
   // Filter successful changes
   const successfulChanges = changes.filter(c => !c.error)
+
+  // Handle commit creation
+  const handleCreateCommit = async () => {
+    if (!commitMessage.trim()) {
+      setCommitError('Commit message is required')
+      return
+    }
+
+    setIsCommitting(true)
+    setCommitError(null)
+
+    try {
+      // Stage all accepted files first
+      const acceptedChanges = successfulChanges.filter(
+        change => changeStatuses?.get(change.id) === 'accepted'
+      )
+
+      if (acceptedChanges.length === 0) {
+        setCommitError('No accepted changes to commit')
+        setIsCommitting(false)
+        return
+      }
+
+      const filePaths = acceptedChanges.map(c => c.filePath)
+
+      // @ts-expect-error - IPC types not available in electron renderer
+      const stageResult = await window.electron?.ipcRenderer.invoke(
+        'git:stage-batch',
+        filePaths,
+        gitWorkingDir
+      )
+
+      if (!stageResult?.success) {
+        setCommitError(stageResult?.error || 'Failed to stage files')
+        setIsCommitting(false)
+        return
+      }
+
+      // Create commit
+      // @ts-expect-error - IPC types not available in electron renderer
+      const commitResult = await window.electron?.ipcRenderer.invoke(
+        'git:commit',
+        commitMessage,
+        gitWorkingDir
+      )
+
+      if (commitResult?.success) {
+        onCommitCreated?.(commitResult.commitHash)
+        setShowCommitDialog(false)
+        setCommitMessage('')
+      } else {
+        setCommitError(commitResult?.error || 'Failed to create commit')
+      }
+    } catch (error: any) {
+      setCommitError(error.message || 'Failed to create commit')
+    } finally {
+      setIsCommitting(false)
+    }
+  }
 
   if (successfulChanges.length === 0) {
     return null
@@ -121,7 +196,7 @@ export function DiffSummaryPanel({
   )
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col relative">
       {/* Header with stats */}
       <div className="px-4 py-3 border-b border-border/30">
         <div className="flex items-center gap-2 text-sm">
@@ -242,7 +317,135 @@ export function DiffSummaryPanel({
             Reject
           </button>
         </div>
+
+        {/* Git commit button */}
+        {enableGitIntegration && (
+          <button
+            onClick={() => setShowCommitDialog(true)}
+            className={cn(
+              "w-full px-3 py-2 rounded-md",
+              "text-xs font-medium",
+              "bg-blue-500/10 hover:bg-blue-500/20",
+              "text-blue-600 dark:text-blue-400",
+              "transition-colors",
+              "flex items-center justify-center gap-2"
+            )}
+          >
+            <GitCommit className="w-3.5 h-3.5" />
+            Create Commit
+          </button>
+        )}
       </div>
+
+      {/* Commit dialog */}
+      {showCommitDialog && (
+        <div className="absolute inset-0 bg-background/95 backdrop-blur-sm z-10 flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-card border border-border rounded-lg shadow-lg">
+            {/* Dialog header */}
+            <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+              <h3 className="text-sm font-medium">Create Commit</h3>
+              <button
+                onClick={() => {
+                  setShowCommitDialog(false)
+                  setCommitMessage('')
+                  setCommitError(null)
+                }}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Dialog body */}
+            <div className="p-4 space-y-3">
+              {/* Stats */}
+              <div className="text-xs text-muted-foreground">
+                {(() => {
+                  const acceptedCount = successfulChanges.filter(
+                    c => changeStatuses?.get(c.id) === 'accepted'
+                  ).length
+                  return `${acceptedCount} accepted ${acceptedCount === 1 ? 'file' : 'files'} will be committed`
+                })()}
+              </div>
+
+              {/* Commit message input */}
+              <div>
+                <label htmlFor="commit-message" className="text-xs font-medium text-foreground block mb-1.5">
+                  Commit message
+                </label>
+                <textarea
+                  id="commit-message"
+                  value={commitMessage}
+                  onChange={(e) => setCommitMessage(e.target.value)}
+                  placeholder="Brief description of changes..."
+                  className={cn(
+                    "w-full px-3 py-2 rounded-md",
+                    "text-sm",
+                    "bg-background border border-border",
+                    "focus:outline-none focus:ring-2 focus:ring-accent",
+                    "resize-none"
+                  )}
+                  rows={3}
+                  autoFocus
+                />
+              </div>
+
+              {/* Error message */}
+              {commitError && (
+                <div className="text-xs text-destructive bg-destructive/10 px-3 py-2 rounded-md">
+                  {commitError}
+                </div>
+              )}
+
+              {/* Action buttons */}
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={() => {
+                    setShowCommitDialog(false)
+                    setCommitMessage('')
+                    setCommitError(null)
+                  }}
+                  className={cn(
+                    "flex-1 px-3 py-2 rounded-md",
+                    "text-xs font-medium",
+                    "bg-accent/50 hover:bg-accent",
+                    "text-accent-foreground",
+                    "transition-colors"
+                  )}
+                  disabled={isCommitting}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleCreateCommit}
+                  className={cn(
+                    "flex-1 px-3 py-2 rounded-md",
+                    "text-xs font-medium",
+                    "bg-blue-500/10 hover:bg-blue-500/20",
+                    "text-blue-600 dark:text-blue-400",
+                    "transition-colors",
+                    "flex items-center justify-center gap-2",
+                    "disabled:opacity-50 disabled:cursor-not-allowed"
+                  )}
+                  disabled={isCommitting || !commitMessage.trim()}
+                >
+                  {isCommitting ? (
+                    <>
+                      <span className="animate-spin">⏳</span>
+                      Committing...
+                    </>
+                  ) : (
+                    <>
+                      <GitCommit className="w-3.5 h-3.5" />
+                      Commit
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
