@@ -27,6 +27,8 @@ import { TurnCardActionsMenu } from './TurnCardActionsMenu'
 import { computeLastChildSet, groupActivitiesByParent, isActivityGroup, formatDuration, formatTokens, deriveTurnPhase, shouldShowThinkingIndicator, type ActivityGroup, type AssistantTurn } from './turn-utils'
 import { DocumentFormattedMarkdownOverlay } from '../overlay'
 import { AcceptPlanDropdown } from './AcceptPlanDropdown'
+import { FileChangesCard } from './FileChangesCard'
+import type { FileChange } from '../overlay/MultiDiffPreviewOverlay'
 
 // ============================================================================
 // Utilities
@@ -179,6 +181,8 @@ export interface TurnCardProps {
   onOpenMultiFileDiff?: () => void
   /** Whether this turn has any Edit or Write activities */
   hasEditOrWriteActivities?: boolean
+  /** File changes from Edit/Write activities */
+  fileChanges?: FileChange[]
   /** TodoWrite tool state - shown at bottom of turn */
   todos?: TodoItem[]
   /** Optional render prop for actions menu (Electron provides dropdown) */
@@ -920,6 +924,10 @@ export interface ResponseCardProps {
   isLastResponse?: boolean
   /** Whether to show the Accept Plan button (default: true) */
   showAcceptPlan?: boolean
+  /** File changes from Edit/Write activities */
+  fileChanges?: FileChange[]
+  /** Callback to open file diff review sheet */
+  onReviewChanges?: () => void
 }
 
 /**
@@ -950,6 +958,8 @@ export function ResponseCard({
   onAcceptWithCompact,
   isLastResponse = true,
   showAcceptPlan = true,
+  fileChanges,
+  onReviewChanges,
 }: ResponseCardProps) {
   // Throttled content for display - updates every CONTENT_THROTTLE_MS during streaming
   const [displayedText, setDisplayedText] = useState(text)
@@ -1079,6 +1089,17 @@ export function ResponseCard({
             >
               {text}
             </Markdown>
+
+            {/* File changes card - shown when there are Edit/Write activities */}
+            {fileChanges && fileChanges.length > 0 && onReviewChanges && (
+              <div className="mt-4 border-t border-border/30 pt-4">
+                <FileChangesCard
+                  changes={fileChanges}
+                  onReviewChanges={onReviewChanges}
+                  disabled={isStreaming}
+                />
+              </div>
+            )}
           </div>
 
           {/* Footer with actions */}
@@ -1304,6 +1325,7 @@ export const TurnCard = React.memo(function TurnCard({
   onOpenActivityDetails,
   onOpenMultiFileDiff,
   hasEditOrWriteActivities,
+  fileChanges,
   todos,
   renderActionsMenu,
   onAcceptPlan,
@@ -1599,6 +1621,8 @@ export const TurnCard = React.memo(function TurnCard({
             onAccept={onAcceptPlan}
             onAcceptWithCompact={onAcceptPlanWithCompact}
             isLastResponse={isLastResponse}
+            fileChanges={fileChanges}
+            onReviewChanges={onOpenMultiFileDiff}
           />
         </div>
       )}
