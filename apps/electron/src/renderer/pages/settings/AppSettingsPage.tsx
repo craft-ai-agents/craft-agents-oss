@@ -26,8 +26,6 @@ import {
   Moon,
   ExternalLink,
   CheckCircle2,
-  Upload,
-  Settings2,
 } from 'lucide-react'
 import { Spinner } from '@craft-agent/ui'
 import type { AuthType } from '../../../shared/types'
@@ -41,6 +39,8 @@ import {
   SettingsSegmentedControl,
   SettingsMenuSelectRow,
   SettingsMenuSelect,
+  SettingsSecretInput,
+  SettingsInput,
 } from '@/components/settings'
 import { useUpdateChecker } from '@/hooks/useUpdateChecker'
 import type { PresetTheme } from '@config/theme'
@@ -51,9 +51,6 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog'
-import { SettingsSecretInput } from '@/components/settings'
-import { CustomEndpointValidationDialog } from '@/components/settings/CustomEndpointValidationDialog'
-import { ViewCustomEndpointConfigDialog } from '@/components/settings/ViewCustomEndpointConfigDialog'
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
@@ -236,7 +233,7 @@ const DEBOUNCE_MS = 500
 function useApiKeyAutoSave({
   apiKey,
   baseUrl,
-  customModelNames,
+  customModel,
   authType,
   hasCredential,
   onSaveStart,
@@ -245,7 +242,7 @@ function useApiKeyAutoSave({
 }: {
   apiKey: string
   baseUrl: string
-  customModelNames: { opus: string; sonnet: string; haiku: string }
+  customModel: string
   authType: AuthType
   hasCredential: boolean
   onSaveStart?: () => void
@@ -258,8 +255,8 @@ function useApiKeyAutoSave({
   const saveStartTimeRef = React.useRef<number>(0)
 
   const serializeConfig = React.useCallback(() => {
-    return JSON.stringify({ apiKey, baseUrl, customModelNames })
-  }, [apiKey, baseUrl, customModelNames])
+    return JSON.stringify({ apiKey, baseUrl, customModel })
+  }, [apiKey, baseUrl, customModel])
 
   const doSave = React.useCallback(async () => {
     if (authType !== 'api_key') return
@@ -269,22 +266,14 @@ function useApiKeyAutoSave({
 
     const trimmedKey = apiKey.trim()
 
-    // Build custom model names object (only include non-empty values)
-    const modelNames = {
-      opus: customModelNames.opus.trim() || undefined,
-      sonnet: customModelNames.sonnet.trim() || undefined,
-      haiku: customModelNames.haiku.trim() || undefined,
-    }
-    const hasModelNames = modelNames.opus || modelNames.sonnet || modelNames.haiku
-
     saveStartTimeRef.current = Date.now()
     onSaveStart?.()
     try {
       await window.electronAPI.updateBillingMethod(
         'api_key',
-        trimmedKey,  // Pass empty string to clear credential
+        trimmedKey,
         baseUrl.trim() || null,
-        hasModelNames ? modelNames : null
+        customModel.trim() || null
       )
       lastSavedRef.current = currentConfig
 
@@ -306,7 +295,7 @@ function useApiKeyAutoSave({
         onSaveError?.(errorMsg)
       }
     }
-  }, [authType, apiKey, baseUrl, customModelNames, serializeConfig, onSaveStart, onSaveSuccess, onSaveError])
+  }, [authType, apiKey, baseUrl, customModel, serializeConfig, onSaveStart, onSaveSuccess, onSaveError])
 
   const handleBlur = React.useCallback(() => {
     if (isInitialLoadRef.current) return
@@ -318,12 +307,10 @@ function useApiKeyAutoSave({
     if (authType !== 'api_key') return
     if (isInitialLoadRef.current) return
 
-    // Clear previous debounce timer
     if (debounceRef.current) {
       clearTimeout(debounceRef.current)
     }
 
-    // Schedule save after debounce delay
     debounceRef.current = setTimeout(() => {
       doSave()
     }, DEBOUNCE_MS)
@@ -331,15 +318,10 @@ function useApiKeyAutoSave({
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current)
     }
-  }, [authType, apiKey, baseUrl, customModelNames, doSave])
+  }, [authType, apiKey, baseUrl, customModel, doSave])
 
-  // Initialize lastSavedRef when API key is first loaded from backend
-  // This effect waits for hasCredential to be set (indicating data is loaded)
-  // before setting the initial saved state and enabling auto-save
   React.useEffect(() => {
     if (authType === 'api_key' && isInitialLoadRef.current) {
-      // Initialize after a short delay to ensure backend data has loaded
-      // hasCredential indicates whether backend has a stored credential
       lastSavedRef.current = serializeConfig()
       setTimeout(() => {
         isInitialLoadRef.current = false
@@ -361,23 +343,17 @@ export default function AppSettingsPage() {
   const [presetThemes, setPresetThemes] = useState<PresetTheme[]>([])
 
   // Billing state
-  // paymentMethod is the UI-level concept: 'oauth_token', 'api_key', or 'custom_endpoint'
-  // authType is the storage-level concept: 'api_key' or 'oauth_token' (custom_endpoint uses api_key)
-  type PaymentMethod = 'oauth_token' | 'api_key' | 'custom_endpoint'
+  type PaymentMethod = 'oauth_token' | 'api_key'
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('api_key')
   const [authType, setAuthType] = useState<AuthType>('api_key')
   const [expandedMethod, setExpandedMethod] = useState<AuthType | null>(null)
   const [hasCredential, setHasCredential] = useState(false)
 
-  // API Key state (simple Anthropic API key, no advanced settings)
+  // API Key state (with optional custom endpoint fields)
   const [apiKeyValue, setApiKeyValue] = useState('')
+  const [baseUrlValue, setBaseUrlValue] = useState('')
+  const [customModelValue, setCustomModelValue] = useState('')
   const [apiKeyError, setApiKeyError] = useState<string | undefined>()
-
-  // Custom endpoint state
-  const [hasCustomEndpoint, setHasCustomEndpoint] = useState(false)
-  const [showValidationDialog, setShowValidationDialog] = useState(false)
-  const [showViewConfigDialog, setShowViewConfigDialog] = useState(false)
-  const [pendingConfigJson, setPendingConfigJson] = useState('')
 
   // Claude OAuth state
   const [existingClaudeToken, setExistingClaudeToken] = useState<string | null>(null)
@@ -402,11 +378,11 @@ export default function AppSettingsPage() {
     }
   }, [updateChecker])
 
-  // API Key auto-save hook (simplified - no base URL or model names)
+  // API Key auto-save hook (with optional base URL + model override)
   const { handleBlur } = useApiKeyAutoSave({
     apiKey: apiKeyValue,
-    baseUrl: '',  // Not used for simple API key mode
-    customModelNames: { opus: '', sonnet: '', haiku: '' },  // Not used for simple API key mode
+    baseUrl: baseUrlValue,
+    customModel: customModelValue,
     authType,
     hasCredential,
     onSaveSuccess: () => {
@@ -422,27 +398,21 @@ export default function AppSettingsPage() {
     const loadSettings = async () => {
       if (!window.electronAPI) return
       try {
-        const [billing, customEndpoint, notificationsOn] = await Promise.all([
+        const [billing, notificationsOn] = await Promise.all([
           window.electronAPI.getBillingMethod(),
-          window.electronAPI.getCustomEndpointConfig(),
           window.electronAPI.getNotificationsEnabled(),
         ])
         setAuthType(billing.authType)
         setHasCredential(billing.hasCredential)
         setNotificationsEnabled(notificationsOn)
 
-        // Determine payment method based on config
-        // If custom endpoint is configured (has base URL), use custom_endpoint
-        // Otherwise use the authType directly
-        if (customEndpoint.hasConfig) {
-          setPaymentMethod('custom_endpoint')
-          setHasCustomEndpoint(true)
-          // Don't set apiKeyValue for custom endpoint (it's managed separately)
-        } else if (billing.authType === 'oauth_token') {
+        if (billing.authType === 'oauth_token') {
           setPaymentMethod('oauth_token')
         } else {
           setPaymentMethod('api_key')
           setApiKeyValue(billing.apiKey || '')
+          setBaseUrlValue(billing.anthropicBaseUrl || '')
+          setCustomModelValue(billing.customModel || '')
         }
       } catch (error) {
         console.error('Failed to load settings:', error)
@@ -487,25 +457,12 @@ export default function AppSettingsPage() {
   }, [expandedMethod])
 
   // Handle clicking on a payment method option
-  // PaymentMethod is 'oauth_token', 'api_key', or 'custom_endpoint'
   const handleMethodClick = useCallback(async (method: PaymentMethod) => {
-    // Switching to API Key mode (simple Anthropic API key)
     if (method === 'api_key') {
-      // First clear any custom endpoint config if present
-      if (hasCustomEndpoint) {
-        try {
-          await window.electronAPI.clearCustomEndpointConfig()
-          setHasCustomEndpoint(false)
-        } catch (error) {
-          console.error('Failed to clear custom endpoint config:', error)
-        }
-      }
-
-      // Switch to api_key mode
       if (authType !== 'api_key' || paymentMethod !== 'api_key') {
         try {
           const trimmedKey = apiKeyValue.trim() || undefined
-          await window.electronAPI.updateBillingMethod('api_key', trimmedKey, null, null)
+          await window.electronAPI.updateBillingMethod('api_key', trimmedKey, baseUrlValue.trim() || null, customModelValue.trim() || null)
           setAuthType('api_key')
           setPaymentMethod('api_key')
           setHasCredential(!!trimmedKey)
@@ -513,13 +470,6 @@ export default function AppSettingsPage() {
           console.error('Failed to switch to API key mode:', error)
         }
       }
-      return
-    }
-
-    // Switching to Custom Endpoint mode
-    if (method === 'custom_endpoint') {
-      setPaymentMethod('custom_endpoint')
-      // Don't change authType yet - it will be set when config is uploaded
       return
     }
 
@@ -534,7 +484,7 @@ export default function AppSettingsPage() {
       setClaudeOAuthStatus('idle')
       setClaudeOAuthError(undefined)
     }
-  }, [authType, paymentMethod, hasCredential, apiKeyValue, hasCustomEndpoint])
+  }, [authType, paymentMethod, hasCredential, apiKeyValue, baseUrlValue, customModelValue])
 
   // Use existing Claude token
   const handleUseExistingClaudeToken = useCallback(async () => {
@@ -636,43 +586,6 @@ export default function AppSettingsPage() {
     await window.electronAPI.setNotificationsEnabled(enabled)
   }, [])
 
-  // Handle file upload for custom endpoint config
-  const handleUploadConfig = useCallback(async () => {
-    // Open file picker for JSON files
-    // openFileDialog returns string[] (array of file paths)
-    const result = await window.electronAPI.openFileDialog()
-    if (!result || result.length === 0) return
-
-    const filePath = result[0]
-    if (!filePath.endsWith('.json')) {
-      console.error('Please select a JSON file')
-      return
-    }
-
-    // Read the file content
-    try {
-      const content = await window.electronAPI.readFile(filePath)
-      setPendingConfigJson(content)
-      setShowValidationDialog(true)
-    } catch (error) {
-      console.error('Failed to read config file:', error)
-    }
-  }, [])
-
-  // Handle successful config validation
-  const handleConfigValidationSuccess = useCallback(() => {
-    setHasCustomEndpoint(true)
-    setAuthType('api_key')  // Custom endpoint uses api_key auth type internally
-    setHasCredential(true)
-    setPendingConfigJson('')
-  }, [])
-
-  // Handle config cleared
-  const handleConfigCleared = useCallback(() => {
-    setHasCustomEndpoint(false)
-    setHasCredential(false)
-  }, [])
-
   return (
     <div className="h-full flex flex-col">
       <PanelHeader title="App Settings" actions={<HeaderMenu route={routes.view.settings('app')} helpFeature="app-settings" />} />
@@ -740,30 +653,27 @@ export default function AppSettingsPage() {
                 <SettingsMenuSelectRow
                   label="Payment method"
                   description={
-                    paymentMethod === 'custom_endpoint' && hasCustomEndpoint
-                      ? 'Custom endpoint configured'
-                      : paymentMethod === 'api_key' && hasCredential
-                        ? 'API key configured'
-                        : paymentMethod === 'oauth_token' && hasCredential
-                          ? 'Claude connected'
-                          : 'Select a method'
+                    paymentMethod === 'api_key' && hasCredential
+                      ? 'API key configured'
+                      : paymentMethod === 'oauth_token' && hasCredential
+                        ? 'Claude connected'
+                        : 'Select a method'
                   }
                   value={paymentMethod}
                   onValueChange={(v) => handleMethodClick(v as PaymentMethod)}
                   options={[
                     { value: 'oauth_token', label: 'Claude Pro/Max', description: 'Use your Pro or Max subscription' },
-                    { value: 'api_key', label: 'Anthropic API Key', description: 'Pay-as-you-go with your Anthropic key' },
-                    { value: 'custom_endpoint', label: 'Custom Endpoint', description: 'OpenRouter, Ollama, or compatible APIs' },
+                    { value: 'api_key', label: 'API Key', description: 'Anthropic, OpenRouter, Ollama, or compatible APIs' },
                   ]}
                 />
               </SettingsCard>
 
-              {/* API Key Inline Config (simple - no advanced settings) */}
+              {/* API Key Config (with optional custom endpoint fields) */}
               {paymentMethod === 'api_key' && (
                 <SettingsCard className="mt-2">
                   <SettingsSecretInput
                     label="API Key"
-                    description="Your Anthropic API key for Claude"
+                    description="Your API key (Anthropic, OpenRouter, or custom provider)"
                     value={apiKeyValue}
                     onChange={setApiKeyValue}
                     onBlur={handleBlur}
@@ -771,61 +681,24 @@ export default function AppSettingsPage() {
                     inCard
                     error={apiKeyError}
                   />
-                </SettingsCard>
-              )}
-
-              {/* Custom Endpoint Config Card */}
-              {paymentMethod === 'custom_endpoint' && (
-                <SettingsCard className="mt-2">
-                  <div className="px-4 py-4">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <Settings2 className="size-4 text-muted-foreground" />
-                          <span className="text-sm font-medium">
-                            {hasCustomEndpoint ? 'Configuration' : 'Upload Configuration'}
-                          </span>
-                          {hasCustomEndpoint && (
-                            <span className="text-xs bg-green-500/20 text-green-600 dark:text-green-400 px-1.5 py-0.5 rounded">
-                              configured
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Upload a JSON configuration file to connect to compatible APIs.{' '}
-                          <a
-                            href="#"
-                            onClick={(e) => {
-                              e.preventDefault()
-                              window.electronAPI.openUrl('https://agents.craft.do/docs/reference/config/custom-endpoint')
-                            }}
-                            className="text-primary hover:underline"
-                          >
-                            Learn more →
-                          </a>
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {hasCustomEndpoint && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setShowViewConfigDialog(true)}
-                          >
-                            View Config
-                          </Button>
-                        )}
-                        <Button
-                          variant={hasCustomEndpoint ? 'outline' : 'default'}
-                          size="sm"
-                          onClick={handleUploadConfig}
-                        >
-                          <Upload className="size-3.5 mr-1.5" />
-                          {hasCustomEndpoint ? 'Replace' : 'Upload'}
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
+                  <SettingsInput
+                    label="Base URL"
+                    description="Optional. For OpenRouter, Ollama, or compatible APIs"
+                    value={baseUrlValue}
+                    onChange={setBaseUrlValue}
+                    onBlur={handleBlur}
+                    placeholder="https://openrouter.ai/api"
+                    inCard
+                  />
+                  <SettingsInput
+                    label="Model"
+                    description="Optional. Overrides model selector when set"
+                    value={customModelValue}
+                    onChange={setCustomModelValue}
+                    onBlur={handleBlur}
+                    placeholder="e.g. openai/gpt-5, qwen3-coder"
+                    inCard
+                  />
                 </SettingsCard>
               )}
 
@@ -867,21 +740,6 @@ export default function AppSettingsPage() {
                 </DialogContent>
               </Dialog>
 
-              {/* Custom Endpoint Validation Dialog */}
-              <CustomEndpointValidationDialog
-                open={showValidationDialog}
-                onOpenChange={setShowValidationDialog}
-                jsonContent={pendingConfigJson}
-                onSuccess={handleConfigValidationSuccess}
-                onCancel={() => setPendingConfigJson('')}
-              />
-
-              {/* View Custom Endpoint Config Dialog */}
-              <ViewCustomEndpointConfigDialog
-                open={showViewConfigDialog}
-                onOpenChange={setShowViewConfigDialog}
-                onClear={handleConfigCleared}
-              />
             </SettingsSection>
 
             {/* About */}

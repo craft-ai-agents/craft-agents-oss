@@ -149,20 +149,8 @@ export async function rebuildMenu(): Promise<void> {
           label: 'Check for Updates',
           click: async () => {
             const { checkForUpdates } = await import('./auto-update')
-            const info = await checkForUpdates({ autoDownload: false })
+            const info = await checkForUpdates({ autoDownload: true })
             mainLog.info('[debug-menu] Update check result:', info)
-          }
-        },
-        {
-          label: 'Download Update',
-          click: async () => {
-            const { downloadUpdate } = await import('./auto-update')
-            try {
-              await downloadUpdate()
-              mainLog.info('[debug-menu] Download complete')
-            } catch (err) {
-              mainLog.error('[debug-menu] Download failed:', err)
-            }
           }
         },
         {

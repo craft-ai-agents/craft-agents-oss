@@ -1092,16 +1092,18 @@ After creating or editing a source's config.json, run this tool to:
                 }
               } else if (mcpResult.errorType === 'needs-auth') {
                 source.connectionStatus = 'needs_auth';
+                source.connectionError = getValidationErrorMessage(mcpResult, { transport: source.mcp?.transport });
                 saveSourceConfig(workspaceRootPath, source);
                 results.push('**⚠ MCP Needs Authentication**');
                 results.push('Use `source_oauth_trigger` to authenticate.');
               } else {
                 hasErrors = true;
                 source.connectionStatus = 'failed';
-                source.connectionError = getValidationErrorMessage(mcpResult);
+                const errorMsg = getValidationErrorMessage(mcpResult, { transport: source.mcp?.transport });
+                source.connectionError = errorMsg;
                 saveSourceConfig(workspaceRootPath, source);
                 results.push(`**❌ MCP Connection Failed**`);
-                results.push(`  Error: ${getValidationErrorMessage(mcpResult)}`);
+                results.push(`  Error: ${errorMsg}`);
 
                 if (mcpResult.errorType === 'invalid-schema' && mcpResult.invalidProperties) {
                   results.push('  Invalid tool properties:');

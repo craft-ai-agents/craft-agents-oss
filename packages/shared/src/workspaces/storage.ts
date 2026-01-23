@@ -230,6 +230,32 @@ export function generateSlug(name: string): string {
 }
 
 /**
+ * Generate a unique folder path for a workspace by appending a numeric suffix
+ * if the slug-based folder already exists.
+ * E.g., "my-workspace", "my-workspace-2", "my-workspace-3", ...
+ *
+ * @param name - Display name to derive the slug from
+ * @param baseDir - Parent directory where workspace folders live (e.g., ~/.craft-agent/workspaces/)
+ * @returns Full path to a unique, non-existing folder
+ */
+export function generateUniqueWorkspacePath(name: string, baseDir: string): string {
+  const slug = generateSlug(name);
+  let candidate = join(baseDir, slug);
+
+  if (!existsSync(candidate)) {
+    return candidate;
+  }
+
+  // Append numeric suffix until we find a non-existing path
+  let counter = 2;
+  while (existsSync(join(baseDir, `${slug}-${counter}`))) {
+    counter++;
+  }
+
+  return join(baseDir, `${slug}-${counter}`);
+}
+
+/**
  * Create workspace folder structure at a given path
  * @param rootPath - Absolute path where workspace folder will be created
  * @param name - Display name for the workspace
@@ -254,7 +280,7 @@ export function createWorkspaceAtPath(
     cyclablePermissionModes: globalDefaults.workspaceDefaults.cyclablePermissionModes,
     thinkingLevel: globalDefaults.workspaceDefaults.thinkingLevel,
     enabledSourceSlugs: [],
-    workingDirectory: rootPath,
+    workingDirectory: undefined,
     ...defaults, // User-provided defaults override global defaults
   };
 

@@ -6,10 +6,10 @@ import { getSystemPrompt, getDateTimeContext, getWorkingDirectoryContext } from 
 // Plan types are used by UI components; not needed in craft-agent.ts since Safe Mode is user-controlled
 import { parseError, type AgentError } from './errors.ts';
 import { runErrorDiagnostics } from './diagnostics.ts';
-import { loadStoredConfig, loadConfigDefaults, getAnthropicBaseUrl, type Workspace } from '../config/storage.ts';
+import { loadStoredConfig, loadConfigDefaults, getAnthropicBaseUrl, resolveModelId, type Workspace } from '../config/storage.ts';
 import { isLocalMcpEnabled } from '../workspaces/storage.ts';
 import { loadPlanFromPath, type SessionConfig as Session } from '../sessions/storage.ts';
-import { DEFAULT_MODEL, getModelForSdk } from '../config/models.ts';
+import { DEFAULT_MODEL } from '../config/models.ts';
 import { getCredentialManager } from '../credentials/index.ts';
 import { updatePreferences, loadPreferences, formatPreferencesForPrompt, type UserPreferences } from '../config/preferences.ts';
 import type { FileAttachment } from '../utils/files.ts';
@@ -807,7 +807,7 @@ export class CraftAgent {
       // Configure SDK options
       // Resolve model: use tier name when using custom API (OpenRouter), else specific version
       const modelConfig = this.config.model || DEFAULT_MODEL;
-      const model = getModelForSdk(modelConfig);
+      const model = resolveModelId(modelConfig);
 
       // Determine effective thinking level: ultrathink override boosts to max for this message
       const effectiveThinkingLevel: ThinkingLevel = this.ultrathinkOverride ? 'max' : this.thinkingLevel;
@@ -1017,12 +1017,12 @@ export class CraftAgent {
                           reason: `Source "${serverName}" is available but not enabled for this session. Please enable it in the sources panel.`,
                         };
                       } else {
-                        // Source doesn't exist at all
+                        // Source doesn't exist or can't be connected
                         this.onDebug?.(`BLOCKED source tool: ${input.tool_name} (source "${serverName}" does not exist)`);
                         return {
                           continue: false,
                           decision: 'block' as const,
-                          reason: `Source "${serverName}" is not available. The source may have been removed or its credentials expired.`,
+                          reason: `Source "${serverName}" could not be connected. It may need re-authentication, or the server may be unreachable. Check the source in the sidebar for details.`,
                         };
                       }
                     }
@@ -2083,18 +2083,25 @@ export class CraftAgent {
     for (const s of sourcesNeedingAttention) {
       const status = s.config.connectionStatus;
       output += `\n\n<source_issue source="${s.config.slug}" status="${status}">`;
-      output += `\nThis source needs attention:`;
+
       if (s.config.connectionError) {
         output += `\nError: ${s.config.connectionError}`;
       }
 
-      // Provide appropriate fix instructions based on auth type
+      // Provide context-aware fix instructions based on auth type and transport
       const authTool = this.getAuthToolName(s);
       if (authTool) {
-        output += `\n\nTo fix: Re-authenticate using ${authTool}.`;
+        // Auth-based source - likely revoked or expired token
+        output += `\n\nThis source requires re-authentication. The user may have revoked access or the token expired.`;
+        output += `\nTo fix: Re-authenticate using ${authTool}.`;
+      } else if (s.config.mcp?.transport === 'stdio') {
+        // Local stdio server - process may have crashed or isn't installed
+        output += `\n\nThis is a local MCP server that is not responding. The server process may need to be restarted.`;
+        output += `\nTo fix: Check if the server command/path is correct and the process can start.`;
       } else {
-        // No-auth sources - suggest checking config/connectivity
-        output += `\n\nTo fix: Check the server URL, network connectivity, or source configuration. Use WebSearch to verify the current API endpoint is correct.`;
+        // Remote no-auth source - server unreachable or URL changed
+        output += `\n\nThis source's server is unreachable. It may be down or the URL may have changed.`;
+        output += `\nTo fix: Check the server URL and network connectivity. Use WebSearch to verify the endpoint is correct.`;
       }
       output += `\n</source_issue>`;
     }

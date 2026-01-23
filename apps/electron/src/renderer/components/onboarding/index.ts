@@ -13,12 +13,11 @@ export {
 export { WelcomeStep } from './WelcomeStep'
 export { BillingMethodStep, type BillingMethod } from './BillingMethodStep'
 export { CredentialsStep, type CredentialStatus } from './CredentialsStep'
-export { CustomEndpointStep, type CustomEndpointStatus } from './CustomEndpointStep'
 export { CompletionStep } from './CompletionStep'
 export { ReauthScreen } from './ReauthScreen'
 
 // Main wizard container
-export { OnboardingWizard, type OnboardingState, type OnboardingStep, type LoginStatus, type CustomEndpointStatus as CustomEndpointStatusExport } from './OnboardingWizard'
+export { OnboardingWizard, type OnboardingState, type OnboardingStep, type LoginStatus } from './OnboardingWizard'
 
 // Re-export all types for convenient import
 export type {
@@ -33,7 +32,3 @@ export type {
 export type {
   CredentialStatus as CredentialStatusType,
 } from './CredentialsStep'
-
-export type {
-  CustomEndpointStatus as CustomEndpointStatusType,
-} from './CustomEndpointStep'

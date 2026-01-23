@@ -1,8 +1,8 @@
 import { cn } from "@/lib/utils"
-import { Check, CreditCard, Key, Settings2 } from "lucide-react"
+import { Check, CreditCard, Key } from "lucide-react"
 import { StepFormLayout, BackButton, ContinueButton } from "./primitives"
 
-export type BillingMethod = 'api_key' | 'claude_oauth' | 'custom_endpoint'
+export type BillingMethod = 'api_key' | 'claude_oauth'
 
 interface BillingOption {
   id: BillingMethod
@@ -22,15 +22,9 @@ const BILLING_OPTIONS: BillingOption[] = [
   },
   {
     id: 'api_key',
-    name: 'Anthropic API Key',
-    description: 'Pay-as-you-go with your own API key.',
+    name: 'API Key',
+    description: 'Anthropic, OpenRouter, Ollama, or compatible APIs.',
     icon: <Key className="size-4" />,
-  },
-  {
-    id: 'custom_endpoint',
-    name: 'Custom Endpoint',
-    description: 'OpenRouter, Ollama, or other compatible APIs.',
-    icon: <Settings2 className="size-4" />,
   },
 ]
 
@@ -42,12 +36,11 @@ interface BillingMethodStepProps {
 }
 
 /**
- * BillingMethodStep - Choose how to pay for AI usage
+ * BillingMethodStep - Choose how to connect your AI agents
  *
- * Three options:
+ * Two options:
  * - Claude Pro/Max (recommended) - Uses Claude subscription
  * - API Key - Pay-as-you-go via Anthropic
- * - Custom Endpoint - OpenRouter, Ollama, or compatible APIs
  */
 export function BillingMethodStep({
   selectedMethod,
@@ -57,7 +50,7 @@ export function BillingMethodStep({
 }: BillingMethodStepProps) {
   return (
     <StepFormLayout
-      title="Choose Billing Method"
+      title="Set Up API Connection"
       description="Select how you'd like to power your AI agents."
       actions={
         <>

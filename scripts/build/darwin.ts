@@ -38,9 +38,11 @@ export async function packageDarwin(config: BuildConfig): Promise<string> {
   // Run electron-builder
   await $`cd ${electronDir} && npx electron-builder ${builderArgs}`;
 
-  // Verify the DMG was built
+  // Verify the DMG and ZIP were built (ZIP is used by electron-updater for auto-updates)
   const dmgName = `Craft-Agent-${arch}.dmg`;
+  const zipName = `Craft-Agent-${arch}.zip`;
   const dmgPath = join(electronDir, 'release', dmgName);
+  const zipPath = join(electronDir, 'release', zipName);
 
   if (!existsSync(dmgPath)) {
     console.error('Contents of release directory:');
@@ -48,13 +50,21 @@ export async function packageDarwin(config: BuildConfig): Promise<string> {
     throw new Error(`Expected DMG not found at ${dmgPath}`);
   }
 
-  // Get file size
-  const file = Bun.file(dmgPath);
-  const sizeMB = ((await file.size) / 1024 / 1024).toFixed(2);
+  if (!existsSync(zipPath)) {
+    console.warn(`  Warning: ZIP not found at ${zipPath} (needed for auto-updates)`);
+  }
+
+  // Get file sizes
+  const dmgFile = Bun.file(dmgPath);
+  const dmgSizeMB = ((await dmgFile.size) / 1024 / 1024).toFixed(2);
 
   console.log(`\n=== Build Complete ===`);
-  console.log(`DMG: ${dmgPath}`);
-  console.log(`Size: ${sizeMB} MB`);
+  console.log(`DMG: ${dmgPath} (${dmgSizeMB} MB)`);
+  if (existsSync(zipPath)) {
+    const zipFile = Bun.file(zipPath);
+    const zipSizeMB = ((await zipFile.size) / 1024 / 1024).toFixed(2);
+    console.log(`ZIP: ${zipPath} (${zipSizeMB} MB)`);
+  }
 
   return dmgPath;
 }

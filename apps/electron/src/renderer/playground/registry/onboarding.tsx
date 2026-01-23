@@ -2,7 +2,6 @@ import type { ComponentEntry } from './types'
 import { WelcomeStep } from '@/components/onboarding/WelcomeStep'
 import { BillingMethodStep } from '@/components/onboarding/BillingMethodStep'
 import { CredentialsStep } from '@/components/onboarding/CredentialsStep'
-import { CustomEndpointStep } from '@/components/onboarding/CustomEndpointStep'
 import { CompletionStep } from '@/components/onboarding/CompletionStep'
 import { OnboardingWizard } from '@/components/onboarding/OnboardingWizard'
 import type { OnboardingState } from '@/components/onboarding/OnboardingWizard'
@@ -58,7 +57,6 @@ export const onboardingComponents: ComponentEntry[] = [
             { label: 'None', value: '' },
             { label: 'Claude OAuth', value: 'claude_oauth' },
             { label: 'API Key', value: 'api_key' },
-            { label: 'Custom Endpoint', value: 'custom_endpoint' },
           ],
         },
         defaultValue: '',
@@ -68,7 +66,6 @@ export const onboardingComponents: ComponentEntry[] = [
       { name: 'No Selection', props: { selectedMethod: null } },
       { name: 'Claude OAuth Selected', props: { selectedMethod: 'claude_oauth' } },
       { name: 'API Key Selected', props: { selectedMethod: 'api_key' } },
-      { name: 'Custom Endpoint Selected', props: { selectedMethod: 'custom_endpoint' } },
     ],
     mockData: () => ({
       onSelect: (method: string) => console.log('[Playground] Selected method:', method),
@@ -80,7 +77,7 @@ export const onboardingComponents: ComponentEntry[] = [
     id: 'credentials-step-api-key',
     name: 'Credentials - API Key',
     category: 'Onboarding',
-    description: 'Enter Anthropic API key for authentication',
+    description: 'API key + optional Base URL and Model for compatible APIs',
     component: CredentialsStep,
     props: [
       {
@@ -112,7 +109,7 @@ export const onboardingComponents: ComponentEntry[] = [
     ],
     mockData: () => ({
       billingMethod: 'api_key',
-      onSubmit: (cred: string) => console.log('[Playground] Submitted credential:', cred),
+      onSubmit: (data: { apiKey: string; baseUrl?: string; customModel?: string }) => console.log('[Playground] Submitted:', data),
       onStartOAuth: noopHandler,
       onBack: noopHandler,
     }),
@@ -131,12 +128,18 @@ export const onboardingComponents: ComponentEntry[] = [
           type: 'select',
           options: [
             { label: 'Idle', value: 'idle' },
-            { label: 'Waiting', value: 'validating' },
+            { label: 'Validating', value: 'validating' },
             { label: 'Success', value: 'success' },
             { label: 'Error', value: 'error' },
           ],
         },
         defaultValue: 'idle',
+      },
+      {
+        name: 'isWaitingForCode',
+        description: 'Show auth code entry form',
+        control: { type: 'boolean' },
+        defaultValue: false,
       },
       {
         name: 'errorMessage',
@@ -147,58 +150,21 @@ export const onboardingComponents: ComponentEntry[] = [
     ],
     variants: [
       { name: 'Idle', props: { billingMethod: 'claude_oauth', status: 'idle' } },
-      { name: 'Waiting', props: { billingMethod: 'claude_oauth', status: 'validating' } },
+      { name: 'Idle (Existing Token)', props: { billingMethod: 'claude_oauth', status: 'idle', existingClaudeToken: 'sk-ant-abc123def456ghi789...' } },
+      { name: 'Waiting for Code', props: { billingMethod: 'claude_oauth', status: 'idle', isWaitingForCode: true } },
+      { name: 'Waiting for Code - Validating', props: { billingMethod: 'claude_oauth', status: 'validating', isWaitingForCode: true } },
+      { name: 'Waiting for Code - Error', props: { billingMethod: 'claude_oauth', status: 'error', isWaitingForCode: true, errorMessage: 'Invalid authorization code.' } },
+      { name: 'Validating', props: { billingMethod: 'claude_oauth', status: 'validating' } },
       { name: 'Success', props: { billingMethod: 'claude_oauth', status: 'success' } },
       { name: 'Error', props: { billingMethod: 'claude_oauth', status: 'error', errorMessage: 'Authentication failed. Please try again.' } },
     ],
     mockData: () => ({
       billingMethod: 'claude_oauth',
-      onSubmit: (cred: string) => console.log('[Playground] Submitted credential:', cred),
+      onSubmit: (data: { apiKey: string }) => console.log('[Playground] Submitted:', data),
       onStartOAuth: noopHandler,
       onBack: noopHandler,
-    }),
-  },
-  {
-    id: 'custom-endpoint-step',
-    name: 'CustomEndpointStep',
-    category: 'Onboarding',
-    description: 'Upload custom API endpoint configuration',
-    component: CustomEndpointStep,
-    props: [
-      {
-        name: 'status',
-        description: 'Configuration status',
-        control: {
-          type: 'select',
-          options: [
-            { label: 'Idle', value: 'idle' },
-            { label: 'Validating', value: 'validating' },
-            { label: 'Success', value: 'success' },
-            { label: 'Error', value: 'error' },
-          ],
-        },
-        defaultValue: 'idle',
-      },
-      {
-        name: 'errorMessage',
-        description: 'Error message to display',
-        control: { type: 'string', placeholder: 'Error message' },
-        defaultValue: '',
-      },
-    ],
-    variants: [
-      { name: 'Idle', props: { status: 'idle' } },
-      { name: 'Validating', props: { status: 'validating' } },
-      { name: 'Success', props: { status: 'success' } },
-      { name: 'Error', props: { status: 'error', errorMessage: 'Invalid configuration. Please check your JSON format.' } },
-    ],
-    mockData: () => ({
-      onUploadConfig: async (json: string) => {
-        console.log('[Playground] Uploaded config:', json)
-        return { success: true }
-      },
-      onBack: noopHandler,
-      onContinue: noopHandler,
+      onSubmitAuthCode: (code: string) => console.log('[Playground] Auth code:', code),
+      onCancelOAuth: noopHandler,
     }),
   },
   {
@@ -274,12 +240,6 @@ export const onboardingComponents: ComponentEntry[] = [
         },
       },
       {
-        name: 'Custom Endpoint',
-        props: {
-          state: createOnboardingState({ step: 'custom-endpoint', billingMethod: 'custom_endpoint' }),
-        },
-      },
-      {
         name: 'Complete - Saving',
         props: {
           state: createOnboardingState({ step: 'complete', completionStatus: 'saving' }),
@@ -301,13 +261,9 @@ export const onboardingComponents: ComponentEntry[] = [
       onContinue: noopHandler,
       onBack: noopHandler,
       onSelectBillingMethod: (method: string) => console.log('[Playground] Selected billing:', method),
-      onSubmitCredential: (cred: string) => console.log('[Playground] Submitted:', cred),
+      onSubmitCredential: (data: { apiKey: string; baseUrl?: string; customModel?: string }) => console.log('[Playground] Submitted:', data),
       onStartOAuth: noopHandler,
       onFinish: noopHandler,
-      onUploadCustomEndpoint: async (json: string) => {
-        console.log('[Playground] Uploaded custom endpoint:', json)
-        return { success: true }
-      },
     }),
   },
 ]

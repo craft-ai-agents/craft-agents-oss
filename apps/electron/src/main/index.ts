@@ -18,7 +18,7 @@ import { handleDeepLink } from './deep-link'
 import log, { isDebugMode, mainLog, getLogFilePath } from './logger'
 import { setPerfEnabled, enableDebug } from '@craft-agent/shared/utils'
 import { initNotificationService, clearBadgeCount, initBadgeIcon, initInstanceBadge } from './notifications'
-import { checkForUpdatesOnLaunch, checkPendingUpdateAndInstall, setWindowManager as setAutoUpdateWindowManager } from './auto-update'
+import { checkForUpdatesOnLaunch, setWindowManager as setAutoUpdateWindowManager } from './auto-update'
 
 // Initialize electron-log for renderer process support
 log.initialize()
@@ -151,16 +151,7 @@ app.whenReady().then(async () => {
   const bundledPermissionsDir = join(__dirname, 'resources/permissions')
   ensureDefaultPermissions(bundledPermissionsDir)
 
-  // Check for pending update and auto-install if available
-  // This must happen early, before creating windows
-  // Skip in dev mode to avoid accidentally installing over /Applications version
-  if (app.isPackaged) {
-    const isAutoInstalling = await checkPendingUpdateAndInstall()
-    if (isAutoInstalling) {
-      // App will quit and install update - don't proceed with startup
-      return
-    }
-  }
+  // Note: electron-updater handles pending updates internally via autoInstallOnAppQuit
 
   // Application menu is created after windowManager initialization (see below)
 

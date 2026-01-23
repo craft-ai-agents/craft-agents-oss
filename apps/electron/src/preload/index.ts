@@ -154,7 +154,7 @@ const api: ElectronAPI = {
     credential?: string
     mcpCredentials?: { accessToken: string; clientId?: string }
     anthropicBaseUrl?: string | null
-    customModelNames?: { opus?: string; sonnet?: string; haiku?: string } | null
+    customModel?: string | null
   }) => ipcRenderer.invoke(IPC_CHANNELS.ONBOARDING_SAVE_CONFIG, config),
   // Claude OAuth
   getExistingClaudeToken: () => ipcRenderer.invoke(IPC_CHANNELS.ONBOARDING_GET_EXISTING_CLAUDE_TOKEN),
@@ -168,17 +168,10 @@ const api: ElectronAPI = {
 
   // Settings - Billing
   getBillingMethod: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET_BILLING_METHOD),
-  updateBillingMethod: (authType: AuthType, credential?: string, anthropicBaseUrl?: string | null, customModelNames?: { opus?: string; sonnet?: string; haiku?: string } | null) =>
-    ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_UPDATE_BILLING_METHOD, authType, credential, anthropicBaseUrl, customModelNames),
+  updateBillingMethod: (authType: AuthType, credential?: string, anthropicBaseUrl?: string | null, customModel?: string | null) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_UPDATE_BILLING_METHOD, authType, credential, anthropicBaseUrl, customModel),
   testApiConnection: (apiKey: string, baseUrl?: string, modelName?: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_TEST_API_CONNECTION, apiKey, baseUrl, modelName),
-  // Custom endpoint config (file upload workflow)
-  uploadCustomEndpointConfig: (jsonContent: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_UPLOAD_CUSTOM_ENDPOINT, jsonContent),
-  getCustomEndpointConfig: () =>
-    ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET_CUSTOM_ENDPOINT),
-  clearCustomEndpointConfig: () =>
-    ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_CLEAR_CUSTOM_ENDPOINT),
 
   // Settings - Model (global default)
   getModel: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET_MODEL),

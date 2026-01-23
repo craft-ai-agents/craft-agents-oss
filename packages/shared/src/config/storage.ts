@@ -31,24 +31,11 @@ export type {
 // Import for local use
 import type { Workspace, AuthType } from '@craft-agent/core/types';
 
-/**
- * Pending update info for auto-install on next launch
- */
-export interface PendingUpdate {
-  version: string;
-  installerPath: string;
-  sha256: string;
-}
-
 // Config stored in JSON file (credentials stored in encrypted file, not here)
 export interface StoredConfig {
   authType?: AuthType;
   anthropicBaseUrl?: string;  // Custom Anthropic API base URL (for third-party compatible APIs)
-  customModelNames?: {  // Custom model name mappings for third-party APIs
-    opus?: string;
-    sonnet?: string;
-    haiku?: string;
-  };
+  customModel?: string;  // Custom model ID override (for third-party APIs like OpenRouter, Ollama)
   workspaces: Workspace[];
   activeWorkspaceId: string | null;
   activeSessionId: string | null;  // Currently active session (primary scope)
@@ -59,7 +46,6 @@ export interface StoredConfig {
   colorTheme?: string;  // ID of selected preset theme (e.g., 'dracula', 'nord'). Default: 'default'
   // Auto-update
   dismissedUpdateVersion?: string;  // Version that user dismissed (skip notifications for this version)
-  pendingUpdate?: PendingUpdate;  // Update ready for auto-install on next launch
 }
 
 const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
@@ -1074,95 +1060,44 @@ export function clearDismissedUpdateVersion(): void {
   saveConfig(config);
 }
 
-/**
- * Get the pending update info for auto-install on next launch.
- * Returns null if no pending update.
- */
-export function getPendingUpdate(): PendingUpdate | null {
-  const config = loadStoredConfig();
-  return config?.pendingUpdate ?? null;
-}
-
-/**
- * Set the pending update info for auto-install on next launch.
- */
-export function setPendingUpdate(update: PendingUpdate): void {
-  const config = loadStoredConfig();
-  if (!config) return;
-  config.pendingUpdate = update;
-  saveConfig(config);
-}
-
-/**
- * Clear the pending update info.
- * Call this after successful install or if installer file is invalid.
- */
-export function clearPendingUpdate(): void {
-  const config = loadStoredConfig();
-  if (!config) return;
-  delete config.pendingUpdate;
-  saveConfig(config);
-}
-
 // ============================================
-// Custom Model Names (for third-party APIs)
+// Custom Model (for third-party APIs)
 // ============================================
 
 /**
- * Get custom model name mappings for third-party APIs.
- * Returns null if no custom names are configured.
+ * Get custom model ID override for third-party APIs.
+ * When set, this single model is used for ALL API calls (main, summarization, etc.)
  */
-export function getCustomModelNames(): { opus?: string; sonnet?: string; haiku?: string } | null {
+export function getCustomModel(): string | null {
   const config = loadStoredConfig();
-  return config?.customModelNames ?? null;
+  return config?.customModel?.trim() || null;
 }
 
 /**
- * Set custom model name mappings for third-party APIs.
- * Pass null to clear the configuration.
+ * Set custom model ID for third-party APIs.
+ * Pass null to clear and use default Anthropic models.
  */
-export function setCustomModelNames(names: { opus?: string; sonnet?: string; haiku?: string } | null): void {
+export function setCustomModel(model: string | null): void {
   const config = loadStoredConfig();
   if (!config) return;
 
-  if (names && Object.values(names).some(v => v?.trim())) {
-    // Only save non-empty values
-    config.customModelNames = Object.fromEntries(
-      Object.entries(names).filter(([_, v]) => v?.trim())
-    ) as typeof names;
+  if (model?.trim()) {
+    config.customModel = model.trim();
   } else {
-    delete config.customModelNames;
+    delete config.customModel;
   }
   saveConfig(config);
 }
 
 /**
- * Get the model family key for a standard Anthropic model ID.
- * Returns null for non-standard model IDs.
- * @param modelId - The model ID to analyze
- * @returns The model family key ('opus' | 'sonnet' | 'haiku') or null
- */
-function getModelFamilyKey(modelId: string): 'opus' | 'sonnet' | 'haiku' | null {
-  // Match standard Anthropic model ID format: claude-{family}-{version}
-  // e.g., claude-opus-4-5-20251101, claude-sonnet-4-5-20250929
-  const match = modelId.match(/^claude-(opus|sonnet|haiku)-/);
-  return (match?.[1] as 'opus' | 'sonnet' | 'haiku') ?? null;
-}
-
-/**
- * Resolve model ID based on user's custom model name configuration.
- * For third-party APIs, users can override default model IDs with custom ones.
- * @param defaultModelId - The default Anthropic model ID (e.g., 'claude-opus-4-5-20251101')
- * @returns The resolved model ID (custom or default)
+ * Resolve model ID based on custom model override.
+ * When a custom model is configured (for OpenRouter, Ollama, etc.),
+ * it overrides ALL model calls (main, summarization, extraction).
+ * @param defaultModelId - The default Anthropic model ID
+ * @returns The custom model if set, otherwise the default
  */
 export function resolveModelId(defaultModelId: string): string {
-  const customNames = getCustomModelNames();
-  if (!customNames) return defaultModelId;
-
-  // Get model family key using precise prefix matching
-  const modelKey = getModelFamilyKey(defaultModelId);
-  if (!modelKey) return defaultModelId;
-
-  // Return custom name if configured for this model family
-  return customNames[modelKey] || defaultModelId;
+  const customModel = getCustomModel();
+  if (customModel) return customModel;
+  return defaultModelId;
 }

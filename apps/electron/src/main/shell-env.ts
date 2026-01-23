@@ -54,6 +54,10 @@ export function loadShellEnv(): void {
         SHELL: shell,
         TERM: 'xterm-256color',
         TMPDIR: process.env.TMPDIR,
+        // Prevent macOS from showing "Install Command Line Developer Tools" dialog
+        // when the shell hits the /usr/bin/git shim on systems without Xcode CLT
+        APPLE_SUPPRESS_DEVELOPER_TOOL_POPUP: '1',
+        GIT_TERMINAL_PROMPT: '0',
       },
       stdio: ['pipe', 'pipe', 'pipe'],
     })

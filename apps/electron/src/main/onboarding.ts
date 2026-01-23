@@ -8,7 +8,7 @@ import { mainLog } from './logger'
 import { getAuthState, getSetupNeeds } from '@craft-agent/shared/auth'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { saveConfig, loadStoredConfig, generateWorkspaceId, type AuthType, type StoredConfig } from '@craft-agent/shared/config'
-import { getDefaultWorkspacesDir } from '@craft-agent/shared/workspaces'
+import { getDefaultWorkspacesDir, generateUniqueWorkspacePath } from '@craft-agent/shared/workspaces'
 import { CraftOAuth, getMcpBaseUrl } from '@craft-agent/shared/auth'
 import { validateMcpConnection } from '@craft-agent/shared/mcp'
 import { getExistingClaudeToken, getExistingClaudeCredentials, isClaudeCliInstalled, runClaudeSetupToken, startClaudeOAuth, exchangeClaudeCode, hasValidOAuthState, clearOAuthState } from '@craft-agent/shared/auth'
@@ -84,7 +84,7 @@ export function registerOnboardingHandlers(sessionManager: SessionManager): void
     credential?: string
     mcpCredentials?: { accessToken: string; clientId?: string }
     anthropicBaseUrl?: string | null
-    customModelNames?: { opus?: string; sonnet?: string; haiku?: string } | null
+    customModel?: string | null
   }): Promise<OnboardingSaveResult> => {
     mainLog.info('[Onboarding:Main] ONBOARDING_SAVE_CONFIG received', {
       authType: config.authType,
@@ -95,7 +95,7 @@ export function registerOnboardingHandlers(sessionManager: SessionManager): void
       credentialLength: config.credential?.length,
       hasMcpCredentials: !!config.mcpCredentials,
       anthropicBaseUrl: config.anthropicBaseUrl,
-      customModelNames: config.customModelNames,
+      customModel: config.customModel,
     })
 
     try {
@@ -160,17 +160,13 @@ export function registerOnboardingHandlers(sessionManager: SessionManager): void
         }
       }
 
-      // 3b. Update customModelNames if provided
-      if (config.customModelNames !== undefined) {
-        mainLog.info('[Onboarding:Main] Updating customModelNames to', config.customModelNames)
-        if (config.customModelNames && Object.values(config.customModelNames).some(v => v?.trim())) {
-          newConfig.customModelNames = {
-            opus: config.customModelNames.opus?.trim() || undefined,
-            sonnet: config.customModelNames.sonnet?.trim() || undefined,
-            haiku: config.customModelNames.haiku?.trim() || undefined,
-          }
+      // 3b. Update customModel if provided
+      if (config.customModel !== undefined) {
+        mainLog.info('[Onboarding:Main] Updating customModel to', config.customModel)
+        if (config.customModel?.trim()) {
+          newConfig.customModel = config.customModel.trim()
         } else {
-          delete newConfig.customModelNames
+          delete newConfig.customModel
         }
       }
 
@@ -188,7 +184,7 @@ export function registerOnboardingHandlers(sessionManager: SessionManager): void
         const workspace = {
           id: workspaceId,
           name: config.workspace.name,
-          rootPath: existingWorkspace?.rootPath ?? `${getDefaultWorkspacesDir()}/${workspaceId}`,
+          rootPath: existingWorkspace?.rootPath ?? generateUniqueWorkspacePath(config.workspace.name, getDefaultWorkspacesDir()),
           createdAt: existingWorkspace?.createdAt ?? Date.now(), // Preserve original creation time
           iconUrl: config.workspace.iconUrl,
           mcpUrl: config.workspace.mcpUrl,
@@ -225,8 +221,8 @@ export function registerOnboardingHandlers(sessionManager: SessionManager): void
 
           const defaultWorkspace = {
             id: workspaceId,
-            name: 'Default',
-            rootPath: `${getDefaultWorkspacesDir()}/${workspaceId}`,
+            name: 'My Workspace',
+            rootPath: generateUniqueWorkspacePath('My Workspace', getDefaultWorkspacesDir()),
             createdAt: Date.now(),
           }
           newConfig.workspaces.push(defaultWorkspace)

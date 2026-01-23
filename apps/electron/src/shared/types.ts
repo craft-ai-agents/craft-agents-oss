@@ -534,10 +534,6 @@ export const IPC_CHANNELS = {
   SETTINGS_GET_BILLING_METHOD: 'settings:getBillingMethod',
   SETTINGS_UPDATE_BILLING_METHOD: 'settings:updateBillingMethod',
   SETTINGS_TEST_API_CONNECTION: 'settings:testApiConnection',
-  // Custom endpoint config (file upload workflow)
-  SETTINGS_UPLOAD_CUSTOM_ENDPOINT: 'settings:uploadCustomEndpoint',
-  SETTINGS_GET_CUSTOM_ENDPOINT: 'settings:getCustomEndpoint',
-  SETTINGS_CLEAR_CUSTOM_ENDPOINT: 'settings:clearCustomEndpoint',
 
   // Settings - Model
   SETTINGS_GET_MODEL: 'settings:getModel',
@@ -723,7 +719,7 @@ export interface ElectronAPI {
     credential?: string  // API key or OAuth token based on authType
     mcpCredentials?: { accessToken: string; clientId?: string }  // MCP OAuth credentials
     anthropicBaseUrl?: string | null  // Custom Anthropic API base URL
-    customModelNames?: { opus?: string; sonnet?: string; haiku?: string } | null  // Custom model names
+    customModel?: string | null  // Custom model ID override
   }): Promise<OnboardingSaveResult>
   // Claude OAuth
   getExistingClaudeToken(): Promise<string | null>
@@ -737,12 +733,8 @@ export interface ElectronAPI {
 
   // Settings - Billing
   getBillingMethod(): Promise<BillingMethodInfo>
-  updateBillingMethod(authType: AuthType, credential?: string, anthropicBaseUrl?: string | null, customModelNames?: { opus?: string; sonnet?: string; haiku?: string } | null): Promise<void>
+  updateBillingMethod(authType: AuthType, credential?: string, anthropicBaseUrl?: string | null, customModel?: string | null): Promise<void>
   testApiConnection(apiKey: string, baseUrl?: string, modelName?: string): Promise<{ success: boolean; error?: string; modelCount?: number }>
-  // Custom endpoint config (file upload workflow)
-  uploadCustomEndpointConfig(jsonContent: string): Promise<CustomEndpointUploadResult>
-  getCustomEndpointConfig(): Promise<CustomEndpointConfigInfo>
-  clearCustomEndpointConfig(): Promise<void>
 
   // Settings - Model (global default)
   getModel(): Promise<string | null>
@@ -861,46 +853,7 @@ export interface BillingMethodInfo {
   hasCredential: boolean
   apiKey?: string  // The stored API key (only returned for api_key auth type)
   anthropicBaseUrl?: string  // Custom Anthropic API base URL (for third-party compatible APIs)
-  customModelNames?: {  // Custom model name mappings for third-party APIs
-    opus?: string
-    sonnet?: string
-    haiku?: string
-  }
-}
-
-/**
- * Custom endpoint configuration info for display
- * API key is masked for security
- */
-export interface CustomEndpointConfigInfo {
-  /** Whether a custom endpoint is configured */
-  hasConfig: boolean
-  /** API endpoint URL */
-  baseUrl?: string
-  /** Masked API key (e.g., "sk-or-v1-****1234") */
-  maskedApiKey?: string
-  /** Model name mappings */
-  models?: {
-    opus?: string
-    sonnet?: string
-    haiku?: string
-  }
-}
-
-/**
- * Result of uploading custom endpoint config
- */
-export interface CustomEndpointUploadResult {
-  success: boolean
-  error?: string
-  /** Validation errors from parsing the config */
-  validationErrors?: string[]
-  /** Connection test result */
-  connectionTest?: {
-    success: boolean
-    error?: string
-    modelCount?: number
-  }
+  customModel?: string  // Custom model ID override (for third-party APIs)
 }
 
 /**
@@ -913,8 +866,6 @@ export interface UpdateInfo {
   currentVersion: string
   /** Latest available version (null if check failed) */
   latestVersion: string | null
-  /** Download URL for the update DMG */
-  downloadUrl: string | null
   /** Download state */
   downloadState: 'idle' | 'downloading' | 'ready' | 'installing' | 'error'
   /** Download progress (0-100) */

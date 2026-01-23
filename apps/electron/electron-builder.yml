@@ -31,17 +31,10 @@ files:
 extraMetadata:
   main: dist/main.cjs
 
-# Extra resources to bundle with the app (outside the app code)
-extraResources:
-  # macOS self-update script
-  - from: scripts/self-update.sh
-    to: self-update.sh
-  # Windows self-update script
-  - from: scripts/self-update.ps1
-    to: self-update.ps1
-  # Linux AppImage self-update script
-  - from: scripts/self-update-linux.sh
-    to: self-update-linux.sh
+# Auto-update: electron-updater fetches from this URL for update manifests (.yml files)
+publish:
+  provider: generic
+  url: https://agents.craft.do/electron/latest
 
 # Disable ASAR to avoid decompression overhead and click delays
 asar: false
@@ -58,6 +51,10 @@ mac:
       arch:
         - arm64
         - x64
+    - target: zip
+      arch:
+        - arm64
+        - x64
   hardenedRuntime: true
   gatekeeperAssess: false
   entitlements: build/entitlements.mac.plist
@@ -71,6 +68,10 @@ mac:
   # To enable: set CSC_LINK, APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID
   # notarize:
   #   teamId: ${APPLE_TEAM_ID}
+
+zip:
+  # Use predictable naming for macOS update packages (electron-updater downloads zip, not dmg)
+  artifactName: "Craft-Agent-${arch}.zip"
 
 dmg:
   # Use predictable naming: Craft-Agent-arm64.dmg, Craft-Agent-x64.dmg
@@ -112,13 +113,10 @@ win:
       to: vendor/bun/bun.exe
 
 nsis:
-  oneClick: false
-  # Force per-user install to %LOCALAPPDATA%\Programs\ (not Program Files).
+  oneClick: true
+  # Per-user install to %LOCALAPPDATA%\Programs\ (not Program Files).
   # Bun subprocess cannot read/write files in Program Files due to Windows permissions.
-  # allowElevation: false removes the "all users" vs "only me" selection screen.
   perMachine: false
-  allowElevation: false
-  allowToChangeInstallationDirectory: false
   deleteAppDataOnUninstall: true
 
 linux:

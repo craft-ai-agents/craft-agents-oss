@@ -22,7 +22,7 @@ on:
         description: 'Also upload to /latest folder'
         required: false
         type: boolean
-        default: false
+        default: true
       uploadScript:
         description: 'Upload install scripts (install-app.sh for macOS/Linux, install-app.ps1 for Windows)'
         required: false
@@ -33,11 +33,16 @@ on:
         required: false
         type: boolean
         default: true
+      legacyManifest:
+        description: 'Also generate legacy manifest.json (for transitioning existing users from old updater)'
+        required: false
+        type: boolean
+        default: true
       forceRebuild:
         description: 'Force rebuild even if artifact already exists in S3'
         required: false
         type: boolean
-        default: false
+        default: true
 
 permissions:
   contents: write
@@ -152,7 +157,7 @@ jobs:
           mkdir -p apps/electron/release
           echo "Downloading existing artifact from S3..."
 
-          # Download with retry logic
+          # Download main binary with retry logic
           for i in 1 2 3; do
             if curl -fsSL --connect-timeout 30 --retry 2 "$ARTIFACT_URL" -o "apps/electron/release/${ARTIFACT_NAME}"; then
               echo "Downloaded: apps/electron/release/${ARTIFACT_NAME}"
@@ -165,6 +170,15 @@ jobs:
               exit 1
             fi
           done
+
+          # For macOS: also download the zip (needed by electron-updater for auto-updates)
+          if [ "${{ matrix.platform }}" = "darwin" ]; then
+            ZIP_NAME="Craft-Agent-${{ matrix.arch }}.zip"
+            ZIP_URL="https://agents.craft.do/electron/${VERSION}/${ZIP_NAME}"
+            echo "Downloading existing zip from S3..."
+            curl -fsSL --connect-timeout 30 --retry 2 "$ZIP_URL" -o "apps/electron/release/${ZIP_NAME}" || \
+              echo "Warning: zip not found in S3 (may not have been uploaded for this version)"
+          fi
 
           ls -la apps/electron/release/
 
@@ -330,7 +344,13 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.0
         with:
           name: build-${{ matrix.platform }}-${{ matrix.arch }}
-          path: apps/electron/release/Craft-Agent-${{ matrix.arch }}.${{ matrix.ext }}
+          # Include main binary plus electron-updater files (zip for macOS updates,
+          # yml manifests, and blockmap for differential updates)
+          path: |
+            apps/electron/release/Craft-Agent-${{ matrix.arch }}.${{ matrix.ext }}
+            apps/electron/release/Craft-Agent-${{ matrix.arch }}.zip
+            apps/electron/release/*.yml
+            apps/electron/release/*.blockmap
           retention-days: 7
 
   # Upload all builds to S3 and create GitHub release
@@ -384,6 +404,9 @@ jobs:
           FLAGS=""
           if [ "${{ inputs.isLatest }}" = "true" ]; then
             FLAGS="$FLAGS --latest"
+          fi
+          if [ "${{ inputs.legacyManifest }}" = "true" ]; then
+            FLAGS="$FLAGS --legacy-manifest"
           fi
           if [ "${{ inputs.uploadScript }}" = "true" ]; then
             FLAGS="$FLAGS --script"

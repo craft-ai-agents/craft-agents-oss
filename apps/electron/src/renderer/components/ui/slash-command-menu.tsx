@@ -483,6 +483,11 @@ export function InlineSlashCommand({
           </React.Fragment>
         ))}
       </div>
+      {/* Always-visible footer hint for @ mentions */}
+      <div className="h-px bg-border/50 mx-2" />
+      <div className="px-3 py-2.5 select-none text-xs text-muted-foreground">
+        Use @ for skills and files
+      </div>
     </div>
   )
 }

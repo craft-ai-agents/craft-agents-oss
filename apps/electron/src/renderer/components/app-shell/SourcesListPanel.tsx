@@ -8,6 +8,7 @@
 import * as React from 'react'
 import { useState } from 'react'
 import { MoreHorizontal } from 'lucide-react'
+import { Tooltip, TooltipTrigger, TooltipContent } from '@craft-agent/ui'
 import { SourceAvatar } from '@/components/ui/source-avatar'
 import { deriveConnectionStatus } from '@/components/ui/source-status-indicator'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -180,9 +181,9 @@ function getStatusBadge(status: SourceConnectionStatus): { label: string; classe
     case 'connected':
       return null // No badge for connected sources
     case 'needs_auth':
-      return { label: 'Needs Auth', classes: 'bg-info/10 text-info' }
+      return { label: 'Auth Required', classes: 'bg-warning/10 text-warning' }
     case 'failed':
-      return { label: 'Failed', classes: 'bg-destructive/10 text-destructive' }
+      return { label: 'Disconnected', classes: 'bg-destructive/10 text-destructive' }
     case 'untested':
       return { label: 'Not Tested', classes: 'bg-foreground/10 text-foreground/50' }
     case 'local_disabled':
@@ -249,14 +250,23 @@ function SourceItem({ source, isSelected, isFirst, localMcpEnabled, onClick, onD
               )}>
                 {getSourceTypeLabel(config.type)}
               </span>
-              {/* Status badge (only shown for non-connected sources) */}
+              {/* Status badge with tooltip showing connection error details on hover */}
               {statusBadge && (
-                <span className={cn(
-                  "shrink-0 px-1.5 py-0.5 text-[10px] font-medium rounded",
-                  statusBadge.classes
-                )}>
-                  {statusBadge.label}
-                </span>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className={cn(
+                      "shrink-0 px-1.5 py-0.5 text-[10px] font-medium rounded cursor-default",
+                      statusBadge.classes
+                    )}>
+                      {statusBadge.label}
+                    </span>
+                  </TooltipTrigger>
+                  {config.connectionError && (
+                    <TooltipContent side="top" className="max-w-xs">
+                      <span className="text-xs">{config.connectionError}</span>
+                    </TooltipContent>
+                  )}
+                </Tooltip>
               )}
               {/* Tagline/description */}
               {subtitle && (

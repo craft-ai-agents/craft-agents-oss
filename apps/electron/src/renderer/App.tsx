@@ -1233,8 +1233,6 @@ export default function App() {
           isWaitingForCode={onboarding.isWaitingForCode}
           onSubmitAuthCode={onboarding.handleSubmitAuthCode}
           onCancelOAuth={onboarding.handleCancelOAuth}
-          customEndpointStatus={onboarding.customEndpointStatus}
-          onUploadCustomEndpoint={onboarding.handleUploadCustomEndpoint}
         />
       </ModalProvider>
     )

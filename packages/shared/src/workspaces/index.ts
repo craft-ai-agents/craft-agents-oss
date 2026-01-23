@@ -29,6 +29,7 @@ export {
   getWorkspaceSummary,
   // Create/Delete operations
   generateSlug,
+  generateUniqueWorkspacePath,
   createWorkspaceAtPath,
   deleteWorkspaceFolder,
   isValidWorkspace,

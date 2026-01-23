@@ -55,7 +55,7 @@ bun run electron:start
 ## Quick Start
 
 1. **Launch the app** after installation
-2. **Choose billing**: Use your own Anthropic API key or Claude Max subscription
+2. **Choose API Connection**: Use your own Anthropic API key or Claude Max subscription
 3. **Create a workspace**: Set up a workspace to organize your sessions
 4. **Connect sources** (optional): Add MCP servers, REST APIs, or local filesystems
 5. **Start chatting**: Create sessions and interact with Claude
