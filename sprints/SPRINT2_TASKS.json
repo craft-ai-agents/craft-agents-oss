@@ -1,0 +1,808 @@
+{
+  "sprint": {
+    "number": 2,
+    "name": "Intelligent Triage Engine",
+    "goal": "AI-powered triage scoring with ranked 'Top 10 things to do today'",
+    "timeline": "Feb 6-19, 2026 (2 weeks, 10 days working)",
+    "team_capacity": "8-10 engineers",
+    "success_criteria": [
+      "80% agreement with human triage ranking",
+      "Triage completes in <60s for 50 issues",
+      "AI reasoning is coherent and helpful",
+      "Beta users report feature as 'useful'"
+    ]
+  },
+  "backend_tasks": [
+    {
+      "id": "B1",
+      "title": "Implement Claude API Integration",
+      "description": "Batch 20 issues per Claude API call with extended thinking mode",
+      "effort_hours": 16,
+      "dependencies": [],
+      "subtasks": [
+        {
+          "id": "B1.1",
+          "title": "Create TriageService class with Claude client",
+          "files": ["packages/shared/src/triage/claude-scorer.ts"],
+          "acceptance_criteria": [
+            "TriageService accepts DailyReport",
+            "Batches 20 issues per API call",
+            "Handles streaming responses",
+            "Returns ScoredIssue[] with reasoning"
+          ]
+        },
+        {
+          "id": "B1.2",
+          "title": "Implement extended thinking mode",
+          "files": ["packages/shared/src/triage/claude-scorer.ts"],
+          "acceptance_criteria": [
+            "Uses Claude model with extended thinking",
+            "Captures thinking for transparency",
+            "Returns structured output"
+          ]
+        },
+        {
+          "id": "B1.3",
+          "title": "Add rate limiting and backoff",
+          "files": ["packages/shared/src/triage/claude-scorer.ts"],
+          "acceptance_criteria": [
+            "Handles rate limits gracefully",
+            "Implements exponential backoff",
+            "Shows progress to user"
+          ]
+        }
+      ],
+      "acceptance_criteria": [
+        "Integration test passes for batch processing",
+        "Extended thinking captures analysis",
+        "Rate limiting prevents API errors"
+      ]
+    },
+    {
+      "id": "B2",
+      "title": "Design Triage Scoring Algorithm",
+      "description": "Implement formula: (Impact × Urgency × 0.8 + Impact × 0.2) / (1 + Complexity/10) with label boosts",
+      "effort_hours": 8,
+      "dependencies": ["B1"],
+      "subtasks": [
+        {
+          "id": "B2.1",
+          "title": "Create scoring formula with label adjustments",
+          "files": ["packages/shared/src/triage/scorer.ts"],
+          "acceptance_criteria": [
+            "P0 label multiplies impact by 2",
+            "Blocked label multiplies urgency by 1.5",
+            "Backlog label multiplies urgency by 0.5",
+            "Formula matches design spec"
+          ]
+        },
+        {
+          "id": "B2.2",
+          "title": "Add impact/urgency/complexity normalization",
+          "files": ["packages/shared/src/triage/scorer.ts"],
+          "acceptance_criteria": [
+            "Normalizes Claude ratings to 1-10 scale",
+            "Handles missing data gracefully",
+            "Unit tests cover edge cases"
+          ]
+        }
+      ],
+      "acceptance_criteria": [
+        "Scoring tests pass (20 test cases)",
+        "Label multipliers work correctly",
+        "Final score ranges 0-100"
+      ]
+    },
+    {
+      "id": "B3",
+      "title": "Create Triage Storage Layer",
+      "description": "Persist triage results with 24-hour TTL cache",
+      "effort_hours": 8,
+      "dependencies": ["B2"],
+      "subtasks": [
+        {
+          "id": "B3.1",
+          "title": "Design triage storage schema",
+          "files": ["packages/shared/src/triage/storage.ts"],
+          "acceptance_criteria": [
+            "Stores scored issues with reasoning",
+            "Includes approval state",
+            "Includes timestamp and TTL"
+          ]
+        },
+        {
+          "id": "B3.2",
+          "title": "Implement JSONL persistence",
+          "files": ["packages/shared/src/triage/storage.ts"],
+          "acceptance_criteria": [
+            "Saves to ~/.vespr/workspaces/{id}/triage/results.jsonl",
+            "Implements 24-hour TTL",
+            "Supports efficient lookups"
+          ]
+        }
+      ],
+      "acceptance_criteria": [
+        "Storage tests pass",
+        "TTL cache works correctly",
+        "Efficient file lookups"
+      ]
+    },
+    {
+      "id": "B4",
+      "title": "Add IPC Handlers for Triage",
+      "description": "Create triage:run and triage:get-results handlers",
+      "effort_hours": 8,
+      "dependencies": ["B3"],
+      "subtasks": [
+        {
+          "id": "B4.1",
+          "title": "Implement triage:run handler",
+          "files": ["apps/electron/src/main/ipc.ts"],
+          "acceptance_criteria": [
+            "Accepts report ID",
+            "Calls TriageService.scoreIssues()",
+            "Broadcasts progress events",
+            "Returns scored report"
+          ]
+        },
+        {
+          "id": "B4.2",
+          "title": "Implement triage:get-results handler",
+          "files": ["apps/electron/src/main/ipc.ts"],
+          "acceptance_criteria": [
+            "Retrieves cached results",
+            "Returns with metadata",
+            "Handles expired cache"
+          ]
+        }
+      ],
+      "acceptance_criteria": [
+        "IPC handlers tested",
+        "Event broadcasting works",
+        "Type safety enforced"
+      ]
+    },
+    {
+      "id": "B5",
+      "title": "Implement Batch Processor",
+      "description": "Process multiple issues in parallel with progress tracking",
+      "effort_hours": 8,
+      "dependencies": ["B1"],
+      "subtasks": [
+        {
+          "id": "B5.1",
+          "title": "Create batch processor with parallel calls",
+          "files": ["packages/shared/src/triage/batch-processor.ts"],
+          "acceptance_criteria": [
+            "Batches 20 issues per call",
+            "Processes batches in parallel",
+            "Limits concurrent API calls",
+            "Tracks progress"
+          ]
+        },
+        {
+          "id": "B5.2",
+          "title": "Add progress event emission",
+          "files": ["packages/shared/src/triage/batch-processor.ts"],
+          "acceptance_criteria": [
+            "Emits progress: current/total",
+            "Updates every batch completion",
+            "Sendable via IPC"
+          ]
+        }
+      ],
+      "acceptance_criteria": [
+        "Processor tests pass",
+        "Progress tracking accurate",
+        "No race conditions"
+      ]
+    }
+  ],
+  "frontend_tasks": [
+    {
+      "id": "F1",
+      "title": "Create Triage List Component",
+      "description": "Display ranked issues with impact/urgency/complexity scores",
+      "effort_hours": 16,
+      "dependencies": ["B4"],
+      "subtasks": [
+        {
+          "id": "F1.1",
+          "title": "Build TriageList.tsx component",
+          "files": ["apps/electron/src/renderer/components/orchestration/TriageList.tsx"],
+          "acceptance_criteria": [
+            "Displays issues sorted by score",
+            "Shows impact/urgency/complexity badges",
+            "Color codes by priority (red/yellow/green)",
+            "Responsive layout"
+          ]
+        },
+        {
+          "id": "F1.2",
+          "title": "Add issue click to detail panel",
+          "files": ["apps/electron/src/renderer/components/orchestration/TriageList.tsx"],
+          "acceptance_criteria": [
+            "Clicking issue opens IssueDetailPanel",
+            "Passes issue data",
+            "Highlights selected issue"
+          ]
+        },
+        {
+          "id": "F1.3",
+          "title": "Integrate with Jotai state",
+          "files": ["apps/electron/src/renderer/components/orchestration/TriageList.tsx"],
+          "acceptance_criteria": [
+            "Reads from triageResultsAtom",
+            "Updates on new results",
+            "Handles loading state"
+          ]
+        }
+      ],
+      "acceptance_criteria": [
+        "Component renders correctly",
+        "Sorting works properly",
+        "State synchronization works"
+      ]
+    },
+    {
+      "id": "F2",
+      "title": "Create Issue Detail Panel",
+      "description": "Display AI reasoning for impact/urgency/complexity scores",
+      "effort_hours": 16,
+      "dependencies": ["F1"],
+      "subtasks": [
+        {
+          "id": "F2.1",
+          "title": "Build IssueDetailPanel.tsx component",
+          "files": ["apps/electron/src/renderer/components/orchestration/IssueDetailPanel.tsx"],
+          "acceptance_criteria": [
+            "Shows issue title and number",
+            "Displays scores with badges",
+            "Shows AI reasoning for each dimension",
+            "Links to GitHub issue"
+          ]
+        },
+        {
+          "id": "F2.2",
+          "title": "Add thinking visibility toggle",
+          "files": ["apps/electron/src/renderer/components/orchestration/IssueDetailPanel.tsx"],
+          "acceptance_criteria": [
+            "Shows 'View AI Thinking' button",
+            "Expands to show full thinking process",
+            "Formats thinking readably"
+          ]
+        },
+        {
+          "id": "F2.3",
+          "title": "Add feedback buttons (thumbs up/down)",
+          "files": ["apps/electron/src/renderer/components/orchestration/IssueDetailPanel.tsx"],
+          "acceptance_criteria": [
+            "Thumbs up/down buttons for feedback",
+            "Shows feedback state",
+            "Callable via IPC for learning system"
+          ]
+        }
+      ],
+      "acceptance_criteria": [
+        "Panel displays correctly",
+        "Reasoning is understandable",
+        "GitHub links work"
+      ]
+    },
+    {
+      "id": "F3",
+      "title": "Create Triage Dashboard",
+      "description": "Top 10 prominent view with 'Run Triage' button",
+      "effort_hours": 16,
+      "dependencies": ["F1", "F2"],
+      "subtasks": [
+        {
+          "id": "F3.1",
+          "title": "Build TriagePage.tsx component",
+          "files": ["apps/electron/src/renderer/pages/TriagePage.tsx"],
+          "acceptance_criteria": [
+            "Shows last report info",
+            "Displays 'Run Triage' button",
+            "Shows top 10 issues prominently",
+            "Recent triage timestamp"
+          ]
+        },
+        {
+          "id": "F3.2",
+          "title": "Add 'Run Triage' button with modal",
+          "files": ["apps/electron/src/renderer/components/orchestration/RunTriageModal.tsx"],
+          "acceptance_criteria": [
+            "Button triggers triage run",
+            "Shows confirmation dialog",
+            "Displays progress during processing",
+            "Shows success message"
+          ]
+        },
+        {
+          "id": "F3.3",
+          "title": "Integrate navigation routing",
+          "files": ["apps/electron/src/contexts/NavigationContext.tsx"],
+          "acceptance_criteria": [
+            "Add triage page route",
+            "Accessible from sidebar",
+            "Back/forward navigation works"
+          ]
+        }
+      ],
+      "acceptance_criteria": [
+        "Dashboard displays correctly",
+        "Triage runs successfully",
+        "Navigation works"
+      ]
+    },
+    {
+      "id": "F4",
+      "title": "Implement Real-Time Progress Updates",
+      "description": "Live progress bar during triage scoring",
+      "effort_hours": 8,
+      "dependencies": ["F3"],
+      "subtasks": [
+        {
+          "id": "F4.1",
+          "title": "Create TriageProgress component",
+          "files": ["apps/electron/src/renderer/components/orchestration/TriageProgress.tsx"],
+          "acceptance_criteria": [
+            "Shows progress bar 0-100%",
+            "Displays current batch info",
+            "Shows estimated time remaining",
+            "Updates in real-time"
+          ]
+        },
+        {
+          "id": "F4.2",
+          "title": "Add progress event listener",
+          "files": ["apps/electron/src/renderer/hooks/useTriageProgress.ts"],
+          "acceptance_criteria": [
+            "Listens to orchestration:event",
+            "Filters triage-progress events",
+            "Updates Jotai atom"
+          ]
+        }
+      ],
+      "acceptance_criteria": [
+        "Progress updates smoothly",
+        "ETA is accurate",
+        "No jank or flickering"
+      ]
+    },
+    {
+      "id": "F5",
+      "title": "Add Jotai Atoms for Triage State",
+      "description": "Create atoms for triage results, loading, and error states",
+      "effort_hours": 4,
+      "dependencies": [],
+      "subtasks": [
+        {
+          "id": "F5.1",
+          "title": "Create triage atoms",
+          "files": ["apps/electron/src/renderer/atoms/triage.ts"],
+          "acceptance_criteria": [
+            "triageResultsAtom",
+            "triageLoadingAtom",
+            "triageProgressAtom",
+            "triageErrorAtom",
+            "selectedIssueAtom"
+          ]
+        }
+      ],
+      "acceptance_criteria": [
+        "All atoms exported",
+        "Types are correct",
+        "No circular dependencies"
+      ]
+    }
+  ],
+  "design_tasks": [
+    {
+      "id": "D1",
+      "title": "Design Triage List & Score Visualization",
+      "description": "Visual hierarchy for impact/urgency/complexity with color coding",
+      "effort_hours": 8,
+      "dependencies": [],
+      "subtasks": [
+        {
+          "id": "D1.1",
+          "title": "Create score badge designs",
+          "files": ["designs/triage-badges.figma"],
+          "acceptance_criteria": [
+            "Impact badge (blue)",
+            "Urgency badge (orange)",
+            "Complexity badge (purple)",
+            "Overall score (red/yellow/green)"
+          ]
+        },
+        {
+          "id": "D1.2",
+          "title": "Design list row layout",
+          "files": ["designs/triage-list.figma"],
+          "acceptance_criteria": [
+            "Issue # and title",
+            "Three score badges",
+            "Overall priority indicator",
+            "Hover state"
+          ]
+        }
+      ],
+      "acceptance_criteria": [
+        "Design handed off to frontend",
+        "Figma components created",
+        "Design tokens documented"
+      ]
+    },
+    {
+      "id": "D2",
+      "title": "Design Detail Panel with AI Reasoning",
+      "description": "Prominent display of AI analysis with thinking visibility",
+      "effort_hours": 8,
+      "dependencies": ["D1"],
+      "subtasks": [
+        {
+          "id": "D2.1",
+          "title": "Design detail panel layout",
+          "files": ["designs/issue-detail-panel.figma"],
+          "acceptance_criteria": [
+            "Issue header with title/number",
+            "Score breakdown section",
+            "AI reasoning for each dimension",
+            "Thinking toggle section"
+          ]
+        },
+        {
+          "id": "D2.2",
+          "title": "Design thinking display",
+          "files": ["designs/ai-thinking.figma"],
+          "acceptance_criteria": [
+            "Monospace font for thinking",
+            "Syntax highlighting for key phrases",
+            "Collapse/expand animation",
+            "Copy button"
+          ]
+        }
+      ],
+      "acceptance_criteria": [
+        "Design handed off",
+        "Accessibility reviewed",
+        "Dark mode variant created"
+      ]
+    },
+    {
+      "id": "D3",
+      "title": "Design Triage Dashboard / Home View",
+      "description": "Top 10 issues with run triage action",
+      "effort_hours": 8,
+      "dependencies": ["D1", "D2"],
+      "subtasks": [
+        {
+          "id": "D3.1",
+          "title": "Design triage page layout",
+          "files": ["designs/triage-page.figma"],
+          "acceptance_criteria": [
+            "Header with 'Run Triage' button",
+            "Last triage info",
+            "Top 10 issues list",
+            "Empty state design"
+          ]
+        },
+        {
+          "id": "D3.2",
+          "title": "Design run triage modal",
+          "files": ["designs/run-triage-modal.figma"],
+          "acceptance_criteria": [
+            "Confirmation dialog",
+            "Progress dialog",
+            "Success/error states",
+            "Animations"
+          ]
+        }
+      ],
+      "acceptance_criteria": [
+        "Design complete",
+        "Handed off to frontend",
+        "Specs documented"
+      ]
+    }
+  ],
+  "ml_tasks": [
+    {
+      "id": "ML1",
+      "title": "Design and Test Scoring Prompt",
+      "description": "Engineer Claude prompt for accurate impact/urgency/complexity assessment",
+      "effort_hours": 16,
+      "dependencies": ["B2"],
+      "subtasks": [
+        {
+          "id": "ML1.1",
+          "title": "Design initial scoring prompt",
+          "files": ["packages/shared/src/triage/prompts/scoring.txt"],
+          "acceptance_criteria": [
+            "Defines impact scale (1-10)",
+            "Defines urgency scale (1-10)",
+            "Defines complexity scale (1-10)",
+            "Includes example issues",
+            "Explains rating criteria"
+          ]
+        },
+        {
+          "id": "ML1.2",
+          "title": "Manually score 20 test issues",
+          "files": ["test_data/manual_scoring.json"],
+          "acceptance_criteria": [
+            "20 diverse GitHub issues scored",
+            "Includes edge cases",
+            "Documents reasoning",
+            "Ready for comparison"
+          ]
+        },
+        {
+          "id": "ML1.3",
+          "title": "A/B test prompt variations",
+          "files": ["docs/prompt_experiments.md"],
+          "acceptance_criteria": [
+            "Test 3 prompt variations",
+            "Compare Claude outputs to manual scores",
+            "Document agreement percentage",
+            "Pick best performing prompt"
+          ]
+        }
+      ],
+      "acceptance_criteria": [
+        "Prompt achieves 80%+ agreement with human triage",
+        "Reasoning is coherent",
+        "Output format is structured"
+      ]
+    },
+    {
+      "id": "ML2",
+      "title": "Validate Scoring Algorithm",
+      "description": "Ensure formula produces meaningful rankings",
+      "effort_hours": 8,
+      "dependencies": ["B2"],
+      "subtasks": [
+        {
+          "id": "ML2.1",
+          "title": "Test algorithm with varied inputs",
+          "files": ["packages/shared/src/triage/__tests__/algorithm.test.ts"],
+          "acceptance_criteria": [
+            "20 test scenarios with known outcomes",
+            "Edge cases (all 1s, all 10s, etc)",
+            "Label multipliers tested",
+            "Ties resolved consistently"
+          ]
+        },
+        {
+          "id": "ML2.2",
+          "title": "Verify score distribution",
+          "files": ["test_data/score_distribution.md"],
+          "acceptance_criteria": [
+            "Generate 1000 random scores",
+            "Check mean is ~50",
+            "Check range uses full 0-100",
+            "Document findings"
+          ]
+        }
+      ],
+      "acceptance_criteria": [
+        "Algorithm produces reasonable rankings",
+        "Score distribution is healthy",
+        "No unexpected edge cases"
+      ]
+    }
+  ],
+  "qa_tasks": [
+    {
+      "id": "QA1",
+      "title": "Test Triage End-to-End",
+      "description": "Full workflow: select report → run triage → verify results",
+      "effort_hours": 16,
+      "dependencies": ["B1", "B2", "B3", "F1", "F2", "F3"],
+      "subtasks": [
+        {
+          "id": "QA1.1",
+          "title": "Create E2E test scenario",
+          "files": ["e2e-tests/triage-flow.cjs"],
+          "acceptance_criteria": [
+            "Generate daily report",
+            "Open triage page",
+            "Click 'Run Triage'",
+            "Verify progress updates",
+            "Verify results display"
+          ]
+        },
+        {
+          "id": "QA1.2",
+          "title": "Test error scenarios",
+          "files": ["e2e-tests/triage-errors.cjs"],
+          "acceptance_criteria": [
+            "Handle API timeouts",
+            "Handle rate limits",
+            "Handle empty issues list",
+            "Handle invalid data"
+          ]
+        },
+        {
+          "id": "QA1.3",
+          "title": "Performance testing",
+          "files": ["test_data/performance_results.md"],
+          "acceptance_criteria": [
+            "Triage 50 issues in <60s",
+            "Progress updates within 1s",
+            "UI remains responsive",
+            "Memory usage stable"
+          ]
+        }
+      ],
+      "acceptance_criteria": [
+        "All E2E tests pass",
+        "Performance targets met",
+        "Error handling robust"
+      ]
+    },
+    {
+      "id": "QA2",
+      "title": "User Acceptance Testing with Beta Users",
+      "description": "Gather feedback from 10+ beta users on triage quality",
+      "effort_hours": 16,
+      "dependencies": ["QA1"],
+      "subtasks": [
+        {
+          "id": "QA2.1",
+          "title": "Prepare UAT environment",
+          "files": ["docs/uat-setup.md"],
+          "acceptance_criteria": [
+            "10 beta users identified",
+            "Access granted to staging",
+            "Instructions provided",
+            "Feedback form ready"
+          ]
+        },
+        {
+          "id": "QA2.2",
+          "title": "Run 1-week UAT",
+          "files": ["test_data/uat_feedback.json"],
+          "acceptance_criteria": [
+            "Collect 50+ triage examples",
+            "Record user agreement %",
+            "Document pain points",
+            "Gather feature requests"
+          ]
+        },
+        {
+          "id": "QA2.3",
+          "title": "Analyze results and iterate",
+          "files": ["docs/uat_analysis.md"],
+          "acceptance_criteria": [
+            "80%+ agreement reached",
+            "Top 3 issues identified",
+            "Prioritize fixes",
+            "Plan Sprint 2.5 if needed"
+          ]
+        }
+      ],
+      "acceptance_criteria": [
+        "UAT completed successfully",
+        "User feedback analyzed",
+        "Quality meets acceptance threshold"
+      ]
+    }
+  ],
+  "docs_tasks": [
+    {
+      "id": "DOCS1",
+      "title": "Write Triage Algorithm Documentation",
+      "description": "Explain scoring formula with examples",
+      "effort_hours": 4,
+      "dependencies": ["B2"],
+      "files": ["docs/TRIAGE_ALGORITHM.md"],
+      "acceptance_criteria": [
+        "Formula clearly explained",
+        "Examples with calculations",
+        "Label multipliers documented",
+        "Edge cases covered"
+      ]
+    },
+    {
+      "id": "DOCS2",
+      "title": "Write Claude Integration Guide",
+      "description": "How Claude API is used for scoring",
+      "effort_hours": 4,
+      "dependencies": ["B1"],
+      "files": ["docs/CLAUDE_INTEGRATION.md"],
+      "acceptance_criteria": [
+        "API calls documented",
+        "Batching strategy explained",
+        "Error handling covered",
+        "Cost estimates provided"
+      ]
+    },
+    {
+      "id": "DOCS3",
+      "title": "Create Triage Feature Guide",
+      "description": "User-facing documentation for triage feature",
+      "effort_hours": 4,
+      "dependencies": ["F1", "F2", "F3"],
+      "files": ["docs/TRIAGE_USER_GUIDE.md"],
+      "acceptance_criteria": [
+        "Feature overview",
+        "Screenshot walkthrough",
+        "Tips for interpreting scores",
+        "Feedback examples"
+      ]
+    },
+    {
+      "id": "DOCS4",
+      "title": "Update SPRINT2_QUICK_START.md",
+      "description": "5-minute getting started guide",
+      "effort_hours": 2,
+      "dependencies": [],
+      "files": ["docs/SPRINT2_QUICK_START.md"],
+      "acceptance_criteria": [
+        "Quick setup steps",
+        "Feature highlights",
+        "Next steps clear"
+      ]
+    }
+  ],
+  "dependencies": {
+    "backend_complete": ["B1", "B2", "B3", "B4", "B5"],
+    "frontend_complete": ["F1", "F2", "F3", "F4", "F5"],
+    "ml_complete": ["ML1", "ML2"],
+    "qa_complete": ["QA1", "QA2"],
+    "docs_complete": ["DOCS1", "DOCS2", "DOCS3", "DOCS4"]
+  },
+  "team_assignments": {
+    "backend_lead": "Claude Code Agent (Backend)",
+    "frontend_lead": "Claude Code Agent (Frontend)",
+    "design_lead": "Claude Code Agent (Design)",
+    "qa_lead": "Claude Code Agent (QA)",
+    "docs_lead": "Claude Code Agent (Docs)"
+  },
+  "success_criteria": {
+    "code_quality": {
+      "typescript_strict": "100%",
+      "test_coverage": "80%+",
+      "tests_passing": "100%"
+    },
+    "feature_quality": {
+      "agreement_with_human_triage": "80%+",
+      "triage_speed": "<60s for 50 issues",
+      "ai_reasoning_quality": "Coherent and helpful",
+      "user_feedback": "Useful rating"
+    },
+    "performance": {
+      "api_latency_p95": "<2s",
+      "ui_responsiveness": "60 FPS",
+      "memory_stable": "No leaks"
+    }
+  },
+  "milestones": {
+    "end_of_week_1": [
+      "B1 (Claude Integration) 50% complete",
+      "B2 (Scoring Algorithm) 100% complete",
+      "ML1 (Prompt Engineering) 50% complete",
+      "Design mockups approved"
+    ],
+    "end_of_week_2": [
+      "All backend tasks 100%",
+      "All frontend components 100%",
+      "QA1 tests passing",
+      "Documentation complete",
+      "Ready for beta launch"
+    ]
+  },
+  "handoff_notes": {
+    "from_sprint1": "Daily report generation is complete with error recovery. GitHub data is available via DailyReport object.",
+    "to_sprint3": "Triage results will be available in TriageResult object for assignment recommendations."
+  },
+  "collaboration_format": {
+    "task_reference": "Use ID (B1, F1, etc) in commit messages and PR titles",
+    "example_commit": "feat(triage): B1 - Implement Claude API integration with batching",
+    "example_pr_title": "feat: F1, F2 - Create triage list and detail panel components",
+    "environment_variable": "CLAUDE_CODE_TASK_LIST_ID_SPRINT2=intelligent-triage-engine-sprint2",
+    "task_status_tracking": "Use @TASK(B1:in_progress) in PR descriptions"
+  }
+}
