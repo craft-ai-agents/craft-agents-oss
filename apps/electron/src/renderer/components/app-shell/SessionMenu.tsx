@@ -33,12 +33,15 @@ import {
   CloudUpload,
   Globe,
   RefreshCw,
+  Tag,
+  Check,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn, isHexColor } from '@/lib/utils'
 import { useMenuComponents } from '@/components/ui/menu-context'
 import { getStateColor, getStateIcon, type TodoStateId } from '@/config/todo-states'
 import type { TodoState } from '@/config/todo-states'
+import type { Label } from '@craft-agent/shared/labels'
 
 export interface SessionMenuProps {
   /** Session ID */
@@ -57,6 +60,12 @@ export interface SessionMenuProps {
   currentTodoState: TodoStateId
   /** Available todo states */
   todoStates: TodoState[]
+  /** Available labels for this workspace */
+  labels?: Label[]
+  /** Label IDs currently assigned to this session */
+  selectedLabelIds?: string[]
+  /** Callback when labels change */
+  onLabelsChange?: (labelIds: string[]) => void
   /** Callbacks */
   onRename: () => void
   onFlag: () => void
@@ -80,6 +89,9 @@ export function SessionMenu({
   hasUnreadMessages,
   currentTodoState,
   todoStates,
+  labels = [],
+  selectedLabelIds = [],
+  onLabelsChange,
   onRename,
   onFlag,
   onUnflag,
@@ -152,6 +164,16 @@ export function SessionMenu({
       toast.success('Title refreshed', { description: result.title })
     } else {
       toast.error('Failed to refresh title', { description: result?.error || 'Unknown error' })
+    }
+  }
+
+  // Toggle a label on/off for this session
+  const handleToggleLabel = (labelId: string) => {
+    if (!onLabelsChange) return
+    if (selectedLabelIds.includes(labelId)) {
+      onLabelsChange(selectedLabelIds.filter(id => id !== labelId))
+    } else {
+      onLabelsChange([...selectedLabelIds, labelId])
     }
   }
 
@@ -256,6 +278,40 @@ export function SessionMenu({
           )}
         </SubContent>
       </Sub>
+
+      {/* Labels submenu */}
+      {labels.length > 0 && onLabelsChange && (
+        <Sub>
+          <SubTrigger>
+            <Tag className="h-3.5 w-3.5" />
+            <span className="flex-1">Labels</span>
+            {selectedLabelIds.length > 0 && (
+              <span className="text-xs text-muted-foreground">{selectedLabelIds.length}</span>
+            )}
+          </SubTrigger>
+          <SubContent>
+            {labels.map((label) => {
+              const isSelected = selectedLabelIds.includes(label.id)
+              return (
+                <MenuItem
+                  key={label.id}
+                  onClick={() => handleToggleLabel(label.id)}
+                  className={isSelected ? 'bg-foreground/5' : ''}
+                >
+                  <span
+                    className="w-3 h-3 rounded-full shrink-0"
+                    style={{ backgroundColor: label.color }}
+                  />
+                  <span className="flex-1">{label.name}</span>
+                  {isSelected && (
+                    <Check className="h-3.5 w-3.5 text-accent" />
+                  )}
+                </MenuItem>
+              )
+            })}
+          </SubContent>
+        </Sub>
+      )}
 
       {/* Mark as Unread - only show if session has been read */}
       {!hasUnreadMessages && hasMessages && (

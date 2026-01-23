@@ -307,6 +307,8 @@ export interface Session {
   }
   // Ralph Loop state (when a loop is active)
   loopState?: LoopStateUI
+  // Label IDs assigned to this session
+  labelIds?: string[]
 }
 
 /**
@@ -420,6 +422,7 @@ export type SessionEvent =
   | { type: 'session_unflagged'; sessionId: string }
   | { type: 'session_model_changed'; sessionId: string; model: string | null }
   | { type: 'todo_state_changed'; sessionId: string; todoState: TodoState }
+  | { type: 'labels_changed'; sessionId: string; labelIds: string[] }
   | { type: 'session_deleted'; sessionId: string }
   | { type: 'session_shared'; sessionId: string; sharedUrl: string }
   | { type: 'session_unshared'; sessionId: string }
@@ -476,6 +479,8 @@ export type SessionCommand =
   | { type: 'revokeShare' }
   | { type: 'startOAuth'; requestId: string }
   | { type: 'refreshTitle' }
+  // Labels
+  | { type: 'setLabels'; labelIds: string[] }
   // Pending plan execution (Accept & Compact flow)
   | { type: 'setPendingPlanExecution'; planPath: string }
   | { type: 'markCompactionComplete' }
@@ -749,6 +754,12 @@ export const IPC_CHANNELS = {
   SCHEDULE_RUN_NOW: 'schedule:runNow',
   SCHEDULE_EVENT: 'schedule:event',  // Broadcast: schedule execution events
 
+  // Labels (workspace-scoped session tagging)
+  LABELS_LIST: 'labels:list',
+  LABELS_CREATE: 'labels:create',
+  LABELS_DELETE: 'labels:delete',
+  LABELS_CHANGED: 'labels:changed',  // Broadcast: label config changed
+
   // GitHub Integration & Orchestration
   GITHUB_START_OAUTH: 'github:startOAuth',
   GITHUB_GET_STATUS: 'github:getStatus',
@@ -941,6 +952,12 @@ export interface ElectronAPI {
   listStatuses(workspaceId: string): Promise<import('@craft-agent/shared/statuses').StatusConfig[]>
   // Statuses change listener (live updates when statuses config or icon files change)
   onStatusesChanged(callback: (workspaceId: string) => void): () => void
+
+  // Labels (workspace-scoped session tagging)
+  listLabels(workspaceId: string): Promise<import('@craft-agent/shared/labels').Label[]>
+  createLabel(workspaceId: string, name: string, color: string): Promise<import('@craft-agent/shared/labels').Label>
+  deleteLabel(workspaceId: string, labelId: string): Promise<void>
+  onLabelsChanged(callback: (workspaceId: string) => void): () => void
 
   // Generic workspace image loading/saving (returns data URL for images, raw string for SVG)
   readWorkspaceImage(workspaceId: string, relativePath: string): Promise<string>

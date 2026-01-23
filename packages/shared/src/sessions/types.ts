@@ -95,6 +95,8 @@ export interface SessionConfig {
     /** Whether we're still waiting for compaction to complete */
     awaitingCompaction: boolean;
   };
+  /** Label IDs assigned to this session */
+  labelIds?: string[];
 }
 
 /**
@@ -154,6 +156,8 @@ export interface SessionHeader {
     /** Whether we're still waiting for compaction to complete */
     awaitingCompaction: boolean;
   };
+  /** Label IDs assigned to this session */
+  labelIds?: string[];
   // Pre-computed fields for fast list loading
   /** Number of messages in session */
   messageCount: number;
@@ -200,4 +204,6 @@ export interface SessionMetadata {
   model?: string;
   /** Thinking level for this session ('off', 'think', 'max') */
   thinkingLevel?: ThinkingLevel;
+  /** Label IDs assigned to this session */
+  labelIds?: string[];
 }

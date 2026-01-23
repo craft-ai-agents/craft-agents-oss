@@ -169,6 +169,8 @@ interface ManagedSession {
   lastReadMessageId?: string
   // Per-session source selection (slugs of enabled sources)
   enabledSourceSlugs?: string[]
+  // Label IDs assigned to this session
+  labelIds?: string[]
   // Working directory for this session (used by agent for bash commands)
   workingDirectory?: string
   // SDK cwd for session storage - set once at creation, never changes.
@@ -643,6 +645,7 @@ export class SessionManager {
             todoState: meta.todoState,
             lastReadMessageId: undefined,  // Loaded with messages
             enabledSourceSlugs: undefined,  // Loaded with messages
+            labelIds: meta.labelIds,  // Loaded from metadata for display
             workingDirectory: meta.workingDirectory ?? wsDefaultWorkingDir,
             sdkCwd: meta.sdkCwd,
             model: meta.model,
@@ -687,6 +690,7 @@ export class SessionManager {
         permissionMode: managed.permissionMode,
         todoState: managed.todoState,
         enabledSourceSlugs: managed.enabledSourceSlugs,
+        labelIds: managed.labelIds,
         workingDirectory: managed.workingDirectory,
         sdkCwd: managed.sdkCwd,
         thinkingLevel: managed.thinkingLevel,
@@ -1814,6 +1818,30 @@ export class SessionManager {
   getSessionSources(sessionId: string): string[] {
     const managed = this.sessions.get(sessionId)
     return managed?.enabledSourceSlugs ?? []
+  }
+
+  /**
+   * Set labels for a session
+   */
+  async setSessionLabels(sessionId: string, labelIds: string[]): Promise<void> {
+    const managed = this.sessions.get(sessionId)
+    if (!managed) {
+      throw new Error(`Session not found: ${sessionId}`)
+    }
+
+    const workspaceRootPath = managed.workspace.rootPath
+    sessionLog.info(`Setting labels for session ${sessionId}:`, labelIds)
+
+    // Store in managed session
+    managed.labelIds = labelIds
+
+    // Persist to storage
+    updateSessionMetadata(workspaceRootPath, sessionId, { labelIds })
+
+    // Notify all windows for this workspace
+    this.sendEvent({ type: 'labels_changed', sessionId, labelIds }, managed.workspace.id)
+
+    sessionLog.info(`Session ${sessionId} labels updated: ${labelIds.length} labels`)
   }
 
   /**

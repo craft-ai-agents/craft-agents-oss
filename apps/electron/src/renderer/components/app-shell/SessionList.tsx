@@ -1,9 +1,12 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react"
 import { formatDistanceToNow, isToday, isYesterday, format, startOfDay } from "date-fns"
-import { MoreHorizontal, Flag, Search, X, Copy, Link2Off, CloudUpload, Globe, RefreshCw } from "lucide-react"
+import { MoreHorizontal, Flag, Search, X, Copy, Link2Off, CloudUpload, Globe, RefreshCw, Tag } from "lucide-react"
 import { toast } from "sonner"
+import { useAtomValue, useSetAtom } from "jotai"
 
 import { cn, isHexColor } from "@/lib/utils"
+import { labelsAtom, labelsMapAtom, activeLabelFilterAtom, toggleLabelFilterAtom, clearLabelFilterAtom } from "@/atoms/labels"
+import { LabelBadge } from "@/components/ui/label-badge"
 import { rendererPerf } from "@/lib/perf"
 import { Spinner } from "@craft-agent/ui"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -167,6 +170,14 @@ interface SessionItemProps {
   searchQuery?: string
   /** Dynamic todo states from workspace config */
   todoStates: TodoState[]
+  /** Labels map for badge display */
+  labelsMap: Map<string, import('@craft-agent/shared/labels').Label>
+  /** All labels for the menu */
+  labels: import('@craft-agent/shared/labels').Label[]
+  /** Callback when a label badge is clicked (for filtering) */
+  onLabelClick?: (labelId: string) => void
+  /** Callback when labels for a session change */
+  onLabelsChange?: (sessionId: string, labelIds: string[]) => void
 }
 
 /**
@@ -192,6 +203,10 @@ function SessionItem({
   permissionMode,
   searchQuery,
   todoStates,
+  labelsMap,
+  labels,
+  onLabelClick,
+  onLabelsChange,
 }: SessionItemProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [contextMenuOpen, setContextMenuOpen] = useState(false)
@@ -378,6 +393,22 @@ function SessionItem({
                   </StyledDropdownMenuContent>
                 </DropdownMenu>
               )}
+              {/* Label badges */}
+              {item.labelIds?.map((labelId) => {
+                const label = labelsMap.get(labelId)
+                if (!label) return null
+                return (
+                  <LabelBadge
+                    key={labelId}
+                    label={label}
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onLabelClick?.(labelId)
+                    }}
+                  />
+                )
+              })}
               <span className="truncate">
                 {item.lastMessageAt && (
                   <>{formatDistanceToNow(new Date(item.lastMessageAt), { addSuffix: true })}</>
@@ -412,6 +443,9 @@ function SessionItem({
                     hasUnreadMessages={hasUnreadMessages(item)}
                     currentTodoState={currentTodoState}
                     todoStates={todoStates}
+                    labels={labels}
+                    selectedLabelIds={item.labelIds}
+                    onLabelsChange={(labelIds) => onLabelsChange?.(item.id, labelIds)}
                     onRename={() => onRenameClick(item.id, getSessionTitle(item))}
                     onFlag={() => onFlag?.(item.id)}
                     onUnflag={() => onUnflag?.(item.id)}
@@ -439,6 +473,9 @@ function SessionItem({
               hasUnreadMessages={hasUnreadMessages(item)}
               currentTodoState={currentTodoState}
               todoStates={todoStates}
+              labels={labels}
+              selectedLabelIds={item.labelIds}
+              onLabelsChange={(labelIds) => onLabelsChange?.(item.id, labelIds)}
               onRename={() => onRenameClick(item.id, getSessionTitle(item))}
               onFlag={() => onFlag?.(item.id)}
               onUnflag={() => onUnflag?.(item.id)}
@@ -534,6 +571,23 @@ export function SessionList({
   const { navigate } = useNavigation()
   const navState = useNavigationState()
 
+  // Labels state
+  const labels = useAtomValue(labelsAtom)
+  const labelsMap = useAtomValue(labelsMapAtom)
+  const activeLabelFilter = useAtomValue(activeLabelFilterAtom)
+  const toggleLabelFilter = useSetAtom(toggleLabelFilterAtom)
+  const clearLabelFilter = useSetAtom(clearLabelFilterAtom)
+
+  // Handler to update session labels
+  const handleLabelsChange = useCallback(async (sessionId: string, labelIds: string[]) => {
+    try {
+      await window.electronAPI.sessionCommand(sessionId, { type: 'setLabels', labelIds })
+    } catch (error) {
+      console.error('[SessionList] Failed to update labels:', error)
+      toast.error('Failed to update labels')
+    }
+  }, [])
+
   // Get current filter from navigation state (for preserving context in tab routes)
   const currentFilter = isChatsNavigation(navState) ? navState.filter : undefined
 
@@ -569,23 +623,32 @@ export function SessionList({
     })
   }, [sortedItems, searchQuery])
 
-  // Reset display limit when search query changes
+  // Filter items by active label filter (OR logic - show if has ANY of the selected labels)
+  const labelFilteredItems = useMemo(() => {
+    if (activeLabelFilter.length === 0) return searchFilteredItems
+    return searchFilteredItems.filter(item => {
+      if (!item.labelIds || item.labelIds.length === 0) return false
+      return item.labelIds.some(labelId => activeLabelFilter.includes(labelId))
+    })
+  }, [searchFilteredItems, activeLabelFilter])
+
+  // Reset display limit when search query or label filter changes
   useEffect(() => {
     setDisplayLimit(INITIAL_DISPLAY_LIMIT)
-  }, [searchQuery])
+  }, [searchQuery, activeLabelFilter])
 
   // Paginate items - only show up to displayLimit
   const paginatedItems = useMemo(() => {
-    return searchFilteredItems.slice(0, displayLimit)
-  }, [searchFilteredItems, displayLimit])
+    return labelFilteredItems.slice(0, displayLimit)
+  }, [labelFilteredItems, displayLimit])
 
   // Check if there are more items to load
-  const hasMore = displayLimit < searchFilteredItems.length
+  const hasMore = displayLimit < labelFilteredItems.length
 
   // Load more items callback
   const loadMore = useCallback(() => {
-    setDisplayLimit(prev => Math.min(prev + BATCH_SIZE, searchFilteredItems.length))
-  }, [searchFilteredItems.length])
+    setDisplayLimit(prev => Math.min(prev + BATCH_SIZE, labelFilteredItems.length))
+  }, [labelFilteredItems.length])
 
   // Intersection observer for infinite scroll
   useEffect(() => {
@@ -794,6 +857,31 @@ export function SessionList({
             </div>
           </div>
         )}
+        {/* Active label filter bar */}
+        {activeLabelFilter.length > 0 && (
+          <div className="sticky top-0 z-sticky px-2 py-2 border-b border-border/50 flex items-center gap-1.5 flex-wrap">
+            <Tag className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            {activeLabelFilter.map((labelId) => {
+              const label = labelsMap.get(labelId)
+              if (!label) return null
+              return (
+                <LabelBadge
+                  key={labelId}
+                  label={label}
+                  size="sm"
+                  removable
+                  onRemove={() => toggleLabelFilter(labelId)}
+                />
+              )
+            })}
+            <button
+              onClick={() => clearLabelFilter()}
+              className="text-xs text-foreground/50 hover:text-foreground ml-1"
+            >
+              Clear
+            </button>
+          </div>
+        )}
         <div
           ref={zoneRef}
           className="flex flex-col pb-14 min-w-0"
@@ -854,6 +942,10 @@ export function SessionList({
                     permissionMode={sessionOptions?.get(item.id)?.permissionMode}
                     searchQuery={searchQuery}
                     todoStates={todoStates}
+                    labelsMap={labelsMap}
+                    labels={labels}
+                    onLabelClick={toggleLabelFilter}
+                    onLabelsChange={handleLabelsChange}
                   />
                 )
               })}
