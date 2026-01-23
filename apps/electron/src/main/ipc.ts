@@ -11,6 +11,7 @@ import { WindowManager } from './window-manager'
 import { getScheduler, startAllSchedulers, stopAllSchedulers } from './scheduler'
 import { registerOnboardingHandlers } from './onboarding'
 import { registerWhatsAppHandlers } from './whatsapp-ipc'
+import { registerSlackHandlers } from './slack-ipc'
 import { registerLabelsIpc } from './labels-ipc'
 import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type AuthType, type BillingMethodInfo, type SendMessageOptions } from '../shared/types'
 import { readFileAttachment, perf, validateImageForClaudeAPI, IMAGE_LIMITS } from '@craft-agent/shared/utils'
@@ -1827,7 +1828,6 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   registerWhatsAppHandlers(sessionManager)
 
   // Register Slack handlers
-  const { registerSlackHandlers } = await import('./slack-ipc')
   registerSlackHandlers()
 
   // Register labels handlers
