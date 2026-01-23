@@ -1,6 +1,6 @@
 # WhatsApp Integration - Full Implementation Plan
 
-**Status:** Phase 3a complete, Phase 3b-3d pending
+**Status:** Phase 3a-3b complete, Phase 3c-3d pending
 **Created:** 2026-01-23
 **Last Updated:** 2026-01-23
 
@@ -13,7 +13,7 @@ The WhatsApp integration has a solid backend foundation (message routing, format
 | Component | Status | Priority | Effort |
 |-----------|--------|----------|--------|
 | 1. CredentialManager WhatsApp Methods | **Complete** | P0 | Small |
-| 2. Baileys Worker Subprocess | Missing | P1 | Medium |
+| 2. Baileys Worker Subprocess | **Complete** | P1 | Medium |
 | 3. IPC Handlers | Missing | P1 | Small |
 | 4. Renderer UI | Missing | P2 | Medium |
 
