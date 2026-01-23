@@ -28,7 +28,7 @@ import {
 import { extractDirective, getDirective } from '../directive-parser'
 import { getSessionId } from '../session-mapper'
 import type { WhatsAppMessage } from '../types'
-import type { Message } from '@anthropic-ai/sdk/resources/messages'
+import type { Message, MessageRole } from '@craft-agent/core/types'
 
 // ============================================================================
 // MOCK FACTORIES
@@ -86,6 +86,12 @@ class MockSessionManager {
     this.calls.push({ method: 'sendMessage', args: [sessionId, content, attachments] })
   }
 
+  setSessionCompletionCallback(sessionId: string, callback: (sessionId: string, messages: any[]) => Promise<void>) {
+    this.calls.push({ method: 'setSessionCompletionCallback', args: [sessionId, callback] })
+    // Immediately call the callback with an empty message array to simulate completion
+    callback(sessionId, [])
+  }
+
   getCallsForMethod(method: string) {
     return this.calls.filter((c) => c.method === method)
   }
@@ -98,21 +104,18 @@ class MockSessionManager {
 
 /**
  * Factory: Create mock SDK Message for result formatting
+ * Uses internal Vespr Message type (content is string, has timestamp)
  */
 function createMockSdkMessage(
-  role: 'user' | 'assistant',
+  role: MessageRole,
   text: string,
 ): Message {
   return {
     id: `msg_${Math.random().toString(36).slice(2)}`,
     role,
-    content: [{ type: 'text', text }],
-    model: 'claude-3-5-sonnet-20241022',
-    stop_reason: 'end_turn',
-    stop_sequence: null,
-    type: 'message',
-    usage: { input_tokens: 100, output_tokens: 100 },
-  } as Message
+    content: text,
+    timestamp: Date.now(),
+  }
 }
 
 /**
@@ -210,15 +213,32 @@ describe('WhatsApp Acceptance Tests - Happy Path (Safe Mode)', () => {
     expect(result.messages[0]!.length).toBeLessThanOrEqual(4096)
   })
 
-  test('4. Large result (> 4096 chars) generates summary with deep link', () => {
-    const largeResponse = 'x'.repeat(5000)
-    const sdkMessages = [createMockSdkMessage('assistant', largeResponse)]
+  test('4. Medium result (4KB-16KB) gets chunked into multiple messages', () => {
+    const mediumResponse = 'x'.repeat(5000) // Between 4KB and 16KB
+    const sdkMessages = [createMockSdkMessage('assistant', mediumResponse)]
 
     const result = formatResult(sdkMessages, 'whatsapp_group::sender')
 
     expect(result.truncated).toBe(true)
-    expect(result.messages[0]).toContain('vespr://session/whatsapp_group::sender')
+    // Medium results get chunked, not deep linked
+    expect(result.messages.length).toBeGreaterThan(1)
+    result.messages.forEach((msg) => {
+      expect(msg.length).toBeLessThanOrEqual(4096)
+    })
     expect(result.summary).toBeTruthy()
+  })
+
+  test('4b. Very large result (>16KB) generates summary with deep link', () => {
+    const veryLargeResponse = 'x'.repeat(20000) // Over 16KB
+    const sdkMessages = [createMockSdkMessage('assistant', veryLargeResponse)]
+
+    const result = formatResult(sdkMessages, 'whatsapp_group::sender')
+
+    expect(result.truncated).toBe(true)
+    // Very large results use preview + deep link
+    expect(result.messages.length).toBe(1)
+    expect(result.messages[0]).toContain('View full result in Vespr')
+    expect(result.deepLink).toBeDefined()
   })
 
   test('5. Session metadata preserved across multiple messages', async () => {
@@ -367,15 +387,30 @@ describe('WhatsApp Acceptance Tests - Result Formatting', () => {
     expect(result.messages[0]).toBe(response)
   })
 
-  test('13. Large response generates summary + deep link', () => {
-    const largeResponse = 'This is a comprehensive explanation. '.repeat(200)
-    const messages = [createMockSdkMessage('assistant', largeResponse)]
+  test('13. Medium response (4KB-16KB) gets chunked', () => {
+    const mediumResponse = 'This is a comprehensive explanation. '.repeat(200) // ~7400 chars
+    const messages = [createMockSdkMessage('assistant', mediumResponse)]
 
     const result = formatResult(messages, 'whatsapp_group123::sender456')
 
     expect(result.truncated).toBe(true)
-    expect(result.messages[0]).toContain('Research Results')
-    expect(result.messages[0]).toContain('vespr://session/whatsapp_group123::sender456')
+    // Medium results get chunked into multiple messages
+    expect(result.messages.length).toBeGreaterThan(1)
+    result.messages.forEach((msg) => {
+      expect(msg.length).toBeLessThanOrEqual(4096)
+    })
+  })
+
+  test('13b. Very large response (>16KB) generates summary + deep link', () => {
+    const veryLargeResponse = 'x'.repeat(20000) // Over 16KB
+    const messages = [createMockSdkMessage('assistant', veryLargeResponse)]
+
+    const result = formatResult(messages, 'whatsapp_group123::sender456')
+
+    expect(result.truncated).toBe(true)
+    expect(result.messages.length).toBe(1)
+    expect(result.messages[0]).toContain('View full result in Vespr')
+    expect(result.deepLink).toBeDefined()
   })
 
   test('14. Multiple messages handled properly', () => {
@@ -393,18 +428,17 @@ describe('WhatsApp Acceptance Tests - Result Formatting', () => {
   })
 
   test('15. Sources extracted and formatted as citations', () => {
-    const messages = [
+    // Create messages with proper internal Message format (content as string)
+    const messages: Message[] = [
       createMockSdkMessage('assistant', 'Found information from two sources.'),
       {
-        ...createMockSdkMessage('user', 'tool result'),
-        content: [
-          {
-            type: 'tool_result',
-            content: 'See https://example.com/page and https://research.org/study',
-          },
-        ],
+        id: 'msg_tool_result',
+        role: 'tool',
+        content: 'See https://example.com/page and https://research.org/study',
+        timestamp: Date.now(),
+        toolResult: 'See https://example.com/page and https://research.org/study',
       },
-    ] as any
+    ]
 
     const result = formatResult(messages, 'session-1')
 
@@ -754,28 +788,28 @@ describe('WhatsApp Acceptance Tests - Integration Flow (End-to-End)', () => {
     expect(formatted.truncated).toBe(false)
   })
 
-  test('33. Complex flow: large response with sources → chunked delivery', () => {
-    const largeResponse = 'This discusses various aspects of cloud computing. '.repeat(200)
+  test('33. Complex flow: medium response with sources → chunked delivery', () => {
+    const mediumResponse = 'This discusses various aspects of cloud computing. '.repeat(200) // ~10KB
 
-    const sdkMessages = [
-      createMockSdkMessage('assistant', largeResponse),
+    const sdkMessages: Message[] = [
+      createMockSdkMessage('assistant', mediumResponse),
       {
-        ...createMockSdkMessage('user', 'tool result'),
-        content: [
-          {
-            type: 'tool_result',
-            content:
-              'Sources: https://aws.amazon.com/cloud-computing and https://azure.microsoft.com/services',
-          },
-        ],
+        id: 'msg_tool_result',
+        role: 'tool',
+        content: 'Sources: https://aws.amazon.com/cloud-computing and https://azure.microsoft.com/services',
+        timestamp: Date.now(),
+        toolResult: 'Sources: https://aws.amazon.com/cloud-computing and https://azure.microsoft.com/services',
       },
-    ] as any
+    ]
 
     const formatted = formatResult(sdkMessages, 'whatsapp_research::alice')
 
     expect(formatted.truncated).toBe(true)
-    expect(formatted.messages[0]).toContain('vespr://session/')
+    // Medium responses (4KB-16KB) get chunked, not deep linked
+    expect(formatted.messages.length).toBeGreaterThan(1)
     expect(formatted.summary).toBeTruthy()
+    // Sources should be in the full markdown
+    expect(formatted.fullMarkdown).toContain('https://aws.amazon.com/cloud-computing')
   })
 
   test('34. All three permission modes work in complete flow', async () => {

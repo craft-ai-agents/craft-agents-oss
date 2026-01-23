@@ -42,6 +42,12 @@ class MockSessionManager {
     this.calls.push({ method: 'sendMessage', args: [sessionId, content, attachments] })
   }
 
+  setSessionCompletionCallback(sessionId: string, callback: (sessionId: string, messages: any[]) => Promise<void>) {
+    this.calls.push({ method: 'setSessionCompletionCallback', args: [sessionId, callback] })
+    // Immediately call the callback with an empty message array to simulate completion
+    callback(sessionId, [])
+  }
+
   getCallsForMethod(method: string): Array<{ method: string; args: any[] }> {
     return this.calls.filter(c => c.method === method)
   }

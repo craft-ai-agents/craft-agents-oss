@@ -15,20 +15,30 @@ import {
   chunkForWhatsApp,
   estimateWhatsAppSize,
 } from '../result-formatter'
-import type { Message } from '@anthropic-ai/sdk/resources/messages'
+import type { Message, MessageRole } from '@craft-agent/core/types'
 
-// Helper to create mock Message objects with minimal required fields
-function createMockMessage(role: 'user' | 'assistant', content: any[]): Message {
+// Helper to create mock Message objects matching internal Vespr Message type
+function createMockMessage(role: MessageRole, content: { type: string; text?: string; content?: string; name?: string; id?: string; input?: unknown }[]): Message {
+  // Extract text content from content blocks (Vespr Message has content as string)
+  const textContent = content
+    .filter((block) => block.type === 'text' && block.text)
+    .map((block) => block.text)
+    .join('\n')
+
+  // Extract tool result content
+  const toolResultContent = content
+    .filter((block) => block.type === 'tool_result' && block.content)
+    .map((block) => block.content)
+    .join('\n')
+
   return {
     id: 'msg_' + Math.random().toString(36).slice(2),
     role,
-    content,
-    model: 'claude-3-5-sonnet-20241022',
-    stop_reason: 'end_turn',
-    stop_sequence: null,
-    type: 'message',
-    usage: { input_tokens: 100, output_tokens: 100 },
-  } as Message
+    content: textContent || toolResultContent || '',
+    timestamp: Date.now(),
+    // Include toolResult for tool_result content blocks
+    ...(toolResultContent && { toolResult: toolResultContent }),
+  }
 }
 
 describe('formatResult', () => {
@@ -49,23 +59,46 @@ describe('formatResult', () => {
     expect(result.messages[0]).toBe('Hello! This is a short response.')
   })
 
-  it('large result includes summary + link', () => {
-    const largeText = 'x'.repeat(5000) // Exceeds 4096 limit
+  it('medium result (4KB-16KB) chunks into multiple messages', () => {
+    const mediumText = 'x'.repeat(5000) // Exceeds 4096 limit but under 16KB
+    const mediumMessages = [
+      createMockMessage('assistant', [
+        {
+          type: 'text',
+          text: mediumText,
+        },
+      ]),
+    ]
+
+    const result = formatResult(mediumMessages, 'whatsapp_group::sender')
+
+    // Medium results get chunked into multiple messages
+    expect(result.messages.length).toBeGreaterThan(1)
+    expect(result.truncated).toBe(true)
+    // Each chunk should respect the 4096 limit
+    result.messages.forEach((msg) => {
+      expect(msg.length).toBeLessThanOrEqual(4096)
+    })
+  })
+
+  it('very large result (>16KB) includes summary + deep link', () => {
+    const veryLargeText = 'x'.repeat(20000) // Exceeds 16KB limit
     const largeMessages = [
       createMockMessage('assistant', [
         {
           type: 'text',
-          text: largeText,
+          text: veryLargeText,
         },
       ]),
     ]
 
     const result = formatResult(largeMessages, 'whatsapp_group::sender')
 
+    // Very large results use preview + deep link
     expect(result.messages.length).toBe(1)
     expect(result.truncated).toBe(true)
-    expect(result.messages[0]).toContain('View full details in Vespr')
-    expect(result.messages[0]).toContain('vespr://session/whatsapp_group::sender')
+    expect(result.messages[0]).toContain('View full result in Vespr')
+    expect(result.deepLink).toBeDefined()
   })
 
   it('4096 char edge case fits in single message', () => {
@@ -86,7 +119,7 @@ describe('formatResult', () => {
     expect(result.messages[0]?.length).toBe(4096)
   })
 
-  it('4097 chars triggers truncation to summary + link', () => {
+  it('4097 chars triggers chunking into multiple messages', () => {
     const overLimitMessage = 'a'.repeat(4097)
     const messages = [
       createMockMessage('assistant', [
@@ -99,9 +132,11 @@ describe('formatResult', () => {
 
     const result = formatResult(messages, 'session-1')
 
-    expect(result.messages.length).toBe(1)
+    // Just over the limit gets chunked (not deep link, that's for >16KB)
+    expect(result.messages.length).toBeGreaterThan(1)
     expect(result.truncated).toBe(true)
-    expect(result.messages[0]).toContain('View full details')
+    // First chunk should be at the limit
+    expect(result.messages[0]?.length).toBeLessThanOrEqual(4096)
   })
 
   it('extracts and formats sources from tool results', () => {
