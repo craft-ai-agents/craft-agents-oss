@@ -99,17 +99,26 @@ function DetailView({ schedule, onUpdate, onRunNow }: DetailViewProps) {
 
   // Execution history from schedule data
   const recentExecutions = useMemo(() => {
-    const executions = []
+    // Use executionHistory if available, fallback to lastRun* fields for backward compatibility
+    if (schedule.executionHistory && schedule.executionHistory.length > 0) {
+      return schedule.executionHistory.map(exec => ({
+        timestamp: exec.timestamp * 1000,
+        status: exec.status,
+        error: exec.error,
+        sessionId: exec.sessionId,
+      }))
+    }
+    // Fallback for schedules without execution history
     if (schedule.lastRunAt) {
-      executions.push({
+      return [{
         timestamp: schedule.lastRunAt * 1000,
         status: schedule.lastRunStatus || 'success',
         error: schedule.lastRunError,
         sessionId: schedule.lastRunSessionId,
-      })
+      }]
     }
-    return executions.slice(0, 3)
-  }, [schedule.lastRunAt, schedule.lastRunStatus, schedule.lastRunError, schedule.lastRunSessionId])
+    return []
+  }, [schedule.executionHistory, schedule.lastRunAt, schedule.lastRunStatus, schedule.lastRunError, schedule.lastRunSessionId])
 
   const handleSavePrompt = () => {
     if (onUpdate && editedPrompt.trim() !== schedule.prompt) {

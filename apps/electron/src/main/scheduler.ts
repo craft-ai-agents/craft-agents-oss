@@ -17,7 +17,7 @@ import { Notification, BrowserWindow } from 'electron'
 import { mainLog } from './logger'
 import type { WindowManager } from './window-manager'
 import type { SessionManager } from './sessions'
-import type { Schedule, ScheduleFormData, ScheduleEvent } from '../shared/types'
+import type { Schedule, ScheduleFormData, ScheduleEvent, ScheduleExecution } from '../shared/types'
 import { IPC_CHANNELS } from '../shared/types'
 
 /**
@@ -217,10 +217,21 @@ export class SchedulerService {
       // Update schedule status
       const idx = this.schedules.findIndex(s => s.id === schedule.id)
       if (idx !== -1) {
-        this.schedules[idx].lastRunAt = Math.floor(startTime / 1000)
+        const timestamp = Math.floor(startTime / 1000)
+        this.schedules[idx].lastRunAt = timestamp
         this.schedules[idx].lastRunStatus = 'success'
         this.schedules[idx].lastRunError = null
         this.schedules[idx].lastRunSessionId = session.id
+
+        // Add to execution history (keep last 3)
+        const execution: ScheduleExecution = {
+          timestamp,
+          status: 'success',
+          sessionId: session.id,
+        }
+        const history = this.schedules[idx].executionHistory || []
+        this.schedules[idx].executionHistory = [execution, ...history].slice(0, 3)
+
         await this.save()
       }
 
@@ -247,10 +258,21 @@ export class SchedulerService {
       // Update schedule status
       const idx = this.schedules.findIndex(s => s.id === schedule.id)
       if (idx !== -1) {
-        this.schedules[idx].lastRunAt = Math.floor(startTime / 1000)
+        const timestamp = Math.floor(startTime / 1000)
+        this.schedules[idx].lastRunAt = timestamp
         this.schedules[idx].lastRunStatus = 'failed'
         this.schedules[idx].lastRunError = errorMessage
         this.schedules[idx].lastRunSessionId = null
+
+        // Add to execution history (keep last 3)
+        const execution: ScheduleExecution = {
+          timestamp,
+          status: 'failed',
+          error: errorMessage,
+        }
+        const history = this.schedules[idx].executionHistory || []
+        this.schedules[idx].executionHistory = [execution, ...history].slice(0, 3)
+
         await this.save()
       }
 

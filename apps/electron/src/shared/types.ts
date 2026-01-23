@@ -496,6 +496,16 @@ export interface NewChatActionParams {
 // ============================================
 
 /**
+ * Execution history entry for a schedule
+ */
+export interface ScheduleExecution {
+  timestamp: number  // Unix timestamp
+  status: 'success' | 'failed'
+  error?: string | null
+  sessionId?: string | null
+}
+
+/**
  * Scheduled task definition
  */
 export interface Schedule {
@@ -510,6 +520,7 @@ export interface Schedule {
   lastRunStatus: 'success' | 'failed' | null
   lastRunError: string | null
   lastRunSessionId: string | null // Session ID created by last run
+  executionHistory?: ScheduleExecution[]  // Recent executions (max 3)
   createdAt: number
 }
 
