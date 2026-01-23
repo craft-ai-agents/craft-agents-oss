@@ -272,7 +272,7 @@ function ExecutionRow({ execution }: ExecutionRowProps) {
 
   const handleClick = () => {
     if (execution.sessionId) {
-      navigate(routes.view.chat(execution.sessionId))
+      navigate(routes.view.allChats(execution.sessionId))
     }
   }
 
