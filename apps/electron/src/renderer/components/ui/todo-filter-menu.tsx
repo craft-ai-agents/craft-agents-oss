@@ -7,6 +7,7 @@ import {
   type TodoState,
   getStateIcon,
   getStateColor,
+  getStateLabel,
 } from '@/config/todo-states'
 
 // Re-export types for backwards compatibility
@@ -24,10 +25,11 @@ const MENU_ITEM_STYLE = 'flex cursor-pointer select-none items-center gap-3 roun
 // StateItemContent - Shared item rendering
 // ============================================================================
 
-function StateItemContent({ state }: { state: TodoState }) {
+function StateItemContent({ state, locale }: { state: TodoState; locale: string }) {
   // Only apply color styling if the icon is colorable (uses currentColor)
   // Emojis and images should render at full opacity with their own colors
   const applyColor = state.iconColorable
+  const translatedLabel = getStateLabel(state.id, [state], locale)
 
   return (
     <>
@@ -40,7 +42,7 @@ function StateItemContent({ state }: { state: TodoState }) {
       >
         {state.icon}
       </span>
-      <div className="flex-1 min-w-0">{state.label}</div>
+      <div className="flex-1 min-w-0">{translatedLabel}</div>
     </>
   )
 }
@@ -62,7 +64,7 @@ export function TodoStateMenu({
   onSelect,
   className,
 }: TodoStateMenuProps) {
-  const { t } = useTranslation()
+  const { t, language } = useTranslation()
   const [filter, setFilter] = React.useState('')
   const inputRef = React.useRef<HTMLInputElement>(null)
 
@@ -97,10 +99,11 @@ export function TodoStateMenu({
         </CommandPrimitive.Empty>
         {states.map((state) => {
           const isActive = activeState === state.id
+          const translatedLabel = getStateLabel(state.id, states, language)
           return (
             <CommandPrimitive.Item
               key={state.id}
-              value={state.label}
+              value={translatedLabel}
               onSelect={() => onSelect(state.id)}
               className={cn(
                 MENU_ITEM_STYLE,
@@ -108,7 +111,7 @@ export function TodoStateMenu({
                 isActive ? 'bg-foreground/7' : 'data-[selected=true]:bg-foreground/3'
               )}
             >
-              <StateItemContent state={state} />
+              <StateItemContent state={state} locale={language} />
             </CommandPrimitive.Item>
           )
         })}

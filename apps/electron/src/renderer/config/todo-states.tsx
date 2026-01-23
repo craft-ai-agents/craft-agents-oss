@@ -278,13 +278,40 @@ export function getStateColor(
 
 /**
  * Get the label for a todo state
+ * Returns translated label for default statuses in Chinese locale
  */
 export function getStateLabel(
   stateId: string,
-  states: TodoState[]
+  states: TodoState[],
+  locale: string = 'en'
 ): string {
   const state = states.find(s => s.id === stateId)
-  return state?.label ?? stateId
+
+  // If state has a custom label (user-defined), use it as-is
+  if (state && !state.isDefault) {
+    return state.label
+  }
+
+  // For default statuses, apply translation based on locale
+  const defaultStatusTranslations: Record<string, Record<string, string>> = {
+    'en': {
+      'backlog': 'Backlog',
+      'todo': 'Todo',
+      'needs-review': 'Needs Review',
+      'done': 'Done',
+      'cancelled': 'Cancelled',
+    },
+    'zh': {
+      'backlog': '待办事项',
+      'todo': '待办',
+      'needs-review': '待审核',
+      'done': '已完成',
+      'cancelled': '已取消',
+    },
+  }
+
+  // Return translated label for default statuses, or original label
+  return defaultStatusTranslations[locale]?.[stateId] ?? state?.label ?? stateId
 }
 
 /**

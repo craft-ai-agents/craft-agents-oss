@@ -72,6 +72,9 @@ export default {
   complete: 'Complete',
   errorStatus: 'Error',
   noStatusFound: 'No status found',
+  backlog: 'Backlog',
+  statusDone: 'Done',
+  cancelled: 'Cancelled',
 
   // Toast Messages
   linkCopiedToClipboard: 'Link copied to clipboard',

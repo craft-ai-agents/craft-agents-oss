@@ -70,6 +70,9 @@ export default {
   complete: '完成',
   errorStatus: '错误',
   noStatusFound: '未找到状态',
+  backlog: '待办事项',
+  statusDone: '已完成',
+  cancelled: '已取消',
 
   // Toast Messages / 提示消息
   linkCopiedToClipboard: '链接已复制到剪贴板',
