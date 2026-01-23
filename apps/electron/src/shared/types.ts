@@ -767,6 +767,12 @@ export const IPC_CHANNELS = {
   GITHUB_SET_OAUTH_CREDENTIALS: 'github:setOAuthCredentials',
   GITHUB_HAS_OAUTH_CREDENTIALS: 'github:hasOAuthCredentials',
 
+  // Slack Integration
+  SLACK_START_OAUTH: 'slack:startOAuth',
+  SLACK_GET_STATUS: 'slack:getStatus',
+  SLACK_DISCONNECT: 'slack:disconnect',
+  SLACK_HAS_OAUTH_CREDENTIALS: 'slack:hasOAuthCredentials',
+
   // Daily Reports
   REPORT_CREATE: 'report:create',
   REPORT_SUBMIT: 'report:submit',
@@ -1030,6 +1036,12 @@ export interface ElectronAPI {
   githubSetStatus(workspaceId: string, status: import('@craft-agent/shared/github').GitHubConnectionStatus): Promise<import('@craft-agent/shared/github').GitHubConnectionStatus>
   githubSetOAuthCredentials(clientId: string | null, clientSecret: string | null): Promise<{ success: boolean; error?: string }>
   githubHasOAuthCredentials(): Promise<boolean>
+
+  // Slack Integration
+  slackStartOAuth(workspaceId: string): Promise<{ success: boolean; error?: string; connection?: any; workspaces?: any[] }>
+  slackGetStatus(workspaceId: string): Promise<{ success: boolean; connection?: any; workspaces?: any[] }>
+  slackDisconnect(workspaceId: string, teamId?: string): Promise<{ success: boolean; error?: string }>
+  slackHasOAuthCredentials(): Promise<boolean>
 
   // Daily Reports
   reportCreate(options: {

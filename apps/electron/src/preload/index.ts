@@ -425,6 +425,16 @@ const api: ElectronAPI = {
   githubHasOAuthCredentials: () =>
     ipcRenderer.invoke(IPC_CHANNELS.GITHUB_HAS_OAUTH_CREDENTIALS),
 
+  // Slack Integration
+  slackStartOAuth: (workspaceId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SLACK_START_OAUTH, workspaceId),
+  slackGetStatus: (workspaceId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SLACK_GET_STATUS, workspaceId),
+  slackDisconnect: (workspaceId: string, teamId?: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SLACK_DISCONNECT, workspaceId, teamId),
+  slackHasOAuthCredentials: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.SLACK_HAS_OAUTH_CREDENTIALS),
+
   // Daily Reports
   reportCreate: (options: any) =>
     ipcRenderer.invoke(IPC_CHANNELS.REPORT_CREATE, options),

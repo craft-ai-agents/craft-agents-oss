@@ -1823,6 +1823,10 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // Register WhatsApp handlers
   registerWhatsAppHandlers(sessionManager)
 
+  // Register Slack handlers
+  const { registerSlackHandlers } = await import('./slack-ipc')
+  registerSlackHandlers()
+
   // ============================================================
   // Theme (app-level only)
   // ============================================================

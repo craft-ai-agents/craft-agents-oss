@@ -28,7 +28,9 @@ export type CredentialType =
   | 'source_apikey'      // API keys
   | 'source_basic'       // Basic auth (base64 encoded user:pass)
   // WhatsApp credentials (workspace-scoped)
-  | 'whatsapp_session';  // WhatsApp Baileys session data
+  | 'whatsapp_session'   // WhatsApp Baileys session data
+  // Slack credentials (workspace-scoped)
+  | 'slack_oauth';       // Slack OAuth tokens
 
 /** Valid credential types for validation */
 const VALID_CREDENTIAL_TYPES: readonly CredentialType[] = [
@@ -41,6 +43,7 @@ const VALID_CREDENTIAL_TYPES: readonly CredentialType[] = [
   'source_apikey',
   'source_basic',
   'whatsapp_session',
+  'slack_oauth',
 ] as const;
 
 /** Check if a string is a valid CredentialType */
@@ -82,6 +85,8 @@ export interface StoredCredential {
   clientId?: string;
   /** Token type (e.g., "Bearer") */
   tokenType?: string;
+  /** Additional metadata for integration-specific fields */
+  metadata?: Record<string, any>;
 }
 
 // Using "::" as delimiter instead of "/" because server names and API names
@@ -95,6 +100,7 @@ const SOURCE_CREDENTIAL_TYPES = [
   'source_apikey',
   'source_basic',
   'whatsapp_session',
+  'slack_oauth',
 ] as const;
 
 /** Check if type is a source credential */

@@ -35,6 +35,7 @@ import {
 } from '@/components/settings'
 import { GitHubSettingsSection } from '@/components/orchestration'
 import { WhatsAppSettingsSection, QRCodeModal } from '@/components/whatsapp'
+import { SlackSettingsSection } from '@/components/slack'
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
@@ -472,6 +473,9 @@ export default function WorkspaceSettingsPage() {
 
             {/* GitHub Integration */}
             <GitHubSettingsSection />
+
+            {/* Slack Integration */}
+            <SlackSettingsSection />
 
             {/* WhatsApp Integration */}
             <WhatsAppSettingsSection />
