@@ -36,6 +36,7 @@ import {
 import { GitHubSettingsSection } from '@/components/orchestration'
 import { WhatsAppSettingsSection, QRCodeModal } from '@/components/whatsapp'
 import { SlackSettingsSection } from '@/components/slack'
+import { LabelsSettingsSection } from '@/components/labels'
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
@@ -470,6 +471,9 @@ export default function WorkspaceSettingsPage() {
                 )}
               </AnimatePresence>
             </SettingsSection>
+
+            {/* Labels */}
+            <LabelsSettingsSection />
 
             {/* GitHub Integration */}
             <GitHubSettingsSection />
