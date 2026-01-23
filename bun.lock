@@ -216,7 +216,6 @@
         "tailwindcss": ">=4.0.0",
       },
       "optionalPeers": [
-        "@pierre/diffs",
         "@radix-ui/react-dialog",
         "jotai",
       ],
