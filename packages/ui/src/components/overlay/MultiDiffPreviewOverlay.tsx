@@ -85,6 +85,10 @@ export interface MultiDiffPreviewOverlayProps {
   theme?: 'light' | 'dark'
   /** Callback to open file in external editor */
   onOpenFile?: (filePath: string) => void
+  /** Enable git integration features */
+  enableGitIntegration?: boolean
+  /** Working directory for git operations */
+  gitWorkingDir?: string
 }
 
 // ============================================
@@ -318,6 +322,8 @@ export function MultiDiffPreviewOverlay({
   focusedChangeId,
   theme = 'light',
   onOpenFile,
+  enableGitIntegration,
+  gitWorkingDir,
 }: MultiDiffPreviewOverlayProps) {
   const responsiveMode = useOverlayMode()
   const isModal = responsiveMode === 'modal'

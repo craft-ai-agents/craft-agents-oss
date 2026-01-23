@@ -26,6 +26,7 @@ import {
   CodePreviewOverlay,
   DiffPreviewOverlay,
   MultiDiffPreviewOverlay,
+  DiffReviewSheet,
   TerminalPreviewOverlay,
   GenericOverlay,
   JSONPreviewOverlay,
@@ -406,6 +407,34 @@ export function ChatDisplay({
     if (!overlayState || overlayState.type !== 'activity') return null
     return extractOverlayData(overlayState.activity)
   }, [overlayState])
+
+  // ============================================================================
+  // Git Integration
+  // ============================================================================
+
+  // Git working directory - set if current working directory is a git repository
+  const [gitWorkingDir, setGitWorkingDir] = useState<string | undefined>()
+
+  // Check if working directory is a git repository
+  useEffect(() => {
+    if (!workingDirectory) {
+      setGitWorkingDir(undefined)
+      return
+    }
+
+    async function checkGitRepo() {
+      try {
+        // @ts-expect-error - IPC types
+        const isRepo = await window.electron?.ipcRenderer.invoke('git:is-repo', workingDirectory)
+        setGitWorkingDir(isRepo ? workingDirectory : undefined)
+      } catch (error) {
+        console.error('Failed to check git repository:', error)
+        setGitWorkingDir(undefined)
+      }
+    }
+
+    checkGitRepo()
+  }, [workingDirectory])
 
   // Pop-out handler - opens message in overlay (read-only markdown)
   const handlePopOut = useCallback((message: Message) => {
@@ -939,6 +968,8 @@ export function ChatDisplay({
           focusedChangeId={overlayState.focusedChangeId}
           theme={isDark ? 'dark' : 'light'}
           onOpenFile={onOpenFile}
+          enableGitIntegration={!!gitWorkingDir}
+          gitWorkingDir={gitWorkingDir}
         />
       )}
 
