@@ -13,7 +13,7 @@
 
 import { URL } from 'url';
 import open from 'open';
-import { randomBytes } from 'crypto';
+import { randomBytes, createHash } from 'crypto';
 import { createCallbackServer, type AppType } from './callback-server.ts';
 import type { SlackService } from '../sources/types.ts';
 
@@ -94,6 +94,15 @@ export interface SlackOAuthResult {
 }
 
 /**
+ * Generate PKCE code verifier and challenge
+ */
+function generatePKCE(): { verifier: string; challenge: string } {
+  const verifier = randomBytes(32).toString('base64url');
+  const challenge = createHash('sha256').update(verifier).digest('base64url');
+  return { verifier, challenge };
+}
+
+/**
  * Generate random state for CSRF protection
  */
 function generateState(): string {
@@ -106,6 +115,7 @@ function generateState(): string {
  */
 async function exchangeCodeForTokens(
   code: string,
+  codeVerifier: string,
   redirectUri: string
 ): Promise<{
   accessToken: string;
@@ -120,6 +130,7 @@ async function exchangeCodeForTokens(
 
   const params = new URLSearchParams({
     code,
+    code_verifier: codeVerifier,
     redirect_uri: redirectUri,
   });
 
@@ -131,6 +142,11 @@ async function exchangeCodeForTokens(
     },
     body: params.toString(),
   });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Token exchange failed (HTTP ${response.status}): ${errorText}`);
+  }
 
   const data = (await response.json()) as {
     ok: boolean;
@@ -169,12 +185,9 @@ async function exchangeCodeForTokens(
  * Note: Token rotation must be enabled in Slack app settings for refresh tokens
  */
 export async function refreshSlackToken(
-  refreshToken: string,
-  clientId?: string
+  refreshToken: string
 ): Promise<{ accessToken: string; expiresAt?: number }> {
-  const authHeader = Buffer.from(
-    `${clientId || SLACK_CLIENT_ID}:${SLACK_CLIENT_SECRET}`
-  ).toString('base64');
+  const authHeader = Buffer.from(`${SLACK_CLIENT_ID}:${SLACK_CLIENT_SECRET}`).toString('base64');
 
   const params = new URLSearchParams({
     grant_type: 'refresh_token',
@@ -190,6 +203,11 @@ export async function refreshSlackToken(
     body: params.toString(),
   });
 
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Token refresh failed (HTTP ${response.status}): ${errorText}`);
+  }
+
   const data = (await response.json()) as {
     ok: boolean;
     error?: string;
@@ -198,11 +216,15 @@ export async function refreshSlackToken(
   };
 
   if (!data.ok) {
-    throw new Error(`Failed to refresh Slack token: ${data.error}`);
+    throw new Error(`Failed to refresh Slack token: ${data.error || 'Unknown error'}`);
+  }
+
+  if (!data.access_token) {
+    throw new Error('Token refresh succeeded but no access_token returned');
   }
 
   return {
-    accessToken: data.access_token!,
+    accessToken: data.access_token,
     expiresAt: data.expires_in ? Date.now() + data.expires_in * 1000 : undefined,
   };
 }
@@ -253,26 +275,27 @@ export function getSlackScopes(options: SlackOAuthOptions): string[] {
  * });
  */
 export async function startSlackOAuth(options: SlackOAuthOptions = {}): Promise<SlackOAuthResult> {
+  // Verify OAuth credentials are configured
+  if (!isSlackOAuthConfigured()) {
+    return {
+      success: false,
+      error:
+        'Slack OAuth not configured. Set SLACK_OAUTH_CLIENT_ID and SLACK_OAUTH_CLIENT_SECRET environment variables.',
+    };
+  }
+
+  // Get user scopes for this request
+  const userScopes = getSlackScopes(options);
+
+  // Generate PKCE and state for security
+  const pkce = generatePKCE();
+  const state = generateState();
+
+  // Start local HTTP callback server
+  const appType = options.appType || 'electron';
+  const callbackServer = await createCallbackServer({ appType });
+
   try {
-    // Verify OAuth credentials are configured
-    if (!isSlackOAuthConfigured()) {
-      return {
-        success: false,
-        error:
-          'Slack OAuth not configured. Set SLACK_OAUTH_CLIENT_ID and SLACK_OAUTH_CLIENT_SECRET environment variables.',
-      };
-    }
-
-    // Get user scopes for this request
-    const userScopes = getSlackScopes(options);
-
-    // Generate state for CSRF protection
-    const state = generateState();
-
-    // Start local HTTP callback server
-    const appType = options.appType || 'electron';
-    const callbackServer = await createCallbackServer({ appType });
-
     // Extract port from local callback URL
     const localUrl = new URL(callbackServer.url);
     const port = localUrl.port;
@@ -287,14 +310,25 @@ export async function startSlackOAuth(options: SlackOAuthOptions = {}): Promise<
     authUrl.searchParams.set('client_id', SLACK_CLIENT_ID);
     authUrl.searchParams.set('redirect_uri', redirectUri);
     authUrl.searchParams.set('state', state);
+    authUrl.searchParams.set('code_challenge', pkce.challenge);
+    authUrl.searchParams.set('code_challenge_method', 'S256');
     // user_scope = authenticate as user, scope = install bot
     authUrl.searchParams.set('user_scope', userScopes.join(','));
 
     // Open browser for authorization
     await open(authUrl.toString());
 
-    // Wait for callback
-    const callback = await callbackServer.promise;
+    // Wait for callback with timeout to prevent hanging indefinitely
+    const OAUTH_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+    const callback = await Promise.race([
+      callbackServer.promise,
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error('OAuth timeout - authorization was not completed within 5 minutes')),
+          OAUTH_TIMEOUT_MS
+        )
+      ),
+    ]);
 
     // Verify state
     if (callback.query.state !== state) {
@@ -322,7 +356,7 @@ export async function startSlackOAuth(options: SlackOAuthOptions = {}): Promise<
     }
 
     // Exchange code for tokens
-    const tokens = await exchangeCodeForTokens(code, redirectUri);
+    const tokens = await exchangeCodeForTokens(code, pkce.verifier, redirectUri);
 
     return {
       success: true,
@@ -338,5 +372,8 @@ export async function startSlackOAuth(options: SlackOAuthOptions = {}): Promise<
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error during Slack OAuth',
     };
+  } finally {
+    // Always clean up the callback server
+    callbackServer.close();
   }
 }

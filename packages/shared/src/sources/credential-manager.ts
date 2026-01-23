@@ -657,7 +657,7 @@ export class SourceCredentialManager {
     cred: StoredCredential
   ): Promise<string | null> {
     try {
-      const result = await refreshSlackToken(cred.refreshToken!, cred.clientId);
+      const result = await refreshSlackToken(cred.refreshToken!);
 
       // Update stored credentials
       await this.save(source, {
