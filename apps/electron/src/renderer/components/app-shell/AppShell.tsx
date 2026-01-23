@@ -107,6 +107,7 @@ import type { RichTextInputHandle } from "@/components/ui/rich-text-input"
 import { hasOpenOverlay } from "@/lib/overlay-detection"
 import { CommandPalette } from "@/components/command-palette/CommandPalette"
 import { commandPaletteOpenAtom } from "@/atoms/command-palette"
+import { WhatsAppToastListener } from "@/components/whatsapp/WhatsAppToastListener"
 
 /**
  * AppShellProps - Minimal props interface for AppShell component
@@ -1863,6 +1864,9 @@ function AppShellContent({
 
       {/* Command Palette */}
       <CommandPalette />
+
+      {/* WhatsApp Toast Notifications */}
+      <WhatsAppToastListener />
 
       </TooltipProvider>
     </AppShellProvider>

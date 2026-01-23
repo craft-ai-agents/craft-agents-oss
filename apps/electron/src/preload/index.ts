@@ -522,6 +522,22 @@ const api: ElectronAPI = {
       ipcRenderer.removeListener(IPC_CHANNELS.WHATSAPP_ERROR, handler)
     }
   },
+  onWhatsAppMessageActivity: (callback: (data: {
+    workspaceId: string
+    status: 'received' | 'processing' | 'complete' | 'error'
+    senderName?: string
+    groupName?: string
+    messagePreview?: string
+    sessionId?: string
+  }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: any) => {
+      callback(data)
+    }
+    ipcRenderer.on(IPC_CHANNELS.WHATSAPP_MESSAGE_ACTIVITY, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.WHATSAPP_MESSAGE_ACTIVITY, handler)
+    }
+  },
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)

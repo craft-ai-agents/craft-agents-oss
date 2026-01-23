@@ -804,6 +804,7 @@ export const IPC_CHANNELS = {
   WHATSAPP_AUTHENTICATED: 'whatsapp:authenticated',
   WHATSAPP_DISCONNECTED: 'whatsapp:disconnected',
   WHATSAPP_ERROR: 'whatsapp:error',
+  WHATSAPP_MESSAGE_ACTIVITY: 'whatsapp:message-activity',
 } as const
 
 // Re-import types for ElectronAPI
@@ -1086,6 +1087,19 @@ export interface ElectronAPI {
   onWhatsAppAuthenticated(callback: (data: { workspaceId: string; phoneNumber: string }) => void): () => void
   onWhatsAppDisconnected(callback: (data: { workspaceId: string; phoneNumber: string }) => void): () => void
   onWhatsAppError(callback: (data: { workspaceId: string; message: string }) => void): () => void
+  onWhatsAppMessageActivity(callback: (data: WhatsAppMessageActivityEvent) => void): () => void
+}
+
+/**
+ * WhatsApp message activity event (main → renderer)
+ */
+export interface WhatsAppMessageActivityEvent {
+  workspaceId: string
+  status: 'received' | 'processing' | 'complete' | 'error'
+  senderName?: string
+  groupName?: string
+  messagePreview?: string
+  sessionId?: string
 }
 
 /**

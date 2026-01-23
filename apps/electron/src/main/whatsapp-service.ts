@@ -1,10 +1,13 @@
 import { ChildProcess, spawn } from 'child_process'
 import { join } from 'path'
 import { EventEmitter } from 'events'
+import { BrowserWindow } from 'electron'
 import type { WhatsAppMessage, WhatsAppConnectionStatus, WhatsAppError, WhatsAppSession } from '@craft-agent/shared/whatsapp'
 import type { CredentialManager } from '@craft-agent/shared/credentials'
 import { createMessageRouter, type WhatsAppMessageRouter, type SessionCompletionResult } from '@craft-agent/shared/whatsapp/message-router'
 import { formatLargeResult } from '@craft-agent/shared/whatsapp/result-formatter'
+import { showNotification } from './notifications'
+import { IPC_CHANNELS } from '../shared/types'
 
 /**
  * Delay between sending messages to avoid WhatsApp rate limiting (in ms)
@@ -63,11 +66,21 @@ export class WhatsAppService extends EventEmitter {
     // (error feedback already sent by router)
     if (result.hasError && !result.responseText) {
       console.log(`Session ${result.sessionId} completed with error, skipping delivery`)
+      this.broadcastMessageActivity({
+        status: 'error',
+        sessionId: result.sessionId,
+      })
       return
     }
 
     // Format and deliver the result using groupJid from the completion result
     await this.deliverResult(result.groupJid, result.sessionId, result.responseText)
+
+    // Broadcast completion to renderer for toast notification
+    this.broadcastMessageActivity({
+      status: 'complete',
+      sessionId: result.sessionId,
+    })
   }
 
   // Listen for QR code from subprocess and handle auth
@@ -419,6 +432,27 @@ export class WhatsAppService extends EventEmitter {
   }
 
   /**
+   * Broadcast WhatsApp message activity to renderer for UI notifications
+   */
+  private broadcastMessageActivity(data: {
+    status: 'received' | 'processing' | 'complete' | 'error'
+    senderName?: string
+    groupName?: string
+    messagePreview?: string
+    sessionId?: string
+  }): void {
+    const windows = BrowserWindow.getAllWindows()
+    for (const win of windows) {
+      if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+        win.webContents.send(IPC_CHANNELS.WHATSAPP_MESSAGE_ACTIVITY, {
+          workspaceId: this.workspaceId,
+          ...data,
+        })
+      }
+    }
+  }
+
+  /**
    * Enhanced event handler for incoming messages
    */
   private setupEventHandlers(): void {
@@ -432,13 +466,42 @@ export class WhatsAppService extends EventEmitter {
         // Emit event first (for logging/monitoring)
         this.emit('incoming_message', whatsappMsg)
 
+        // Show desktop notification for incoming message
+        showNotification(
+          `WhatsApp: ${whatsappMsg.groupName}`,
+          `${whatsappMsg.senderName}: ${whatsappMsg.content.substring(0, 100)}`,
+          this.workspaceId,
+          '' // No session ID yet
+        )
+
+        // Broadcast to renderer for toast notification
+        this.broadcastMessageActivity({
+          status: 'received',
+          senderName: whatsappMsg.senderName,
+          groupName: whatsappMsg.groupName,
+          messagePreview: whatsappMsg.content.substring(0, 80),
+        })
+
         // Route through message router
         if (this.messageRouter) {
+          // Broadcast processing started
+          this.broadcastMessageActivity({
+            status: 'processing',
+            senderName: whatsappMsg.senderName,
+            groupName: whatsappMsg.groupName,
+          })
+
           try {
             await this.messageRouter.routeIncomingMessage(whatsappMsg)
           } catch (error) {
             console.error('Failed to route WhatsApp message:', error)
             this.emit('routing_error', { message: whatsappMsg, error })
+
+            // Broadcast error
+            this.broadcastMessageActivity({
+              status: 'error',
+              groupName: whatsappMsg.groupName,
+            })
           }
         }
       } else if (msg.type === 'connection_update') {
