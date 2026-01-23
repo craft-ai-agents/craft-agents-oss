@@ -247,6 +247,8 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.LABELS_LIST, workspaceId),
   createLabel: (workspaceId: string, name: string, color: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.LABELS_CREATE, workspaceId, name, color),
+  updateLabel: (workspaceId: string, labelId: string, updates: { name?: string; color?: string }) =>
+    ipcRenderer.invoke(IPC_CHANNELS.LABELS_UPDATE, workspaceId, labelId, updates),
   deleteLabel: (workspaceId: string, labelId: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.LABELS_DELETE, workspaceId, labelId),
   onLabelsChanged: (callback: (workspaceId: string) => void) => {

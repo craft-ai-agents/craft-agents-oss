@@ -57,6 +57,20 @@ export const createLabelAtom = atom(
 );
 
 /**
+ * Update an existing label
+ */
+export const updateLabelAtom = atom(
+  null,
+  async (get, set, params: { workspaceId: string; labelId: string; updates: { name?: string; color?: string } }) => {
+    const label = await window.electronAPI.updateLabel(params.workspaceId, params.labelId, params.updates);
+    // Optimistically update local state
+    const labels = get(labelsAtom);
+    set(labelsAtom, labels.map(l => l.id === params.labelId ? label : l));
+    return label;
+  }
+);
+
+/**
  * Delete a label
  */
 export const deleteLabelAtom = atom(

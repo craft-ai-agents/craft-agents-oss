@@ -6,7 +6,7 @@
 
 import { ipcMain, BrowserWindow } from 'electron';
 import { IPC_CHANNELS } from '../shared/types';
-import { loadLabels, createLabel, deleteLabel, type Label } from '@craft-agent/shared/labels';
+import { loadLabels, createLabel, updateLabel, deleteLabel, type Label } from '@craft-agent/shared/labels';
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config';
 
 /**
@@ -35,18 +35,44 @@ function getWorkspaceRootPath(workspaceId: string): string {
 export function registerLabelsIpc(): void {
   // List all labels for a workspace
   ipcMain.handle(IPC_CHANNELS.LABELS_LIST, async (_event, workspaceId: string): Promise<Label[]> => {
-    const rootPath = getWorkspaceRootPath(workspaceId);
-    return loadLabels(rootPath);
+    try {
+      const rootPath = getWorkspaceRootPath(workspaceId);
+      return loadLabels(rootPath);
+    } catch (error) {
+      console.error('[labels:list] Error:', error);
+      throw error;
+    }
   });
 
   // Create a new label
   ipcMain.handle(
     IPC_CHANNELS.LABELS_CREATE,
     async (_event, workspaceId: string, name: string, color: string): Promise<Label> => {
-      const rootPath = getWorkspaceRootPath(workspaceId);
-      const label = createLabel(rootPath, name, color);
-      broadcastLabelsChanged(workspaceId);
-      return label;
+      try {
+        const rootPath = getWorkspaceRootPath(workspaceId);
+        const label = createLabel(rootPath, name, color);
+        broadcastLabelsChanged(workspaceId);
+        return label;
+      } catch (error) {
+        console.error('[labels:create] Error:', error);
+        throw error;
+      }
+    }
+  );
+
+  // Update an existing label
+  ipcMain.handle(
+    IPC_CHANNELS.LABELS_UPDATE,
+    async (_event, workspaceId: string, labelId: string, updates: { name?: string; color?: string }): Promise<Label> => {
+      try {
+        const rootPath = getWorkspaceRootPath(workspaceId);
+        const label = updateLabel(rootPath, labelId, updates);
+        broadcastLabelsChanged(workspaceId);
+        return label;
+      } catch (error) {
+        console.error('[labels:update] Error:', error);
+        throw error;
+      }
     }
   );
 
@@ -54,9 +80,14 @@ export function registerLabelsIpc(): void {
   ipcMain.handle(
     IPC_CHANNELS.LABELS_DELETE,
     async (_event, workspaceId: string, labelId: string): Promise<void> => {
-      const rootPath = getWorkspaceRootPath(workspaceId);
-      deleteLabel(rootPath, labelId);
-      broadcastLabelsChanged(workspaceId);
+      try {
+        const rootPath = getWorkspaceRootPath(workspaceId);
+        deleteLabel(rootPath, labelId);
+        broadcastLabelsChanged(workspaceId);
+      } catch (error) {
+        console.error('[labels:delete] Error:', error);
+        throw error;
+      }
     }
   );
 }

@@ -57,11 +57,31 @@ export const LABEL_COLORS = [
 
 export type LabelColorValue = (typeof LABEL_COLORS)[number]['value'];
 
+/** Set of valid color values for fast validation */
+const VALID_COLORS = new Set(LABEL_COLORS.map(c => c.value));
+
+/**
+ * Validate that a color is from the preset palette
+ */
+export function isValidLabelColor(color: string): color is LabelColorValue {
+  return VALID_COLORS.has(color as LabelColorValue);
+}
+
 // ============================================================
 // Storage
 // ============================================================
 
 const LABELS_FILE = 'labels.json';
+
+/** Simple in-memory cache to avoid repeated file reads */
+const labelsCache = new Map<string, { labels: Label[]; mtime: number }>();
+
+/**
+ * Clear the labels cache for a workspace (call after mutations)
+ */
+export function clearLabelsCache(workspaceRootPath: string): void {
+  labelsCache.delete(workspaceRootPath);
+}
 
 /**
  * Get path to labels.json for a workspace
@@ -83,6 +103,7 @@ export function getDefaultLabelConfig(): WorkspaceLabelConfig {
 /**
  * Load labels for a workspace
  * Returns empty array if no config exists
+ * Uses in-memory cache to avoid repeated file reads
  */
 export function loadLabels(workspaceRootPath: string): Label[] {
   const configPath = getLabelsPath(workspaceRootPath);
@@ -92,8 +113,23 @@ export function loadLabels(workspaceRootPath: string): Label[] {
   }
 
   try {
+    const stat = require('fs').statSync(configPath);
+    const mtime = stat.mtimeMs;
+
+    // Check cache
+    const cached = labelsCache.get(workspaceRootPath);
+    if (cached && cached.mtime === mtime) {
+      return cached.labels;
+    }
+
+    // Read and parse
     const config = JSON.parse(readFileSync(configPath, 'utf-8')) as WorkspaceLabelConfig;
-    return config.labels || [];
+    const labels = config.labels || [];
+
+    // Update cache
+    labelsCache.set(workspaceRootPath, { labels, mtime });
+
+    return labels;
   } catch (error) {
     console.error('[loadLabels] Failed to parse labels config:', error);
     return [];
@@ -102,6 +138,7 @@ export function loadLabels(workspaceRootPath: string): Label[] {
 
 /**
  * Save labels to workspace
+ * Clears cache after write
  */
 export function saveLabels(workspaceRootPath: string, labels: Label[]): void {
   const configPath = getLabelsPath(workspaceRootPath);
@@ -113,6 +150,8 @@ export function saveLabels(workspaceRootPath: string, labels: Label[]): void {
 
   try {
     writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
+    // Clear cache so next read gets fresh data
+    clearLabelsCache(workspaceRootPath);
   } catch (error) {
     console.error('[saveLabels] Failed to save labels:', error);
     throw error;
@@ -122,6 +161,7 @@ export function saveLabels(workspaceRootPath: string, labels: Label[]): void {
 /**
  * Create a new label
  * Returns the created label
+ * Validates color is from preset palette
  */
 export function createLabel(
   workspaceRootPath: string,
@@ -134,6 +174,11 @@ export function createLabel(
   const trimmedName = name.trim();
   if (!trimmedName || trimmedName.length > 50) {
     throw new Error('Label name must be 1-50 characters');
+  }
+
+  // Validate color is from preset palette (P1-Security fix)
+  if (!isValidLabelColor(color)) {
+    throw new Error('Invalid label color. Must be from preset palette.');
   }
 
   // Check for duplicate names (case-insensitive)
@@ -151,6 +196,57 @@ export function createLabel(
   saveLabels(workspaceRootPath, labels);
 
   return newLabel;
+}
+
+/**
+ * Update an existing label
+ * Returns the updated label
+ */
+export function updateLabel(
+  workspaceRootPath: string,
+  labelId: string,
+  updates: { name?: string; color?: string }
+): Label {
+  const labels = loadLabels(workspaceRootPath);
+
+  const labelIndex = labels.findIndex(l => l.id === labelId);
+  if (labelIndex === -1) {
+    throw new Error('Label not found');
+  }
+
+  const existingLabel = labels[labelIndex];
+  if (!existingLabel) {
+    throw new Error('Label not found');
+  }
+
+  // Create updated label (copy to avoid mutation issues)
+  const updatedLabel: Label = { ...existingLabel };
+
+  // Validate name if provided
+  if (updates.name !== undefined) {
+    const trimmedName = updates.name.trim();
+    if (!trimmedName || trimmedName.length > 50) {
+      throw new Error('Label name must be 1-50 characters');
+    }
+    // Check for duplicate names (case-insensitive), excluding current label
+    if (labels.some(l => l.id !== labelId && l.name.toLowerCase() === trimmedName.toLowerCase())) {
+      throw new Error('A label with this name already exists');
+    }
+    updatedLabel.name = trimmedName;
+  }
+
+  // Validate color if provided
+  if (updates.color !== undefined) {
+    if (!isValidLabelColor(updates.color)) {
+      throw new Error('Invalid label color. Must be from preset palette.');
+    }
+    updatedLabel.color = updates.color;
+  }
+
+  labels[labelIndex] = updatedLabel;
+  saveLabels(workspaceRootPath, labels);
+
+  return updatedLabel;
 }
 
 /**
@@ -223,4 +319,22 @@ export function setSessionLabels(
 
   // Update session metadata
   updateSessionMetadata(workspaceRootPath, sessionId, { labelIds: filteredIds });
+}
+
+/**
+ * Filter session label IDs to only include valid labels
+ * Use this when loading session data to clean up stale references
+ */
+export function filterValidLabelIds(
+  workspaceRootPath: string,
+  labelIds: string[] | undefined
+): string[] {
+  if (!labelIds || labelIds.length === 0) {
+    return [];
+  }
+
+  const validLabels = loadLabels(workspaceRootPath);
+  const validIds = new Set(validLabels.map(l => l.id));
+
+  return labelIds.filter(id => validIds.has(id));
 }

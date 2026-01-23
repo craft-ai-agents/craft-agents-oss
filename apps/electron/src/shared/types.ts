@@ -757,6 +757,7 @@ export const IPC_CHANNELS = {
   // Labels (workspace-scoped session tagging)
   LABELS_LIST: 'labels:list',
   LABELS_CREATE: 'labels:create',
+  LABELS_UPDATE: 'labels:update',
   LABELS_DELETE: 'labels:delete',
   LABELS_CHANGED: 'labels:changed',  // Broadcast: label config changed
 
@@ -956,6 +957,7 @@ export interface ElectronAPI {
   // Labels (workspace-scoped session tagging)
   listLabels(workspaceId: string): Promise<import('@craft-agent/shared/labels').Label[]>
   createLabel(workspaceId: string, name: string, color: string): Promise<import('@craft-agent/shared/labels').Label>
+  updateLabel(workspaceId: string, labelId: string, updates: { name?: string; color?: string }): Promise<import('@craft-agent/shared/labels').Label>
   deleteLabel(workspaceId: string, labelId: string): Promise<void>
   onLabelsChanged(callback: (workspaceId: string) => void): () => void
 
