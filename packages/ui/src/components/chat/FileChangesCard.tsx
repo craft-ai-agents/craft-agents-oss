@@ -159,16 +159,26 @@ export function FileChangesCard({ changes, onReviewChanges, disabled = false }: 
               </span>
 
               {/* File path and stats */}
-              <div className="flex-1 min-w-0 flex items-center justify-between gap-2 overflow-hidden">
-                <div className="flex-1 min-w-0 font-mono truncate">
-                  {parentDir && (
-                    <span className="text-muted-foreground/60">
-                      {parentDir}/
+              <div className="flex-1 min-w-0 flex items-center justify-between gap-2">
+                <div
+                  className="flex-1 min-w-0 font-mono flex items-center gap-0.5"
+                  title={filePath}
+                >
+                  {parentDir ? (
+                    <>
+                      <span className="text-muted-foreground/60 truncate min-w-[20px]">
+                        {parentDir}
+                      </span>
+                      <span className="text-muted-foreground/40 shrink-0">/</span>
+                      <span className="text-foreground/90 font-medium shrink-0">
+                        {fileName}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-foreground/90 font-medium truncate">
+                      {fileName}
                     </span>
                   )}
-                  <span className="text-foreground/90 font-medium">
-                    {fileName}
-                  </span>
                 </div>
 
                 {/* Addition/Removal stats */}
