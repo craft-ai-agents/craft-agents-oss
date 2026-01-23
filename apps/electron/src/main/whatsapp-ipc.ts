@@ -26,6 +26,17 @@ export function registerWhatsAppHandlers(sessionManager: SessionManager): void {
     async (_event, { workspaceId, phoneNumber }: { workspaceId: string; phoneNumber: string }) => {
       try {
         const service = getWhatsAppService(workspaceId)
+
+        // Attach error handler to prevent ERR_UNHANDLED_ERROR crashes
+        service.on('error', (error) => {
+          console.error('[WhatsApp IPC] Service error:', error)
+          broadcastWhatsAppEvent(IPC_CHANNELS.WHATSAPP_ERROR, {
+            workspaceId,
+            message: error.message || 'Unknown error',
+            timestamp: error.timestamp || Date.now()
+          })
+        })
+
         service.setCredentialManager(credentialManager)
         service.setPhoneNumber(phoneNumber)
         service.setSessionManager(sessionManager)
