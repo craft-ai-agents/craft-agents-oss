@@ -8,6 +8,7 @@
 import * as React from 'react'
 import type { RightSidebarPanel } from '../../../shared/types'
 import { SessionMetadataPanel } from '../right-sidebar/SessionMetadataPanel'
+import type { FileChange } from '@craft-agent/ui'
 
 export interface RightSidebarProps {
   /** Current panel configuration */
@@ -16,15 +17,60 @@ export interface RightSidebarProps {
   sessionId?: string
   /** Close button to display in panel header */
   closeButton?: React.ReactNode
+  /** File changes accumulated across the session */
+  fileChanges?: FileChange[]
+  /** Callback to open diff review sheet */
+  onReviewChanges?: () => void
+  /** Callback to open diff review for specific file */
+  onReviewFile?: (changeId: string) => void
+  /** Callback when all changes are accepted */
+  onAcceptAll?: () => void
+  /** Callback when all changes are rejected */
+  onRejectAll?: () => void
+  /** Status of each change (pending/accepted/rejected) */
+  changeStatuses?: Map<string, 'pending' | 'accepted' | 'rejected'>
+  /** Enable git integration features */
+  enableGitIntegration?: boolean
+  /** Working directory for git operations */
+  gitWorkingDir?: string
+  /** Callback when commit is created */
+  onCommitCreated?: (commitHash: string) => void
 }
 
 /**
  * Routes right sidebar content based on panel type
  */
-export function RightSidebar({ panel, sessionId, closeButton }: RightSidebarProps) {
+export function RightSidebar({
+  panel,
+  sessionId,
+  closeButton,
+  fileChanges,
+  onReviewChanges,
+  onReviewFile,
+  onAcceptAll,
+  onRejectAll,
+  changeStatuses,
+  enableGitIntegration,
+  gitWorkingDir,
+  onCommitCreated,
+}: RightSidebarProps) {
   switch (panel.type) {
     case 'sessionMetadata':
-      return <SessionMetadataPanel sessionId={sessionId} closeButton={closeButton} />
+      return (
+        <SessionMetadataPanel
+          sessionId={sessionId}
+          closeButton={closeButton}
+          fileChanges={fileChanges}
+          onReviewChanges={onReviewChanges}
+          onReviewFile={onReviewFile}
+          onAcceptAll={onAcceptAll}
+          onRejectAll={onRejectAll}
+          changeStatuses={changeStatuses}
+          enableGitIntegration={enableGitIntegration}
+          gitWorkingDir={gitWorkingDir}
+          onCommitCreated={onCommitCreated}
+        />
+      )
 
     case 'files':
       // TODO: Implement SessionFilesPanel

@@ -80,6 +80,7 @@ import { useStatuses } from "@/hooks/useStatuses"
 import * as storage from "@/lib/local-storage"
 import { toast } from "sonner"
 import { navigate, routes } from "@/lib/navigate"
+import { useFileChangeReview, type FileChange, DiffReviewSheet } from "@craft-agent/ui"
 import {
   useNavigation,
   useNavigationState,
@@ -352,6 +353,124 @@ function AppShellContent({
       console.error('[Chat] Failed to load workspace settings:', err)
     })
   }, [activeWorkspaceId])
+
+  // ============================================================================
+  // File Changes Review State
+  // ============================================================================
+
+  // Collect all file changes from session activities
+  const fileChanges = useMemo(() => {
+    if (!session?.messages) return []
+
+    const changes: FileChange[] = []
+
+    session.messages.forEach(msg => {
+      if (msg.role !== 'assistant' || !msg.activities) return
+
+      msg.activities.forEach(a => {
+        const actInput = a.toolInput as Record<string, unknown> | undefined
+        if (a.toolName === 'Edit' && actInput) {
+          changes.push({
+            id: a.id,
+            filePath: (actInput.file_path as string) || 'unknown',
+            toolType: 'Edit',
+            original: (actInput.old_string as string) || '',
+            modified: (actInput.new_string as string) || '',
+            error: a.error || undefined,
+          })
+        } else if (a.toolName === 'Write' && actInput) {
+          changes.push({
+            id: a.id,
+            filePath: (actInput.file_path as string) || 'unknown',
+            toolType: 'Write',
+            original: '',
+            modified: (actInput.content as string) || '',
+            error: a.error || undefined,
+          })
+        }
+      })
+    })
+
+    return changes
+  }, [session?.messages])
+
+  // File change review state (accept/reject tracking)
+  const {
+    statuses: changeStatuses,
+    acceptChange,
+    rejectChange,
+    acceptAll,
+    rejectAll,
+    resetAll,
+    counts: changeCounts,
+  } = useFileChangeReview(fileChanges)
+
+  // DiffReviewSheet state
+  const [isDiffReviewOpen, setIsDiffReviewOpen] = React.useState(false)
+  const [focusedFileIndex, setFocusedFileIndex] = React.useState(0)
+
+  // Open diff review sheet
+  const handleOpenDiffReview = React.useCallback((fileIndex = 0) => {
+    setFocusedFileIndex(fileIndex)
+    setIsDiffReviewOpen(true)
+  }, [])
+
+  // Handle accepting all changes
+  const handleAcceptAllChanges = React.useCallback(() => {
+    acceptAll()
+    setIsDiffReviewOpen(false)
+  }, [acceptAll])
+
+  // Handle rejecting all changes (revert files)
+  const handleRejectAllChanges = React.useCallback(async () => {
+    // Revert all files to original content
+    for (const change of fileChanges) {
+      if (change.original) {
+        // @ts-expect-error - IPC types
+        await window.electron?.ipcRenderer.invoke(
+          'file-changes:revert',
+          change.filePath,
+          change.original
+        )
+      }
+    }
+    rejectAll()
+    setIsDiffReviewOpen(false)
+  }, [fileChanges, rejectAll])
+
+  // Handle commit created
+  const handleCommitCreated = React.useCallback((commitHash: string) => {
+    console.log('Commit created:', commitHash)
+    toast.success('Changes committed successfully')
+  }, [])
+
+  // ============================================================================
+  // Git Integration
+  // ============================================================================
+
+  // Git working directory - set if current working directory is a git repository
+  const [gitWorkingDir, setGitWorkingDir] = React.useState<string | undefined>()
+
+  // Check if working directory is a git repository
+  React.useEffect(() => {
+    const workingDirectory = session?.workingDirectory
+    if (!workingDirectory) {
+      setGitWorkingDir(undefined)
+      return
+    }
+
+    async function checkGitRepo() {
+      try {
+        // @ts-expect-error - IPC types
+        const isRepo = await window.electron?.ipcRenderer.invoke('git:is-repo', workingDirectory)
+        setGitWorkingDir(isRepo ? workingDirectory : undefined)
+      } catch (error) {
+        setGitWorkingDir(undefined)
+      }
+    }
+
+    checkGitRepo()
+  }, [session?.workingDirectory])
 
   // Load sources from backend on mount
   React.useEffect(() => {
@@ -749,7 +868,36 @@ function AppShellContent({
     todoStates,
     onSessionSourcesChange: handleSessionSourcesChange,
     rightSidebarButton: rightSidebarOpenButton,
-  }), [contextValue, handleDeleteSession, sources, skills, enabledModes, todoStates, handleSessionSourcesChange, rightSidebarOpenButton])
+    // Diff Review Data
+    fileChanges,
+    changeStatuses,
+    gitWorkingDir,
+    // Diff Review Callbacks
+    onAcceptAllChanges: handleAcceptAllChanges,
+    onRejectAllChanges: handleRejectAllChanges,
+    onReviewChanges: handleOpenDiffReview,
+    onReviewFile: (changeId: string) => {
+      const index = fileChanges.findIndex(c => c.id === changeId)
+      if (index >= 0) handleOpenDiffReview(index)
+    },
+    onCommitCreated: handleCommitCreated,
+  }), [
+    contextValue,
+    handleDeleteSession,
+    sources,
+    skills,
+    enabledModes,
+    todoStates,
+    handleSessionSourcesChange,
+    rightSidebarOpenButton,
+    fileChanges,
+    changeStatuses,
+    gitWorkingDir,
+    handleAcceptAllChanges,
+    handleRejectAllChanges,
+    handleOpenDiffReview,
+    handleCommitCreated
+  ])
 
   // Persist expanded folders to localStorage
   React.useEffect(() => {
@@ -1655,6 +1803,18 @@ function AppShellContent({
                     panel={{ type: 'sessionMetadata' }}
                     sessionId={isChatsNavigation(navState) && navState.details ? navState.details.sessionId : undefined}
                     closeButton={rightSidebarCloseButton}
+                    fileChanges={fileChanges}
+                    changeStatuses={changeStatuses}
+                    gitWorkingDir={gitWorkingDir}
+                    enableGitIntegration={!!gitWorkingDir}
+                    onReviewChanges={handleOpenDiffReview}
+                    onReviewFile={(changeId: string) => {
+                      const index = fileChanges.findIndex(c => c.id === changeId)
+                      if (index >= 0) handleOpenDiffReview(index)
+                    }}
+                    onAcceptAll={handleAcceptAllChanges}
+                    onRejectAll={handleRejectAllChanges}
+                    onCommitCreated={handleCommitCreated}
                   />
                 </motion.div>
               </motion.div>
@@ -1755,6 +1915,19 @@ function AppShellContent({
             side="bottom"
             align="start"
             {...getEditConfig('add-skill', activeWorkspace.rootPath)}
+          />
+
+          {/* Diff review overlay (full-screen) */}
+          <DiffReviewSheet
+            isOpen={isDiffReviewOpen}
+            onClose={() => setIsDiffReviewOpen(false)}
+            changes={fileChanges}
+            onAcceptAll={handleAcceptAllChanges}
+            onRejectAll={handleRejectAllChanges}
+            theme={resolvedMode === 'dark' ? 'dark' : 'light'}
+            initialSelectedIndex={focusedFileIndex}
+            enableGitIntegration={!!gitWorkingDir}
+            gitWorkingDir={gitWorkingDir}
           />
         </>
       )}

@@ -27,6 +27,7 @@ import type { TodoState as TodoStateConfig } from '@/config/todo-states'
 import type { SessionOptions, SessionOptionUpdates } from '../hooks/useSessionOptions'
 import { defaultSessionOptions } from '../hooks/useSessionOptions'
 import { sessionAtomFamily } from '../atoms/sessions'
+import type { FileChange, ChangeStatus } from '@craft-agent/ui'
 
 export interface AppShellContextType {
   // Data
@@ -49,6 +50,14 @@ export interface AppShellContextType {
   /** Dynamic todo states from workspace config (provided by AppShell, defaults to empty) */
   todoStates?: TodoStateConfig[]
 
+  // Diff Review Data
+  /** File changes accumulated across the session */
+  fileChanges?: FileChange[]
+  /** Status of each change (pending/accepted/rejected) */
+  changeStatuses?: Map<string, ChangeStatus>
+  /** Git working directory if current directory is a git repo */
+  gitWorkingDir?: string
+
   // Unified session options (replaces ultrathinkSessions and sessionModes)
   /** All session-scoped options in one map. Use useSessionOptionsFor() hook for easy access. */
   sessionOptions: Map<string, SessionOptions>
@@ -63,6 +72,13 @@ export interface AppShellContextType {
   onMarkSessionUnread: (sessionId: string) => void
   onTodoStateChange: (sessionId: string, state: TodoState) => void
   onDeleteSession: (sessionId: string, skipConfirmation?: boolean) => Promise<boolean>
+
+  // Diff Review Callbacks
+  onAcceptAllChanges?: () => void
+  onRejectAllChanges?: () => void
+  onReviewChanges?: (fileIndex?: number) => void
+  onReviewFile?: (changeId: string) => void
+  onCommitCreated?: (commitHash: string) => void
 
   // Permission handling
   onRespondToPermission?: (

@@ -35,6 +35,12 @@ export interface SessionMetadataPanelProps {
   onRejectAll?: () => void
   /** Status of each change (pending/accepted/rejected) */
   changeStatuses?: Map<string, 'pending' | 'accepted' | 'rejected'>
+  /** Enable git integration features */
+  enableGitIntegration?: boolean
+  /** Working directory for git operations */
+  gitWorkingDir?: string
+  /** Callback when commit is created */
+  onCommitCreated?: (commitHash: string) => void
 }
 
 // Default and constraints for section heights
@@ -94,6 +100,9 @@ export function SessionMetadataPanel({
   onAcceptAll,
   onRejectAll,
   changeStatuses,
+  enableGitIntegration,
+  gitWorkingDir,
+  onCommitCreated,
 }: SessionMetadataPanelProps) {
   const { onRenameSession } = useAppShellContext()
   const containerRef = useRef<HTMLDivElement>(null)
@@ -293,6 +302,9 @@ export function SessionMetadataPanel({
               onAcceptAll={onAcceptAll || (() => {})}
               onRejectAll={onRejectAll || (() => {})}
               changeStatuses={changeStatuses}
+              enableGitIntegration={enableGitIntegration}
+              gitWorkingDir={gitWorkingDir}
+              onCommitCreated={onCommitCreated}
             />
           </div>
         </>
