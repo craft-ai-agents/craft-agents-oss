@@ -118,3 +118,74 @@ export interface FormattedResult {
   /** True if result was truncated across multiple messages */
   truncated: boolean;
 }
+
+/**
+ * WhatsApp connection status from Baileys.
+ */
+export interface WhatsAppConnectionStatus {
+  /** Connection state: 'close' | 'connecting' | 'open' */
+  connection: 'close' | 'connecting' | 'open';
+
+  /** QR code string when connection needs authentication */
+  qr?: string;
+
+  /** True if this is a new login (not restored from saved session) */
+  isNewLogin?: boolean;
+
+  /** Last disconnect reason (if applicable) */
+  lastDisconnect?: {
+    error?: Error;
+    date?: Date;
+  };
+}
+
+/**
+ * WhatsApp error event.
+ */
+export interface WhatsAppError {
+  /** Human-readable error message */
+  message: string;
+
+  /** Timestamp when error occurred (milliseconds since epoch) */
+  timestamp: number;
+
+  /** Optional error code for categorization */
+  code?: WhatsAppErrorCode;
+
+  /** Optional: original error for debugging (not exposed to users) */
+  originalError?: unknown;
+}
+
+/**
+ * Error codes for categorizing WhatsApp errors.
+ * Used to generate user-friendly error messages.
+ */
+export type WhatsAppErrorCode =
+  | 'PERMISSION_DENIED'      // Tool blocked in safe mode
+  | 'AGENT_ERROR'            // Agent processing failed
+  | 'TIMEOUT'                // Agent took too long
+  | 'SESSION_CREATE_FAILED'  // Could not create session
+  | 'ROUTING_ERROR'          // Message routing failed
+  | 'DELIVERY_ERROR'         // Could not send message to WhatsApp
+  | 'INTERNAL_ERROR';        // Generic internal error
+
+/**
+ * User-friendly error message templates.
+ * Maps error codes to human-readable messages (no stack traces).
+ */
+export const ERROR_MESSAGES: Record<WhatsAppErrorCode, string> = {
+  PERMISSION_DENIED:
+    'This action requires elevated permissions. Use /ask or /allow-all directive to enable write operations.',
+  AGENT_ERROR:
+    'I encountered an issue while processing your request. Please try again or rephrase your question.',
+  TIMEOUT:
+    'Your request took too long to process. Try a simpler query or break it into smaller parts.',
+  SESSION_CREATE_FAILED:
+    'Could not start a new conversation. Please try again in a moment.',
+  ROUTING_ERROR:
+    'Failed to process your message. Please try again.',
+  DELIVERY_ERROR:
+    'Could not send the response. Please check your connection and try again.',
+  INTERNAL_ERROR:
+    'Something went wrong on our end. Please try again later.',
+};

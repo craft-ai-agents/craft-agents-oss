@@ -3,9 +3,13 @@ import { join } from 'path'
 import { EventEmitter } from 'events'
 import type { WhatsAppMessage, WhatsAppConnectionStatus, WhatsAppError, WhatsAppSession } from '@craft-agent/shared/whatsapp'
 import type { CredentialManager } from '@craft-agent/shared/credentials'
-import { createMessageRouter, type WhatsAppMessageRouter } from '@craft-agent/shared/whatsapp/message-router'
-import { formatResult } from '@craft-agent/shared/whatsapp/result-formatter'
-import type { Message } from '@anthropic-ai/claude-agent-sdk'
+import { createMessageRouter, type WhatsAppMessageRouter, type SessionCompletionResult } from '@craft-agent/shared/whatsapp/message-router'
+import { formatLargeResult } from '@craft-agent/shared/whatsapp/result-formatter'
+
+/**
+ * Delay between sending messages to avoid WhatsApp rate limiting (in ms)
+ */
+const MESSAGE_SEND_DELAY_MS = 500
 
 export class WhatsAppService extends EventEmitter {
   private subprocess: ChildProcess | null = null
@@ -16,6 +20,7 @@ export class WhatsAppService extends EventEmitter {
   private phoneNumber: string | null = null
   private messageRouter: WhatsAppMessageRouter | null = null
   private sessionManager: any = null // Will be typed as SessionManager when available
+  private completionUnsubscribe: (() => void) | null = null
 
   constructor(private workspaceId: string) {
     super()
@@ -38,7 +43,31 @@ export class WhatsAppService extends EventEmitter {
     this.sessionManager = sessionManager
     if (sessionManager && !this.messageRouter) {
       this.messageRouter = createMessageRouter(this.workspaceId, sessionManager)
+      // Wire up error feedback callback so routing errors get sent back to WhatsApp
+      this.messageRouter.setErrorFeedbackCallback(this.sendErrorFeedback.bind(this))
+      // Wire up session completion callback to deliver results back to WhatsApp
+      this.completionUnsubscribe = this.messageRouter.onSessionComplete(
+        this.handleSessionCompletion.bind(this)
+      )
     }
+  }
+
+  /**
+   * Handle session completion - deliver results back to WhatsApp
+   *
+   * This callback is triggered when the agent finishes processing a message.
+   * It formats the response and sends it back to the originating WhatsApp group.
+   */
+  private async handleSessionCompletion(result: SessionCompletionResult): Promise<void> {
+    // Don't deliver if there was an error and no response text
+    // (error feedback already sent by router)
+    if (result.hasError && !result.responseText) {
+      console.log(`Session ${result.sessionId} completed with error, skipping delivery`)
+      return
+    }
+
+    // Format and deliver the result using groupJid from the completion result
+    await this.deliverResult(result.groupJid, result.sessionId, result.responseText)
   }
 
   // Listen for QR code from subprocess and handle auth
@@ -193,6 +222,12 @@ export class WhatsAppService extends EventEmitter {
   async stop(): Promise<void> {
     if (!this.subprocess || !this.isRunning) return
 
+    // Unsubscribe from session completion events
+    if (this.completionUnsubscribe) {
+      this.completionUnsubscribe()
+      this.completionUnsubscribe = null
+    }
+
     // Send disconnect message
     this.subprocess.send({ type: 'disconnect' })
 
@@ -232,6 +267,49 @@ export class WhatsAppService extends EventEmitter {
     })
 
     return messageId
+  }
+
+  /**
+   * Send error feedback to a WhatsApp group.
+   * Used by the message router to notify users of processing errors.
+   *
+   * This method:
+   * - Sends a user-friendly error message (no stack traces or internal details)
+   * - Emits an 'error_feedback_sent' event for logging/monitoring
+   * - Logs errors but doesn't throw (fire-and-forget feedback)
+   *
+   * @param groupJid - The WhatsApp group JID to send the error to
+   * @param errorMessage - User-friendly error message (pre-formatted)
+   */
+  async sendErrorFeedback(groupJid: string, errorMessage: string): Promise<void> {
+    try {
+      if (!this.subprocess || !this.isRunning) {
+        console.warn('Cannot send error feedback - WhatsApp service not running')
+        return
+      }
+
+      const messageId = await this.sendMessage(groupJid, errorMessage)
+
+      // Emit event for logging/monitoring
+      this.emit('error_feedback_sent', {
+        groupJid,
+        messageId,
+        errorMessage,
+        timestamp: Date.now(),
+      })
+
+      console.log(`Error feedback sent to ${groupJid}: ${messageId}`)
+    } catch (sendError) {
+      // Don't throw - just log the failure
+      // We don't want error feedback failures to cascade
+      console.error('Failed to send error feedback to WhatsApp:', sendError)
+      this.emit('error_feedback_failed', {
+        groupJid,
+        errorMessage,
+        sendError,
+        timestamp: Date.now(),
+      })
+    }
   }
 
   // Get connection status
@@ -421,32 +499,71 @@ export class WhatsAppService extends EventEmitter {
 
   /**
    * Deliver formatted result back to WhatsApp
+   *
+   * Handles large results by:
+   * - Chunking into multiple messages (4KB-16KB results)
+   * - Using deep links for very large results (>16KB)
+   * - Adding small delay between messages to avoid rate limiting
+   *
+   * @param groupJid - WhatsApp group to send to
+   * @param sessionId - Session ID for deep link generation
+   * @param responseText - The agent's response text
    */
   async deliverResult(
     groupJid: string,
     sessionId: string,
-    sessionMessages: Message[],
+    responseText: string,
   ): Promise<void> {
     try {
-      // Format result for WhatsApp constraints
-      const formatted = formatResult(sessionMessages, sessionId)
-
-      // Send each message chunk
-      for (const resultMessage of formatted.messages) {
-        const messageId = await this.sendMessage(groupJid, resultMessage)
-        console.log(`✅ Result delivered: ${messageId}`)
+      // Skip empty responses
+      if (!responseText || responseText.trim().length === 0) {
+        console.log(`Skipping empty response for session ${sessionId}`)
+        return
       }
 
-      // Log delivery in main window
+      // Format result for WhatsApp constraints (handles chunking and deep links)
+      const messages = formatLargeResult(responseText, this.workspaceId, sessionId)
+
+      // Send each message with a small delay to avoid rate limiting
+      for (let i = 0; i < messages.length; i++) {
+        const resultMessage = messages[i]
+
+        // Add delay between messages (not before first message)
+        if (i > 0) {
+          await this.delay(MESSAGE_SEND_DELAY_MS)
+        }
+
+        const messageId = await this.sendMessage(groupJid, resultMessage)
+        console.log(`Result delivered (${i + 1}/${messages.length}): ${messageId}`)
+      }
+
+      // Emit event for logging/monitoring
       this.emit('result_delivered', {
         sessionId,
-        messageCount: formatted.messages.length,
-        truncated: formatted.truncated,
+        groupJid,
+        messageCount: messages.length,
+        totalLength: responseText.length,
+        timestamp: Date.now(),
       })
+
+      console.log(`All ${messages.length} message(s) delivered to ${groupJid}`)
     } catch (error) {
       console.error('Failed to deliver WhatsApp result:', error)
-      this.emit('delivery_error', { sessionId, error })
+      this.emit('delivery_error', {
+        sessionId,
+        groupJid,
+        error,
+        timestamp: Date.now(),
+      })
+      // Don't rethrow - delivery errors shouldn't crash the service
     }
+  }
+
+  /**
+   * Promise-based delay helper
+   */
+  private delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms))
   }
 }
 

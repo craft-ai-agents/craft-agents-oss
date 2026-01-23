@@ -194,7 +194,7 @@ describe('formatResult', () => {
       ]),
     ]
 
-    const result = formatResult(messages, 'session-1', 500) // Custom limit
+    const result = formatResult(messages, 'session-1', 'default', 500) // Custom limit
 
     expect(result.truncated).toBe(true)
   })
