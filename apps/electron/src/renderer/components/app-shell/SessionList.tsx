@@ -5,7 +5,9 @@ import { toast } from "sonner"
 import { useAtomValue, useSetAtom } from "jotai"
 
 import { cn, isHexColor } from "@/lib/utils"
-import { labelsAtom, labelsMapAtom, activeLabelFilterAtom, toggleLabelFilterAtom, clearLabelFilterAtom } from "@/atoms/labels"
+import { labelsMapAtom, activeLabelFilterAtom, toggleLabelFilterAtom, clearLabelFilterAtom } from "@/atoms/labels"
+import { useLabels } from "@/hooks/useLabels"
+import { useAppShellContext } from "@/context/AppShellContext"
 import { LabelBadge } from "@/components/ui/label-badge"
 import { rendererPerf } from "@/lib/perf"
 import { Spinner } from "@craft-agent/ui"
@@ -571,8 +573,11 @@ export function SessionList({
   const { navigate } = useNavigation()
   const navState = useNavigationState()
 
-  // Labels state
-  const labels = useAtomValue(labelsAtom)
+  // Get workspace ID for labels
+  const { activeWorkspaceId } = useAppShellContext()
+
+  // Labels state - use hook that subscribes to changes
+  const { labels } = useLabels(activeWorkspaceId)
   const labelsMap = useAtomValue(labelsMapAtom)
   const activeLabelFilter = useAtomValue(activeLabelFilterAtom)
   const toggleLabelFilter = useSetAtom(toggleLabelFilterAtom)

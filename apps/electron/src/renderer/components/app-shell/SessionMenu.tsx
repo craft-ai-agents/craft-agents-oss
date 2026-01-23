@@ -279,8 +279,8 @@ export function SessionMenu({
         </SubContent>
       </Sub>
 
-      {/* Labels submenu */}
-      {labels.length > 0 && onLabelsChange && (
+      {/* Labels submenu - always show so users can create first label */}
+      {onLabelsChange && (
         <Sub>
           <SubTrigger>
             <Tag className="h-3.5 w-3.5" />
@@ -290,25 +290,33 @@ export function SessionMenu({
             )}
           </SubTrigger>
           <SubContent>
-            {labels.map((label) => {
-              const isSelected = selectedLabelIds.includes(label.id)
-              return (
-                <MenuItem
-                  key={label.id}
-                  onClick={() => handleToggleLabel(label.id)}
-                  className={isSelected ? 'bg-foreground/5' : ''}
-                >
-                  <span
-                    className="w-3 h-3 rounded-full shrink-0"
-                    style={{ backgroundColor: label.color }}
-                  />
-                  <span className="flex-1">{label.name}</span>
-                  {isSelected && (
-                    <Check className="h-3.5 w-3.5 text-accent" />
-                  )}
-                </MenuItem>
-              )
-            })}
+            {labels.length === 0 ? (
+              <div className="px-2 py-3 text-center text-sm text-muted-foreground">
+                No labels yet.
+                <br />
+                <span className="text-xs">Create labels in Settings.</span>
+              </div>
+            ) : (
+              labels.map((label) => {
+                const isSelected = selectedLabelIds.includes(label.id)
+                return (
+                  <MenuItem
+                    key={label.id}
+                    onClick={() => handleToggleLabel(label.id)}
+                    className={isSelected ? 'bg-foreground/5' : ''}
+                  >
+                    <span
+                      className="w-3 h-3 rounded-full shrink-0"
+                      style={{ backgroundColor: label.color }}
+                    />
+                    <span className="flex-1">{label.name}</span>
+                    {isSelected && (
+                      <Check className="h-3.5 w-3.5 text-accent" />
+                    )}
+                  </MenuItem>
+                )
+              })
+            )}
           </SubContent>
         </Sub>
       )}
