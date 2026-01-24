@@ -1,6 +1,6 @@
 # Ralph Mode User Guide
 
-Welcome to the Ralph Mode user guide! This document will help you understand and use Ralph Mode and Ralph Loop in Vesper to automate your coding workflows.
+Welcome to the Ralph Mode user guide. This document will help you understand and use Ralph Mode and Ralph Loop in Vesper to automate your coding workflows.
 
 ---
 
@@ -71,7 +71,7 @@ When you enable Ralph Mode:
 - The interface signals that you're in an autonomous workflow state
 - Vesper is ready to process tasks from a PRD document
 
-**Note:** Ralph Mode is typically activated automatically when you start a Ralph Loop. You don't usually need to enable it manually.
+**Note:** Ralph Mode is typically activated automatically when you start a Ralph Loop. You don't usually need to enable it manually. The permission mode is locked during loop execution to prevent accidental changes.
 
 ---
 
@@ -94,6 +94,14 @@ In Ralph Loop, each task is called a "story." Stories are small, focused pieces 
 - "Add a login button to the header"
 - "Create a password reset form"
 - "Update the footer copyright year"
+
+### Key Capabilities
+
+- **Autonomy**: Process multiple stories without constant user intervention
+- **Structured Progress**: Track completion via checkbox-based PRDs
+- **Resilience**: Continue working even when individual stories fail
+- **Accountability**: Auto-commit changes with proper attribution
+- **Control**: Pause, resume, or cancel at any time
 
 ---
 
@@ -168,6 +176,14 @@ Let's break down what each part means:
 
 - The text below the header provides context and details for Vesper to understand what to do.
 
+### Supported Variations
+
+- `### [ ] US-001: Title` - Standard format with prefix
+- `### [ ] 001: Title` - Numeric only (no prefix)
+- `### [ ] STORY-001: Title` - Custom prefix
+- `### [x] US-001: Title` - Completed story (checkbox checked)
+- `### [X] US-001: Title` - Case-insensitive checkbox
+
 ### Tips for Writing Good Stories
 
 1. **Keep each story small and focused**
@@ -206,11 +222,19 @@ Let's break down what each part means:
 
 ### How to Initiate the Loop
 
-1. **Prepare your PRD**: Create a markdown file with your stories using the format described above
-2. **Open Vesper**: Make sure you have a session active
-3. **Start the loop**: You can start a Ralph Loop by:
-   - Providing your PRD content in the chat
-   - Referencing a PRD file in your project
+You can start a Ralph Loop in two ways:
+
+**Option A: Using the Accept Plan Button**
+1. Create or paste your PRD content in the chat
+2. Vesper will detect the PRD format and may offer to execute it
+3. Click "Accept Plan" to start the loop immediately
+
+**Option B: Manual Invocation**
+1. Ensure you have a PRD file in your project or paste the content
+2. Reference the PRD in the chat
+3. Ask Vesper to run it as a Ralph Loop
+
+The "Accept Plan" button provides direct invocation - it immediately starts the loop without requiring LLM interpretation, making it faster and more reliable.
 
 ### Configuration Options
 
@@ -234,7 +258,7 @@ For most users, the default settings work well. You only need to adjust these if
 When you start a Ralph Loop:
 
 1. Vesper parses your PRD to find all the stories
-2. The permission mode switches to Ralph (orange)
+2. The permission mode switches to Ralph (orange) and locks
 3. A progress indicator appears in the chat
 4. Vesper begins working on the first unchecked story
 5. You'll see real-time updates as work progresses
@@ -250,7 +274,7 @@ Once a Ralph Loop is running, you can monitor its progress through the progress 
 The progress indicator shows:
 
 ```
-Running | Story 3/5 [=======>     ] | US-003 Add auth | 4m 32s | [||] [X]
+Running | Story 3/5 [=======>     ] | US-003 Add auth | Iter 2/5 | 4m 32s | [||] [X]
 ```
 
 Let's break this down:
@@ -259,8 +283,29 @@ Let's break this down:
 - **Story 3/5**: Which story is being worked on (3rd of 5 total)
 - **Progress bar**: Visual representation of overall progress
 - **US-003 Add auth**: The ID and title of the current story
+- **Iter 2/5**: Current iteration (2nd attempt out of 5 max)
 - **4m 32s**: How long the loop has been running
 - **[||] [X]**: Pause and Cancel buttons
+
+### Expandable Sections
+
+The progress indicator has three collapsible sections:
+
+1. **Completed Stories**: Expand to see all finished stories with:
+   - Result icons (✅ success, ❌ failed, ⊘ skipped)
+   - Commit SHA (if auto-commit is enabled)
+   - Duration for each story
+
+2. **Activity Log**: Shows the last 20 tool executions:
+   - Bash commands
+   - File edits
+   - API calls
+   - Auto-scrolls to show latest activity
+
+3. **Error Details**: Auto-expands when a story fails:
+   - Full error message
+   - Error code
+   - Recovery options (Retry, Skip)
 
 ### Story Status
 
@@ -318,6 +363,11 @@ When you resume:
 
 Click the **Cancel button** (looks like an X) to stop the loop entirely.
 
+**Important:** A confirmation modal will appear before canceling. This prevents accidentally stopping potentially hours of work. The modal shows:
+- How many stories have been completed
+- Reminder that uncommitted work remains in your working directory
+- Options: "Continue Loop" or "Cancel Loop"
+
 When you cancel:
 - The current operation stops
 - The loop ends immediately
@@ -328,6 +378,15 @@ When you cancel:
 - You realize the PRD needs significant changes
 - Something went wrong that needs fixing
 - You want to take a different approach
+
+### How to Skip a Story
+
+If Vesper gets stuck on a particular story, you can skip it without canceling the entire loop:
+
+1. Click the **Skip Story** button
+2. The current story is marked as skipped with `[~]` checkbox
+3. The loop moves to the next pending story
+4. You can manually complete skipped stories later
 
 ### What Happens to Partial Work
 
@@ -342,6 +401,21 @@ You can always:
 2. Commit them manually if desired
 3. Discard them if needed
 4. Start a new loop to continue
+
+### Recovery from App Restart
+
+If the app crashes or closes during a loop:
+
+1. Loop state is automatically saved to disk
+2. On restart, you'll see a recovery prompt: "Ralph Loop was interrupted. Would you like to resume?"
+3. Choose "Resume" to continue where you left off
+4. Choose "Discard" to clear the interrupted loop state
+
+The recovery system preserves:
+- Completed stories list
+- Current story position
+- Elapsed time
+- Configuration settings
 
 ---
 
@@ -394,13 +468,38 @@ When the loop finishes:
 
 Remember: Ralph Loop automates the work, but you're still responsible for the final quality.
 
-### Additional Tips
+### Start with Clean Working Directory
 
-- **Write clear descriptions**: The more context you provide, the better the results
-- **Use consistent naming**: Keep your story IDs organized (US-001, US-002, etc.)
-- **Start fresh**: Begin with a clean working directory when possible
-- **Save your PRD**: Keep your PRD file for reference and future use
-- **Monitor the first few stories**: Watch how Vesper handles them before stepping away
+- Commit or stash any uncommitted changes before starting a loop
+- This makes it easier to see what the loop changed
+- Reduces the risk of merge conflicts
+
+### Use Consistent Naming
+
+- Keep your story IDs organized (US-001, US-002, etc.)
+- Use consistent prefixes within a PRD
+- Avoid reusing IDs across different PRDs
+
+### Write Clear Descriptions
+
+- The more context you provide, the better the results
+- Include specific acceptance criteria
+- Mention any constraints or requirements
+- Reference related files or components
+
+### Monitor the First Few Stories
+
+- Watch how Vesper handles the first 2-3 stories
+- Verify the quality and approach
+- Pause if adjustments are needed
+- Once confident, you can step away
+
+### Save Your PRD Files
+
+- Keep PRD files in your project repository
+- Use descriptive filenames (e.g., `prd-user-auth.md`)
+- This creates a record of what was implemented
+- Useful for future reference and documentation
 
 ---
 
@@ -428,7 +527,7 @@ Here are solutions to common issues you might encounter.
 - Review the story description - is it clear enough?
 - Break the story into smaller pieces
 - Check if the story depends on something that doesn't exist yet
-- Look at the error messages for clues
+- Look at the error messages for clues (expand Error Details section)
 - Try running the story manually first
 
 #### The loop is too slow
@@ -449,23 +548,42 @@ Here are solutions to common issues you might encounter.
 - Verify you're in a git repository
 - Check that auto-commit is enabled
 - Ensure there are actual file changes to commit
-- Look for git errors in the output
+- Look for git errors in the Activity Log
 
 #### The loop stops unexpectedly
 
 **Symptoms:** The loop ends before all stories are complete.
 
 **Solutions:**
-- Check if an error occurred (look for error messages)
+- Check if an error occurred (expand Error Details section)
 - Verify your PRD format is correct
 - Check if you accidentally clicked cancel
 - Review the timeout settings
+
+#### Loop won't start
+
+**Symptoms:** "Accept Plan" button doesn't start the loop.
+
+**Solutions:**
+- Verify the PRD format is valid
+- Check for duplicate story IDs
+- Ensure you're in a valid git repository (if auto-commit is enabled)
+- Check the console for error messages
+
+#### Permission mode is locked
+
+**Symptoms:** Can't change permission mode while loop is running.
+
+**Solutions:**
+- This is by design to prevent accidental interruptions
+- Pause or cancel the loop to unlock the mode
+- The mode automatically unlocks when the loop completes
 
 ### What to Do If a Story Fails
 
 When a story fails:
 
-1. **Check the error message**: It often tells you what went wrong
+1. **Check the error message**: The Error Details section shows what went wrong
 2. **Review the story description**: Was it clear and complete?
 3. **Look at partial changes**: See what Vesper attempted
 4. **Revise the story**: Rewrite it to be clearer or simpler
@@ -487,6 +605,7 @@ If you continue to have issues:
 - Review your PRD format against the examples in this guide
 - Try starting with a very simple PRD (one or two basic stories)
 - Check that your project is set up correctly (valid git repository, etc.)
+- Consult the technical documentation for advanced troubleshooting
 
 ---
 
@@ -509,14 +628,27 @@ If you continue to have issues:
 [Description and acceptance criteria]
 ```
 
-### Keyboard of Controls
+### Controls
 
 | Action | How to Do It |
 |--------|-------------|
+| Start the loop | Click "Accept Plan" button |
 | Pause the loop | Click the pause button (||) |
 | Resume the loop | Click the resume button |
-| Cancel the loop | Click the cancel button (X) |
+| Cancel the loop | Click the cancel button (X), confirm in modal |
+| Skip current story | Click the "Skip Story" button |
 | Check progress | View the progress indicator |
+| See completed stories | Expand "Completed Stories" section |
+| View activity log | Expand "Activity Log" section |
+| See error details | Expand "Error Details" section (auto-expands on failure) |
+
+### Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| Space | Pause/Resume |
+| Esc | Cancel (with confirmation) |
+| S | Skip Story |
 
 ### Status Colors
 

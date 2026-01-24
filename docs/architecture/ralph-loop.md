@@ -1,22 +1,33 @@
-# Ralph Loop - Autonomous Coding System
+# Ralph Loop - Technical Architecture
 
 ## Overview
 
-Ralph Loop is an autonomous coding system integrated into the Vesper/Electron application. It enables users to execute iterative, goal-driven coding loops directly from the chat interface. Ralph Loop processes a PRD (Product Requirements Document) with checkbox-formatted user stories, working through each story autonomously until completion or iteration limits are reached.
+Ralph Loop is an autonomous coding system integrated into the Vesper Electron application. It enables users to execute iterative, goal-driven coding loops directly from the chat interface. Ralph Loop processes a PRD (Product Requirements Document) with checkbox-formatted user stories, working through each story autonomously until completion or iteration limits are reached.
 
-### Key Capabilities
-
-- **Autonomy**: Process multiple stories without constant user intervention
-- **Structured Progress**: Track completion via checkbox-based PRDs
-- **Resilience**: Continue working even when individual stories fail
-- **Accountability**: Auto-commit changes with proper attribution
-- **Control**: Pause, resume, or cancel at any time
+This document provides comprehensive technical details for developers working on or integrating with the Ralph Loop system.
 
 ---
 
-## Architecture
+## Table of Contents
 
-### High-Level Design
+1. [High-Level Architecture](#high-level-architecture)
+2. [Core Components](#core-components)
+3. [Permission Mode System](#permission-mode-system)
+4. [PRD Format Specification](#prd-format-specification)
+5. [IPC API](#ipc-api)
+6. [Event System](#event-system)
+7. [Configuration](#configuration)
+8. [Execution Flow](#execution-flow)
+9. [UI Integration](#ui-integration)
+10. [Main Process Integration](#main-process-integration)
+11. [Type Definitions](#type-definitions)
+12. [State Persistence](#state-persistence)
+13. [Security Considerations](#security-considerations)
+14. [Design Decisions](#design-decisions)
+
+---
+
+## High-Level Architecture
 
 ```
 +---------------------------------------------------------------------+
@@ -49,16 +60,33 @@ Ralph Loop is an autonomous coding system integrated into the Vesper/Electron ap
 |  |  - Current iteration (2/5)                                    |  |
 |  |  - Elapsed time                                               |  |
 |  |  - Pause/Cancel controls                                      |  |
+|  |  - Expandable sections (Completed, Activity, Errors)          |  |
 |  +---------------------------------------------------------------+  |
 +---------------------------------------------------------------------+
 ```
 
-### Core Components
+### Key Design Decisions
 
-#### 1. RalphLoopRunner (`packages/shared/src/ralph-loop/loop-runner.ts`)
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| Agent Integration | Use Claude Agent SDK directly | Avoids CLI spawning overhead, integrates with existing permission system |
+| Process Location | Main process | Simpler IPC, direct access to SessionManager and git operations |
+| State Management | Extend session state with loop metadata | Consistent with Vesper's Jotai atom architecture |
+| PRD Format | Markdown with `### [ ] US-XXX:` syntax | Compatible with standard checkbox format, easy to edit |
+| Permission Handling | Respect session's current mode | Maintains safety, locks mode during execution |
+| Loop Invocation | Direct IPC call | Faster, more reliable than LLM-mediated flow |
 
-The central orchestrator for loop execution. Key responsibilities:
+---
 
+## Core Components
+
+### 1. RalphLoopRunner
+
+**Location:** `packages/shared/src/ralph-loop/loop-runner.ts`
+
+The central orchestrator for loop execution.
+
+**Responsibilities:**
 - Manages loop lifecycle (start, pause, resume, cancel)
 - Processes stories sequentially
 - Controls iterations per story (default: 5)
@@ -66,6 +94,8 @@ The central orchestrator for loop execution. Key responsibilities:
 - Emits progress events
 - Coordinates with CraftAgent for story execution
 - Integrates with git operations for commit verification
+
+**Interface:**
 
 ```typescript
 export class RalphLoopRunner extends EventEmitter {
@@ -85,14 +115,33 @@ export class RalphLoopRunner extends EventEmitter {
 }
 ```
 
-#### 2. PRD Parser (`packages/shared/src/ralph-loop/prd-parser.ts`)
+**Event Emissions:**
 
-Parses markdown PRD documents into structured story objects:
+```typescript
+export type LoopRunnerEvent =
+  | { type: 'progress'; state: LoopState }
+  | { type: 'story_start'; story: Story }
+  | { type: 'story_complete'; story: Story; result: StoryResult }
+  | { type: 'iteration'; iteration: number; story: Story }
+  | { type: 'error'; error: LoopError }
+  | { type: 'complete'; result: LoopResult }
+  | { type: 'paused'; state: LoopState }
+  | { type: 'resumed'; state: LoopState }
+```
 
+### 2. PRD Parser
+
+**Location:** `packages/shared/src/ralph-loop/prd-parser.ts`
+
+Parses markdown PRD documents into structured story objects.
+
+**Responsibilities:**
 - Extracts checkbox-formatted user stories
 - Tracks story status (pending, completed, failed, skipped)
 - Maintains line numbers for marking stories complete
 - Validates PRD format and detects duplicates
+
+**Interface:**
 
 ```typescript
 export function parsePRD(markdown: string): PRD
@@ -104,9 +153,48 @@ export function validatePRD(markdown: string): { isValid: boolean; error?: strin
 export function generateStoryPrompt(story: Story, prdPath?: string): string
 ```
 
-#### 3. Git Operations (`packages/shared/src/ralph-loop/git-ops.ts`)
+**Story Structure:**
 
-Handles git operations for commit tracking and auto-commit:
+```typescript
+export interface Story {
+  /** Story identifier (e.g., "US-001") */
+  id: string
+  /** Story title from the checkbox line */
+  title: string
+  /** Line number in original PRD (for marking complete) */
+  lineNumber: number
+  /** Full story block content including description */
+  content: string
+  /** Current status of this story */
+  status: StoryStatus  // 'pending' | 'in_progress' | 'completed' | 'failed' | 'skipped'
+}
+```
+
+**PRD Structure:**
+
+```typescript
+export interface PRD {
+  /** Original markdown source */
+  source: string
+  /** Extracted stories */
+  stories: Story[]
+  /** PRD metadata */
+  metadata: {
+    totalStories: number
+    completedStories: number
+    pendingStories: number
+    failedStories: number
+  }
+}
+```
+
+### 3. Git Operations
+
+**Location:** `packages/shared/src/ralph-loop/git-ops.ts`
+
+Handles git operations for commit tracking and auto-commit.
+
+**Interface:**
 
 ```typescript
 export interface GitOperations {
@@ -118,9 +206,21 @@ export interface GitOperations {
   getLastCommitMessage(): Promise<string>
   isGitRepository(): Promise<boolean>
 }
+
+export function createGitOperations(workingDirectory: string): GitOperations
 ```
 
-#### 4. Module Index (`packages/shared/src/ralph-loop/index.ts`)
+**Auto-commit Message Format:**
+
+```
+feat(US-XXX): story title
+
+Auto-committed by Ralph Loop
+```
+
+### 4. Module Index
+
+**Location:** `packages/shared/src/ralph-loop/index.ts`
 
 Exports all public types and functions for the Ralph Loop system.
 
@@ -132,6 +232,7 @@ Exports all public types and functions for the Ralph Loop system.
 | `packages/shared/src/ralph-loop/loop-runner.ts` | Main loop orchestration |
 | `packages/shared/src/ralph-loop/prd-parser.ts` | PRD parsing and validation |
 | `packages/shared/src/ralph-loop/git-ops.ts` | Git commit operations |
+| `packages/shared/src/ralph-loop/state-storage.ts` | Loop state persistence |
 | `packages/shared/src/ralph-loop/index.ts` | Module exports |
 | `apps/electron/src/main/sessions.ts` | IPC handlers and integration |
 | `apps/electron/src/renderer/components/loop/` | UI components |
@@ -139,19 +240,20 @@ Exports all public types and functions for the Ralph Loop system.
 
 ---
 
-## Permission Mode
+## Permission Mode System
 
 ### The 'ralph' Permission Mode
 
 Ralph Loop introduces a dedicated permission mode (`'ralph'`) optimized for autonomous execution workflows.
 
-#### Mode Definition (`packages/shared/src/agent/mode-types.ts`)
+**Mode Definition:**
 
 ```typescript
+// packages/shared/src/agent/mode-types.ts
 export type PermissionMode = 'safe' | 'ask' | 'allow-all' | 'ralph';
 ```
 
-#### Mode Characteristics
+**Mode Characteristics:**
 
 | Mode | Display Name | Description | Color |
 |------|--------------|-------------|-------|
@@ -160,7 +262,7 @@ export type PermissionMode = 'safe' | 'ask' | 'allow-all' | 'ralph';
 | `allow-all` | Execute | Everything allowed, no prompts | Purple |
 | `ralph` | Ralph | Autonomous loop mode for automated workflows | Orange |
 
-#### How Ralph Mode Differs
+**How Ralph Mode Differs:**
 
 The `ralph` mode provides the same capabilities as `allow-all` but is explicitly designed for automated workflows:
 
@@ -168,17 +270,19 @@ The `ralph` mode provides the same capabilities as `allow-all` but is explicitly
 - **No prompts**: Operations execute without user confirmation
 - **Optimized for loops**: Designed for multi-story autonomous execution
 - **Clear signal**: Indicates the session is in an automated workflow state
+- **Mode locking**: Permission mode is locked during loop execution to prevent accidental changes
 
-#### Mode Manager Integration (`packages/shared/src/agent/mode-manager.ts`)
+**Mode Manager Integration:**
 
 ```typescript
+// packages/shared/src/agent/mode-manager.ts
 // Ralph mode is treated like allow-all for permissions
 if (mode === 'allow-all' || mode === 'ralph') {
   return { allowed: true };
 }
 ```
 
-#### UI Configuration
+**UI Configuration:**
 
 ```typescript
 'ralph': {
@@ -195,11 +299,11 @@ if (mode === 'allow-all' || mode === 'ralph') {
 }
 ```
 
-**Note**: Ralph mode is not included in the standard `PERMISSION_MODE_ORDER` for SHIFT+TAB cycling - it is set programmatically when a loop starts.
+**Note:** Ralph mode is not included in the standard `PERMISSION_MODE_ORDER` for SHIFT+TAB cycling - it is set programmatically when a loop starts and locked during execution.
 
 ---
 
-## PRD Format
+## PRD Format Specification
 
 ### Expected Markdown Format
 
@@ -234,6 +338,13 @@ The parser uses this regex pattern to match story headers:
 const STORY_HEADER_PATTERN = /^###\s*\[([ xX])\]\s*([A-Za-z]*-?\d+):\s*(.+)$/
 ```
 
+**Components:**
+- `###` - Level 3 markdown heading
+- `\[([ xX])\]` - Checkbox (space for unchecked, x/X for checked)
+- `([A-Za-z]*-?\d+)` - Story ID (optional prefix, required number)
+- `:` - Separator
+- `(.+)` - Story title
+
 ### Supported Variations
 
 - `### [ ] US-001: Title` - Standard format with prefix
@@ -242,60 +353,16 @@ const STORY_HEADER_PATTERN = /^###\s*\[([ xX])\]\s*([A-Za-z]*-?\d+):\s*(.+)$/
 - `### [x] US-001: Title` - Completed story (checkbox checked)
 - `### [X] US-001: Title` - Case-insensitive checkbox
 
-### Story Structure
-
-```typescript
-export interface Story {
-  /** Story identifier (e.g., "US-001") */
-  id: string
-  /** Story title from the checkbox line */
-  title: string
-  /** Line number in original PRD (for marking complete) */
-  lineNumber: number
-  /** Full story block content including description */
-  content: string
-  /** Current status of this story */
-  status: StoryStatus  // 'pending' | 'in_progress' | 'completed' | 'failed' | 'skipped'
-}
-```
-
-### PRD Structure
-
-```typescript
-export interface PRD {
-  /** Original markdown source */
-  source: string
-  /** Extracted stories */
-  stories: Story[]
-  /** PRD metadata */
-  metadata: {
-    totalStories: number
-    completedStories: number
-    pendingStories: number
-    failedStories: number
-  }
-}
-```
-
 ---
 
 ## IPC API
 
 ### IPC Channels
 
-The following IPC channels are registered for Ralph Loop control:
-
-| Channel | Purpose |
-|---------|---------|
-| `loop:start` | Start a new loop with PRD content |
-| `loop:pause` | Pause the running loop |
-| `loop:resume` | Resume a paused loop |
-| `loop:cancel` | Cancel the loop immediately |
-| `loop:getState` | Get current loop state |
-
-### Channel Definitions (`apps/electron/src/shared/types.ts`)
+**Channel Definitions:**
 
 ```typescript
+// apps/electron/src/shared/types.ts
 export const IPC_CHANNELS = {
   // ... other channels
 
@@ -305,6 +372,8 @@ export const IPC_CHANNELS = {
   LOOP_RESUME: 'loop:resume',
   LOOP_CANCEL: 'loop:cancel',
   LOOP_GET_STATE: 'loop:getState',
+  LOOP_SKIP_STORY: 'loop:skipStory',
+  LOOP_RECOVER: 'loop:recover',
 } as const
 ```
 
@@ -318,10 +387,14 @@ interface ElectronAPI {
   loopResume(sessionId: string): Promise<void>
   loopCancel(sessionId: string): Promise<void>
   loopGetState(sessionId: string): Promise<LoopStateUI | null>
+  loopSkipStory(sessionId: string): Promise<void>
+  loopRecover(sessionId: string): Promise<void>
 }
 ```
 
-### Preload Bindings (`apps/electron/src/preload/index.ts`)
+### Preload Bindings
+
+**Location:** `apps/electron/src/preload/index.ts`
 
 ```typescript
 // Ralph Loop (autonomous coding loops)
@@ -331,11 +404,13 @@ loopPause: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.LOOP_PAUSE, se
 loopResume: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.LOOP_RESUME, sessionId),
 loopCancel: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.LOOP_CANCEL, sessionId),
 loopGetState: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.LOOP_GET_STATE, sessionId),
+loopSkipStory: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.LOOP_SKIP_STORY, sessionId),
+loopRecover: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.LOOP_RECOVER, sessionId),
 ```
 
 ---
 
-## Event Types
+## Event System
 
 ### SessionEvent Union Types
 
@@ -358,32 +433,33 @@ export type SessionEvent =
 
 ### Event Descriptions
 
-| Event | Description |
-|-------|-------------|
-| `loop_started` | Loop execution has begun |
-| `loop_progress` | Real-time updates during loop execution |
-| `loop_story_complete` | A single story finished processing |
-| `loop_complete` | Entire loop finished successfully |
-| `loop_paused` | Loop was paused by user |
-| `loop_resumed` | Loop was resumed after pause |
-| `loop_cancelled` | Loop was cancelled by user |
-| `loop_error` | Error during loop execution |
+| Event | Description | Emitted When |
+|-------|-------------|--------------|
+| `loop_started` | Loop execution has begun | Loop starts successfully |
+| `loop_progress` | Real-time updates during loop execution | Every iteration, story change, or time threshold |
+| `loop_story_complete` | A single story finished processing | Story succeeds, fails, or is skipped |
+| `loop_complete` | Entire loop finished successfully | All stories processed or loop cancelled |
+| `loop_paused` | Loop was paused by user | User clicks pause button |
+| `loop_resumed` | Loop was resumed after pause | User clicks resume button |
+| `loop_cancelled` | Loop was cancelled by user | User confirms cancellation |
+| `loop_error` | Error during loop execution | Fatal error or story failure |
 
-### RalphLoopRunner Events
+### Event Handlers
 
-The runner emits strongly-typed events:
+**Location:** `apps/electron/src/renderer/event-processor/handlers/loop.ts`
 
 ```typescript
-export type LoopRunnerEvent =
-  | { type: 'progress'; state: LoopState }
-  | { type: 'story_start'; story: Story }
-  | { type: 'story_complete'; story: Story; result: StoryResult }
-  | { type: 'iteration'; iteration: number; story: Story }
-  | { type: 'error'; error: LoopError }
-  | { type: 'complete'; result: LoopResult }
-  | { type: 'paused'; state: LoopState }
-  | { type: 'resumed'; state: LoopState }
+export function handleLoopStarted(state: SessionState, event: LoopStartedEvent): SessionState
+export function handleLoopProgress(state: SessionState, event: LoopProgressEvent): SessionState
+export function handleLoopStoryComplete(state: SessionState, event: LoopStoryCompleteEvent): SessionState
+export function handleLoopComplete(state: SessionState, event: LoopCompleteEvent): SessionState
+export function handleLoopPaused(state: SessionState, event: LoopPausedEvent): SessionState
+export function handleLoopResumed(state: SessionState, event: LoopResumedEvent): SessionState
+export function handleLoopCancelled(state: SessionState, event: LoopCancelledEvent): SessionState
+export function handleLoopError(state: SessionState, event: LoopErrorEvent): SessionState
 ```
+
+These are pure functions that return new state - no side effects.
 
 ---
 
@@ -435,7 +511,8 @@ export interface LoopConfigInput {
 ```
 1. Parse PRD into structured stories
 2. Validate PRD (check for duplicates, valid format)
-3. For each pending story:
+3. Lock permission mode to 'ralph'
+4. For each pending story:
    a. Capture current git HEAD
    b. Mark story as in_progress
    c. For each iteration (up to maxIterationsPerStory):
@@ -446,9 +523,11 @@ export interface LoopConfigInput {
       v.   If success, verify/create commit
       vi.  If failure, continue to next iteration
    d. Mark story result (success/failed/timeout)
-   e. Check for pause/cancel
-   f. Emit story_complete event
-4. Emit loop_complete with summary
+   e. Emit story_complete event
+   f. Check for pause/cancel
+   g. Persist loop state
+5. Emit loop_complete with summary
+6. Unlock permission mode
 ```
 
 ### Iteration Control
@@ -498,6 +577,13 @@ const message = `feat(${storyId}): ${title}\n\nAuto-committed by Ralph Loop`
 - **Resume**: Clears `isPaused` flag and continues with next story
 - **Cancel**: Sets `isCancelled` flag and aborts current operation immediately
 
+### Skip Story
+
+- **Skip**: Marks current story as skipped with `[~]` checkbox
+- Moves to next pending story
+- Updates PRD with skip marker
+- Emits story_complete event with 'skipped' result
+
 ---
 
 ## UI Integration
@@ -535,6 +621,12 @@ export interface LoopStateUI {
   }
   /** Elapsed time in milliseconds */
   elapsedMs?: number
+  /** Completed stories list */
+  completedStories?: CompletedStory[]
+  /** Activity log (last 20 actions) */
+  activityLog?: ActivityLogEntry[]
+  /** Error history */
+  errorHistory?: LoopError[]
   /** Summary (available after completion) */
   summary?: {
     totalStories: number
@@ -549,7 +641,7 @@ export interface LoopStateUI {
 
 ### LoopProgressIndicator Component
 
-Located at `apps/electron/src/renderer/components/loop/LoopProgressIndicator.tsx`:
+**Location:** `apps/electron/src/renderer/components/loop/LoopProgressIndicator.tsx`
 
 ```tsx
 export interface LoopProgressIndicatorProps {
@@ -561,6 +653,8 @@ export interface LoopProgressIndicatorProps {
   onResume?: () => void
   /** Callback when cancel button is clicked */
   onCancel?: () => void
+  /** Callback when skip story button is clicked */
+  onSkipStory?: () => void
   /** Additional class name */
   className?: string
 }
@@ -570,34 +664,41 @@ export interface LoopProgressIndicatorProps {
 
 ```
 +------------------------------------------------------------------+
-| Running    | Story 3/5 [=======>     ] | US-003 Add auth | 4m 32s | [||] [X]
+| Running    | Story 3/5 [=======>     ] | US-003 Add auth | 4m 32s | [||] [Skip] [X]
++------------------------------------------------------------------+
+| ▼ Completed Stories (2/5)                                        |
+|   ✅ US-001: Create login form (2m 15s) [abc123]                |
+|   ✅ US-002: Add form styling (1m 30s) [def456]                 |
++------------------------------------------------------------------+
+| ▼ Activity Log                                                   |
+|   [14:23:45] Bash: npm install                                   |
+|   [14:24:01] Edit: src/components/LoginForm.tsx                  |
+|   [14:24:23] Bash: git add .                                     |
++------------------------------------------------------------------+
+| ▼ Error Details                                                  |
+|   [Auto-expands when error occurs]                               |
 +------------------------------------------------------------------+
 ```
 
-Features:
+**Features:**
 - Status indicator with icon (running/paused/completed/cancelled/error)
 - Story progress bar and count
 - Current story ID and title
 - Iteration counter
 - Elapsed time display
-- Pause/Resume and Cancel buttons
+- Pause/Resume, Skip Story, and Cancel buttons
+- Three expandable sections: Completed Stories, Activity Log, Error Details
 
-### Event Handlers
+### UI Components
 
-Located at `apps/electron/src/renderer/event-processor/handlers/loop.ts`:
+**Location:** `apps/electron/src/renderer/components/loop/`
 
-```typescript
-handleLoopStarted(state, event): SessionState
-handleLoopProgress(state, event): SessionState
-handleLoopStoryComplete(state, event): SessionState
-handleLoopComplete(state, event): SessionState
-handleLoopPaused(state, event): SessionState
-handleLoopResumed(state, event): SessionState
-handleLoopCancelled(state, event): SessionState
-handleLoopError(state, event): SessionState
-```
-
-These are pure functions that return new state - no side effects.
+- `LoopProgressIndicator.tsx` - Main progress display
+- `LoopSummaryCard.tsx` - Completion summary
+- `CompletedStoriesList.tsx` - Expandable completed stories list
+- `ActivityLogViewer.tsx` - Expandable activity log with virtualization
+- `ErrorDetailsSection.tsx` - Error display with recovery options
+- `ConfirmCancelLoopModal.tsx` - Confirmation modal for cancel action
 
 ---
 
@@ -605,7 +706,9 @@ These are pure functions that return new state - no side effects.
 
 ### SessionManager Methods
 
-The `SessionManager` class in `apps/electron/src/main/sessions.ts` implements the loop control methods:
+**Location:** `apps/electron/src/main/sessions.ts`
+
+The `SessionManager` class implements the loop control methods:
 
 ```typescript
 class SessionManager {
@@ -624,14 +727,23 @@ class SessionManager {
   /** Cancel a running loop */
   async cancelLoop(sessionId: string): Promise<void>
 
+  /** Skip current story in running loop */
+  async skipCurrentStory(sessionId: string): Promise<void>
+
   /** Get current loop state for a session */
   getLoopState(sessionId: string): LoopStateUI | null
+
+  /** Persist loop state to disk */
+  private async persistLoopState(sessionId: string): Promise<void>
+
+  /** Recover loop state from disk */
+  private async recoverLoopState(sessionId: string): Promise<PersistedLoopState | null>
 }
 ```
 
 ### IPC Handlers
 
-IPC handlers in `apps/electron/src/main/ipc.ts`:
+**Location:** `apps/electron/src/main/ipc.ts`
 
 ```typescript
 ipcMain.handle(IPC_CHANNELS.LOOP_START, async (_event, sessionId, prdContent, config) => {
@@ -652,6 +764,10 @@ ipcMain.handle(IPC_CHANNELS.LOOP_CANCEL, async (_event, sessionId) => {
 
 ipcMain.handle(IPC_CHANNELS.LOOP_GET_STATE, async (_event, sessionId) => {
   return sessionManager.getLoopState(sessionId)
+})
+
+ipcMain.handle(IPC_CHANNELS.LOOP_SKIP_STORY, async (_event, sessionId) => {
+  await sessionManager.skipCurrentStory(sessionId)
 })
 ```
 
@@ -750,7 +866,31 @@ export interface LoopState {
 }
 ```
 
-### Persistence Types
+### UI-Specific Types
+
+```typescript
+export interface CompletedStory {
+  id: string
+  title: string
+  result: 'success' | 'failed' | 'skipped' | 'timeout'
+  commitSha?: string
+  durationMs: number
+}
+
+export interface ActivityLogEntry {
+  timestamp: number
+  tool: string
+  summary: string
+}
+```
+
+---
+
+## State Persistence
+
+### Persistence Storage
+
+**Location:** `packages/shared/src/ralph-loop/state-storage.ts`
 
 ```typescript
 export interface PersistedLoopState {
@@ -767,7 +907,158 @@ export interface PersistedLoopState {
   startTime: number
   lastUpdated: number
 }
+
+export class LoopStateStorage {
+  constructor(private workspacePath: string) {}
+
+  save(state: PersistedLoopState): Promise<void>
+  load(loopId: string): Promise<PersistedLoopState | null>
+  getActiveLoop(sessionId: string): Promise<PersistedLoopState | null>
+  clear(loopId: string): Promise<void>
+}
 ```
+
+**Storage Location:** `~/.vesper/workspaces/{id}/sessions/{sessionId}_loop.json`
+
+### Recovery on App Restart
+
+When session loads, check for active loop state:
+
+1. If found, show recovery prompt: "Ralph Loop was interrupted. Would you like to resume?"
+2. User can choose to resume or discard
+3. Resuming restores:
+   - Completed stories list
+   - Current story position
+   - Elapsed time
+   - Configuration settings
+
+**Implementation:**
+
+```typescript
+// On app startup
+const persistedState = await loopStateStorage.getActiveLoop(sessionId)
+if (persistedState) {
+  // Show recovery modal
+  const shouldRecover = await showRecoveryPrompt(persistedState)
+  if (shouldRecover) {
+    await sessionManager.recoverLoop(sessionId, persistedState)
+  } else {
+    await loopStateStorage.clear(persistedState.loopId)
+  }
+}
+```
+
+---
+
+## Security Considerations
+
+### Permission Mode Locking
+
+- Permission mode is locked to 'ralph' during loop execution
+- Prevents accidental mode changes that could interrupt the loop
+- Automatically unlocks when loop completes, is cancelled, or encounters fatal error
+
+### Auto-commit Safety
+
+- Only creates commits if there are actual changes
+- Verifies git repository exists before attempting commits
+- Uses standard git commit format for traceability
+- Includes "Auto-committed by Ralph Loop" attribution
+
+### Story Isolation
+
+- Each story runs in isolated agent context
+- Failures in one story don't affect subsequent stories
+- Uncommitted changes remain in working directory for review
+
+### Timeout Protection
+
+- Per-story timeout prevents infinite loops
+- Default 10-minute timeout per story
+- Configurable based on story complexity
+
+### Error Handling
+
+- All errors are categorized with error codes
+- Error details preserved in state
+- User can review error messages and recovery options
+- Fatal errors halt the loop and preserve state
+
+---
+
+## Design Decisions
+
+### Alternative Approaches Considered
+
+#### 1. CLI Spawning (Rejected)
+
+**Approach:** Spawn `ralph` CLI as child process, capture stdout for progress.
+
+**Pros:**
+- Direct reuse of existing Ralph Loop code
+- No SDK integration needed
+
+**Cons:**
+- Bypasses Vesper's safety model
+- No integration with Vesper's permission prompts
+- Process management complexity
+- Stdout parsing is fragile
+
+**Decision:** Rejected. Safety and integration benefits of SDK approach outweigh reuse benefits.
+
+#### 2. Utility Process Worker (Considered)
+
+**Approach:** Run loop in Electron UtilityProcess for isolation.
+
+**Pros:**
+- Won't block main process
+- Clean separation
+
+**Cons:**
+- Complex IPC for agent operations
+- CraftAgent not designed for utility process context
+- Overkill for current needs
+
+**Decision:** Defer. Start with main process, migrate if performance issues arise.
+
+#### 3. Background Session (Considered)
+
+**Approach:** Create separate background session for loop, run in parallel.
+
+**Pros:**
+- User can continue chatting while loop runs
+- Clean session isolation
+
+**Cons:**
+- May confuse users with multiple sessions
+- Complex state synchronization
+- Resource intensive
+
+**Decision:** Defer to future enhancement. Start with foreground loop in current session.
+
+#### 4. LLM-Mediated Invocation (Rejected)
+
+**Approach:** Keep the current message-based flow but enhance Claude's prompt to reliably invoke Ralph Loop.
+
+**Pros:**
+- Minimal code changes
+- Preserves flexibility (Claude can choose manual execution if appropriate)
+
+**Cons:**
+- Still unreliable (LLM behavior isn't deterministic)
+- Slower (requires API round-trip)
+- Doesn't solve fundamental UX issue (users expect direct action)
+
+**Decision:** Rejected. Direct IPC invocation is more reliable, faster, and clearer for users.
+
+### Key Architectural Decisions
+
+1. **Direct IPC Invocation**: "Accept Plan" button calls IPC directly for immediate, reliable loop start
+2. **Permission Mode Locking**: Prevents accidental interruptions during autonomous execution
+3. **Three-Section Progress UI**: Completed Stories, Activity Log, and Error Details provide comprehensive visibility
+4. **State Persistence**: Enables recovery from app crashes without losing work
+5. **Skip Story Feature**: Allows users to bypass stuck stories without canceling entire loop
+6. **Confirmation Modal**: Prevents accidental cancellation of long-running loops
 
 ---
 
@@ -814,6 +1105,9 @@ await window.electronAPI.loopPause(sessionId);
 // Resume
 await window.electronAPI.loopResume(sessionId);
 
+// Skip current story
+await window.electronAPI.loopSkipStory(sessionId);
+
 // Cancel
 await window.electronAPI.loopCancel(sessionId);
 
@@ -847,18 +1141,25 @@ useEffect(() => {
 
 ### Internal Files
 
-- Loop types: `/Users/tinnguyen/vesper/packages/shared/src/ralph-loop/types.ts`
-- Loop runner: `/Users/tinnguyen/vesper/packages/shared/src/ralph-loop/loop-runner.ts`
-- PRD parser: `/Users/tinnguyen/vesper/packages/shared/src/ralph-loop/prd-parser.ts`
-- Git operations: `/Users/tinnguyen/vesper/packages/shared/src/ralph-loop/git-ops.ts`
-- Mode types: `/Users/tinnguyen/vesper/packages/shared/src/agent/mode-types.ts`
-- Mode manager: `/Users/tinnguyen/vesper/packages/shared/src/agent/mode-manager.ts`
-- Session manager: `/Users/tinnguyen/vesper/apps/electron/src/main/sessions.ts`
-- IPC types: `/Users/tinnguyen/vesper/apps/electron/src/shared/types.ts`
-- Preload bindings: `/Users/tinnguyen/vesper/apps/electron/src/preload/index.ts`
-- Event handlers: `/Users/tinnguyen/vesper/apps/electron/src/renderer/event-processor/handlers/loop.ts`
-- UI components: `/Users/tinnguyen/vesper/apps/electron/src/renderer/components/loop/`
+- Loop types: `packages/shared/src/ralph-loop/types.ts`
+- Loop runner: `packages/shared/src/ralph-loop/loop-runner.ts`
+- PRD parser: `packages/shared/src/ralph-loop/prd-parser.ts`
+- Git operations: `packages/shared/src/ralph-loop/git-ops.ts`
+- State storage: `packages/shared/src/ralph-loop/state-storage.ts`
+- Mode types: `packages/shared/src/agent/mode-types.ts`
+- Mode manager: `packages/shared/src/agent/mode-manager.ts`
+- Session manager: `apps/electron/src/main/sessions.ts`
+- IPC types: `apps/electron/src/shared/types.ts`
+- Preload bindings: `apps/electron/src/preload/index.ts`
+- Event handlers: `apps/electron/src/renderer/event-processor/handlers/loop.ts`
+- UI components: `apps/electron/src/renderer/components/loop/`
 
 ### Related Documentation
 
-- Plan: `/Users/tinnguyen/vesper/plans/feat-ralph-loop-integration.md`
+- User Guide: `docs/ralph-mode-user-guide.md`
+- Contributing: `CONTRIBUTING.md`
+- Security: `SECURITY.md`
+
+---
+
+*Last Updated: 2026-01-23*
