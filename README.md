@@ -43,7 +43,11 @@ bun run electron:start
 - **Command Palette**: Fast navigation with CMD+K command palette for session management
 - **Vector Search**: Semantic search over markdown documentation using QMD with collection management
 - **Document Viewer**: Integrated document preview for search results with rich formatting
-- **Cron Scheduler**: Visual cron-based scheduling for automated agent tasks with time picker and preset schedules
+- **Cron Scheduler**: Visual cron-based scheduling with session continuation across executions
+- **Skills Marketplace**: Browse and install skills from skills.sh with one-click installation
+- **Terminal Resume**: Resume Claude Agent SDK sessions in external terminal (cross-platform)
+- **Session Labels**: Organize sessions with customizable color-coded labels
+- **Session Sharing**: Share sessions via pluggable backends (craft.do or static HTML export)
 - **MCP Integration**: Connect to MCP servers (Craft, Linear, GitHub, Notion, custom)
 - **Sources**: Connect to REST APIs (Google, Slack, Microsoft) and local filesystems
 - **WhatsApp Integration**: Connect WhatsApp to receive and respond to messages via AI agents with permission directives
@@ -73,6 +77,26 @@ bun run electron:start
 - **Session Naming**: AI-generated titles or manual naming
 - **Session Persistence**: Full conversation history saved to disk
 
+### Skills Marketplace
+
+Browse and install agent skills from the skills.sh marketplace:
+
+1. Navigate to **Skills** in the sidebar
+2. Toggle to **Marketplace** view
+3. Search for skills by name or description
+4. Click **Install** to add skills to your workspace
+
+Skills provide specialized agent instructions for specific tasks like React best practices, code review, and more.
+
+### Session Labels
+
+Organize your sessions with customizable labels:
+
+1. Go to **Settings** → **Labels** to manage workspace labels
+2. Create labels with custom names and colors (8-color palette)
+3. Right-click any session to assign labels
+4. Filter sessions by label in the inbox
+
 ### Sources
 
 Connect external data sources to your workspace:
@@ -92,6 +116,15 @@ Connect external data sources to your workspace:
 | `allow-all` | Auto | Auto-approves all commands |
 
 Use **SHIFT+TAB** to cycle through modes in the chat interface.
+
+### Terminal Resume
+
+Resume your Vespr session in an external terminal for Claude Code CLI access:
+
+1. Start a session and send at least one message
+2. Click the **terminal icon** in the chat input area (appears after working directory badge)
+3. A new terminal window opens with your session automatically resumed
+4. Works on macOS (Terminal.app), Linux (gnome-terminal, konsole, xterm), and Windows (Windows Terminal, PowerShell, cmd.exe)
 
 ### Keyboard Shortcuts
 

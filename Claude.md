@@ -12,50 +12,63 @@ Vespr leverages the Claude Agent SDK and Claude Code while adding significant im
 
 ## Recent Major Features (Past 12 Hours)
 
-### 1. Command Palette (CMD+K)
-- **Location:** `apps/electron/src/renderer/components/command-palette/`
-- **Shortcut:** `Cmd+K`
-- **Functionality:** Fast navigation and session management
-- **Files:** `CommandPalette.tsx`, `command-palette.ts` (atoms)
-
-### 2. Vector Search & Semantic Search
-- **Location:** `apps/electron/src/renderer/components/vector-search/`
+### 1. Skills Marketplace Integration
+- **Location:** `apps/electron/src/renderer/components/skills/`
 - **Features:**
-  - QMD-based semantic search over markdown documentation
-  - Collection management with modal dialogs
-  - Document viewer for search results
-- **Components:**
-  - `VectorSearch.tsx` - Main search interface
-  - `AddCollectionModal.tsx` - Create/manage collections
-  - `CollectionList.tsx` - Display collections
-  - `DocumentViewerPage.tsx` - View search results
+  - Browse and install skills from skills.sh marketplace
+  - Search skills with marketplace toggle ("Installed" vs "Marketplace")
+  - Preview SKILL.md content fetched from GitHub
+  - Smart folder discovery with fallback strategy for mismatched skill IDs
+- **Key Files:**
+  - `MarketplaceSearchPanel.tsx` - Search interface with install buttons
+  - `MarketplaceSkillInfoPage.tsx` - Skill details in right panel
+  - `apps/electron/src/main/skills-marketplace.ts` - IPC handlers for marketplace operations
+- **Routes:** `skills/marketplace/{source~repo}/{skillId}`
 
-### 3. Cron Scheduler
-- **Location:** `apps/electron/src/renderer/components/scheduler/`
+### 2. Terminal Resume Button
+- **Location:** `apps/electron/src/renderer/components/app-shell/input/TerminalResumeButton.tsx`
 - **Features:**
-  - Visual cron builder with time picker
-  - Preset schedules (hourly, daily, weekly, monthly)
-  - Schedule detail panel with clickable executions
-  - Real-time UI sync on CRUD operations
-- **Components:**
-  - `ScheduleModal.tsx` - Create/edit schedules
-  - `ScheduleList.tsx` - List scheduled tasks
-  - `ScheduleDetailPanel.tsx` - View schedule details
-  - `CronBuilder.tsx` - Visual cron builder
-  - `TimePicker.tsx` - Time selection UI
-  - `PresetCard.tsx` - Preset schedule templates
+  - Resume Claude Agent SDK sessions in external terminal window
+  - Cross-platform support (macOS Terminal.app, Linux gnome-terminal/konsole/xterm, Windows Terminal/PowerShell/cmd.exe)
+  - Security: Session ID validation, path escaping, injection prevention
+  - Task list integration via `CLAUDE_CODE_TASK_LIST_ID` environment variable
+- **Backend:** `apps/electron/src/main/terminal.ts` (349 lines)
+- **UX:** Appears after working directory badge, hidden until session has SDK session ID
 
-### 4. Real-Time UI Sync
-- **Broadcast Events:** Scheduler broadcasts CRUD operations for live updates
+### 3. Session Labels
+- **Location:** `apps/electron/src/renderer/components/settings/LabelsSettingsSection.tsx`
+- **Features:**
+  - Create, edit, and delete workspace labels
+  - 8-color preset palette matching `LABEL_COLORS`
+  - Preview label badge before saving
+  - Always-visible Labels submenu in session context menu
+- **Integration:** WorkspaceSettingsPage → Mode Cycling section
+
+### 4. Scheduler Session Continuation
 - **Location:** `apps/electron/src/main/scheduler.ts`
-- **Impact:** All connected clients receive immediate updates
+- **Features:**
+  - Reuse `lastRunSessionId` from previous scheduled executions
+  - Preserves conversation context across scheduled runs
+  - Agent can learn from and reference previous executions
+  - Graceful fallback to new session if previous was deleted
 
-### 5. WhatsApp Integration
+### 5. Viewer Backend Abstraction
+- **Location:** `packages/shared/src/viewer/`
+- **Features:**
+  - ViewerService interface with pluggable implementations
+  - `CraftHostedViewer` - Default backend (craft.do compatible)
+  - `StaticExportViewer` - Generate standalone HTML for any static host
+  - Privacy-first and offline-capable session sharing
+- **Configuration:** Settings UI for configuring viewer backend
+- **Integration:** SessionManager refactored to use ViewerService
+
+### 6. WhatsApp Integration
 - **Location:** `apps/electron/src/renderer/components/whatsapp/` and `apps/electron/src/main/whatsapp-*.ts`
 - **Features:**
   - QR code authentication via WhatsApp Web
   - Session management and persistence
   - Message routing with permission directives
+  - Real-time notifications for incoming messages
 - **Key Files:**
   - `WhatsAppSettingsSection.tsx` - Settings UI for WhatsApp connection
   - `whatsapp-service.ts` - Main process WhatsApp service
@@ -65,11 +78,6 @@ Vespr leverages the Claude Agent SDK and Claude Code while adding significant im
   - `directive-parser` - Parses permission directives from messages
   - `session-mapper` - Maps WhatsApp sessions to Vespr sessions
   - `result-formatter` - Formats agent responses for WhatsApp
-
-### 6. GitHub OAuth Settings UI
-- **Location:** Settings page
-- **Feature:** Users can enter GitHub OAuth credentials directly in the UI
-- **Benefit:** Simplified OAuth setup without manual config file editing
 
 ## Project Structure
 
@@ -203,14 +211,18 @@ Key IPC handlers in `apps/electron/src/main/ipc.ts`:
 - `config:*` - Configuration updates
 - `source:*` - Data source operations
 - `whatsapp:*` - WhatsApp connection and messaging
+- `skills-marketplace:*` - Marketplace search, install, and skill details
+- `terminal:*` - Terminal spawning for session resume
+- `labels:*` - Workspace label management
+- `viewer:*` - Viewer backend configuration
 
 ## Recent Bug Fixes
 
-1. **QMD CLI Integration**: Resolved issues with QMD document vectorization
-2. **Ralph Loop Security**: Added hardening and memory leak prevention
-3. **Dark Mode Support**: Fixed markdown overlay rendering in dark mode
-4. **Global Skills Loading**: Auto-create plugin manifest for SDK integration
-5. **Dropdown Aria-Hidden Dialog Conflict**: Fixed accessibility conflict between dropdown menus and dialog components
+1. **Skills Marketplace Folder Discovery**: Smart fallback when skill ID doesn't match GitHub folder name
+2. **Labels Submenu**: Always show labels submenu and subscribe to changes
+3. **WhatsApp Session Completion**: Wire up session completion callback for message delivery
+4. **Slack IPC Static Import**: Fixed build error by moving slack-ipc to static import
+5. **TypeScript Test Errors**: Resolved errors in WhatsApp and viewer tests
 
 ## Common Tasks
 
@@ -260,5 +272,5 @@ When working on Vespr:
 
 ---
 
-*Last Updated: 2026-01-23*
+*Last Updated: 2026-01-24*
 *For questions or updates, please refer to the main README.md and CONTRIBUTING.md*
