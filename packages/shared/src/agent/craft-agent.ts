@@ -1138,6 +1138,44 @@ export class CraftAgent {
               }
 
               // ============================================================
+              // BASH WORKING DIRECTORY: Ensure bash commands run in the user-selected working directory
+              // The SDK's cwd parameter is used for session transcript storage (sdkCwd) to ensure
+              // session resumption works even when workingDirectory changes. However, this means
+              // bash commands run from the session directory instead of the user-selected directory.
+              // Fix: Prepend 'cd <workingDirectory> && ' to bash commands when workingDirectory differs from sdkCwd.
+              // ============================================================
+              if (input.tool_name === 'Bash') {
+                const toolInput = input.tool_input as Record<string, unknown>;
+                const workingDirectory = this.config.session?.workingDirectory;
+                const sdkCwd = this.config.session?.sdkCwd;
+
+                // Only inject cd if:
+                // 1. User has explicitly set a working directory
+                // 2. It differs from the SDK's cwd (session directory)
+                // 3. The command doesn't already start with cd to avoid double-cd
+                if (workingDirectory && sdkCwd && workingDirectory !== sdkCwd) {
+                  const command = String(toolInput.command || '');
+                  const trimmedCommand = command.trim();
+
+                  // Don't modify if command already starts with 'cd ' (case-insensitive)
+                  if (!trimmedCommand.match(/^cd\s+/i)) {
+                    // Prepend cd to working directory with proper escaping
+                    const escapedPath = workingDirectory.replace(/'/g, "'\\''"); // Escape single quotes
+                    const updatedCommand = `cd '${escapedPath}' && ${command}`;
+
+                    this.onDebug?.(`Bash: injecting cd to working directory: ${workingDirectory}`);
+                    return {
+                      continue: true,
+                      hookSpecificOutput: {
+                        hookEventName: 'PreToolUse' as const,
+                        updatedInput: { ...toolInput, command: updatedCommand },
+                      },
+                    };
+                  }
+                }
+              }
+
+              // ============================================================
               // SKILL QUALIFICATION: Ensure skill names are fully-qualified (workspaceId:slug)
               // The SDK requires fully-qualified names to resolve skills. If the agent
               // calls a skill with just the short slug, we prefix it here.
