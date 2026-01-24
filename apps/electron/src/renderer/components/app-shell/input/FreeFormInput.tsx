@@ -1135,6 +1135,10 @@ export function FreeFormInput({
             context={addLabelEditConfig.context}
             example={addLabelEditConfig.example}
             overridePlaceholder={addLabelEditConfig.overridePlaceholder}
+            secondaryAction={workspaceRootPath ? {
+              label: 'Edit File',
+              onClick: () => window.electronAPI?.openFile(`${workspaceRootPath}/labels/config.json`),
+            } : undefined}
             side="top"
             align="start"
           />

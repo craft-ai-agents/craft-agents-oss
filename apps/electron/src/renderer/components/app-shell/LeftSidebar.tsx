@@ -23,8 +23,8 @@ export interface SidebarContextMenuConfig {
   labelId?: string
   /** Handler for "Configure Statuses" action - for allChats/status/flagged types */
   onConfigureStatuses?: () => void
-  /** Handler for "Configure Labels" action - for labels type */
-  onConfigureLabels?: () => void
+  /** Handler for "Configure Labels" action - receives labelId when triggered from a specific label */
+  onConfigureLabels?: (labelId?: string) => void
   /** Handler for "Add New Label" action - creates a label (parentId passed from labelId) */
   onAddLabel?: (parentId?: string) => void
   /** Handler for "Delete Label" action - deletes the label by labelId */

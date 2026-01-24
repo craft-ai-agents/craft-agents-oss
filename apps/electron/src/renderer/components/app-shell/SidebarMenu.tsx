@@ -37,8 +37,8 @@ export interface SidebarMenuProps {
   labelId?: string
   /** Handler for "Configure Statuses" action - only for allChats/status/flagged types */
   onConfigureStatuses?: () => void
-  /** Handler for "Configure Labels" action - only for labels type */
-  onConfigureLabels?: () => void
+  /** Handler for "Configure Labels" action - receives labelId when triggered from a specific label */
+  onConfigureLabels?: (labelId?: string) => void
   /** Handler for "Add New Label" action - creates a label (parentId = labelId if set) */
   onAddLabel?: (parentId?: string) => void
   /** Handler for "Delete Label" action - deletes the label identified by labelId */
@@ -112,7 +112,7 @@ export function SidebarMenu({
           </MenuItem>
         )}
         {onConfigureLabels && (
-          <MenuItem onClick={onConfigureLabels}>
+          <MenuItem onClick={() => onConfigureLabels(labelId)}>
             <Settings2 className="h-3.5 w-3.5" />
             <span className="flex-1">Edit Labels</span>
           </MenuItem>

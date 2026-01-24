@@ -489,6 +489,12 @@ export class SessionManager {
 
     sessionLog.info(`Setting up ConfigWatcher for workspace: ${workspaceRootPath}`)
 
+    // Resolve the actual workspace UUID from config.json rather than using the directory name.
+    // Workspace folders are slug-based (e.g., "my-workspace") but the renderer compares
+    // against the UUID, so we must broadcast the UUID for hot-reload to work.
+    const wsConfig = loadWorkspaceConfig(workspaceRootPath)
+    const resolvedWorkspaceId = wsConfig?.id || workspaceRootPath.split(/[/\\]/).pop() || workspaceRootPath
+
     const callbacks: ConfigWatcherCallbacks = {
       onSourcesListChange: async (sources: LoadedSource[]) => {
         sessionLog.info(`Sources list changed in ${workspaceRootPath} (${sources.length} sources)`)
@@ -520,17 +526,17 @@ export class SessionManager {
         const sources = loadWorkspaceSources(workspaceRootPath)
         this.broadcastSourcesChanged(sources)
       },
-      onStatusConfigChange: (workspaceId: string) => {
-        sessionLog.info(`Status config changed in ${workspaceId}`)
-        this.broadcastStatusesChanged(workspaceId)
+      onStatusConfigChange: () => {
+        sessionLog.info(`Status config changed in ${resolvedWorkspaceId}`)
+        this.broadcastStatusesChanged(resolvedWorkspaceId)
       },
-      onStatusIconChange: (workspaceId: string, iconFilename: string) => {
-        sessionLog.info(`Status icon changed: ${iconFilename} in ${workspaceId}`)
-        this.broadcastStatusesChanged(workspaceId)
+      onStatusIconChange: (_workspaceId: string, iconFilename: string) => {
+        sessionLog.info(`Status icon changed: ${iconFilename} in ${resolvedWorkspaceId}`)
+        this.broadcastStatusesChanged(resolvedWorkspaceId)
       },
-      onLabelConfigChange: (workspaceId: string) => {
-        sessionLog.info(`Label config changed in ${workspaceId}`)
-        this.broadcastLabelsChanged(workspaceId)
+      onLabelConfigChange: () => {
+        sessionLog.info(`Label config changed in ${resolvedWorkspaceId}`)
+        this.broadcastLabelsChanged(resolvedWorkspaceId)
       },
       onAppThemeChange: (theme) => {
         sessionLog.info(`App theme changed`)

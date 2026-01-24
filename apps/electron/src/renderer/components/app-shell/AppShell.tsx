@@ -39,9 +39,12 @@ import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@craft
 import {
   DropdownMenu,
   DropdownMenuTrigger,
+  DropdownMenuSub,
   StyledDropdownMenuContent,
   StyledDropdownMenuItem,
   StyledDropdownMenuSeparator,
+  StyledDropdownMenuSubTrigger,
+  StyledDropdownMenuSubContent,
 } from "@/components/ui/styled-dropdown"
 import {
   ContextMenu,
@@ -81,7 +84,7 @@ import { useStatuses } from "@/hooks/useStatuses"
 import { useLabels } from "@/hooks/useLabels"
 import { useViews } from "@/hooks/useViews"
 import { LabelIcon } from "@/components/ui/label-icon"
-import { buildLabelTree, getDescendantIds, getLabelDisplayName, flattenLabels, extractLabelId } from "@craft-agent/shared/labels"
+import { buildLabelTree, getDescendantIds, getLabelDisplayName, flattenLabels, extractLabelId, findLabelById } from "@craft-agent/shared/labels"
 import type { LabelConfig, LabelTreeNode } from "@craft-agent/shared/labels"
 import { resolveEntityColor } from "@craft-agent/shared/colors"
 import * as storage from "@/lib/local-storage"
@@ -251,6 +254,11 @@ function AppShellContent({
   // Session list filter: empty set shows all, otherwise shows only sessions with selected states
   const [listFilter, setListFilter] = React.useState<Set<TodoStateId>>(() => {
     const saved = storage.get<TodoStateId[]>(storage.KEYS.listFilter, [])
+    return new Set(saved)
+  })
+  // Label filter: empty set shows all, otherwise shows only sessions with at least one matching label
+  const [labelFilter, setLabelFilter] = React.useState<Set<string>>(() => {
+    const saved = storage.get<string[]>(storage.KEYS.labelFilter, [])
     return new Set(saved)
   })
   // Search state for session list
@@ -775,13 +783,29 @@ function AppShellContent({
         result = workspaceSessionMetas
     }
 
-    // Apply secondary filter by todo states if any are selected (only in allChats view)
-    if (chatFilter.kind === 'allChats' && listFilter.size > 0) {
-      result = result.filter(s => listFilter.has((s.todoState || 'todo') as TodoStateId))
+    // Apply secondary filters in allChats view (status + labels, AND-ed together)
+    if (chatFilter.kind === 'allChats') {
+      // Filter by status if any statuses are selected
+      if (listFilter.size > 0) {
+        result = result.filter(s => listFilter.has((s.todoState || 'todo') as TodoStateId))
+      }
+      // Filter by labels if any labels are selected (includes descendants)
+      if (labelFilter.size > 0) {
+        // Expand selected labels to include all descendant IDs
+        const matchIds = new Set<string>()
+        for (const id of labelFilter) {
+          matchIds.add(id)
+          const descendants = getDescendantIds(labelConfigs, id)
+          for (const d of descendants) matchIds.add(d)
+        }
+        result = result.filter(s =>
+          s.labels?.some(l => matchIds.has(extractLabelId(l)))
+        )
+      }
     }
 
     return result
-  }, [workspaceSessionMetas, chatFilter, listFilter, labelConfigs])
+  }, [workspaceSessionMetas, chatFilter, listFilter, labelFilter, labelConfigs])
 
   // Ensure session messages are loaded when selected
   React.useEffect(() => {
@@ -870,6 +894,11 @@ function AppShellContent({
     storage.set(storage.KEYS.listFilter, [...listFilter])
   }, [listFilter])
 
+  // Persist label filter to localStorage
+  React.useEffect(() => {
+    storage.set(storage.KEYS.labelFilter, [...labelFilter])
+  }, [labelFilter])
+
   // Persist sidebar section collapsed states
   React.useEffect(() => {
     storage.set(storage.KEYS.collapsedSidebarItems, [...collapsedItems])
@@ -946,6 +975,9 @@ function AppShellContent({
   // appears near it rather than at a fixed location. Updated synchronously before
   // the setTimeout that opens the popover, ensuring the ref is set before render.
   const editPopoverAnchorY = useRef<number>(120)
+  // Tracks which label was right-clicked when opening label EditPopovers,
+  // so the agent knows the target for commands like "make this red" or "add below this"
+  const editLabelTargetId = useRef<string | undefined>(undefined)
 
   // Stores the trigger element (button) so we can keep it highlighted while the
   // EditPopover is open (after Radix removes data-state="open" on context menu close).
@@ -987,8 +1019,9 @@ function AppShellContent({
   }, [captureContextMenuPosition])
 
   // Handler for "Configure Labels" context menu action
-  // Opens the EditPopover for label configuration
-  const openConfigureLabels = useCallback(() => {
+  // Opens the EditPopover for label configuration, storing which label was right-clicked
+  const openConfigureLabels = useCallback((labelId?: string) => {
+    editLabelTargetId.current = labelId
     captureContextMenuPosition()
     setTimeout(() => setEditPopoverOpen('labels'), 50)
   }, [captureContextMenuPosition])
@@ -1013,8 +1046,10 @@ function AppShellContent({
   }, [activeWorkspace?.id, viewConfigs])
 
   // Handler for "Add New Label" context menu action
-  // Opens the EditPopover with 'add-label' context so the user can describe the label
-  const handleAddLabel = useCallback((_parentId?: string) => {
+  // Opens the EditPopover with 'add-label' context, storing which label was right-clicked
+  // so the agent knows to add the new label relative to it
+  const handleAddLabel = useCallback((parentId?: string) => {
+    editLabelTargetId.current = parentId
     captureContextMenuPosition()
     setTimeout(() => setEditPopoverOpen('add-label'), 50)
   }, [captureContextMenuPosition])
@@ -2040,6 +2075,10 @@ function AppShellContent({
             }
             side="bottom"
             align="start"
+            secondaryAction={{
+              label: 'Edit File',
+              onClick: () => window.electronAPI?.openFile(`${activeWorkspace.rootPath}/statuses/config.json`),
+            }}
             {...getEditConfig('edit-statuses', activeWorkspace.rootPath)}
           />
           {/* Configure Labels EditPopover - anchored near sidebar */}
@@ -2056,7 +2095,27 @@ function AppShellContent({
             }
             side="bottom"
             align="start"
-            {...getEditConfig('edit-labels', activeWorkspace.rootPath)}
+            secondaryAction={{
+              label: 'Edit File',
+              onClick: () => window.electronAPI?.openFile(`${activeWorkspace.rootPath}/labels/config.json`),
+            }}
+            {...(() => {
+              // Spread base config, override context to include which label was right-clicked
+              const config = getEditConfig('edit-labels', activeWorkspace.rootPath)
+              const targetLabel = editLabelTargetId.current
+                ? findLabelById(labelConfigs, editLabelTargetId.current)
+                : undefined
+              if (!targetLabel) return config
+              return {
+                ...config,
+                context: {
+                  ...config.context,
+                  context: (config.context.context || '') +
+                    ` The user right-clicked on the label "${targetLabel.name}" (id: "${targetLabel.id}"). ` +
+                    'If they refer to "this label" or "this", they mean this specific label.',
+                },
+              }
+            })()}
           />
           {/* Edit Views EditPopover - anchored near sidebar */}
           <EditPopover
@@ -2072,6 +2131,10 @@ function AppShellContent({
             }
             side="bottom"
             align="start"
+            secondaryAction={{
+              label: 'Edit File',
+              onClick: () => window.electronAPI?.openFile(`${activeWorkspace.rootPath}/views.json`),
+            }}
             {...getEditConfig('edit-views', activeWorkspace.rootPath)}
           />
           {/* Add Source EditPopovers - one for each variant (generic + filter-specific)
@@ -2125,7 +2188,27 @@ function AppShellContent({
             }
             side="bottom"
             align="start"
-            {...getEditConfig('add-label', activeWorkspace.rootPath)}
+            secondaryAction={{
+              label: 'Edit File',
+              onClick: () => window.electronAPI?.openFile(`${activeWorkspace.rootPath}/labels/config.json`),
+            }}
+            {...(() => {
+              // Spread base config, override context to include which label was right-clicked
+              const config = getEditConfig('add-label', activeWorkspace.rootPath)
+              const targetLabel = editLabelTargetId.current
+                ? findLabelById(labelConfigs, editLabelTargetId.current)
+                : undefined
+              if (!targetLabel) return config
+              return {
+                ...config,
+                context: {
+                  ...config.context,
+                  context: (config.context.context || '') +
+                    ` The user right-clicked on the label "${targetLabel.name}" (id: "${targetLabel.id}"). ` +
+                    'The new label should be added as a sibling after this label, or as a child if the user specifies.',
+                },
+              }
+            })()}
           />
         </>
       )}

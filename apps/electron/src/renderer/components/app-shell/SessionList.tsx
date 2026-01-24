@@ -858,7 +858,13 @@ export function SessionList({
         </EmptyHeader>
         <EmptyContent>
           <button
-            onClick={() => onFocusChatInput?.()}
+            onClick={() => {
+              // Create a new session, applying the current filter's status/label if applicable
+              const params: { status?: string; label?: string } = {}
+              if (currentFilter?.kind === 'state') params.status = currentFilter.stateId
+              else if (currentFilter?.kind === 'label') params.label = currentFilter.labelId
+              navigate(routes.action.newChat(Object.keys(params).length > 0 ? params : undefined))
+            }}
             className="inline-flex items-center h-7 px-3 text-xs font-medium rounded-[8px] bg-background shadow-minimal hover:bg-foreground/[0.03] transition-colors"
           >
             New Conversation

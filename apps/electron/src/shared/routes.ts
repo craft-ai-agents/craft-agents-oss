@@ -39,8 +39,10 @@ export const routes = {
      * @param input - Optional initial message to pre-fill or send
      * @param name - Optional session name
      * @param send - If true and input is provided, immediately sends the message
+     * @param status - Optional status/todo-state ID to apply to the new session
+     * @param label - Optional label ID to apply to the new session
      */
-    newChat: (params?: { input?: string; name?: string; send?: boolean }) =>
+    newChat: (params?: { input?: string; name?: string; send?: boolean; status?: string; label?: string }) =>
       `action/new-chat${toQueryString(params ? { ...params, send: params.send ? 'true' : undefined } : undefined)}` as const,
 
     /** Rename a session */

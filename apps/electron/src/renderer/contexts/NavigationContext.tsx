@@ -225,11 +225,26 @@ export function NavigationProvider({
             await window.electronAPI.sessionCommand(session.id, { type: 'rename', name: parsed.params.name })
           }
 
-          // Update navigation state to show new chat in allChats
+          // Apply status (todo state) to new session if specified
+          if (parsed.params.status) {
+            await window.electronAPI.sessionCommand(session.id, { type: 'setTodoState', state: parsed.params.status })
+          }
+
+          // Apply label to new session if specified
+          if (parsed.params.label) {
+            await window.electronAPI.sessionCommand(session.id, { type: 'setLabels', labels: [parsed.params.label] })
+          }
+
+          // Determine navigation filter — preserve status/label context if the new session was created with one
+          const filter: import('../../shared/types').ChatFilter =
+            parsed.params.status ? { kind: 'state', stateId: parsed.params.status } :
+            parsed.params.label ? { kind: 'label', labelId: parsed.params.label } :
+            { kind: 'allChats' }
+
           setSession({ selected: session.id })
           setNavigationState({
             navigator: 'chats',
-            filter: { kind: 'allChats' },
+            filter,
             details: { type: 'chat', sessionId: session.id },
           })
 

@@ -136,18 +136,26 @@ export function useDynamicStack(options?: { gap?: number; minVisible?: number; r
           child.style.maskImage = 'none'
           child.style.webkitMaskImage = 'none'
         } else {
-          // Check how much the next badge overlaps this one (negative margin = overlap)
+          // Check proximity to the next badge and apply gradual fade.
+          // Fade begins when the gap shrinks below 4px (before actual overlap),
+          // ramping transparency from 0→66% over 36px of proximity/overlap.
           const nextMargin = parseFloat((children[i + 1] as HTMLElement).style.marginLeft || '0')
-          if (nextMargin < 0) {
-            // Immediate full fade on any overlap — the overlap zone plus 24px
-            // extra ensures the fade is clearly visible even at small overlaps.
-            const overlap = Math.abs(nextMargin)
-            const fadeZone = overlap + 24
-            const mask = `linear-gradient(to right, black calc(100% - ${fadeZone}px), rgba(0,0,0,0) 100%)`
+          const fadeStart = 4 // start fading when gap is this small
+          if (nextMargin < fadeStart) {
+            const proximity = fadeStart - nextMargin // 0 at threshold, grows as badges get closer/overlap
+            const fadeZone = 36
+            const t = Math.min(1, proximity / 36)
+            const endAlpha = 1 - t * 0.66 // max fade capped at 66% transparency
+            // Position gradient ahead of the overlap zone, shifted 24px right.
+            // gradientEnd = right edge of the fade; gradientStart = left edge (clamped to 12px from badge left).
+            const actualOverlap = Math.max(0, -nextMargin)
+            const gradientEnd = Math.max(0, actualOverlap - 24) // shifted 24px right
+            const gradientStart = Math.min(widths[i] - 12, gradientEnd + fadeZone) // left edge never past 12px from left
+            const mask = `linear-gradient(to right, black calc(100% - ${gradientStart}px), rgba(0,0,0,${endAlpha}) calc(100% - ${gradientEnd}px), rgba(0,0,0,${endAlpha}) 100%)`
             child.style.maskImage = mask
             child.style.webkitMaskImage = mask
           } else {
-            // No overlap — clear mask
+            // Enough space — clear mask
             child.style.maskImage = 'none'
             child.style.webkitMaskImage = 'none'
           }
