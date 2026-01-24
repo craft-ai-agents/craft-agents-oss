@@ -380,6 +380,10 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.GOD_MODE_SET_CONFIG, config),
   initializeGodModeWorkspace: () =>
     ipcRenderer.invoke(IPC_CHANNELS.GOD_MODE_INITIALIZE),
+
+  // Git operations
+  getGitBranch: (dirPath: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.GET_GIT_BRANCH, dirPath),
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)

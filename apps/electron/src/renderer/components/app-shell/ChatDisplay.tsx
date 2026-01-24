@@ -370,8 +370,37 @@ export function ChatDisplay({
   // This accounts for scenic themes (like Haze) that force dark mode
   const { isDark } = useTheme()
 
+  // Git branch state
+  const [gitBranch, setGitBranch] = useState<string | null>(null)
+
   // Context-provided diff and git state (used by right sidebar, not directly here)
   const { gitWorkingDir } = useAppShellContext()
+
+  // Fetch git branch when working directory changes
+  useEffect(() => {
+    // Prefer explicitly set workingDirectory, fallback to gitWorkingDir from context
+    const effectiveDir = workingDirectory || gitWorkingDir
+    console.log('[GitDebug] Effective dir:', effectiveDir)
+
+    if (!effectiveDir) {
+      setGitBranch(null)
+      return
+    }
+
+    const fetchBranch = async () => {
+      try {
+        console.log('[GitDebug] Calling getGitBranch with:', effectiveDir)
+        const branch = await window.electronAPI.getGitBranch(effectiveDir)
+        console.log('[GitDebug] Result:', branch)
+        setGitBranch(branch)
+      } catch (err) {
+        console.error('[GitDebug] Failed to fetch git branch:', err)
+        setGitBranch(null)
+      }
+    }
+
+    fetchBranch()
+  }, [workingDirectory, gitWorkingDir])
 
   // Register as focus zone - when zone gains focus, focus the textarea
   const { zoneRef, isFocused } = useFocusZone({
@@ -878,6 +907,7 @@ export function ChatDisplay({
               ultrathinkEnabled={ultrathinkEnabled}
               onUltrathinkChange={onUltrathinkChange}
               permissionMode={permissionMode}
+              gitBranch={gitBranch}
               onPermissionModeChange={onPermissionModeChange}
               tasks={backgroundTasks}
               sessionId={session.id}

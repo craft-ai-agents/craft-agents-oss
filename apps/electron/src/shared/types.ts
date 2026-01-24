@@ -625,6 +625,9 @@ export const IPC_CHANNELS = {
   GOD_MODE_GET_CONFIG: 'god-mode:getConfig',
   GOD_MODE_SET_CONFIG: 'god-mode:setConfig',
   GOD_MODE_INITIALIZE: 'god-mode:initialize',
+
+  // Git operations
+  GET_GIT_BRANCH: 'git:getBranch',
 } as const
 
 // Re-import types for ElectronAPI
@@ -844,6 +847,9 @@ export interface ElectronAPI {
   getGodModeConfig(): Promise<GodModeConfig | null>
   setGodModeConfig(config: GodModeConfig | null): Promise<void>
   initializeGodModeWorkspace(): Promise<{ success: boolean; error?: string }>
+
+  // Git operations
+  getGitBranch(dirPath: string): Promise<string | null>
 }
 
 /**

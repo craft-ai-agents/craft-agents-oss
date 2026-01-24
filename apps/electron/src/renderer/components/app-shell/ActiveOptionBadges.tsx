@@ -2,7 +2,7 @@ import * as React from 'react'
 import { cn } from '@/lib/utils'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { SlashCommandMenu, DEFAULT_SLASH_COMMAND_GROUPS, type SlashCommandId } from '@/components/ui/slash-command-menu'
-import { ChevronDown, X } from 'lucide-react'
+import { ChevronDown, X, GitBranch } from 'lucide-react'
 import { PERMISSION_MODE_CONFIG, type PermissionMode } from '@craft-agent/shared/agent/modes'
 import { ActiveTasksBar, type BackgroundTask } from './ActiveTasksBar'
 
@@ -34,6 +34,8 @@ export interface ActiveOptionBadgesProps {
   onUltrathinkChange?: (enabled: boolean) => void
   /** Current permission mode */
   permissionMode?: PermissionMode
+  /** Current git branch */
+  gitBranch?: string | null
   /** Callback when permission mode changes */
   onPermissionModeChange?: (mode: PermissionMode) => void
   /** Background tasks to display */
@@ -52,6 +54,7 @@ export function ActiveOptionBadges({
   ultrathinkEnabled = false,
   onUltrathinkChange,
   permissionMode = 'ask',
+  gitBranch,
   onPermissionModeChange,
   tasks = [],
   sessionId,
@@ -59,45 +62,58 @@ export function ActiveOptionBadges({
   onInsertMessage,
   className,
 }: ActiveOptionBadgesProps) {
-  // Only render if badges or tasks are active
-  if (!ultrathinkEnabled && !permissionMode && tasks.length === 0) {
+  console.log('[GitBadgeDebug] Rendering with gitBranch:', gitBranch)
+  // Only render if badges or tasks are active or git branch is shown
+  if (!ultrathinkEnabled && !permissionMode && tasks.length === 0 && !gitBranch) {
     return null
   }
 
   return (
     <div className={cn("flex items-start gap-2 mb-2 px-px pt-px pb-0.5 overflow-x-auto overflow-y-hidden", className)}>
-      {/* Permission Mode Badge */}
-      {permissionMode && (
-        <div className="shrink-0">
-          <PermissionModeDropdown
-            permissionMode={permissionMode}
-            ultrathinkEnabled={ultrathinkEnabled}
-            onPermissionModeChange={onPermissionModeChange}
-            onUltrathinkChange={onUltrathinkChange}
-          />
-        </div>
-      )}
+      <div className='flex-row grow gap-2'>
+        {/* Permission Mode Badge */}
+        {permissionMode && (
+          <div className="shrink-0">
+            <PermissionModeDropdown
+              permissionMode={permissionMode}
+              ultrathinkEnabled={ultrathinkEnabled}
+              onPermissionModeChange={onPermissionModeChange}
+              onUltrathinkChange={onUltrathinkChange}
+            />
+          </div>
+        )}
 
-      {/* Ultrathink Badge */}
-      {ultrathinkEnabled && (
-        <button
-          type="button"
-          onClick={() => onUltrathinkChange?.(false)}
-          className="h-[30px] pl-2.5 pr-2 text-xs font-medium rounded-[8px] flex items-center gap-1.5 shrink-0 transition-all bg-gradient-to-r from-blue-600/10 via-purple-600/10 to-pink-600/10 hover:from-blue-600/15 hover:via-purple-600/15 hover:to-pink-600/15 shadow-tinted outline-none select-none"
-          style={{ '--shadow-color': '147, 51, 234' } as React.CSSProperties}
-        >
-          <span className="bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
-            Ultrathink
-          </span>
-          <X className="h-3 w-3 text-purple-500 opacity-60 hover:opacity-100 translate-y-px" />
-        </button>
-      )}
+        {/* Ultrathink Badge */}
+        {ultrathinkEnabled && (
+          <button
+            type="button"
+            onClick={() => onUltrathinkChange?.(false)}
+            className="h-[30px] pl-2.5 pr-2 text-xs font-medium rounded-[8px] flex items-center gap-1.5 shrink-0 transition-all bg-gradient-to-r from-blue-600/10 via-purple-600/10 to-pink-600/10 hover:from-blue-600/15 hover:via-purple-600/15 hover:to-pink-600/15 shadow-tinted outline-none select-none"
+            style={{ '--shadow-color': '147, 51, 234' } as React.CSSProperties}
+          >
+            <span className="bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
+              Ultrathink
+            </span>
+            <X className="h-3 w-3 text-purple-500 opacity-60 hover:opacity-100 translate-y-px" />
+          </button>
+        )}
 
-      {/* Background Tasks - DISABLED: UI hidden because task tracking is not reliable.
-       * The underlying infrastructure (useBackgroundTasks hook, atoms, event handlers) is kept
-       * intact for when we fix the reliability issues. See apps/electron/CLAUDE.md for details.
-       */}
-      {/* {sessionId && <ActiveTasksBar tasks={tasks} sessionId={sessionId} onKillTask={onKillTask} onInsertMessage={onInsertMessage} />} */}
+        {/* Background Tasks - DISABLED: UI hidden because task tracking is not reliable.
+         * The underlying infrastructure (useBackgroundTasks hook, atoms, event handlers) is kept
+         * intact for when we fix the reliability issues. See apps/electron/CLAUDE.md for details.
+         */}
+        {/* {sessionId && <ActiveTasksBar tasks={tasks} sessionId={sessionId} onKillTask={onKillTask} onInsertMessage={onInsertMessage} />} */}
+      </div>
+
+      <div className='flex-row gap-2'>
+        {/* Git Branch Badge */}
+        {gitBranch && (
+          <div className="shrink-0 h-[30px] pl-2.5 pr-2.5 text-xs font-medium rounded-[8px] flex items-center gap-1.5 bg-foreground/5 text-foreground/60 shadow-thin select-none cursor-default">
+            <GitBranch className="h-3.5 w-3.5" />
+            <span className="truncate max-w-[150px]">{gitBranch}</span>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -198,4 +214,3 @@ function PermissionModeDropdown({ permissionMode, ultrathinkEnabled = false, onP
     </Popover>
   )
 }
-

@@ -675,15 +675,19 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
   // Get git branch for a directory (returns null if not a git repo or git unavailable)
   ipcMain.handle(IPC_CHANNELS.GET_GIT_BRANCH, (_event, dirPath: string) => {
+    const targetDir = dirPath || process.cwd()
+    ipcLog.info(`[IPC] GET_GIT_BRANCH for: ${targetDir}`)
     try {
       const branch = execSync('git rev-parse --abbrev-ref HEAD', {
-        cwd: dirPath,
+        cwd: targetDir,
         encoding: 'utf-8',
         stdio: ['pipe', 'pipe', 'pipe'],  // Suppress stderr output
         timeout: 5000,  // 5 second timeout
       }).trim()
+      ipcLog.info(`[IPC] GET_GIT_BRANCH result: ${branch}`)
       return branch || null
-    } catch {
+    } catch (error) {
+      ipcLog.warn(`[IPC] GET_GIT_BRANCH failed for ${targetDir}:`, error instanceof Error ? error.message : String(error))
       // Not a git repo, git not installed, or other error
       return null
     }
