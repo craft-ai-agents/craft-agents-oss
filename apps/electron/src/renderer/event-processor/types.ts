@@ -134,6 +134,15 @@ export interface SourcesChangedEvent {
 }
 
 /**
+ * Statuses changed event
+ */
+export interface StatusesChangedEvent {
+  type: 'statuses_changed'
+  sessionId: string
+  workspaceId: string
+}
+
+/**
  * Plan submitted event
  */
 export interface PlanSubmittedEvent {
@@ -375,6 +384,7 @@ export type AgentEvent =
   | PermissionRequestEvent
   | CredentialRequestEvent
   | SourcesChangedEvent
+  | StatusesChangedEvent
   | PlanSubmittedEvent
   | StatusEvent
   | InfoEvent

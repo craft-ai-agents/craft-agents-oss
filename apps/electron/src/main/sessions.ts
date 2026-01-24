@@ -512,11 +512,13 @@ export class SessionManager {
       },
       onStatusConfigChange: (workspaceId: string) => {
         sessionLog.info(`Status config changed in ${workspaceId}`)
-        this.broadcastStatusesChanged(workspaceId)
+        // Pass workspaceRootPath instead of directory name to resolve workspace UUID correctly
+        this.broadcastStatusesChanged(workspaceRootPath)
       },
       onStatusIconChange: (workspaceId: string, iconFilename: string) => {
         sessionLog.info(`Status icon changed: ${iconFilename} in ${workspaceId}`)
-        this.broadcastStatusesChanged(workspaceId)
+        // Pass workspaceRootPath instead of directory name to resolve workspace UUID correctly
+        this.broadcastStatusesChanged(workspaceRootPath)
       },
       onAppThemeChange: (theme) => {
         sessionLog.info(`App theme changed`)
@@ -555,11 +557,38 @@ export class SessionManager {
 
   /**
    * Broadcast statuses changed event to all windows
+   * @param workspaceRootPath - Full path to workspace root (e.g., /Users/chris/.craft-agent/workspaces/my-workspace)
    */
-  private broadcastStatusesChanged(workspaceId: string): void {
+  private broadcastStatusesChanged(workspaceRootPath: string): void {
     if (!this.windowManager) return
-    sessionLog.info(`Broadcasting statuses changed for ${workspaceId}`)
-    this.windowManager.broadcastToAll(IPC_CHANNELS.STATUSES_CHANGED, workspaceId)
+    sessionLog.info(`Broadcasting statuses changed for ${workspaceRootPath}`)
+    
+    // Find workspace by matching rootPath (most reliable method)
+    const workspaces = getWorkspaces()
+    const workspace = workspaces.find(w => w.rootPath === workspaceRootPath) || null
+    const workspaceUuid = workspace?.id || workspaceRootPath
+    
+    if (workspace) {
+      sessionLog.info(`Resolved workspace ${workspaceRootPath} to UUID ${workspaceUuid}`)
+    } else {
+      sessionLog.warn(`Could not resolve workspace ${workspaceRootPath} to UUID, using as-is`)
+    }
+    
+    // Broadcast IPC event (existing - for useStatuses hook)
+    // Send UUID so it matches what useStatuses expects
+    this.windowManager.broadcastToAll(IPC_CHANNELS.STATUSES_CHANGED, workspaceUuid)
+    
+    // Also send SessionEvents to all sessions in workspace (for event processor)
+    const sessions = Array.from(this.sessions.values()).filter(
+      s => s.workspace.id === workspaceUuid
+    )
+    for (const managed of sessions) {
+      this.sendEvent({
+        type: 'statuses_changed',
+        sessionId: managed.id,
+        workspaceId: workspaceUuid,
+      }, workspaceUuid)
+    }
   }
 
   /**

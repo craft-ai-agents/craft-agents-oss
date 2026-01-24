@@ -12,6 +12,7 @@ import type {
   ErrorEvent,
   TypedErrorEvent,
   SourcesChangedEvent,
+  StatusesChangedEvent,
   PermissionRequestEvent,
   CredentialRequestEvent,
   PlanSubmittedEvent,
@@ -492,6 +493,29 @@ export function handleSourcesChanged(
         ...session,
         enabledSourceSlugs: event.enabledSourceSlugs,
       },
+      streaming,
+    },
+    effects: [],
+  }
+}
+
+/**
+ * Handle statuses_changed - workspace status config changed
+ * Statuses are workspace-scoped, so this doesn't update session state.
+ * The event is processed to ensure UI components can react to the change.
+ */
+export function handleStatusesChanged(
+  state: SessionState,
+  event: StatusesChangedEvent
+): ProcessResult {
+  const { session, streaming } = state
+  
+  // Statuses are workspace-scoped config, not stored on session.
+  // Return state unchanged but as new reference to ensure atom sync detects the "change".
+  // UI components using useStatuses hook will refresh via IPC broadcast.
+  return {
+    state: {
+      session: { ...session },
       streaming,
     },
     effects: [],
