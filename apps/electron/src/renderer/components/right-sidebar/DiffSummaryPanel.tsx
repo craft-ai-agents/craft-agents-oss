@@ -197,8 +197,13 @@ export function DiffSummaryPanel({
 
   return (
     <div className="h-full flex flex-col relative">
+      {/* Section Header - matches SessionFilesSection styling */}
+      <div className="flex items-center justify-between px-4 pt-4 pb-2 shrink-0 select-none">
+        <span className="text-xs font-medium text-muted-foreground">File changes</span>
+      </div>
+
       {/* Header with stats */}
-      <div className="px-4 py-3 border-b border-border/30">
+      <div className="px-4 py-2 border-b border-border/30">
         <div className="flex items-center gap-2 text-sm">
           <span className="font-medium">
             {successfulChanges.length} {successfulChanges.length === 1 ? 'file' : 'files'}

@@ -125,6 +125,11 @@ export function SessionMetadataPanel({
   // Get session data
   const session = useSessionData(sessionId || '')
 
+  // Debug: Log fileChanges prop
+  useEffect(() => {
+    console.log('[SessionMetadataPanel] fileChanges:', fileChanges, 'length:', fileChanges?.length)
+  }, [fileChanges])
+
   // Initialize name from session
   useEffect(() => {
     setName(session?.name || '')
