@@ -372,6 +372,14 @@ const api: ElectronAPI = {
       ipcRenderer.removeListener(IPC_CHANNELS.NOTIFICATION_NAVIGATE, handler)
     }
   },
+
+  // God Mode (dev-only self-building feature)
+  getGodModeConfig: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.GOD_MODE_GET_CONFIG),
+  setGodModeConfig: (config: import('../shared/types').GodModeConfig | null) =>
+    ipcRenderer.invoke(IPC_CHANNELS.GOD_MODE_SET_CONFIG, config),
+  initializeGodModeWorkspace: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.GOD_MODE_INITIALIZE),
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)

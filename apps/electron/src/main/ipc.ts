@@ -1944,4 +1944,30 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // Note: Permission mode cycling settings (cyclablePermissionModes) are now workspace-level
   // and managed via WORKSPACE_SETTINGS_GET/UPDATE channels
 
+  // ============================================================
+  // God Mode (dev-only self-building feature)
+  // ============================================================
+
+  // Get God Mode config
+  ipcMain.handle(IPC_CHANNELS.GOD_MODE_GET_CONFIG, async () => {
+    const { getGodModeConfigHandler } = await import('./god-mode')
+    return getGodModeConfigHandler()
+  })
+
+  // Set God Mode config
+  ipcMain.handle(IPC_CHANNELS.GOD_MODE_SET_CONFIG, async (_event, config: import('../shared/types').GodModeConfig | null) => {
+    const { setGodModeConfigHandler } = await import('./god-mode')
+    setGodModeConfigHandler(config)
+  })
+
+  // Initialize God Mode workspace
+  ipcMain.handle(IPC_CHANNELS.GOD_MODE_INITIALIZE, async () => {
+    const { getGodModeConfigHandler, initializeGodModeWorkspace } = await import('./god-mode')
+    const config = getGodModeConfigHandler()
+    if (!config?.sourcePath) {
+      return { success: false, error: 'Source path not configured' }
+    }
+    return initializeGodModeWorkspace(config.sourcePath)
+  })
+
 }

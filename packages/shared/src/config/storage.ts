@@ -16,9 +16,13 @@ import type { StoredAttachment, StoredMessage } from '@craft-agent/core/types';
 import type { Plan } from '../agent/plan-types.ts';
 import type { PermissionMode } from '../agent/mode-manager.ts';
 import { BUNDLED_CONFIG_DEFAULTS, type ConfigDefaults } from './config-defaults-schema.ts';
+import type { GodModeConfig } from './types.ts';
 
 // Re-export CONFIG_DIR for convenience (centralized in paths.ts)
 export { CONFIG_DIR } from './paths.ts';
+
+// Re-export GodModeConfig for convenience
+export type { GodModeConfig } from './types.ts';
 
 // Re-export base types from core (single source of truth)
 export type {
@@ -60,6 +64,8 @@ export interface StoredConfig {
   // Auto-update
   dismissedUpdateVersion?: string;  // Version that user dismissed (skip notifications for this version)
   pendingUpdate?: PendingUpdate;  // Update ready for auto-install on next launch
+  // God Mode (dev-only self-building feature)
+  godMode?: GodModeConfig;
 }
 
 const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
@@ -423,8 +429,13 @@ export function switchWorkspaceAtomic(workspaceId: string): { workspace: Workspa
 /**
  * Add a workspace to the global config.
  * @param workspace - Workspace data (must include rootPath)
+ * @param options - Optional configuration
+ * @param options.id - Optional custom ID to use instead of generating one
  */
-export function addWorkspace(workspace: Omit<Workspace, 'id' | 'createdAt'>): Workspace {
+export function addWorkspace(
+  workspace: Omit<Workspace, 'id' | 'createdAt'>,
+  options?: { id?: string }
+): Workspace {
   const config = loadStoredConfig();
   if (!config) {
     throw new Error('No config found');
@@ -434,10 +445,11 @@ export function addWorkspace(workspace: Omit<Workspace, 'id' | 'createdAt'>): Wo
   const existing = config.workspaces.find(w => w.rootPath === workspace.rootPath);
   if (existing) {
     // Update existing workspace with new settings
+    // If a custom ID is provided and different from existing, update it
     const updated: Workspace = {
       ...existing,
       ...workspace,
-      id: existing.id,
+      id: options?.id || existing.id,
       createdAt: existing.createdAt,
     };
     const existingIndex = config.workspaces.indexOf(existing);
@@ -448,7 +460,7 @@ export function addWorkspace(workspace: Omit<Workspace, 'id' | 'createdAt'>): Wo
 
   const newWorkspace: Workspace = {
     ...workspace,
-    id: generateWorkspaceId(),
+    id: options?.id || generateWorkspaceId(),
     createdAt: Date.now(),
   };
 
@@ -1165,4 +1177,42 @@ export function resolveModelId(defaultModelId: string): string {
 
   // Return custom name if configured for this model family
   return customNames[modelKey] || defaultModelId;
+}
+
+// ============================================
+// God Mode Configuration (Dev-only self-building)
+// ============================================
+
+/**
+ * Get the God Mode configuration.
+ * Returns null if not configured.
+ */
+export function getGodModeConfig(): GodModeConfig | null {
+  const config = loadStoredConfig();
+  return config?.godMode ?? null;
+}
+
+/**
+ * Set the God Mode configuration.
+ * Pass null to disable God Mode.
+ */
+export function setGodModeConfig(godModeConfig: GodModeConfig | null): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+
+  if (godModeConfig) {
+    config.godMode = godModeConfig;
+  } else {
+    delete config.godMode;
+  }
+  saveConfig(config);
+}
+
+/**
+ * Check if God Mode is enabled.
+ * Returns false if not configured or disabled.
+ */
+export function isGodModeEnabled(): boolean {
+  const config = getGodModeConfig();
+  return config?.enabled === true && !!config.sourcePath;
 }

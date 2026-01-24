@@ -37,8 +37,8 @@ export type {
 // Import and re-export auth types for onboarding
 // Use types-only subpaths to avoid pulling in Node.js dependencies
 import type { AuthState, SetupNeeds } from '@craft-agent/shared/auth/types';
-import type { AuthType } from '@craft-agent/shared/config/types';
-export type { AuthState, SetupNeeds, AuthType };
+import type { AuthType, GodModeConfig } from '@craft-agent/shared/config/types';
+export type { AuthState, SetupNeeds, AuthType, GodModeConfig };
 
 // Import source types for session source selection
 import type { LoadedSource, FolderSourceConfig, SourceConnectionStatus } from '@craft-agent/shared/sources/types';
@@ -620,6 +620,11 @@ export const IPC_CHANNELS = {
   BADGE_DRAW: 'badge:draw',  // Broadcast: { count: number, iconDataUrl: string }
   WINDOW_FOCUS_STATE: 'window:focusState',  // Broadcast: boolean (isFocused)
   WINDOW_GET_FOCUS_STATE: 'window:getFocusState',
+
+  // God Mode (dev-only self-building feature)
+  GOD_MODE_GET_CONFIG: 'god-mode:getConfig',
+  GOD_MODE_SET_CONFIG: 'god-mode:setConfig',
+  GOD_MODE_INITIALIZE: 'god-mode:initialize',
 } as const
 
 // Re-import types for ElectronAPI
@@ -834,6 +839,11 @@ export interface ElectronAPI {
   // Theme preferences sync across windows (mode, colorTheme, font)
   broadcastThemePreferences(preferences: { mode: string; colorTheme: string; font: string }): Promise<void>
   onThemePreferencesChange(callback: (preferences: { mode: string; colorTheme: string; font: string }) => void): () => void
+
+  // God Mode (dev-only self-building feature)
+  getGodModeConfig(): Promise<GodModeConfig | null>
+  setGodModeConfig(config: GodModeConfig | null): Promise<void>
+  initializeGodModeWorkspace(): Promise<{ success: boolean; error?: string }>
 }
 
 /**
@@ -985,6 +995,15 @@ export interface SkillsNavigationState {
 }
 
 /**
+ * Terminal navigation state - shows blank terminal page
+ */
+export interface TerminalNavigationState {
+  navigator: 'terminal'
+  /** Optional right sidebar panel state */
+  rightSidebar?: RightSidebarPanel
+}
+
+/**
  * Unified navigation state - single source of truth for all 3 panels
  *
  * From this state we can derive:
@@ -997,6 +1016,7 @@ export type NavigationState =
   | SourcesNavigationState
   | SettingsNavigationState
   | SkillsNavigationState
+  | TerminalNavigationState
 
 /**
  * Type guard to check if state is chats navigation
@@ -1027,6 +1047,13 @@ export const isSkillsNavigation = (
 ): state is SkillsNavigationState => state.navigator === 'skills'
 
 /**
+ * Type guard to check if state is terminal navigation
+ */
+export const isTerminalNavigation = (
+  state: NavigationState
+): state is TerminalNavigationState => state.navigator === 'terminal'
+
+/**
  * Default navigation state - allChats with no selection
  */
 export const DEFAULT_NAVIGATION_STATE: NavigationState = {
@@ -1053,6 +1080,9 @@ export const getNavigationStateKey = (state: NavigationState): string => {
   }
   if (state.navigator === 'settings') {
     return `settings:${state.subpage}`
+  }
+  if (state.navigator === 'terminal') {
+    return 'terminal'
   }
   // Chats
   const f = state.filter
@@ -1092,6 +1122,7 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
 
   // Handle settings
   if (key === 'settings') return { navigator: 'settings', subpage: 'app' }
+  if (key === 'terminal') return { navigator: 'terminal' }
   if (key.startsWith('settings:')) {
     const subpage = key.slice(9) as SettingsSubpage
     if (['app', 'workspace', 'shortcuts', 'preferences'].includes(subpage)) {

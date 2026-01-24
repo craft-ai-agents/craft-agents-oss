@@ -12,3 +12,12 @@ export type {
   AuthType,
   OAuthCredentials,
 } from '@craft-agent/core/types';
+
+/**
+ * God Mode configuration (dev-only self-building feature)
+ */
+export interface GodModeConfig {
+  enabled: boolean;
+  sourcePath: string;  // Path to craft-agents-oss source code
+  workspaceContext?: string;  // Custom context for the agent
+}
