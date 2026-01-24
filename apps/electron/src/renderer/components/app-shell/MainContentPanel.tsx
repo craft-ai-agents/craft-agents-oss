@@ -23,8 +23,9 @@ import {
   isSourcesNavigation,
   isSettingsNavigation,
   isSkillsNavigation,
+  isTerminalNavigation,
 } from '@/contexts/NavigationContext'
-import { AppSettingsPage, WorkspaceSettingsPage, PermissionsSettingsPage, PreferencesPage, ShortcutsPage, SourceInfoPage, ChatPage } from '@/pages'
+import { AppSettingsPage, WorkspaceSettingsPage, PermissionsSettingsPage, PreferencesPage, ShortcutsPage, SourceInfoPage, ChatPage, TerminalPage } from '@/pages'
 import SkillInfoPage from '@/pages/SkillInfoPage'
 
 export interface MainContentPanelProps {
@@ -83,6 +84,15 @@ export function MainContentPanel({
           </Panel>
         )
     }
+  }
+
+  // Terminal navigator
+  if (isTerminalNavigation(navState)) {
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        <TerminalPage />
+      </Panel>
+    )
   }
 
   // Sources navigator - show source info or empty state

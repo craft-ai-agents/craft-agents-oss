@@ -34,7 +34,7 @@ export interface ParsedRoute {
 // Compound Route Types (new format)
 // =============================================================================
 
-export type NavigatorType = 'chats' | 'sources' | 'skills' | 'settings'
+export type NavigatorType = 'chats' | 'sources' | 'skills' | 'settings' | 'terminal'
 
 export interface ParsedCompoundRoute {
   /** The navigator type */
@@ -58,7 +58,7 @@ export interface ParsedCompoundRoute {
  * Known prefixes that indicate a compound route
  */
 const COMPOUND_ROUTE_PREFIXES = [
-  'allChats', 'flagged', 'state', 'sources', 'skills', 'settings'
+  'allChats', 'flagged', 'state', 'sources', 'skills', 'settings', 'terminal'
 ]
 
 /**
@@ -84,6 +84,7 @@ export function isCompoundRoute(route: string): boolean {
  *   'sources/api/source/gmail' -> { navigator: 'sources', sourceFilter: { kind: 'type', sourceType: 'api' }, details: { type: 'source', id: 'gmail' } }
  *   'settings' -> { navigator: 'settings', details: { type: 'app', id: 'app' } }
  *   'settings/shortcuts' -> { navigator: 'settings', details: { type: 'shortcuts', id: 'shortcuts' } }
+ *   'terminal' -> { navigator: 'terminal', details: null }
  */
 export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
   const segments = route.split('/').filter(Boolean)
@@ -155,6 +156,11 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
     return null
   }
 
+  // Terminal navigator
+  if (first === 'terminal') {
+    return { navigator: 'terminal', details: null }
+  }
+
   // Chats navigator (allChats, flagged, state)
   let chatFilter: ChatFilter
   let detailsStartIndex: number
@@ -205,6 +211,10 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
   if (parsed.navigator === 'settings') {
     const detailsType = parsed.details?.type || 'app'
     return detailsType === 'app' ? 'settings' : `settings/${detailsType}`
+  }
+
+  if (parsed.navigator === 'terminal') {
+    return 'terminal'
   }
 
   if (parsed.navigator === 'sources') {
@@ -416,6 +426,11 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
     return { navigator: 'settings', subpage }
   }
 
+  // Terminal
+  if (compound.navigator === 'terminal') {
+    return { navigator: 'terminal' }
+  }
+
   // Sources - include filter if present
   if (compound.navigator === 'sources') {
     if (!compound.details) {
@@ -479,6 +494,8 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
       return { navigator: 'settings', subpage: 'shortcuts' }
     case 'preferences':
       return { navigator: 'settings', subpage: 'preferences' }
+    case 'terminal':
+      return { navigator: 'terminal' }
     case 'sources':
       return { navigator: 'sources', details: null }
     case 'source-info':
@@ -573,6 +590,10 @@ export function buildRouteFromNavigationState(state: NavigationState): string {
       return `skills/skill/${state.details.skillSlug}`
     }
     return 'skills'
+  }
+
+  if (state.navigator === 'terminal') {
+    return 'terminal'
   }
 
   // Chats

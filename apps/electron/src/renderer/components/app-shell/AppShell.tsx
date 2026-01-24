@@ -15,6 +15,7 @@ import {
   Search,
   Plus,
   Trash2,
+  Terminal,
   DatabaseZap,
   Zap,
   Inbox,
@@ -391,6 +392,7 @@ function AppShellContent({
       })
     })
 
+    console.log('[AppShell] Computed fileChanges:', changes.length, changes)
     return changes
   }, [session?.messages])
 
@@ -965,6 +967,10 @@ function AppShellContent({
     navigate(routes.view.settings(subpage))
   }, [])
 
+  const handleTerminalClick = useCallback(() => {
+    navigate(routes.view.terminal())
+  }, [])
+
   // ============================================================================
   // EDIT POPOVER STATE
   // ============================================================================
@@ -1060,8 +1066,14 @@ function AppShellContent({
     // 2.6. Skills nav item
     result.push({ id: 'nav:skills', type: 'nav', action: handleSkillsClick })
 
+    // 2.6.5. Terminal nav item
+    result.push({ id: 'nav:terminal', type: 'nav', action: handleTerminalClick })
+
     // 2.7. Settings nav item
     result.push({ id: 'nav:settings', type: 'nav', action: () => handleSettingsClick('app') })
+
+    // 2.8. God Mode nav item (only for Settings)
+    result.push({ id: 'nav:settings:god-mode', type: 'nav', action: () => handleSettingsClick('preferences') }) // Use preferences as placeholder for now
 
     return result
   }, [handleAllChatsClick, handleFlaggedClick, handleTodoStateClick, todoStates, handleSourcesClick, handleSkillsClick, handleSettingsClick])
@@ -1181,6 +1193,11 @@ function AppShellContent({
     // Skills navigator
     if (isSkillsNavigation(navState)) {
       return 'All Skills'
+    }
+
+    // Terminal navigator
+    if (navState.navigator === 'terminal') {
+      return 'Terminal'
     }
 
     // Settings navigator
@@ -1408,6 +1425,13 @@ function AppShellContent({
                         onAddSkill: openAddSkill,
                       },
                     },
+                    {
+                      id: "nav:terminal",
+                      title: "Terminal",
+                      icon: Terminal,
+                      variant: navState.navigator === 'terminal' ? "default" : "ghost",
+                      onClick: handleTerminalClick,
+                    },
                     { id: "separator:skills-settings", type: "separator" },
                     {
                       id: "nav:settings",
@@ -1415,6 +1439,18 @@ function AppShellContent({
                       icon: Settings,
                       variant: isSettingsNavigation(navState) ? "default" : "ghost",
                       onClick: () => handleSettingsClick('app'),
+                      expandable: true,
+                      expanded: isExpanded('nav:settings'),
+                      onToggle: () => toggleExpanded('nav:settings'),
+                      items: [
+                        {
+                          id: "nav:settings:god-mode",
+                          title: "God Mode",
+                          icon: <Zap className="h-3.5 w-3.5" />,
+                          variant: (isSettingsNavigation(navState) && navState.subpage === 'preferences') ? "default" : "ghost",
+                          onClick: () => handleSettingsClick('preferences'),
+                        }
+                      ]
                     },
                   ]}
                 />
@@ -1514,6 +1550,15 @@ function AppShellContent({
             style={{ width: sessionListWidth }}
           >
             <PanelHeader
+              leftAction={
+                isChatsNavigation(navState) ? (
+                  <HeaderIconButton
+                    icon={<SquarePenRounded className="h-3.5 w-3.5" />}
+                    onClick={() => handleNewChat(true)}
+                    tooltip="New Chat"
+                  />
+                ) : undefined
+              }
               title={isSidebarVisible ? listTitle : undefined}
               compensateForStoplight={!isSidebarVisible}
               badge={
@@ -1848,6 +1893,18 @@ function AppShellContent({
                         panel={{ type: 'sessionMetadata' }}
                         sessionId={isChatsNavigation(navState) && navState.details ? navState.details.sessionId : undefined}
                         closeButton={rightSidebarCloseButton}
+                        fileChanges={fileChanges}
+                        changeStatuses={changeStatuses}
+                        gitWorkingDir={gitWorkingDir}
+                        enableGitIntegration={!!gitWorkingDir}
+                        onReviewChanges={handleOpenDiffReview}
+                        onReviewFile={(changeId: string) => {
+                          const index = fileChanges.findIndex(c => c.id === changeId)
+                          if (index >= 0) handleOpenDiffReview(index)
+                        }}
+                        onAcceptAll={handleAcceptAllChanges}
+                        onRejectAll={handleRejectAllChanges}
+                        onCommitCreated={handleCommitCreated}
                       />
                     </div>
                   </motion.div>
