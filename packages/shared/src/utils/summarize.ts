@@ -37,7 +37,7 @@ async function getAnthropicClient(): Promise<Anthropic | null> {
     return anthropicClient;
   }
 
-  // Option 1: Direct API key from env (set by setAuthEnvironment)
+  // Option 1: Direct API key from env (set by reinitializeAuth in sessions.ts)
   const envApiKey = process.env.ANTHROPIC_API_KEY;
   if (envApiKey) {
     const baseUrl = process.env.ANTHROPIC_BASE_URL?.trim();

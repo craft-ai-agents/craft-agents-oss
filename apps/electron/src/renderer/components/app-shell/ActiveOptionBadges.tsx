@@ -2,9 +2,23 @@ import * as React from 'react'
 import { cn } from '@/lib/utils'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { SlashCommandMenu, DEFAULT_SLASH_COMMAND_GROUPS, type SlashCommandId } from '@/components/ui/slash-command-menu'
-import { ChevronDown, X } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
+  StyledDropdownMenuContent,
+  StyledDropdownMenuItem,
+} from '@/components/ui/styled-dropdown'
+import { ChevronDown, Trash2, X } from 'lucide-react'
 import { PERMISSION_MODE_CONFIG, type PermissionMode } from '@craft-agent/shared/agent/modes'
 import { ActiveTasksBar, type BackgroundTask } from './ActiveTasksBar'
+import { LabelIcon } from '@/components/ui/label-icon'
+import type { LabelConfig } from '@craft-agent/shared/labels'
+import { flattenLabels, extractLabelId } from '@craft-agent/shared/labels'
+import { resolveEntityColor } from '@craft-agent/shared/colors'
+import { useTheme } from '@/context/ThemeContext'
+import { useDynamicStack } from '@/hooks/useDynamicStack'
 
 // ============================================================================
 // Permission Mode Icon Component
@@ -44,6 +58,12 @@ export interface ActiveOptionBadgesProps {
   onKillTask?: (taskId: string) => void
   /** Callback to insert message into input field */
   onInsertMessage?: (text: string) => void
+  /** Label IDs applied to this session */
+  sessionLabels?: string[]
+  /** Available label configs (tree structure) for resolving label display */
+  labels?: LabelConfig[]
+  /** Callback when a label is removed */
+  onRemoveLabel?: (labelId: string) => void
   /** Additional CSS classes */
   className?: string
 }
@@ -57,15 +77,38 @@ export function ActiveOptionBadges({
   sessionId,
   onKillTask,
   onInsertMessage,
+  sessionLabels = [],
+  labels = [],
+  onRemoveLabel,
   className,
 }: ActiveOptionBadgesProps) {
+  // Resolve session label entries to their config objects for rendering.
+  // Entries may be bare IDs ("bug") or valued ("priority::3"), so we
+  // extract just the label ID before looking up the config.
+  const resolvedLabels = React.useMemo(() => {
+    if (sessionLabels.length === 0 || labels.length === 0) return []
+    const flat = flattenLabels(labels)
+    return sessionLabels
+      .map(entry => flat.find(l => l.id === extractLabelId(entry)))
+      .filter((l): l is LabelConfig => l !== undefined)
+  }, [sessionLabels, labels])
+
+  const hasLabels = resolvedLabels.length > 0
+
+  // Dynamic stacking with equal visible strips: ResizeObserver computes per-badge
+  // margins directly on children. Wider badges get more negative margins so each
+  // shows the same visible strip when stacked. No React re-renders needed.
+  // reservedStart: 24 matches the mask gradient width so stacking begins
+  // before badges reach the faded zone on the left edge.
+  const stackRef = useDynamicStack({ gap: 8, minVisible: 20, reservedStart: 24 })
+
   // Only render if badges or tasks are active
-  if (!ultrathinkEnabled && !permissionMode && tasks.length === 0) {
+  if (!ultrathinkEnabled && !permissionMode && tasks.length === 0 && !hasLabels) {
     return null
   }
 
   return (
-    <div className={cn("flex items-start gap-2 mb-2 px-px pt-px pb-0.5 overflow-x-auto overflow-y-hidden", className)}>
+    <div className={cn("flex items-start gap-2 mb-2 px-px pt-px pb-0.5", className)}>
       {/* Permission Mode Badge */}
       {permissionMode && (
         <div className="shrink-0">
@@ -93,12 +136,95 @@ export function ActiveOptionBadges({
         </button>
       )}
 
-      {/* Background Tasks - DISABLED: UI hidden because task tracking is not reliable.
-       * The underlying infrastructure (useBackgroundTasks hook, atoms, event handlers) is kept
-       * intact for when we fix the reliability issues. See apps/electron/CLAUDE.md for details.
-       */}
-      {/* {sessionId && <ActiveTasksBar tasks={tasks} sessionId={sessionId} onKillTask={onKillTask} onInsertMessage={onInsertMessage} />} */}
+      {/* Label Badges Container — dynamic stacking with equal visible strips.
+       * useDynamicStack sets per-child marginLeft directly via ResizeObserver.
+       * overflow: clip prevents scroll container while py/-my gives shadow room. */}
+      {hasLabels && (
+        <div
+          className="min-w-0 flex-1 py-0.5 -my-0.5"
+          style={{
+            // shadow-minimal replicated as drop-shadow (traces masked alpha, no clipping).
+            // Ring uses higher blur+opacity for visible border feel (hard 1px ring can't be replicated exactly).
+            // Blur shadows use reduced blur+opacity to stay tight (accounting for no negative spread in drop-shadow).
+            filter: 'drop-shadow(0px 0px 0.5px rgba(var(--foreground-rgb), 0.3)) drop-shadow(0px 1px 0.1px rgba(0,0,0,0.04)) drop-shadow(0px 3px 0.2px rgba(0,0,0,0.03))',
+          }}
+        >
+          <div
+            ref={stackRef}
+            className="flex items-center min-w-0 justify-end py-1 -my-1 pr-2 -mr-2"
+            style={{ overflow: 'clip' }}
+          >
+            {resolvedLabels.map(label => (
+              <LabelBadge
+                key={label.id}
+                label={label}
+                onRemove={() => onRemoveLabel?.(label.id)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
+  )
+}
+
+// ============================================================================
+// Label Badge Component
+// ============================================================================
+
+/**
+ * Renders a single label badge with a dropdown menu for actions (e.g. Remove).
+ * No box-shadow on the badge itself — all shadows come from the parent
+ * wrapper's drop-shadow filter (traces masked alpha without clipping).
+ * Chevron indicates the dropdown is interactive.
+ */
+function LabelBadge({
+  label,
+  onRemove,
+}: {
+  label: LabelConfig
+  onRemove: () => void
+}) {
+  const { isDark } = useTheme()
+  // Resolve label color to CSS value for tinting bg (3%) and text (10%).
+  // Falls back to foreground if no color — produces near-invisible neutral tint.
+  const resolvedColor = label.color
+    ? resolveEntityColor(label.color, isDark)
+    : 'var(--foreground)'
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "h-[30px] pl-3 pr-2 text-xs font-medium rounded-[8px] flex items-center shrink-0",
+            "outline-none select-none transition-colors",
+            // Background: 97% background + 3% label color. Hover: 92% + 8%.
+            // Text: 90% foreground + 10% label color.
+            // All opaque — drop-shadow traces alpha, badge must stay solid.
+            "bg-[color-mix(in_srgb,var(--background)_97%,var(--badge-color))]",
+            "hover:bg-[color-mix(in_srgb,var(--background)_92%,var(--badge-color))]",
+            "text-[color-mix(in_srgb,var(--foreground)_90%,var(--badge-color))]",
+            "relative", // for z-index stacking when overlapped
+          )}
+          style={{ '--badge-color': resolvedColor } as React.CSSProperties}
+        >
+          <LabelIcon label={label} size="sm" />
+          <span className="whitespace-nowrap ml-2">{label.name}</span>
+          <ChevronDown className="h-3 w-3 opacity-40 ml-1 shrink-0" />
+        </button>
+      </DropdownMenuTrigger>
+      <StyledDropdownMenuContent side="bottom" align="end" sideOffset={4} className="min-w-[140px]">
+        <StyledDropdownMenuItem
+          onSelect={onRemove}
+          className="flex items-center gap-2 text-destructive cursor-pointer"
+        >
+          <Trash2 className="h-3.5 w-3.5 text-destructive" />
+          <span>Remove</span>
+        </StyledDropdownMenuItem>
+      </StyledDropdownMenuContent>
+    </DropdownMenu>
   )
 }
 

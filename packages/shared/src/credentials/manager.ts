@@ -221,6 +221,37 @@ export class CredentialManager {
     });
   }
 
+  /** Get workspace MCP OAuth credentials */
+  async getWorkspaceOAuth(workspaceId: string): Promise<{
+    accessToken: string;
+    tokenType?: string;
+    clientId?: string;
+  } | null> {
+    const cred = await this.get({ type: 'workspace_oauth', workspaceId });
+    if (!cred) return null;
+    return {
+      accessToken: cred.value,
+      tokenType: cred.tokenType,
+      clientId: cred.clientId,
+    };
+  }
+
+  /** Set workspace MCP OAuth credentials */
+  async setWorkspaceOAuth(workspaceId: string, credentials: {
+    accessToken: string;
+    tokenType?: string;
+    clientId?: string;
+  }): Promise<void> {
+    await this.set(
+      { type: 'workspace_oauth', workspaceId },
+      {
+        value: credentials.accessToken,
+        tokenType: credentials.tokenType,
+        clientId: credentials.clientId,
+      }
+    );
+  }
+
   /** Delete all credentials for a workspace (source credentials) */
   async deleteWorkspaceCredentials(workspaceId: string): Promise<void> {
     const allCreds = await this.list({ workspaceId });

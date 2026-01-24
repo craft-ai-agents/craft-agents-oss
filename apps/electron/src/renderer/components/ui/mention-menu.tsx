@@ -1,14 +1,15 @@
 import * as React from 'react'
 import { cn } from '@/lib/utils'
+import { FadingText } from '@/components/ui/fading-text'
 import { SkillAvatar } from '@/components/ui/skill-avatar'
 import { SourceAvatar } from '@/components/ui/source-avatar'
-import type { LoadedSkill, LoadedSource } from '../../../shared/types'
+import type { LoadedSkill, LoadedSource, FileSearchResult } from '../../../shared/types'
 
 // ============================================================================
 // Types
 // ============================================================================
 
-export type MentionItemType = 'skill' | 'source'
+export type MentionItemType = 'skill' | 'source' | 'file' | 'folder'
 
 export interface MentionItem {
   id: string
@@ -18,6 +19,7 @@ export interface MentionItem {
   // Type-specific data
   skill?: LoadedSkill
   source?: LoadedSource
+  file?: { path: string; type: 'file' | 'directory'; relativePath: string }
 }
 
 export interface MentionSection {
@@ -36,6 +38,8 @@ export interface InlineMentionMenuProps {
   workspaceId?: string
   maxWidth?: number
   className?: string
+  /** Whether file search is in progress */
+  isSearching?: boolean
 }
 
 // ============================================================================
@@ -43,10 +47,38 @@ export interface InlineMentionMenuProps {
 // ============================================================================
 
 const MENU_CONTAINER_STYLE = 'overflow-hidden rounded-[8px] bg-background text-foreground shadow-modal-small'
-const MENU_LIST_STYLE = 'max-h-[300px] overflow-y-auto py-1'
+const MENU_LIST_STYLE = 'max-h-[240px] overflow-y-auto py-1'
 const MENU_ITEM_STYLE = 'flex cursor-pointer select-none items-center gap-3 rounded-[6px] mx-1 px-2 py-1.5 text-[13px]'
 const MENU_ITEM_SELECTED = 'bg-foreground/5'
-const MENU_SECTION_HEADER = 'px-3 py-1.5 text-[10px] font-medium text-muted-foreground uppercase tracking-wider'
+// Type badge shown to the right of each item label (e.g. "Skill", "Source")
+const MENU_TYPE_BADGE = 'rounded-[4px] shadow-[0_0_0_1px_var(--shadow-tinted)] shadow-minimal bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground shrink-0'
+
+// ============================================================================
+// Path utilities
+// ============================================================================
+
+/** Extract parent directory from a relative path (e.g. "src/components/Button.tsx" → "src/components/") */
+function getParentDir(relativePath: string): string {
+  const lastSlash = relativePath.lastIndexOf('/')
+  if (lastSlash <= 0) return ''
+  return relativePath.slice(0, lastSlash + 1)
+}
+
+/** Filter cached FileSearchResults by query and convert to MentionItems.
+ *  Used for instant client-side filtering without waiting for IPC. */
+function filterCacheResults(cache: FileSearchResult[], query: string): MentionItem[] {
+  const lowerQuery = query.toLowerCase()
+  return cache
+    .filter(f => f.name.toLowerCase().includes(lowerQuery) || f.relativePath.toLowerCase().includes(lowerQuery))
+    .slice(0, 20)
+    .map(f => ({
+      id: f.path,
+      type: f.type === 'directory' ? 'folder' as const : 'file' as const,
+      label: f.name,
+      description: f.relativePath,
+      file: { path: f.path, type: f.type, relativePath: f.relativePath },
+    }))
+}
 
 // ============================================================================
 // Filter utilities
@@ -216,16 +248,12 @@ export function InlineMentionMenu({
     }
   }, [selectedIndex])
 
-  // Hide if no results or not open
-  if (!open || flatItems.length === 0) return null
+  if (!open) return null
 
   // Calculate bottom position from window height (menu appears above cursor)
   const bottomPosition = typeof window !== 'undefined'
     ? window.innerHeight - Math.round(position.y) + 8
     : 0
-
-  // Track current item index across all sections
-  let currentItemIndex = 0
 
   return (
     <div
@@ -238,66 +266,138 @@ export function InlineMentionMenu({
         maxWidth,
       }}
     >
+      {/* Menu header — sticky above scroll area */}
+      <div className="px-3 py-1.5 text-[12px] font-medium text-muted-foreground border-b border-foreground/5">
+        Mention files, skills, sources
+      </div>
+
       <div ref={listRef} className={MENU_LIST_STYLE}>
-        {filteredSections.map((section, sectionIndex) => (
-          <React.Fragment key={section.id}>
-            {/* Section header - hide when filtering for better prefix match relevance */}
-            {!filter && (
-              <div className={MENU_SECTION_HEADER}>
-                {section.label}
+        {flatItems.length === 0 && filter && (
+          <div className="px-3 py-2 text-[12px] text-muted-foreground/60">No results</div>
+        )}
+        {flatItems.map((item, itemIndex) => {
+          const isSelected = itemIndex === selectedIndex
+
+          return (
+            <div
+              key={`${item.type}-${item.id}`}
+              data-selected={isSelected}
+              onClick={() => {
+                onSelect(item)
+                onOpenChange(false)
+              }}
+              onMouseEnter={() => setSelectedIndex(itemIndex)}
+              className={cn(
+                MENU_ITEM_STYLE,
+                isSelected && MENU_ITEM_SELECTED
+              )}
+            >
+              {/* Icon based on type */}
+              <div className="shrink-0">
+                {item.type === 'skill' && item.skill && (
+                  <SkillAvatar skill={item.skill} size="sm" workspaceId={workspaceId} />
+                )}
+                {item.type === 'source' && item.source && (
+                  <SourceAvatar source={item.source} size="sm" />
+                )}
+                {item.type === 'folder' && (
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" className="text-muted-foreground">
+                    <path d="M20.5 10C20.5 9.07003 20.5 8.60504 20.3978 8.22354C20.1204 7.18827 19.3117 6.37962 18.2765 6.10222C17.895 6 17.43 6 16.5 6H13.1008C12.4742 6 12.1609 6 11.8739 5.91181C11.6824 5.85298 11.5009 5.76572 11.3353 5.65295C11.0871 5.48389 10.8914 5.23926 10.5 4.75L10.4095 4.63693C10.107 4.25881 9.9558 4.06975 9.7736 3.92674C9.54464 3.74703 9.27921 3.61946 8.99585 3.55294C8.77037 3.5 8.52825 3.5 8.04402 3.5C6.60485 3.5 5.88527 3.5 5.32008 3.74178C4.61056 4.0453 4.0453 4.61056 3.74178 5.32008C3.5 5.88527 3.5 6.60485 3.5 8.04402V10M9.46502 20.5H14.535C16.9102 20.5 18.0978 20.5 18.9301 19.8113C19.7624 19.1226 19.9846 17.9559 20.429 15.6227L20.8217 13.5613C21.1358 11.9121 21.2929 11.0874 20.843 10.5437C20.393 10 19.5536 10 17.8746 10H6.12537C4.44643 10 3.60696 10 3.15704 10.5437C2.70713 11.0874 2.8642 11.9121 3.17835 13.5613L3.57099 15.6227C4.01541 17.9559 4.23763 19.1226 5.06992 19.8113C5.90221 20.5 7.08981 20.5 9.46502 20.5Z"/>
+                  </svg>
+                )}
+                {item.type === 'file' && (
+                  <FileMenuIcon name={item.label} />
+                )}
               </div>
-            )}
 
-            {/* Section items */}
-            {section.items.map((item) => {
-              const itemIndex = currentItemIndex++
-              const isSelected = itemIndex === selectedIndex
-
-              return (
-                <div
-                  key={`${section.id}-${item.id}`}
-                  data-selected={isSelected}
-                  onClick={() => {
-                    onSelect(item)
-                    onOpenChange(false)
-                  }}
-                  onMouseEnter={() => setSelectedIndex(itemIndex)}
-                  className={cn(
-                    MENU_ITEM_STYLE,
-                    isSelected && MENU_ITEM_SELECTED
+              {/* Label and optional path/badge */}
+              {(item.type === 'file' || item.type === 'folder') ? (
+                <>
+                  {/* File/folder: filename then parent path fading out on overflow */}
+                  <span className="shrink-0">{item.label}</span>
+                  {item.file?.relativePath && getParentDir(item.file.relativePath) && (
+                    <FadingText className="text-[11px] text-muted-foreground min-w-0 opacity-50" fadeWidth={20}>
+                      {getParentDir(item.file.relativePath)}
+                    </FadingText>
                   )}
-                >
-                  {/* Icon based on type */}
-                  <div className="shrink-0">
-                    {item.type === 'skill' && item.skill && (
-                      <SkillAvatar skill={item.skill} size="sm" workspaceId={workspaceId} />
-                    )}
-                    {item.type === 'source' && item.source && (
-                      <SourceAvatar source={item.source} size="sm" />
-                    )}
+                </>
+              ) : (
+                <>
+                  {/* Skill/source: label with type badge */}
+                  <div className="flex-1 min-w-0">
+                    <span className="truncate block">{item.label}</span>
                   </div>
+                  <span className={MENU_TYPE_BADGE}>
+                    {item.type === 'skill' ? 'Skill' : 'Source'}
+                  </span>
+                </>
+              )}
+            </div>
+          )
+        })}
 
-                  {/* Label and description */}
-                  <div className="flex-1 min-w-0 leading-tight">
-                    <div className="font-medium truncate">{item.label}</div>
-                    {item.description && (
-                      <div className="text-[11px] text-foreground/50 truncate mt-px">
-                        {item.description}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
-
-            {/* Separator between sections (not after last, hide when filtering) */}
-            {!filter && sectionIndex < filteredSections.length - 1 && (
-              <div className="h-px bg-border/50 my-1 mx-2" />
-            )}
-          </React.Fragment>
-        ))}
       </div>
     </div>
+  )
+}
+
+// ============================================================================
+// File icon component - picks icon variant based on file extension
+// ============================================================================
+
+/** Known code file extensions that get the code file icon (< >) */
+const CODE_EXTENSIONS = new Set([
+  'ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs',
+  'py', 'rs', 'go', 'java', 'rb', 'swift', 'kt',
+  'c', 'cpp', 'h', 'hpp', 'cs',
+  'css', 'scss', 'less', 'html', 'vue', 'svelte',
+  'json', 'yaml', 'yml', 'toml', 'xml',
+  'sh', 'bash', 'zsh', 'fish',
+  'md', 'mdx',
+  'sql', 'graphql', 'proto',
+])
+
+/** Known image file extensions that get the image icon */
+const IMAGE_EXTENSIONS = new Set([
+  'png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'ico', 'bmp', 'tiff', 'tif', 'avif', 'heic', 'heif',
+])
+
+function getFileIconType(name: string): 'code' | 'image' | 'generic' {
+  const ext = name.split('.').pop()?.toLowerCase()
+  if (!ext) return 'generic'
+  if (CODE_EXTENSIONS.has(ext)) return 'code'
+  if (IMAGE_EXTENSIONS.has(ext)) return 'image'
+  return 'generic'
+}
+
+/** Renders the appropriate file icon based on extension (code, image, or generic) */
+function FileMenuIcon({ name }: { name: string }) {
+  const iconType = getFileIconType(name)
+
+  if (iconType === 'code') {
+    // Code file icon (document with < > brackets)
+    return (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground">
+        <path d="M10.5 2.5C12.1569 2.5 13.5 3.84315 13.5 5.5V6.1C13.5 6.4716 13.5 6.6574 13.5246 6.81287C13.6602 7.66865 14.3313 8.33983 15.1871 8.47538C15.3426 8.5 15.5284 8.5 15.9 8.5H16.5C18.1569 8.5 19.5 9.84315 19.5 11.5M10.5 12.8799C9.70024 13.2985 9.10807 13.8275 8.64232 14.5478C8.51063 14.7515 8.44479 14.8533 8.44489 15.0011C8.44498 15.1488 8.51099 15.2506 8.643 15.4542C9.1095 16.1736 9.70167 16.7028 10.5 17.1225M13.5 12.8799C14.2998 13.2985 14.8919 13.8275 15.3577 14.5478C15.4894 14.7515 15.5552 14.8533 15.5551 15.0011C15.555 15.1488 15.489 15.2506 15.357 15.4542C14.8905 16.1736 14.2983 16.7028 13.5 17.1225M10.9645 2.5H10.6678C8.64635 2.5 7.63561 2.5 6.84835 2.85692C5.96507 3.25736 5.25736 3.96507 4.85692 4.84835C4.5 5.63561 4.5 6.64635 4.5 8.66781V14C4.5 17.2875 4.5 18.9312 5.40796 20.0376C5.57418 20.2401 5.75989 20.4258 5.96243 20.592C7.06878 21.5 8.71252 21.5 12 21.5C15.2875 21.5 16.9312 21.5 18.0376 20.592C18.2401 20.4258 18.4258 20.2401 18.592 20.0376C19.5 18.9312 19.5 17.2875 19.5 14V11.0355C19.5 10.0027 19.5 9.48628 19.4176 8.99414C19.2671 8.09576 18.9141 7.24342 18.3852 6.50177C18.0955 6.09549 17.7303 5.73032 17 5C16.2697 4.26968 15.9045 3.90451 15.4982 3.6148C14.7566 3.08595 13.9042 2.7329 13.0059 2.58243C12.5137 2.5 11.9973 2.5 10.9645 2.5Z"/>
+      </svg>
+    )
+  }
+
+  if (iconType === 'image') {
+    // Image file icon (landscape frame with mountain/sun)
+    return (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground">
+        <path d="M8 8.5C8 8.77614 7.77614 9 7.5 9C7.22386 9 7 8.77614 7 8.5C7 8.22386 7.22386 8 7.5 8C7.77614 8 8 8.22386 8 8.5Z" fill="currentColor"/>
+        <path d="M20.9998 16.1004L17.9497 13.0503C16.6163 11.7169 15.9496 11.0503 15.1212 11.0503C14.2928 11.0503 13.6261 11.7169 12.2928 13.0503L5.34323 20M8 8.5C8 8.77614 7.77614 9 7.5 9C7.22386 9 7 8.77614 7 8.5C7 8.22386 7.22386 8 7.5 8C7.77614 8 8 8.22386 8 8.5ZM10.5 20.5H13.5C17.2712 20.5 19.1569 20.5 20.3284 19.3284C21.5 18.1569 21.5 16.2712 21.5 12.5V11.5C21.5 7.72876 21.5 5.84315 20.3284 4.67157C19.1569 3.5 17.2712 3.5 13.5 3.5H10.5C6.72876 3.5 4.84315 3.5 3.67157 4.67157C2.5 5.84315 2.5 7.72876 2.5 11.5V12.5C2.5 16.2712 2.5 18.1569 3.67157 19.3284C4.84315 20.5 6.72876 20.5 10.5 20.5Z"/>
+      </svg>
+    )
+  }
+
+  // Generic file icon (document with folded corner)
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground">
+      <path d="M10.5 2.5C12.1569 2.5 13.5 3.84315 13.5 5.5V6.1C13.5 6.4716 13.5 6.6574 13.5246 6.81287C13.6602 7.66865 14.3313 8.33983 15.1871 8.47538C15.3426 8.5 15.5284 8.5 15.9 8.5H16.5C18.1569 8.5 19.5 9.84315 19.5 11.5M9 16H15M9 12H10M10.9645 2.5H10.6678C8.64635 2.5 7.63561 2.5 6.84835 2.85692C5.96507 3.25736 5.25736 3.96507 4.85692 4.84835C4.5 5.63561 4.5 6.64635 4.5 8.66781V14C4.5 17.2875 4.5 18.9312 5.40796 20.0376C5.57418 20.2401 5.75989 20.4258 5.96243 20.592C7.06878 21.5 8.71252 21.5 12 21.5C15.2875 21.5 16.9312 21.5 18.0376 20.592C18.2401 20.4258 18.4258 20.2401 18.592 20.0376C19.5 18.9312 19.5 17.2875 19.5 14V11.0355C19.5 10.0027 19.5 9.48628 19.4176 8.99414C19.2671 8.09576 18.9141 7.24342 18.3852 6.50177C18.0955 6.09549 17.7303 5.73032 17 5C16.2697 4.26968 15.9045 3.90451 15.4982 3.6148C14.7566 3.08595 13.9042 2.7329 13.0059 2.58243C12.5137 2.5 11.9973 2.5 10.9645 2.5Z"/>
+    </svg>
   )
 }
 
@@ -318,6 +418,8 @@ export interface UseInlineMentionOptions {
   inputRef: React.RefObject<MentionInputElement | null>
   skills: LoadedSkill[]
   sources: LoadedSource[]
+  /** Base path for file search (working directory) */
+  basePath?: string
   onSelect: (item: MentionItem) => void
   /** Workspace ID for fully-qualified skill names */
   workspaceId?: string
@@ -328,6 +430,8 @@ export interface UseInlineMentionReturn {
   filter: string
   position: { x: number; y: number }
   sections: MentionSection[]
+  /** Whether file search is in progress */
+  isSearching: boolean
   handleInputChange: (value: string, cursorPosition: number) => void
   close: () => void
   handleSelect: (item: MentionItem) => { value: string; cursorPosition: number }
@@ -337,17 +441,37 @@ export function useInlineMention({
   inputRef,
   skills,
   sources,
+  basePath,
   onSelect,
   workspaceId,
 }: UseInlineMentionOptions): UseInlineMentionReturn {
   const [isOpen, setIsOpen] = React.useState(false)
   const [filter, setFilter] = React.useState('')
+  // committedFilter: only updates when IPC returns (or immediately when no IPC needed).
+  // Prevents visual jumps — the menu shows all items until results are ready,
+  // then applies filter + file results in a single frame.
+  const [committedFilter, setCommittedFilter] = React.useState('')
   const [position, setPosition] = React.useState({ x: 0, y: 0 })
   const [atStart, setAtStart] = React.useState(-1)
+  const [fileResults, setFileResults] = React.useState<MentionItem[]>([])
+  const fileSearchTimeout = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Cache of raw IPC file search results for the current menu session.
+  // Allows instant client-side filtering when user edits the query (add/delete chars)
+  // without waiting for a new IPC round-trip. Cleared when menu closes.
+  const fileCache = React.useRef<FileSearchResult[]>([])
   // Store current input state for handleSelect
   const currentInputRef = React.useRef({ value: '', cursorPosition: 0 })
 
-  // Build sections from available data (skills and sources only - folders moved to slash menu)
+  // Cleanup pending timeout on unmount
+  React.useEffect(() => {
+    return () => {
+      if (fileSearchTimeout.current) {
+        clearTimeout(fileSearchTimeout.current)
+      }
+    }
+  }, [])
+
+  // Build sections from available data (skills, sources, and file search results)
   const sections = React.useMemo((): MentionSection[] => {
     const result: MentionSection[] = []
 
@@ -383,44 +507,79 @@ export function useInlineMention({
       })
     }
 
+    // Files section (from async search results)
+    if (fileResults.length > 0) {
+      result.push({
+        id: 'files',
+        label: 'Files',
+        items: fileResults,
+      })
+    }
+
     return result
-  }, [skills, sources])
+  }, [skills, sources, fileResults])
 
   const handleInputChange = React.useCallback((value: string, cursorPosition: number) => {
     // Store current state for handleSelect
     currentInputRef.current = { value, cursorPosition }
 
     const textBeforeCursor = value.slice(0, cursorPosition)
-    // Match @ anywhere, followed by optional word chars, hyphens, and slashes
-    // This triggers on typing @ and shows menu while typing the filter
-    const atMatch = textBeforeCursor.match(/@([\w\-/]*)$/)
+    // Match @ anywhere, followed by optional word chars, hyphens, slashes, and dots
+    // (dots needed for file extensions like @main.ts)
+    const atMatch = textBeforeCursor.match(/@([\w\-\/.]+)?$/)
 
-    // Only show menu if we have at least one section with items
-    const hasItems = sections.some(s => s.items.length > 0)
-
-    // Check if this is a valid @ mention trigger:
-    // - Must have @ match and items to show
-    // - @ must be at start of input OR preceded by whitespace (not mid-word like emails)
+    // Check if this is a valid @ mention trigger
     const matchStart = atMatch ? textBeforeCursor.lastIndexOf('@') : -1
-    const isValidTrigger = atMatch && hasItems && isValidMentionTrigger(textBeforeCursor, matchStart)
+    const isValidTrigger = atMatch && isValidMentionTrigger(textBeforeCursor, matchStart)
 
     if (isValidTrigger) {
       const filterText = atMatch[1] || ''
-      // Check if there are any filtered results before opening menu
-      // This ensures Enter key works normally when no matches exist
-      const filteredSections = filterSections(sections, filterText)
-      const hasFilteredItems = filteredSections.some(s => s.items.length > 0)
-
-      if (!hasFilteredItems) {
-        // No results after filtering - close menu to allow normal Enter handling
-        setIsOpen(false)
-        setFilter('')
-        setAtStart(-1)
-        return
-      }
-
       setAtStart(matchStart)
       setFilter(filterText)
+
+      // Cache-first file search: if cache has entries from a previous IPC call,
+      // filter client-side instantly (no IPC, no debounce). Otherwise fire a
+      // debounced IPC to populate the cache. Cache clears when menu closes.
+      window.electronAPI.debugLog('[mention] filterText:', filterText, 'basePath:', basePath, 'cacheSize:', fileCache.current.length)
+      if (basePath && filterText.length >= 1) {
+        if (fileCache.current.length > 0) {
+          // Cache exists — filter client-side instantly, no IPC needed
+          if (fileSearchTimeout.current) {
+            clearTimeout(fileSearchTimeout.current)
+            fileSearchTimeout.current = null
+          }
+          const filtered = filterCacheResults(fileCache.current, filterText)
+          window.electronAPI.debugLog('[mention] cache hit:', filtered.length, 'items')
+          setFileResults(filtered)
+          setCommittedFilter(filterText)
+        } else {
+          // First search — fire debounced IPC to populate cache
+          if (fileSearchTimeout.current) clearTimeout(fileSearchTimeout.current)
+
+          fileSearchTimeout.current = setTimeout(async () => {
+            try {
+              window.electronAPI.debugLog('[mention] calling IPC searchFiles:', basePath, filterText)
+              const results = await window.electronAPI.searchFiles(basePath, filterText)
+              window.electronAPI.debugLog('[mention] IPC returned:', results?.length, 'results')
+              fileCache.current = results
+              const filtered = filterCacheResults(fileCache.current, filterText)
+              window.electronAPI.debugLog('[mention] after cache filter:', filtered.length, 'items')
+              setFileResults(filtered)
+              setCommittedFilter(filterText)
+            } catch (err) {
+              window.electronAPI.debugLog('[mention] IPC searchFiles error:', String(err))
+            }
+          }, 150)
+        }
+      } else {
+        window.electronAPI.debugLog('[mention] skipping file search (no basePath or empty filter)')
+        if (fileSearchTimeout.current) {
+          clearTimeout(fileSearchTimeout.current)
+          fileSearchTimeout.current = null
+        }
+        setFileResults([])
+        setCommittedFilter(filterText)
+      }
 
       if (inputRef.current) {
         // Try to get actual caret position from the input element
@@ -448,9 +607,17 @@ export function useInlineMention({
     } else {
       setIsOpen(false)
       setFilter('')
+      setCommittedFilter('')
       setAtStart(-1)
+      // Clear file search state and cache when menu closes
+      if (fileSearchTimeout.current) {
+        clearTimeout(fileSearchTimeout.current)
+        fileSearchTimeout.current = null
+      }
+      setFileResults([])
+      fileCache.current = []
     }
-  }, [inputRef, sections])
+  }, [inputRef, basePath])
 
   const handleSelect = React.useCallback((item: MentionItem): { value: string; cursorPosition: number } => {
     let result = ''
@@ -471,6 +638,11 @@ export function useInlineMention({
         mentionText = `[skill:${qualifiedName}] `
       } else if (item.type === 'source') {
         mentionText = `[source:${item.id}] `
+      } else if (item.type === 'file') {
+        // Use relative path for file mentions
+        mentionText = `[file:${item.file?.relativePath || item.id}] `
+      } else if (item.type === 'folder') {
+        mentionText = `[folder:${item.file?.relativePath || item.id}] `
       } else {
         mentionText = `[skill:${item.id}] `
       }
@@ -481,6 +653,14 @@ export function useInlineMention({
 
     onSelect(item)
     setIsOpen(false)
+    setCommittedFilter('')
+    // Clear file search state and cache to prevent stale results on next open
+    if (fileSearchTimeout.current) {
+      clearTimeout(fileSearchTimeout.current)
+      fileSearchTimeout.current = null
+    }
+    setFileResults([])
+    fileCache.current = []
 
     return { value: result, cursorPosition: newCursorPosition }
   }, [onSelect, atStart, workspaceId])
@@ -488,14 +668,23 @@ export function useInlineMention({
   const close = React.useCallback(() => {
     setIsOpen(false)
     setFilter('')
+    setCommittedFilter('')
     setAtStart(-1)
+    // Clear file search state and cache to prevent stale results on next open
+    if (fileSearchTimeout.current) {
+      clearTimeout(fileSearchTimeout.current)
+      fileSearchTimeout.current = null
+    }
+    setFileResults([])
+    fileCache.current = []
   }, [])
 
   return {
     isOpen,
-    filter,
+    filter: committedFilter,
     position,
     sections,
+    isSearching: false,
     handleInputChange,
     close,
     handleSelect,

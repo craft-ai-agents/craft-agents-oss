@@ -51,6 +51,7 @@ Use available tools to learn about the service:
 Based on research and user intent, create `config.json` with **ALL required fields**:
 
 **Required fields:**
+- `id` - **REQUIRED**: Unique identifier string. Format: `{slug}_{random}` (e.g., `linear_a1b2c3d4`). Generate the random part with any method (e.g., 8 hex chars).
 - `name`, `slug`, `provider`, `type` - Basic identification
 - `icon` - **REQUIRED**: URL to the service's favicon, logo, or app icon. Search the web to find an appropriate icon that looks like an app icon. The icon is auto-downloaded and cached locally. Use an emoji as fallback.
 - `tagline` - **REQUIRED**: Short description for agent context (e.g., "Issue tracking, sprint planning, and project management")
@@ -223,7 +224,7 @@ Each source folder contains:
 
 ```json
 {
-  "id": "uuid",
+  "id": "linear_a1b2c3d4",        // Unique identifier: {slug}_{random}
   "name": "Human-readable name",
   "slug": "url-safe-identifier",
   "enabled": true,
@@ -278,6 +279,7 @@ Model Context Protocol servers provide tools via HTTP/SSE.
 **OAuth authentication (recommended):**
 ```json
 {
+  "id": "linear_a1b2c3d4",
   "type": "mcp",
   "provider": "linear",
   "mcp": {

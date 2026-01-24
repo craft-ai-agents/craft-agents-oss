@@ -162,7 +162,7 @@ function FileTreeItem({
         // min-w-0 and overflow-hidden required for truncation to work in grid context
         "group flex w-full min-w-0 overflow-hidden items-center gap-2 rounded-[6px] py-[5px] text-[13px] select-none outline-none text-left",
         "focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring",
-        "hover:bg-foreground/5 transition-colors",
+        "hover:bg-sidebar-hover transition-colors",
         // Same padding for all items - nested indentation handled by container
         "px-2"
       )}

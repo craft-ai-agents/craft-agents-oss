@@ -21,6 +21,7 @@ import {
   isIconUrl,
   ICON_EXTENSIONS,
 } from '../utils/icon.ts';
+import { migrateStatusColors } from '../colors/migrate.ts';
 import { debug } from '../utils/debug.ts';
 
 const STATUS_CONFIG_DIR = 'statuses';
@@ -32,12 +33,12 @@ const STATUS_ICONS_DIR = 'statuses/icons';
  * Note: icon field is omitted - uses auto-discovered files in statuses/icons/{id}.svg
  */
 export function getDefaultStatusConfig(): WorkspaceStatusConfig {
-  // Note: color is omitted - the renderer applies design system defaults:
-  // - backlog: text-foreground/50 (muted, not yet planned)
-  // - todo: text-foreground (solid, ready to work on)
-  // - needs-review: text-info (amber, attention needed)
-  // - done: text-accent (purple, completed)
-  // - cancelled: text-foreground/50 (muted, inactive)
+  // Note: color is omitted - defaults from colors/defaults.ts are applied:
+  // - backlog: foreground/50 (muted, not yet planned)
+  // - todo: foreground/50 (muted, ready to work on)
+  // - needs-review: info (amber, attention needed)
+  // - done: accent (purple, completed)
+  // - cancelled: foreground/50 (muted, inactive)
   //
   // Note: icon is omitted - auto-discovered from statuses/icons/{id}.svg
   return {
@@ -127,8 +128,9 @@ function validateStatusConfig(config: WorkspaceStatusConfig): boolean {
 
 /**
  * Load workspace status configuration
- * Returns defaults if no config exists or validation fails
- * Ensures icon files exist
+ * Returns defaults if no config exists or validation fails.
+ * Ensures icon files exist.
+ * Auto-migrates old Tailwind color format to EntityColor on first load.
  */
 export function loadStatusConfig(workspaceRootPath: string): WorkspaceStatusConfig {
   // Ensure default icon files exist (self-healing)
@@ -148,6 +150,14 @@ export function loadStatusConfig(workspaceRootPath: string): WorkspaceStatusConf
     if (!validateStatusConfig(config)) {
       console.warn('[loadStatusConfig] Invalid config: missing required fixed statuses, returning defaults');
       return getDefaultStatusConfig();
+    }
+
+    // Auto-migrate old Tailwind class colors (e.g., "text-accent") to new EntityColor format.
+    // If migration occurs, write the updated config back to disk.
+    const migrated = migrateStatusColors(config);
+    if (migrated) {
+      debug('[loadStatusConfig] Migrated old color format, writing back');
+      saveStatusConfig(workspaceRootPath, config);
     }
 
     return config;

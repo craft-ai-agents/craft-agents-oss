@@ -114,7 +114,7 @@ const MENU_CONTAINER_STYLE = 'min-w-[200px] overflow-hidden rounded-[8px] bg-bac
 const MENU_LIST_STYLE = 'max-h-[260px] overflow-y-auto py-1'
 const MENU_ITEM_STYLE = 'flex cursor-pointer select-none items-center gap-2 rounded-[6px] mx-1 px-2 py-1.5 text-[13px]'
 const MENU_ITEM_SELECTED = 'bg-foreground/5'
-const MENU_SECTION_HEADER = 'px-3 py-1.5 text-[10px] font-medium text-muted-foreground uppercase tracking-wider'
+const MENU_SECTION_HEADER = 'px-3 py-1.5 mb-0.5 text-[12px] font-medium text-muted-foreground border-b border-foreground/5'
 
 // ============================================================================
 // Shared: Filter utilities
@@ -476,10 +476,6 @@ export function InlineSlashCommand({
               }
             })}
 
-            {/* Separator between sections (not after last) */}
-            {sectionIndex < filteredSections.length - 1 && (
-              <div className="h-px bg-border/50 my-1 mx-2" />
-            )}
           </React.Fragment>
         ))}
       </div>
@@ -587,7 +583,7 @@ export function useInlineSlashCommand({
 
       result.push({
         id: 'folders',
-        label: 'Recent Folders',
+        label: 'Recent Working Directories',
         items: sortedFolders.map(path => ({
           id: path,
           type: 'folder' as const,

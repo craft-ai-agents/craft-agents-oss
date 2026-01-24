@@ -330,7 +330,16 @@ export function listSessions(workspaceRootPath: string): SessionMetadata[] {
   for (const entry of entries) {
     if (entry.isDirectory()) {
       const sessionId = entry.name;
-      const jsonlFile = join(sessionsDir, sessionId, 'session.jsonl');
+      const sessionDir = join(sessionsDir, sessionId);
+      const jsonlFile = join(sessionDir, 'session.jsonl');
+
+      // Clean up orphaned .tmp files from crashed atomic writes.
+      // These are harmless but waste disk space.
+      const tmpFile = jsonlFile + '.tmp';
+      if (existsSync(tmpFile)) {
+        try { unlinkSync(tmpFile); } catch { /* ignore */ }
+      }
+
       if (existsSync(jsonlFile)) {
         const header = readSessionHeader(jsonlFile);
         if (header) {
@@ -376,6 +385,7 @@ function headerToMetadata(header: SessionHeader, workspaceRootPath: string): Ses
       sdkSessionId: header.sdkSessionId,
       isFlagged: header.isFlagged,
       todoState: validatedTodoState,
+      labels: header.labels,
       permissionMode: header.permissionMode,
       planCount: planCount > 0 ? planCount : undefined,
       lastMessageRole: header.lastMessageRole,
@@ -385,6 +395,8 @@ function headerToMetadata(header: SessionHeader, workspaceRootPath: string): Ses
       // Shared viewer state - must be included for persistence across app restarts
       sharedUrl: header.sharedUrl,
       sharedId: header.sharedId,
+      // Token usage from JSONL header (available without loading messages)
+      tokenUsage: header.tokenUsage,
       // Unread detection fields - pre-computed for session list display without loading messages
       lastReadMessageId: header.lastReadMessageId,
       lastFinalMessageId: header.lastFinalMessageId,
@@ -485,6 +497,7 @@ export function updateSessionMetadata(
     | 'isFlagged'
     | 'name'
     | 'todoState'
+    | 'labels'
     | 'lastReadMessageId'
     | 'hasUnread'
     | 'enabledSourceSlugs'
@@ -501,6 +514,7 @@ export function updateSessionMetadata(
   if (updates.isFlagged !== undefined) session.isFlagged = updates.isFlagged;
   if (updates.name !== undefined) session.name = updates.name;
   if (updates.todoState !== undefined) session.todoState = updates.todoState;
+  if (updates.labels !== undefined) session.labels = updates.labels;
   if (updates.enabledSourceSlugs !== undefined) session.enabledSourceSlugs = updates.enabledSourceSlugs;
   if (updates.workingDirectory !== undefined) session.workingDirectory = updates.workingDirectory;
   if (updates.permissionMode !== undefined) session.permissionMode = updates.permissionMode;
@@ -536,6 +550,17 @@ export function setSessionTodoState(
   todoState: TodoState
 ): void {
   updateSessionMetadata(workspaceRootPath, sessionId, { todoState });
+}
+
+/**
+ * Set labels for a session
+ */
+export function setSessionLabels(
+  workspaceRootPath: string,
+  sessionId: string,
+  labels: string[]
+): void {
+  updateSessionMetadata(workspaceRootPath, sessionId, { labels });
 }
 
 // ============================================================

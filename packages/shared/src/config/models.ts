@@ -8,6 +8,8 @@ export interface ModelDefinition {
   name: string;
   shortName: string;
   description: string;
+  /** Known context window size in tokens (used as fallback before SDK reports usage) */
+  contextWindow?: number;
 }
 
 // ============================================
@@ -15,9 +17,9 @@ export interface ModelDefinition {
 // ============================================
 
 export const MODELS: ModelDefinition[] = [
-  { id: 'claude-opus-4-5-20251101', name: 'Opus 4.5', shortName: 'Opus', description: 'Most capable' },
-  { id: 'claude-sonnet-4-5-20250929', name: 'Sonnet 4.5', shortName: 'Sonnet', description: 'Balanced' },
-  { id: 'claude-haiku-4-5-20251001', name: 'Haiku 4.5', shortName: 'Haiku', description: 'Fast & efficient' },
+  { id: 'claude-opus-4-5-20251101', name: 'Opus 4.5', shortName: 'Opus', description: 'Most capable', contextWindow: 200000 },
+  { id: 'claude-sonnet-4-5-20250929', name: 'Sonnet 4.5', shortName: 'Sonnet', description: 'Balanced', contextWindow: 200000 },
+  { id: 'claude-haiku-4-5-20251001', name: 'Haiku 4.5', shortName: 'Haiku', description: 'Fast & efficient', contextWindow: 200000 },
 ];
 
 // ============================================
@@ -58,6 +60,11 @@ export function getModelShortName(modelId: string): string {
   }
   // Fallback: strip claude- prefix and date suffix
   return modelId.replace('claude-', '').replace(/-[\d.-]+$/, '');
+}
+
+/** Get known context window size for a model ID (fallback when SDK hasn't reported usage yet) */
+export function getModelContextWindow(modelId: string): number | undefined {
+  return MODELS.find(m => m.id === modelId)?.contextWindow;
 }
 
 /** Check if model is an Opus model (for cache TTL decisions) */

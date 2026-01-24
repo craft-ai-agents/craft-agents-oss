@@ -1,7 +1,7 @@
 import { app, ipcMain, nativeTheme, nativeImage, dialog, shell, BrowserWindow } from 'electron'
-import { readFile, realpath, mkdir, writeFile, unlink, rm } from 'fs/promises'
+import { readFile, readdir, stat, realpath, mkdir, writeFile, unlink, rm } from 'fs/promises'
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
-import { normalize, isAbsolute, join, basename, dirname, resolve } from 'path'
+import { normalize, isAbsolute, join, basename, dirname, resolve, relative } from 'path'
 import { homedir, tmpdir } from 'os'
 import { randomUUID } from 'crypto'
 import { execSync } from 'child_process'
@@ -11,7 +11,7 @@ import { WindowManager } from './window-manager'
 import { registerOnboardingHandlers } from './onboarding'
 import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type AuthType, type ApiSetupInfo, type SendMessageOptions } from '../shared/types'
 import { readFileAttachment, perf, validateImageForClaudeAPI, IMAGE_LIMITS } from '@craft-agent/shared/utils'
-import { getAuthType, setAuthType, getPreferencesPath, getCustomModel, setCustomModel, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, getAnthropicBaseUrl, setAnthropicBaseUrl, loadStoredConfig, saveConfig, type Workspace, SUMMARIZATION_MODEL } from '@craft-agent/shared/config'
+import { getAuthType, setAuthType, getPreferencesPath, getCustomModel, setCustomModel, getModel, setModel, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, getAnthropicBaseUrl, setAnthropicBaseUrl, loadStoredConfig, saveConfig, type Workspace, SUMMARIZATION_MODEL } from '@craft-agent/shared/config'
 import { getSessionAttachmentsPath } from '@craft-agent/shared/sessions'
 import { loadWorkspaceSources, getSourcesBySlugs, type LoadedSource } from '@craft-agent/shared/sources'
 import { isValidThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
@@ -349,6 +349,8 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
         return sessionManager.updateWorkingDirectory(sessionId, command.dir)
       case 'setSources':
         return sessionManager.setSessionSources(sessionId, command.sourceSlugs)
+      case 'setLabels':
+        return sessionManager.setSessionLabels(sessionId, command.labels)
       case 'showInFinder': {
         const sessionPath = sessionManager.getSessionPath(sessionId)
         if (sessionPath) {
@@ -692,6 +694,98 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     }
   })
 
+  // Debug logging from renderer → main log file (fire-and-forget, no response)
+  ipcMain.on(IPC_CHANNELS.DEBUG_LOG, (_event, ...args: unknown[]) => {
+    ipcLog.info('[renderer]', ...args)
+  })
+
+  // Filesystem search for @ mention file selection.
+  // Parallel BFS walk that skips ignored directories BEFORE entering them,
+  // avoiding reading node_modules/etc. contents entirely. Uses withFileTypes
+  // to get entry types without separate stat calls.
+  ipcMain.handle(IPC_CHANNELS.FS_SEARCH, async (_event, basePath: string, query: string) => {
+    ipcLog.info('[FS_SEARCH] called:', basePath, query)
+    const MAX_RESULTS = 50
+
+    // Directories to never recurse into
+    const SKIP_DIRS = new Set([
+      'node_modules', '.git', '.svn', '.hg', 'dist', 'build',
+      '.next', '.nuxt', '.cache', '__pycache__', 'vendor',
+      '.idea', '.vscode', 'coverage', '.nyc_output', '.turbo', 'out',
+    ])
+
+    const lowerQuery = query.toLowerCase()
+    const results: Array<{ name: string; path: string; type: 'file' | 'directory'; relativePath: string }> = []
+
+    try {
+      // BFS queue: each entry is a relative path prefix ('' for root)
+      let queue = ['']
+
+      while (queue.length > 0 && results.length < MAX_RESULTS) {
+        // Process current level: read all directories in parallel
+        const nextQueue: string[] = []
+
+        const dirResults = await Promise.all(
+          queue.map(async (relDir) => {
+            const absDir = relDir ? join(basePath, relDir) : basePath
+            try {
+              return { relDir, entries: await readdir(absDir, { withFileTypes: true }) }
+            } catch {
+              // Skip dirs we can't read (permissions, broken symlinks, etc.)
+              return { relDir, entries: [] as import('fs').Dirent[] }
+            }
+          })
+        )
+
+        for (const { relDir, entries } of dirResults) {
+          if (results.length >= MAX_RESULTS) break
+
+          for (const entry of entries) {
+            if (results.length >= MAX_RESULTS) break
+
+            const name = entry.name
+            // Skip hidden files/dirs and ignored directories
+            if (name.startsWith('.') || SKIP_DIRS.has(name)) continue
+
+            const relativePath = relDir ? `${relDir}/${name}` : name
+            const isDir = entry.isDirectory()
+
+            // Queue subdirectories for next BFS level
+            if (isDir) {
+              nextQueue.push(relativePath)
+            }
+
+            // Check if name or path matches the query
+            const lowerName = name.toLowerCase()
+            const lowerRelative = relativePath.toLowerCase()
+            if (lowerName.includes(lowerQuery) || lowerRelative.includes(lowerQuery)) {
+              results.push({
+                name,
+                path: join(basePath, relativePath),
+                type: isDir ? 'directory' : 'file',
+                relativePath,
+              })
+            }
+          }
+        }
+
+        queue = nextQueue
+      }
+
+      // Sort: directories first, then by name length (shorter = better match)
+      results.sort((a, b) => {
+        if (a.type !== b.type) return a.type === 'directory' ? -1 : 1
+        return a.name.length - b.name.length
+      })
+
+      ipcLog.info('[FS_SEARCH] returning', results.length, 'results')
+      return results
+    } catch (err) {
+      ipcLog.error('[FS_SEARCH] error:', err)
+      return []
+    }
+  })
+
   // Auto-update handlers
   // Manual check from UI - don't auto-download (user might be on metered connection)
   ipcMain.handle(IPC_CHANNELS.UPDATE_CHECK, async () => {
@@ -1006,9 +1100,11 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
         return { success: false, error: 'Please specify a model for custom endpoints' }
       }
 
+      // OpenAI models via providers like OpenRouter require max_tokens >= 16
+      // See: https://github.com/langgenius/dify-official-plugins/issues/1694
       await client.messages.create({
         model: testModel,
-        max_tokens: 1,
+        max_tokens: 16,
         messages: [{ role: 'user', content: 'hi' }],
         // Include a tool to validate tool/function calling support
         tools: [{
@@ -1086,16 +1182,13 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
   // Get global default model
   ipcMain.handle(IPC_CHANNELS.SETTINGS_GET_MODEL, async (): Promise<string | null> => {
-    const config = loadStoredConfig()
-    return config?.model ?? null
+    return getModel()
   })
 
   // Set global default model
   ipcMain.handle(IPC_CHANNELS.SETTINGS_SET_MODEL, async (_event, model: string) => {
-    const config = loadStoredConfig() || { authType: 'api_key', workspaces: [], activeWorkspaceId: null, activeSessionId: null }
-    config.model = model
-    saveConfig(config)
-    ipcLog.info(`Global default model updated to: ${model}`)
+    setModel(model)
+    ipcLog.info(`Global model updated to: ${model}`)
   })
 
   // ============================================================
@@ -1781,6 +1874,71 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
     const { listStatuses } = await import('@craft-agent/shared/statuses')
     return listStatuses(workspace.rootPath)
+  })
+
+  // Reorder statuses (drag-and-drop). Receives new ordered array of status IDs.
+  // Config watcher will detect the file change and broadcast STATUSES_CHANGED.
+  ipcMain.handle(IPC_CHANNELS.STATUSES_REORDER, async (_event, workspaceId: string, orderedIds: string[]) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const { reorderStatuses } = await import('@craft-agent/shared/statuses')
+    reorderStatuses(workspace.rootPath, orderedIds)
+  })
+
+  // ============================================================
+  // Label Management (Workspace-scoped)
+  // ============================================================
+
+  // List all labels for a workspace
+  ipcMain.handle(IPC_CHANNELS.LABELS_LIST, async (_event, workspaceId: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const { listLabels } = await import('@craft-agent/shared/labels/storage')
+    return listLabels(workspace.rootPath)
+  })
+
+  // Create a new label in a workspace
+  ipcMain.handle(IPC_CHANNELS.LABELS_CREATE, async (_event, workspaceId: string, input: import('@craft-agent/shared/labels').CreateLabelInput) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const { createLabel } = await import('@craft-agent/shared/labels/crud')
+    const label = createLabel(workspace.rootPath, input)
+    windowManager.broadcastToAll(IPC_CHANNELS.LABELS_CHANGED, workspaceId)
+    return label
+  })
+
+  // Delete a label (and descendants) from a workspace
+  ipcMain.handle(IPC_CHANNELS.LABELS_DELETE, async (_event, workspaceId: string, labelId: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const { deleteLabel } = await import('@craft-agent/shared/labels/crud')
+    const result = deleteLabel(workspace.rootPath, labelId)
+    windowManager.broadcastToAll(IPC_CHANNELS.LABELS_CHANGED, workspaceId)
+    return result
+  })
+
+  // List views for a workspace (dynamic expression-based filters stored in views.json)
+  ipcMain.handle(IPC_CHANNELS.VIEWS_LIST, async (_event, workspaceId: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const { listViews } = await import('@craft-agent/shared/views/storage')
+    return listViews(workspace.rootPath)
+  })
+
+  // Save views (replaces full array)
+  ipcMain.handle(IPC_CHANNELS.VIEWS_SAVE, async (_event, workspaceId: string, views: import('@craft-agent/shared/views').ViewConfig[]) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const { saveViews } = await import('@craft-agent/shared/views/storage')
+    saveViews(workspace.rootPath, views)
+    // Broadcast labels changed since views are used alongside labels in sidebar
+    windowManager.broadcastToAll(IPC_CHANNELS.LABELS_CHANGED, workspaceId)
   })
 
   // Generic workspace image loading (for source icons, status icons, etc.)

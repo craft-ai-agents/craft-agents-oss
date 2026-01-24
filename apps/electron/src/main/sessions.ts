@@ -51,6 +51,8 @@ import { loadWorkspaceSkills, type LoadedSkill } from '@craft-agent/shared/skill
 import type { ToolDisplayMeta } from '@craft-agent/core/types'
 import { DEFAULT_MODEL } from '@craft-agent/shared/config'
 import { type ThinkingLevel, DEFAULT_THINKING_LEVEL } from '@craft-agent/shared/agent/thinking-levels'
+import { evaluateAutoLabels } from '@craft-agent/shared/labels/auto'
+import { listLabels } from '@craft-agent/shared/labels/storage'
 
 /**
  * Sanitize message content for use as session title.
@@ -295,6 +297,8 @@ interface ManagedSession {
   hasUnread?: boolean
   // Per-session source selection (slugs of enabled sources)
   enabledSourceSlugs?: string[]
+  // Labels applied to this session (additive tags, many-per-session)
+  labels?: string[]
   // Working directory for this session (used by agent for bash commands)
   workingDirectory?: string
   // SDK cwd for session storage - set once at creation, never changes.
@@ -317,6 +321,10 @@ interface ManagedSession {
   isAsyncOperationOngoing?: boolean
   // Preview of first user message (for sidebar display fallback)
   preview?: string
+  // When the session was first created (ms timestamp from JSONL header)
+  createdAt?: number
+  // Total message count (pre-computed in JSONL header for fast list loading)
+  messageCount?: number
   // Message queue for handling new messages while processing
   // When a message arrives during processing, we interrupt and queue
   messageQueue: Array<{
@@ -379,6 +387,7 @@ function messageToStored(msg: Message): StoredMessage {
     authLabels: msg.authLabels,
     authDescription: msg.authDescription,
     authHint: msg.authHint,
+    authSourceUrl: msg.authSourceUrl,
     authError: msg.authError,
     authEmail: msg.authEmail,
     authWorkspace: msg.authWorkspace,
@@ -428,6 +437,7 @@ function storedToMessage(stored: StoredMessage): Message {
     authLabels: stored.authLabels,
     authDescription: stored.authDescription,
     authHint: stored.authHint,
+    authSourceUrl: stored.authSourceUrl,
     authError: stored.authError,
     authEmail: stored.authEmail,
     authWorkspace: stored.authWorkspace,
@@ -518,6 +528,10 @@ export class SessionManager {
         sessionLog.info(`Status icon changed: ${iconFilename} in ${workspaceId}`)
         this.broadcastStatusesChanged(workspaceId)
       },
+      onLabelConfigChange: (workspaceId: string) => {
+        sessionLog.info(`Label config changed in ${workspaceId}`)
+        this.broadcastLabelsChanged(workspaceId)
+      },
       onAppThemeChange: (theme) => {
         sessionLog.info(`App theme changed`)
         this.broadcastAppThemeChanged(theme)
@@ -536,6 +550,56 @@ export class SessionManager {
         const { loadWorkspaceSkills } = await import('@craft-agent/shared/skills')
         const skills = loadWorkspaceSkills(workspaceRootPath)
         this.broadcastSkillsChanged(skills)
+      },
+
+      // Session metadata changes (external edits to session.jsonl headers).
+      // Detects label/flag/name/todoState changes made by other instances or scripts.
+      // Compares with in-memory state and only emits events for actual differences.
+      onSessionMetadataChange: (sessionId, header) => {
+        const managed = this.sessions.get(sessionId)
+        if (!managed) return
+
+        // Skip if session is currently processing — in-memory state is authoritative during streaming
+        if (managed.isProcessing) return
+
+        let changed = false
+
+        // Labels
+        const oldLabels = JSON.stringify(managed.labels ?? [])
+        const newLabels = JSON.stringify(header.labels ?? [])
+        if (oldLabels !== newLabels) {
+          managed.labels = header.labels
+          this.sendEvent({ type: 'labels_changed', sessionId, labels: header.labels ?? [] }, managed.workspace.id)
+          changed = true
+        }
+
+        // Flagged
+        if ((managed.isFlagged ?? false) !== (header.isFlagged ?? false)) {
+          managed.isFlagged = header.isFlagged ?? false
+          this.sendEvent(
+            { type: header.isFlagged ? 'session_flagged' : 'session_unflagged', sessionId },
+            managed.workspace.id
+          )
+          changed = true
+        }
+
+        // Todo state
+        if (managed.todoState !== header.todoState) {
+          managed.todoState = header.todoState
+          this.sendEvent({ type: 'todo_state_changed', sessionId, todoState: header.todoState }, managed.workspace.id)
+          changed = true
+        }
+
+        // Name
+        if (managed.name !== header.name) {
+          managed.name = header.name
+          this.sendEvent({ type: 'name_changed', sessionId, name: header.name }, managed.workspace.id)
+          changed = true
+        }
+
+        if (changed) {
+          sessionLog.info(`External metadata change detected for session ${sessionId}`)
+        }
       },
     }
 
@@ -560,6 +624,15 @@ export class SessionManager {
     if (!this.windowManager) return
     sessionLog.info(`Broadcasting statuses changed for ${workspaceId}`)
     this.windowManager.broadcastToAll(IPC_CHANNELS.STATUSES_CHANGED, workspaceId)
+  }
+
+  /**
+   * Broadcast labels changed event to all windows
+   */
+  private broadcastLabelsChanged(workspaceId: string): void {
+    if (!this.windowManager) return
+    sessionLog.info(`Broadcasting labels changed for ${workspaceId}`)
+    this.windowManager.broadcastToAll(IPC_CHANNELS.LABELS_CHANGED, workspaceId)
   }
 
   /**
@@ -618,8 +691,14 @@ export class SessionManager {
   }
 
   /**
-   * Reinitialize authentication environment variables
-   * Call this after onboarding or settings changes to pick up new credentials
+   * Reinitialize authentication environment variables.
+   * Call this after onboarding or settings changes to pick up new credentials.
+   *
+   * SECURITY NOTE: These env vars are propagated to the SDK subprocess via options.ts.
+   * Bun's automatic .env loading is disabled in the subprocess (--env-file=/dev/null)
+   * to prevent a user's project .env from injecting ANTHROPIC_API_KEY and overriding
+   * OAuth auth — Claude Code prioritizes API key over OAuth token when both are set.
+   * See: https://github.com/lukilabs/craft-agents-oss/issues/39
    */
   async reinitializeAuth(): Promise<void> {
     try {
@@ -760,15 +839,18 @@ export class SessionManager {
             pendingTextParent: undefined,
             name: meta.name,
             preview: meta.preview,
+            createdAt: meta.createdAt,
+            messageCount: meta.messageCount,
             isFlagged: meta.isFlagged ?? false,
             permissionMode: meta.permissionMode,
             sdkSessionId: meta.sdkSessionId,
-            tokenUsage: undefined,  // Loaded with messages
+            tokenUsage: meta.tokenUsage,  // From JSONL header (updated on save)
             todoState: meta.todoState,
             lastReadMessageId: meta.lastReadMessageId,  // Pre-computed for unread detection
             lastFinalMessageId: meta.lastFinalMessageId,  // Pre-computed for unread detection
             hasUnread: meta.hasUnread,  // Explicit unread flag for NEW badge state machine
             enabledSourceSlugs: undefined,  // Loaded with messages
+            labels: meta.labels,
             workingDirectory: meta.workingDirectory ?? wsDefaultWorkingDir,
             sdkCwd: meta.sdkCwd,
             model: meta.model,
@@ -815,6 +897,7 @@ export class SessionManager {
         lastReadMessageId: managed.lastReadMessageId,  // For unread detection
         hasUnread: managed.hasUnread,  // Explicit unread flag for NEW badge state machine
         enabledSourceSlugs: managed.enabledSourceSlugs,
+        labels: managed.labels,
         workingDirectory: managed.workingDirectory,
         sdkCwd: managed.sdkCwd,
         thinkingLevel: managed.thinkingLevel,
@@ -1140,9 +1223,13 @@ export class SessionManager {
         workingDirectory: m.workingDirectory,
         model: m.model,
         enabledSourceSlugs: m.enabledSourceSlugs,
+        labels: m.labels,
         sharedUrl: m.sharedUrl,
         sharedId: m.sharedId,
         lastMessageRole: m.lastMessageRole,
+        tokenUsage: m.tokenUsage,
+        createdAt: m.createdAt,
+        messageCount: m.messageCount,
       }))
       .sort((a, b) => b.lastMessageAt - a.lastMessageAt)
   }
@@ -1179,6 +1266,7 @@ export class SessionManager {
       model: m.model,
       sessionFolderPath: getSessionStoragePath(m.workspace.rootPath, m.id),
       enabledSourceSlugs: m.enabledSourceSlugs,
+      labels: m.labels,
       sharedUrl: m.sharedUrl,
       sharedId: m.sharedId,
       lastMessageRole: m.lastMessageRole,
@@ -1492,6 +1580,7 @@ export class SessionManager {
             authDescription: request.description,
             authHint: request.hint,
             authHeaderName: request.headerName,
+            authSourceUrl: request.sourceUrl,
           }),
         }
 
@@ -2250,9 +2339,9 @@ export class SessionManager {
     // Ensure messages are loaded before we try to add new ones
     await this.ensureMessagesLoaded(managed)
 
-    // If currently processing, queue the message and interrupt
-    // The SDK will send a 'complete' event which triggers onProcessingStopped
-    // onProcessingStopped will then process the queued message
+    // If currently processing, queue the message and interrupt via forceAbort.
+    // The abort throws an AbortError (caught in the catch block) which calls
+    // onProcessingStopped → processNextQueuedMessage to drain the queue.
     if (managed.isProcessing) {
       sessionLog.info(`Session ${sessionId} is processing, queueing message and interrupting`)
 
@@ -2340,6 +2429,33 @@ export class SessionManager {
         // Generate AI title asynchronously (will update the initial title)
         this.generateTitle(managed, message)
       }
+    }
+
+    // Evaluate auto-label rules against the user message (common path for both
+    // fresh and queued messages). Scans regex patterns configured on labels,
+    // then merges any new matches into the session's label array.
+    try {
+      const labelTree = listLabels(managed.workspace.rootPath)
+      const autoMatches = evaluateAutoLabels(message, labelTree)
+
+      if (autoMatches.length > 0) {
+        const existingLabels = managed.labels ?? []
+        const newEntries = autoMatches
+          .map(m => `${m.labelId}::${m.value}`)
+          .filter(entry => !existingLabels.includes(entry))
+
+        if (newEntries.length > 0) {
+          managed.labels = [...existingLabels, ...newEntries]
+          this.persistSession(managed)
+          this.sendEvent({
+            type: 'labels_changed',
+            sessionId,
+            labels: managed.labels,
+          }, managed.workspace.id)
+        }
+      }
+    } catch (e) {
+      sessionLog.warn(`Auto-label evaluation failed for session ${sessionId}:`, e)
     }
 
     managed.lastMessageAt = Date.now()
@@ -2496,9 +2612,9 @@ export class SessionManager {
         sendSpan.setMetadata('abort_reason', reason || 'unknown')
         sendSpan.end()
 
-        // Only show "Interrupted" for user-initiated stops
-        // Plan submissions and redirects handle their own cleanup
-        if (reason === AbortReason.UserStop || reason === undefined) {
+        // Plan submissions handle their own cleanup (they set isProcessing = false directly).
+        // All other abort reasons route through onProcessingStopped for queue draining.
+        if (reason === AbortReason.UserStop || reason === AbortReason.Redirect || reason === undefined) {
           this.onProcessingStopped(sessionId, 'interrupted')
         }
       } else {
@@ -2848,6 +2964,25 @@ To view this task's output:
         type: 'permission_mode_changed',
         sessionId: managed.id,
         permissionMode: mode,
+      }, managed.workspace.id)
+      // Persist to disk
+      this.persistSession(managed)
+    }
+  }
+
+  /**
+   * Set labels for a session (additive tags, many-per-session).
+   * Labels are IDs referencing workspace labels/config.json.
+   */
+  setSessionLabels(sessionId: string, labels: string[]): void {
+    const managed = this.sessions.get(sessionId)
+    if (managed) {
+      managed.labels = labels
+
+      this.sendEvent({
+        type: 'labels_changed',
+        sessionId: managed.id,
+        labels,
       }, managed.workspace.id)
       // Persist to disk
       this.persistSession(managed)

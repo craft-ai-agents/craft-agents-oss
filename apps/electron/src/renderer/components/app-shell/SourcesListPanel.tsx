@@ -7,11 +7,13 @@
 
 import * as React from 'react'
 import { useState } from 'react'
-import { MoreHorizontal } from 'lucide-react'
+import { MoreHorizontal, DatabaseZap } from 'lucide-react'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@craft-agent/ui'
 import { SourceAvatar } from '@/components/ui/source-avatar'
 import { deriveConnectionStatus } from '@/components/ui/source-status-indicator'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from '@/components/ui/empty'
+import { getDocUrl } from '@craft-agent/shared/docs/doc-links'
 import { Separator } from '@/components/ui/separator'
 import {
   DropdownMenu,
@@ -25,7 +27,7 @@ import {
 } from '@/components/ui/styled-context-menu'
 import { DropdownMenuProvider, ContextMenuProvider } from '@/components/ui/menu-context'
 import { SourceMenu } from './SourceMenu'
-import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
+import { EditPopover, getEditConfig, type EditContextKey } from '@/components/ui/EditPopover'
 import { cn } from '@/lib/utils'
 import type { LoadedSource, SourceConnectionStatus, SourceFilter } from '../../../shared/types'
 
@@ -71,7 +73,7 @@ export function SourcesListPanel({
 }: SourcesListPanelProps) {
   // Filter sources based on type filter if active
   const filteredSources = React.useMemo(() => {
-    if (!sourceFilter || sourceFilter.kind === 'all') {
+    if (!sourceFilter) {
       return sources
     }
     // Filter by source type
@@ -86,46 +88,61 @@ export function SourcesListPanel({
     return 'No sources configured.'
   }, [sourceFilter])
 
+  // Empty state - rendered outside ScrollArea for proper vertical centering
+  if (filteredSources.length === 0) {
+    return (
+      <Empty className={cn('flex-1', className)}>
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <DatabaseZap />
+          </EmptyMedia>
+          <EmptyTitle>{emptyMessage}</EmptyTitle>
+          <EmptyDescription>
+            Sources connect your agent to external data — MCP servers, REST APIs, and local folders.
+          </EmptyDescription>
+        </EmptyHeader>
+        <EmptyContent>
+          <button
+            onClick={() => window.electronAPI.openUrl(getDocUrl('sources'))}
+            className="inline-flex items-center h-7 px-3 text-xs font-medium rounded-[8px] bg-foreground/[0.02] shadow-minimal hover:bg-foreground/[0.05] transition-colors"
+          >
+            Learn more
+          </button>
+          {workspaceRootPath && (
+            <EditPopover
+              align="center"
+              trigger={
+                <button className="inline-flex items-center h-7 px-3 text-xs font-medium rounded-[8px] bg-background shadow-minimal hover:bg-foreground/[0.03] transition-colors">
+                  Add Source
+                </button>
+              }
+              {...getEditConfig(
+                sourceFilter?.kind === 'type' ? `add-source-${sourceFilter.sourceType}` as EditContextKey : 'add-source',
+                workspaceRootPath
+              )}
+            />
+          )}
+        </EmptyContent>
+      </Empty>
+    )
+  }
+
   return (
     <ScrollArea className={cn('flex-1', className)}>
       <div className="pb-2">
-        {filteredSources.length === 0 ? (
-          <div className="px-4 py-8 text-center">
-            <p className="text-sm text-muted-foreground">
-              {emptyMessage}
-            </p>
-            {workspaceRootPath && (
-              <div className="mt-3 flex items-center justify-center">
-                <EditPopover
-                  trigger={
-                    <button className="text-sm text-foreground hover:underline">
-                      Add your first source
-                    </button>
-                  }
-                  {...getEditConfig(
-                    // Use filter-aware edit config key when a type filter is active
-                    sourceFilter?.kind === 'type' ? `add-source-${sourceFilter.sourceType}` : 'add-source',
-                    workspaceRootPath
-                  )}
-                />
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="pt-2">
-            {filteredSources.map((source, index) => (
-              <SourceItem
-                key={`${source.config.slug}-${source.config.connectionStatus}-${source.config.isAuthenticated}-${localMcpEnabled}`}
-                source={source}
-                isSelected={selectedSourceSlug === source.config.slug}
-                isFirst={index === 0}
-                localMcpEnabled={localMcpEnabled}
-                onClick={() => onSourceClick(source)}
-                onDelete={() => onDeleteSource(source.config.slug)}
-              />
-            ))}
-          </div>
-        )}
+        <div className="pt-2">
+          {filteredSources.map((source, index) => (
+            <SourceItem
+              key={`${source.config.slug}-${source.config.connectionStatus}-${source.config.isAuthenticated}-${localMcpEnabled}`}
+              source={source}
+              isSelected={selectedSourceSlug === source.config.slug}
+              isFirst={index === 0}
+              localMcpEnabled={localMcpEnabled}
+              onClick={() => onSourceClick(source)}
+              onDelete={() => onDeleteSource(source.config.slug)}
+            />
+          ))}
+        </div>
       </div>
     </ScrollArea>
   )

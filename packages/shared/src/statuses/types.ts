@@ -10,7 +10,13 @@
  * - Local files: Stored in statuses/icons/{id}.svg (auto-discovered)
  *
  * Priority: local file > URL (downloaded) > emoji
+ *
+ * Color format: EntityColor (system color string or custom color object)
+ * - System: "accent", "foreground/50", "info/80" (uses CSS variables, auto light/dark)
+ * - Custom: { light: "#EF4444", dark: "#F87171" } (explicit values)
  */
+
+import type { EntityColor } from '../colors/types.ts'
 
 /**
  * Status category determines filtering behavior:
@@ -29,8 +35,8 @@ export interface StatusConfig {
   /** Display name */
   label: string;
 
-  /** Optional color (hex code or Tailwind class). If omitted, uses design system defaults. */
-  color?: string;
+  /** Optional color. If omitted, uses design system defaults from colors module. */
+  color?: EntityColor;
 
   /**
    * Icon: emoji or URL (auto-downloaded)
@@ -72,7 +78,7 @@ export interface WorkspaceStatusConfig {
  */
 export interface CreateStatusInput {
   label: string;
-  color?: string;
+  color?: EntityColor;
   icon?: string; // Emoji or URL
   category: StatusCategory;
 }
@@ -82,7 +88,7 @@ export interface CreateStatusInput {
  */
 export interface UpdateStatusInput {
   label?: string;
-  color?: string;
+  color?: EntityColor;
   icon?: string; // Emoji or URL
   category?: StatusCategory;
 }

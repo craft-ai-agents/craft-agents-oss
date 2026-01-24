@@ -11,6 +11,7 @@ import {
   RotateCw,
   Flag,
   ListFilter,
+  Tag,
   Check,
   Search,
   Plus,
@@ -30,7 +31,7 @@ import { SourceAvatar } from "@/components/ui/source-avatar"
 import { AppMenu } from "../AppMenu"
 import { SquarePenRounded } from "../icons/SquarePenRounded"
 import { McpIcon } from "../icons/McpIcon"
-import { cn, isHexColor } from "@/lib/utils"
+import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { HeaderIconButton } from "@/components/ui/HeaderIconButton"
 import { Separator } from "@/components/ui/separator"
@@ -71,12 +72,18 @@ import { useFocusZone, useGlobalShortcuts } from "@/hooks/keyboard"
 import { useFocusContext } from "@/context/FocusContext"
 import { getSessionTitle } from "@/utils/session"
 import { useSetAtom } from "jotai"
-import type { Session, Workspace, FileAttachment, PermissionRequest, TodoState, LoadedSource, LoadedSkill, PermissionMode, SourceFilter } from "../../../shared/types"
+import type { Session, Workspace, FileAttachment, PermissionRequest, LoadedSource, LoadedSkill, PermissionMode, SourceFilter } from "../../../shared/types"
 import { sessionMetaMapAtom, type SessionMeta } from "@/atoms/sessions"
 import { sourcesAtom } from "@/atoms/sources"
 import { skillsAtom } from "@/atoms/skills"
-import { type TodoStateId, statusConfigsToTodoStates } from "@/config/todo-states"
+import { type TodoStateId, type TodoState, statusConfigsToTodoStates } from "@/config/todo-states"
 import { useStatuses } from "@/hooks/useStatuses"
+import { useLabels } from "@/hooks/useLabels"
+import { useViews } from "@/hooks/useViews"
+import { LabelIcon } from "@/components/ui/label-icon"
+import { buildLabelTree, getDescendantIds, getLabelDisplayName, flattenLabels, extractLabelId } from "@craft-agent/shared/labels"
+import type { LabelConfig, LabelTreeNode } from "@craft-agent/shared/labels"
+import { resolveEntityColor } from "@craft-agent/shared/colors"
 import * as storage from "@/lib/local-storage"
 import { toast } from "sonner"
 import { navigate, routes } from "@/lib/navigate"
@@ -94,7 +101,7 @@ import type { SettingsSubpage } from "../../../shared/types"
 import { SourcesListPanel } from "./SourcesListPanel"
 import { SkillsListPanel } from "./SkillsListPanel"
 import { PanelHeader } from "./PanelHeader"
-import { EditPopover, getEditConfig } from "@/components/ui/EditPopover"
+import { EditPopover, getEditConfig, type EditContextKey } from "@/components/ui/EditPopover"
 import { getDocUrl } from "@craft-agent/shared/docs/doc-links"
 import SettingsNavigator from "@/pages/settings/SettingsNavigator"
 import { RightSidebar } from "./RightSidebar"
@@ -225,7 +232,7 @@ function AppShellContent({
   const sessionListHandleRef = React.useRef<HTMLDivElement>(null)
   const rightSidebarHandleRef = React.useRef<HTMLDivElement>(null)
   const [session, setSession] = useSession()
-  const { resolvedMode } = useTheme()
+  const { resolvedMode, isDark } = useTheme()
   const { canGoBack, canGoForward, goBack, goForward, navigateToSource } = useNavigation()
 
   // Double-Esc interrupt feature: first Esc shows warning, second Esc interrupts
@@ -302,10 +309,12 @@ function AppShellContent({
   })
   const [focusedSidebarItemId, setFocusedSidebarItemId] = React.useState<string | null>(null)
   const sidebarItemRefs = React.useRef<Map<string, HTMLElement>>(new Map())
-  // Track which expandable sidebar items are collapsed (default: all expanded)
+  // Track which expandable sidebar items are collapsed
+  // Labels are collapsed by default; user preference is persisted once toggled
   const [collapsedItems, setCollapsedItems] = React.useState<Set<string>>(() => {
-    const saved = storage.get<string[]>(storage.KEYS.collapsedSidebarItems, [])
-    return new Set(saved)
+    const saved = storage.get<string[] | null>(storage.KEYS.collapsedSidebarItems, null)
+    if (saved !== null) return new Set(saved)
+    return new Set(['nav:labels'])
   })
   const isExpanded = React.useCallback((id: string) => !collapsedItems.has(id), [collapsedItems])
   const toggleExpanded = React.useCallback((id: string) => {
@@ -401,21 +410,21 @@ function AppShellContent({
     }
   }, [])
 
+  // Handle session label changes (add/remove via # menu or badge X)
+  const handleSessionLabelsChange = React.useCallback(async (sessionId: string, labels: string[]) => {
+    try {
+      await window.electronAPI.sessionCommand(sessionId, { type: 'setLabels', labels })
+      // Session will emit a 'labels_changed' event that updates the session state
+    } catch (err) {
+      console.error('[Chat] Failed to set session labels:', err)
+    }
+  }, [])
+
   const activeWorkspace = workspaces.find(w => w.id === activeWorkspaceId)
 
   // Load dynamic statuses from workspace config
   const { statuses: statusConfigs, isLoading: isLoadingStatuses } = useStatuses(activeWorkspace?.id || null)
-  const [todoStates, setTodoStates] = React.useState<Array<{
-    id: string
-    label: string
-    color: string
-    icon: React.ReactNode
-    iconColorable: boolean
-    category?: 'open' | 'closed'
-    isFixed?: boolean
-    isDefault?: boolean
-    shortcut?: string
-  }>>([])
+  const [todoStates, setTodoStates] = React.useState<TodoState[]>([])
 
   // Convert StatusConfig to TodoState with resolved icons
   React.useEffect(() => {
@@ -424,8 +433,43 @@ function AppShellContent({
       return
     }
 
-    statusConfigsToTodoStates(statusConfigs, activeWorkspace.id).then(setTodoStates)
-  }, [statusConfigs, activeWorkspace?.id])
+    setTodoStates(statusConfigsToTodoStates(statusConfigs, activeWorkspace.id, isDark))
+  }, [statusConfigs, activeWorkspace?.id, isDark])
+
+  // Optimistic status order: immediately reflects drag-drop order while IPC propagates.
+  // Cleared when statusConfigs changes (config watcher is source of truth).
+  const [optimisticStatusOrder, setOptimisticStatusOrder] = React.useState<string[] | null>(null)
+
+  // Clear optimistic state when the config watcher fires (statusConfigs changes)
+  React.useEffect(() => {
+    setOptimisticStatusOrder(null)
+  }, [statusConfigs])
+
+  // Derive effective todo states: apply optimistic reorder if active, otherwise use canonical order
+  const effectiveTodoStates = React.useMemo(() => {
+    if (!optimisticStatusOrder) return todoStates
+    // Reorder todoStates array to match optimistic order
+    const stateMap = new Map(todoStates.map(s => [s.id, s]))
+    const reordered: TodoState[] = []
+    for (const id of optimisticStatusOrder) {
+      const state = stateMap.get(id)
+      if (state) reordered.push(state)
+    }
+    // Append any states not in the optimistic order (shouldn't happen, but defensive)
+    for (const state of todoStates) {
+      if (!optimisticStatusOrder.includes(state.id)) reordered.push(state)
+    }
+    return reordered
+  }, [todoStates, optimisticStatusOrder])
+
+  // Load labels from workspace config
+  const { labels: labelConfigs } = useLabels(activeWorkspace?.id || null)
+
+  // Views: compiled once on config load, evaluated per session in list/chat
+  const { evaluateSession: evaluateViews, viewConfigs } = useViews(activeWorkspace?.id || null)
+
+  // Build hierarchical label tree from nested config structure
+  const labelTree = useMemo(() => buildLabelTree(labelConfigs), [labelConfigs])
 
   // Ensure session messages are loaded when selected
   const ensureMessagesLoaded = useSetAtom(ensureSessionMessagesLoadedAtom)
@@ -627,21 +671,46 @@ function AppShellContent({
   const isMetaDone = (s: SessionMeta) => s.todoState === 'done' || s.todoState === 'cancelled'
   const flaggedCount = workspaceSessionMetas.filter(s => s.isFlagged).length
 
-  // Count sessions by individual todo state (dynamic based on todoStates)
+  // Compute session counts per label (cumulative: parent includes descendants).
+  // Flatten the tree for iteration, use the tree for descendant lookups.
+  const labelCounts = useMemo(() => {
+    const allLabels = flattenLabels(labelConfigs)
+    const counts: Record<string, number> = {}
+    for (const label of allLabels) {
+      // Direct count: sessions explicitly tagged with this label (handles valued entries like "priority::3")
+      const directCount = workspaceSessionMetas.filter(
+        s => s.labels?.some(l => extractLabelId(l) === label.id)
+      ).length
+      counts[label.id] = directCount
+    }
+    // Add descendant counts to parents (cumulative)
+    for (const label of allLabels) {
+      const descendants = getDescendantIds(labelConfigs, label.id)
+      if (descendants.length > 0) {
+        const descendantCount = workspaceSessionMetas.filter(
+          s => s.labels?.some(l => descendants.includes(extractLabelId(l)))
+        ).length
+        counts[label.id] = (counts[label.id] || 0) + descendantCount
+      }
+    }
+    return counts
+  }, [workspaceSessionMetas, labelConfigs])
+
+  // Count sessions by individual todo state (dynamic based on effectiveTodoStates)
   const todoStateCounts = useMemo(() => {
     const counts: Record<TodoStateId, number> = {}
     // Initialize counts for all dynamic statuses
-    for (const state of todoStates) {
+    for (const state of effectiveTodoStates) {
       counts[state.id] = 0
     }
     // Count sessions
     for (const s of workspaceSessionMetas) {
       const state = (s.todoState || 'todo') as TodoStateId
-      // Increment count (initialize to 0 if status not in todoStates yet)
+      // Increment count (initialize to 0 if status not in effectiveTodoStates yet)
       counts[state] = (counts[state] || 0) + 1
     }
     return counts
-  }, [workspaceSessionMetas, todoStates])
+  }, [workspaceSessionMetas, effectiveTodoStates])
 
   // Count sources by type for the Sources dropdown subcategories
   const sourceTypeCounts = useMemo(() => {
@@ -676,6 +745,32 @@ function AppShellContent({
         // Filter by specific todo state
         result = workspaceSessionMetas.filter(s => (s.todoState || 'todo') === chatFilter.stateId)
         break
+      case 'label': {
+        if (chatFilter.labelId === '__all__') {
+          // "Labels" header: show all sessions that have at least one label
+          result = workspaceSessionMetas.filter(s => s.labels && s.labels.length > 0)
+        } else {
+          // Specific label: includes sessions tagged with this label or any descendant
+          const descendants = getDescendantIds(labelConfigs, chatFilter.labelId)
+          const matchIds = new Set([chatFilter.labelId, ...descendants])
+          result = workspaceSessionMetas.filter(
+            s => s.labels?.some(l => matchIds.has(extractLabelId(l)))
+          )
+        }
+        break
+      }
+      case 'view': {
+        // Filter by view: __all__ shows any session matched by any view,
+        // otherwise filter to the specific view
+        result = workspaceSessionMetas.filter(s => {
+          const matched = evaluateViews(s)
+          if (chatFilter.viewId === '__all__') {
+            return matched.length > 0
+          }
+          return matched.some(v => v.id === chatFilter.viewId)
+        })
+        break
+      }
       default:
         result = workspaceSessionMetas
     }
@@ -686,7 +781,7 @@ function AppShellContent({
     }
 
     return result
-  }, [workspaceSessionMetas, chatFilter, listFilter])
+  }, [workspaceSessionMetas, chatFilter, listFilter, labelConfigs])
 
   // Ensure session messages are loaded when selected
   React.useEffect(() => {
@@ -740,18 +835,20 @@ function AppShellContent({
     )
   }, [isFocusedMode, isRightSidebarVisible])
 
-  // Extend context value with local overrides (textareaRef, wrapped onDeleteSession, sources, skills, enabledModes, rightSidebarOpenButton, todoStates)
+  // Extend context value with local overrides (textareaRef, wrapped onDeleteSession, sources, skills, labels, enabledModes, rightSidebarOpenButton, effectiveTodoStates)
   const appShellContextValue = React.useMemo<AppShellContextType>(() => ({
     ...contextValue,
     onDeleteSession: handleDeleteSession,
     textareaRef: chatInputRef,
     enabledSources: sources,
     skills,
+    labels: labelConfigs,
+    onSessionLabelsChange: handleSessionLabelsChange,
     enabledModes,
-    todoStates,
+    todoStates: effectiveTodoStates,
     onSessionSourcesChange: handleSessionSourcesChange,
     rightSidebarButton: rightSidebarOpenButton,
-  }), [contextValue, handleDeleteSession, sources, skills, enabledModes, todoStates, handleSessionSourcesChange, rightSidebarOpenButton])
+  }), [contextValue, handleDeleteSession, sources, skills, labelConfigs, handleSessionLabelsChange, enabledModes, effectiveTodoStates, handleSessionSourcesChange, rightSidebarOpenButton])
 
   // Persist expanded folders to localStorage
   React.useEffect(() => {
@@ -791,6 +888,23 @@ function AppShellContent({
     navigate(routes.view.state(stateId))
   }, [])
 
+  // Handler for label filter views (hierarchical — includes descendant labels)
+  const handleLabelClick = useCallback((labelId: string) => {
+    navigate(routes.view.label(labelId))
+  }, [])
+
+  const handleViewClick = useCallback((viewId: string) => {
+    navigate(routes.view.view(viewId))
+  }, [])
+
+  // DnD handler: reorder statuses (flat list drag-and-drop)
+  // Sets optimistic order immediately for instant UI feedback, then fires IPC.
+  const handleStatusReorder = useCallback((orderedIds: string[]) => {
+    if (!activeWorkspaceId) return
+    setOptimisticStatusOrder(orderedIds)
+    window.electronAPI.reorderStatuses(activeWorkspaceId, orderedIds)
+  }, [activeWorkspaceId])
+
   // Handler for sources view (all sources)
   const handleSourcesClick = useCallback(() => {
     navigate(routes.view.sources())
@@ -826,29 +940,111 @@ function AppShellContent({
   // We use controlled popovers instead of deep links so the user can type
   // their request in the popover UI before opening a new chat window.
   // add-source variants: add-source (generic), add-source-api, add-source-mcp, add-source-local
-  const [editPopoverOpen, setEditPopoverOpen] = useState<'statuses' | 'add-source' | 'add-source-api' | 'add-source-mcp' | 'add-source-local' | 'add-skill' | null>(null)
+  const [editPopoverOpen, setEditPopoverOpen] = useState<'statuses' | 'labels' | 'views' | 'add-source' | 'add-source-api' | 'add-source-mcp' | 'add-source-local' | 'add-skill' | 'add-label' | null>(null)
+
+  // Stores the Y position of the last right-clicked sidebar item so the EditPopover
+  // appears near it rather than at a fixed location. Updated synchronously before
+  // the setTimeout that opens the popover, ensuring the ref is set before render.
+  const editPopoverAnchorY = useRef<number>(120)
+
+  // Stores the trigger element (button) so we can keep it highlighted while the
+  // EditPopover is open (after Radix removes data-state="open" on context menu close).
+  const editPopoverTriggerRef = useRef<Element | null>(null)
+
+  // Captures the bounding rect of the currently-open context menu trigger (the button).
+  // Radix sets data-state="open" on the button (via ContextMenuTrigger asChild)
+  // while the menu is visible, so we can locate it in the DOM at click time.
+  const captureContextMenuPosition = useCallback(() => {
+    const trigger = document.querySelector('.group\\/section > [data-state="open"]')
+    if (trigger) {
+      const rect = trigger.getBoundingClientRect()
+      editPopoverAnchorY.current = rect.top
+      editPopoverTriggerRef.current = trigger
+    }
+  }, [])
+
+  // Sync data-edit-active attribute on the trigger element with EditPopover open state.
+  // This keeps the sidebar item visually highlighted while the popover is shown,
+  // since Radix's data-state="open" disappears when the context menu closes.
+  useEffect(() => {
+    const el = editPopoverTriggerRef.current
+    if (!el) return
+    if (editPopoverOpen) {
+      el.setAttribute('data-edit-active', 'true')
+    } else {
+      el.removeAttribute('data-edit-active')
+      editPopoverTriggerRef.current = null
+    }
+  }, [editPopoverOpen])
 
   // Handler for "Configure Statuses" context menu action
   // Opens the EditPopover for status configuration
   // Uses setTimeout to delay opening until after context menu closes,
   // preventing the popover from immediately closing due to focus shift
   const openConfigureStatuses = useCallback(() => {
+    captureContextMenuPosition()
     setTimeout(() => setEditPopoverOpen('statuses'), 50)
-  }, [])
+  }, [captureContextMenuPosition])
+
+  // Handler for "Configure Labels" context menu action
+  // Opens the EditPopover for label configuration
+  const openConfigureLabels = useCallback(() => {
+    captureContextMenuPosition()
+    setTimeout(() => setEditPopoverOpen('labels'), 50)
+  }, [captureContextMenuPosition])
+
+  // Handler for "Edit Views" context menu action
+  // Opens the EditPopover for view configuration
+  const openConfigureViews = useCallback(() => {
+    captureContextMenuPosition()
+    setTimeout(() => setEditPopoverOpen('views'), 50)
+  }, [captureContextMenuPosition])
+
+  // Handler for "Delete View" context menu action
+  // Removes the view from config by filtering it out and saving
+  const handleDeleteView = useCallback(async (viewId: string) => {
+    if (!activeWorkspace?.id) return
+    try {
+      const updated = viewConfigs.filter(v => v.id !== viewId)
+      await window.electronAPI.saveViews(activeWorkspace.id, updated)
+    } catch (err) {
+      console.error('[AppShell] Failed to delete view:', err)
+    }
+  }, [activeWorkspace?.id, viewConfigs])
+
+  // Handler for "Add New Label" context menu action
+  // Opens the EditPopover with 'add-label' context so the user can describe the label
+  const handleAddLabel = useCallback((_parentId?: string) => {
+    captureContextMenuPosition()
+    setTimeout(() => setEditPopoverOpen('add-label'), 50)
+  }, [captureContextMenuPosition])
+
+  // Handler for "Delete Label" context menu action
+  // Deletes the label and all its descendants, stripping from sessions
+  const handleDeleteLabel = useCallback(async (labelId: string) => {
+    if (!activeWorkspace?.id) return
+    try {
+      await window.electronAPI.deleteLabel(activeWorkspace.id, labelId)
+    } catch (err) {
+      console.error('[AppShell] Failed to delete label:', err)
+    }
+  }, [activeWorkspace?.id])
 
   // Handler for "Add Source" context menu action
   // Opens the EditPopover for adding a new source
   // Optional sourceType param allows filter-aware context (from subcategory menus or filtered views)
   const openAddSource = useCallback((sourceType?: 'api' | 'mcp' | 'local') => {
+    captureContextMenuPosition()
     const key = sourceType ? `add-source-${sourceType}` as const : 'add-source' as const
     setTimeout(() => setEditPopoverOpen(key), 50)
-  }, [])
+  }, [captureContextMenuPosition])
 
   // Handler for "Add Skill" context menu action
   // Opens the EditPopover for adding a new skill
   const openAddSkill = useCallback(() => {
+    captureContextMenuPosition()
     setTimeout(() => setEditPopoverOpen('add-skill'), 50)
-  }, [])
+  }, [captureContextMenuPosition])
 
   // Create a new chat and select it
   const handleNewChat = useCallback(async (_useCurrentAgent: boolean = true) => {
@@ -902,26 +1098,34 @@ function AppShellContent({
   const unifiedSidebarItems = React.useMemo((): SidebarItem[] => {
     const result: SidebarItem[] = []
 
-    // 1. Nav items (All Chats, Flagged)
+    // 1. Chats section: All Chats, Flagged, States header, States items
     result.push({ id: 'nav:allChats', type: 'nav', action: handleAllChatsClick })
     result.push({ id: 'nav:flagged', type: 'nav', action: handleFlaggedClick })
-
-    // 2. Status nav items (dynamic from todoStates)
-    for (const state of todoStates) {
+    result.push({ id: 'nav:states', type: 'nav', action: handleAllChatsClick })
+    for (const state of effectiveTodoStates) {
       result.push({ id: `nav:state:${state.id}`, type: 'nav', action: () => handleTodoStateClick(state.id) })
     }
 
-    // 2.5. Sources nav item
+    // 2. Labels section header + regular label tree for keyboard nav
+    result.push({ id: 'nav:labels', type: 'nav', action: handleAllChatsClick })
+    // Flatten regular label tree for keyboard navigation (depth-first)
+    const flattenTree = (nodes: LabelTreeNode[]) => {
+      for (const node of nodes) {
+        if (node.label) {
+          result.push({ id: `nav:label:${node.fullId}`, type: 'nav', action: () => handleLabelClick(node.fullId) })
+        }
+        if (node.children.length > 0) flattenTree(node.children)
+      }
+    }
+    flattenTree(labelTree)
+
+    // 3. Sources, Skills, Settings
     result.push({ id: 'nav:sources', type: 'nav', action: handleSourcesClick })
-
-    // 2.6. Skills nav item
     result.push({ id: 'nav:skills', type: 'nav', action: handleSkillsClick })
-
-    // 2.7. Settings nav item
     result.push({ id: 'nav:settings', type: 'nav', action: () => handleSettingsClick('app') })
 
     return result
-  }, [handleAllChatsClick, handleFlaggedClick, handleTodoStateClick, todoStates, handleSourcesClick, handleSkillsClick, handleSettingsClick])
+  }, [handleAllChatsClick, handleFlaggedClick, handleTodoStateClick, effectiveTodoStates, handleLabelClick, labelConfigs, labelTree, viewConfigs, handleViewClick, handleSourcesClick, handleSkillsClick, handleSettingsClick])
 
   // Toggle folder expanded state
   const handleToggleFolder = React.useCallback((path: string) => {
@@ -1049,13 +1253,69 @@ function AppShellContent({
     switch (chatFilter.kind) {
       case 'flagged':
         return 'Flagged'
-      case 'state':
-        const state = todoStates.find(s => s.id === chatFilter.stateId)
+      case 'state': {
+        const state = effectiveTodoStates.find(s => s.id === chatFilter.stateId)
         return state?.label || 'All Chats'
+      }
+      case 'label':
+        return chatFilter.labelId === '__all__' ? 'Labels' : getLabelDisplayName(labelConfigs, chatFilter.labelId)
+      case 'view':
+        return chatFilter.viewId === '__all__' ? 'Views' : viewConfigs.find(v => v.id === chatFilter.viewId)?.name || 'Views'
       default:
         return 'All Chats'
     }
-  }, [navState, chatFilter, todoStates])
+  }, [navState, chatFilter, effectiveTodoStates, labelConfigs, viewConfigs])
+
+  // Build recursive sidebar items from label tree.
+  // Each node renders with condensed height (compact: true) since many labels expected.
+  // Clicking any label navigates to its filter view; the chevron toggles expand/collapse.
+  const buildLabelSidebarItems = useCallback((nodes: LabelTreeNode[]): any[] => {
+    // Sort labels alphabetically by display name at every level (parent + children)
+    const sorted = [...nodes].sort((a, b) => {
+      const nameA = (a.label?.name || a.segment).toLowerCase()
+      const nameB = (b.label?.name || b.segment).toLowerCase()
+      return nameA.localeCompare(nameB)
+    })
+    return sorted.map(node => {
+      const hasChildren = node.children.length > 0
+      const isActive = chatFilter?.kind === 'label' && chatFilter.labelId === node.fullId
+      const count = labelCounts[node.fullId] || 0
+
+      const item: any = {
+        id: `nav:label:${node.fullId}`,
+        title: node.label?.name || node.segment.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+        label: count > 0 ? String(count) : undefined,
+        icon: node.label && activeWorkspace?.id ? (
+          <LabelIcon
+            label={node.label}
+            size="sm"
+            hasChildren={hasChildren}
+          />
+        ) : <Tag className="h-3.5 w-3.5" />,
+        variant: isActive ? "default" : "ghost",
+        compact: true, // Reduced height for label items (many labels expected)
+        // All labels navigate on click — parent and leaf alike
+        onClick: () => handleLabelClick(node.fullId),
+        contextMenu: {
+          type: 'labels' as const,
+          labelId: node.fullId,
+          onConfigureLabels: openConfigureLabels,
+          onAddLabel: handleAddLabel,
+          onDeleteLabel: handleDeleteLabel,
+        },
+      }
+
+      if (hasChildren) {
+        item.expandable = true
+        item.expanded = isExpanded(`nav:label:${node.fullId}`)
+        // Chevron toggles expand/collapse independently of navigation
+        item.onToggle = () => toggleExpanded(`nav:label:${node.fullId}`)
+        item.items = buildLabelSidebarItems(node.children)
+      }
+
+      return item
+    })
+  }, [chatFilter, labelCounts, activeWorkspace?.id, handleLabelClick, isExpanded, toggleExpanded, openConfigureLabels, handleAddLabel, handleDeleteLabel])
 
   return (
     <AppShellProvider value={appShellContextValue}>
@@ -1116,7 +1376,7 @@ function AppShellContent({
               {/* Sidebar Top Section */}
               <div className="flex-1 flex flex-col min-h-0">
                 {/* New Chat Button - Gmail-style, with context menu for "Open in New Window" */}
-                <div className="px-2 pt-1 pb-2">
+                <div className="px-2 pt-1 pb-2 shrink-0">
                   <ContextMenu modal={true}>
                     <ContextMenuTrigger asChild>
                       <Button
@@ -1136,12 +1396,14 @@ function AppShellContent({
                     </StyledContextMenuContent>
                   </ContextMenu>
                 </div>
-                {/* Primary Nav: All Chats (with expandable submenu), Sources */}
+                {/* Primary Nav: All Chats, Flagged, States, Labels | Sources, Skills | Settings */}
+                <div className="flex-1 overflow-y-auto min-h-0 mask-fade-bottom">
                 <LeftSidebar
                   isCollapsed={false}
                   getItemProps={getSidebarItemProps}
                   focusedItemId={focusedSidebarItemId}
                   links={[
+                    // --- Chats Section ---
                     {
                       id: "nav:allChats",
                       title: "All Chats",
@@ -1149,71 +1411,84 @@ function AppShellContent({
                       icon: Inbox,
                       variant: chatFilter?.kind === 'allChats' ? "default" : "ghost",
                       onClick: handleAllChatsClick,
+                    },
+                    {
+                      id: "nav:flagged",
+                      title: "Flagged",
+                      label: String(flaggedCount),
+                      icon: <Flag className="h-3.5 w-3.5" />,
+                      variant: chatFilter?.kind === 'flagged' ? "default" : "ghost",
+                      onClick: handleFlaggedClick,
+                    },
+                    // States: expandable section with status sub-items (drag-and-drop reorder)
+                    {
+                      id: "nav:states",
+                      title: "Status",
+                      icon: CheckCircle2,
+                      variant: "ghost",
+                      onClick: () => toggleExpanded('nav:states'),
                       expandable: true,
-                      expanded: isExpanded('nav:allChats'),
-                      onToggle: () => toggleExpanded('nav:allChats'),
-                      // Context menu: Configure Statuses
+                      expanded: isExpanded('nav:states'),
+                      onToggle: () => toggleExpanded('nav:states'),
                       contextMenu: {
                         type: 'allChats',
                         onConfigureStatuses: openConfigureStatuses,
                       },
-                      items: [
-                        // Dynamic status items from todoStates
-                        ...todoStates.map(state => ({
-                          id: `nav:state:${state.id}`,
-                          title: state.label,
-                          label: String(todoStateCounts[state.id] || 0),
-                          icon: state.icon,
-                          iconColor: state.color,
-                          iconColorable: state.iconColorable,
-                          variant: (chatFilter?.kind === 'state' && chatFilter.stateId === state.id ? "default" : "ghost") as "default" | "ghost",
-                          onClick: () => handleTodoStateClick(state.id),
-                          // Context menu for each status: Configure Statuses
-                          contextMenu: {
-                            type: 'status' as const,
-                            statusId: state.id,
-                            onConfigureStatuses: openConfigureStatuses,
-                          },
-                        })),
-                        // Separator before Flagged
-                        { id: "separator:before-flagged", type: "separator" },
-                        // Flagged at the bottom
-                        {
-                          id: "nav:flagged",
-                          title: "Flagged",
-                          label: String(flaggedCount),
-                          icon: <Flag className="h-3.5 w-3.5 fill-current" />,
-                          iconColor: "text-info",
-                          variant: chatFilter?.kind === 'flagged' ? "default" : "ghost",
-                          onClick: handleFlaggedClick,
-                          // Context menu for Flagged: Configure Statuses
-                          contextMenu: {
-                            type: 'flagged' as const,
-                            onConfigureStatuses: openConfigureStatuses,
-                          },
+                      // Enable flat DnD reorder for status items
+                      sortable: { onReorder: handleStatusReorder },
+                      items: effectiveTodoStates.map(state => ({
+                        id: `nav:state:${state.id}`,
+                        title: state.label,
+                        label: String(todoStateCounts[state.id] || 0),
+                        icon: state.icon,
+                        iconColor: state.resolvedColor,
+                        iconColorable: state.iconColorable,
+                        variant: (chatFilter?.kind === 'state' && chatFilter.stateId === state.id ? "default" : "ghost") as "default" | "ghost",
+                        onClick: () => handleTodoStateClick(state.id),
+                        contextMenu: {
+                          type: 'status' as const,
+                          statusId: state.id,
+                          onConfigureStatuses: openConfigureStatuses,
                         },
-                      ],
+                      })),
                     },
+                    // Labels: navigable header (shows all labeled sessions) + hierarchical tree (drag-and-drop reorder + re-parent)
+                    {
+                      id: "nav:labels",
+                      title: "Labels",
+                      icon: Tag,
+                      // Only highlighted when "Labels" itself is selected (not sub-labels)
+                      variant: (chatFilter?.kind === 'label' && chatFilter.labelId === '__all__') ? "default" as const : "ghost" as const,
+                      // Clicking navigates to "all labeled sessions" view
+                      onClick: () => handleLabelClick('__all__'),
+                      expandable: true,
+                      expanded: isExpanded('nav:labels'),
+                      onToggle: () => toggleExpanded('nav:labels'),
+                      contextMenu: {
+                        type: 'labels' as const,
+                        onConfigureLabels: openConfigureLabels,
+                        onAddLabel: handleAddLabel,
+                      },
+                      items: buildLabelSidebarItems(labelTree),
+                    },
+                    // --- Separator ---
+                    { id: "separator:chats-sources", type: "separator" },
+                    // --- Sources & Skills Section ---
                     {
                       id: "nav:sources",
                       title: "Sources",
                       label: String(sources.length),
                       icon: DatabaseZap,
-                      // Highlight when in sources navigator and no type filter (or viewing all)
                       variant: (isSourcesNavigation(navState) && !sourceFilter) ? "default" : "ghost",
                       onClick: handleSourcesClick,
                       dataTutorial: "sources-nav",
-                      // Make expandable with source type subcategories
                       expandable: true,
                       expanded: isExpanded('nav:sources'),
                       onToggle: () => toggleExpanded('nav:sources'),
-                      // Context menu: Add Source
                       contextMenu: {
                         type: 'sources',
                         onAddSource: openAddSource,
                       },
-                      // Subcategories for source types: APIs, MCPs, Local Folders
-                      // Each subcategory passes its type to openAddSource for filter-aware context
                       items: [
                         {
                           id: "nav:sources:api",
@@ -1263,13 +1538,14 @@ function AppShellContent({
                       icon: Zap,
                       variant: isSkillsNavigation(navState) ? "default" : "ghost",
                       onClick: handleSkillsClick,
-                      // Context menu: Add Skill
                       contextMenu: {
                         type: 'skills',
                         onAddSkill: openAddSkill,
                       },
                     },
+                    // --- Separator ---
                     { id: "separator:skills-settings", type: "separator" },
+                    // --- Settings ---
                     {
                       id: "nav:settings",
                       title: "Settings",
@@ -1281,6 +1557,7 @@ function AppShellContent({
                 />
                 {/* Agent Tree: Hierarchical list of agents */}
                 {/* Agents section removed */}
+                </div>
               </div>
 
               {/* Sidebar Bottom Section: WorkspaceSwitcher + Help icon */}
@@ -1416,7 +1693,7 @@ function AppShellContent({
                           )}
                         </div>
                         {/* Dynamic status filter items */}
-                        {todoStates.map(state => {
+                        {effectiveTodoStates.map(state => {
                           // Only apply color if icon is colorable (uses currentColor)
                           const applyColor = state.iconColorable
                           return (
@@ -1433,11 +1710,8 @@ function AppShellContent({
                               }}
                             >
                               <span
-                                className={cn(
-                                  "h-3.5 w-3.5 flex items-center justify-center shrink-0 [&>svg]:w-full [&>svg]:h-full [&>img]:w-full [&>img]:h-full",
-                                  applyColor && !isHexColor(state.color) && state.color
-                                )}
-                                style={applyColor && isHexColor(state.color) ? { color: state.color } : undefined}
+                                className="h-3.5 w-3.5 flex items-center justify-center shrink-0 [&>svg]:w-full [&>svg]:h-full [&>img]:w-full [&>img]:h-full"
+                                style={applyColor ? { color: state.resolvedColor } : undefined}
                               >
                                 {state.icon}
                               </span>
@@ -1505,7 +1779,7 @@ function AppShellContent({
                         />
                       }
                       {...getEditConfig(
-                        sourceFilter?.kind === 'type' ? `add-source-${sourceFilter.sourceType}` : 'add-source',
+                        sourceFilter?.kind === 'type' ? `add-source-${sourceFilter.sourceType}` as EditContextKey : 'add-source',
                         activeWorkspace.rootPath
                       )}
                     />
@@ -1580,6 +1854,10 @@ function AppShellContent({
                       navigate(routes.view.flagged(selectedMeta.id))
                     } else if (chatFilter.kind === 'state') {
                       navigate(routes.view.state(chatFilter.stateId, selectedMeta.id))
+                    } else if (chatFilter.kind === 'label') {
+                      navigate(routes.view.label(chatFilter.labelId, selectedMeta.id))
+                    } else if (chatFilter.kind === 'view') {
+                      navigate(routes.view.view(chatFilter.viewId, selectedMeta.id))
                     }
                   }}
                   onOpenInNewWindow={(selectedMeta) => {
@@ -1602,7 +1880,9 @@ function AppShellContent({
                     setSearchActive(false)
                     setSearchQuery('')
                   }}
-                  todoStates={todoStates}
+                  todoStates={effectiveTodoStates}
+                  evaluateViews={evaluateViews}
+                  labels={labelConfigs}
                 />
               </>
             )}
@@ -1740,7 +2020,8 @@ function AppShellContent({
        * ============================================================================
        * These EditPopovers are opened programmatically from sidebar context menus.
        * They use controlled state (editPopoverOpen) and invisible anchors for positioning.
-       * Positioned near the sidebar (left side) since that's where context menus originate.
+       * The anchor Y position is captured from the right-clicked item (editPopoverAnchorY ref)
+       * so the popover appears near the triggering item rather than at a fixed location.
        * modal={true} prevents auto-close when focus shifts after context menu closes.
        */}
       {activeWorkspace && (
@@ -1752,14 +2033,46 @@ function AppShellContent({
             modal={true}
             trigger={
               <div
-                className="fixed top-[120px] w-0 h-0 pointer-events-none"
-                style={{ left: sidebarWidth + 20 }}
+                className="fixed w-0 h-0 pointer-events-none"
+                style={{ left: sidebarWidth + 20, top: editPopoverAnchorY.current }}
                 aria-hidden="true"
               />
             }
             side="bottom"
             align="start"
             {...getEditConfig('edit-statuses', activeWorkspace.rootPath)}
+          />
+          {/* Configure Labels EditPopover - anchored near sidebar */}
+          <EditPopover
+            open={editPopoverOpen === 'labels'}
+            onOpenChange={(isOpen) => setEditPopoverOpen(isOpen ? 'labels' : null)}
+            modal={true}
+            trigger={
+              <div
+                className="fixed w-0 h-0 pointer-events-none"
+                style={{ left: sidebarWidth + 20, top: editPopoverAnchorY.current }}
+                aria-hidden="true"
+              />
+            }
+            side="bottom"
+            align="start"
+            {...getEditConfig('edit-labels', activeWorkspace.rootPath)}
+          />
+          {/* Edit Views EditPopover - anchored near sidebar */}
+          <EditPopover
+            open={editPopoverOpen === 'views'}
+            onOpenChange={(isOpen) => setEditPopoverOpen(isOpen ? 'views' : null)}
+            modal={true}
+            trigger={
+              <div
+                className="fixed w-0 h-0 pointer-events-none"
+                style={{ left: sidebarWidth + 20, top: editPopoverAnchorY.current }}
+                aria-hidden="true"
+              />
+            }
+            side="bottom"
+            align="start"
+            {...getEditConfig('edit-views', activeWorkspace.rootPath)}
           />
           {/* Add Source EditPopovers - one for each variant (generic + filter-specific)
            * editPopoverOpen can be: 'add-source', 'add-source-api', 'add-source-mcp', 'add-source-local'
@@ -1789,14 +2102,30 @@ function AppShellContent({
             modal={true}
             trigger={
               <div
-                className="fixed top-[120px] w-0 h-0 pointer-events-none"
-                style={{ left: sidebarWidth + 20 }}
+                className="fixed w-0 h-0 pointer-events-none"
+                style={{ left: sidebarWidth + 20, top: editPopoverAnchorY.current }}
                 aria-hidden="true"
               />
             }
             side="bottom"
             align="start"
             {...getEditConfig('add-skill', activeWorkspace.rootPath)}
+          />
+          {/* Add Label EditPopover - triggered from "Add New Label" context menu on labels */}
+          <EditPopover
+            open={editPopoverOpen === 'add-label'}
+            onOpenChange={(isOpen) => setEditPopoverOpen(isOpen ? 'add-label' : null)}
+            modal={true}
+            trigger={
+              <div
+                className="fixed w-0 h-0 pointer-events-none"
+                style={{ left: sidebarWidth + 20, top: editPopoverAnchorY.current }}
+                aria-hidden="true"
+              />
+            }
+            side="bottom"
+            align="start"
+            {...getEditConfig('add-label', activeWorkspace.rootPath)}
           />
         </>
       )}

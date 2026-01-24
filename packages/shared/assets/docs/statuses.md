@@ -11,13 +11,59 @@ Session statuses represent workflow states. Each workspace has its own status co
 
 | ID | Label | Default Color | Category | Type |
 |----|-------|---------------|----------|------|
-| `backlog` | Backlog | text-foreground/50 | open | Default |
-| `todo` | Todo | text-foreground | open | Fixed |
-| `needs-review` | Needs Review | text-info | open | Default |
-| `done` | Done | text-accent | closed | Fixed |
-| `cancelled` | Cancelled | text-foreground/50 | closed | Fixed |
+| `backlog` | Backlog | foreground/50 | open | Default |
+| `todo` | Todo | foreground/50 | open | Fixed |
+| `needs-review` | Needs Review | info | open | Default |
+| `done` | Done | accent | closed | Fixed |
+| `cancelled` | Cancelled | foreground/50 | closed | Fixed |
 
 **Note:** Color is optional. When omitted, the design system default is used.
+
+## Color Format
+
+Colors use the `EntityColor` type — either a system color string or a custom color object.
+
+### System Colors
+
+Auto-adapt to light/dark theme via CSS variables. No hex values needed.
+
+| Name | Appearance | Example |
+|------|-----------|---------|
+| `"accent"` | Purple (brand) | `"accent"` |
+| `"info"` | Amber | `"info"` |
+| `"success"` | Green | `"success"` |
+| `"destructive"` | Red | `"destructive"` |
+| `"foreground"` | Text color | `"foreground"` |
+
+Add `/opacity` (integer 0–100) for transparency: `"foreground/50"`, `"info/80"`.
+
+### Custom Colors
+
+Object with explicit CSS color values for light and dark themes:
+
+```json
+{ "light": "#EF4444", "dark": "#F87171" }
+```
+
+If `dark` is omitted, it's auto-derived from `light` (brightened ~30%).
+
+**Supported CSS color formats for `light`/`dark` values:**
+
+| Format | Example |
+|--------|---------|
+| Hex (3-digit) | `"#F00"` |
+| Hex (6-digit) | `"#EF4444"` |
+| Hex (8-digit, with alpha) | `"#EF444480"` |
+| OKLCH | `"oklch(0.7 0.15 20)"` |
+| RGB | `"rgb(239, 68, 68)"` |
+| HSL | `"hsl(0, 84%, 60%)"` |
+
+### Common Mistakes
+
+- Bare color names (`"red"`, `"blue"`) are **not** supported — use hex or system colors
+- Tailwind classes (`"text-red-500"`) are **not** valid — use system color names directly
+- Hex without `#` prefix (`"EF4444"`) is invalid — always include `#`
+- System color opacity must be an integer 0–100 (`"foreground/50"` not `"foreground/0.5"`)
 
 ## Status Types
 
@@ -100,7 +146,21 @@ Edit the workspace's `statuses/config.json`:
 {
   "id": "blocked",
   "label": "Blocked",
-  "color": "#EF4444",
+  "color": "destructive",
+  "icon": "🚫",
+  "category": "open",
+  "isFixed": false,
+  "isDefault": false,
+  "order": 3
+}
+```
+
+Or with a custom hex color:
+```json
+{
+  "id": "blocked",
+  "label": "Blocked",
+  "color": { "light": "#EF4444", "dark": "#F87171" },
   "icon": "🚫",
   "category": "open",
   "isFixed": false,

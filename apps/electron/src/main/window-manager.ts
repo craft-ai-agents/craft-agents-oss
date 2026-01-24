@@ -187,19 +187,16 @@ export class WindowManager {
           window.loadURL(`${VITE_DEV_SERVER_URL}?${params}`)
         }
       } else {
-        // In prod, use file:// URL directly if it's a file URL, otherwise extract query
-        if (restoreUrl.startsWith('file://')) {
-          window.loadURL(restoreUrl)
-        } else {
-          // Extract query params and load file with them
-          try {
-            const savedUrl = new URL(restoreUrl)
-            const query: Record<string, string> = {}
-            savedUrl.searchParams.forEach((value, key) => { query[key] = value })
-            window.loadFile(join(__dirname, 'renderer/index.html'), { query })
-          } catch {
-            window.loadFile(join(__dirname, 'renderer/index.html'), { query: { workspaceId } })
-          }
+        // In prod, always extract query params and load from current __dirname.
+        // Never load file:// URLs directly — the path may be stale (e.g. Linux AppImage
+        // mounts to a different /tmp dir on each launch). See #13.
+        try {
+          const savedUrl = new URL(restoreUrl)
+          const query: Record<string, string> = {}
+          savedUrl.searchParams.forEach((value, key) => { query[key] = value })
+          window.loadFile(join(__dirname, 'renderer/index.html'), { query })
+        } catch {
+          window.loadFile(join(__dirname, 'renderer/index.html'), { query: { workspaceId } })
         }
       }
     } else {
@@ -216,6 +213,13 @@ export class WindowManager {
         window.loadFile(join(__dirname, 'renderer/index.html'), { query })
       }
     }
+
+    // Fallback: if the renderer fails to load (e.g. stale path, disk error),
+    // recover gracefully by loading the default state instead of showing a white screen. See #13.
+    window.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
+      windowLog.warn('Failed to load renderer, falling back to default state:', errorCode, errorDescription)
+      window.loadFile(join(__dirname, 'renderer/index.html'), { query: { workspaceId } })
+    })
 
     // If an initial deep link was provided, navigate to it after the window is ready
     if (initialDeepLink) {

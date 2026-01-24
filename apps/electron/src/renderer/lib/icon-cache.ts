@@ -2,7 +2,7 @@
  * Unified Icon Cache
  *
  * Single cache for source, skill, and status icons.
- * Used by SourceAvatar, SkillAvatar, todo-states, and RichTextInput.
+ * Used by EntityIcon, SourceAvatar, SkillAvatar, StatusIcon, and RichTextInput.
  *
  * Icons are stored as data URLs for consistent usage across:
  * - React components (img src)
@@ -12,7 +12,16 @@
  * - source:{workspaceId}:{slug}
  * - skill:{workspaceId}:{slug}
  * - status:{workspaceId}:{relativePath}
+ *
+ * Note: Labels do NOT use icons — they are color-only (colored circles).
+ *
+ * The useEntityIcon() hook is the single entry point for loading any entity's icon.
+ * It handles cache lookup, IPC file loading, SVG theming, and emoji detection.
  */
+
+import { useState, useEffect, useMemo } from 'react'
+import { isEmoji } from '@craft-agent/shared/utils/icon-constants'
+import type { ResolvedEntityIcon } from '@craft-agent/shared/icons'
 
 // ============================================================================
 // Types
@@ -93,64 +102,53 @@ export const skillIconCache = {
   },
 }
 
-/** @deprecated Use iconCache directly with 'status:' prefix */
-export const statusIconCache = {
-  get: (key: string) => iconCache.get(`status:${key}`),
-  set: (key: string, value: string) => iconCache.set(`status:${key}`, value),
-  has: (key: string) => iconCache.has(`status:${key}`),
-  delete: (key: string) => iconCache.delete(`status:${key}`),
-  clear: () => {
-    // Clear only status entries
-    for (const key of iconCache.keys()) {
-      if (key.startsWith('status:')) iconCache.delete(key)
-    }
-  },
-}
-
 // ============================================================================
 // Cache Management
 // ============================================================================
 
 /**
- * Clear all icon caches
+ * Clear all icon caches (all entity types)
  */
 export function clearIconCaches(): void {
   iconCache.clear()
   logoUrlCache.clear()
+  colorableCache.clear()
+  rawSvgCache.clear()
 }
 
 /**
- * Clear source icon caches only
+ * Clear source icon caches only.
+ * @deprecated Will be removed once rich-text-input.tsx is migrated to useEntityIcon.
  */
 export function clearSourceIconCaches(): void {
   sourceIconCache.clear()
   logoUrlCache.clear()
+  // Also clear from colorable/rawSvg caches
+  for (const key of colorableCache) {
+    if (key.startsWith('source:')) colorableCache.delete(key)
+  }
+  for (const key of rawSvgCache.keys()) {
+    if (key.startsWith('source:')) rawSvgCache.delete(key)
+  }
 }
 
 /**
- * Clear skill icon caches only
+ * Clear skill icon caches only.
+ * @deprecated Will be removed once rich-text-input.tsx is migrated to useEntityIcon.
  */
 export function clearSkillIconCaches(): void {
   skillIconCache.clear()
-}
-
-/**
- * Clear status icon caches only
- */
-export function clearStatusIconCaches(): void {
-  statusIconCache.clear()
+  for (const key of colorableCache) {
+    if (key.startsWith('skill:')) colorableCache.delete(key)
+  }
+  for (const key of rawSvgCache.keys()) {
+    if (key.startsWith('skill:')) rawSvgCache.delete(key)
+  }
 }
 
 // ============================================================================
 // Source Icon Loading
 // ============================================================================
-
-// Emoji detection - matches single emoji characters (including skin tones, flags, etc.)
-const EMOJI_REGEX = /^(?:\p{Emoji_Presentation}|\p{Emoji}\uFE0F)(?:\u200D(?:\p{Emoji_Presentation}|\p{Emoji}\uFE0F))*$/u
-
-function isEmoji(str: string): boolean {
-  return str.length <= 8 && EMOJI_REGEX.test(str)
-}
 
 // Special prefix for emoji icons in cache - callers check for this to render emoji
 export const EMOJI_ICON_PREFIX = 'emoji:'
@@ -415,5 +413,267 @@ function deriveServiceUrl(config: SourceConfig): string | null {
     return config.api.baseUrl
   }
 
+  return null
+}
+
+// ============================================================================
+// Unified Entity Icon Hook
+// ============================================================================
+
+/** Supported icon file extensions for auto-discovery */
+const ICON_FILE_EXTENSIONS = ['.svg', '.png', '.jpg', '.jpeg']
+
+/**
+ * Pre-compiled regex for extracting workspace-relative icon paths from absolute paths.
+ * Matches any known entity directory prefix (skills/, sources/, statuses/)
+ * followed by the rest of the path.
+ */
+const ICON_PATH_PATTERN = /(?:skills|sources|statuses)\/.+$/
+
+/**
+ * Options for the useEntityIcon hook.
+ */
+export interface UseEntityIconOptions {
+  /** Workspace context for IPC calls */
+  workspaceId: string
+  /** Cache namespace (e.g. 'source', 'skill', 'status', 'label') */
+  entityType: string
+  /** Unique identifier within the entity type (slug, statusId, etc.) */
+  identifier: string
+  /**
+   * Known relative path to icon file (for entities with pre-resolved paths).
+   * e.g. 'skills/my-skill/icon.svg'
+   * If provided, only this exact path is attempted (no auto-discovery).
+   */
+  iconPath?: string
+  /**
+   * Directory to auto-discover icon files in (relative to workspace).
+   * e.g. 'sources/linear' → tries sources/linear/icon.svg, icon.png, etc.
+   * Ignored if iconPath is provided.
+   */
+  iconDir?: string
+  /**
+   * Icon value from entity config. Can be:
+   * - Emoji string (e.g. "🔧") → resolved as emoji
+   * - URL (ignored here, assumed already downloaded to local file)
+   * - undefined → auto-discover from iconDir
+   */
+  iconValue?: string
+  /**
+   * Override the filename used for auto-discovery (default: 'icon').
+   * e.g. for statuses, set to the statusId so it discovers '{statusId}.svg'
+   * instead of 'icon.svg'.
+   */
+  iconFileName?: string
+}
+
+/**
+ * Unified icon loading hook - single entry point for all entity types.
+ *
+ * Handles cache lookup, IPC file loading, SVG theming, colorability detection,
+ * and emoji detection. Returns a ResolvedEntityIcon ready for EntityIcon rendering.
+ *
+ * Resolution priority:
+ * 1. Emoji in iconValue → { kind: 'emoji', value: emoji, colorable: false }
+ * 2. Local file (iconPath or auto-discovered in iconDir) → { kind: 'file', value: dataUrl, colorable }
+ * 3. Fallback → { kind: 'fallback', colorable: false }
+ *
+ * Usage:
+ *   const icon = useEntityIcon({ workspaceId, entityType: 'skill', identifier: slug, iconPath })
+ *   return <EntityIcon icon={icon} fallbackIcon={Zap} />
+ */
+export function useEntityIcon(opts: UseEntityIconOptions): ResolvedEntityIcon {
+  const { workspaceId, entityType, identifier, iconPath, iconDir, iconValue, iconFileName } = opts
+
+  // Stable cache key for this entity's icon
+  const cacheKey = `${entityType}:${workspaceId}:${identifier}`
+
+  // Check if iconValue is an emoji (synchronous, no loading needed)
+  const emojiValue = useMemo(() => {
+    if (iconValue && isEmoji(iconValue)) return iconValue
+    return null
+  }, [iconValue])
+
+  // Initial state: check cache synchronously or return emoji/fallback
+  const [resolved, setResolved] = useState<ResolvedEntityIcon>(() => {
+    if (emojiValue) {
+      return { kind: 'emoji', value: emojiValue, colorable: false }
+    }
+    // Check unified cache for a previously loaded file icon
+    const cached = iconCache.get(cacheKey)
+    if (cached) {
+      const colorable = colorableCache.has(cacheKey)
+      return {
+        kind: 'file',
+        value: cached,
+        colorable,
+        rawSvg: colorable ? rawSvgCache.get(cacheKey) : undefined,
+      }
+    }
+    return { kind: 'fallback', colorable: false }
+  })
+
+  useEffect(() => {
+    // If emoji, no file loading needed - just update state
+    if (emojiValue) {
+      setResolved({ kind: 'emoji', value: emojiValue, colorable: false })
+      return
+    }
+
+    // Check cache first
+    const cached = iconCache.get(cacheKey)
+    if (cached) {
+      const colorable = colorableCache.has(cacheKey)
+      setResolved({
+        kind: 'file',
+        value: cached,
+        colorable,
+        rawSvg: colorable ? rawSvgCache.get(cacheKey) : undefined,
+      })
+      return
+    }
+
+    // No cache hit - load from filesystem via IPC
+    let cancelled = false
+
+    async function loadIcon() {
+      let result: { dataUrl: string; colorable: boolean; rawSvg?: string } | null = null
+
+      if (iconPath) {
+        // Known path - extract relative portion and load directly
+        // iconPath may be absolute; extract the workspace-relative part
+        const relativeMatch = iconPath.match(ICON_PATH_PATTERN)
+        const relativePath = relativeMatch ? relativeMatch[0] : iconPath
+
+        result = await loadIconFile(workspaceId, relativePath)
+      } else if (iconDir) {
+        // Auto-discover icon files in directory
+        // iconFileName overrides the default 'icon' prefix (e.g. statuses use statusId)
+        result = await discoverIconFile(workspaceId, iconDir, iconFileName)
+      }
+
+      if (cancelled) return
+
+      if (result) {
+        // Cache the loaded icon and its colorability/rawSvg
+        iconCache.set(cacheKey, result.dataUrl)
+        if (result.colorable) {
+          colorableCache.add(cacheKey)
+        }
+        if (result.rawSvg) {
+          rawSvgCache.set(cacheKey, result.rawSvg)
+        }
+        setResolved({
+          kind: 'file',
+          value: result.dataUrl,
+          colorable: result.colorable,
+          rawSvg: result.rawSvg,
+        })
+      } else {
+        setResolved({ kind: 'fallback', colorable: false })
+      }
+    }
+
+    loadIcon()
+
+    return () => { cancelled = true }
+  }, [workspaceId, entityType, identifier, iconPath, iconDir, iconFileName, emojiValue, cacheKey])
+
+  return resolved
+}
+
+// ============================================================================
+// useEntityIcon Internal Helpers
+// ============================================================================
+
+/**
+ * Tracks which cached icons are colorable (use currentColor).
+ * Kept as a Set of cache keys for O(1) lookup.
+ */
+const colorableCache = new Set<string>()
+
+/**
+ * Stores sanitized raw SVG content for colorable icons.
+ * Used for inline rendering so CSS color classes can cascade into SVG fills.
+ */
+const rawSvgCache = new Map<string, string>()
+
+/**
+ * Load a single icon file by relative path.
+ * Handles SVG theming, colorability detection, and sanitization.
+ *
+ * For colorable SVGs (those using currentColor), returns rawSvg for inline rendering
+ * so CSS color classes can cascade into SVG fills/strokes.
+ */
+async function loadIconFile(
+  workspaceId: string,
+  relativePath: string
+): Promise<{ dataUrl: string; colorable: boolean; rawSvg?: string } | null> {
+  try {
+    const content = await window.electronAPI.readWorkspaceImage(workspaceId, relativePath)
+
+    if (relativePath.endsWith('.svg')) {
+      // Detect if SVG uses currentColor (colorable)
+      const colorable = content.includes('currentColor')
+      // Theme SVG: inject foreground color for data URL usage
+      const dataUrl = svgToThemedDataUrl(content)
+
+      if (colorable) {
+        // Sanitize SVG for inline rendering (XSS prevention)
+        const rawSvg = sanitizeSvgForInline(content)
+        return { dataUrl, colorable, rawSvg }
+      }
+
+      return { dataUrl, colorable }
+    }
+
+    // Raster image (PNG, JPG) - not colorable
+    return { dataUrl: content, colorable: false }
+  } catch {
+    // File doesn't exist or failed to load
+    return null
+  }
+}
+
+/**
+ * Sanitize SVG content for safe inline rendering via dangerouslySetInnerHTML.
+ * Removes script tags, event handlers, and JavaScript URLs.
+ * Also strips width/height attributes so SVG fills its container.
+ */
+function sanitizeSvgForInline(svg: string): string {
+  return svg
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/on\w+="[^"]*"/gi, '')
+    .replace(/on\w+='[^']*'/gi, '')
+    .replace(/javascript:/gi, '')
+    .replace(/\s+width="[^"]*"/gi, '')
+    .replace(/\s+height="[^"]*"/gi, '')
+}
+
+/**
+ * Auto-discover an icon file in a workspace directory.
+ * Probes all extensions (.svg, .png, .jpg, .jpeg) in parallel via IPC,
+ * then returns the first successful result by priority order.
+ * Default fileName is 'icon' (e.g. icon.svg). Override for entities
+ * that use identifier-based naming (e.g. statuses use '{statusId}.svg').
+ */
+async function discoverIconFile(
+  workspaceId: string,
+  iconDir: string,
+  fileName?: string
+): Promise<{ dataUrl: string; colorable: boolean; rawSvg?: string } | null> {
+  const name = fileName ?? 'icon'
+
+  // Probe all extensions in parallel — reduces round-trips from N to 1
+  const results = await Promise.allSettled(
+    ICON_FILE_EXTENSIONS.map(ext =>
+      loadIconFile(workspaceId, `${iconDir}/${name}${ext}`)
+    )
+  )
+
+  // Return first successful result in priority order (svg > png > jpg > jpeg)
+  for (const result of results) {
+    if (result.status === 'fulfilled' && result.value) return result.value
+  }
   return null
 }

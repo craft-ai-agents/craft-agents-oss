@@ -4,7 +4,20 @@ import tailwindcss from '@tailwindcss/vite'
 import { resolve } from 'path'
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react({
+      babel: {
+        plugins: [
+          // Jotai HMR support: caches atom instances in globalThis.jotaiAtomCache
+          // so that HMR module re-execution returns stable atom references
+          // instead of creating new (empty) atoms that orphan existing data.
+          'jotai/babel/plugin-debug-label',
+          ['jotai/babel/plugin-react-refresh', { customAtomNames: ['atomFamily'] }],
+        ],
+      },
+    }),
+    tailwindcss(),
+  ],
   root: resolve(__dirname, 'src/renderer'),
   base: './',
   build: {
@@ -29,7 +42,7 @@ export default defineConfig({
     dedupe: ['react', 'react-dom']
   },
   optimizeDeps: {
-    include: ['react', 'react-dom', 'jotai'],
+    include: ['react', 'react-dom', 'jotai', 'filtrex'],
     exclude: ['@craft-agent/ui']
   },
   server: {

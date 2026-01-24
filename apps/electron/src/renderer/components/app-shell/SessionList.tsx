@@ -1,12 +1,18 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react"
-import { formatDistanceToNow, isToday, isYesterday, format, startOfDay } from "date-fns"
-import { MoreHorizontal, Flag, Search, X, Copy, Link2Off, CloudUpload, Globe, RefreshCw } from "lucide-react"
+import { formatDistanceToNow, formatDistanceToNowStrict, isToday, isYesterday, format, startOfDay } from "date-fns"
+import type { Locale } from "date-fns"
+import { MoreHorizontal, Flag, Search, X, Copy, Link2Off, CloudUpload, Globe, RefreshCw, Inbox } from "lucide-react"
 import { toast } from "sonner"
 
-import { cn, isHexColor } from "@/lib/utils"
+import { cn } from "@/lib/utils"
 import { rendererPerf } from "@/lib/perf"
-import { Spinner } from "@craft-agent/ui"
+import type { LabelConfig } from "@craft-agent/shared/labels"
+import { flattenLabels, extractLabelId } from "@craft-agent/shared/labels"
+import { resolveEntityColor } from "@craft-agent/shared/colors"
+import { useTheme } from "@/context/ThemeContext"
+import { Spinner, Tooltip, TooltipTrigger, TooltipContent } from "@craft-agent/ui"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty"
 import { Separator } from "@/components/ui/separator"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -42,11 +48,29 @@ import { useNavigation, useNavigationState, routes, isChatsNavigation } from "@/
 import { useFocusContext } from "@/context/FocusContext"
 import { getSessionTitle } from "@/utils/session"
 import type { SessionMeta } from "@/atoms/sessions"
+import type { ViewConfig } from "@craft-agent/shared/views"
 import { PERMISSION_MODE_CONFIG, type PermissionMode } from "@craft-agent/shared/agent/modes"
 
 // Pagination constants
 const INITIAL_DISPLAY_LIMIT = 20
 const BATCH_SIZE = 20
+
+/** Short relative time locale for date-fns formatDistanceToNowStrict.
+ *  Produces compact strings: "7m", "2h", "3d", "2w", "5mo", "1y" */
+const shortTimeLocale: Pick<Locale, 'formatDistance'> = {
+  formatDistance: (token: string, count: number) => {
+    const units: Record<string, string> = {
+      xSeconds: `${count}s`,
+      xMinutes: `${count}m`,
+      xHours: `${count}h`,
+      xDays: `${count}d`,
+      xWeeks: `${count}w`,
+      xMonths: `${count}mo`,
+      xYears: `${count}y`,
+    }
+    return units[token] || `${count}`
+  },
+}
 
 /**
  * Format a date for the date header
@@ -167,6 +191,8 @@ interface SessionItemProps {
   searchQuery?: string
   /** Dynamic todo states from workspace config */
   todoStates: TodoState[]
+  /** Pre-flattened label configs for resolving session label IDs to display info */
+  flatLabels: LabelConfig[]
 }
 
 /**
@@ -192,6 +218,7 @@ function SessionItem({
   permissionMode,
   searchQuery,
   todoStates,
+  flatLabels,
 }: SessionItemProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [contextMenuOpen, setContextMenuOpen] = useState(false)
@@ -199,6 +226,21 @@ function SessionItem({
 
   // Get current todo state from session properties
   const currentTodoState = getSessionTodoState(item)
+
+  // Resolve session label IDs (e.g. "bug", "priority::3") to their LabelConfig objects
+  const resolvedLabels = useMemo(() => {
+    if (!item.labels || item.labels.length === 0 || flatLabels.length === 0) return []
+    return item.labels
+      .map(entry => {
+        const id = extractLabelId(entry)
+        return flatLabels.find(l => l.id === id)
+      })
+      .filter((l): l is LabelConfig => l != null)
+  }, [item.labels, flatLabels])
+
+
+  // Theme context for resolving label colors (light/dark aware)
+  const { isDark } = useTheme()
 
   const handleClick = () => {
     // Start perf tracking for session switch
@@ -234,9 +276,8 @@ function SessionItem({
                 className={cn(
                   "w-4 h-4 flex items-center justify-center rounded-full transition-colors cursor-pointer",
                   "hover:bg-foreground/5",
-                  !isHexColor(getStateColor(currentTodoState, todoStates)) && (getStateColor(currentTodoState, todoStates) || 'text-muted-foreground')
                 )}
-                style={isHexColor(getStateColor(currentTodoState, todoStates)) ? { color: getStateColor(currentTodoState, todoStates) } : undefined}
+                style={{ color: getStateColor(currentTodoState, todoStates) ?? 'var(--foreground)' }}
                 role="button"
                 aria-haspopup="menu"
                 aria-expanded={todoMenuOpen}
@@ -299,8 +340,9 @@ function SessionItem({
                 {searchQuery ? highlightMatch(getSessionTitle(item), searchQuery) : getSessionTitle(item)}
               </div>
             </div>
-            {/* Subtitle - with optional flag at start, single line with truncation */}
-            <div className="flex items-center gap-1.5 text-xs text-foreground/70 w-full -mb-[2px] pr-6 min-w-0">
+            {/* Subtitle row — badges scroll horizontally when they overflow */}
+            <div className="flex items-center gap-1.5 text-xs text-foreground/70 w-full -mb-[2px] min-w-0">
+              {/* Fixed indicators (Spinner + New) — always visible */}
               {item.isProcessing && (
                 <Spinner className="text-[8px] text-foreground shrink-0" />
               )}
@@ -309,80 +351,117 @@ function SessionItem({
                   New
                 </span>
               )}
-              {item.isFlagged && (
-                <Flag className="h-[10px] w-[10px] text-info fill-info shrink-0" />
-              )}
-              {item.lastMessageRole === 'plan' && (
-                <span className="shrink-0 px-1.5 py-0.5 text-[10px] font-medium rounded bg-success/10 text-success">
-                  Plan
-                </span>
-              )}
-              {permissionMode && (
-                <span
-                  className={cn(
-                    "shrink-0 px-1.5 py-0.5 text-[10px] font-medium rounded",
-                    // Mode-specific styling using CSS variables (theme-aware)
-                    permissionMode === 'safe' && "bg-foreground/5 text-foreground/60",
-                    permissionMode === 'ask' && "bg-info/10 text-info",
-                    permissionMode === 'allow-all' && "bg-accent/10 text-accent"
-                  )}
-                >
-                  {PERMISSION_MODE_CONFIG[permissionMode].shortName}
-                </span>
-              )}
-              {item.sharedUrl && (
-                <DropdownMenu modal={true}>
-                  <DropdownMenuTrigger asChild>
-                    <span
-                      className="shrink-0 px-1.5 py-0.5 h-[18px] text-[10px] font-medium rounded flex items-center bg-foreground/5 text-foreground/70 cursor-pointer hover:bg-foreground/10"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <CloudUpload className="h-[10px] w-[10px]" />
-                    </span>
-                  </DropdownMenuTrigger>
-                  <StyledDropdownMenuContent align="start">
-                    <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(item.sharedUrl!)}>
-                      <Globe />
-                      Open in Browser
-                    </StyledDropdownMenuItem>
-                    <StyledDropdownMenuItem onClick={async () => {
-                      await navigator.clipboard.writeText(item.sharedUrl!)
-                      toast.success('Link copied to clipboard')
-                    }}>
-                      <Copy />
-                      Copy Link
-                    </StyledDropdownMenuItem>
-                    <StyledDropdownMenuItem onClick={async () => {
-                      const result = await window.electronAPI.sessionCommand(item.id, { type: 'updateShare' })
-                      if (result?.success) {
-                        toast.success('Share updated')
-                      } else {
-                        toast.error('Failed to update share', { description: result?.error })
-                      }
-                    }}>
-                      <RefreshCw />
-                      Update Share
-                    </StyledDropdownMenuItem>
-                    <StyledDropdownMenuSeparator />
-                    <StyledDropdownMenuItem onClick={async () => {
-                      const result = await window.electronAPI.sessionCommand(item.id, { type: 'revokeShare' })
-                      if (result?.success) {
-                        toast.success('Sharing stopped')
-                      } else {
-                        toast.error('Failed to stop sharing', { description: result?.error })
-                      }
-                    }} variant="destructive">
-                      <Link2Off />
-                      Stop Sharing
-                    </StyledDropdownMenuItem>
-                  </StyledDropdownMenuContent>
-                </DropdownMenu>
-              )}
-              <span className="truncate">
-                {item.lastMessageAt && (
-                  <>{formatDistanceToNow(new Date(item.lastMessageAt), { addSuffix: true })}</>
+
+              {/* Scrollable badges container — horizontal scroll with hidden scrollbar,
+                  right-edge gradient mask to hint at overflow */}
+              <div
+                className="flex-1 flex items-center gap-1 min-w-0 overflow-x-auto scrollbar-hide pr-4"
+                style={{ maskImage: 'linear-gradient(to right, black calc(100% - 16px), transparent 100%)', WebkitMaskImage: 'linear-gradient(to right, black calc(100% - 16px), transparent 100%)' }}
+              >
+                {item.isFlagged && (
+                  <span className="shrink-0 h-[18px] w-[18px] flex items-center justify-center rounded bg-foreground/5">
+                    <Flag className="h-[10px] w-[10px] text-info fill-info" />
+                  </span>
                 )}
-              </span>
+                {item.lastMessageRole === 'plan' && (
+                  <span className="shrink-0 h-[18px] px-1.5 text-[10px] font-medium rounded bg-success/10 text-success flex items-center whitespace-nowrap">
+                    Plan
+                  </span>
+                )}
+                {permissionMode && (
+                  <span
+                    className={cn(
+                      "shrink-0 h-[18px] px-1.5 text-[10px] font-medium rounded flex items-center whitespace-nowrap",
+                      permissionMode === 'safe' && "bg-foreground/5 text-foreground/60",
+                      permissionMode === 'ask' && "bg-info/10 text-info",
+                      permissionMode === 'allow-all' && "bg-accent/10 text-accent"
+                    )}
+                  >
+                    {PERMISSION_MODE_CONFIG[permissionMode].shortName}
+                  </span>
+                )}
+                {/* Label badges — solid color via color-mix in sRGB */}
+                {resolvedLabels.map(label => {
+                  const color = label.color ? resolveEntityColor(label.color, isDark) : null
+                  return (
+                    <span
+                      key={label.id}
+                      className="shrink-0 h-[18px] px-1.5 text-[10px] font-medium rounded flex items-center whitespace-nowrap"
+                      style={color ? {
+                        backgroundColor: `color-mix(in srgb, ${color} 6%, transparent)`,
+                        color: `color-mix(in srgb, ${color} 80%, transparent)`,
+                      } : {
+                        backgroundColor: 'rgba(var(--foreground-rgb), 0.05)',
+                        color: 'rgba(var(--foreground-rgb), 0.6)',
+                      }}
+                    >
+                      {label.name}
+                    </span>
+                  )
+                })}
+                {item.sharedUrl && (
+                  <DropdownMenu modal={true}>
+                    <DropdownMenuTrigger asChild>
+                      <span
+                        className="shrink-0 h-[18px] w-[18px] flex items-center justify-center rounded bg-foreground/5 text-foreground/70 cursor-pointer hover:bg-foreground/10"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <CloudUpload className="h-[10px] w-[10px]" />
+                      </span>
+                    </DropdownMenuTrigger>
+                    <StyledDropdownMenuContent align="start">
+                      <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(item.sharedUrl!)}>
+                        <Globe />
+                        Open in Browser
+                      </StyledDropdownMenuItem>
+                      <StyledDropdownMenuItem onClick={async () => {
+                        await navigator.clipboard.writeText(item.sharedUrl!)
+                        toast.success('Link copied to clipboard')
+                      }}>
+                        <Copy />
+                        Copy Link
+                      </StyledDropdownMenuItem>
+                      <StyledDropdownMenuItem onClick={async () => {
+                        const result = await window.electronAPI.sessionCommand(item.id, { type: 'updateShare' })
+                        if (result?.success) {
+                          toast.success('Share updated')
+                        } else {
+                          toast.error('Failed to update share', { description: result?.error })
+                        }
+                      }}>
+                        <RefreshCw />
+                        Update Share
+                      </StyledDropdownMenuItem>
+                      <StyledDropdownMenuSeparator />
+                      <StyledDropdownMenuItem onClick={async () => {
+                        const result = await window.electronAPI.sessionCommand(item.id, { type: 'revokeShare' })
+                        if (result?.success) {
+                          toast.success('Sharing stopped')
+                        } else {
+                          toast.error('Failed to stop sharing', { description: result?.error })
+                        }
+                      }} variant="destructive">
+                        <Link2Off />
+                        Stop Sharing
+                      </StyledDropdownMenuItem>
+                    </StyledDropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </div>
+              {/* Timestamp — outside stacking container so it never overlaps badges.
+                  shrink-0 keeps it fixed-width; the badges container clips instead. */}
+              {item.lastMessageAt && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="shrink-0 text-[11px] text-foreground/40 whitespace-nowrap cursor-default">
+                      {formatDistanceToNowStrict(new Date(item.lastMessageAt), { locale: shortTimeLocale as Locale })}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" sideOffset={4}>
+                    {formatDistanceToNow(new Date(item.lastMessageAt), { addSuffix: true })}
+                  </TooltipContent>
+                </Tooltip>
+              )}
             </div>
           </div>
         </button>
@@ -496,6 +575,10 @@ interface SessionListProps {
   onSearchClose?: () => void
   /** Dynamic todo states from workspace config */
   todoStates?: TodoState[]
+  /** View evaluator — evaluates a session and returns matching view configs */
+  evaluateViews?: (meta: SessionMeta) => ViewConfig[]
+  /** Label configs for resolving session label IDs to display info */
+  labels?: LabelConfig[]
 }
 
 // Re-export TodoStateId for use by parent components
@@ -529,10 +612,15 @@ export function SessionList({
   onSearchChange,
   onSearchClose,
   todoStates = [],
+  evaluateViews,
+  labels = [],
 }: SessionListProps) {
   const [session] = useSession()
   const { navigate } = useNavigation()
   const navState = useNavigationState()
+
+  // Pre-flatten label tree once for efficient ID lookups in each SessionItem
+  const flatLabels = useMemo(() => flattenLabels(labels), [labels])
 
   // Get current filter from navigation state (for preserving context in tab routes)
   const currentFilter = isChatsNavigation(navState) ? navState.filter : undefined
@@ -755,14 +843,28 @@ export function SessionList({
     }
   }
 
-  // Empty state - render outside ScrollArea to avoid scroll
+  // Empty state - render outside ScrollArea for proper vertical centering
   if (flatItems.length === 0 && !searchActive) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <p className="text-sm text-muted-foreground">
-          No conversations yet
-        </p>
-      </div>
+      <Empty className="h-full">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <Inbox />
+          </EmptyMedia>
+          <EmptyTitle>No conversations yet</EmptyTitle>
+          <EmptyDescription>
+            Conversations with your agent appear here. Start one to get going.
+          </EmptyDescription>
+        </EmptyHeader>
+        <EmptyContent>
+          <button
+            onClick={() => onFocusChatInput?.()}
+            className="inline-flex items-center h-7 px-3 text-xs font-medium rounded-[8px] bg-background shadow-minimal hover:bg-foreground/[0.03] transition-colors"
+          >
+            New Conversation
+          </button>
+        </EmptyContent>
+      </Empty>
     )
   }
 
@@ -854,6 +956,7 @@ export function SessionList({
                     permissionMode={sessionOptions?.get(item.id)?.permissionMode}
                     searchQuery={searchQuery}
                     todoStates={todoStates}
+                    flatLabels={flatLabels}
                   />
                 )
               })}

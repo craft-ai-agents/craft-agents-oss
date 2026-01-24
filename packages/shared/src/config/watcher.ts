@@ -12,6 +12,7 @@
  * - ~/.craft-agent/workspaces/{slug}/ - Workspace directory (recursive)
  *   - sources/{slug}/config.json, guide.md, permissions.json
  *   - skills/{slug}/SKILL.md, icon.*
+ *   - sessions/{id}/session.jsonl (header metadata only)
  *   - permissions.json
  */
 
@@ -45,6 +46,8 @@ import {
   statusNeedsIconDownload,
   downloadStatusIcon,
 } from '../statuses/storage.ts';
+import { readSessionHeader } from '../sessions/jsonl.ts';
+import type { SessionHeader } from '../sessions/types.ts';
 import { loadAppTheme, loadPresetThemes, loadPresetTheme, getAppThemesDir } from './storage.ts';
 import type { ThemeOverrides, PresetTheme } from './theme.ts';
 
@@ -114,6 +117,14 @@ export interface ConfigWatcherCallbacks {
   onStatusConfigChange?: (workspaceId: string) => void;
   /** Called when a status icon file changes */
   onStatusIconChange?: (workspaceId: string, iconFilename: string) => void;
+
+  // Label callbacks
+  /** Called when labels config.json changes */
+  onLabelConfigChange?: (workspaceId: string) => void;
+
+  // Session callbacks
+  /** Called when a session's JSONL header is modified externally (labels, name, flags, etc.) */
+  onSessionMetadataChange?: (sessionId: string, header: SessionHeader) => void;
 
   // Theme callbacks (app-level only)
   /** Called when app-level theme.json changes */
@@ -383,6 +394,20 @@ export class ConfigWatcher {
       return;
     }
 
+    // Session metadata changes: sessions/{id}/session.jsonl
+    // Detects external modifications (other instances, scripts, manual edits).
+    // Only reads line 1 (header) — lightweight even during active streaming.
+    if (parts[0] === 'sessions' && parts.length >= 3) {
+      const sessionId = parts[1]!;
+      const file = parts[2];
+
+      // Only watch actual session files, ignore .tmp (atomic write intermediates)
+      if (file === 'session.jsonl') {
+        this.debounce(`session-meta:${sessionId}`, () => this.handleSessionMetadataChange(sessionId));
+      }
+      return;
+    }
+
     // Statuses changes: statuses/...
     if (parts[0] === 'statuses' && parts.length >= 2) {
       const file = parts[1];
@@ -403,6 +428,18 @@ export class ConfigWatcher {
         }
         return;
       }
+    }
+
+    // Labels changes: labels/...
+    if (parts[0] === 'labels' && parts.length >= 2) {
+      const file = parts[1];
+
+      // config.json change
+      if (file === 'config.json') {
+        this.debounce('labels-config', () => this.handleLabelConfigChange());
+        return;
+      }
+
     }
   }
 
@@ -798,6 +835,40 @@ export class ConfigWatcher {
   private handleStatusIconChange(iconFilename: string): void {
     debug('[ConfigWatcher] Status icon changed:', this.workspaceId, iconFilename);
     this.callbacks.onStatusIconChange?.(this.workspaceId, iconFilename);
+  }
+
+  // ============================================================
+  // Labels Handlers
+  // ============================================================
+
+  /**
+   * Handle labels config.json change.
+   */
+  private handleLabelConfigChange(): void {
+    debug('[ConfigWatcher] Labels config.json changed:', this.workspaceId);
+    this.callbacks.onLabelConfigChange?.(this.workspaceId);
+  }
+
+  // ============================================================
+  // Session Metadata Handlers
+  // ============================================================
+
+  /**
+   * Handle session.jsonl change — reads only line 1 (header) and emits if valid.
+   * This enables detection of external metadata changes (labels, name, flags)
+   * made by other instances, scripts, or manual edits.
+   */
+  private handleSessionMetadataChange(sessionId: string): void {
+    const sessionFile = join(this.workspaceDir, 'sessions', sessionId, 'session.jsonl');
+
+    if (!existsSync(sessionFile)) {
+      return;
+    }
+
+    const header = readSessionHeader(sessionFile);
+    if (header) {
+      this.callbacks.onSessionMetadataChange?.(sessionId, header);
+    }
   }
 
   // ============================================================

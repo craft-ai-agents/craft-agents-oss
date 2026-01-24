@@ -40,6 +40,10 @@ export interface SessionMeta {
    * Set to false when user views the session (and not processing).
    */
   hasUnread?: boolean
+  /** Labels for filtering (additive tags, many-per-session) */
+  labels?: string[]
+  /** Permission mode ('safe', 'ask', 'allow-all') — used by view expressions */
+  permissionMode?: string
   /** Todo state for filtering */
   todoState?: string
   /** Role/type of the last message (for badge display without loading messages) */
@@ -48,6 +52,20 @@ export interface SessionMeta {
   isAsyncOperationOngoing?: boolean
   /** @deprecated Use isAsyncOperationOngoing instead */
   isRegeneratingTitle?: boolean
+  /** Model override for this session */
+  model?: string
+  /** Token usage stats (from JSONL header, available without loading messages) */
+  tokenUsage?: {
+    inputTokens: number
+    outputTokens: number
+    totalTokens: number
+    costUsd: number
+    contextTokens: number
+  }
+  /** When the session was created (ms timestamp) */
+  createdAt?: number
+  /** Total number of messages in this session */
+  messageCount?: number
 }
 
 /**
@@ -88,11 +106,18 @@ export function extractSessionMeta(session: Session): SessionMeta {
     lastFinalMessageId,
     // Explicit unread flag - source of truth for NEW badge
     hasUnread: session.hasUnread,
+    labels: session.labels,
+    permissionMode: session.permissionMode,
     todoState: session.todoState,
     lastMessageRole: session.lastMessageRole,
     // Use isAsyncOperationOngoing if available, fall back to deprecated isRegeneratingTitle
     isAsyncOperationOngoing: session.isAsyncOperationOngoing ?? session.isRegeneratingTitle,
     isRegeneratingTitle: session.isRegeneratingTitle,
+    // Fields needed by view expressions (messageCount, model, createdAt, tokenUsage)
+    messageCount: session.messageCount ?? session.messages?.length ?? 0,
+    model: session.model,
+    createdAt: session.createdAt,
+    tokenUsage: session.tokenUsage,
   }
 }
 
@@ -236,6 +261,22 @@ export const updateStreamingContentAtom = atom(
 export const initializeSessionsAtom = atom(
   null,
   (get, set, sessions: Session[]) => {
+    // Clean up stale atom family entries from previous workspace.
+    // Without this, switching workspaces leaves orphaned atoms in memory
+    // and components subscribed to old session IDs see stale/empty data.
+    const oldIds = get(sessionIdsAtom)
+    const newIdSet = new Set(sessions.map(s => s.id))
+    for (const oldId of oldIds) {
+      if (!newIdSet.has(oldId)) {
+        sessionAtomFamily.remove(oldId)
+        expandedTurnsAtomFamily.remove(oldId)
+        expandedActivityGroupsAtomFamily.remove(oldId)
+        backgroundTasksAtomFamily.remove(oldId)
+      }
+    }
+    // Reset loaded sessions tracking — new workspace needs fresh lazy loading
+    set(loadedSessionsAtom, new Set<string>())
+
     // Set individual session atoms
     for (const session of sessions) {
       set(sessionAtomFamily(session.id), session)
@@ -402,6 +443,13 @@ export const syncSessionsToAtomsAtom = atom(
  * Action atom: Load session messages if not already loaded
  * Returns the loaded session or current session if already loaded.
  * Uses promise deduplication to prevent redundant IPC calls from concurrent requests.
+ *
+ * IMPORTANT: This only merges messages into the existing session atom.
+ * UI state fields (hasUnread, isFlagged, todoState, etc.) are preserved from
+ * the in-memory atom, NOT overwritten with potentially stale disk data.
+ * This prevents a race condition where optimistic updates (e.g., clearing the
+ * NEW badge on session view) get clobbered by async message loading that reads
+ * older state from disk.
  */
 export const ensureSessionMessagesLoadedAtom = atom(
   null,
@@ -427,21 +475,42 @@ export const ensureSessionMessagesLoadedAtom = atom(
         return get(sessionAtomFamily(sessionId))
       }
 
-      // Update the atom with the full session (including messages)
-      set(sessionAtomFamily(sessionId), loadedSession)
+      // Merge messages and disk-only fields into existing session, preserving in-memory UI state.
+      // The renderer's atom is authoritative for UI fields (hasUnread, isFlagged, etc.)
+      // because optimistic updates may have changed them since the disk write.
+      // tokenUsage and sessionFolderPath are only returned by getSession() (not getSessions()),
+      // so they must be explicitly merged here to be available after app restart.
+      const existingSession = get(sessionAtomFamily(sessionId))
+      const mergedSession = existingSession
+        ? {
+            ...existingSession,
+            messages: loadedSession.messages,
+            tokenUsage: loadedSession.tokenUsage ?? existingSession.tokenUsage,
+            sessionFolderPath: loadedSession.sessionFolderPath ?? existingSession.sessionFolderPath,
+          }
+        : loadedSession
+      set(sessionAtomFamily(sessionId), mergedSession)
 
-      // Update metadata
-      const metaMap = get(sessionMetaMapAtom)
-      const newMetaMap = new Map(metaMap)
-      newMetaMap.set(sessionId, extractSessionMeta(loadedSession))
-      set(sessionMetaMapAtom, newMetaMap)
+      // Update only lastFinalMessageId in metadata (now computable from loaded messages).
+      // Don't replace the full meta entry — other fields are maintained through
+      // optimistic updates and IPC events, and may be ahead of disk state.
+      const lastFinalMessageId = findLastFinalMessageId(loadedSession.messages)
+      if (lastFinalMessageId) {
+        const metaMap = get(sessionMetaMapAtom)
+        const existingMeta = metaMap.get(sessionId)
+        if (existingMeta && existingMeta.lastFinalMessageId !== lastFinalMessageId) {
+          const newMetaMap = new Map(metaMap)
+          newMetaMap.set(sessionId, { ...existingMeta, lastFinalMessageId })
+          set(sessionMetaMapAtom, newMetaMap)
+        }
+      }
 
       // Mark as loaded
       const newLoadedSessions = new Set(get(loadedSessionsAtom))
       newLoadedSessions.add(sessionId)
       set(loadedSessionsAtom, newLoadedSessions)
 
-      return loadedSession
+      return mergedSession
     })()
 
     // Cache the promise before awaiting
@@ -503,13 +572,3 @@ export const backgroundTasksAtomFamily = atomFamily(
   (a, b) => a === b
 )
 
-// HMR: Force full page refresh when this file changes.
-// Jotai atoms are module-level objects - when HMR reloads this file, new atom
-// instances are created but the store still holds data in the old atoms.
-// This causes messages to disappear because components subscribe to new (empty)
-// atoms while data lives in old (orphaned) atoms. Full refresh avoids this.
-if (import.meta.hot) {
-  import.meta.hot.accept(() => {
-    import.meta.hot?.invalidate()
-  })
-}

@@ -1,7 +1,10 @@
 import * as React from 'react'
 import type { StatusConfig } from '@craft-agent/shared/statuses'
-import { isEmoji, ICON_EXTENSIONS } from '@craft-agent/shared/utils/icon-constants'
-import { statusIconCache, clearStatusIconCaches } from '@/lib/icon-cache'
+import { isEmoji } from '@craft-agent/shared/utils/icon-constants'
+import { resolveEntityColor, getDefaultStatusColor } from '@craft-agent/shared/colors'
+import type { EntityColor } from '@craft-agent/shared/colors'
+import { StatusIcon } from '@/components/ui/status-icon'
+import { iconCache } from '@/lib/icon-cache'
 
 // ============================================================================
 // Types
@@ -13,41 +16,16 @@ export type TodoStateId = string
 export interface TodoStateConfig {
   id: string
   label: string
-  color?: string
-}
-
-// ============================================================================
-// Default Status Colors (design system semantic colors)
-// ============================================================================
-
-/**
- * Default color mapping for built-in statuses.
- * Uses Tailwind classes that map to our design system semantic colors.
- * Custom statuses without a color will fall back to 'text-foreground/50'.
- */
-const DEFAULT_STATUS_COLORS: Record<string, string> = {
-  'backlog': 'text-foreground/50',   // Muted - not yet planned
-  'todo': 'text-foreground/50',       // Muted - ready to work on
-  'in-progress': 'text-success',     // Green - active work (kept for existing configs)
-  'needs-review': 'text-info',       // Amber - attention needed
-  'done': 'text-accent',             // Purple - completed
-  'cancelled': 'text-foreground/50', // Muted - inactive
-}
-
-/** Fallback color for custom statuses without explicit color */
-const DEFAULT_FALLBACK_COLOR = 'text-foreground/50'
-
-/**
- * Get the effective color for a status.
- * Returns the explicit color if set, otherwise the design system default.
- */
-export function getDefaultStatusColor(statusId: string): string {
-  return DEFAULT_STATUS_COLORS[statusId] ?? DEFAULT_FALLBACK_COLOR
+  color?: EntityColor
 }
 
 export interface TodoState extends TodoStateConfig {
-  /** Color is always resolved (either from config or design system default) */
-  color: string
+  /**
+   * Resolved CSS color string for inline style application.
+   * System colors resolve to var(--name) or color-mix(...).
+   * Custom colors resolve to the appropriate light/dark hex value.
+   */
+  resolvedColor: string
   icon: React.ReactNode
   /**
    * Whether the icon responds to color styling (uses currentColor).
@@ -60,181 +38,48 @@ export interface TodoState extends TodoStateConfig {
   isDefault?: boolean
 }
 
-/** Result from resolving a status icon */
-interface ResolvedIcon {
-  node: React.ReactNode
-  /** True if icon uses currentColor and should inherit status color */
-  colorable: boolean
-}
-
 // ============================================================================
-// Icon size constant
+// Status → TodoState Conversion
 // ============================================================================
 
-const ICON_SIZE = 'h-3.5 w-3.5'
-
 /**
- * Sanitize SVG content (basic XSS prevention)
- * Removes script tags and event handlers
- */
-function sanitizeSvg(svg: string): string {
-  return svg
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-    .replace(/on\w+="[^"]*"/gi, '')
-    .replace(/on\w+='[^']*'/gi, '')
-    .replace(/javascript:/gi, '')
-    .replace(/\s+width="[^"]*"/gi, '')      // Remove width attribute
-    .replace(/\s+height="[^"]*"/gi, '')     // Remove height attribute
-}
-
-/**
- * Check if an SVG uses currentColor (meaning it should inherit the status color).
- * SVGs with hardcoded colors should render at full opacity.
- */
-function svgUsesCurrentColor(svgContent: string): boolean {
-  // Check for currentColor in fill or stroke attributes
-  return svgContent.includes('currentColor')
-}
-
-/**
- * Try to load an icon file, checking multiple extensions.
- * Returns { content, extension } or null if not found.
- */
-async function tryLoadIconFile(
-  workspaceId: string,
-  statusId: string
-): Promise<{ content: string; extension: string } | null> {
-  for (const ext of ICON_EXTENSIONS) {
-    const relativePath = `statuses/icons/${statusId}${ext}`
-    const cacheKey = `${workspaceId}:${relativePath}`
-
-    // Check cache first (using shared statusIconCache from lib/icon-cache)
-    const cached = statusIconCache.get(cacheKey)
-    if (cached) {
-      return { content: cached, extension: ext }
-    }
-
-    // Try to load from filesystem
-    try {
-      const content = await window.electronAPI.readWorkspaceImage(workspaceId, relativePath)
-      statusIconCache.set(cacheKey, content)
-      return { content, extension: ext }
-    } catch {
-      // File doesn't exist, try next extension
-      continue
-    }
-  }
-  return null
-}
-
-/**
- * Resolve status icon to React.ReactNode with colorability info.
- * Handles emoji, auto-discovered files, and fallback.
+ * Convert StatusConfig to TodoState.
+ * Resolves EntityColor to a CSS color string for inline style use.
+ * System colors (e.g., "accent") resolve to CSS variable references that
+ * auto-adapt to light/dark theme. Custom colors use isDark to pick the right value.
  *
- * Icon resolution priority:
- * 1. Config icon (emoji set in config.json) - allows user override
- * 2. Local file (statuses/icons/{statusId}.svg, .png, etc.)
- * 3. Fallback bullet
- *
- * Returns { node, colorable } where:
- * - colorable=true: Icon uses currentColor, should inherit status color
- * - colorable=false: Icon has its own colors (emoji, image, hardcoded SVG)
+ * Colorability is determined synchronously:
+ * - Emoji icons → not colorable (they have their own colors)
+ * - Everything else (SVGs, fallback) → colorable (uses currentColor)
  */
-export async function resolveStatusIcon(
-  statusId: string,
-  icon: string | undefined,
-  workspaceId: string,
-  className: string = ICON_SIZE
-): Promise<ResolvedIcon> {
-  // Priority 1: Check if icon field is set in config (emoji takes precedence)
-  // This allows users to override default file icons by setting "icon" in config.json
-  if (icon && isEmoji(icon)) {
-    return {
-      node: <span className="text-[13px] leading-none">{icon}</span>,
-      colorable: false,
-    }
-  }
-
-  // Priority 2: Try to load local icon file (auto-discovered by ID)
-  // This includes default icons created by ensureDefaultIconFiles() and downloaded URLs
-  const iconFile = await tryLoadIconFile(workspaceId, statusId)
-  if (iconFile) {
-    if (iconFile.extension === '.svg') {
-      const sanitized = sanitizeSvg(iconFile.content)
-      const colorable = svgUsesCurrentColor(iconFile.content)
-      return {
-        node: (
-          <div
-            className={className}
-            dangerouslySetInnerHTML={{ __html: sanitized }}
-            style={{ display: 'inline-block' }}
-          />
-        ),
-        colorable,
-      }
-    } else {
-      // PNG, JPG, etc. - images have their own colors
-      return {
-        node: (
-          <img
-            src={iconFile.content}
-            className={className}
-            alt=""
-            style={{ display: 'inline-block' }}
-          />
-        ),
-        colorable: false,
-      }
-    }
-  }
-
-  // Priority 3: Fallback bullet - colorable
-  return {
-    node: <span className={className}>●</span>,
-    colorable: true,
-  }
-}
-
-/**
- * Hook to resolve status icon with loading state
- * Use this in components that need synchronous rendering with async icon loading
- */
-export function useStatusIcon(
-  statusId: string,
-  icon: string | undefined,
-  workspaceId: string,
-  className: string = ICON_SIZE
-): React.ReactNode {
-  const [resolvedIcon, setResolvedIcon] = React.useState<React.ReactNode>(
-    <span className={className}>●</span>
-  )
-
-  React.useEffect(() => {
-    // Extract just the node from ResolvedIcon, discarding colorable info
-    // (useStatusIcon is only used for simple icon rendering, not full status state)
-    resolveStatusIcon(statusId, icon, workspaceId, className).then(resolved => setResolvedIcon(resolved.node))
-  }, [statusId, icon, workspaceId, className])
-
-  return resolvedIcon
-}
-
-/**
- * Convert StatusConfig to TodoState with resolved icon
- * This is async because icon loading may require IPC
- */
-export async function statusConfigToTodoState(
+export function statusConfigToTodoState(
   config: StatusConfig,
-  workspaceId: string
-): Promise<TodoState> {
-  const resolvedIcon = await resolveStatusIcon(config.id, config.icon, workspaceId)
+  workspaceId: string,
+  isDark: boolean
+): TodoState {
+  // Emojis have their own colors and don't respond to CSS color inheritance.
+  // SVGs with currentColor and the fallback Circle icon are colorable.
+  const iconColorable = !isEmoji(config.icon)
+
+  // Resolve EntityColor → CSS color string for inline style
+  const entityColor = config.color ?? getDefaultStatusColor(config.id)
+  const resolvedColor = resolveEntityColor(entityColor, isDark)
 
   return {
     id: config.id,
     label: config.label,
-    // Use explicit color if provided, otherwise fall back to design system default
-    color: config.color ?? getDefaultStatusColor(config.id),
-    icon: resolvedIcon.node,
-    iconColorable: resolvedIcon.colorable,
+    color: config.color,
+    resolvedColor,
+    icon: (
+      <StatusIcon
+        statusId={config.id}
+        icon={config.icon}
+        workspaceId={workspaceId}
+        size="xs"
+        chromeless={!iconColorable}
+      />
+    ),
+    iconColorable,
     category: config.category,
     isFixed: config.isFixed,
     isDefault: config.isDefault,
@@ -244,11 +89,12 @@ export async function statusConfigToTodoState(
 /**
  * Convert array of StatusConfig to TodoState[]
  */
-export async function statusConfigsToTodoStates(
+export function statusConfigsToTodoStates(
   configs: StatusConfig[],
-  workspaceId: string
-): Promise<TodoState[]> {
-  return Promise.all(configs.map(c => statusConfigToTodoState(c, workspaceId)))
+  workspaceId: string,
+  isDark: boolean
+): TodoState[] {
+  return configs.map(c => statusConfigToTodoState(c, workspaceId, isDark))
 }
 
 // ============================================================================
@@ -263,17 +109,17 @@ export function getStateIcon(
   states: TodoState[]
 ): React.ReactNode {
   const state = states.find(s => s.id === stateId)
-  return state?.icon ?? <span className={ICON_SIZE}>●</span>
+  return state?.icon ?? <span className="h-3.5 w-3.5">●</span>
 }
 
 /**
- * Get the color class for a todo state
+ * Get the resolved CSS color for a todo state (ready for inline style)
  */
 export function getStateColor(
   stateId: string,
   states: TodoState[]
 ): string | undefined {
-  return states.find(s => s.id === stateId)?.color
+  return states.find(s => s.id === stateId)?.resolvedColor
 }
 
 /**
@@ -298,8 +144,11 @@ export function getState(
 }
 
 /**
- * Clear icon cache (useful when statuses are updated)
+ * Clear status icon cache (useful when statuses are updated).
+ * Clears status-prefixed entries from the unified icon cache.
  */
 export function clearIconCache(): void {
-  clearStatusIconCaches()
+  for (const key of iconCache.keys()) {
+    if (key.startsWith('status:')) iconCache.delete(key)
+  }
 }

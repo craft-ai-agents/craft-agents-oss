@@ -54,7 +54,7 @@ function getAssetsDir(): string {
  */
 function loadBundledDocs(): Record<string, string> {
   const assetsDir = getAssetsDir();
-  const docFiles = ['sources.md', 'skills.md', 'permissions.md', 'themes.md', 'statuses.md'];
+  const docFiles = ['sources.md', 'skills.md', 'permissions.md', 'themes.md', 'statuses.md', 'labels.md'];
 
   const docs: Record<string, string> = {};
 
@@ -108,6 +108,7 @@ export const DOC_REFS = {
   skills: `${APP_ROOT}/docs/skills.md`,
   themes: `${APP_ROOT}/docs/themes.md`,
   statuses: `${APP_ROOT}/docs/statuses.md`,
+  labels: `${APP_ROOT}/docs/labels.md`,
   docsDir: `${APP_ROOT}/docs/`,
 } as const;
 

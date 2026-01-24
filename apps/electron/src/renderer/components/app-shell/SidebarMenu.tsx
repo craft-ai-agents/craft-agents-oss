@@ -20,26 +20,41 @@ import {
   AppWindow,
   Settings2,
   Plus,
+  Trash2,
   ExternalLink,
 } from 'lucide-react'
 import { useMenuComponents } from '@/components/ui/menu-context'
 import { getDocUrl, type DocFeature } from '@craft-agent/shared/docs/doc-links'
 
-export type SidebarMenuType = 'allChats' | 'flagged' | 'status' | 'sources' | 'skills' | 'newChat'
+export type SidebarMenuType = 'allChats' | 'flagged' | 'status' | 'sources' | 'skills' | 'labels' | 'views' | 'newChat'
 
 export interface SidebarMenuProps {
   /** Type of sidebar item (determines available menu items) */
   type: SidebarMenuType
   /** Status ID for status items (e.g., 'todo', 'done') - not currently used but kept for future */
   statusId?: string
+  /** Label ID — when set, this is an individual label item (enables Delete Label) */
+  labelId?: string
   /** Handler for "Configure Statuses" action - only for allChats/status/flagged types */
   onConfigureStatuses?: () => void
+  /** Handler for "Configure Labels" action - only for labels type */
+  onConfigureLabels?: () => void
+  /** Handler for "Add New Label" action - creates a label (parentId = labelId if set) */
+  onAddLabel?: (parentId?: string) => void
+  /** Handler for "Delete Label" action - deletes the label identified by labelId */
+  onDeleteLabel?: (labelId: string) => void
   /** Handler for "Add Source" action - only for sources type */
   onAddSource?: () => void
   /** Handler for "Add Skill" action - only for skills type */
   onAddSkill?: () => void
   /** Source type filter for "Learn More" link - determines which docs page to open */
   sourceType?: 'api' | 'mcp' | 'local'
+  /** Handler for "Edit Views" action - for views type */
+  onConfigureViews?: () => void
+  /** View ID — when set, this is an individual view (enables Delete) */
+  viewId?: string
+  /** Handler for "Delete View" action */
+  onDeleteView?: (id: string) => void
 }
 
 /**
@@ -49,10 +64,17 @@ export interface SidebarMenuProps {
 export function SidebarMenu({
   type,
   statusId,
+  labelId,
   onConfigureStatuses,
+  onConfigureLabels,
+  onAddLabel,
+  onDeleteLabel,
   onAddSource,
   onAddSkill,
   sourceType,
+  onConfigureViews,
+  viewId,
+  onDeleteView,
 }: SidebarMenuProps) {
   // Get menu components from context (works with both DropdownMenu and ContextMenu)
   const { MenuItem, Separator } = useMenuComponents()
@@ -74,6 +96,60 @@ export function SidebarMenu({
         <Settings2 className="h-3.5 w-3.5" />
         <span className="flex-1">Configure Statuses</span>
       </MenuItem>
+    )
+  }
+
+  // Labels: show context-appropriate actions
+  // - Header ("Labels" parent): Configure Labels + Add New Label
+  // - Individual label items: Add New Label (as child) + Delete Label
+  if (type === 'labels') {
+    return (
+      <>
+        {onAddLabel && (
+          <MenuItem onClick={() => onAddLabel(labelId)}>
+            <Plus className="h-3.5 w-3.5" />
+            <span className="flex-1">Add New Label</span>
+          </MenuItem>
+        )}
+        {onConfigureLabels && (
+          <MenuItem onClick={onConfigureLabels}>
+            <Settings2 className="h-3.5 w-3.5" />
+            <span className="flex-1">Edit Labels</span>
+          </MenuItem>
+        )}
+        {labelId && onDeleteLabel && (
+          <>
+            <Separator />
+            <MenuItem onClick={() => onDeleteLabel(labelId)}>
+              <Trash2 className="h-3.5 w-3.5" />
+              <span className="flex-1">Delete Label</span>
+            </MenuItem>
+          </>
+        )}
+      </>
+    )
+  }
+
+  // Views: show "Edit Views" and optionally "Delete View"
+  if (type === 'views') {
+    return (
+      <>
+        {onConfigureViews && (
+          <MenuItem onClick={onConfigureViews}>
+            <Settings2 className="h-3.5 w-3.5" />
+            <span className="flex-1">Edit Views</span>
+          </MenuItem>
+        )}
+        {viewId && onDeleteView && (
+          <>
+            <Separator />
+            <MenuItem onClick={() => onDeleteView(viewId)}>
+              <Trash2 className="h-3.5 w-3.5" />
+              <span className="flex-1">Delete View</span>
+            </MenuItem>
+          </>
+        )}
+      </>
     )
   }
 

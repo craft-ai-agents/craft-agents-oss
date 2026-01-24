@@ -15,6 +15,7 @@ import { z } from 'zod';
 import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 import { CONFIG_DIR } from './paths.ts';
+import { EntityColorSchema } from '../colors/validate.ts';
 
 // ============================================================
 // Config Directory
@@ -263,10 +264,11 @@ export function validateAll(workspaceId?: string, workspaceRoot?: string): Valid
     results.push(validateAllSources(workspaceId));
   }
 
-  // Include skill, status, and permissions validation if workspaceRoot is provided
+  // Include skill, status, label, and permissions validation if workspaceRoot is provided
   if (workspaceRoot) {
     results.push(validateAllSkills(workspaceRoot));
     results.push(validateStatuses(workspaceRoot));
+    results.push(validateLabels(workspaceRoot));
     results.push(validateAllPermissions(workspaceRoot));
   }
 
@@ -370,7 +372,7 @@ export const FolderSourceConfigSchema = z.object({
 );
 
 /**
- * Validate a source config object
+ * Validate a source config object (in-memory, no disk reads)
  */
 export function validateSourceConfig(config: unknown): ValidationResult {
   const result = FolderSourceConfigSchema.safeParse(config);
@@ -384,6 +386,30 @@ export function validateSourceConfig(config: unknown): ValidationResult {
     errors: zodErrorToIssues(result.error, 'config.json'),
     warnings: [],
   };
+}
+
+/**
+ * Validate source config from a JSON string.
+ * Used by PreToolUse hook to validate before writing to disk.
+ */
+export function validateSourceConfigContent(jsonString: string): ValidationResult {
+  let content: unknown;
+  try {
+    content = JSON.parse(jsonString);
+  } catch (e) {
+    return {
+      valid: false,
+      errors: [{
+        file: 'config.json',
+        path: '',
+        message: `Invalid JSON: ${e instanceof Error ? e.message : 'Unknown error'}`,
+        severity: 'error',
+      }],
+      warnings: [],
+    };
+  }
+
+  return validateSourceConfig(content);
 }
 
 /**
@@ -514,7 +540,6 @@ export function validateAllSources(workspaceId: string): ValidationResult {
 import matter from 'gray-matter';
 import { getWorkspaceSkillsPath } from '../workspaces/storage.ts';
 import { basename, extname } from 'path';
-import type { WorkspaceStatusConfig, StatusConfig } from '../statuses/types.ts';
 
 /**
  * Schema for skill metadata (SKILL.md frontmatter)
@@ -556,24 +581,7 @@ export function validateSkill(workspaceRoot: string, slug: string): ValidationRe
   const errors: ValidationIssue[] = [];
   const warnings: ValidationIssue[] = [];
 
-  // 1. Validate slug format
-  if (!/^[a-z0-9-]+$/.test(slug)) {
-    // Generate a suggested valid slug from the current name
-    const suggestedSlug = slug
-      .toLowerCase()
-      .replace(/[^a-z0-9-]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .replace(/-+/g, '-');
-    errors.push({
-      file: `skills/${slug}`,
-      path: 'slug',
-      message: 'Slug must be lowercase alphanumeric with hyphens',
-      severity: 'error',
-      suggestion: `Rename folder to '${suggestedSlug || 'valid-slug-name'}'`,
-    });
-  }
-
-  // 2. Check directory exists
+  // 1. Check directory exists (slug format is validated by validateSkillContent below)
   if (!existsSync(skillDir)) {
     return {
       valid: false,
@@ -602,7 +610,7 @@ export function validateSkill(workspaceRoot: string, slug: string): ValidationRe
     };
   }
 
-  // 4. Parse SKILL.md
+  // 4. Read and validate content using content-based validator
   let content: string;
   try {
     content = readFileSync(skillFile, 'utf-8');
@@ -619,11 +627,74 @@ export function validateSkill(workspaceRoot: string, slug: string): ValidationRe
     };
   }
 
-  // 5. Parse frontmatter
+  // Delegate content validation (frontmatter schema + body non-empty + slug format)
+  const contentResult = validateSkillContent(content, slug);
+  errors.push(...contentResult.errors);
+
+  // 5. FS-only checks: icon existence (warnings)
+  const iconPath = findSkillIconForValidation(skillDir);
+  if (iconPath) {
+    const ext = extname(iconPath).toLowerCase();
+    if (!['.svg', '.png', '.jpg', '.jpeg'].includes(ext)) {
+      warnings.push({
+        file: `skills/${slug}/${basename(iconPath)}`,
+        path: '',
+        message: `Unexpected icon format: ${ext}`,
+        severity: 'warning',
+        suggestion: 'Use .svg, .png, or .jpg for icons',
+      });
+    }
+  } else {
+    const searchTerm = slug.replace(/-/g, ' ');
+    warnings.push({
+      file: `skills/${slug}/`,
+      path: 'icon',
+      message: 'No icon found',
+      severity: 'warning',
+      suggestion: `Search for '${searchTerm} icon' on heroicons.com, lucide.dev, or icons8.com. Save as icon.svg in the skill folder.`,
+    });
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    warnings,
+  };
+}
+
+/**
+ * Validate skill SKILL.md content from a string (no disk reads).
+ * Used by PreToolUse hook to validate before writing to disk.
+ * Checks frontmatter schema and non-empty body. Skips icon/folder checks.
+ *
+ * @param markdownContent - The full SKILL.md file content
+ * @param slug - The skill slug (folder name), used for slug format validation
+ */
+export function validateSkillContent(markdownContent: string, slug: string): ValidationResult {
+  const file = `skills/${slug}/SKILL.md`;
+  const errors: ValidationIssue[] = [];
+
+  // 1. Validate slug format
+  if (!/^[a-z0-9-]+$/.test(slug)) {
+    const suggestedSlug = slug
+      .toLowerCase()
+      .replace(/[^a-z0-9-]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .replace(/-+/g, '-');
+    errors.push({
+      file: `skills/${slug}`,
+      path: 'slug',
+      message: 'Slug must be lowercase alphanumeric with hyphens',
+      severity: 'error',
+      suggestion: `Rename folder to '${suggestedSlug || 'valid-slug-name'}'`,
+    });
+  }
+
+  // 2. Parse frontmatter
   let frontmatter: unknown;
   let body: string;
   try {
-    const parsed = matter(content);
+    const parsed = matter(markdownContent);
     frontmatter = parsed.data;
     body = parsed.content;
   } catch (e) {
@@ -640,53 +711,27 @@ export function validateSkill(workspaceRoot: string, slug: string): ValidationRe
     };
   }
 
-  // 6. Validate frontmatter schema
+  // 3. Validate frontmatter schema
   const metaResult = SkillMetadataSchema.safeParse(frontmatter);
   if (!metaResult.success) {
     errors.push(...zodErrorToIssues(metaResult.error, file));
   }
 
-  // 7. Check content is not empty
+  // 4. Check content is not empty
   if (!body || body.trim().length === 0) {
     errors.push({
       file,
       path: 'content',
       message: 'Skill content is empty (nothing after frontmatter)',
       severity: 'error',
-      suggestion: 'Add instructions after the frontmatter describing what the skill should do, with examples and constraints',
-    });
-  }
-
-  // 8. Validate icon - warn if missing, validate format if present
-  const iconPath = findSkillIconForValidation(skillDir);
-  if (iconPath) {
-    const ext = extname(iconPath).toLowerCase();
-    if (!['.svg', '.png', '.jpg', '.jpeg'].includes(ext)) {
-      warnings.push({
-        file: `skills/${slug}/${basename(iconPath)}`,
-        path: '',
-        message: `Unexpected icon format: ${ext}`,
-        severity: 'warning',
-        suggestion: 'Use .svg, .png, or .jpg for icons',
-      });
-    }
-  } else {
-    // Generate a search-friendly term from the skill name or slug
-    const skillName = metaResult.success ? metaResult.data.name : slug;
-    const searchTerm = skillName.replace(/-/g, ' ');
-    warnings.push({
-      file: `skills/${slug}/`,
-      path: 'icon',
-      message: 'No icon found',
-      severity: 'warning',
-      suggestion: `Search for '${searchTerm} icon' on heroicons.com, lucide.dev, or icons8.com. Save as icon.svg in the skill folder.`,
+      suggestion: 'Add instructions after the frontmatter describing what the skill should do',
     });
   }
 
   return {
     valid: errors.length === 0,
     errors,
-    warnings,
+    warnings: [],  // Icon/folder warnings skipped in content-only validation
   };
 }
 
@@ -748,28 +793,17 @@ export function validateAllSkills(workspaceRoot: string): ValidationResult {
 // Status Validators
 // ============================================================
 
-const STATUS_CONFIG_DIR = 'statuses';
 const STATUS_CONFIG_FILE = 'statuses/config.json';
-const STATUS_ICONS_DIR = 'statuses/icons';
 
 /** Required fixed statuses that must always exist */
 const REQUIRED_FIXED_STATUS_IDS = ['todo', 'done', 'cancelled'] as const;
 
 /**
- * Zod schema for status icon configuration
- * Supports two formats:
- * - Simple string (emoji or URL) - stored directly in icon field
- * - Object with type/value (for explicit file references)
+ * Status icons are simple strings: emoji characters (e.g., "✅") or URLs.
+ * Local icon files (statuses/icons/{id}.svg) are auto-discovered at runtime,
+ * not referenced in the config.
  */
-const StatusIconSchema = z.union([
-  // Simple string: emoji or URL
-  z.string(),
-  // Object format: { type: "file" | "emoji", value: "..." }
-  z.object({
-    type: z.enum(['file', 'emoji']),
-    value: z.string().min(1),
-  }),
-]);
+const StatusIconSchema = z.string();
 
 /**
  * Zod schema for individual status configuration
@@ -777,7 +811,7 @@ const StatusIconSchema = z.union([
 const StatusConfigSchema = z.object({
   id: z.string().regex(/^[a-z0-9-]+$/, 'Status ID must be lowercase alphanumeric with hyphens'),
   label: z.string().min(1, 'Status label is required'),
-  color: z.string().optional(),
+  color: EntityColorSchema.optional(),
   icon: StatusIconSchema.optional(),
   category: z.enum(['open', 'closed']),
   isFixed: z.boolean(),
@@ -800,11 +834,7 @@ const WorkspaceStatusConfigSchema = z.object({
  */
 export function validateStatuses(workspaceRoot: string): ValidationResult {
   const configPath = join(workspaceRoot, STATUS_CONFIG_FILE);
-  const iconsDir = join(workspaceRoot, STATUS_ICONS_DIR);
   const file = STATUS_CONFIG_FILE;
-
-  const errors: ValidationIssue[] = [];
-  const warnings: ValidationIssue[] = [];
 
   // Check if config file exists (optional - defaults are used if missing)
   if (!existsSync(configPath)) {
@@ -821,11 +851,42 @@ export function validateStatuses(workspaceRoot: string): ValidationResult {
     };
   }
 
+  // Read file and delegate to content-based validator
+  let raw: string;
+  try {
+    raw = readFileSync(configPath, 'utf-8');
+  } catch (e) {
+    return {
+      valid: false,
+      errors: [{
+        file,
+        path: '',
+        message: `Cannot read file: ${e instanceof Error ? e.message : 'Unknown error'}`,
+        severity: 'error',
+      }],
+      warnings: [],
+    };
+  }
+
+  // Icons are auto-discovered from statuses/icons/{id}.{ext} at runtime,
+  // not referenced in config, so no FS checks needed here.
+  return validateStatusesContent(raw);
+}
+
+/**
+ * Validate statuses config from a JSON string (no disk reads).
+ * Used by PreToolUse hook to validate before writing to disk.
+ * Runs schema validation and semantic checks. Skips icon file existence checks.
+ */
+export function validateStatusesContent(jsonString: string): ValidationResult {
+  const file = 'statuses/config.json';
+  const errors: ValidationIssue[] = [];
+  const warnings: ValidationIssue[] = [];
+
   // Parse JSON
   let content: unknown;
   try {
-    const raw = readFileSync(configPath, 'utf-8');
-    content = JSON.parse(raw);
+    content = JSON.parse(jsonString);
   } catch (e) {
     return {
       valid: false,
@@ -848,7 +909,7 @@ export function validateStatuses(workspaceRoot: string): ValidationResult {
 
   const config = result.data;
 
-  // Semantic validations
+  // Semantic validations (same as validateStatuses but without FS checks)
 
   // 1. Check required fixed statuses exist
   const statusIds = new Set(config.statuses.map(s => s.id));
@@ -904,23 +965,7 @@ export function validateStatuses(workspaceRoot: string): ValidationResult {
     }
   }
 
-  // 5. Validate icon file references exist
-  for (const status of config.statuses) {
-    if (status.icon && typeof status.icon === 'object' && status.icon.type === 'file') {
-      const iconPath = join(iconsDir, status.icon.value);
-      if (!existsSync(iconPath)) {
-        warnings.push({
-          file,
-          path: `statuses[id=${status.id}].icon`,
-          message: `Icon file '${status.icon.value}' not found`,
-          severity: 'warning',
-          suggestion: `Create the icon file at ${STATUS_ICONS_DIR}/${status.icon.value}`,
-        });
-      }
-    }
-  }
-
-  // 6. Check that at least one status is in each category
+  // 5. Check that at least one status is in each category
   const hasOpen = config.statuses.some(s => s.category === 'open');
   const hasClosed = config.statuses.some(s => s.category === 'closed');
   if (!hasOpen) {
@@ -948,6 +993,242 @@ export function validateStatuses(workspaceRoot: string): ValidationResult {
 }
 
 // ============================================================
+// Labels Validators
+// ============================================================
+
+import { validateAutoLabelRule } from '../labels/auto/validation.ts';
+
+const LABEL_CONFIG_FILE = 'labels/config.json';
+
+/** Maximum nesting depth for label tree (prevents excessively deep hierarchies) */
+const MAX_LABEL_DEPTH = 5;
+
+/**
+ * Zod schema for individual label configuration.
+ * Recursive: each label can have optional children forming a tree.
+ * IDs are simple slugs (lowercase alphanumeric + hyphens).
+ */
+/**
+ * Zod schema for auto-label rules (regex patterns for automatic label application).
+ * Validates pattern is non-empty; regex validity is checked semantically below.
+ */
+const AutoLabelRuleSchema = z.object({
+  pattern: z.string().min(1, 'Auto-label rule pattern is required'),
+  flags: z.string().optional(),
+  valueTemplate: z.string().optional(),
+  description: z.string().optional(),
+});
+
+const BaseLabelConfigSchema = z.object({
+  id: z.string().regex(
+    /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/,
+    'Label ID must be a simple slug (lowercase alphanumeric + hyphens, e.g., "bug", "frontend")'
+  ),
+  name: z.string().min(1, 'Label name is required'),
+  color: EntityColorSchema.optional(),
+  icon: z.string().optional(),
+  /** Optional hint: what type of value this label carries (omit for boolean labels) */
+  valueType: z.enum(['string', 'number', 'date']).optional(),
+  /** Auto-label rules: regex patterns that scan messages and apply labels automatically */
+  autoRules: z.array(AutoLabelRuleSchema).optional(),
+});
+
+// Recursive schema: LabelConfig can have children which are also LabelConfigs.
+// Zod supports lazy() for recursive types.
+type LabelConfigSchemaType = z.ZodType<{
+  id: string;
+  name: string;
+  color?: unknown;
+  icon?: string;
+  valueType?: 'string' | 'number' | 'date';
+  autoRules?: Array<{ pattern: string; flags?: string; valueTemplate?: string; description?: string }>;
+  children?: LabelConfigSchemaType[];
+}>;
+
+const LabelConfigSchema: z.ZodType<any> = BaseLabelConfigSchema.extend({
+  children: z.lazy(() => z.array(LabelConfigSchema)).optional(),
+});
+
+/**
+ * Zod schema for workspace label configuration (recursive tree)
+ */
+const WorkspaceLabelConfigSchema = z.object({
+  version: z.number().int().min(1),
+  labels: z.array(LabelConfigSchema),
+});
+
+/**
+ * Validate labels configuration for a workspace (reads from disk)
+ * @param workspaceRoot - Absolute path to workspace root folder
+ */
+export function validateLabels(workspaceRoot: string): ValidationResult {
+  const configPath = join(workspaceRoot, LABEL_CONFIG_FILE);
+  const file = LABEL_CONFIG_FILE;
+
+  // Labels config is optional — no config means no labels (valid state)
+  if (!existsSync(configPath)) {
+    return {
+      valid: true,
+      errors: [],
+      warnings: [{
+        file,
+        path: '',
+        message: 'Labels config does not exist (no labels configured)',
+        severity: 'warning',
+      }],
+    };
+  }
+
+  let raw: string;
+  try {
+    raw = readFileSync(configPath, 'utf-8');
+  } catch (e) {
+    return {
+      valid: false,
+      errors: [{
+        file,
+        path: '',
+        message: `Cannot read file: ${e instanceof Error ? e.message : 'Unknown error'}`,
+        severity: 'error',
+      }],
+      warnings: [],
+    };
+  }
+
+  return validateLabelsContent(raw);
+}
+
+/**
+ * Validate labels config from a JSON string (no disk reads).
+ * Used by PreToolUse hook to validate before writing to disk.
+ * Checks schema validation and semantic rules (unique IDs, max depth).
+ */
+export function validateLabelsContent(jsonString: string): ValidationResult {
+  const file = 'labels/config.json';
+  const errors: ValidationIssue[] = [];
+  const warnings: ValidationIssue[] = [];
+
+  // Parse JSON
+  let content: unknown;
+  try {
+    content = JSON.parse(jsonString);
+  } catch (e) {
+    return {
+      valid: false,
+      errors: [{
+        file,
+        path: '',
+        message: `Invalid JSON: ${e instanceof Error ? e.message : 'Unknown error'}`,
+        severity: 'error',
+      }],
+      warnings: [],
+    };
+  }
+
+  // Validate schema (recursive, includes EntityColor validation via Zod)
+  const result = WorkspaceLabelConfigSchema.safeParse(content);
+  if (!result.success) {
+    errors.push(...zodErrorToIssues(result.error, file));
+    return { valid: false, errors, warnings };
+  }
+
+  const config = result.data;
+
+  // 1. Check for globally unique IDs across the entire tree
+  const seenIds = new Set<string>();
+  function checkUniqueIds(labels: any[], path: string): void {
+    for (let i = 0; i < labels.length; i++) {
+      const label = labels[i];
+      if (seenIds.has(label.id)) {
+        errors.push({
+          file,
+          path: `${path}[${i}].id`,
+          message: `Duplicate label ID '${label.id}' — IDs must be globally unique across the tree`,
+          severity: 'error',
+          suggestion: 'Each label must have a unique ID regardless of nesting level',
+        });
+      }
+      seenIds.add(label.id);
+      if (label.children && label.children.length > 0) {
+        checkUniqueIds(label.children, `${path}[${i}].children`);
+      }
+    }
+  }
+  checkUniqueIds(config.labels, 'labels');
+
+  // 2. Check max nesting depth (prevents excessively deep hierarchies)
+  function checkDepth(labels: any[], depth: number, path: string): void {
+    if (depth > MAX_LABEL_DEPTH) {
+      errors.push({
+        file,
+        path,
+        message: `Label tree exceeds maximum depth of ${MAX_LABEL_DEPTH} levels`,
+        severity: 'error',
+        suggestion: `Flatten the hierarchy — ${MAX_LABEL_DEPTH} levels should be sufficient for any organization scheme`,
+      });
+      return;
+    }
+    for (let i = 0; i < labels.length; i++) {
+      const label = labels[i];
+      if (label.children && label.children.length > 0) {
+        checkDepth(label.children, depth + 1, `${path}[${i}].children`);
+      }
+    }
+  }
+  checkDepth(config.labels, 1, 'labels');
+
+  // 3. Validate auto-label rules (regex patterns on regular labels)
+  function checkAutoRules(labels: any[], path: string): void {
+    for (let i = 0; i < labels.length; i++) {
+      const label = labels[i];
+      if (label.autoRules && Array.isArray(label.autoRules)) {
+        for (let j = 0; j < label.autoRules.length; j++) {
+          const rule = label.autoRules[j];
+          if (rule.pattern) {
+            const ruleResult = validateAutoLabelRule(rule.pattern, rule.flags);
+            for (const err of ruleResult.errors) {
+              errors.push({
+                file,
+                path: `${path}[${i}].autoRules[${j}].pattern`,
+                message: err,
+                severity: 'error',
+                suggestion: 'Fix the regex pattern or remove the rule',
+              });
+            }
+            for (const warn of ruleResult.warnings) {
+              warnings.push({
+                file,
+                path: `${path}[${i}].autoRules[${j}].pattern`,
+                message: warn,
+                severity: 'warning',
+              });
+            }
+          } else {
+            errors.push({
+              file,
+              path: `${path}[${i}].autoRules[${j}]`,
+              message: 'Auto-label rule must have a "pattern" field',
+              severity: 'error',
+              suggestion: 'Add a regex pattern string to the rule',
+            });
+          }
+        }
+      }
+      if (label.children && label.children.length > 0) {
+        checkAutoRules(label.children, `${path}[${i}].children`);
+      }
+    }
+  }
+  checkAutoRules(config.labels, 'labels');
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    warnings,
+  };
+}
+
+// ============================================================
 // Permissions Validators
 // ============================================================
 
@@ -964,9 +1245,6 @@ import {
  * Checks JSON syntax, Zod schema, and regex pattern validity.
  */
 function validatePermissionsFile(filePath: string, displayFile: string): ValidationResult {
-  const errors: ValidationIssue[] = [];
-  const warnings: ValidationIssue[] = [];
-
   // File is optional - missing is just a warning
   if (!existsSync(filePath)) {
     return {
@@ -981,11 +1259,41 @@ function validatePermissionsFile(filePath: string, displayFile: string): Validat
     };
   }
 
+  // Read file and delegate to content-based validator
+  let raw: string;
+  try {
+    raw = readFileSync(filePath, 'utf-8');
+  } catch (e) {
+    return {
+      valid: false,
+      errors: [{
+        file: displayFile,
+        path: '',
+        message: `Cannot read file: ${e instanceof Error ? e.message : 'Unknown error'}`,
+        severity: 'error',
+      }],
+      warnings: [],
+    };
+  }
+
+  return validatePermissionsContent(raw, displayFile);
+}
+
+/**
+ * Validate permissions config from a JSON string (no disk reads).
+ * Used by PreToolUse hook to validate before writing to disk.
+ * Runs Zod schema validation and regex pattern compilation checks.
+ *
+ * @param jsonString - The raw JSON content of the permissions file
+ * @param displayFile - File name for error messages (e.g., 'permissions.json' or 'sources/github/permissions.json')
+ */
+export function validatePermissionsContent(jsonString: string, displayFile: string = 'permissions.json'): ValidationResult {
+  const errors: ValidationIssue[] = [];
+
   // Parse JSON
   let content: unknown;
   try {
-    const raw = readFileSync(filePath, 'utf-8');
-    content = JSON.parse(raw);
+    content = JSON.parse(jsonString);
   } catch (e) {
     return {
       valid: false,
@@ -1003,7 +1311,7 @@ function validatePermissionsFile(filePath: string, displayFile: string): Validat
   const result = PermissionsConfigSchema.safeParse(content);
   if (!result.success) {
     errors.push(...zodErrorToIssues(result.error, displayFile));
-    return { valid: false, errors, warnings };
+    return { valid: false, errors, warnings: [] };
   }
 
   // Validate regex patterns (semantic validation)
@@ -1020,7 +1328,7 @@ function validatePermissionsFile(filePath: string, displayFile: string): Validat
   return {
     valid: errors.length === 0,
     errors,
-    warnings,
+    warnings: [],
   };
 }
 
@@ -1137,4 +1445,107 @@ export function formatValidationResult(result: ValidationResult): string {
   }
 
   return lines.join('\n');
+}
+
+// ============================================================
+// PreToolUse Content Validation
+// ============================================================
+// These utilities are used by the PreToolUse hook to detect config files
+// being written and validate their content before it reaches disk.
+
+/**
+ * Result of detecting what type of config file a path corresponds to.
+ */
+export interface ConfigFileDetection {
+  type: 'source' | 'skill' | 'statuses' | 'labels' | 'permissions';
+  /** Slug of the source or skill (if applicable) */
+  slug?: string;
+  /** Display file path for error messages */
+  displayFile: string;
+}
+
+/**
+ * Detect if a file path corresponds to a known config file type within a workspace.
+ * Returns null if the path is not a recognized config file.
+ *
+ * Matches patterns:
+ * - .../sources/{slug}/config.json → source config
+ * - .../skills/{slug}/SKILL.md → skill definition
+ * - .../statuses/config.json → status workflow config
+ * - .../labels/config.json → label config
+ * - .../permissions.json (workspace or source-level) → permission rules
+ */
+export function detectConfigFileType(filePath: string, workspaceRootPath: string): ConfigFileDetection | null {
+  // Normalize to consistent forward slashes and ensure root ends with /
+  // so startsWith doesn't false-match on path prefixes (e.g., /workspace vs /workspacefoo)
+  const normalizedPath = filePath.replace(/\\/g, '/');
+  const normalizedRoot = workspaceRootPath.replace(/\\/g, '/').replace(/\/?$/, '/');
+
+  // Only validate files within the workspace root
+  if (!normalizedPath.startsWith(normalizedRoot)) {
+    return null;
+  }
+
+  // Get the relative path from workspace root (no leading slash since root ends with /)
+  const relativePath = normalizedPath.slice(normalizedRoot.length);
+
+  // Match: sources/{slug}/config.json
+  const sourceMatch = relativePath.match(/^sources\/([^/]+)\/config\.json$/);
+  if (sourceMatch) {
+    return { type: 'source', slug: sourceMatch[1], displayFile: `sources/${sourceMatch[1]}/config.json` };
+  }
+
+  // Match: skills/{slug}/SKILL.md
+  const skillMatch = relativePath.match(/^skills\/([^/]+)\/SKILL\.md$/);
+  if (skillMatch) {
+    return { type: 'skill', slug: skillMatch[1], displayFile: `skills/${skillMatch[1]}/SKILL.md` };
+  }
+
+  // Match: statuses/config.json
+  if (relativePath === 'statuses/config.json') {
+    return { type: 'statuses', displayFile: 'statuses/config.json' };
+  }
+
+  // Match: labels/config.json
+  if (relativePath === 'labels/config.json') {
+    return { type: 'labels', displayFile: 'labels/config.json' };
+  }
+
+  // Match: permissions.json (workspace-level)
+  if (relativePath === 'permissions.json') {
+    return { type: 'permissions', displayFile: 'permissions.json' };
+  }
+
+  // Match: sources/{slug}/permissions.json (source-level)
+  const sourcePermMatch = relativePath.match(/^sources\/([^/]+)\/permissions\.json$/);
+  if (sourcePermMatch) {
+    return { type: 'permissions', slug: sourcePermMatch[1], displayFile: `sources/${sourcePermMatch[1]}/permissions.json` };
+  }
+
+  return null;
+}
+
+/**
+ * Validate config file content based on its detected type.
+ * Dispatches to the appropriate content-based validator.
+ * Returns null if the detection type is unrecognized.
+ */
+export function validateConfigFileContent(
+  detection: ConfigFileDetection,
+  content: string
+): ValidationResult | null {
+  switch (detection.type) {
+    case 'source':
+      return validateSourceConfigContent(content);
+    case 'skill':
+      return validateSkillContent(content, detection.slug || 'unknown');
+    case 'statuses':
+      return validateStatusesContent(content);
+    case 'labels':
+      return validateLabelsContent(content);
+    case 'permissions':
+      return validatePermissionsContent(content, detection.displayFile);
+    default:
+      return null;
+  }
 }

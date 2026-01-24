@@ -183,8 +183,8 @@ export function NavigationProvider({
   // Helper: Get first source slug (optionally filtered by type)
   const getFirstSourceSlug = useCallback(
     (filter?: SourceFilter | null): string | null => {
-      // If no filter or 'all', return first source
-      if (!filter || filter.kind === 'all') {
+      // If no filter, return first source
+      if (!filter) {
         return sources[0]?.config.slug ?? null
       }
       // Filter by source type and return first match

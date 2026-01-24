@@ -1,6 +1,6 @@
 {
   "name": "@craft-agent/shared",
-  "version": "0.2.26",
+  "version": "0.2.27",
   "license": "Apache-2.0",
   "description": "Shared business logic for Craft Agents - agent, auth, config, credentials, MCP integration",
   "type": "module",
@@ -36,7 +36,14 @@
     "./utils/logo": "./src/utils/logo.ts",
     "./utils/service-url": "./src/utils/service-url.ts",
     "./utils/icon": "./src/utils/icon.ts",
+    "./icons": "./src/icons/index.ts",
+    "./colors": "./src/colors/index.ts",
     "./utils/icon-constants": "./src/utils/icon-constants.ts",
+    "./labels": "./src/labels/index.ts",
+    "./labels/auto": "./src/labels/auto/index.ts",
+    "./labels/storage": "./src/labels/storage.ts",
+    "./views": "./src/views/index.ts",
+    "./views/storage": "./src/views/storage.ts",
     "./validation": "./src/validation/index.ts",
     "./version": "./src/version/index.ts",
     "./branding": "./src/branding.ts",
@@ -45,6 +52,7 @@
   "dependencies": {
     "@craft-agent/core": "workspace:*",
     "bash-parser": "^0.5.0",
+    "filtrex": "^3.1.0",
     "incr-regex-package": "^1.0.4",
     "shell-quote": "^1.8.3"
   },

@@ -159,7 +159,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
         <Info_Page.Content>
           {/* Hero: Avatar, title, and description */}
           <Info_Page.Hero
-            avatar={<SkillAvatar skill={skill} size="lg" workspaceId={workspaceId} />}
+            avatar={<SkillAvatar skill={skill} fluid workspaceId={workspaceId} />}
             title={skill.metadata.name}
             tagline={skill.metadata.description}
           />

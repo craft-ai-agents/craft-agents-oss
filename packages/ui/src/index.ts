@@ -179,6 +179,7 @@ export * from './components/chat/turn-utils'
 // Icons
 export {
   Icon_Folder,
+  Icon_Home,
   Icon_Inbox,
   type IconProps,
 } from './components/icons'

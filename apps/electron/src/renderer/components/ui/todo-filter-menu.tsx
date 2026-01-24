@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { Command as CommandPrimitive } from 'cmdk'
-import { cn, isHexColor } from '@/lib/utils'
+import { cn } from '@/lib/utils'
 import {
   type TodoStateId,
   type TodoState,
@@ -31,11 +31,8 @@ function StateItemContent({ state }: { state: TodoState }) {
   return (
     <>
       <span
-        className={cn(
-          "shrink-0 flex items-center",
-          applyColor && !isHexColor(state.color) && (state.color || "text-muted-foreground")
-        )}
-        style={applyColor && isHexColor(state.color) ? { color: state.color } : undefined}
+        className="shrink-0 flex items-center"
+        style={applyColor ? { color: state.resolvedColor } : undefined}
       >
         {state.icon}
       </span>

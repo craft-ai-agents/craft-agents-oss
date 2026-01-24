@@ -41,7 +41,7 @@ import {
 } from './mode-manager.ts';
 import { type PermissionsContext, permissionsConfigCache } from './permissions-config.ts';
 import { getSessionPlansPath, getSessionPath, getSessionLongResponsesPath } from '../sessions/storage.ts';
-import { writeFileSync, existsSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { expandPath } from '../utils/paths.ts';
 import {
@@ -50,6 +50,7 @@ import {
   type ConfigWatcherCallbacks,
 } from '../config/watcher.ts';
 import type { ValidationIssue } from '../config/validators.ts';
+import { detectConfigFileType, validateConfigFileContent, formatValidationResult } from '../config/validators.ts';
 import { type ThinkingLevel, getThinkingTokens, DEFAULT_THINKING_LEVEL } from './thinking-levels.ts';
 import type { LoadedSource } from '../sources/types.ts';
 import { sourceNeedsAuthentication } from '../sources/credential-manager.ts';
@@ -1070,6 +1071,58 @@ export class CraftAgent {
                   const expandedPath = expandPath(toolInput.path);
                   this.onDebug?.(`Expanding search path: ${toolInput.path} → ${expandedPath}`);
                   updatedInput = { ...(updatedInput || toolInput), path: expandedPath };
+                }
+
+                // ============================================================
+                // CONFIG FILE VALIDATION: For Write/Edit to workspace config files,
+                // validate the content before allowing the write to proceed.
+                // This prevents invalid configs from ever reaching disk.
+                // Validates: sources/*/config.json, skills/*/SKILL.md,
+                //            statuses/config.json, permissions.json
+                // ============================================================
+                const configWriteTools = new Set(['Write', 'Edit']);
+                if (configWriteTools.has(input.tool_name)) {
+                  // Resolve the final file path (after any ~ expansion)
+                  const resolvedPath = (updatedInput?.file_path ?? toolInput.file_path) as string | undefined;
+
+                  if (resolvedPath) {
+                    const detection = detectConfigFileType(resolvedPath, this.workspaceRootPath);
+
+                    if (detection) {
+                      let contentToValidate: string | null = null;
+
+                      if (input.tool_name === 'Write') {
+                        // For Write, the full file content is in tool_input.content
+                        contentToValidate = toolInput.content as string;
+                      } else if (input.tool_name === 'Edit') {
+                        // For Edit, simulate the replacement on the current file content
+                        try {
+                          const currentContent = readFileSync(resolvedPath, 'utf-8');
+                          const oldString = toolInput.old_string as string;
+                          const newString = toolInput.new_string as string;
+                          const replaceAll = toolInput.replace_all as boolean | undefined;
+                          contentToValidate = replaceAll
+                            ? currentContent.replaceAll(oldString, newString)
+                            : currentContent.replace(oldString, newString);
+                        } catch {
+                          // File doesn't exist yet or can't be read — skip validation
+                          // (Write tool will create it; Edit will fail on its own)
+                        }
+                      }
+
+                      if (contentToValidate) {
+                        const validationResult = validateConfigFileContent(detection, contentToValidate);
+                        if (validationResult && !validationResult.valid) {
+                          this.onDebug?.(`Config validation blocked ${input.tool_name} to ${detection.displayFile}: ${validationResult.errors.length} errors`);
+                          return {
+                            continue: false,
+                            decision: 'block' as const,
+                            reason: `Cannot write invalid config to ${detection.displayFile}.\n\n${formatValidationResult(validationResult)}\n\nFix the errors above and try again.`,
+                          };
+                        }
+                      }
+                    }
+                  }
                 }
 
                 // If any path was expanded, return updated input

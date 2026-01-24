@@ -81,6 +81,23 @@ const KeyboardIcon = ({ className }: { className?: string }) => (
   </svg>
 )
 
+/** Tag icon for labels */
+const LabelsIcon = ({ className }: { className?: string }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+  >
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M11.7949 2.42926C10.9535 2.1246 10.051 2.20745 8.86327 2.31647C7.59803 2.4326 6.28428 2.45979 5.04052 2.72989C4.47811 2.85203 3.94507 3.05945 3.50238 3.50213C3.05969 3.94482 2.85227 4.47787 2.73014 5.04027C2.46003 6.28406 2.43285 7.59777 2.31671 8.86303C2.20769 10.0507 2.12485 10.9532 2.42951 11.7947C2.73416 12.6362 3.37557 13.2765 4.21966 14.1191C5.08769 14.9856 5.95475 15.8531 6.8218 16.7206C8.02346 17.9229 9.17793 19.23 10.5313 20.2626C11.2756 20.8305 12.0473 21.2176 12.9752 21.2176C13.9031 21.2176 14.6748 20.8305 15.4191 20.2626C17.1642 18.9312 18.931 17.1645 20.2629 15.4188C20.8307 14.6746 21.2178 13.9028 21.2178 12.9749C21.2178 12.0471 20.8307 11.2753 20.2629 10.5311C19.2303 9.17768 17.9232 8.02322 16.7208 6.82155C15.8533 5.9545 14.9858 5.08745 14.1193 4.21941C13.2767 3.37533 12.6364 2.73392 11.7949 2.42926ZM10.8529 10.8534C11.6339 10.0724 11.6339 8.80604 10.8529 8.025C10.0718 7.24395 8.80549 7.24395 8.02444 8.025C7.24339 8.80604 7.24339 10.0724 8.02444 10.8534C8.80549 11.6345 10.0718 11.6345 10.8529 10.8534Z"
+      fill="currentColor"
+    />
+  </svg>
+)
+
 /** Shield icon for permissions */
 const ShieldIcon = ({ className }: { className?: string }) => (
   <svg
@@ -139,6 +156,12 @@ const settingsItems: SettingsItem[] = [
     label: 'Permissions',
     icon: ShieldIcon,
     description: 'Allowed commands in Explore mode',
+  },
+  {
+    id: 'labels',
+    label: 'Labels',
+    icon: LabelsIcon,
+    description: 'Label hierarchy and auto-apply rules',
   },
   {
     id: 'shortcuts',

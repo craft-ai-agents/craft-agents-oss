@@ -5,7 +5,9 @@ import type {
   ColumnSizingState,
   SortingState,
   PaginationState,
+  ExpandedState,
   Column,
+  Row,
   Table as TableInstance,
 } from '@tanstack/react-table'
 import {
@@ -14,6 +16,7 @@ import {
   getFilteredRowModel,
   getSortedRowModel,
   getPaginationRowModel,
+  getExpandedRowModel,
   useReactTable,
 } from '@tanstack/react-table'
 import { Button } from '@/components/ui/button'
@@ -50,6 +53,13 @@ interface DataTableProps<TData, TValue> {
   pagination?: boolean
   /** Page size when pagination is enabled (default: 50) */
   pageSize?: number
+  /**
+   * Enable tree/hierarchical rows. Provide a function that returns child rows.
+   * When set, rows can be expanded/collapsed. All rows start expanded by default.
+   */
+  getSubRows?: (row: TData) => TData[] | undefined
+  /** Initial expanded state (default: all expanded when getSubRows is provided) */
+  defaultExpanded?: boolean
 }
 
 export function DataTable<TData, TValue>({
@@ -65,6 +75,8 @@ export function DataTable<TData, TValue>({
   noWrapper = false,
   pagination: paginationEnabled = false,
   pageSize = 50,
+  getSubRows,
+  defaultExpanded = true,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -74,6 +86,10 @@ export function DataTable<TData, TValue>({
     pageIndex: 0,
     pageSize,
   })
+  // Tree expand state: default to all expanded when getSubRows is provided
+  const [expanded, setExpanded] = React.useState<ExpandedState>(
+    getSubRows && defaultExpanded ? true : {}
+  )
 
   // Sync external global filter and reset pagination
   React.useEffect(() => {
@@ -102,11 +118,14 @@ export function DataTable<TData, TValue>({
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     ...(paginationEnabled && { getPaginationRowModel: getPaginationRowModel() }),
+    // Tree/expand support: only enabled when getSubRows is provided
+    ...(getSubRows && { getExpandedRowModel: getExpandedRowModel(), getSubRows }),
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onColumnSizingChange: setColumnSizing,
     onGlobalFilterChange: setInternalGlobalFilter,
     ...(paginationEnabled && { onPaginationChange: setPagination }),
+    ...(getSubRows && { onExpandedChange: setExpanded }),
     globalFilterFn: 'includesString',
     enableColumnResizing: true,
     columnResizeMode: 'onChange',
@@ -116,6 +135,7 @@ export function DataTable<TData, TValue>({
       columnSizing,
       globalFilter: internalGlobalFilter,
       ...(paginationEnabled && { pagination }),
+      ...(getSubRows && { expanded }),
     },
   })
 
@@ -296,4 +316,4 @@ export function SortableHeader<TData, TValue>({
   )
 }
 
-export type { ColumnDef, Column, TableInstance }
+export type { ColumnDef, Column, Row, TableInstance }

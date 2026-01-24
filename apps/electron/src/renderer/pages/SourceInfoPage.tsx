@@ -402,7 +402,7 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
         <Info_Page.Content>
           {/* Hero: Avatar, title, and tagline */}
           <Info_Page.Hero
-            avatar={<SourceAvatar source={source} className="h-full w-full" />}
+            avatar={<SourceAvatar source={source} fluid />}
             title={source.config.name}
             tagline={source.config.tagline}
           />

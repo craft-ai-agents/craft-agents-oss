@@ -1,4 +1,4 @@
-import { writeFile } from 'fs/promises'
+import { writeFile, rename } from 'fs/promises'
 import type { StoredSession, SessionHeader } from './types.js'
 import { getSessionFilePath, ensureSessionsDir, ensureSessionDir } from './storage.js'
 import { toPortablePath } from '../utils/paths.js'
@@ -41,6 +41,7 @@ class SessionPersistenceQueue {
 
   /**
    * Write a session to disk immediately in JSONL format.
+   * Uses atomic write (write-to-temp-then-rename) to prevent corruption on crash.
    */
   private async write(sessionId: string): Promise<void> {
     const entry = this.pending.get(sessionId)
@@ -71,7 +72,12 @@ class SessionPersistenceQueue {
         ...storageSession.messages.map(m => JSON.stringify(m)),
       ]
 
-      await writeFile(filePath, lines.join('\n') + '\n', 'utf-8')
+      // Atomic write: write to .tmp then rename over the real file.
+      // If the process crashes mid-write, only the .tmp is corrupted —
+      // the original session.jsonl remains intact.
+      const tmpFile = filePath + '.tmp'
+      await writeFile(tmpFile, lines.join('\n') + '\n', 'utf-8')
+      await rename(tmpFile, filePath)
       console.log(`[PersistenceQueue] Wrote session ${sessionId}`)
     } catch (error) {
       console.error(`[PersistenceQueue] Failed to write session ${sessionId}:`, error)

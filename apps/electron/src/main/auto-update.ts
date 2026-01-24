@@ -34,6 +34,17 @@ let updateInfo: UpdateInfo = {
 
 let windowManager: WindowManager | null = null
 
+// Flag to indicate update is in progress — used to prevent force exit during quitAndInstall
+let __isUpdating = false
+
+/**
+ * Check if an update installation is in progress.
+ * Used by main process to avoid force-quitting during update.
+ */
+export function isUpdating(): boolean {
+  return __isUpdating
+}
+
 /**
  * Set the window manager for broadcasting update events to renderer windows
  */
@@ -221,9 +232,20 @@ export async function installUpdate(): Promise<void> {
   // Clear dismissed version since user is explicitly updating
   clearDismissedUpdateVersion()
 
-  // isSilent=false shows the installer UI on Windows if needed (fallback)
-  // isForceRunAfter=true ensures the app relaunches after install
-  autoUpdater.quitAndInstall(false, true)
+  // Set flag to prevent force exit from breaking electron-updater's shutdown sequence
+  __isUpdating = true
+
+  try {
+    // isSilent=false shows the installer UI on Windows if needed (fallback)
+    // isForceRunAfter=true ensures the app relaunches after install
+    autoUpdater.quitAndInstall(false, true)
+  } catch (error) {
+    __isUpdating = false
+    mainLog.error('[auto-update] quitAndInstall failed:', error)
+    updateInfo = { ...updateInfo, downloadState: 'error' }
+    broadcastUpdateInfo()
+    throw error
+  }
 }
 
 /**

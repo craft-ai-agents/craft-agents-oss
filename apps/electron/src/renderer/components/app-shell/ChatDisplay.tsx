@@ -44,6 +44,7 @@ import { ActiveOptionBadges } from "./ActiveOptionBadges"
 import { InputContainer, type StructuredInputState, type StructuredResponse, type PermissionResponse } from "./input"
 import type { RichTextInputHandle } from "@/components/ui/rich-text-input"
 import { useBackgroundTasks } from "@/hooks/useBackgroundTasks"
+import type { SessionMeta } from "@/atoms/sessions"
 import { CHAT_LAYOUT } from "@/config/layout"
 
 // ============================================================================
@@ -119,6 +120,11 @@ interface ChatDisplayProps {
   // Skill selection (for @mentions)
   /** Available skills for @mention autocomplete */
   skills?: LoadedSkill[]
+  // Label selection (for #labels)
+  /** Available label configs (tree) for label menu and badge display */
+  labels?: import('@craft-agent/shared/labels').LabelConfig[]
+  /** Callback when labels change */
+  onLabelsChange?: (labels: string[]) => void
   /** Workspace ID for loading skill icons */
   workspaceId?: string
   // Working directory (per session)
@@ -338,6 +344,9 @@ export function ChatDisplay({
   onSourcesChange,
   // Skills (for @mentions)
   skills,
+  // Labels (for #labels)
+  labels,
+  onLabelsChange,
   workspaceId,
   // Working directory
   workingDirectory,
@@ -852,6 +861,13 @@ export function ChatDisplay({
               sessionId={session.id}
               onKillTask={(taskId) => killTask(taskId, backgroundTasks.find(t => t.id === taskId)?.type ?? 'shell')}
               onInsertMessage={onInputChange}
+              sessionLabels={session.labels}
+              labels={labels}
+              onRemoveLabel={(labelId) => {
+                // Remove label from session and persist
+                const newLabels = (session.labels || []).filter(id => id !== labelId)
+                onLabelsChange?.(newLabels)
+              }}
             />
             <InputContainer
               disabled={isInputDisabled}
@@ -876,6 +892,15 @@ export function ChatDisplay({
               enabledSourceSlugs={session.enabledSourceSlugs}
               onSourcesChange={onSourcesChange}
               skills={skills}
+              labels={labels}
+              sessionLabels={session.labels}
+              onLabelAdd={(labelId) => {
+                // Add label to session (prevent duplicates) and persist
+                const current = session.labels || []
+                if (!current.includes(labelId)) {
+                  onLabelsChange?.([...current, labelId])
+                }
+              }}
               workspaceId={workspaceId}
               workingDirectory={workingDirectory}
               onWorkingDirectoryChange={onWorkingDirectoryChange}

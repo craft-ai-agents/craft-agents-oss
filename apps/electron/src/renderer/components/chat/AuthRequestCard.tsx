@@ -179,6 +179,7 @@ export function AuthRequestCard({ message, onRespondToCredential, sessionId, isI
     authLabels,
     authDescription,
     authHint,
+    authSourceUrl,
     authError,
     authEmail,
     authWorkspace,
@@ -214,6 +215,11 @@ export function AuthRequestCard({ message, onRespondToCredential, sessionId, isI
     if (!authRequestId || !onRespondToCredential) return
     onRespondToCredential(sessionId, authRequestId, { type: 'credential', cancelled: true })
   }, [onRespondToCredential, sessionId, authRequestId])
+
+  const handleFormSubmit = useCallback((e: React.FormEvent) => {
+    e.preventDefault()
+    handleSubmit()
+  }, [handleSubmit])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && isValid) {
@@ -395,6 +401,8 @@ export function AuthRequestCard({ message, onRespondToCredential, sessionId, isI
                 <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   id={`auth-username-${authRequestId}`}
+                  name="username"
+                  autoComplete="username"
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
@@ -415,6 +423,8 @@ export function AuthRequestCard({ message, onRespondToCredential, sessionId, isI
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   id={`auth-password-${authRequestId}`}
+                  name="password"
+                  autoComplete="current-password"
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -435,7 +445,7 @@ export function AuthRequestCard({ message, onRespondToCredential, sessionId, isI
             </div>
           </>
         ) : (
-          /* Single credential field */
+          /* Single credential field (API key, bearer token) */
           <div className="space-y-1.5">
             <Label htmlFor={`auth-value-${authRequestId}`} className="text-xs">
               {credentialLabel}
@@ -449,6 +459,8 @@ export function AuthRequestCard({ message, onRespondToCredential, sessionId, isI
               <Key className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 id={`auth-value-${authRequestId}`}
+                name="credential"
+                autoComplete="current-password"
                 type={showPassword ? 'text' : 'password'}
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
@@ -501,7 +513,7 @@ export function AuthRequestCard({ message, onRespondToCredential, sessionId, isI
       )
     }
 
-    // Credential form - save button
+    // Credential form - save button (uses type="submit" inside form)
     return (
       <AuthCardActions
         primary={{
@@ -520,14 +532,11 @@ export function AuthRequestCard({ message, onRespondToCredential, sessionId, isI
     )
   }
 
-  return (
-    <div
-      className={cn('rounded-[8px] overflow-hidden', variantTextClass)}
-      style={{
-        backgroundColor: variantBg,
-        ...(shadowColor ? { '--shadow-color': shadowColor } as React.CSSProperties : {})
-      }}
-    >
+  // Whether this is a pending credential form (needs form wrapper for 1Password)
+  const isCredentialForm = authStatus === 'pending' && !isOAuth
+
+  const cardContent = (
+    <>
       <div
         className={cn(
           hasActions ? 'p-4' : 'px-4 py-3',
@@ -539,6 +548,30 @@ export function AuthRequestCard({ message, onRespondToCredential, sessionId, isI
       </div>
 
       {hasActions && renderActions()}
+    </>
+  )
+
+  return (
+    <div
+      className={cn('rounded-[8px] overflow-hidden', variantTextClass)}
+      style={{
+        backgroundColor: variantBg,
+        ...(shadowColor ? { '--shadow-color': shadowColor } as React.CSSProperties : {})
+      }}
+    >
+      {/* Form wrapper enables password manager (1Password) detection and autofill.
+          action points to the source URL for domain-based credential matching. */}
+      {isCredentialForm ? (
+        <form
+          onSubmit={handleFormSubmit}
+          action={authSourceUrl || undefined}
+          method="post"
+        >
+          {cardContent}
+        </form>
+      ) : (
+        cardContent
+      )}
     </div>
   )
 }

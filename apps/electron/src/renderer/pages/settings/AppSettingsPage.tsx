@@ -159,7 +159,7 @@ export default function AppSettingsPage() {
       <div className="flex-1 min-h-0 mask-fade-y">
         <ScrollArea className="h-full">
           <div className="px-5 py-7 max-w-3xl mx-auto">
-          <div className="space-y-6">
+          <div className="space-y-8">
             {/* Appearance */}
             <SettingsSection title="Appearance">
               <SettingsCard>

@@ -83,7 +83,7 @@ export interface MessageAttachment {
  */
 export interface ContentBadge {
   /** Badge type - used for fallback icon if iconBase64 not available */
-  type: 'source' | 'skill' | 'context' | 'command' | 'file';
+  type: 'source' | 'skill' | 'context' | 'command' | 'file' | 'folder';
   /** Display label (e.g., "Linear", "Commit") */
   label: string;
   /** Original text pattern (e.g., "@linear", "@commit") */
@@ -112,7 +112,7 @@ export interface ContentBadge {
  * Created when user sends a message with attachments
  */
 export interface StoredAttachment {
-  id: string;                    // UUID for uniqueness
+  id: string;                    // Unique identifier
   type: AttachmentType;
   name: string;                  // Original filename
   mimeType: string;
@@ -197,6 +197,7 @@ export interface Message {
   };
   authDescription?: string;       // Description/instructions
   authHint?: string;              // Hint about where to find credentials
+  authSourceUrl?: string;         // Source URL for password manager domain matching (1Password)
   authError?: string;             // Error message if auth failed
   authEmail?: string;             // Authenticated email (for OAuth)
   authWorkspace?: string;         // Authenticated workspace (for Slack)
@@ -264,6 +265,7 @@ export interface StoredMessage {
   };
   authDescription?: string;
   authHint?: string;
+  authSourceUrl?: string;
   authError?: string;
   authEmail?: string;
   authWorkspace?: string;

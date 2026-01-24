@@ -199,7 +199,7 @@ export default function PreferencesPage() {
       <PanelHeader title="Preferences" actions={<HeaderMenu route={routes.view.settings('preferences')} helpFeature="preferences" />} />
       <div className="flex-1 min-h-0 mask-fade-y">
         <ScrollArea className="h-full">
-          <div className="px-5 py-7 max-w-3xl mx-auto space-y-6">
+          <div className="px-5 py-7 max-w-3xl mx-auto space-y-8">
           {/* Basic Info */}
           <SettingsSection
             title="Basic Info"

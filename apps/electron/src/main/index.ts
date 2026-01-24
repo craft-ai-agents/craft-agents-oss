@@ -18,7 +18,7 @@ import { handleDeepLink } from './deep-link'
 import log, { isDebugMode, mainLog, getLogFilePath } from './logger'
 import { setPerfEnabled, enableDebug } from '@craft-agent/shared/utils'
 import { initNotificationService, clearBadgeCount, initBadgeIcon, initInstanceBadge } from './notifications'
-import { checkForUpdatesOnLaunch, setWindowManager as setAutoUpdateWindowManager } from './auto-update'
+import { checkForUpdatesOnLaunch, setWindowManager as setAutoUpdateWindowManager, isUpdating } from './auto-update'
 
 // Initialize electron-log for renderer process support
 log.initialize()
@@ -289,6 +289,15 @@ app.on('before-quit', async (event) => {
     }
     // Clean up SessionManager resources (file watchers, timers, etc.)
     sessionManager.cleanup()
+
+    // If update is in progress, let electron-updater handle the quit flow
+    // Force exit breaks the NSIS installer on Windows
+    if (isUpdating()) {
+      mainLog.info('Update in progress, letting electron-updater handle quit')
+      app.quit()
+      return
+    }
+
     // Now actually quit
     app.exit(0)
   }

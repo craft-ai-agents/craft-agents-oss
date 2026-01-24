@@ -115,6 +115,10 @@ export interface ConfigWatcherCallbacks {
   /** Called when a status icon file changes */
   onStatusIconChange?: (workspaceId: string, iconFilename: string) => void;
 
+  // Label callbacks
+  /** Called when labels config.json changes */
+  onLabelConfigChange?: (workspaceId: string) => void;
+
   // Theme callbacks (app-level only)
   /** Called when app-level theme.json changes */
   onAppThemeChange?: (theme: ThemeOverrides | null) => void;
@@ -401,6 +405,17 @@ export class ConfigWatcher {
             this.handleStatusIconChange(iconFilename);
           });
         }
+        return;
+      }
+    }
+
+    // Labels changes: labels/...
+    if (parts[0] === 'labels' && parts.length >= 2) {
+      const file = parts[1];
+
+      // config.json change
+      if (file === 'config.json') {
+        this.debounce('labels-config', () => this.handleLabelConfigChange());
         return;
       }
     }
@@ -818,6 +833,19 @@ export class ConfigWatcher {
   private handleStatusIconChange(iconFilename: string): void {
     debug('[ConfigWatcher] Status icon changed:', this.workspaceId, iconFilename);
     this.callbacks.onStatusIconChange?.(this.workspaceId, iconFilename);
+  }
+
+  // ============================================================
+  // Labels Handlers
+  // ============================================================
+
+  /**
+   * Handle labels config.json change.
+   * Labels are color-only (no icons to download).
+   */
+  private handleLabelConfigChange(): void {
+    debug('[ConfigWatcher] Labels config.json changed:', this.workspaceId);
+    this.callbacks.onLabelConfigChange?.(this.workspaceId);
   }
 
   // ============================================================

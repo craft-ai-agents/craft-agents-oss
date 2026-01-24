@@ -56,6 +56,11 @@ export function CredentialRequest({ request, onResponse, unstyled = false }: Cre
     onResponse({ type: 'credential', cancelled: true })
   }, [onResponse])
 
+  const handleFormSubmit = useCallback((e: React.FormEvent) => {
+    e.preventDefault()
+    handleSubmit()
+  }, [handleSubmit])
+
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && isValid) {
       handleSubmit()
@@ -75,66 +80,114 @@ export function CredentialRequest({ request, onResponse, unstyled = false }: Cre
       'bg-background overflow-hidden h-full flex flex-col',
       unstyled ? 'border-0' : 'border border-border rounded-[8px] shadow-middle'
     )}>
-      {/* Content */}
-      <div className="p-4 space-y-4 flex-1 min-h-0 flex flex-col">
-        {/* Header */}
-        <div className="flex items-start gap-3">
-          <div className="shrink-0 mt-0.5">
-            <Key className="h-5 w-5 text-foreground" />
-          </div>
-          <div className="flex-1 min-w-0 space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-foreground">
-                Authentication Required
-              </span>
-              <span className="text-xs text-muted-foreground">
-                ({request.sourceName})
-              </span>
+      {/* Form wraps the entire card so password managers (1Password) can detect fields.
+          action points to the source URL for domain-based credential matching. */}
+      <form
+        onSubmit={handleFormSubmit}
+        action={request.sourceUrl || undefined}
+        method="post"
+        className="flex flex-col flex-1 min-h-0"
+      >
+        {/* Content */}
+        <div className="p-4 space-y-4 flex-1 min-h-0 flex flex-col">
+          {/* Header */}
+          <div className="flex items-start gap-3">
+            <div className="shrink-0 mt-0.5">
+              <Key className="h-5 w-5 text-foreground" />
             </div>
-            {request.description && (
-              <p className="text-xs text-muted-foreground">{request.description}</p>
-            )}
-          </div>
-        </div>
-
-        {/* Input fields */}
-        <div className="space-y-3">
-          {isBasicAuth ? (
-            <>
-              {/* Username field */}
-              <div className="space-y-1.5">
-                <Label htmlFor="credential-username" className="text-xs">
-                  {usernameLabel}
-                </Label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="credential-username"
-                    type="text"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    className="pl-9"
-                    placeholder={`Enter ${usernameLabel.toLowerCase()}`}
-                    autoFocus
-                  />
-                </div>
+            <div className="flex-1 min-w-0 space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-foreground">
+                  Authentication Required
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  ({request.sourceName})
+                </span>
               </div>
-              {/* Password field */}
+              {request.description && (
+                <p className="text-xs text-muted-foreground">{request.description}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Input fields */}
+          <div className="space-y-3">
+            {isBasicAuth ? (
+              <>
+                {/* Username field */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="credential-username" className="text-xs">
+                    {usernameLabel}
+                  </Label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="credential-username"
+                      name="username"
+                      autoComplete="username"
+                      type="text"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      className="pl-9"
+                      placeholder={`Enter ${usernameLabel.toLowerCase()}`}
+                      autoFocus
+                    />
+                  </div>
+                </div>
+                {/* Password field */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="credential-password" className="text-xs">
+                    {passwordLabel}
+                  </Label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="credential-password"
+                      name="password"
+                      autoComplete="current-password"
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      className="pl-9 pr-9"
+                      placeholder={`Enter ${passwordLabel.toLowerCase()}`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      tabIndex={-1}
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              /* Single credential field (API key, bearer token) */
               <div className="space-y-1.5">
-                <Label htmlFor="credential-password" className="text-xs">
-                  {passwordLabel}
+                <Label htmlFor="credential-value" className="text-xs">
+                  {credentialLabel}
+                  {request.mode === 'header' && request.headerName && (
+                    <span className="text-muted-foreground ml-1">
+                      ({request.headerName})
+                    </span>
+                  )}
                 </Label>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Key className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
-                    id="credential-password"
+                    id="credential-value"
+                    name="credential"
+                    autoComplete="current-password"
                     type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    value={value}
+                    onChange={(e) => setValue(e.target.value)}
                     onKeyDown={handleKeyDown}
                     className="pl-9 pr-9"
-                    placeholder={`Enter ${passwordLabel.toLowerCase()}`}
+                    placeholder={`Enter ${credentialLabel.toLowerCase()}`}
+                    autoFocus
                   />
                   <button
                     type="button"
@@ -146,79 +199,47 @@ export function CredentialRequest({ request, onResponse, unstyled = false }: Cre
                   </button>
                 </div>
               </div>
-            </>
-          ) : (
-            /* Single credential field */
-            <div className="space-y-1.5">
-              <Label htmlFor="credential-value" className="text-xs">
-                {credentialLabel}
-                {request.mode === 'header' && request.headerName && (
-                  <span className="text-muted-foreground ml-1">
-                    ({request.headerName})
-                  </span>
-                )}
-              </Label>
-              <div className="relative">
-                <Key className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="credential-value"
-                  type={showPassword ? 'text' : 'password'}
-                  value={value}
-                  onChange={(e) => setValue(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  className="pl-9 pr-9"
-                  placeholder={`Enter ${credentialLabel.toLowerCase()}`}
-                  autoFocus
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                  tabIndex={-1}
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-            </div>
-          )}
+            )}
 
-          {/* Hint */}
-          {request.hint && (
-            <p className="text-[11px] text-muted-foreground">
-              {request.hint}
-            </p>
-          )}
+            {/* Hint */}
+            {request.hint && (
+              <p className="text-[11px] text-muted-foreground">
+                {request.hint}
+              </p>
+            )}
+          </div>
         </div>
-      </div>
 
-      {/* Action buttons */}
-      <div className="flex items-center gap-2 px-3 py-2 border-t border-border/50">
-        <Button
-          size="sm"
-          variant="default"
-          className="h-7 gap-1.5"
-          onClick={handleSubmit}
-          disabled={!isValid}
-        >
-          <Check className="h-3.5 w-3.5" />
-          Save
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          className="h-7 gap-1.5 text-muted-foreground hover:text-foreground"
-          onClick={handleCancel}
-        >
-          <X className="h-3.5 w-3.5" />
-          Cancel
-        </Button>
+        {/* Action buttons */}
+        <div className="flex items-center gap-2 px-3 py-2 border-t border-border/50">
+          <Button
+            type="submit"
+            size="sm"
+            variant="default"
+            className="h-7 gap-1.5"
+            disabled={!isValid}
+          >
+            <Check className="h-3.5 w-3.5" />
+            Save
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-7 gap-1.5 text-muted-foreground hover:text-foreground"
+            onClick={handleCancel}
+          >
+            <X className="h-3.5 w-3.5" />
+            Cancel
+          </Button>
 
-        <div className="flex-1" />
+          <div className="flex-1" />
 
-        <span className="text-[10px] text-muted-foreground">
-          Credentials are encrypted at rest
-        </span>
-      </div>
+          <span className="text-[10px] text-muted-foreground">
+            Credentials are encrypted at rest
+          </span>
+        </div>
+      </form>
     </div>
   )
 }

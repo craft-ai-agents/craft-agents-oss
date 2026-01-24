@@ -13,6 +13,7 @@ export type DocFeature =
   | 'skills'
   | 'statuses'
   | 'permissions'
+  | 'labels'
   | 'workspaces'
   | 'themes'
   | 'app-settings'
@@ -69,6 +70,12 @@ export const DOCS: Record<DocFeature, DocInfo> = {
     title: 'Permissions',
     summary:
       'Control how much autonomy your agent has. Explore mode is read-only, Ask to Edit prompts before changes, and Execute mode runs without prompts.',
+  },
+  labels: {
+    path: '/customisation/labels',
+    title: 'Labels',
+    summary:
+      'Tag sessions with colored labels for organization and filtering. Labels support hierarchical nesting, typed values, and auto-apply rules that extract data from messages using regex patterns.',
   },
   workspaces: {
     path: '/go-further/workspaces',

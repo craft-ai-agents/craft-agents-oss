@@ -448,7 +448,8 @@ export async function createSource(
   const now = Date.now();
 
   const config: FolderSourceConfig = {
-    id: `src_${randomUUID().slice(0, 8)}`,
+    // ID format: {slug}_{random} for easy identification (e.g., "linear_a1b2c3d4")
+    id: `${slug}_${randomUUID().slice(0, 8)}`,
     name: input.name,
     slug,
     enabled: input.enabled ?? true,

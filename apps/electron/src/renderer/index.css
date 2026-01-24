@@ -369,6 +369,10 @@ html[data-font="inter"] {
   --color-foreground-90: var(--foreground-90);
   --color-foreground-95: var(--foreground-95);
 
+  /* === SEMANTIC SURFACE COLORS === */
+  /* Subtle hover background for sidebar list items (2% foreground opacity) */
+  --color-sidebar-hover: oklch(from var(--foreground) l c h / 0.02);
+
   /* === LEGACY COMPATIBILITY === */
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
@@ -487,6 +491,11 @@ html[data-font="inter"] {
   .mask-fade-y {
     mask-image: linear-gradient(to bottom, transparent 0%, black 32px, black calc(100% - 32px), transparent 100%);
     -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 32px, black calc(100% - 32px), transparent 100%);
+  }
+
+  .mask-fade-bottom {
+    mask-image: linear-gradient(to bottom, black 0%, black calc(100% - 32px), transparent 100%);
+    -webkit-mask-image: linear-gradient(to bottom, black 0%, black calc(100% - 32px), transparent 100%);
   }
 
   /* Custom shadow utilities
@@ -962,6 +971,11 @@ html.dark[data-scenic] .fullscreen-overlay-background {
 
 .animate-shake {
   animation: shake 0.4s ease-in-out;
+}
+
+@keyframes editPopoverFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 /* =============================================================================

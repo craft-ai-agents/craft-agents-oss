@@ -17,6 +17,7 @@ import {
   CodePreviewOverlay,
   DiffPreviewOverlay,
   TerminalPreviewOverlay,
+  JSONPreviewOverlay,
   extractOverlayData,
   type PlatformActions,
   type ActivityItem,
@@ -242,6 +243,18 @@ export function App() {
           toolType={overlayData.toolType}
           description={overlayData.description}
           theme={theme}
+        />
+      )}
+
+      {/* JSON preview overlay for tools returning JSON data */}
+      {overlayData?.type === 'json' && (
+        <JSONPreviewOverlay
+          isOpen={!!overlayActivity}
+          onClose={handleCloseOverlay}
+          data={overlayData.data}
+          title={overlayData.title}
+          theme={theme}
+          error={overlayData.error}
         />
       )}
 

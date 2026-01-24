@@ -102,6 +102,8 @@ export interface CredentialAuthRequest extends BaseAuthRequest {
   description?: string;
   hint?: string;
   headerName?: string;
+  /** Source URL/domain for password manager credential matching (1Password, etc.) */
+  sourceUrl?: string;
 }
 
 /**
@@ -1881,6 +1883,8 @@ source_credential_prompt({
           description: args.description,
           hint: args.hint,
           headerName: source.api?.headerName,
+          // Pass source URL so password managers (1Password) can match stored credentials by domain
+          sourceUrl: source.api?.baseUrl || source.mcp?.url,
         };
 
         // Trigger auth request - this will cause the session manager to forceAbort

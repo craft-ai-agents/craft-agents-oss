@@ -1,10 +1,9 @@
 import type { LucideIcon } from "lucide-react"
 import * as React from "react"
-import { useState } from "react"
 import { AnimatePresence, motion, type Variants } from "motion/react"
 import { ChevronRight } from "lucide-react"
 
-import { cn, isHexColor } from "@/lib/utils"
+import { cn } from "@/lib/utils"
 import {
   ContextMenu,
   ContextMenuTrigger,
@@ -12,6 +11,7 @@ import {
 } from '@/components/ui/styled-context-menu'
 import { ContextMenuProvider } from '@/components/ui/menu-context'
 import { SidebarMenu, type SidebarMenuType } from './SidebarMenu'
+import { SortableList, type SortableItemData } from '@/components/ui/sortable-list'
 
 /** Context menu configuration for sidebar items */
 export interface SidebarContextMenuConfig {
@@ -19,14 +19,37 @@ export interface SidebarContextMenuConfig {
   type: SidebarMenuType
   /** Status ID for status items (e.g., 'todo', 'done') - not currently used but kept for future */
   statusId?: string
+  /** Label ID — when set, this is an individual label (enables Delete Label) */
+  labelId?: string
   /** Handler for "Configure Statuses" action - for allChats/status/flagged types */
   onConfigureStatuses?: () => void
+  /** Handler for "Configure Labels" action - for labels type */
+  onConfigureLabels?: () => void
+  /** Handler for "Add New Label" action - creates a label (parentId passed from labelId) */
+  onAddLabel?: (parentId?: string) => void
+  /** Handler for "Delete Label" action - deletes the label by labelId */
+  onDeleteLabel?: (labelId: string) => void
   /** Handler for "Add Source" action - for sources type */
   onAddSource?: () => void
   /** Handler for "Add Skill" action - for skills type */
   onAddSkill?: () => void
   /** Source type filter for "Learn More" link - determines which docs page to open */
   sourceType?: 'api' | 'mcp' | 'local'
+  /** Handler for "Edit Views" action - for views type */
+  onConfigureViews?: () => void
+  /** View ID — when set, this is an individual view (enables Delete) */
+  viewId?: string
+  /** Handler for "Delete View" action */
+  onDeleteView?: (id: string) => void
+}
+
+/**
+ * Sortable configuration for expandable sidebar items.
+ * When present on an expandable LinkItem, its children become drag-sortable.
+ */
+export interface SortableConfig {
+  /** Flat list reorder: called with new ordered array of item IDs after a drag-drop */
+  onReorder: (orderedIds: string[]) => void
 }
 
 export interface LinkItem {
@@ -44,10 +67,14 @@ export interface LinkItem {
   expanded?: boolean
   onToggle?: () => void
   items?: SidebarItem[]    // Subitems as data (rendered as nested LeftSidebar) - supports separators
+  // Compact mode: reduced vertical padding (4px less total height)
+  compact?: boolean
   // Tutorial system
   dataTutorial?: string // data-tutorial attribute for tutorial targeting
   // Context menu configuration (optional - if provided, right-click shows context menu)
   contextMenu?: SidebarContextMenuConfig
+  // Drag-and-drop: flat list reorder (e.g., statuses)
+  sortable?: SortableConfig
 }
 
 export interface SeparatorItem {
@@ -126,6 +153,11 @@ const itemVariants: Variants = {
  * - Show a chevron toggle on hover (replaces icon position)
  * - Children are rendered with animated expand/collapse
  * - Nested items have left indentation with vertical line
+ *
+ * Drag-and-drop:
+ * - Expandable items can opt-in to sortable (flat) or sortableTree (hierarchical) DnD
+ * - Uses @dnd-kit with DragOverlay portaled to document.body (no clipping)
+ * - Two-phase drop animation: overlay fades out, ghost fades in
  */
 export function LeftSidebar({ links, isCollapsed, getItemProps, focusedItemId, isNested }: LeftSidebarProps) {
   // For nested sidebars, wrap in motion container for stagger effect
@@ -171,112 +203,67 @@ export function LeftSidebar({ links, isCollapsed, getItemProps, focusedItemId, i
 
           // Button element shared by both expandable and non-expandable items
           const buttonElement = (
-            <button
-              {...itemProps}
-              onClick={link.onClick}
-              data-tutorial={link.dataTutorial}
-              className={cn(
-                "group flex w-full items-center gap-2 rounded-[6px] py-[5px] text-[13px] select-none outline-none",
-                "focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring",
-                // Same padding for all items
-                "px-2",
-                link.variant === "default"
-                  ? "bg-foreground/[0.07]"
-                  : "hover:bg-foreground/5"
-              )}
-            >
-              {/* Icon container with hover toggle for expandable items */}
-              <span className="relative h-3.5 w-3.5 shrink-0 flex items-center justify-center">
-                {link.expandable ? (
-                  <>
-                    {/* Main icon - hidden on hover */}
-                    <span className="absolute inset-0 flex items-center justify-center group-hover:opacity-0 transition-opacity duration-150">
-                      {renderIcon(link)}
-                    </span>
-                    {/* Toggle chevron - shown on hover */}
-                    <span
-                      className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-150 cursor-pointer"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        link.onToggle?.()
-                      }}
-                    >
-                      <ChevronRight
-                        className={cn(
-                          "h-3.5 w-3.5 text-muted-foreground transition-transform duration-200",
-                          link.expanded && "rotate-90"
-                        )}
-                      />
-                    </span>
-                  </>
-                ) : (
-                  renderIcon(link)
-                )}
-              </span>
-              {link.title}
-              {/* Label Badge: Shows count or status on the right */}
-              {link.label && (
-                <span className="ml-auto text-xs text-foreground/30 opacity-0 group-hover/section:opacity-100 transition-opacity">
-                  {link.label}
-                </span>
-              )}
-            </button>
+            <SidebarButton
+              link={link}
+              itemProps={itemProps}
+            />
           )
 
-          // Inner content: button and expandable children
-          const innerContent = (
-            <>
-              {buttonElement}
-              {/* Expandable subitems with animation */}
+          // Determine which expanded content to render (sortable vs regular)
+          const expandedContent = link.expandable && link.items && link.expanded
+            ? renderExpandedContent(link, getItemProps, focusedItemId, isNested)
+            : null
+
+          // Wrap with context menu if configured, scoped to button only.
+          // ContextMenuTrigger with asChild sets data-state="open" on the button
+          // so only the clicked item highlights, not the entire section.
+          const content = (
+            <div className="group/section">
+              {link.contextMenu ? (
+                <ContextMenu modal={true}>
+                  <ContextMenuTrigger asChild>
+                    {buttonElement}
+                  </ContextMenuTrigger>
+                  <StyledContextMenuContent>
+                    <ContextMenuProvider>
+                      <SidebarMenu
+                        type={link.contextMenu.type}
+                        statusId={link.contextMenu.statusId}
+                        labelId={link.contextMenu.labelId}
+                        onConfigureStatuses={link.contextMenu.onConfigureStatuses}
+                        onConfigureLabels={link.contextMenu.onConfigureLabels}
+                        onAddLabel={link.contextMenu.onAddLabel}
+                        onDeleteLabel={link.contextMenu.onDeleteLabel}
+                        onAddSource={link.contextMenu.onAddSource}
+                        onAddSkill={link.contextMenu.onAddSkill}
+                        sourceType={link.contextMenu.sourceType}
+                        onConfigureViews={link.contextMenu.onConfigureViews}
+                        viewId={link.contextMenu.viewId}
+                        onDeleteView={link.contextMenu.onDeleteView}
+                      />
+                    </ContextMenuProvider>
+                  </StyledContextMenuContent>
+                </ContextMenu>
+              ) : (
+                buttonElement
+              )}
+              {/* Expandable subitems — outside context menu scope so only the
+                * clicked button gets data-state="open", not nested children */}
               {link.expandable && link.items && (
                 <AnimatePresence initial={false}>
                   {link.expanded && (
                     <motion.div
                       initial={{ height: 0, opacity: 0, marginTop: 0, marginBottom: 0 }}
-                      animate={{ height: 'auto', opacity: 1, marginTop: 2, marginBottom: 8 }}
+                      animate={{ height: 'auto', opacity: 1, marginTop: 2, marginBottom: isNested ? 4 : 8 }}
                       exit={{ height: 0, opacity: 0, marginTop: 0, marginBottom: 0 }}
                       transition={{ duration: 0.2, ease: 'easeInOut' }}
                       className="overflow-hidden"
                     >
-                      <LeftSidebar
-                        isCollapsed={false}
-                        isNested={true}
-                        getItemProps={getItemProps}
-                        focusedItemId={focusedItemId}
-                        links={link.items}
-                      />
+                      {expandedContent}
                     </motion.div>
                   )}
                 </AnimatePresence>
               )}
-            </>
-          )
-
-          // Wrap with context menu if configured, otherwise just group/section wrapper
-          // Context menus enable right-click actions like "Edit Statuses" and "Open in New Window"
-          const content = link.contextMenu ? (
-            <ContextMenu modal={true}>
-              <ContextMenuTrigger asChild>
-                <div className="group/section">
-                  {innerContent}
-                </div>
-              </ContextMenuTrigger>
-              <StyledContextMenuContent>
-                <ContextMenuProvider>
-                  <SidebarMenu
-                    type={link.contextMenu.type}
-                    statusId={link.contextMenu.statusId}
-                    onConfigureStatuses={link.contextMenu.onConfigureStatuses}
-                    onAddSource={link.contextMenu.onAddSource}
-                    onAddSkill={link.contextMenu.onAddSkill}
-                    sourceType={link.contextMenu.sourceType}
-                  />
-                </ContextMenuProvider>
-              </StyledContextMenuContent>
-            </ContextMenu>
-          ) : (
-            <div className="group/section">
-              {innerContent}
             </div>
           )
 
@@ -296,24 +283,245 @@ export function LeftSidebar({ links, isCollapsed, getItemProps, focusedItemId, i
   )
 }
 
+// ============================================================
+// Expanded Content Renderer
+// Chooses between sortable, sortableTree, or regular nested sidebar
+// ============================================================
+
+function renderExpandedContent(
+  link: LinkItem,
+  getItemProps: LeftSidebarProps['getItemProps'],
+  focusedItemId: string | null | undefined,
+  isNested: boolean | undefined
+): React.ReactNode {
+  // Flat sortable (e.g., statuses): wrap items in SortableList
+  if (link.sortable && link.items) {
+    return (
+      <SortableStatusList
+        items={link.items}
+        onReorder={link.sortable.onReorder}
+        getItemProps={getItemProps}
+        focusedItemId={focusedItemId}
+      />
+    )
+  }
+
+  // Default: regular nested sidebar (no DnD)
+  return (
+    <LeftSidebar
+      isCollapsed={false}
+      isNested={true}
+      getItemProps={getItemProps}
+      focusedItemId={focusedItemId}
+      links={link.items!}
+    />
+  )
+}
+
+// ============================================================
+// SortableStatusList — flat sortable wrapper for status items
+// ============================================================
+
+interface SortableStatusListProps {
+  items: SidebarItem[]
+  onReorder: (orderedIds: string[]) => void
+  getItemProps: LeftSidebarProps['getItemProps']
+  focusedItemId: string | null | undefined
+}
+
+function SortableStatusList({ items, onReorder, getItemProps, focusedItemId }: SortableStatusListProps) {
+  // Filter to LinkItems only (separators don't participate in DnD)
+  const linkItems = items.filter((item): item is LinkItem => !isSeparatorItem(item))
+
+  // Map to SortableItemData format (needs `id` field)
+  const sortableItems: (LinkItem & SortableItemData)[] = linkItems.map(item => ({
+    ...item,
+    id: item.id,
+  }))
+
+  const handleReorder = React.useCallback((newItems: (LinkItem & SortableItemData)[]) => {
+    // Extract the raw IDs (strip 'nav:state:' prefix) for the IPC call
+    const orderedIds = newItems.map(item => {
+      // Strip navigation prefix to get the actual status/label ID
+      const parts = item.id.split(':')
+      return parts[parts.length - 1]
+    })
+    onReorder(orderedIds)
+  }, [onReorder])
+
+  return (
+    <div className="flex flex-col select-none">
+      <div className="pl-5 pr-0 relative">
+        {/* Vertical line for nested items */}
+        <div
+          className="absolute left-[13px] top-1 bottom-1 w-px bg-foreground/10"
+          aria-hidden="true"
+        />
+        <SortableList
+          items={sortableItems}
+          onReorder={handleReorder}
+          className="grid gap-0.5"
+          renderItem={(item) => (
+            <div className="group/section">
+              {item.contextMenu ? (
+                <ContextMenu modal={true}>
+                  <ContextMenuTrigger asChild>
+                    <SidebarButton
+                      link={item}
+                      itemProps={getItemProps?.(item.id)}
+                    />
+                  </ContextMenuTrigger>
+                  <StyledContextMenuContent>
+                    <ContextMenuProvider>
+                      <SidebarMenu
+                        type={item.contextMenu.type}
+                        statusId={item.contextMenu.statusId}
+                        labelId={item.contextMenu.labelId}
+                        onConfigureStatuses={item.contextMenu.onConfigureStatuses}
+                        onConfigureLabels={item.contextMenu.onConfigureLabels}
+                        onAddLabel={item.contextMenu.onAddLabel}
+                        onDeleteLabel={item.contextMenu.onDeleteLabel}
+                        onAddSource={item.contextMenu.onAddSource}
+                        onAddSkill={item.contextMenu.onAddSkill}
+                        sourceType={item.contextMenu.sourceType}
+                        onConfigureViews={item.contextMenu.onConfigureViews}
+                        viewId={item.contextMenu.viewId}
+                        onDeleteView={item.contextMenu.onDeleteView}
+                      />
+                    </ContextMenuProvider>
+                  </StyledContextMenuContent>
+                </ContextMenu>
+              ) : (
+                <SidebarButton
+                  link={item}
+                  itemProps={getItemProps?.(item.id)}
+                />
+              )}
+            </div>
+          )}
+          renderOverlay={(item) => (
+            <SidebarButton
+              link={item}
+              isOverlay={true}
+            />
+          )}
+        />
+      </div>
+    </div>
+  )
+}
+
+// ============================================================
+// SidebarButton - Extracted button component for reuse in sortable contexts
+// ============================================================
+
+interface SidebarButtonProps {
+  link: LinkItem
+  itemProps?: {
+    tabIndex: number
+    'data-focused': boolean
+    ref: (el: HTMLElement | null) => void
+  }
+  /** True when rendering inside the DragOverlay (floating clone) */
+  isOverlay?: boolean
+}
+
+// forwardRef is required so Radix's ContextMenuTrigger (asChild) can attach its ref
+// and pass props like data-state="open" directly onto this button element.
+const SidebarButton = React.forwardRef<HTMLButtonElement, SidebarButtonProps & React.ButtonHTMLAttributes<HTMLButtonElement>>(
+  ({ link, itemProps, isOverlay, className: extraClassName, ...radixProps }, forwardedRef) => {
+    return (
+      <button
+        {...(isOverlay ? {} : (() => {
+          // Separate ref from itemProps so we can merge it with forwardedRef
+          const { ref: _itemRef, ...rest } = itemProps || { ref: undefined }
+          return rest
+        })())}
+        // Spread Radix props (data-state, onContextMenu, onPointerDown, etc.)
+        {...radixProps}
+        ref={(el) => {
+          // Merge forwarded ref (from Radix) and itemProps ref (for keyboard nav)
+          if (typeof forwardedRef === 'function') forwardedRef(el)
+          else if (forwardedRef) forwardedRef.current = el
+          if (!isOverlay && itemProps?.ref) itemProps.ref(el)
+        }}
+        onClick={isOverlay ? undefined : link.onClick}
+        data-tutorial={link.dataTutorial}
+        className={cn(
+          "group flex w-full items-center gap-2 rounded-[6px] text-[13px] select-none outline-none",
+          "focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring",
+          // Compact mode: 4px less total height (py-[3px] vs py-[5px])
+          link.compact ? "py-[3px]" : "py-[5px]",
+          "px-2",
+          link.variant === "default"
+            ? "bg-foreground/[0.07]"
+            // Highlight on hover, context menu open (data-state), or EditPopover active (data-edit-active)
+            : "hover:bg-sidebar-hover data-[state=open]:bg-sidebar-hover data-[edit-active=true]:bg-sidebar-hover",
+          extraClassName,
+        )}
+      >
+        {/* Icon container with hover toggle for expandable items */}
+        <span className="relative h-3.5 w-3.5 shrink-0 flex items-center justify-center">
+          {link.expandable && !isOverlay ? (
+            <>
+              {/* Main icon - hidden on hover */}
+              <span className="absolute inset-0 flex items-center justify-center group-hover:opacity-0 transition-opacity duration-150">
+                {renderIcon(link)}
+              </span>
+              {/* Toggle chevron - shown on hover. data-no-dnd prevents drag activation on click. */}
+              <span
+                className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-150 cursor-pointer"
+                data-no-dnd="true"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  link.onToggle?.()
+                }}
+              >
+                <ChevronRight
+                  className={cn(
+                    "h-3.5 w-3.5 text-muted-foreground transition-transform duration-200",
+                    link.expanded && "rotate-90"
+                  )}
+                />
+              </span>
+            </>
+          ) : (
+            renderIcon(link)
+          )}
+        </span>
+        {link.title}
+        {/* Label Badge: Shows count or status on the right */}
+        {link.label && (
+          <span className="ml-auto text-xs text-foreground/30 opacity-0 group-hover/section:opacity-100 group-data-[state=open]:opacity-100 group-data-[edit-active=true]:opacity-100 transition-opacity">
+            {link.label}
+          </span>
+        )}
+      </button>
+    )
+  }
+)
+
 /**
- * Helper to render icon - either component (function/forwardRef) or React element
+ * Helper to render icon - either component (function/forwardRef) or React element.
+ * Colors are always applied via inline style (resolved CSS color strings from EntityColor).
  */
 function renderIcon(link: LinkItem) {
   const isComponent = typeof link.icon === 'function' ||
     (typeof link.icon === 'object' && link.icon !== null && 'render' in link.icon)
-  const defaultColor = "text-foreground/60"
+  // Default color for items without explicit iconColor (foreground at 60% opacity)
+  const defaultColor = 'color-mix(in oklch, var(--foreground) 60%, transparent)'
 
   // Lucide components are always colorable; ReactNode icons check iconColorable
   // Default to true for backwards compatibility (most icons are colorable)
   const applyColor = link.iconColorable !== false
+  const colorStyle = applyColor ? { color: link.iconColor || defaultColor } : undefined
 
   if (isComponent) {
     const Icon = link.icon as React.ComponentType<{ className?: string; style?: React.CSSProperties }>
     return (
       <Icon
-        className={cn("h-3.5 w-3.5 shrink-0", applyColor && !isHexColor(link.iconColor) && (link.iconColor || defaultColor))}
-        style={applyColor && isHexColor(link.iconColor) ? { color: link.iconColor } : undefined}
+        className="h-3.5 w-3.5 shrink-0"
+        style={colorStyle}
       />
     )
   }
@@ -321,12 +529,8 @@ function renderIcon(link: LinkItem) {
   // Use [&>svg]:w-full [&>svg]:h-full to size SVG children and [&>div>svg] for wrapped SVGs
   return (
     <span
-      className={cn(
-        "h-3.5 w-3.5 shrink-0 flex items-center justify-center",
-        "[&>svg]:w-full [&>svg]:h-full [&>div>svg]:w-full [&>div>svg]:h-full [&>img]:w-full [&>img]:h-full",
-        applyColor && !isHexColor(link.iconColor) && (link.iconColor || defaultColor)
-      )}
-      style={applyColor && isHexColor(link.iconColor) ? { color: link.iconColor } : undefined}
+      className="h-3.5 w-3.5 shrink-0 flex items-center justify-center [&>svg]:w-full [&>svg]:h-full [&>div>svg]:w-full [&>div>svg]:h-full [&>img]:w-full [&>img]:h-full"
+      style={colorStyle}
     >
       {link.icon as React.ReactNode}
     </span>

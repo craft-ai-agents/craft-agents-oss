@@ -17,7 +17,7 @@ export type SessionStatus = 'todo' | 'in_progress' | 'needs_review' | 'done' | '
  * Session represents a conversation scope (SDK session = our scope boundary)
  */
 export interface Session {
-  id: string;                    // Our UUID (stable, known immediately)
+  id: string;                    // Unique identifier (stable, known immediately)
   sdkSessionId?: string;         // SDK session ID (captured after first message)
   workspaceId: string;           // Which workspace this session belongs to
   name?: string;                 // Optional user-defined name
