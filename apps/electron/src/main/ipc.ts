@@ -16,6 +16,7 @@ import { getSessionAttachmentsPath } from '@craft-agent/shared/sessions'
 import { loadWorkspaceSources, getSourcesBySlugs, type LoadedSource } from '@craft-agent/shared/sources'
 import { isValidThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
+import { debug } from '@craft-agent/shared/utils/debug'
 import { MarkItDown } from 'markitdown-js'
 
 /**
@@ -1027,10 +1028,24 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
             expiresAt: cliCreds.expiresAt,
           })
           ipcLog.info('Saved Claude OAuth credentials with refresh token')
+          // Clear skipCliImportUntil flag after new authentication
+          const currentConfig = loadStoredConfig()
+          if (currentConfig && currentConfig.skipCliImportUntil !== undefined) {
+            currentConfig.skipCliImportUntil = undefined
+            saveConfig(currentConfig)
+            debug('[auth] Cleared skipCliImportUntil flag after new authentication')
+          }
         } else {
           // Fallback to just saving the access token
           await manager.setClaudeOAuth(credential)
           ipcLog.info('Saved Claude OAuth access token only')
+          // Clear skipCliImportUntil flag after new authentication
+          const currentConfig = loadStoredConfig()
+          if (currentConfig && currentConfig.skipCliImportUntil !== undefined) {
+            currentConfig.skipCliImportUntil = undefined
+            saveConfig(currentConfig)
+            debug('[auth] Cleared skipCliImportUntil flag after new authentication')
+          }
         }
       }
     } else if (credential === '') {

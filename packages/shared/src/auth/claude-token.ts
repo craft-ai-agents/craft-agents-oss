@@ -189,7 +189,7 @@ export function getExistingClaudeToken(): string | null {
 
 /**
  * Refresh Claude OAuth token using refresh token
- * Uses the Anthropic API token endpoint
+ * Uses the platform.claude.com token endpoint
  */
 export async function refreshClaudeToken(refreshToken: string): Promise<{
   accessToken: string;
@@ -197,7 +197,7 @@ export async function refreshClaudeToken(refreshToken: string): Promise<{
   expiresAt?: number;
 }> {
   // Use the same endpoint as token exchange
-  const TOKEN_URL = 'https://console.anthropic.com/v1/oauth/token';
+  const TOKEN_URL = 'https://platform.claude.com/v1/oauth/token';
   const CLIENT_ID = '9d1c250a-e61b-44d9-88ed-5944d1962f5e'; // Same client ID as OAuth flow
   
   const params = new URLSearchParams({

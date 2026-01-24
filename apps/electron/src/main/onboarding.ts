@@ -8,6 +8,7 @@ import { mainLog } from './logger'
 import { getAuthState, getSetupNeeds } from '@craft-agent/shared/auth'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { saveConfig, loadStoredConfig, generateWorkspaceId, type AuthType, type StoredConfig } from '@craft-agent/shared/config'
+import { debug } from '@craft-agent/shared/utils/debug'
 import { getDefaultWorkspacesDir, generateUniqueWorkspacePath } from '@craft-agent/shared/workspaces'
 import { CraftOAuth, getMcpBaseUrl } from '@craft-agent/shared/auth'
 import { validateMcpConnection } from '@craft-agent/shared/mcp'
@@ -139,21 +140,56 @@ export function registerOnboardingHandlers(sessionManager: SessionManager): void
               refreshTokenLength: savedCreds?.refreshToken?.length,
               hasExpiresAt: !!savedCreds?.expiresAt,
             })
+            // Clear skipCliImportUntil flag after new authentication
+            const currentConfig = loadStoredConfig()
+            if (currentConfig && currentConfig.skipCliImportUntil !== undefined) {
+              currentConfig.skipCliImportUntil = undefined
+              saveConfig(currentConfig)
+              debug('[auth] Cleared skipCliImportUntil flag after new authentication')
+            }
           } else {
-            // String token provided - try to get full credentials from CLI, fallback to token only
-            mainLog.info('[Onboarding:Main] Token string provided, attempting to import full Claude OAuth credentials from CLI...')
-            const cliCreds = getExistingClaudeCredentials()
-            if (cliCreds) {
-              await manager.setClaudeOAuthCredentials({
-                accessToken: cliCreds.accessToken,
-                refreshToken: cliCreds.refreshToken,
-                expiresAt: cliCreds.expiresAt,
-              })
-              mainLog.info('[Onboarding:Main] Claude OAuth credentials saved with refresh token from CLI')
+            // String token provided - check if we already have credentials (from OAuth exchange)
+            // If credentials exist, use them instead of importing from CLI (which may have old incompatible token)
+            const existingCreds = await manager.getClaudeOAuthCredentials()
+            if (existingCreds) {
+              mainLog.info('[Onboarding:Main] Token string provided, but credentials already exist from OAuth exchange - keeping existing credentials')
+              // Clear skipCliImportUntil flag after new authentication
+              const currentConfig = loadStoredConfig()
+              if (currentConfig && currentConfig.skipCliImportUntil !== undefined) {
+                currentConfig.skipCliImportUntil = undefined
+                saveConfig(currentConfig)
+                debug('[auth] Cleared skipCliImportUntil flag after new authentication')
+              }
             } else {
-              // Fallback to just saving the access token
-              await manager.setClaudeOAuth(config.credential)
-              mainLog.info('[Onboarding:Main] Claude OAuth saved (access token only - no refresh token available)')
+              // No existing credentials - try to get full credentials from CLI, but only if skip flag isn't set
+              const currentConfig = loadStoredConfig()
+              if (currentConfig?.skipCliImportUntil && Date.now() < currentConfig.skipCliImportUntil) {
+                mainLog.info('[Onboarding:Main] Token string provided, but skipping CLI import due to skipCliImportUntil flag')
+                // Fallback to just saving the access token
+                await manager.setClaudeOAuth(config.credential)
+                mainLog.info('[Onboarding:Main] Claude OAuth saved (access token only - CLI import skipped)')
+              } else {
+                mainLog.info('[Onboarding:Main] Token string provided, attempting to import full Claude OAuth credentials from CLI...')
+                const cliCreds = getExistingClaudeCredentials()
+                if (cliCreds) {
+                  await manager.setClaudeOAuthCredentials({
+                    accessToken: cliCreds.accessToken,
+                    refreshToken: cliCreds.refreshToken,
+                    expiresAt: cliCreds.expiresAt,
+                  })
+                  mainLog.info('[Onboarding:Main] Claude OAuth credentials saved with refresh token from CLI')
+                  // Clear skipCliImportUntil flag after new authentication
+                  if (currentConfig && currentConfig.skipCliImportUntil !== undefined) {
+                    currentConfig.skipCliImportUntil = undefined
+                    saveConfig(currentConfig)
+                    debug('[auth] Cleared skipCliImportUntil flag after new authentication')
+                  }
+                } else {
+                  // Fallback to just saving the access token
+                  await manager.setClaudeOAuth(config.credential)
+                  mainLog.info('[Onboarding:Main] Claude OAuth saved (access token only - no refresh token available)')
+                }
+              }
             }
           }
         }
@@ -292,6 +328,17 @@ export function registerOnboardingHandlers(sessionManager: SessionManager): void
   // Get existing Claude OAuth token from keychain/credentials file
   ipcMain.handle(IPC_CHANNELS.ONBOARDING_GET_EXISTING_CLAUDE_TOKEN, async () => {
     try {
+      // Check if we should skip CLI import due to recent refresh failure
+      const config = loadStoredConfig()
+      if (config?.skipCliImportUntil && Date.now() < config.skipCliImportUntil) {
+        mainLog.info('[Onboarding] Skipping CLI credential check due to skipCliImportUntil flag', {
+          skipUntil: config.skipCliImportUntil,
+          now: Date.now(),
+          remainingMs: config.skipCliImportUntil - Date.now(),
+        })
+        return null
+      }
+
       mainLog.info('[Onboarding] Checking for existing Claude token...')
       const token = getExistingClaudeToken()
       mainLog.info('[Onboarding] Existing Claude token:', token ? `found (${token.length} chars)` : 'not found')
@@ -305,6 +352,17 @@ export function registerOnboardingHandlers(sessionManager: SessionManager): void
   // Get existing Claude OAuth credentials (full object with refresh token and expiry) from keychain/credentials file
   ipcMain.handle(IPC_CHANNELS.ONBOARDING_GET_EXISTING_CLAUDE_CREDENTIALS, async () => {
     try {
+      // Check if we should skip CLI import due to recent refresh failure
+      const config = loadStoredConfig()
+      if (config?.skipCliImportUntil && Date.now() < config.skipCliImportUntil) {
+        mainLog.info('[Onboarding] Skipping CLI credential check due to skipCliImportUntil flag', {
+          skipUntil: config.skipCliImportUntil,
+          now: Date.now(),
+          remainingMs: config.skipCliImportUntil - Date.now(),
+        })
+        return null
+      }
+
       mainLog.info('[Onboarding] Checking for existing Claude credentials...')
       const creds = getExistingClaudeCredentials()
       mainLog.info('[Onboarding] Existing Claude credentials:', creds ? `found (has refreshToken: ${!!creds.refreshToken}, expiresAt: ${creds.expiresAt})` : 'not found')
@@ -389,6 +447,14 @@ export function registerOnboardingHandlers(sessionManager: SessionManager): void
         refreshToken: tokens.refreshToken,
         expiresAt: tokens.expiresAt,
       })
+
+      // Clear skipCliImportUntil flag after new authentication
+      const currentConfig = loadStoredConfig()
+      if (currentConfig && currentConfig.skipCliImportUntil !== undefined) {
+        currentConfig.skipCliImportUntil = undefined
+        saveConfig(currentConfig)
+        debug('[auth] Cleared skipCliImportUntil flag after new authentication')
+      }
 
       mainLog.info('[Onboarding] Claude OAuth successful')
       return { success: true, token: tokens.accessToken }

@@ -7,7 +7,7 @@
  */
 
 import { getCredentialManager } from '../credentials/index.ts';
-import { loadStoredConfig, getActiveWorkspace, type AuthType, type Workspace } from '../config/storage.ts';
+import { loadStoredConfig, saveConfig, getActiveWorkspace, type AuthType, type Workspace } from '../config/storage.ts';
 import { refreshClaudeToken, isTokenExpired, getExistingClaudeCredentials } from './claude-token.ts';
 import { debug } from '../utils/debug.ts';
 
@@ -64,6 +64,17 @@ async function getValidClaudeOAuthToken(): Promise<string | null> {
 
   // If we don't have credentials in our store, try to import from Claude CLI
   if (!creds) {
+    // Check if we should skip CLI import due to recent refresh failure
+    const config = loadStoredConfig();
+    if (config?.skipCliImportUntil && Date.now() < config.skipCliImportUntil) {
+      debug('[auth] Skipping CLI credential import due to skipCliImportUntil flag', {
+        skipUntil: config.skipCliImportUntil,
+        now: Date.now(),
+        remainingMs: config.skipCliImportUntil - Date.now(),
+      });
+      return null;
+    }
+
     const cliCreds = getExistingClaudeCredentials();
     if (cliCreds) {
       debug('[auth] Importing Claude credentials from CLI keychain');
@@ -103,6 +114,14 @@ async function getValidClaudeOAuthToken(): Promise<string | null> {
           expiresAt: refreshed.expiresAt,
         });
 
+        // Clear skipCliImportUntil flag after successful refresh
+        const config = loadStoredConfig();
+        if (config && config.skipCliImportUntil !== undefined) {
+          config.skipCliImportUntil = undefined;
+          saveConfig(config);
+          debug('[auth] Cleared skipCliImportUntil flag after successful token refresh');
+        }
+
         return refreshed.accessToken;
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
@@ -113,6 +132,35 @@ async function getValidClaudeOAuthToken(): Promise<string | null> {
           errorType: error?.constructor?.name,
           errorString: String(error),
         });
+
+        // Check if this is a token mismatch error (400/401 + "refresh token")
+        const isTokenMismatch = (errorMessage.includes('400') || errorMessage.includes('401')) &&
+          errorMessage.toLowerCase().includes('refresh token');
+
+        if (isTokenMismatch) {
+          debug('[auth] Token mismatch detected (old console.anthropic.com token)', {
+            status: errorMessage.match(/\d{3}/)?.[0],
+            errorMessage,
+          });
+
+          // Clear stored credentials
+          await manager.delete({ type: 'claude_oauth' });
+          debug('[auth] Cleared incompatible credentials and setting skipCliImportUntil flag');
+
+          // Set skipCliImportUntil flag to prevent re-importing incompatible token
+          const config = loadStoredConfig();
+          if (config) {
+            config.skipCliImportUntil = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
+            saveConfig(config);
+          }
+        } else {
+          // Other error (network, server, etc.) - just clear credentials, don't set flag
+          debug('[auth] Clearing credentials due to refresh failure (non-token-mismatch error)', {
+            errorMessage,
+          });
+          await manager.delete({ type: 'claude_oauth' });
+        }
+
         // Token refresh failed - return null to trigger re-authentication
         return null;
       }

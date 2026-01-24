@@ -46,6 +46,8 @@ export interface StoredConfig {
   colorTheme?: string;  // ID of selected preset theme (e.g., 'dracula', 'nord'). Default: 'default'
   // Auto-update
   dismissedUpdateVersion?: string;  // Version that user dismissed (skip notifications for this version)
+  // OAuth migration
+  skipCliImportUntil?: number;  // Timestamp (ms) until which CLI credential import should be skipped (prevents re-importing incompatible tokens)
 }
 
 const CONFIG_FILE = join(CONFIG_DIR, 'config.json');

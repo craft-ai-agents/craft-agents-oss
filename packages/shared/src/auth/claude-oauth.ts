@@ -13,8 +13,8 @@ import open from 'open'
 // OAuth configuration
 const CLAUDE_CLIENT_ID = '9d1c250a-e61b-44d9-88ed-5944d1962f5e'
 const CLAUDE_AUTH_URL = 'https://claude.ai/oauth/authorize'
-const CLAUDE_TOKEN_URL = 'https://console.anthropic.com/v1/oauth/token'
-const REDIRECT_URI = 'https://console.anthropic.com/oauth/code/callback'
+const CLAUDE_TOKEN_URL = 'https://platform.claude.com/v1/oauth/token'
+const REDIRECT_URI = 'https://platform.claude.com/oauth/code/callback'
 const OAUTH_SCOPES = 'org:create_api_key user:profile user:inference'
 const STATE_EXPIRY_MS = 10 * 60 * 1000 // 10 minutes
 
