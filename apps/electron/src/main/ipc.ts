@@ -2471,6 +2471,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   })
 
   // Fetch skill details (SKILL.md) from GitHub
+  // The skill ID from skills.sh may not match the folder name, so we need to discover it
   ipcMain.handle(IPC_CHANNELS.MARKETPLACE_GET_SKILL_DETAILS, async (_event, topSource: string, skillId: string) => {
     try {
       // Validate topSource format
@@ -2478,22 +2479,53 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
         return { success: false, error: 'Invalid source format' }
       }
 
-      // Build GitHub raw URL for SKILL.md
-      // Format: https://raw.githubusercontent.com/owner/repo/main/skills/{skillId}/SKILL.md
-      const url = `https://raw.githubusercontent.com/${topSource}/main/skills/${skillId}/SKILL.md`
-
-      const response = await fetch(url)
-      if (!response.ok) {
-        // Try HEAD branch if main doesn't exist
-        const headUrl = `https://raw.githubusercontent.com/${topSource}/HEAD/skills/${skillId}/SKILL.md`
-        const headResponse = await fetch(headUrl)
-        if (!headResponse.ok) {
-          return { success: false, error: `Skill not found: ${response.status}` }
-        }
-        return { success: true, content: await headResponse.text() }
+      // Helper to try fetching from a URL
+      const tryFetch = async (url: string): Promise<string | null> => {
+        try {
+          const response = await fetch(url)
+          if (response.ok) return response.text()
+        } catch {}
+        return null
       }
 
-      return { success: true, content: await response.text() }
+      // Helper to check if content contains matching skill name
+      const hasMatchingName = (content: string, targetName: string): boolean => {
+        const nameMatch = content.match(/^name:\s*["']?([^"'\n]+)["']?/m)
+        return nameMatch?.[1]?.trim() === targetName
+      }
+
+      // Strategy 1: Try skill ID as folder name directly
+      const directUrl = `https://raw.githubusercontent.com/${topSource}/main/skills/${skillId}/SKILL.md`
+      let content = await tryFetch(directUrl)
+      if (content) return { success: true, content }
+
+      // Strategy 2: Try HEAD branch
+      const headUrl = `https://raw.githubusercontent.com/${topSource}/HEAD/skills/${skillId}/SKILL.md`
+      content = await tryFetch(headUrl)
+      if (content) return { success: true, content }
+
+      // Strategy 3: List all skill folders and find the one with matching name
+      // Use GitHub API to get folder listing
+      const listUrl = `https://api.github.com/repos/${topSource}/contents/skills`
+      const listResponse = await fetch(listUrl, {
+        headers: { 'Accept': 'application/vnd.github.v3+json' }
+      })
+
+      if (listResponse.ok) {
+        const folders = await listResponse.json() as Array<{ name: string; type: string }>
+        const skillFolders = folders.filter(f => f.type === 'dir')
+
+        // Check each folder's SKILL.md for matching name
+        for (const folder of skillFolders) {
+          const folderUrl = `https://raw.githubusercontent.com/${topSource}/main/skills/${folder.name}/SKILL.md`
+          content = await tryFetch(folderUrl)
+          if (content && hasMatchingName(content, skillId)) {
+            return { success: true, content }
+          }
+        }
+      }
+
+      return { success: false, error: `Skill not found: ${skillId}` }
     } catch (error) {
       ipcLog.error('Error fetching skill details:', error)
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
