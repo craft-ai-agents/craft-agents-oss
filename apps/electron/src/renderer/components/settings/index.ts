@@ -92,3 +92,9 @@ export {
   SettingsTextarea,
   type SettingsTextareaProps,
 } from './SettingsTextarea'
+
+// God Mode (dev-only)
+export {
+  GodModeSettings,
+  type GodModeSettingsProps,
+} from './GodModeSettings'

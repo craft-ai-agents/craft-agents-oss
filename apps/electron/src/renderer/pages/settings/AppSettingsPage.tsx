@@ -40,6 +40,7 @@ import {
   SettingsSegmentedControl,
   SettingsMenuSelectRow,
   SettingsMenuSelect,
+  GodModeSettings,
 } from '@/components/settings'
 import { useUpdateChecker } from '@/hooks/useUpdateChecker'
 import type { PresetTheme } from '@config/theme'
@@ -385,6 +386,9 @@ export default function AppSettingsPage() {
   // Notifications state
   const [notificationsEnabled, setNotificationsEnabled] = useState(true)
 
+  // Debug mode state (for dev-only features like God Mode)
+  const [isDebugMode, setIsDebugMode] = useState(false)
+
   // Auto-update state
   const updateChecker = useUpdateChecker()
   const [isCheckingForUpdates, setIsCheckingForUpdates] = useState(false)
@@ -418,9 +422,10 @@ export default function AppSettingsPage() {
     const loadSettings = async () => {
       if (!window.electronAPI) return
       try {
-        const [billing, notificationsOn] = await Promise.all([
+        const [billing, notificationsOn, debugMode] = await Promise.all([
           window.electronAPI.getBillingMethod(),
           window.electronAPI.getNotificationsEnabled(),
+          window.electronAPI.isDebugMode(),
         ])
         setAuthType(billing.authType)
         setHasCredential(billing.hasCredential)
@@ -434,6 +439,7 @@ export default function AppSettingsPage() {
           })
         }
         setNotificationsEnabled(notificationsOn)
+        setIsDebugMode(debugMode)
       } catch (error) {
         console.error('Failed to load settings:', error)
       }
@@ -893,6 +899,9 @@ export default function AppSettingsPage() {
                 )}
               </SettingsCard>
             </SettingsSection>
+
+            {/* God Mode (dev-only) */}
+            <GodModeSettings isDebugMode={isDebugMode} />
           </div>
         </div>
         </ScrollArea>

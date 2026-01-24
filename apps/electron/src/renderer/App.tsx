@@ -26,6 +26,7 @@ import { NavigationProvider } from '@/contexts/NavigationContext'
 import { navigate, routes } from './lib/navigate'
 import { initRendererPerf } from './lib/perf'
 import { DEFAULT_MODEL } from '@config/models'
+import { AgentationWrapper } from '@/components/Agentation'
 import {
   initializeSessionsAtom,
   addSessionAtom,
@@ -134,6 +135,7 @@ export default function App() {
   useEffect(() => {
     window.electronAPI.isDebugMode().then((isDebug) => {
       initRendererPerf(isDebug)
+      setIsDebugMode(isDebug)
     })
   }, [])
 
@@ -197,6 +199,9 @@ export default function App() {
 
   // Notifications enabled state (from app settings)
   const [notificationsEnabled, setNotificationsEnabled] = useState(true)
+
+  // Debug mode state (for dev-only features like God Mode)
+  const [isDebugMode, setIsDebugMode] = useState(false)
 
   // Sources and skills for badge extraction
   const sources = useAtomValue(sourcesAtom)
@@ -386,6 +391,17 @@ export default function App() {
     })
     return () => {
       cleanupApp()
+    }
+  }, [])
+
+  // Listen for workspace changes (e.g., God Mode enabled from settings)
+  useEffect(() => {
+    const handleWorkspacesChanged = () => {
+      window.electronAPI.getWorkspaces().then(setWorkspaces)
+    }
+    window.addEventListener('workspaces-changed', handleWorkspacesChanged)
+    return () => {
+      window.removeEventListener('workspaces-changed', handleWorkspacesChanged)
     }
   }, [])
 
@@ -1283,6 +1299,16 @@ export default function App() {
               open={showResetDialog}
               onConfirm={executeReset}
               onCancel={() => setShowResetDialog(false)}
+            />
+
+            {/* God Mode: Agentation overlay for dev-only self-building */}
+            <AgentationWrapper
+              isDebugMode={isDebugMode}
+              onNavigateToSession={(workspaceId, sessionId) => {
+                // Switch to the workspace and navigate to the session
+                handleSelectWorkspace(workspaceId)
+                navigate(routes.view.allChats(sessionId))
+              }}
             />
           </div>
         </NavigationProvider>
