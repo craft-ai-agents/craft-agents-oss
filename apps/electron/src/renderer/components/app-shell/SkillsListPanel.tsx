@@ -3,14 +3,16 @@
  *
  * Panel component for displaying workspace skills in the sidebar.
  * Styled to match SourcesListPanel with avatar, title, and subtitle layout.
+ * Includes toggle to browse marketplace skills from skills.sh.
  */
 
 import * as React from 'react'
 import { useState } from 'react'
-import { MoreHorizontal } from 'lucide-react'
+import { MoreHorizontal, Store, Package } from 'lucide-react'
 import { SkillAvatar } from '@/components/ui/skill-avatar'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
+import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -26,7 +28,8 @@ import { SkillMenu } from './SkillMenu'
 import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
-import type { LoadedSkill } from '../../../shared/types'
+import { MarketplaceSearchPanel } from '../skills/MarketplaceSearchPanel'
+import type { LoadedSkill, MarketplaceSkill } from '../../../shared/types'
 
 export interface SkillsListPanelProps {
   skills: LoadedSkill[]
@@ -36,6 +39,10 @@ export interface SkillsListPanelProps {
   workspaceId?: string
   /** Workspace root path for EditPopover context */
   workspaceRootPath?: string
+  /** Callback when marketplace skill is selected */
+  onMarketplaceSkillSelect?: (skill: MarketplaceSkill) => void
+  /** Currently selected marketplace skill ID */
+  selectedMarketplaceSkillId?: string | null
   className?: string
 }
 
@@ -46,46 +53,99 @@ export function SkillsListPanel({
   selectedSkillSlug,
   workspaceId,
   workspaceRootPath,
+  onMarketplaceSkillSelect,
+  selectedMarketplaceSkillId,
   className,
 }: SkillsListPanelProps) {
+  const [showMarketplace, setShowMarketplace] = useState(false)
+
+  // Handle skill installation - refresh and switch back to installed view
+  const handleInstalled = React.useCallback(() => {
+    // The skills list will be refreshed via onSkillsChanged listener
+    setShowMarketplace(false)
+  }, [])
+
   return (
-    <ScrollArea className={cn('flex-1', className)}>
-      <div className="pb-2">
-        {skills.length === 0 ? (
-          <div className="px-4 py-8 text-center">
-            <p className="text-sm text-muted-foreground">
-              No skills configured.
-            </p>
-            {workspaceRootPath && (
-              <div className="mt-3 flex items-center justify-center">
-                <EditPopover
-                  trigger={
-                    <button className="text-sm text-foreground hover:underline">
-                      Add your first skill
+    <div className={cn('flex flex-col h-full', className)}>
+      {/* Header with toggle */}
+      <div className="flex items-center justify-between px-4 py-2 border-b shrink-0">
+        <span className="text-sm font-medium">
+          {showMarketplace ? 'Browse Marketplace' : 'Installed Skills'}
+        </span>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setShowMarketplace(!showMarketplace)}
+          className="h-7 px-2 text-xs"
+        >
+          {showMarketplace ? (
+            <>
+              <Package className="h-3.5 w-3.5 mr-1" />
+              Installed
+            </>
+          ) : (
+            <>
+              <Store className="h-3.5 w-3.5 mr-1" />
+              Marketplace
+            </>
+          )}
+        </Button>
+      </div>
+
+      {/* Content */}
+      {showMarketplace ? (
+        <MarketplaceSearchPanel
+          onInstalled={handleInstalled}
+          onSkillSelect={onMarketplaceSkillSelect}
+          selectedSkillId={selectedMarketplaceSkillId}
+          className="flex-1"
+        />
+      ) : (
+        <ScrollArea className="flex-1">
+          <div className="pb-2">
+            {skills.length === 0 ? (
+              <div className="px-4 py-8 text-center">
+                <p className="text-sm text-muted-foreground">
+                  No skills configured.
+                </p>
+                {workspaceRootPath && (
+                  <div className="mt-3 flex flex-col items-center gap-2">
+                    <EditPopover
+                      trigger={
+                        <button className="text-sm text-foreground hover:underline">
+                          Add your first skill
+                        </button>
+                      }
+                      {...getEditConfig('add-skill', workspaceRootPath)}
+                    />
+                    <button
+                      className="text-sm text-muted-foreground hover:underline"
+                      onClick={() => setShowMarketplace(true)}
+                    >
+                      or browse marketplace
                     </button>
-                  }
-                  {...getEditConfig('add-skill', workspaceRootPath)}
-                />
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="pt-2">
+                {skills.map((skill, index) => (
+                  <SkillItem
+                    key={skill.slug}
+                    skill={skill}
+                    isSelected={selectedSkillSlug === skill.slug}
+                    isFirst={index === 0}
+                    workspaceId={workspaceId}
+                    onClick={() => onSkillClick(skill)}
+                    onDelete={() => onDeleteSkill(skill.slug)}
+                  />
+                ))}
               </div>
             )}
           </div>
-        ) : (
-          <div className="pt-2">
-            {skills.map((skill, index) => (
-              <SkillItem
-                key={skill.slug}
-                skill={skill}
-                isSelected={selectedSkillSlug === skill.slug}
-                isFirst={index === 0}
-                workspaceId={workspaceId}
-                onClick={() => onSkillClick(skill)}
-                onDelete={() => onDeleteSkill(skill.slug)}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-    </ScrollArea>
+        </ScrollArea>
+      )}
+    </div>
   )
 }
 

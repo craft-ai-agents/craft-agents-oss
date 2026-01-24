@@ -2414,4 +2414,90 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     }
   })
 
+  // =============================================================================
+  // Marketplace Handlers (skills.sh integration)
+  // =============================================================================
+
+  // Search skills from skills.sh
+  ipcMain.handle(IPC_CHANNELS.MARKETPLACE_SEARCH, async (_event, query: string) => {
+    try {
+      const url = query
+        ? `https://skills.sh/api/skills?q=${encodeURIComponent(query)}`
+        : 'https://skills.sh/api/skills'
+      const response = await fetch(url)
+      if (!response.ok) {
+        throw new Error(`API request failed: ${response.status}`)
+      }
+      return await response.json()
+    } catch (error) {
+      ipcLog.error('Error searching marketplace:', error)
+      return { skills: [], hasMore: false }
+    }
+  })
+
+  // Install skill using npx skills add
+  ipcMain.handle(IPC_CHANNELS.MARKETPLACE_INSTALL, async (_event, topSource: string) => {
+    const { spawn } = await import('child_process')
+
+    // Validate topSource format: owner/repo
+    if (!/^[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+$/.test(topSource)) {
+      return { success: false, error: 'Invalid source format' }
+    }
+
+    return new Promise<import('../shared/types').MarketplaceInstallResult>((resolve) => {
+      const child = spawn('npx', ['skills', 'add', topSource], {
+        cwd: homedir(),
+        shell: true,
+        timeout: 120000
+      })
+
+      let stdout = ''
+      let stderr = ''
+      child.stdout?.on('data', (d) => { stdout += d.toString() })
+      child.stderr?.on('data', (d) => { stderr += d.toString() })
+
+      child.on('close', (code) => {
+        if (code === 0) {
+          resolve({ success: true, stdout })
+        } else {
+          resolve({ success: false, error: stderr || stdout || `Exit code: ${code}` })
+        }
+      })
+
+      child.on('error', (error) => {
+        resolve({ success: false, error: error.message })
+      })
+    })
+  })
+
+  // Fetch skill details (SKILL.md) from GitHub
+  ipcMain.handle(IPC_CHANNELS.MARKETPLACE_GET_SKILL_DETAILS, async (_event, topSource: string, skillId: string) => {
+    try {
+      // Validate topSource format
+      if (!/^[a-zA-Z0-9_-]+\/[a-zA-Z0-9_.-]+$/.test(topSource)) {
+        return { success: false, error: 'Invalid source format' }
+      }
+
+      // Build GitHub raw URL for SKILL.md
+      // Format: https://raw.githubusercontent.com/owner/repo/main/skills/{skillId}/SKILL.md
+      const url = `https://raw.githubusercontent.com/${topSource}/main/skills/${skillId}/SKILL.md`
+
+      const response = await fetch(url)
+      if (!response.ok) {
+        // Try HEAD branch if main doesn't exist
+        const headUrl = `https://raw.githubusercontent.com/${topSource}/HEAD/skills/${skillId}/SKILL.md`
+        const headResponse = await fetch(headUrl)
+        if (!headResponse.ok) {
+          return { success: false, error: `Skill not found: ${response.status}` }
+        }
+        return { success: true, content: await headResponse.text() }
+      }
+
+      return { success: true, content: await response.text() }
+    } catch (error) {
+      ipcLog.error('Error fetching skill details:', error)
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    }
+  })
+
 }

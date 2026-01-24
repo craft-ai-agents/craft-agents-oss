@@ -48,6 +48,46 @@ export type { LoadedSource, FolderSourceConfig, SourceConnectionStatus };
 import type { LoadedSkill, SkillMetadata, SkillSource } from '@craft-agent/shared/skills/types';
 export type { LoadedSkill, SkillMetadata, SkillSource };
 
+// ============================================
+// Marketplace Types
+// ============================================
+
+/**
+ * Skill from skills.sh marketplace API
+ */
+export interface MarketplaceSkill {
+  id: string
+  name: string
+  installs: number
+  topSource: string  // "owner/repo" format
+}
+
+/**
+ * Response from skills.sh API
+ */
+export interface MarketplaceSearchResponse {
+  skills: MarketplaceSkill[]
+  hasMore: boolean
+}
+
+/**
+ * Result of installing a marketplace skill
+ */
+export interface MarketplaceInstallResult {
+  success: boolean
+  stdout?: string
+  error?: string
+}
+
+/**
+ * Result of fetching marketplace skill details (SKILL.md)
+ */
+export interface MarketplaceSkillDetailsResult {
+  success: boolean
+  content?: string
+  error?: string
+}
+
 
 /**
  * File/directory entry in a skill folder
@@ -813,6 +853,11 @@ export const IPC_CHANNELS = {
   VIEWER_GET_CONFIG: 'viewer:getConfig',
   VIEWER_SET_CONFIG: 'viewer:setConfig',
   VIEWER_TEST_CONNECTION: 'viewer:testConnection',
+
+  // Marketplace (skills.sh integration)
+  MARKETPLACE_SEARCH: 'marketplace:search',
+  MARKETPLACE_INSTALL: 'marketplace:install',
+  MARKETPLACE_GET_SKILL_DETAILS: 'marketplace:getSkillDetails',
 } as const
 
 // Re-import types for ElectronAPI
@@ -1104,6 +1149,11 @@ export interface ElectronAPI {
   getViewerConfig(): Promise<ViewerConfigResult>
   setViewerConfig(config: ViewerConfig): Promise<ViewerResult>
   testViewerConnection(config: ViewerConfig): Promise<ViewerResult>
+
+  // Marketplace (skills.sh integration)
+  marketplaceSearch(query: string): Promise<MarketplaceSearchResponse>
+  marketplaceInstall(topSource: string): Promise<MarketplaceInstallResult>
+  marketplaceGetSkillDetails(topSource: string, skillId: string): Promise<MarketplaceSkillDetailsResult>
 }
 
 /**
@@ -1407,8 +1457,11 @@ export interface SettingsNavigationState {
  */
 export interface SkillsNavigationState {
   navigator: 'skills'
-  /** Selected skill details, or null for empty state */
-  details: { type: 'skill'; skillSlug: string } | null
+  /** Selected skill details (installed or marketplace), or null for empty state */
+  details:
+    | { type: 'skill'; skillSlug: string }
+    | { type: 'marketplaceSkill'; source: string; skillId: string }
+    | null
   /** Optional right sidebar panel state */
   rightSidebar?: RightSidebarPanel
 }
@@ -1519,6 +1572,9 @@ export const getNavigationStateKey = (state: NavigationState): string => {
   }
   if (state.navigator === 'skills') {
     if (state.details) {
+      if (state.details.type === 'marketplaceSkill') {
+        return `skills/marketplace/${state.details.source.replace('/', '~')}/${encodeURIComponent(state.details.skillId)}`
+      }
       return `skills/skill/${state.details.skillSlug}`
     }
     return 'skills'

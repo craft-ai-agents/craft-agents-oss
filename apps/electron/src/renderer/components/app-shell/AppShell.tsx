@@ -72,7 +72,7 @@ import { useFocusZone, useGlobalShortcuts } from "@/hooks/keyboard"
 import { useFocusContext } from "@/context/FocusContext"
 import { getSessionTitle } from "@/utils/session"
 import { useSetAtom, useAtom } from "jotai"
-import type { Session, Workspace, FileAttachment, PermissionRequest, TodoState, LoadedSource, LoadedSkill, PermissionMode, SourceFilter } from "../../../shared/types"
+import type { Session, Workspace, FileAttachment, PermissionRequest, TodoState, LoadedSource, LoadedSkill, PermissionMode, SourceFilter, MarketplaceSkill } from "../../../shared/types"
 import { sessionMetaMapAtom, type SessionMeta } from "@/atoms/sessions"
 import { sourcesAtom } from "@/atoms/sources"
 import { skillsAtom } from "@/atoms/skills"
@@ -452,6 +452,12 @@ function AppShellContent({
   const handleSkillSelect = React.useCallback((skill: LoadedSkill) => {
     if (!activeWorkspaceId) return
     navigate(routes.view.skills(skill.slug))
+  }, [activeWorkspaceId, navigate])
+
+  // Handle selecting a marketplace skill from the list
+  const handleMarketplaceSkillSelect = React.useCallback((skill: { id: string; topSource: string }) => {
+    if (!activeWorkspaceId) return
+    navigate(routes.view.marketplaceSkill(skill.topSource, skill.id))
   }, [activeWorkspaceId, navigate])
 
   // Focus zone management
@@ -1600,7 +1606,9 @@ function AppShellContent({
                 workspaceRootPath={activeWorkspace?.rootPath}
                 onSkillClick={handleSkillSelect}
                 onDeleteSkill={handleDeleteSkill}
-                selectedSkillSlug={isSkillsNavigation(navState) && navState.details ? navState.details.skillSlug : null}
+                selectedSkillSlug={isSkillsNavigation(navState) && navState.details?.type === 'skill' ? navState.details.skillSlug : null}
+                onMarketplaceSkillSelect={handleMarketplaceSkillSelect}
+                selectedMarketplaceSkillId={isSkillsNavigation(navState) && navState.details?.type === 'marketplaceSkill' ? navState.details.skillId : null}
               />
             )}
             {isSettingsNavigation(navState) && (

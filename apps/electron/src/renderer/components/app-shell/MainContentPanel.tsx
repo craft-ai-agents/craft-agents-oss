@@ -28,6 +28,7 @@ import {
 } from '@/contexts/NavigationContext'
 import { AppSettingsPage, WorkspaceSettingsPage, PermissionsSettingsPage, PreferencesPage, ShortcutsPage, SourceInfoPage, ChatPage, DocumentViewerPage } from '@/pages'
 import SkillInfoPage from '@/pages/SkillInfoPage'
+import MarketplaceSkillInfoPage from '@/pages/MarketplaceSkillInfoPage'
 import { ScheduleDetailPanel } from '@/components/scheduler/ScheduleDetailPanel'
 
 export interface MainContentPanelProps {
@@ -113,6 +114,19 @@ export function MainContentPanel({
   // Skills navigator - show skill info or empty state
   if (isSkillsNavigation(navState)) {
     if (navState.details) {
+      // Handle marketplace skill type
+      if (navState.details.type === 'marketplaceSkill') {
+        return wrapWithStoplight(
+          <Panel variant="grow" className={className}>
+            <MarketplaceSkillInfoPage
+              source={navState.details.source}
+              skillId={navState.details.skillId}
+              onInstalled={() => {}}
+            />
+          </Panel>
+        )
+      }
+      // Handle installed skill type
       return wrapWithStoplight(
         <Panel variant="grow" className={className}>
           <SkillInfoPage

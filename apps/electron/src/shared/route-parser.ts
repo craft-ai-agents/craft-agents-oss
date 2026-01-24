@@ -152,6 +152,17 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
       }
     }
 
+    // skills/marketplace/{source~repo}/{skillId}
+    // Source uses ~ instead of / to avoid URL path conflicts (e.g., "vercel-labs~agent-skills")
+    if (segments[1] === 'marketplace' && segments[2] && segments[3]) {
+      const source = segments[2].replace('~', '/') // Convert back to owner/repo format
+      const skillId = decodeURIComponent(segments[3])
+      return {
+        navigator: 'skills',
+        details: { type: 'marketplaceSkill', id: `${source}/${skillId}` },
+      }
+    }
+
     return null
   }
 
@@ -473,6 +484,19 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
     if (!compound.details) {
       return { navigator: 'skills', details: null }
     }
+    // Handle marketplace skill type
+    if (compound.details.type === 'marketplaceSkill') {
+      // id format is "owner/repo/skillId"
+      const parts = compound.details.id.split('/')
+      if (parts.length >= 3) {
+        const source = `${parts[0]}/${parts[1]}`
+        const skillId = parts.slice(2).join('/')
+        return {
+          navigator: 'skills',
+          details: { type: 'marketplaceSkill', source, skillId },
+        }
+      }
+    }
     return {
       navigator: 'skills',
       details: { type: 'skill', skillSlug: compound.details.id },
@@ -628,6 +652,9 @@ export function buildRouteFromNavigationState(state: NavigationState): string {
 
   if (state.navigator === 'skills') {
     if (state.details) {
+      if (state.details.type === 'marketplaceSkill') {
+        return `skills/marketplace/${state.details.source.replace('/', '~')}/${encodeURIComponent(state.details.skillId)}`
+      }
       return `skills/skill/${state.details.skillSlug}`
     }
     return 'skills'

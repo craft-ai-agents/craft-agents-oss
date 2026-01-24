@@ -136,6 +136,11 @@ export const routes = {
         ? `skills/skill/${skillSlug}` as const
         : 'skills' as const,
 
+    /** Marketplace skill view (skills navigator with marketplace skill detail) */
+    // Source format is "owner/repo", we replace / with ~ to avoid URL path conflicts
+    marketplaceSkill: (source: string, skillId: string) =>
+      `skills/marketplace/${source.replace('/', '~')}/${encodeURIComponent(skillId)}` as const,
+
     /** Vector search view (vectorSearch navigator) */
     vectorSearch: (filePath?: string) =>
       filePath

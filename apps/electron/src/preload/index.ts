@@ -549,6 +549,14 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.VIEWER_SET_CONFIG, config),
   testViewerConnection: (config: import('../shared/types').ViewerConfig) =>
     ipcRenderer.invoke(IPC_CHANNELS.VIEWER_TEST_CONNECTION, config),
+
+  // Marketplace (skills.sh integration)
+  marketplaceSearch: (query: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.MARKETPLACE_SEARCH, query),
+  marketplaceInstall: (topSource: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.MARKETPLACE_INSTALL, topSource),
+  marketplaceGetSkillDetails: (topSource: string, skillId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.MARKETPLACE_GET_SKILL_DETAILS, topSource, skillId),
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)

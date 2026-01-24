@@ -497,7 +497,11 @@ export function NavigationProvider({
     }
 
     if (isSkillsNavigation(navState) && navState.details) {
-      return skills.some(s => s.slug === navState.details!.skillSlug)
+      // Marketplace skills are always valid (fetched from API)
+      if (navState.details.type === 'marketplaceSkill') return true
+      // Type narrowing: at this point, details must be 'skill' type
+      const skillDetails = navState.details
+      return skills.some(s => s.slug === skillDetails.skillSlug)
     }
 
     return true // Routes without details are always valid
