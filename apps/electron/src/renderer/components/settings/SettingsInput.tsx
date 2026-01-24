@@ -225,10 +225,6 @@ export interface SettingsSecretInputProps {
   onChange: (value: string) => void
   /** Placeholder text */
   placeholder?: string
-  /** Whether there's an existing saved value */
-  hasExistingValue?: boolean
-  /** Placeholder to show when existing value exists */
-  existingValuePlaceholder?: string
   /** Disabled state */
   disabled?: boolean
   /** Error message */
@@ -237,6 +233,8 @@ export interface SettingsSecretInputProps {
   className?: string
   /** Whether inside a card */
   inCard?: boolean
+  /** onBlur handler */
+  onBlur?: () => void
 }
 
 export function SettingsSecretInput({
@@ -245,19 +243,14 @@ export function SettingsSecretInput({
   value,
   onChange,
   placeholder = 'Enter value...',
-  hasExistingValue,
-  existingValuePlaceholder = '••••••••••••••••',
   disabled,
   error,
   className,
   inCard = false,
+  onBlur,
 }: SettingsSecretInputProps) {
   const id = React.useId()
   const [showValue, setShowValue] = React.useState(false)
-
-  const displayPlaceholder = hasExistingValue && !value
-    ? existingValuePlaceholder
-    : placeholder
 
   return (
     <div
@@ -278,7 +271,7 @@ export function SettingsSecretInput({
         </div>
       )}
       <div className={cn(
-        'relative rounded-md shadow-minimal has-[:focus-visible]:bg-background',
+        'relative rounded-md shadow-minimal bg-muted/50 has-[:focus-visible]:bg-background',
         error && 'ring-1 ring-destructive'
       )}>
         <Input
@@ -286,9 +279,10 @@ export function SettingsSecretInput({
           type={showValue ? 'text' : 'password'}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder={displayPlaceholder}
+          placeholder={placeholder}
           disabled={disabled}
-          className="pr-10 bg-muted/50 border-0 shadow-none focus-visible:ring-0 focus-visible:outline-none focus-visible:bg-transparent"
+          onBlur={onBlur}
+          className="pr-10 bg-transparent border-0 shadow-none focus-visible:ring-0 focus-visible:outline-none"
         />
         <button
           type="button"

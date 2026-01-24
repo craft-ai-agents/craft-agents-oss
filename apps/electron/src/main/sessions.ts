@@ -11,6 +11,8 @@ import {
   getWorkspaces,
   getWorkspaceByNameOrId,
   loadConfigDefaults,
+  getAnthropicBaseUrl,
+  resolveModelId,
   type Workspace,
 } from '@craft-agent/shared/config'
 import { loadWorkspaceConfig } from '@craft-agent/shared/workspaces'
@@ -499,6 +501,16 @@ export class SessionManager {
         // Use API key (pay-as-you-go)
         process.env.ANTHROPIC_API_KEY = billing.apiKey
         delete process.env.CLAUDE_CODE_OAUTH_TOKEN
+
+        // Set custom base URL if configured
+        const baseUrl = getAnthropicBaseUrl()
+        if (baseUrl) {
+          process.env.ANTHROPIC_BASE_URL = baseUrl
+          sessionLog.info(`Set Anthropic Base URL: ${baseUrl}`)
+        } else {
+          delete process.env.ANTHROPIC_BASE_URL
+        }
+
         sessionLog.info('Set Anthropic API Key')
       } else {
         sessionLog.error('No authentication configured!')
@@ -1935,7 +1947,8 @@ export class SessionManager {
       // Update agent model if it already exists (takes effect on next query)
       if (managed.agent) {
         const effectiveModel = model ?? loadStoredConfig()?.model ?? DEFAULT_MODEL
-        managed.agent.setModel(effectiveModel)
+        const resolvedModel = resolveModelId(effectiveModel)
+        managed.agent.setModel(resolvedModel)
       }
       // Notify renderer of the model change
       this.sendEvent({ type: 'session_model_changed', sessionId, model }, managed.workspace.id)

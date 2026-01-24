@@ -11,7 +11,7 @@ import { WindowManager } from './window-manager'
 import { registerOnboardingHandlers } from './onboarding'
 import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type AuthType, type BillingMethodInfo, type SendMessageOptions } from '../shared/types'
 import { readFileAttachment, perf, validateImageForClaudeAPI, IMAGE_LIMITS } from '@craft-agent/shared/utils'
-import { getAuthType, setAuthType, getPreferencesPath, getModel, setModel, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, type Workspace } from '@craft-agent/shared/config'
+import { getAuthType, setAuthType, getPreferencesPath, getModel, setModel, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, getAnthropicBaseUrl, setAnthropicBaseUrl, getCustomModelNames, setCustomModelNames, type Workspace } from '@craft-agent/shared/config'
 import { getSessionAttachmentsPath } from '@craft-agent/shared/sessions'
 import { loadWorkspaceSources, getSourcesBySlugs, type LoadedSource } from '@craft-agent/shared/sources'
 import { isValidThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
@@ -850,17 +850,30 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     const manager = getCredentialManager()
 
     let hasCredential = false
+    let apiKey: string | undefined
+    let anthropicBaseUrl: string | undefined
+    let customModelNames: { opus?: string; sonnet?: string; haiku?: string } | undefined
+
     if (authType === 'api_key') {
-      hasCredential = !!(await manager.getApiKey())
+      apiKey = await manager.getApiKey() ?? undefined
+      anthropicBaseUrl = getAnthropicBaseUrl() ?? undefined
+      customModelNames = getCustomModelNames() ?? undefined
+      hasCredential = !!apiKey
     } else if (authType === 'oauth_token') {
       hasCredential = !!(await manager.getClaudeOAuth())
     }
 
-    return { authType, hasCredential }
+    return {
+      authType,
+      hasCredential,
+      apiKey,
+      anthropicBaseUrl,
+      customModelNames,
+    }
   })
 
   // Update billing method and credential
-  ipcMain.handle(IPC_CHANNELS.SETTINGS_UPDATE_BILLING_METHOD, async (_event, authType: AuthType, credential?: string) => {
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_UPDATE_BILLING_METHOD, async (_event, authType: AuthType, credential?: string, anthropicBaseUrl?: string | null, customModelNames?: { opus?: string; sonnet?: string; haiku?: string } | null) => {
     const manager = getCredentialManager()
 
     // Clear old credentials when switching auth types
@@ -876,7 +889,32 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     // Set new auth type
     setAuthType(authType)
 
-    // Store new credential if provided
+    // Update Anthropic base URL (null to clear, undefined to keep unchanged)
+    if (anthropicBaseUrl !== undefined) {
+      try {
+        setAnthropicBaseUrl(anthropicBaseUrl)
+        if (anthropicBaseUrl) {
+          ipcLog.info('Anthropic base URL updated (HTTPS enforced)')
+        } else {
+          ipcLog.info('Anthropic base URL cleared')
+        }
+      } catch (error) {
+        ipcLog.error('Failed to set Anthropic base URL:', error)
+        throw error
+      }
+    }
+
+    // Update custom model names (null to clear, undefined to keep unchanged)
+    if (customModelNames !== undefined) {
+      setCustomModelNames(customModelNames)
+      if (customModelNames) {
+        ipcLog.info('Custom model names updated:', customModelNames)
+      } else {
+        ipcLog.info('Custom model names cleared')
+      }
+    }
+
+    // Store or clear credential
     if (credential) {
       if (authType === 'api_key') {
         await manager.setApiKey(credential)
@@ -897,6 +935,15 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
           ipcLog.info('Saved Claude OAuth access token only')
         }
       }
+    } else if (credential === '') {
+      // Empty string means user explicitly cleared the credential
+      if (authType === 'api_key') {
+        await manager.delete({ type: 'anthropic_api_key' })
+        ipcLog.info('API key cleared')
+      } else if (authType === 'oauth_token') {
+        await manager.delete({ type: 'claude_oauth' })
+        ipcLog.info('Claude OAuth cleared')
+      }
     }
 
     ipcLog.info(`Billing method updated to: ${authType}`)
@@ -908,6 +955,56 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     } catch (authError) {
       ipcLog.error('Failed to reinitialize auth:', authError)
       // Don't fail the whole operation if auth reinit fails
+    }
+  })
+
+  // Test API connection (validates API key, base URL, and optionally custom model)
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_TEST_API_CONNECTION, async (_event, apiKey: string, baseUrl?: string, modelName?: string): Promise<{ success: boolean; error?: string; modelCount?: number }> => {
+    if (!apiKey?.trim()) {
+      return { success: false, error: 'API key is required' }
+    }
+
+    try {
+      const Anthropic = (await import('@anthropic-ai/sdk')).default
+      const client = new Anthropic({
+        apiKey: apiKey.trim(),
+        ...(baseUrl?.trim() ? { baseURL: baseUrl.trim() } : {})
+      })
+
+      // If a custom model name is provided, try to send a minimal message to validate it
+      if (modelName?.trim()) {
+        try {
+          await client.messages.create({
+            model: modelName.trim(),
+            max_tokens: 1,
+            messages: [{ role: 'user', content: 'test' }]
+          })
+          return { success: true }
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error)
+          if (msg.includes('401') || msg.includes('invalid') || msg.includes('Unauthorized')) {
+            return { success: false, error: 'Invalid API key' }
+          }
+          if (msg.includes('model') || msg.includes('not found')) {
+            return { success: false, error: `Model "${modelName}" not found` }
+          }
+          return { success: false, error: msg }
+        }
+      }
+
+      // Default: list models to validate connection
+      const result = await client.models.list()
+      const modelCount = result.data?.length ?? 0
+      return { success: true, modelCount }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      if (msg.includes('401') || msg.includes('invalid') || msg.includes('Unauthorized')) {
+        return { success: false, error: 'Invalid API key' }
+      }
+      if (msg.includes('ECONNREFUSED') || msg.includes('ENOTFOUND')) {
+        return { success: false, error: 'Cannot connect to API server' }
+      }
+      return { success: false, error: msg }
     }
   })
 
@@ -1846,5 +1943,31 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
   // Note: Permission mode cycling settings (cyclablePermissionModes) are now workspace-level
   // and managed via WORKSPACE_SETTINGS_GET/UPDATE channels
+
+  // ============================================================
+  // God Mode (dev-only self-building feature)
+  // ============================================================
+
+  // Get God Mode config
+  ipcMain.handle(IPC_CHANNELS.GOD_MODE_GET_CONFIG, async () => {
+    const { getGodModeConfigHandler } = await import('./god-mode')
+    return getGodModeConfigHandler()
+  })
+
+  // Set God Mode config
+  ipcMain.handle(IPC_CHANNELS.GOD_MODE_SET_CONFIG, async (_event, config: import('../shared/types').GodModeConfig | null) => {
+    const { setGodModeConfigHandler } = await import('./god-mode')
+    setGodModeConfigHandler(config)
+  })
+
+  // Initialize God Mode workspace
+  ipcMain.handle(IPC_CHANNELS.GOD_MODE_INITIALIZE, async () => {
+    const { getGodModeConfigHandler, initializeGodModeWorkspace } = await import('./god-mode')
+    const config = getGodModeConfigHandler()
+    if (!config?.sourcePath) {
+      return { success: false, error: 'Source path not configured' }
+    }
+    return initializeGodModeWorkspace(config.sourcePath)
+  })
 
 }

@@ -1,6 +1,6 @@
 import * as React from "react"
 import { useState, useEffect } from "react"
-import { Check, FolderPlus, ExternalLink, ChevronDown } from "lucide-react"
+import { Check, FolderPlus, ExternalLink, ChevronDown, Zap } from "lucide-react"
 import { AnimatePresence } from "motion/react"
 import { useSetAtom } from "jotai"
 import { toast } from "sonner"
@@ -18,6 +18,9 @@ import { CrossfadeAvatar } from "@/components/ui/avatar"
 import { FadingText } from "@/components/ui/fading-text"
 import { WorkspaceCreationScreen } from "@/components/workspace"
 import type { Workspace } from "../../../shared/types"
+
+// God Mode workspace ID (must match the one in god-mode.ts)
+const GOD_MODE_WORKSPACE_ID = 'god-mode'
 
 interface WorkspaceSwitcherProps {
   isCollapsed: boolean
@@ -100,6 +103,19 @@ export function WorkspaceSwitcher({
     return undefined
   }
 
+  // Check if workspace is the God Mode workspace
+  const isGodModeWorkspace = (workspace: Workspace): boolean => {
+    return workspace.id === GOD_MODE_WORKSPACE_ID
+  }
+
+  // Get fallback icon for workspace (special handling for God Mode)
+  const getWorkspaceFallback = (workspace: Workspace): React.ReactNode => {
+    if (isGodModeWorkspace(workspace)) {
+      return <Zap className="h-3 w-3 text-amber-500" />
+    }
+    return workspace.name.charAt(0)
+  }
+
   const handleNewWorkspace = () => {
     setShowCreationScreen(true)
     setFullscreenOverlayOpen(true)
@@ -144,13 +160,19 @@ export function WorkspaceSwitcher({
           aria-label="Select workspace"
         >
           {/* Workspace Avatar: Image with crossfade, border, first letter fallback */}
-          <CrossfadeAvatar
-            src={selectedWorkspace ? getIconUrl(selectedWorkspace) : undefined}
-            alt={selectedWorkspace?.name}
-            className="h-4 w-4 rounded-full ring-1 ring-border/50"
-            fallbackClassName="bg-foreground text-background text-[10px] rounded-full"
-            fallback={selectedWorkspace?.name?.charAt(0) || 'W'}
-          />
+          {selectedWorkspace && isGodModeWorkspace(selectedWorkspace) ? (
+            <div className="h-4 w-4 rounded-full ring-1 ring-border/50 bg-amber-500/10 flex items-center justify-center">
+              <Zap className="h-2.5 w-2.5 text-amber-500" />
+            </div>
+          ) : (
+            <CrossfadeAvatar
+              src={selectedWorkspace ? getIconUrl(selectedWorkspace) : undefined}
+              alt={selectedWorkspace?.name}
+              className="h-4 w-4 rounded-full ring-1 ring-border/50"
+              fallbackClassName="bg-foreground text-background text-[10px] rounded-full"
+              fallback={selectedWorkspace?.name?.charAt(0) || 'W'}
+            />
+          )}
           {/* Workspace Name: Hidden when collapsed, gradient fade on overflow */}
           {!isCollapsed && (
             <>
@@ -178,13 +200,19 @@ export function WorkspaceSwitcher({
             )}
           >
             <div className="flex items-center gap-3 font-sans">
-              <CrossfadeAvatar
-                src={getIconUrl(workspace)}
-                alt={workspace.name}
-                className="h-5 w-5 rounded-full ring-1 ring-border/50"
-                fallbackClassName="bg-muted text-xs rounded-full"
-                fallback={workspace.name.charAt(0)}
-              />
+              {isGodModeWorkspace(workspace) ? (
+                <div className="h-5 w-5 rounded-full ring-1 ring-border/50 bg-amber-500/10 flex items-center justify-center">
+                  <Zap className="h-3 w-3 text-amber-500" />
+                </div>
+              ) : (
+                <CrossfadeAvatar
+                  src={getIconUrl(workspace)}
+                  alt={workspace.name}
+                  className="h-5 w-5 rounded-full ring-1 ring-border/50"
+                  fallbackClassName="bg-muted text-xs rounded-full"
+                  fallback={workspace.name.charAt(0)}
+                />
+              )}
               {workspace.name}
             </div>
             <div className="flex items-center gap-1">

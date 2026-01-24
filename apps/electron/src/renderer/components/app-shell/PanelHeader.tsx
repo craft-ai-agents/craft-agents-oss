@@ -47,6 +47,8 @@ const springTransition = { type: 'spring' as const, stiffness: 300, damping: 30 
 const STOPLIGHT_PADDING = 84
 
 export interface PanelHeaderProps {
+  /** Optional left-side icon (e.g., New Chat button) */
+  leftAction?: React.ReactNode
   /** Header title (undefined hides with animation) */
   title?: string
   /** Optional badge element (e.g., agent badge) */
@@ -71,6 +73,7 @@ export interface PanelHeaderProps {
  * Standardized panel header with title and actions
  */
 export function PanelHeader({
+  leftAction,
   title,
   badge,
   titleMenu,
@@ -107,6 +110,11 @@ export function PanelHeader({
 
   const content = (
     <>
+      {leftAction && (
+        <div className="titlebar-no-drag shrink-0">
+          {leftAction}
+        </div>
+      )}
       <div className="flex-1 min-w-0 flex items-center select-none">
         <div className="mx-auto w-fit">
           {titleMenu ? (

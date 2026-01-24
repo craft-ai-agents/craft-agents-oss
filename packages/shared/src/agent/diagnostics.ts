@@ -5,7 +5,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { getLastApiError } from '../network-interceptor.ts';
-import { getAnthropicApiKey, getClaudeOAuthToken, type AuthType } from '../config/storage.ts';
+import { getAnthropicApiKey, getAnthropicBaseUrl, getClaudeOAuthToken, type AuthType } from '../config/storage.ts';
 
 export type DiagnosticCode =
   | 'billing_error'         // HTTP 402 from Anthropic API
@@ -180,9 +180,12 @@ async function checkWorkspaceToken(_workspaceId: string): Promise<CheckResult> {
  * Validate an API key by making a test request to Anthropic.
  * Uses models.list() which is lightweight and doesn't incur AI costs.
  */
-async function validateApiKeyWithAnthropic(apiKey: string): Promise<CheckResult> {
+async function validateApiKeyWithAnthropic(apiKey: string, baseUrl?: string | null): Promise<CheckResult> {
   try {
-    const client = new Anthropic({ apiKey });
+    const client = new Anthropic({
+      apiKey,
+      ...(baseUrl ? { baseURL: baseUrl } : {})
+    });
     const result = await client.models.list();
     const modelCount = result.data?.length ?? 0;
     return {
@@ -226,6 +229,8 @@ async function validateApiKeyWithAnthropic(apiKey: string): Promise<CheckResult>
 async function checkApiKey(): Promise<CheckResult> {
   try {
     const apiKey = await getAnthropicApiKey();
+    const baseUrl = getAnthropicBaseUrl();
+
     if (!apiKey) {
       return {
         ok: false,
@@ -237,7 +242,7 @@ async function checkApiKey(): Promise<CheckResult> {
     }
 
     // Actually validate the key works
-    return await validateApiKeyWithAnthropic(apiKey);
+    return await validateApiKeyWithAnthropic(apiKey, baseUrl);
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     return { ok: true, detail: `✓ API key: Check failed (${msg})` };

@@ -82,6 +82,9 @@ export function registerOnboardingHandlers(sessionManager: SessionManager): void
     authType?: AuthType  // Optional - if not provided, preserves existing auth type
     workspace?: { name: string; iconUrl?: string; mcpUrl?: string }  // Optional - if not provided, only updates billing
     credential?: string
+    mcpCredentials?: { accessToken: string; clientId?: string }
+    anthropicBaseUrl?: string | null
+    customModelNames?: { opus?: string; sonnet?: string; haiku?: string } | null
   }): Promise<OnboardingSaveResult> => {
     mainLog.info('[Onboarding:Main] ONBOARDING_SAVE_CONFIG received', {
       authType: config.authType,
@@ -90,6 +93,9 @@ export function registerOnboardingHandlers(sessionManager: SessionManager): void
       mcpUrl: config.workspace?.mcpUrl,
       hasCredential: !!config.credential,
       credentialLength: config.credential?.length,
+      hasMcpCredentials: !!config.mcpCredentials,
+      anthropicBaseUrl: config.anthropicBaseUrl,
+      customModelNames: config.customModelNames,
     })
 
     try {
@@ -144,6 +150,30 @@ export function registerOnboardingHandlers(sessionManager: SessionManager): void
         newConfig.authType = config.authType
       }
 
+      // 3a. Update anthropicBaseUrl if provided
+      if (config.anthropicBaseUrl !== undefined) {
+        mainLog.info('[Onboarding:Main] Updating anthropicBaseUrl to', config.anthropicBaseUrl)
+        if (config.anthropicBaseUrl) {
+          newConfig.anthropicBaseUrl = config.anthropicBaseUrl
+        } else {
+          delete newConfig.anthropicBaseUrl
+        }
+      }
+
+      // 3b. Update customModelNames if provided
+      if (config.customModelNames !== undefined) {
+        mainLog.info('[Onboarding:Main] Updating customModelNames to', config.customModelNames)
+        if (config.customModelNames && Object.values(config.customModelNames).some(v => v?.trim())) {
+          newConfig.customModelNames = {
+            opus: config.customModelNames.opus?.trim() || undefined,
+            sonnet: config.customModelNames.sonnet?.trim() || undefined,
+            haiku: config.customModelNames.haiku?.trim() || undefined,
+          }
+        } else {
+          delete newConfig.customModelNames
+        }
+      }
+
       // 4. Create workspace only if workspace info is provided
       let workspaceId: string | undefined
       if (config.workspace) {
@@ -164,6 +194,17 @@ export function registerOnboardingHandlers(sessionManager: SessionManager): void
           mcpUrl: config.workspace.mcpUrl,
         }
         mainLog.info('[Onboarding:Main] Workspace config:', workspace, existingWorkspace ? '(updating existing)' : '(new)')
+
+        // Save MCP credentials if provided
+        if (config.mcpCredentials) {
+          mainLog.info('[Onboarding:Main] Saving MCP credentials for workspace')
+          await manager.setWorkspaceOAuth(workspaceId, {
+            accessToken: config.mcpCredentials.accessToken,
+            tokenType: 'Bearer',
+            clientId: config.mcpCredentials.clientId,
+          })
+          mainLog.info('[Onboarding:Main] MCP credentials saved')
+        }
 
         if (existingIndex !== -1) {
           // Update existing workspace

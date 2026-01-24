@@ -18,14 +18,16 @@
   },
   "dependencies": {
     "@craft-agent/core": "workspace:*",
+    "@git-diff-view/file": "^0.0.36",
+    "@git-diff-view/react": "^0.0.36",
     "@types/mdast": "^4.0.0",
     "@uiw/react-json-view": "^2.0.0-alpha.40",
     "unified": "^11.0.0",
     "unist-util-visit": "^5.0.0"
   },
   "peerDependencies": {
-    "@radix-ui/react-dialog": ">=1.0.0",
     "@pierre/diffs": ">=0.1.0",
+    "@radix-ui/react-dialog": ">=1.0.0",
     "@tailwindcss/typography": ">=0.5.0",
     "class-variance-authority": ">=0.7.0",
     "clsx": ">=2.0.0",

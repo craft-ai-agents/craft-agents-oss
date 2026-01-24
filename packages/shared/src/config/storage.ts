@@ -16,9 +16,13 @@ import type { StoredAttachment, StoredMessage } from '@craft-agent/core/types';
 import type { Plan } from '../agent/plan-types.ts';
 import type { PermissionMode } from '../agent/mode-manager.ts';
 import { BUNDLED_CONFIG_DEFAULTS, type ConfigDefaults } from './config-defaults-schema.ts';
+import type { GodModeConfig } from './types.ts';
 
 // Re-export CONFIG_DIR for convenience (centralized in paths.ts)
 export { CONFIG_DIR } from './paths.ts';
+
+// Re-export GodModeConfig for convenience
+export type { GodModeConfig } from './types.ts';
 
 // Re-export base types from core (single source of truth)
 export type {
@@ -43,6 +47,12 @@ export interface PendingUpdate {
 // Config stored in JSON file (credentials stored in encrypted file, not here)
 export interface StoredConfig {
   authType?: AuthType;
+  anthropicBaseUrl?: string;  // Custom Anthropic API base URL (for third-party compatible APIs)
+  customModelNames?: {  // Custom model name mappings for third-party APIs
+    opus?: string;
+    sonnet?: string;
+    haiku?: string;
+  };
   workspaces: Workspace[];
   activeWorkspaceId: string | null;
   activeSessionId: string | null;  // Currently active session (primary scope)
@@ -54,6 +64,8 @@ export interface StoredConfig {
   // Auto-update
   dismissedUpdateVersion?: string;  // Version that user dismissed (skip notifications for this version)
   pendingUpdate?: PendingUpdate;  // Update ready for auto-install on next launch
+  // God Mode (dev-only self-building feature)
+  godMode?: GodModeConfig;
 }
 
 const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
@@ -214,6 +226,25 @@ export function setAuthType(authType: AuthType): void {
   if (!config) return;
   config.authType = authType;
   saveConfig(config);
+}
+
+export function setAnthropicBaseUrl(baseUrl: string | null): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+
+  if (baseUrl) {
+    const trimmed = baseUrl.trim();
+    // URL validation deferred to Test Connection button
+    config.anthropicBaseUrl = trimmed;
+  } else {
+    delete config.anthropicBaseUrl;
+  }
+  saveConfig(config);
+}
+
+export function getAnthropicBaseUrl(): string | null {
+  const config = loadStoredConfig();
+  return config?.anthropicBaseUrl ?? null;
 }
 
 export function getModel(): string | null {
@@ -398,8 +429,13 @@ export function switchWorkspaceAtomic(workspaceId: string): { workspace: Workspa
 /**
  * Add a workspace to the global config.
  * @param workspace - Workspace data (must include rootPath)
+ * @param options - Optional configuration
+ * @param options.id - Optional custom ID to use instead of generating one
  */
-export function addWorkspace(workspace: Omit<Workspace, 'id' | 'createdAt'>): Workspace {
+export function addWorkspace(
+  workspace: Omit<Workspace, 'id' | 'createdAt'>,
+  options?: { id?: string }
+): Workspace {
   const config = loadStoredConfig();
   if (!config) {
     throw new Error('No config found');
@@ -409,10 +445,11 @@ export function addWorkspace(workspace: Omit<Workspace, 'id' | 'createdAt'>): Wo
   const existing = config.workspaces.find(w => w.rootPath === workspace.rootPath);
   if (existing) {
     // Update existing workspace with new settings
+    // If a custom ID is provided and different from existing, update it
     const updated: Workspace = {
       ...existing,
       ...workspace,
-      id: existing.id,
+      id: options?.id || existing.id,
       createdAt: existing.createdAt,
     };
     const existingIndex = config.workspaces.indexOf(existing);
@@ -423,7 +460,7 @@ export function addWorkspace(workspace: Omit<Workspace, 'id' | 'createdAt'>): Wo
 
   const newWorkspace: Workspace = {
     ...workspace,
-    id: generateWorkspaceId(),
+    id: options?.id || generateWorkspaceId(),
     createdAt: Date.now(),
   };
 
@@ -1077,4 +1114,105 @@ export function clearPendingUpdate(): void {
   if (!config) return;
   delete config.pendingUpdate;
   saveConfig(config);
+}
+
+// ============================================
+// Custom Model Names (for third-party APIs)
+// ============================================
+
+/**
+ * Get custom model name mappings for third-party APIs.
+ * Returns null if no custom names are configured.
+ */
+export function getCustomModelNames(): { opus?: string; sonnet?: string; haiku?: string } | null {
+  const config = loadStoredConfig();
+  return config?.customModelNames ?? null;
+}
+
+/**
+ * Set custom model name mappings for third-party APIs.
+ * Pass null to clear the configuration.
+ */
+export function setCustomModelNames(names: { opus?: string; sonnet?: string; haiku?: string } | null): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+
+  if (names && Object.values(names).some(v => v?.trim())) {
+    // Only save non-empty values
+    config.customModelNames = Object.fromEntries(
+      Object.entries(names).filter(([_, v]) => v?.trim())
+    ) as typeof names;
+  } else {
+    delete config.customModelNames;
+  }
+  saveConfig(config);
+}
+
+/**
+ * Get the model family key for a standard Anthropic model ID.
+ * Returns null for non-standard model IDs.
+ * @param modelId - The model ID to analyze
+ * @returns The model family key ('opus' | 'sonnet' | 'haiku') or null
+ */
+function getModelFamilyKey(modelId: string): 'opus' | 'sonnet' | 'haiku' | null {
+  // Match standard Anthropic model ID format: claude-{family}-{version}
+  // Also matches legacy/detailed versions like claude-3-5-sonnet-20240620
+  const match = modelId.match(/claude(?:-[3-9]-[0-9])?-(opus|sonnet|haiku)/i);
+  return (match?.[1]?.toLowerCase() as 'opus' | 'sonnet' | 'haiku') ?? null;
+}
+
+/**
+ * Resolve model ID based on user's custom model name configuration.
+ * For third-party APIs, users can override default model IDs with custom ones.
+ * @param defaultModelId - The default Anthropic model ID (e.g., 'claude-opus-4-5-20251101')
+ * @returns The resolved model ID (custom or default)
+ */
+export function resolveModelId(defaultModelId: string): string {
+  const customNames = getCustomModelNames();
+  if (!customNames) return defaultModelId;
+
+  // Get model family key using precise prefix matching
+  const modelKey = getModelFamilyKey(defaultModelId);
+  if (!modelKey) return defaultModelId;
+
+  // Return custom name if configured for this model family
+  return customNames[modelKey] || defaultModelId;
+}
+
+// ============================================
+// God Mode Configuration (Dev-only self-building)
+// ============================================
+
+/**
+ * Get the God Mode configuration.
+ * Returns null if not configured.
+ */
+export function getGodModeConfig(): GodModeConfig | null {
+  const config = loadStoredConfig();
+  return config?.godMode ?? null;
+}
+
+/**
+ * Set the God Mode configuration.
+ * Pass null to disable God Mode.
+ */
+export function setGodModeConfig(godModeConfig: GodModeConfig | null): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+
+  if (godModeConfig) {
+    config.godMode = godModeConfig;
+  } else {
+    delete config.godMode;
+  }
+  saveConfig(config);
+}
+
+/**
+ * Check if God Mode is enabled.
+ * Returns false if not configured or disabled.
+ */
+export function isGodModeEnabled(): boolean {
+  const config = getGodModeConfig();
+  return config?.enabled === true && !!config.sourcePath;
 }

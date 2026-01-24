@@ -35,6 +35,7 @@ export {
   SystemMessage,
   FileTypeIcon,
   getFileTypeLabel,
+  FileChangesCard,
   type SessionViewerProps,
   type SessionViewerMode,
   type TurnCardProps,
@@ -47,6 +48,7 @@ export {
   type ActivityItem,
   type ResponseContent,
   type TodoItem,
+  type FileChangesCardProps,
 } from './components/chat'
 
 // Markdown
@@ -117,6 +119,7 @@ export {
   CodePreviewOverlay,
   DiffPreviewOverlay,
   MultiDiffPreviewOverlay,
+  DiffReviewSheet,
   TerminalPreviewOverlay,
   GenericOverlay,
   JSONPreviewOverlay,
@@ -126,6 +129,7 @@ export {
   type CodePreviewOverlayProps,
   type DiffPreviewOverlayProps,
   type MultiDiffPreviewOverlayProps,
+  type DiffReviewSheetProps,
   type FileChange,
   type TerminalPreviewOverlayProps,
   type GenericOverlayProps,
@@ -145,6 +149,13 @@ export {
   useOverlayMode,
   type OverlayMode,
 } from './lib/layout'
+
+// Hooks
+export {
+  useFileChangeReview,
+  type UseFileChangeReviewReturn,
+  type ChangeStatus,
+} from './hooks/useFileChangeReview'
 
 // Tool result parsers
 export {
@@ -174,3 +185,10 @@ export {
   Icon_Inbox,
   type IconProps,
 } from './components/icons'
+
+// Git components
+export {
+  GitStatusIndicator,
+  type GitStatus,
+  type GitStatusIndicatorProps,
+} from './components/git'

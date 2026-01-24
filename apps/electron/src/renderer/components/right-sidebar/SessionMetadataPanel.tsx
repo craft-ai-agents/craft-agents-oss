@@ -16,17 +16,39 @@ import { Input } from '../ui/input'
 import { Textarea } from '../ui/textarea'
 import { HorizontalResizeHandle } from '../ui/horizontal-resize-handle'
 import { SessionFilesSection } from './SessionFilesSection'
+import { DiffSummaryPanel } from './DiffSummaryPanel'
 import * as storage from '@/lib/local-storage'
+import type { FileChange } from '@craft-agent/ui'
 
 export interface SessionMetadataPanelProps {
   sessionId?: string
   closeButton?: React.ReactNode
+  /** File changes accumulated across the session */
+  fileChanges?: FileChange[]
+  /** Callback to open diff review sheet */
+  onReviewChanges?: () => void
+  /** Callback to open diff review for specific file */
+  onReviewFile?: (changeId: string) => void
+  /** Callback when all changes are accepted */
+  onAcceptAll?: () => void
+  /** Callback when all changes are rejected */
+  onRejectAll?: () => void
+  /** Status of each change (pending/accepted/rejected) */
+  changeStatuses?: Map<string, 'pending' | 'accepted' | 'rejected'>
+  /** Enable git integration features */
+  enableGitIntegration?: boolean
+  /** Working directory for git operations */
+  gitWorkingDir?: string
+  /** Callback when commit is created */
+  onCommitCreated?: (commitHash: string) => void
 }
 
-// Default and constraints for metadata section height
+// Default and constraints for section heights
 const DEFAULT_METADATA_HEIGHT = 250
 const MIN_METADATA_HEIGHT = 120
 const MIN_FILES_HEIGHT = 80
+const DEFAULT_DIFF_HEIGHT = 200
+const MIN_DIFF_HEIGHT = 100
 
 /**
  * Custom hook for debounced callback
@@ -69,7 +91,19 @@ function useDebouncedCallback<T extends (...args: any[]) => void>(
 /**
  * Panel displaying session metadata with minimal styling
  */
-export function SessionMetadataPanel({ sessionId, closeButton }: SessionMetadataPanelProps) {
+export function SessionMetadataPanel({
+  sessionId,
+  closeButton,
+  fileChanges = [],
+  onReviewChanges,
+  onReviewFile,
+  onAcceptAll,
+  onRejectAll,
+  changeStatuses,
+  enableGitIntegration,
+  gitWorkingDir,
+  onCommitCreated,
+}: SessionMetadataPanelProps) {
   const { onRenameSession } = useAppShellContext()
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -83,8 +117,18 @@ export function SessionMetadataPanel({ sessionId, closeButton }: SessionMetadata
     return storage.get(storage.KEYS.sessionInfoMetadataHeight, DEFAULT_METADATA_HEIGHT)
   })
 
+  // State for diff section height
+  const [diffHeight, setDiffHeight] = useState(() => {
+    return storage.get(storage.KEYS.sessionInfoDiffHeight, DEFAULT_DIFF_HEIGHT)
+  })
+
   // Get session data
   const session = useSessionData(sessionId || '')
+
+  // Debug: Log fileChanges prop
+  useEffect(() => {
+    console.log('[SessionMetadataPanel] fileChanges:', fileChanges, 'length:', fileChanges?.length)
+  }, [fileChanges])
 
   // Initialize name from session
   useEffect(() => {
@@ -156,6 +200,21 @@ export function SessionMetadataPanel({ sessionId, closeButton }: SessionMetadata
   const handleResizeEnd = useCallback(() => {
     storage.set(storage.KEYS.sessionInfoMetadataHeight, metadataHeight)
   }, [metadataHeight])
+
+  // Handle diff section resize
+  const handleDiffResize = useCallback((deltaY: number) => {
+    if (!containerRef.current) return
+
+    setDiffHeight((prev) => {
+      const newHeight = prev - deltaY // Negative because we're growing upward from bottom
+      return Math.max(MIN_DIFF_HEIGHT, newHeight)
+    })
+  }, [])
+
+  // Save diff height to localStorage when resize ends
+  const handleDiffResizeEnd = useCallback(() => {
+    storage.set(storage.KEYS.sessionInfoDiffHeight, diffHeight)
+  }, [diffHeight])
 
   // Early return if no sessionId
   if (!sessionId) {
@@ -232,6 +291,29 @@ export function SessionMetadataPanel({ sessionId, closeButton }: SessionMetadata
       <div className="flex-1 min-h-0 overflow-hidden">
         <SessionFilesSection sessionId={sessionId} />
       </div>
+
+      {/* File changes section - shown when there are changes */}
+      {fileChanges && fileChanges.length > 0 && (
+        <>
+          <HorizontalResizeHandle
+            onResize={handleDiffResize}
+            onResizeEnd={handleDiffResizeEnd}
+          />
+          <div className="shrink-0 border-t border-border/30" style={{ height: diffHeight }}>
+            <DiffSummaryPanel
+              changes={fileChanges}
+              onReviewChanges={onReviewChanges || (() => {})}
+              onReviewFile={onReviewFile || (() => {})}
+              onAcceptAll={onAcceptAll || (() => {})}
+              onRejectAll={onRejectAll || (() => {})}
+              changeStatuses={changeStatuses}
+              enableGitIntegration={enableGitIntegration}
+              gitWorkingDir={gitWorkingDir}
+              onCommitCreated={onCommitCreated}
+            />
+          </div>
+        </>
+      )}
     </div>
   )
 }

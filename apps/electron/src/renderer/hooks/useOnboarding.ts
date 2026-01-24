@@ -49,6 +49,12 @@ interface UseOnboardingReturn {
   handleSubmitAuthCode: (code: string) => void
   handleCancelOAuth: () => void
 
+  // Advanced API options
+  baseUrl: string
+  setBaseUrl: (value: string) => void
+  customModelNames: { opus: string; sonnet: string; haiku: string }
+  setCustomModelNames: (names: { opus: string; sonnet: string; haiku: string }) => void
+
   // Completion
   handleFinish: () => void
   handleCancel: () => void
@@ -79,6 +85,14 @@ export function useOnboarding({
     isExistingUser: initialSetupNeeds?.needsBillingConfig ?? false,
   })
 
+  // Advanced API options
+  const [baseUrl, setBaseUrl] = useState('')
+  const [customModelNames, setCustomModelNames] = useState({
+    opus: '',
+    sonnet: '',
+    haiku: '',
+  })
+
   // Save configuration
   const handleSaveConfig = useCallback(async (credential?: string) => {
     if (!state.billingMethod) {
@@ -92,9 +106,13 @@ export function useOnboarding({
       const authType = billingMethodToAuthType(state.billingMethod)
       console.log('[Onboarding] Saving config with authType:', authType)
 
+      const hasAnyModel = Object.values(customModelNames).some(v => v.trim())
+
       const result = await window.electronAPI.saveOnboardingConfig({
         authType,
         credential,
+        anthropicBaseUrl: baseUrl.trim() || null,
+        customModelNames: hasAnyModel ? customModelNames : null,
       })
 
       if (result.success) {
@@ -115,7 +133,7 @@ export function useOnboarding({
         errorMessage: error instanceof Error ? error.message : 'Failed to save configuration',
       }))
     }
-  }, [state.billingMethod])
+  }, [state.billingMethod, baseUrl, customModelNames])
 
   // Continue to next step
   const handleContinue = useCallback(async () => {
@@ -339,6 +357,8 @@ export function useOnboarding({
     setIsClaudeCliInstalled(false)
     setClaudeOAuthChecked(false)
     setIsWaitingForCode(false)
+    setBaseUrl('')
+    setCustomModelNames({ opus: '', sonnet: '', haiku: '' })
   }, [])
 
   return {
@@ -355,6 +375,11 @@ export function useOnboarding({
     isWaitingForCode,
     handleSubmitAuthCode,
     handleCancelOAuth,
+    // Advanced API options
+    baseUrl,
+    setBaseUrl,
+    customModelNames,
+    setCustomModelNames,
     handleFinish,
     handleCancel,
     reset,

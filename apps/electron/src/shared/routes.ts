@@ -141,6 +141,9 @@ export const routes = {
       subpage && subpage !== 'app'
         ? `settings/${subpage}` as const
         : 'settings' as const,
+
+    /** Terminal view */
+    terminal: () => 'terminal' as const,
   },
 } as const
 

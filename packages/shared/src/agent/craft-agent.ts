@@ -6,7 +6,7 @@ import { getSystemPrompt, getDateTimeContext, getWorkingDirectoryContext } from 
 // Plan types are used by UI components; not needed in craft-agent.ts since Safe Mode is user-controlled
 import { parseError, type AgentError } from './errors.ts';
 import { runErrorDiagnostics } from './diagnostics.ts';
-import { loadStoredConfig, loadConfigDefaults, type Workspace } from '../config/storage.ts';
+import { loadStoredConfig, loadConfigDefaults, resolveModelId, type Workspace } from '../config/storage.ts';
 import { isLocalMcpEnabled } from '../workspaces/storage.ts';
 import { loadPlanFromPath, type SessionConfig as Session } from '../sessions/storage.ts';
 import { DEFAULT_MODEL } from '../config/models.ts';
@@ -423,7 +423,9 @@ export class CraftAgent {
 
   constructor(config: CraftAgentConfig) {
     // Resolve model: prioritize session model > config model > global config > DEFAULT_MODEL
-    const resolvedModel = config.session?.model ?? config.model ?? loadStoredConfig()?.model ?? DEFAULT_MODEL;
+    // Then apply custom model name mappings (for third-party APIs)
+    const baseModel = config.session?.model ?? config.model ?? loadStoredConfig()?.model ?? DEFAULT_MODEL;
+    const resolvedModel = resolveModelId(baseModel);
     this.config = { ...config, model: resolvedModel };
     this.isHeadless = config.isHeadless ?? false;
 

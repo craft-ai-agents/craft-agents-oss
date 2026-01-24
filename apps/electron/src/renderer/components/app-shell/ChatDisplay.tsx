@@ -26,6 +26,7 @@ import {
   CodePreviewOverlay,
   DiffPreviewOverlay,
   MultiDiffPreviewOverlay,
+  DiffReviewSheet,
   TerminalPreviewOverlay,
   GenericOverlay,
   JSONPreviewOverlay,
@@ -33,6 +34,7 @@ import {
   type OverlayData,
   type FileChange,
 } from "@craft-agent/ui"
+import { useAppShellContext } from "@/context/AppShellContext"
 import { useFocusZone } from "@/hooks/keyboard"
 import { useTheme } from "@/hooks/useTheme"
 import type { Session, Message, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, LoadedSource, LoadedSkill } from "../../../shared/types"
@@ -368,6 +370,9 @@ export function ChatDisplay({
   // This accounts for scenic themes (like Haze) that force dark mode
   const { isDark } = useTheme()
 
+  // Context-provided diff and git state (used by right sidebar, not directly here)
+  const { gitWorkingDir } = useAppShellContext()
+
   // Register as focus zone - when zone gains focus, focus the textarea
   const { zoneRef, isFocused } = useFocusZone({
     zoneId: 'chat',
@@ -683,6 +688,31 @@ export function ChatDisplay({
                     const isLastResponse = index === turns.length - 1 || !turns.slice(index + 1).some(t => t.type === 'user')
 
                     // Assistant turns - render with TurnCard (buffered streaming)
+                    // Extract file changes from this turn's activities for FileChangesCard
+                    const turnFileChanges: FileChange[] = []
+                    turn.activities.forEach(a => {
+                      const actInput = a.toolInput as Record<string, unknown> | undefined
+                      if (a.toolName === 'Edit' && actInput) {
+                        turnFileChanges.push({
+                          id: a.id,
+                          filePath: (actInput.file_path as string) || 'unknown',
+                          toolType: 'Edit',
+                          original: (actInput.old_string as string) || '',
+                          modified: (actInput.new_string as string) || '',
+                          error: a.error || undefined,
+                        })
+                      } else if (a.toolName === 'Write' && actInput) {
+                        turnFileChanges.push({
+                          id: a.id,
+                          filePath: (actInput.file_path as string) || 'unknown',
+                          toolType: 'Write',
+                          original: '',
+                          modified: (actInput.content as string) || '',
+                          error: a.error || undefined,
+                        })
+                      }
+                    })
+
                     return (
                       <TurnCard
                         key={`turn-${turn.turnId}`}
@@ -698,6 +728,7 @@ export function ChatDisplay({
                         onOpenFile={onOpenFile}
                         onOpenUrl={onOpenUrl}
                         isLastResponse={isLastResponse}
+                        fileChanges={turnFileChanges}
                         onAcceptPlan={() => {
                           window.dispatchEvent(new CustomEvent('craft:approve-plan', {
                             detail: { text: 'Plan approved, please execute.', sessionId: session?.id }
@@ -939,6 +970,8 @@ export function ChatDisplay({
           focusedChangeId={overlayState.focusedChangeId}
           theme={isDark ? 'dark' : 'light'}
           onOpenFile={onOpenFile}
+          enableGitIntegration={!!gitWorkingDir}
+          gitWorkingDir={gitWorkingDir}
         />
       )}
 

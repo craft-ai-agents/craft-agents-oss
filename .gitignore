@@ -40,6 +40,10 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # Claude Code local settings (user-specific)
 .claude/settings.local.json
 
+# Claude Code TLDR cache
+.tldr/
+.tldrignore
+
 # Accidental literal tilde directories (Node.js doesn't expand ~)
 ~/
 
