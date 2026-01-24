@@ -676,7 +676,6 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // Get git branch for a directory (returns null if not a git repo or git unavailable)
   ipcMain.handle(IPC_CHANNELS.GET_GIT_BRANCH, (_event, dirPath: string) => {
     const targetDir = dirPath || process.cwd()
-    ipcLog.info(`[IPC] GET_GIT_BRANCH for: ${targetDir}`)
     try {
       const branch = execSync('git rev-parse --abbrev-ref HEAD', {
         cwd: targetDir,
@@ -684,13 +683,84 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
         stdio: ['pipe', 'pipe', 'pipe'],  // Suppress stderr output
         timeout: 5000,  // 5 second timeout
       }).trim()
-      ipcLog.info(`[IPC] GET_GIT_BRANCH result: ${branch}`)
       return branch || null
     } catch (error) {
-      ipcLog.warn(`[IPC] GET_GIT_BRANCH failed for ${targetDir}:`, error instanceof Error ? error.message : String(error))
+      ipcLog.warn(`GET_GIT_BRANCH failed for ${targetDir}:`, error instanceof Error ? error.message : String(error))
       // Not a git repo, git not installed, or other error
       return null
     }
+  })
+
+  // Git branch watcher state
+  let gitBranchWatcher: import('fs').FSWatcher | null = null
+  let watchedGitDir: string | null = null
+  let gitBranchDebounceTimer: ReturnType<typeof setTimeout> | null = null
+
+  ipcMain.handle(IPC_CHANNELS.WATCH_GIT_BRANCH, async (_event, dirPath: string) => {
+    const targetDir = dirPath || process.cwd()
+
+    // Close existing watcher
+    if (gitBranchWatcher) {
+      gitBranchWatcher.close()
+      gitBranchWatcher = null
+    }
+    if (gitBranchDebounceTimer) {
+      clearTimeout(gitBranchDebounceTimer)
+      gitBranchDebounceTimer = null
+    }
+
+    watchedGitDir = targetDir
+
+    try {
+      const gitHeadPath = join(targetDir, '.git', 'HEAD')
+      if (!existsSync(gitHeadPath)) return
+
+      const { watch } = await import('fs')
+      // Watch the .git directory
+      const gitDirPath = join(targetDir, '.git')
+      gitBranchWatcher = watch(gitDirPath, (eventType, filename) => {
+        // We care about HEAD changes or refs/heads changes
+        if (filename === 'HEAD' || filename?.startsWith('refs/heads/')) {
+          if (gitBranchDebounceTimer) clearTimeout(gitBranchDebounceTimer)
+          gitBranchDebounceTimer = setTimeout(async () => {
+            try {
+              const branch = execSync('git rev-parse --abbrev-ref HEAD', {
+                cwd: watchedGitDir!,
+                encoding: 'utf-8',
+                stdio: ['pipe', 'pipe', 'pipe'],
+                timeout: 2000,
+              }).trim()
+
+              // Notify all windows
+              const { BrowserWindow } = require('electron')
+              for (const win of BrowserWindow.getAllWindows()) {
+                if (!win.isDestroyed()) {
+                  win.webContents.send(IPC_CHANNELS.GIT_BRANCH_CHANGED, branch || null)
+                }
+              }
+            } catch {
+              // Ignore errors during background fetch
+            }
+          }, 200)
+        }
+      })
+
+      ipcLog.info(`Watching git branch for: ${targetDir}`)
+    } catch (error) {
+      ipcLog.error('Failed to start git branch watcher:', error)
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.UNWATCH_GIT_BRANCH, async () => {
+    if (gitBranchWatcher) {
+      gitBranchWatcher.close()
+      gitBranchWatcher = null
+    }
+    if (gitBranchDebounceTimer) {
+      clearTimeout(gitBranchDebounceTimer)
+      gitBranchDebounceTimer = null
+    }
+    watchedGitDir = null
   })
 
   // Auto-update handlers

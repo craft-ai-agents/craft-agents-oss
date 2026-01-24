@@ -62,15 +62,14 @@ export function ActiveOptionBadges({
   onInsertMessage,
   className,
 }: ActiveOptionBadgesProps) {
-  console.log('[GitBadgeDebug] Rendering with gitBranch:', gitBranch)
   // Only render if badges or tasks are active or git branch is shown
   if (!ultrathinkEnabled && !permissionMode && tasks.length === 0 && !gitBranch) {
     return null
   }
 
   return (
-    <div className={cn("flex items-start gap-2 mb-2 px-px pt-px pb-0.5 overflow-x-auto overflow-y-hidden", className)}>
-      <div className='flex-row grow gap-2'>
+    <div className={cn("flex items-start justify-between gap-2 mb-2 px-px pt-px pb-0.5 overflow-x-auto overflow-y-hidden", className)}>
+      <div className='flex items-center gap-2'>
         {/* Permission Mode Badge */}
         {permissionMode && (
           <div className="shrink-0">
@@ -105,15 +104,13 @@ export function ActiveOptionBadges({
         {/* {sessionId && <ActiveTasksBar tasks={tasks} sessionId={sessionId} onKillTask={onKillTask} onInsertMessage={onInsertMessage} />} */}
       </div>
 
-      <div className='flex-row gap-2'>
-        {/* Git Branch Badge */}
-        {gitBranch && (
-          <div className="shrink-0 h-[30px] pl-2.5 pr-2.5 text-xs font-medium rounded-[8px] flex items-center gap-1.5 bg-foreground/5 text-foreground/60 shadow-thin select-none cursor-default">
-            <GitBranch className="h-3.5 w-3.5" />
-            <span className="truncate max-w-[150px]">{gitBranch}</span>
-          </div>
-        )}
-      </div>
+      {/* Git Branch Badge */}
+      {gitBranch && (
+        <div className="shrink-0 h-[30px] pl-2.5 pr-2.5 text-xs font-medium rounded-[8px] flex items-center gap-1.5 bg-foreground/5 text-foreground/60 shadow-thin select-none cursor-default">
+          <GitBranch className="h-3.5 w-3.5" />
+          <span className="truncate max-w-[150px]">{gitBranch}</span>
+        </div>
+      )}
     </div>
   )
 }

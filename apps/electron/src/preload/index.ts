@@ -384,6 +384,15 @@ const api: ElectronAPI = {
   // Git operations
   getGitBranch: (dirPath: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.GET_GIT_BRANCH, dirPath),
+  watchGitBranch: (dirPath: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.WATCH_GIT_BRANCH, dirPath),
+  unwatchGitBranch: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.UNWATCH_GIT_BRANCH),
+  onGitBranchChanged: (callback: (branch: string | null) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, branch: string | null) => callback(branch)
+    ipcRenderer.on(IPC_CHANNELS.GIT_BRANCH_CHANGED, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.GIT_BRANCH_CHANGED, handler)
+  },
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)

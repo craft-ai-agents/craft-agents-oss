@@ -628,6 +628,9 @@ export const IPC_CHANNELS = {
 
   // Git operations
   GET_GIT_BRANCH: 'git:getBranch',
+  WATCH_GIT_BRANCH: 'git:watchBranch',      // Start watching git branch for a directory
+  UNWATCH_GIT_BRANCH: 'git:unwatchBranch',  // Stop watching
+  GIT_BRANCH_CHANGED: 'git:branchChanged',  // Event: main → renderer
 } as const
 
 // Re-import types for ElectronAPI
@@ -850,6 +853,9 @@ export interface ElectronAPI {
 
   // Git operations
   getGitBranch(dirPath: string): Promise<string | null>
+  watchGitBranch(dirPath: string): Promise<void>
+  unwatchGitBranch(): Promise<void>
+  onGitBranchChanged(callback: (branch: string | null) => void): () => void
 }
 
 /**

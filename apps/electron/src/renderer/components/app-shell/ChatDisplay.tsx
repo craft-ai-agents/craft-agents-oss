@@ -376,11 +376,10 @@ export function ChatDisplay({
   // Context-provided diff and git state (used by right sidebar, not directly here)
   const { gitWorkingDir } = useAppShellContext()
 
-  // Fetch git branch when working directory changes
+  // Fetch git branch and setup watcher when working directory changes
   useEffect(() => {
     // Prefer explicitly set workingDirectory, fallback to gitWorkingDir from context
     const effectiveDir = workingDirectory || gitWorkingDir
-    console.log('[GitDebug] Effective dir:', effectiveDir)
 
     if (!effectiveDir) {
       setGitBranch(null)
@@ -389,17 +388,30 @@ export function ChatDisplay({
 
     const fetchBranch = async () => {
       try {
-        console.log('[GitDebug] Calling getGitBranch with:', effectiveDir)
         const branch = await window.electronAPI.getGitBranch(effectiveDir)
-        console.log('[GitDebug] Result:', branch)
         setGitBranch(branch)
       } catch (err) {
-        console.error('[GitDebug] Failed to fetch git branch:', err)
+        console.error('Failed to fetch git branch:', err)
         setGitBranch(null)
       }
     }
 
     fetchBranch()
+
+    // Start watching for branch changes
+    window.electronAPI.watchGitBranch(effectiveDir).catch(err => {
+      console.error('Failed to start git branch watcher:', err)
+    })
+
+    // Listen for branch change events
+    const cleanupListener = window.electronAPI.onGitBranchChanged((branch) => {
+      setGitBranch(branch)
+    })
+
+    return () => {
+      cleanupListener()
+      window.electronAPI.unwatchGitBranch().catch(() => {})
+    }
   }, [workingDirectory, gitWorkingDir])
 
   // Register as focus zone - when zone gains focus, focus the textarea
