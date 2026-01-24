@@ -9,6 +9,7 @@ import { SessionManager } from './sessions'
 import { ipcLog, windowLog } from './logger'
 import { WindowManager } from './window-manager'
 import { getScheduler, startAllSchedulers, stopAllSchedulers } from './scheduler'
+import { spawnTerminalWithSession } from './terminal'
 import { registerOnboardingHandlers } from './onboarding'
 import { registerWhatsAppHandlers } from './whatsapp-ipc'
 import { registerSlackHandlers } from './slack-ipc'
@@ -400,6 +401,57 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // Returns true if the response was delivered, false if agent/session is gone
   ipcMain.handle(IPC_CHANNELS.RESPOND_TO_CREDENTIAL, async (_event, sessionId: string, requestId: string, response: import('../shared/types').CredentialResponse) => {
     return sessionManager.respondToCredential(sessionId, requestId, response)
+  })
+
+  // Resume session in terminal
+  ipcMain.handle(IPC_CHANNELS.SESSION_RESUME_IN_TERMINAL, async (_event, sessionId: string) => {
+    try {
+      ipcLog.info(`[terminal] Resuming session ${sessionId} in terminal`)
+
+      // Validate session ID format (prevent injection)
+      if (!sessionId || !/^ses-[a-f0-9-]+$/.test(sessionId)) {
+        throw new Error('Invalid session ID format')
+      }
+
+      // Get session
+      const session = sessionManager.getSession(sessionId)
+      if (!session) {
+        throw new Error('Session not found')
+      }
+
+      // Check if session has SDK session ID (only available after first message)
+      if (!session.sdkSessionId) {
+        throw new Error('Send a message first to initialize the session')
+      }
+
+      // Get working directory (prefer sdkCwd, fallback to workingDirectory)
+      const workingDirectory = session.sdkCwd || session.workingDirectory
+      if (!workingDirectory) {
+        throw new Error('Session has no working directory configured')
+      }
+
+      // Optional: Check if Claude CLI is installed
+      // Note: We'll let the terminal module handle this check for better error messages
+
+      // Spawn terminal with session
+      const result = await spawnTerminalWithSession({
+        sdkSessionId: session.sdkSessionId,
+        workingDirectory,
+        taskListId: sessionId // Use Vespr session ID as task list ID
+      })
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to spawn terminal')
+      }
+
+      ipcLog.info(`[terminal] Successfully spawned terminal for session ${sessionId}`)
+      return { success: true }
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      ipcLog.error(`[terminal] Failed to resume session in terminal: ${errorMessage}`)
+      throw error
+    }
   })
 
   // ==========================================================================

@@ -16,6 +16,10 @@ const api: ElectronAPI = {
   respondToCredential: (sessionId: string, requestId: string, response: import('../shared/types').CredentialResponse) =>
     ipcRenderer.invoke(IPC_CHANNELS.RESPOND_TO_CREDENTIAL, sessionId, requestId, response),
 
+  // Terminal resume (spawn terminal with SDK session)
+  resumeInTerminal: (sessionId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SESSION_RESUME_IN_TERMINAL, sessionId),
+
   // Consolidated session command handler
   sessionCommand: (sessionId: string, command: import('../shared/types').SessionCommand) =>
     ipcRenderer.invoke(IPC_CHANNELS.SESSION_COMMAND, sessionId, command),

@@ -50,6 +50,7 @@ import { AttachmentPreview } from '../AttachmentPreview'
 import { MODELS, getModelShortName } from '@config/models'
 import { SourceAvatar } from '@/components/ui/source-avatar'
 import { FreeFormInputContextBadge } from './FreeFormInputContextBadge'
+import { TerminalResumeButton } from './TerminalResumeButton'
 import type { FileAttachment, LoadedSource, LoadedSkill } from '../../../../shared/types'
 import type { PermissionMode } from '@craft-agent/shared/agent/modes'
 import { PERMISSION_MODE_ORDER } from '@craft-agent/shared/agent/modes'
@@ -139,6 +140,8 @@ export interface FreeFormInputProps {
   sessionFolderPath?: string
   /** Session ID for scoping events like approve-plan */
   sessionId?: string
+  /** SDK Session ID for terminal resume */
+  sdkSessionId?: string
   /** Disable send action (for tutorial guidance) */
   disableSend?: boolean
   /** Whether the session is empty (no messages yet) - affects context badge prominence */
@@ -194,6 +197,7 @@ export function FreeFormInput({
   onWorkingDirectoryChange,
   sessionFolderPath,
   sessionId,
+  sdkSessionId,
   disableSend = false,
   isEmptySession = false,
   contextStatus,
@@ -1236,6 +1240,16 @@ export function FreeFormInput({
               onWorkingDirectoryChange={onWorkingDirectoryChange}
               sessionFolderPath={sessionFolderPath}
               isEmptySession={isEmptySession}
+            />
+          )}
+
+          {/* 4. Terminal Resume Button */}
+          {sessionId && (
+            <TerminalResumeButton
+              sessionId={sessionId}
+              sdkSessionId={sdkSessionId}
+              workingDirectory={workingDirectory}
+              disabled={isProcessing}
             />
           )}
 

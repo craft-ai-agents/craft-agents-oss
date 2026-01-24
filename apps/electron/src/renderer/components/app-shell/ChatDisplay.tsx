@@ -944,6 +944,7 @@ export function ChatDisplay({
               onWorkingDirectoryChange={onWorkingDirectoryChange}
               sessionFolderPath={sessionFolderPath}
               sessionId={session.id}
+              sdkSessionId={session.sdkSessionId}
               disableSend={disableSend}
               isEmptySession={session.messages.length === 0}
               contextStatus={{

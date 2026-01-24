@@ -555,6 +555,9 @@ export const IPC_CHANNELS = {
   RESPOND_TO_PERMISSION: 'sessions:respondToPermission',
   RESPOND_TO_CREDENTIAL: 'sessions:respondToCredential',
 
+  // Terminal resume (spawn terminal with SDK session)
+  SESSION_RESUME_IN_TERMINAL: 'sessions:resumeInTerminal',
+
   // Consolidated session command
   SESSION_COMMAND: 'sessions:command',
 
@@ -828,6 +831,9 @@ export interface ElectronAPI {
   getTaskOutput(taskId: string): Promise<string | null>
   respondToPermission(sessionId: string, requestId: string, allowed: boolean, alwaysAllow: boolean): Promise<boolean>
   respondToCredential(sessionId: string, requestId: string, response: CredentialResponse): Promise<boolean>
+
+  // Terminal resume (spawn terminal with SDK session)
+  resumeInTerminal(sessionId: string): Promise<{ success: boolean; error?: string }>
 
   // Consolidated session command handler
   sessionCommand(sessionId: string, command: SessionCommand): Promise<void | ShareResult | RefreshTitleResult>

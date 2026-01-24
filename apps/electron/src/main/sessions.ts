@@ -1071,6 +1071,8 @@ export class SessionManager {
       todoState: m.todoState,
       lastReadMessageId: m.lastReadMessageId,
       workingDirectory: m.workingDirectory,
+      sdkCwd: m.sdkCwd,
+      sdkSessionId: m.sdkSessionId,
       model: m.model,
       sessionFolderPath: getSessionStoragePath(m.workspace.rootPath, m.id),
       enabledSourceSlugs: m.enabledSourceSlugs,
