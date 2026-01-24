@@ -868,6 +868,9 @@ export class CraftAgent {
             this.config.session?.workingDirectory
           ),
         },
+        // Auto-load CLAUDE.md from working directory on session start
+        // SDK reads project-level context files and injects into system prompt
+        settingSources: ['project'],
         // Use sdkCwd for SDK session storage - this is set once at session creation and never changes.
         // This ensures SDK can always find session transcripts regardless of workingDirectory changes.
         // Note: workingDirectory is still used for context injection and shown to the agent.
