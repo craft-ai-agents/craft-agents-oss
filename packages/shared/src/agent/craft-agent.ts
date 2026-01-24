@@ -868,12 +868,10 @@ export class CraftAgent {
             this.config.session?.workingDirectory
           ),
         },
-        // Use workingDirectory for SDK cwd so bash commands run in the user-selected directory.
-        // Falls back to sdkCwd (session directory) if no working directory is set.
-        // Note: This means session transcripts will be stored based on workingDirectory path,
-        // but session resumption uses session_id which should still work correctly.
-        cwd: this.config.session?.workingDirectory ??
-          this.config.session?.sdkCwd ??
+        // Use sdkCwd for SDK session storage - this is set once at session creation and never changes.
+        // This ensures SDK can always find session transcripts regardless of workingDirectory changes.
+        // Note: Bash commands are redirected to workingDirectory via PreToolUse hook (cd prefix injection).
+        cwd: this.config.session?.sdkCwd ??
           (sessionId ? getSessionPath(this.workspaceRootPath, sessionId) : this.workspaceRootPath),
         includePartialMessages: true,
         // Enable the full Claude Code toolset
@@ -1134,6 +1132,38 @@ export class CraftAgent {
                     hookSpecificOutput: {
                       hookEventName: 'PreToolUse' as const,
                       updatedInput,
+                    },
+                  };
+                }
+              }
+
+              // ============================================================
+              // BASH WORKING DIRECTORY: Redirect bash commands to user-selected working directory
+              // The SDK's cwd is set to sdkCwd (session directory) to ensure session transcript
+              // storage remains stable for resumption. To make bash commands run in the user's
+              // selected working directory, we prepend 'cd <workingDirectory> &&' to each command.
+              // ============================================================
+              if (input.tool_name === 'Bash') {
+                const toolInput = input.tool_input as Record<string, unknown>;
+                const workingDirectory = this.config.session?.workingDirectory;
+                const sdkCwd = this.config.session?.sdkCwd;
+
+                // Only inject cd if:
+                // 1. User has explicitly set a working directory
+                // 2. It differs from the SDK's cwd (session directory)
+                if (workingDirectory && sdkCwd && workingDirectory !== sdkCwd) {
+                  const command = String(toolInput.command || '');
+
+                  // Prepend cd to working directory with proper escaping
+                  const escapedPath = workingDirectory.replace(/'/g, "'\\''");
+                  const updatedCommand = `cd '${escapedPath}' && ${command}`;
+
+                  this.onDebug?.(`Bash: redirecting to working directory: ${workingDirectory}`);
+                  return {
+                    continue: true,
+                    hookSpecificOutput: {
+                      hookEventName: 'PreToolUse' as const,
+                      updatedInput: { ...toolInput, command: updatedCommand },
                     },
                   };
                 }
