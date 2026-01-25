@@ -34,6 +34,7 @@ import {
 } from '../ui/table'
 import { cn } from '@/lib/utils'
 import { getByPath } from '@json-render/core'
+import { toast } from 'sonner'
 
 // ============================================
 // Error Boundary
@@ -283,7 +284,9 @@ const defaultActionHandlers: Record<string, ActionHandler> = {
     const text = params?.text as string
     if (text) {
       await navigator.clipboard.writeText(text)
-      console.log('[JSONRender] Copied to clipboard:', text)
+      toast.success('Copied to clipboard', { description: text.slice(0, 50) + (text.length > 50 ? '...' : '') })
+    } else {
+      toast.info('Copy action triggered', { description: 'No text provided to copy' })
     }
   },
   // Open a URL in browser
@@ -291,12 +294,28 @@ const defaultActionHandlers: Record<string, ActionHandler> = {
     const url = params?.url as string
     if (url) {
       window.open(url, '_blank', 'noopener,noreferrer')
-      console.log('[JSONRender] Opened URL:', url)
+      toast.success('Opening URL', { description: url })
+    } else {
+      toast.info('Open URL action triggered', { description: 'No URL provided' })
     }
   },
   // Log action for debugging
   log: async (params) => {
     console.log('[JSONRender] Log action:', params)
+    toast.info('Action executed', {
+      description: params ? JSON.stringify(params).slice(0, 100) : 'No parameters'
+    })
+  },
+  // Submit form action
+  submit: async (params) => {
+    console.log('[JSONRender] Submit action:', params)
+    toast.success('Form submitted', {
+      description: 'Data logged to console'
+    })
+  },
+  // Cancel/dismiss action
+  cancel: async () => {
+    toast.info('Action cancelled')
   },
 }
 
