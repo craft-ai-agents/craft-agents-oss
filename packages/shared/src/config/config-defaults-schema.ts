@@ -7,6 +7,22 @@ import type { AuthType } from '@vesper/core/types';
 import type { PermissionMode } from '../agent/mode-manager.ts';
 import type { ThinkingLevel } from '../agent/thinking-levels.ts';
 
+/**
+ * Notification settings defaults
+ */
+export interface NotificationSettingsDefaults {
+  enabled: boolean;
+  sound: boolean;
+  soundVolume: number;
+  quietHoursEnabled: boolean;
+  quietHoursStart: string;
+  quietHoursEnd: string;
+  agentCompletion: boolean;
+  agentError: boolean;
+  schedulerRun: boolean;
+  messageReceived: boolean;
+}
+
 export interface ConfigDefaults {
   version: string;
   description: string;
@@ -15,6 +31,7 @@ export interface ConfigDefaults {
     notificationsEnabled: boolean;
     agentationEnabled: boolean;
     colorTheme: string;
+    notificationSettings: NotificationSettingsDefaults;
   };
   workspaceDefaults: {
     thinkingLevel: ThinkingLevel;
@@ -38,6 +55,18 @@ export const BUNDLED_CONFIG_DEFAULTS: ConfigDefaults = {
     notificationsEnabled: true,
     agentationEnabled: false,
     colorTheme: 'default',
+    notificationSettings: {
+      enabled: true,
+      sound: true,
+      soundVolume: 80,
+      quietHoursEnabled: false,
+      quietHoursStart: '22:00',
+      quietHoursEnd: '08:00',
+      agentCompletion: true,
+      agentError: true,
+      schedulerRun: true,
+      messageReceived: true,
+    },
   },
   workspaceDefaults: {
     thinkingLevel: 'think',

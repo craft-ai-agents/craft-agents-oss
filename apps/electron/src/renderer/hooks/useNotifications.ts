@@ -11,6 +11,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAtomValue } from 'jotai'
 import type { Session } from '../../shared/types'
 import { sessionMetaMapAtom, type SessionMeta } from '@/atoms/sessions'
+import { playNotificationSound } from '@/lib/notification-sound'
 
 /**
  * Draw a badge onto an icon image using Canvas
@@ -159,6 +160,17 @@ export function useNotifications({
       } catch (error) {
         console.error('[Notifications] Failed to draw badge:', error)
       }
+    })
+
+    return cleanup
+  }, [])
+
+  // Subscribe to notification sound play requests from main process
+  // Uses Web Audio API with volume control
+  useEffect(() => {
+    const cleanup = window.electronAPI.onNotificationPlaySound((volume) => {
+      console.log('[Notifications] Playing sound at volume:', volume)
+      playNotificationSound(volume)
     })
 
     return cleanup

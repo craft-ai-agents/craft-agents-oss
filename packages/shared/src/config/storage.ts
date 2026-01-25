@@ -40,6 +40,48 @@ export interface PendingUpdate {
   sha256: string;
 }
 
+/**
+ * Notification settings for controlling desktop notifications behavior.
+ */
+export interface NotificationSettings {
+  /** Master toggle for all notifications */
+  enabled: boolean;
+  /** Play sound with notifications */
+  sound: boolean;
+  /** Sound volume (0-100) */
+  soundVolume: number;
+  /** Enable quiet hours (no notifications during specified time) */
+  quietHoursEnabled: boolean;
+  /** Quiet hours start time (HH:MM format, 24-hour) */
+  quietHoursStart: string;
+  /** Quiet hours end time (HH:MM format, 24-hour) */
+  quietHoursEnd: string;
+  /** Notify when agent completes a task */
+  agentCompletion: boolean;
+  /** Notify when agent encounters an error */
+  agentError: boolean;
+  /** Notify when a scheduled task runs */
+  schedulerRun: boolean;
+  /** Notify when a message is received (WhatsApp, Slack, etc.) */
+  messageReceived: boolean;
+}
+
+/**
+ * Default notification settings
+ */
+export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
+  enabled: true,
+  sound: true,
+  soundVolume: 80,
+  quietHoursEnabled: false,
+  quietHoursStart: '22:00',
+  quietHoursEnd: '08:00',
+  agentCompletion: true,
+  agentError: true,
+  schedulerRun: true,
+  messageReceived: true,
+};
+
 // Config stored in JSON file (credentials stored in encrypted file, not here)
 export interface StoredConfig {
   authType?: AuthType;
@@ -48,7 +90,9 @@ export interface StoredConfig {
   activeSessionId: string | null;  // Currently active session (primary scope)
   model?: string;
   // Notifications
-  notificationsEnabled?: boolean;  // Desktop notifications for task completion (default: true)
+  notificationsEnabled?: boolean;  // Desktop notifications for task completion (default: true) - DEPRECATED: Use notificationSettings instead
+  /** Detailed notification settings */
+  notificationSettings?: NotificationSettings;
   // Developer tools
   agentationEnabled?: boolean;  // Agentation dev panel for debugging (default: false)
   // Appearance
@@ -271,6 +315,109 @@ export function setNotificationsEnabled(enabled: boolean): void {
   if (!config) return;
   config.notificationsEnabled = enabled;
   saveConfig(config);
+}
+
+/**
+ * Get notification settings.
+ * Returns full settings object with defaults for any missing fields.
+ */
+export function getNotificationSettings(): NotificationSettings {
+  const config = loadStoredConfig();
+  const settings = config?.notificationSettings;
+
+  // Merge with defaults for any missing fields
+  return {
+    ...DEFAULT_NOTIFICATION_SETTINGS,
+    ...settings,
+    // Backwards compatibility: if old notificationsEnabled is set, use it for enabled
+    enabled: settings?.enabled ?? config?.notificationsEnabled ?? DEFAULT_NOTIFICATION_SETTINGS.enabled,
+  };
+}
+
+/**
+ * Set notification settings.
+ * Merges with existing settings (partial update supported).
+ */
+export function setNotificationSettings(settings: Partial<NotificationSettings>): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+
+  const currentSettings = getNotificationSettings();
+  config.notificationSettings = {
+    ...currentSettings,
+    ...settings,
+  };
+
+  // Also update legacy field for backwards compatibility
+  if (settings.enabled !== undefined) {
+    config.notificationsEnabled = settings.enabled;
+  }
+
+  saveConfig(config);
+}
+
+/**
+ * Update a single notification setting.
+ */
+export function updateNotificationSetting<K extends keyof NotificationSettings>(
+  key: K,
+  value: NotificationSettings[K]
+): void {
+  setNotificationSettings({ [key]: value } as Partial<NotificationSettings>);
+}
+
+/**
+ * Check if notifications are currently allowed based on settings and quiet hours.
+ * @param type - Optional notification type to check specific setting
+ */
+export function isNotificationAllowed(type?: 'agentCompletion' | 'agentError' | 'schedulerRun' | 'messageReceived'): boolean {
+  const settings = getNotificationSettings();
+
+  // Master toggle
+  if (!settings.enabled) {
+    return false;
+  }
+
+  // Check quiet hours
+  if (settings.quietHoursEnabled && isInQuietHours(settings.quietHoursStart, settings.quietHoursEnd)) {
+    return false;
+  }
+
+  // Check specific notification type
+  if (type && !settings[type]) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Check if current time is within quiet hours.
+ * Handles overnight quiet hours (e.g., 22:00 to 08:00).
+ */
+export function isInQuietHours(start: string, end: string): boolean {
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+  const startParts = start.split(':').map(Number);
+  const endParts = end.split(':').map(Number);
+
+  const startHour = startParts[0] ?? 0;
+  const startMin = startParts[1] ?? 0;
+  const endHour = endParts[0] ?? 0;
+  const endMin = endParts[1] ?? 0;
+
+  const startMinutes = startHour * 60 + startMin;
+  const endMinutes = endHour * 60 + endMin;
+
+  // Handle overnight quiet hours (e.g., 22:00 to 08:00)
+  if (startMinutes > endMinutes) {
+    // Quiet hours span midnight
+    return currentMinutes >= startMinutes || currentMinutes < endMinutes;
+  } else {
+    // Quiet hours within same day
+    return currentMinutes >= startMinutes && currentMinutes < endMinutes;
+  }
 }
 
 /**

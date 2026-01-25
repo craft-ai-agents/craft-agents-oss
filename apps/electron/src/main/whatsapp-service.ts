@@ -471,7 +471,8 @@ export class WhatsAppService extends EventEmitter {
           `WhatsApp: ${whatsappMsg.groupName}`,
           `${whatsappMsg.senderName}: ${whatsappMsg.content.substring(0, 100)}`,
           this.workspaceId,
-          '' // No session ID yet
+          '', // No session ID yet
+          'messageReceived'
         )
 
         // Broadcast to renderer for toast notification

@@ -42,6 +42,7 @@ import {
   SettingsSegmentedControl,
   SettingsMenuSelectRow,
   SettingsMenuSelect,
+  NotificationSettingsSection,
 } from '@/components/settings'
 import { useUpdateChecker } from '@/hooks/useUpdateChecker'
 import { useAppShellContext } from '@/context/AppShellContext'
@@ -348,9 +349,6 @@ export default function AppSettingsPage() {
   const [isWaitingForCode, setIsWaitingForCode] = useState(false)
   const [authCode, setAuthCode] = useState('')
 
-  // Notifications state
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true)
-
   // Developer tools state
   const [agentationEnabled, setAgentationEnabled] = useState(false)
 
@@ -367,19 +365,17 @@ export default function AppSettingsPage() {
     }
   }, [updateChecker])
 
-  // Load current billing method, notifications setting, and preset themes on mount
+  // Load current billing method and preset themes on mount
   useEffect(() => {
     const loadSettings = async () => {
       if (!window.electronAPI) return
       try {
-        const [billing, notificationsOn, agentationOn] = await Promise.all([
+        const [billing, agentationOn] = await Promise.all([
           window.electronAPI.getBillingMethod(),
-          window.electronAPI.getNotificationsEnabled(),
           window.electronAPI.getAgentationEnabled(),
         ])
         setAuthType(billing.authType)
         setHasCredential(billing.hasCredential)
-        setNotificationsEnabled(notificationsOn)
         setAgentationEnabled(agentationOn)
       } catch (error) {
         console.error('Failed to load settings:', error)
@@ -560,11 +556,6 @@ export default function AppSettingsPage() {
     }
   }, [])
 
-  const handleNotificationsEnabledChange = useCallback(async (enabled: boolean) => {
-    setNotificationsEnabled(enabled)
-    await window.electronAPI.setNotificationsEnabled(enabled)
-  }, [])
-
   const handleAgentationEnabledChange = useCallback(async (enabled: boolean) => {
     setAgentationEnabled(enabled)
     try {
@@ -625,16 +616,7 @@ export default function AppSettingsPage() {
             </SettingsSection>
 
             {/* Notifications */}
-            <SettingsSection title="Notifications">
-              <SettingsCard>
-                <SettingsToggle
-                  label="Desktop notifications"
-                  description="Get notified when AI finishes working in a chat."
-                  checked={notificationsEnabled}
-                  onCheckedChange={handleNotificationsEnabledChange}
-                />
-              </SettingsCard>
-            </SettingsSection>
+            <NotificationSettingsSection />
 
             {/* Billing */}
             <SettingsSection title="Billing" description="Choose how you pay for AI usage">

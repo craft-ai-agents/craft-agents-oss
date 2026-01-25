@@ -95,3 +95,4 @@ export {
 
 // Feature Settings
 export { ViewerSettings } from './ViewerSettings'
+export { NotificationSettingsSection } from './NotificationSettingsSection'

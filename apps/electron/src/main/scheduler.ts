@@ -13,7 +13,7 @@ import { readFile, writeFile, mkdir } from 'fs/promises'
 import { existsSync } from 'fs'
 import { join, dirname } from 'path'
 import { randomUUID } from 'crypto'
-import { Notification, BrowserWindow } from 'electron'
+import { BrowserWindow } from 'electron'
 import { mainLog } from './logger'
 import type { WindowManager } from './window-manager'
 import type { SessionManager } from './sessions'
@@ -322,35 +322,20 @@ export class SchedulerService {
   }
 
   /**
-   * Show native notification
+   * Show native notification for scheduler events
    */
   private showNotification(title: string, body: string, sessionId: string | null): void {
-    if (!Notification.isSupported()) return
+    // Import notification service to respect settings
+    const { showNotification: showNotificationService } = require('./notifications')
 
-    const notification = new Notification({
-      title: `Schedule: ${title}`,
+    // Use the notification service which respects settings
+    showNotificationService(
+      `Schedule: ${title}`,
       body,
-      silent: false,
-    })
-
-    notification.on('click', () => {
-      if (sessionId && this.windowManager) {
-        // Focus window and navigate to session
-        const window = this.windowManager.getWindowByWorkspace(this.workspaceId)
-        if (window && !window.isDestroyed()) {
-          if (window.isMinimized()) {
-            window.restore()
-          }
-          window.focus()
-          window.webContents.send('notification:navigate', {
-            workspaceId: this.workspaceId,
-            sessionId,
-          })
-        }
-      }
-    })
-
-    notification.show()
+      this.workspaceId,
+      sessionId || '',
+      'schedulerRun'
+    )
   }
 
   /**

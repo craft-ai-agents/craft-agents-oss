@@ -12,6 +12,8 @@ import { join } from 'path'
 import { readFileSync } from 'fs'
 import { mainLog } from './logger'
 import type { WindowManager } from './window-manager'
+import { isNotificationAllowed, getNotificationSettings } from '@vesper/shared/config'
+import { IPC_CHANNELS } from '../shared/types'
 
 let windowManager: WindowManager | null = null
 let baseIconPath: string | null = null
@@ -33,23 +35,34 @@ export function initNotificationService(wm: WindowManager): void {
  * @param body - Notification body (e.g., message preview)
  * @param workspaceId - Workspace ID for navigation
  * @param sessionId - Session ID for navigation
+ * @param type - Notification type for settings check (optional)
  */
 export function showNotification(
   title: string,
   body: string,
   workspaceId: string,
-  sessionId: string
+  sessionId: string,
+  type?: 'agentCompletion' | 'agentError' | 'schedulerRun' | 'messageReceived'
 ): void {
   if (!Notification.isSupported()) {
     mainLog.info('Notifications not supported on this platform')
     return
   }
 
+  // Check if notifications are allowed based on settings
+  if (!isNotificationAllowed(type)) {
+    mainLog.info('Notification blocked by settings:', { type, title })
+    return
+  }
+
+  // Get notification settings for sound configuration
+  const settings = getNotificationSettings()
+
   const notification = new Notification({
     title,
     body,
-    // macOS-specific options
-    silent: false,
+    // Always silent - we handle sound ourselves via Web Audio API for volume control
+    silent: true,
     // Use the app icon
     icon: undefined,  // Will use app icon by default on macOS
   })
@@ -60,7 +73,16 @@ export function showNotification(
   })
 
   notification.show()
-  mainLog.info('Notification shown:', { title, sessionId })
+  mainLog.info('Notification shown:', { title, sessionId, type })
+
+  // Play custom notification sound with volume control via renderer
+  if (settings.sound) {
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+        win.webContents.send(IPC_CHANNELS.NOTIFICATIONS_PLAY_SOUND, settings.soundVolume)
+      }
+    })
+  }
 }
 
 /**
