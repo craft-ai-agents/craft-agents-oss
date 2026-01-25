@@ -35,6 +35,7 @@ import {
   RefreshCw,
   Tag,
   Check,
+  BookmarkPlus,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn, isHexColor } from '@/lib/utils'
@@ -74,6 +75,7 @@ export interface SessionMenuProps {
   onTodoStateChange: (state: TodoStateId) => void
   onOpenInNewWindow: () => void
   onDelete: () => void
+  onSaveAsTemplate?: () => void
 }
 
 /**
@@ -99,6 +101,7 @@ export function SessionMenu({
   onTodoStateChange,
   onOpenInNewWindow,
   onDelete,
+  onSaveAsTemplate,
 }: SessionMenuProps) {
   // Share handlers
   const handleShare = async () => {
@@ -364,6 +367,14 @@ export function SessionMenu({
       </MenuItem>
 
       <Separator />
+
+      {/* Save as Template */}
+      {onSaveAsTemplate && (
+        <MenuItem onClick={onSaveAsTemplate}>
+          <BookmarkPlus className="h-3.5 w-3.5" />
+          <span className="flex-1">Save as Template</span>
+        </MenuItem>
+      )}
 
       {/* Delete */}
       <MenuItem onClick={onDelete} variant="destructive">

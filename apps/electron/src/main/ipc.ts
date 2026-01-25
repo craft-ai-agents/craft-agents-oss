@@ -15,6 +15,7 @@ import { registerWhatsAppHandlers } from './whatsapp-ipc'
 import { registerTelegramHandlers } from './telegram-ipc'
 import { registerSlackHandlers } from './slack-ipc'
 import { registerLabelsIpc } from './labels-ipc'
+import { registerTemplateIpcHandlers } from './templates'
 import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type AuthType, type BillingMethodInfo, type SendMessageOptions } from '../shared/types'
 import { readFileAttachment, perf, validateImageForClaudeAPI, IMAGE_LIMITS } from '@vesper/shared/utils'
 import { getAuthType, setAuthType, getPreferencesPath, getModel, setModel, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, type Workspace } from '@vesper/shared/config'
@@ -1900,6 +1901,9 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
   // Register labels handlers
   registerLabelsIpc()
+
+  // Register template handlers
+  registerTemplateIpcHandlers(sessionManager)
 
   // ============================================================
   // Theme (app-level only)
