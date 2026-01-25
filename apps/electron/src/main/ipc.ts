@@ -2523,9 +2523,10 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // =============================================================================
 
   // GitHub sources to search (in addition to skills.sh)
+  // skillsPath: path to skills folder (empty string '' for root level)
   const GITHUB_SKILL_SOURCES = [
-    { owner: 'anthropics', repo: 'skills', name: 'anthropics/skills' as const },
-    { owner: 'ComposioHQ', repo: 'awesome-claude-skills', name: 'ComposioHQ/awesome-claude-skills' as const },
+    { owner: 'anthropics', repo: 'skills', skillsPath: 'skills', name: 'anthropics/skills' as const },
+    { owner: 'ComposioHQ', repo: 'awesome-claude-skills', skillsPath: '', name: 'ComposioHQ/awesome-claude-skills' as const },
   ]
 
   // Simple in-memory cache for GitHub sources (they change less frequently)
@@ -2588,10 +2589,12 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
   /**
    * Fetch skills from a GitHub repository
+   * @param skillsPath - path to skills folder (empty string '' for root level)
    */
   async function fetchGitHubSource(
     owner: string,
     repo: string,
+    skillsPath: string,
     sourceName: 'anthropics/skills' | 'ComposioHQ/awesome-claude-skills',
     query: string
   ): Promise<import('../shared/types').MarketplaceSkill[]> {
@@ -2602,7 +2605,9 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
     if (!skills) {
       // Fetch directory listing from GitHub API
-      const listUrl = `https://api.github.com/repos/${owner}/${repo}/contents/skills`
+      // If skillsPath is empty, fetch from root; otherwise fetch from the specified path
+      const contentsPath = skillsPath ? `contents/${skillsPath}` : 'contents'
+      const listUrl = `https://api.github.com/repos/${owner}/${repo}/${contentsPath}`
       const response = await safeFetch(listUrl, {
         headers: { 'Accept': 'application/vnd.github.v3+json' },
       })
@@ -2615,7 +2620,9 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       // Fetch SKILL.md metadata for each directory (limit to 50 to avoid rate limits)
       const skillPromises = dirs.slice(0, 50).map(async (dir: any): Promise<import('../shared/types').MarketplaceSkill | null> => {
         try {
-          const mdUrl = `https://raw.githubusercontent.com/${owner}/${repo}/main/skills/${dir.name}/SKILL.md`
+          // Build path to SKILL.md - handle both root and nested paths
+          const mdPath = skillsPath ? `${skillsPath}/${dir.name}/SKILL.md` : `${dir.name}/SKILL.md`
+          const mdUrl = `https://raw.githubusercontent.com/${owner}/${repo}/main/${mdPath}`
           const mdResponse = await fetch(mdUrl, { signal: AbortSignal.timeout(5000) })
           if (!mdResponse.ok) return null
 
@@ -2661,7 +2668,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     // Fetch from all sources in parallel
     const results = await Promise.allSettled([
       fetchSkillsSh(query),
-      ...GITHUB_SKILL_SOURCES.map(s => fetchGitHubSource(s.owner, s.repo, s.name, query)),
+      ...GITHUB_SKILL_SOURCES.map(s => fetchGitHubSource(s.owner, s.repo, s.skillsPath, s.name, query)),
     ])
 
     const skills: import('../shared/types').MarketplaceSkill[] = []
