@@ -1,5 +1,5 @@
 ---
-status: pending
+status: complete
 priority: p3
 issue_id: "018"
 tags: [code-review, feature, slack-oauth, consistency]

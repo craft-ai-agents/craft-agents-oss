@@ -16,6 +16,7 @@ import open from 'open';
 import { randomBytes, createHash } from 'crypto';
 import { createCallbackServer, type AppType } from './callback-server.ts';
 import type { SlackService } from '../sources/types.ts';
+import { generateState } from './pkce.ts';
 
 // Re-export for convenience
 export type { SlackService } from '../sources/types.ts';
@@ -28,6 +29,53 @@ const SLACK_CLIENT_SECRET = process.env.SLACK_OAUTH_CLIENT_SECRET || '';
 // Slack OAuth endpoints
 const SLACK_AUTH_URL = 'https://slack.com/oauth/v2/authorize';
 const SLACK_TOKEN_URL = 'https://slack.com/api/oauth.v2.access';
+
+// Slack OAuth relay URL (configurable via environment variable)
+const SLACK_OAUTH_RELAY_URL = process.env.SLACK_OAUTH_RELAY_URL || 'https://agents.craft.do/auth/slack/callback';
+
+/**
+ * Fetch with timeout using AbortController
+ */
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit,
+  timeoutMs = 30000
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`Request timed out after ${timeoutMs / 1000} seconds`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/**
+ * Fetch user email from Slack API
+ * Returns undefined if email is not available (won't fail the OAuth flow)
+ */
+async function getUserEmail(accessToken: string, userId: string): Promise<string | undefined> {
+  try {
+    const response = await fetchWithTimeout(
+      `https://slack.com/api/users.info?user=${userId}`,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }
+    );
+    const data = (await response.json()) as {
+      ok: boolean;
+      user?: { profile?: { email?: string } };
+    };
+    return data.ok ? data.user?.profile?.email : undefined;
+  } catch {
+    return undefined; // Email is optional, don't fail OAuth
+  }
+}
 
 /**
  * Predefined USER scope sets for common Slack services
@@ -89,6 +137,8 @@ export interface SlackOAuthResult {
   teamName?: string;
   /** Authenticated user ID */
   userId?: string;
+  /** Authenticated user email (if available) */
+  email?: string;
   /** Error message if failed */
   error?: string;
 }
@@ -100,13 +150,6 @@ function generatePKCE(): { verifier: string; challenge: string } {
   const verifier = randomBytes(32).toString('base64url');
   const challenge = createHash('sha256').update(verifier).digest('base64url');
   return { verifier, challenge };
-}
-
-/**
- * Generate random state for CSRF protection
- */
-function generateState(): string {
-  return randomBytes(16).toString('hex');
 }
 
 /**
@@ -134,7 +177,7 @@ async function exchangeCodeForTokens(
     redirect_uri: redirectUri,
   });
 
-  const response = await fetch(SLACK_TOKEN_URL, {
+  const response = await fetchWithTimeout(SLACK_TOKEN_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
@@ -194,7 +237,7 @@ export async function refreshSlackToken(
     refresh_token: refreshToken,
   });
 
-  const response = await fetch(SLACK_TOKEN_URL, {
+  const response = await fetchWithTimeout(SLACK_TOKEN_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
@@ -302,7 +345,7 @@ export async function startSlackOAuth(options: SlackOAuthOptions = {}): Promise<
 
     // Use Cloudflare Worker relay for Slack OAuth (Slack requires HTTPS)
     // The relay redirects: https://agents.craft.do/auth/slack/callback → http://localhost:{port}/callback
-    const redirectUri = `https://agents.craft.do/auth/slack/callback?port=${port}`;
+    const redirectUri = `${SLACK_OAUTH_RELAY_URL}?port=${port}`;
 
     // Build authorization URL
     // Use user_scope (not scope) to get a user token instead of bot token
@@ -358,6 +401,9 @@ export async function startSlackOAuth(options: SlackOAuthOptions = {}): Promise<
     // Exchange code for tokens
     const tokens = await exchangeCodeForTokens(code, pkce.verifier, redirectUri);
 
+    // Fetch user email (optional, won't fail if unavailable)
+    const email = await getUserEmail(tokens.accessToken, tokens.userId);
+
     return {
       success: true,
       accessToken: tokens.accessToken,
@@ -366,6 +412,7 @@ export async function startSlackOAuth(options: SlackOAuthOptions = {}): Promise<
       teamId: tokens.teamId,
       teamName: tokens.teamName,
       userId: tokens.userId,
+      email,
     };
   } catch (error) {
     return {
