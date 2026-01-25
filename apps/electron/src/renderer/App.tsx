@@ -14,6 +14,7 @@ import { OnboardingWizard, ReauthScreen } from '@/components/onboarding'
 import { ResetConfirmationDialog } from '@/components/ResetConfirmationDialog'
 import { SplashScreen } from '@/components/SplashScreen'
 import { GitHubConnectModal, DailyReportModal } from '@/components/orchestration'
+import { AgentationErrorBoundary } from './components/error-boundaries/AgentationErrorBoundary'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { FocusProvider } from '@/context/FocusContext'
 import { ModalProvider } from '@/context/ModalContext'
@@ -208,6 +209,7 @@ export default function App() {
 
   // Agentation dev panel state (from app settings)
   const [agentationEnabled, setAgentationEnabled] = useState(false)
+  const [agentationInitialized, setAgentationInitialized] = useState(false)
 
   // Sources and skills for badge extraction
   const sources = useAtomValue(sourcesAtom)
@@ -357,7 +359,10 @@ export default function App() {
 
     window.electronAPI.getWorkspaces().then(setWorkspaces)
     window.electronAPI.getNotificationsEnabled().then(setNotificationsEnabled)
-    window.electronAPI.getAgentationEnabled().then(setAgentationEnabled)
+    window.electronAPI.getAgentationEnabled().then((enabled) => {
+      setAgentationEnabled(enabled)
+      setAgentationInitialized(true)
+    })
     window.electronAPI.getSessions().then((loadedSessions) => {
       // Initialize per-session atoms and metadata map
       // NOTE: No sessionsAtom used - sessions are only in per-session atoms
@@ -1330,16 +1335,20 @@ export default function App() {
           {/* Orchestration Modals */}
           <GitHubConnectModal />
           <DailyReportModal />
+
+          {/* Agentation Debug Panel - must be inside providers */}
+          {agentationInitialized && agentationEnabled && (
+            <AgentationErrorBoundary>
+              <React.Suspense fallback={null}>
+                <Agentation />
+              </React.Suspense>
+            </AgentationErrorBoundary>
+          )}
         </NavigationProvider>
         </TooltipProvider>
         </ModalProvider>
       </FocusProvider>
     </ShikiThemeProvider>
-    {agentationEnabled && (
-      <React.Suspense fallback={null}>
-        <Agentation />
-      </React.Suspense>
-    )}
     </PlatformProvider>
   )
 }

@@ -702,12 +702,17 @@ export default function AppSettingsPage() {
             {/* Developer */}
             <SettingsSection title="Developer">
               <SettingsCard>
-                <SettingsToggle
-                  label="Agent Debug Panel"
-                  description="Shows real-time agent activity, tool calls, and API requests. Useful for debugging and understanding how the AI processes requests."
-                  checked={agentationEnabled}
-                  onCheckedChange={handleAgentationEnabledChange}
-                />
+                <div className="flex flex-col gap-1">
+                  <SettingsToggle
+                    label="Agent Debug Panel"
+                    description="Shows real-time agent activity including tool calls, API requests, and DOM analysis. This panel can see all visible conversation content, file references, and error messages."
+                    checked={agentationEnabled}
+                    onCheckedChange={handleAgentationEnabledChange}
+                  />
+                  <p className="text-xs text-amber-600 dark:text-amber-500 font-medium pl-0.5">
+                    Developer tool only. Do not enable with sensitive conversations.
+                  </p>
+                </div>
               </SettingsCard>
             </SettingsSection>
 

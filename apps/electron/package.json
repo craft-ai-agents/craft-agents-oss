@@ -53,7 +53,7 @@
     "@vesper/shared": "workspace:*",
     "@vesper/ui": "workspace:*",
     "@whiskeysockets/baileys": "7.0.0-rc.9",
-    "agentation": "^1.1.0",
+    "agentation": "1.1.0",
     "cmdk": "^1.1.1",
     "cronstrue": "^3.9.0",
     "electron-log": "^5.4.3",

@@ -2009,7 +2009,14 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
   // Set Agentation enabled setting
   ipcMain.handle(IPC_CHANNELS.AGENTATION_SET_ENABLED, async (_event, enabled: boolean) => {
-    if (typeof enabled !== 'boolean') return
+    if (typeof enabled !== 'boolean') {
+      console.warn('[IPC] Invalid type for AGENTATION_SET_ENABLED:', {
+        received: typeof enabled,
+        value: enabled,
+        expected: 'boolean'
+      })
+      return
+    }
     const { setAgentationEnabled } = await import('@vesper/shared/config/storage')
     setAgentationEnabled(enabled)
   })
