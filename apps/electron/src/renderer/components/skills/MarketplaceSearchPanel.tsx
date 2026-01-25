@@ -73,10 +73,28 @@ export function MarketplaceSearchPanel({
     }
   }, [errors])
 
-  // Filter skills by active source
-  const filteredSkills = activeSource
-    ? skills.filter(s => s.source === activeSource)
-    : skills
+  // Filter skills by active source AND apply client-side search filter as fallback
+  const filteredSkills = React.useMemo(() => {
+    let result = skills
+
+    // Filter by source if one is selected
+    if (activeSource) {
+      result = result.filter(s => s.source === activeSource)
+    }
+
+    // Apply client-side search filter as fallback (in case API doesn't filter properly)
+    if (query.trim()) {
+      const q = query.toLowerCase().trim()
+      result = result.filter(s =>
+        s.name.toLowerCase().includes(q) ||
+        s.id.toLowerCase().includes(q) ||
+        s.description?.toLowerCase().includes(q) ||
+        s.topSource.toLowerCase().includes(q)
+      )
+    }
+
+    return result
+  }, [skills, activeSource, query])
 
   // Handle skill installation
   const handleInstall = useCallback(async (skill: MarketplaceSkill, e: React.MouseEvent) => {
@@ -169,7 +187,7 @@ export function MarketplaceSearchPanel({
       </div>
 
       {/* Skills list */}
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1 min-h-0 overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />

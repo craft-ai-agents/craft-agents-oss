@@ -1908,7 +1908,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   registerTelegramHandlers(sessionManager)
 
   // Register Slack handlers
-  registerSlackHandlers()
+  registerSlackHandlers(sessionManager)
 
   // Register labels handlers
   registerLabelsIpc()
@@ -2571,10 +2571,12 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
   /**
    * Fetch skills from skills.sh marketplace
+   * Uses /api/search for queries, /api/skills for browsing
    */
   async function fetchSkillsSh(query: string): Promise<import('../shared/types').MarketplaceSkill[]> {
+    // Use search endpoint for queries, skills endpoint for browsing
     const url = query
-      ? `https://skills.sh/api/skills?q=${encodeURIComponent(query)}`
+      ? `https://skills.sh/api/search?q=${encodeURIComponent(query)}`
       : 'https://skills.sh/api/skills'
 
     const response = await safeFetch(url)
@@ -2615,14 +2617,19 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       if (!response.ok) throw new Error(`GitHub ${owner}/${repo}: ${response.status}`)
 
       const contents = await response.json()
-      const dirs = contents.filter((item: any) => item.type === 'dir')
+      // Filter for directories only, excluding hidden dirs (starting with .)
+      const dirs = contents.filter((item: any) => item.type === 'dir' && !item.name.startsWith('.'))
+
+      ipcLog.info(`GitHub ${owner}/${repo}: Found ${dirs.length} potential skill directories`)
 
       // Fetch SKILL.md metadata for each directory (limit to 50 to avoid rate limits)
       const skillPromises = dirs.slice(0, 50).map(async (dir: any): Promise<import('../shared/types').MarketplaceSkill | null> => {
         try {
           // Build path to SKILL.md - handle both root and nested paths
           const mdPath = skillsPath ? `${skillsPath}/${dir.name}/SKILL.md` : `${dir.name}/SKILL.md`
-          const mdUrl = `https://raw.githubusercontent.com/${owner}/${repo}/main/${mdPath}`
+
+          // Use HEAD which always points to default branch (works for both main and master)
+          const mdUrl = `https://raw.githubusercontent.com/${owner}/${repo}/HEAD/${mdPath}`
           const mdResponse = await fetch(mdUrl, { signal: AbortSignal.timeout(5000) })
           if (!mdResponse.ok) return null
 
@@ -2640,13 +2647,15 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
             topSource: `${owner}/${repo}`,
             source: sourceName,
           }
-        } catch {
+        } catch (err) {
+          // Silent fail for individual skills
           return null
         }
       })
 
       const results = await Promise.all(skillPromises)
       skills = results.filter((s): s is import('../shared/types').MarketplaceSkill => s !== null)
+      ipcLog.info(`GitHub ${owner}/${repo}: Found ${skills.length} skills with valid SKILL.md`)
       setCachedSkills(cacheKey, skills)
     }
 
