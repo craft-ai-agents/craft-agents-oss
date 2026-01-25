@@ -32,7 +32,9 @@ export type CredentialType =
   // Slack credentials (workspace-scoped)
   | 'slack_oauth'       // Slack OAuth tokens
   // Telegram credentials (workspace-scoped)
-  | 'telegram_bot_token'; // Telegram bot token from @BotFather
+  | 'telegram_bot_token' // Telegram bot token from @BotFather
+  // GitHub credentials (workspace-scoped)
+  | 'github_access_token'; // GitHub access token from OAuth
 
 /** Valid credential types for validation */
 const VALID_CREDENTIAL_TYPES: readonly CredentialType[] = [
@@ -47,6 +49,7 @@ const VALID_CREDENTIAL_TYPES: readonly CredentialType[] = [
   'whatsapp_session',
   'slack_oauth',
   'telegram_bot_token',
+  'github_access_token',
 ] as const;
 
 /** Check if a string is a valid CredentialType */
@@ -105,6 +108,7 @@ const SOURCE_CREDENTIAL_TYPES = [
   'whatsapp_session',
   'slack_oauth',
   'telegram_bot_token',
+  'github_access_token',
 ] as const;
 
 /** Check if type is a source credential */

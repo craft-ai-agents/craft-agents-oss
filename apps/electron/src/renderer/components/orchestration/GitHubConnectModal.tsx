@@ -13,8 +13,10 @@ import {
   githubOAuthStateAtom,
   githubConnectionAtom,
 } from '@/atoms/orchestration';
+import { useAppShellContext } from '@/context/AppShellContext';
 
 export function GitHubConnectModal() {
+  const { activeWorkspaceId: workspaceId } = useAppShellContext();
   const [isOpen, setIsOpen] = useAtom(githubConnectModalOpenAtom);
   const [oauthState, setOAuthState] = useAtom(githubOAuthStateAtom);
   const [connection, setConnection] = useAtom(githubConnectionAtom);
@@ -42,6 +44,15 @@ export function GitHubConnectModal() {
   }, [setConnection, setOAuthState, setIsOpen]);
 
   const handleStartOAuth = async () => {
+    if (!workspaceId) {
+      setOAuthState({
+        isInProgress: false,
+        error: 'No workspace selected',
+        success: false,
+      });
+      return;
+    }
+
     try {
       setOAuthState({
         isInProgress: true,
@@ -58,6 +69,25 @@ export function GitHubConnectModal() {
           success: false,
         });
         return;
+      }
+
+      // Store access token in credentials
+      if (result.accessToken) {
+        const { getCredentialManager } = await import('@vesper/shared/credentials');
+        const credManager = getCredentialManager();
+
+        await credManager.set(
+          {
+            type: 'github_access_token',
+            workspaceId,
+            sourceId: 'github', // Use constant sourceId for GitHub OAuth
+          },
+          {
+            value: result.accessToken,
+            refreshToken: result.refreshToken,
+            expiresAt: result.expiresAt,
+          }
+        );
       }
 
       // Update connection status

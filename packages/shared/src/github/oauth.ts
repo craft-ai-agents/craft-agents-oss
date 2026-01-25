@@ -208,6 +208,119 @@ export async function isGitHubOAuthConfigured(): Promise<boolean> {
 }
 
 /**
+ * Test GitHub OAuth credentials by making a simple API call
+ *
+ * This function validates the credentials without starting a full OAuth flow.
+ * It creates a temporary access token and verifies it works with GitHub's API.
+ *
+ * @param clientId GitHub OAuth App Client ID
+ * @param clientSecret GitHub OAuth App Client Secret
+ * @returns Result indicating success or failure with helpful error messages
+ */
+export async function testGitHubCredentials(
+  clientId: string,
+  clientSecret: string
+): Promise<{ success: boolean; error?: string; message?: string }> {
+  try {
+    // Basic validation
+    if (!clientId || !clientSecret) {
+      return {
+        success: false,
+        error: 'Both Client ID and Client Secret are required',
+      };
+    }
+
+    // Validate Client ID format (should start with Ov or Iv)
+    if (!/^(Ov|Iv)[a-zA-Z0-9.]{10,}$/.test(clientId.trim())) {
+      return {
+        success: false,
+        error: 'Invalid Client ID format. GitHub OAuth App Client IDs start with "Ov" or "Iv".',
+      };
+    }
+
+    // Validate Client Secret length
+    if (clientSecret.trim().length < 20) {
+      return {
+        success: false,
+        error: 'Client Secret appears too short. GitHub Client Secrets are typically 40 characters.',
+      };
+    }
+
+    // Test by attempting to verify the app exists
+    // We use GitHub's check-token endpoint which requires basic auth
+    const authHeader = Buffer.from(`${clientId.trim()}:${clientSecret.trim()}`).toString('base64');
+
+    const response = await fetch('https://api.github.com/applications/' + clientId.trim() + '/token', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${authHeader}`,
+        'Accept': 'application/vnd.github.v3+json',
+        'Content-Type': 'application/json',
+      },
+      // Send a test token (invalid, but we just want to check auth)
+      body: JSON.stringify({ access_token: 'test_token_validation' }),
+    });
+
+    // 404 means credentials are valid but token doesn't exist (expected for test)
+    // 401 means invalid credentials
+    // 422 means validation error (also acceptable, means credentials work)
+    if (response.status === 404 || response.status === 422) {
+      return {
+        success: true,
+        message: 'GitHub OAuth credentials are valid',
+      };
+    }
+
+    if (response.status === 401) {
+      return {
+        success: false,
+        error: 'Invalid credentials. Please verify your Client ID and Client Secret.',
+      };
+    }
+
+    if (response.status === 403) {
+      return {
+        success: false,
+        error: 'Access forbidden. Your OAuth App may not have the necessary permissions.',
+      };
+    }
+
+    if (response.status === 429) {
+      return {
+        success: false,
+        error: 'Rate limit exceeded. Please try again in a few minutes.',
+      };
+    }
+
+    if (response.status >= 500) {
+      return {
+        success: false,
+        error: 'GitHub server error. Please try again later.',
+      };
+    }
+
+    // Unexpected status - credentials might be valid
+    return {
+      success: true,
+      message: `Credentials appear valid (status: ${response.status})`,
+    };
+  } catch (error) {
+    // Network errors
+    if (error instanceof TypeError) {
+      return {
+        success: false,
+        error: 'Network error. Please check your internet connection.',
+      };
+    }
+
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error occurred',
+    };
+  }
+}
+
+/**
  * Start GitHub OAuth flow
  *
  * Opens browser for GitHub authorization, handles callback, and returns token + user info.

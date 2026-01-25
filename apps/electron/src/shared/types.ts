@@ -856,6 +856,7 @@ export const IPC_CHANNELS = {
   GITHUB_SET_STATUS: 'github:setStatus',
   GITHUB_SET_OAUTH_CREDENTIALS: 'github:setOAuthCredentials',
   GITHUB_HAS_OAUTH_CREDENTIALS: 'github:hasOAuthCredentials',
+  GITHUB_TEST_CREDENTIALS: 'github:testCredentials',
 
   // Slack Integration
   SLACK_START_OAUTH: 'slack:startOAuth',
@@ -1178,6 +1179,7 @@ export interface ElectronAPI {
   githubSetStatus(workspaceId: string, status: import('@vesper/shared/github').GitHubConnectionStatus): Promise<import('@vesper/shared/github').GitHubConnectionStatus>
   githubSetOAuthCredentials(clientId: string | null, clientSecret: string | null): Promise<{ success: boolean; error?: string }>
   githubHasOAuthCredentials(): Promise<boolean>
+  githubTestCredentials(clientId: string, clientSecret: string): Promise<{ success: boolean; error?: string; message?: string }>
 
   // Slack Integration
   slackStartOAuth(workspaceId: string): Promise<{ success: boolean; error?: string; connection?: any; workspaces?: any[] }>

@@ -2418,7 +2418,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
         if (!clientId.trim() || !clientSecret.trim()) {
           return { success: false, error: 'Both Client ID and Client Secret are required' }
         }
-        if (!/^(Ov|Iv)[a-zA-Z0-9]{10,}$/.test(clientId.trim())) {
+        if (!/^(Ov|Iv)[a-zA-Z0-9.]{10,}$/.test(clientId.trim())) {
           return { success: false, error: 'Invalid Client ID format' }
         }
         if (clientSecret.trim().length < 20) {
@@ -2446,6 +2446,19 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       return Boolean(clientId?.value && clientSecret?.value)
     } catch {
       return false
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GITHUB_TEST_CREDENTIALS, async (_event, clientId: string, clientSecret: string) => {
+    try {
+      const { testGitHubCredentials } = await import('@vesper/shared/github')
+      return await testGitHubCredentials(clientId, clientSecret)
+    } catch (error) {
+      ipcLog.error('Failed to test GitHub credentials:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to test credentials'
+      }
     }
   })
 

@@ -484,6 +484,8 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.GITHUB_SET_OAUTH_CREDENTIALS, clientId, clientSecret),
   githubHasOAuthCredentials: () =>
     ipcRenderer.invoke(IPC_CHANNELS.GITHUB_HAS_OAUTH_CREDENTIALS),
+  githubTestCredentials: (clientId: string, clientSecret: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.GITHUB_TEST_CREDENTIALS, clientId, clientSecret),
 
   // Slack Integration
   slackStartOAuth: (workspaceId: string) =>

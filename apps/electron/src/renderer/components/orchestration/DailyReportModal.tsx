@@ -19,8 +19,10 @@ import {
   isGitHubConnectedAtom,
 } from '@/atoms/orchestration';
 import type { DailyReport } from '@vesper/shared/github';
+import { useAppShellContext } from '@/context/AppShellContext';
 
 export function DailyReportModal() {
+  const { activeWorkspaceId: workspaceId } = useAppShellContext();
   const [isOpen, setIsOpen] = useAtom(dailyReportModalOpenAtom);
   const [form, setForm] = useAtom(dailyReportFormAtom);
   const [draft, setDraft] = useAtom(dailyReportDraftAtom);
@@ -35,6 +37,14 @@ export function DailyReportModal() {
   }, [form, isOpen]);
 
   const handleGenerateReport = async () => {
+    if (!workspaceId) {
+      setGenState({
+        ...genState,
+        error: 'No workspace selected',
+      });
+      return;
+    }
+
     if (!localForm.repoOwner || !localForm.repoName) {
       setGenState({
         ...genState,
@@ -54,13 +64,30 @@ export function DailyReportModal() {
         },
       });
 
-      // Note: In a real implementation, you'd get the token from secure storage
-      // For now, this is a placeholder showing the pattern
+      // Retrieve access token from credentials
+      const { getCredentialManager } = await import('@vesper/shared/credentials');
+      const credManager = getCredentialManager();
+      const tokenCred = await credManager.get({
+        type: 'github_access_token',
+        workspaceId,
+        sourceId: 'github', // Use constant sourceId for GitHub OAuth
+      });
+
+      if (!tokenCred?.value) {
+        setGenState({
+          isLoading: false,
+          error: 'Not authenticated with GitHub. Please reconnect.',
+          progress: null,
+        });
+        return;
+      }
+
       const report = (await window.electronAPI.reportCreate({
         repoOwner: localForm.repoOwner,
         repoName: localForm.repoName,
         sinceDays: localForm.sinceDays,
         teamCapacity: localForm.teamCapacity,
+        accessToken: tokenCred.value, // Pass the access token
       })) as DailyReport;
 
       setDraft(report);
