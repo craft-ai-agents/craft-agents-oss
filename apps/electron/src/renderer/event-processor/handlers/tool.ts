@@ -64,16 +64,65 @@ export function handleToolStart(
 }
 
 /**
+ * Parse render_ui tool result and extract the UI tree
+ */
+function parseRenderUiResult(result: string): { tree: unknown } | null {
+  const match = result.match(/__RENDER_UI__(.+?)__END_RENDER_UI__/)
+  if (!match) return null
+  try {
+    return { tree: JSON.parse(match[1]) }
+  } catch {
+    return null
+  }
+}
+
+/**
  * Handle tool_result - complete tool execution
  *
  * Updates the tool message with result. If tool not found (out-of-order),
  * creates the tool message with result included.
+ *
+ * Special handling for render_ui: Creates an assistant message with jsonRender.
  */
 export function handleToolResult(
   state: SessionState,
   event: ToolResultEvent
 ): SessionState {
   const { session, streaming } = state
+
+  // Check for render_ui tool result
+  if (event.toolName === 'render_ui' && event.result && !event.isError) {
+    const renderData = parseRenderUiResult(event.result)
+    if (renderData) {
+      // Create assistant message with jsonRender tree
+      const renderMessage: Message = {
+        id: generateMessageId(),
+        role: 'assistant',
+        content: '', // No text content, just the UI
+        timestamp: Date.now(),
+        turnId: event.turnId,
+        jsonRender: renderData,
+      }
+
+      // Update tool message as completed
+      const toolIndex = findToolMessage(session.messages, event.toolUseId)
+      let updatedSession = session
+
+      if (toolIndex !== -1) {
+        updatedSession = updateMessageAt(session, toolIndex, {
+          toolResult: 'UI rendered successfully',
+          toolStatus: 'completed',
+          isError: false,
+        })
+      }
+
+      // Append the render message
+      return {
+        session: appendMessage(updatedSession, renderMessage),
+        streaming,
+      }
+    }
+  }
 
   const toolIndex = findToolMessage(session.messages, event.toolUseId)
 

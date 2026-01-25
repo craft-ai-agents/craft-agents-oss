@@ -1875,6 +1875,137 @@ source_credential_prompt({
 }
 
 // ============================================================
+// Render UI Tool
+// ============================================================
+
+/**
+ * UI Tree structure for render_ui tool
+ */
+export interface UITree {
+  root: string;
+  elements: Record<string, {
+    type: string;
+    props: Record<string, unknown>;
+    children?: string[];
+  }>;
+}
+
+/**
+ * Create a session-scoped render_ui tool.
+ * Generates AI-powered UI components inline in chat messages.
+ *
+ * The tool validates the tree structure and returns it for rendering.
+ * The event processor will detect this tool's result and attach the
+ * jsonRender tree to the assistant message.
+ */
+export function createRenderUiTool(sessionId: string) {
+  return tool(
+    'render_ui',
+    `Generate a simple UI to display inline in chat.
+
+Use this to render structured data, tables, metrics, or other visual content.
+The UI will appear in the chat message, not in a separate window.
+
+**Available Components:**
+- **Card**: Container with optional title/description. Can contain other components.
+  Props: { title?: string, description?: string }
+- **Stack**: Layout container for arranging children.
+  Props: { direction: "horizontal" | "vertical", gap: "sm" | "md" | "lg" }
+- **Text**: Display text with typography variants.
+  Props: { content: string, variant: "p" | "h1" | "h2" | "h3" | "muted" }
+- **Badge**: Status indicator with color variants.
+  Props: { label: string, variant: "default" | "secondary" | "outline" | "destructive" }
+- **Table**: Data table with columns and rows. Max 100 rows.
+  Props: { columns: [{ key: string, header: string }], data: [{ key: value }] }
+
+**Tree Structure:**
+Return a tree with:
+- \`root\`: ID of the root element
+- \`elements\`: Record of element ID → { type, props, children? }
+
+**Example:**
+\`\`\`json
+{
+  "root": "card1",
+  "elements": {
+    "card1": {
+      "type": "Card",
+      "props": { "title": "User Stats" },
+      "children": ["stack1"]
+    },
+    "stack1": {
+      "type": "Stack",
+      "props": { "direction": "horizontal", "gap": "lg" },
+      "children": ["badge1", "badge2"]
+    },
+    "badge1": { "type": "Badge", "props": { "label": "Active: 100" } },
+    "badge2": { "type": "Badge", "props": { "label": "New: 5", "variant": "secondary" } }
+  }
+}
+\`\`\``,
+    {
+      tree: z.object({
+        root: z.string().describe('ID of the root element'),
+        elements: z.record(z.string(), z.object({
+          type: z.enum(['Card', 'Stack', 'Text', 'Badge', 'Table']).describe('Component type'),
+          props: z.record(z.string(), z.unknown()).describe('Component props'),
+          children: z.array(z.string()).optional().describe('Child element IDs'),
+        })).describe('Map of element ID to element definition'),
+      }).describe('UI tree structure'),
+    },
+    async (args) => {
+      debug('[render_ui] Called with tree:', JSON.stringify(args.tree).slice(0, 200));
+
+      // Type-safe element access
+      type UIElement = {
+        type: 'Card' | 'Stack' | 'Text' | 'Badge' | 'Table';
+        props: Record<string, unknown>;
+        children?: string[];
+      };
+      const elements = args.tree.elements as Record<string, UIElement>;
+
+      // Validate root exists in elements
+      if (!elements[args.tree.root]) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `Error: Root element '${args.tree.root}' not found in elements.`,
+          }],
+          isError: true,
+        };
+      }
+
+      // Validate all children references exist
+      for (const [id, element] of Object.entries(elements)) {
+        if (element.children) {
+          for (const childId of element.children) {
+            if (!elements[childId]) {
+              return {
+                content: [{
+                  type: 'text' as const,
+                  text: `Error: Element '${id}' references missing child '${childId}'.`,
+                }],
+                isError: true,
+              };
+            }
+          }
+        }
+      }
+
+      // Return the tree as a special marker for the event processor
+      // The event processor will detect this and attach jsonRender to the message
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `__RENDER_UI__${JSON.stringify(args.tree)}__END_RENDER_UI__`,
+        }],
+        isError: false,
+      };
+    }
+  );
+}
+
+// ============================================================
 // Session-Scoped Tools Provider
 // ============================================================
 
@@ -1913,6 +2044,8 @@ export function getSessionScopedTools(sessionId: string, workspaceRootPath: stri
         createSlackOAuthTriggerTool(sessionId, workspaceRootPath),
         createMicrosoftOAuthTriggerTool(sessionId, workspaceRootPath),
         createCredentialPromptTool(sessionId, workspaceRootPath),
+        // UI rendering tool for AI-generated components
+        createRenderUiTool(sessionId),
       ],
     });
     sessionScopedToolsCache.set(cacheKey, cached);

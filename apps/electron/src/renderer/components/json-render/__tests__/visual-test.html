@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JSON Render Visual Test</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a1a;
+      color: #e5e5e5;
+      padding: 20px;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    h1 { color: #fff; }
+    h2 { color: #a0a0a0; margin-top: 30px; }
+    pre {
+      background: #2d2d2d;
+      padding: 15px;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-size: 12px;
+    }
+    .test-case {
+      background: #252525;
+      border: 1px solid #333;
+      border-radius: 12px;
+      padding: 20px;
+      margin: 20px 0;
+    }
+    .test-title {
+      color: #8b5cf6;
+      font-weight: 600;
+      margin-bottom: 10px;
+    }
+    .card {
+      background: #2d2d2d;
+      border: 1px solid #404040;
+      border-radius: 12px;
+      padding: 16px;
+      margin: 10px 0;
+    }
+    .card-title { font-weight: 600; margin-bottom: 4px; }
+    .card-desc { color: #a0a0a0; font-size: 14px; }
+    .stack-h { display: flex; gap: 12px; flex-wrap: wrap; }
+    .stack-v { display: flex; flex-direction: column; gap: 12px; }
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .badge-default { background: #8b5cf6; color: white; }
+    .badge-secondary { background: #404040; color: #e5e5e5; }
+    .badge-destructive { background: #ef4444; color: white; }
+    .badge-outline { border: 1px solid #404040; background: transparent; }
+    .text-h1 { font-size: 24px; font-weight: bold; }
+    .text-h2 { font-size: 20px; font-weight: 600; }
+    .text-h3 { font-size: 18px; font-weight: 500; }
+    .text-p { font-size: 14px; }
+    .text-muted { font-size: 14px; color: #a0a0a0; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+    th, td {
+      padding: 10px;
+      text-align: left;
+      border-bottom: 1px solid #333;
+    }
+    th { color: #a0a0a0; font-weight: 500; }
+  </style>
+</head>
+<body>
+  <h1>JSON Render Visual Test</h1>
+  <p>This page shows how each component should render. Use this as a reference.</p>
+
+  <h2>Test Case 1: Card with Badges</h2>
+  <div class="test-case">
+    <div class="test-title">Expected Output:</div>
+    <div class="card">
+      <div class="card-title">User Statistics</div>
+      <div class="card-desc">Daily metrics overview</div>
+      <div style="margin-top: 12px;">
+        <div class="stack-h">
+          <span class="badge badge-default">Active: 1,234</span>
+          <span class="badge badge-secondary">New: 56</span>
+          <span class="badge badge-destructive">Churned: 12</span>
+        </div>
+      </div>
+    </div>
+    <div class="test-title" style="margin-top: 20px;">JSON Tree:</div>
+    <pre>{
+  "root": "card1",
+  "elements": {
+    "card1": {
+      "type": "Card",
+      "props": { "title": "User Statistics", "description": "Daily metrics overview" },
+      "children": ["stack1"]
+    },
+    "stack1": {
+      "type": "Stack",
+      "props": { "direction": "horizontal", "gap": "lg" },
+      "children": ["badge1", "badge2", "badge3"]
+    },
+    "badge1": { "type": "Badge", "props": { "label": "Active: 1,234", "variant": "default" } },
+    "badge2": { "type": "Badge", "props": { "label": "New: 56", "variant": "secondary" } },
+    "badge3": { "type": "Badge", "props": { "label": "Churned: 12", "variant": "destructive" } }
+  }
+}</pre>
+  </div>
+
+  <h2>Test Case 2: Text Variants</h2>
+  <div class="test-case">
+    <div class="test-title">Expected Output:</div>
+    <div class="stack-v">
+      <div class="text-h1">Heading 1</div>
+      <div class="text-h2">Heading 2</div>
+      <div class="text-h3">Heading 3</div>
+      <div class="text-p">Regular paragraph text</div>
+      <div class="text-muted">Muted helper text</div>
+    </div>
+    <div class="test-title" style="margin-top: 20px;">JSON Tree:</div>
+    <pre>{
+  "root": "stack1",
+  "elements": {
+    "stack1": {
+      "type": "Stack",
+      "props": { "direction": "vertical", "gap": "sm" },
+      "children": ["t1", "t2", "t3", "t4", "t5"]
+    },
+    "t1": { "type": "Text", "props": { "content": "Heading 1", "variant": "h1" } },
+    "t2": { "type": "Text", "props": { "content": "Heading 2", "variant": "h2" } },
+    "t3": { "type": "Text", "props": { "content": "Heading 3", "variant": "h3" } },
+    "t4": { "type": "Text", "props": { "content": "Regular paragraph text", "variant": "p" } },
+    "t5": { "type": "Text", "props": { "content": "Muted helper text", "variant": "muted" } }
+  }
+}</pre>
+  </div>
+
+  <h2>Test Case 3: Data Table</h2>
+  <div class="test-case">
+    <div class="test-title">Expected Output:</div>
+    <div class="card">
+      <div class="card-title">Sales Report</div>
+      <div style="margin-top: 12px; border: 1px solid #333; border-radius: 8px; overflow: hidden;">
+        <table>
+          <thead>
+            <tr>
+              <th>Product</th>
+              <th>Units</th>
+              <th>Revenue</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Widget A</td><td>150</td><td>$4,500</td></tr>
+            <tr><td>Widget B</td><td>89</td><td>$2,670</td></tr>
+            <tr><td>Widget C</td><td>234</td><td>$7,020</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="test-title" style="margin-top: 20px;">JSON Tree:</div>
+    <pre>{
+  "root": "card1",
+  "elements": {
+    "card1": {
+      "type": "Card",
+      "props": { "title": "Sales Report" },
+      "children": ["table1"]
+    },
+    "table1": {
+      "type": "Table",
+      "props": {
+        "columns": [
+          { "key": "product", "header": "Product" },
+          { "key": "units", "header": "Units" },
+          { "key": "revenue", "header": "Revenue" }
+        ],
+        "data": [
+          { "product": "Widget A", "units": 150, "revenue": "$4,500" },
+          { "product": "Widget B", "units": 89, "revenue": "$2,670" },
+          { "product": "Widget C", "units": 234, "revenue": "$7,020" }
+        ]
+      }
+    }
+  }
+}</pre>
+  </div>
+
+  <h2>Test Case 4: Error State</h2>
+  <div class="test-case">
+    <div class="test-title">Expected Output (invalid tree):</div>
+    <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.5); border-radius: 8px; padding: 12px; color: #ef4444; font-size: 14px;">
+      Invalid UI structure
+    </div>
+    <div class="test-title" style="margin-top: 20px;">JSON Tree (invalid):</div>
+    <pre>{
+  "root": "missing-element",
+  "elements": {}
+}</pre>
+  </div>
+
+  <hr style="border-color: #333; margin: 40px 0;">
+  <p style="color: #666; font-size: 12px;">
+    Open this file in a browser to see the expected visual output.<br>
+    File: apps/electron/src/renderer/components/json-render/__tests__/visual-test.html
+  </p>
+</body>
+</html>
