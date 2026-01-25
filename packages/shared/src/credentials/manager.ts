@@ -352,6 +352,71 @@ export class CredentialManager {
 
     return sessions;
   }
+
+  // ========================================
+  // Telegram Bot Token Management
+  // ========================================
+
+  /**
+   * Store Telegram bot token
+   *
+   * @param workspaceId - Workspace ID
+   * @param botToken - Telegram bot token from @BotFather
+   */
+  async setTelegramBotToken(
+    workspaceId: string,
+    botToken: string
+  ): Promise<void> {
+    await this.set(
+      {
+        type: 'telegram_bot_token',
+        workspaceId,
+        sourceId: 'default', // Only one bot per workspace for now
+      },
+      {
+        value: botToken,
+      }
+    );
+    debug(`[CredentialManager] Saved Telegram bot token for workspace ${workspaceId}`);
+  }
+
+  /**
+   * Get Telegram bot token
+   *
+   * @param workspaceId - Workspace ID
+   * @returns Bot token or null if not found
+   */
+  async getTelegramBotToken(
+    workspaceId: string
+  ): Promise<string | null> {
+    const cred = await this.get({
+      type: 'telegram_bot_token',
+      workspaceId,
+      sourceId: 'default',
+    });
+
+    return cred?.value || null;
+  }
+
+  /**
+   * Delete Telegram bot token (GDPR compliance)
+   *
+   * @param workspaceId - Workspace ID
+   * @returns True if deleted, false if not found
+   */
+  async deleteTelegramBotToken(
+    workspaceId: string
+  ): Promise<boolean> {
+    const deleted = await this.delete({
+      type: 'telegram_bot_token',
+      workspaceId,
+      sourceId: 'default',
+    });
+    if (deleted) {
+      debug(`[CredentialManager] Deleted Telegram bot token for workspace ${workspaceId}`);
+    }
+    return deleted;
+  }
 }
 
 /**

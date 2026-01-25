@@ -1,5 +1,16 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { IPC_CHANNELS, type SessionEvent, type ElectronAPI, type FileAttachment, type AuthType } from '../shared/types'
+import {
+  IPC_CHANNELS,
+  type SessionEvent,
+  type ElectronAPI,
+  type FileAttachment,
+  type AuthType,
+  type TelegramConnectResponse,
+  type TelegramDisconnectResponse,
+  type TelegramStatusResponse,
+  type TelegramSendMessageResponse,
+  type TelegramGetSavedTokenResponse,
+} from '../shared/types'
 
 const api: ElectronAPI = {
   // Session management
@@ -540,6 +551,54 @@ const api: ElectronAPI = {
     ipcRenderer.on(IPC_CHANNELS.WHATSAPP_MESSAGE_ACTIVITY, handler)
     return () => {
       ipcRenderer.removeListener(IPC_CHANNELS.WHATSAPP_MESSAGE_ACTIVITY, handler)
+    }
+  },
+
+  // Telegram Integration
+  telegramConnect: (workspaceId: string, botToken: string): Promise<TelegramConnectResponse> =>
+    ipcRenderer.invoke(IPC_CHANNELS.TELEGRAM_CONNECT, { workspaceId, botToken }),
+  telegramDisconnect: (workspaceId: string): Promise<TelegramDisconnectResponse> =>
+    ipcRenderer.invoke(IPC_CHANNELS.TELEGRAM_DISCONNECT, { workspaceId }),
+  telegramGetStatus: (workspaceId: string): Promise<TelegramStatusResponse> =>
+    ipcRenderer.invoke(IPC_CHANNELS.TELEGRAM_STATUS, { workspaceId }),
+  telegramSendMessage: (workspaceId: string, chatId: number, content: string): Promise<TelegramSendMessageResponse> =>
+    ipcRenderer.invoke(IPC_CHANNELS.TELEGRAM_SEND_MESSAGE, { workspaceId, chatId, content }),
+  telegramGetSavedToken: (workspaceId: string): Promise<TelegramGetSavedTokenResponse> =>
+    ipcRenderer.invoke(IPC_CHANNELS.TELEGRAM_GET_SAVED_TOKEN, { workspaceId }),
+
+  // Telegram event listeners
+  onTelegramConnectionStatus: (callback: (data: { workspaceId: string; status: any }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: { workspaceId: string; status: any }) => {
+      callback(data)
+    }
+    ipcRenderer.on(IPC_CHANNELS.TELEGRAM_CONNECTION_STATUS, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.TELEGRAM_CONNECTION_STATUS, handler)
+    }
+  },
+  onTelegramError: (callback: (data: { workspaceId: string; message: string; timestamp: number }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: { workspaceId: string; message: string; timestamp: number }) => {
+      callback(data)
+    }
+    ipcRenderer.on(IPC_CHANNELS.TELEGRAM_ERROR, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.TELEGRAM_ERROR, handler)
+    }
+  },
+  onTelegramMessageActivity: (callback: (data: {
+    workspaceId: string
+    status: 'received' | 'processing' | 'complete' | 'error'
+    chatId?: number
+    chatTitle?: string
+    username?: string
+    sessionId?: string
+  }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: any) => {
+      callback(data)
+    }
+    ipcRenderer.on(IPC_CHANNELS.TELEGRAM_MESSAGE_ACTIVITY, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.TELEGRAM_MESSAGE_ACTIVITY, handler)
     }
   },
 

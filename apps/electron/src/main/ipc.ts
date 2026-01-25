@@ -12,6 +12,7 @@ import { getScheduler, startAllSchedulers, stopAllSchedulers } from './scheduler
 import { spawnTerminalWithSession } from './terminal'
 import { registerOnboardingHandlers } from './onboarding'
 import { registerWhatsAppHandlers } from './whatsapp-ipc'
+import { registerTelegramHandlers } from './telegram-ipc'
 import { registerSlackHandlers } from './slack-ipc'
 import { registerLabelsIpc } from './labels-ipc'
 import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type AuthType, type BillingMethodInfo, type SendMessageOptions } from '../shared/types'
@@ -1890,6 +1891,9 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
   // Register WhatsApp handlers
   registerWhatsAppHandlers(sessionManager)
+
+  // Register Telegram handlers
+  registerTelegramHandlers(sessionManager)
 
   // Register Slack handlers
   registerSlackHandlers()

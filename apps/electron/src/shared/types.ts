@@ -856,6 +856,17 @@ export const IPC_CHANNELS = {
   WHATSAPP_ERROR: 'whatsapp:error',
   WHATSAPP_MESSAGE_ACTIVITY: 'whatsapp:message-activity',
 
+  // Telegram Integration
+  TELEGRAM_CONNECT: 'telegram:connect',
+  TELEGRAM_DISCONNECT: 'telegram:disconnect',
+  TELEGRAM_STATUS: 'telegram:status',
+  TELEGRAM_SEND_MESSAGE: 'telegram:send-message',
+  TELEGRAM_GET_SAVED_TOKEN: 'telegram:get-saved-token',
+  // Telegram events (main → renderer)
+  TELEGRAM_CONNECTION_STATUS: 'telegram:connection-status',
+  TELEGRAM_ERROR: 'telegram:error',
+  TELEGRAM_MESSAGE_ACTIVITY: 'telegram:message-activity',
+
   // Viewer Configuration (session sharing backend)
   VIEWER_GET_CONFIG: 'viewer:getConfig',
   VIEWER_SET_CONFIG: 'viewer:setConfig',
@@ -1156,6 +1167,24 @@ export interface ElectronAPI {
   onWhatsAppError(callback: (data: { workspaceId: string; message: string }) => void): () => void
   onWhatsAppMessageActivity(callback: (data: WhatsAppMessageActivityEvent) => void): () => void
 
+  // Telegram Integration
+  telegramConnect(workspaceId: string, botToken: string): Promise<TelegramConnectResponse>
+  telegramDisconnect(workspaceId: string): Promise<TelegramDisconnectResponse>
+  telegramGetStatus(workspaceId: string): Promise<TelegramStatusResponse>
+  telegramSendMessage(workspaceId: string, chatId: number, content: string): Promise<TelegramSendMessageResponse>
+  telegramGetSavedToken(workspaceId: string): Promise<TelegramGetSavedTokenResponse>
+  // Telegram event listeners
+  onTelegramConnectionStatus(callback: (data: { workspaceId: string; status: any }) => void): () => void
+  onTelegramError(callback: (data: { workspaceId: string; message: string; timestamp: number }) => void): () => void
+  onTelegramMessageActivity(callback: (data: {
+    workspaceId: string
+    status: 'received' | 'processing' | 'complete' | 'error'
+    chatId?: number
+    chatTitle?: string
+    username?: string
+    sessionId?: string
+  }) => void): () => void
+
   // Viewer Configuration (session sharing backend)
   getViewerConfig(): Promise<ViewerConfigResult>
   setViewerConfig(config: ViewerConfig): Promise<ViewerResult>
@@ -1299,6 +1328,49 @@ export interface WhatsAppSessionsResult extends WhatsAppResult {
  */
 export interface WhatsAppSendResult extends WhatsAppResult {
   messageId?: string
+}
+
+/**
+ * Result from Telegram IPC operations
+ */
+export interface TelegramResult {
+  success: boolean
+  error?: string
+}
+
+/**
+ * Telegram connect result
+ */
+export interface TelegramConnectResponse extends TelegramResult {
+  // Additional fields can be added if needed
+}
+
+/**
+ * Telegram disconnect result
+ */
+export interface TelegramDisconnectResponse extends TelegramResult {
+  // Additional fields can be added if needed
+}
+
+/**
+ * Telegram status result
+ */
+export interface TelegramStatusResponse extends TelegramResult {
+  status?: any
+}
+
+/**
+ * Telegram send message result
+ */
+export interface TelegramSendMessageResponse extends TelegramResult {
+  messageId?: number
+}
+
+/**
+ * Telegram get saved token result
+ */
+export interface TelegramGetSavedTokenResponse extends TelegramResult {
+  token?: string
 }
 
 /**
