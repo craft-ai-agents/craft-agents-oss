@@ -19,10 +19,12 @@ import {
   isGitHubConnectedAtom,
 } from '@/atoms/orchestration';
 import type { DailyReport } from '@vesper/shared/github';
-import { useAppShellContext } from '@/context/AppShellContext';
 
-export function DailyReportModal() {
-  const { activeWorkspaceId: workspaceId } = useAppShellContext();
+interface DailyReportModalProps {
+  workspaceId: string | null;
+}
+
+export function DailyReportModal({ workspaceId }: DailyReportModalProps) {
   const [isOpen, setIsOpen] = useAtom(dailyReportModalOpenAtom);
   const [form, setForm] = useAtom(dailyReportFormAtom);
   const [draft, setDraft] = useAtom(dailyReportDraftAtom);

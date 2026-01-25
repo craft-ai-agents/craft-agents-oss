@@ -13,10 +13,12 @@ import {
   githubOAuthStateAtom,
   githubConnectionAtom,
 } from '@/atoms/orchestration';
-import { useAppShellContext } from '@/context/AppShellContext';
 
-export function GitHubConnectModal() {
-  const { activeWorkspaceId: workspaceId } = useAppShellContext();
+interface GitHubConnectModalProps {
+  workspaceId: string | null;
+}
+
+export function GitHubConnectModal({ workspaceId }: GitHubConnectModalProps) {
   const [isOpen, setIsOpen] = useAtom(githubConnectModalOpenAtom);
   const [oauthState, setOAuthState] = useAtom(githubOAuthStateAtom);
   const [connection, setConnection] = useAtom(githubConnectionAtom);

@@ -16,7 +16,7 @@ import { join } from 'path';
 import matter from 'gray-matter';
 import type { LoadedSkill, SkillMetadata, SkillSource } from './types.ts';
 import { getWorkspaceSkillsPath } from '../workspaces/storage.ts';
-import { GLOBAL_SKILLS_DIR, CLAUDE_CODE_SKILLS_DIR, CLAUDE_CODE_COMMANDS_DIR } from '../config/paths.ts';
+import { CLAUDE_CODE_SKILLS_DIR, CLAUDE_CODE_COMMANDS_DIR } from '../config/paths.ts';
 import {
   validateIconValue,
   findIconFile,
@@ -284,16 +284,11 @@ function loadCommandsAsSkills(): LoadedSkill[] {
 }
 
 /**
- * Load global skills from ~/.vesper/global-skills/, ~/.claude/skills/,
- * and ~/.claude/commands/ (auto-converted to skills).
- * Claude Code skills and commands are read-only, global skills are user-installed.
+ * Load Claude Code skills from ~/.claude/skills/ and ~/.claude/commands/.
+ * All non-workspace skills are stored in the Claude Code skills directory.
  */
 export function loadGlobalSkills(): LoadedSkill[] {
   const skills: LoadedSkill[] = [];
-
-  // Load from ~/.vesper/global-skills/ (user-installed)
-  const globalSkills = loadSkillsFromDir(GLOBAL_SKILLS_DIR, 'global');
-  skills.push(...globalSkills);
 
   // Load from ~/.claude/skills/ (Claude Code CLI standalone skills)
   const claudeCodeSkills = loadSkillsFromDir(CLAUDE_CODE_SKILLS_DIR, 'claude-code');

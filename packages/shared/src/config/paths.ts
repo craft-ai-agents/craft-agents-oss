@@ -18,8 +18,8 @@ import { join } from 'path';
 // Falls back to default ~/.vesper/ for production and non-numbered dev folders
 export const CONFIG_DIR = process.env.VESPER_CONFIG_DIR || join(homedir(), '.vesper');
 
-// Global skills directories (where skills are stored)
-export const GLOBAL_SKILLS_DIR = join(CONFIG_DIR, 'global-skills');
+// Claude Code skills directory (where skills are stored)
+// All non-workspace skills go here - no separate "global-skills" directory
 export const CLAUDE_CODE_SKILLS_DIR = join(homedir(), '.claude', 'skills');
 
 // Claude Code commands directory (where slash commands are stored)

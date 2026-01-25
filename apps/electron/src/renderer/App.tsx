@@ -1333,8 +1333,8 @@ export default function App() {
           </div>
 
           {/* Orchestration Modals */}
-          <GitHubConnectModal />
-          <DailyReportModal />
+          <GitHubConnectModal workspaceId={windowWorkspaceId} />
+          <DailyReportModal workspaceId={windowWorkspaceId} />
 
           {/* Agentation Debug Panel - must be inside providers */}
           {agentationInitialized && agentationEnabled && (

@@ -4,7 +4,7 @@ import type { ContentBlockParam } from '@anthropic-ai/sdk/resources';
 import { z } from 'zod';
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
-import { GLOBAL_SKILLS_DIR, CLAUDE_CODE_SKILLS_DIR, CLAUDE_CODE_PLUGIN_DIR } from '../config/paths.ts';
+import { CLAUDE_CODE_SKILLS_DIR, CLAUDE_CODE_PLUGIN_DIR } from '../config/paths.ts';
 import { getSystemPrompt, getDateTimeContext, getWorkingDirectoryContext } from '../prompts/system.ts';
 // Plan types are used by UI components; not needed in vesper-agent.ts since Safe Mode is user-controlled
 import { parseError, type AgentError } from './errors.ts';
@@ -418,9 +418,8 @@ export class VesperAgent {
 
   /**
    * Build the plugins configuration array for the SDK.
-   * Includes workspace, global skills, and Claude Code skills directories.
+   * Includes workspace and Claude Code skills directories.
    * Only includes directories that exist to avoid SDK errors.
-   * Ensures plugin manifests exist for global skill directories.
    *
    * SDK plugin structure expects:
    *   {plugin-root}/.claude-plugin/plugin.json
@@ -433,14 +432,7 @@ export class VesperAgent {
       { type: 'local' as const, path: this.workspaceRootPath },
     ];
 
-    // Add global skills directory if it exists (user-installed skills)
-    // Note: Global skills at ~/.vesper/global-skills/ - SDK will look for /skills/ subdir
-    if (existsSync(GLOBAL_SKILLS_DIR)) {
-      this.ensurePluginManifestForDir(GLOBAL_SKILLS_DIR, 'craft-global-skills');
-      configs.push({ type: 'local' as const, path: GLOBAL_SKILLS_DIR });
-    }
-
-    // Add Claude Code skills directory if it exists (CLI-installed skills)
+    // Add Claude Code skills directory if it exists
     // SDK expects: {plugin-root}/skills/ so we pass ~/.claude/ as root
     // Skills are at ~/.claude/skills/{skill-name}/SKILL.md
     if (existsSync(CLAUDE_CODE_SKILLS_DIR)) {
