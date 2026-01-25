@@ -1901,16 +1901,18 @@ export interface UITree {
 export function createRenderUiTool(sessionId: string) {
   return tool(
     'render_ui',
-    `Generate a simple UI to display inline in chat.
+    `Generate an interactive UI to display inline in chat.
 
-Use this to render structured data, tables, metrics, or other visual content.
+Use this to render structured data, forms, tables, metrics, or interactive content.
 The UI will appear in the chat message, not in a separate window.
 
-**Available Components:**
+**LAYOUT COMPONENTS:**
 - **Card**: Container with optional title/description. Can contain other components.
   Props: { title?: string, description?: string }
 - **Stack**: Layout container for arranging children.
   Props: { direction: "horizontal" | "vertical", gap: "sm" | "md" | "lg" }
+
+**DISPLAY COMPONENTS:**
 - **Text**: Display text with typography variants.
   Props: { content: string, variant: "p" | "h1" | "h2" | "h3" | "muted" }
 - **Badge**: Status indicator with color variants.
@@ -1918,28 +1920,41 @@ The UI will appear in the chat message, not in a separate window.
 - **Table**: Data table with columns and rows. Max 100 rows.
   Props: { columns: [{ key: string, header: string }], data: [{ key: value }] }
 
+**INTERACTIVE COMPONENTS:**
+- **Button**: Clickable button that triggers an action.
+  Props: { label: string, action: string, variant?: "default" | "secondary" | "outline" | "destructive" | "ghost", disabled?: boolean }
+- **TextField**: Text input with data binding.
+  Props: { label?: string, valuePath: string, placeholder?: string, type?: "text" | "email" | "number" | "password" }
+- **SelectField**: Dropdown select with options.
+  Props: { label?: string, bindPath: string, options: [{ value: string, label: string }], placeholder?: string }
+
+**BUILT-IN ACTIONS (for Button):**
+- "copy" - Copies text to clipboard
+- "open_url" - Opens a URL in browser
+- "log" - Logs to console for debugging
+
 **Tree Structure:**
 Return a tree with:
 - \`root\`: ID of the root element
 - \`elements\`: Record of element ID → { type, props, children? }
 
-**Example:**
+**Example with interactive components:**
 \`\`\`json
 {
   "root": "card1",
   "elements": {
     "card1": {
       "type": "Card",
-      "props": { "title": "User Stats" },
+      "props": { "title": "Quick Actions" },
       "children": ["stack1"]
     },
     "stack1": {
       "type": "Stack",
-      "props": { "direction": "horizontal", "gap": "lg" },
-      "children": ["badge1", "badge2"]
+      "props": { "direction": "horizontal", "gap": "md" },
+      "children": ["btn1", "input1"]
     },
-    "badge1": { "type": "Badge", "props": { "label": "Active: 100" } },
-    "badge2": { "type": "Badge", "props": { "label": "New: 5", "variant": "secondary" } }
+    "btn1": { "type": "Button", "props": { "label": "Copy", "action": "copy" } },
+    "input1": { "type": "TextField", "props": { "label": "Name", "valuePath": "/user/name", "placeholder": "Enter name..." } }
   }
 }
 \`\`\``,
@@ -1947,7 +1962,7 @@ Return a tree with:
       tree: z.object({
         root: z.string().describe('ID of the root element'),
         elements: z.record(z.string(), z.object({
-          type: z.enum(['Card', 'Stack', 'Text', 'Badge', 'Table']).describe('Component type'),
+          type: z.enum(['Card', 'Stack', 'Text', 'Badge', 'Table', 'Button', 'TextField', 'SelectField']).describe('Component type'),
           props: z.record(z.string(), z.unknown()).describe('Component props'),
           children: z.array(z.string()).optional().describe('Child element IDs'),
         })).describe('Map of element ID to element definition'),
@@ -1958,7 +1973,7 @@ Return a tree with:
 
       // Type-safe element access
       type UIElement = {
-        type: 'Card' | 'Stack' | 'Text' | 'Badge' | 'Table';
+        type: 'Card' | 'Stack' | 'Text' | 'Badge' | 'Table' | 'Button' | 'TextField' | 'SelectField';
         props: Record<string, unknown>;
         children?: string[];
       };
