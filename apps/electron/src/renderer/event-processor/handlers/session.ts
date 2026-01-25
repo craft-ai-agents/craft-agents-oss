@@ -24,6 +24,7 @@ import type {
   WorkingDirectoryChangedEvent,
   PermissionModeChangedEvent,
   SessionModelChangedEvent,
+  SdkSessionIdChangedEvent,
   UserMessageEvent,
   SessionSharedEvent,
   SessionUnsharedEvent,
@@ -404,6 +405,24 @@ export function handleSessionModelChanged(
   return {
     state: {
       session: { ...session, model: event.model ?? undefined },
+      streaming,
+    },
+    effects: [],
+  }
+}
+
+/**
+ * Handle sdk_session_id_changed - update SDK session ID for terminal resume
+ */
+export function handleSdkSessionIdChanged(
+  state: SessionState,
+  event: SdkSessionIdChangedEvent
+): ProcessResult {
+  const { session, streaming } = state
+
+  return {
+    state: {
+      session: { ...session, sdkSessionId: event.sdkSessionId },
       streaming,
     },
     effects: [],

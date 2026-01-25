@@ -89,6 +89,32 @@ export interface ParentUpdateEvent {
 }
 
 /**
+ * JSON Render event - AI-generated UI component
+ * Sent when the render_ui tool completes successfully.
+ * Contains the full message with jsonRender tree.
+ */
+export interface JsonRenderEvent {
+  type: 'json_render'
+  sessionId: string
+  message: {
+    id: string
+    content: string
+    timestamp: number
+    turnId?: string
+    jsonRender: {
+      tree: {
+        root: string
+        elements: Record<string, {
+          type: string
+          props: Record<string, unknown>
+          children?: string[]
+        }>
+      }
+    }
+  }
+}
+
+/**
  * Complete event - agent loop finished
  */
 export interface CompleteEvent {
@@ -233,6 +259,15 @@ export interface SessionModelChangedEvent {
   type: 'session_model_changed'
   sessionId: string
   model: string | null
+}
+
+/**
+ * SDK session ID changed event - terminal resume button needs this to show
+ */
+export interface SdkSessionIdChangedEvent {
+  type: 'sdk_session_id_changed'
+  sessionId: string
+  sdkSessionId: string | undefined
 }
 
 /**
@@ -498,6 +533,7 @@ export type AgentEvent =
   | WorkingDirectoryChangedEvent
   | PermissionModeChangedEvent
   | SessionModelChangedEvent
+  | SdkSessionIdChangedEvent
   | TaskBackgroundedEvent
   | ShellBackgroundedEvent
   | TaskProgressEvent
@@ -509,6 +545,7 @@ export type AgentEvent =
   | AuthCompletedEvent
   | SourceActivatedEvent
   | UsageUpdateEvent
+  | JsonRenderEvent
   // Ralph Loop events
   | LoopProgressEvent
   | LoopStoryCompleteEvent

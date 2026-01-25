@@ -10,8 +10,9 @@
 
 import { spawn, execFile } from 'child_process'
 import { promisify } from 'util'
-import { existsSync } from 'fs'
-import { homedir } from 'os'
+import { existsSync, writeFileSync, chmodSync, unlinkSync } from 'fs'
+import { homedir, tmpdir } from 'os'
+import { join } from 'path'
 import { mainLog } from './logger'
 
 const execFileAsync = promisify(execFile)
@@ -47,14 +48,19 @@ export interface SpawnTerminalResult {
 /**
  * Validates SDK session ID format to prevent shell injection
  *
- * Expected format: ses-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
- * or shorter format: ses-<hex>
+ * Accepts multiple formats:
+ * - Plain UUID: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+ * - With ses- prefix: ses-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+ * - Short hex format: ses-<hex>
  */
 function validateSessionId(sessionId: string): boolean {
-  // Allow full UUID format or shortened hex format
-  const fullPattern = /^ses-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/
-  const shortPattern = /^ses-[a-f0-9-]+$/
-  return fullPattern.test(sessionId) || shortPattern.test(sessionId)
+  // Plain UUID format (most common for SDK session IDs)
+  const uuidPattern = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i
+  // With ses- prefix (legacy format)
+  const sesUuidPattern = /^ses-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i
+  // Short hex format with ses- prefix
+  const shortPattern = /^ses-[a-f0-9-]+$/i
+  return uuidPattern.test(sessionId) || sesUuidPattern.test(sessionId) || shortPattern.test(sessionId)
 }
 
 /**
@@ -79,46 +85,82 @@ function validateWorkingDirectory(workingDirectory: string): string {
 }
 
 /**
- * Spawns a terminal on macOS using AppleScript
+ * Spawns a terminal on macOS
  *
- * Uses Terminal.app by default. Future enhancement: support iTerm2.
+ * Uses a temporary shell script approach which is more reliable from Electron apps
+ * than AppleScript automation (which requires Accessibility permissions).
+ *
+ * Flow:
+ * 1. Create a temporary shell script with the claude resume command
+ * 2. Make it executable
+ * 3. Use `open -a Terminal <script>` to launch Terminal with the script
+ * 4. Clean up the script after a delay
  */
 async function openMacTerminal(options: SpawnTerminalOptions): Promise<SpawnTerminalResult> {
   const { sdkSessionId, workingDirectory, taskListId } = options
 
   const validDir = validateWorkingDirectory(workingDirectory)
-  const escapedDir = escapeShellPath(validDir)
 
-  // Build command to execute in terminal
-  let command = `cd ${escapedDir}`
+  // Create a unique temporary script file
+  const scriptName = `vesper-terminal-${Date.now()}.sh`
+  const scriptPath = join(tmpdir(), scriptName)
+
+  // Build the shell script content
+  let scriptContent = '#!/bin/bash\n'
+  scriptContent += '# Vesper Terminal Resume Script - auto-generated\n'
+  scriptContent += `cd ${escapeShellPath(validDir)}\n`
 
   // Add task list ID environment variable if provided
   if (taskListId) {
-    command += ` && export CLAUDE_CODE_TASK_LIST_ID='${taskListId}'`
+    scriptContent += `export CLAUDE_CODE_TASK_LIST_ID='${taskListId}'\n`
   }
 
   // Add claude resume command
-  command += ` && claude --resume ${sdkSessionId}`
+  scriptContent += `claude --resume ${sdkSessionId}\n`
 
-  // AppleScript to open Terminal.app with the command
-  const appleScript = `
-    tell application "Terminal"
-      do script "${command.replace(/"/g, '\\"')}"
-      activate
-    end tell
-  `.trim()
+  // Keep the shell open after the command (in case claude exits)
+  scriptContent += 'exec $SHELL\n'
 
   try {
-    // Execute AppleScript via osascript
-    await execFileAsync('osascript', ['-e', appleScript], {
-      timeout: 5000,
+    // Write the script file
+    writeFileSync(scriptPath, scriptContent, { encoding: 'utf-8' })
+    chmodSync(scriptPath, 0o755) // Make executable
+
+    mainLog.info(`[terminal] Created temp script: ${scriptPath}`)
+
+    // Use 'open' command to launch Terminal with the script
+    // The -a flag specifies the application, and Terminal.app will execute the script
+    const child = spawn('open', ['-a', 'Terminal', scriptPath], {
+      detached: true,
+      stdio: 'ignore',
     })
+
+    child.unref()
+
+    // Clean up the script after a delay (give Terminal time to read it)
+    setTimeout(() => {
+      try {
+        unlinkSync(scriptPath)
+        mainLog.info(`[terminal] Cleaned up temp script: ${scriptPath}`)
+      } catch (cleanupError) {
+        // Script may have already been deleted or is still in use
+        mainLog.debug(`[terminal] Could not clean up script: ${scriptPath}`)
+      }
+    }, 5000) // 5 second delay
 
     mainLog.info(`[terminal] Successfully opened Terminal.app with session ${sdkSessionId}`)
     return { success: true }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)
     mainLog.error(`[terminal] Failed to open macOS terminal: ${errorMessage}`)
+
+    // Try to clean up the script on error
+    try {
+      unlinkSync(scriptPath)
+    } catch {
+      // Ignore cleanup errors
+    }
+
     return {
       success: false,
       error: `Failed to open Terminal.app: ${errorMessage}`,

@@ -14,7 +14,7 @@
 
 import type { SessionState, AgentEvent, ProcessResult } from './types'
 import { handleTextDelta, handleTextComplete } from './handlers/text'
-import { handleToolStart, handleToolResult, handleParentUpdate, handleTaskBackgrounded, handleShellBackgrounded, handleTaskProgress } from './handlers/tool'
+import { handleToolStart, handleToolResult, handleParentUpdate, handleTaskBackgrounded, handleShellBackgrounded, handleTaskProgress, handleJsonRender } from './handlers/tool'
 import {
   handleComplete,
   handleError,
@@ -32,6 +32,7 @@ import {
   handleWorkingDirectoryChanged,
   handlePermissionModeChanged,
   handleSessionModelChanged,
+  handleSdkSessionIdChanged,
   handleUserMessage,
   handleSessionShared,
   handleSessionUnshared,
@@ -106,6 +107,11 @@ export function processEvent(
       return { state: newState, effects: [] }
     }
 
+    case 'json_render': {
+      const newState = handleJsonRender(state, event)
+      return { state: newState, effects: [] }
+    }
+
     case 'complete':
       return handleComplete(state, event)
 
@@ -141,6 +147,9 @@ export function processEvent(
 
     case 'session_model_changed':
       return handleSessionModelChanged(state, event)
+
+    case 'sdk_session_id_changed':
+      return handleSdkSessionIdChanged(state, event)
 
     case 'sources_changed':
       return handleSourcesChanged(state, event)
