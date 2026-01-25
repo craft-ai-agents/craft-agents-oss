@@ -104,17 +104,26 @@ export function CreateTemplateDialog({ open, onOpenChange, sessionId, workspaceI
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="include-prompt"
-              checked={includeInitialPrompt}
-              onChange={e => setIncludeInitialPrompt(e.target.checked)}
-              className="cursor-pointer"
-            />
-            <Label htmlFor="include-prompt" className="cursor-pointer text-sm font-normal">
-              Include initial prompt
-            </Label>
+          <div className="space-y-2">
+            <div className="flex items-start gap-2">
+              <input
+                type="checkbox"
+                id="include-prompt"
+                checked={includeInitialPrompt}
+                onChange={e => setIncludeInitialPrompt(e.target.checked)}
+                className="mt-1 cursor-pointer"
+              />
+              <div className="flex-1">
+                <Label htmlFor="include-prompt" className="cursor-pointer text-sm font-normal">
+                  Include initial prompt
+                </Label>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {includeInitialPrompt
+                    ? 'The first message from this session will be automatically sent to new sessions using this template'
+                    : 'New sessions will need to manually enter the initial prompt'}
+                </p>
+              </div>
+            </div>
           </div>
         </div>
 

@@ -25,6 +25,18 @@ export class TemplateError extends Error {
 }
 
 /**
+ * Validate scope and workspaceId consistency
+ */
+export function validateScopeConsistency(scope: 'global' | 'workspace', workspaceId?: string): void {
+  if (scope === 'workspace' && !workspaceId) {
+    throw new TemplateError('Workspace ID required for workspace-scoped template', 'INVALID_INPUT');
+  }
+  if (scope === 'global' && workspaceId) {
+    throw new TemplateError('Global-scoped template should not have a workspaceId', 'INVALID_INPUT');
+  }
+}
+
+/**
  * Validate template creation options
  */
 function validateTemplateOptions(options: CreateTemplateOptions): void {
@@ -34,9 +46,7 @@ function validateTemplateOptions(options: CreateTemplateOptions): void {
   if (options.name.length > 100) {
     throw new TemplateError('Template name too long (max 100 chars)', 'INVALID_INPUT');
   }
-  if (options.scope === 'workspace' && !options.workspaceId) {
-    throw new TemplateError('Workspace ID required for workspace-scoped template', 'INVALID_INPUT');
-  }
+  validateScopeConsistency(options.scope, options.workspaceId);
 }
 
 export function getTemplatesDir(scope: 'global' | 'workspace', workspaceId?: string): string {
@@ -194,6 +204,11 @@ export async function updateTemplate(
   workspaceId: string | undefined,
   updates: Partial<SessionTemplate>
 ): Promise<SessionTemplate | null> {
+  // Validate scope consistency in updates
+  if (updates.scope) {
+    validateScopeConsistency(updates.scope, updates.workspaceId ?? workspaceId);
+  }
+
   const dir = getTemplatesDir(scope, workspaceId);
   const filePath = join(dir, `${id}.json`);
 
