@@ -15,7 +15,7 @@
 import * as React from 'react'
 import { Panel } from './Panel'
 import { cn } from '@/lib/utils'
-import { useAppShellContext } from '@/context/AppShellContext'
+import { useAppShellContext, useActiveWorkspace } from '@/context/AppShellContext'
 import { StoplightProvider } from '@/context/StoplightContext'
 import {
   useNavigationState,
@@ -44,6 +44,7 @@ export function MainContentPanel({
 }: MainContentPanelProps) {
   const navState = useNavigationState()
   const { activeWorkspaceId } = useAppShellContext()
+  const activeWorkspace = useActiveWorkspace()
 
   // Wrap content with StoplightProvider so PanelHeaders auto-compensate in focused mode
   const wrapWithStoplight = (content: React.ReactNode) => (

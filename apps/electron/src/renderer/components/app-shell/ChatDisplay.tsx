@@ -35,9 +35,10 @@ import {
 } from "@vesper/ui"
 import { useFocusZone } from "@/hooks/keyboard"
 import { useTheme } from "@/hooks/useTheme"
-import type { Session, Message, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, LoadedSource, LoadedSkill } from "../../../shared/types"
+import type { Session, Message, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, LoadedSource, LoadedSkill, ContentBadge, FlowyInlineEmbed } from "../../../shared/types"
 import type { PermissionMode } from "@vesper/shared/agent/modes"
 import type { ThinkingLevel } from "@vesper/shared/agent/thinking-levels"
+import type { FlowyDocument } from "@vesper/shared/flowy"
 import { TurnCard, UserMessageBubble, groupMessagesByTurn, formatTurnAsMarkdown, formatActivityAsMarkdown, type Turn, type AssistantTurn, type UserTurn, type SystemTurn, type AuthRequestTurn } from "@vesper/ui"
 import { MemoizedAuthRequestCard } from "@/components/chat/AuthRequestCard"
 import { ActiveOptionBadges } from "./ActiveOptionBadges"
@@ -50,6 +51,7 @@ import { JSONRenderView } from "@/components/json-render"
 import { detectScheduleIntent, parseTimeToCron } from "@/hooks/useScheduleFromChat"
 import { toast } from "sonner"
 import cronstrue from "cronstrue"
+import { FlowyInlineEmbed as FlowyInlineEmbedComponent } from "@/components/chat/FlowyInlineEmbed"
 
 // ============================================================================
 // Overlay State Types
@@ -707,6 +709,7 @@ export function ChatDisplay({
                         <div key={`user-${turn.message.id}`} className={CHAT_LAYOUT.userMessagePadding}>
                           <MemoizedMessageBubble
                             message={turn.message}
+                            sessionId={session.id}
                             onOpenFile={onOpenFile}
                             onOpenUrl={onOpenUrl}
                           />
@@ -720,6 +723,7 @@ export function ChatDisplay({
                         <MemoizedMessageBubble
                           key={`system-${turn.message.id}`}
                           message={turn.message}
+                          sessionId={session.id}
                           onOpenFile={onOpenFile}
                           onOpenUrl={onOpenUrl}
                         />
@@ -747,9 +751,17 @@ export function ChatDisplay({
                     const isLastResponse = index === turns.length - 1 || !turns.slice(index + 1).some(t => t.type === 'user')
 
                     // Assistant turns - render with TurnCard (buffered streaming)
+                    // If turn has jsonRender, also render JSONRenderView
+                    const hasJsonRender = turn.response?.jsonRender?.tree
                     return (
+                      <React.Fragment key={`turn-${turn.turnId}`}>
+                        {/* JSON Render: AI-generated UI tree (above TurnCard if present) */}
+                        {hasJsonRender && (
+                          <div className="mb-2">
+                            <JSONRenderView tree={turn.response!.jsonRender!.tree} />
+                          </div>
+                        )}
                       <TurnCard
-                        key={`turn-${turn.turnId}`}
                         sessionId={session.id}
                         sessionFolderPath={session.sessionFolderPath}
                         turnId={turn.turnId}
@@ -876,6 +888,7 @@ export function ChatDisplay({
                           }
                         }}
                       />
+                      </React.Fragment>
                     )
                   })}
                     </motion.div>
@@ -1057,6 +1070,78 @@ export function ChatDisplay({
 }
 
 /**
+ * UserMessageWithEmbeds - Custom user message renderer with Flowy embed support
+ *
+ * Renders user message content with inline Flowy diagram embeds.
+ * For simplicity, embeds are rendered after the main content.
+ */
+interface UserMessageWithEmbedsProps {
+  message: Message
+  sessionId: string
+  onOpenFile: (path: string) => void
+  onOpenUrl: (url: string) => void
+}
+
+function UserMessageWithEmbeds({
+  message,
+  sessionId,
+  onOpenFile,
+  onOpenUrl,
+}: UserMessageWithEmbedsProps) {
+  const { content, badges = [], flowyEmbeds = [], attachments, isPending, isQueued, ultrathink } = message
+
+  // Handle flowy embed updates
+  const handleFlowyEdit = async (embedId: string, document: FlowyDocument) => {
+    await window.electronAPI.flowyEmbedUpdate(sessionId, message.id, embedId, document)
+  }
+
+  // If no embeds, use standard UserMessageBubble
+  if (flowyEmbeds.length === 0) {
+    return (
+      <UserMessageBubble
+        content={content}
+        attachments={attachments}
+        badges={badges}
+        isPending={isPending}
+        isQueued={isQueued}
+        ultrathink={ultrathink}
+        onUrlClick={onOpenUrl}
+        onFileClick={onOpenFile}
+      />
+    )
+  }
+
+  // Render message with embeds below the content
+  // This is simpler than trying to inline embeds at specific positions
+  return (
+    <div className="flex flex-col items-end gap-3 w-full">
+      {/* Standard user message bubble */}
+      <UserMessageBubble
+        content={content}
+        attachments={attachments}
+        badges={badges}
+        isPending={isPending}
+        isQueued={isQueued}
+        ultrathink={ultrathink}
+        onUrlClick={onOpenUrl}
+        onFileClick={onOpenFile}
+      />
+
+      {/* Flowy embeds rendered below */}
+      {flowyEmbeds.map((embed) => (
+        <div key={embed.id} className="max-w-[80%]">
+          <FlowyInlineEmbedComponent
+            embed={embed}
+            onEdit={(document) => handleFlowyEdit(embed.id, document)}
+            isEditable={true}
+          />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/**
  * MessageBubble - Renders a single message based on its role
  *
  * Message Roles & Styles:
@@ -1069,6 +1154,7 @@ export function ChatDisplay({
  */
 interface MessageBubbleProps {
   message: Message
+  sessionId: string
   onOpenFile: (path: string) => void
   onOpenUrl: (url: string) => void
   /**
@@ -1135,6 +1221,7 @@ function ErrorMessage({ message }: { message: Message }) {
 
 function MessageBubble({
   message,
+  sessionId,
   onOpenFile,
   onOpenUrl,
   renderMode = 'minimal',
@@ -1143,23 +1230,26 @@ function MessageBubble({
   // === USER MESSAGE: Right-aligned bubble with attachments above ===
   if (message.role === 'user') {
     return (
-      <UserMessageBubble
-        content={message.content}
-        attachments={message.attachments}
-        badges={message.badges}
-        isPending={message.isPending}
-        isQueued={message.isQueued}
-        ultrathink={message.ultrathink}
-        onUrlClick={onOpenUrl}
-        onFileClick={onOpenFile}
+      <UserMessageWithEmbeds
+        message={message}
+        sessionId={sessionId}
+        onOpenFile={onOpenFile}
+        onOpenUrl={onOpenUrl}
       />
     )
   }
 
   // === ASSISTANT MESSAGE: Left-aligned gray bubble with markdown rendering ===
   if (message.role === 'assistant') {
+    const { flowyEmbeds = [] } = message
+
+    // Handle flowy embed updates for assistant messages
+    const handleFlowyEdit = async (embedId: string, document: FlowyDocument) => {
+      await window.electronAPI.flowyEmbedUpdate(sessionId, message.id, embedId, document)
+    }
+
     return (
-      <div className="flex justify-start group">
+      <div className="flex flex-col gap-2 justify-start group">
         <div className="relative max-w-[90%] bg-background shadow-minimal rounded-[8px] pl-6 pr-4 py-3 break-words min-w-0 select-text">
           {/* Pop-out button - visible on hover */}
           {onPopOut && !message.isStreaming && (
@@ -1171,7 +1261,7 @@ function MessageBubble({
               <ExternalLink className="w-4 h-4 text-muted-foreground hover:text-foreground" />
             </button>
           )}
-          {/* JSON Render: AI-generated UI tree */}
+          {/* JSON Render: AI-generated UI tree (fallback - turns render via TurnCard) */}
           {message.jsonRender?.tree && (
             <JSONRenderView tree={message.jsonRender.tree} />
           )}
@@ -1199,6 +1289,17 @@ function MessageBubble({
             </CollapsibleMarkdownProvider>
           )}
         </div>
+
+        {/* Flowy embeds rendered below */}
+        {flowyEmbeds.map((embed) => (
+          <div key={embed.id} className="max-w-[90%]">
+            <FlowyInlineEmbedComponent
+              embed={embed}
+              onEdit={(document) => handleFlowyEdit(embed.id, document)}
+              isEditable={true}
+            />
+          </div>
+        ))}
       </div>
     )
   }
@@ -1289,6 +1390,8 @@ const MemoizedMessageBubble = React.memo(MessageBubble, (prev, next) => {
   return (
     prev.message.id === next.message.id &&
     prev.message.content === next.message.content &&
-    prev.message.role === next.message.role
+    prev.message.role === next.message.role &&
+    prev.sessionId === next.sessionId &&
+    prev.message.flowyEmbeds === next.message.flowyEmbeds
   )
 })

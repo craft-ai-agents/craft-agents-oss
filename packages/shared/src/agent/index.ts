@@ -1,6 +1,7 @@
 export * from './vesper-agent.ts';
 export * from './errors.ts';
 export * from './options.ts';
+export { buildDiagramContext } from './diagram-context.ts';
 
 // Export session-scoped-tools - tools scoped to a specific session
 export {

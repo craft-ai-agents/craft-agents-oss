@@ -369,6 +369,30 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_GET_ENABLED) as Promise<boolean>,
   setNotificationsEnabled: (enabled: boolean) =>
     ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_SET_ENABLED, enabled),
+  getNotificationSettings: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATIONS_GET_SETTINGS),
+  setNotificationSettings: (settings: any) =>
+    ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATIONS_SET_SETTINGS, settings),
+  testNotification: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATIONS_TEST),
+  onNotificationSettingsChanged: (callback: () => void) => {
+    const handler = () => {
+      callback()
+    }
+    ipcRenderer.on(IPC_CHANNELS.NOTIFICATIONS_SETTINGS_CHANGED, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.NOTIFICATIONS_SETTINGS_CHANGED, handler)
+    }
+  },
+  onNotificationPlaySound: (callback: (volume: number) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, volume: number) => {
+      callback(volume)
+    }
+    ipcRenderer.on(IPC_CHANNELS.NOTIFICATIONS_PLAY_SOUND, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.NOTIFICATIONS_PLAY_SOUND, handler)
+    }
+  },
 
   // Developer tools
   getAgentationEnabled: () =>
@@ -672,6 +696,12 @@ const api: ElectronAPI = {
     ipcRenderer.invoke('template:save-from-session', options),
   useTemplate: (id: string, scope: 'global' | 'workspace', workspaceId?: string) =>
     ipcRenderer.invoke('template:use', id, scope, workspaceId),
+  createDefaultTemplates: (workspaceId: string) =>
+    ipcRenderer.invoke('template:create-defaults', workspaceId),
+
+  // Flowy Inline Diagrams
+  flowyEmbedUpdate: (sessionId: string, messageId: string, embedId: string, document: import('@vesper/shared/flowy').FlowyDocument) =>
+    ipcRenderer.invoke(IPC_CHANNELS.FLOWY_EMBED_UPDATE, sessionId, messageId, embedId, document),
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)

@@ -16,7 +16,9 @@ import { DEFAULT_MODEL } from '../config/models.ts';
 import { getCredentialManager } from '../credentials/index.ts';
 import { updatePreferences, loadPreferences, formatPreferencesForPrompt, type UserPreferences } from '../config/preferences.ts';
 import type { FileAttachment } from '../utils/files.ts';
+import type { FlowyInlineEmbed } from '@vesper/core';
 import { debug } from '../utils/debug.ts';
+import { buildDiagramContext } from './diagram-context.ts';
 import { estimateTokens, summarizeLargeResult, TOKEN_LIMIT } from '../utils/summarize.ts';
 import {
   getSessionPlansDir,
@@ -796,6 +798,7 @@ export class VesperAgent {
   async *chat(
     userMessage: string,
     attachments?: FileAttachment[],
+    flowyEmbeds?: FlowyInlineEmbed[],
     _isRetry: boolean = false // Internal flag for session expiry retry
   ): AsyncGenerator<AgentEvent> {
     try {
@@ -1571,14 +1574,14 @@ export class VesperAgent {
         debug(`[chat] Detected SDK slash command: ${trimmedMessage}`);
         this.currentQuery = query({ prompt: trimmedMessage, options: optionsWithAbort });
       } else if (hasBinaryAttachments) {
-        const sdkMessage = this.buildSDKUserMessage(userMessage, attachments);
+        const sdkMessage = this.buildSDKUserMessage(userMessage, attachments, flowyEmbeds);
         async function* singleMessage(): AsyncIterable<SDKUserMessage> {
           yield sdkMessage;
         }
         this.currentQuery = query({ prompt: singleMessage(), options: optionsWithAbort });
       } else {
         // Simple string prompt for text-only messages (may include text file contents)
-        const prompt = this.buildTextPrompt(userMessage, attachments);
+        const prompt = this.buildTextPrompt(userMessage, attachments, flowyEmbeds);
         this.currentQuery = query({ prompt, options: optionsWithAbort });
       }
 
@@ -1775,7 +1778,7 @@ export class VesperAgent {
 
           yield { type: 'info', message: 'Restoring conversation context...' };
           // Retry with fresh session, injecting conversation history into the message
-          yield* this.chat(messageWithContext, attachments, true);
+          yield* this.chat(messageWithContext, attachments, flowyEmbeds, true);
           return;
         }
 
@@ -1926,7 +1929,7 @@ export class VesperAgent {
             // Use 'info' instead of 'status' to show message without spinner
             yield { type: 'info', message: 'Session expired, restoring context...' };
             // Recursively call with isRetry=true (yield* delegates all events)
-            yield* this.chat(userMessage, attachments, true);
+            yield* this.chat(userMessage, attachments, flowyEmbeds, true);
             return;
           }
 
@@ -2002,7 +2005,7 @@ export class VesperAgent {
           // Use 'info' instead of 'status' to show message without spinner
           yield { type: 'info', message: statusMessage };
           // Recursively call with isRetry=true (yield* delegates all events)
-          yield* this.chat(userMessage, attachments, true);
+          yield* this.chat(userMessage, attachments, flowyEmbeds, true);
           return;
         }
 
@@ -2248,7 +2251,7 @@ Please continue the conversation naturally from where we left off.
    * Prepends date/time context for prompt caching optimization (keeps system prompt static)
    * Injects session state (including mode state) for every message
    */
-  private buildTextPrompt(text: string, attachments?: FileAttachment[]): string {
+  private buildTextPrompt(text: string, attachments?: FileAttachment[], flowyEmbeds?: FlowyInlineEmbed[]): string {
     const parts: string[] = [];
 
     // Add date/time context first (moved from system prompt to enable caching)
@@ -2292,6 +2295,14 @@ Please continue the conversation naturally from where we left off.
       }
     }
 
+    // Add diagram context from inline Flowy embeds
+    if (flowyEmbeds && flowyEmbeds.length > 0) {
+      const diagramContext = buildDiagramContext(flowyEmbeds);
+      if (diagramContext) {
+        parts.push(diagramContext);
+      }
+    }
+
     // Add user's message
     if (text) {
       parts.push(text);
@@ -2305,7 +2316,7 @@ Please continue the conversation naturally from where we left off.
    * Prepends date/time context for prompt caching optimization (keeps system prompt static)
    * Injects session state (including mode state) for every message
    */
-  private buildSDKUserMessage(text: string, attachments?: FileAttachment[]): SDKUserMessage {
+  private buildSDKUserMessage(text: string, attachments?: FileAttachment[], flowyEmbeds?: FlowyInlineEmbed[]): SDKUserMessage {
     const contentBlocks: ContentBlockParam[] = [];
 
     // Add date/time context first (moved from system prompt to enable caching)
@@ -2375,6 +2386,14 @@ Please continue the conversation naturally from where we left off.
           });
         }
         // Text files: path info already added above, agent uses Read tool to access content
+      }
+    }
+
+    // Add diagram context from inline Flowy embeds
+    if (flowyEmbeds && flowyEmbeds.length > 0) {
+      const diagramContext = buildDiagramContext(flowyEmbeds);
+      if (diagramContext) {
+        contentBlocks.push({ type: 'text', text: diagramContext });
       }
     }
 

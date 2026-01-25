@@ -77,7 +77,6 @@ import type { Session, Workspace, FileAttachment, PermissionRequest, TodoState, 
 import { sessionMetaMapAtom, type SessionMeta } from "@/atoms/sessions"
 import { sourcesAtom } from "@/atoms/sources"
 import { skillsAtom } from "@/atoms/skills"
-import { flowyFilesAtom } from "@/atoms/flowy"
 import { type TodoStateId, statusConfigsToTodoStates } from "@/config/todo-states"
 import { useStatuses } from "@/hooks/useStatuses"
 import * as storage from "@/lib/local-storage"
@@ -92,7 +91,6 @@ import {
   isSkillsNavigation,
   isVectorSearchNavigation,
   isSchedulesNavigation,
-  isFlowyNavigation,
   type NavigationState,
   type ChatFilter,
 } from "@/contexts/NavigationContext"
@@ -101,7 +99,6 @@ import { SourcesListPanel } from "./SourcesListPanel"
 import { TemplatePickerDialog } from "@/components/templates/TemplatePickerDialog"
 import type { SessionTemplate } from "@vesper/shared/templates"
 import { SkillsListPanel } from "./SkillsListPanel"
-import { FlowyListPanel } from "@/components/flowy/FlowyListPanel"
 import { PanelHeader } from "./PanelHeader"
 import { EditPopover, getEditConfig } from "@/components/ui/EditPopover"
 import { getDocUrl } from "@vesper/shared/docs/doc-links"
@@ -352,16 +349,11 @@ function AppShellContent({
     setSkillsAtom(skills)
   }, [skills, setSkillsAtom])
 
-  // Flowy files state (workspace-scoped)
-  const [flowyFiles, setFlowyFiles] = React.useState<import('@vesper/shared/flowy/types').FlowyFile[]>([])
-  // Sync flowy files to atom for NavigationContext auto-selection
-  const setFlowyFilesAtom = useSetAtom(flowyFilesAtom)
-  React.useEffect(() => {
-    setFlowyFilesAtom(flowyFiles)
-  }, [flowyFiles, setFlowyFilesAtom])
-
   // Whether local MCP servers are enabled (affects stdio source status)
   const [localMcpEnabled, setLocalMcpEnabled] = React.useState(true)
+
+  // Whether to show template picker on CMD+N (opt-in feature)
+  const [templatesEnabled, setTemplatesEnabled] = React.useState(false)
 
   // Enabled permission modes for Shift+Tab cycling (min 2 modes, includes 'ralph' for Ralph Loop)
   const DEFAULT_CYCLABLE_MODES: PermissionMode[] = ['safe', 'ask', 'allow-all', 'ralph']
@@ -373,6 +365,7 @@ function AppShellContent({
     window.electronAPI.getWorkspaceSettings(activeWorkspaceId).then((settings) => {
       if (settings) {
         setLocalMcpEnabled(settings.localMcpEnabled ?? true)
+        setTemplatesEnabled(settings.templatesEnabled ?? false)
         // Load cyclablePermissionModes from workspace settings, or reset to defaults
         if (settings.cyclablePermissionModes && settings.cyclablePermissionModes.length >= 2) {
           setEnabledModes(settings.cyclablePermissionModes)
@@ -421,35 +414,6 @@ function AppShellContent({
     })
     return cleanup
   }, [])
-
-  // Load flowy files from backend on mount
-  React.useEffect(() => {
-    if (!activeWorkspaceId || !activeWorkspace) return
-    window.electronAPI.flowyList(activeWorkspaceId, activeWorkspace.rootPath).then((result: any) => {
-      if (result.success && result.files) {
-        setFlowyFiles(result.files)
-      }
-    }).catch(err => {
-      console.error('[Chat] Failed to load flowy files:', err)
-    })
-  }, [activeWorkspaceId, activeWorkspace])
-
-  // Subscribe to live flowy file updates (when files are added/removed/modified)
-  React.useEffect(() => {
-    const cleanup = window.electronAPI.onFlowyChanged?.((event) => {
-      // Reload the full file list when any file changes
-      if (activeWorkspaceId && activeWorkspace && event.workspaceId === activeWorkspaceId) {
-        window.electronAPI.flowyList(activeWorkspaceId, activeWorkspace.rootPath).then((result: any) => {
-          if (result.success && result.files) {
-            setFlowyFiles(result.files)
-          }
-        }).catch(err => {
-          console.error('[Chat] Failed to reload flowy files:', err)
-        })
-      }
-    })
-    return cleanup
-  }, [activeWorkspaceId, activeWorkspace])
 
   // Handle session source selection changes
   const handleSessionSourcesChange = React.useCallback(async (sessionId: string, sourceSlugs: string[]) => {
@@ -901,11 +865,6 @@ function AppShellContent({
     navigate(routes.view.schedules())
   }, [])
 
-  // Handler for flowy view
-  const handleFlowyClick = useCallback(() => {
-    navigate(routes.view.flowy())
-  }, [])
-
   // Handler for settings view
   const handleSettingsClick = useCallback((subpage: SettingsSubpage = 'app') => {
     navigate(routes.view.settings(subpage))
@@ -946,9 +905,16 @@ function AppShellContent({
   const handleNewChat = useCallback(async (_useCurrentAgent: boolean = true) => {
     if (!activeWorkspace) return
 
-    // Show template picker instead of creating session immediately
-    setShowTemplatePicker(true)
-  }, [activeWorkspace])
+    // Check if templates are enabled (opt-in feature)
+    if (templatesEnabled) {
+      // Show template picker for users who enabled the feature
+      setShowTemplatePicker(true)
+    } else {
+      // Create blank session immediately (default behavior)
+      const newSession = await onCreateSession(activeWorkspace.id, {})
+      navigate(routes.view.allChats(newSession.id))
+    }
+  }, [activeWorkspace, templatesEnabled, onCreateSession, navigate])
 
   // Handle template selection from picker
   const handleTemplateSelect = useCallback(async (template: SessionTemplate | null, initialPrompt?: string) => {
@@ -1013,12 +979,6 @@ function AppShellContent({
       toast.error('Failed to delete skill')
     }
   }, [activeWorkspace])
-
-  // Handle selecting a flowy file from the list
-  const handleFlowyFileSelect = React.useCallback((file: import('@vesper/shared/flowy/types').FlowyFile) => {
-    if (!activeWorkspaceId) return
-    navigate(routes.view.flowy(file.filename))
-  }, [activeWorkspaceId, navigate])
 
   // Respond to menu bar "New Chat" trigger
   const menuTriggerRef = useRef(menuNewChatTrigger)
@@ -1181,11 +1141,6 @@ function AppShellContent({
     // Skills navigator
     if (isSkillsNavigation(navState)) {
       return 'All Skills'
-    }
-
-    // Flowy navigator
-    if (isFlowyNavigation(navState)) {
-      return 'Flowy Diagrams'
     }
 
     // Settings navigator
@@ -1430,14 +1385,6 @@ function AppShellContent({
                       icon: Clock,
                       variant: isSchedulesNavigation(navState) ? "default" : "ghost",
                       onClick: handleSchedulesClick,
-                    },
-                    {
-                      id: "nav:flowy",
-                      title: "Flowy",
-                      label: String(flowyFiles.length),
-                      icon: Workflow,
-                      variant: isFlowyNavigation(navState) ? "default" : "ghost",
-                      onClick: handleFlowyClick,
                     },
                     { id: "separator:skills-settings", type: "separator" },
                     {
@@ -1736,16 +1683,6 @@ function AppShellContent({
             {isSchedulesNavigation(navState) && activeWorkspaceId && (
               /* Schedules Panel */
               <ScheduleList workspaceId={activeWorkspaceId} />
-            )}
-            {isFlowyNavigation(navState) && activeWorkspaceId && activeWorkspace && (
-              /* Flowy List */
-              <FlowyListPanel
-                files={flowyFiles}
-                workspaceId={activeWorkspaceId}
-                workspacePath={activeWorkspace.rootPath}
-                onFileClick={handleFlowyFileSelect}
-                selectedFilename={isFlowyNavigation(navState) && navState.details ? navState.details.filename : null}
-              />
             )}
             {isChatsNavigation(navState) && (
               /* Sessions List */

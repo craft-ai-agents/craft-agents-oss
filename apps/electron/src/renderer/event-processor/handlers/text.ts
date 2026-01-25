@@ -14,6 +14,7 @@ import {
   appendMessage,
   generateMessageId
 } from '../helpers'
+import { parseFlowyCodeBlocks } from '../../utils/flowy-parser'
 
 /**
  * Handle text_delta - accumulate streaming content
@@ -75,12 +76,20 @@ export function handleTextDelta(
  * Sets isStreaming: false, isPending: false.
  * If message not found, CREATES it (fixes race condition bug).
  * Uses complete text from SDK (event.text), not accumulated content.
+ * Parses Flowy code blocks and creates inline embeds.
  */
 export function handleTextComplete(
   state: SessionState,
   event: TextCompleteEvent
 ): SessionState {
   const { session } = state
+
+  // Parse Flowy code blocks from the content
+  const { embeds, cleanedContent } = parseFlowyCodeBlocks(event.text)
+
+  // Use cleaned content if embeds were found, otherwise use original
+  const finalContent = embeds.length > 0 ? cleanedContent : event.text
+  const flowyEmbeds = embeds.length > 0 ? embeds : undefined
 
   // Find message by turnId (try streaming first, then any assistant)
   let msgIndex = findStreamingMessage(session.messages, event.turnId)
@@ -89,11 +98,12 @@ export function handleTextComplete(
   }
 
   if (msgIndex !== -1) {
-    // Update existing message with final content
+    // Update existing message with final content and Flowy embeds
     // Only update lastMessageAt for final (non-intermediate) messages
     const shouldUpdateTimestamp = !event.isIntermediate
     const updatedSession = updateMessageAt(session, msgIndex, {
-      content: event.text,  // Complete text from SDK
+      content: finalContent,  // Complete text from SDK (with Flowy blocks replaced)
+      flowyEmbeds,  // Inline diagram embeds
       isStreaming: false,
       isPending: false,
       isIntermediate: event.isIntermediate,
@@ -109,7 +119,8 @@ export function handleTextComplete(
   const newMessage: Message = {
     id: generateMessageId(),
     role: 'assistant',
-    content: event.text,
+    content: finalContent,
+    flowyEmbeds,  // Inline diagram embeds
     timestamp: Date.now(),
     isStreaming: false,
     isPending: false,

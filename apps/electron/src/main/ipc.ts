@@ -407,7 +407,9 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   })
 
   // Resume session in terminal
-  ipcMain.handle(IPC_CHANNELS.SESSION_RESUME_IN_TERMINAL, async (_event, sessionId: string) => {
+  // Returns { success: true } or { success: false, error: string }
+  // Does NOT throw - all errors are returned as { success: false, error }
+  ipcMain.handle(IPC_CHANNELS.SESSION_RESUME_IN_TERMINAL, async (_event, sessionId: string): Promise<{ success: boolean; error?: string }> => {
     try {
       ipcLog.info(`[terminal] Resuming session ${sessionId} in terminal`)
 
@@ -417,28 +419,31 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       const vesperIdPattern = /^(\d{6})-([a-z]+-[a-z]+)(?:-(\d+))?$/
       const uuidPattern = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/
       if (!sessionId || (!vesperIdPattern.test(sessionId) && !uuidPattern.test(sessionId))) {
-        throw new Error('Invalid session ID format')
+        ipcLog.error(`[terminal] Invalid session ID format: ${sessionId}`)
+        return { success: false, error: 'Invalid session ID format' }
       }
 
       // Get session
-      const session = sessionManager.getSession(sessionId)
+      const session = await sessionManager.getSession(sessionId)
       if (!session) {
-        throw new Error('Session not found')
+        ipcLog.error(`[terminal] Session not found: ${sessionId}`)
+        return { success: false, error: 'Session not found' }
       }
 
       // Check if session has SDK session ID (only available after first message)
       if (!session.sdkSessionId) {
-        throw new Error('Send a message first to initialize the session')
+        ipcLog.error(`[terminal] Session ${sessionId} has no SDK session ID`)
+        return { success: false, error: 'Send a message first to initialize the session' }
       }
 
       // Get working directory (prefer sdkCwd, fallback to workingDirectory)
       const workingDirectory = session.sdkCwd || session.workingDirectory
       if (!workingDirectory) {
-        throw new Error('Session has no working directory configured')
+        ipcLog.error(`[terminal] Session ${sessionId} has no working directory`)
+        return { success: false, error: 'Session has no working directory configured' }
       }
 
-      // Optional: Check if Claude CLI is installed
-      // Note: We'll let the terminal module handle this check for better error messages
+      ipcLog.info(`[terminal] Spawning terminal for SDK session ${session.sdkSessionId} in ${workingDirectory}`)
 
       // Spawn terminal with session
       const result = await spawnTerminalWithSession({
@@ -448,7 +453,8 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       })
 
       if (!result.success) {
-        throw new Error(result.error || 'Failed to spawn terminal')
+        ipcLog.error(`[terminal] Failed to spawn terminal: ${result.error}`)
+        return { success: false, error: result.error || 'Failed to spawn terminal' }
       }
 
       ipcLog.info(`[terminal] Successfully spawned terminal for session ${sessionId}`)
@@ -456,8 +462,8 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      ipcLog.error(`[terminal] Failed to resume session in terminal: ${errorMessage}`)
-      throw error
+      ipcLog.error(`[terminal] Unexpected error: ${errorMessage}`)
+      return { success: false, error: errorMessage }
     }
   })
 
@@ -2619,6 +2625,124 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       return { success: false, error: `Skill not found: ${skillId}` }
     } catch (error) {
       ipcLog.error('Error fetching skill details:', error)
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    }
+  })
+
+  // =============================================================================
+  // Flowy Inline Diagrams
+  // =============================================================================
+
+  // Update an embedded Flowy diagram within a message
+  ipcMain.handle(IPC_CHANNELS.FLOWY_EMBED_UPDATE, async (_event, sessionId: string, messageId: string, embedId: string, document: import('@vesper/shared/flowy').FlowyDocument) => {
+    try {
+      // Get the session from SessionManager
+      const session = await sessionManager.getSession(sessionId)
+      if (!session) {
+        return { success: false, error: `Session not found: ${sessionId}` }
+      }
+
+      // Find the message by ID
+      const messageIndex = session.messages.findIndex(m => m.id === messageId)
+      if (messageIndex === -1) {
+        return { success: false, error: `Message not found: ${messageId}` }
+      }
+
+      const message = session.messages[messageIndex]
+      if (!message) {
+        return { success: false, error: `Message not found: ${messageId}` }
+      }
+
+      // Ensure flowyEmbeds array exists
+      if (!message.flowyEmbeds) {
+        message.flowyEmbeds = []
+      }
+
+      // Find the embed by ID
+      const embedIndex = message.flowyEmbeds.findIndex(e => e.id === embedId)
+      if (embedIndex === -1) {
+        return { success: false, error: `Embed not found: ${embedId}` }
+      }
+
+      // Update the embed's document
+      message.flowyEmbeds[embedIndex]!.document = document
+
+      // Save the session to persist the changes
+      const { saveSession } = await import('@vesper/shared/sessions')
+      const workspace = getWorkspaceByNameOrId(session.workspaceId)
+      if (!workspace) {
+        return { success: false, error: `Workspace not found: ${session.workspaceId}` }
+      }
+
+      // Create a StoredSession for persistence
+      const storedSession = {
+        id: session.id,
+        workspaceRootPath: workspace.rootPath,
+        createdAt: session.lastMessageAt,
+        lastUsedAt: Date.now(),
+        name: session.name,
+        messages: session.messages.map(m => ({
+          id: m.id,
+          type: m.role as any,
+          content: m.content,
+          timestamp: m.timestamp,
+          toolName: m.toolName,
+          toolUseId: m.toolUseId,
+          toolInput: m.toolInput,
+          toolResult: m.toolResult,
+          toolStatus: m.toolStatus,
+          toolDuration: m.toolDuration,
+          toolIntent: m.toolIntent,
+          toolDisplayName: m.toolDisplayName,
+          parentToolUseId: m.parentToolUseId,
+          taskId: m.taskId,
+          shellId: m.shellId,
+          elapsedSeconds: m.elapsedSeconds,
+          isBackground: m.isBackground,
+          isError: m.isError,
+          attachments: m.attachments,
+          badges: m.badges,
+          flowyEmbeds: m.flowyEmbeds,
+          isIntermediate: m.isIntermediate,
+          turnId: m.turnId,
+          statusType: m.statusType,
+          errorCode: m.errorCode,
+          errorTitle: m.errorTitle,
+          errorDetails: m.errorDetails,
+          errorOriginal: m.errorOriginal,
+          errorCanRetry: m.errorCanRetry,
+          ultrathink: m.ultrathink,
+          planPath: m.planPath,
+          authRequestId: m.authRequestId,
+          authRequestType: m.authRequestType,
+          authSourceSlug: m.authSourceSlug,
+          authSourceName: m.authSourceName,
+          authStatus: m.authStatus,
+          authCredentialMode: m.authCredentialMode,
+          authHeaderName: m.authHeaderName,
+          authLabels: m.authLabels,
+          authDescription: m.authDescription,
+          authHint: m.authHint,
+          authError: m.authError,
+          authEmail: m.authEmail,
+          authWorkspace: m.authWorkspace,
+          jsonRender: m.jsonRender,
+        })),
+        tokenUsage: session.tokenUsage || {
+          inputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+          contextTokens: 0,
+          costUsd: 0,
+        },
+      }
+
+      saveSession(storedSession)
+
+      ipcLog.info(`Updated Flowy embed ${embedId} in message ${messageId} of session ${sessionId}`)
+      return { success: true }
+    } catch (error) {
+      ipcLog.error('Error updating Flowy embed:', error)
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
     }
   })

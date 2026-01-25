@@ -27,6 +27,7 @@ export type {
   MessageAttachment,
   StoredAttachment,
   ContentBadge,
+  FlowyInlineEmbed,
   Message,
   StoredMessage,
   TokenUsage,

@@ -51,7 +51,11 @@
     "./whatsapp/session-mapper": "./src/whatsapp/session-mapper.ts",
     "./whatsapp/directive-parser": "./src/whatsapp/directive-parser.ts",
     "./whatsapp/message-queue": "./src/whatsapp/message-queue.ts",
-    "./viewer": "./src/viewer/index.ts"
+    "./viewer": "./src/viewer/index.ts",
+    "./flowy": "./src/flowy/index.ts",
+    "./flowy/types": "./src/flowy/types.ts",
+    "./flowy/schema": "./src/flowy/schema.ts",
+    "./flowy/templates": "./src/flowy/templates.ts"
   },
   "dependencies": {
     "@vesper/core": "workspace:*",

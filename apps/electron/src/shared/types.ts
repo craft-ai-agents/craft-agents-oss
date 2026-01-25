@@ -11,6 +11,7 @@ import type {
   SessionMetadata as CoreSessionMetadata,
   StoredAttachment as CoreStoredAttachment,
   ContentBadge,
+  FlowyInlineEmbed,
 } from '@vesper/core/types';
 
 // Import mode types from dedicated subpath export (avoids pulling in SDK)
@@ -32,6 +33,7 @@ export type {
   CoreSessionMetadata as SessionMetadata,
   CoreStoredAttachment as StoredAttachment,
   ContentBadge,
+  FlowyInlineEmbed,
 };
 
 // Import and re-export auth types for onboarding
@@ -311,6 +313,10 @@ export interface Session {
   enabledSourceSlugs?: string[]
   // Working directory for this session (used by agent for bash commands)
   workingDirectory?: string
+  // SDK working directory (set by SDK when it changes cwd)
+  sdkCwd?: string
+  // Claude Agent SDK session ID (for terminal resume)
+  sdkSessionId?: string
   // Session folder path (for "Reset to Session Root" option)
   sessionFolderPath?: string
   // Shared viewer URL (if shared via viewer)
@@ -467,6 +473,7 @@ export type SessionEvent =
   | { type: 'session_flagged'; sessionId: string }
   | { type: 'session_unflagged'; sessionId: string }
   | { type: 'session_model_changed'; sessionId: string; model: string | null }
+  | { type: 'sdk_session_id_changed'; sessionId: string; sdkSessionId: string | undefined }
   | { type: 'todo_state_changed'; sessionId: string; todoState: TodoState }
   | { type: 'labels_changed'; sessionId: string; labelIds: string[] }
   | { type: 'session_deleted'; sessionId: string }
@@ -479,6 +486,8 @@ export type SessionEvent =
   | { type: 'source_activated'; sessionId: string; sourceSlug: string; originalMessage: string }
   // Real-time usage update during processing (for context display)
   | { type: 'usage_update'; sessionId: string; tokenUsage: { inputTokens: number; contextWindow?: number } }
+  // JSON Render event (AI-generated UI)
+  | { type: 'json_render'; sessionId: string; message: { id: string; content: string; timestamp: number; turnId?: string; jsonRender: { tree: { root: string; elements: Record<string, { type: string; props: Record<string, unknown>; children?: string[] }> } } } }
   // Ralph Loop events
   | { type: 'loop_started'; sessionId: string; loopId: string; totalStories: number; config: { maxIterationsPerStory: number; timeoutPerStoryMs: number; autoCommit: boolean } }
   | { type: 'loop_progress'; sessionId: string; loopId: string; currentStory: { id: string; title: string } | null; storyIndex: number; totalStories: number; currentIteration: number; maxIterations: number; elapsedMs: number; status: 'running' | 'paused' }
@@ -497,6 +506,8 @@ export interface SendMessageOptions {
   skillSlugs?: string[]
   /** Content badges for inline display (sources, skills with embedded icons) */
   badges?: import('@vesper/core').ContentBadge[]
+  /** Inline Flowy diagram embeds for this message */
+  flowyEmbeds?: import('@vesper/core').FlowyInlineEmbed[]
 }
 
 // =============================================================================
@@ -785,6 +796,11 @@ export const IPC_CHANNELS = {
   NOTIFICATION_NAVIGATE: 'notification:navigate',  // Broadcast: { workspaceId, sessionId }
   NOTIFICATION_GET_ENABLED: 'notification:getEnabled',
   NOTIFICATION_SET_ENABLED: 'notification:setEnabled',
+  NOTIFICATIONS_GET_SETTINGS: 'notifications:getSettings',
+  NOTIFICATIONS_SET_SETTINGS: 'notifications:setSettings',
+  NOTIFICATIONS_TEST: 'notifications:test',
+  NOTIFICATIONS_SETTINGS_CHANGED: 'notifications:settingsChanged',  // Broadcast: settings updated
+  NOTIFICATIONS_PLAY_SOUND: 'notifications:playSound',  // Broadcast: { volume: number 0-100 }
 
   // Developer tools
   AGENTATION_GET_ENABLED: 'agentation:getEnabled',
@@ -886,6 +902,9 @@ export const IPC_CHANNELS = {
   MARKETPLACE_SEARCH: 'marketplace:search',
   MARKETPLACE_INSTALL: 'marketplace:install',
   MARKETPLACE_GET_SKILL_DETAILS: 'marketplace:getSkillDetails',
+
+  // Flowy Inline Diagrams
+  FLOWY_EMBED_UPDATE: 'flowy:embed-update',
 } as const
 
 // Re-import types for ElectronAPI
@@ -1097,6 +1116,11 @@ export interface ElectronAPI {
   showNotification(title: string, body: string, workspaceId: string, sessionId: string): Promise<void>
   getNotificationsEnabled(): Promise<boolean>
   setNotificationsEnabled(enabled: boolean): Promise<void>
+  getNotificationSettings(): Promise<import('@vesper/shared/config').NotificationSettings>
+  setNotificationSettings(settings: Partial<import('@vesper/shared/config').NotificationSettings>): Promise<{ success: boolean; error?: string }>
+  testNotification(): Promise<{ success: boolean; error?: string }>
+  onNotificationSettingsChanged(callback: () => void): () => void
+  onNotificationPlaySound(callback: (volume: number) => void): () => void
 
   // Developer tools
   getAgentationEnabled(): Promise<boolean>
@@ -1233,6 +1257,10 @@ export interface ElectronAPI {
   deleteTemplate(id: string, scope: 'global' | 'workspace', workspaceId?: string): Promise<void>
   saveSessionAsTemplate(options: import('@vesper/shared/templates').SaveSessionAsTemplateOptions): Promise<import('@vesper/shared/templates').SessionTemplate>
   useTemplate(id: string, scope: 'global' | 'workspace', workspaceId?: string): Promise<import('@vesper/shared/templates').SessionTemplate | null>
+  createDefaultTemplates(workspaceId: string): Promise<import('@vesper/shared/templates').SessionTemplate[]>
+
+  // Flowy Inline Diagrams
+  flowyEmbedUpdate(sessionId: string, messageId: string, embedId: string, document: import('@vesper/shared/flowy').FlowyDocument): Promise<{ success: boolean; error?: string }>
 }
 
 /**
@@ -1484,6 +1512,8 @@ export interface WorkspaceSettings {
   workingDirectory?: string
   /** Whether local (stdio) MCP servers are enabled */
   localMcpEnabled?: boolean
+  /** Whether to show template picker on CMD+N (default: false - creates blank session) */
+  templatesEnabled?: boolean
 }
 
 /**

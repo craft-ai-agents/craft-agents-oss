@@ -2,6 +2,8 @@
  * Message types for conversations
  */
 
+import type { FlowyDocument } from '@vesper/shared/flowy';
+
 /**
  * Message roles for display (runtime)
  */
@@ -93,6 +95,21 @@ export interface ContentBadge {
 }
 
 /**
+ * Inline Flowy diagram embed for messages
+ * Stores diagram data directly within the message for inline display
+ */
+export interface FlowyInlineEmbed {
+  /** Unique embed ID within message */
+  id: string;
+  /** Diagram document (stored inline with message) */
+  document: FlowyDocument;
+  /** Display mode */
+  displayMode: 'thumbnail' | 'preview' | 'full';
+  /** Position marker in content string */
+  position: number;
+}
+
+/**
  * Stored attachment metadata (persisted to disk, no base64)
  * Created when user sends a message with attachments
  */
@@ -139,6 +156,8 @@ export interface Message {
   attachments?: StoredAttachment[];
   // Content badges for inline display (sources, skills)
   badges?: ContentBadge[];
+  // Inline Flowy diagram embeds
+  flowyEmbeds?: FlowyInlineEmbed[];
   isError?: boolean;
   isStreaming?: boolean;
   // Pending: streaming text where we don't yet know if it's intermediate
@@ -226,6 +245,8 @@ export interface StoredMessage {
   attachments?: StoredAttachment[];
   /** Content badges for inline display (sources, skills) */
   badges?: ContentBadge[];
+  /** Inline Flowy diagram embeds */
+  flowyEmbeds?: FlowyInlineEmbed[];
   // Turn grouping - critical for TurnCard rendering after reload
   isIntermediate?: boolean;
   turnId?: string;
