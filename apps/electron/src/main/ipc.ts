@@ -1836,6 +1836,207 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   })
 
   // ============================================================
+  // Team Skills (synced from private GitHub repo)
+  // ============================================================
+
+  // Set team skills configuration (repo URL and trigger sync)
+  ipcMain.handle(
+    IPC_CHANNELS.TEAM_SKILLS_SET_CONFIG,
+    async (_event, config: { repoUrl: string; token: string }) => {
+      const { getCredentialManager } = await import('@vesper/shared/credentials')
+      const credentialManager = getCredentialManager()
+
+      // Store the GitHub PAT securely
+      await credentialManager.set(
+        { type: 'team_skills_token' },
+        { value: config.token }
+      )
+
+      // Store repo URL in config.json
+      const { loadStoredConfig, saveConfig } = await import('@vesper/shared/config')
+      const storedConfig = loadStoredConfig()
+      if (storedConfig) {
+        storedConfig.teamSkillsRepoUrl = config.repoUrl
+        saveConfig(storedConfig)
+      }
+
+      ipcLog.info(`Team skills config saved: ${config.repoUrl}`)
+      return { success: true }
+    }
+  )
+
+  // Sync team skills from GitHub repo
+  ipcMain.handle(IPC_CHANNELS.TEAM_SKILLS_SYNC, async () => {
+    const { loadStoredConfig } = await import('@vesper/shared/config')
+    const { getCredentialManager } = await import('@vesper/shared/credentials')
+    const { TEAM_SKILLS_DIR } = await import('@vesper/shared/config/paths')
+    const { mkdirSync, writeFileSync, rmSync, existsSync } = await import('fs')
+    const { join } = await import('path')
+
+    const storedConfig = loadStoredConfig()
+    const repoUrl = storedConfig?.teamSkillsRepoUrl
+
+    if (!repoUrl) {
+      return { success: false, error: 'No team skills repo configured' }
+    }
+
+    // Get GitHub PAT from credential manager
+    const credentialManager = getCredentialManager()
+    const credential = await credentialManager.get({ type: 'team_skills_token' })
+
+    if (!credential) {
+      return { success: false, error: 'No GitHub token configured' }
+    }
+
+    try {
+      // Parse repo URL: https://github.com/owner/repo or owner/repo
+      const repoMatch = repoUrl.match(/(?:github\.com\/)?([^/]+)\/([^/]+?)(?:\.git)?$/)
+      if (!repoMatch) {
+        return { success: false, error: 'Invalid repo URL format' }
+      }
+      const [, owner, repo] = repoMatch
+
+      // Fetch repo contents via GitHub API
+      const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents`
+      const response = await fetch(apiUrl, {
+        headers: {
+          Authorization: `Bearer ${credential.value}`,
+          Accept: 'application/vnd.github.v3+json',
+          'User-Agent': 'Vesper-Team-Skills',
+        },
+        signal: AbortSignal.timeout(30000),
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        ipcLog.error(`GitHub API error: ${response.status} ${errorText}`)
+        return { success: false, error: `GitHub API error: ${response.status}` }
+      }
+
+      const contents = (await response.json()) as Array<{
+        name: string
+        type: string
+        path: string
+        download_url: string | null
+      }>
+
+      // Filter for directories (skills)
+      const skillDirs = contents.filter((item) => item.type === 'dir')
+
+      // Clear existing team skills directory
+      if (existsSync(TEAM_SKILLS_DIR)) {
+        rmSync(TEAM_SKILLS_DIR, { recursive: true })
+      }
+      mkdirSync(TEAM_SKILLS_DIR, { recursive: true })
+
+      let syncedCount = 0
+
+      // Security: Valid skill ID pattern (no path traversal)
+      const VALID_SKILL_ID = /^[a-z0-9][a-z0-9-]{0,62}[a-z0-9]?$/
+
+      // Download each skill
+      for (const skillDir of skillDirs) {
+        // Skip hidden directories
+        if (skillDir.name.startsWith('.')) continue
+
+        // Security: Validate skill ID to prevent path traversal
+        if (!VALID_SKILL_ID.test(skillDir.name)) {
+          ipcLog.warn(`Skipping invalid skill ID: ${skillDir.name}`)
+          continue
+        }
+
+        try {
+          // Fetch skill directory contents
+          const skillApiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${skillDir.path}`
+          const skillResponse = await fetch(skillApiUrl, {
+            headers: {
+              Authorization: `Bearer ${credential.value}`,
+              Accept: 'application/vnd.github.v3+json',
+              'User-Agent': 'Vesper-Team-Skills',
+            },
+            signal: AbortSignal.timeout(30000),
+          })
+
+          if (!skillResponse.ok) continue
+
+          const skillFiles = (await skillResponse.json()) as Array<{
+            name: string
+            type: string
+            download_url: string | null
+          }>
+
+          // Check for SKILL.md
+          const skillMd = skillFiles.find((f) => f.name === 'SKILL.md')
+          if (!skillMd || !skillMd.download_url) continue
+
+          // Create skill directory
+          const localSkillDir = join(TEAM_SKILLS_DIR, skillDir.name)
+          mkdirSync(localSkillDir, { recursive: true })
+
+          // Download all files in the skill directory
+          for (const file of skillFiles) {
+            if (file.type !== 'file' || !file.download_url) continue
+
+            const fileResponse = await fetch(file.download_url, {
+              headers: {
+                Authorization: `Bearer ${credential.value}`,
+                'User-Agent': 'Vesper-Team-Skills',
+              },
+              signal: AbortSignal.timeout(30000),
+            })
+
+            if (fileResponse.ok) {
+              const content = await fileResponse.text()
+              writeFileSync(join(localSkillDir, file.name), content, 'utf-8')
+            }
+          }
+
+          syncedCount++
+          ipcLog.info(`Synced team skill: ${skillDir.name}`)
+        } catch (skillError) {
+          ipcLog.error(`Failed to sync skill ${skillDir.name}:`, skillError)
+        }
+      }
+
+      ipcLog.info(`Team skills sync complete: ${syncedCount} skills`)
+
+      // Broadcast skills changed event
+      BrowserWindow.getAllWindows().forEach((win) => {
+        win.webContents.send(IPC_CHANNELS.SKILLS_CHANGED)
+      })
+
+      return { success: true, syncedCount }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      ipcLog.error(`Team skills sync failed: ${errorMessage}`)
+      return { success: false, error: errorMessage }
+    }
+  })
+
+  // Get team skills sync status
+  ipcMain.handle(IPC_CHANNELS.TEAM_SKILLS_GET_STATUS, async () => {
+    const { loadStoredConfig } = await import('@vesper/shared/config')
+    const { getCredentialManager } = await import('@vesper/shared/credentials')
+    const { TEAM_SKILLS_DIR } = await import('@vesper/shared/config/paths')
+    const { existsSync, readdirSync } = await import('fs')
+
+    const storedConfig = loadStoredConfig()
+    const credentialManager = getCredentialManager()
+    const credential = await credentialManager.get({ type: 'team_skills_token' })
+
+    const skillCount = existsSync(TEAM_SKILLS_DIR)
+      ? readdirSync(TEAM_SKILLS_DIR, { withFileTypes: true }).filter((d) => d.isDirectory()).length
+      : 0
+
+    return {
+      configured: !!storedConfig?.teamSkillsRepoUrl && !!credential,
+      repoUrl: storedConfig?.teamSkillsRepoUrl || null,
+      hasToken: !!credential,
+      skillCount,
+    }
+  })
+
+  // ============================================================
   // Status Management (Workspace-scoped)
   // ============================================================
 

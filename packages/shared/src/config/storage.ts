@@ -119,6 +119,12 @@ export interface StoredConfig {
     /** Optional shell command to run after static export (e.g., rsync to S3) */
     uploadCommand?: string;
   };
+  /**
+   * Team skills repository URL (GitHub)
+   * Format: "owner/repo" or "https://github.com/owner/repo"
+   * Skills are synced from this private repo to ~/.vesper/team-skills/
+   */
+  teamSkillsRepoUrl?: string;
 }
 
 const CONFIG_FILE = join(CONFIG_DIR, 'config.json');

@@ -20,6 +20,10 @@ export const CONFIG_DIR = process.env.VESPER_CONFIG_DIR || join(homedir(), '.ves
 
 // Global skills directories (where skills are stored)
 export const GLOBAL_SKILLS_DIR = join(CONFIG_DIR, 'global-skills');
+
+// Team skills directory (synced from private GitHub repo)
+export const TEAM_SKILLS_DIR = join(CONFIG_DIR, 'team-skills');
+
 export const CLAUDE_CODE_SKILLS_DIR = join(homedir(), '.claude', 'skills');
 
 // Claude Code commands directory (where slash commands are stored)

@@ -39,6 +39,7 @@ import { SlackSettingsSection } from '@/components/slack'
 import { TelegramSettingsSection } from '@/components/telegram'
 import { TemplateManager } from '@/components/templates'
 import { LabelsSettingsSection } from '@/components/labels'
+import { TeamSkillsSettingsSection } from '@/components/skills'
 import { ViewerSettings } from '@/components/settings'
 
 export const meta: DetailsPageMeta = {
@@ -477,6 +478,9 @@ export default function WorkspaceSettingsPage() {
 
             {/* Labels */}
             <LabelsSettingsSection />
+
+            {/* Team Skills */}
+            <TeamSkillsSettingsSection />
 
             {/* GitHub Integration */}
             <GitHubSettingsSection />
