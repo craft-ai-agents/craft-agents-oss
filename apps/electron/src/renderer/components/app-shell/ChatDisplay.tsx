@@ -47,7 +47,7 @@ import type { RichTextInputHandle } from "@/components/ui/rich-text-input"
 import { useBackgroundTasks } from "@/hooks/useBackgroundTasks"
 import { CHAT_LAYOUT } from "@/config/layout"
 import { LoopProgressIndicator, LoopSummaryCard } from "@/components/loop"
-import { JSONRenderView } from "@/components/json-render"
+import { JSONRenderView, JSONRenderTest } from "@/components/json-render"
 import { detectScheduleIntent, parseTimeToCron } from "@/hooks/useScheduleFromChat"
 import { toast } from "sonner"
 import cronstrue from "cronstrue"
@@ -896,6 +896,9 @@ export function ChatDisplay({
                     </AnimatePresence>
                   </motion.div>
                 </AnimatePresence>
+                {/* DEBUG: JSON Render Test - REMOVE AFTER TESTING */}
+                <JSONRenderTest />
+
                 {/* Processing Indicator - always visible while processing */}
                 {session.isProcessing && (() => {
                   // Find the last user message timestamp for accurate elapsed time
@@ -1090,10 +1093,10 @@ function UserMessageWithEmbeds({
 }: UserMessageWithEmbedsProps) {
   const { content, badges = [], flowyEmbeds = [], attachments, isPending, isQueued, ultrathink } = message
 
-  // Handle flowy embed updates
-  const handleFlowyEdit = async (embedId: string, document: FlowyDocument) => {
+  // Handle flowy embed updates - memoized to prevent callback recreation on every render
+  const handleFlowyEdit = useCallback(async (embedId: string, document: FlowyDocument) => {
     await window.electronAPI.flowyEmbedUpdate(sessionId, message.id, embedId, document)
-  }
+  }, [sessionId, message.id])
 
   // If no embeds, use standard UserMessageBubble
   if (flowyEmbeds.length === 0) {
@@ -1243,10 +1246,10 @@ function MessageBubble({
   if (message.role === 'assistant') {
     const { flowyEmbeds = [] } = message
 
-    // Handle flowy embed updates for assistant messages
-    const handleFlowyEdit = async (embedId: string, document: FlowyDocument) => {
+    // Handle flowy embed updates for assistant messages - memoized to prevent callback recreation on every render
+    const handleFlowyEdit = useCallback(async (embedId: string, document: FlowyDocument) => {
       await window.electronAPI.flowyEmbedUpdate(sessionId, message.id, embedId, document)
-    }
+    }, [sessionId, message.id])
 
     return (
       <div className="flex flex-col gap-2 justify-start group">

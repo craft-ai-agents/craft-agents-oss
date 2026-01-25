@@ -4,6 +4,15 @@
 
 import { z } from 'zod';
 
+// Security Constraints
+export const FLOWY_CONSTRAINTS = {
+  MAX_NODES: 100,
+  MAX_EDGES: 150,
+  MAX_NODE_LABEL_LENGTH: 500,
+  MAX_NODE_DESCRIPTION_LENGTH: 2000,
+  MAX_EDGE_LABEL_LENGTH: 200,
+} as const;
+
 // Base Schemas
 export const PositionSchema = z.object({ x: z.number(), y: z.number() });
 export const SizeSchema = z.object({ width: z.number().positive(), height: z.number().positive() });
@@ -39,7 +48,7 @@ export const IconConfigSchema = z.object({
 export const FlowyNodeSchema = z.object({
   id: z.string().min(1),
   type: z.enum(['rect', 'circle', 'diamond']),
-  label: z.string(),
+  label: z.string().max(FLOWY_CONSTRAINTS.MAX_NODE_LABEL_LENGTH),
   position: PositionSchema,
   size: SizeSchema,
   style: NodeStyleSchema.optional(),
@@ -52,7 +61,7 @@ export const FlowyEdgeSchema = z.object({
   from: z.string().min(1),
   to: z.string().min(1),
   type: z.enum(['arrow', 'dashed', 'line', 'orthogonal', 'curved']),
-  label: z.string().optional(),
+  label: z.string().max(FLOWY_CONSTRAINTS.MAX_EDGE_LABEL_LENGTH).optional(),
   style: EdgeStyleSchema.optional(),
   controlPoints: z.array(PositionSchema).optional(),
   data: z.record(z.string(), z.unknown()).optional(),
@@ -109,7 +118,11 @@ export const MockupConnectionSchema = z.object({
 });
 
 // Content
-export const FlowyFlowchartSchema = z.object({ type: z.literal('flowchart'), nodes: z.array(FlowyNodeSchema), edges: z.array(FlowyEdgeSchema) });
+export const FlowyFlowchartSchema = z.object({
+  type: z.literal('flowchart'),
+  nodes: z.array(FlowyNodeSchema).max(FLOWY_CONSTRAINTS.MAX_NODES),
+  edges: z.array(FlowyEdgeSchema).max(FLOWY_CONSTRAINTS.MAX_EDGES)
+});
 export const FlowyMockupSchema = z.object({ type: z.literal('mockup'), screens: z.array(MockupScreenSchema), connections: z.array(MockupConnectionSchema) });
 const FlowyContentSchema = z.discriminatedUnion('type', [FlowyFlowchartSchema, FlowyMockupSchema]);
 
@@ -117,7 +130,7 @@ const FlowyContentSchema = z.discriminatedUnion('type', [FlowyFlowchartSchema, F
 export const FlowyDocumentSchema = z.object({
   version: z.literal('1.0'),
   name: z.string().min(1),
-  description: z.string().optional(),
+  description: z.string().max(FLOWY_CONSTRAINTS.MAX_NODE_DESCRIPTION_LENGTH).optional(),
   type: z.enum(['flowchart', 'mockup']),
   content: FlowyContentSchema,
   viewport: z.object({ zoom: z.number().positive(), pan: PositionSchema }).optional(),

@@ -6,7 +6,7 @@
  */
 
 import * as React from 'react'
-import { useMemo } from 'react'
+import { useMemo, useCallback } from 'react'
 import type {
   FlowyDocument,
   FlowyFlowchart,
@@ -58,7 +58,7 @@ const DEFAULT_EDGE_STYLE: EdgeStyle = {
   markerEnd: 'arrow',
 }
 
-export function DiagramRenderer({
+function DiagramRendererComponent({
   document,
   className,
   zoom = 1,
@@ -162,6 +162,11 @@ export function DiagramRenderer({
 }
 
 /**
+ * DiagramRenderer - Memoized export for performance
+ */
+export const DiagramRenderer = React.memo(DiagramRendererComponent)
+
+/**
  * Calculate viewBox for flowchart content
  */
 function calculateFlowchartViewBox(content: FlowyFlowchart): { x: number; y: number; width: number; height: number } {
@@ -223,7 +228,7 @@ function calculateMockupViewBox(content: FlowyMockup): { x: number; y: number; w
 /**
  * Flowchart renderer - renders nodes and edges
  */
-function FlowchartRenderer({ content }: { content: FlowyFlowchart }) {
+const FlowchartRenderer = React.memo(function FlowchartRenderer({ content }: { content: FlowyFlowchart }) {
   return (
     <g>
       {/* Render edges first (below nodes) */}
@@ -240,12 +245,12 @@ function FlowchartRenderer({ content }: { content: FlowyFlowchart }) {
       ))}
     </g>
   )
-}
+})
 
 /**
  * Node renderer - renders individual flowchart nodes
  */
-function NodeRenderer({ node }: { node: FlowyNode }) {
+const NodeRenderer = React.memo(function NodeRenderer({ node }: { node: FlowyNode }) {
   const style = { ...DEFAULT_NODE_STYLE, ...node.style }
   const { x, y } = node.position
   const { width, height } = node.size
@@ -309,12 +314,12 @@ function NodeRenderer({ node }: { node: FlowyNode }) {
       </text>
     </g>
   )
-}
+})
 
 /**
  * Edge renderer - renders connections between nodes
  */
-function EdgeRenderer({ edge, nodes }: { edge: FlowyEdge; nodes: FlowyNode[] }) {
+const EdgeRenderer = React.memo(function EdgeRenderer({ edge, nodes }: { edge: FlowyEdge; nodes: FlowyNode[] }) {
   const fromNode = nodes.find((n) => n.id === edge.from)
   const toNode = nodes.find((n) => n.id === edge.to)
 
@@ -390,7 +395,7 @@ function EdgeRenderer({ edge, nodes }: { edge: FlowyEdge; nodes: FlowyNode[] }) 
       )}
     </g>
   )
-}
+})
 
 /**
  * Calculate edge start/end points based on node boundaries
@@ -489,7 +494,7 @@ function getNodeBoundaryPoint(
 /**
  * Mockup renderer - renders screens and their components
  */
-function MockupRenderer({ content }: { content: FlowyMockup }) {
+const MockupRenderer = React.memo(function MockupRenderer({ content }: { content: FlowyMockup }) {
   return (
     <g>
       {/* Render connections first (below screens) */}
@@ -506,12 +511,12 @@ function MockupRenderer({ content }: { content: FlowyMockup }) {
       ))}
     </g>
   )
-}
+})
 
 /**
  * Screen renderer - renders a device frame with components
  */
-function ScreenRenderer({ screen }: { screen: MockupScreen }) {
+const ScreenRenderer = React.memo(function ScreenRenderer({ screen }: { screen: MockupScreen }) {
   const dims = DEVICE_DIMENSIONS[screen.device]
   const { x, y } = screen.position
 
@@ -586,12 +591,12 @@ function ScreenRenderer({ screen }: { screen: MockupScreen }) {
       </g>
     </g>
   )
-}
+})
 
 /**
  * Component renderer - renders individual UI components
  */
-function ComponentRenderer({
+const ComponentRenderer = React.memo(function ComponentRenderer({
   component,
   screenX,
   screenY,
@@ -1025,12 +1030,12 @@ function ComponentRenderer({
         />
       )
   }
-}
+})
 
 /**
  * Mockup connection renderer - renders connections between screens
  */
-function MockupConnectionRenderer({
+const MockupConnectionRenderer = React.memo(function MockupConnectionRenderer({
   connection,
   screens,
 }: {
@@ -1076,4 +1081,4 @@ function MockupConnectionRenderer({
       )}
     </g>
   )
-}
+})

@@ -2634,12 +2634,23 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // =============================================================================
 
   // Update an embedded Flowy diagram within a message
-  ipcMain.handle(IPC_CHANNELS.FLOWY_EMBED_UPDATE, async (_event, sessionId: string, messageId: string, embedId: string, document: import('@vesper/shared/flowy').FlowyDocument) => {
+  ipcMain.handle(IPC_CHANNELS.FLOWY_EMBED_UPDATE, async (event, sessionId: string, messageId: string, embedId: string, document: import('@vesper/shared/flowy').FlowyDocument) => {
     try {
+      // Authorization: Get workspace ID from calling window
+      const callingWorkspaceId = windowManager.getWorkspaceForWindow(event.sender.id)
+      if (!callingWorkspaceId) {
+        return { success: false, error: 'Unable to determine workspace for this window' }
+      }
+
       // Get the session from SessionManager
       const session = await sessionManager.getSession(sessionId)
       if (!session) {
         return { success: false, error: `Session not found: ${sessionId}` }
+      }
+
+      // Authorization: Verify session belongs to the calling workspace
+      if (session.workspaceId !== callingWorkspaceId) {
+        return { success: false, error: 'Unauthorized: Session does not belong to this workspace' }
       }
 
       // Find the message by ID
@@ -2662,6 +2673,32 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       const embedIndex = message.flowyEmbeds.findIndex(e => e.id === embedId)
       if (embedIndex === -1) {
         return { success: false, error: `Embed not found: ${embedId}` }
+      }
+
+      // Validate JSON size (must be < 1MB)
+      const serializedSize = new TextEncoder().encode(JSON.stringify(document)).length
+      const MAX_JSON_SIZE = 1_048_576 // 1MB in bytes
+      if (serializedSize > MAX_JSON_SIZE) {
+        ipcLog.warn(`Flowy document exceeds size limit: ${serializedSize} bytes (max: ${MAX_JSON_SIZE})`)
+        return {
+          success: false,
+          error: `Document too large: ${Math.round(serializedSize / 1024)}KB (max: 1MB)`
+        }
+      }
+
+      // Validate document structure and constraints
+      const { validateFlowyDocument } = await import('@vesper/shared/flowy/schema')
+      const validation = validateFlowyDocument(document)
+      if (!validation.success) {
+        ipcLog.warn('Flowy document validation failed:', validation.error)
+        const firstError = validation.error?.issues?.[0]
+        const errorMessage = firstError
+          ? `${firstError.path.join('.')}: ${firstError.message}`
+          : 'Validation failed'
+        return {
+          success: false,
+          error: `Invalid document: ${errorMessage}`
+        }
       }
 
       // Update the embed's document
@@ -2738,6 +2775,25 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       }
 
       saveSession(storedSession)
+
+      // Broadcast update event to all windows for multi-window sync
+      const windows = windowManager.getAllWindowsForWorkspace(session.workspaceId)
+      for (const win of windows) {
+        // Check mainFrame - it becomes null when render frame is disposed
+        if (!win.isDestroyed() && !win.webContents.isDestroyed() && win.webContents.mainFrame) {
+          try {
+            win.webContents.send(IPC_CHANNELS.SESSION_EVENT, {
+              type: 'info',
+              sessionId,
+              message: 'Flowy diagram updated',
+              statusType: 'flowy_updated',
+              level: 'info'
+            })
+          } catch {
+            // Silently ignore - expected during window closure race conditions
+          }
+        }
+      }
 
       ipcLog.info(`Updated Flowy embed ${embedId} in message ${messageId} of session ${sessionId}`)
       return { success: true }
