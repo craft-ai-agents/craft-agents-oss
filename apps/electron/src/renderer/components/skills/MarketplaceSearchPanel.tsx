@@ -6,15 +6,16 @@
  */
 
 import * as React from 'react'
-import { useState, useEffect, useCallback } from 'react'
-import { Search, Download, Loader2, Package } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { Search, Download, Loader2, Package, Globe, Github } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
+import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import type { MarketplaceSkill } from '../../../shared/types'
+import type { MarketplaceSkill, MarketplaceSource } from '../../../shared/types'
 
 export interface MarketplaceSearchPanelProps {
   onInstalled: () => void
@@ -34,6 +35,9 @@ export function MarketplaceSearchPanel({
   const [loading, setLoading] = useState(true)
   const [installing, setInstalling] = useState<string | null>(null)
   const [hasMore, setHasMore] = useState(false)
+  const [activeSource, setActiveSource] = useState<MarketplaceSource | null>(null)
+  const [errors, setErrors] = useState<string[]>([])
+  const lastErrorsRef = useRef<string>('')  // Track last shown errors to avoid duplicate toasts
 
   // Debounced search
   useEffect(() => {
@@ -43,9 +47,11 @@ export function MarketplaceSearchPanel({
         const result = await window.electronAPI.marketplaceSearch(query)
         setSkills(result.skills || [])
         setHasMore(result.hasMore || false)
+        setErrors(result.errors || [])
       } catch (error) {
         console.error('Search failed:', error)
         setSkills([])
+        setErrors([])
       } finally {
         setLoading(false)
       }
@@ -53,6 +59,24 @@ export function MarketplaceSearchPanel({
 
     return () => clearTimeout(timer)
   }, [query])
+
+  // Show toast when sources fail (avoid duplicate toasts)
+  useEffect(() => {
+    if (errors.length > 0) {
+      const errorKey = errors.join(',')
+      if (errorKey !== lastErrorsRef.current) {
+        lastErrorsRef.current = errorKey
+        toast.warning('Some sources unavailable', {
+          description: errors.join(', '),
+        })
+      }
+    }
+  }, [errors])
+
+  // Filter skills by active source
+  const filteredSkills = activeSource
+    ? skills.filter(s => s.source === activeSource)
+    : skills
 
   // Handle skill installation
   const handleInstall = useCallback(async (skill: MarketplaceSkill, e: React.MouseEvent) => {
@@ -109,13 +133,48 @@ export function MarketplaceSearchPanel({
         </div>
       </div>
 
+      {/* Source filter badges */}
+      <div className="flex flex-wrap gap-1.5 px-3 py-2 border-b">
+        <Badge
+          variant={activeSource === null ? 'default' : 'outline'}
+          className="cursor-pointer text-xs"
+          onClick={() => setActiveSource(null)}
+        >
+          All
+        </Badge>
+        <Badge
+          variant={activeSource === 'skills.sh' ? 'default' : 'outline'}
+          className="cursor-pointer text-xs"
+          onClick={() => setActiveSource('skills.sh')}
+        >
+          <Globe className="w-3 h-3 mr-1" />
+          skills.sh
+        </Badge>
+        <Badge
+          variant={activeSource === 'anthropics/skills' ? 'default' : 'outline'}
+          className="cursor-pointer text-xs"
+          onClick={() => setActiveSource('anthropics/skills')}
+        >
+          <Github className="w-3 h-3 mr-1" />
+          anthropics
+        </Badge>
+        <Badge
+          variant={activeSource === 'ComposioHQ/awesome-claude-skills' ? 'default' : 'outline'}
+          className="cursor-pointer text-xs"
+          onClick={() => setActiveSource('ComposioHQ/awesome-claude-skills')}
+        >
+          <Github className="w-3 h-3 mr-1" />
+          ComposioHQ
+        </Badge>
+      </div>
+
       {/* Skills list */}
       <ScrollArea className="flex-1">
         {loading ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
-        ) : skills.length === 0 ? (
+        ) : filteredSkills.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 text-center px-4">
             <Package className="h-8 w-8 text-muted-foreground mb-2" />
             <p className="text-sm text-muted-foreground">
@@ -124,7 +183,7 @@ export function MarketplaceSearchPanel({
           </div>
         ) : (
           <div className="pb-2 pt-2">
-            {skills.map((skill, index) => (
+            {filteredSkills.map((skill, index) => (
               <SkillRow
                 key={skill.id}
                 skill={skill}
@@ -188,9 +247,19 @@ function SkillRow({
         onClick={onClick}
       >
         <div className="flex flex-col gap-0.5 min-w-0 flex-1 pr-3">
-          <span className="font-medium text-sm truncate">{skill.name}</span>
+          <div className="flex items-center gap-1.5">
+            <span className="font-medium text-sm truncate">{skill.name}</span>
+            {/* Source indicator */}
+            <span className="text-muted-foreground shrink-0">
+              {skill.source === 'skills.sh' ? (
+                <Globe className="w-3 h-3" />
+              ) : (
+                <Github className="w-3 h-3" />
+              )}
+            </span>
+          </div>
           <span className="text-xs text-muted-foreground truncate">
-            {skill.topSource} · {formatInstalls(skill.installs)} installs
+            {skill.topSource}{skill.installs != null ? ` · ${formatInstalls(skill.installs)} installs` : ''}
           </span>
         </div>
         <Button

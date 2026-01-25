@@ -55,21 +55,29 @@ export type { LoadedSkill, SkillMetadata, SkillSource };
 // ============================================
 
 /**
- * Skill from skills.sh marketplace API
+ * Skill source identifier for multi-source marketplace
+ */
+export type MarketplaceSource = 'skills.sh' | 'anthropics/skills' | 'ComposioHQ/awesome-claude-skills'
+
+/**
+ * Skill from marketplace (skills.sh or GitHub repositories)
  */
 export interface MarketplaceSkill {
   id: string
   name: string
-  installs: number
+  installs?: number  // Optional - GitHub sources don't have install counts
   topSource: string  // "owner/repo" format
+  description?: string  // Extracted from SKILL.md
+  source: MarketplaceSource  // Which marketplace this skill came from
 }
 
 /**
- * Response from skills.sh API
+ * Response from marketplace search (aggregated from multiple sources)
  */
 export interface MarketplaceSearchResponse {
   skills: MarketplaceSkill[]
   hasMore: boolean
+  errors?: string[]  // List of sources that failed (for partial results)
 }
 
 /**

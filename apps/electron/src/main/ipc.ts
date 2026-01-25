@@ -2519,23 +2519,176 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   })
 
   // =============================================================================
-  // Marketplace Handlers (skills.sh integration)
+  // Marketplace Handlers (multi-source: skills.sh + GitHub repositories)
   // =============================================================================
 
-  // Search skills from skills.sh
+  // GitHub sources to search (in addition to skills.sh)
+  const GITHUB_SKILL_SOURCES = [
+    { owner: 'anthropics', repo: 'skills', name: 'anthropics/skills' as const },
+    { owner: 'ComposioHQ', repo: 'awesome-claude-skills', name: 'ComposioHQ/awesome-claude-skills' as const },
+  ]
+
+  // Simple in-memory cache for GitHub sources (they change less frequently)
+  const marketplaceCache = new Map<string, { data: import('../shared/types').MarketplaceSkill[]; expiry: number }>()
+  const MARKETPLACE_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+
+  function getCachedSkills(key: string): import('../shared/types').MarketplaceSkill[] | null {
+    const entry = marketplaceCache.get(key)
+    if (!entry || Date.now() > entry.expiry) {
+      marketplaceCache.delete(key)
+      return null
+    }
+    return entry.data
+  }
+
+  function setCachedSkills(key: string, data: import('../shared/types').MarketplaceSkill[]): void {
+    marketplaceCache.set(key, { data, expiry: Date.now() + MARKETPLACE_CACHE_TTL })
+  }
+
+  // Fetch with timeout and size limit for security
+  async function safeFetch(url: string, options?: RequestInit): Promise<Response> {
+    const response = await fetch(url, {
+      ...options,
+      signal: AbortSignal.timeout(8000), // 8 second timeout
+    })
+
+    const contentLength = parseInt(response.headers.get('content-length') || '0')
+    if (contentLength > 5 * 1024 * 1024) { // 5MB max
+      throw new Error('Response too large')
+    }
+
+    return response
+  }
+
+  // Sanitize SKILL.md content to prevent XSS
+  function sanitizeSkillContent(content: string): string {
+    return content
+      .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+      .replace(/javascript:/gi, '')
+      .replace(/on\w+\s*=/gi, '')
+  }
+
+  /**
+   * Fetch skills from skills.sh marketplace
+   */
+  async function fetchSkillsSh(query: string): Promise<import('../shared/types').MarketplaceSkill[]> {
+    const url = query
+      ? `https://skills.sh/api/skills?q=${encodeURIComponent(query)}`
+      : 'https://skills.sh/api/skills'
+
+    const response = await safeFetch(url)
+    if (!response.ok) throw new Error(`skills.sh: ${response.status}`)
+
+    const data = await response.json()
+    return (data.skills || []).map((s: any) => ({
+      ...s,
+      source: 'skills.sh' as const,
+    }))
+  }
+
+  /**
+   * Fetch skills from a GitHub repository
+   */
+  async function fetchGitHubSource(
+    owner: string,
+    repo: string,
+    sourceName: 'anthropics/skills' | 'ComposioHQ/awesome-claude-skills',
+    query: string
+  ): Promise<import('../shared/types').MarketplaceSkill[]> {
+    const cacheKey = `github:${owner}/${repo}`
+
+    // Try cache first (GitHub repos don't change as frequently)
+    let skills = getCachedSkills(cacheKey)
+
+    if (!skills) {
+      // Fetch directory listing from GitHub API
+      const listUrl = `https://api.github.com/repos/${owner}/${repo}/contents/skills`
+      const response = await safeFetch(listUrl, {
+        headers: { 'Accept': 'application/vnd.github.v3+json' },
+      })
+
+      if (!response.ok) throw new Error(`GitHub ${owner}/${repo}: ${response.status}`)
+
+      const contents = await response.json()
+      const dirs = contents.filter((item: any) => item.type === 'dir')
+
+      // Fetch SKILL.md metadata for each directory (limit to 50 to avoid rate limits)
+      const skillPromises = dirs.slice(0, 50).map(async (dir: any): Promise<import('../shared/types').MarketplaceSkill | null> => {
+        try {
+          const mdUrl = `https://raw.githubusercontent.com/${owner}/${repo}/main/skills/${dir.name}/SKILL.md`
+          const mdResponse = await fetch(mdUrl, { signal: AbortSignal.timeout(5000) })
+          if (!mdResponse.ok) return null
+
+          const content = await mdResponse.text()
+          const sanitizedContent = sanitizeSkillContent(content)
+
+          // Extract name and description from YAML frontmatter
+          const name = sanitizedContent.match(/^name:\s*["']?([^"'\n]+)["']?/m)?.[1]?.trim() ?? dir.name
+          const description = sanitizedContent.match(/^description:\s*["']?([^"'\n]+)["']?/m)?.[1]?.trim()
+
+          return {
+            id: dir.name,
+            name,
+            description,
+            topSource: `${owner}/${repo}`,
+            source: sourceName,
+          }
+        } catch {
+          return null
+        }
+      })
+
+      const results = await Promise.all(skillPromises)
+      skills = results.filter((s): s is import('../shared/types').MarketplaceSkill => s !== null)
+      setCachedSkills(cacheKey, skills)
+    }
+
+    // Filter by query if provided
+    if (query) {
+      const q = query.toLowerCase()
+      return skills.filter(
+        s => s.name.toLowerCase().includes(q) || s.description?.toLowerCase().includes(q)
+      )
+    }
+
+    return skills
+  }
+
+  // Search skills from multiple sources in parallel
   ipcMain.handle(IPC_CHANNELS.MARKETPLACE_SEARCH, async (_event, query: string) => {
-    try {
-      const url = query
-        ? `https://skills.sh/api/skills?q=${encodeURIComponent(query)}`
-        : 'https://skills.sh/api/skills'
-      const response = await fetch(url)
-      if (!response.ok) {
-        throw new Error(`API request failed: ${response.status}`)
+    const errors: string[] = []
+
+    // Fetch from all sources in parallel
+    const results = await Promise.allSettled([
+      fetchSkillsSh(query),
+      ...GITHUB_SKILL_SOURCES.map(s => fetchGitHubSource(s.owner, s.repo, s.name, query)),
+    ])
+
+    const skills: import('../shared/types').MarketplaceSkill[] = []
+    const sourceNames = ['skills.sh', ...GITHUB_SKILL_SOURCES.map(s => s.name)]
+
+    results.forEach((result, i) => {
+      if (result.status === 'fulfilled') {
+        skills.push(...result.value)
+      } else {
+        const errorMsg = result.reason?.message ?? 'failed'
+        errors.push(`${sourceNames[i]}: ${errorMsg}`)
+        ipcLog.warn(`Marketplace source ${sourceNames[i]} failed:`, errorMsg)
       }
-      return await response.json()
-    } catch (error) {
-      ipcLog.error('Error searching marketplace:', error)
-      return { skills: [], hasMore: false }
+    })
+
+    // Simple dedup by id (keep first occurrence - skills.sh takes priority)
+    const seen = new Set<string>()
+    const dedupedSkills = skills.filter(s => {
+      if (seen.has(s.id)) return false
+      seen.add(s.id)
+      return true
+    })
+
+    return {
+      skills: dedupedSkills,
+      hasMore: false,
+      errors: errors.length > 0 ? errors : undefined,
     }
   })
 
