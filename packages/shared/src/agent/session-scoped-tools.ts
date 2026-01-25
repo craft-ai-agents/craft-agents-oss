@@ -1903,7 +1903,7 @@ export function createRenderUiTool(sessionId: string) {
     'render_ui',
     `Generate an interactive UI to display inline in chat.
 
-Use this to render structured data, forms, tables, metrics, or interactive content.
+Use this to render structured data, forms, tables, charts, metrics, or interactive content.
 The UI will appear in the chat message, not in a separate window.
 
 **LAYOUT COMPONENTS:**
@@ -1917,44 +1917,55 @@ The UI will appear in the chat message, not in a separate window.
   Props: { content: string, variant: "p" | "h1" | "h2" | "h3" | "muted" }
 - **Badge**: Status indicator with color variants.
   Props: { label: string, variant: "default" | "secondary" | "outline" | "destructive" }
-- **Table**: Data table with columns and rows. Max 100 rows.
+- **Table**: Simple data table with columns and rows. Max 100 rows.
   Props: { columns: [{ key: string, header: string }], data: [{ key: value }] }
+
+**DATA VISUALIZATION COMPONENTS:**
+- **Chart**: Interactive charts (bar, line, pie, area).
+  Props: { type: "bar" | "line" | "pie" | "area", data: [{name, value, ...}], xKey: string, yKey: string, title?: string, height?: number, colors?: string[] }
+- **Metric**: KPI metric display with trend indicator.
+  Props: { label: string, value: string | number, trend?: "up" | "down" | "neutral", change?: "+12%", prefix?: "$", suffix?: "%" }
+- **DataTable**: Advanced table with sorting, filtering, pagination.
+  Props: { columns: [{ key, header, sortable? }], data: [...], searchable?: boolean, pageSize?: number }
 
 **INTERACTIVE COMPONENTS:**
 - **Button**: Clickable button that triggers an action.
-  Props: { label: string, action: string, variant?: "default" | "secondary" | "outline" | "destructive" | "ghost", disabled?: boolean }
+  Props: { label: string, action: string | { name, params }, variant?: "default" | "secondary" | "outline" | "destructive" | "ghost", disabled?: boolean }
 - **TextField**: Text input with data binding.
   Props: { label?: string, valuePath: string, placeholder?: string, type?: "text" | "email" | "number" | "password" }
 - **SelectField**: Dropdown select with options.
   Props: { label?: string, bindPath: string, options: [{ value: string, label: string }], placeholder?: string }
 
 **BUILT-IN ACTIONS (for Button):**
-- "copy" - Copies text to clipboard
-- "open_url" - Opens a URL in browser
+- "copy" - Copies text to clipboard. Params: { text: "..." }
+- "open_url" - Opens a URL in browser. Params: { url: "..." }
+- "api_call" - Makes HTTP request. Params: { url, method?, body?, headers? }
 - "log" - Logs to console for debugging
+- "refresh" - Triggers data refresh
 
 **Tree Structure:**
 Return a tree with:
 - \`root\`: ID of the root element
 - \`elements\`: Record of element ID → { type, props, children? }
 
-**Example with interactive components:**
+**Example with chart and metrics:**
 \`\`\`json
 {
   "root": "card1",
   "elements": {
     "card1": {
       "type": "Card",
-      "props": { "title": "Quick Actions" },
-      "children": ["stack1"]
+      "props": { "title": "Sales Dashboard" },
+      "children": ["metrics", "chart1"]
     },
-    "stack1": {
+    "metrics": {
       "type": "Stack",
       "props": { "direction": "horizontal", "gap": "md" },
-      "children": ["btn1", "input1"]
+      "children": ["metric1", "metric2"]
     },
-    "btn1": { "type": "Button", "props": { "label": "Copy", "action": "copy" } },
-    "input1": { "type": "TextField", "props": { "label": "Name", "valuePath": "/user/name", "placeholder": "Enter name..." } }
+    "metric1": { "type": "Metric", "props": { "label": "Revenue", "value": 125000, "prefix": "$", "trend": "up", "change": "+12%" } },
+    "metric2": { "type": "Metric", "props": { "label": "Users", "value": 5432, "trend": "up", "change": "+8%" } },
+    "chart1": { "type": "Chart", "props": { "type": "bar", "data": [{"month": "Jan", "value": 4000}, {"month": "Feb", "value": 5500}], "xKey": "month", "yKey": "value" } }
   }
 }
 \`\`\``,
@@ -1962,7 +1973,7 @@ Return a tree with:
       tree: z.object({
         root: z.string().describe('ID of the root element'),
         elements: z.record(z.string(), z.object({
-          type: z.enum(['Card', 'Stack', 'Text', 'Badge', 'Table', 'Button', 'TextField', 'SelectField']).describe('Component type'),
+          type: z.enum(['Card', 'Stack', 'Text', 'Badge', 'Table', 'Button', 'TextField', 'SelectField', 'Chart', 'Metric', 'DataTable']).describe('Component type'),
           props: z.record(z.string(), z.unknown()).describe('Component props'),
           children: z.array(z.string()).optional().describe('Child element IDs'),
         })).describe('Map of element ID to element definition'),
@@ -1973,7 +1984,7 @@ Return a tree with:
 
       // Type-safe element access
       type UIElement = {
-        type: 'Card' | 'Stack' | 'Text' | 'Badge' | 'Table' | 'Button' | 'TextField' | 'SelectField';
+        type: 'Card' | 'Stack' | 'Text' | 'Badge' | 'Table' | 'Button' | 'TextField' | 'SelectField' | 'Chart' | 'Metric' | 'DataTable';
         props: Record<string, unknown>;
         children?: string[];
       };

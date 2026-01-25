@@ -55,14 +55,14 @@ describe('JSONRenderView Tree Validation', () => {
     expect(invalidTree.root).toBeNull()
   })
 
-  test('all 5 MVP component types', () => {
+  test('all 11 component types', () => {
     const allComponents = {
       root: 'stack1',
       elements: {
         'stack1': {
           type: 'Stack',
           props: { direction: 'vertical', gap: 'md' },
-          children: ['card1', 'text1', 'badge1', 'table1']
+          children: ['card1', 'text1', 'badge1', 'table1', 'button1', 'textfield1', 'select1', 'chart1', 'metric1', 'datatable1']
         },
         'card1': {
           type: 'Card',
@@ -89,6 +89,35 @@ describe('JSONRenderView Tree Validation', () => {
               { name: 'Row 2', value: '200' }
             ]
           }
+        },
+        'button1': {
+          type: 'Button',
+          props: { label: 'Click me', action: 'log', variant: 'default' }
+        },
+        'textfield1': {
+          type: 'TextField',
+          props: { label: 'Name', valuePath: '/user/name', placeholder: 'Enter name' }
+        },
+        'select1': {
+          type: 'SelectField',
+          props: { label: 'Color', bindPath: '/user/color', options: [{ value: 'red', label: 'Red' }] }
+        },
+        'chart1': {
+          type: 'Chart',
+          props: { type: 'bar', data: [{ name: 'A', value: 100 }], xKey: 'name', yKey: 'value' }
+        },
+        'metric1': {
+          type: 'Metric',
+          props: { label: 'Revenue', value: 5000, trend: 'up', change: '+10%' }
+        },
+        'datatable1': {
+          type: 'DataTable',
+          props: {
+            columns: [{ key: 'id', header: 'ID' }],
+            data: [{ id: '001' }],
+            searchable: true,
+            pageSize: 10
+          }
         }
       }
     }
@@ -100,6 +129,12 @@ describe('JSONRenderView Tree Validation', () => {
     expect(types).toContain('Text')
     expect(types).toContain('Badge')
     expect(types).toContain('Table')
+    expect(types).toContain('Button')
+    expect(types).toContain('TextField')
+    expect(types).toContain('SelectField')
+    expect(types).toContain('Chart')
+    expect(types).toContain('Metric')
+    expect(types).toContain('DataTable')
   })
 
   test('table respects max 100 rows limit', () => {
@@ -148,5 +183,54 @@ describe('Component Props Validation', () => {
     expect(Array.isArray(tableProps.data)).toBe(true)
     expect(tableProps.columns[0]).toHaveProperty('key')
     expect(tableProps.columns[0]).toHaveProperty('header')
+  })
+
+  test('Button props', () => {
+    const buttonProps = { label: 'Click', action: 'copy', variant: 'default', disabled: false }
+    expect(typeof buttonProps.label).toBe('string')
+    expect(['default', 'secondary', 'outline', 'destructive', 'ghost']).toContain(buttonProps.variant)
+    expect(typeof buttonProps.action).toBe('string')
+  })
+
+  test('Chart props', () => {
+    const chartProps = {
+      type: 'bar',
+      data: [{ name: 'Jan', value: 100 }, { name: 'Feb', value: 200 }],
+      xKey: 'name',
+      yKey: 'value',
+      title: 'Sales',
+      height: 300
+    }
+    expect(['bar', 'line', 'pie', 'area']).toContain(chartProps.type)
+    expect(Array.isArray(chartProps.data)).toBe(true)
+    expect(typeof chartProps.xKey).toBe('string')
+    expect(typeof chartProps.yKey).toBe('string')
+    expect(typeof chartProps.height).toBe('number')
+  })
+
+  test('Metric props', () => {
+    const metricProps = {
+      label: 'Revenue',
+      value: 50000,
+      trend: 'up',
+      change: '+15%',
+      prefix: '$'
+    }
+    expect(typeof metricProps.label).toBe('string')
+    expect(['up', 'down', 'neutral']).toContain(metricProps.trend)
+    expect(typeof metricProps.change).toBe('string')
+  })
+
+  test('DataTable props', () => {
+    const dataTableProps = {
+      columns: [{ key: 'id', header: 'ID', sortable: true }],
+      data: [{ id: '001' }, { id: '002' }],
+      searchable: true,
+      pageSize: 10
+    }
+    expect(Array.isArray(dataTableProps.columns)).toBe(true)
+    expect(dataTableProps.columns[0]).toHaveProperty('sortable')
+    expect(typeof dataTableProps.searchable).toBe('boolean')
+    expect(typeof dataTableProps.pageSize).toBe('number')
   })
 })

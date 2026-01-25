@@ -97,12 +97,56 @@ export const vesperCatalog = createCatalog({
       }),
       description: 'Dropdown select with options',
     },
+
+    // ============================================
+    // Data Visualization Components
+    // ============================================
+    Chart: {
+      props: z.object({
+        type: z.enum(['bar', 'line', 'pie', 'area']).default('bar'),
+        data: z.array(z.record(z.string(), z.unknown())),
+        xKey: z.string().default('name').describe('Key for X axis values'),
+        yKey: z.string().default('value').describe('Key for Y axis values'),
+        title: z.string().optional(),
+        height: z.number().default(300),
+        colors: z.array(z.string()).optional(),
+      }),
+      description: 'Interactive chart (bar, line, pie, area) using recharts',
+    },
+
+    Metric: {
+      props: z.object({
+        label: z.string(),
+        value: z.union([z.string(), z.number()]),
+        trend: z.enum(['up', 'down', 'neutral']).optional(),
+        change: z.string().optional().describe('Change text like "+12%" or "-5%"'),
+        prefix: z.string().optional().describe('Text before value like "$"'),
+        suffix: z.string().optional().describe('Text after value like "%"'),
+      }),
+      description: 'KPI metric display with trend indicator',
+    },
+
+    DataTable: {
+      props: z.object({
+        columns: z.array(z.object({
+          key: z.string(),
+          header: z.string(),
+          sortable: z.boolean().optional().default(true),
+        })).max(20),
+        data: z.array(z.record(z.string(), z.unknown())).max(1000),
+        searchable: z.boolean().optional().default(false),
+        pageSize: z.number().optional().default(10),
+      }),
+      description: 'Data table with sorting, filtering, and pagination',
+    },
   },
 
   actions: {
     copy: { description: 'Copy text to clipboard. Params: { text: string }' },
     open_url: { description: 'Open a URL in browser. Params: { url: string }' },
     log: { description: 'Log data for debugging. Params: any' },
+    api_call: { description: 'Make HTTP request. Params: { url: string, method?: string, body?: object, headers?: object }' },
+    refresh: { description: 'Trigger data refresh. No params.' },
   },
 })
 
@@ -121,17 +165,24 @@ LAYOUT:
 DISPLAY:
 - Text: Display text. variant: "p" | "h1" | "h2" | "h3" | "muted"
 - Badge: Status indicator. variant: "default" | "secondary" | "outline" | "destructive"
-- Table: Data table with columns and rows. Max 100 rows.
+- Table: Simple data table with columns and rows. Max 100 rows.
+
+DATA VISUALIZATION:
+- Chart: Interactive charts. type: "bar" | "line" | "pie" | "area", data: [{name, value}], xKey, yKey, title, height, colors
+- Metric: KPI display. label, value, trend: "up" | "down" | "neutral", change: "+12%", prefix: "$", suffix: "%"
+- DataTable: Advanced table with sorting, filtering, pagination. columns: [{key, header, sortable}], data, searchable, pageSize
 
 INTERACTIVE:
-- Button: Clickable button. label, variant, action (action name string), disabled
+- Button: Clickable button. label, variant, action (action name or {name, params}), disabled
 - TextField: Text input. label, valuePath (data binding path), placeholder, type
 - SelectField: Dropdown. label, bindPath, options: [{value, label}], placeholder
 
 ACTIONS (for Button):
-- copy: Copy text to clipboard. Use action: "copy" with params.text
-- open_url: Open URL in browser. Use action: "open_url" with params.url
-- log: Debug logging. Use action: "log" with any params
+- copy: Copy text to clipboard. { name: "copy", params: { text: "..." } }
+- open_url: Open URL in browser. { name: "open_url", params: { url: "..." } }
+- api_call: Make HTTP request. { name: "api_call", params: { url, method?, body?, headers? } }
+- log: Debug logging. { name: "log", params: any }
+- refresh: Trigger data refresh. { name: "refresh" }
 
 Return a tree with { root: string, elements: Record<string, Element> } where each element has { type, props, children? }.`,
 
