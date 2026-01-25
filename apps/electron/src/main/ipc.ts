@@ -16,6 +16,7 @@ import { registerTelegramHandlers } from './telegram-ipc'
 import { registerSlackHandlers } from './slack-ipc'
 import { registerLabelsIpc } from './labels-ipc'
 import { registerTemplateIpcHandlers } from './templates'
+import { registerNotificationIpc } from './notifications-ipc'
 import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type AuthType, type BillingMethodInfo, type SendMessageOptions } from '../shared/types'
 import { readFileAttachment, perf, validateImageForClaudeAPI, IMAGE_LIMITS } from '@vesper/shared/utils'
 import { getAuthType, setAuthType, getPreferencesPath, getModel, setModel, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, type Workspace } from '@vesper/shared/config'
@@ -411,7 +412,11 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       ipcLog.info(`[terminal] Resuming session ${sessionId} in terminal`)
 
       // Validate session ID format (prevent injection)
-      if (!sessionId || !/^ses-[a-f0-9-]+$/.test(sessionId)) {
+      // Vesper session IDs: YYMMDD-word-word or YYMMDD-word-word-N (e.g., 260111-swift-river)
+      // Legacy: UUID format also accepted
+      const vesperIdPattern = /^(\d{6})-([a-z]+-[a-z]+)(?:-(\d+))?$/
+      const uuidPattern = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/
+      if (!sessionId || (!vesperIdPattern.test(sessionId) && !uuidPattern.test(sessionId))) {
         throw new Error('Invalid session ID format')
       }
 
@@ -1904,6 +1909,9 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
   // Register template handlers
   registerTemplateIpcHandlers(sessionManager)
+
+  // Register notification handlers
+  registerNotificationIpc()
 
   // ============================================================
   // Theme (app-level only)
