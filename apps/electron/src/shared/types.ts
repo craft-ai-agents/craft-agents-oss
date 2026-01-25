@@ -1167,6 +1167,24 @@ export interface ElectronAPI {
   onWhatsAppError(callback: (data: { workspaceId: string; message: string }) => void): () => void
   onWhatsAppMessageActivity(callback: (data: WhatsAppMessageActivityEvent) => void): () => void
 
+  // Telegram Integration
+  telegramConnect(workspaceId: string, botToken: string): Promise<{ success: boolean; error?: string }>
+  telegramDisconnect(workspaceId: string): Promise<{ success: boolean; error?: string }>
+  telegramGetStatus(workspaceId: string): Promise<{ success: boolean; status?: any; error?: string }>
+  telegramSendMessage(workspaceId: string, chatId: number, content: string): Promise<{ success: boolean; messageId?: number; error?: string }>
+  telegramGetSavedToken(workspaceId: string): Promise<{ success: boolean; token?: string; error?: string }>
+  // Telegram event listeners
+  onTelegramConnectionStatus(callback: (data: { workspaceId: string; status: any }) => void): () => void
+  onTelegramError(callback: (data: { workspaceId: string; message: string; timestamp: number }) => void): () => void
+  onTelegramMessageActivity(callback: (data: {
+    workspaceId: string
+    status: 'received' | 'processing' | 'complete' | 'error'
+    chatId?: number
+    chatTitle?: string
+    username?: string
+    sessionId?: string
+  }) => void): () => void
+
   // Viewer Configuration (session sharing backend)
   getViewerConfig(): Promise<ViewerConfigResult>
   setViewerConfig(config: ViewerConfig): Promise<ViewerResult>
