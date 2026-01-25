@@ -23,7 +23,7 @@ export const loadTemplatesAtom = atom(
   async (get, set, { scope, workspaceId }: { scope: 'global' | 'workspace' | 'all'; workspaceId?: string }) => {
     set(templatesAtom, { items: [], isLoading: true, error: null });
     try {
-      const templates = await window.electron.invoke('template:list', scope, workspaceId);
+      const templates = await window.electronAPI.listTemplates(scope, workspaceId);
       set(templatesAtom, { items: templates, isLoading: false, error: null });
     } catch (error) {
       set(templatesAtom, {
@@ -38,8 +38,8 @@ export const loadTemplatesAtom = atom(
 // Atom to create a template
 export const createTemplateAtom = atom(
   null,
-  async (get, set, options: Parameters<typeof window.electron.invoke>[1]) => {
-    const template = await window.electron.invoke('template:create', options);
+  async (get, set, options: import('@vesper/shared/templates').CreateTemplateOptions) => {
+    const template = await window.electronAPI.createTemplate(options);
     const current = get(templatesAtom);
     set(templatesAtom, {
       ...current,
@@ -67,7 +67,7 @@ export const updateTemplateAtom = atom(
       updates: Partial<SessionTemplate>;
     }
   ) => {
-    const updated = await window.electron.invoke('template:update', id, scope, workspaceId, updates);
+    const updated = await window.electronAPI.updateTemplate(id, scope, workspaceId, updates);
     const current = get(templatesAtom);
     set(templatesAtom, {
       ...current,
@@ -81,7 +81,7 @@ export const updateTemplateAtom = atom(
 export const deleteTemplateAtom = atom(
   null,
   async (get, set, { id, scope, workspaceId }: { id: string; scope: 'global' | 'workspace'; workspaceId?: string }) => {
-    await window.electron.invoke('template:delete', id, scope, workspaceId);
+    await window.electronAPI.deleteTemplate(id, scope, workspaceId);
     const current = get(templatesAtom);
     set(templatesAtom, {
       ...current,
@@ -94,7 +94,7 @@ export const deleteTemplateAtom = atom(
 export const useTemplateAtom = atom(
   null,
   async (get, set, { id, scope, workspaceId }: { id: string; scope: 'global' | 'workspace'; workspaceId?: string }) => {
-    const template = await window.electron.invoke('template:use', id, scope, workspaceId);
+    const template = await window.electronAPI.useTemplate(id, scope, workspaceId);
     const current = get(templatesAtom);
     set(templatesAtom, {
       ...current,

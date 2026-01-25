@@ -656,6 +656,22 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.WHATSAPP_GET_ROUTE_CONFIG, workspaceId),
   whatsappSetRouteConfig: (workspaceId: string, config: any) =>
     ipcRenderer.invoke(IPC_CHANNELS.WHATSAPP_SET_ROUTE_CONFIG, workspaceId, config),
+
+  // Templates
+  listTemplates: (scope: 'global' | 'workspace' | 'all', workspaceId?: string) =>
+    ipcRenderer.invoke('template:list', scope, workspaceId),
+  createTemplate: (options: import('@vesper/shared/templates').CreateTemplateOptions) =>
+    ipcRenderer.invoke('template:create', options),
+  getTemplate: (id: string, scope: 'global' | 'workspace', workspaceId?: string) =>
+    ipcRenderer.invoke('template:get', id, scope, workspaceId),
+  updateTemplate: (id: string, scope: 'global' | 'workspace', workspaceId: string | undefined, updates: Partial<import('@vesper/shared/templates').SessionTemplate>) =>
+    ipcRenderer.invoke('template:update', id, scope, workspaceId, updates),
+  deleteTemplate: (id: string, scope: 'global' | 'workspace', workspaceId?: string) =>
+    ipcRenderer.invoke('template:delete', id, scope, workspaceId),
+  saveSessionAsTemplate: (options: import('@vesper/shared/templates').SaveSessionAsTemplateOptions) =>
+    ipcRenderer.invoke('template:save-from-session', options),
+  useTemplate: (id: string, scope: 'global' | 'workspace', workspaceId?: string) =>
+    ipcRenderer.invoke('template:use', id, scope, workspaceId),
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)

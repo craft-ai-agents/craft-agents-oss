@@ -1218,6 +1218,15 @@ export interface ElectronAPI {
   whatsappGetGroups(workspaceId: string): Promise<{ success: boolean; groups?: any[]; error?: string }>
   whatsappGetRouteConfig(workspaceId: string): Promise<{ success: boolean; config?: any; error?: string }>
   whatsappSetRouteConfig(workspaceId: string, config: any): Promise<{ success: boolean; error?: string }>
+
+  // Templates
+  listTemplates(scope: 'global' | 'workspace' | 'all', workspaceId?: string): Promise<import('@vesper/shared/templates').SessionTemplate[]>
+  createTemplate(options: import('@vesper/shared/templates').CreateTemplateOptions): Promise<import('@vesper/shared/templates').SessionTemplate>
+  getTemplate(id: string, scope: 'global' | 'workspace', workspaceId?: string): Promise<import('@vesper/shared/templates').SessionTemplate | null>
+  updateTemplate(id: string, scope: 'global' | 'workspace', workspaceId: string | undefined, updates: Partial<import('@vesper/shared/templates').SessionTemplate>): Promise<import('@vesper/shared/templates').SessionTemplate | null>
+  deleteTemplate(id: string, scope: 'global' | 'workspace', workspaceId?: string): Promise<void>
+  saveSessionAsTemplate(options: import('@vesper/shared/templates').SaveSessionAsTemplateOptions): Promise<import('@vesper/shared/templates').SessionTemplate>
+  useTemplate(id: string, scope: 'global' | 'workspace', workspaceId?: string): Promise<import('@vesper/shared/templates').SessionTemplate | null>
 }
 
 /**
