@@ -41,6 +41,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { RenameDialog } from "@/components/ui/rename-dialog"
+import { CreateTemplateDialog } from "@/components/templates"
 import { useSession } from "@/hooks/useSession"
 import { useFocusZone, useRovingTabIndex } from "@/hooks/keyboard"
 import { useNavigation, useNavigationState, routes, isChatsNavigation } from "@/contexts/NavigationContext"
@@ -180,6 +181,8 @@ interface SessionItemProps {
   onLabelClick?: (labelId: string) => void
   /** Callback when labels for a session change */
   onLabelsChange?: (sessionId: string, labelIds: string[]) => void
+  /** Callback when save as template is clicked */
+  onSaveAsTemplate?: (sessionId: string) => void
 }
 
 /**
@@ -209,6 +212,7 @@ function SessionItem({
   labels,
   onLabelClick,
   onLabelsChange,
+  onSaveAsTemplate,
 }: SessionItemProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [contextMenuOpen, setContextMenuOpen] = useState(false)
@@ -455,6 +459,7 @@ function SessionItem({
                     onTodoStateChange={(state) => onTodoStateChange(item.id, state)}
                     onOpenInNewWindow={onOpenInNewWindow}
                     onDelete={() => onDelete(item.id)}
+                    onSaveAsTemplate={onSaveAsTemplate ? () => onSaveAsTemplate(item.id) : undefined}
                   />
                 </DropdownMenuProvider>
               </StyledDropdownMenuContent>
@@ -485,6 +490,7 @@ function SessionItem({
               onTodoStateChange={(state) => onTodoStateChange(item.id, state)}
               onOpenInNewWindow={onOpenInNewWindow}
               onDelete={() => onDelete(item.id)}
+              onSaveAsTemplate={onSaveAsTemplate ? () => onSaveAsTemplate(item.id) : undefined}
             />
           </ContextMenuProvider>
         </StyledContextMenuContent>
@@ -602,6 +608,10 @@ export function SessionList({
   const [displayLimit, setDisplayLimit] = useState(INITIAL_DISPLAY_LIMIT)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
+
+  // Template dialog state
+  const [showCreateTemplate, setShowCreateTemplate] = useState(false)
+  const [templateSessionId, setTemplateSessionId] = useState<string | null>(null)
 
   // Focus search input when search becomes active (with delay to let dropdown close)
   useEffect(() => {
@@ -812,6 +822,25 @@ export function SessionList({
     setRenameName("")
   }
 
+  const handleSaveAsTemplate = useCallback((sessionId: string) => {
+    setTemplateSessionId(sessionId)
+    // Defer dialog open to next frame to let dropdown fully unmount first
+    requestAnimationFrame(() => {
+      setShowCreateTemplate(true)
+    })
+  }, [])
+
+  const handleSaveTemplate = useCallback(async (options: import('@vesper/shared/templates').SaveSessionAsTemplateOptions) => {
+    try {
+      await window.electronAPI.saveSessionAsTemplate(options)
+      toast.success('Template saved successfully')
+    } catch (error) {
+      console.error('[SessionList] Failed to save template:', error)
+      toast.error('Failed to save template')
+      throw error
+    }
+  }, [])
+
   // Handle search input key events
   const handleSearchKeyDown = (e: React.KeyboardEvent) => {
     // Stop propagation to prevent roving tabindex from intercepting keys (e.g. Backspace as Delete)
@@ -951,6 +980,7 @@ export function SessionList({
                     labels={labels}
                     onLabelClick={toggleLabelFilter}
                     onLabelsChange={handleLabelsChange}
+                    onSaveAsTemplate={handleSaveAsTemplate}
                   />
                 )
               })}
@@ -974,6 +1004,15 @@ export function SessionList({
         onValueChange={setRenameName}
         onSubmit={handleRenameSubmit}
         placeholder="Enter a name..."
+      />
+
+      {/* Create Template Dialog */}
+      <CreateTemplateDialog
+        open={showCreateTemplate}
+        onOpenChange={setShowCreateTemplate}
+        sessionId={templateSessionId || ''}
+        workspaceId={activeWorkspaceId || ''}
+        onSave={handleSaveTemplate}
       />
     </>
   )

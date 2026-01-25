@@ -183,6 +183,17 @@ export interface Message {
   authError?: string;             // Error message if auth failed
   authEmail?: string;             // Authenticated email (for OAuth)
   authWorkspace?: string;         // Authenticated workspace (for Slack)
+  // JSON Render - AI-generated UI tree
+  jsonRender?: {
+    tree: {
+      root: string;
+      elements: Record<string, {
+        type: string;
+        props: Record<string, unknown>;
+        children?: string[];
+      }>;
+    };
+  };
 }
 
 /**
@@ -248,6 +259,17 @@ export interface StoredMessage {
   authError?: string;
   authEmail?: string;
   authWorkspace?: string;
+  // JSON Render - AI-generated UI tree (persisted for session reload)
+  jsonRender?: {
+    tree: {
+      root: string;
+      elements: Record<string, {
+        type: string;
+        props: Record<string, unknown>;
+        children?: string[];
+      }>;
+    };
+  };
 }
 
 /**

@@ -54,7 +54,7 @@ export interface AppShellContextType {
   sessionOptions: Map<string, SessionOptions>
 
   // Session callbacks
-  onCreateSession: (workspaceId: string) => Promise<Session>
+  onCreateSession: (workspaceId: string, options?: import('../../shared/types').CreateSessionOptions) => Promise<Session>
   onSendMessage: (sessionId: string, message: string, attachments?: FileAttachment[], skillSlugs?: string[]) => void
   onRenameSession: (sessionId: string, name: string) => void
   onFlagSession: (sessionId: string) => void

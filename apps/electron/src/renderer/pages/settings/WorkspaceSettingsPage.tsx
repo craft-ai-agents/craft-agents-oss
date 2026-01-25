@@ -36,6 +36,8 @@ import {
 import { GitHubSettingsSection } from '@/components/orchestration'
 import { WhatsAppSettingsSection, QRCodeModal } from '@/components/whatsapp'
 import { SlackSettingsSection } from '@/components/slack'
+import { TelegramSettingsSection } from '@/components/telegram'
+import { TemplateManager } from '@/components/templates'
 import { LabelsSettingsSection } from '@/components/labels'
 import { ViewerSettings } from '@/components/settings'
 
@@ -484,6 +486,17 @@ export default function WorkspaceSettingsPage() {
 
             {/* WhatsApp Integration */}
             <WhatsAppSettingsSection />
+
+            {/* Telegram Integration */}
+            <TelegramSettingsSection />
+
+            {/* Session Templates */}
+            <SettingsSection
+              title="Session Templates"
+              description="Create and manage reusable session configurations"
+            >
+              <TemplateManager />
+            </SettingsSection>
 
             {/* Session Sharing */}
             <ViewerSettings />

@@ -23,6 +23,7 @@ import {
   HelpCircle,
   ExternalLink,
   Clock,
+  Workflow,
 } from "lucide-react"
 import { PanelRightRounded } from "../icons/PanelRightRounded"
 import { PanelLeftRounded } from "../icons/PanelLeftRounded"
@@ -76,6 +77,7 @@ import type { Session, Workspace, FileAttachment, PermissionRequest, TodoState, 
 import { sessionMetaMapAtom, type SessionMeta } from "@/atoms/sessions"
 import { sourcesAtom } from "@/atoms/sources"
 import { skillsAtom } from "@/atoms/skills"
+import { flowyFilesAtom } from "@/atoms/flowy"
 import { type TodoStateId, statusConfigsToTodoStates } from "@/config/todo-states"
 import { useStatuses } from "@/hooks/useStatuses"
 import * as storage from "@/lib/local-storage"
@@ -90,12 +92,16 @@ import {
   isSkillsNavigation,
   isVectorSearchNavigation,
   isSchedulesNavigation,
+  isFlowyNavigation,
   type NavigationState,
   type ChatFilter,
 } from "@/contexts/NavigationContext"
 import type { SettingsSubpage } from "../../../shared/types"
 import { SourcesListPanel } from "./SourcesListPanel"
+import { TemplatePickerDialog } from "@/components/templates/TemplatePickerDialog"
+import type { SessionTemplate } from "@vesper/shared/templates"
 import { SkillsListPanel } from "./SkillsListPanel"
+import { FlowyListPanel } from "@/components/flowy/FlowyListPanel"
 import { PanelHeader } from "./PanelHeader"
 import { EditPopover, getEditConfig } from "@/components/ui/EditPopover"
 import { getDocUrl } from "@vesper/shared/docs/doc-links"
@@ -190,6 +196,7 @@ function AppShellContent({
     onOpenStoredUserPreferences,
     onReset,
     onSendMessage,
+    onInputChange,
     openNewChat,
   } = contextValue
 
@@ -237,6 +244,9 @@ function AppShellContent({
 
   // Double-Esc interrupt feature: first Esc shows warning, second Esc interrupts
   const { handleEscapePress } = useEscapeInterrupt()
+
+  // Template picker state
+  const [showTemplatePicker, setShowTemplatePicker] = React.useState(false)
 
   // Command palette state
   const [, setCommandPaletteOpen] = useAtom(commandPaletteOpenAtom)
@@ -341,6 +351,15 @@ function AppShellContent({
   React.useEffect(() => {
     setSkillsAtom(skills)
   }, [skills, setSkillsAtom])
+
+  // Flowy files state (workspace-scoped)
+  const [flowyFiles, setFlowyFiles] = React.useState<import('@vesper/shared/flowy/types').FlowyFile[]>([])
+  // Sync flowy files to atom for NavigationContext auto-selection
+  const setFlowyFilesAtom = useSetAtom(flowyFilesAtom)
+  React.useEffect(() => {
+    setFlowyFilesAtom(flowyFiles)
+  }, [flowyFiles, setFlowyFilesAtom])
+
   // Whether local MCP servers are enabled (affects stdio source status)
   const [localMcpEnabled, setLocalMcpEnabled] = React.useState(true)
 
@@ -402,6 +421,35 @@ function AppShellContent({
     })
     return cleanup
   }, [])
+
+  // Load flowy files from backend on mount
+  React.useEffect(() => {
+    if (!activeWorkspaceId || !activeWorkspace) return
+    window.electronAPI.flowyList(activeWorkspaceId, activeWorkspace.rootPath).then((result: any) => {
+      if (result.success && result.files) {
+        setFlowyFiles(result.files)
+      }
+    }).catch(err => {
+      console.error('[Chat] Failed to load flowy files:', err)
+    })
+  }, [activeWorkspaceId, activeWorkspace])
+
+  // Subscribe to live flowy file updates (when files are added/removed/modified)
+  React.useEffect(() => {
+    const cleanup = window.electronAPI.onFlowyChanged?.((event) => {
+      // Reload the full file list when any file changes
+      if (activeWorkspaceId && activeWorkspace && event.workspaceId === activeWorkspaceId) {
+        window.electronAPI.flowyList(activeWorkspaceId, activeWorkspace.rootPath).then((result: any) => {
+          if (result.success && result.files) {
+            setFlowyFiles(result.files)
+          }
+        }).catch(err => {
+          console.error('[Chat] Failed to reload flowy files:', err)
+        })
+      }
+    })
+    return cleanup
+  }, [activeWorkspaceId, activeWorkspace])
 
   // Handle session source selection changes
   const handleSessionSourcesChange = React.useCallback(async (sessionId: string, sourceSlugs: string[]) => {
@@ -853,6 +901,11 @@ function AppShellContent({
     navigate(routes.view.schedules())
   }, [])
 
+  // Handler for flowy view
+  const handleFlowyClick = useCallback(() => {
+    navigate(routes.view.flowy())
+  }, [])
+
   // Handler for settings view
   const handleSettingsClick = useCallback((subpage: SettingsSubpage = 'app') => {
     navigate(routes.view.settings(subpage))
@@ -893,10 +946,49 @@ function AppShellContent({
   const handleNewChat = useCallback(async (_useCurrentAgent: boolean = true) => {
     if (!activeWorkspace) return
 
-    const newSession = await onCreateSession(activeWorkspace.id)
+    // Show template picker instead of creating session immediately
+    setShowTemplatePicker(true)
+  }, [activeWorkspace])
+
+  // Handle template selection from picker
+  const handleTemplateSelect = useCallback(async (template: SessionTemplate | null, initialPrompt?: string) => {
+    if (!activeWorkspace) return
+
+    setShowTemplatePicker(false)
+
+    // Create session with template config applied
+    const createOptions: import('../../../shared/types').CreateSessionOptions = {}
+
+    if (template) {
+      if (template.permissionMode) {
+        createOptions.permissionMode = template.permissionMode
+      }
+      if (template.workingDirectory) {
+        createOptions.workingDirectory = template.workingDirectory
+      }
+      if (template.model) {
+        createOptions.model = template.model
+      }
+      // Note: template.thinkingLevel is currently a number in SessionTemplate type
+      // but CreateSessionOptions expects 'off' | 'think' | 'max'
+      // Skip for now until template types are aligned
+      if (template.skillIds && template.skillIds.length > 0) {
+        createOptions.skillIds = template.skillIds
+      }
+    }
+
+    const newSession = await onCreateSession(activeWorkspace.id, createOptions)
+
     // Navigate to the new session via central routing
     navigate(routes.view.allChats(newSession.id))
-  }, [activeWorkspace, onCreateSession])
+
+    // If template has initial prompt, pre-fill the input
+    if (initialPrompt && onInputChange) {
+      setTimeout(() => {
+        onInputChange(newSession.id, initialPrompt)
+      }, 100)
+    }
+  }, [activeWorkspace, onCreateSession, navigate, onInputChange])
 
   // Delete Source - simplified since agents system is removed
   const handleDeleteSource = useCallback(async (sourceSlug: string) => {
@@ -921,6 +1013,12 @@ function AppShellContent({
       toast.error('Failed to delete skill')
     }
   }, [activeWorkspace])
+
+  // Handle selecting a flowy file from the list
+  const handleFlowyFileSelect = React.useCallback((file: import('@vesper/shared/flowy/types').FlowyFile) => {
+    if (!activeWorkspaceId) return
+    navigate(routes.view.flowy(file.filename))
+  }, [activeWorkspaceId, navigate])
 
   // Respond to menu bar "New Chat" trigger
   const menuTriggerRef = useRef(menuNewChatTrigger)
@@ -1083,6 +1181,11 @@ function AppShellContent({
     // Skills navigator
     if (isSkillsNavigation(navState)) {
       return 'All Skills'
+    }
+
+    // Flowy navigator
+    if (isFlowyNavigation(navState)) {
+      return 'Flowy Diagrams'
     }
 
     // Settings navigator
@@ -1327,6 +1430,14 @@ function AppShellContent({
                       icon: Clock,
                       variant: isSchedulesNavigation(navState) ? "default" : "ghost",
                       onClick: handleSchedulesClick,
+                    },
+                    {
+                      id: "nav:flowy",
+                      title: "Flowy",
+                      label: String(flowyFiles.length),
+                      icon: Workflow,
+                      variant: isFlowyNavigation(navState) ? "default" : "ghost",
+                      onClick: handleFlowyClick,
                     },
                     { id: "separator:skills-settings", type: "separator" },
                     {
@@ -1626,6 +1737,16 @@ function AppShellContent({
               /* Schedules Panel */
               <ScheduleList workspaceId={activeWorkspaceId} />
             )}
+            {isFlowyNavigation(navState) && activeWorkspaceId && activeWorkspace && (
+              /* Flowy List */
+              <FlowyListPanel
+                files={flowyFiles}
+                workspaceId={activeWorkspaceId}
+                workspacePath={activeWorkspace.rootPath}
+                onFileClick={handleFlowyFileSelect}
+                selectedFilename={isFlowyNavigation(navState) && navState.details ? navState.details.filename : null}
+              />
+            )}
             {isChatsNavigation(navState) && (
               /* Sessions List */
               <>
@@ -1875,6 +1996,16 @@ function AppShellContent({
 
       {/* WhatsApp Toast Notifications */}
       <WhatsAppToastListener />
+
+      {/* Template Picker Dialog */}
+      {activeWorkspaceId && (
+        <TemplatePickerDialog
+          open={showTemplatePicker}
+          onOpenChange={setShowTemplatePicker}
+          workspaceId={activeWorkspaceId}
+          onSelect={handleTemplateSelect}
+        />
+      )}
 
       </TooltipProvider>
     </AppShellProvider>

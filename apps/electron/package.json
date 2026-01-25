@@ -36,10 +36,9 @@
     "lint:fix": "eslint src/ --fix"
   },
   "dependencies": {
-    "@vesper/core": "workspace:*",
-    "@vesper/shared": "workspace:*",
-    "@vesper/ui": "workspace:*",
     "@hapi/boom": "^10.0.1",
+    "@json-render/core": "^0.3.0",
+    "@json-render/react": "^0.2.0",
     "@paper-design/shaders-react": "^0.0.69",
     "@pierre/diffs": "^1.0.4",
     "@radix-ui/react-context-menu": "^2.2.16",
@@ -50,6 +49,9 @@
     "@radix-ui/react-switch": "^1.2.6",
     "@tanstack/react-table": "^8.21.3",
     "@types/qrcode": "^1.5.6",
+    "@vesper/core": "workspace:*",
+    "@vesper/shared": "workspace:*",
+    "@vesper/ui": "workspace:*",
     "@whiskeysockets/baileys": "7.0.0-rc.9",
     "agentation": "^1.1.0",
     "cmdk": "^1.1.1",

@@ -46,6 +46,7 @@ import type { RichTextInputHandle } from "@/components/ui/rich-text-input"
 import { useBackgroundTasks } from "@/hooks/useBackgroundTasks"
 import { CHAT_LAYOUT } from "@/config/layout"
 import { LoopProgressIndicator, LoopSummaryCard } from "@/components/loop"
+import { JSONRenderView } from "@/components/json-render"
 import { detectScheduleIntent, parseTimeToCron } from "@/hooks/useScheduleFromChat"
 import { toast } from "sonner"
 import cronstrue from "cronstrue"
@@ -1169,6 +1170,10 @@ function MessageBubble({
             >
               <ExternalLink className="w-4 h-4 text-muted-foreground hover:text-foreground" />
             </button>
+          )}
+          {/* JSON Render: AI-generated UI tree */}
+          {message.jsonRender?.tree && (
+            <JSONRenderView tree={message.jsonRender.tree} />
           )}
           {/* Use StreamingMarkdown for block-level memoization during streaming */}
           {message.isStreaming ? (

@@ -8,10 +8,12 @@
 import * as React from 'react'
 import { useAtomValue, useSetAtom } from 'jotai'
 import { AlertCircle } from 'lucide-react'
+import { toast } from 'sonner'
 import { ChatDisplay } from '@/components/app-shell/ChatDisplay'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { SessionMenu } from '@/components/app-shell/SessionMenu'
 import { RenameDialog } from '@/components/ui/rename-dialog'
+import { CreateTemplateDialog } from '@/components/templates'
 import { useAppShellContext, usePendingPermission, usePendingCredential, useSessionOptionsFor, useSession as useSessionData } from '@/context/AppShellContext'
 import { rendererPerf } from '@/lib/perf'
 import { routes } from '@/lib/navigate'
@@ -222,6 +224,9 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
   const [renameDialogOpen, setRenameDialogOpen] = React.useState(false)
   const [renameName, setRenameName] = React.useState('')
 
+  // Template dialog state
+  const [showCreateTemplate, setShowCreateTemplate] = React.useState(false)
+
   // Session action handlers
   const handleRename = React.useCallback(() => {
     setRenameName(displayTitle)
@@ -266,6 +271,21 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     }
   }, [sessionId])
 
+  const handleSaveAsTemplate = React.useCallback(() => {
+    setShowCreateTemplate(true)
+  }, [])
+
+  const handleSaveTemplate = React.useCallback(async (options: import('@vesper/shared/templates').SaveSessionAsTemplateOptions) => {
+    try {
+      await window.electronAPI.saveSessionAsTemplate(options)
+      toast.success('Template saved successfully')
+    } catch (error) {
+      console.error('[ChatPage] Failed to save template:', error)
+      toast.error('Failed to save template')
+      throw error
+    }
+  }, [])
+
   // Build title menu content for chat sessions using shared SessionMenu
   const titleMenu = React.useMemo(() => (
     <SessionMenu
@@ -284,6 +304,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
       onTodoStateChange={handleTodoStateChange}
       onOpenInNewWindow={handleOpenInNewWindow}
       onDelete={handleDelete}
+      onSaveAsTemplate={handleSaveAsTemplate}
     />
   ), [
     sessionId,
@@ -301,6 +322,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     handleTodoStateChange,
     handleOpenInNewWindow,
     handleDelete,
+    handleSaveAsTemplate,
   ])
 
   // Handle missing session - loading or deleted
@@ -368,6 +390,13 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
             onValueChange={setRenameName}
             onSubmit={handleRenameSubmit}
             placeholder="Enter chat name..."
+          />
+          <CreateTemplateDialog
+            open={showCreateTemplate}
+            onOpenChange={setShowCreateTemplate}
+            sessionId={sessionId}
+            workspaceId={activeWorkspaceId || ''}
+            onSave={handleSaveTemplate}
           />
         </>
       )
@@ -437,6 +466,13 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
         onValueChange={setRenameName}
         onSubmit={handleRenameSubmit}
         placeholder="Enter chat name..."
+      />
+      <CreateTemplateDialog
+        open={showCreateTemplate}
+        onOpenChange={setShowCreateTemplate}
+        sessionId={sessionId}
+        workspaceId={activeWorkspaceId || ''}
+        onSave={handleSaveTemplate}
       />
     </>
   )
