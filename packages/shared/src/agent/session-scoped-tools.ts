@@ -1940,6 +1940,7 @@ The UI will appear in the chat message, not in a separate window.
 - "copy" - Copies text to clipboard. Params: { text: "..." }
 - "open_url" - Opens a URL in browser. Params: { url: "..." }
 - "api_call" - Makes HTTP request. Params: { url, method?, body?, headers? }
+- "mcp_fetch" - Fetches data from connected MCP source. Params: { source: "github", tool: "get_issues", args: { owner, repo } }
 - "log" - Logs to console for debugging
 - "refresh" - Triggers data refresh
 

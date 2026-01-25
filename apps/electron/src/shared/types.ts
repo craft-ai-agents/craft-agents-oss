@@ -761,8 +761,9 @@ export const IPC_CHANNELS = {
   DEFAULT_PERMISSIONS_GET: 'permissions:getDefaults',
   // Broadcast when default permissions change (file watcher)
   DEFAULT_PERMISSIONS_CHANGED: 'permissions:defaultsChanged',
-  // MCP tools listing
+  // MCP tools listing and invocation
   SOURCES_GET_MCP_TOOLS: 'sources:getMcpTools',
+  SOURCES_CALL_MCP_TOOL: 'sources:callMcpTool',
 
   // Skills (workspace-scoped)
   SKILLS_GET: 'skills:get',

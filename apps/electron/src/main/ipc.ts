@@ -1651,6 +1651,84 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     }
   })
 
+  // Call an MCP tool and return the result (for data binding in render_ui)
+  ipcMain.handle(IPC_CHANNELS.SOURCES_CALL_MCP_TOOL, async (
+    _event,
+    workspaceId: string,
+    sourceSlug: string,
+    toolName: string,
+    toolArgs: Record<string, unknown>
+  ) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) return { success: false, error: 'Workspace not found' }
+
+    try {
+      // Load source config
+      const sources = await loadWorkspaceSources(workspace.rootPath)
+      const source = sources.find(s => s.config.slug === sourceSlug)
+      if (!source) return { success: false, error: 'Source not found' }
+      if (source.config.type !== 'mcp') return { success: false, error: 'Source is not an MCP server' }
+      if (!source.config.mcp) return { success: false, error: 'MCP config not found' }
+
+      // Check connection status
+      if (source.config.connectionStatus === 'needs_auth') {
+        return { success: false, error: 'Source requires authentication' }
+      }
+      if (source.config.connectionStatus === 'failed') {
+        return { success: false, error: source.config.connectionError || 'Connection failed' }
+      }
+
+      // Create MCP client
+      const { CraftMcpClient } = await import('@vesper/shared/mcp')
+      let client: InstanceType<typeof CraftMcpClient>
+
+      if (source.config.mcp.transport === 'stdio') {
+        if (!source.config.mcp.command) {
+          return { success: false, error: 'Stdio MCP source is missing required "command" field' }
+        }
+        ipcLog.info(`[MCP Call] ${sourceSlug}.${toolName} via stdio`)
+        client = new CraftMcpClient({
+          transport: 'stdio',
+          command: source.config.mcp.command,
+          args: source.config.mcp.args,
+          env: source.config.mcp.env,
+        })
+      } else {
+        if (!source.config.mcp.url) {
+          return { success: false, error: 'MCP source URL is required for HTTP/SSE transport' }
+        }
+
+        let accessToken: string | undefined
+        if (source.config.mcp.authType === 'oauth' || source.config.mcp.authType === 'bearer') {
+          const credentialManager = getCredentialManager()
+          const credentialId = source.config.mcp.authType === 'oauth'
+            ? { type: 'source_oauth' as const, workspaceId: source.workspaceId, sourceId: sourceSlug }
+            : { type: 'source_bearer' as const, workspaceId: source.workspaceId, sourceId: sourceSlug }
+          const credential = await credentialManager.get(credentialId)
+          accessToken = credential?.value
+        }
+
+        ipcLog.info(`[MCP Call] ${sourceSlug}.${toolName} via HTTP`)
+        client = new CraftMcpClient({
+          transport: 'http',
+          url: source.config.mcp.url,
+          headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+        })
+      }
+
+      // Call the tool
+      const result = await client.callTool(toolName, toolArgs)
+      await client.close()
+
+      ipcLog.info(`[MCP Call] ${sourceSlug}.${toolName} completed`)
+      return { success: true, data: result }
+    } catch (error) {
+      ipcLog.error(`[MCP Call] ${sourceSlug}.${toolName} failed:`, error)
+      const errorMessage = error instanceof Error ? error.message : 'Failed to call tool'
+      return { success: false, error: errorMessage }
+    }
+  })
+
   // ============================================================
   // Skills (Workspace-scoped)
   // ============================================================

@@ -252,6 +252,8 @@ const api: ElectronAPI = {
   },
   getMcpTools: (workspaceId: string, sourceSlug: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SOURCES_GET_MCP_TOOLS, workspaceId, sourceSlug),
+  callMcpTool: (workspaceId: string, sourceSlug: string, toolName: string, toolArgs: Record<string, unknown>) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SOURCES_CALL_MCP_TOOL, workspaceId, sourceSlug, toolName, toolArgs),
 
   // Status management
   listStatuses: (workspaceId: string) =>

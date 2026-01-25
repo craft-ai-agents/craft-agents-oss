@@ -147,6 +147,7 @@ export const vesperCatalog = createCatalog({
     log: { description: 'Log data for debugging. Params: any' },
     api_call: { description: 'Make HTTP request. Params: { url: string, method?: string, body?: object, headers?: object }' },
     refresh: { description: 'Trigger data refresh. No params.' },
+    mcp_fetch: { description: 'Fetch data from MCP source. Params: { source: string (source slug), tool: string (tool name), args?: object }' },
   },
 })
 
@@ -181,6 +182,7 @@ ACTIONS (for Button):
 - copy: Copy text to clipboard. { name: "copy", params: { text: "..." } }
 - open_url: Open URL in browser. { name: "open_url", params: { url: "..." } }
 - api_call: Make HTTP request. { name: "api_call", params: { url, method?, body?, headers? } }
+- mcp_fetch: Fetch from MCP source. { name: "mcp_fetch", params: { source: "github", tool: "list_issues", args: {...} } }
 - log: Debug logging. { name: "log", params: any }
 - refresh: Trigger data refresh. { name: "refresh" }
 

@@ -662,6 +662,44 @@ const defaultActionHandlers: Record<string, ActionHandler> = {
   refresh: async () => {
     toast.info('Refreshing data...', { description: 'This would trigger a data refresh in a connected system' })
   },
+  // MCP tool call action - fetches data from an MCP source
+  mcp_fetch: async (params) => {
+    const source = params?.source as string
+    const tool = params?.tool as string
+    const args = (params?.args as Record<string, unknown>) || {}
+
+    if (!source || !tool) {
+      toast.error('MCP fetch failed', { description: 'Missing source or tool name' })
+      return { error: 'Missing source or tool' }
+    }
+
+    const toastId = toast.loading('Fetching from MCP...', { description: `${source}.${tool}` })
+
+    try {
+      // Get current workspace ID from window context
+      const workspaceId = await window.electronAPI?.getWindowWorkspace?.()
+      if (!workspaceId) {
+        toast.error('MCP fetch failed', { id: toastId, description: 'No workspace context' })
+        return { error: 'No workspace context' }
+      }
+
+      // Call the MCP tool via IPC
+      const result = await window.electronAPI?.callMcpTool?.(workspaceId, source, tool, args)
+
+      if (!result?.success) {
+        toast.error('MCP fetch failed', { id: toastId, description: result?.error || 'Unknown error' })
+        return { error: result?.error }
+      }
+
+      toast.success('MCP data fetched', { id: toastId, description: `${source}.${tool}` })
+      console.log('[JSONRender] MCP result:', result.data)
+      return result.data
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      toast.error('MCP fetch failed', { id: toastId, description: message })
+      return { error: message }
+    }
+  },
 }
 
 // ============================================
