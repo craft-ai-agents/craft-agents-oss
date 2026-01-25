@@ -818,6 +818,18 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     return !app.isPackaged
   })
 
+  // Get full config (for E2E tests and workspace detection)
+  ipcMain.handle(IPC_CHANNELS.CONFIG_GET, async () => {
+    try {
+      const { loadStoredConfig } = await import('@vesper/shared/config')
+      const config = await loadStoredConfig()
+      return config
+    } catch (error) {
+      ipcLog.error('Error getting config:', error)
+      return null
+    }
+  })
+
   // Get git branch for a directory (returns null if not a git repo or git unavailable)
   ipcMain.handle(IPC_CHANNELS.GET_GIT_BRANCH, (_event, dirPath: string) => {
     try {
@@ -2173,6 +2185,18 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     }
   })
 
+  ipcMain.handle(IPC_CHANNELS.SCHEDULE_GET, async (_event, workspaceId: string, scheduleId: string) => {
+    try {
+      const workspace = getWorkspaceOrThrow(workspaceId)
+      const scheduler = getScheduler(workspaceId, workspace.rootPath)
+      const schedules = scheduler.list()
+      return schedules.find(s => s.id === scheduleId) || null
+    } catch (error) {
+      ipcLog.error('Error getting schedule:', error)
+      return null
+    }
+  })
+
   ipcMain.handle(IPC_CHANNELS.SCHEDULE_CREATE, async (_event, workspaceId: string, data: import('../shared/types').ScheduleFormData) => {
     try {
       const workspace = getWorkspaceOrThrow(workspaceId)
@@ -2410,6 +2434,57 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       return { success: healthy, error: healthy ? undefined : 'Connection failed' }
     } catch (error) {
       ipcLog.error('Error testing viewer connection:', error)
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    }
+  })
+
+  // Share session via viewer service
+  ipcMain.handle(IPC_CHANNELS.VIEWER_SHARE, async (_event, sessionId: string) => {
+    try {
+      // Use sessionManager which already has the viewer service configured
+      const result = await sessionManager.shareToViewer(sessionId)
+      return result
+    } catch (error) {
+      ipcLog.error('Error sharing session:', error)
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    }
+  })
+
+  // Update shared session via viewer service
+  ipcMain.handle(IPC_CHANNELS.VIEWER_UPDATE, async (_event, shareId: string, sessionId: string) => {
+    try {
+      const result = await sessionManager.updateShare(sessionId)
+      return result
+    } catch (error) {
+      ipcLog.error('Error updating shared session:', error)
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    }
+  })
+
+  // Revoke shared session via viewer service
+  ipcMain.handle(IPC_CHANNELS.VIEWER_REVOKE, async (_event, shareId: string) => {
+    try {
+      // Find session by shareId and revoke
+      const result = await sessionManager.revokeShare(shareId)
+      return result
+    } catch (error) {
+      ipcLog.error('Error revoking shared session:', error)
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    }
+  })
+
+  // Viewer health check
+  ipcMain.handle(IPC_CHANNELS.VIEWER_HEALTH_CHECK, async () => {
+    try {
+      const { loadStoredConfig } = await import('@vesper/shared/config/storage')
+      const { createViewerService } = await import('@vesper/shared/viewer')
+      const config = loadStoredConfig()
+      const viewerConfig = config?.viewer || { type: 'craft-hosted' as const }
+      const viewer = createViewerService(viewerConfig)
+      const healthy = await viewer.healthCheck()
+      return { success: healthy, error: healthy ? undefined : 'Viewer not healthy' }
+    } catch (error) {
+      ipcLog.error('Error checking viewer health:', error)
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
     }
   })

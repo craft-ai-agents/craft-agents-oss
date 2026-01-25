@@ -649,6 +649,9 @@ export const IPC_CHANNELS = {
   GET_HOME_DIR: 'system:homeDir',
   IS_DEBUG_MODE: 'system:isDebugMode',
 
+  // Configuration
+  CONFIG_GET: 'config:get',
+
   // Git
   GET_GIT_BRANCH: 'git:branch',
 
@@ -801,6 +804,7 @@ export const IPC_CHANNELS = {
 
   // Scheduler (automated task scheduling)
   SCHEDULE_LIST: 'schedule:list',
+  SCHEDULE_GET: 'schedule:get',  // Get a specific schedule by ID
   SCHEDULE_CREATE: 'schedule:create',
   SCHEDULE_UPDATE: 'schedule:update',
   SCHEDULE_DELETE: 'schedule:delete',
@@ -842,6 +846,9 @@ export const IPC_CHANNELS = {
   WHATSAPP_STATUS: 'whatsapp:status',
   WHATSAPP_LIST_SESSIONS: 'whatsapp:list-sessions',
   WHATSAPP_SEND_MESSAGE: 'whatsapp:send-message',
+  WHATSAPP_GET_GROUPS: 'whatsapp:getGroups',
+  WHATSAPP_GET_ROUTE_CONFIG: 'whatsapp:getRouteConfig',
+  WHATSAPP_SET_ROUTE_CONFIG: 'whatsapp:setRouteConfig',
   // WhatsApp events (main → renderer)
   WHATSAPP_QR_CODE: 'whatsapp:qr-code',
   WHATSAPP_AUTHENTICATED: 'whatsapp:authenticated',
@@ -853,6 +860,10 @@ export const IPC_CHANNELS = {
   VIEWER_GET_CONFIG: 'viewer:getConfig',
   VIEWER_SET_CONFIG: 'viewer:setConfig',
   VIEWER_TEST_CONNECTION: 'viewer:testConnection',
+  VIEWER_SHARE: 'viewer:share',
+  VIEWER_UPDATE: 'viewer:update',
+  VIEWER_REVOKE: 'viewer:revoke',
+  VIEWER_HEALTH_CHECK: 'viewer:healthCheck',
 
   // Marketplace (skills.sh integration)
   MARKETPLACE_SEARCH: 'marketplace:search',
@@ -1154,6 +1165,30 @@ export interface ElectronAPI {
   marketplaceSearch(query: string): Promise<MarketplaceSearchResponse>
   marketplaceInstall(topSource: string): Promise<MarketplaceInstallResult>
   marketplaceGetSkillDetails(topSource: string, skillId: string): Promise<MarketplaceSkillDetailsResult>
+
+  // ============================================
+  // E2E Test Compatibility Methods
+  // ============================================
+
+  // Alias for marketplaceGetSkillDetails
+  marketplaceGetSkillInfo(topSource: string, skillId?: string): Promise<MarketplaceSkillDetailsResult>
+  // Alias for listLabels
+  getLabels(workspaceId: string): Promise<import('@vesper/shared/labels').Label[]>
+  // Alias for resumeInTerminal
+  spawnTerminal(options: { sdkSessionId: string; workingDirectory: string; taskListId?: string }): Promise<{ success: boolean; error?: string }>
+  // Get full config
+  getConfig(): Promise<import('@vesper/shared/config').StoredConfig | null>
+  // Get single schedule
+  scheduleGet(workspaceId: string, scheduleId: string): Promise<Schedule | null>
+  // Viewer service methods
+  viewerShare(sessionId: string): Promise<ShareResult>
+  viewerUpdate(shareId: string, sessionId: string): Promise<ViewerResult>
+  viewerRevoke(shareId: string): Promise<ViewerResult>
+  viewerHealthCheck(): Promise<ViewerResult>
+  // WhatsApp additional methods
+  whatsappGetGroups(workspaceId: string): Promise<{ success: boolean; groups?: any[]; error?: string }>
+  whatsappGetRouteConfig(workspaceId: string): Promise<{ success: boolean; config?: any; error?: string }>
+  whatsappSetRouteConfig(workspaceId: string, config: any): Promise<{ success: boolean; error?: string }>
 }
 
 /**

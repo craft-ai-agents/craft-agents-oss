@@ -126,6 +126,68 @@ export function registerWhatsAppHandlers(sessionManager: SessionManager): void {
       }
     }
   )
+
+  /**
+   * Get WhatsApp groups for a workspace
+   * Note: getGroups may not be implemented yet - returns empty array if not available
+   */
+  ipcMain.handle(
+    IPC_CHANNELS.WHATSAPP_GET_GROUPS,
+    async (_event, workspaceId: string) => {
+      try {
+        const service = getWhatsAppService(workspaceId) as any
+        // Return empty array if not connected
+        if (service.getConnectionStatus().connection !== 'open') {
+          return { success: true, groups: [] }
+        }
+        const groups = typeof service.getGroups === 'function' ? await service.getGroups() : []
+        return { success: true, groups }
+      } catch (error) {
+        console.error('[WhatsApp IPC] Get groups error:', error)
+        return { success: false, error: (error as Error).message, groups: [] }
+      }
+    }
+  )
+
+  /**
+   * Get WhatsApp route config for a workspace
+   * Note: getRouteConfig may not be implemented yet - returns default config if not available
+   */
+  ipcMain.handle(
+    IPC_CHANNELS.WHATSAPP_GET_ROUTE_CONFIG,
+    async (_event, workspaceId: string) => {
+      try {
+        const service = getWhatsAppService(workspaceId) as any
+        const config = typeof service.getRouteConfig === 'function'
+          ? service.getRouteConfig()
+          : { enabled: false, allowedGroups: [] }
+        return { success: true, config }
+      } catch (error) {
+        console.error('[WhatsApp IPC] Get route config error:', error)
+        return { success: false, error: (error as Error).message }
+      }
+    }
+  )
+
+  /**
+   * Set WhatsApp route config for a workspace
+   * Note: setRouteConfig may not be implemented yet - no-op if not available
+   */
+  ipcMain.handle(
+    IPC_CHANNELS.WHATSAPP_SET_ROUTE_CONFIG,
+    async (_event, workspaceId: string, config: { enabled: boolean; allowedGroups: string[] }) => {
+      try {
+        const service = getWhatsAppService(workspaceId) as any
+        if (typeof service.setRouteConfig === 'function') {
+          service.setRouteConfig(config)
+        }
+        return { success: true }
+      } catch (error) {
+        console.error('[WhatsApp IPC] Set route config error:', error)
+        return { success: false, error: (error as Error).message }
+      }
+    }
+  )
 }
 
 /**

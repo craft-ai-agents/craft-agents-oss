@@ -557,6 +557,46 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.MARKETPLACE_INSTALL, topSource),
   marketplaceGetSkillDetails: (topSource: string, skillId: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.MARKETPLACE_GET_SKILL_DETAILS, topSource, skillId),
+  // Alias for E2E test compatibility
+  marketplaceGetSkillInfo: (topSource: string, skillId?: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.MARKETPLACE_GET_SKILL_DETAILS, topSource, skillId || ''),
+
+  // ============================================
+  // Aliases for E2E test compatibility
+  // ============================================
+
+  // Labels alias (tests expect getLabels, we have listLabels)
+  getLabels: (workspaceId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.LABELS_LIST, workspaceId),
+
+  // Terminal alias (tests expect spawnTerminal, we have resumeInTerminal)
+  spawnTerminal: (options: { sdkSessionId: string; workingDirectory: string; taskListId?: string }) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SESSION_RESUME_IN_TERMINAL, options.sdkSessionId),
+
+  // Config getter (many tests need this to get active workspace)
+  getConfig: () => ipcRenderer.invoke(IPC_CHANNELS.CONFIG_GET),
+
+  // Schedule get single (tests expect scheduleGet)
+  scheduleGet: (workspaceId: string, scheduleId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SCHEDULE_GET, workspaceId, scheduleId),
+
+  // Viewer service methods
+  viewerShare: (sessionId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.VIEWER_SHARE, sessionId),
+  viewerUpdate: (shareId: string, sessionId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.VIEWER_UPDATE, shareId, sessionId),
+  viewerRevoke: (shareId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.VIEWER_REVOKE, shareId),
+  viewerHealthCheck: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.VIEWER_HEALTH_CHECK),
+
+  // WhatsApp additional methods
+  whatsappGetGroups: (workspaceId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.WHATSAPP_GET_GROUPS, workspaceId),
+  whatsappGetRouteConfig: (workspaceId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.WHATSAPP_GET_ROUTE_CONFIG, workspaceId),
+  whatsappSetRouteConfig: (workspaceId: string, config: any) =>
+    ipcRenderer.invoke(IPC_CHANNELS.WHATSAPP_SET_ROUTE_CONFIG, workspaceId, config),
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)
