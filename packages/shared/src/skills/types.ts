@@ -27,7 +27,7 @@ export interface SkillMetadata {
 }
 
 /** Skill source type */
-export type SkillSource = 'workspace' | 'team' | 'global' | 'claude-code';
+export type SkillSource = 'workspace' | 'team' | 'claude-code';
 
 /**
  * A loaded skill with parsed content
