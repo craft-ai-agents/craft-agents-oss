@@ -47,10 +47,16 @@ bun run electron:start
 - **Skills Marketplace**: Browse and install skills from skills.sh with one-click installation
 - **Terminal Resume**: Resume Claude Agent SDK sessions in external terminal (cross-platform)
 - **Session Labels**: Organize sessions with customizable color-coded labels
+- **Session Templates**: Reusable session configurations with skills, sources, and permission modes
 - **Session Sharing**: Share sessions via pluggable backends (craft.do or static HTML export)
+- **JSON Rendering**: AI-generated UI components (charts, metrics, buttons, forms, tables) with MCP data binding
+- **Inline Flowy Diagrams**: Embedded flowcharts and UI mockups rendered directly in chat messages
 - **MCP Integration**: Connect to MCP servers (Craft, Linear, GitHub, Notion, custom)
 - **Sources**: Connect to REST APIs (Google, Slack, Microsoft) and local filesystems
+- **Slack Integration**: Connect Slack workspace with Socket Mode for message routing and permission directives
+- **Telegram Integration**: Connect Telegram bot with message routing and permission controls
 - **WhatsApp Integration**: Connect WhatsApp to receive and respond to messages via AI agents with permission directives
+- **Notification Settings**: Custom notification sounds with volume control and per-type toggles
 - **Permission Modes**: Three-level system (Explore, Ask to Edit, Auto) with customizable rules
 - **Background Tasks**: Run long-running operations with progress tracking and real-time UI sync
 - **Dynamic Status System**: Customizable session workflow states (Todo, In Progress, Done, etc.)
