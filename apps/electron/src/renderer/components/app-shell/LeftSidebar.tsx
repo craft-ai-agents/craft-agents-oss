@@ -534,13 +534,17 @@ function renderIcon(link: LinkItem) {
     )
   }
   // Already a React element or primitive ReactNode
-  // Use [&>svg]:w-full [&>svg]:h-full to size SVG children and [&>div>svg] for wrapped SVGs
+  // Clone with bare={true} to remove EntityIcon container, wrapper provides sizing
+  const iconElement = link.icon as React.ReactNode
+  const bareIcon = React.isValidElement(iconElement)
+    ? React.cloneElement(iconElement as React.ReactElement<{ bare?: boolean }>, { bare: true })
+    : iconElement
   return (
     <span
-      className="h-3.5 w-3.5 shrink-0 flex items-center justify-center [&>svg]:w-full [&>svg]:h-full [&>div>svg]:w-full [&>div>svg]:h-full [&>img]:w-full [&>img]:h-full"
+      className="h-3.5 w-3.5 shrink-0 flex items-center justify-center [&>svg]:w-full [&>svg]:h-full"
       style={colorStyle}
     >
-      {link.icon as React.ReactNode}
+      {bareIcon}
     </span>
   )
 }

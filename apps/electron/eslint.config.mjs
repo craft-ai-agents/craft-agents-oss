@@ -10,6 +10,8 @@ import tsPlugin from '@typescript-eslint/eslint-plugin'
 import reactPlugin from 'eslint-plugin-react'
 import reactHooksPlugin from 'eslint-plugin-react-hooks'
 import noDirectNavigationState from './eslint-rules/no-direct-navigation-state.cjs'
+import noDirectPlatformCheck from './eslint-rules/no-direct-platform-check.cjs'
+import noHardcodedPathSeparator from './eslint-rules/no-hardcoded-path-separator.cjs'
 
 export default [
   // Ignore patterns
@@ -46,6 +48,18 @@ export default [
           'no-direct-navigation-state': noDirectNavigationState,
         },
       },
+      // Custom plugin for platform detection rules
+      'craft-platform': {
+        rules: {
+          'no-direct-platform-check': noDirectPlatformCheck,
+        },
+      },
+      // Custom plugin for cross-platform path rules
+      'craft-paths': {
+        rules: {
+          'no-hardcoded-path-separator': noHardcodedPathSeparator,
+        },
+      },
     },
     settings: {
       react: {
@@ -59,6 +73,12 @@ export default [
 
       // Custom navigation rule
       'craft-navigation/no-direct-navigation-state': 'error',
+
+      // Custom platform detection rule
+      'craft-platform/no-direct-platform-check': 'error',
+
+      // Custom cross-platform path rule
+      'craft-paths/no-hardcoded-path-separator': 'warn',
     },
   },
 ]

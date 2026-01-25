@@ -44,7 +44,9 @@ export function getDefaultOptions(): Partial<Options> {
     // which can inject ANTHROPIC_API_KEY and override our OAuth auth — silently charging
     // the user's API key instead of their Max subscription.
     // See: https://github.com/lukilabs/craft-agents-oss/issues/39
-    const envFileFlag = '--env-file=/dev/null';
+    // Use platform-appropriate null device (NUL on Windows, /dev/null on Unix)
+    const nullDevice = process.platform === 'win32' ? 'NUL' : '/dev/null';
+    const envFileFlag = `--env-file=${nullDevice}`;
 
     // If custom path is set (e.g., for Electron), use it with minimal options
     if (customPathToClaudeCodeExecutable) {

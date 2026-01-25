@@ -212,6 +212,15 @@ export interface Plan {
 // ============================================
 
 /**
+ * Git Bash detection status (Windows only)
+ */
+export interface GitBashStatus {
+  found: boolean
+  path: string | null
+  platform: 'win32' | 'darwin' | 'linux'
+}
+
+/**
  * Result of saving onboarding configuration
  */
 export interface OnboardingSaveResult {
@@ -670,6 +679,26 @@ export const IPC_CHANNELS = {
 
   // Git operations
   GET_GIT_BRANCH: 'git:getBranch',
+
+  // Git Bash (Windows)
+  GITBASH_CHECK: 'gitbash:check',
+  GITBASH_BROWSE: 'gitbash:browse',
+  GITBASH_SET_PATH: 'gitbash:setPath',
+
+  // Menu actions (renderer → main for window/app control)
+  MENU_QUIT: 'menu:quit',
+  MENU_MINIMIZE: 'menu:minimize',
+  MENU_MAXIMIZE: 'menu:maximize',
+  MENU_ZOOM_IN: 'menu:zoomIn',
+  MENU_ZOOM_OUT: 'menu:zoomOut',
+  MENU_ZOOM_RESET: 'menu:zoomReset',
+  MENU_TOGGLE_DEVTOOLS: 'menu:toggleDevTools',
+  MENU_UNDO: 'menu:undo',
+  MENU_REDO: 'menu:redo',
+  MENU_CUT: 'menu:cut',
+  MENU_COPY: 'menu:copy',
+  MENU_PASTE: 'menu:paste',
+  MENU_SELECT_ALL: 'menu:selectAll',
 } as const
 
 // Re-import types for ElectronAPI
@@ -904,6 +933,26 @@ export interface ElectronAPI {
 
   // Git operations
   getGitBranch(dirPath: string): Promise<string | null>
+
+  // Git Bash (Windows)
+  checkGitBash(): Promise<GitBashStatus>
+  browseForGitBash(): Promise<string | null>
+  setGitBashPath(path: string): Promise<{ success: boolean; error?: string }>
+
+  // Menu actions (from renderer to main)
+  menuQuit(): Promise<void>
+  menuMinimize(): Promise<void>
+  menuMaximize(): Promise<void>
+  menuZoomIn(): Promise<void>
+  menuZoomOut(): Promise<void>
+  menuZoomReset(): Promise<void>
+  menuToggleDevTools(): Promise<void>
+  menuUndo(): Promise<void>
+  menuRedo(): Promise<void>
+  menuCut(): Promise<void>
+  menuCopy(): Promise<void>
+  menuPaste(): Promise<void>
+  menuSelectAll(): Promise<void>
 }
 
 /**

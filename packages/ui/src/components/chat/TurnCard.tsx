@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { useMemo, useEffect, useRef, useCallback, useState } from 'react'
 import type { ToolDisplayMeta } from '@craft-agent/core'
+import { normalizePath, pathStartsWith, stripPathPrefix } from '@craft-agent/core/utils'
 import { motion, AnimatePresence } from 'motion/react'
 import {
   ChevronRight,
@@ -375,16 +376,16 @@ function stripSessionFolderPath(filePath: string, sessionFolderPath?: string): s
 
   // Get workspace path (parent of sessions folder)
   // sessionFolderPath: /path/workspaces/{uuid}/sessions/{sessionId}
-  const workspacePath = sessionFolderPath.replace(/\/sessions\/[^/]+$/, '')
+  const workspacePath = normalizePath(sessionFolderPath).replace(/\/sessions\/[^/]+$/, '')
 
   // Try session folder first (more specific)
-  if (filePath.startsWith(sessionFolderPath + '/')) {
-    return filePath.slice(sessionFolderPath.length + 1)
+  if (pathStartsWith(filePath, sessionFolderPath)) {
+    return stripPathPrefix(filePath, sessionFolderPath)
   }
 
   // Then try workspace folder
-  if (filePath.startsWith(workspacePath + '/')) {
-    return filePath.slice(workspacePath.length + 1)
+  if (pathStartsWith(filePath, workspacePath)) {
+    return stripPathPrefix(filePath, workspacePath)
   }
 
   return filePath

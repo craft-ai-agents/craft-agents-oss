@@ -26,6 +26,8 @@ interface StatusIconProps {
   className?: string
   /** When true, emoji icons render without container chrome (bg, ring, rounded) */
   chromeless?: boolean
+  /** When true, renders without any container (just the SVG/emoji) */
+  bare?: boolean
 }
 
 export function StatusIcon({
@@ -35,6 +37,7 @@ export function StatusIcon({
   size = 'sm',
   className,
   chromeless,
+  bare,
 }: StatusIconProps) {
   const resolved = useEntityIcon({
     workspaceId,
@@ -53,6 +56,7 @@ export function StatusIcon({
       fallbackIcon={Circle}
       className={className}
       chromeless={chromeless}
+      bare={bare}
     />
   )
 }

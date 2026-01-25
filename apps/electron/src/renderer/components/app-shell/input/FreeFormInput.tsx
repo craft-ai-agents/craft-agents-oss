@@ -50,6 +50,7 @@ import {
 } from '@/components/ui/styled-dropdown'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
+import { PATH_SEP, getPathBasename } from '@/lib/platform'
 import { applySmartTypography } from '@/lib/smart-typography'
 import { AttachmentPreview } from '../AttachmentPreview'
 import { MODELS, getModelShortName, getModelContextWindow, isClaudeModel } from '@config/models'
@@ -1607,7 +1608,10 @@ function formatPathForDisplay(path: string, homeDir: string): string {
   let displayPath = path
   if (homeDir && path.startsWith(homeDir)) {
     const relativePath = path.slice(homeDir.length)
-    displayPath = relativePath || '/'
+    // Remove leading separator if present, show root separator if empty
+    displayPath = relativePath.startsWith(PATH_SEP)
+      ? relativePath.slice(1)
+      : (relativePath || PATH_SEP)
   }
   return `in ${displayPath}`
 }
@@ -1694,8 +1698,8 @@ function WorkingDirectoryBadge({
   const filteredRecent = recentDirs
     .filter(p => p !== workingDirectory)
     .sort((a, b) => {
-      const nameA = (a.split('/').pop() || '').toLowerCase()
-      const nameB = (b.split('/').pop() || '').toLowerCase()
+      const nameA = getPathBasename(a).toLowerCase()
+      const nameB = getPathBasename(b).toLowerCase()
       return nameA.localeCompare(nameB)
     })
   // Show filter input only when more than 5 recent folders
@@ -1703,7 +1707,7 @@ function WorkingDirectoryBadge({
 
   // Determine label - "Work in Folder" if not set or at session root, otherwise folder name
   const hasFolder = !!workingDirectory && workingDirectory !== sessionFolderPath
-  const folderName = hasFolder ? (workingDirectory.split('/').pop() || 'Folder') : 'Work in Folder'
+  const folderName = hasFolder ? (getPathBasename(workingDirectory) || 'Folder') : 'Work in Folder'
 
   // Show reset option when a folder is selected and it differs from session folder
   const showReset = hasFolder && sessionFolderPath && sessionFolderPath !== workingDirectory
@@ -1775,7 +1779,7 @@ function WorkingDirectoryBadge({
 
             {/* Recent Directories - filterable (current directory already filtered out via filteredRecent) */}
             {filteredRecent.map((path) => {
-              const recentFolderName = path.split('/').pop() || 'Folder'
+              const recentFolderName = getPathBasename(path) || 'Folder'
               return (
                 <CommandPrimitive.Item
                   key={path}

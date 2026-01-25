@@ -5,6 +5,8 @@ import type { FileAttachment, LoadedSource, PermissionMode } from '../../shared/
 // ============================================================================
 
 export const mockElectronAPI = {
+  isDebugMode: async () => true,
+
   openFileDialog: async () => {
     console.log('[Playground] openFileDialog called')
     return [] // Let user use file input or drag-drop

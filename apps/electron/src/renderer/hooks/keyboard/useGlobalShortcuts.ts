@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react"
+import { isMac } from "@/lib/platform"
 
 interface Shortcut {
   /** Key to match (e.g., '1', 'n', 'b', '/') */
@@ -46,7 +47,6 @@ export function useGlobalShortcuts({ shortcuts, disabled = false }: UseGlobalSho
                       target.tagName === 'TEXTAREA' ||
                       target.isContentEditable
 
-      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0
       const cmdKey = isMac ? e.metaKey : e.ctrlKey
 
       for (const shortcut of shortcutsRef.current) {

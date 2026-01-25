@@ -3,6 +3,7 @@ import { WelcomeStep } from '@/components/onboarding/WelcomeStep'
 import { APISetupStep } from '@/components/onboarding/APISetupStep'
 import { CredentialsStep } from '@/components/onboarding/CredentialsStep'
 import { CompletionStep } from '@/components/onboarding/CompletionStep'
+import { GitBashWarning, type GitBashStatus } from '@/components/onboarding/GitBashWarning'
 import { OnboardingWizard } from '@/components/onboarding/OnboardingWizard'
 import type { OnboardingState } from '@/components/onboarding/OnboardingWizard'
 
@@ -13,6 +14,9 @@ const createOnboardingState = (overrides: Partial<OnboardingState> = {}): Onboar
   completionStatus: 'complete',
   apiSetupMethod: null,
   isExistingUser: false,
+  gitBashStatus: { found: false, path: null, platform: 'win32' },
+  isRecheckingGitBash: false,
+  isCheckingGitBash: false,
   ...overrides,
 })
 
@@ -32,10 +36,17 @@ export const onboardingComponents: ComponentEntry[] = [
         control: { type: 'boolean' },
         defaultValue: false,
       },
+      {
+        name: 'isLoading',
+        description: 'Show loading state on continue button',
+        control: { type: 'boolean' },
+        defaultValue: false,
+      },
     ],
     variants: [
       { name: 'New User', props: { isExistingUser: false } },
       { name: 'Existing User', props: { isExistingUser: true } },
+      { name: 'Loading', props: { isLoading: true } },
     ],
     mockData: () => ({
       onContinue: noopHandler,
@@ -196,6 +207,60 @@ export const onboardingComponents: ComponentEntry[] = [
     }),
   },
   {
+    id: 'git-bash-warning',
+    name: 'GitBashWarning',
+    category: 'Onboarding',
+    description: 'Warning screen when Git Bash is not found on Windows',
+    component: GitBashWarning,
+    props: [
+      {
+        name: 'isRechecking',
+        description: 'Show loading state on re-check button',
+        control: { type: 'boolean' },
+        defaultValue: false,
+      },
+    ],
+    variants: [
+      {
+        name: 'Not Found',
+        props: {
+          status: { found: false, path: null, platform: 'win32' } as GitBashStatus,
+        },
+      },
+      {
+        name: 'Rechecking',
+        props: {
+          status: { found: false, path: null, platform: 'win32' } as GitBashStatus,
+          isRechecking: true,
+        },
+      },
+      {
+        name: 'With Suggested Path',
+        props: {
+          status: { found: false, path: 'C:\\Program Files\\Git\\bin\\bash.exe', platform: 'win32' } as GitBashStatus,
+        },
+      },
+      {
+        name: 'With Error',
+        props: {
+          status: { found: false, path: null, platform: 'win32' } as GitBashStatus,
+          errorMessage: 'File does not exist at the specified path',
+        },
+      },
+    ],
+    mockData: () => ({
+      status: { found: false, path: null, platform: 'win32' } as GitBashStatus,
+      onBrowse: async () => {
+        console.log('[Playground] Browse clicked')
+        return 'C:\\Program Files\\Git\\bin\\bash.exe'
+      },
+      onUsePath: (path: string) => console.log('[Playground] Use path:', path),
+      onRecheck: noopHandler,
+      onBack: noopHandler,
+      onClearError: noopHandler,
+    }),
+  },
+  {
     id: 'onboarding-wizard',
     name: 'OnboardingWizard',
     category: 'Onboarding',
@@ -213,6 +278,18 @@ export const onboardingComponents: ComponentEntry[] = [
         name: 'Welcome (Existing User)',
         props: {
           state: createOnboardingState({ step: 'welcome', isExistingUser: true }),
+        },
+      },
+      {
+        name: 'Git Bash Warning',
+        props: {
+          state: createOnboardingState({ step: 'git-bash' }),
+        },
+      },
+      {
+        name: 'Git Bash Warning (Rechecking)',
+        props: {
+          state: createOnboardingState({ step: 'git-bash', isRecheckingGitBash: true }),
         },
       },
       {
@@ -264,6 +341,13 @@ export const onboardingComponents: ComponentEntry[] = [
       onSubmitCredential: (data: { apiKey: string; baseUrl?: string; customModel?: string }) => console.log('[Playground] Submitted:', data),
       onStartOAuth: noopHandler,
       onFinish: noopHandler,
+      onBrowseGitBash: async () => {
+        console.log('[Playground] Browse Git Bash clicked')
+        return 'C:\\Program Files\\Git\\bin\\bash.exe'
+      },
+      onUseGitBashPath: (path: string) => console.log('[Playground] Use Git Bash path:', path),
+      onRecheckGitBash: noopHandler,
+      onClearError: noopHandler,
     }),
   },
 ]

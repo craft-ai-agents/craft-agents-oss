@@ -107,7 +107,7 @@ export class WindowManager {
       // Windows: use native frame with Mica/Acrylic transparency (Windows 10/11)
       ...(isWindows && {
         frame: true, // Keep native frame for better UX
-        autoHideMenuBar: true, // Hide menu bar but accessible via Alt key
+        autoHideMenuBar: true, // Menu is null on Windows, this is just for safety
         // Note: Don't use transparent:true with backgroundMaterial - it hides the window frame
         ...(windowsBackgroundMaterial && {
           backgroundMaterial: windowsBackgroundMaterial,

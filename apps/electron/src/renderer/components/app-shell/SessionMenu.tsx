@@ -230,11 +230,13 @@ export function SessionMenu({
       {/* Status submenu - includes all statuses plus Flag/Unflag at the bottom */}
       <Sub>
         <SubTrigger className="pr-2">
-          <span
-            className="shrink-0 flex items-center justify-center -mt-px h-3.5 w-3.5 [&>svg]:w-full [&>svg]:h-full [&>div>svg]:w-full [&>div>svg]:h-full [&>img]:w-full [&>img]:h-full"
-            style={{ color: getStateColor(currentTodoState, todoStates) ?? 'var(--foreground)' }}
-          >
-            {getStateIcon(currentTodoState, todoStates)}
+          <span style={{ color: getStateColor(currentTodoState, todoStates) ?? 'var(--foreground)' }}>
+            {(() => {
+              const icon = getStateIcon(currentTodoState, todoStates)
+              return React.isValidElement(icon)
+                ? React.cloneElement(icon as React.ReactElement<{ bare?: boolean }>, { bare: true })
+                : icon
+            })()}
           </span>
           <span className="flex-1">Status</span>
         </SubTrigger>
@@ -242,17 +244,18 @@ export function SessionMenu({
           {todoStates.map((state) => {
             // Only apply color if icon is colorable (uses currentColor)
             const applyColor = state.iconColorable
+            // Clone icon with bare prop to render without EntityIcon container
+            const bareIcon = React.isValidElement(state.icon)
+              ? React.cloneElement(state.icon as React.ReactElement<{ bare?: boolean }>, { bare: true })
+              : state.icon
             return (
               <MenuItem
                 key={state.id}
                 onClick={() => onTodoStateChange(state.id)}
                 className={currentTodoState === state.id ? 'bg-foreground/5' : ''}
               >
-                <span
-                  className="shrink-0 flex items-center justify-center -mt-px h-3.5 w-3.5 [&>svg]:w-full [&>svg]:h-full [&>div>svg]:w-full [&>div>svg]:h-full [&>img]:w-full [&>img]:h-full"
-                  style={applyColor ? { color: state.resolvedColor } : undefined}
-                >
-                  {state.icon}
+                <span style={applyColor ? { color: state.resolvedColor } : undefined}>
+                  {bareIcon}
                 </span>
                 <span className="flex-1">{state.label}</span>
               </MenuItem>

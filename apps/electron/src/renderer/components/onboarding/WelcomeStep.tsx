@@ -5,6 +5,8 @@ interface WelcomeStepProps {
   onContinue: () => void
   /** Whether this is an existing user updating settings */
   isExistingUser?: boolean
+  /** Whether the app is loading (e.g., checking Git Bash on Windows) */
+  isLoading?: boolean
 }
 
 /**
@@ -16,7 +18,8 @@ interface WelcomeStepProps {
  */
 export function WelcomeStep({
   onContinue,
-  isExistingUser = false
+  isExistingUser = false,
+  isLoading = false
 }: WelcomeStepProps) {
   return (
     <StepFormLayout
@@ -32,7 +35,7 @@ export function WelcomeStep({
           : 'Agents with the UX they deserve. Connect anything. Organize your sessions. Everything you need to do the work of your life!'
       }
       actions={
-        <ContinueButton onClick={onContinue} className="w-full">
+        <ContinueButton onClick={onContinue} className="w-full" loading={isLoading} loadingText="Checking...">
           {isExistingUser ? 'Continue' : 'Get Started'}
         </ContinueButton>
       }

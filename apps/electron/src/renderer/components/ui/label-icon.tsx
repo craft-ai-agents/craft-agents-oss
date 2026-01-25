@@ -30,11 +30,11 @@ interface LabelIconProps {
 
 /** Circle diameter in pixels for each icon size */
 const CIRCLE_SIZES: Record<IconSize, number> = {
-  xs: 6,
-  sm: 8,
-  md: 10,
-  lg: 12,
-  xl: 14,
+  xs: 4,
+  sm: 6,
+  md: 8,
+  lg: 10,
+  xl: 12,
 }
 
 export function LabelIcon({ label, size = 'sm', hasChildren, className }: LabelIconProps) {
@@ -45,34 +45,37 @@ export function LabelIcon({ label, size = 'sm', hasChildren, className }: LabelI
     ? resolveEntityColor(label.color, isDark)
     : undefined
 
-  // Parent labels get a slightly larger circle to accommodate the inner dot
-  const diameter = CIRCLE_SIZES[size] + (hasChildren ? 2 : 0)
+  // All labels use the same diameter for consistent spacing
+  const diameter = CIRCLE_SIZES[size]
+  const padding = 1 // Internal padding around the circle
+  const center = diameter / 2
+  const outerRadius = center - padding
+  const dotRadius = 1 // 2px diameter inner dot
+
+  const fillColor = resolvedColor || 'currentColor'
+
   return (
-    <span
-      className={cn('inline-flex items-center justify-center shrink-0', className)}
-      style={{ width: diameter, height: diameter }}
+    <svg
+      width={diameter}
+      height={diameter}
+      viewBox={`0 0 ${diameter} ${diameter}`}
+      className={cn('shrink-0', className)}
+      style={{ opacity: resolvedColor ? 1 : 0.4 }}
     >
-      <span
-        className="relative rounded-full w-full h-full flex items-center justify-center"
-        style={{
-          backgroundColor: resolvedColor || 'currentColor',
-          opacity: resolvedColor ? 1 : 0.4,
-        }}
-      >
-        {/* Inner dot signals this label has nested children (radio-button style).
-            Color is 85% background + 15% label color via color-mix. */}
-        {hasChildren && (
-          <span
-            className="rounded-full shadow-minimal"
-            style={{
-              width: 4,
-              height: 4,
-              backgroundColor: `color-mix(in srgb, var(--background) 85%, ${resolvedColor || 'currentColor'} 15%)`,
-            }}
-          />
-        )}
-      </span>
-    </span>
+      <circle cx={center} cy={center} r={outerRadius} fill={fillColor} />
+      {/* Inner dot signals this label has nested children (radio-button style).
+          Color is 85% background + 15% label color via color-mix. */}
+      {hasChildren && (
+        <circle
+          cx={center}
+          cy={center}
+          r={dotRadius}
+          style={{
+            fill: `color-mix(in srgb, var(--background) 85%, ${fillColor} 15%)`,
+          }}
+        />
+      )}
+    </svg>
   )
 }
 

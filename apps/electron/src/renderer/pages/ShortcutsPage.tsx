@@ -10,6 +10,7 @@ import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { HeaderMenu } from '@/components/ui/HeaderMenu'
 import { routes } from '@/lib/navigate'
+import { isMac } from '@/lib/platform'
 
 interface ShortcutItem {
   keys: string[]
@@ -21,9 +22,6 @@ interface ShortcutSection {
   shortcuts: ShortcutItem[]
 }
 
-const isMac =
-  typeof navigator !== 'undefined' &&
-  navigator.platform.toUpperCase().indexOf('MAC') >= 0
 const cmdKey = isMac ? '⌘' : 'Ctrl'
 
 const sections: ShortcutSection[] = [

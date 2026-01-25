@@ -281,7 +281,7 @@ function LabelBadge({
         )}
         style={{ '--badge-color': resolvedColor } as React.CSSProperties}
       >
-        <LabelIcon label={label} size="sm" />
+        <LabelIcon label={label} size="lg" />
         <span className="whitespace-nowrap ml-2">{label.name}</span>
         {/* Optional typed value: interpunkt separator + value, or placeholder icon if typed but no value set */}
         {displayValue ? (

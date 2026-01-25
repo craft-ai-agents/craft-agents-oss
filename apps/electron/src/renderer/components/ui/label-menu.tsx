@@ -262,12 +262,7 @@ export function InlineLabelMenu({
                 )}
               >
                 {/* Label icon */}
-                <div className="shrink-0">
-                  <LabelIcon
-                    label={item.config}
-                    size="sm"
-                  />
-                </div>
+                <LabelIcon label={item.config} size="lg" />
                 {/* Label name with optional parent path */}
                 <div className="flex-1 min-w-0 truncate">
                   {item.parentPath && (

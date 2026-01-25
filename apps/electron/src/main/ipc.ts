@@ -1,7 +1,7 @@
 import { app, ipcMain, nativeTheme, nativeImage, dialog, shell, BrowserWindow } from 'electron'
 import { readFile, readdir, stat, realpath, mkdir, writeFile, unlink, rm } from 'fs/promises'
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
-import { normalize, isAbsolute, join, basename, dirname, resolve, relative } from 'path'
+import { normalize, isAbsolute, join, basename, dirname, resolve, relative, sep } from 'path'
 import { homedir, tmpdir } from 'os'
 import { randomUUID } from 'crypto'
 import { execSync } from 'child_process'
@@ -82,12 +82,15 @@ async function validateFilePath(filePath: string): Promise<string> {
   // Define allowed base directories
   const allowedDirs = [
     homedir(),      // User's home directory
-    '/tmp',         // Temporary files
-    '/var/folders', // macOS temp folders
+    tmpdir(),       // Platform-appropriate temp directory
   ]
 
-  // Check if the real path is within an allowed directory
-  const isAllowed = allowedDirs.some(dir => realPath.startsWith(dir + '/') || realPath === dir)
+  // Check if the real path is within an allowed directory (cross-platform)
+  const isAllowed = allowedDirs.some(dir => {
+    const normalizedDir = normalize(dir)
+    const normalizedReal = normalize(realPath)
+    return normalizedReal.startsWith(normalizedDir + sep) || normalizedReal === normalizedDir
+  })
 
   if (!isAllowed) {
     throw new Error('Access denied: file path is outside allowed directories')
@@ -694,6 +697,86 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     }
   })
 
+  // Git Bash detection and configuration (Windows only)
+  ipcMain.handle(IPC_CHANNELS.GITBASH_CHECK, async () => {
+    const platform = process.platform as 'win32' | 'darwin' | 'linux'
+
+    // Non-Windows platforms don't need Git Bash
+    if (platform !== 'win32') {
+      return { found: true, path: null, platform }
+    }
+
+    // Check common Git Bash installation paths
+    const commonPaths = [
+      'C:\\Program Files\\Git\\bin\\bash.exe',
+      'C:\\Program Files (x86)\\Git\\bin\\bash.exe',
+      join(process.env.LOCALAPPDATA || '', 'Programs', 'Git', 'bin', 'bash.exe'),
+      join(process.env.PROGRAMFILES || '', 'Git', 'bin', 'bash.exe'),
+    ]
+
+    for (const bashPath of commonPaths) {
+      try {
+        await stat(bashPath)
+        return { found: true, path: bashPath, platform }
+      } catch {
+        // Path doesn't exist, try next
+      }
+    }
+
+    // Try to find via 'where' command
+    try {
+      const result = execSync('where bash', {
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        timeout: 5000,
+      }).trim()
+      const firstPath = result.split('\n')[0]?.trim()
+      if (firstPath && firstPath.toLowerCase().includes('git')) {
+        return { found: true, path: firstPath, platform }
+      }
+    } catch {
+      // where command failed
+    }
+
+    return { found: false, path: null, platform }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GITBASH_BROWSE, async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) return null
+
+    const result = await dialog.showOpenDialog(win, {
+      title: 'Select bash.exe',
+      filters: [{ name: 'Executable', extensions: ['exe'] }],
+      properties: ['openFile'],
+      defaultPath: 'C:\\Program Files\\Git\\bin',
+    })
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return null
+    }
+
+    return result.filePaths[0]
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GITBASH_SET_PATH, async (_event, bashPath: string) => {
+    try {
+      // Verify the path exists
+      await stat(bashPath)
+
+      // Verify it's an executable (basic check - ends with .exe on Windows)
+      if (!bashPath.toLowerCase().endsWith('.exe')) {
+        return { success: false, error: 'Path must be an executable (.exe) file' }
+      }
+
+      // TODO: Persist this path to config if needed
+      // For now, we just validate it exists
+      return { success: true }
+    } catch {
+      return { success: false, error: 'File does not exist at the specified path' }
+    }
+  })
+
   // Debug logging from renderer → main log file (fire-and-forget, no response)
   ipcMain.on(IPC_CHANNELS.DEBUG_LOG, (_event, ...args: unknown[]) => {
     ipcLog.info('[renderer]', ...args)
@@ -877,6 +960,77 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       ipcLog.error('showInFolder error:', message)
       throw new Error(`Failed to show in folder: ${message}`)
     }
+  })
+
+  // Menu actions from renderer (for unified Craft menu)
+  ipcMain.handle(IPC_CHANNELS.MENU_QUIT, () => {
+    app.quit()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.MENU_MINIMIZE, (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    win?.minimize()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.MENU_MAXIMIZE, (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (win) {
+      if (win.isMaximized()) {
+        win.unmaximize()
+      } else {
+        win.maximize()
+      }
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.MENU_ZOOM_IN, (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (win) {
+      const currentZoom = win.webContents.getZoomFactor()
+      win.webContents.setZoomFactor(Math.min(currentZoom + 0.1, 3.0))
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.MENU_ZOOM_OUT, (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (win) {
+      const currentZoom = win.webContents.getZoomFactor()
+      win.webContents.setZoomFactor(Math.max(currentZoom - 0.1, 0.5))
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.MENU_ZOOM_RESET, (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    win?.webContents.setZoomFactor(1.0)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.MENU_TOGGLE_DEVTOOLS, (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    win?.webContents.toggleDevTools()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.MENU_UNDO, (event) => {
+    event.sender.undo()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.MENU_REDO, (event) => {
+    event.sender.redo()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.MENU_CUT, (event) => {
+    event.sender.cut()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.MENU_COPY, (event) => {
+    event.sender.copy()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.MENU_PASTE, (event) => {
+    event.sender.paste()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.MENU_SELECT_ALL, (event) => {
+    event.sender.selectAll()
   })
 
   // Show logout confirmation dialog

@@ -1272,6 +1272,10 @@ export default function App() {
           isWaitingForCode={onboarding.isWaitingForCode}
           onSubmitAuthCode={onboarding.handleSubmitAuthCode}
           onCancelOAuth={onboarding.handleCancelOAuth}
+          onBrowseGitBash={onboarding.handleBrowseGitBash}
+          onUseGitBashPath={onboarding.handleUseGitBashPath}
+          onRecheckGitBash={onboarding.handleRecheckGitBash}
+          onClearError={onboarding.handleClearError}
         />
       </ModalProvider>
     )
