@@ -342,6 +342,13 @@ class E2ETestRunner {
     const success = this.results.print();
     return this.results.getExitCode();
   }
+
+  /**
+   * Disconnect without printing results (for setup scripts)
+   */
+  disconnect() {
+    this.cdp.close();
+  }
 }
 
 /**

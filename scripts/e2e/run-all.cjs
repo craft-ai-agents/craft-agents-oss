@@ -18,6 +18,7 @@
 
 const { spawn } = require('child_process');
 const path = require('path');
+const { setupTestWorkspace } = require('./setup-test-workspace.cjs');
 
 // Available test suites
 const TEST_SUITES = [
@@ -122,6 +123,21 @@ async function main() {
     process.exit(1);
   }
 
+  log('');
+
+  // Setup test workspace
+  log('Setting up test workspace...');
+  try {
+    const setupResult = await setupTestWorkspace();
+    if (setupResult.created) {
+      log(`Created test workspace: ${setupResult.workspaceId.slice(0, 8)}...`);
+    } else {
+      log(`Using existing workspace: ${setupResult.workspaceId.slice(0, 8)}...`);
+    }
+  } catch (error) {
+    log(`Warning: Could not setup test workspace: ${error.message}`);
+    log('Tests requiring a workspace may be skipped.');
+  }
   log('');
 
   // Run tests
