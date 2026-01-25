@@ -856,6 +856,17 @@ export const IPC_CHANNELS = {
   WHATSAPP_ERROR: 'whatsapp:error',
   WHATSAPP_MESSAGE_ACTIVITY: 'whatsapp:message-activity',
 
+  // Telegram Integration
+  TELEGRAM_CONNECT: 'telegram:connect',
+  TELEGRAM_DISCONNECT: 'telegram:disconnect',
+  TELEGRAM_STATUS: 'telegram:status',
+  TELEGRAM_SEND_MESSAGE: 'telegram:send-message',
+  TELEGRAM_GET_SAVED_TOKEN: 'telegram:get-saved-token',
+  // Telegram events (main → renderer)
+  TELEGRAM_CONNECTION_STATUS: 'telegram:connection-status',
+  TELEGRAM_ERROR: 'telegram:error',
+  TELEGRAM_MESSAGE_ACTIVITY: 'telegram:message-activity',
+
   // Viewer Configuration (session sharing backend)
   VIEWER_GET_CONFIG: 'viewer:getConfig',
   VIEWER_SET_CONFIG: 'viewer:setConfig',
