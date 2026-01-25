@@ -773,6 +773,11 @@ export const IPC_CHANNELS = {
   SKILLS_OPEN_FINDER: 'skills:openFinder',
   SKILLS_CHANGED: 'skills:changed',
 
+  // Team Skills (synced from private GitHub repo)
+  TEAM_SKILLS_SET_CONFIG: 'team-skills:setConfig',
+  TEAM_SKILLS_SYNC: 'team-skills:sync',
+  TEAM_SKILLS_GET_STATUS: 'team-skills:getStatus',
+
   // Status management (workspace-scoped)
   STATUSES_LIST: 'statuses:list',
   STATUSES_CHANGED: 'statuses:changed',  // Broadcast event
@@ -1096,6 +1101,16 @@ export interface ElectronAPI {
 
   // Skills change listener (live updates when skills are added/removed/modified)
   onSkillsChanged(callback: (skills: LoadedSkill[]) => void): () => void
+
+  // Team Skills (synced from private GitHub repo)
+  setTeamSkillsConfig(config: { repoUrl: string; token: string }): Promise<{ success: boolean; error?: string }>
+  syncTeamSkills(): Promise<{ success: boolean; syncedCount?: number; error?: string }>
+  getTeamSkillsStatus(): Promise<{
+    configured: boolean
+    repoUrl: string | null
+    hasToken: boolean
+    skillCount: number
+  }>
 
   // Statuses (workspace-scoped)
   listStatuses(workspaceId: string): Promise<import('@vesper/shared/statuses').StatusConfig[]>

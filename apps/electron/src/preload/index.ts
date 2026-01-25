@@ -318,6 +318,14 @@ const api: ElectronAPI = {
     }
   },
 
+  // Team Skills (synced from private GitHub repo)
+  setTeamSkillsConfig: (config: { repoUrl: string; token: string }) =>
+    ipcRenderer.invoke(IPC_CHANNELS.TEAM_SKILLS_SET_CONFIG, config),
+  syncTeamSkills: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.TEAM_SKILLS_SYNC),
+  getTeamSkillsStatus: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.TEAM_SKILLS_GET_STATUS),
+
   // Statuses change listener (live updates when statuses config or icon files change)
   onStatusesChanged: (callback: (workspaceId: string) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, workspaceId: string) => {

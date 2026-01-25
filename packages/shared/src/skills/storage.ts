@@ -16,7 +16,7 @@ import { join } from 'path';
 import matter from 'gray-matter';
 import type { LoadedSkill, SkillMetadata, SkillSource } from './types.ts';
 import { getWorkspaceSkillsPath } from '../workspaces/storage.ts';
-import { CLAUDE_CODE_SKILLS_DIR, CLAUDE_CODE_COMMANDS_DIR } from '../config/paths.ts';
+import { GLOBAL_SKILLS_DIR, TEAM_SKILLS_DIR, CLAUDE_CODE_SKILLS_DIR, CLAUDE_CODE_COMMANDS_DIR } from '../config/paths.ts';
 import {
   validateIconValue,
   findIconFile,
@@ -284,11 +284,24 @@ function loadCommandsAsSkills(): LoadedSkill[] {
 }
 
 /**
- * Load Claude Code skills from ~/.claude/skills/ and ~/.claude/commands/.
- * All non-workspace skills are stored in the Claude Code skills directory.
+ * Load team skills from ~/.vesper/team-skills/.
+ * Team skills are synced from a private GitHub repository.
+ */
+export function loadTeamSkills(): LoadedSkill[] {
+  return loadSkillsFromDir(TEAM_SKILLS_DIR, 'team');
+}
+
+/**
+ * Load global skills from ~/.vesper/global-skills/, ~/.claude/skills/,
+ * and ~/.claude/commands/ (auto-converted to skills).
+ * Claude Code skills and commands are read-only, global skills are user-installed.
  */
 export function loadGlobalSkills(): LoadedSkill[] {
   const skills: LoadedSkill[] = [];
+
+  // Load from ~/.vesper/global-skills/ (user-installed skills)
+  const globalSkills = loadSkillsFromDir(GLOBAL_SKILLS_DIR, 'global');
+  skills.push(...globalSkills);
 
   // Load from ~/.claude/skills/ (Claude Code CLI standalone skills)
   const claudeCodeSkills = loadSkillsFromDir(CLAUDE_CODE_SKILLS_DIR, 'claude-code');
@@ -302,30 +315,37 @@ export function loadGlobalSkills(): LoadedSkill[] {
 }
 
 /**
- * Load all skills for a workspace, merging workspace skills with global skills.
- * Workspace skills override global skills when same slug exists.
+ * Load all skills for a workspace, merging skills from all sources.
+ * Precedence order (first wins): workspace > team > global > claude-code
  * @param workspaceRoot - Absolute path to workspace root
  */
 export function loadAllSkills(workspaceRoot: string): LoadedSkill[] {
-  // Load workspace skills first (they take priority)
-  const workspaceSkills = loadWorkspaceSkills(workspaceRoot).map((s) => ({
-    ...s,
-    source: 'workspace' as SkillSource,
-  }));
+  const skills: LoadedSkill[] = [];
+  const seenSlugs = new Set<string>();
 
-  // Load global skills
-  const globalSkills = loadGlobalSkills();
+  // 1. Workspace skills (highest priority - local overrides)
+  for (const skill of loadWorkspaceSkills(workspaceRoot)) {
+    skills.push({ ...skill, source: 'workspace' as SkillSource });
+    seenSlugs.add(skill.slug);
+  }
 
-  // Create a set of workspace skill slugs for override detection
-  const workspaceSlugs = new Set(workspaceSkills.map((s) => s.slug));
+  // 2. Team skills (from private GitHub repo)
+  for (const skill of loadTeamSkills()) {
+    if (!seenSlugs.has(skill.slug)) {
+      skills.push(skill);
+      seenSlugs.add(skill.slug);
+    }
+  }
 
-  // Merge: workspace skills first, then global skills that don't conflict
-  const merged: LoadedSkill[] = [
-    ...workspaceSkills,
-    ...globalSkills.filter((g) => !workspaceSlugs.has(g.slug)),
-  ];
+  // 3. Global + Claude Code skills
+  for (const skill of loadGlobalSkills()) {
+    if (!seenSlugs.has(skill.slug)) {
+      skills.push(skill);
+      seenSlugs.add(skill.slug);
+    }
+  }
 
-  return merged;
+  return skills;
 }
 
 /**
