@@ -420,6 +420,12 @@ export interface CreateSessionOptions {
    * - Absolute path string: Use this specific path
    */
   workingDirectory?: string | 'user_default' | 'none'
+  /** Model to use for this session (overrides global config if set) */
+  model?: string
+  /** Thinking level for this session ('off', 'think', 'max') */
+  thinkingLevel?: ThinkingLevel
+  /** Skill IDs to attach to this session */
+  skillIds?: string[]
   /** Optional metadata for context-specific session creation (e.g., WhatsApp) */
   metadata?: Record<string, any>
 }

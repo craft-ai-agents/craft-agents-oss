@@ -1154,8 +1154,13 @@ export class SessionManager {
       ?? globalDefaults.workspaceDefaults.permissionMode
 
     const userDefaultWorkingDir = wsConfig?.defaults?.workingDirectory || undefined
-    // Get default thinking level from workspace config, fallback to global defaults
-    const defaultThinkingLevel = wsConfig?.defaults?.thinkingLevel ?? globalDefaults.workspaceDefaults.thinkingLevel
+    // Get default thinking level from workspace config, fallback to global defaults, then options
+    const defaultThinkingLevel = options?.thinkingLevel
+      ?? wsConfig?.defaults?.thinkingLevel
+      ?? globalDefaults.workspaceDefaults.thinkingLevel
+
+    // Get model from options (template may provide this)
+    const sessionModel = options?.model || undefined
 
     // Resolve working directory from options:
     // - 'user_default' or undefined: Use workspace's configured default
@@ -1174,6 +1179,7 @@ export class SessionManager {
     const storedSession = createStoredSession(workspaceRootPath, {
       permissionMode: defaultPermissionMode,
       workingDirectory: resolvedWorkingDir,
+      model: sessionModel,
     })
 
     const managed: ManagedSession = {

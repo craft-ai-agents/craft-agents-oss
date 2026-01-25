@@ -40,25 +40,49 @@ export function registerTemplateIpcHandlers(sessionManager: SessionManager) {
 
   // Create template
   ipcMain.handle('template:create', async (_, options: CreateTemplateOptions) => {
-    return templateStorage.createTemplate(options);
+    try {
+      return await templateStorage.createTemplate(options);
+    } catch (error) {
+      console.error('[Templates] Failed to create template:', error);
+      throw error;
+    }
   });
 
   // Get template
   ipcMain.handle('template:get', async (_, id: string, scope: 'global' | 'workspace', workspaceId?: string) => {
-    return templateStorage.getTemplate(id, scope, workspaceId);
+    try {
+      return await templateStorage.getTemplate(id, scope, workspaceId);
+    } catch (error) {
+      console.error('[Templates] Failed to get template:', error);
+      throw error;
+    }
   });
 
   // Update template
   ipcMain.handle(
     'template:update',
     async (_, id: string, scope: 'global' | 'workspace', workspaceId: string | undefined, updates: Partial<SessionTemplate>) => {
-      return templateStorage.updateTemplate(id, scope, workspaceId, updates);
+      try {
+        return await templateStorage.updateTemplate(id, scope, workspaceId, updates);
+      } catch (error) {
+        console.error('[Templates] Failed to update template:', error);
+        throw error;
+      }
     }
   );
 
   // Delete template
   ipcMain.handle('template:delete', async (_, id: string, scope: 'global' | 'workspace', workspaceId?: string) => {
-    return templateStorage.deleteTemplate(id, scope, workspaceId);
+    try {
+      await templateStorage.deleteTemplate(id, scope, workspaceId);
+    } catch (error) {
+      // If template not found, treat as success (idempotent delete)
+      if (error instanceof templateStorage.TemplateError && error.code === 'NOT_FOUND') {
+        return;
+      }
+      console.error('[Templates] Failed to delete template:', error);
+      throw error;
+    }
   });
 
   // Save session as template
