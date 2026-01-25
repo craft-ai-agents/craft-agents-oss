@@ -12,72 +12,97 @@ Vesper leverages the Claude Agent SDK and Claude Code while adding significant i
 
 ## Recent Major Features (Past 12 Hours)
 
-### 1. Skills Marketplace Integration
-- **Location:** `apps/electron/src/renderer/components/skills/`
+### 1. JSON Rendering System (AI-Generated UI)
+- **Location:** `apps/electron/src/renderer/components/json-render/`
 - **Features:**
-  - Browse and install skills from skills.sh marketplace
-  - Search skills with marketplace toggle ("Installed" vs "Marketplace")
-  - Preview SKILL.md content fetched from GitHub
-  - Smart folder discovery with fallback strategy for mismatched skill IDs
+  - AI-generated interactive UI components inline in chat messages
+  - Static components: Card, Stack, Text, Badge, Table, Chart, Metric, DataTable
+  - Interactive components: Button, TextField, SelectField
+  - Actions: copy, open_url, api_call, mcp_fetch, submit, cancel, refresh
+  - MCP data binding via `mcp_fetch` action for dynamic content
+  - Chart component with recharts (bar, line, pie, area)
+  - DataTable with sorting, filtering, pagination
 - **Key Files:**
-  - `MarketplaceSearchPanel.tsx` - Search interface with install buttons
-  - `MarketplaceSkillInfoPage.tsx` - Skill details in right panel
-  - `apps/electron/src/main/skills-marketplace.ts` - IPC handlers for marketplace operations
-- **Routes:** `skills/marketplace/{source~repo}/{skillId}`
+  - `JSONRenderView.tsx` - Main rendering component
+  - `catalog.ts` - Component registry
+  - `packages/shared/src/agent/session-scoped-tools.ts` - render_ui tool
 
-### 2. Terminal Resume Button
-- **Location:** `apps/electron/src/renderer/components/app-shell/input/TerminalResumeButton.tsx`
+### 2. Inline Flowy Diagrams
+- **Location:** `apps/electron/src/renderer/components/diagram/` and `packages/shared/src/flowy/`
 - **Features:**
-  - Resume Claude Agent SDK sessions in external terminal window
-  - Cross-platform support (macOS Terminal.app, Linux gnome-terminal/konsole/xterm, Windows Terminal/PowerShell/cmd.exe)
-  - Security: Session ID validation, path escaping, injection prevention
-  - Task list integration via `CLAUDE_CODE_TASK_LIST_ID` environment variable
-- **Backend:** `apps/electron/src/main/terminal.ts` (349 lines)
-- **UX:** Appears after working directory badge, hidden until session has SDK session ID
-
-### 3. Session Labels
-- **Location:** `apps/electron/src/renderer/components/settings/LabelsSettingsSection.tsx`
-- **Features:**
-  - Create, edit, and delete workspace labels
-  - 8-color preset palette matching `LABEL_COLORS`
-  - Preview label badge before saving
-  - Always-visible Labels submenu in session context menu
-- **Integration:** WorkspaceSettingsPage → Mode Cycling section
-
-### 4. Scheduler Session Continuation
-- **Location:** `apps/electron/src/main/scheduler.ts`
-- **Features:**
-  - Reuse `lastRunSessionId` from previous scheduled executions
-  - Preserves conversation context across scheduled runs
-  - Agent can learn from and reference previous executions
-  - Graceful fallback to new session if previous was deleted
-
-### 5. Viewer Backend Abstraction
-- **Location:** `packages/shared/src/viewer/`
-- **Features:**
-  - ViewerService interface with pluggable implementations
-  - `CraftHostedViewer` - Default backend (craft.do compatible)
-  - `StaticExportViewer` - Generate standalone HTML for any static host
-  - Privacy-first and offline-capable session sharing
-- **Configuration:** Settings UI for configuring viewer backend
-- **Integration:** SessionManager refactored to use ViewerService
-
-### 6. WhatsApp Integration
-- **Location:** `apps/electron/src/renderer/components/whatsapp/` and `apps/electron/src/main/whatsapp-*.ts`
-- **Features:**
-  - QR code authentication via WhatsApp Web
-  - Session management and persistence
-  - Message routing with permission directives
-  - Real-time notifications for incoming messages
+  - Create flowcharts and UI mockups directly in chat conversations
+  - Auto-detects `flowy-flowchart` and `flowy-mockup` code blocks
+  - Interactive inline diagrams with edit capabilities
+  - Diagram context preserved on follow-up messages
+  - React.memo optimization for all diagram components
+  - Security: Zod schema constraints, ReDoS-safe parser, authorization checks
 - **Key Files:**
-  - `WhatsAppSettingsSection.tsx` - Settings UI for WhatsApp connection
-  - `whatsapp-service.ts` - Main process WhatsApp service
-  - `whatsapp-ipc.ts` - IPC handlers for WhatsApp operations
-- **Backend:** `packages/shared/src/whatsapp/`
-  - `message-router` - Routes incoming messages
-  - `directive-parser` - Parses permission directives from messages
-  - `session-mapper` - Maps WhatsApp sessions to Vesper sessions
-  - `result-formatter` - Formats agent responses for WhatsApp
+  - `DiagramRenderer.tsx` - Diagram rendering component
+  - `FlowyInlineEmbed.tsx` - Inline embed handler
+  - `flowy-parser.ts` - Safe parser with validation
+  - `packages/shared/src/flowy/` - Schema, templates, types
+
+### 3. Slack Integration (Socket Mode)
+- **Location:** `apps/electron/src/main/slack-service.ts` and `packages/shared/src/slack/`
+- **Features:**
+  - Full Slack messaging integration with Socket Mode
+  - Access control (channel/user allowlist, DM policy)
+  - Message formatting (mrkdwn escaping, 4000 char chunking)
+  - Session continuity across conversations
+  - Permission directives (`/ask`, `/allow-all`, `/safe`)
+  - Message deduplication (10-min TTL)
+  - Inbound debouncing (1.5s window)
+  - Thread context resolution
+- **Key Files:**
+  - `slack-service.ts` (661 lines) - SlackService using @slack/bolt
+  - `packages/shared/src/slack/message-router.ts` (202 lines)
+  - `SlackSettingsSection.tsx` - Service controls UI
+
+### 4. Telegram Bot Integration
+- **Location:** `apps/electron/src/main/telegram-service.ts` and `packages/shared/src/telegram/`
+- **Features:**
+  - Comprehensive Telegram bot integration with in-process polling
+  - Bot token authentication (encrypted storage)
+  - Message queue for rate limiting (30 msgs/sec)
+  - Per-chat rate limiting (token bucket algorithm)
+  - Permission directives (`/safe`, `/ask`, `/allow_all`)
+  - Large result handling (4096 char limit, chunking + deep links)
+  - Session continuity (same chat+user = same session)
+- **Key Files:**
+  - `telegram-service.ts` (458 lines) - TelegramService
+  - `telegram-ipc.ts` (139 lines) - IPC handlers
+  - `packages/shared/src/telegram/message-router.ts` (610 lines)
+  - `TelegramSettingsSection.tsx` - Bot configuration UI
+
+### 5. Session Templates
+- **Location:** `packages/shared/src/templates/` and `apps/electron/src/renderer/components/templates/`
+- **Features:**
+  - Create reusable session configuration presets
+  - Save templates from existing sessions
+  - Store: permission mode, model, thinking level, working directory, skill IDs
+  - Optional initial prompt inclusion
+  - Usage count tracking for popularity sorting
+  - Global and workspace-scoped templates
+  - File-based locking for concurrent updates
+- **Key Files:**
+  - `packages/shared/src/templates/storage.ts` (227 lines)
+  - `apps/electron/src/main/templates.ts` (105 lines)
+  - `TemplateManager.tsx` - Settings CRUD UI
+  - `TemplatePickerDialog.tsx` - Template selection modal
+
+### 6. Notification Settings
+- **Location:** `apps/electron/src/renderer/pages/settings/NotificationSettingsSection.tsx`
+- **Features:**
+  - Granular notification control with custom sounds
+  - Master toggle (enable/disable all)
+  - Custom notification sound with volume slider (0-100%)
+  - Quiet hours configuration
+  - Per-type toggles: agent completion, errors, scheduler, messages
+  - Web Audio API for volume control
+  - Sound preview button
+- **Key Files:**
+  - `NotificationSettingsSection.tsx` (294 lines)
+  - `notification-sound.ts` (99 lines) - Audio playback utilities
 
 ## Project Structure
 
@@ -211,18 +236,32 @@ Key IPC handlers in `apps/electron/src/main/ipc.ts`:
 - `config:*` - Configuration updates
 - `source:*` - Data source operations
 - `whatsapp:*` - WhatsApp connection and messaging
+- `slack:*` - Slack service controls and messaging
+- `telegram:*` - Telegram bot configuration and messaging
 - `skills-marketplace:*` - Marketplace search, install, and skill details
 - `terminal:*` - Terminal spawning for session resume
 - `labels:*` - Workspace label management
 - `viewer:*` - Viewer backend configuration
+- `templates:*` - Session template CRUD operations
+- `notification:*` - Notification settings and test notification
 
 ## Recent Bug Fixes
 
-1. **Skills Marketplace Folder Discovery**: Smart fallback when skill ID doesn't match GitHub folder name
-2. **Labels Submenu**: Always show labels submenu and subscribe to changes
-3. **WhatsApp Session Completion**: Wire up session completion callback for message delivery
-4. **Slack IPC Static Import**: Fixed build error by moving slack-ipc to static import
-5. **TypeScript Test Errors**: Resolved errors in WhatsApp and viewer tests
+1. **JSON Render Tool Matching**: Fixed tool name matching using `endsWith('render_ui')` for SDK-prefixed names
+2. **JSON Render API Corrections**: Fixed Renderer props (`components` → `registry`) and ActionProvider (`actions` → `handlers`)
+3. **Marketplace Search**: Use `/api/search` endpoint with client-side filtering fallback
+4. **Marketplace GitHub Sources**: Add `skillsPath` config for different folder structures (ComposioHQ, anthropics)
+5. **Marketplace Scroll**: Add `min-h-0` and `overflow-hidden` for proper flex scrolling
+6. **Terminal Resume Session ID**: Accept both Vesper IDs (YYMMDD-word-word) and plain UUIDs
+7. **Terminal Shell Script Approach**: Replace AppleScript with shell script for better Electron compatibility
+8. **Flowy Security**: Zod constraints, ReDoS-safe parser, authorization checks
+9. **Flowy Performance**: React.memo optimization eliminates ~150ms redundant renders
+10. **Slack OAuth**: Configurable relay URL, fetch timeout protection, code deduplication
+11. **Telegram Rate Limiting**: Per-chat token bucket algorithm (5 burst, 0.5 tokens/sec)
+12. **Telegram ReDoS Protection**: Non-greedy regex patterns
+13. **Templates File Locking**: File-based locking for concurrent updates
+14. **Templates Error Handling**: Categorized errors (NOT_FOUND, INVALID_INPUT, IO_ERROR, CORRUPT_DATA)
+15. **E2E Test Infrastructure**: Mock workspace setup, cleanup flags, missing IPC handlers
 
 ## Common Tasks
 
@@ -272,5 +311,5 @@ When working on Vesper:
 
 ---
 
-*Last Updated: 2026-01-24*
+*Last Updated: 2026-01-25*
 *For questions or updates, please refer to the main README.md and CONTRIBUTING.md*
