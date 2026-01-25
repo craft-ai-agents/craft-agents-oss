@@ -14,11 +14,13 @@
  * Options:
  *   --test=<name>  Run specific test (e.g., --test=skills-marketplace)
  *   --parallel     Run tests in parallel (faster but may interfere with each other)
+ *   --fresh        Clean up before tests (start with fresh test environment)
+ *   --clean        Clean up after tests (remove test artifacts)
  */
 
 const { spawn } = require('child_process');
 const path = require('path');
-const { setupTestWorkspace } = require('./setup-test-workspace.cjs');
+const { setupTestWorkspace, cleanupTestWorkspace, freshStart } = require('./setup-test-workspace.cjs');
 
 // Available test suites
 const TEST_SUITES = [
@@ -34,6 +36,41 @@ const TEST_SUITES = [
 const args = process.argv.slice(2);
 const specificTest = args.find(arg => arg.startsWith('--test='))?.split('=')[1];
 const runParallel = args.includes('--parallel');
+const shouldFresh = args.includes('--fresh');
+const shouldClean = args.includes('--clean');
+const showHelp = args.includes('--help') || args.includes('-h');
+
+// Show help
+if (showHelp) {
+  console.log(`
+Vespr E2E Test Runner
+
+Usage: node scripts/e2e/run-all.cjs [options]
+
+Options:
+  --test=<name>  Run specific test suite (e.g., --test=skills-marketplace)
+  --parallel     Run tests in parallel (faster but may interfere)
+  --fresh        Clean up before tests (fresh start)
+  --clean        Clean up after tests (remove test artifacts)
+  --help, -h     Show this help message
+
+Available test suites:
+  - skills-marketplace
+  - terminal-resume
+  - session-labels
+  - scheduler-continuation
+  - viewer-backend
+  - whatsapp-integration
+
+Examples:
+  bun run test:e2e                    # Run all tests, reuse workspace
+  bun run test:e2e --fresh            # Fresh start, then run all tests
+  bun run test:e2e --clean            # Run all tests, then clean up
+  bun run test:e2e --fresh --clean    # CI mode: fresh start, run, clean up
+  bun run test:e2e --test=session-labels  # Run specific test suite
+`);
+  process.exit(0);
+}
 
 function log(msg) {
   console.log(`[E2E-RUNNER] ${msg}`);
@@ -125,6 +162,13 @@ async function main() {
 
   log('');
 
+  // Fresh start if requested (clean before tests)
+  if (shouldFresh) {
+    log('Fresh start requested - cleaning previous test artifacts...');
+    await freshStart();
+    log('');
+  }
+
   // Setup test workspace
   log('Setting up test workspace...');
   try {
@@ -178,9 +222,17 @@ async function main() {
   log('');
   log('========================================');
 
-  // Screenshots location
-  log('');
-  log('Screenshots saved to: /tmp/vespr-e2e/');
+  // Screenshots location (only if not cleaning)
+  if (!shouldClean) {
+    log('');
+    log('Screenshots saved to: /tmp/vespr-e2e/');
+  }
+
+  // Cleanup if requested
+  if (shouldClean) {
+    log('');
+    await cleanupTestWorkspace();
+  }
 
   // Exit with appropriate code
   process.exit(failed.length > 0 ? 1 : 0);

@@ -165,29 +165,55 @@ async function setupTestWorkspace() {
 }
 
 /**
- * Cleanup test workspace
- * @param {string} workspaceId
+ * Cleanup test workspace artifacts
+ * Removes temp directory and test data created during tests
+ * Note: Workspace config entry persists (no deleteWorkspace API) - this is fine
  */
-async function cleanupTestWorkspace(workspaceId) {
-  // For now, we don't delete workspaces as they might be reused
-  // The test directory is in /tmp so it will be cleaned up eventually
-  console.log(`[E2E-SETUP] Cleanup: workspace ${workspaceId.slice(0, 8)}... preserved for debugging`);
+async function cleanupTestWorkspace() {
+  console.log(`[E2E-CLEANUP] Cleaning up test artifacts...`);
 
   // Clean up the temp directory
   if (fs.existsSync(TEST_WORKSPACE_DIR)) {
     try {
       fs.rmSync(TEST_WORKSPACE_DIR, { recursive: true });
-      console.log(`[E2E-SETUP] Removed test directory: ${TEST_WORKSPACE_DIR}`);
+      console.log(`[E2E-CLEANUP] Removed test directory: ${TEST_WORKSPACE_DIR}`);
     } catch (e) {
-      // Ignore errors - directory might be in use
+      console.log(`[E2E-CLEANUP] Could not remove test directory: ${e.message}`);
+    }
+  } else {
+    console.log(`[E2E-CLEANUP] Test directory already clean`);
+  }
+
+  // Clean up test screenshots
+  const screenshotDir = '/tmp/vespr-e2e';
+  if (fs.existsSync(screenshotDir)) {
+    try {
+      fs.rmSync(screenshotDir, { recursive: true });
+      console.log(`[E2E-CLEANUP] Removed screenshots: ${screenshotDir}`);
+    } catch (e) {
+      // Ignore errors
     }
   }
+
+  // Note: Workspace entry in ~/.vesper/config.json persists
+  // This is intentional - no deleteWorkspace API and entries are minimal
+  console.log(`[E2E-CLEANUP] Done (workspace config entry preserved)`);
+}
+
+/**
+ * Force fresh start by cleaning up before tests
+ * Same as cleanup but runs before setup
+ */
+async function freshStart() {
+  console.log(`[E2E-FRESH] Starting fresh - removing previous test artifacts...`);
+  await cleanupTestWorkspace();
 }
 
 // Export for use by run-all.cjs
 module.exports = {
   setupTestWorkspace,
   cleanupTestWorkspace,
+  freshStart,
   TEST_WORKSPACE_NAME,
   TEST_WORKSPACE_DIR
 };
