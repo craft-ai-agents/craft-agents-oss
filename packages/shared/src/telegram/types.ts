@@ -77,6 +77,40 @@ export interface TelegramSessionId {
 }
 
 /**
+ * Metadata stored with sessions created via Telegram.
+ *
+ * This metadata is persisted with the session and used for:
+ * - Routing responses back to the correct chat
+ * - Displaying session context in the UI
+ * - Filtering and searching sessions by source
+ */
+export interface TelegramSessionMetadata {
+  /** Type identifier for Telegram sessions */
+  type: 'telegram';
+
+  /** Chat ID where this session originated */
+  chatId: number;
+
+  /** Human-readable chat title (empty for private chats) */
+  chatTitle: string;
+
+  /** Chat type: 'group', 'supergroup', or 'private' */
+  chatType: 'group' | 'supergroup' | 'private';
+
+  /** User ID of the session creator */
+  userId: number;
+
+  /** Username of the session creator (may be empty) */
+  username: string;
+
+  /** First name of the session creator */
+  firstName: string;
+
+  /** Session creation source */
+  createdVia: 'telegram';
+}
+
+/**
  * Formatted result ready for delivery back to Telegram.
  *
  * Respects Telegram's 4096 character limit per message.

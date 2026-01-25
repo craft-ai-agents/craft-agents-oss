@@ -1,5 +1,5 @@
 import { mkdir, readFile, writeFile } from 'fs/promises'
-import { join } from 'path'
+import { join, dirname } from 'path'
 import type { TelegramSessionId } from './types'
 
 /**
@@ -45,6 +45,9 @@ export class SessionMapper {
    */
   async save(): Promise<void> {
     try {
+      // Ensure parent directory exists
+      await mkdir(dirname(this.mappingFilePath), { recursive: true })
+
       const data = Array.from(this.mappings.entries()).map(([key, sessionId]) => ({
         key,
         sessionId,
@@ -52,7 +55,9 @@ export class SessionMapper {
 
       await writeFile(this.mappingFilePath, JSON.stringify(data, null, 2), 'utf-8')
     } catch (error) {
-      console.error('Failed to save Telegram mappings:', error)
+      const errorMsg = `Failed to save Telegram session mappings: ${error instanceof Error ? error.message : String(error)}`
+      console.error(errorMsg, error)
+      throw new Error(errorMsg)
     }
   }
 
@@ -76,8 +81,14 @@ export class SessionMapper {
     const sessionId = getSessionId(chatId, userId)
     this.mappings.set(key, sessionId)
 
-    // Persist immediately
-    await this.save()
+    // Persist immediately with rollback on failure
+    try {
+      await this.save()
+    } catch (error) {
+      // Rollback in-memory state on save failure
+      this.mappings.delete(key)
+      throw error
+    }
 
     return sessionId
   }

@@ -18,7 +18,8 @@ export function extractDirective(message: string): {
 
   // Pattern: /directive
   // Note: Telegram uses underscores in /allow_all for bot commands
-  const match = trimmed.match(/^\/(safe|ask|allow_all)\s+(.*)$/i)
+  // Use non-greedy match (.+?) to prevent ReDoS vulnerability
+  const match = trimmed.match(/^\/(safe|ask|allow_all)\s+(.+?)$/is)
 
   if (!match) {
     // No directive found - treat entire message as content

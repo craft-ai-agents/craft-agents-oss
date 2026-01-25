@@ -1,4 +1,4 @@
-import type { TelegramMessage, TelegramErrorCode } from './types'
+import type { TelegramMessage, TelegramErrorCode, TelegramSessionMetadata } from './types'
 import { getSessionId } from './session-mapper'
 import { extractDirective, type PermissionDirective } from './directive-parser'
 import type { AgentEvent } from '@vesper/core/types'
@@ -7,9 +7,9 @@ import type { AgentEvent } from '@vesper/core/types'
 // Defines the subset of SessionManager methods used by the message router
 interface SessionManager {
   getSession(sessionId: string): Promise<{ id: string } | null>
-  createSession(workspaceId: string, options?: {
+  createSession<M = Record<string, unknown>>(workspaceId: string, options?: {
     name?: string
-    metadata?: Record<string, unknown>
+    metadata?: M
   }): Promise<{ id: string }>
   sendMessage(sessionId: string, message: string, attachments?: unknown[]): Promise<void>
   setSessionPermissionMode(sessionId: string, mode: 'safe' | 'ask' | 'allow-all'): void
@@ -287,19 +287,25 @@ export class TelegramMessageRouter {
       let session = await this.sessionManager.getSession(sessionId)
       if (!session) {
         try {
-          session = await this.sessionManager.createSession(this.workspaceId, {
-            name: `${msg.chatTitle || 'Private'} / ${msg.firstName}`,
-            metadata: {
-              type: 'telegram',
-              chatId: msg.chatId,
-              chatTitle: msg.chatTitle,
-              chatType: msg.chatType,
-              userId: msg.userId,
-              username: msg.username,
-              firstName: msg.firstName,
-              createdVia: 'telegram',
-            } as any,
-          })
+          // Create properly typed metadata for the session
+          const metadata: TelegramSessionMetadata = {
+            type: 'telegram',
+            chatId: msg.chatId,
+            chatTitle: msg.chatTitle,
+            chatType: msg.chatType,
+            userId: msg.userId,
+            username: msg.username,
+            firstName: msg.firstName,
+            createdVia: 'telegram',
+          }
+
+          session = await this.sessionManager.createSession<TelegramSessionMetadata>(
+            this.workspaceId,
+            {
+              name: `${msg.chatTitle || 'Private'} / ${msg.firstName}`,
+              metadata,
+            }
+          )
         } catch (sessionError) {
           // Session creation failed - send feedback and rethrow
           await this.sendErrorFeedback(msg.chatId, 'SESSION_CREATE_FAILED')
@@ -391,6 +397,9 @@ export class TelegramMessageRouter {
    * This registers a callback with the SessionManager that will be invoked
    * when the agent finishes processing the message.
    *
+   * IMPORTANT: The callback is registered BEFORE adding to tracking maps
+   * to prevent race conditions with very fast agent responses.
+   *
    * @param sessionId - The session ID to monitor
    * @param originalMsg - The original Telegram message for tracking
    */
@@ -398,28 +407,20 @@ export class TelegramMessageRouter {
     sessionId: string,
     originalMsg: TelegramMessage,
   ): void {
-    // Create timeout handler
-    const timeoutHandle = setTimeout(() => {
-      this.handleSessionTimeout(originalMsg.id, originalMsg.chatId)
-    }, this.timeoutMs)
-
-    // Create pending message entry for tracking
+    // Create pending message entry FIRST (but don't register in maps yet)
     const pending: PendingMessage = {
       message: originalMsg,
       sessionId,
       startedAt: Date.now(),
-      timeoutHandle,
+      timeoutHandle: null as any, // Will be set after callback registration
       responseText: '',
       hasError: false,
       resolve: () => {}, // Not using promise-based flow anymore
     }
 
-    // Register in tracking maps
-    this.pendingMessages.set(originalMsg.id, pending)
-    this.sessionToMessageId.set(sessionId, originalMsg.id)
-
-    // Register completion callback with SessionManager
-    // This callback is invoked by SessionManager.onProcessingStopped when agent completes
+    // Register completion callback BEFORE adding to tracking maps
+    // This prevents race conditions where fast agent responses might complete
+    // before the callback is registered
     this.sessionManager.setSessionCompletionCallback(
       sessionId,
       async (_completedSessionId: string, messages: Array<{ role: string; content?: string; isIntermediate?: boolean }>) => {
@@ -436,13 +437,26 @@ export class TelegramMessageRouter {
 
         // Update pending message with response
         const pendingMsg = this.pendingMessages.get(originalMsg.id)
-        if (pendingMsg) {
-          pendingMsg.responseText = responseText
-          // Finalize the message (notifies callbacks, cleans up tracking)
-          this.finalizeMessage(originalMsg.id, false)
+        if (!pendingMsg) {
+          console.warn(`[TelegramRouter] Completion callback fired but no pending message for ${originalMsg.id}`)
+          return
         }
+
+        pendingMsg.responseText = responseText
+        // Finalize the message (notifies callbacks, cleans up tracking)
+        this.finalizeMessage(originalMsg.id, false)
       }
     )
+
+    // NOW register in tracking maps (callback is already registered)
+    this.pendingMessages.set(originalMsg.id, pending)
+    this.sessionToMessageId.set(sessionId, originalMsg.id)
+
+    // Create timeout LAST (after callback and maps are set up)
+    const timeoutHandle = setTimeout(() => {
+      this.handleSessionTimeout(originalMsg.id, originalMsg.chatId)
+    }, this.timeoutMs)
+    pending.timeoutHandle = timeoutHandle
 
     console.log(`[TelegramRouter] Completion callback registered for session ${sessionId}, message ${originalMsg.id}`)
   }

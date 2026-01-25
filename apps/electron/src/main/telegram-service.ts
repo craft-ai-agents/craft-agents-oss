@@ -4,6 +4,7 @@ import type { TelegramMessage, TelegramConnectionStatus, TelegramError } from '@
 import type { CredentialManager } from '@vesper/shared/credentials'
 import { createMessageRouter, type TelegramMessageRouter, type SessionCompletionResult } from '@vesper/shared/telegram/message-router'
 import { formatLargeResult } from '@vesper/shared/telegram/result-formatter'
+import { sanitizeError } from '@vesper/shared/utils'
 import { showNotification } from './notifications'
 import { IPC_CHANNELS } from '../shared/types'
 import { BrowserWindow } from 'electron'
@@ -13,6 +14,11 @@ import { BrowserWindow } from 'electron'
  * Telegram allows 30 messages/second, so 35ms delay is safe
  */
 const MESSAGE_SEND_DELAY_MS = 35
+
+/**
+ * Maximum number of messages allowed in queue (~2MB max memory)
+ */
+const MAX_QUEUE_SIZE = 1000
 
 /**
  * Queue for rate-limited message sending
@@ -28,11 +34,24 @@ class MessageQueue {
 
   async enqueue(chatId: number, text: string): Promise<number> {
     return new Promise((resolve, reject) => {
+      // Reject if queue is full
+      if (this.queue.length >= MAX_QUEUE_SIZE) {
+        reject(new Error(
+          `Message queue full (${MAX_QUEUE_SIZE} messages). ` +
+          `Telegram delivery is overwhelmed. Try again later.`
+        ))
+        return
+      }
+
       this.queue.push({ chatId, text, resolve, reject })
       if (!this.processing) {
         void this.processQueue()
       }
     })
+  }
+
+  getQueueSize(): number {
+    return this.queue.length
   }
 
   private async processQueue(): Promise<void> {
@@ -150,11 +169,14 @@ export class TelegramService extends EventEmitter {
       console.log(`🤖 Telegram bot started: @${botInfo.username}`)
 
     } catch (error) {
+      // Sanitize bot token from error before logging or storing
+      const sanitized = sanitizeError(error, [botToken])
+
       this.connectionStatus = {
         isConnected: false,
         isConnecting: false,
         lastDisconnect: {
-          error: error as Error,
+          error: sanitized as Error,
           date: new Date()
         }
       }
@@ -164,11 +186,11 @@ export class TelegramService extends EventEmitter {
         message: 'Failed to start Telegram bot',
         timestamp: Date.now(),
         code: 'INTERNAL_ERROR',
-        originalError: error
+        originalError: sanitized
       }
       this.emit('error', errorEvent)
 
-      throw error
+      throw sanitized
     }
   }
 
@@ -380,7 +402,17 @@ export class TelegramService extends EventEmitter {
 
       // Send each chunk with rate limiting
       for (const chunk of chunks) {
-        await this.sendMessage(chatId, chunk)
+        try {
+          await this.sendMessage(chatId, chunk)
+        } catch (error) {
+          if (error instanceof Error && error.message.includes('queue full')) {
+            // Send user-friendly error about system overload
+            console.error(`Queue full, dropping message for chat ${chatId}`)
+            await this.sendMessage(chatId, '⚠️ System is overloaded. Please try again in a few minutes.')
+            break  // Stop trying to send chunks
+          }
+          throw error
+        }
       }
 
       console.log(`✅ Delivered result to Telegram chat ${chatId} (${chunks.length} messages)`)

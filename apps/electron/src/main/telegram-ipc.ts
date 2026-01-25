@@ -9,6 +9,7 @@ import { ipcMain, BrowserWindow } from 'electron'
 import { IPC_CHANNELS } from '../shared/types'
 import { getTelegramService } from './telegram-service'
 import { getCredentialManager } from '@vesper/shared/credentials'
+import { sanitizeError } from '@vesper/shared/utils'
 import type { SessionManager } from './sessions'
 
 /**
@@ -44,8 +45,9 @@ export function registerTelegramHandlers(sessionManager: SessionManager): void {
 
         return { success: true }
       } catch (error) {
-        console.error('[Telegram IPC] Connect error:', error)
-        return { success: false, error: (error as Error).message }
+        const sanitized = sanitizeError(error, [botToken])
+        console.error('[Telegram IPC] Connect error:', sanitized)
+        return { success: false, error: (sanitized as Error).message }
       }
     }
   )
@@ -63,6 +65,7 @@ export function registerTelegramHandlers(sessionManager: SessionManager): void {
 
         return { success: true }
       } catch (error) {
+        // No bot token to sanitize on disconnect
         console.error('[Telegram IPC] Disconnect error:', error)
         return { success: false, error: (error as Error).message }
       }
@@ -81,6 +84,7 @@ export function registerTelegramHandlers(sessionManager: SessionManager): void {
 
         return { success: true, status }
       } catch (error) {
+        // No bot token to sanitize on status check
         console.error('[Telegram IPC] Status error:', error)
         return { success: false, error: (error as Error).message }
       }
@@ -99,6 +103,7 @@ export function registerTelegramHandlers(sessionManager: SessionManager): void {
 
         return { success: true, messageId }
       } catch (error) {
+        // No bot token to sanitize on send message
         console.error('[Telegram IPC] Send message error:', error)
         return { success: false, error: (error as Error).message }
       }
@@ -116,6 +121,7 @@ export function registerTelegramHandlers(sessionManager: SessionManager): void {
 
         return { success: true, token }
       } catch (error) {
+        // No bot token to sanitize on get saved token (token not retrieved on error)
         console.error('[Telegram IPC] Get saved token error:', error)
         return { success: false, error: (error as Error).message }
       }
