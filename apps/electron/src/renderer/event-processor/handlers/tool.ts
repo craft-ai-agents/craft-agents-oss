@@ -90,8 +90,8 @@ export function handleToolResult(
 ): SessionState {
   const { session, streaming } = state
 
-  // Check for render_ui tool result
-  if (event.toolName === 'render_ui' && event.result && !event.isError) {
+  // Check for render_ui tool result (tool name is prefixed with MCP server name: mcp__session__render_ui)
+  if (event.toolName?.endsWith('render_ui') && event.result && !event.isError) {
     const renderData = parseRenderUiResult(event.result)
     if (renderData) {
       // Create assistant message with jsonRender tree
