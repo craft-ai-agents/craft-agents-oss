@@ -28,12 +28,13 @@ const sections: ShortcutSection[] = [
   {
     title: 'Global',
     shortcuts: [
+      { keys: [cmdKey, 'K'], description: 'Open command palette' },
       { keys: [cmdKey, '1'], description: 'Focus sidebar' },
       { keys: [cmdKey, '2'], description: 'Focus session list' },
       { keys: [cmdKey, '3'], description: 'Focus chat input' },
       { keys: [cmdKey, 'N'], description: 'New chat' },
       { keys: [cmdKey, 'Shift', 'N'], description: 'New window' },
-      { keys: [cmdKey, '\\'], description: 'Toggle sidebar' },
+      { keys: [cmdKey, 'B'], description: 'Toggle sidebar' },
       { keys: [cmdKey, ','], description: 'Open settings' },
       { keys: [cmdKey, '/'], description: 'Show this dialog' },
     ],
