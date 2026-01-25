@@ -6,8 +6,9 @@
  */
 
 import { useEffect, useState } from 'react'
-import { useAtom } from 'jotai'
+import { useAtom, useAtomValue } from 'jotai'
 import { MessageSquare, LogOut, Plus, CheckCircle2, XCircle } from 'lucide-react'
+import { toast } from 'sonner'
 import { useAppShellContext } from '@/context/AppShellContext'
 import {
   SettingsSection,
@@ -20,6 +21,7 @@ import {
   slackWorkspacesAtom,
   slackErrorAtom,
   slackOAuthLoadingAtom,
+  slackServiceStatusAtom,
 } from '@/atoms/slack'
 
 export function SlackSettingsSection() {
@@ -29,6 +31,8 @@ export function SlackSettingsSection() {
   const [error, setError] = useAtom(slackErrorAtom)
   const [isLoading, setIsLoading] = useAtom(slackOAuthLoadingAtom)
   const [hasCredentials, setHasCredentials] = useState(false)
+  const [connecting, setConnecting] = useState(false)
+  const serviceStatuses = useAtomValue(slackServiceStatusAtom)
 
   // Load Slack connection status when component mounts
   useEffect(() => {
@@ -125,6 +129,41 @@ export function SlackSettingsSection() {
     })
   }
 
+  // Handler for connecting service
+  const handleConnectService = async () => {
+    if (!workspaceId) return
+
+    setConnecting(true)
+    try {
+      const result = await window.electronAPI.slackConnect(workspaceId)
+      if (result.success) {
+        toast.success('Connected to Slack')
+      } else {
+        toast.error('Failed to connect', { description: result.error })
+      }
+    } catch (error) {
+      toast.error('Connection error', { description: String(error) })
+    } finally {
+      setConnecting(false)
+    }
+  }
+
+  // Handler for disconnecting service
+  const handleDisconnectService = async () => {
+    if (!workspaceId) return
+
+    try {
+      await window.electronAPI.slackDisconnectService(workspaceId)
+      toast.success('Disconnected from Slack')
+    } catch (error) {
+      toast.error('Disconnect error', { description: String(error) })
+    }
+  }
+
+  // Get service connection status for current workspace
+  const serviceStatus = workspaceId ? serviceStatuses[workspaceId] : undefined
+  const isServiceConnected = serviceStatus?.status === 'connected'
+
   // Show credentials warning if not configured
   if (!hasCredentials) {
     return (
@@ -180,7 +219,33 @@ export function SlackSettingsSection() {
               </SettingsRow>
             ))}
 
-            {/* Disconnect button */}
+            {/* Service Connection Section */}
+            <div className="border-t border-gray-200 dark:border-gray-800 pt-4 space-y-3">
+              <div>
+                <h4 className="text-sm font-medium">Message Listening</h4>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Enable real-time message listening to receive and process Slack messages.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant={isServiceConnected ? 'outline' : 'default'}
+                  size="sm"
+                  onClick={isServiceConnected ? handleDisconnectService : handleConnectService}
+                  disabled={connecting}
+                >
+                  {connecting ? 'Connecting...' : isServiceConnected ? 'Stop Listening' : 'Start Listening'}
+                </Button>
+                {isServiceConnected && serviceStatus?.teamName && (
+                  <div className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+                    <div className="w-2 h-2 rounded-full bg-green-600 dark:bg-green-400" />
+                    Listening to {serviceStatus.teamName}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Disconnect OAuth button */}
             <div className="border-t border-gray-200 dark:border-gray-800 pt-4">
               <Button
                 variant="outline"
@@ -190,7 +255,7 @@ export function SlackSettingsSection() {
                 className="text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950"
               >
                 <LogOut className="w-4 h-4 mr-2" />
-                Disconnect Slack
+                Disconnect OAuth
               </Button>
             </div>
           </>

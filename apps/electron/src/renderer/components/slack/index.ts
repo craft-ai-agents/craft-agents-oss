@@ -5,3 +5,4 @@
  */
 
 export { SlackSettingsSection } from './SlackSettingsSection'
+export { SlackEventListener } from './SlackEventListener'

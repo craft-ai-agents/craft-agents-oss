@@ -493,6 +493,33 @@ const api: ElectronAPI = {
   slackHasOAuthCredentials: () =>
     ipcRenderer.invoke(IPC_CHANNELS.SLACK_HAS_OAUTH_CREDENTIALS),
 
+  // Slack service methods
+  slackConnect: (workspaceId: string, accountId?: string, config?: any) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SLACK_CONNECT, { workspaceId, accountId, config }),
+  slackDisconnectService: (workspaceId: string, accountId?: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SLACK_DISCONNECT_SERVICE, { workspaceId, accountId }),
+  slackSendMessage: (workspaceId: string, message: any, accountId?: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SLACK_SEND_MESSAGE, { workspaceId, accountId, message }),
+  slackGetServiceStatus: (workspaceId: string, accountId?: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SLACK_GET_SERVICE_STATUS, { workspaceId, accountId }),
+
+  // Slack event listeners
+  onSlackMessageReceived: (callback: (data: any) => void) => {
+    const handler = (_: any, data: any) => callback(data)
+    ipcRenderer.on('slack:message-received', handler)
+    return () => ipcRenderer.removeListener('slack:message-received', handler)
+  },
+  onSlackStatusChanged: (callback: (data: any) => void) => {
+    const handler = (_: any, data: any) => callback(data)
+    ipcRenderer.on('slack:status-changed', handler)
+    return () => ipcRenderer.removeListener('slack:status-changed', handler)
+  },
+  onSlackError: (callback: (data: any) => void) => {
+    const handler = (_: any, data: any) => callback(data)
+    ipcRenderer.on('slack:error', handler)
+    return () => ipcRenderer.removeListener('slack:error', handler)
+  },
+
   // Daily Reports
   reportCreate: (options: any) =>
     ipcRenderer.invoke(IPC_CHANNELS.REPORT_CREATE, options),

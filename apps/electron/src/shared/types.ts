@@ -861,6 +861,11 @@ export const IPC_CHANNELS = {
   SLACK_GET_STATUS: 'slack:getStatus',
   SLACK_DISCONNECT: 'slack:disconnect',
   SLACK_HAS_OAUTH_CREDENTIALS: 'slack:hasOAuthCredentials',
+  SLACK_CONNECT: 'slack:connect',
+  SLACK_DISCONNECT_SERVICE: 'slack:disconnectService',
+  SLACK_SEND_MESSAGE: 'slack:sendMessage',
+  SLACK_GET_CHANNELS: 'slack:getChannels',
+  SLACK_GET_SERVICE_STATUS: 'slack:getServiceStatus',
 
   // Daily Reports
   REPORT_CREATE: 'report:create',
@@ -1178,6 +1183,15 @@ export interface ElectronAPI {
   slackGetStatus(workspaceId: string): Promise<{ success: boolean; connection?: any; workspaces?: any[] }>
   slackDisconnect(workspaceId: string, teamId?: string): Promise<{ success: boolean; error?: string }>
   slackHasOAuthCredentials(): Promise<boolean>
+  // Slack service methods
+  slackConnect(workspaceId: string, accountId?: string, config?: any): Promise<{ success: boolean; error?: string; state?: any }>
+  slackDisconnectService(workspaceId: string, accountId?: string): Promise<{ success: boolean; error?: string }>
+  slackSendMessage(workspaceId: string, message: any, accountId?: string): Promise<{ success: boolean; error?: string; ts?: string }>
+  slackGetServiceStatus(workspaceId: string, accountId?: string): Promise<{ connected: boolean; state: any }>
+  // Slack event listeners
+  onSlackMessageReceived(callback: (data: any) => void): () => void
+  onSlackStatusChanged(callback: (data: any) => void): () => void
+  onSlackError(callback: (data: any) => void): () => void
 
   // Daily Reports
   reportCreate(options: {
