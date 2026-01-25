@@ -1,12 +1,6 @@
 import { mkdir, readFile, writeFile } from 'fs/promises'
 import { join } from 'path'
-
-// Composite key that uniquely identifies a Telegram conversation
-export interface TelegramSessionId {
-  chatId: number // Chat ID (group or private)
-  userId: number // User ID of sender
-  // Composite key: immutable once created
-}
+import type { TelegramSessionId } from './types'
 
 /**
  * Deterministically generate Vesper sessionId from Telegram identifiers

@@ -94,6 +94,9 @@ export interface FormattedResult {
 
   /** True if result was truncated across multiple messages */
   truncated: boolean;
+
+  /** Deep link to view full result in desktop app (if applicable) */
+  deepLink?: string;
 }
 
 /**

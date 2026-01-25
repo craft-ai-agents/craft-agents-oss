@@ -11,6 +11,7 @@
  */
 
 import type { Message } from '@vesper/core/types'
+import type { FormattedResult } from './types'
 
 // --- Constants for Telegram message size limits ---
 
@@ -22,19 +23,6 @@ export const MAX_TOTAL_SIZE = 16384
 
 /** Preview length when using deep links */
 export const PREVIEW_LENGTH = 500
-
-export interface FormattedResult {
-  /** Array of Telegram messages (≤4096 chars each) */
-  messages: string[]
-  /** One-liner summary (max ~100 chars) */
-  summary: string
-  /** Full untruncated result in markdown */
-  fullMarkdown: string
-  /** True if result was split across multiple messages or truncated */
-  truncated: boolean
-  /** Deep link to view full result in desktop app (if applicable) */
-  deepLink?: string
-}
 
 // --- Deep Link Helper Functions ---
 
