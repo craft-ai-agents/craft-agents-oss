@@ -1,0 +1,25 @@
+{
+  "name": "Ivory & Ebony",
+  "description": "Classic luxury with cognac leather accents inspired by AMAN Hotels",
+  "author": "Vesper",
+  "license": "MIT",
+  "supportedModes": ["light", "dark"],
+  "shikiTheme": {
+    "light": "github-light",
+    "dark": "github-dark"
+  },
+  "background": "oklch(0.97 0.005 85)",
+  "foreground": "oklch(0.22 0.01 280)",
+  "accent": "oklch(0.45 0.08 30)",
+  "info": "oklch(0.65 0.12 75)",
+  "success": "oklch(0.50 0.10 155)",
+  "destructive": "oklch(0.55 0.20 25)",
+  "dark": {
+    "background": "oklch(0.15 0.01 280)",
+    "foreground": "oklch(0.95 0.005 85)",
+    "accent": "oklch(0.55 0.10 35)",
+    "info": "oklch(0.70 0.14 75)",
+    "success": "oklch(0.55 0.12 155)",
+    "destructive": "oklch(0.60 0.22 25)"
+  }
+}

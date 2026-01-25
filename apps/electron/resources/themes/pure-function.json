@@ -1,0 +1,25 @@
+{
+  "name": "Pure Function",
+  "description": "Dieter Rams minimalism - less, but better",
+  "author": "Vesper",
+  "license": "MIT",
+  "supportedModes": ["light", "dark"],
+  "shikiTheme": {
+    "light": "github-light",
+    "dark": "github-dark"
+  },
+  "background": "oklch(0.99 0 0)",
+  "foreground": "oklch(0.20 0 0)",
+  "accent": "oklch(0.50 0.01 0)",
+  "info": "oklch(0.75 0.10 85)",
+  "success": "oklch(0.55 0.08 145)",
+  "destructive": "oklch(0.55 0.15 25)",
+  "dark": {
+    "background": "oklch(0.12 0 0)",
+    "foreground": "oklch(0.95 0 0)",
+    "accent": "oklch(0.55 0.01 0)",
+    "info": "oklch(0.78 0.12 85)",
+    "success": "oklch(0.58 0.10 145)",
+    "destructive": "oklch(0.60 0.18 25)"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "name": "Jade & Midnight",
+  "description": "Asian-inspired refinement with celadon jade and ink-wash aesthetics",
+  "author": "Vesper",
+  "license": "MIT",
+  "supportedModes": ["light", "dark"],
+  "shikiTheme": {
+    "light": "github-light",
+    "dark": "github-dark"
+  },
+  "background": "oklch(0.96 0.01 180)",
+  "foreground": "oklch(0.25 0.02 250)",
+  "accent": "oklch(0.58 0.12 165)",
+  "info": "oklch(0.68 0.10 80)",
+  "success": "oklch(0.52 0.15 150)",
+  "destructive": "oklch(0.56 0.22 20)",
+  "dark": {
+    "background": "oklch(0.16 0.03 250)",
+    "foreground": "oklch(0.92 0.01 180)",
+    "accent": "oklch(0.62 0.14 165)",
+    "info": "oklch(0.72 0.12 80)",
+    "success": "oklch(0.56 0.16 150)",
+    "destructive": "oklch(0.60 0.24 20)"
+  }
+}

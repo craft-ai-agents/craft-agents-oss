@@ -267,6 +267,84 @@ export const DEFAULT_THEME: ThemeOverrides = {
   },
 };
 
+/**
+ * Premium Theme Collection
+ * Inspired by Monocle Magazine and AMAN Hotels (sophisticated luxury)
+ * Plus one Dieter Rams functional minimalism theme
+ */
+
+// Theme 1: Ivory & Ebony - Classic Luxury
+export const IVORY_EBONY_THEME: ThemeOverrides = {
+  background: 'oklch(0.97 0.005 85)', // Warm ivory
+  foreground: 'oklch(0.22 0.01 280)', // Deep charcoal
+  accent: 'oklch(0.45 0.08 30)', // Cognac leather brown
+  info: 'oklch(0.65 0.12 75)', // Burnished gold
+  success: 'oklch(0.50 0.10 155)', // Forest green
+  destructive: 'oklch(0.55 0.20 25)', // Deep burgundy
+  dark: {
+    background: 'oklch(0.15 0.01 280)', // Ebony black
+    foreground: 'oklch(0.95 0.005 85)', // Soft ivory
+    accent: 'oklch(0.55 0.10 35)', // Warm cognac
+    info: 'oklch(0.70 0.14 75)', // Polished brass
+    success: 'oklch(0.55 0.12 155)', // Sage green
+    destructive: 'oklch(0.60 0.22 25)', // Ruby red
+  },
+};
+
+// Theme 2: Sand & Stone - Natural Elements
+export const SAND_STONE_THEME: ThemeOverrides = {
+  background: 'oklch(0.93 0.02 70)', // Warm sand
+  foreground: 'oklch(0.28 0.02 260)', // Cool stone gray
+  accent: 'oklch(0.60 0.10 50)', // Terra cotta
+  info: 'oklch(0.70 0.12 65)', // Desert amber
+  success: 'oklch(0.55 0.12 140)', // Olive green
+  destructive: 'oklch(0.58 0.18 30)', // Clay red
+  dark: {
+    background: 'oklch(0.20 0.02 260)', // Slate stone
+    foreground: 'oklch(0.90 0.02 70)', // Light sand
+    accent: 'oklch(0.65 0.12 50)', // Warm terra cotta
+    info: 'oklch(0.72 0.14 65)', // Amber glow
+    success: 'oklch(0.58 0.14 140)', // Muted olive
+    destructive: 'oklch(0.62 0.20 30)', // Rust red
+  },
+};
+
+// Theme 3: Jade & Midnight - Asian Luxury
+export const JADE_MIDNIGHT_THEME: ThemeOverrides = {
+  background: 'oklch(0.96 0.01 180)', // Pale jade
+  foreground: 'oklch(0.25 0.02 250)', // Ink blue-black
+  accent: 'oklch(0.58 0.12 165)', // Celadon jade
+  info: 'oklch(0.68 0.10 80)', // Soft gold
+  success: 'oklch(0.52 0.15 150)', // Bamboo green
+  destructive: 'oklch(0.56 0.22 20)', // Cinnabar red
+  dark: {
+    background: 'oklch(0.16 0.03 250)', // Midnight blue
+    foreground: 'oklch(0.92 0.01 180)', // Soft jade white
+    accent: 'oklch(0.62 0.14 165)', // Luminous jade
+    info: 'oklch(0.72 0.12 80)', // Lantern gold
+    success: 'oklch(0.56 0.16 150)', // Deep jade
+    destructive: 'oklch(0.60 0.24 20)', // Imperial red
+  },
+};
+
+// Theme 4: Pure Function - Dieter Rams Aesthetic
+export const PURE_FUNCTION_THEME: ThemeOverrides = {
+  background: 'oklch(0.99 0 0)', // Pure white
+  foreground: 'oklch(0.20 0 0)', // True black
+  accent: 'oklch(0.50 0.01 0)', // Neutral gray (minimal color)
+  info: 'oklch(0.75 0.10 85)', // Braun yellow (subtle nod)
+  success: 'oklch(0.55 0.08 145)', // Muted green (barely there)
+  destructive: 'oklch(0.55 0.15 25)', // Understated red
+  dark: {
+    background: 'oklch(0.12 0 0)', // Deep black
+    foreground: 'oklch(0.95 0 0)', // Off-white
+    accent: 'oklch(0.55 0.01 0)', // Lighter neutral gray
+    info: 'oklch(0.78 0.12 85)', // Subtle Braun yellow
+    success: 'oklch(0.58 0.10 145)', // Muted green
+    destructive: 'oklch(0.60 0.18 25)', // Controlled red
+  },
+};
+
 // ============================================
 // Preset Themes
 // ============================================
