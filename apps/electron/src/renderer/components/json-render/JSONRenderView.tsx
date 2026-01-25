@@ -16,7 +16,7 @@ import {
   CardContent,
 } from '../ui/card'
 import { Badge } from '../ui/badge'
-import { Button } from '../ui/button'
+import { Button as ShadcnButton } from '../ui/button'
 import {
   Select,
   SelectContent,
@@ -197,14 +197,14 @@ const components = {
     }, [action, disabled, onAction])
 
     return (
-      <Button
+      <ShadcnButton
         variant={variant}
         size={size}
         disabled={!!disabled || loading}
         onClick={handleClick}
       >
         {loading ? 'Loading...' : label}
-      </Button>
+      </ShadcnButton>
     )
   },
 
