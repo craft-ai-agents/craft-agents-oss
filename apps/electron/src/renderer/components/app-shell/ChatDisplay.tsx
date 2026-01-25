@@ -47,7 +47,7 @@ import type { RichTextInputHandle } from "@/components/ui/rich-text-input"
 import { useBackgroundTasks } from "@/hooks/useBackgroundTasks"
 import { CHAT_LAYOUT } from "@/config/layout"
 import { LoopProgressIndicator, LoopSummaryCard } from "@/components/loop"
-import { JSONRenderView, JSONRenderTest } from "@/components/json-render"
+import { JSONRenderView } from "@/components/json-render"
 import { detectScheduleIntent, parseTimeToCron } from "@/hooks/useScheduleFromChat"
 import { toast } from "sonner"
 import cronstrue from "cronstrue"
@@ -896,8 +896,6 @@ export function ChatDisplay({
                     </AnimatePresence>
                   </motion.div>
                 </AnimatePresence>
-                {/* DEBUG: JSON Render Test - REMOVE AFTER TESTING */}
-                <JSONRenderTest />
 
                 {/* Processing Indicator - always visible while processing */}
                 {session.isProcessing && (() => {
