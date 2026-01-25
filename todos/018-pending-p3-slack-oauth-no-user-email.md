@@ -141,6 +141,7 @@ None required.
 | Date | Action | Learnings |
 |------|--------|-----------|
 | 2026-01-23 | Created during code review | users:read.email scope required |
+| 2026-01-25 | Verified issue still exists | SlackOAuthResult interface (L78-94) has no email field, unlike GoogleOAuthResult |
 
 ## Resources
 

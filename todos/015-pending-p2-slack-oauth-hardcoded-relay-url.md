@@ -122,6 +122,7 @@ None required.
 | Date | Action | Learnings |
 |------|--------|-----------|
 | 2026-01-23 | Created during code review | Update branding from "Craft Agents" to "Vesper" |
+| 2026-01-25 | Verified issue still exists | Line 305: `https://agents.craft.do/auth/slack/callback?port=${port}` hardcoded |
 
 ## Resources
 

@@ -126,6 +126,7 @@ None required.
 | Date | Action | Learnings |
 |------|--------|-----------|
 | 2026-01-23 | Created during code review | DRY principle for security functions |
+| 2026-01-25 | Verified issue still exists | Duplicate in slack-oauth.ts (L108-110), google-oauth.ts (L98-100), pkce.ts uses base64url (L36-38) |
 
 ## Resources
 

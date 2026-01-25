@@ -136,6 +136,7 @@ None required.
 | Date | Action | Learnings |
 |------|--------|-----------|
 | 2026-01-23 | Created during code review | Apply to Google/Microsoft OAuth too |
+| 2026-01-25 | Verified issue still exists | No timeout in exchangeCodeForTokens (L137-144) and refreshSlackToken (L197-204) |
 
 ## Resources
 
