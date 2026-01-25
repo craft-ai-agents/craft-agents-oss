@@ -6,8 +6,8 @@
  */
 
 import { EventEmitter } from 'events'
-import type { CraftAgent } from '../agent/craft-agent.ts'
-import type { AgentEvent } from '@craft-agent/core/types'
+import type { VesperAgent } from '../agent/vesper-agent.ts'
+import type { AgentEvent } from '@vesper/core/types'
 import type {
   PRD,
   Story,
@@ -49,7 +49,7 @@ export interface RalphLoopRunnerEvents {
   complete: (result: LoopResult) => void
   paused: (state: LoopState) => void
   resumed: (state: LoopState) => void
-  /** Agent events forwarded from CraftAgent during story processing */
+  /** Agent events forwarded from VesperAgent during story processing */
   agent_event: (event: AgentEvent) => void
 }
 
@@ -71,7 +71,7 @@ export class RalphLoopRunner extends EventEmitter {
 
   constructor(
     private sessionId: string,
-    private agent: CraftAgent,
+    private agent: VesperAgent,
     private gitOps: GitOperations,
     private config: LoopConfig
   ) {
@@ -455,14 +455,14 @@ export class RalphLoopRunner extends EventEmitter {
  * Create a RalphLoopRunner instance
  *
  * @param sessionId - Session ID for this loop
- * @param agent - CraftAgent instance to use for processing
+ * @param agent - VesperAgent instance to use for processing
  * @param workingDirectory - Git working directory
  * @param config - Loop configuration (optional, uses defaults)
  * @returns Configured RalphLoopRunner
  */
 export function createLoopRunner(
   sessionId: string,
-  agent: CraftAgent,
+  agent: VesperAgent,
   workingDirectory: string,
   config?: Partial<LoopConfig>
 ): RalphLoopRunner {

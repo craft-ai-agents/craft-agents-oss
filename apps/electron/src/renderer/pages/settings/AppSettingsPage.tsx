@@ -30,7 +30,7 @@ import {
   ExternalLink,
   CheckCircle2,
 } from 'lucide-react'
-import { Spinner } from '@craft-agent/ui'
+import { Spinner } from '@vesper/ui'
 import type { AuthType } from '../../../shared/types'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 

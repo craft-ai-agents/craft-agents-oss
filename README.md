@@ -1,15 +1,15 @@
-# Vespr
+# Vesper
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
 
-Vespr is an open-source AI agent platform built by Tin from Ather Labs. It enables intuitive multitasking, no-fluff connection to any API or Service, sharing sessions, and a more document-centric workflow in a beautiful and fluid desktop experience.
+Vesper is an open-source AI agent platform built by Tin from Ather Labs. It enables intuitive multitasking, no-fluff connection to any API or Service, sharing sessions, and a more document-centric workflow in a beautiful and fluid desktop experience.
 
-Vespr leverages the Claude Agent SDK and Claude Code, combining what works great while adding significant improvements for agentic workflows. It's built with Agent Native software principles in mind and is highly customizable out of the box—one of the first of its kind.
+Vesper leverages the Claude Agent SDK and Claude Code, combining what works great while adding significant improvements for agentic workflows. It's built with Agent Native software principles in mind and is highly customizable out of the box—one of the first of its kind.
 
-Vespr is open source under the Apache 2.0 license—you're free to remix and modify anything. We're building Vespr with Vespr itself, no code editors required—any customization is just a prompt away.
+Vesper is open source under the Apache 2.0 license—you're free to remix and modify anything. We're building Vesper with Vesper itself, no code editors required—any customization is just a prompt away.
 
-We built Vespr because we wanted a better, more opinionated approach to working with the world's most powerful AI agents. We continue to improve it based on real-world usage and intuition.
+We built Vesper because we wanted a better, more opinionated approach to working with the world's most powerful AI agents. We continue to improve it based on real-world usage and intuition.
 
 <img width="1578" height="894" alt="image" src="https://github.com/user-attachments/assets/3f1f2fe8-7cf6-4487-99ff-76f6c8c0a3fb" />
 
@@ -19,19 +19,19 @@ We built Vespr because we wanted a better, more opinionated approach to working 
 
 **macOS / Linux:**
 ```bash
-curl -fsSL https://vespr.atherslabs.com/install-app.sh | bash
+curl -fsSL https://vesper.atherslabs.com/install-app.sh | bash
 ```
 
 **Windows (PowerShell):**
 ```powershell
-irm https://vespr.atherslabs.com/install-app.ps1 | iex
+irm https://vesper.atherslabs.com/install-app.ps1 | iex
 ```
 
 ### Build from Source
 
 ```bash
-git clone https://github.com/atherslabs/vespr.git
-cd vespr
+git clone https://github.com/atherslabs/vesper.git
+cd vesper
 bun install
 bun run electron:start
 ```
@@ -119,7 +119,7 @@ Use **SHIFT+TAB** to cycle through modes in the chat interface.
 
 ### Terminal Resume
 
-Resume your Vespr session in an external terminal for Claude Code CLI access:
+Resume your Vesper session in an external terminal for Claude Code CLI access:
 
 1. Start a session and send at least one message
 2. Click the **terminal icon** in the chat input area (appears after working directory badge)
@@ -141,7 +141,7 @@ Resume your Vespr session in an external terminal for Claude Code CLI access:
 ## Architecture
 
 ```
-vespr/
+vesper/
 ├── apps/
 │   └── electron/              # Desktop GUI (primary)
 │       └── src/
@@ -193,10 +193,10 @@ See [Google Cloud Console](https://console.cloud.google.com/apis/credentials) to
 
 ## Configuration
 
-Configuration is stored at `~/.vespr/`:
+Configuration is stored at `~/.vesper/`:
 
 ```
-~/.vespr/
+~/.vesper/
 ├── config.json              # Main config (workspaces, auth type)
 ├── credentials.enc          # Encrypted credentials (AES-256-GCM)
 ├── preferences.json         # User preferences
@@ -219,14 +219,14 @@ Tool responses exceeding ~60KB are automatically summarized using Claude Haiku w
 
 ### Deep Linking
 
-External apps can navigate using `vespr://` URLs:
+External apps can navigate using `vesper://` URLs:
 
 ```
-vespr://allChats                    # All chats view
-vespr://allChats/chat/session123    # Specific chat
-vespr://settings                    # Settings
-vespr://sources/source/github       # Source info
-vespr://action/new-chat             # Create new chat
+vesper://allChats                    # All chats view
+vesper://allChats/chat/session123    # Specific chat
+vesper://settings                    # Settings
+vesper://sources/source/github       # Source info
+vesper://action/new-chat             # Create new chat
 ```
 
 ## Tech Stack
@@ -250,7 +250,7 @@ This project uses the [Claude Agent SDK](https://www.npmjs.com/package/@anthropi
 
 ### Trademark
 
-"Vespr" is a trademark of Ather Labs. See [TRADEMARK.md](TRADEMARK.md) for usage guidelines.
+"Vesper" is a trademark of Ather Labs. See [TRADEMARK.md](TRADEMARK.md) for usage guidelines.
 
 ## Contributing
 

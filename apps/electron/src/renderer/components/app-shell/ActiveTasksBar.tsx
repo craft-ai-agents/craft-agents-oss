@@ -7,7 +7,7 @@
 
 import React from 'react'
 import { cn } from '@/lib/utils'
-import { Spinner } from '@craft-agent/ui'
+import { Spinner } from '@vesper/ui'
 import { TaskActionMenu, type TerminalOverlayData } from './TaskActionMenu'
 
 export interface BackgroundTask {

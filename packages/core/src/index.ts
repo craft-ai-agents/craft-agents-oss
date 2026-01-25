@@ -1,5 +1,5 @@
 /**
- * @craft-agent/core
+ * @vesper/core
  *
  * Core types and utilities for Vesper.
  *

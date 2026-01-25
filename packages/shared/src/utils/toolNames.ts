@@ -10,7 +10,7 @@
  */
 const TOOL_DISPLAY_NAMES: Record<string, string> = {
   // Documentation tools
-  'SearchCraftAgents': 'Search Documentation',
+  'SearchVesperAgents': 'Search Documentation',
 };
 
 /**

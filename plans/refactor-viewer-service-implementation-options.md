@@ -9,11 +9,11 @@
 
 ## Executive Summary
 
-The current Chat Session Share Feature has a **hard dependency** on `https://agents.craft.do` as the viewer service. This creates vendor lock-in, single point of failure, and conflicts with Vespr's philosophy of user-owned, portable data.
+The current Chat Session Share Feature has a **hard dependency** on `https://agents.craft.do` as the viewer service. This creates vendor lock-in, single point of failure, and conflicts with Vesper's philosophy of user-owned, portable data.
 
-Three implementation options exist with different trade-offs. This document analyzes each option against Vespr's existing architecture patterns to recommend the best path forward.
+Three implementation options exist with different trade-offs. This document analyzes each option against Vesper's existing architecture patterns to recommend the best path forward.
 
-**TL;DR Recommendation:** **Option A (Full Decoupling)** aligns perfectly with Vespr's existing abstraction patterns (credentials, sources, OAuth) and provides maximum flexibility while maintaining simplicity.
+**TL;DR Recommendation:** **Option A (Full Decoupling)** aligns perfectly with Vesper's existing abstraction patterns (credentials, sources, OAuth) and provides maximum flexibility while maintaining simplicity.
 
 ---
 
@@ -40,11 +40,11 @@ const response = await fetch(`${VIEWER_URL}/s/api`, { /* ... */ })
 | Rate limiting | Intermittent failures | Medium | **MEDIUM** |
 | Data privacy concerns | User sessions on third-party server | High | **HIGH** |
 
-### Alignment with Vespr Philosophy
+### Alignment with Vesper Philosophy
 
-Vespr's core values (from CLAUDE.md and architecture exploration):
+Vesper's core values (from CLAUDE.md and architecture exploration):
 
-1. **User Ownership** - Data stored locally in `~/.vespr/`, encrypted, portable
+1. **User Ownership** - Data stored locally in `~/.vesper/`, encrypted, portable
 2. **Privacy First** - No cloud dependency unless user chooses
 3. **Offline Capable** - Works without internet connection
 4. **Simplicity** - Sensible defaults, advanced features opt-in
@@ -108,7 +108,7 @@ function createViewerService(config?: ViewerConfig): ViewerService {
 
 **Workspace-level override** (optional):
 ```json
-// ~/.vespr/workspaces/{id}/viewer-config.json
+// ~/.vesper/workspaces/{id}/viewer-config.json
 {
   "type": "static-export",
   "exportPath": "~/my-shared-sessions",
@@ -171,7 +171,7 @@ Settings page with viewer configuration:
 
 #### Pros
 
-✅ **Aligns perfectly with Vespr patterns** - Mirrors credentials, sources, OAuth abstractions
+✅ **Aligns perfectly with Vesper patterns** - Mirrors credentials, sources, OAuth abstractions
 ✅ **Maximum flexibility** - 4 viewer backends out of the box
 ✅ **User ownership** - Static export gives users full control
 ✅ **Offline capable** - LocalViewer + StaticExport work offline
@@ -249,7 +249,7 @@ Single input field in settings:
 ❌ **No offline support** - Still requires internet
 ❌ **No privacy improvement** - Still uploads to server
 ❌ **No static export** - Can't generate HTML files
-❌ **Doesn't match Vespr patterns** - No abstraction, just hardcoded config
+❌ **Doesn't match Vesper patterns** - No abstraction, just hardcoded config
 ❌ **Not future-proof** - Locked into REST API shape
 
 #### Risk Assessment
@@ -285,7 +285,7 @@ interface ViewerService {
 {
   "viewer": {
     "type": "craft-hosted" | "static-export",
-    "exportPath": "~/vespr-shares",
+    "exportPath": "~/vesper-shares",
     "uploadCommand": "aws s3 sync . s3://bucket"
   }
 }
@@ -328,7 +328,7 @@ export class StaticExportViewer implements ViewerService {
 
 {viewerType === 'static-export' && (
   <>
-    <Input label="Export Path" placeholder="~/vespr-shares" />
+    <Input label="Export Path" placeholder="~/vesper-shares" />
     <Input label="Upload Command (Optional)" placeholder="aws s3 sync ..." />
   </>
 )}
@@ -340,7 +340,7 @@ export class StaticExportViewer implements ViewerService {
 ✅ **Maximum privacy** - Users control where files go
 ✅ **Offline capable** - Generate HTML without internet
 ✅ **Portable** - HTML files work anywhere
-✅ **Matches Vespr philosophy** - User-owned data
+✅ **Matches Vesper philosophy** - User-owned data
 ✅ **Simpler than full decoupling** - Only 2 backends to maintain
 ✅ **Good abstraction** - Foundation for future backends
 
@@ -385,7 +385,7 @@ export class StaticExportViewer implements ViewerService {
 | **Flexibility** | ✅✅ (4 options) | ❌ (URL only) | ✅ (2 options) | A |
 | **Enterprise Readiness** | ✅✅ (Self-host) | ✅ (Self-host) | ❌ (No server) | A |
 
-### Alignment with Vespr Philosophy
+### Alignment with Vesper Philosophy
 
 | Value | Option A (Full) | Option B (Quick) | Option C (Static) | Winner |
 |-------|-----------------|------------------|-------------------|--------|
@@ -411,7 +411,7 @@ export class StaticExportViewer implements ViewerService {
 
 ## Architecture Pattern Analysis
 
-### How Vespr Currently Handles Similar Problems
+### How Vesper Currently Handles Similar Problems
 
 #### Pattern 1: Credentials (Backend Abstraction)
 
@@ -555,7 +555,7 @@ class CraftOAuth {
 
 **Pros vs Option A:**
 - Faster (3-4 days vs 2 weeks)
-- Still matches Vespr patterns partially
+- Still matches Vesper patterns partially
 - Eliminates server dependency
 
 **Cons vs Option A:**
@@ -566,7 +566,7 @@ class CraftOAuth {
 
 **Why avoid:**
 
-- ❌ Doesn't match any Vespr pattern
+- ❌ Doesn't match any Vesper pattern
 - ❌ Creates tech debt (will refactor later)
 - ❌ Low user value (only helps self-hosters)
 - ❌ Doesn't address privacy or offline concerns
@@ -897,9 +897,9 @@ export class SessionManager {
 
 ## References
 
-- **Architecture Analysis:** `~/Documents/compound-docs/docs/solutions/architecture-patterns/session-share-viewer-architecture-vespr-20260123.md`
+- **Architecture Analysis:** `~/Documents/compound-docs/docs/solutions/architecture-patterns/session-share-viewer-architecture-vesper-20260123.md`
 - **Original Decoupling Plan:** `/Users/tinnguyen/vesper/docs/architecture/session-share-decoupling-plan.md`
-- **Vespr CLAUDE.md:** `/Users/tinnguyen/vesper/CLAUDE.md`
+- **Vesper CLAUDE.md:** `/Users/tinnguyen/vesper/CLAUDE.md`
 - **Existing Patterns:**
   - Credentials: `packages/shared/src/credentials/`
   - Sources: `packages/shared/src/sources/`

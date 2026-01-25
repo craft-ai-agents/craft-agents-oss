@@ -2,7 +2,7 @@
  * WhatsApp Integration Types
  *
  * Core types for WhatsApp message handling, session management,
- * and credential storage within Vespr's credential system.
+ * and credential storage within Vesper's credential system.
  */
 
 /**

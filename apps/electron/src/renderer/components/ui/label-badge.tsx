@@ -8,7 +8,7 @@
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 import { X } from 'lucide-react';
-import type { Label } from '@craft-agent/shared/labels';
+import type { Label } from '@vesper/shared/labels';
 
 export interface LabelBadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
   label: Label;

@@ -14,8 +14,8 @@ Thank you for your interest in contributing to Vesper! This document provides gu
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/anthropics/craft-agents.git
-   cd craft-agents
+   git clone https://github.com/AskTinNguyen/vesper.git
+   cd vesper
    ```
 
 2. Install dependencies:
@@ -93,14 +93,14 @@ How you tested these changes
 ## Project Structure
 
 ```
-craft-agents/
+vesper/
 ├── apps/
 │   ├── electron/    # Desktop GUI (primary interface)
-│   └── tui/         # Terminal CLI (deprecated)
+│   └── viewer/      # Document viewer app
 └── packages/
-    ├── core/        # @craft-agent/core - Shared types
-    ├── shared/      # @craft-agent/shared - Business logic
-    └── ui/          # @craft-agent/ui - React components
+    ├── core/        # Shared types
+    ├── shared/      # Business logic (agent, auth, sessions)
+    └── ui/          # Shared React components
 ```
 
 ## Key Areas

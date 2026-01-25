@@ -8,7 +8,7 @@
 
 ## Executive Summary
 
-Sprint 1 delivers a complete GitHub integration feature for Vespr, enabling non-technical knowledge workers to automatically generate daily engineering reports. The implementation spans:
+Sprint 1 delivers a complete GitHub integration feature for Vesper, enabling non-technical knowledge workers to automatically generate daily engineering reports. The implementation spans:
 
 - **Backend:** Secure GitHub OAuth, REST API client with automatic retry logic, daily report generation
 - **Frontend:** React components with Jotai state management, real-time event synchronization
@@ -31,7 +31,7 @@ Sprint 1 delivers a complete GitHub integration feature for Vespr, enabling non-
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                  Vespr Electron Application                │
+│                  Vesper Electron Application                │
 ├─────────────────────────────────────────────────────────────┤
 │                                                              │
 │  Frontend (React)                                           │
@@ -45,7 +45,7 @@ Sprint 1 delivers a complete GitHub integration feature for Vespr, enabling non-
 │  └── IPC Handlers                (9 channels)              │
 │       ↓ HTTP/HTTPS                                         │
 │  Shared Business Logic                                      │
-│  ├── @vespr/shared/github                                  │
+│  ├── @vesper/shared/github                                  │
 │  │   ├── oauth.ts                (GitHub OAuth 2.0)       │
 │  │   ├── client.ts               (REST API client)        │
 │  │   ├── daily-report.ts         (Report generation)      │
@@ -133,7 +133,7 @@ Return Success + User Login/Email
 
 **Example Usage:**
 ```typescript
-import { startGitHubOAuth } from '@vespr/shared/github'
+import { startGitHubOAuth } from '@vesper/shared/github'
 
 const result = await startGitHubOAuth()
 if (result.success) {
@@ -260,7 +260,7 @@ export async function getReportSummary(
 
 **Storage Location:**
 ```
-~/.vespr/workspaces/{workspaceId}/github/
+~/.vesper/workspaces/{workspaceId}/github/
 ├── daily-reports.jsonl        # All submitted reports (append-only)
 ├── connection-status.json     # Current GitHub connection
 └── credentials.enc            # OAuth token (encrypted elsewhere)
@@ -767,7 +767,7 @@ bun run typecheck:all
 **Solution:**
 ```bash
 # Clear test artifacts
-rm -rf /tmp/vespr-test-*
+rm -rf /tmp/vesper-test-*
 
 # Run tests again
 bun test

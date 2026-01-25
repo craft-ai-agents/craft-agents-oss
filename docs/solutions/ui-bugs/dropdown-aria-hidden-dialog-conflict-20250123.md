@@ -1,5 +1,5 @@
 ---
-module: Vespr
+module: Vesper
 date: 2025-01-23
 problem_type: ui_bug
 component: frontend_stimulus
@@ -19,7 +19,7 @@ tags: [radix-ui, dialog, select, portal, aria-hidden, focus-management]
 Select, Popover, and DropdownMenu components fail to open or respond to clicks when nested inside a Radix Dialog. The browser blocks the interaction due to aria-hidden focus conflicts.
 
 ## Environment
-- Module: Vespr Electron App
+- Module: Vesper Electron App
 - Stack: React + Radix UI (shadcn/ui)
 - Affected Components: Select, Popover, DropdownMenu inside Dialog
 - Date: 2025-01-23

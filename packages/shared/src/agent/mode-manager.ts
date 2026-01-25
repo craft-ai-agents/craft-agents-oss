@@ -160,7 +160,7 @@ class ModeManager {
 
     debug(`[Mode] Set permission mode to ${mode} for session ${sessionId}`);
 
-    // Notify callbacks (for CraftAgent internal sync)
+    // Notify callbacks (for VesperAgent internal sync)
     const callbacks = this.callbacks.get(sessionId);
     if (callbacks?.onStateChange) {
       callbacks.onStateChange(newState);
@@ -1345,7 +1345,7 @@ export function shouldAllowToolInMode(
   // Handle MCP tools - allow read-only, block write operations
   if (toolName.startsWith('mcp__')) {
     // Always allow preferences and documentation tools (read-only, always available)
-    if (toolName.startsWith('mcp__preferences__') || toolName.startsWith('mcp__craft-agents-docs__')) {
+    if (toolName.startsWith('mcp__preferences__') || toolName.startsWith('mcp__vesper-docs__')) {
       return { allowed: true };
     }
 
@@ -1636,5 +1636,5 @@ You can customize Explore mode via \`permissions.json\` files - extend what's al
 | Workspace | \`{workspaceRoot}/permissions.json\` | All sources in workspace |
 | Per-source | \`{workspaceRoot}/sources/{slug}/permissions.json\` | That source only (auto-scoped) |
 
-**Before editing**: Read \`~/.craft-agent/docs/permissions.md\` for the full schema and examples.`;
+**Before editing**: Read \`~/.vesper/docs/permissions.md\` for the full schema and examples.`;
 }

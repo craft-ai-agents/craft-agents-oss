@@ -11,7 +11,7 @@ import { describe, it, expect, beforeEach, mock } from 'bun:test'
 import { RalphLoopRunner } from '../src/ralph-loop/loop-runner.ts'
 import type { PRD, LoopConfig, Story } from '../src/ralph-loop/types.ts'
 import type { GitOperations } from '../src/ralph-loop/git-ops.ts'
-import type { CraftAgent } from '../agent/craft-agent.ts'
+import type { VesperAgent } from '../agent/vesper-agent.ts'
 
 // ============================================================
 // Mock Factories
@@ -86,7 +86,7 @@ function createMockGitOps(): GitOperations {
   }
 }
 
-function createMockAgent(): CraftAgent {
+function createMockAgent(): VesperAgent {
   // Create a simple async generator for chat
   async function* mockChat(_prompt: string) {
     yield { type: 'complete' as const }
@@ -95,7 +95,7 @@ function createMockAgent(): CraftAgent {
   return {
     chat: mock(mockChat),
     dispose: mock(() => {}),
-  } as unknown as CraftAgent
+  } as unknown as VesperAgent
 }
 
 // ============================================================
@@ -104,7 +104,7 @@ function createMockAgent(): CraftAgent {
 
 describe('RalphLoopRunner - Basic', () => {
   let runner: RalphLoopRunner
-  let mockAgent: CraftAgent
+  let mockAgent: VesperAgent
   let mockGitOps: GitOperations
   let mockConfig: LoopConfig
 
@@ -141,7 +141,7 @@ describe('RalphLoopRunner - Basic', () => {
 
 describe('RalphLoopRunner - Events', () => {
   let runner: RalphLoopRunner
-  let mockAgent: CraftAgent
+  let mockAgent: VesperAgent
   let mockGitOps: GitOperations
   let mockConfig: LoopConfig
 
@@ -213,7 +213,7 @@ describe('RalphLoopRunner - Events', () => {
 
 describe('RalphLoopRunner - Control Flow', () => {
   let runner: RalphLoopRunner
-  let mockAgent: CraftAgent
+  let mockAgent: VesperAgent
   let mockGitOps: GitOperations
   let mockConfig: LoopConfig
 
@@ -257,7 +257,7 @@ describe('RalphLoopRunner - Control Flow', () => {
 
 describe('RalphLoopRunner - Cleanup', () => {
   let runner: RalphLoopRunner
-  let mockAgent: CraftAgent
+  let mockAgent: VesperAgent
   let mockGitOps: GitOperations
   let mockConfig: LoopConfig
 
@@ -362,7 +362,7 @@ describe('RalphLoopRunner - Cleanup', () => {
         yield { type: 'complete' as const }
       }),
       dispose: mock(() => {}),
-    } as unknown as CraftAgent
+    } as unknown as VesperAgent
 
     const slowRunner = new RalphLoopRunner('test-session', slowAgent, mockGitOps, mockConfig)
 
@@ -461,7 +461,7 @@ describe('RalphLoopRunner - Error Handling', () => {
         yield { type: 'error' as const, message: 'Agent error' }
       }),
       dispose: mock(() => {}),
-    } as unknown as CraftAgent
+    } as unknown as VesperAgent
 
     const mockGitOps = createMockGitOps()
     const mockConfig = createMockConfig({ maxIterationsPerStory: 1 })
@@ -484,7 +484,7 @@ describe('RalphLoopRunner - Error Handling', () => {
         yield { type: 'error' as const, message: 'Agent failed' }
       }),
       dispose: mock(() => {}),
-    } as unknown as CraftAgent
+    } as unknown as VesperAgent
 
     const mockGitOps = createMockGitOps()
     // Set low max iterations to speed up test

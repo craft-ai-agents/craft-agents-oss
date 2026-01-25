@@ -14,7 +14,7 @@ This guide provides structured code review directions for the Phase 2 WhatsApp m
 
 ## A. Message Router (`message-router.ts` - 162 LOC)
 
-**Purpose:** Routes incoming WhatsApp messages to Vespr sessions with permission directives
+**Purpose:** Routes incoming WhatsApp messages to Vesper sessions with permission directives
 
 **Key Implementation Details:**
 
@@ -36,7 +36,7 @@ const { directive, content: strippedContent } = extractDirective(msg.content)
 ```
 - **Question:** Is message content properly stripped before sending to agent?
   - ✓ YES - line 69 sends `strippedContent`, not original `msg.content`
-  - ✓ Directive prefix removed completely: `@vespr /safe ...` → `...`
+  - ✓ Directive prefix removed completely: `@vesper /safe ...` → `...`
 
 **Permission Mode Mapping (lines 58-100)**
 ```typescript
@@ -143,9 +143,9 @@ for (const msg of messages) {
 ### Test Coverage
 
 **Directive Parser Tests (22 tests)**
-- Basic pattern matching: @vespr /safe → 'safe' ✓
+- Basic pattern matching: @vesper /safe → 'safe' ✓
 - Case insensitivity: @VESPR /SAFE → 'safe' ✓
-- Content extraction: @vespr /ask "message text" → content correct ✓
+- Content extraction: @vesper /ask "message text" → content correct ✓
 - No directive: "plain message" → directive: null ✓
 - Edge cases: empty content, whitespace handling ✓
 
@@ -213,7 +213,7 @@ return {
   messages: [
     `📱 **Research Results**\n\n` +
       `Summary:\n${summary}\n\n` +
-      `🔗 [View full details in Vespr](vespr://session/${sessionId})`,
+      `🔗 [View full details in Vesper](vesper://session/${sessionId})`,
   ],
   summary,
   fullMarkdown: citedText,
@@ -224,7 +224,7 @@ return {
   - Size threshold correct (4096 default)? ✓ YES
   - Small results (<= limit) kept as-is? ✓ YES - truncated: false
   - Large results (> limit) get summary + link? ✓ YES - truncated: true
-  - Deep link format correct? ✓ YES - `vespr://session/{sessionId}`
+  - Deep link format correct? ✓ YES - `vesper://session/{sessionId}`
   - Full content preserved in fullMarkdown? ✓ YES - even when truncated
 
 ### Source Extraction (`extractSources`, lines 99-130)
@@ -584,12 +584,12 @@ await writeFile(this.queuePath, content, 'utf-8')
 
 **Regex Pattern (line 20)**
 ```typescript
-const match = trimmed.match(/^@vespr\s+\/(safe|ask|allow-all)\s+(.*)$/i)
+const match = trimmed.match(/^@vesper\s+\/(safe|ask|allow-all)\s+(.*)$/i)
 ```
 - **Verify Pattern Accuracy:**
-  - Starts with @vespr? ✓ YES - `^@vespr`
+  - Starts with @vesper? ✓ YES - `^@vesper`
   - Case insensitive? ✓ YES - `/i` flag
-  - One or more spaces after @vespr? ✓ YES - `\s+`
+  - One or more spaces after @vesper? ✓ YES - `\s+`
   - Slash before directive? ✓ YES - `\/`
   - Captures safe/ask/allow-all? ✓ YES - `(safe|ask|allow-all)`
   - Captures remaining content? ✓ YES - `(.*)`
@@ -631,7 +631,7 @@ return {
 **hasDirective (lines 42-44)**
 ```typescript
 export function hasDirective(message: string): boolean {
-  return /^@vespr\s+\/(safe|ask|allow-all)/i.test(message.trim())
+  return /^@vesper\s+\/(safe|ask|allow-all)/i.test(message.trim())
 }
 ```
 - **Check:** Uses same regex pattern? ✓ YES - case insensitive test
@@ -659,8 +659,8 @@ export type PermissionDirective = 'safe' | 'ask' | 'allow-all' | null
 ### Test Coverage
 
 **Directive Parser Tests (22 tests)**
-- Basic pattern: "@vespr /safe message" ✓
-- Case variations: "@VESPR /SAFE", "@Vespr /Ask" ✓
+- Basic pattern: "@vesper /safe message" ✓
+- Case variations: "@VESPR /SAFE", "@Vesper /Ask" ✓
 - All directives: /safe, /ask, /allow-all ✓
 - Content extraction with various prefixes ✓
 - No directive: plain message returns null ✓
@@ -671,9 +671,9 @@ export type PermissionDirective = 'safe' | 'ask' | 'allow-all' | null
 - getDirective() extraction ✓
 
 **Edge Cases Covered:**
-- Partial matches (should be false): "@vespr /unknown" ✓
-- Missing slash: "@vespr safe" ✓
-- Wrong prefix: "vespr /safe" (no @) ✓
+- Partial matches (should be false): "@vesper /unknown" ✓
+- Missing slash: "@vesper safe" ✓
+- Wrong prefix: "vesper /safe" (no @) ✓
 
 ---
 
@@ -755,7 +755,7 @@ type SessionManager = Record<string, any>
 ```
 - **Status:** Intentionally deferred to Phase 2d
 - **Reason:** IPC types not yet formalized in shared package
-- **Future Work:** Move to @vespr/core types
+- **Future Work:** Move to @vesper/core types
 - **Impact:** No safety loss (type checked at IPC boundary)
 
 **Metadata Type Cast (message-router.ts, line 51)**
@@ -819,7 +819,7 @@ Use this checklist during code review:
 - [ ] Tests verify crash recovery
 
 ### Directive Parser
-- [ ] Regex pattern matches @vespr correctly
+- [ ] Regex pattern matches @vesper correctly
 - [ ] Pattern is case-insensitive
 - [ ] All three directives recognized
 - [ ] Content properly extracted
@@ -848,25 +848,25 @@ Use this checklist during code review:
 ```bash
 # Send message without directive
 # Expected: Safe mode (read-only)
-@vespr /ask research AI trends
+@vesper /ask research AI trends
 ```
 
 **2. Permission Directives**
 ```bash
 # /safe directive
-@vespr /safe get current status
+@vesper /safe get current status
 
 # /ask directive
-@vespr /ask create new file
+@vesper /ask create new file
 
 # /allow-all directive
-@vespr /allow-all run deployment script
+@vesper /allow-all run deployment script
 ```
 
 **3. Large Results**
 ```bash
 # Send long-form request
-@vespr /safe write 5000-word article on AI
+@vesper /safe write 5000-word article on AI
 
 # Expected: Summary + deep link to desktop app
 ```

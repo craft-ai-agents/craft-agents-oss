@@ -14,11 +14,11 @@ updated: 2026-01-23
 
 ## Problem Statement
 
-The Agentation package (`agentation@1.1.0`) is licensed under **PolyForm Shield 1.0.0**, a proprietary license with specific usage restrictions. The license includes a non-compete clause that must be reviewed for compatibility with Vespr's distribution model and business strategy.
+The Agentation package (`agentation@1.1.0`) is licensed under **PolyForm Shield 1.0.0**, a proprietary license with specific usage restrictions. The license includes a non-compete clause that must be reviewed for compatibility with Vesper's distribution model and business strategy.
 
 **Why it matters:**
 - **Legal compliance:** Cannot merge or ship without legal approval
-- **Business risk:** Non-compete clause may restrict Vespr's product direction
+- **Business risk:** Non-compete clause may restrict Vesper's product direction
 - **IP protection:** Using proprietary code without review creates liability
 - **Distribution:** May affect open-source distribution rights
 
@@ -52,9 +52,9 @@ any product or service that includes Agentation.
 - ❌ Cannot re-sell Agentation as standalone product
 - ❌ Cannot create competing debug panel without license
 - ❌ Cannot restrict Licensor's ability to license others
-- ⚠️ Non-compete clause may affect Vespr's future feature roadmap
-- ✅ Can use in Vespr's internal product
-- ✅ Can distribute as part of Vespr
+- ⚠️ Non-compete clause may affect Vesper's future feature roadmap
+- ✅ Can use in Vesper's internal product
+- ✅ Can distribute as part of Vesper
 
 **Risk Assessment:**
 - **Severity:** MEDIUM-HIGH (requires legal review)
@@ -72,11 +72,11 @@ Submit license for legal review:
 1. **Request:** Provide legal team with:
    - Agentation package.json
    - PolyForm Shield 1.0.0 license text
-   - Use case: Debug panel in Vespr (proprietary desktop app)
-   - Distribution: Ship as part of Vespr desktop app
+   - Use case: Debug panel in Vesper (proprietary desktop app)
+   - Distribution: Ship as part of Vesper desktop app
 
 2. **Legal Review:** Team evaluates:
-   - Does non-compete clause restrict Vespr?
+   - Does non-compete clause restrict Vesper?
    - Are usage restrictions acceptable?
    - Any other compliance issues?
 
@@ -164,7 +164,7 @@ The PolyForm Shield license is not prohibitive—it's designed for tools like th
 ## Acceptance Criteria
 
 - [ ] Legal team reviews PolyForm Shield 1.0.0 license
-- [ ] Legal team reviews Agentation use case (debug panel in Vespr)
+- [ ] Legal team reviews Agentation use case (debug panel in Vesper)
 - [ ] Legal decision: Approved, Approved with Conditions, or Rejected
 - [ ] If approved: Document decision and add to CONTRIBUTING.md
 - [ ] If conditions: Implement per legal guidance
@@ -196,11 +196,11 @@ The PolyForm Shield license is not prohibitive—it's designed for tools like th
 
 **Package:** agentation v1.1.0
 **License:** PolyForm Shield 1.0.0
-**Use Case:** Debug panel in Vespr desktop application
+**Use Case:** Debug panel in Vesper desktop application
 
 **Questions:**
-1. Are there legal restrictions on using this package in Vespr?
-2. Does the non-compete clause restrict Vespr's product roadmap?
+1. Are there legal restrictions on using this package in Vesper?
+2. Does the non-compete clause restrict Vesper's product roadmap?
 3. Are there any attribution requirements?
 4. Any recommendations for safer alternatives?
 

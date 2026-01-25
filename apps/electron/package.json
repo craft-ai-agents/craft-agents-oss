@@ -1,5 +1,5 @@
 {
-  "name": "@craft-agent/electron",
+  "name": "@vesper/electron",
   "version": "0.2.25",
   "description": "Electron desktop app for Craft Agents",
   "main": "dist/main.cjs",
@@ -36,9 +36,9 @@
     "lint:fix": "eslint src/ --fix"
   },
   "dependencies": {
-    "@craft-agent/core": "workspace:*",
-    "@craft-agent/shared": "workspace:*",
-    "@craft-agent/ui": "workspace:*",
+    "@vesper/core": "workspace:*",
+    "@vesper/shared": "workspace:*",
+    "@vesper/ui": "workspace:*",
     "@hapi/boom": "^10.0.1",
     "@paper-design/shaders-react": "^0.0.69",
     "@pierre/diffs": "^1.0.4",

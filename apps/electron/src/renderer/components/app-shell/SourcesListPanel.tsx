@@ -114,7 +114,7 @@ export function SourcesListPanel({
           <div className="pt-2">
             {filteredSources.map((source, index) => (
               <SourceItem
-                key={`${source.config.slug}-${source.config.connectionStatus}-${source.config.isAuthenticated}-${localMcpEnabled}`}
+                key={source.config.slug}
                 source={source}
                 isSelected={selectedSourceSlug === source.config.slug}
                 isFirst={index === 0}

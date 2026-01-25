@@ -6,8 +6,8 @@
 
 import { ipcMain, BrowserWindow } from 'electron';
 import { IPC_CHANNELS } from '../shared/types';
-import { loadLabels, createLabel, updateLabel, deleteLabel, type Label } from '@craft-agent/shared/labels';
-import { getWorkspaceByNameOrId } from '@craft-agent/shared/config';
+import { loadLabels, createLabel, updateLabel, deleteLabel, type Label } from '@vesper/shared/labels';
+import { getWorkspaceByNameOrId } from '@vesper/shared/config';
 
 /**
  * Broadcast labels changed event to all windows

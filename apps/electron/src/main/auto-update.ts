@@ -20,15 +20,15 @@ import {
   isNewerVersion,
   getPlatformKey,
   getAppVersion,
-} from '@craft-agent/shared/version'
+} from '@vesper/shared/version'
 import {
   getDismissedUpdateVersion,
   clearDismissedUpdateVersion,
   getPendingUpdate,
   setPendingUpdate,
   clearPendingUpdate,
-} from '@craft-agent/shared/config'
-import type { VersionManifest, BinaryInfo } from '@craft-agent/shared/version/manifest'
+} from '@vesper/shared/config'
+import type { VersionManifest, BinaryInfo } from '@vesper/shared/version/manifest'
 import type { UpdateInfo } from '../shared/types'
 import type { WindowManager } from './window-manager'
 
@@ -280,7 +280,7 @@ async function doDownloadUpdate(): Promise<void> {
 
   try {
     // Create temp directory for download
-    const tempDir = join(app.getPath('temp'), 'craft-agent-updates')
+    const tempDir = join(app.getPath('temp'), 'vesper-updates')
     if (!existsSync(tempDir)) {
       mkdirSync(tempDir, { recursive: true })
     }

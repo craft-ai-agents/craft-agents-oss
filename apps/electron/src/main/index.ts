@@ -11,12 +11,12 @@ import { registerIpcHandlers } from './ipc'
 import { createApplicationMenu } from './menu'
 import { WindowManager } from './window-manager'
 import { loadWindowState, saveWindowState } from './window-state'
-import { getWorkspaces } from '@craft-agent/shared/config'
-import { initializeDocs } from '@craft-agent/shared/docs'
-import { ensureDefaultPermissions } from '@craft-agent/shared/agent/permissions-config'
+import { getWorkspaces } from '@vesper/shared/config'
+import { initializeDocs } from '@vesper/shared/docs'
+import { ensureDefaultPermissions } from '@vesper/shared/agent/permissions-config'
 import { handleDeepLink } from './deep-link'
 import log, { isDebugMode, mainLog, getLogFilePath } from './logger'
-import { setPerfEnabled, enableDebug } from '@craft-agent/shared/utils'
+import { setPerfEnabled, enableDebug } from '@vesper/shared/utils'
 import { initNotificationService, clearBadgeCount, initBadgeIcon, initInstanceBadge } from './notifications'
 import { checkForUpdatesOnLaunch, checkPendingUpdateAndInstall, setWindowManager as setAutoUpdateWindowManager } from './auto-update'
 import { startAllSchedulers, stopAllSchedulers } from './scheduler'
@@ -27,7 +27,7 @@ log.initialize()
 
 // Enable debug/perf in dev mode (running from source)
 if (isDebugMode) {
-  process.env.CRAFT_DEBUG = '1'
+  process.env.VESPER_DEBUG = '1'
   enableDebug()
   setPerfEnabled(true)
 }

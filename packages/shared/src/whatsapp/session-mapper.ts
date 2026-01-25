@@ -9,7 +9,7 @@ export interface WhatsAppSessionId {
 }
 
 /**
- * Deterministically generate Vespr sessionId from WhatsApp identifiers
+ * Deterministically generate Vesper sessionId from WhatsApp identifiers
  * Same (groupJid, senderJid) always maps to same sessionId
  */
 export function getSessionId(groupJid: string, senderJid: string): string {
@@ -17,7 +17,7 @@ export function getSessionId(groupJid: string, senderJid: string): string {
 }
 
 /**
- * Manage WhatsApp → Vespr session mappings with persistence
+ * Manage WhatsApp → Vesper session mappings with persistence
  */
 export class SessionMapper {
   private mappings = new Map<string, string>() // groupJid::senderJid → sessionId

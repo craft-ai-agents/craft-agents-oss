@@ -687,7 +687,7 @@ export function generateSessionHTML(session: StoredSession): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${session.name || 'Shared Session'} - Vespr</title>
+  <title>${session.name || 'Shared Session'} - Vesper</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -746,7 +746,7 @@ export function generateSessionHTML(session: StoredSession): string {
     ${messagesHTML}
   </div>
   <div class="footer">
-    Shared from <strong>Vespr</strong> - An open-source AI agent platform
+    Shared from <strong>Vesper</strong> - An open-source AI agent platform
   </div>
 </body>
 </html>
@@ -796,7 +796,7 @@ export class LocalViewer implements ViewerService {
 
       if (!sessionId) {
         res.writeHead(200, { 'Content-Type': 'text/html' });
-        res.end('<h1>Vespr Local Viewer</h1><p>Session ID required in URL</p>');
+        res.end('<h1>Vesper Local Viewer</h1><p>Session ID required in URL</p>');
         return;
       }
 
@@ -877,7 +877,7 @@ if (managed.sharedUrl && managed.sharedUrl.includes('agents.craft.do')) {
 ### Self-Hosting Setup
 
 1. Deploy viewer service (see `docs/self-hosting/viewer-setup.md`)
-2. Open Vespr → Settings → Sharing
+2. Open Vesper → Settings → Sharing
 3. Select "Self-Hosted Viewer"
 4. Enter your viewer URL
 5. Click "Test Connection"
@@ -885,7 +885,7 @@ if (managed.sharedUrl && managed.sharedUrl.includes('agents.craft.do')) {
 
 ### Static Export Setup
 
-1. Choose export directory (e.g., `~/vespr-shares`)
+1. Choose export directory (e.g., `~/vesper-shares`)
 2. Optional: Configure upload command:
    ```bash
    aws s3 sync . s3://my-bucket/shares

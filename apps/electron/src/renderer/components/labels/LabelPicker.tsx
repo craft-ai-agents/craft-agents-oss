@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { LabelBadge } from '@/components/ui/label-badge';
 import { labelsAtom, createLabelAtom, deleteLabelAtom } from '@/atoms/labels';
-import { LABEL_COLORS, type Label } from '@craft-agent/shared/labels';
+import { LABEL_COLORS, type Label } from '@vesper/shared/labels';
 import { Check, Plus, Tag, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 

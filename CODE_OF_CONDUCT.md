@@ -15,7 +15,7 @@ We expect all participants to:
 
 ## Enforcement
 
-Instances of unacceptable behavior may be reported to: conduct@craft.do
+Instances of unacceptable behavior may be reported to: tin.nguyen@atherlabs.com
 
 All complaints will be reviewed and investigated promptly and fairly.
 

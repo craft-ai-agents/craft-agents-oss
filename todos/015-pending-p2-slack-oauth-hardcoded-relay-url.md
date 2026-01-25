@@ -15,7 +15,7 @@ The Cloudflare Worker relay URL is hardcoded directly in the code at line 282. T
 **Why it matters:**
 - If `agents.craft.do` goes down, all Slack OAuth fails
 - Testing requires the production relay or mocking
-- The URL references "Craft Agents" but the project is "Vespr" (branding inconsistency)
+- The URL references "Craft Agents" but the project is "Vesper" (branding inconsistency)
 
 ## Findings
 
@@ -121,7 +121,7 @@ None required.
 
 | Date | Action | Learnings |
 |------|--------|-----------|
-| 2026-01-23 | Created during code review | Update branding from "Craft Agents" to "Vespr" |
+| 2026-01-23 | Created during code review | Update branding from "Craft Agents" to "Vesper" |
 
 ## Resources
 

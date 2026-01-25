@@ -1,10 +1,10 @@
 # GitHub Integration Setup Guide
 
-This document explains how to set up GitHub OAuth for the daily report feature in Vespr.
+This document explains how to set up GitHub OAuth for the daily report feature in Vesper.
 
 ## Overview
 
-Vespr's GitHub integration allows you to:
+Vesper's GitHub integration allows you to:
 - Generate daily reports from GitHub issues and pull requests
 - Auto-detect repository activity
 - Track team members
@@ -24,7 +24,7 @@ Vespr's GitHub integration allows you to:
 2. Click **New OAuth App**
 
 3. Fill in the application details:
-   - **Application name**: `Vespr` (or any name you prefer)
+   - **Application name**: `Vesper` (or any name you prefer)
    - **Homepage URL**: `http://localhost` (for development)
    - **Application description**: "Daily engineering report generator"
    - **Authorization callback URL**: `http://localhost:9914/oauth/callback`
@@ -45,13 +45,13 @@ You have two options for configuring your GitHub OAuth credentials:
 
 The easiest way to configure GitHub OAuth is through the Settings UI:
 
-1. Open Vespr application
+1. Open Vesper application
 2. Go to **Settings** > **Credentials**
 3. Find the **GitHub OAuth** section
 4. Enter your **Client ID** and **Client Secret** from Step 1
 5. Click **Save**
 
-This method stores credentials securely in `~/.vespr/credentials.enc` and does not require a restart.
+This method stores credentials securely in `~/.vesper/credentials.enc` and does not require a restart.
 
 ### Option B: Environment Variables
 
@@ -89,10 +89,10 @@ bun run electron:dev    # or electron:start
 
 ## Step 4: Connect Your Repository
 
-1. Open Vespr application
+1. Open Vesper application
 2. Go to **Workspace Settings** > **GitHub Integration**
 3. Click **Connect**
-4. Authorize Vespr in GitHub (browser popup)
+4. Authorize Vesper in GitHub (browser popup)
 5. Return to settings and configure:
    - **Repository Owner**: Your GitHub username or organization
    - **Repository Name**: The repository name
@@ -100,20 +100,20 @@ bun run electron:dev    # or electron:start
 
 ## Scopes Requested
 
-Vespr requests these GitHub permissions:
+Vesper requests these GitHub permissions:
 - `repo` - Access to repository data (required for reading issues and PRs)
 - `read:org` - Read organization membership
 - `read:user` - Read user profile data
 
-### What Vespr Can Access
+### What Vesper Can Access
 
-Vespr can:
+Vesper can:
 - ✅ Read public and private repository issues
 - ✅ Read pull requests
 - ✅ See team members
 - ✅ Access repository activity
 
-Vespr **cannot**:
+Vesper **cannot**:
 - ❌ Modify issues or PRs
 - ❌ Create new issues
 - ❌ Push code
@@ -184,12 +184,12 @@ Use environment-specific `.env` files or pass variables at runtime.
 
 To remove GitHub access:
 
-1. **In GitHub**: Settings > Apps and integrations > Authorized OAuth Apps > Revoke next to Vespr
-2. **In Vespr**: Workspace Settings > GitHub Integration > Disconnect
+1. **In GitHub**: Settings > Apps and integrations > Authorized OAuth Apps > Revoke next to Vesper
+2. **In Vesper**: Workspace Settings > GitHub Integration > Disconnect
 
 ## Security Notes
 
-- Your GitHub token is stored encrypted in `~/.vespr/credentials.enc`
+- Your GitHub token is stored encrypted in `~/.vesper/credentials.enc`
 - Never commit `.env` files with real credentials
 - Regularly audit GitHub's authorized apps
 - Use separate OAuth apps for development vs production
@@ -210,13 +210,13 @@ If you want to share an OAuth app across your team:
 Monitor who has authorized the app:
 1. Go to GitHub > Settings > Applications
 2. Click **Authorized OAuth Apps**
-3. View when each team member last authorized Vespr
+3. View when each team member last authorized Vesper
 
 ## API Rate Limits
 
-Vespr is designed to handle GitHub's rate limits:
+Vesper is designed to handle GitHub's rate limits:
 
-| Type | Limit | Vespr Strategy |
+| Type | Limit | Vesper Strategy |
 |------|-------|---|
 | Unauthenticated | 60/hour | Uses OAuth token (higher limit) |
 | Authenticated | 5,000/hour | Caches responses for 1 hour |

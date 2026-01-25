@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Cron Scheduler lets you automate recurring agent tasks like morning briefings, daily summaries, or periodic reports. Create schedules using simple presets or custom cron expressions, and Vespr will run your prompts automatically at the specified times.
+The Cron Scheduler lets you automate recurring agent tasks like morning briefings, daily summaries, or periodic reports. Create schedules using simple presets or custom cron expressions, and Vesper will run your prompts automatically at the specified times.
 
 **Key Features:**
 - Visual preset cards for common schedules (hourly, daily, weekly, monthly)
@@ -12,7 +12,7 @@ The Cron Scheduler lets you automate recurring agent tasks like morning briefing
 - Native macOS notifications on completion
 - Real-time UI updates across all windows
 
-**Important:** Schedules only run when Vespr is open. A status indicator shows when schedules are active.
+**Important:** Schedules only run when Vesper is open. A status indicator shows when schedules are active.
 
 ## Creating Schedules
 
@@ -33,7 +33,7 @@ You can create schedules directly from any chat session using natural language:
 schedule this to run every weekday at 9am
 ```
 
-Vespr will:
+Vesper will:
 1. Detect the scheduling intent
 2. Parse the time expression into a cron schedule
 3. Create the schedule using the conversation context
@@ -163,7 +163,7 @@ Bad: "What's happening today?"
 
 **Include context for recurring tasks:**
 ```
-"Check for new GitHub issues in vespr repo and summarize any that need triage"
+"Check for new GitHub issues in vesper repo and summarize any that need triage"
 ```
 
 **Use skills via prompts:**
@@ -242,7 +242,7 @@ Schedules run in "safe" mode by default (read-only). To enable write operations:
 
 ### Application Must Be Open
 
-Schedules only execute when Vespr is running. If the app is closed:
+Schedules only execute when Vesper is running. If the app is closed:
 - Scheduled tasks will not run
 - Upon reopening, missed schedules are **not** retroactively executed
 - Consider leaving the app running for critical schedules
@@ -273,7 +273,7 @@ Native skill scheduling is not supported in the current version. Workaround:
 - If it shows "Invalid schedule", edit and fix the expression
 
 **Ensure the app is open:**
-- Schedules only run when Vespr is active
+- Schedules only run when Vesper is active
 - Status indicator shows "Schedules active"
 
 ### Failed Execution
@@ -310,7 +310,7 @@ If the agent reports context limits:
 
 Schedules are stored in:
 ```
-~/.vespr/workspaces/{workspaceId}/schedules.json
+~/.vesper/workspaces/{workspaceId}/schedules.json
 ```
 
 This JSON file contains:
@@ -321,8 +321,8 @@ This JSON file contains:
 
 **Backup:** The file is human-readable and can be backed up or edited directly if needed.
 
-**Logs:** Execution logs are written to `~/Library/Logs/Vespr/` for debugging.
+**Logs:** Execution logs are written to `~/Library/Logs/Vesper/` for debugging.
 
 ---
 
-*For more information about Vespr's architecture and features, see the main documentation.*
+*For more information about Vesper's architecture and features, see the main documentation.*

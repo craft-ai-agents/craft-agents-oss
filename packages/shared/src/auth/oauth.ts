@@ -2,7 +2,7 @@ import { createServer, type Server } from 'http';
 import { URL } from 'url';
 import open from 'open';
 import { randomBytes, createHash } from 'crypto';
-import { CRAFT_LOGO_HTML } from '../branding.ts';
+import { VESPER_LOGO_HTML } from '../branding.ts';
 
 export interface OAuthConfig {
   mcpBaseUrl: string; // e.g., http://localhost:3000/v1/links/abc123
@@ -447,7 +447,7 @@ function generateOAuthPage(options: {
       </div>
 
       <div class="logo-container">
-<pre class="logo">${CRAFT_LOGO_HTML}</pre>
+<pre class="logo">${VESPER_LOGO_HTML}</pre>
       </div>
 
       <div class="terminal-output">
@@ -673,7 +673,7 @@ export class CraftOAuth {
       }
     } else {
       // Use a default client ID for public clients
-      clientId = 'craft-agent';
+      clientId = 'vesper';
       this.callbacks.onStatus(`Using default client ID: ${clientId}`);
     }
 

@@ -11,8 +11,8 @@
  */
 
 import type { PermissionMode } from '../../shared/types'
-import type { ThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
-import { DEFAULT_THINKING_LEVEL } from '@craft-agent/shared/agent/thinking-levels'
+import type { ThinkingLevel } from '@vesper/shared/agent/thinking-levels'
+import { DEFAULT_THINKING_LEVEL } from '@vesper/shared/agent/thinking-levels'
 
 /**
  * All session-scoped options in one place.

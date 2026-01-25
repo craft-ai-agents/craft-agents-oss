@@ -21,7 +21,7 @@ import { CrossfadeAvatar } from '@/components/ui/avatar'
 import { cn } from '@/lib/utils'
 import { skillIconCache, clearSkillIconCaches, svgToThemedDataUrl } from '@/lib/icon-cache'
 import { Zap } from 'lucide-react'
-import { isEmoji } from '@craft-agent/shared/utils/icon-constants'
+import { isEmoji } from '@vesper/shared/utils/icon-constants'
 import type { LoadedSkill } from '../../../shared/types'
 
 export type SkillAvatarSize = 'xs' | 'sm' | 'md' | 'lg'

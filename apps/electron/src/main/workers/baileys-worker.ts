@@ -86,7 +86,7 @@ let reconnectAttempts = 0
 const MAX_RECONNECT_ATTEMPTS = 5
 
 // Auth directory for Baileys state
-const authDir = join(homedir(), '.vespr', 'whatsapp-auth', workspaceId)
+const authDir = join(homedir(), '.vesper', 'whatsapp-auth', workspaceId)
 
 // ============================================================================
 // IPC Communication
@@ -153,7 +153,7 @@ async function connect(existingSession?: unknown): Promise<void> {
     socket = makeWASocket({
       auth: state,
       printQRInTerminal: false, // We handle QR display ourselves
-      browser: ['Vespr', 'Desktop', '1.0.0'],
+      browser: ['Vesper', 'Desktop', '1.0.0'],
       syncFullHistory: false,
       markOnlineOnConnect: true,
     })
@@ -321,10 +321,10 @@ async function processIncomingMessage(msg: BaileysEventMap['messages.upsert']['m
     msg.message?.videoMessage?.caption ||
     ''
 
-  // Only process messages that mention @vespr (bot trigger)
-  if (!content.toLowerCase().includes('@vespr')) return
+  // Only process messages that mention @vesper (bot trigger)
+  if (!content.toLowerCase().includes('@vesper')) return
 
-  console.log(`[BaileysWorker] Received message mentioning @vespr: ${content.substring(0, 50)}...`)
+  console.log(`[BaileysWorker] Received message mentioning @vesper: ${content.substring(0, 50)}...`)
 
   // Get sender info
   const groupJid = remoteJid

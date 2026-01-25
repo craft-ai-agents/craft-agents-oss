@@ -7,8 +7,8 @@
 
 import { ipcMain } from 'electron'
 import { IPC_CHANNELS } from '../shared/types'
-import { getCredentialManager, type CredentialId } from '@craft-agent/shared/credentials'
-import { startSlackOAuth, isSlackOAuthConfigured } from '@craft-agent/shared/auth/slack-oauth'
+import { getCredentialManager, type CredentialId } from '@vesper/shared/credentials'
+import { startSlackOAuth, isSlackOAuthConfigured } from '@vesper/shared/auth/slack-oauth'
 
 interface SlackConnection {
   isConnected: boolean

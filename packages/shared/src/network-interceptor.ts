@@ -17,10 +17,10 @@ import { join } from 'node:path';
 // Using string[][] instead of [string, string][] to match RequestInit.headers type
 type HeadersInitType = Headers | Record<string, string> | string[][];
 
-const DEBUG = process.argv.includes('--debug') || process.env.CRAFT_DEBUG === '1';
+const DEBUG = process.argv.includes('--debug') || process.env.VESPER_DEBUG === '1';
 
 // Log file for debug output (avoids console spam)
-const LOG_DIR = join(homedir(), '.craft-agent', 'logs');
+const LOG_DIR = join(homedir(), '.vesper', 'logs');
 const LOG_FILE = join(LOG_DIR, 'interceptor.log');
 
 // Ensure log directory exists at module load
@@ -48,7 +48,7 @@ export interface LastApiError {
 }
 
 // File-based storage for cross-process sharing
-const ERROR_FILE = join(homedir(), '.craft-agent', 'api-error.json');
+const ERROR_FILE = join(homedir(), '.vesper', 'api-error.json');
 const MAX_ERROR_AGE_MS = 5 * 60 * 1000; // 5 minutes
 
 function getStoredError(): LastApiError | null {

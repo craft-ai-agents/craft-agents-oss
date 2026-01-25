@@ -2,13 +2,13 @@
 
 ## Overview
 
-Add a button in the chat input area that spawns a new terminal window with the current Claude Agent SDK session auto-resumed using `claude --resume <session-id>`. This feature enables users to seamlessly continue their Vespr AI conversations in the command-line interface while maintaining full session context.
+Add a button in the chat input area that spawns a new terminal window with the current Claude Agent SDK session auto-resumed using `claude --resume <session-id>`. This feature enables users to seamlessly continue their Vesper AI conversations in the command-line interface while maintaining full session context.
 
-**User Story:** As a Vespr user, I want to resume my current AI session in a terminal so that I can leverage Claude Code CLI's advanced features (parallel agents, task lists, direct file system access) without losing my conversation context.
+**User Story:** As a Vesper user, I want to resume my current AI session in a terminal so that I can leverage Claude Code CLI's advanced features (parallel agents, task lists, direct file system access) without losing my conversation context.
 
 ## Problem Statement / Motivation
 
-Currently, Vespr sessions exist only within the Electron app UI. Power users who want to:
+Currently, Vesper sessions exist only within the Electron app UI. Power users who want to:
 - Run parallel sub-agents for complex tasks
 - Use task list environment variables (`CLAUDE_CODE_TASK_LIST_ID`)
 - Execute long-running operations in the background
@@ -31,7 +31,7 @@ Integrate a "Open in Terminal" button into the chat input area that:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  1. User has active Vespr session with messages             │
+│  1. User has active Vesper session with messages             │
 │     (SDK session ID captured after first agent response)    │
 └────────────────┬────────────────────────────────────────────┘
                  │
@@ -61,7 +61,7 @@ Integrate a "Open in Terminal" button into the chat input area that:
 ┌─────────────────────────────────────────────────────────────┐
 │  5. Terminal opens with command:                             │
 │     cd <working_dir>                                         │
-│     export CLAUDE_CODE_TASK_LIST_ID=<vespr_session_id>      │
+│     export CLAUDE_CODE_TASK_LIST_ID=<vesper_session_id>      │
 │     claude --resume <sdk_session_id>                         │
 └────────────────┬────────────────────────────────────────────┘
                  │
@@ -116,7 +116,7 @@ Integrate a "Open in Terminal" button into the chat input area that:
 │  Executes: claude --resume <sdk_session_id>                   │
 │  With:                                                         │
 │    - CWD: session's sdkCwd or workingDirectory                │
-│    - ENV: CLAUDE_CODE_TASK_LIST_ID=<vespr_session_id>         │
+│    - ENV: CLAUDE_CODE_TASK_LIST_ID=<vesper_session_id>         │
 └───────────────────────────────────────────────────────────────┘
 ```
 
@@ -179,39 +179,40 @@ export function TerminalResumeButton({
 **Scope:** Basic terminal spawning on macOS only
 
 **Tasks:**
-- [ ] Create `terminal.ts` with `openMacTerminal()` implementation
+- [x] Create `terminal.ts` with `openMacTerminal()` implementation
   - Use AppleScript via `osascript` to open Terminal.app
   - Execute `claude --resume <session-id>` command
   - Set working directory via `cd` command
   - Handle environment variables with `export`
-- [ ] Add IPC handler in `ipc.ts`
+- [x] Add IPC handler in `ipc.ts`
   - Validate session ID format: `/^ses-[a-f0-9-]+$/`
   - Check session exists via `SessionManager.getSession()`
   - Verify Claude CLI installed: `which claude`
   - Call `spawnTerminalWithSession()` with session data
-- [ ] Create `TerminalResumeButton.tsx` component
+- [x] Create `TerminalResumeButton.tsx` component
   - Use `<Terminal />` icon from lucide-react
   - Implement loading state with `<Loader2 className="animate-spin" />`
   - Call `window.electronAPI.resumeInTerminal()`
   - Show success/error toasts using `sonner`
-- [ ] Update `FreeFormInput.tsx` to include button
+- [x] Update `FreeFormInput.tsx` to include button
   - Add button between working directory and model selector
   - Only render if `sdkSessionId` exists
   - Disable if session is processing
-- [ ] Add IPC types and preload exposure
+- [x] Add IPC types and preload exposure
   - Update `IPC_CHANNELS` enum in `types.ts`
   - Add `resumeInTerminal` to `ElectronAPI` interface
   - Expose via contextBridge in `preload/index.ts`
 
 **Acceptance Criteria:**
-- [ ] Button appears in chat input area after first message sent
-- [ ] Clicking button opens Terminal.app on macOS with session resumed
-- [ ] Terminal opens to correct working directory
-- [ ] Success toast shown: "Terminal opened with session resumed"
-- [ ] Button shows spinner during spawn operation (1-2 seconds)
-- [ ] Error toast shown if Claude CLI not installed
+- [x] Button appears in chat input area after first message sent
+- [x] Clicking button opens Terminal.app on macOS with session resumed
+- [x] Terminal opens to correct working directory
+- [x] Success toast shown: "Terminal opened with session resumed"
+- [x] Button shows spinner during spawn operation (1-2 seconds)
+- [x] Error toast shown if Claude CLI not installed
 
-**Estimated Time:** 1-2 days
+**Status:** ✅ **COMPLETED** - Committed in 2b68bfb (2026-01-24)
+**Actual Time:** ~20 minutes (with parallel agent execution)
 
 #### Phase 2: Cross-Platform Support
 **Scope:** Windows and Linux terminal spawning
@@ -279,7 +280,7 @@ export function TerminalResumeButton({
 **Tasks:**
 - [ ] Add `taskListId` to session metadata
   - Update `Session` type in `packages/core/src/types/session.ts`
-  - Generate task list ID when session is created (use Vespr session ID)
+  - Generate task list ID when session is created (use Vesper session ID)
   - Persist in session JSONL storage
 - [ ] Inject environment variable in terminal spawn
   - Add to shell command: `export CLAUDE_CODE_TASK_LIST_ID=<id>`
@@ -508,12 +509,12 @@ export function TerminalResumeButton({
 
 ### Advanced Features
 - MCP source connection inheritance (terminal gets same sources)
-- Task list visualization in Vespr UI (track terminal tasks)
+- Task list visualization in Vesper UI (track terminal tasks)
 - Bidirectional sync (terminal changes reflected in UI)
 - Multiple terminal support (spawn multiple terminals for same session)
 
 ### Cross-Application Integration
-- Deep link support: `vespr://resume/<session-id>`
+- Deep link support: `vesper://resume/<session-id>`
 - Context menu integration (right-click session → Open in Terminal)
 - Command palette action (CMD+K → "Resume in Terminal")
 

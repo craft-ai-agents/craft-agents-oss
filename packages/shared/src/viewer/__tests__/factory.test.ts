@@ -36,7 +36,7 @@ describe('createViewerService', () => {
    * Helper to create temp directory for tests
    */
   function createTempDir(): string {
-    const dir = path.join(tmpdir(), `vespr-factory-test-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+    const dir = path.join(tmpdir(), `vesper-factory-test-${Date.now()}-${Math.random().toString(36).slice(2)}`)
     fs.mkdirSync(dir, { recursive: true })
     tempDirs.push(dir)
     return dir

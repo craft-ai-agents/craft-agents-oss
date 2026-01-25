@@ -2,7 +2,7 @@ import * as React from 'react'
 import type { ComponentEntry } from './types'
 import { AttachmentPreview } from '@/components/app-shell/AttachmentPreview'
 import { SetupAuthBanner } from '@/components/app-shell/SetupAuthBanner'
-import { TurnCard, type ActivityItem } from '@craft-agent/ui'
+import { TurnCard, type ActivityItem } from '@vesper/ui'
 import type { BackgroundTask } from '@/components/app-shell/ActiveTasksBar'
 import { ActiveOptionBadges } from '@/components/app-shell/ActiveOptionBadges'
 import { InputContainer } from '@/components/app-shell/input'
@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button'
 import { motion } from 'motion/react'
 import { ArrowUp, Paperclip, ChevronDown, Sparkles } from 'lucide-react'
 import type { FileAttachment, PermissionRequest } from '../../../shared/types'
-import type { PermissionMode } from '@craft-agent/shared/agent/modes'
+import type { PermissionMode } from '@vesper/shared/agent/modes'
 import { cn } from '@/lib/utils'
 import {
   ensureMockElectronAPI,
@@ -502,7 +502,7 @@ function ActiveTasksBarContext({ tasks = sampleBackgroundTasks }: ActiveTasksBar
           onUltrathinkChange={setUltrathinkEnabled}
           sources={mockSources}
           enabledSourceSlugs={['github-api', 'local-files']}
-          workingDirectory="/Users/demo/projects/craft-agent"
+          workingDirectory="/Users/demo/projects/vesper"
           sessionId="playground-session"
           onSubmit={mockInputCallbacks.onSubmit}
           onModelChange={mockInputCallbacks.onModelChange}
@@ -610,7 +610,7 @@ function PermissionInputToggle({ autoToggle = false, autoToggleInterval = 3000, 
         onUltrathinkChange={setUltrathinkEnabled}
         sources={mockSources}
         enabledSourceSlugs={['github-api', 'local-files']}
-        workingDirectory="/Users/demo/projects/craft-agent"
+        workingDirectory="/Users/demo/projects/vesper"
         sessionId="playground-session"
         structuredInput={structuredInput}
         onStructuredResponse={handlePermissionResponse}
@@ -980,7 +980,7 @@ export const chatComponents: ComponentEntry[] = [
         name: 'workingDirectory',
         description: 'Current working directory',
         control: { type: 'string', placeholder: '/path/to/project' },
-        defaultValue: '/Users/demo/projects/craft-agent',
+        defaultValue: '/Users/demo/projects/vesper',
       },
     ],
     mockData: () => {

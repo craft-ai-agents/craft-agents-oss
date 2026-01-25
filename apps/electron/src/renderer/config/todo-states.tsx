@@ -1,6 +1,6 @@
 import * as React from 'react'
-import type { StatusConfig } from '@craft-agent/shared/statuses'
-import { isEmoji, ICON_EXTENSIONS } from '@craft-agent/shared/utils/icon-constants'
+import type { StatusConfig } from '@vesper/shared/statuses'
+import { isEmoji, ICON_EXTENSIONS } from '@vesper/shared/utils/icon-constants'
 import { statusIconCache, clearStatusIconCaches } from '@/lib/icon-cache'
 
 // ============================================================================

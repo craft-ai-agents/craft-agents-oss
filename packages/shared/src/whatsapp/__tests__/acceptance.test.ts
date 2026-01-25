@@ -28,7 +28,7 @@ import {
 import { extractDirective, getDirective } from '../directive-parser'
 import { getSessionId } from '../session-mapper'
 import type { WhatsAppMessage } from '../types'
-import type { Message, MessageRole } from '@craft-agent/core/types'
+import type { Message, MessageRole } from '@vesper/core/types'
 
 // ============================================================================
 // MOCK FACTORIES
@@ -104,7 +104,7 @@ class MockSessionManager {
 
 /**
  * Factory: Create mock SDK Message for result formatting
- * Uses internal Vespr Message type (content is string, has timestamp)
+ * Uses internal Vesper Message type (content is string, has timestamp)
  */
 function createMockSdkMessage(
   role: MessageRole,
@@ -237,7 +237,7 @@ describe('WhatsApp Acceptance Tests - Happy Path (Safe Mode)', () => {
     expect(result.truncated).toBe(true)
     // Very large results use preview + deep link
     expect(result.messages.length).toBe(1)
-    expect(result.messages[0]).toContain('View full result in Vespr')
+    expect(result.messages[0]).toContain('View full result in Vesper')
     expect(result.deepLink).toBeDefined()
   })
 
@@ -283,9 +283,9 @@ describe('WhatsApp Acceptance Tests - Permission Directives (Ask Mode)', () => {
     router = new WhatsAppMessageRouter(workspaceId, sessionManager as any)
   })
 
-  test('6. Message with @vespr /ask directive sets ask mode', async () => {
+  test('6. Message with @vesper /ask directive sets ask mode', async () => {
     const msg = createMockWhatsAppMessage({
-      content: '@vespr /ask run deployment script',
+      content: '@vesper /ask run deployment script',
     })
 
     await router.routeIncomingMessage(msg)
@@ -301,7 +301,7 @@ describe('WhatsApp Acceptance Tests - Permission Directives (Ask Mode)', () => {
   })
 
   test('7. Directive extracted correctly from message', () => {
-    const msg = '@vespr /ask analyze this data'
+    const msg = '@vesper /ask analyze this data'
     const { directive, content } = extractDirective(msg)
 
     expect(directive).toBe('ask')
@@ -310,7 +310,7 @@ describe('WhatsApp Acceptance Tests - Permission Directives (Ask Mode)', () => {
 
   test('8. Permission mode set BEFORE message sent to agent', async () => {
     const msg = createMockWhatsAppMessage({
-      content: '@vespr /ask execute command',
+      content: '@vesper /ask execute command',
     })
 
     await router.routeIncomingMessage(msg)
@@ -335,9 +335,9 @@ describe('WhatsApp Acceptance Tests - Permission Directives (Allow-All Mode)', (
     router = new WhatsAppMessageRouter(workspaceId, sessionManager as any)
   })
 
-  test('9. Message with @vespr /allow-all directive enables allow-all mode', async () => {
+  test('9. Message with @vesper /allow-all directive enables allow-all mode', async () => {
     const msg = createMockWhatsAppMessage({
-      content: '@vespr /allow-all write production data',
+      content: '@vesper /allow-all write production data',
     })
 
     await router.routeIncomingMessage(msg)
@@ -365,7 +365,7 @@ describe('WhatsApp Acceptance Tests - Permission Directives (Allow-All Mode)', (
 
   test('11. Invalid directive defaults to safe mode', async () => {
     const msg = createMockWhatsAppMessage({
-      content: '@vespr /invalid-mode do something',
+      content: '@vesper /invalid-mode do something',
     })
 
     await router.routeIncomingMessage(msg)
@@ -409,7 +409,7 @@ describe('WhatsApp Acceptance Tests - Result Formatting', () => {
 
     expect(result.truncated).toBe(true)
     expect(result.messages.length).toBe(1)
-    expect(result.messages[0]).toContain('View full result in Vespr')
+    expect(result.messages[0]).toContain('View full result in Vesper')
     expect(result.deepLink).toBeDefined()
   })
 
@@ -668,7 +668,7 @@ describe('WhatsApp Acceptance Tests - Error Handling', () => {
 
   test('26. Invalid directive ignored gracefully (defaults to safe mode)', async () => {
     const msg = createMockWhatsAppMessage({
-      content: '@vespr /destroy-everything research',
+      content: '@vesper /destroy-everything research',
     })
 
     // Should not throw
@@ -691,15 +691,15 @@ describe('WhatsApp Acceptance Tests - Error Handling', () => {
   })
 
   test('28. Directive with empty content recognized and handled', async () => {
-    const { directive, content } = extractDirective('@vespr /ask')
+    const { directive, content } = extractDirective('@vesper /ask')
 
     expect(directive).toBeNull()
-    expect(content).toBe('@vespr /ask')
+    expect(content).toBe('@vesper /ask')
   })
 
   test('29. Multiple directives: only first is applied', async () => {
     const msg = createMockWhatsAppMessage({
-      content: '@vespr /safe @vespr /allow-all test',
+      content: '@vesper /safe @vesper /allow-all test',
     })
 
     await router.routeIncomingMessage(msg)
@@ -709,12 +709,12 @@ describe('WhatsApp Acceptance Tests - Error Handling', () => {
     expect(modeCalls[0]!.args[1]).toBe('safe')
 
     const msgCalls = sessionManager.getCallsForMethod('sendMessage')
-    expect(msgCalls[0]!.args[1]).toContain('@vespr /allow-all')
+    expect(msgCalls[0]!.args[1]).toContain('@vesper /allow-all')
   })
 
   test('30. Attachments forwarded regardless of directive presence', async () => {
     const msg = createMockWhatsAppMessage({
-      content: '@vespr /safe analyze document',
+      content: '@vesper /safe analyze document',
       attachments: [
         {
           fileName: 'report.pdf',
@@ -753,7 +753,7 @@ describe('WhatsApp Acceptance Tests - Integration Flow (End-to-End)', () => {
       groupName: 'Research Team',
       senderName: 'Carol',
       senderPhoneNumber: '+11234567890',
-      content: '@vespr /ask research cloud computing',
+      content: '@vesper /ask research cloud computing',
     })
 
     await router.routeIncomingMessage(msg)
@@ -817,9 +817,9 @@ describe('WhatsApp Acceptance Tests - Integration Flow (End-to-End)', () => {
       directive: string
       expectedMode: 'safe' | 'ask' | 'allow-all'
     }> = [
-      { directive: '@vespr /safe', expectedMode: 'safe' },
-      { directive: '@vespr /ask', expectedMode: 'ask' },
-      { directive: '@vespr /allow-all', expectedMode: 'allow-all' },
+      { directive: '@vesper /safe', expectedMode: 'safe' },
+      { directive: '@vesper /ask', expectedMode: 'ask' },
+      { directive: '@vesper /allow-all', expectedMode: 'allow-all' },
     ]
 
     for (const { directive, expectedMode } of modes) {
@@ -898,9 +898,9 @@ describe('WhatsApp Acceptance Tests - Edge Cases', () => {
 
   test('39. Whitespace variations handled correctly', async () => {
     const variations = [
-      '   @vespr /safe   test   ',
-      '@vespr/safe test',
-      '@vespr  /safe  test',
+      '   @vesper /safe   test   ',
+      '@vesper/safe test',
+      '@vesper  /safe  test',
     ]
 
     for (const content of variations.slice(0, 1)) {

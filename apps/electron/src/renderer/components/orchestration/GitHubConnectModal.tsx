@@ -92,7 +92,7 @@ export function GitHubConnectModal() {
         <DialogHeader>
           <DialogTitle>Connect GitHub</DialogTitle>
           <DialogDescription>
-            Authorize Vespr to access your GitHub repositories for daily reports
+            Authorize Vesper to access your GitHub repositories for daily reports
           </DialogDescription>
         </DialogHeader>
 
@@ -136,7 +136,7 @@ export function GitHubConnectModal() {
             <div className="space-y-3">
               <div className="rounded-lg bg-blue-50 dark:bg-blue-950 p-3">
                 <p className="text-sm text-gray-700 dark:text-gray-300">
-                  Click below to authorize Vespr with your GitHub account. You
+                  Click below to authorize Vesper with your GitHub account. You
                   can revoke access anytime in GitHub Settings.
                 </p>
               </div>

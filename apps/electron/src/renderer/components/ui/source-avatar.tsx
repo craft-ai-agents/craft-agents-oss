@@ -36,9 +36,9 @@ import {
 } from '@/lib/icon-cache'
 import { Mail, Plug, Globe, HardDrive } from 'lucide-react'
 import { McpIcon } from '@/components/icons/McpIcon'
-import { deriveServiceUrl } from '@craft-agent/shared/utils/service-url'
-import { isEmoji } from '@craft-agent/shared/utils/icon-constants'
-import type { LoadedSource } from '@craft-agent/shared/sources/types'
+import { deriveServiceUrl } from '@vesper/shared/utils/service-url'
+import { isEmoji } from '@vesper/shared/utils/icon-constants'
+import type { LoadedSource } from '@vesper/shared/sources/types'
 import type { SourceConnectionStatus } from '../../../shared/types'
 import { SourceStatusIndicator, deriveConnectionStatus } from './source-status-indicator'
 

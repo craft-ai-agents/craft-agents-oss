@@ -5,11 +5,11 @@
  * Uses recursive directory watching for simplicity and reliability.
  *
  * Watched paths:
- * - ~/.craft-agent/config.json - Main app configuration
- * - ~/.craft-agent/preferences.json - User preferences
- * - ~/.craft-agent/theme.json - App-level theme overrides
- * - ~/.craft-agent/themes/*.json - Preset theme files (app-level)
- * - ~/.craft-agent/workspaces/{slug}/ - Workspace directory (recursive)
+ * - ~/.vesper/config.json - Main app configuration
+ * - ~/.vesper/preferences.json - User preferences
+ * - ~/.vesper/theme.json - App-level theme overrides
+ * - ~/.vesper/themes/*.json - Preset theme files (app-level)
+ * - ~/.vesper/workspaces/{slug}/ - Workspace directory (recursive)
  *   - sources/{slug}/config.json, guide.md, permissions.json
  *   - skills/{slug}/SKILL.md, icon.*
  *   - permissions.json
@@ -102,7 +102,7 @@ export interface ConfigWatcherCallbacks {
   onSkillsListChange?: (skills: LoadedSkill[]) => void;
 
   // Permissions callbacks
-  /** Called when app-level default permissions change (~/.craft-agent/permissions/default.json) */
+  /** Called when app-level default permissions change (~/.vesper/permissions/default.json) */
   onDefaultPermissionsChange?: () => void;
   /** Called when workspace permissions.json changes */
   onWorkspacePermissionsChange?: (workspaceId: string) => void;
@@ -814,7 +814,7 @@ export class ConfigWatcher {
   }
 
   /**
-   * Watch app-level themes directory (~/.craft-agent/themes/)
+   * Watch app-level themes directory (~/.vesper/themes/)
    */
   private watchAppThemesDir(): void {
     const themesDir = getAppThemesDir();
@@ -843,7 +843,7 @@ export class ConfigWatcher {
   }
 
   /**
-   * Watch app-level permissions directory (~/.craft-agent/permissions/)
+   * Watch app-level permissions directory (~/.vesper/permissions/)
    * Watches for changes to default.json which contains the default read-only patterns
    */
   private watchAppPermissionsDir(): void {

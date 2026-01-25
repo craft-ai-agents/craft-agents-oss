@@ -10,7 +10,7 @@
  * - Large results (>16KB): Send truncated preview + deep link to desktop session
  */
 
-import type { Message } from '@craft-agent/core/types'
+import type { Message } from '@vesper/core/types'
 
 // --- Constants for WhatsApp message size limits ---
 
@@ -52,7 +52,7 @@ export function shouldUseDeepLink(result: string): boolean {
 }
 
 /**
- * Generate a Vespr deep link for viewing full session details
+ * Generate a Vesper deep link for viewing full session details
  *
  * Deep links allow users to open the full session in the desktop app
  * when WhatsApp message limits are exceeded.
@@ -98,7 +98,7 @@ export function formatLargeResult(
         `${truncatedPreview}\n\n` +
         `---\n` +
         `*Result too large for WhatsApp (${Math.round(result.length / 1024)}KB)*\n\n` +
-        `🔗 [View full result in Vespr](${deepLink})`
+        `🔗 [View full result in Vesper](${deepLink})`
     ]
   }
 

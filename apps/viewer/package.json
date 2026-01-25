@@ -1,5 +1,5 @@
 {
-  "name": "@craft-agent/viewer",
+  "name": "@vesper/viewer",
   "version": "0.2.25",
   "description": "Web viewer for Craft Agents sessions - upload and share session transcripts",
   "private": true,
@@ -11,8 +11,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@craft-agent/core": "workspace:*",
-    "@craft-agent/ui": "workspace:*",
+    "@vesper/core": "workspace:*",
+    "@vesper/ui": "workspace:*",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

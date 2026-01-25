@@ -54,7 +54,7 @@ describe('GitHub Storage', () => {
       if (latest) expect(latest.id).toBe(report.id);
 
       // Cleanup
-      await fs.rm(join(tmpdir(), '.vespr', 'workspaces', wsId), {
+      await fs.rm(join(tmpdir(), '.vesper', 'workspaces', wsId), {
         recursive: true,
         force: true,
       });
@@ -76,7 +76,7 @@ describe('GitHub Storage', () => {
       if (all[1]) expect(all[1].id).toBe('id-2');
 
       // Cleanup
-      await fs.rm(join(tmpdir(), '.vespr', 'workspaces', wsId), {
+      await fs.rm(join(tmpdir(), '.vesper', 'workspaces', wsId), {
         recursive: true,
         force: true,
       });
@@ -108,7 +108,7 @@ describe('GitHub Storage', () => {
       }
 
       // Cleanup
-      await fs.rm(join(tmpdir(), '.vespr', 'workspaces', wsId), {
+      await fs.rm(join(tmpdir(), '.vesper', 'workspaces', wsId), {
         recursive: true,
         force: true,
       });
@@ -132,7 +132,7 @@ describe('GitHub Storage', () => {
       expect(reports).toHaveLength(3);
 
       // Cleanup
-      await fs.rm(join(tmpdir(), '.vespr', 'workspaces', wsId), {
+      await fs.rm(join(tmpdir(), '.vesper', 'workspaces', wsId), {
         recursive: true,
         force: true,
       });
@@ -158,7 +158,7 @@ describe('GitHub Storage', () => {
       expect(reports.length).toBeGreaterThanOrEqual(1); // Should get at least reports from the range
 
       // Cleanup
-      await fs.rm(join(tmpdir(), '.vespr', 'workspaces', wsId), {
+      await fs.rm(join(tmpdir(), '.vesper', 'workspaces', wsId), {
         recursive: true,
         force: true,
       });
@@ -185,7 +185,7 @@ describe('GitHub Storage', () => {
       }
 
       // Cleanup
-      await fs.rm(join(tmpdir(), '.vespr', 'workspaces', wsId), {
+      await fs.rm(join(tmpdir(), '.vesper', 'workspaces', wsId), {
         recursive: true,
         force: true,
       });

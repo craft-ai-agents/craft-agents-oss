@@ -1,5 +1,5 @@
 /**
- * @craft-agent/ui - Shared React UI components for Vesper
+ * @vesper/ui - Shared React UI components for Vesper
  *
  * This package provides platform-agnostic UI components that work in both:
  * - Electron desktop app (full interactive mode)

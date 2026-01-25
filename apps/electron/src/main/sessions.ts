@@ -2,7 +2,7 @@ import { app } from 'electron'
 import { join } from 'path'
 import { existsSync } from 'fs'
 import { rm, readFile } from 'fs/promises'
-import { CraftAgent, type AgentEvent, setPermissionMode, type PermissionMode, unregisterSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest } from '@craft-agent/shared/agent'
+import { VesperAgent, type AgentEvent, setPermissionMode, type PermissionMode, unregisterSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest } from '@vesper/shared/agent'
 import { sessionLog, isDebugMode, getLogFilePath } from './logger'
 import { createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk'
 import type { WindowManager } from './window-manager'
@@ -12,8 +12,8 @@ import {
   getWorkspaceByNameOrId,
   loadConfigDefaults,
   type Workspace,
-} from '@craft-agent/shared/config'
-import { loadWorkspaceConfig } from '@craft-agent/shared/workspaces'
+} from '@vesper/shared/config'
+import { loadWorkspaceConfig } from '@vesper/shared/workspaces'
 import {
   // Session persistence functions
   listSessions as listStoredSessions,
@@ -36,19 +36,19 @@ import {
   type StoredMessage,
   type SessionMetadata,
   type TodoState,
-} from '@craft-agent/shared/sessions'
-import { loadWorkspaceSources, loadAllSources, getSourcesBySlugs, type LoadedSource, type McpServerConfig, getSourcesNeedingAuth, getSourceCredentialManager, getSourceServerBuilder, type SourceWithCredential, isApiOAuthProvider, SERVER_BUILD_ERRORS } from '@craft-agent/shared/sources'
-import { ConfigWatcher, type ConfigWatcherCallbacks } from '@craft-agent/shared/config'
-import { getAuthState } from '@craft-agent/shared/auth'
-import { setAnthropicOptionsEnv, setPathToClaudeCodeExecutable, setInterceptorPath, setExecutable } from '@craft-agent/shared/agent'
-import { getCredentialManager } from '@craft-agent/shared/credentials'
-import { CraftMcpClient } from '@craft-agent/shared/mcp'
+} from '@vesper/shared/sessions'
+import { loadWorkspaceSources, loadAllSources, getSourcesBySlugs, type LoadedSource, type McpServerConfig, getSourcesNeedingAuth, getSourceCredentialManager, getSourceServerBuilder, type SourceWithCredential, isApiOAuthProvider, SERVER_BUILD_ERRORS } from '@vesper/shared/sources'
+import { ConfigWatcher, type ConfigWatcherCallbacks } from '@vesper/shared/config'
+import { getAuthState } from '@vesper/shared/auth'
+import { setAnthropicOptionsEnv, setPathToClaudeCodeExecutable, setInterceptorPath, setExecutable } from '@vesper/shared/agent'
+import { getCredentialManager } from '@vesper/shared/credentials'
+import { CraftMcpClient } from '@vesper/shared/mcp'
 import { type Session, type Message, type SessionEvent, type FileAttachment, type StoredAttachment, type SendMessageOptions, IPC_CHANNELS, generateMessageId } from '../shared/types'
-import { generateSessionTitle, regenerateSessionTitle, formatPathsToRelative, formatToolInputPaths, perf } from '@craft-agent/shared/utils'
-import { DEFAULT_MODEL } from '@craft-agent/shared/config'
-import { type ThinkingLevel, DEFAULT_THINKING_LEVEL } from '@craft-agent/shared/agent/thinking-levels'
-import { createViewerService } from '@craft-agent/shared/viewer'
-import type { ViewerService } from '@craft-agent/shared/viewer'
+import { generateSessionTitle, regenerateSessionTitle, formatPathsToRelative, formatToolInputPaths, perf } from '@vesper/shared/utils'
+import { DEFAULT_MODEL } from '@vesper/shared/config'
+import { type ThinkingLevel, DEFAULT_THINKING_LEVEL } from '@vesper/shared/agent/thinking-levels'
+import { createViewerService } from '@vesper/shared/viewer'
+import type { ViewerService } from '@vesper/shared/viewer'
 
 /**
  * Sanitize message content for use as session title.
@@ -126,7 +126,7 @@ async function buildServersFromSources(sources: LoadedSource[]) {
 interface ManagedSession {
   id: string
   workspace: Workspace
-  agent: CraftAgent | null  // Lazy-loaded - null until first message
+  agent: VesperAgent | null  // Lazy-loaded - null until first message
   messages: Message[]
   isProcessing: boolean
   lastMessageAt: number
@@ -436,7 +436,7 @@ export class SessionManager {
       onSkillChange: async (slug, skill) => {
         sessionLog.info(`Skill '${slug}' changed:`, skill ? 'updated' : 'deleted')
         // Broadcast updated list to UI
-        const { loadWorkspaceSkills } = await import('@craft-agent/shared/skills')
+        const { loadWorkspaceSkills } = await import('@vesper/shared/skills')
         const skills = loadWorkspaceSkills(workspaceRootPath)
         this.broadcastSkillsChanged(skills)
       },
@@ -468,7 +468,7 @@ export class SessionManager {
   /**
    * Broadcast app theme changed event to all windows
    */
-  private broadcastAppThemeChanged(theme: import('@craft-agent/shared/config').ThemeOverrides | null): void {
+  private broadcastAppThemeChanged(theme: import('@vesper/shared/config').ThemeOverrides | null): void {
     if (!this.windowManager) return
     sessionLog.info(`Broadcasting app theme changed`)
     this.windowManager.broadcastToAll(IPC_CHANNELS.THEME_APP_CHANGED, theme)
@@ -477,7 +477,7 @@ export class SessionManager {
   /**
    * Broadcast skills changed event to all windows
    */
-  private broadcastSkillsChanged(skills: import('@craft-agent/shared/skills').LoadedSkill[]): void {
+  private broadcastSkillsChanged(skills: import('@vesper/shared/skills').LoadedSkill[]): void {
     if (!this.windowManager) return
     sessionLog.info(`Broadcasting skills changed (${skills.length} skills)`)
     this.windowManager.broadcastToAll(IPC_CHANNELS.SKILLS_CHANGED, skills)
@@ -485,7 +485,7 @@ export class SessionManager {
 
   /**
    * Broadcast default permissions changed event to all windows
-   * Triggered when ~/.craft-agent/permissions/default.json changes
+   * Triggered when ~/.vesper/permissions/default.json changes
    */
   private broadcastDefaultPermissionsChanged(): void {
     if (!this.windowManager) return
@@ -504,7 +504,7 @@ export class SessionManager {
     const workspaceRootPath = managed.workspace.rootPath
     sessionLog.info(`Reloading sources for session ${managed.id}`)
 
-    // Reload all sources from disk (craft-agents-docs is always available as MCP server)
+    // Reload all sources from disk (vesper-docs is always available as MCP server)
     const allSources = loadAllSources(workspaceRootPath)
     managed.agent.setAllSources(allSources)
 
@@ -980,7 +980,7 @@ export class SessionManager {
       }
 
       // Update source config to mark as authenticated
-      const { markSourceAuthenticated } = await import('@craft-agent/shared/sources')
+      const { markSourceAuthenticated } = await import('@vesper/shared/sources')
       markSourceAuthenticated(managed.workspace.rootPath, request.sourceSlug)
 
       // Mark source as unseen so fresh guide is injected on next message
@@ -1226,11 +1226,11 @@ export class SessionManager {
   /**
    * Get or create agent for a session (lazy loading)
    */
-  private async getOrCreateAgent(managed: ManagedSession): Promise<CraftAgent> {
+  private async getOrCreateAgent(managed: ManagedSession): Promise<VesperAgent> {
     if (!managed.agent) {
       const end = perf.start('agent.create', { sessionId: managed.id })
       const config = loadStoredConfig()
-      managed.agent = new CraftAgent({
+      managed.agent = new VesperAgent({
         workspace: managed.workspace,
         // Session model takes priority, fallback to global config
         model: managed.model || config?.model,
@@ -1302,7 +1302,7 @@ export class SessionManager {
       }
 
       // Note: Credential requests now flow through onAuthRequest (unified auth flow)
-      // The legacy onCredentialRequest callback has been removed from CraftAgent
+      // The legacy onCredentialRequest callback has been removed from VesperAgent
 
       // Set up mode change handlers
       managed.agent.onPermissionModeChange = (mode) => {
@@ -2837,7 +2837,7 @@ To view this task's output:
         const PARENT_TOOLS = ['Task', 'TaskOutput']
         const isParentTool = PARENT_TOOLS.includes(event.toolName)
 
-        // Use parentToolUseId from the event - CraftAgent computes this correctly
+        // Use parentToolUseId from the event - VesperAgent computes this correctly
         // using the SDK's parent_tool_use_id (authoritative for parallel Tasks)
         // Only fall back to stack heuristic if event doesn't provide parent
         let parentToolUseId: string | undefined
@@ -2845,7 +2845,7 @@ To view this task's output:
           // Parent tools don't have a parent themselves
           parentToolUseId = undefined
         } else if (event.parentToolUseId) {
-          // CraftAgent provided the correct parent from SDK - use it
+          // VesperAgent provided the correct parent from SDK - use it
           parentToolUseId = event.parentToolUseId
         } else if (managed.parentToolStack.length > 0) {
           // Fallback: use stack heuristic for edge cases
@@ -3171,7 +3171,7 @@ To view this task's output:
         break
 
       case 'complete':
-        // Complete event from CraftAgent - accumulate usage from this turn
+        // Complete event from VesperAgent - accumulate usage from this turn
         // Actual 'complete' sent to renderer comes from the finally block in sendMessage
         if (event.usage) {
           // Initialize tokenUsage if not set
@@ -3369,7 +3369,7 @@ To view this task's output:
   // =============================================================================
 
   /** Map of session ID -> running RalphLoopRunner */
-  private loopRunners: Map<string, import('@craft-agent/shared/ralph-loop').RalphLoopRunner> = new Map()
+  private loopRunners: Map<string, import('@vesper/shared/ralph-loop').RalphLoopRunner> = new Map()
 
   /**
    * Start a Ralph Loop for a session
@@ -3390,7 +3390,7 @@ To view this task's output:
     }
 
     // Lazy-load loop module to avoid startup cost
-    const { parsePRD, validatePRD, createLoopRunner } = await import('@craft-agent/shared/ralph-loop')
+    const { parsePRD, validatePRD, createLoopRunner } = await import('@vesper/shared/ralph-loop')
 
     // Validate the PRD
     const validation = validatePRD(prdContent)

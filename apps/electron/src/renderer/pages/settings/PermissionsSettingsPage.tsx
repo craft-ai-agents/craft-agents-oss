@@ -2,10 +2,10 @@
  * PermissionsSettingsPage
  *
  * Displays permissions configuration for Explore mode.
- * Shows both default patterns (from ~/.craft-agent/permissions/default.json)
+ * Shows both default patterns (from ~/.vesper/permissions/default.json)
  * and custom workspace additions (from workspace permissions.json).
  *
- * Default patterns can be edited by the user in ~/.craft-agent/permissions/default.json.
+ * Default patterns can be edited by the user in ~/.vesper/permissions/default.json.
  * Custom patterns can be edited via workspace permissions.json file.
  */
 
@@ -16,7 +16,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { HeaderMenu } from '@/components/ui/HeaderMenu'
 import { Loader2 } from 'lucide-react'
 import { useAppShellContext, useActiveWorkspace } from '@/context/AppShellContext'
-import { type PermissionsConfigFile } from '@craft-agent/shared/agent/modes'
+import { type PermissionsConfigFile } from '@vesper/shared/agent/modes'
 import {
   PermissionsDataTable,
   type PermissionRow,
@@ -35,7 +35,7 @@ export const meta: DetailsPageMeta = {
 }
 
 /**
- * Build default permissions data from ~/.craft-agent/permissions/default.json.
+ * Build default permissions data from ~/.vesper/permissions/default.json.
  * These are the Explore mode patterns that can be customized by the user.
  * Patterns can include comments which are displayed in the table.
  *
@@ -138,7 +138,7 @@ export default function PermissionsSettingsPage() {
   const [defaultPermissionsPath, setDefaultPermissionsPath] = useState<string | null>(null)
   const [customConfig, setCustomConfig] = useState<PermissionsConfigFile | null>(null)
 
-  // Build default permissions data from ~/.craft-agent/permissions/default.json
+  // Build default permissions data from ~/.vesper/permissions/default.json
   const defaultPermissionsData = useMemo(() => buildDefaultPermissionsData(defaultConfig), [defaultConfig])
 
   // Build custom permissions data from workspace permissions.json
@@ -236,7 +236,7 @@ export default function PermissionsSettingsPage() {
                         <div className="p-8 text-center text-muted-foreground">
                           <p className="text-sm">No default permissions found.</p>
                           <p className="text-xs mt-1 text-foreground/40">
-                            Default permissions should be at <code className="bg-foreground/5 px-1 rounded">~/.craft-agent/permissions/default.json</code>
+                            Default permissions should be at <code className="bg-foreground/5 px-1 rounded">~/.vesper/permissions/default.json</code>
                           </p>
                         </div>
                       )}

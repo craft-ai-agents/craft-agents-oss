@@ -5,8 +5,8 @@
  * Auto-refreshes when workspace changes.
  */
 
-import { useState, useEffect, useCallback } from 'react'
-import type { StatusConfig } from '@craft-agent/shared/statuses'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import type { StatusConfig } from '@vesper/shared/statuses'
 import { clearIconCache } from '@/config/todo-states'
 
 export interface UseStatusesResult {
@@ -29,8 +29,13 @@ export function useStatuses(workspaceId: string | null): UseStatusesResult {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // Use ref to store workspaceId for use in event handler without causing re-subscriptions
+  const workspaceIdRef = useRef(workspaceId)
+  workspaceIdRef.current = workspaceId
+
   const refresh = useCallback(async () => {
-    if (!workspaceId) {
+    const currentWorkspaceId = workspaceIdRef.current
+    if (!currentWorkspaceId) {
       setStatuses([])
       setIsLoading(false)
       return
@@ -38,7 +43,7 @@ export function useStatuses(workspaceId: string | null): UseStatusesResult {
 
     try {
       setIsLoading(true)
-      const configs = await window.electronAPI.listStatuses(workspaceId)
+      const configs = await window.electronAPI.listStatuses(currentWorkspaceId)
       setStatuses(configs)
       setError(null)
     } catch (err) {
@@ -47,20 +52,20 @@ export function useStatuses(workspaceId: string | null): UseStatusesResult {
     } finally {
       setIsLoading(false)
     }
-  }, [workspaceId])
+  }, []) // No dependencies - uses ref for workspaceId
 
   // Load statuses when workspace changes
   useEffect(() => {
     refresh()
-  }, [refresh])
+  }, [workspaceId, refresh])
 
   // Subscribe to live status changes (config or icon file changes)
   useEffect(() => {
     if (!workspaceId) return
 
     const cleanup = window.electronAPI.onStatusesChanged((changedWorkspaceId) => {
-      // Only refresh if this is our workspace
-      if (changedWorkspaceId === workspaceId) {
+      // Only refresh if this is our workspace (use ref for current value)
+      if (changedWorkspaceId === workspaceIdRef.current) {
         clearIconCache()  // Clear cached icon files before refreshing
         refresh()
       }

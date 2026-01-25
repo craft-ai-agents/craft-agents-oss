@@ -2,13 +2,13 @@
 
 ## Overview
 
-The WhatsApp message routing module provides comprehensive integration between WhatsApp groups/chats and Vespr's AI agent system. It handles message ingestion, permission directives, session mapping, result formatting, and persistent message queuing.
+The WhatsApp message routing module provides comprehensive integration between WhatsApp groups/chats and Vesper's AI agent system. It handles message ingestion, permission directives, session mapping, result formatting, and persistent message queuing.
 
 This module is part of **Phase 2** of the WhatsApp bot integration and focuses on reliable message routing, session isolation, and graceful error handling.
 
 ### Architecture Goals
 
-- **Session Isolation**: Each sender+group combination gets a dedicated isolated Vespr session
+- **Session Isolation**: Each sender+group combination gets a dedicated isolated Vesper session
 - **Permission Control**: Per-message permission directives allow users to control agent behavior inline
 - **Reliability**: Persistent message queue ensures no messages are lost across restarts
 - **WhatsApp Compliance**: Respects 4096 character message limits with intelligent formatting
@@ -23,7 +23,7 @@ The WhatsApp integration is organized into five focused modules:
 | `types.ts` | Core type definitions for messages, sessions, and formatting |
 | `directive-parser.ts` | Extract and parse permission directives from message text |
 | `session-mapper.ts` | Create deterministic session IDs from WhatsApp identifiers |
-| `message-router.ts` | Route incoming WhatsApp messages to Vespr sessions |
+| `message-router.ts` | Route incoming WhatsApp messages to Vesper sessions |
 | `result-formatter.ts` | Format agent output for WhatsApp constraints |
 | `message-queue.ts` | Persistent, encrypted queue for reliable delivery |
 
@@ -31,7 +31,7 @@ The WhatsApp integration is organized into five focused modules:
 
 ### Sessions and Isolation
 
-Each unique combination of (sender, group) receives a dedicated Vespr session. This ensures:
+Each unique combination of (sender, group) receives a dedicated Vesper session. This ensures:
 
 - **Context Preservation**: If a user asks multiple questions in the same group, the agent maintains conversation history
 - **User Isolation**: Different senders in the same group don't see each other's conversation history
@@ -51,17 +51,17 @@ sessionId: "whatsapp_123456789-987654321@g.us::1234567890@s.whatsapp.net"
 Users can control agent permissions on a per-message basis using inline directives:
 
 ```
-@vespr /safe research competitors
-@vespr /ask run script.sh
-@vespr /allow-all deploy to production
+@vesper /safe research competitors
+@vesper /ask run script.sh
+@vesper /allow-all deploy to production
 ```
 
-**Directive Format**: `@vespr /{mode} {message content}`
+**Directive Format**: `@vesper /{mode} {message content}`
 
 **Modes**:
-- `@vespr /safe` - Read-only mode (no write operations allowed)
-- `@vespr /ask` - Ask for approval mode (prompts before executing)
-- `@vespr /allow-all` - Auto-approve mode (auto-executes all commands)
+- `@vesper /safe` - Read-only mode (no write operations allowed)
+- `@vesper /ask` - Ask for approval mode (prompts before executing)
+- `@vesper /allow-all` - Auto-approve mode (auto-executes all commands)
 - No directive (default) - Falls back to `safe` mode for safety
 
 ### WhatsApp Message Structure
@@ -76,7 +76,7 @@ Messages received from WhatsApp contain:
   senderJid: "1234567890@s.whatsapp.net",
   senderPhoneNumber: "+1234567890",
   senderName: "Alice",
-  content: "@vespr /ask run diagnostic.sh",
+  content: "@vesper /ask run diagnostic.sh",
   timestamp: 1674067200000,
   attachments: [
     {
@@ -97,7 +97,7 @@ Agent responses are formatted for WhatsApp's 4096 character limit:
 - **Large results (>4096 chars)**: Summary sent with deep link to full session in desktop app
 - **Multi-part results**: Intelligently chunked at paragraph boundaries
 
-Deep link format: `vespr://session/{sessionId}`
+Deep link format: `vesper://session/{sessionId}`
 
 ## API Reference
 
@@ -123,11 +123,11 @@ Parses a message for inline permission directives and returns both the directive
 **Examples:**
 ```typescript
 // With directive
-extractDirective("@vespr /safe research competitors")
+extractDirective("@vesper /safe research competitors")
 // Returns: { directive: 'safe', content: 'research competitors' }
 
 // With allow-all directive
-extractDirective("@vespr /allow-all deploy main")
+extractDirective("@vesper /allow-all deploy main")
 // Returns: { directive: 'allow-all', content: 'deploy main' }
 
 // No directive (defaults to safe)
@@ -157,7 +157,7 @@ Extract only the directive without the content.
 
 **Example:**
 ```typescript
-const mode = getDirective("@vespr /ask run script")
+const mode = getDirective("@vesper /ask run script")
 // Returns: 'ask'
 ```
 
@@ -169,7 +169,7 @@ type PermissionDirective = 'safe' | 'ask' | 'allow-all' | null
 
 ### session-mapper.ts
 
-Deterministically map WhatsApp identifiers to Vespr session IDs with persistence.
+Deterministically map WhatsApp identifiers to Vesper session IDs with persistence.
 
 #### `getSessionId(groupJid: string, senderJid: string): string`
 
@@ -192,7 +192,7 @@ const sessionId = getSessionId(
 
 #### `class SessionMapper`
 
-Manages persistent mappings between WhatsApp identifiers and Vespr session IDs.
+Manages persistent mappings between WhatsApp identifiers and Vesper session IDs.
 
 **Constructor:**
 ```typescript
@@ -263,7 +263,7 @@ Clear all mappings and truncate the mapping file.
 
 ### message-router.ts
 
-Route incoming WhatsApp messages to Vespr sessions with directive processing.
+Route incoming WhatsApp messages to Vesper sessions with directive processing.
 
 #### `class WhatsAppMessageRouter`
 
@@ -275,7 +275,7 @@ constructor(workspaceId: string, sessionManager: SessionManager)
 ```
 
 **Parameters:**
-- `workspaceId` (string): Vespr workspace ID for session creation
+- `workspaceId` (string): Vesper workspace ID for session creation
 - `sessionManager` (SessionManager): Session manager (injected dependency)
 
 ##### `async routeIncomingMessage(msg: WhatsAppMessage): Promise<void>`
@@ -284,18 +284,18 @@ Main routing method. Processes a WhatsApp message end-to-end.
 
 **Processing Flow:**
 
-1. Extract permission directive from message (e.g., `@vespr /ask`)
+1. Extract permission directive from message (e.g., `@vesper /ask`)
 2. Generate deterministic session ID from groupJid + senderJid
-3. Get or create Vespr session with WhatsApp metadata
+3. Get or create Vesper session with WhatsApp metadata
 4. Apply permission mode override based on directive
 5. Send stripped message content to agent (non-blocking)
 6. Monitor session for results and delivery
 
 **Permission Mode Mapping:**
 - No directive → `'safe'` (read-only, default)
-- `@vespr /safe` → `'safe'`
-- `@vespr /ask` → `'ask'`
-- `@vespr /allow-all` → `'allow-all'`
+- `@vesper /safe` → `'safe'`
+- `@vesper /ask` → `'ask'`
+- `@vesper /allow-all` → `'allow-all'`
 
 **Example:**
 ```typescript
@@ -308,7 +308,7 @@ const whatsappMsg = {
   senderJid: "1234567890@s.whatsapp.net",
   senderPhoneNumber: "+1234567890",
   senderName: "Alice",
-  content: "@vespr /ask run backup.sh",
+  content: "@vesper /ask run backup.sh",
   timestamp: Date.now()
 }
 
@@ -322,7 +322,7 @@ await router.routeIncomingMessage(whatsappMsg)
 
 **Directive Processing Example:**
 
-User sends: `@vespr /safe research competitors`
+User sends: `@vesper /safe research competitors`
 - Directive extracted: `'safe'`
 - Permission mode set to: `'safe'` (read-only)
 - Agent receives: `research competitors`
@@ -356,7 +356,7 @@ Factory function to create a message router instance.
 
 **Example:**
 ```typescript
-import { createMessageRouter } from '@vespr/shared/whatsapp'
+import { createMessageRouter } from '@vesper/shared/whatsapp'
 
 const router = createMessageRouter(workspaceId, sessionManager)
 ```
@@ -390,7 +390,7 @@ Convert agent session output to WhatsApp-compatible format.
 - If fits in 4096 chars: returns full message
 - If too large: returns summary + deep link to session
 
-**Deep Link Format**: `vespr://session/{sessionId}`
+**Deep Link Format**: `vesper://session/{sessionId}`
 
 **Example: Small Result**
 ```typescript
@@ -410,7 +410,7 @@ const result = formatResult(messages, sessionId)
 // {
 //   messages: [
 //     "📱 Research Results\n\nSummary:\nExtensive analysis of 50+ competitors...\n\n" +
-//     "🔗 [View full details in Vespr](vespr://session/whatsapp_group::sender)"
+//     "🔗 [View full details in Vesper](vesper://session/whatsapp_group::sender)"
 //   ],
 //   summary: "Extensive analysis of 50+ competitors...",
 //   truncated: true
@@ -714,7 +714,7 @@ interface WhatsAppSession {
 ### Example 1: Basic Message Routing
 
 ```typescript
-import { createMessageRouter } from '@vespr/shared/whatsapp'
+import { createMessageRouter } from '@vesper/shared/whatsapp'
 import { SessionManager } from '../sessions'
 
 // Initialize
@@ -745,7 +745,7 @@ await router.routeIncomingMessage(whatsappMsg)
 // User sends message with permission directive
 const msg = {
   ...whatsappMsg,
-  content: '@vespr /ask run backup.sh'
+  content: '@vesper /ask run backup.sh'
 }
 
 await router.routeIncomingMessage(msg)
@@ -758,7 +758,7 @@ await router.routeIncomingMessage(msg)
 ### Example 3: Result Formatting and Delivery
 
 ```typescript
-import { formatResult, estimateWhatsAppSize } from '@vespr/shared/whatsapp'
+import { formatResult, estimateWhatsAppSize } from '@vesper/shared/whatsapp'
 
 // After agent completes
 const sessionId = 'whatsapp_123-456@g.us::1234567890@s.whatsapp.net'
@@ -779,7 +779,7 @@ for (const message of result.messages) {
 ### Example 4: Persistent Message Queue
 
 ```typescript
-import { WhatsAppMessageQueue } from '@vespr/shared/whatsapp'
+import { WhatsAppMessageQueue } from '@vesper/shared/whatsapp'
 
 // Initialize queue
 const queue = new WhatsAppMessageQueue(workspacePath, credentialManager)
@@ -814,7 +814,7 @@ process.on('SIGTERM', async () => {
 ### Example 5: Session Mapper with Persistence
 
 ```typescript
-import { SessionMapper, getSessionId } from '@vespr/shared/whatsapp'
+import { SessionMapper, getSessionId } from '@vesper/shared/whatsapp'
 
 // Create mapper
 const mapper = new SessionMapper(workspacePath)
@@ -850,7 +850,7 @@ WhatsApp Input (Baileys)
 │ Message Router (message-router.ts)              │
 │                                                 │
 │ 1. Extract Directive Parser (directive-parser)  │
-│    - Parse @vespr /safe|/ask|/allow-all         │
+│    - Parse @vesper /safe|/ask|/allow-all         │
 │    - Return: directive + stripped content       │
 │                                                 │
 │ 2. Session Mapper (session-mapper)              │
@@ -953,13 +953,13 @@ The message router is instantiated by the WhatsApp service:
 
 ```typescript
 // In apps/electron/src/main/whatsapp-service.ts
-import { createMessageRouter } from '@vespr/shared/whatsapp'
+import { createMessageRouter } from '@vesper/shared/whatsapp'
 
 const router = createMessageRouter(workspaceId, sessionManager)
 
 // When Baileys receives a message
 baileys.on('messages.upsert', async (m) => {
-  const whatsappMsg = convertBaileysToVesprMessage(m)
+  const whatsappMsg = convertBaileysToVesperMessage(m)
   await router.routeIncomingMessage(whatsappMsg)
 })
 ```
@@ -972,7 +972,7 @@ The message queue uses credential manager for encryption (Phase 2b):
 // Current: Plaintext JSONL (Phase 2a)
 // Future: AES-256-GCM encrypted (Phase 2b)
 
-import { getCredentialManager } from '@vespr/shared/credentials'
+import { getCredentialManager } from '@vesper/shared/credentials'
 const credentialManager = getCredentialManager()
 const queue = new WhatsAppMessageQueue(workspacePath, credentialManager)
 ```
@@ -1017,10 +1017,10 @@ Directives are evaluated per-message, not globally. Each message can specify its
 
 ```typescript
 // Message 1: Limited permissions
-"@vespr /safe what's the budget?"
+"@vesper /safe what's the budget?"
 
 // Message 2 (from same user, same session): Extended permissions
-"@vespr /ask deploy to staging"
+"@vesper /ask deploy to staging"
 
 // Each message independently controls its permission mode
 ```
@@ -1041,7 +1041,7 @@ Same sender, same group → Same session (context preserved)
 
 Message queue storage is encrypted (Phase 2b):
 
-**Current (Phase 2a):** Plaintext JSONL at `~/.vespr/workspaces/{id}/whatsapp-queue.jsonl`
+**Current (Phase 2a):** Plaintext JSONL at `~/.vesper/workspaces/{id}/whatsapp-queue.jsonl`
 
 **Future (Phase 2b):** AES-256-GCM encrypted via CredentialManager
 
@@ -1058,14 +1058,14 @@ await sessionManager.deleteWorkspace(workspaceId)  // Delete sessions
 
 ## Permission Modes Reference
 
-### Safe Mode (`@vespr /safe`)
+### Safe Mode (`@vesper /safe`)
 
 Read-only, all write operations blocked.
 
 **Use Case:** Information gathering, research, analysis
 
 ```
-Message: @vespr /safe analyze competitor pricing
+Message: @vesper /safe analyze competitor pricing
 
 Allowed:
 - Browse websites
@@ -1079,14 +1079,14 @@ Blocked:
 - Modify systems
 ```
 
-### Ask Mode (`@vespr /ask`)
+### Ask Mode (`@vesper /ask`)
 
 Default permission mode. Prompts for approval before write operations.
 
 **Use Case:** Administrative tasks, deployments, system changes
 
 ```
-Message: @vespr /ask deploy release-1.0
+Message: @vesper /ask deploy release-1.0
 
 User sees:
 ⚠️ The agent wants to: Run bash: ./deploy.sh
@@ -1096,14 +1096,14 @@ If approved → Command executes
 If denied → Agent continues without command
 ```
 
-### Allow-All Mode (`@vespr /allow-all`)
+### Allow-All Mode (`@vesper /allow-all`)
 
 Auto-approves all operations without prompting.
 
 **Use Case:** Trusted automation, batch processing, high-volume operations
 
 ```
-Message: @vespr /allow-all sync all databases
+Message: @vesper /allow-all sync all databases
 
 All commands auto-execute without approval
 Use with caution - suitable only for trusted workflows
@@ -1116,9 +1116,9 @@ Use with caution - suitable only for trusted workflows
 For clarity, put directive and command together:
 
 ```
-✓ GOOD:   @vespr /ask run backup.sh
-✗ BAD:    Run backup.sh @vespr /ask
-✗ WORSE:  @vespr /ask
+✓ GOOD:   @vesper /ask run backup.sh
+✗ BAD:    Run backup.sh @vesper /ask
+✗ WORSE:  @vesper /ask
           run backup.sh
 ```
 
@@ -1182,7 +1182,7 @@ async function processWithRetry(msg, maxRetries = 3) {
 
 1. Check if router is initialized: `await router.routeIncomingMessage()`
 2. Verify sessionManager dependency is passed correctly
-3. Check logs in `~/Library/Logs/Vespr/`
+3. Check logs in `~/Library/Logs/Vesper/`
 
 ### Queue Growing Indefinitely
 
@@ -1192,7 +1192,7 @@ async function processWithRetry(msg, maxRetries = 3) {
 
 ### Permission Mode Not Applied
 
-1. Verify directive syntax: `@vespr /mode message`
+1. Verify directive syntax: `@vesper /mode message`
 2. Check message is being sent to SessionManager: `sendMessage()`
 3. Confirm SessionManager supports `setSessionPermissionMode()`
 
@@ -1217,7 +1217,7 @@ This shouldn't happen with composite key approach. If it does:
 
 ## Summary
 
-The WhatsApp message routing module provides a production-ready integration layer between WhatsApp and Vespr's agent system. It handles message ingestion, permission control, session isolation, result formatting, and reliable delivery through a modular, well-tested architecture.
+The WhatsApp message routing module provides a production-ready integration layer between WhatsApp and Vesper's agent system. It handles message ingestion, permission control, session isolation, result formatting, and reliable delivery through a modular, well-tested architecture.
 
 Key responsibilities:
 - **Directive Parsing**: Extract permission overrides from messages

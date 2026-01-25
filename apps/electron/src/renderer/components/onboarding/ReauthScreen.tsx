@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { AlertCircle, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Spinner } from "@craft-agent/ui"
+import { Spinner } from "@vesper/ui"
 import { VesperSymbol } from "@/components/icons/VesperSymbol"
 import { StepFormLayout } from "./primitives"
 

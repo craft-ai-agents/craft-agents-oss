@@ -211,7 +211,7 @@ export function generateSessionHTML(session: StoredSession): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${sessionName} - Vespr Session</title>
+  <title>${sessionName} - Vesper Session</title>
   <style>
     * {
       margin: 0;
@@ -560,7 +560,7 @@ export function generateSessionHTML(session: StoredSession): string {
     </div>
 
     <div class="footer">
-      Exported from <a href="https://vespr.atherslabs.com" target="_blank">Vespr</a> by Ather Labs
+      Exported from <a href="https://vesper.atherslabs.com" target="_blank">Vesper</a> by Ather Labs
     </div>
   </div>
 </body>

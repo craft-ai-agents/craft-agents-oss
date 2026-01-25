@@ -5,14 +5,14 @@
  */
 import { ipcMain } from 'electron'
 import { mainLog } from './logger'
-import { getAuthState, getSetupNeeds } from '@craft-agent/shared/auth'
-import { getCredentialManager } from '@craft-agent/shared/credentials'
-import { saveConfig, loadStoredConfig, generateWorkspaceId, type AuthType, type StoredConfig } from '@craft-agent/shared/config'
-import { getDefaultWorkspacesDir } from '@craft-agent/shared/workspaces'
-import { CraftOAuth, getMcpBaseUrl } from '@craft-agent/shared/auth'
-import { validateMcpConnection } from '@craft-agent/shared/mcp'
-import { getExistingClaudeToken, getExistingClaudeCredentials, isClaudeCliInstalled, runClaudeSetupToken, startClaudeOAuth, exchangeClaudeCode, hasValidOAuthState, clearOAuthState } from '@craft-agent/shared/auth'
-import { getCredentialManager as getCredentialManagerFn } from '@craft-agent/shared/credentials'
+import { getAuthState, getSetupNeeds } from '@vesper/shared/auth'
+import { getCredentialManager } from '@vesper/shared/credentials'
+import { saveConfig, loadStoredConfig, generateWorkspaceId, type AuthType, type StoredConfig } from '@vesper/shared/config'
+import { getDefaultWorkspacesDir } from '@vesper/shared/workspaces'
+import { CraftOAuth, getMcpBaseUrl } from '@vesper/shared/auth'
+import { validateMcpConnection } from '@vesper/shared/mcp'
+import { getExistingClaudeToken, getExistingClaudeCredentials, isClaudeCliInstalled, runClaudeSetupToken, startClaudeOAuth, exchangeClaudeCode, hasValidOAuthState, clearOAuthState } from '@vesper/shared/auth'
+import { getCredentialManager as getCredentialManagerFn } from '@vesper/shared/credentials'
 import {
   IPC_CHANNELS,
   type OnboardingSaveResult,

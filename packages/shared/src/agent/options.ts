@@ -3,7 +3,7 @@ import { join, dirname } from "path";
 import { homedir } from "os";
 import { debug } from "../utils/debug";
 
-declare const CRAFT_AGENT_CLI_VERSION: string | undefined;
+declare const VESPER_CLI_VERSION: string | undefined;
 
 let optionsEnv: Record<string, string> = {};
 let customPathToClaudeCodeExecutable: string | null = null;
@@ -49,7 +49,7 @@ export function getDefaultOptions(): Partial<Options> {
                 ...process.env,
                 ... optionsEnv,
                 // Propagate debug mode from argv flag OR existing env var
-                CRAFT_DEBUG: (process.argv.includes('--debug') || process.env.CRAFT_DEBUG === '1') ? '1' : '0',
+                VESPER_DEBUG: (process.argv.includes('--debug') || process.env.VESPER_DEBUG === '1') ? '1' : '0',
             }
         };
         // Add interceptor preload if path is set (needed for cache TTL patching)
@@ -59,8 +59,8 @@ export function getDefaultOptions(): Partial<Options> {
         return options;
     }
 
-    if (typeof CRAFT_AGENT_CLI_VERSION !== 'undefined' && CRAFT_AGENT_CLI_VERSION != null) {
-        const baseDir = join(homedir(), '.local', 'share', 'craft', 'versions', CRAFT_AGENT_CLI_VERSION);
+    if (typeof VESPER_CLI_VERSION !== 'undefined' && VESPER_CLI_VERSION != null) {
+        const baseDir = join(homedir(), '.local', 'share', 'craft', 'versions', VESPER_CLI_VERSION);
         return {
             pathToClaudeCodeExecutable: join(baseDir, 'claude-agent-sdk', 'cli.js'),
             // Use the compiled binary itself as the runtime via BUN_BE_BUN=1
@@ -74,7 +74,7 @@ export function getDefaultOptions(): Partial<Options> {
                 BUN_BE_BUN: '1',
                 ... optionsEnv,
                 // Propagate debug mode from argv flag OR existing env var
-                CRAFT_DEBUG: (process.argv.includes('--debug') || process.env.CRAFT_DEBUG === '1') ? '1' : '0',
+                VESPER_DEBUG: (process.argv.includes('--debug') || process.env.VESPER_DEBUG === '1') ? '1' : '0',
             }
         }
     }
@@ -83,7 +83,7 @@ export function getDefaultOptions(): Partial<Options> {
             ... process.env,
             ... optionsEnv,
             // Propagate debug mode from argv flag OR existing env var
-            CRAFT_DEBUG: (process.argv.includes('--debug') || process.env.CRAFT_DEBUG === '1') ? '1' : '0',
+            VESPER_DEBUG: (process.argv.includes('--debug') || process.env.VESPER_DEBUG === '1') ? '1' : '0',
         }
     };
 }

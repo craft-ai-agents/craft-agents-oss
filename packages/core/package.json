@@ -1,8 +1,8 @@
 {
-  "name": "@craft-agent/core",
-  "version": "0.2.25",
+  "name": "@vesper/core",
+  "version": "0.1.0",
   "license": "Apache-2.0",
-  "description": "Core types, storage, and agent logic for Craft Agents",
+  "description": "Core types and utilities for Vesper",
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",

@@ -10,7 +10,7 @@
  */
 
 import { useState, useCallback, useEffect, useMemo } from 'react'
-import type { StoredSession } from '@craft-agent/core'
+import type { StoredSession } from '@vesper/core'
 import {
   SessionViewer,
   GenericOverlay,
@@ -21,7 +21,7 @@ import {
   type PlatformActions,
   type ActivityItem,
   type OverlayData,
-} from '@craft-agent/ui'
+} from '@vesper/ui'
 import { SessionUpload } from './components/SessionUpload'
 import { Header } from './components/Header'
 

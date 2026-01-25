@@ -18,7 +18,7 @@ import {
   reportSubmissionStateAtom,
   isGitHubConnectedAtom,
 } from '@/atoms/orchestration';
-import type { DailyReport } from '@craft-agent/shared/github';
+import type { DailyReport } from '@vesper/shared/github';
 
 export function DailyReportModal() {
   const [isOpen, setIsOpen] = useAtom(dailyReportModalOpenAtom);

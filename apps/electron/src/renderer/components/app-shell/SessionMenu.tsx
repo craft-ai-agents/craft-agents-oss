@@ -41,7 +41,7 @@ import { cn, isHexColor } from '@/lib/utils'
 import { useMenuComponents } from '@/components/ui/menu-context'
 import { getStateColor, getStateIcon, type TodoStateId } from '@/config/todo-states'
 import type { TodoState } from '@/config/todo-states'
-import type { Label } from '@craft-agent/shared/labels'
+import type { Label } from '@vesper/shared/labels'
 
 export interface SessionMenuProps {
   /** Session ID */

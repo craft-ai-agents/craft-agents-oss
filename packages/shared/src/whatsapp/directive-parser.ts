@@ -3,11 +3,11 @@ export type PermissionDirective = 'safe' | 'ask' | 'allow-all' | null
 /**
  * Parse inline permission directives from WhatsApp messages
  *
- * Format: @vespr /safe|/ask|/allow-all <message content>
+ * Format: @vesper /safe|/ask|/allow-all <message content>
  *
  * Examples:
- * - "@vespr /safe research competitors" → directive='safe', content='research competitors'
- * - "@vespr /allow-all run script.sh" → directive='allow-all', content='run script.sh'
+ * - "@vesper /safe research competitors" → directive='safe', content='research competitors'
+ * - "@vesper /allow-all run script.sh" → directive='allow-all', content='run script.sh'
  * - "just ask claude" → directive=null, content='just ask claude'
  */
 export function extractDirective(message: string): {
@@ -16,8 +16,8 @@ export function extractDirective(message: string): {
 } {
   const trimmed = message.trim()
 
-  // Pattern: @vespr /directive
-  const match = trimmed.match(/^@vespr\s+\/(safe|ask|allow-all)\s+(.*)$/i)
+  // Pattern: @vesper /directive
+  const match = trimmed.match(/^@vesper\s+\/(safe|ask|allow-all)\s+(.*)$/i)
 
   if (!match) {
     // No directive found - treat entire message as content
@@ -40,7 +40,7 @@ export function extractDirective(message: string): {
  * Check if message contains a directive
  */
 export function hasDirective(message: string): boolean {
-  return /^@vespr\s+\/(safe|ask|allow-all)/i.test(message.trim())
+  return /^@vesper\s+\/(safe|ask|allow-all)/i.test(message.trim())
 }
 
 /**

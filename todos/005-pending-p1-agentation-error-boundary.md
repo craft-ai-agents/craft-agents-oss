@@ -242,7 +242,7 @@ This is the production-grade approach. A dedicated error boundary component can 
 - React Error Boundaries: https://react.dev/reference/react/Component#catching-rendering-errors-with-an-errorboundary
 - Error Boundary example: https://react.dev/reference/react/Component#catching-rendering-errors-with-an-errorboundary
 - react-error-boundary: https://github.com/bvaughn/react-error-boundary (if going with Solution B)
-- Vespr error handling patterns: See existing error boundaries in `/apps/electron/src/renderer/components/`
+- Vesper error handling patterns: See existing error boundaries in `/apps/electron/src/renderer/components/`
 
 ## Design Considerations
 

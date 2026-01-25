@@ -1,14 +1,14 @@
-# Claude.md - Vespr Project Guide
+# Claude.md - Vesper Project Guide
 
-This file provides guidance to Claude Code (claude.ai/code) when working with the Vespr codebase.
+This file provides guidance to Claude Code (claude.ai/code) when working with the Vesper codebase.
 
 **Important:** Keep this file up-to-date whenever significant functionality changes or new features are added.
 
 ## Project Overview
 
-**Vespr** is an open-source AI agent platform built by Tin from Ather Labs. It's a desktop application that enables intuitive multitasking with AI agents through a beautiful, document-centric interface.
+**Vesper** is an open-source AI agent platform built by Tin from Ather Labs. It's a desktop application that enables intuitive multitasking with AI agents through a beautiful, document-centric interface.
 
-Vespr leverages the Claude Agent SDK and Claude Code while adding significant improvements for agentic workflows. It's built with Agent Native software principles and is highly customizable out of the box.
+Vesper leverages the Claude Agent SDK and Claude Code while adding significant improvements for agentic workflows. It's built with Agent Native software principles and is highly customizable out of the box.
 
 ## Recent Major Features (Past 12 Hours)
 
@@ -76,13 +76,13 @@ Vespr leverages the Claude Agent SDK and Claude Code while adding significant im
 - **Backend:** `packages/shared/src/whatsapp/`
   - `message-router` - Routes incoming messages
   - `directive-parser` - Parses permission directives from messages
-  - `session-mapper` - Maps WhatsApp sessions to Vespr sessions
+  - `session-mapper` - Maps WhatsApp sessions to Vesper sessions
   - `result-formatter` - Formats agent responses for WhatsApp
 
 ## Project Structure
 
 ```
-vespr/
+vesper/
 ├── apps/
 │   ├── electron/              # Main desktop app (Electron + React)
 │   │   └── src/
@@ -143,7 +143,7 @@ bun run typecheck:all
 # Run tests
 bun test
 
-# Debug logging (written to ~/Library/Logs/Vespr/)
+# Debug logging (written to ~/Library/Logs/Vesper/)
 # Automatically enabled in development
 ```
 
@@ -185,7 +185,7 @@ bun test
 
 ### User Data (Persistent)
 ```
-~/.vespr/
+~/.vesper/
 ├── config.json              # Main configuration
 ├── credentials.enc          # Encrypted API keys
 ├── preferences.json         # User preferences
@@ -199,7 +199,7 @@ bun test
 
 ### Logs
 ```
-~/Library/Logs/Vespr/       # Application logs (macOS)
+~/Library/Logs/Vesper/       # Application logs (macOS)
 ```
 
 ## IPC Messages (main/renderer communication)
@@ -244,17 +244,17 @@ Key IPC handlers in `apps/electron/src/main/ipc.ts`:
 
 ## Branding
 
-- **Product Name:** Vespr (not Vesper)
+- **Product Name:** Vesper
 - **Owner:** Tin from Ather Labs
-- **Website:** vespr.atherslabs.com
-- **Repository:** github.com/atherslabs/vespr
-- **Deep Linking:** `vespr://` protocol
-- **Configuration Dir:** `~/.vespr/`
-- **Logs Dir:** `~/Library/Logs/Vespr/`
+- **Website:** vesper.atherslabs.com
+- **Repository:** github.com/atherslabs/vesper
+- **Deep Linking:** `vesper://` protocol
+- **Configuration Dir:** `~/.vesper/`
+- **Logs Dir:** `~/Library/Logs/Vesper/`
 
 ## Contributing
 
-When working on Vespr:
+When working on Vesper:
 1. Keep feature components modular and reusable
 2. Use Jotai atoms for local state
 3. Broadcast IPC events for main/renderer sync

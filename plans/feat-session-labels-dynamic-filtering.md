@@ -42,7 +42,7 @@ interface SessionHeader {
 ### Storage
 
 ```
-~/.vespr/workspaces/{workspaceId}/
+~/.vesper/workspaces/{workspaceId}/
 ├── labels.json              # Label definitions
 └── sessions/{sessionId}/
     └── session.jsonl        # Line 1 includes labelIds

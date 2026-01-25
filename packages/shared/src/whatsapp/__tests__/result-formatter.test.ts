@@ -15,11 +15,11 @@ import {
   chunkForWhatsApp,
   estimateWhatsAppSize,
 } from '../result-formatter'
-import type { Message, MessageRole } from '@craft-agent/core/types'
+import type { Message, MessageRole } from '@vesper/core/types'
 
-// Helper to create mock Message objects matching internal Vespr Message type
+// Helper to create mock Message objects matching internal Vesper Message type
 function createMockMessage(role: MessageRole, content: { type: string; text?: string; content?: string; name?: string; id?: string; input?: unknown }[]): Message {
-  // Extract text content from content blocks (Vespr Message has content as string)
+  // Extract text content from content blocks (Vesper Message has content as string)
   const textContent = content
     .filter((block) => block.type === 'text' && block.text)
     .map((block) => block.text)
@@ -97,7 +97,7 @@ describe('formatResult', () => {
     // Very large results use preview + deep link
     expect(result.messages.length).toBe(1)
     expect(result.truncated).toBe(true)
-    expect(result.messages[0]).toContain('View full result in Vespr')
+    expect(result.messages[0]).toContain('View full result in Vesper')
     expect(result.deepLink).toBeDefined()
   })
 

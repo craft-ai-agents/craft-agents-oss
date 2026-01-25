@@ -1,22 +1,22 @@
 /**
  * Centralized path configuration for Vesper.
  *
- * Supports multi-instance development via CRAFT_CONFIG_DIR environment variable.
+ * Supports multi-instance development via VESPER_CONFIG_DIR environment variable.
  * When running from a numbered folder (e.g., craft-tui-agent-1), the detect-instance.sh
- * script sets CRAFT_CONFIG_DIR to ~/.craft-agent-1, allowing multiple instances to run
+ * script sets VESPER_CONFIG_DIR to ~/.vesper-1, allowing multiple instances to run
  * simultaneously with separate configurations.
  *
- * Default (non-numbered folders): ~/.craft-agent/
- * Instance 1 (-1 suffix): ~/.craft-agent-1/
- * Instance 2 (-2 suffix): ~/.craft-agent-2/
+ * Default (non-numbered folders): ~/.vesper/
+ * Instance 1 (-1 suffix): ~/.vesper-1/
+ * Instance 2 (-2 suffix): ~/.vesper-2/
  */
 
 import { homedir } from 'os';
 import { join } from 'path';
 
 // Allow override via environment variable for multi-instance dev
-// Falls back to default ~/.craft-agent/ for production and non-numbered dev folders
-export const CONFIG_DIR = process.env.CRAFT_CONFIG_DIR || join(homedir(), '.craft-agent');
+// Falls back to default ~/.vesper/ for production and non-numbered dev folders
+export const CONFIG_DIR = process.env.VESPER_CONFIG_DIR || join(homedir(), '.vesper');
 
 // Global skills directories (where skills are stored)
 export const GLOBAL_SKILLS_DIR = join(CONFIG_DIR, 'global-skills');

@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-`@vespr/shared` is the core business logic package for Vespr. It contains:
+`@vesper/shared` is the core business logic package for Vesper. It contains:
 - Agent implementation (VesperAgent, session-scoped tools, permission modes)
 - Authentication (OAuth, credentials, auth state)
 - Configuration (storage, preferences, themes, watcher)
@@ -20,14 +20,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 This package uses subpath exports for clean imports:
 
 ```typescript
-import { VesperAgent, getPermissionMode, setPermissionMode } from '@vespr/shared/agent';
-import { loadStoredConfig, type Workspace } from '@vespr/shared/config';
-import { getCredentialManager } from '@vespr/shared/credentials';
-import { VesperMcpClient } from '@vespr/shared/mcp';
-import { loadWorkspaceSources, type LoadedSource } from '@vespr/shared/sources';
-import { loadStatusConfig, createStatus } from '@vespr/shared/statuses';
-import { resolveTheme } from '@vespr/shared/config/theme';
-import { debug } from '@vespr/shared/utils';
+import { VesperAgent, getPermissionMode, setPermissionMode } from '@vesper/shared/agent';
+import { loadStoredConfig, type Workspace } from '@vesper/shared/config';
+import { getCredentialManager } from '@vesper/shared/credentials';
+import { VesperMcpClient } from '@vesper/shared/mcp';
+import { loadWorkspaceSources, type LoadedSource } from '@vesper/shared/sources';
+import { loadStatusConfig, createStatus } from '@vesper/shared/statuses';
+import { resolveTheme } from '@vesper/shared/config/theme';
+import { debug } from '@vesper/shared/utils';
 ```
 
 ## Directory Structure
@@ -35,7 +35,7 @@ import { debug } from '@vespr/shared/utils';
 ```
 src/
 ├── agent/              # VesperAgent, session-scoped-tools, mode-manager, mode-types, permissions-config
-├── auth/               # OAuth, vespr-token, claude-token, state
+├── auth/               # OAuth, vesper-token, claude-token, state
 ├── config/             # Storage, preferences, models, theme, watcher
 ├── credentials/        # Secure credential storage (AES-256-GCM)
 ├── headless/           # Non-interactive execution mode
@@ -44,7 +44,7 @@ src/
 ├── sessions/           # Session index, storage, persistence-queue
 ├── sources/            # Source types, storage, service
 ├── statuses/           # Dynamic status types, CRUD, storage
-├── subscription/       # Vespr subscription checking
+├── subscription/       # Vesper subscription checking
 ├── utils/              # Debug logging, file handling, summarization
 ├── validation/         # URL validation
 ├── version/            # Version management, install scripts
@@ -78,8 +78,8 @@ Three-level permission system per session:
 
 ### Permissions Configuration (`src/agent/permissions-config.ts`)
 Customizable safety rules at two levels (additive merging):
-- Workspace: `~/.vespr/workspaces/{id}/permissions.json`
-- Source: `~/.vespr/workspaces/{id}/sources/{slug}/permissions.json`
+- Workspace: `~/.vesper/workspaces/{id}/permissions.json`
+- Source: `~/.vesper/workspaces/{id}/sources/{slug}/permissions.json`
 
 **Rule types:**
 - `blockedTools` - Tools to block (extends defaults)
@@ -100,7 +100,7 @@ Tools available within agent sessions with callback registry:
 ### Dynamic Status System (`src/statuses/`)
 Workspace-level customizable workflow states:
 
-**Storage:** `~/.vespr/workspaces/{id}/statuses/config.json`
+**Storage:** `~/.vesper/workspaces/{id}/statuses/config.json`
 
 **Status properties:** `id`, `label`, `color`, `icon`, `shortcut`, `category` (open/closed), `isFixed`, `isDefault`, `order`
 
@@ -112,8 +112,8 @@ Workspace-level customizable workflow states:
 Cascading theme configuration: app → workspace (last wins)
 
 **Storage:**
-- App: `~/.vespr/theme.json`
-- Workspace: `~/.vespr/workspaces/{id}/theme.json`
+- App: `~/.vesper/theme.json`
+- Workspace: `~/.vesper/workspaces/{id}/theme.json`
 
 **6-color system:** `background`, `foreground`, `accent`, `info`, `success`, `destructive`
 
@@ -125,10 +125,10 @@ Cascading theme configuration: app → workspace (last wins)
 - **index.ts:** Session listing and metadata
 
 ### Credentials (`src/credentials/`)
-All sensitive credentials (API keys, OAuth tokens) are stored in an AES-256-GCM encrypted file at `~/.vespr/credentials.enc`. The `CredentialManager` provides the API for reading and writing credentials.
+All sensitive credentials (API keys, OAuth tokens) are stored in an AES-256-GCM encrypted file at `~/.vesper/credentials.enc`. The `CredentialManager` provides the API for reading and writing credentials.
 
 ### Configuration (`src/config/storage.ts`)
-Multi-workspace configuration stored in `~/.vespr/config.json`. Supports:
+Multi-workspace configuration stored in `~/.vesper/config.json`. Supports:
 - Multiple workspaces with separate MCP servers and sessions
 - Default permission mode for new sessions
 - Extended cache TTL preference
@@ -140,11 +140,11 @@ File watcher for live config updates:
 - Callbacks: `onConfigChange`, `onThemeChange`, `onWorkspacePermissionsChange`, `onSourcePermissionsChange`
 
 ### Sources (`src/sources/`)
-Sources are external data connections (MCP servers, APIs, local filesystems). Stored at `~/.vespr/workspaces/{id}/sources/{slug}/` with config.json and guide.md. Types: `mcp`, `api`, `local`, `gmail`.
+Sources are external data connections (MCP servers, APIs, local filesystems). Stored at `~/.vesper/workspaces/{id}/sources/{slug}/` with config.json and guide.md. Types: `mcp`, `api`, `local`, `gmail`.
 
 ## Dependencies
 
-- `@vespr/core` - Shared types
+- `@vesper/core` - Shared types
 - `@anthropic-ai/claude-agent-sdk` - Claude Agent SDK
 
 ## Type Checking

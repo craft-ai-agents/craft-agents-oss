@@ -1,19 +1,19 @@
-# Vespr: Unified Product Vision 2026
+# Vesper: Unified Product Vision 2026
 ## Autonomous Orchestration Platform for Teams
 
 **Date:** 2026-01-23
-**Product:** Vespr (Built by Tin from Ather Labs)
+**Product:** Vesper (Built by Tin from Ather Labs)
 **Vision Horizon:** 18 months (Q1 2026 - Q2 2027)
 
 ---
 
 ## Executive Summary
 
-Vespr is the autonomous orchestration platform that eliminates operational bottlenecks for any team. Whether you're an engineering leader triaging bugs, a researcher synthesizing findings, or a finance manager processing invoices—the core problem is identical:
+Vesper is the autonomous orchestration platform that eliminates operational bottlenecks for any team. Whether you're an engineering leader triaging bugs, a researcher synthesizing findings, or a finance manager processing invoices—the core problem is identical:
 
 **You spend 30-50% of your time on operational overhead instead of strategic work.**
 
-Vespr solves this with one universal loop:
+Vesper solves this with one universal loop:
 
 ```
 Input → Triage → Prioritize → Execute → Review → Ship
@@ -27,7 +27,7 @@ The platform reads your daily context, intelligently ranks what matters, decompo
 
 ## Product Vision Statement
 
-> **Vespr is the autonomous orchestration layer for teams. It reads your daily context, intelligently prioritizes work, executes the routine, and surfaces results for review. You maintain control and transparency while reclaiming 10-20 hours per week.**
+> **Vesper is the autonomous orchestration layer for teams. It reads your daily context, intelligently prioritizes work, executes the routine, and surfaces results for review. You maintain control and transparency while reclaiming 10-20 hours per week.**
 
 ### Vision Pillars
 
@@ -282,7 +282,7 @@ Not shallow Zapier connections—deep understanding of each domain:
 
 ## Competitive Positioning
 
-| Capability | Vespr | GitHub/Jira | Claude Code | Notion AI |
+| Capability | Vesper | GitHub/Jira | Claude Code | Notion AI |
 |------------|-------|-------------|-------------|-----------|
 | Intelligent triage | ✓ | ✗ | ✗ | ✗ |
 | Task decomposition | ✓ | ✗ | ✗ | ✗ |
@@ -352,7 +352,7 @@ Not shallow Zapier connections—deep understanding of each domain:
 
 ## What We're Building
 
-Vespr is not another AI chatbot. It's not another project management tool. It's the orchestration layer that sits between your team and your work—triaging, prioritizing, executing, and surfacing results for your approval.
+Vesper is not another AI chatbot. It's not another project management tool. It's the orchestration layer that sits between your team and your work—triaging, prioritizing, executing, and surfacing results for your approval.
 
 **The core insight:** Every operational workflow follows the same pattern. Build the engine once, adapt it to any vertical.
 

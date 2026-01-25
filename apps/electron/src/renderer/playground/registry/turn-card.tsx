@@ -1,6 +1,6 @@
 import type { ComponentEntry } from './types'
 import { useState, useEffect, type ReactNode } from 'react'
-import { TurnCard, DocumentFormattedMarkdownOverlay, type ActivityItem, type ResponseContent, type TodoItem } from '@craft-agent/ui'
+import { TurnCard, DocumentFormattedMarkdownOverlay, type ActivityItem, type ResponseContent, type TodoItem } from '@vesper/ui'
 
 /** Wrapper with padding for playground preview */
 function PaddedWrapper({ children }: { children: ReactNode }) {

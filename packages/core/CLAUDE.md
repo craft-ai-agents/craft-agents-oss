@@ -1,12 +1,12 @@
 # CLAUDE.md - Core Package
 
-This file provides guidance to Claude Code when working with the `@vespr/core` package.
+This file provides guidance to Claude Code when working with the `@vesper/core` package.
 
 **Important:** Keep this file and `README.md` up-to-date whenever functionality changes. After making changes to this package, update the documentation to reflect the current state.
 
 ## Overview
 
-The core package provides shared TypeScript types and utilities used by the Electron app and shared packages. It serves as the type definition layer for the Vespr monorepo.
+The core package provides shared TypeScript types and utilities used by the Electron app and shared packages. It serves as the type definition layer for the Vesper monorepo.
 
 **Current State:** This package currently only exports types and a debug utility stub. The actual implementation of storage, credentials, agent logic, auth, and MCP handling still lives in the root `src/` directory and is accessed via relative imports by the apps.
 
@@ -71,13 +71,13 @@ import type {
   Session,
   Message,
   AgentEvent,
-} from '@vespr/core';
+} from '@vesper/core';
 
 // Import utilities
-import { generateMessageId, debug } from '@vespr/core';
+import { generateMessageId, debug } from '@vesper/core';
 
 // Or import from specific subpaths
-import type { Session } from '@vespr/core/types';
+import type { Session } from '@vesper/core/types';
 ```
 
 ## Key Design Decisions
@@ -92,7 +92,7 @@ Sessions are the primary isolation boundary, not workspaces. Each session:
 
 ### MCP Auth Separation
 
-**Critical:** Vespr OAuth (`vespr_oauth::global`) is ONLY for the Vespr API (managing workspaces, MCP links). It is NEVER used for MCP server authentication. Each MCP server has its own OAuth via `workspace_oauth::{workspaceId}`.
+**Critical:** Vesper OAuth (`vesper_oauth::global`) is ONLY for the Vesper API (managing workspaces, MCP links). It is NEVER used for MCP server authentication. Each MCP server has its own OAuth via `workspace_oauth::{workspaceId}`.
 
 ### Message ID Generation
 
@@ -106,7 +106,7 @@ const id = generateMessageId(); // "msg-1702736400000-a1b2c3"
 This package is designed to eventually contain more than just types. The migration plan:
 
 1. **Current:** Types only, implementation in root `src/`
-2. **Phase 2:** Move storage logic to `@vespr/core`
+2. **Phase 2:** Move storage logic to `@vesper/core`
 3. **Phase 3:** Move auth, credentials, MCP client
 4. **Phase 4:** Move agent logic, prompts
 

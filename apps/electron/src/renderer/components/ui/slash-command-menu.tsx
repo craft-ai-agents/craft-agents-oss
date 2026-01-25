@@ -1,9 +1,9 @@
 import * as React from 'react'
 import { Command as CommandPrimitive } from 'cmdk'
 import { Brain, Check } from 'lucide-react'
-import { Icon_Folder } from '@craft-agent/ui'
+import { Icon_Folder } from '@vesper/ui'
 import { cn } from '@/lib/utils'
-import { PERMISSION_MODE_CONFIG, PERMISSION_MODE_ORDER, type PermissionMode } from '@craft-agent/shared/agent/modes'
+import { PERMISSION_MODE_CONFIG, PERMISSION_MODE_ORDER, type PermissionMode } from '@vesper/shared/agent/modes'
 
 // ============================================================================
 // Types

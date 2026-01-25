@@ -32,7 +32,7 @@
 
 ### Feature 1: Daily Report Input (Weeks 1-4)
 
-**Purpose:** Allow engineering leaders to post daily context—GitHub issues, PRs, errors, team capacity—and let Vespr understand what matters most.
+**Purpose:** Allow engineering leaders to post daily context—GitHub issues, PRs, errors, team capacity—and let Vesper understand what matters most.
 
 **User Journey:**
 1. Connect GitHub workspace
@@ -41,8 +41,8 @@
    - Pull requests (waiting for review)
    - Errors/warnings (from Sentry/error tracking)
    - Team capacity (# engineers available)
-3. Leader confirms/edits report, submits to Vespr
-4. Vespr analyzes and surfaces triage recommendations
+3. Leader confirms/edits report, submits to Vesper
+4. Vesper analyzes and surfaces triage recommendations
 
 **Technical Requirements:**
 
@@ -192,7 +192,7 @@ interface TriageResult {
 
 ### Feature 3: Orchestration & Approval (Weeks 8-12)
 
-**Purpose:** Vespr recommends how to execute the work, leader approves, and GitHub gets updated.
+**Purpose:** Vesper recommends how to execute the work, leader approves, and GitHub gets updated.
 
 **Orchestration Flow:**
 
@@ -237,7 +237,7 @@ Where:
 **Technical Implementation:**
 - Store assignment history to improve recommendations
 - GitHub API: Create/update issues, add comments, manage labels
-- Detect when GitHub changes externally (PR merged, issue closed) and update Vespr
+- Detect when GitHub changes externally (PR merged, issue closed) and update Vesper
 - Real-time updates via polling GitHub API every 5 minutes
 
 **Deliverables:**
@@ -390,7 +390,7 @@ LearningMetric {
 
 ```
 ┌─────────────────────────────────────────┐
-│       Vespr Electron App (UI)           │
+│       Vesper Electron App (UI)           │
 └──────────────┬──────────────────────────┘
                │
                ├─ Daily Report Input
@@ -399,7 +399,7 @@ LearningMetric {
                └─ Execution Dashboard
                │
 ┌──────────────▼──────────────────────────┐
-│    Vespr Backend (Node/Bun)             │
+│    Vesper Backend (Node/Bun)             │
 │  • Report processing                    │
 │  • Triage scoring (Claude API)          │
 │  • Assignment algorithms                │
@@ -723,8 +723,8 @@ LearningMetric {
 **Mitigation:** Make approval ultra-simple (1-click), explain reasoning clearly
 
 ### Risk 4: GitHub Changes Externally
-**Impact:** Vespr state gets out of sync with GitHub
-**Mitigation:** Webhook integration (GitHub → Vespr) + hourly reconciliation
+**Impact:** Vesper state gets out of sync with GitHub
+**Mitigation:** Webhook integration (GitHub → Vesper) + hourly reconciliation
 
 ### Risk 5: AI Learning Doesn't Work
 **Impact:** System doesn't improve over time

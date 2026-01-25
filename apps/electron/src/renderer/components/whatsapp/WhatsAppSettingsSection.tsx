@@ -260,7 +260,7 @@ export function WhatsAppSettingsSection() {
               <div>
                 <h4 className="text-sm font-medium">Connect WhatsApp</h4>
                 <p className="text-xs text-muted-foreground">
-                  Link your WhatsApp account to receive and respond to messages via Vespr
+                  Link your WhatsApp account to receive and respond to messages via Vesper
                 </p>
               </div>
 
@@ -312,18 +312,18 @@ export function WhatsAppSettingsSection() {
           <ul className="text-xs text-muted-foreground space-y-2">
             <li className="flex items-start gap-2">
               <span className="font-medium text-foreground">1.</span>
-              Add Vespr to your WhatsApp group chats
+              Add Vesper to your WhatsApp group chats
             </li>
             <li className="flex items-start gap-2">
               <span className="font-medium text-foreground">2.</span>
-              Mention @vespr in a message to trigger the agent
+              Mention @vesper in a message to trigger the agent
             </li>
             <li className="flex items-start gap-2">
               <span className="font-medium text-foreground">3.</span>
               Use directives for permission control:
-              <code className="bg-muted px-1 rounded">@vespr /safe</code> (read-only),
-              <code className="bg-muted px-1 rounded">@vespr /ask</code> (prompt),
-              <code className="bg-muted px-1 rounded">@vespr /allow-all</code> (auto)
+              <code className="bg-muted px-1 rounded">@vesper /safe</code> (read-only),
+              <code className="bg-muted px-1 rounded">@vesper /ask</code> (prompt),
+              <code className="bg-muted px-1 rounded">@vesper /allow-all</code> (auto)
             </li>
             <li className="flex items-start gap-2">
               <span className="font-medium text-foreground">4.</span>

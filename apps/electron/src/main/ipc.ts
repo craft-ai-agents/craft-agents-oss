@@ -15,12 +15,12 @@ import { registerWhatsAppHandlers } from './whatsapp-ipc'
 import { registerSlackHandlers } from './slack-ipc'
 import { registerLabelsIpc } from './labels-ipc'
 import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type AuthType, type BillingMethodInfo, type SendMessageOptions } from '../shared/types'
-import { readFileAttachment, perf, validateImageForClaudeAPI, IMAGE_LIMITS } from '@craft-agent/shared/utils'
-import { getAuthType, setAuthType, getPreferencesPath, getModel, setModel, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, type Workspace } from '@craft-agent/shared/config'
-import { getSessionAttachmentsPath } from '@craft-agent/shared/sessions'
-import { loadWorkspaceSources, getSourcesBySlugs, type LoadedSource } from '@craft-agent/shared/sources'
-import { isValidThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
-import { getCredentialManager } from '@craft-agent/shared/credentials'
+import { readFileAttachment, perf, validateImageForClaudeAPI, IMAGE_LIMITS } from '@vesper/shared/utils'
+import { getAuthType, setAuthType, getPreferencesPath, getModel, setModel, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, type Workspace } from '@vesper/shared/config'
+import { getSessionAttachmentsPath } from '@vesper/shared/sessions'
+import { loadWorkspaceSources, getSourcesBySlugs, type LoadedSource } from '@vesper/shared/sources'
+import { isValidThinkingLevel } from '@vesper/shared/agent/thinking-levels'
+import { getCredentialManager } from '@vesper/shared/credentials'
 import { MarkItDown } from 'markitdown-js'
 
 /**
@@ -239,7 +239,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
   // Check if a workspace slug already exists (for validation before creation)
   ipcMain.handle(IPC_CHANNELS.CHECK_WORKSPACE_SLUG, async (_event, slug: string) => {
-    const defaultWorkspacesDir = join(homedir(), '.craft-agent', 'workspaces')
+    const defaultWorkspacesDir = join(homedir(), '.vesper', 'workspaces')
     const workspacePath = join(defaultWorkspacesDir, slug)
     const exists = existsSync(workspacePath)
     return { exists, path: workspacePath }
@@ -437,7 +437,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       const result = await spawnTerminalWithSession({
         sdkSessionId: session.sdkSessionId,
         workingDirectory,
-        taskListId: sessionId // Use Vespr session ID as task list ID
+        taskListId: sessionId // Use Vesper session ID as task list ID
       })
 
       if (!result.success) {
@@ -853,13 +853,13 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
   // Dismiss update for this version (persists across restarts)
   ipcMain.handle(IPC_CHANNELS.UPDATE_DISMISS, async (_event, version: string) => {
-    const { setDismissedUpdateVersion } = await import('@craft-agent/shared/config')
+    const { setDismissedUpdateVersion } = await import('@vesper/shared/config')
     setDismissedUpdateVersion(version)
   })
 
   // Get dismissed version
   ipcMain.handle(IPC_CHANNELS.UPDATE_GET_DISMISSED, async () => {
-    const { getDismissedUpdateVersion } = await import('@craft-agent/shared/config')
+    const { getDismissedUpdateVersion } = await import('@vesper/shared/config')
     return getDismissedUpdateVersion()
   })
 
@@ -973,7 +973,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       }
 
       // Delete the config file
-      const configPath = join(homedir(), '.craft-agent', 'config.json')
+      const configPath = join(homedir(), '.vesper', 'config.json')
       await unlink(configPath).catch(() => {
         // Ignore if file doesn't exist
       })
@@ -1027,7 +1027,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
         await manager.setApiKey(credential)
       } else if (authType === 'oauth_token') {
         // Import full credentials including refresh token and expiry from Claude CLI
-        const { getExistingClaudeCredentials } = await import('@craft-agent/shared/auth')
+        const { getExistingClaudeCredentials } = await import('@vesper/shared/auth')
         const cliCreds = getExistingClaudeCredentials()
         if (cliCreds) {
           await manager.setClaudeOAuthCredentials({
@@ -1105,7 +1105,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     }
 
     // Load workspace config
-    const { loadWorkspaceConfig } = await import('@craft-agent/shared/workspaces')
+    const { loadWorkspaceConfig } = await import('@vesper/shared/workspaces')
     const config = loadWorkspaceConfig(workspace.rootPath)
 
     return {
@@ -1131,7 +1131,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       throw new Error(`Invalid workspace setting key: ${key}. Valid keys: ${validKeys.join(', ')}`)
     }
 
-    const { loadWorkspaceConfig, saveWorkspaceConfig } = await import('@craft-agent/shared/workspaces')
+    const { loadWorkspaceConfig, saveWorkspaceConfig } = await import('@vesper/shared/workspaces')
     const config = loadWorkspaceConfig(workspace.rootPath)
     if (!config) {
       throw new Error(`Failed to load workspace config: ${workspaceId}`)
@@ -1382,10 +1382,10 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   })
 
   // Create a new source
-  ipcMain.handle(IPC_CHANNELS.SOURCES_CREATE, async (_event, workspaceId: string, config: Partial<import('@craft-agent/shared/sources').CreateSourceInput>) => {
+  ipcMain.handle(IPC_CHANNELS.SOURCES_CREATE, async (_event, workspaceId: string, config: Partial<import('@vesper/shared/sources').CreateSourceInput>) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
-    const { createSource } = await import('@craft-agent/shared/sources')
+    const { createSource } = await import('@vesper/shared/sources')
     return createSource(workspace.rootPath, {
       name: config.name || 'New Source',
       provider: config.provider || 'custom',
@@ -1401,7 +1401,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   ipcMain.handle(IPC_CHANNELS.SOURCES_DELETE, async (_event, workspaceId: string, sourceSlug: string) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
-    const { deleteSource } = await import('@craft-agent/shared/sources')
+    const { deleteSource } = await import('@vesper/shared/sources')
     deleteSource(workspace.rootPath, sourceSlug)
   })
 
@@ -1412,7 +1412,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       if (!workspace) {
         return { success: false, error: `Workspace not found: ${workspaceId}` }
       }
-      const { loadSource, getSourceCredentialManager } = await import('@craft-agent/shared/sources')
+      const { loadSource, getSourceCredentialManager } = await import('@vesper/shared/sources')
 
       const source = loadSource(workspace.rootPath, sourceSlug)
       if (!source || source.config.type !== 'mcp' || !source.config.mcp?.url) {
@@ -1447,7 +1447,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   ipcMain.handle(IPC_CHANNELS.SOURCES_SAVE_CREDENTIALS, async (_event, workspaceId: string, sourceSlug: string, credential: string) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
-    const { loadSource, getSourceCredentialManager } = await import('@craft-agent/shared/sources')
+    const { loadSource, getSourceCredentialManager } = await import('@vesper/shared/sources')
 
     const source = loadSource(workspace.rootPath, sourceSlug)
     if (!source) {
@@ -1468,7 +1468,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
     // Load raw JSON file (not normalized) for UI display
     const { existsSync, readFileSync } = await import('fs')
-    const { getSourcePermissionsPath } = await import('@craft-agent/shared/agent')
+    const { getSourcePermissionsPath } = await import('@vesper/shared/agent')
     const path = getSourcePermissionsPath(workspace.rootPath, sourceSlug)
 
     if (!existsSync(path)) return null
@@ -1489,7 +1489,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
     // Load raw JSON file (not normalized) for UI display
     const { existsSync, readFileSync } = await import('fs')
-    const { getWorkspacePermissionsPath } = await import('@craft-agent/shared/agent')
+    const { getWorkspacePermissionsPath } = await import('@vesper/shared/agent')
     const path = getWorkspacePermissionsPath(workspace.rootPath)
 
     if (!existsSync(path)) return null
@@ -1503,11 +1503,11 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     }
   })
 
-  // Get default permissions from ~/.craft-agent/permissions/default.json
+  // Get default permissions from ~/.vesper/permissions/default.json
   // Returns raw JSON for UI display (patterns with comments), plus the file path
   ipcMain.handle(IPC_CHANNELS.DEFAULT_PERMISSIONS_GET, async () => {
     const { existsSync, readFileSync } = await import('fs')
-    const { getAppPermissionsDir } = await import('@craft-agent/shared/agent')
+    const { getAppPermissionsDir } = await import('@vesper/shared/agent')
     const { join } = await import('path')
 
     const defaultPath = join(getAppPermissionsDir(), 'default.json')
@@ -1547,7 +1547,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       }
 
       // Create unified MCP client for both stdio and HTTP transports
-      const { CraftMcpClient } = await import('@craft-agent/shared/mcp')
+      const { CraftMcpClient } = await import('@vesper/shared/mcp')
       let client: InstanceType<typeof CraftMcpClient>
 
       if (source.config.mcp.transport === 'stdio') {
@@ -1591,7 +1591,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       await client.close()
 
       // Load permissions patterns
-      const { loadSourcePermissionsConfig, permissionsConfigCache } = await import('@craft-agent/shared/agent')
+      const { loadSourcePermissionsConfig, permissionsConfigCache } = await import('@vesper/shared/agent')
       const permissionsConfig = loadSourcePermissionsConfig(workspace.rootPath, sourceSlug)
 
       // Get merged permissions config
@@ -1630,7 +1630,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // Skills (Workspace-scoped)
   // ============================================================
 
-  // Get all skills for a workspace (includes global skills from ~/.claude/skills/ and ~/.craft-agent/global-skills/)
+  // Get all skills for a workspace (includes global skills from ~/.claude/skills/ and ~/.vesper/global-skills/)
   ipcMain.handle(IPC_CHANNELS.SKILLS_GET, async (_event, workspaceId: string) => {
     ipcLog.info(`SKILLS_GET: Loading skills for workspace: ${workspaceId}`)
     const workspace = getWorkspaceByNameOrId(workspaceId)
@@ -1638,7 +1638,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       ipcLog.error(`SKILLS_GET: Workspace not found: ${workspaceId}`)
       return []
     }
-    const { loadAllSkills } = await import('@craft-agent/shared/skills')
+    const { loadAllSkills } = await import('@vesper/shared/skills')
     const skills = loadAllSkills(workspace.rootPath)
     ipcLog.info(`SKILLS_GET: Loaded ${skills.length} skills (workspace + global) from ${workspace.rootPath}`)
     return skills
@@ -1654,7 +1654,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
     const { join } = await import('path')
     const { readdirSync, statSync } = await import('fs')
-    const { getWorkspaceSkillsPath } = await import('@craft-agent/shared/workspaces')
+    const { getWorkspaceSkillsPath } = await import('@vesper/shared/workspaces')
 
     const skillsDir = getWorkspaceSkillsPath(workspace.rootPath)
     const skillDir = join(skillsDir, skillSlug)
@@ -1707,7 +1707,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
 
-    const { deleteSkill } = await import('@craft-agent/shared/skills')
+    const { deleteSkill } = await import('@vesper/shared/skills')
     deleteSkill(workspace.rootPath, skillSlug)
     ipcLog.info(`Deleted skill: ${skillSlug}`)
   })
@@ -1719,7 +1719,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
     const { join } = await import('path')
     const { shell } = await import('electron')
-    const { getWorkspaceSkillsPath } = await import('@craft-agent/shared/workspaces')
+    const { getWorkspaceSkillsPath } = await import('@vesper/shared/workspaces')
 
     const skillsDir = getWorkspaceSkillsPath(workspace.rootPath)
     const skillFile = join(skillsDir, skillSlug, 'SKILL.md')
@@ -1741,7 +1741,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
 
-    const { listStatuses } = await import('@craft-agent/shared/statuses')
+    const { listStatuses } = await import('@vesper/shared/statuses')
     return listStatuses(workspace.rootPath)
   })
 
@@ -1890,30 +1890,30 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // ============================================================
 
   ipcMain.handle(IPC_CHANNELS.THEME_GET_APP, async () => {
-    const { loadAppTheme } = await import('@craft-agent/shared/config/storage')
+    const { loadAppTheme } = await import('@vesper/shared/config/storage')
     return loadAppTheme()
   })
 
   // Preset themes (app-level)
   ipcMain.handle(IPC_CHANNELS.THEME_GET_PRESETS, async () => {
-    const { loadPresetThemes } = await import('@craft-agent/shared/config/storage')
+    const { loadPresetThemes } = await import('@vesper/shared/config/storage')
     // Pass bundled themes path from Electron resources (dist/resources/themes)
     const bundledThemesDir = join(__dirname, 'resources/themes')
     return loadPresetThemes(bundledThemesDir)
   })
 
   ipcMain.handle(IPC_CHANNELS.THEME_LOAD_PRESET, async (_event, themeId: string) => {
-    const { loadPresetTheme } = await import('@craft-agent/shared/config/storage')
+    const { loadPresetTheme } = await import('@vesper/shared/config/storage')
     return loadPresetTheme(themeId)
   })
 
   ipcMain.handle(IPC_CHANNELS.THEME_GET_COLOR_THEME, async () => {
-    const { getColorTheme } = await import('@craft-agent/shared/config/storage')
+    const { getColorTheme } = await import('@vesper/shared/config/storage')
     return getColorTheme()
   })
 
   ipcMain.handle(IPC_CHANNELS.THEME_SET_COLOR_THEME, async (_event, themeId: string) => {
-    const { setColorTheme } = await import('@craft-agent/shared/config/storage')
+    const { setColorTheme } = await import('@vesper/shared/config/storage')
     setColorTheme(themeId)
   })
 
@@ -1933,7 +1933,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
   // Logo URL resolution (uses Node.js filesystem cache for provider domains)
   ipcMain.handle(IPC_CHANNELS.LOGO_GET_URL, async (_event, serviceUrl: string, provider?: string) => {
-    const { getLogoUrl } = await import('@craft-agent/shared/utils/logo')
+    const { getLogoUrl } = await import('@vesper/shared/utils/logo')
     const result = getLogoUrl(serviceUrl, provider)
     console.log(`[logo] getLogoUrl("${serviceUrl}", "${provider}") => "${result}"`)
     return result
@@ -1951,13 +1951,13 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
   // Get notifications enabled setting
   ipcMain.handle(IPC_CHANNELS.NOTIFICATION_GET_ENABLED, async () => {
-    const { getNotificationsEnabled } = await import('@craft-agent/shared/config/storage')
+    const { getNotificationsEnabled } = await import('@vesper/shared/config/storage')
     return getNotificationsEnabled()
   })
 
   // Set notifications enabled setting (also triggers permission request if enabling)
   ipcMain.handle(IPC_CHANNELS.NOTIFICATION_SET_ENABLED, async (_event, enabled: boolean) => {
-    const { setNotificationsEnabled } = await import('@craft-agent/shared/config/storage')
+    const { setNotificationsEnabled } = await import('@vesper/shared/config/storage')
     setNotificationsEnabled(enabled)
 
     // If enabling, trigger a notification to request macOS permission
@@ -1969,14 +1969,14 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
   // Get Agentation enabled setting
   ipcMain.handle(IPC_CHANNELS.AGENTATION_GET_ENABLED, async () => {
-    const { getAgentationEnabled } = await import('@craft-agent/shared/config/storage')
+    const { getAgentationEnabled } = await import('@vesper/shared/config/storage')
     return getAgentationEnabled()
   })
 
   // Set Agentation enabled setting
   ipcMain.handle(IPC_CHANNELS.AGENTATION_SET_ENABLED, async (_event, enabled: boolean) => {
     if (typeof enabled !== 'boolean') return
-    const { setAgentationEnabled } = await import('@craft-agent/shared/config/storage')
+    const { setAgentationEnabled } = await import('@vesper/shared/config/storage')
     setAgentationEnabled(enabled)
   })
 
@@ -2235,7 +2235,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // GitHub OAuth
   ipcMain.handle(IPC_CHANNELS.GITHUB_START_OAUTH, async (_event) => {
     try {
-      const { startGitHubOAuth } = await import('@craft-agent/shared/github')
+      const { startGitHubOAuth } = await import('@vesper/shared/github')
       return await startGitHubOAuth()
     } catch (error) {
       ipcLog.error('Error starting GitHub OAuth:', error)
@@ -2274,7 +2274,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // GitHub OAuth Credentials
   ipcMain.handle(IPC_CHANNELS.GITHUB_SET_OAUTH_CREDENTIALS, async (_event, clientId: string | null, clientSecret: string | null) => {
     try {
-      const { getCredentialManager } = await import('@craft-agent/shared/credentials')
+      const { getCredentialManager } = await import('@vesper/shared/credentials')
       const credManager = getCredentialManager()
 
       if (clientId === null || clientSecret === null) {
@@ -2308,7 +2308,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
   ipcMain.handle(IPC_CHANNELS.GITHUB_HAS_OAUTH_CREDENTIALS, async () => {
     try {
-      const { getCredentialManager } = await import('@craft-agent/shared/credentials')
+      const { getCredentialManager } = await import('@vesper/shared/credentials')
       const credManager = getCredentialManager()
       const clientId = await credManager.get({ type: 'github_oauth_client_id' })
       const clientSecret = await credManager.get({ type: 'github_oauth_client_secret' })
@@ -2367,7 +2367,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // Get current viewer config
   ipcMain.handle(IPC_CHANNELS.VIEWER_GET_CONFIG, async () => {
     try {
-      const { loadStoredConfig } = await import('@craft-agent/shared/config/storage')
+      const { loadStoredConfig } = await import('@vesper/shared/config/storage')
       const config = loadStoredConfig()
       return {
         success: true,
@@ -2380,9 +2380,9 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   })
 
   // Set viewer config
-  ipcMain.handle(IPC_CHANNELS.VIEWER_SET_CONFIG, async (_event, viewerConfig: import('@craft-agent/shared/viewer').ViewerConfig) => {
+  ipcMain.handle(IPC_CHANNELS.VIEWER_SET_CONFIG, async (_event, viewerConfig: import('@vesper/shared/viewer').ViewerConfig) => {
     try {
-      const { loadStoredConfig, saveConfig } = await import('@craft-agent/shared/config/storage')
+      const { loadStoredConfig, saveConfig } = await import('@vesper/shared/config/storage')
       const config = loadStoredConfig()
       if (!config) {
         return { success: false, error: 'No config found' }
@@ -2402,9 +2402,9 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   })
 
   // Test viewer connection
-  ipcMain.handle(IPC_CHANNELS.VIEWER_TEST_CONNECTION, async (_event, viewerConfig: import('@craft-agent/shared/viewer').ViewerConfig) => {
+  ipcMain.handle(IPC_CHANNELS.VIEWER_TEST_CONNECTION, async (_event, viewerConfig: import('@vesper/shared/viewer').ViewerConfig) => {
     try {
-      const { createViewerService } = await import('@craft-agent/shared/viewer')
+      const { createViewerService } = await import('@vesper/shared/viewer')
       const viewer = createViewerService(viewerConfig)
       const healthy = await viewer.healthCheck()
       return { success: healthy, error: healthy ? undefined : 'Connection failed' }

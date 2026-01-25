@@ -43,7 +43,7 @@ import { skillsAtom } from '@/atoms/skills'
 import { dailyReportModalOpenAtom } from '@/atoms/orchestration'
 import { extractBadges } from '@/lib/mentions'
 import { getDefaultStore } from 'jotai'
-import { ShikiThemeProvider, PlatformProvider } from '@craft-agent/ui'
+import { ShikiThemeProvider, PlatformProvider } from '@vesper/ui'
 
 // Lazy load Agentation for code splitting - only loaded when enabled
 const Agentation = React.lazy(() =>
@@ -1221,7 +1221,7 @@ export default function App() {
     handleCancelLoop,
   ])
 
-  // Platform actions for @craft-agent/ui components (overlays, etc.)
+  // Platform actions for @vesper/ui components (overlays, etc.)
   // Memoized to prevent re-renders when these callbacks don't change
   // NOTE: Must be defined before early returns to maintain consistent hook order
   const platformActions = useMemo(() => ({

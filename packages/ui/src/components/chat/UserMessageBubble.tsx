@@ -12,7 +12,7 @@
  */
 
 import type { ReactNode } from 'react'
-import type { StoredAttachment, ContentBadge } from '@craft-agent/core'
+import type { StoredAttachment, ContentBadge } from '@vesper/core'
 import { FileText } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { Markdown } from '../markdown'

@@ -27,7 +27,7 @@ function createMockSession(overrides?: Partial<StoredSession>): StoredSession {
   return {
     id: 'test-session-123',
     name: 'Test Session',
-    workspaceRootPath: '~/.vespr/workspaces/workspace-1',
+    workspaceRootPath: '~/.vesper/workspaces/workspace-1',
     createdAt: Date.now(),
     lastUsedAt: Date.now(),
     messages: [],

@@ -11,7 +11,7 @@ import { motion } from 'motion/react'
 import { Pause, Play, X, CheckCircle2, RefreshCw, AlertCircle, ChevronDown, CheckCircle, XCircle, Ban } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { Spinner } from '@craft-agent/ui'
+import { Spinner } from '@vesper/ui'
 import type { LoopStateUI } from '../../../shared/types'
 
 export interface LoopProgressIndicatorProps {

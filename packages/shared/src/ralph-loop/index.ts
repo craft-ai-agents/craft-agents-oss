@@ -10,7 +10,7 @@
  *   parsePRD,
  *   createLoopRunner,
  *   type LoopConfig,
- * } from '@craft-agent/shared/ralph-loop';
+ * } from '@vesper/shared/ralph-loop';
  *
  * const prd = parsePRD(markdownContent);
  * const runner = createLoopRunner(sessionId, agent, workingDirectory);

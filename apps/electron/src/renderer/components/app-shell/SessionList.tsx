@@ -10,7 +10,7 @@ import { useLabels } from "@/hooks/useLabels"
 import { useAppShellContext } from "@/context/AppShellContext"
 import { LabelBadge } from "@/components/ui/label-badge"
 import { rendererPerf } from "@/lib/perf"
-import { Spinner } from "@craft-agent/ui"
+import { Spinner } from "@vesper/ui"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { Button } from "@/components/ui/button"
@@ -47,7 +47,7 @@ import { useNavigation, useNavigationState, routes, isChatsNavigation } from "@/
 import { useFocusContext } from "@/context/FocusContext"
 import { getSessionTitle } from "@/utils/session"
 import type { SessionMeta } from "@/atoms/sessions"
-import { PERMISSION_MODE_CONFIG, type PermissionMode } from "@craft-agent/shared/agent/modes"
+import { PERMISSION_MODE_CONFIG, type PermissionMode } from "@vesper/shared/agent/modes"
 
 // Pagination constants
 const INITIAL_DISPLAY_LIMIT = 20
@@ -173,9 +173,9 @@ interface SessionItemProps {
   /** Dynamic todo states from workspace config */
   todoStates: TodoState[]
   /** Labels map for badge display */
-  labelsMap: Map<string, import('@craft-agent/shared/labels').Label>
+  labelsMap: Map<string, import('@vesper/shared/labels').Label>
   /** All labels for the menu */
-  labels: import('@craft-agent/shared/labels').Label[]
+  labels: import('@vesper/shared/labels').Label[]
   /** Callback when a label badge is clicked (for filtering) */
   onLabelClick?: (labelId: string) => void
   /** Callback when labels for a session change */

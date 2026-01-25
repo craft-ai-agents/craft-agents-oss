@@ -5,10 +5,10 @@
  * Auto-refreshes when workspace changes or labels are modified.
  */
 
-import { useEffect, useCallback } from 'react'
+import { useEffect, useCallback, useRef } from 'react'
 import { useAtom, useSetAtom } from 'jotai'
 import { labelsAtom, initializeLabelsAtom } from '@/atoms/labels'
-import type { Label } from '@craft-agent/shared/labels'
+import type { Label } from '@vesper/shared/labels'
 
 export interface UseLabelsResult {
   labels: Label[]
@@ -24,19 +24,24 @@ export function useLabels(workspaceId: string | null): UseLabelsResult {
   const [labels, setLabels] = useAtom(labelsAtom)
   const initializeLabels = useSetAtom(initializeLabelsAtom)
 
+  // Use ref to store workspaceId for use in event handler without causing re-subscriptions
+  const workspaceIdRef = useRef(workspaceId)
+  workspaceIdRef.current = workspaceId
+
   const refresh = useCallback(async () => {
-    if (!workspaceId) {
+    const currentWorkspaceId = workspaceIdRef.current
+    if (!currentWorkspaceId) {
       setLabels([])
       return
     }
 
     try {
-      const loadedLabels = await window.electronAPI.listLabels(workspaceId)
+      const loadedLabels = await window.electronAPI.listLabels(currentWorkspaceId)
       setLabels(loadedLabels)
     } catch (err) {
       console.error('[useLabels] Failed to load labels:', err)
     }
-  }, [workspaceId, setLabels])
+  }, [setLabels])
 
   // Load labels when workspace changes
   useEffect(() => {
@@ -45,13 +50,13 @@ export function useLabels(workspaceId: string | null): UseLabelsResult {
     }
   }, [workspaceId, refresh])
 
-  // Subscribe to live label changes
+  // Subscribe to live label changes - stable effect that doesn't re-subscribe on refresh changes
   useEffect(() => {
     if (!workspaceId) return
 
     const cleanup = window.electronAPI.onLabelsChanged((changedWorkspaceId) => {
-      // Only refresh if this is our workspace
-      if (changedWorkspaceId === workspaceId) {
+      // Only refresh if this is our workspace (use ref for current value)
+      if (changedWorkspaceId === workspaceIdRef.current) {
         refresh()
       }
     })

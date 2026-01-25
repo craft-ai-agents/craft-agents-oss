@@ -2,11 +2,11 @@
 
 ## Overview
 
-Vespr's WhatsApp integration enables AI agents to receive and respond to messages from WhatsApp groups. By connecting your WhatsApp account to Vespr, you can interact with AI agents directly through WhatsApp, making it easier to collaborate with your team and leverage AI assistance in your existing communication channels.
+Vesper's WhatsApp integration enables AI agents to receive and respond to messages from WhatsApp groups. By connecting your WhatsApp account to Vesper, you can interact with AI agents directly through WhatsApp, making it easier to collaborate with your team and leverage AI assistance in your existing communication channels.
 
 **Key Features:**
 - QR code-based authentication for secure connection
-- Group message monitoring with @vespr mentions
+- Group message monitoring with @vesper mentions
 - Permission-based agent control (safe, ask, allow-all modes)
 - Session mapping to organize conversations
 - Desktop and in-app notifications for incoming messages
@@ -16,16 +16,16 @@ Vespr's WhatsApp integration enables AI agents to receive and respond to message
 
 ### Prerequisites
 
-Before connecting WhatsApp to Vespr:
+Before connecting WhatsApp to Vesper:
 - Have an active WhatsApp account with a phone number
 - Ensure WhatsApp is installed on your mobile device
-- Have Vespr desktop app installed and running
-- Be part of at least one WhatsApp group where you want to use Vespr
+- Have Vesper desktop app installed and running
+- Be part of at least one WhatsApp group where you want to use Vesper
 
 ### Connecting WhatsApp
 
-1. **Open Vespr Settings**
-   - Navigate to Settings in the Vespr desktop app
+1. **Open Vesper Settings**
+   - Navigate to Settings in the Vesper desktop app
    - Find the "WhatsApp Integration" section
 
 2. **Enter Phone Number**
@@ -36,10 +36,10 @@ Before connecting WhatsApp to Vespr:
    - A modal will appear with a QR code
    - Open WhatsApp on your phone
    - Go to: **Settings → Linked Devices → Link a Device**
-   - Scan the QR code displayed in Vespr
+   - Scan the QR code displayed in Vesper
 
 4. **Wait for Connection**
-   - Once scanned, Vespr will authenticate with WhatsApp
+   - Once scanned, Vesper will authenticate with WhatsApp
    - You'll see a success notification when connected
    - Your phone number will appear in the "Connected Accounts" list
 
@@ -61,10 +61,10 @@ Before connecting WhatsApp to Vespr:
 
 ### Triggering the Agent
 
-To interact with Vespr through WhatsApp, mention `@vespr` in any group message:
+To interact with Vesper through WhatsApp, mention `@vesper` in any group message:
 
 ```
-@vespr What's the weather in San Francisco?
+@vesper What's the weather in San Francisco?
 ```
 
 The agent will:
@@ -78,7 +78,7 @@ Control how the agent operates by adding a permission directive to your message:
 
 #### Safe Mode (Read-Only)
 ```
-@vespr /safe What files are in this repository?
+@vesper /safe What files are in this repository?
 ```
 - Blocks all write operations
 - Agent can only read and respond
@@ -86,7 +86,7 @@ Control how the agent operates by adding a permission directive to your message:
 
 #### Ask Mode (Default)
 ```
-@vespr /ask Create a new document about project planning
+@vesper /ask Create a new document about project planning
 ```
 - Prompts for approval before executing commands
 - Recommended for most use cases
@@ -94,7 +94,7 @@ Control how the agent operates by adding a permission directive to your message:
 
 #### Allow-All Mode (Full Automation)
 ```
-@vespr /allow-all Deploy the latest changes to production
+@vesper /allow-all Deploy the latest changes to production
 ```
 - **⚠️ Use with extreme caution**
 - Auto-approves all commands without confirmation
@@ -105,9 +105,9 @@ Control how the agent operates by adding a permission directive to your message:
 
 ### Session Mapping
 
-Vespr automatically maps WhatsApp conversations to internal sessions:
+Vesper automatically maps WhatsApp conversations to internal sessions:
 
-- **Group-Based Sessions:** Each WhatsApp group gets its own Vespr session
+- **Group-Based Sessions:** Each WhatsApp group gets its own Vesper session
 - **Conversation History:** All messages and responses are logged
 - **Context Preservation:** The agent remembers previous messages in the group
 - **Cross-Session Memory:** Sessions are isolated to prevent context leakage
@@ -129,12 +129,12 @@ Agent responses are formatted for WhatsApp readability:
 **Native OS Notifications:**
 - Receive desktop notifications when WhatsApp messages arrive
 - See sender name, group name, and message preview
-- Click notification to focus Vespr window
+- Click notification to focus Vesper window
 - Works on macOS and Windows
 
 **Customize Notifications:**
 - Control notification preferences through your OS settings
-- Vespr respects system-level notification permissions
+- Vesper respects system-level notification permissions
 
 ### In-App Notifications
 
@@ -152,7 +152,7 @@ Agent responses are formatted for WhatsApp readability:
 ### Message Routing
 
 **Intelligent Message Handling:**
-- Only messages with `@vespr` mentions are processed
+- Only messages with `@vesper` mentions are processed
 - Group messages are prioritized over direct messages
 - Messages from self are automatically skipped
 - Rate limiting prevents spam and abuse
@@ -182,7 +182,7 @@ Agent responses are formatted for WhatsApp readability:
 
 **QR Code Not Appearing:**
 - Check internet connection on both desktop and mobile
-- Restart Vespr desktop app
+- Restart Vesper desktop app
 - Clear browser cache if using web version
 - Try a different phone number
 
@@ -194,17 +194,17 @@ Agent responses are formatted for WhatsApp readability:
 
 **Connection Drops:**
 - Check if WhatsApp is logged out on mobile device
-- Verify Vespr is allowed in firewall settings
-- Restart both Vespr and WhatsApp on mobile
+- Verify Vesper is allowed in firewall settings
+- Restart both Vesper and WhatsApp on mobile
 - Disconnect and reconnect the account
 
 ### Message Processing Issues
 
 **Agent Not Responding:**
-- Verify the message includes `@vespr` mention
+- Verify the message includes `@vesper` mention
 - Check if the account is still connected in Settings
 - Ensure the group has the connected WhatsApp number
-- Check Vespr logs for error messages (~/Library/Logs/Vespr/)
+- Check Vesper logs for error messages (~/Library/Logs/Vesper/)
 
 **Delayed Responses:**
 - WhatsApp may rate-limit message delivery
@@ -229,7 +229,7 @@ Agent responses are formatted for WhatsApp readability:
 **High Memory Usage:**
 - Long-running sessions accumulate message history
 - Disconnect and reconnect to clear session cache
-- Restart Vespr if memory usage is excessive
+- Restart Vesper if memory usage is excessive
 - Check for memory leaks in logs
 
 ### Security Concerns
@@ -242,7 +242,7 @@ Agent responses are formatted for WhatsApp readability:
 
 **Credential Storage:**
 - All credentials encrypted with AES-256-GCM
-- Stored locally in ~/.vespr/ directory
+- Stored locally in ~/.vesper/ directory
 - Automatically deleted on disconnect
 - Never transmitted to third parties
 
@@ -269,7 +269,7 @@ Agent responses are formatted for WhatsApp readability:
 }
 ```
 
-**Location:** `~/.vespr/workspaces/{workspace-id}/config.json`
+**Location:** `~/.vesper/workspaces/{workspace-id}/config.json`
 
 **Options:**
 - `maxPermissionLevel`: Maximum permission mode allowed (`safe` or `ask`, never `allow-all`)
@@ -291,7 +291,7 @@ Agent responses are formatted for WhatsApp readability:
 }
 ```
 
-**Location:** `~/.vespr/workspaces/{workspace-id}/config.json`
+**Location:** `~/.vesper/workspaces/{workspace-id}/config.json`
 
 **Options:**
 - `maxRetries`: Number of retry attempts for failed messages
@@ -313,7 +313,7 @@ Agent responses are formatted for WhatsApp readability:
 }
 ```
 
-**Location:** `~/.vespr/workspaces/{workspace-id}/config.json`
+**Location:** `~/.vesper/workspaces/{workspace-id}/config.json`
 
 **Options:**
 - `autoRestore`: Automatically restore sessions on app restart
@@ -326,7 +326,7 @@ Agent responses are formatted for WhatsApp readability:
 
 1. **Use Ask Mode by Default:** Never use `allow-all` mode unless absolutely necessary
 2. **Configure Allowlist:** Restrict elevated permissions to trusted phone numbers
-3. **Monitor Activity:** Regularly review Vespr logs for unusual activity
+3. **Monitor Activity:** Regularly review Vesper logs for unusual activity
 4. **Rotate Sessions:** Disconnect and reconnect periodically to refresh credentials
 5. **Limit Exposure:** Only add the WhatsApp account to necessary groups
 
@@ -343,7 +343,7 @@ Agent responses are formatted for WhatsApp readability:
 1. **Clear Communication:** Structure messages clearly with explicit instructions
 2. **Include Context:** Provide necessary background information in the message
 3. **Specify Constraints:** Mention any limitations or requirements upfront
-4. **Use Mentions:** Always include `@vespr` to trigger the agent
+4. **Use Mentions:** Always include `@vesper` to trigger the agent
 5. **Review Responses:** Verify agent responses before acting on them
 
 ## Data & Privacy
@@ -351,7 +351,7 @@ Agent responses are formatted for WhatsApp readability:
 ### Data Storage
 
 **Local Storage:**
-- All WhatsApp credentials stored locally in `~/.vespr/` directory
+- All WhatsApp credentials stored locally in `~/.vesper/` directory
 - Message history stored in workspace session files
 - No data transmitted to external servers (except Anthropic API)
 
@@ -377,25 +377,25 @@ Agent responses are formatted for WhatsApp readability:
 ### Getting Help
 
 **Documentation:**
-- [Vespr Main Documentation](../README.md)
+- [Vesper Main Documentation](../README.md)
 - [Session Management Guide](../architecture-session-management.md)
 - [GitHub Integration](../GITHUB_INTEGRATION.md)
 
 **Logs Location:**
-- macOS: `~/Library/Logs/Vespr/`
-- Windows: `%APPDATA%/Vespr/logs/`
-- Linux: `~/.config/Vespr/logs/`
+- macOS: `~/Library/Logs/Vesper/`
+- Windows: `%APPDATA%/Vesper/logs/`
+- Linux: `~/.config/Vesper/logs/`
 
 **Configuration:**
-- User Data: `~/.vespr/`
-- Workspace Config: `~/.vespr/workspaces/{workspace-id}/`
-- Credentials: `~/.vespr/credentials.enc`
+- User Data: `~/.vesper/`
+- Workspace Config: `~/.vesper/workspaces/{workspace-id}/`
+- Credentials: `~/.vesper/credentials.enc`
 
 ### Known Limitations
 
 1. **Group Messages Only:** Currently only supports WhatsApp group messages (not direct messages)
 2. **Text Only:** Media attachments (images, videos, files) not yet supported
-3. **Single Device:** One WhatsApp account per Vespr instance
+3. **Single Device:** One WhatsApp account per Vesper instance
 4. **Rate Limits:** Subject to WhatsApp's rate limiting policies
 5. **Session Expiry:** Long periods of inactivity may require re-authentication
 
@@ -405,8 +405,8 @@ If you encounter issues:
 
 1. Check this troubleshooting guide first
 2. Review logs for error messages
-3. Open an issue on [GitHub](https://github.com/atherslabs/vespr/issues)
-4. Include: Vespr version, OS version, error logs, steps to reproduce
+3. Open an issue on [GitHub](https://github.com/atherslabs/vesper/issues)
+4. Include: Vesper version, OS version, error logs, steps to reproduce
 
 ---
 

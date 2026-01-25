@@ -5,7 +5,7 @@
  */
 
 import { atom } from 'jotai';
-import type { Label } from '@craft-agent/shared/labels';
+import type { Label } from '@vesper/shared/labels';
 
 /**
  * All labels in the current workspace

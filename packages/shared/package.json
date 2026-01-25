@@ -1,8 +1,8 @@
 {
-  "name": "@craft-agent/shared",
-  "version": "0.2.25",
+  "name": "@vesper/shared",
+  "version": "0.1.0",
   "license": "Apache-2.0",
-  "description": "Shared business logic for Craft Agents - agent, auth, config, credentials, MCP integration",
+  "description": "Shared business logic for Vesper - agent, auth, config, credentials, MCP integration",
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",
@@ -54,7 +54,7 @@
     "./viewer": "./src/viewer/index.ts"
   },
   "dependencies": {
-    "@craft-agent/core": "workspace:*",
+    "@vesper/core": "workspace:*",
     "bash-parser": "^0.5.0",
     "incr-regex-package": "^1.0.4",
     "shell-quote": "^1.8.3"

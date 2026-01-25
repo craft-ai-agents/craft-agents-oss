@@ -32,13 +32,13 @@ import {
   type ActivityItem,
   type OverlayData,
   type FileChange,
-} from "@craft-agent/ui"
+} from "@vesper/ui"
 import { useFocusZone } from "@/hooks/keyboard"
 import { useTheme } from "@/hooks/useTheme"
 import type { Session, Message, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, LoadedSource, LoadedSkill } from "../../../shared/types"
-import type { PermissionMode } from "@craft-agent/shared/agent/modes"
-import type { ThinkingLevel } from "@craft-agent/shared/agent/thinking-levels"
-import { TurnCard, UserMessageBubble, groupMessagesByTurn, formatTurnAsMarkdown, formatActivityAsMarkdown, type Turn, type AssistantTurn, type UserTurn, type SystemTurn, type AuthRequestTurn } from "@craft-agent/ui"
+import type { PermissionMode } from "@vesper/shared/agent/modes"
+import type { ThinkingLevel } from "@vesper/shared/agent/thinking-levels"
+import { TurnCard, UserMessageBubble, groupMessagesByTurn, formatTurnAsMarkdown, formatActivityAsMarkdown, type Turn, type AssistantTurn, type UserTurn, type SystemTurn, type AuthRequestTurn } from "@vesper/ui"
 import { MemoizedAuthRequestCard } from "@/components/chat/AuthRequestCard"
 import { ActiveOptionBadges } from "./ActiveOptionBadges"
 import { InputContainer, type StructuredInputState, type StructuredResponse, type PermissionResponse } from "./input"
@@ -416,7 +416,7 @@ export function ChatDisplay({
   }, [])
 
   // Extract overlay data for activity-based overlays
-  // Uses the shared extractOverlayData parser from @craft-agent/ui
+  // Uses the shared extractOverlayData parser from @vesper/ui
   const overlayData: OverlayData | null = useMemo(() => {
     if (!overlayState || overlayState.type !== 'activity') return null
     return extractOverlayData(overlayState.activity)

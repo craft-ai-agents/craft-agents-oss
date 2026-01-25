@@ -6,7 +6,7 @@
  * - Daily reports
  * - GitHub connection status
  *
- * Storage location: ~/.vespr/workspaces/{workspaceId}/github/
+ * Storage location: ~/.vesper/workspaces/{workspaceId}/github/
  */
 
 import { promises as fs, mkdirSync } from 'fs';
@@ -21,7 +21,7 @@ import type {
  */
 export function getGitHubStorageDir(workspaceId: string): string {
   const home = process.env.HOME || process.env.USERPROFILE || '';
-  return join(home, '.vespr', 'workspaces', workspaceId, 'github');
+  return join(home, '.vesper', 'workspaces', workspaceId, 'github');
 }
 
 /**

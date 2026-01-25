@@ -104,9 +104,9 @@ describe('WhatsAppMessageRouter with Directive Integration', () => {
       expect(msgCalls[0]!.args[1]).toBe('just ask claude something')
     })
 
-    test('message with @vespr /safe directive sets safe mode', async () => {
+    test('message with @vesper /safe directive sets safe mode', async () => {
       const msg = createTestMessage({
-        content: '@vespr /safe research competitors',
+        content: '@vesper /safe research competitors',
       })
 
       await router.routeIncomingMessage(msg)
@@ -122,9 +122,9 @@ describe('WhatsAppMessageRouter with Directive Integration', () => {
       expect(msgCalls[0]!.args[1]).toBe('research competitors')
     })
 
-    test('message with @vespr /ask directive sets ask mode', async () => {
+    test('message with @vesper /ask directive sets ask mode', async () => {
       const msg = createTestMessage({
-        content: '@vespr /ask run this script',
+        content: '@vesper /ask run this script',
       })
 
       await router.routeIncomingMessage(msg)
@@ -140,9 +140,9 @@ describe('WhatsAppMessageRouter with Directive Integration', () => {
       expect(msgCalls[0]!.args[1]).toBe('run this script')
     })
 
-    test('message with @vespr /allow-all directive sets allow-all mode', async () => {
+    test('message with @vesper /allow-all directive sets allow-all mode', async () => {
       const msg = createTestMessage({
-        content: '@vespr /allow-all execute deployment',
+        content: '@vesper /allow-all execute deployment',
       })
 
       await router.routeIncomingMessage(msg)
@@ -162,7 +162,7 @@ describe('WhatsAppMessageRouter with Directive Integration', () => {
   describe('Case Insensitivity', () => {
     test('directives are case insensitive', async () => {
       const msg = createTestMessage({
-        content: '@vespr /SAFE research info',
+        content: '@vesper /SAFE research info',
       })
 
       await router.routeIncomingMessage(msg)
@@ -177,7 +177,7 @@ describe('WhatsAppMessageRouter with Directive Integration', () => {
       expect(msgCalls[0]!.args[1]).toBe('research info')
     })
 
-    test('@vespr prefix case insensitivity', async () => {
+    test('@vesper prefix case insensitivity', async () => {
       const msg = createTestMessage({
         content: '@VESPR /ask test',
       })
@@ -194,7 +194,7 @@ describe('WhatsAppMessageRouter with Directive Integration', () => {
   describe('Directive Stripping', () => {
     test('directive prefix is completely stripped from agent input', async () => {
       const msg = createTestMessage({
-        content: '@vespr /allow-all deploy to production',
+        content: '@vesper /allow-all deploy to production',
       })
 
       await router.routeIncomingMessage(msg)
@@ -202,14 +202,14 @@ describe('WhatsAppMessageRouter with Directive Integration', () => {
       const msgCalls = mockSessionManager.getCallsForMethod('sendMessage')
       expect(msgCalls).toHaveLength(1)
       expect(msgCalls[0]!.args[1]).toBe('deploy to production')
-      // Ensure no @vespr or /allow-all remains
-      expect(msgCalls[0]!.args[1]).not.toContain('@vespr')
+      // Ensure no @vesper or /allow-all remains
+      expect(msgCalls[0]!.args[1]).not.toContain('@vesper')
       expect(msgCalls[0]!.args[1]).not.toContain('/')
     })
 
     test('multi-word content is preserved after stripping', async () => {
       const msg = createTestMessage({
-        content: '@vespr /safe research my competitors market share trends',
+        content: '@vesper /safe research my competitors market share trends',
       })
 
       await router.routeIncomingMessage(msg)
@@ -223,7 +223,7 @@ describe('WhatsAppMessageRouter with Directive Integration', () => {
   describe('Edge Cases', () => {
     test('just directive with no content sends empty message', async () => {
       const msg = createTestMessage({
-        content: '@vespr /safe',
+        content: '@vesper /safe',
       })
 
       await router.routeIncomingMessage(msg)
@@ -235,12 +235,12 @@ describe('WhatsAppMessageRouter with Directive Integration', () => {
       expect(modeCalls).toHaveLength(1)
       expect(msgCalls).toHaveLength(1)
       // Full message should be sent (not recognized as valid directive)
-      expect(msgCalls[0]!.args[1]).toBe('@vespr /safe')
+      expect(msgCalls[0]!.args[1]).toBe('@vesper /safe')
     })
 
     test('multiple directives: only first one is recognized', async () => {
       const msg = createTestMessage({
-        content: '@vespr /safe @vespr /allow-all test content',
+        content: '@vesper /safe @vesper /allow-all test content',
       })
 
       await router.routeIncomingMessage(msg)
@@ -252,12 +252,12 @@ describe('WhatsAppMessageRouter with Directive Integration', () => {
 
       // Second directive should remain in content
       const msgCalls = mockSessionManager.getCallsForMethod('sendMessage')
-      expect(msgCalls[0]!.args[1]).toBe('@vespr /allow-all test content')
+      expect(msgCalls[0]!.args[1]).toBe('@vesper /allow-all test content')
     })
 
     test('directive in middle of message is not recognized', async () => {
       const msg = createTestMessage({
-        content: 'hello @vespr /safe world',
+        content: 'hello @vesper /safe world',
       })
 
       await router.routeIncomingMessage(msg)
@@ -269,12 +269,12 @@ describe('WhatsAppMessageRouter with Directive Integration', () => {
 
       // Full message should be sent
       const msgCalls = mockSessionManager.getCallsForMethod('sendMessage')
-      expect(msgCalls[0]!.args[1]).toBe('hello @vespr /safe world')
+      expect(msgCalls[0]!.args[1]).toBe('hello @vesper /safe world')
     })
 
     test('invalid directive ignored, defaults to safe', async () => {
       const msg = createTestMessage({
-        content: '@vespr /invalid research',
+        content: '@vesper /invalid research',
       })
 
       await router.routeIncomingMessage(msg)
@@ -286,12 +286,12 @@ describe('WhatsAppMessageRouter with Directive Integration', () => {
 
       // Full message (including invalid directive) should be sent
       const msgCalls = mockSessionManager.getCallsForMethod('sendMessage')
-      expect(msgCalls[0]!.args[1]).toBe('@vespr /invalid research')
+      expect(msgCalls[0]!.args[1]).toBe('@vesper /invalid research')
     })
 
     test('whitespace trimming around directive and content', async () => {
       const msg = createTestMessage({
-        content: '   @vespr /ask   test content   ',
+        content: '   @vesper /ask   test content   ',
       })
 
       await router.routeIncomingMessage(msg)
@@ -310,7 +310,7 @@ describe('WhatsAppMessageRouter with Directive Integration', () => {
   describe('Permission Mode Setting Order', () => {
     test('permission mode is set BEFORE sending message', async () => {
       const msg = createTestMessage({
-        content: '@vespr /allow-all deploy',
+        content: '@vesper /allow-all deploy',
       })
 
       await router.routeIncomingMessage(msg)
@@ -329,7 +329,7 @@ describe('WhatsAppMessageRouter with Directive Integration', () => {
   describe('Session Management with Directives', () => {
     test('creates session with correct metadata', async () => {
       const msg = createTestMessage({
-        content: '@vespr /ask analyze this',
+        content: '@vesper /ask analyze this',
         groupName: 'Engineering Team',
         senderName: 'Bob',
       })
@@ -350,7 +350,7 @@ describe('WhatsAppMessageRouter with Directive Integration', () => {
         content: 'first message',
       })
       const msg2 = createTestMessage({
-        content: '@vespr /ask second message',
+        content: '@vesper /ask second message',
       })
 
       await router.routeIncomingMessage(msg1)
@@ -382,7 +382,7 @@ describe('WhatsAppMessageRouter with Directive Integration', () => {
   describe('Attachment Handling with Directives', () => {
     test('attachments are forwarded to agent when directive present', async () => {
       const msg = createTestMessage({
-        content: '@vespr /safe analyze this document',
+        content: '@vesper /safe analyze this document',
         attachments: [
           {
             fileName: 'report.pdf',
@@ -434,7 +434,7 @@ describe('WhatsAppMessageRouter with Directive Integration', () => {
 
   describe('All Valid Directives Work Correctly', () => {
     test('/safe directive', async () => {
-      const msg = createTestMessage({ content: '@vespr /safe data' })
+      const msg = createTestMessage({ content: '@vesper /safe data' })
       await router.routeIncomingMessage(msg)
 
       const modeCalls = mockSessionManager.getCallsForMethod('setSessionPermissionMode')
@@ -442,7 +442,7 @@ describe('WhatsAppMessageRouter with Directive Integration', () => {
     })
 
     test('/ask directive', async () => {
-      const msg = createTestMessage({ content: '@vespr /ask code' })
+      const msg = createTestMessage({ content: '@vesper /ask code' })
       await router.routeIncomingMessage(msg)
 
       const modeCalls = mockSessionManager.getCallsForMethod('setSessionPermissionMode')
@@ -450,7 +450,7 @@ describe('WhatsAppMessageRouter with Directive Integration', () => {
     })
 
     test('/allow-all directive', async () => {
-      const msg = createTestMessage({ content: '@vespr /allow-all run' })
+      const msg = createTestMessage({ content: '@vesper /allow-all run' })
       await router.routeIncomingMessage(msg)
 
       const modeCalls = mockSessionManager.getCallsForMethod('setSessionPermissionMode')

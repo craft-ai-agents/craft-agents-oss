@@ -13,7 +13,7 @@ import { Info_DataTable, SortableHeader } from './Info_DataTable'
 import { Info_Badge } from './Info_Badge'
 import { Info_StatusBadge } from './Info_StatusBadge'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
-import { DataTableOverlay } from '@craft-agent/ui'
+import { DataTableOverlay } from '@vesper/ui'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 

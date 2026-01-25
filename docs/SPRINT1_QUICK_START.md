@@ -1,6 +1,6 @@
 # Sprint 1: GitHub Integration - Quick Start Guide
 
-This guide helps you get started with Vespr's GitHub integration feature in Sprint 1.
+This guide helps you get started with Vesper's GitHub integration feature in Sprint 1.
 
 ## What's New in Sprint 1
 
@@ -38,13 +38,13 @@ bun run electron:start
 
 ### 3. Connect GitHub
 
-1. Open Vespr
+1. Open Vesper
 2. Go to **Workspace Settings** > **GitHub Integration**
 3. Click **Connect**
 4. Authorize in GitHub browser popup
 5. Configure your repository:
    - Repository Owner: (e.g., `atherslabs`)
-   - Repository Name: (e.g., `vespr`)
+   - Repository Name: (e.g., `vesper`)
    - Look Back (Days): 1-30
 
 ### 4. Generate Your First Report
@@ -85,7 +85,7 @@ Done! You now have a daily report ready for triage in Sprint 2.
 
 ```
 ┌─────────────────────────────────────────┐
-│         Vespr Electron App              │
+│         Vesper Electron App              │
 ├─────────────────────────────────────────┤
 │                                         │
 │  Frontend Layer                         │
@@ -106,7 +106,7 @@ Done! You now have a daily report ready for triage in Sprint 2.
 │           ↓ HTTP ↑                      │
 │  Shared Business Logic                  │
 │  ┌─────────────────────────────────┐   │
-│  │ @vespr/shared/github            │   │
+│  │ @vesper/shared/github            │   │
 │  │ • OAuth flow                    │   │
 │  │ • REST API client               │   │
 │  │ • Daily report service          │   │

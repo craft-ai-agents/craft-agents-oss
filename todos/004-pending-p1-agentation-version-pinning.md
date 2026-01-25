@@ -188,7 +188,7 @@ For a desktop application, exact pinning is the safest approach. Updates are inf
 
 - NPM versioning docs: https://docs.npmjs.com/cli/v10/using-npm/semver
 - Caret vs Tilde: https://stackoverflow.com/questions/22137778/what-is-the-difference-between-tilde-and-caret-in-package-json
-- Vespr dependency policy: Check CONTRIBUTING.md for standards
+- Vesper dependency policy: Check CONTRIBUTING.md for standards
 - Industry best practice: See npm/yarn documentation on pinning
 
 ## Dependency Audit Recommendations

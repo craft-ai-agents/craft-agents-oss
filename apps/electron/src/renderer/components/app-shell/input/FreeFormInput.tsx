@@ -11,7 +11,7 @@ import {
   ChevronDown,
   Loader2,
 } from 'lucide-react'
-import { Icon_Folder } from '@craft-agent/ui'
+import { Icon_Folder } from '@vesper/ui'
 
 import * as storage from '@/lib/local-storage'
 
@@ -52,9 +52,9 @@ import { SourceAvatar } from '@/components/ui/source-avatar'
 import { FreeFormInputContextBadge } from './FreeFormInputContextBadge'
 import { TerminalResumeButton } from './TerminalResumeButton'
 import type { FileAttachment, LoadedSource, LoadedSkill } from '../../../../shared/types'
-import type { PermissionMode } from '@craft-agent/shared/agent/modes'
-import { PERMISSION_MODE_ORDER } from '@craft-agent/shared/agent/modes'
-import { type ThinkingLevel, THINKING_LEVELS, getThinkingLevelName } from '@craft-agent/shared/agent/thinking-levels'
+import type { PermissionMode } from '@vesper/shared/agent/modes'
+import { PERMISSION_MODE_ORDER } from '@vesper/shared/agent/modes'
+import { type ThinkingLevel, THINKING_LEVELS, getThinkingLevelName } from '@vesper/shared/agent/thinking-levels'
 import { useEscapeInterrupt } from '@/context/EscapeInterruptContext'
 import { EscapeInterruptOverlay } from './EscapeInterruptOverlay'
 

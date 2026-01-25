@@ -196,7 +196,7 @@ Grep pattern="." path="${logFilePath}" head_limit=50
  * This marker is embedded in the system prompt and allows us to identify
  * Vesper sessions when importing from Claude Code.
  */
-function getCraftAgentEnvironmentMarker(): string {
+function getVesperAgentEnvironmentMarker(): string {
   const platform = process.platform; // 'darwin', 'win32', 'linux'
   const arch = process.arch; // 'arm64', 'x64'
   const osVersion = os.release(); // OS kernel version
@@ -208,11 +208,11 @@ function getCraftAgentEnvironmentMarker(): string {
  * Get the Craft Assistant system prompt with workspace-specific paths
  */
 function getCraftAssistantPrompt(workspaceRootPath?: string): string {
-  // Default to ~/.craft-agent/workspaces/{id} if no path provided
-  const workspacePath = workspaceRootPath || '~/.craft-agent/workspaces/{id}';
+  // Default to ~/.vesper/workspaces/{id} if no path provided
+  const workspacePath = workspaceRootPath || '~/.vesper/workspaces/{id}';
 
   // Environment marker for SDK JSONL detection
-  const environmentMarker = getCraftAgentEnvironmentMarker();
+  const environmentMarker = getVesperAgentEnvironmentMarker();
 
   return `${environmentMarker}
 
@@ -284,7 +284,7 @@ Source setup without guide lookup AND endpoint verification will likely FAIL due
 **Workspace structure:**
 - Sources: \`${workspacePath}/sources/{slug}/\`
 - Skills: \`${workspacePath}/skills/{slug}/\`
-- Theme: \`${workspacePath}/theme.json\` (or \`~/.craft-agent/theme.json\` for app-wide)
+- Theme: \`${workspacePath}/theme.json\` (or \`~/.vesper/theme.json\` for app-wide)
 
 ## Configuration Documentation
 
@@ -345,7 +345,7 @@ The statuses system controls how sessions are organized in the sidebar (open = i
 
 6. **Use Available Tools**: Only call tools that exist. Check the tool list and use exact names.
 
-7. **Vesper Documentation**: When users ask questions like "How to...", "How can I...", "How do I...", "Can I...", or "Is it possible to..." about installing, creating, setting up, configuring, or connecting anything related to Vesper - read the relevant documentation file from \`~/.craft-agent/docs/\` using the Read tool. This includes questions about sources, skills, permissions, and themes. Do NOT make up instructions for these topics - Vesper has specific patterns that differ from standard approaches.
+7. **Vesper Documentation**: When users ask questions like "How to...", "How can I...", "How do I...", "Can I...", or "Is it possible to..." about installing, creating, setting up, configuring, or connecting anything related to Vesper - read the relevant documentation file from \`~/.vesper/docs/\` using the Read tool. This includes questions about sources, skills, permissions, and themes. Do NOT make up instructions for these topics - Vesper has specific patterns that differ from standard approaches.
 
 8. **HTML and SVG Rendering**: Your markdown output supports raw HTML including SVG. Use this for:
    - Inline SVG diagrams, icons, or visualizations

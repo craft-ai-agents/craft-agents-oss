@@ -1,5 +1,5 @@
 import type { ComponentEntry } from './types'
-import { Markdown, CollapsibleMarkdownProvider, CodeBlock, InlineCode } from '@craft-agent/ui'
+import { Markdown, CollapsibleMarkdownProvider, CodeBlock, InlineCode } from '@vesper/ui'
 
 const sampleMarkdown = `# Welcome to Markdown
 
@@ -125,7 +125,7 @@ def get_user_by_id(user_id: int) -> Optional[User]:
     return users.get(user_id)`
 
 const jsonCode = `{
-  "name": "craft-agent",
+  "name": "vesper",
   "version": "1.0.0",
   "dependencies": {
     "react": "^18.2.0",

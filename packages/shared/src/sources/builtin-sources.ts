@@ -5,8 +5,8 @@
  * These sources are not shown in the sources list UI but are available
  * for the agent to use.
  *
- * NOTE: craft-agents-docs is now an always-available MCP server configured
- * directly in craft-agent.ts, not a source. This file is kept for backwards
+ * NOTE: vesper-docs is now an always-available MCP server configured
+ * directly in vesper-agent.ts, not a source. This file is kept for backwards
  * compatibility but returns empty results.
  */
 
@@ -15,8 +15,8 @@ import type { LoadedSource, FolderSourceConfig } from './types.ts';
 /**
  * Get all built-in sources for a workspace.
  *
- * Currently returns empty array - craft-agents-docs has been moved to
- * an always-available MCP server in craft-agent.ts.
+ * Currently returns empty array - vesper-docs has been moved to
+ * an always-available MCP server in vesper-agent.ts.
  *
  * @param _workspaceId - The workspace ID (unused)
  * @param _workspaceRootPath - Absolute path to workspace root folder (unused)
@@ -30,7 +30,7 @@ export function getBuiltinSources(_workspaceId: string, _workspaceRootPath: stri
  * Get the built-in Vesper docs source.
  *
  * @deprecated vesper-docs is now an always-available MCP server
- * configured directly in craft-agent.ts. This function is kept for
+ * configured directly in vesper-agent.ts. This function is kept for
  * backwards compatibility but returns a placeholder.
  */
 export function getDocsSource(workspaceId: string, workspaceRootPath: string): LoadedSource {
@@ -66,7 +66,7 @@ export function getDocsSource(workspaceId: string, workspaceRootPath: string): L
 /**
  * Check if a source slug is a built-in source.
  *
- * Returns false - craft-agents-docs is now an always-available MCP server,
+ * Returns false - vesper-docs is now an always-available MCP server,
  * not a source in the sources system.
  *
  * @param _slug - Source slug to check (unused)

@@ -204,7 +204,7 @@ This is the pragmatic approach for a debug feature. Add a warning log that helps
 
 - Console API: https://developer.mozilla.org/en-US/docs/Web/API/Console/warn
 - Electron logging: https://www.electronjs.org/docs/tutorial/debugging-main-process
-- Vespr logging patterns: Check existing IPC handlers for log patterns
+- Vesper logging patterns: Check existing IPC handlers for log patterns
 
 ## Future Enhancement
 

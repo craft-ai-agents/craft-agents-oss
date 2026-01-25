@@ -2,7 +2,7 @@
  * Session types for conversation management
  *
  * Sessions are the primary isolation boundary. Each session maps 1:1
- * with a CraftAgent instance and SDK conversation.
+ * with a VesperAgent instance and SDK conversation.
  */
 
 import type { StoredMessage, TokenUsage } from './message.ts';

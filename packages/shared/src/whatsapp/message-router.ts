@@ -3,7 +3,7 @@ import type { WhatsAppMessage, WhatsAppErrorCode } from './types'
 // to keep the router self-contained and easily testable
 import { getSessionId } from './session-mapper'
 import { extractDirective, type PermissionDirective } from './directive-parser'
-import type { AgentEvent } from '@craft-agent/core/types'
+import type { AgentEvent } from '@vesper/core/types'
 
 // SessionManager interface for WhatsApp integration
 // Defines the subset of SessionManager methods used by the message router
@@ -264,11 +264,11 @@ export class WhatsAppMessageRouter {
   }
 
   /**
-   * Route incoming WhatsApp message to Vespr session
+   * Route incoming WhatsApp message to Vesper session
    *
    * Directive Processing Flow:
    * 1. Extract inline permission directive from message (if present)
-   *    - Format: @vespr /safe|/ask|/allow-all <message>
+   *    - Format: @vesper /safe|/ask|/allow-all <message>
    *    - No directive → defaults to safe mode (read-only)
    * 2. Strip directive prefix from message content before sending to agent
    * 3. Apply permission mode override BEFORE sending message

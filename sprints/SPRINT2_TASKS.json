@@ -115,7 +115,7 @@
           "title": "Implement JSONL persistence",
           "files": ["packages/shared/src/triage/storage.ts"],
           "acceptance_criteria": [
-            "Saves to ~/.vespr/workspaces/{id}/triage/results.jsonl",
+            "Saves to ~/.vesper/workspaces/{id}/triage/results.jsonl",
             "Implements 24-hour TTL",
             "Supports efficient lookups"
           ]

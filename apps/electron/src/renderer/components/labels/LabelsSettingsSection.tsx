@@ -25,7 +25,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
-import type { Label } from '@craft-agent/shared/labels'
+import type { Label } from '@vesper/shared/labels'
 
 // Preset color palette (matches LABEL_COLORS from shared package)
 const LABEL_COLORS = [

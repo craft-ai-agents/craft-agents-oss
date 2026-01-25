@@ -22,7 +22,7 @@ export type CredentialType =
   | 'claude_oauth'       // Claude OAuth token (Max subscription)
   | 'github_oauth_client_id'     // GitHub OAuth App Client ID
   | 'github_oauth_client_secret' // GitHub OAuth App Client Secret
-  // Source credentials (stored at ~/.craft-agent/workspaces/{ws}/sources/{slug}/)
+  // Source credentials (stored at ~/.vesper/workspaces/{ws}/sources/{slug}/)
   | 'source_oauth'       // OAuth tokens for MCP/API sources
   | 'source_bearer'      // Bearer tokens
   | 'source_apikey'      // API keys

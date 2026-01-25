@@ -1,5 +1,5 @@
 // Types shared between main and renderer processes
-// Core types are re-exported from @craft-agent/core
+// Core types are re-exported from @vesper/core
 
 // Import and re-export core types
 import type {
@@ -11,17 +11,17 @@ import type {
   SessionMetadata as CoreSessionMetadata,
   StoredAttachment as CoreStoredAttachment,
   ContentBadge,
-} from '@craft-agent/core/types';
+} from '@vesper/core/types';
 
 // Import mode types from dedicated subpath export (avoids pulling in SDK)
-import type { PermissionMode } from '@craft-agent/shared/agent/modes';
+import type { PermissionMode } from '@vesper/shared/agent/modes';
 export type { PermissionMode };
-export { PERMISSION_MODE_CONFIG } from '@craft-agent/shared/agent/modes';
+export { PERMISSION_MODE_CONFIG } from '@vesper/shared/agent/modes';
 
 // Import thinking level types
-import type { ThinkingLevel } from '@craft-agent/shared/agent/thinking-levels';
+import type { ThinkingLevel } from '@vesper/shared/agent/thinking-levels';
 export type { ThinkingLevel };
-export { THINKING_LEVELS, DEFAULT_THINKING_LEVEL } from '@craft-agent/shared/agent/thinking-levels';
+export { THINKING_LEVELS, DEFAULT_THINKING_LEVEL } from '@vesper/shared/agent/thinking-levels';
 
 export type {
   CoreMessage as Message,
@@ -36,16 +36,16 @@ export type {
 
 // Import and re-export auth types for onboarding
 // Use types-only subpaths to avoid pulling in Node.js dependencies
-import type { AuthState, SetupNeeds } from '@craft-agent/shared/auth/types';
-import type { AuthType } from '@craft-agent/shared/config/types';
+import type { AuthState, SetupNeeds } from '@vesper/shared/auth/types';
+import type { AuthType } from '@vesper/shared/config/types';
 export type { AuthState, SetupNeeds, AuthType };
 
 // Import source types for session source selection
-import type { LoadedSource, FolderSourceConfig, SourceConnectionStatus } from '@craft-agent/shared/sources/types';
+import type { LoadedSource, FolderSourceConfig, SourceConnectionStatus } from '@vesper/shared/sources/types';
 export type { LoadedSource, FolderSourceConfig, SourceConnectionStatus };
 
 // Import skill types
-import type { LoadedSkill, SkillMetadata, SkillSource } from '@craft-agent/shared/skills/types';
+import type { LoadedSkill, SkillMetadata, SkillSource } from '@vesper/shared/skills/types';
 export type { LoadedSkill, SkillMetadata, SkillSource };
 
 // ============================================
@@ -112,12 +112,12 @@ export interface SessionFile {
 }
 
 // Import auth request types for unified auth flow
-import type { AuthRequest as SharedAuthRequest, CredentialInputMode as SharedCredentialInputMode, CredentialAuthRequest as SharedCredentialAuthRequest } from '@craft-agent/shared/agent';
+import type { AuthRequest as SharedAuthRequest, CredentialInputMode as SharedCredentialInputMode, CredentialAuthRequest as SharedCredentialAuthRequest } from '@vesper/shared/agent';
 export type { SharedAuthRequest as AuthRequest };
 export type { SharedCredentialInputMode as CredentialInputMode };
 // CredentialRequest is used by UI components for displaying credential input
 export type CredentialRequest = SharedCredentialAuthRequest;
-export { generateMessageId } from '@craft-agent/core/types';
+export { generateMessageId } from '@vesper/core/types';
 
 /**
  * OAuth result from main process
@@ -174,8 +174,8 @@ export interface RefreshTitleResult {
 
 
 // Re-export permission types from core, extended with sessionId for multi-session context
-export type { PermissionRequest as BasePermissionRequest } from '@craft-agent/core/types';
-import type { PermissionRequest as BasePermissionRequest } from '@craft-agent/core/types';
+export type { PermissionRequest as BasePermissionRequest } from '@vesper/core/types';
+import type { PermissionRequest as BasePermissionRequest } from '@vesper/core/types';
 
 /**
  * Permission request with session context (for multi-session Electron app)
@@ -188,7 +188,7 @@ export interface PermissionRequest extends BasePermissionRequest {
 // Credential Input Types (Secure Auth UI)
 // ============================================
 
-// CredentialInputMode is imported from @craft-agent/shared/agent above
+// CredentialInputMode is imported from @vesper/shared/agent above
 
 /**
  * Credential response from user (for credential auth requests)
@@ -263,7 +263,7 @@ export interface FileAttachment {
 }
 
 // Import types needed for Session interface
-import type { Message } from '@craft-agent/core/types';
+import type { Message } from '@vesper/core/types';
 
 /**
  * Electron-specific Session type (includes runtime state)
@@ -490,7 +490,7 @@ export interface SendMessageOptions {
   /** Skill slugs to activate for this message (from @mentions) */
   skillSlugs?: string[]
   /** Content badges for inline display (sources, skills with embedded icons) */
-  badges?: import('@craft-agent/core').ContentBadge[]
+  badges?: import('@vesper/core').ContentBadge[]
 }
 
 // =============================================================================
@@ -729,7 +729,7 @@ export const IPC_CHANNELS = {
   SOURCES_GET_PERMISSIONS: 'sources:getPermissions',
   // Workspace permissions config (for Explore mode)
   WORKSPACE_GET_PERMISSIONS: 'workspace:getPermissions',
-  // Default permissions from ~/.craft-agent/permissions/default.json
+  // Default permissions from ~/.vesper/permissions/default.json
   DEFAULT_PERMISSIONS_GET: 'permissions:getDefaults',
   // Broadcast when default permissions change (file watcher)
   DEFAULT_PERMISSIONS_CHANGED: 'permissions:defaultsChanged',
@@ -861,7 +861,7 @@ export const IPC_CHANNELS = {
 } as const
 
 // Re-import types for ElectronAPI
-import type { Workspace, SessionMetadata, StoredAttachment as StoredAttachmentType } from '@craft-agent/core/types';
+import type { Workspace, SessionMetadata, StoredAttachment as StoredAttachmentType } from '@vesper/core/types';
 
 // Type-safe IPC API exposed to renderer
 export interface ElectronAPI {
@@ -1014,9 +1014,9 @@ export interface ElectronAPI {
   deleteSource(workspaceId: string, sourceSlug: string): Promise<void>
   startSourceOAuth(workspaceId: string, sourceSlug: string): Promise<{ success: boolean; error?: string; accessToken?: string }>
   saveSourceCredentials(workspaceId: string, sourceSlug: string, credential: string): Promise<void>
-  getSourcePermissionsConfig(workspaceId: string, sourceSlug: string): Promise<import('@craft-agent/shared/agent').PermissionsConfigFile | null>
-  getWorkspacePermissionsConfig(workspaceId: string): Promise<import('@craft-agent/shared/agent').PermissionsConfigFile | null>
-  getDefaultPermissionsConfig(): Promise<{ config: import('@craft-agent/shared/agent').PermissionsConfigFile | null; path: string }>
+  getSourcePermissionsConfig(workspaceId: string, sourceSlug: string): Promise<import('@vesper/shared/agent').PermissionsConfigFile | null>
+  getWorkspacePermissionsConfig(workspaceId: string): Promise<import('@vesper/shared/agent').PermissionsConfigFile | null>
+  getDefaultPermissionsConfig(): Promise<{ config: import('@vesper/shared/agent').PermissionsConfigFile | null; path: string }>
   getMcpTools(workspaceId: string, sourceSlug: string): Promise<McpToolsResult>
 
   // Sources change listener (live updates when sources are added/removed)
@@ -1036,14 +1036,14 @@ export interface ElectronAPI {
   onSkillsChanged(callback: (skills: LoadedSkill[]) => void): () => void
 
   // Statuses (workspace-scoped)
-  listStatuses(workspaceId: string): Promise<import('@craft-agent/shared/statuses').StatusConfig[]>
+  listStatuses(workspaceId: string): Promise<import('@vesper/shared/statuses').StatusConfig[]>
   // Statuses change listener (live updates when statuses config or icon files change)
   onStatusesChanged(callback: (workspaceId: string) => void): () => void
 
   // Labels (workspace-scoped session tagging)
-  listLabels(workspaceId: string): Promise<import('@craft-agent/shared/labels').Label[]>
-  createLabel(workspaceId: string, name: string, color: string): Promise<import('@craft-agent/shared/labels').Label>
-  updateLabel(workspaceId: string, labelId: string, updates: { name?: string; color?: string }): Promise<import('@craft-agent/shared/labels').Label>
+  listLabels(workspaceId: string): Promise<import('@vesper/shared/labels').Label[]>
+  createLabel(workspaceId: string, name: string, color: string): Promise<import('@vesper/shared/labels').Label>
+  updateLabel(workspaceId: string, labelId: string, updates: { name?: string; color?: string }): Promise<import('@vesper/shared/labels').Label>
   deleteLabel(workspaceId: string, labelId: string): Promise<void>
   onLabelsChanged(callback: (workspaceId: string) => void): () => void
 
@@ -1107,9 +1107,9 @@ export interface ElectronAPI {
   onScheduleEvent(callback: (event: ScheduleEvent) => void): () => void
 
   // GitHub Integration
-  githubStartOAuth(): Promise<import('@craft-agent/shared/github').GitHubOAuthResult>
-  githubGetStatus(workspaceId: string): Promise<import('@craft-agent/shared/github').GitHubConnectionStatus | null>
-  githubSetStatus(workspaceId: string, status: import('@craft-agent/shared/github').GitHubConnectionStatus): Promise<import('@craft-agent/shared/github').GitHubConnectionStatus>
+  githubStartOAuth(): Promise<import('@vesper/shared/github').GitHubOAuthResult>
+  githubGetStatus(workspaceId: string): Promise<import('@vesper/shared/github').GitHubConnectionStatus | null>
+  githubSetStatus(workspaceId: string, status: import('@vesper/shared/github').GitHubConnectionStatus): Promise<import('@vesper/shared/github').GitHubConnectionStatus>
   githubSetOAuthCredentials(clientId: string | null, clientSecret: string | null): Promise<{ success: boolean; error?: string }>
   githubHasOAuthCredentials(): Promise<boolean>
 
@@ -1125,9 +1125,9 @@ export interface ElectronAPI {
     repoName: string
     sinceDays?: number
     teamCapacity?: { availableDevelopers: number; hoursPerDay: number }
-  }): Promise<import('@craft-agent/shared/github').DailyReport>
-  reportSubmit(report: import('@craft-agent/shared/github').DailyReport): Promise<import('@craft-agent/shared/github').DailyReport>
-  reportGetLatest(workspaceId: string): Promise<import('@craft-agent/shared/github').DailyReport | null>
+  }): Promise<import('@vesper/shared/github').DailyReport>
+  reportSubmit(report: import('@vesper/shared/github').DailyReport): Promise<import('@vesper/shared/github').DailyReport>
+  reportGetLatest(workspaceId: string): Promise<import('@vesper/shared/github').DailyReport | null>
 
   // Orchestration events listener
   onOrchestrationEvent(callback: (event: any) => void): () => void

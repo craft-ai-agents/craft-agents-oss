@@ -8,7 +8,7 @@
 import { ipcMain, BrowserWindow } from 'electron'
 import { IPC_CHANNELS } from '../shared/types'
 import { getWhatsAppService, closeWhatsAppService } from './whatsapp-service'
-import { getCredentialManager } from '@craft-agent/shared/credentials'
+import { getCredentialManager } from '@vesper/shared/credentials'
 import type { SessionManager } from './sessions'
 
 /**

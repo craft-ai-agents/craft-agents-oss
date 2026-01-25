@@ -1,5 +1,5 @@
 /**
- * Chat component exports for @craft-agent/ui
+ * Chat component exports for @vesper/ui
  */
 
 // Turn utilities (pure functions, no React)

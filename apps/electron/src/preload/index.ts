@@ -217,7 +217,7 @@ const api: ElectronAPI = {
 
   // Sources
   getSources: (workspaceId: string) => ipcRenderer.invoke(IPC_CHANNELS.SOURCES_GET, workspaceId),
-  createSource: (workspaceId: string, config: Partial<import('@craft-agent/shared/sources').FolderSourceConfig>) =>
+  createSource: (workspaceId: string, config: Partial<import('@vesper/shared/sources').FolderSourceConfig>) =>
     ipcRenderer.invoke(IPC_CHANNELS.SOURCES_CREATE, workspaceId, config),
   deleteSource: (workspaceId: string, sourceSlug: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SOURCES_DELETE, workspaceId, sourceSlug),
@@ -272,8 +272,8 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.WORKSPACE_WRITE_IMAGE, workspaceId, relativePath, base64, mimeType),
 
   // Sources change listener (live updates when sources are added/removed)
-  onSourcesChanged: (callback: (sources: import('@craft-agent/shared/sources').LoadedSource[]) => void) => {
-    const handler = (_event: Electron.IpcRendererEvent, sources: import('@craft-agent/shared/sources').LoadedSource[]) => {
+  onSourcesChanged: (callback: (sources: import('@vesper/shared/sources').LoadedSource[]) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, sources: import('@vesper/shared/sources').LoadedSource[]) => {
       callback(sources)
     }
     ipcRenderer.on(IPC_CHANNELS.SOURCES_CHANGED, handler)
@@ -295,8 +295,8 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.SKILLS_OPEN_FINDER, skillPath),
 
   // Skills change listener (live updates when skills are added/removed/modified)
-  onSkillsChanged: (callback: (skills: import('@craft-agent/shared/skills').LoadedSkill[]) => void) => {
-    const handler = (_event: Electron.IpcRendererEvent, skills: import('@craft-agent/shared/skills').LoadedSkill[]) => {
+  onSkillsChanged: (callback: (skills: import('@vesper/shared/skills').LoadedSkill[]) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, skills: import('@vesper/shared/skills').LoadedSkill[]) => {
       callback(skills)
     }
     ipcRenderer.on(IPC_CHANNELS.SKILLS_CHANGED, handler)
@@ -329,8 +329,8 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.LOGO_GET_URL, serviceUrl, provider),
 
   // Theme change listeners (live updates when theme.json files change)
-  onAppThemeChange: (callback: (theme: import('@craft-agent/shared/config').ThemeOverrides | null) => void) => {
-    const handler = (_event: Electron.IpcRendererEvent, theme: import('@craft-agent/shared/config').ThemeOverrides | null) => {
+  onAppThemeChange: (callback: (theme: import('@vesper/shared/config').ThemeOverrides | null) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, theme: import('@vesper/shared/config').ThemeOverrides | null) => {
       callback(theme)
     }
     ipcRenderer.on(IPC_CHANNELS.THEME_APP_CHANGED, handler)

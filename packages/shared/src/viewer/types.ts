@@ -1,7 +1,7 @@
 /**
  * Viewer service types for session sharing and export
  *
- * This module defines the interfaces for sharing Vespr sessions publicly
+ * This module defines the interfaces for sharing Vesper sessions publicly
  * through various viewer backends (hosted service or static export).
  */
 

@@ -20,7 +20,7 @@ function createMockSession(overrides?: Partial<StoredSession>): StoredSession {
   return {
     id: 'test-session-123',
     name: 'Test Session',
-    workspaceRootPath: '~/.vespr/workspaces/workspace-1',
+    workspaceRootPath: '~/.vesper/workspaces/workspace-1',
     createdAt: Date.now(),
     lastUsedAt: Date.now(),
     messages: [
@@ -54,7 +54,7 @@ describe('StaticExportViewer', () => {
 
   beforeEach(() => {
     // Create a unique temp directory for each test
-    testExportPath = path.join(tmpdir(), `vespr-test-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+    testExportPath = path.join(tmpdir(), `vesper-test-${Date.now()}-${Math.random().toString(36).slice(2)}`)
     fs.mkdirSync(testExportPath, { recursive: true })
     viewer = new StaticExportViewer(testExportPath)
   })
@@ -72,7 +72,7 @@ describe('StaticExportViewer', () => {
 
   describe('constructor', () => {
     test('creates export directory if it does not exist', () => {
-      const newPath = path.join(tmpdir(), `vespr-new-${Date.now()}`)
+      const newPath = path.join(tmpdir(), `vesper-new-${Date.now()}`)
       expect(fs.existsSync(newPath)).toBe(false)
 
       const newViewer = new StaticExportViewer(newPath)
@@ -167,7 +167,7 @@ describe('StaticExportViewer', () => {
 
     test('returns error on write failure', async () => {
       // Make the export path read-only to cause write failure
-      const readOnlyPath = path.join(tmpdir(), `vespr-readonly-${Date.now()}`)
+      const readOnlyPath = path.join(tmpdir(), `vesper-readonly-${Date.now()}`)
       fs.mkdirSync(readOnlyPath, { recursive: true })
 
       const readOnlyViewer = new StaticExportViewer(readOnlyPath)
@@ -338,7 +338,7 @@ describe('StaticExportViewer', () => {
       expect(content).toContain('My Test Session')
       expect(content).toContain('What is 2+2?')
       expect(content).toContain('The answer is 4.')
-      expect(content).toContain('Vespr Session')
+      expect(content).toContain('Vesper Session')
       expect(content).toContain('</html>')
     })
 

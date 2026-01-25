@@ -3,7 +3,7 @@
  *
  * Provides message resilience across app crashes, network disconnections, and restarts.
  *
- * Storage: ~/.vespr/workspaces/{id}/whatsapp-queue.jsonl
+ * Storage: ~/.vesper/workspaces/{id}/whatsapp-queue.jsonl
  * Encryption: AES-256-GCM (via CredentialManager for sensitive data)
  * Note: Current implementation stores messages as plaintext JSONL.
  *       Full encryption deferred to Phase 2b for performance optimization.
@@ -46,7 +46,7 @@ export class WhatsAppMessageQueue {
   /**
    * Create a new message queue instance
    *
-   * @param workspacePath - Workspace directory (e.g., ~/.vespr/workspaces/{id})
+   * @param workspacePath - Workspace directory (e.g., ~/.vesper/workspaces/{id})
    * @param credentialManager - For potential future encryption integration
    */
   constructor(

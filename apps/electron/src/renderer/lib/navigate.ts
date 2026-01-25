@@ -19,7 +19,7 @@ export { routes }
 export type { Route }
 
 // Event name for internal navigation
-export const NAVIGATE_EVENT = 'craft-agent-navigate'
+export const NAVIGATE_EVENT = 'vesper-navigate'
 
 /**
  * Navigate to a route

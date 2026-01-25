@@ -2,7 +2,7 @@
 
 ## Overview
 
-Sprint tasks are organized as Claude Tasks (similar to a task list like "groceries") that can be referenced by multiple Claude agents for autonomous multi-agent collaboration on Vespr development.
+Sprint tasks are organized as Claude Tasks (similar to a task list like "groceries") that can be referenced by multiple Claude agents for autonomous multi-agent collaboration on Vesper development.
 
 ## Environment Variables
 

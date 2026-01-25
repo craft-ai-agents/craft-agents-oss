@@ -9,7 +9,7 @@
 
 import type { ReactNode } from 'react'
 import { useMemo, useState, useCallback } from 'react'
-import type { StoredSession } from '@craft-agent/core'
+import type { StoredSession } from '@vesper/core'
 import { cn } from '../../lib/utils'
 import { CHAT_LAYOUT, CHAT_CLASSES } from '../../lib/layout'
 import { PlatformProvider, type PlatformActions } from '../../context'
@@ -49,9 +49,9 @@ export interface SessionViewerProps {
 }
 
 /**
- * CraftAgentLogo - The Vesper "C" logo for branding (legacy component name)
+ * VesperAgentLogo - The Vesper "C" logo for branding (legacy component name)
  */
-function CraftAgentLogo({ className }: { className?: string }) {
+function VesperAgentLogo({ className }: { className?: string }) {
   return (
     <svg
       className={className}
@@ -218,7 +218,7 @@ export function SessionViewer({
 
             {/* Bottom branding */}
             <div className={CHAT_CLASSES.brandingContainer}>
-              <CraftAgentLogo className="w-8 h-8 text-[#9570BE]/40" />
+              <VesperAgentLogo className="w-8 h-8 text-[#9570BE]/40" />
             </div>
             </div>
           </div>

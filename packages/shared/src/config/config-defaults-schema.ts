@@ -3,7 +3,7 @@
  * This file contains the default values for all configuration options.
  */
 
-import type { AuthType } from '@craft-agent/core/types';
+import type { AuthType } from '@vesper/core/types';
 import type { PermissionMode } from '../agent/mode-manager.ts';
 import type { ThinkingLevel } from '../agent/thinking-levels.ts';
 

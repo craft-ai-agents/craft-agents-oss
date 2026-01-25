@@ -284,14 +284,14 @@ function loadCommandsAsSkills(): LoadedSkill[] {
 }
 
 /**
- * Load global skills from ~/.craft-agent/global-skills/, ~/.claude/skills/,
+ * Load global skills from ~/.vesper/global-skills/, ~/.claude/skills/,
  * and ~/.claude/commands/ (auto-converted to skills).
  * Claude Code skills and commands are read-only, global skills are user-installed.
  */
 export function loadGlobalSkills(): LoadedSkill[] {
   const skills: LoadedSkill[] = [];
 
-  // Load from ~/.craft-agent/global-skills/ (user-installed)
+  // Load from ~/.vesper/global-skills/ (user-installed)
   const globalSkills = loadSkillsFromDir(GLOBAL_SKILLS_DIR, 'global');
   skills.push(...globalSkills);
 

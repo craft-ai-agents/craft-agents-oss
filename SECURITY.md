@@ -8,7 +8,7 @@ We take security seriously. If you discover a security vulnerability in Vesper, 
 
 **Please do NOT report security vulnerabilities through public GitHub issues.**
 
-Instead, please send an email to: **security@craft.do**
+Instead, please send an email to: **tin.nguyen@atherlabs.com**
 
 Include the following information:
 - Description of the vulnerability
@@ -26,7 +26,7 @@ Include the following information:
 
 This policy applies to:
 - The Vesper desktop application
-- The `@craft-agent/*` npm packages
+- The Vesper packages and codebase
 - Official Vesper repositories
 
 ### Out of Scope

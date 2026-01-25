@@ -1,6 +1,6 @@
 # Session HTML Template Generator
 
-This module provides functionality to generate standalone HTML files for Vespr sessions.
+This module provides functionality to generate standalone HTML files for Vesper sessions.
 
 ## Features
 
@@ -55,7 +55,7 @@ await Bun.write('session-export.html', html);
 
 ## Message Types Supported
 
-The template supports all Vespr message types with appropriate styling:
+The template supports all Vesper message types with appropriate styling:
 
 - **user**: User messages (blue)
 - **assistant**: AI assistant responses (purple)
@@ -105,7 +105,7 @@ The `escapeHtml()` function ensures all user content is properly escaped to prev
 ## Styling
 
 The template includes embedded CSS with:
-- Professional color scheme matching Vespr's UI
+- Professional color scheme matching Vesper's UI
 - Gradient header
 - Message-type-specific colors
 - Code blocks with monospace font

@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 import { Eye, EyeOff, ExternalLink, CheckCircle2, XCircle } from "lucide-react"
-import { Spinner } from "@craft-agent/ui"
+import { Spinner } from "@vesper/ui"
 import type { BillingMethod } from "./BillingMethodStep"
 import { StepFormLayout, BackButton, ContinueButton, type StepIconVariant } from "./primitives"
 

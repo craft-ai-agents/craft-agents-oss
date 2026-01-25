@@ -228,4 +228,4 @@ This is the simplest and most correct approach. There's no benefit to isolating 
 
 - Architecture review: `AGENTATION_SYNTHESIS.md` section 3.1
 - React Context best practices: https://react.dev/learn/passing-data-deeply-with-context
-- Provider pattern in Vespr: See `FocusProvider`, `ModalProvider` implementations in `/apps/electron/src/renderer/contexts/`
+- Provider pattern in Vesper: See `FocusProvider`, `ModalProvider` implementations in `/apps/electron/src/renderer/contexts/`
