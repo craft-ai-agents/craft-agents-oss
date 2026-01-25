@@ -1,26 +1,22 @@
 // apps/electron/src/renderer/components/templates/TemplateManager.tsx
 
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import { useAtom } from 'jotai';
-import { templatesAtom, loadTemplatesAtom, deleteTemplateAtom, createTemplateAtom } from '@/atoms/templates';
+import { templatesAtom, loadTemplatesAtom, deleteTemplateAtom } from '@/atoms/templates';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import type { SessionTemplate, CreateTemplateOptions } from '@vesper/shared/templates';
+import { EditPopover, getEditConfig } from '@/components/ui/EditPopover';
+import type { SessionTemplate } from '@vesper/shared/templates';
 import { PlusIcon, TrashIcon } from 'lucide-react';
 
 interface TemplateManagerProps {
   workspaceId: string;
+  workspaceRootPath?: string;
 }
 
-export function TemplateManager({ workspaceId }: TemplateManagerProps) {
+export function TemplateManager({ workspaceId, workspaceRootPath }: TemplateManagerProps) {
   const [templates] = useAtom(templatesAtom);
   const [, loadTemplates] = useAtom(loadTemplatesAtom);
   const [, deleteTemplate] = useAtom(deleteTemplateAtom);
-  const [, createTemplate] = useAtom(createTemplateAtom);
-  const [showCreateDialog, setShowCreateDialog] = useState(false);
 
   useEffect(() => {
     loadTemplates({ scope: 'all', workspaceId });
@@ -35,11 +31,6 @@ export function TemplateManager({ workspaceId }: TemplateManagerProps) {
     });
   };
 
-  const handleCreate = async (options: CreateTemplateOptions) => {
-    await createTemplate(options);
-    setShowCreateDialog(false);
-  };
-
   const globalTemplates = templates.items.filter(t => t.scope === 'global');
   const workspaceTemplates = templates.items.filter(t => t.scope === 'workspace');
 
@@ -47,10 +38,17 @@ export function TemplateManager({ workspaceId }: TemplateManagerProps) {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">Templates</h2>
-        <Button onClick={() => setShowCreateDialog(true)} size="sm">
-          <PlusIcon className="size-4 mr-2" />
-          New Template
-        </Button>
+        {workspaceRootPath && (
+          <EditPopover
+            trigger={
+              <Button size="sm">
+                <PlusIcon className="size-4 mr-2" />
+                New Template
+              </Button>
+            }
+            {...getEditConfig('add-template', workspaceRootPath)}
+          />
+        )}
       </div>
 
       {globalTemplates.length > 0 && (
@@ -78,18 +76,9 @@ export function TemplateManager({ workspaceId }: TemplateManagerProps) {
       {templates.items.length === 0 && !templates.isLoading && (
         <div className="rounded-lg border border-dashed border-muted-foreground/30 p-8 text-center">
           <p className="text-sm text-muted-foreground">
-            No templates yet. Create one to reuse session configurations.
+            No templates yet. Create one to save session configurations for quick reuse.
           </p>
         </div>
-      )}
-
-      {showCreateDialog && (
-        <CreateTemplateFromScratchDialog
-          open={showCreateDialog}
-          onOpenChange={setShowCreateDialog}
-          workspaceId={workspaceId}
-          onCreate={handleCreate}
-        />
       )}
     </div>
   );
@@ -122,109 +111,5 @@ function TemplateRow({ template, onDelete }: TemplateRowProps) {
         </Button>
       </div>
     </div>
-  );
-}
-
-interface CreateTemplateFromScratchDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  workspaceId: string;
-  onCreate: (options: CreateTemplateOptions) => Promise<void>;
-}
-
-function CreateTemplateFromScratchDialog({ open, onOpenChange, workspaceId, onCreate }: CreateTemplateFromScratchDialogProps) {
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [scope, setScope] = useState<'workspace' | 'global'>('workspace');
-  const [isSaving, setIsSaving] = useState(false);
-
-  const handleSave = async () => {
-    if (!name.trim()) return;
-
-    setIsSaving(true);
-    try {
-      await onCreate({
-        name: name.trim(),
-        description: description.trim() || undefined,
-        scope,
-        workspaceId: scope === 'workspace' ? workspaceId : undefined,
-      });
-      setName('');
-      setDescription('');
-      setScope('workspace');
-    } catch (error) {
-      console.error('Failed to create template:', error);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Create Template</DialogTitle>
-        </DialogHeader>
-
-        <div className="space-y-4 py-4">
-          <div className="space-y-2">
-            <Label htmlFor="template-name">Name</Label>
-            <Input
-              id="template-name"
-              placeholder="e.g., Code Review"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              autoFocus
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="template-description">Description (optional)</Label>
-            <Textarea
-              id="template-description"
-              placeholder="What is this template for?"
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              rows={2}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label>Scope</Label>
-            <div className="flex gap-4">
-              <label className="flex cursor-pointer items-center gap-2">
-                <input
-                  type="radio"
-                  name="scope"
-                  value="workspace"
-                  checked={scope === 'workspace'}
-                  onChange={() => setScope('workspace')}
-                />
-                <span className="text-sm">This workspace</span>
-              </label>
-              <label className="flex cursor-pointer items-center gap-2">
-                <input
-                  type="radio"
-                  name="scope"
-                  value="global"
-                  checked={scope === 'global'}
-                  onChange={() => setScope('global')}
-                />
-                <span className="text-sm">All workspaces</span>
-              </label>
-            </div>
-          </div>
-        </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
-            Cancel
-          </Button>
-          <Button onClick={handleSave} disabled={!name.trim() || isSaving}>
-            {isSaving ? 'Creating...' : 'Create Template'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }

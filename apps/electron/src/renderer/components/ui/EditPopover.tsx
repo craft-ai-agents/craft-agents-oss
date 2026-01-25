@@ -66,6 +66,8 @@ export type EditContextKey =
   | 'add-source-local' // Filter-specific: user is viewing Local Folders
   | 'add-skill'
   | 'edit-statuses'
+  | 'add-template'     // Create new session template
+  | 'add-schedule'     // Create new scheduled task
 
 /**
  * Full edit configuration including context for agent and example for UI.
@@ -320,6 +322,45 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Confirm clearly when done.',
     },
     example: 'Add a "Blocked" status',
+  }),
+
+  // Template creation context
+  'add-template': (location) => ({
+    context: {
+      label: 'Add Template',
+      filePath: `${location}/templates/`,
+      context:
+        'The user wants to create a new session template for quickly starting chats with preset configurations. ' +
+        'Templates are stored as JSON files in the templates folder with a UUID filename. ' +
+        'Template fields: name (required), description, scope ("workspace"), workspaceId, ' +
+        'permissionMode ("safe"/"ask"/"allow-all"), model (e.g., "claude-sonnet-4-20250514"), ' +
+        'thinkingLevel (0-5), initialPrompt (text pre-filled in input), gatherContext (instructions for Claude about what to ask user), ' +
+        'skillIds (array of skill slugs), workingDirectory. ' +
+        'Ask clarifying questions: What is this template for? What permission mode should it use? ' +
+        'Should it pre-fill a prompt or have Claude gather context? Any specific skills to attach? ' +
+        'Create the template JSON file with a generated UUID as the filename. ' +
+        'After creating, confirm the template is ready to use.',
+    },
+    example: 'Code review template in safe mode',
+    overridePlaceholder: 'What kind of workflow do you want to save?',
+  }),
+
+  // Schedule creation context
+  'add-schedule': (location) => ({
+    context: {
+      label: 'Add Schedule',
+      filePath: `${location}/schedules.json`,
+      context:
+        'The user wants to create a scheduled task that runs automatically. ' +
+        'Parse their natural language to extract: name, prompt (what to run), frequency, and time. ' +
+        'Common patterns: "daily at 9am", "every hour", "weekdays at 10am", "weekly on Monday at 3pm", "monthly on the 1st at noon". ' +
+        'If any detail is missing or ambiguous (e.g., "Monday" could mean this Monday or every Monday), ask clarifying questions. ' +
+        'Once you have all details, use the schedule_create tool to create the schedule. ' +
+        'Always confirm the schedule details with the user before creating. ' +
+        'The timezone is automatically detected from the user\'s system.',
+    },
+    example: 'Remind me to review PRs every day at 9am',
+    overridePlaceholder: 'What would you like to schedule?',
   }),
 }
 

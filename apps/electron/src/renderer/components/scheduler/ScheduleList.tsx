@@ -14,9 +14,11 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
 import { ScheduleModal } from './ScheduleModal'
 import { navigate, routes } from '@/lib/navigate'
 import { useNavigationState, isSchedulesNavigation } from '@/contexts/NavigationContext'
+import { useActiveWorkspace } from '@/contexts/WorkspaceContext'
 import { cn } from '@/lib/utils'
 import type { Schedule, ScheduleFormData, ScheduleEvent } from '../../../shared/types'
 
@@ -27,8 +29,14 @@ interface ScheduleListProps {
 export function ScheduleList({ workspaceId }: ScheduleListProps) {
   const [schedules, setSchedules] = useState<Schedule[]>([])
   const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null)
-  const [showNew, setShowNew] = useState(false)
+  const [showAdvancedModal, setShowAdvancedModal] = useState(false)
   const navState = useNavigationState()
+  const workspace = useActiveWorkspace()
+
+  // Get EditPopover config
+  const scheduleConfig = workspace?.rootPath
+    ? getEditConfig('add-schedule', workspace.rootPath)
+    : null
 
   // Get selected schedule ID from navigation state
   const selectedScheduleId = isSchedulesNavigation(navState) && navState.details
@@ -52,7 +60,7 @@ export function ScheduleList({ workspaceId }: ScheduleListProps) {
   const handleCreate = useCallback(async (data: ScheduleFormData) => {
     const created = await window.electronAPI.scheduleCreate(workspaceId, data)
     setSchedules(prev => [...prev, created])
-    setShowNew(false)
+    setShowAdvancedModal(false)
   }, [workspaceId])
 
   const handleUpdate = useCallback(async (data: ScheduleFormData) => {
@@ -84,10 +92,28 @@ export function ScheduleList({ workspaceId }: ScheduleListProps) {
     <div className="p-4 h-full flex flex-col">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold">Schedules</h2>
-        <Button size="sm" onClick={() => setShowNew(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          New Schedule
-        </Button>
+        {scheduleConfig ? (
+          <EditPopover
+            trigger={
+              <Button size="sm">
+                <Plus className="w-4 h-4 mr-2" />
+                New Schedule
+              </Button>
+            }
+            context={scheduleConfig.context}
+            example={scheduleConfig.example}
+            overridePlaceholder={scheduleConfig.overridePlaceholder}
+            secondaryAction={{
+              label: 'Advanced',
+              onClick: () => setShowAdvancedModal(true),
+            }}
+          />
+        ) : (
+          <Button size="sm" onClick={() => setShowAdvancedModal(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            New Schedule
+          </Button>
+        )}
       </div>
 
       {schedules.length === 0 ? (
@@ -118,8 +144,8 @@ export function ScheduleList({ workspaceId }: ScheduleListProps) {
         Schedules run when Vesper is open
       </p>
 
-      {showNew && (
-        <ScheduleModal onSave={handleCreate} onClose={() => setShowNew(false)} />
+      {showAdvancedModal && (
+        <ScheduleModal onSave={handleCreate} onClose={() => setShowAdvancedModal(false)} />
       )}
 
       {editingSchedule && (

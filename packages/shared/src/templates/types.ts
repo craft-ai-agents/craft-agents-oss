@@ -9,6 +9,7 @@ export interface SessionTemplate {
 
   // Session Configuration
   initialPrompt?: string;        // Pre-filled in input box
+  gatherContext?: string;        // Instructions for Claude about what info to gather from user
   skillIds?: string[];           // Skills to attach
   permissionMode?: 'safe' | 'ask' | 'allow-all';
   model?: string;                // e.g., 'claude-sonnet-4-20250514'
@@ -27,6 +28,7 @@ export interface CreateTemplateOptions {
   scope: 'workspace' | 'global';
   workspaceId?: string;
   initialPrompt?: string;
+  gatherContext?: string;        // Instructions for Claude about what info to gather
   skillIds?: string[];
   permissionMode?: 'safe' | 'ask' | 'allow-all';
   model?: string;

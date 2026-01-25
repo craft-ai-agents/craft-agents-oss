@@ -126,4 +126,14 @@ export function registerTemplateIpcHandlers(sessionManager: SessionManager) {
     await templateStorage.incrementUsageCount(templateId, scope, workspaceId);
     return templateStorage.getTemplate(templateId, scope, workspaceId);
   });
+
+  // Create default templates for a workspace (called when user enables templates)
+  ipcMain.handle('template:create-defaults', async (_, workspaceId: string) => {
+    try {
+      return await templateStorage.createDefaultTemplates(workspaceId);
+    } catch (error) {
+      console.error('[Templates] Failed to create default templates:', error);
+      throw error;
+    }
+  });
 }

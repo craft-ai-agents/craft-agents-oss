@@ -1,11 +1,11 @@
 /**
  * Tool Event Handlers
  *
- * Handles tool_start and tool_result events.
+ * Handles tool_start, tool_result, and json_render events.
  * Pure functions that return new state - no side effects.
  */
 
-import type { SessionState, ToolStartEvent, ToolResultEvent, ParentUpdateEvent, TaskBackgroundedEvent, ShellBackgroundedEvent, TaskProgressEvent } from '../types'
+import type { SessionState, ToolStartEvent, ToolResultEvent, ParentUpdateEvent, TaskBackgroundedEvent, ShellBackgroundedEvent, TaskProgressEvent, JsonRenderEvent } from '../types'
 import type { Message } from '../../../shared/types'
 import {
   findToolMessage,
@@ -62,67 +62,21 @@ export function handleToolStart(
     streaming,
   }
 }
-
-/**
- * Parse render_ui tool result and extract the UI tree
- */
-function parseRenderUiResult(result: string): { tree: unknown } | null {
-  const match = result.match(/__RENDER_UI__(.+?)__END_RENDER_UI__/)
-  if (!match) return null
-  try {
-    return { tree: JSON.parse(match[1]) }
-  } catch {
-    return null
-  }
-}
-
 /**
  * Handle tool_result - complete tool execution
  *
  * Updates the tool message with result. If tool not found (out-of-order),
  * creates the tool message with result included.
  *
- * Special handling for render_ui: Creates an assistant message with jsonRender.
+ * Note: render_ui tool results are handled by the main process which creates
+ * the jsonRender message and persists it. The renderer receives the message
+ * via session sync, avoiding duplicate message creation.
  */
 export function handleToolResult(
   state: SessionState,
   event: ToolResultEvent
 ): SessionState {
   const { session, streaming } = state
-
-  // Check for render_ui tool result (tool name is prefixed with MCP server name: mcp__session__render_ui)
-  if (event.toolName?.endsWith('render_ui') && event.result && !event.isError) {
-    const renderData = parseRenderUiResult(event.result)
-    if (renderData) {
-      // Create assistant message with jsonRender tree
-      const renderMessage: Message = {
-        id: generateMessageId(),
-        role: 'assistant',
-        content: '', // No text content, just the UI
-        timestamp: Date.now(),
-        turnId: event.turnId,
-        jsonRender: renderData,
-      }
-
-      // Update tool message as completed
-      const toolIndex = findToolMessage(session.messages, event.toolUseId)
-      let updatedSession = session
-
-      if (toolIndex !== -1) {
-        updatedSession = updateMessageAt(session, toolIndex, {
-          toolResult: 'UI rendered successfully',
-          toolStatus: 'completed',
-          isError: false,
-        })
-      }
-
-      // Append the render message
-      return {
-        session: appendMessage(updatedSession, renderMessage),
-        streaming,
-      }
-    }
-  }
 
   const toolIndex = findToolMessage(session.messages, event.toolUseId)
 
@@ -268,4 +222,33 @@ export function handleTaskProgress(
 
   // Tool not found - shouldn't happen, but return state unchanged
   return state
+}
+
+/**
+ * Handle json_render - add AI-generated UI component to session
+ *
+ * When the render_ui tool completes, the main process creates a message
+ * with jsonRender data and sends this event so the renderer can add it
+ * to its in-memory state for immediate display.
+ */
+export function handleJsonRender(
+  state: SessionState,
+  event: JsonRenderEvent
+): SessionState {
+  const { session, streaming } = state
+
+  // Create the assistant message with jsonRender from the event
+  const renderMessage: Message = {
+    id: event.message.id,
+    role: 'assistant',
+    content: event.message.content,
+    timestamp: event.message.timestamp,
+    turnId: event.message.turnId,
+    jsonRender: event.message.jsonRender,
+  }
+
+  return {
+    session: appendMessage(session, renderMessage),
+    streaming,
+  }
 }

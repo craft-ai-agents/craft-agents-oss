@@ -307,3 +307,87 @@ export async function incrementUsageCount(
     }
   }
 }
+
+/**
+ * Default starter templates created when user first enables templates
+ */
+const DEFAULT_TEMPLATES: Omit<CreateTemplateOptions, 'workspaceId'>[] = [
+  {
+    name: 'Code Review',
+    description: 'Review code changes with careful analysis in safe mode',
+    scope: 'workspace',
+    permissionMode: 'safe',
+    initialPrompt: 'Please review the following code for bugs, security issues, and improvement suggestions:\n\n',
+  },
+  {
+    name: 'Feature Build',
+    description: 'Build new features with full autonomy and extended thinking',
+    scope: 'workspace',
+    permissionMode: 'allow-all',
+    thinkingLevel: 3,
+    gatherContext: 'Ask the user: 1) What feature do you want to build? 2) Any specific requirements or constraints? 3) Which files or areas of the codebase are involved?',
+  },
+  {
+    name: 'Bug Investigation',
+    description: 'Debug issues safely without making changes',
+    scope: 'workspace',
+    permissionMode: 'safe',
+    initialPrompt: 'Help me investigate this issue:\n\n',
+    gatherContext: 'Ask the user to describe the bug, when it occurs, and any error messages they see.',
+  },
+  {
+    name: 'Documentation',
+    description: 'Write or improve project documentation',
+    scope: 'workspace',
+    permissionMode: 'ask',
+    gatherContext: 'Ask the user: 1) What needs to be documented? 2) Is this for a README, API docs, or inline comments? 3) Any style guidelines to follow?',
+  },
+  {
+    name: 'Refactoring',
+    description: 'Improve code quality with approval for each change',
+    scope: 'workspace',
+    permissionMode: 'ask',
+    thinkingLevel: 3,
+    gatherContext: 'Ask the user: 1) What code needs refactoring? 2) What are the goals (performance, readability, maintainability)? 3) Any constraints on the changes?',
+  },
+  {
+    name: 'Quick Question',
+    description: 'Get fast answers without extended thinking',
+    scope: 'workspace',
+    permissionMode: 'safe',
+    thinkingLevel: 0,
+  },
+];
+
+/**
+ * Create default starter templates for a workspace.
+ * Only creates templates if none exist yet.
+ *
+ * @param workspaceId - The workspace to create templates for
+ * @returns The created templates, or empty array if templates already exist
+ */
+export async function createDefaultTemplates(workspaceId: string): Promise<SessionTemplate[]> {
+  // Check if workspace already has templates
+  const existing = await listTemplates('workspace', workspaceId);
+  if (existing.length > 0) {
+    console.log(`[Templates] Workspace ${workspaceId} already has ${existing.length} templates, skipping defaults`);
+    return [];
+  }
+
+  const created: SessionTemplate[] = [];
+
+  for (const templateDef of DEFAULT_TEMPLATES) {
+    try {
+      const template = await createTemplate({
+        ...templateDef,
+        workspaceId,
+      });
+      created.push(template);
+    } catch (error) {
+      console.error(`[Templates] Failed to create default template "${templateDef.name}":`, error);
+    }
+  }
+
+  console.log(`[Templates] Created ${created.length} default templates for workspace ${workspaceId}`);
+  return created;
+}

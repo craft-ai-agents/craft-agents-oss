@@ -12,11 +12,12 @@
 
 import * as React from 'react'
 import { useState, useEffect, useCallback } from 'react'
+import { useAtom } from 'jotai'
 import { motion, AnimatePresence } from 'motion/react'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { HeaderMenu } from '@/components/ui/HeaderMenu'
-import { useAppShellContext } from '@/context/AppShellContext'
+import { useAppShellContext, useActiveWorkspace } from '@/context/AppShellContext'
 import { cn } from '@/lib/utils'
 import { routes } from '@/lib/navigate'
 import { Spinner } from '@vesper/ui'
@@ -28,6 +29,7 @@ import type { DetailsPageMeta } from '@/lib/navigation-registry'
 
 import {
   SettingsSection,
+  SettingsGroup,
   SettingsCard,
   SettingsRow,
   SettingsToggle,
@@ -38,6 +40,7 @@ import { WhatsAppSettingsSection, QRCodeModal } from '@/components/whatsapp'
 import { SlackSettingsSection } from '@/components/slack'
 import { TelegramSettingsSection } from '@/components/telegram'
 import { TemplateManager } from '@/components/templates'
+import { loadTemplatesAtom } from '@/atoms/templates'
 import { LabelsSettingsSection } from '@/components/labels'
 import { TeamSkillsSettingsSection } from '@/components/skills'
 import { ViewerSettings } from '@/components/settings'
@@ -57,6 +60,7 @@ export default function WorkspaceSettingsPage() {
   const onModelChange = appShellContext.onModelChange
   const activeWorkspaceId = appShellContext.activeWorkspaceId
   const onRefreshWorkspaces = appShellContext.onRefreshWorkspaces
+  const activeWorkspace = useActiveWorkspace()
 
   // Workspace settings state
   const [wsName, setWsName] = useState('')
@@ -69,6 +73,7 @@ export default function WorkspaceSettingsPage() {
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('ask')
   const [workingDirectory, setWorkingDirectory] = useState('')
   const [localMcpEnabled, setLocalMcpEnabled] = useState(true)
+  const [templatesEnabled, setTemplatesEnabled] = useState(false)
   const [isLoadingWorkspace, setIsLoadingWorkspace] = useState(true)
 
   // Mode cycling state (includes 'ralph' for Ralph Loop support)
@@ -94,6 +99,7 @@ export default function WorkspaceSettingsPage() {
           setPermissionMode(settings.permissionMode || 'ask')
           setWorkingDirectory(settings.workingDirectory || '')
           setLocalMcpEnabled(settings.localMcpEnabled ?? true)
+          setTemplatesEnabled(settings.templatesEnabled ?? false)
           // Load cyclable permission modes from workspace settings, or reset to defaults
           if (settings.cyclablePermissionModes && settings.cyclablePermissionModes.length >= 2) {
             setEnabledModes(settings.cyclablePermissionModes)
@@ -258,6 +264,31 @@ export default function WorkspaceSettingsPage() {
       await updateWorkspaceSetting('localMcpEnabled', enabled)
     },
     [updateWorkspaceSetting]
+  )
+
+  // Access templates loading atom for refresh after creating defaults
+  const [, loadTemplates] = useAtom(loadTemplatesAtom)
+
+  const handleTemplatesEnabledChange = useCallback(
+    async (enabled: boolean) => {
+      setTemplatesEnabled(enabled)
+      await updateWorkspaceSetting('templatesEnabled', enabled)
+
+      // When enabling templates for the first time, create default starter templates
+      if (enabled && activeWorkspaceId) {
+        try {
+          const created = await window.electronAPI.createDefaultTemplates(activeWorkspaceId)
+          if (created.length > 0) {
+            console.log(`[Settings] Created ${created.length} default templates`)
+            // Refresh templates list to show newly created ones
+            loadTemplates({ scope: 'all', workspaceId: activeWorkspaceId })
+          }
+        } catch (error) {
+          console.error('[Settings] Failed to create default templates:', error)
+        }
+      }
+    },
+    [updateWorkspaceSetting, activeWorkspaceId, loadTemplates]
   )
 
   const handleModeToggle = useCallback(
@@ -499,7 +530,18 @@ export default function WorkspaceSettingsPage() {
               title="Session Templates"
               description="Create and manage reusable session configurations"
             >
-              <TemplateManager />
+              <SettingsCard>
+                <SettingsToggle
+                  label="Show Templates on New Chat"
+                  description="When enabled, CMD+N shows a template picker instead of creating a blank chat"
+                  checked={templatesEnabled}
+                  onCheckedChange={handleTemplatesEnabledChange}
+                />
+              </SettingsCard>
+              <TemplateManager
+                workspaceId={activeWorkspaceId!}
+                workspaceRootPath={activeWorkspace?.rootPath}
+              />
             </SettingsSection>
 
             {/* Session Sharing */}

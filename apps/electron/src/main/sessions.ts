@@ -2,7 +2,7 @@ import { app } from 'electron'
 import { join } from 'path'
 import { existsSync } from 'fs'
 import { rm, readFile } from 'fs/promises'
-import { VesperAgent, type AgentEvent, setPermissionMode, type PermissionMode, unregisterSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest } from '@vesper/shared/agent'
+import { VesperAgent, type AgentEvent, setPermissionMode, type PermissionMode, unregisterSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest, type ScheduleCreateData, type ScheduleCreateResult } from '@vesper/shared/agent'
 import { sessionLog, isDebugMode, getLogFilePath } from './logger'
 import { createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk'
 import type { WindowManager } from './window-manager'
@@ -49,6 +49,7 @@ import { DEFAULT_MODEL } from '@vesper/shared/config'
 import { type ThinkingLevel, DEFAULT_THINKING_LEVEL } from '@vesper/shared/agent/thinking-levels'
 import { createViewerService } from '@vesper/shared/viewer'
 import type { ViewerService } from '@vesper/shared/viewer'
+import { getScheduler } from './scheduler'
 
 /**
  * Sanitize message content for use as session title.
@@ -60,6 +61,27 @@ function sanitizeForTitle(content: string): string {
     .replace(/<[^>]+>/g, '')     // Strip remaining XML/HTML tags
     .replace(/\s+/g, ' ')        // Collapse whitespace
     .trim()
+}
+
+/**
+ * Generate cron expression from schedule parameters.
+ * Used by onScheduleCreate callback to convert natural language to cron.
+ */
+function generateCronFromParams(data: ScheduleCreateData): string | null {
+  if (data.scheduleType !== 'recurring') return null;
+  if (data.customCron) return data.customCron;
+
+  const minute = data.minute ?? 0;
+  const hour = data.hour ?? 9;
+
+  switch (data.frequency) {
+    case 'hourly': return `${minute} * * * *`;
+    case 'daily': return `${minute} ${hour} * * *`;
+    case 'weekdays': return `${minute} ${hour} * * 1-5`;
+    case 'weekly': return `${minute} ${hour} * * ${data.dayOfWeek ?? 1}`;
+    case 'monthly': return `${minute} ${hour} ${data.dayOfMonth ?? 1} * *`;
+    default: return `${minute} ${hour} * * *`;
+  }
 }
 
 /**
@@ -272,6 +294,8 @@ function messageToStored(msg: Message): StoredMessage {
     authError: msg.authError,
     authEmail: msg.authEmail,
     authWorkspace: msg.authWorkspace,
+    // JSON Render - AI-generated UI tree
+    jsonRender: msg.jsonRender,
   }
 }
 
@@ -319,6 +343,8 @@ function storedToMessage(stored: StoredMessage): Message {
     authError: stored.authError,
     authEmail: stored.authEmail,
     authWorkspace: stored.authWorkspace,
+    // JSON Render - AI-generated UI tree
+    jsonRender: stored.jsonRender,
   }
 }
 
@@ -1264,6 +1290,8 @@ export class SessionManager {
           // Persist immediately and flush - critical for resumption reliability
           this.persistSession(managed)
           sessionPersistenceQueue.flush(managed.id)
+          // Notify renderer so terminal resume button appears
+          this.sendEvent({ type: 'sdk_session_id_changed', sessionId: managed.id, sdkSessionId }, managed.workspace.id)
         },
         // Called when SDK session ID is cleared after failed resume (empty response recovery)
         onSdkSessionIdCleared: () => {
@@ -1272,6 +1300,8 @@ export class SessionManager {
           // Persist immediately to prevent repeated resume attempts
           this.persistSession(managed)
           sessionPersistenceQueue.flush(managed.id)
+          // Notify renderer so terminal resume button hides
+          this.sendEvent({ type: 'sdk_session_id_changed', sessionId: managed.id, sdkSessionId: undefined }, managed.workspace.id)
         },
         // Called to get recent messages for recovery context when resume fails.
         // Returns last 6 messages (3 exchanges) of user/assistant content.
@@ -1435,6 +1465,55 @@ export class SessionManager {
 
         // OAuth flow is now user-initiated via startSessionOAuth()
         // The UI will call sessionCommand({ type: 'startOAuth' }) when user clicks "Sign in"
+      }
+
+      // Wire up onScheduleCreate for conversational schedule creation
+      managed.agent.onScheduleCreate = async (data: ScheduleCreateData): Promise<ScheduleCreateResult> => {
+        sessionLog.info(`Schedule create request for session ${managed.id}:`, data.name)
+        try {
+          const scheduler = getScheduler(managed.workspace.id, managed.workspace.rootPath);
+
+          // Generate cron expression from frequency/time
+          const cron = generateCronFromParams(data);
+
+          const formData = {
+            name: data.name,
+            prompt: data.prompt,
+            cron: data.scheduleType === 'recurring' ? cron : null,
+            scheduledFor: data.scheduledFor ? Math.floor(new Date(data.scheduledFor).getTime() / 1000) : null,
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            enabled: true,
+          };
+
+          const schedule = await scheduler.create(formData);
+          const nextRun = scheduler.getNextRun(schedule);
+
+          // Use cronstrue for human-readable if available
+          let humanReadable: string | undefined;
+          if (schedule.cron) {
+            try {
+              const cronstrue = await import('cronstrue');
+              humanReadable = cronstrue.toString(schedule.cron);
+            } catch {
+              humanReadable = undefined;
+            }
+          }
+
+          return {
+            success: true,
+            scheduleId: schedule.id,
+            scheduleName: schedule.name,
+            cronExpression: schedule.cron ?? undefined,
+            humanReadable,
+            nextRun: nextRun?.toISOString(),
+          };
+        } catch (error) {
+          sessionLog.error(`Failed to create schedule:`, error)
+          return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          };
+        }
       }
 
       // Wire up onSourceActivationRequest to auto-enable sources when agent tries to use them
@@ -2280,7 +2359,7 @@ export class SessionManager {
       }
 
       sendSpan.mark('chat.starting')
-      const chatIterator = agent.chat(message, attachments)
+      const chatIterator = agent.chat(message, attachments, options?.flowyEmbeds)
       sessionLog.info('Got chat iterator, starting iteration...')
 
       for await (const event of chatIterator) {
@@ -2310,6 +2389,8 @@ export class SessionManager {
             // Also flush here since we're in fallback mode
             this.persistSession(managed)
             sessionPersistenceQueue.flush(managed.id)
+            // Notify renderer so terminal resume button appears
+            this.sendEvent({ type: 'sdk_session_id_changed', sessionId: managed.id, sdkSessionId: sdkId }, managed.workspace.id)
           }
         }
 
@@ -2931,6 +3012,12 @@ To view this task's output:
         const toolName = managed.pendingTools.get(event.toolUseId) || 'unknown'
         managed.pendingTools.delete(event.toolUseId)
 
+        // Debug: Log raw result for render_ui tools
+        if (toolName.endsWith('render_ui')) {
+          sessionLog.info(`[render_ui] Raw result (first 200 chars): ${event.result?.slice(0, 200)}`)
+          sessionLog.info(`[render_ui] Has markers: ${event.result?.includes('__RENDER_UI__')}`)
+        }
+
         // Parent tool names for defensive cleanup
         const PARENT_TOOLS = ['Task', 'TaskOutput']
 
@@ -3000,6 +3087,53 @@ To view this task's output:
 
         // Use stored parent mapping or existing message's parent
         const finalParentToolUseId = existingToolMsg?.parentToolUseId || storedParentId
+
+        // Special handling for render_ui tool: create assistant message with jsonRender
+        if (toolName.endsWith('render_ui') && !event.isError && event.result) {
+          sessionLog.info(`[render_ui] Processing render_ui result...`)
+          // Parse the content array to extract the UI tree
+          try {
+            const parsed = JSON.parse(event.result)
+            sessionLog.info(`[render_ui] Parsed result, isArray: ${Array.isArray(parsed)}`)
+            if (Array.isArray(parsed)) {
+              const textBlock = parsed.find((block: { type: string; text?: string }) => block.type === 'text' && block.text)
+              sessionLog.info(`[render_ui] Found text block: ${!!textBlock}`)
+              if (textBlock?.text) {
+                const match = textBlock.text.match(/__RENDER_UI__(.+?)__END_RENDER_UI__/)
+                sessionLog.info(`[render_ui] Marker match: ${!!match}`)
+                if (match) {
+                  const tree = JSON.parse(match[1])
+                  const renderMessage: Message = {
+                    id: generateMessageId(),
+                    role: 'assistant',
+                    content: '',
+                    timestamp: Date.now(),
+                    turnId: event.turnId,
+                    jsonRender: { tree },
+                  }
+                  managed.messages.push(renderMessage)
+                  sessionLog.info(`[render_ui] Created jsonRender message with tree root: ${tree.root}`)
+
+                  // Send json_render event to renderer for immediate UI update
+                  sessionLog.info(`[render_ui] Sending json_render event to renderer, workspaceId=${workspaceId}, sessionId=${sessionId}`)
+                  this.sendEvent({
+                    type: 'json_render',
+                    sessionId,
+                    message: {
+                      id: renderMessage.id,
+                      content: renderMessage.content,
+                      timestamp: renderMessage.timestamp,
+                      turnId: renderMessage.turnId,
+                      jsonRender: renderMessage.jsonRender,
+                    },
+                  }, workspaceId)
+                }
+              }
+            }
+          } catch (parseError) {
+            sessionLog.warn(`[render_ui] Failed to parse result: ${parseError}`)
+          }
+        }
 
         // Only send event to renderer if not already marked complete
         if (!wasAlreadyComplete) {

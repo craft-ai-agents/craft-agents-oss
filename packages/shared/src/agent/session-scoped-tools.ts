@@ -160,6 +160,34 @@ export interface AuthResult {
 }
 
 /**
+ * Schedule creation request from conversational setup
+ */
+export interface ScheduleCreateData {
+  name: string;
+  prompt: string;
+  scheduleType: 'recurring' | 'once';
+  // Recurring options
+  frequency?: 'hourly' | 'daily' | 'weekdays' | 'weekly' | 'monthly' | 'custom';
+  hour?: number;        // 0-23
+  minute?: number;      // 0-59
+  dayOfWeek?: number;   // 0-6 (Sun=0)
+  dayOfMonth?: number;  // 1-31
+  customCron?: string;  // For custom frequency
+  // One-time options
+  scheduledFor?: string; // ISO timestamp
+}
+
+export interface ScheduleCreateResult {
+  success: boolean;
+  scheduleId?: string;
+  scheduleName?: string;
+  nextRun?: string;
+  cronExpression?: string;
+  humanReadable?: string;
+  error?: string;
+}
+
+/**
  * Callbacks for session-scoped tool operations.
  * These are registered per-session and invoked by tools.
  */
@@ -176,6 +204,8 @@ export interface SessionScopedToolCallbacks {
    * 5. Agent resumes and processes the result
    */
   onAuthRequest?: (request: AuthRequest) => void;
+  /** Called when a schedule is created via conversational setup */
+  onScheduleCreate?: (data: ScheduleCreateData) => Promise<ScheduleCreateResult>;
 }
 
 /**
@@ -2032,6 +2062,133 @@ Return a tree with:
   );
 }
 
+/**
+ * Create a session-scoped schedule_create tool.
+ * Creates scheduled tasks from natural language via conversational setup.
+ */
+export function createScheduleCreateTool(sessionId: string) {
+  return tool(
+    'schedule_create',
+    `Create a scheduled task that runs automatically.
+
+**For recurring schedules:** Specify frequency and time.
+**For one-time schedules:** Specify scheduledFor as ISO timestamp.
+
+**Frequency Options:**
+- hourly: Runs every hour at specified minute
+- daily: Runs every day at specified hour:minute
+- weekdays: Runs Mon-Fri at specified hour:minute
+- weekly: Runs on specified dayOfWeek at hour:minute
+- monthly: Runs on specified dayOfMonth at hour:minute
+- custom: Uses raw cron expression in customCron field
+
+**Parameters:**
+- name: Short descriptive name (max 100 chars)
+- prompt: The message to send when schedule triggers
+- scheduleType: "recurring" or "once"
+- frequency: Required for recurring (hourly|daily|weekdays|weekly|monthly|custom)
+- hour: 0-23 (required for all except hourly)
+- minute: 0-59 (default 0)
+- dayOfWeek: 0-6 for weekly (0=Sunday, 1=Monday, etc.)
+- dayOfMonth: 1-31 for monthly
+- customCron: Raw cron expression for custom frequency
+- scheduledFor: ISO timestamp for one-time schedules
+
+**Examples:**
+- Daily at 9am: { scheduleType: "recurring", frequency: "daily", hour: 9, minute: 0 }
+- Weekdays at 10:30am: { scheduleType: "recurring", frequency: "weekdays", hour: 10, minute: 30 }
+- Weekly on Monday at 3pm: { scheduleType: "recurring", frequency: "weekly", hour: 15, minute: 0, dayOfWeek: 1 }
+- Monthly on 1st at noon: { scheduleType: "recurring", frequency: "monthly", hour: 12, minute: 0, dayOfMonth: 1 }
+- Once tomorrow at 2pm: { scheduleType: "once", scheduledFor: "2026-01-26T14:00:00-08:00" }
+
+**IMPORTANT:**
+- Always confirm schedule details before creating
+- Minimum interval is 1 minute (no sub-minute schedules)
+- One-time schedules cannot be in the past
+- Maximum 100 schedules per workspace`,
+    {
+      name: z.string().min(1).max(100).describe('Short descriptive name for the schedule'),
+      prompt: z.string().min(1).describe('The prompt to run when schedule triggers'),
+      scheduleType: z.enum(['recurring', 'once']).describe('Type of schedule'),
+      frequency: z.enum(['hourly', 'daily', 'weekdays', 'weekly', 'monthly', 'custom']).optional()
+        .describe('Frequency for recurring schedules'),
+      hour: z.number().min(0).max(23).optional().describe('Hour in 24-hour format (0-23)'),
+      minute: z.number().min(0).max(59).optional().describe('Minute (0-59)'),
+      dayOfWeek: z.number().min(0).max(6).optional().describe('Day of week for weekly (0=Sun, 1=Mon, ..., 6=Sat)'),
+      dayOfMonth: z.number().min(1).max(31).optional().describe('Day of month for monthly (1-31)'),
+      customCron: z.string().optional().describe('Custom cron expression'),
+      scheduledFor: z.string().optional().describe('ISO timestamp for one-time schedules'),
+    },
+    async (args) => {
+      const callbacks = sessionScopedToolCallbackRegistry.get(sessionId);
+
+      // Validation
+      if (args.scheduleType === 'recurring' && !args.frequency) {
+        return {
+          content: [{ type: 'text' as const, text: 'Error: frequency is required for recurring schedules' }],
+          isError: true,
+        };
+      }
+
+      if (args.scheduleType === 'once' && !args.scheduledFor) {
+        return {
+          content: [{ type: 'text' as const, text: 'Error: scheduledFor is required for one-time schedules' }],
+          isError: true,
+        };
+      }
+
+      // Check for past timestamp
+      if (args.scheduledFor) {
+        const scheduledDate = new Date(args.scheduledFor);
+        if (scheduledDate.getTime() < Date.now() - 60000) { // 1 minute tolerance
+          return {
+            content: [{ type: 'text' as const, text: 'Error: Cannot schedule for a time in the past' }],
+            isError: true,
+          };
+        }
+      }
+
+      if (!callbacks?.onScheduleCreate) {
+        return {
+          content: [{ type: 'text' as const, text: 'Schedule creation not available in this context.' }],
+          isError: true,
+        };
+      }
+
+      try {
+        const result = await callbacks.onScheduleCreate(args);
+
+        if (result.success) {
+          return {
+            content: [{
+              type: 'text' as const,
+              text: `✓ Schedule "${result.scheduleName}" created successfully!\n\n` +
+                    `ID: ${result.scheduleId}\n` +
+                    `Schedule: ${result.humanReadable || result.cronExpression}\n` +
+                    `Next run: ${result.nextRun}\n\n` +
+                    `The schedule is now active and will run automatically.`
+            }],
+            isError: false,
+          };
+        } else {
+          return {
+            content: [{ type: 'text' as const, text: `Failed to create schedule: ${result.error}` }],
+            isError: true,
+          };
+        }
+      } catch (error) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `Error creating schedule: ${error instanceof Error ? error.message : 'Unknown error'}`
+          }],
+          isError: true,
+        };
+      }
+    }
+  );
+}
+
 // ============================================================
 // Session-Scoped Tools Provider
 // ============================================================
@@ -2073,6 +2230,8 @@ export function getSessionScopedTools(sessionId: string, workspaceRootPath: stri
         createCredentialPromptTool(sessionId, workspaceRootPath),
         // UI rendering tool for AI-generated components
         createRenderUiTool(sessionId),
+        // Schedule creation tool for conversational setup
+        createScheduleCreateTool(sessionId),
       ],
     });
     sessionScopedToolsCache.set(cacheKey, cached);
