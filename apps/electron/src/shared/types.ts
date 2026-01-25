@@ -1168,11 +1168,11 @@ export interface ElectronAPI {
   onWhatsAppMessageActivity(callback: (data: WhatsAppMessageActivityEvent) => void): () => void
 
   // Telegram Integration
-  telegramConnect(workspaceId: string, botToken: string): Promise<{ success: boolean; error?: string }>
-  telegramDisconnect(workspaceId: string): Promise<{ success: boolean; error?: string }>
-  telegramGetStatus(workspaceId: string): Promise<{ success: boolean; status?: any; error?: string }>
-  telegramSendMessage(workspaceId: string, chatId: number, content: string): Promise<{ success: boolean; messageId?: number; error?: string }>
-  telegramGetSavedToken(workspaceId: string): Promise<{ success: boolean; token?: string; error?: string }>
+  telegramConnect(workspaceId: string, botToken: string): Promise<TelegramConnectResponse>
+  telegramDisconnect(workspaceId: string): Promise<TelegramDisconnectResponse>
+  telegramGetStatus(workspaceId: string): Promise<TelegramStatusResponse>
+  telegramSendMessage(workspaceId: string, chatId: number, content: string): Promise<TelegramSendMessageResponse>
+  telegramGetSavedToken(workspaceId: string): Promise<TelegramGetSavedTokenResponse>
   // Telegram event listeners
   onTelegramConnectionStatus(callback: (data: { workspaceId: string; status: any }) => void): () => void
   onTelegramError(callback: (data: { workspaceId: string; message: string; timestamp: number }) => void): () => void
@@ -1328,6 +1328,49 @@ export interface WhatsAppSessionsResult extends WhatsAppResult {
  */
 export interface WhatsAppSendResult extends WhatsAppResult {
   messageId?: string
+}
+
+/**
+ * Result from Telegram IPC operations
+ */
+export interface TelegramResult {
+  success: boolean
+  error?: string
+}
+
+/**
+ * Telegram connect result
+ */
+export interface TelegramConnectResponse extends TelegramResult {
+  // Additional fields can be added if needed
+}
+
+/**
+ * Telegram disconnect result
+ */
+export interface TelegramDisconnectResponse extends TelegramResult {
+  // Additional fields can be added if needed
+}
+
+/**
+ * Telegram status result
+ */
+export interface TelegramStatusResponse extends TelegramResult {
+  status?: any
+}
+
+/**
+ * Telegram send message result
+ */
+export interface TelegramSendMessageResponse extends TelegramResult {
+  messageId?: number
+}
+
+/**
+ * Telegram get saved token result
+ */
+export interface TelegramGetSavedTokenResponse extends TelegramResult {
+  token?: string
 }
 
 /**

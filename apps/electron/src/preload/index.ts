@@ -1,5 +1,16 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { IPC_CHANNELS, type SessionEvent, type ElectronAPI, type FileAttachment, type AuthType } from '../shared/types'
+import {
+  IPC_CHANNELS,
+  type SessionEvent,
+  type ElectronAPI,
+  type FileAttachment,
+  type AuthType,
+  type TelegramConnectResponse,
+  type TelegramDisconnectResponse,
+  type TelegramStatusResponse,
+  type TelegramSendMessageResponse,
+  type TelegramGetSavedTokenResponse,
+} from '../shared/types'
 
 const api: ElectronAPI = {
   // Session management
@@ -544,15 +555,15 @@ const api: ElectronAPI = {
   },
 
   // Telegram Integration
-  telegramConnect: (workspaceId: string, botToken: string) =>
+  telegramConnect: (workspaceId: string, botToken: string): Promise<TelegramConnectResponse> =>
     ipcRenderer.invoke(IPC_CHANNELS.TELEGRAM_CONNECT, { workspaceId, botToken }),
-  telegramDisconnect: (workspaceId: string) =>
+  telegramDisconnect: (workspaceId: string): Promise<TelegramDisconnectResponse> =>
     ipcRenderer.invoke(IPC_CHANNELS.TELEGRAM_DISCONNECT, { workspaceId }),
-  telegramGetStatus: (workspaceId: string) =>
+  telegramGetStatus: (workspaceId: string): Promise<TelegramStatusResponse> =>
     ipcRenderer.invoke(IPC_CHANNELS.TELEGRAM_STATUS, { workspaceId }),
-  telegramSendMessage: (workspaceId: string, chatId: number, content: string) =>
+  telegramSendMessage: (workspaceId: string, chatId: number, content: string): Promise<TelegramSendMessageResponse> =>
     ipcRenderer.invoke(IPC_CHANNELS.TELEGRAM_SEND_MESSAGE, { workspaceId, chatId, content }),
-  telegramGetSavedToken: (workspaceId: string) =>
+  telegramGetSavedToken: (workspaceId: string): Promise<TelegramGetSavedTokenResponse> =>
     ipcRenderer.invoke(IPC_CHANNELS.TELEGRAM_GET_SAVED_TOKEN, { workspaceId }),
 
   // Telegram event listeners

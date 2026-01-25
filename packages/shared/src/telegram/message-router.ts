@@ -176,8 +176,6 @@ interface PendingMessage {
   hasError: boolean
   /** Error message if error occurred */
   errorMessage?: string
-  /** Resolve function for the completion promise */
-  resolve: (result: SessionCompletionResult) => void
 }
 
 export class TelegramMessageRouter {
@@ -415,7 +413,6 @@ export class TelegramMessageRouter {
       timeoutHandle: null as any, // Will be set after callback registration
       responseText: '',
       hasError: false,
-      resolve: () => {}, // Not using promise-based flow anymore
     }
 
     // Register completion callback BEFORE adding to tracking maps
@@ -513,9 +510,6 @@ export class TelegramMessageRouter {
         console.error('Error in session completion callback:', error)
       }
     }
-
-    // Resolve the promise
-    pending.resolve(result)
   }
 
   /**
@@ -551,7 +545,6 @@ export class TelegramMessageRouter {
       }
     }
 
-    pending.resolve(result)
     return true
   }
 
@@ -561,18 +554,6 @@ export class TelegramMessageRouter {
   cleanup(): void {
     for (const [messageId, pending] of this.pendingMessages) {
       clearTimeout(pending.timeoutHandle)
-
-      const result: SessionCompletionResult = {
-        sessionId: pending.sessionId,
-        messageId,
-        chatId: pending.message.chatId,
-        responseText: pending.responseText,
-        timedOut: false,
-        hasError: true,
-        errorMessage: 'Router shutdown',
-      }
-
-      pending.resolve(result)
     }
 
     this.pendingMessages.clear()

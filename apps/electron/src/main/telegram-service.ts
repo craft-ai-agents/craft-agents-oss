@@ -21,11 +21,23 @@ const MESSAGE_SEND_DELAY_MS = 35
 const MAX_QUEUE_SIZE = 1000
 
 /**
+ * Per-chat rate limiting using token bucket algorithm
+ */
+interface TokenBucket {
+  tokens: number
+  lastRefillTime: number
+}
+
+const RATE_LIMIT_BURST_CAPACITY = 5
+const RATE_LIMIT_TOKENS_PER_SEC = 0.5
+
+/**
  * Queue for rate-limited message sending
  */
 class MessageQueue {
   private queue: Array<{ chatId: number; text: string; resolve: (messageId: number) => void; reject: (error: Error) => void }> = []
   private processing = false
+  private perChatTokens = new Map<number, TokenBucket>()
 
   constructor(
     private bot: TelegramBot,
@@ -54,6 +66,72 @@ class MessageQueue {
     return this.queue.length
   }
 
+  /**
+   * Check if a chat has available tokens for sending a message
+   * Implements token bucket algorithm: 5 burst capacity, 0.5 tokens/sec refill
+   */
+  private canSendToChat(chatId: number): boolean {
+    const now = Date.now()
+    let bucket = this.perChatTokens.get(chatId)
+
+    if (!bucket) {
+      // Initialize new bucket with full capacity
+      bucket = {
+        tokens: RATE_LIMIT_BURST_CAPACITY,
+        lastRefillTime: now
+      }
+      this.perChatTokens.set(chatId, bucket)
+      return true
+    }
+
+    // Refill tokens based on elapsed time
+    const elapsedMs = now - bucket.lastRefillTime
+    const tokensToAdd = (elapsedMs / 1000) * RATE_LIMIT_TOKENS_PER_SEC
+    bucket.tokens = Math.min(
+      RATE_LIMIT_BURST_CAPACITY,
+      bucket.tokens + tokensToAdd
+    )
+    bucket.lastRefillTime = now
+
+    // Check if we have at least 1 token
+    if (bucket.tokens >= 1) {
+      bucket.tokens -= 1
+      return true
+    }
+
+    return false
+  }
+
+  /**
+   * Get time to wait (ms) before next message can be sent to a chat
+   */
+  private getWaitTimeForChat(chatId: number): number {
+    const now = Date.now()
+    let bucket = this.perChatTokens.get(chatId)
+
+    if (!bucket) {
+      return 0
+    }
+
+    // Refill tokens based on elapsed time
+    const elapsedMs = now - bucket.lastRefillTime
+    const tokensToAdd = (elapsedMs / 1000) * RATE_LIMIT_TOKENS_PER_SEC
+    const availableTokens = Math.min(
+      RATE_LIMIT_BURST_CAPACITY,
+      bucket.tokens + tokensToAdd
+    )
+
+    // If we have tokens, no wait needed
+    if (availableTokens >= 1) {
+      return 0
+    }
+
+    // Calculate time to next token
+    const tokensNeeded = 1 - availableTokens
+    const timeToNextToken = (tokensNeeded / RATE_LIMIT_TOKENS_PER_SEC) * 1000
+    return Math.ceil(timeToNextToken)
+  }
+
   private async processQueue(): Promise<void> {
     this.processing = true
 
@@ -62,6 +140,12 @@ class MessageQueue {
       if (!item) break
 
       try {
+        // Check per-chat rate limiting
+        const waitTime = this.getWaitTimeForChat(item.chatId)
+        if (waitTime > 0) {
+          await new Promise(resolve => setTimeout(resolve, waitTime))
+        }
+
         const sentMessage = await this.bot.sendMessage(item.chatId, item.text, {
           parse_mode: 'Markdown',
           disable_web_page_preview: false
@@ -71,7 +155,7 @@ class MessageQueue {
         item.reject(error as Error)
       }
 
-      // Rate limiting delay
+      // Rate limiting delay for global queue
       if (this.queue.length > 0) {
         await new Promise(resolve => setTimeout(resolve, this.delayMs))
       }
