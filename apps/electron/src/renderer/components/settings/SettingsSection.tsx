@@ -76,6 +76,8 @@ export interface SettingsGroupProps {
   children: React.ReactNode
   /** Additional className */
   className?: string
+  /** Optional badge or action element shown at the right of the header */
+  badge?: React.ReactNode
 }
 
 /**
@@ -87,12 +89,15 @@ export interface SettingsGroupProps {
  *   <SettingsSection title="Permissions">...</SettingsSection>
  * </SettingsGroup>
  */
-export function SettingsGroup({ title, children, className }: SettingsGroupProps) {
+export function SettingsGroup({ title, children, className, badge }: SettingsGroupProps) {
   return (
     <div className={cn('space-y-6', className)}>
-      <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide pb-2 border-b border-border">
-        {title}
-      </h2>
+      <div className="flex items-center justify-between pb-2 border-b border-border">
+        <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+          {title}
+        </h2>
+        {badge && <div className="shrink-0">{badge}</div>}
+      </div>
       <div className="space-y-8">{children}</div>
     </div>
   )

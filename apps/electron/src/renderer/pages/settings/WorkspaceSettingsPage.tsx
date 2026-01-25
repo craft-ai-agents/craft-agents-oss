@@ -44,6 +44,10 @@ import { loadTemplatesAtom } from '@/atoms/templates'
 import { LabelsSettingsSection } from '@/components/labels'
 import { TeamSkillsSettingsSection } from '@/components/skills'
 import { ViewerSettings } from '@/components/settings'
+import { Badge } from '@/components/ui/badge'
+import { githubConnectionAtom } from '@/atoms/orchestration'
+import { slackConnectionAtom } from '@/atoms/slack'
+import { whatsappConnectionAtom } from '@/atoms/whatsapp'
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
@@ -79,6 +83,36 @@ export default function WorkspaceSettingsPage() {
   // Mode cycling state (includes 'ralph' for Ralph Loop support)
   const [enabledModes, setEnabledModes] = useState<PermissionMode[]>(['safe', 'ask', 'allow-all', 'ralph'])
   const [modeCyclingError, setModeCyclingError] = useState<string | null>(null)
+
+  // Integration connection states (for status badge)
+  const [githubConnection] = useAtom(githubConnectionAtom)
+  const [slackConnection] = useAtom(slackConnectionAtom)
+  const [whatsappConnection] = useAtom(whatsappConnectionAtom)
+  const [telegramConnection, setTelegramConnection] = useState<{ isConnected: boolean }>({ isConnected: false })
+
+  // Load Telegram connection status
+  useEffect(() => {
+    const loadTelegramStatus = async () => {
+      if (!activeWorkspaceId || !window.electronAPI.telegramGetStatus) return
+      try {
+        const result = await window.electronAPI.telegramGetStatus(activeWorkspaceId)
+        if (result.success && result.status) {
+          setTelegramConnection(result.status)
+        }
+      } catch (error) {
+        console.error('Failed to load Telegram status:', error)
+      }
+    }
+    loadTelegramStatus()
+  }, [activeWorkspaceId])
+
+  // Calculate integration status
+  const connectedIntegrations = [
+    githubConnection?.isConnected,
+    slackConnection?.isConnected,
+    whatsappConnection?.isConnected,
+    telegramConnection?.isConnected,
+  ].filter(Boolean).length
 
   // Load workspace settings when active workspace changes
   useEffect(() => {
@@ -352,236 +386,262 @@ export default function WorkspaceSettingsPage() {
       <div className="flex-1 min-h-0 mask-fade-y">
         <ScrollArea className="h-full">
           <div className="px-5 py-7 max-w-3xl mx-auto">
-          <div className="space-y-6">
-            {/* Workspace Info */}
-            <SettingsSection title="Workspace Info">
-              <SettingsCard>
-                <SettingsRow
-                  label="Name"
-                  description={wsName || 'Untitled'}
-                  action={
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setWsNameEditing(wsName)
-                        setRenameDialogOpen(true)
-                      }}
-                      className="inline-flex items-center h-8 px-3 text-sm rounded-lg bg-background shadow-minimal hover:bg-foreground/[0.02] transition-colors"
-                    >
-                      Edit
-                    </button>
-                  }
-                />
-                <SettingsRow
-                  label="Icon"
-                  action={
-                    <label className="cursor-pointer">
-                      <input
-                        type="file"
-                        accept="image/png,image/jpeg,image/svg+xml,image/webp,image/gif"
-                        onChange={handleIconUpload}
-                        className="sr-only"
-                        disabled={isUploadingIcon}
-                      />
-                      <span className="inline-flex items-center h-8 px-3 text-sm rounded-lg bg-background shadow-minimal hover:bg-foreground/[0.02] transition-colors">
-                        {isUploadingIcon ? 'Uploading...' : 'Change'}
-                      </span>
-                    </label>
-                  }
-                >
-                  <div
-                    className={cn(
-                      'w-6 h-6 rounded-full overflow-hidden bg-foreground/5 flex items-center justify-center',
-                      'ring-1 ring-border/50'
-                    )}
-                  >
-                    {isUploadingIcon ? (
-                      <Spinner className="text-muted-foreground text-[8px]" />
-                    ) : wsIconUrl ? (
-                      <img src={wsIconUrl} alt="" className="w-full h-full object-cover" />
-                    ) : (
-                      <span className="text-xs font-medium text-muted-foreground">
-                        {wsName?.charAt(0)?.toUpperCase() || 'W'}
-                      </span>
-                    )}
-                  </div>
-                </SettingsRow>
-              </SettingsCard>
-
-              <RenameDialog
-                open={renameDialogOpen}
-                onOpenChange={setRenameDialogOpen}
-                title="Rename workspace"
-                value={wsNameEditing}
-                onValueChange={setWsNameEditing}
-                onSubmit={() => {
-                  const newName = wsNameEditing.trim()
-                  if (newName && newName !== wsName) {
-                    setWsName(newName)
-                    updateWorkspaceSetting('name', newName)
-                    onRefreshWorkspaces?.()
-                  }
-                  setRenameDialogOpen(false)
-                }}
-                placeholder="Enter workspace name..."
-              />
-            </SettingsSection>
-
-            {/* Model */}
-            <SettingsSection title="Model">
-              <SettingsCard>
-                <SettingsMenuSelectRow
-                  label="Default model"
-                  description="AI model for new chats"
-                  value={wsModel}
-                  onValueChange={handleModelChange}
-                  options={[
-                    { value: 'claude-opus-4-5-20251101', label: 'Opus 4.5', description: 'Most capable for complex work' },
-                    { value: 'claude-sonnet-4-5-20250929', label: 'Sonnet 4.5', description: 'Best for everyday tasks' },
-                    { value: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5', description: 'Fastest for quick answers' },
-                  ]}
-                />
-                <SettingsMenuSelectRow
-                  label="Thinking level"
-                  description="Reasoning depth for new chats"
-                  value={wsThinkingLevel}
-                  onValueChange={(v) => handleThinkingLevelChange(v as ThinkingLevel)}
-                  options={THINKING_LEVELS.map(({ id, name, description }) => ({
-                    value: id,
-                    label: name,
-                    description,
-                  }))}
-                />
-              </SettingsCard>
-            </SettingsSection>
-
-            {/* Permissions */}
-            <SettingsSection title="Permissions">
-              <SettingsCard>
-                <SettingsMenuSelectRow
-                  label="Default mode"
-                  description="Control what AI can do"
-                  value={permissionMode}
-                  onValueChange={(v) => handlePermissionModeChange(v as PermissionMode)}
-                  options={[
-                    { value: 'safe', label: PERMISSION_MODE_CONFIG['safe'].shortName, description: 'Read-only, no changes allowed' },
-                    { value: 'ask', label: PERMISSION_MODE_CONFIG['ask'].shortName, description: 'Prompts before making edits' },
-                    { value: 'allow-all', label: PERMISSION_MODE_CONFIG['allow-all'].shortName, description: 'Full autonomous execution' },
-                  ]}
-                />
-              </SettingsCard>
-            </SettingsSection>
-
-            {/* Mode Cycling */}
-            <SettingsSection
-              title="Mode Cycling"
-              description="Select which modes to cycle through with Shift+Tab"
-            >
-              <SettingsCard>
-                {(['safe', 'ask', 'allow-all'] as const).map((m) => {
-                  const config = PERMISSION_MODE_CONFIG[m]
-                  const isEnabled = enabledModes.includes(m)
-                  return (
-                    <SettingsToggle
-                      key={m}
-                      label={config.displayName}
-                      description={config.description}
-                      checked={isEnabled}
-                      onCheckedChange={(checked) => handleModeToggle(m, checked)}
-                    />
-                  )
-                })}
-              </SettingsCard>
-              <AnimatePresence>
-                {modeCyclingError && (
-                  <motion.p
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
-                    className="text-xs text-destructive mt-1 overflow-hidden"
-                  >
-                    {modeCyclingError}
-                  </motion.p>
-                )}
-              </AnimatePresence>
-            </SettingsSection>
-
-            {/* Labels */}
-            <LabelsSettingsSection />
-
-            {/* Team Skills */}
-            <TeamSkillsSettingsSection />
-
-            {/* GitHub Integration */}
-            <GitHubSettingsSection />
-
-            {/* Slack Integration */}
-            <SlackSettingsSection />
-
-            {/* WhatsApp Integration */}
-            <WhatsAppSettingsSection />
-
-            {/* Telegram Integration */}
-            <TelegramSettingsSection />
-
-            {/* Session Templates */}
-            <SettingsSection
-              title="Session Templates"
-              description="Create and manage reusable session configurations"
-            >
-              <SettingsCard>
-                <SettingsToggle
-                  label="Show Templates on New Chat"
-                  description="When enabled, CMD+N shows a template picker instead of creating a blank chat"
-                  checked={templatesEnabled}
-                  onCheckedChange={handleTemplatesEnabledChange}
-                />
-              </SettingsCard>
-              <TemplateManager
-                workspaceId={activeWorkspaceId!}
-                workspaceRootPath={activeWorkspace?.rootPath}
-              />
-            </SettingsSection>
-
-            {/* Session Sharing */}
-            <ViewerSettings />
-
-            {/* Advanced */}
-            <SettingsSection title="Advanced">
-              <SettingsCard>
-                <SettingsRow
-                  label="Default Working Directory"
-                  description={workingDirectory || 'Not set (uses session folder)'}
-                  action={
-                    <div className="flex items-center gap-2">
-                      {workingDirectory && (
-                        <button
-                          type="button"
-                          onClick={handleClearWorkingDirectory}
-                          className="inline-flex items-center h-8 px-3 text-sm rounded-lg bg-background shadow-minimal hover:bg-foreground/[0.02] transition-colors text-foreground/60 hover:text-foreground"
-                        >
-                          Clear
-                        </button>
-                      )}
+          <div className="space-y-10">
+            {/* ============================================ */}
+            {/* WORKSPACE */}
+            {/* ============================================ */}
+            <SettingsGroup title="Workspace">
+              <SettingsSection title="Identity">
+                <SettingsCard>
+                  <SettingsRow
+                    label="Name"
+                    description={wsName || 'Untitled'}
+                    action={
                       <button
                         type="button"
-                        onClick={handleChangeWorkingDirectory}
+                        onClick={() => {
+                          setWsNameEditing(wsName)
+                          setRenameDialogOpen(true)
+                        }}
                         className="inline-flex items-center h-8 px-3 text-sm rounded-lg bg-background shadow-minimal hover:bg-foreground/[0.02] transition-colors"
                       >
-                        Change...
+                        Edit
                       </button>
+                    }
+                  />
+                  <SettingsRow
+                    label="Icon"
+                    action={
+                      <label className="cursor-pointer">
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/svg+xml,image/webp,image/gif"
+                          onChange={handleIconUpload}
+                          className="sr-only"
+                          disabled={isUploadingIcon}
+                        />
+                        <span className="inline-flex items-center h-8 px-3 text-sm rounded-lg bg-background shadow-minimal hover:bg-foreground/[0.02] transition-colors">
+                          {isUploadingIcon ? 'Uploading...' : 'Change'}
+                        </span>
+                      </label>
+                    }
+                  >
+                    <div
+                      className={cn(
+                        'w-6 h-6 rounded-full overflow-hidden bg-foreground/5 flex items-center justify-center',
+                        'ring-1 ring-border/50'
+                      )}
+                    >
+                      {isUploadingIcon ? (
+                        <Spinner className="text-muted-foreground text-[8px]" />
+                      ) : wsIconUrl ? (
+                        <img src={wsIconUrl} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-xs font-medium text-muted-foreground">
+                          {wsName?.charAt(0)?.toUpperCase() || 'W'}
+                        </span>
+                      )}
                     </div>
-                  }
+                  </SettingsRow>
+                </SettingsCard>
+
+                <RenameDialog
+                  open={renameDialogOpen}
+                  onOpenChange={setRenameDialogOpen}
+                  title="Rename workspace"
+                  value={wsNameEditing}
+                  onValueChange={setWsNameEditing}
+                  onSubmit={() => {
+                    const newName = wsNameEditing.trim()
+                    if (newName && newName !== wsName) {
+                      setWsName(newName)
+                      updateWorkspaceSetting('name', newName)
+                      onRefreshWorkspaces?.()
+                    }
+                    setRenameDialogOpen(false)
+                  }}
+                  placeholder="Enter workspace name..."
                 />
-                <SettingsToggle
-                  label="Local MCP Servers"
-                  description="Enable stdio subprocess servers"
-                  checked={localMcpEnabled}
-                  onCheckedChange={handleLocalMcpEnabledChange}
+              </SettingsSection>
+            </SettingsGroup>
+
+            {/* ============================================ */}
+            {/* AGENT DEFAULTS */}
+            {/* ============================================ */}
+            <SettingsGroup title="Agent Defaults">
+              <SettingsSection title="Model">
+                <SettingsCard>
+                  <SettingsMenuSelectRow
+                    label="Default model"
+                    description="AI model for new chats"
+                    value={wsModel}
+                    onValueChange={handleModelChange}
+                    options={[
+                      { value: 'claude-opus-4-5-20251101', label: 'Opus 4.5', description: 'Most capable for complex work' },
+                      { value: 'claude-sonnet-4-5-20250929', label: 'Sonnet 4.5', description: 'Best for everyday tasks' },
+                      { value: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5', description: 'Fastest for quick answers' },
+                    ]}
+                  />
+                  <SettingsMenuSelectRow
+                    label="Thinking level"
+                    description="Reasoning depth for new chats"
+                    value={wsThinkingLevel}
+                    onValueChange={(v) => handleThinkingLevelChange(v as ThinkingLevel)}
+                    options={THINKING_LEVELS.map(({ id, name, description }) => ({
+                      value: id,
+                      label: name,
+                      description,
+                    }))}
+                  />
+                </SettingsCard>
+              </SettingsSection>
+
+              <SettingsSection title="Permissions">
+                <SettingsCard>
+                  <SettingsMenuSelectRow
+                    label="Default mode"
+                    description="Control what AI can do"
+                    value={permissionMode}
+                    onValueChange={(v) => handlePermissionModeChange(v as PermissionMode)}
+                    options={[
+                      { value: 'safe', label: PERMISSION_MODE_CONFIG['safe'].shortName, description: 'Read-only, no changes allowed' },
+                      { value: 'ask', label: PERMISSION_MODE_CONFIG['ask'].shortName, description: 'Prompts before making edits' },
+                      { value: 'allow-all', label: PERMISSION_MODE_CONFIG['allow-all'].shortName, description: 'Full autonomous execution' },
+                    ]}
+                  />
+                </SettingsCard>
+
+                {/* Mode Cycling - Nested within Permissions */}
+                <SettingsCard>
+                  <div className="space-y-3">
+                    <div className="pl-1">
+                      <h4 className="text-sm font-medium">Mode Cycling</h4>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Select which modes to cycle through with Shift+Tab
+                      </p>
+                    </div>
+                    <div className="space-y-0">
+                      {(['safe', 'ask', 'allow-all'] as const).map((m) => {
+                        const config = PERMISSION_MODE_CONFIG[m]
+                        const isEnabled = enabledModes.includes(m)
+                        return (
+                          <SettingsToggle
+                            key={m}
+                            label={config.displayName}
+                            description={config.description}
+                            checked={isEnabled}
+                            onCheckedChange={(checked) => handleModeToggle(m, checked)}
+                          />
+                        )
+                      })}
+                    </div>
+                  </div>
+                </SettingsCard>
+                <AnimatePresence>
+                  {modeCyclingError && (
+                    <motion.p
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
+                      className="text-xs text-destructive mt-1 overflow-hidden"
+                    >
+                      {modeCyclingError}
+                    </motion.p>
+                  )}
+                </AnimatePresence>
+              </SettingsSection>
+            </SettingsGroup>
+
+            {/* ============================================ */}
+            {/* ORGANIZATION */}
+            {/* ============================================ */}
+            <SettingsGroup title="Organization">
+              <LabelsSettingsSection />
+
+              <SettingsSection
+                title="Session Templates"
+                description="Create and manage reusable session configurations"
+              >
+                <SettingsCard>
+                  <SettingsToggle
+                    label="Show Templates on New Chat"
+                    description="When enabled, CMD+N shows a template picker instead of creating a blank chat"
+                    checked={templatesEnabled}
+                    onCheckedChange={handleTemplatesEnabledChange}
+                  />
+                </SettingsCard>
+                <TemplateManager
+                  workspaceId={activeWorkspaceId!}
+                  workspaceRootPath={activeWorkspace?.rootPath}
                 />
-              </SettingsCard>
-            </SettingsSection>
+              </SettingsSection>
+            </SettingsGroup>
+
+            {/* ============================================ */}
+            {/* INTEGRATIONS */}
+            {/* ============================================ */}
+            <SettingsGroup
+              title="Integrations"
+              badge={
+                <Badge variant="secondary" className="text-[10px] font-medium">
+                  {connectedIntegrations} of 4 connected
+                </Badge>
+              }
+            >
+              <GitHubSettingsSection />
+              <SlackSettingsSection />
+              <WhatsAppSettingsSection />
+              <TelegramSettingsSection />
+            </SettingsGroup>
+
+            {/* ============================================ */}
+            {/* SHARING */}
+            {/* ============================================ */}
+            <SettingsGroup title="Sharing">
+              <TeamSkillsSettingsSection />
+              <ViewerSettings />
+            </SettingsGroup>
+
+            {/* ============================================ */}
+            {/* ADVANCED */}
+            {/* ============================================ */}
+            <SettingsGroup title="Advanced">
+              <SettingsSection title="Developer Settings">
+                <SettingsCard>
+                  <SettingsRow
+                    label="Default Working Directory"
+                    description={workingDirectory || 'Not set (uses session folder)'}
+                    action={
+                      <div className="flex items-center gap-2">
+                        {workingDirectory && (
+                          <button
+                            type="button"
+                            onClick={handleClearWorkingDirectory}
+                            className="inline-flex items-center h-8 px-3 text-sm rounded-lg bg-background shadow-minimal hover:bg-foreground/[0.02] transition-colors text-foreground/60 hover:text-foreground"
+                          >
+                            Clear
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={handleChangeWorkingDirectory}
+                          className="inline-flex items-center h-8 px-3 text-sm rounded-lg bg-background shadow-minimal hover:bg-foreground/[0.02] transition-colors"
+                        >
+                          Change...
+                        </button>
+                      </div>
+                    }
+                  />
+                  <SettingsToggle
+                    label="Local MCP Servers"
+                    description="Enable stdio subprocess servers"
+                    checked={localMcpEnabled}
+                    onCheckedChange={handleLocalMcpEnabledChange}
+                  />
+                </SettingsCard>
+              </SettingsSection>
+            </SettingsGroup>
 
           </div>
         </div>
