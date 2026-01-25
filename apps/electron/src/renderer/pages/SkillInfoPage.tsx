@@ -185,6 +185,11 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
               <Info_Table.Row label="Description">
                 {skill.metadata.description}
               </Info_Table.Row>
+              {skill.source && (
+                <Info_Table.Row label="Source">
+                  <span className="capitalize">{skill.source === 'claude-code' ? 'Claude Code' : skill.source}</span>
+                </Info_Table.Row>
+              )}
               <Info_Table.Row label="Location">
                 <button
                   onClick={handleLocationClick}

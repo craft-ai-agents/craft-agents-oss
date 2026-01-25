@@ -201,6 +201,11 @@ function SkillItem({ skill, isSelected, isFirst, workspaceId, onClick, onDelete 
                     CC
                   </Badge>
                 )}
+                {skill.source === 'team' && (
+                  <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 font-medium bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20 shrink-0">
+                    TEAM
+                  </Badge>
+                )}
               </div>
             </div>
             {/* Subtitle - description */}
