@@ -2080,7 +2080,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     }
 
     if (!existsSync(absolutePath)) {
-      throw new Error(`Image file not found: ${relativePath}`)
+      return null
     }
 
     // Read file as buffer

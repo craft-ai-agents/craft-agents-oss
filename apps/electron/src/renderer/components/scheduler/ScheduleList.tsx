@@ -18,7 +18,7 @@ import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
 import { ScheduleModal } from './ScheduleModal'
 import { navigate, routes } from '@/lib/navigate'
 import { useNavigationState, isSchedulesNavigation } from '@/contexts/NavigationContext'
-import { useActiveWorkspace } from '@/contexts/WorkspaceContext'
+import { useActiveWorkspace } from '@/context/AppShellContext'
 import { cn } from '@/lib/utils'
 import type { Schedule, ScheduleFormData, ScheduleEvent } from '../../../shared/types'
 

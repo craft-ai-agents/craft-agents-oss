@@ -149,6 +149,7 @@ export default function WorkspaceSettingsPage() {
         for (const ext of ICON_EXTENSIONS) {
           try {
             const iconData = await window.electronAPI.readWorkspaceImage(activeWorkspaceId, `./icon.${ext}`)
+            if (!iconData) continue // File not found, try next extension
             // For SVG, wrap in data URL
             if (ext === 'svg' && !iconData.startsWith('data:')) {
               setWsIconUrl(`data:image/svg+xml;base64,${btoa(iconData)}`)
@@ -158,7 +159,7 @@ export default function WorkspaceSettingsPage() {
             iconFound = true
             break
           } catch {
-            // Icon not found with this extension, try next
+            // Error loading icon, try next extension
           }
         }
         if (!iconFound) {
@@ -223,10 +224,12 @@ export default function WorkspaceSettingsPage() {
 
       // Reload the icon locally for settings display
       const iconData = await window.electronAPI.readWorkspaceImage(activeWorkspaceId, `./icon.${ext}`)
-      if (ext === 'svg' && !iconData.startsWith('data:')) {
-        setWsIconUrl(`data:image/svg+xml;base64,${btoa(iconData)}`)
-      } else {
-        setWsIconUrl(iconData)
+      if (iconData) {
+        if (ext === 'svg' && !iconData.startsWith('data:')) {
+          setWsIconUrl(`data:image/svg+xml;base64,${btoa(iconData)}`)
+        } else {
+          setWsIconUrl(iconData)
+        }
       }
 
       // Refresh workspaces to update sidebar icon
