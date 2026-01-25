@@ -138,6 +138,17 @@ export interface ResponseContent {
   streamStartTime?: number
   /** Whether this response is a plan (renders with plan variant) */
   isPlan?: boolean
+  /** AI-generated UI tree for json-render component */
+  jsonRender?: {
+    tree: {
+      root: string
+      elements: Record<string, {
+        type: string
+        props: Record<string, unknown>
+        children?: string[]
+      }>
+    }
+  }
 }
 
 export interface TurnCardProps {
@@ -920,6 +931,17 @@ export interface ResponseCardProps {
   isLastResponse?: boolean
   /** Whether to show the Accept Plan button (default: true) */
   showAcceptPlan?: boolean
+  /** AI-generated UI tree for json-render component */
+  jsonRender?: {
+    tree: {
+      root: string
+      elements: Record<string, {
+        type: string
+        props: Record<string, unknown>
+        children?: string[]
+      }>
+    }
+  }
 }
 
 /**
@@ -950,6 +972,7 @@ export function ResponseCard({
   onAcceptWithCompact,
   isLastResponse = true,
   showAcceptPlan = true,
+  jsonRender,
 }: ResponseCardProps) {
   // Throttled content for display - updates every CONTENT_THROTTLE_MS during streaming
   const [displayedText, setDisplayedText] = useState(text)

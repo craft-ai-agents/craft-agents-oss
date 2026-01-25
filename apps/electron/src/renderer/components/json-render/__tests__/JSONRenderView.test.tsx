@@ -9,7 +9,10 @@ import { describe, test, expect } from 'bun:test'
 // Test the tree validation logic (component tests would need jsdom)
 describe('JSONRenderView Tree Validation', () => {
   test('valid tree structure', () => {
-    const validTree = {
+    const validTree: {
+      root: string
+      elements: Record<string, { type: string; props: Record<string, unknown>; children?: string[] }>
+    } = {
       root: 'card1',
       elements: {
         'card1': {
@@ -30,7 +33,10 @@ describe('JSONRenderView Tree Validation', () => {
   })
 
   test('invalid tree - missing root', () => {
-    const invalidTree = {
+    const invalidTree: {
+      root: string
+      elements: Record<string, { type: string; props: Record<string, unknown> }>
+    } = {
       root: 'missing',
       elements: {
         'card1': { type: 'Card', props: {} }

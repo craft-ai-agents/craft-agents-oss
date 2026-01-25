@@ -50,7 +50,7 @@ export const vesperCatalog = createCatalog({
           key: z.string(),
           header: z.string(),
         })).max(20),
-        data: z.array(z.record(z.unknown())).max(100),
+        data: z.array(z.record(z.string(), z.unknown())).max(100),
       }),
       description: 'Data table (max 100 rows)',
     },
