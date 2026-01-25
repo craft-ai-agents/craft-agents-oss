@@ -5,9 +5,9 @@
  * Includes error boundary for graceful failure handling.
  */
 
-import React, { memo, Component, type ReactNode } from 'react'
-import { Renderer, VisibilityProvider, DataProvider, ActionProvider, type ComponentRenderProps } from '@json-render/react'
-import type { UITree } from '@json-render/core'
+import React, { memo, Component, type ReactNode, useCallback } from 'react'
+import { Renderer, VisibilityProvider, DataProvider, ActionProvider, useData, type ComponentRenderProps } from '@json-render/react'
+import type { UITree, Action, ActionHandler } from '@json-render/core'
 import {
   Card,
   CardHeader,
@@ -16,6 +16,14 @@ import {
   CardContent,
 } from '../ui/card'
 import { Badge } from '../ui/badge'
+import { Button } from '../ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../ui/select'
 import {
   Table,
   TableBody,
@@ -25,6 +33,7 @@ import {
   TableRow,
 } from '../ui/table'
 import { cn } from '@/lib/utils'
+import { getByPath } from '@json-render/core'
 
 // ============================================
 // Error Boundary
@@ -167,6 +176,128 @@ const components = {
       </div>
     )
   },
+
+  // ============================================
+  // Interactive Components
+  // ============================================
+
+  Button: ({ element, onAction, loading }: ElementProps) => {
+    const label = element.props.label as string
+    const variant = (element.props.variant as 'default' | 'secondary' | 'outline' | 'destructive' | 'ghost') || 'default'
+    const size = (element.props.size as 'default' | 'sm' | 'lg') || 'default'
+    const action = element.props.action as Action | string | undefined
+    const disabled = element.props.disabled as boolean | undefined
+
+    const handleClick = useCallback(() => {
+      if (disabled || !action) return
+      // Support both string action names and full Action objects
+      const actionObj: Action = typeof action === 'string' ? { name: action } : action
+      console.log('[JSONRender] Button clicked, executing action:', actionObj)
+      onAction?.(actionObj)
+    }, [action, disabled, onAction])
+
+    return (
+      <Button
+        variant={variant}
+        size={size}
+        disabled={!!disabled || loading}
+        onClick={handleClick}
+      >
+        {loading ? 'Loading...' : label}
+      </Button>
+    )
+  },
+
+  TextField: ({ element }: ElementProps) => {
+    const label = element.props.label as string | undefined
+    const valuePath = element.props.valuePath as string
+    const placeholder = element.props.placeholder as string | undefined
+    const type = (element.props.type as string) || 'text'
+
+    // Use the data context for value binding
+    const { data, set } = useData()
+    const value = valuePath ? (getByPath(data, valuePath) as string | undefined) : undefined
+
+    return (
+      <div className="flex flex-col gap-1.5">
+        {label && (
+          <label className="text-sm font-medium">{label}</label>
+        )}
+        <input
+          type={type}
+          value={value ?? ''}
+          onChange={(e) => valuePath && set(valuePath, e.target.value)}
+          placeholder={placeholder}
+          className="flex h-9 w-full rounded-md border border-foreground/15 bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-foreground/30 disabled:cursor-not-allowed disabled:opacity-50"
+        />
+      </div>
+    )
+  },
+
+  SelectField: ({ element }: ElementProps) => {
+    const label = element.props.label as string | undefined
+    const bindPath = element.props.bindPath as string
+    const options = (element.props.options as Array<{ value: string; label: string }>) || []
+    const placeholder = element.props.placeholder as string | undefined
+
+    // Use the data context for value binding
+    const { data, set } = useData()
+    const value = bindPath ? (getByPath(data, bindPath) as string | undefined) : undefined
+
+    return (
+      <div className="flex flex-col gap-1.5">
+        {label && (
+          <label className="text-sm font-medium">{label}</label>
+        )}
+        <Select
+          value={value}
+          onValueChange={(val) => bindPath && set(bindPath, val)}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder={placeholder || 'Select...'} />
+          </SelectTrigger>
+          <SelectContent>
+            {options.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    )
+  },
+}
+
+// ============================================
+// Default Action Handlers
+// ============================================
+
+/**
+ * Default action handlers for common operations.
+ * These can be overridden by passing custom handlers to JSONRenderView.
+ */
+const defaultActionHandlers: Record<string, ActionHandler> = {
+  // Copy text to clipboard
+  copy: async (params) => {
+    const text = params?.text as string
+    if (text) {
+      await navigator.clipboard.writeText(text)
+      console.log('[JSONRender] Copied to clipboard:', text)
+    }
+  },
+  // Open a URL in browser
+  open_url: async (params) => {
+    const url = params?.url as string
+    if (url) {
+      window.open(url, '_blank', 'noopener,noreferrer')
+      console.log('[JSONRender] Opened URL:', url)
+    }
+  },
+  // Log action for debugging
+  log: async (params) => {
+    console.log('[JSONRender] Log action:', params)
+  },
 }
 
 // ============================================
@@ -175,10 +306,19 @@ const components = {
 
 interface JSONRenderViewProps {
   tree: UITree
+  /** Initial data for data bindings */
+  initialData?: Record<string, unknown>
+  /** Custom action handlers (merged with defaults) */
+  actionHandlers?: Record<string, ActionHandler>
+  /** Callback when any action is executed */
+  onAction?: (actionName: string, params?: Record<string, unknown>) => void
 }
 
 export const JSONRenderView = memo(function JSONRenderView({
   tree,
+  initialData = {},
+  actionHandlers = {},
+  onAction,
 }: JSONRenderViewProps) {
   // Debug: log what we receive
   console.log('[JSONRenderView] Received tree:', JSON.stringify(tree, null, 2))
@@ -210,6 +350,31 @@ export const JSONRenderView = memo(function JSONRenderView({
 
   console.log('[JSONRenderView] Transformed tree:', JSON.stringify(transformedTree, null, 2))
 
+  // Merge default handlers with custom handlers, wrapping to call onAction callback
+  const mergedHandlers: Record<string, ActionHandler> = {}
+  const allHandlerNames = new Set([
+    ...Object.keys(defaultActionHandlers),
+    ...Object.keys(actionHandlers),
+  ])
+
+  for (const name of allHandlerNames) {
+    const customHandler = actionHandlers[name]
+    const defaultHandler = defaultActionHandlers[name]
+
+    mergedHandlers[name] = async (params) => {
+      console.log('[JSONRender] Executing action:', name, params)
+      onAction?.(name, params as Record<string, unknown>)
+
+      // Custom handler takes precedence
+      if (customHandler) {
+        return customHandler(params)
+      }
+      if (defaultHandler) {
+        return defaultHandler(params)
+      }
+    }
+  }
+
   return (
     <JSONRenderErrorBoundary>
       <div
@@ -217,9 +382,9 @@ export const JSONRenderView = memo(function JSONRenderView({
         role="region"
         aria-label="AI-generated content"
       >
-        <DataProvider initialData={{}}>
+        <DataProvider initialData={initialData}>
           <VisibilityProvider>
-            <ActionProvider handlers={{}}>
+            <ActionProvider handlers={mergedHandlers}>
               <Renderer tree={transformedTree} registry={components} />
             </ActionProvider>
           </VisibilityProvider>
