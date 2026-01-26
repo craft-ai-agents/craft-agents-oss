@@ -126,14 +126,10 @@ export const startOAuthAtom = atom(
 /** Complete OAuth flow */
 export const completeOAuthAtom = atom(
   null,
-  async (get, set, { code, state }: { code: string; state: string }) => {
+  async (_get, _set, { code, state }: { code: string; state: string }) => {
+    // Don't manually update state here - the event listener will handle it
+    // to avoid duplicates from race conditions
     const profile = await window.electronAPI.claudeProfilesCompleteOAuth(code, state);
-    const current = get(profilesAtom);
-    set(profilesAtom, {
-      ...current,
-      items: [...current.items, profile],
-      activeId: current.activeId ?? profile.id,
-    });
     return profile;
   }
 );
@@ -271,6 +267,8 @@ export const setupProfileEventsAtom = atom(null, (get, set) => {
       set(profilesAtom, {
         ...current,
         items: [...current.items, profile],
+        // Set as active if this is the first profile or no active profile
+        activeId: current.activeId ?? profile.id,
       });
     }
   });
