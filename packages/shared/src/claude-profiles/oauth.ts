@@ -197,24 +197,32 @@ export function getPendingOAuthStateCount(): number {
 
 /**
  * Fetch user info from the access token.
+ * Returns null if the endpoint is unavailable or returns an error.
  */
-async function fetchUserInfo(accessToken: string): Promise<UserInfo> {
-  const response = await fetch('https://api.anthropic.com/api/oauth/userinfo', {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-  });
+async function fetchUserInfo(accessToken: string): Promise<UserInfo | null> {
+  try {
+    const response = await fetch('https://api.anthropic.com/api/oauth/userinfo', {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+    });
 
-  if (!response.ok) {
-    throw new Error(`Failed to fetch user info: ${response.status}`);
+    if (!response.ok) {
+      // User info endpoint may not be available - this is not fatal
+      console.warn(`[claude-profiles] User info fetch failed: ${response.status}`);
+      return null;
+    }
+
+    const data = await response.json() as { email: string; name?: string };
+    return {
+      email: data.email,
+      name: data.name,
+    };
+  } catch (error) {
+    console.warn('[claude-profiles] User info fetch error:', error);
+    return null;
   }
-
-  const data = await response.json() as { email: string; name?: string };
-  return {
-    email: data.email,
-    name: data.name,
-  };
 }
 
 /**
@@ -291,13 +299,13 @@ export async function completeProfileOAuth(
 
     onStatus?.('Fetching account information...');
 
-    // Fetch user info to get email
+    // Try to fetch user info to get email (optional - may not be available)
     const userInfo = await fetchUserInfo(data.access_token);
 
     onStatus?.('Creating profile...');
 
-    // Create the profile
-    const profile = await createProfile(oauthState.profileName, userInfo.email);
+    // Create the profile (email is optional)
+    const profile = await createProfile(oauthState.profileName, userInfo?.email);
 
     // Store tokens via CredentialManager
     const credManager = getCredentialManager();

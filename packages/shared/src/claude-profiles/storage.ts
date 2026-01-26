@@ -210,7 +210,7 @@ export async function getActiveProfileId(): Promise<string | null> {
  */
 export async function createProfile(
   name: string,
-  email: string
+  email?: string
 ): Promise<ClaudeProfile> {
   if (!name || name.trim().length === 0) {
     throw new ProfileStorageError('Profile name is required', 'INVALID_INPUT');
@@ -218,14 +218,11 @@ export async function createProfile(
   if (name.length > 100) {
     throw new ProfileStorageError('Profile name too long (max 100 chars)', 'INVALID_INPUT');
   }
-  if (!email || !email.includes('@')) {
-    throw new ProfileStorageError('Valid email is required', 'INVALID_INPUT');
-  }
 
   const profile: ClaudeProfile = {
     id: uuidv4(),
     name: name.trim(),
-    email: email.trim().toLowerCase(),
+    email: email?.trim().toLowerCase(),
     createdAt: Date.now(),
     isDefault: false,
   };
@@ -233,8 +230,8 @@ export async function createProfile(
   return withLock(async () => {
     const storage = await loadProfileStorage();
 
-    // Check for duplicate email
-    if (storage.profiles.some(p => p.email === profile.email)) {
+    // Check for duplicate email (only if email provided)
+    if (profile.email && storage.profiles.some(p => p.email === profile.email)) {
       throw new ProfileStorageError(
         `Profile with email ${profile.email} already exists`,
         'INVALID_INPUT'

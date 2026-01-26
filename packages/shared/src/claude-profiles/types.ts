@@ -15,8 +15,8 @@ export interface ClaudeProfile {
   /** User-defined label (e.g., "Work", "Personal") */
   name: string;
 
-  /** Account email address */
-  email: string;
+  /** Account email address (may not be available if userinfo endpoint fails) */
+  email?: string;
 
   /** Timestamp when profile was created (Unix ms) */
   createdAt: number;

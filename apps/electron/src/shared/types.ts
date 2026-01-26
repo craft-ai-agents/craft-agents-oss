@@ -1615,7 +1615,7 @@ export interface ClaudeOAuthResult {
 export interface ClaudeProfile {
   id: string
   name: string
-  email: string
+  email?: string
   createdAt: number
   lastUsedAt?: number
   isDefault: boolean
