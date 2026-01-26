@@ -11,7 +11,9 @@ Vesper is open source under the Apache 2.0 license—you're free to remix and mo
 
 We built Vesper because we wanted a better, more opinionated approach to working with the world's most powerful AI agents. We continue to improve it based on real-world usage and intuition.
 
-<img width="1578" height="894" alt="image" src="https://github.com/user-attachments/assets/3f1f2fe8-7cf6-4487-99ff-76f6c8c0a3fb" />
+<img alt="Vesper Main Interface" src="docs/images/vesper-main-interface.png" />
+
+*Multi-session inbox with AI-powered chat, scheduled tasks, and document-centric workflow*
 
 ## Installation
 
@@ -90,6 +92,10 @@ bun run electron:start
 
 Browse and install agent skills from the skills.sh marketplace:
 
+<img alt="Skills Management" src="docs/images/vesper-skills.png" />
+
+*Manage installed skills with detailed metadata, permission modes, and instructions*
+
 1. Navigate to **Skills** in the sidebar
 2. Toggle to **Marketplace** view
 3. Search for skills by name or description
@@ -139,6 +145,19 @@ Connect your GitHub account for daily reports and repository access:
 
 Features OAuth 2.0 with PKCE, automatic token refresh, and secure credential storage.
 
+### Vector Search (Search Docs)
+
+Semantic search over your markdown documentation with collection management:
+
+<img alt="Search Docs" src="docs/images/vesper-search-docs.png" />
+
+*Hybrid search across multiple document collections with BM25 and vector embeddings*
+
+1. Navigate to **Search Docs** in the sidebar
+2. Create collections pointing to your markdown directories
+3. Search using keyword, semantic, or hybrid mode
+4. Results are ranked and displayed with rich previews
+
 ### Session Labels
 
 Organize your sessions with customizable labels:
@@ -152,6 +171,10 @@ Organize your sessions with customizable labels:
 
 Connect external data sources to your workspace:
 
+<img alt="MCP Sources - GitHub Integration" src="docs/images/vesper-mcp-sources.png" />
+
+*Connect to MCP servers like GitHub with granular tool permissions*
+
 | Type | Examples |
 |------|----------|
 | **MCP Servers** | Craft, Linear, GitHub, Notion, custom servers |
@@ -159,6 +182,10 @@ Connect external data sources to your workspace:
 | **Local Files** | Filesystem, Obsidian vaults, Git repos |
 
 ### Permission Modes
+
+<img alt="Permission Settings" src="docs/images/vesper-permissions.png" />
+
+*Configure granular permission patterns for safe, controlled agent operations*
 
 | Mode | Display | Behavior |
 |------|---------|----------|
@@ -220,6 +247,10 @@ Coordinate multi-agent workflows with structured task management:
 ### Scheduler with AI Editing
 
 Schedule recurring tasks and one-time executions with natural language editing:
+
+<img alt="Schedule Management" src="docs/images/vesper-schedules.png" />
+
+*Create and manage scheduled tasks with execution history and AI-powered editing*
 
 **Features:**
 - **"Edit with AI" Button**: Modify schedules using natural language (e.g., "change it to run at 3pm daily")
@@ -353,6 +384,21 @@ GITHUB_OAUTH_CLIENT_SECRET=your-github-client-secret
 ```
 
 See [Google Cloud Console](https://console.cloud.google.com/apis/credentials) and [GitHub OAuth Apps](https://github.com/settings/developers) to create OAuth credentials.
+
+### User Preferences
+
+Personalize Vesper to understand your context and preferences:
+
+<img alt="User Preferences" src="docs/images/vesper-preferences.png" />
+
+*Configure your name, timezone, language, and location for personalized responses*
+
+Navigate to **Settings** → **Preferences** to set:
+- **Name**: How Vesper should address you
+- **Timezone**: For relative date handling ("tomorrow", "next week")
+- **Language**: Preferred language for responses
+- **Location**: City and country for regional context
+- **Notes**: Free-form context about your preferences
 
 ## Configuration
 
