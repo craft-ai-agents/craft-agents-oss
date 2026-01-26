@@ -21,6 +21,14 @@ import type { Schedule, ScheduleFormData, ScheduleEvent, ScheduleExecution } fro
 import { IPC_CHANNELS } from '../shared/types'
 
 /**
+ * Get cron expression from schedule, supporting both standard 'cron' field
+ * and legacy 'customCron' field from manually created schedules.
+ */
+function getCronExpression(schedule: Schedule): string | null {
+  return schedule.cron || (schedule as Record<string, unknown>).customCron as string | null
+}
+
+/**
  * SchedulerService manages scheduled task execution for a workspace.
  */
 export class SchedulerService {
@@ -122,19 +130,22 @@ export class SchedulerService {
     if (this.jobs.has(schedule.id)) return
 
     try {
-      if (schedule.cron) {
+      const cronExpr = getCronExpression(schedule)
+      if (cronExpr) {
         // Recurring schedule
         const job = new Cron(
-          schedule.cron,
+          cronExpr,
           { timezone: schedule.timezone },
           () => this.enqueue(schedule)
         )
         this.jobs.set(schedule.id, job)
-        mainLog.info(`Started recurring job for schedule ${schedule.id}: ${schedule.cron}`)
+        mainLog.info(`Started recurring job for schedule ${schedule.id}: ${cronExpr}`)
       } else if (schedule.scheduledFor) {
-        // One-time schedule
-        const runAt = new Date(schedule.scheduledFor * 1000)
-        if (runAt > new Date()) {
+        // One-time schedule - handle both Unix timestamp (number) and ISO string
+        const runAt = typeof schedule.scheduledFor === 'number'
+          ? new Date(schedule.scheduledFor * 1000)
+          : new Date(schedule.scheduledFor)
+        if (!isNaN(runAt.getTime()) && runAt > new Date()) {
           const job = new Cron(runAt, () => {
             this.enqueue(schedule)
             this.jobs.delete(schedule.id)
@@ -312,7 +323,7 @@ export class SchedulerService {
     }
 
     // Disable one-time schedules after execution
-    if (!schedule.cron) {
+    if (!getCronExpression(schedule)) {
       const idx = this.schedules.findIndex(s => s.id === schedule.id)
       if (idx !== -1) {
         this.schedules[idx].enabled = false
@@ -483,9 +494,10 @@ export class SchedulerService {
    * Get next run time for a schedule
    */
   getNextRun(schedule: Schedule): Date | null {
-    if (!schedule.cron || !schedule.enabled) return null
+    const cronExpr = getCronExpression(schedule)
+    if (!cronExpr || !schedule.enabled) return null
     try {
-      const cron = new Cron(schedule.cron, { timezone: schedule.timezone })
+      const cron = new Cron(cronExpr, { timezone: schedule.timezone })
       return cron.nextRun()
     } catch {
       return null
