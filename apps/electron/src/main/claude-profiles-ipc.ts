@@ -316,22 +316,22 @@ export function registerClaudeProfilesIpc(): void {
   // Auto-Switch Settings
   // ========================================
 
-  // Get settings
+  // Get auto-switch settings
   ipcMain.handle(
-    'claude-profiles:get-settings',
+    'claude-profiles:get-auto-switch-settings',
     async (): Promise<ClaudeAutoSwitchSettings> => {
       try {
         return await getAutoSwitchSettings();
       } catch (error) {
-        console.error('[claude-profiles:get-settings] Error:', error);
+        console.error('[claude-profiles:get-auto-switch-settings] Error:', error);
         throw error;
       }
     }
   );
 
-  // Update settings
+  // Update auto-switch settings
   ipcMain.handle(
-    'claude-profiles:update-settings',
+    'claude-profiles:update-auto-switch-settings',
     async (
       _event,
       updates: Partial<ClaudeAutoSwitchSettings>
@@ -341,7 +341,7 @@ export function registerClaudeProfilesIpc(): void {
         broadcastProfileEvent('claude-profiles:settings-changed', { settings });
         return settings;
       } catch (error) {
-        console.error('[claude-profiles:update-settings] Error:', error);
+        console.error('[claude-profiles:update-auto-switch-settings] Error:', error);
         throw error;
       }
     }
