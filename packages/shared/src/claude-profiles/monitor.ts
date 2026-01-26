@@ -289,25 +289,44 @@ export class ClaudeUsageMonitor extends EventEmitter {
 
   /**
    * Fetch usage data by parsing Claude CLI output.
-   * Runs `claude /usage` and parses the response.
+   * Pipes /usage command to claude CLI and parses the response.
    */
   private async fetchUsageViaCLI(accessToken: string): Promise<ClaudeUsageData | null> {
     return new Promise((resolve) => {
       try {
-        // Run claude with the OAuth token in environment
-        const proc = spawn('claude', ['-p', '/usage'], {
+        // Run claude in pipe mode and send /usage command
+        const proc = spawn('claude', ['--print'], {
           env: {
             ...process.env,
             CLAUDE_CODE_OAUTH_TOKEN: accessToken,
           },
-          timeout: CLI_TIMEOUT_MS,
+          stdio: ['pipe', 'pipe', 'pipe'],
         });
 
         let stdout = '';
         let stderr = '';
+        let resolved = false;
+
+        const cleanup = () => {
+          if (!resolved) {
+            resolved = true;
+            if (!proc.killed) {
+              proc.kill('SIGTERM');
+            }
+          }
+        };
 
         proc.stdout?.on('data', (data) => {
           stdout += data.toString();
+          // Check if we have usage data in the output
+          if (stdout.includes('% used') || stdout.includes('usage')) {
+            const usage = this.parseUsageOutput(stdout);
+            if (usage && !resolved) {
+              resolved = true;
+              proc.kill('SIGTERM');
+              resolve(usage);
+            }
+          }
         });
 
         proc.stderr?.on('data', (data) => {
@@ -316,25 +335,27 @@ export class ClaudeUsageMonitor extends EventEmitter {
 
         proc.on('error', (error) => {
           debug('[ClaudeUsageMonitor] CLI spawn error:', error);
+          cleanup();
           resolve(null);
         });
 
-        proc.on('close', (code) => {
-          if (code !== 0) {
-            debug(`[ClaudeUsageMonitor] CLI exited with code ${code}: ${stderr}`);
-            resolve(null);
-            return;
+        proc.on('close', () => {
+          if (!resolved) {
+            resolved = true;
+            const usage = this.parseUsageOutput(stdout);
+            resolve(usage);
           }
-
-          const usage = this.parseUsageOutput(stdout);
-          resolve(usage);
         });
+
+        // Send /usage command
+        proc.stdin?.write('/usage\n');
+        proc.stdin?.end();
 
         // Kill process after timeout
         setTimeout(() => {
-          if (!proc.killed) {
-            proc.kill('SIGTERM');
+          if (!resolved) {
             debug('[ClaudeUsageMonitor] CLI command timed out');
+            cleanup();
             resolve(null);
           }
         }, CLI_TIMEOUT_MS);
