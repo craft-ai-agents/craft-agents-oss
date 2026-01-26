@@ -1,5 +1,5 @@
 import { query, createSdkMcpServer, tool, AbortError, type Query, type SDKMessage, type SDKUserMessage, type SDKAssistantMessageError, type Options } from '@anthropic-ai/claude-agent-sdk';
-import { getDefaultOptions } from './options.ts';
+import { getDefaultOptions, resetClaudeConfigCheck } from './options.ts';
 import type { ContentBlockParam } from '@anthropic-ai/sdk/resources';
 import { z } from 'zod';
 import { getSystemPrompt, getDateTimeContext, getWorkingDirectoryContext } from '../prompts/system.ts';
@@ -1825,6 +1825,30 @@ export class CraftAgent {
           const typedError = parseError(new Error(rawErrorMsg));
           yield { type: 'typed_error', error: typedError };
           yield { type: 'complete' };
+          return;
+        }
+
+        // Check for .claude.json corruption — the SDK subprocess crashes if this file
+        // is empty, BOM-encoded, or contains invalid JSON. Two error patterns:
+        //   1. "CLI output was not valid JSON" — CLI wrote plain-text error to stdout
+        //   2. "process exited with code 1" with stderr mentioning config corruption
+        // See: claude-code#14442 (BOM), #2593 (empty file), #18998 (race condition)
+        const stderrForConfigCheck = this.lastStderrOutput.join('\n').toLowerCase();
+        const isConfigCorruption =
+          (errorMsg.includes('not valid json') && (errorMsg.includes('claude') || errorMsg.includes('configuration'))) ||
+          (errorMsg.includes('process exited with code') && (
+            stderrForConfigCheck.includes('claude.json') ||
+            stderrForConfigCheck.includes('configuration file') ||
+            stderrForConfigCheck.includes('corrupted')
+          ));
+
+        if (isConfigCorruption && !_isRetry) {
+          debug('[CraftAgent] Detected .claude.json corruption, repairing and retrying...');
+          // Reset the once-per-process guard so ensureClaudeConfig() runs again
+          // on the retry — it will repair the file before the next subprocess spawn
+          resetClaudeConfigCheck();
+          yield { type: 'info', message: 'Repairing configuration file...' };
+          yield* this.chat(userMessage, attachments, true);
           return;
         }
 

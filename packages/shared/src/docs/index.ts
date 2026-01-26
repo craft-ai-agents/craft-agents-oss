@@ -20,21 +20,27 @@ const DOCS_DIR = join(CONFIG_DIR, 'docs');
 // Track if docs have been initialized this session (prevents re-init on hot reload)
 let docsInitialized = false;
 
-// Resolve the assets directory using process.cwd() based paths.
-// All paths work in both ESM (Bun dev) and CJS (Electron bundle) environments.
-// Handles multiple scenarios:
-// - Development (bun): process.cwd() = monorepo root
-// - Bundled (esbuild): process.cwd() = app directory containing dist/
-// - Electron packaged: process.cwd() = app resources directory
+// Resolve the assets directory containing bundled documentation files.
+//
+// Uses __dirname-based paths first, which work reliably in both environments:
+// - Development (Bun):   __dirname = packages/shared/src/docs/
+//                         -> join(__dirname, '../../assets/docs') = packages/shared/assets/docs/
+// - Packaged (esbuild CJS): __dirname = <app-bundle>/dist/
+//                         -> join(__dirname, 'assets/docs') = <app-bundle>/dist/assets/docs/
+//
+// process.cwd()-based paths are kept as fallbacks but don't work in packaged
+// Electron apps where cwd is the user's directory, not the app bundle.
+// See: https://github.com/lukilabs/craft-agents-oss/issues/71
 function getAssetsDir(): string {
-  // Try multiple possible locations in priority order:
   const possiblePaths = [
-    // 1. Development: monorepo root -> packages/shared/assets/docs
+    // 1. __dirname relative: development (packages/shared/src/docs/ -> ../../assets/docs)
+    join(__dirname, '..', '..', 'assets', 'docs'),
+    // 2. __dirname relative: bundled CJS (dist/ -> assets/docs)
+    join(__dirname, 'assets', 'docs'),
+    // 3. Fallback: process.cwd() for monorepo root in dev
     join(process.cwd(), 'packages', 'shared', 'assets', 'docs'),
-    // 2. Bundled: dist/assets/docs (assets copied during build)
+    // 4. Fallback: process.cwd() for bundled builds
     join(process.cwd(), 'dist', 'assets', 'docs'),
-    // 3. Bundled alternative: assets/docs at cwd root
-    join(process.cwd(), 'assets', 'docs'),
   ];
 
   for (const p of possiblePaths) {
@@ -43,7 +49,7 @@ function getAssetsDir(): string {
     }
   }
 
-  // Fallback: development path (will fail gracefully if files don't exist)
+  // Fallback: first path (will fail gracefully if files don't exist)
   return possiblePaths[0]!;
 }
 

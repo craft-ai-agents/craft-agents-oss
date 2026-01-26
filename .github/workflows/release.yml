@@ -11,21 +11,6 @@ on:
         required: false
         type: string
         default: 'all'
-      sync_oss:
-        description: 'Sync to OSS repository after build'
-        required: false
-        type: boolean
-        default: true
-      create_release:
-        description: 'Create GitHub release on OSS repo with binaries'
-        required: false
-        type: boolean
-        default: true
-      update_latest:
-        description: 'Update /latest endpoint (auto-enabled for tag pushes)'
-        required: false
-        type: boolean
-        default: true
       force_rebuild:
         description: 'Force rebuild even if artifact exists in S3'
         required: false
@@ -323,20 +308,15 @@ jobs:
           pattern: build-*
           merge-multiple: true
 
+      # Upload to versioned path only (electron/{version}/).
+      # Promotion to electron/latest/ happens separately via the promote workflow,
+      # allowing testing before propagating to all users.
       - name: Upload to S3
         env:
           S3_VERSIONS_BUCKET_ENDPOINT: ${{ secrets.S3_VERSIONS_BUCKET_ENDPOINT }}
           S3_VERSIONS_BUCKET_ACCESS_KEY_ID: ${{ secrets.S3_VERSIONS_BUCKET_ACCESS_KEY_ID }}
           S3_VERSIONS_BUCKET_SECRET_ACCESS_KEY: ${{ secrets.S3_VERSIONS_BUCKET_SECRET_ACCESS_KEY }}
-        run: |
-          FLAGS=""
-          # Update latest for tag pushes or if explicitly requested
-          if [[ "${{ needs.prepare.outputs.is_tag }}" == "true" ]] || [[ "${{ inputs.update_latest }}" == "true" ]]; then
-            # --legacy-manifest generates manifest.json for clients still on the old custom updater (pre-electron-updater).
-            # Remove --legacy-manifest once all users have updated past v0.2.25.
-            FLAGS="$FLAGS --latest --script --legacy-manifest"
-          fi
-          bun run scripts/upload.ts $FLAGS
+        run: bun run scripts/upload.ts
 
       - name: Create git tag (if not already a tag push)
         if: needs.prepare.outputs.is_tag != 'true' && github.ref == 'refs/heads/main'
@@ -353,113 +333,18 @@ jobs:
             git push origin "$TAG"
           fi
 
-  # Sync to OSS repository
-  oss-sync:
-    needs: [prepare, upload]
-    # Run for tag pushes (always) or manual dispatch (if not disabled)
-    if: github.event_name == 'push' || inputs.sync_oss != false
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    outputs:
-      changelog: ${{ steps.changelog.outputs.changelog }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Install dependencies
-        run: bun install
-
-      - name: Configure Git
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-
-      # Read release notes from docs/release-notes/{version}.md (validated in prepare job)
-      - name: Read release notes
-        id: changelog
-        run: |
-          VERSION="${{ needs.prepare.outputs.version }}"
-          NOTES_FILE="docs/release-notes/${VERSION}.md"
-
-          # Read the release notes file
-          CHANGELOG=$(cat "$NOTES_FILE")
-          echo "$CHANGELOG" > /tmp/changelog.md
-
-          # Build commit message: version as title, changelog as body
-          printf "v%s\n\n%s" "$VERSION" "$CHANGELOG" > /tmp/commit-message.md
-
-          # Export changelog as job output for reuse in oss-release
-          echo "changelog<<CHANGELOG_EOF" >> $GITHUB_OUTPUT
-          echo "$CHANGELOG" >> $GITHUB_OUTPUT
-          echo "CHANGELOG_EOF" >> $GITHUB_OUTPUT
-
-      - name: Sync to OSS
-        run: |
-          TARGET="https://x-access-token:${{ secrets.OSS_REPO_TOKEN }}@github.com/lukilabs/craft-agents-oss.git"
-          bun run scripts/oss-sync.ts --target "$TARGET" --yes --force --message-file /tmp/commit-message.md
-
-  # Create OSS release with changelog
-  oss-release:
-    needs: [prepare, oss-sync]
-    # Run for tag pushes (always) or manual dispatch (if not disabled)
-    if: github.event_name == 'push' || (inputs.create_release != false && inputs.sync_oss != false)
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      # Reuse changelog from oss-sync job (already generated for the commit message)
-      - name: Get changelog
-        env:
-          CHANGELOG: ${{ needs.oss-sync.outputs.changelog }}
-        run: echo "$CHANGELOG" > /tmp/changelog.md
-
-      - name: Download binaries
-        run: |
-          VERSION="${{ needs.prepare.outputs.version }}"
-          BASE_URL="https://agents.craft.do/electron/$VERSION"
-          mkdir -p /tmp/binaries
-
-          curl -fsSL -o "/tmp/binaries/Craft-Agents-$VERSION-mac-arm64.dmg" "$BASE_URL/Craft-Agent-arm64.dmg" || true
-          curl -fsSL -o "/tmp/binaries/Craft-Agents-$VERSION-mac-x64.dmg" "$BASE_URL/Craft-Agent-x64.dmg" || true
-          curl -fsSL -o "/tmp/binaries/Craft-Agents-$VERSION-win-x64.exe" "$BASE_URL/Craft-Agent-x64.exe" || true
-          curl -fsSL -o "/tmp/binaries/Craft-Agents-$VERSION-linux-x64.AppImage" "$BASE_URL/Craft-Agent-x64.AppImage" || true
-
-      - name: Create OSS Release
-        env:
-          GH_TOKEN: ${{ secrets.OSS_REPO_TOKEN }}
-        run: |
-          VERSION="${{ needs.prepare.outputs.version }}"
-          CHANGELOG=$(cat /tmp/changelog.md)
-
-          cd /tmp
-          git clone "https://x-access-token:${{ secrets.OSS_REPO_TOKEN }}@github.com/lukilabs/craft-agents-oss.git" oss
-          cd oss
-
-          if gh release view "v$VERSION" &>/dev/null; then
-            echo "Release v$VERSION already exists"
-            exit 0
-          fi
-
-          gh release create "v$VERSION" --title "v$VERSION" --notes "$CHANGELOG"
-
-          for file in /tmp/binaries/*; do
-            if [[ -f "$file" && -s "$file" ]]; then
-              gh release upload "v$VERSION" "$file" --clobber || true
-            fi
-          done
-
+      # OSS sync and promotion to latest are handled by the promote workflow
+      # (.github/workflows/promote.yml) — triggered manually after testing.
       - name: Print summary
         run: |
           VERSION="${{ needs.prepare.outputs.version }}"
           echo ""
           echo "=========================================="
-          echo "  Release v$VERSION Complete"
+          echo "  Build v$VERSION uploaded"
           echo "=========================================="
           echo ""
-          echo "Install:"
-          echo "  macOS/Linux: curl -fsSL https://agents.craft.do/install-app.sh | bash"
-          echo "  Windows:     irm https://agents.craft.do/install-app.ps1 | iex"
+          echo "Artifacts available at:"
+          echo "  https://agents.craft.do/electron/$VERSION/"
+          echo ""
+          echo "To promote to latest and release to OSS:"
+          echo "  Run the 'Promote Release' workflow with version $VERSION"

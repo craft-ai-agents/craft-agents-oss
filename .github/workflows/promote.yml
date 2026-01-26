@@ -1,0 +1,190 @@
+# Promote a tested release to latest and sync to OSS.
+#
+# This is the second step of the release process:
+#   1. release.yml — builds and uploads to electron/{version}/ (automatic on tag push)
+#   2. promote.yml — promotes to electron/latest/ and creates OSS release (manual, after testing)
+#
+# Run this workflow after verifying the build works correctly.
+
+name: Promote Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to promote (e.g. 0.2.32)'
+        required: true
+        type: string
+      sync_oss:
+        description: 'Sync to OSS repository'
+        required: false
+        type: boolean
+        default: true
+      create_release:
+        description: 'Create GitHub release on OSS repo with binaries'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: promote-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  # Promote versioned artifacts to electron/latest/ so all users receive the update
+  promote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.validate.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Validate version
+        id: validate
+        run: |
+          VERSION="${{ inputs.version }}"
+
+          # Strip leading 'v' if provided (accept both "0.2.32" and "v0.2.32")
+          VERSION="${VERSION#v}"
+
+          if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "ERROR: Invalid version format: $VERSION (expected X.Y.Z)"
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Promoting v$VERSION to latest"
+
+      # Copy all files from electron/{version}/ to electron/latest/ via S3 CopyObject
+      # and update the version pointer JSON + install scripts
+      - name: Promote to latest
+        env:
+          S3_VERSIONS_BUCKET_ENDPOINT: ${{ secrets.S3_VERSIONS_BUCKET_ENDPOINT }}
+          S3_VERSIONS_BUCKET_ACCESS_KEY_ID: ${{ secrets.S3_VERSIONS_BUCKET_ACCESS_KEY_ID }}
+          S3_VERSIONS_BUCKET_SECRET_ACCESS_KEY: ${{ secrets.S3_VERSIONS_BUCKET_SECRET_ACCESS_KEY }}
+        run: bun run scripts/promote-latest.ts --version "${{ steps.validate.outputs.version }}" --script
+
+  # Sync allowed source files to the public OSS repository
+  oss-sync:
+    needs: promote
+    if: inputs.sync_oss
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      changelog: ${{ steps.changelog.outputs.changelog }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      # Read release notes from docs/release-notes/{version}.md
+      - name: Read release notes
+        id: changelog
+        run: |
+          VERSION="${{ needs.promote.outputs.version }}"
+          NOTES_FILE="docs/release-notes/${VERSION}.md"
+
+          if [ ! -f "$NOTES_FILE" ]; then
+            echo "::warning::Release notes not found: $NOTES_FILE"
+            echo "No release notes for v${VERSION}." > /tmp/changelog.md
+          else
+            cat "$NOTES_FILE" > /tmp/changelog.md
+          fi
+
+          CHANGELOG=$(cat /tmp/changelog.md)
+
+          # Build commit message: version as title, changelog as body
+          printf "v%s\n\n%s" "$VERSION" "$CHANGELOG" > /tmp/commit-message.md
+
+          # Export changelog as job output for reuse in oss-release
+          echo "changelog<<CHANGELOG_EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "CHANGELOG_EOF" >> $GITHUB_OUTPUT
+
+      - name: Sync to OSS
+        run: |
+          TARGET="https://x-access-token:${{ secrets.OSS_REPO_TOKEN }}@github.com/lukilabs/craft-agents-oss.git"
+          bun run scripts/oss-sync.ts --target "$TARGET" --yes --force --message-file /tmp/commit-message.md
+
+  # Create a GitHub release on the OSS repo with binaries and changelog
+  oss-release:
+    needs: [promote, oss-sync]
+    if: inputs.create_release && inputs.sync_oss
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Reuse changelog from oss-sync job
+      - name: Get changelog
+        env:
+          CHANGELOG: ${{ needs.oss-sync.outputs.changelog }}
+        run: echo "$CHANGELOG" > /tmp/changelog.md
+
+      - name: Download binaries
+        run: |
+          VERSION="${{ needs.promote.outputs.version }}"
+          BASE_URL="https://agents.craft.do/electron/$VERSION"
+          mkdir -p /tmp/binaries
+
+          curl -fsSL -o "/tmp/binaries/Craft-Agents-$VERSION-mac-arm64.dmg" "$BASE_URL/Craft-Agent-arm64.dmg" || true
+          curl -fsSL -o "/tmp/binaries/Craft-Agents-$VERSION-mac-x64.dmg" "$BASE_URL/Craft-Agent-x64.dmg" || true
+          curl -fsSL -o "/tmp/binaries/Craft-Agents-$VERSION-win-x64.exe" "$BASE_URL/Craft-Agent-x64.exe" || true
+          curl -fsSL -o "/tmp/binaries/Craft-Agents-$VERSION-linux-x64.AppImage" "$BASE_URL/Craft-Agent-x64.AppImage" || true
+
+      - name: Create OSS Release
+        env:
+          GH_TOKEN: ${{ secrets.OSS_REPO_TOKEN }}
+        run: |
+          VERSION="${{ needs.promote.outputs.version }}"
+          CHANGELOG=$(cat /tmp/changelog.md)
+
+          cd /tmp
+          git clone "https://x-access-token:${{ secrets.OSS_REPO_TOKEN }}@github.com/lukilabs/craft-agents-oss.git" oss
+          cd oss
+
+          if gh release view "v$VERSION" &>/dev/null; then
+            echo "Release v$VERSION already exists"
+            exit 0
+          fi
+
+          gh release create "v$VERSION" --title "v$VERSION" --notes "$CHANGELOG"
+
+          for file in /tmp/binaries/*; do
+            if [[ -f "$file" && -s "$file" ]]; then
+              gh release upload "v$VERSION" "$file" --clobber || true
+            fi
+          done
+
+      - name: Print summary
+        run: |
+          VERSION="${{ needs.promote.outputs.version }}"
+          echo ""
+          echo "=========================================="
+          echo "  Release v$VERSION Complete"
+          echo "=========================================="
+          echo ""
+          echo "Install:"
+          echo "  macOS/Linux: curl -fsSL https://agents.craft.do/install-app.sh | bash"
+          echo "  Windows:     irm https://agents.craft.do/install-app.ps1 | iex"
