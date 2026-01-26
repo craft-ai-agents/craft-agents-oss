@@ -86,9 +86,30 @@ Feature planning documents and implementation roadmaps:
 
 ---
 
+## Developer Documentation
+
+Comprehensive guides for developers working on Vesper:
+
+- [Architecture Overview](developer/architecture.md) - System architecture, core components, and design patterns
+- [Development Setup](developer/development-setup.md) - Setting up your development environment
+- [Testing Guide](developer/testing-guide.md) - Testing strategies and best practices
+- [Contributing Guide](developer/contributing.md) - Contribution workflow and standards
+- [Code Organization](developer/code-organization.md) - Project structure and code patterns
+- [IPC Patterns](developer/ipc-patterns.md) - Inter-process communication best practices
+
+---
+
+## Testing Documentation
+
+Testing infrastructure and examples:
+
+- [Task Lists Architecture](developer/task-lists-architecture.md) - Task list system design and implementation
+
+---
+
 ## Contributing
 
-For contribution guidelines, see the main [CONTRIBUTING.md](../CONTRIBUTING.md) file.
+For contribution guidelines, see the [Developer Contributing Guide](developer/contributing.md) and the main [CONTRIBUTING.md](../CONTRIBUTING.md) file.
 
 ---
 

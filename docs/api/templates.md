@@ -1,12 +1,17 @@
 # Session Templates API
 
-Session Templates provide reusable session configuration presets with optional initial prompts and skill selection.
+**Last Updated:** 2026-01-26
+**Package:** `@vesper/shared/templates`
+**Version:** 1.0
+
+Session Templates provide reusable session configuration presets with optional initial prompts, skill selection, and gather context instructions.
 
 ## Storage
 
-- **Global:** `~/.vesper/templates/global.json`
-- **Workspace:** `~/.vesper/workspaces/{id}/templates/workspace.json`
-- **Concurrency:** File-based locking with `proper-lockfile`
+- **Global:** `~/.vesper/templates/{uuid}.json` (one file per template)
+- **Workspace:** `~/.vesper/workspaces/{id}/templates/{uuid}.json` (one file per template)
+- **Concurrency:** File-based locking with `proper-lockfile` (5 retries, 50ms timeout)
+- **File format:** JSON with pretty-print (2 spaces)
 
 ## Data Types
 
@@ -14,28 +19,29 @@ Session Templates provide reusable session configuration presets with optional i
 
 ```typescript
 interface SessionTemplate {
-  id: string;
-  name: string;
+  id: string;                    // UUID
+  name: string;                  // Max 100 characters
   description?: string;
   scope: 'global' | 'workspace';
-  workspaceId?: string;         // Required for workspace-scoped templates
+  workspaceId?: string;          // Required for workspace-scoped templates
 
   // Session configuration
-  permissionMode?: PermissionMode;
-  model?: string;
-  thinkingLevel?: ThinkingLevel;
+  permissionMode?: 'safe' | 'ask' | 'allow-all';
+  model?: string;                // e.g., 'claude-sonnet-4-20250514'
+  thinkingLevel?: number;        // 0-5
   workingDirectory?: string;
   skillIds?: string[];
-  taskListId?: string;          // Optional task list association
+  taskListId?: string;           // Optional task list for multi-agent coordination
 
-  // Optional initial prompt
-  initialPrompt?: string;
+  // Prompts and context gathering
+  initialPrompt?: string;        // Pre-filled in input (not auto-sent)
+  gatherContext?: string;        // Instructions for Claude about what to ask user
 
   // Usage tracking
-  usageCount: number;
+  usageCount?: number;           // Incremented on each use
 
-  createdAt: number;
-  updatedAt: number;
+  createdAt: string;             // ISO timestamp
+  updatedAt: string;             // ISO timestamp
 }
 ```
 
@@ -43,17 +49,18 @@ interface SessionTemplate {
 
 ```typescript
 interface CreateTemplateOptions {
-  name: string;
+  name: string;                  // Required, max 100 chars
   description?: string;
-  scope: 'global' | 'workspace';
-  workspaceId?: string;
-  permissionMode?: PermissionMode;
+  scope: 'global' | 'workspace'; // Required
+  workspaceId?: string;          // Required if scope is 'workspace'
+  permissionMode?: 'safe' | 'ask' | 'allow-all';
   model?: string;
-  thinkingLevel?: ThinkingLevel;
+  thinkingLevel?: number;        // 0-5
   workingDirectory?: string;
   skillIds?: string[];
   taskListId?: string;
   initialPrompt?: string;
+  gatherContext?: string;        // Instructions for Claude
 }
 ```
 
@@ -322,10 +329,15 @@ SessionTemplate[]
 const defaultTemplates = await ipcRenderer.invoke('template:create-defaults', workspaceId);
 ```
 
-**Default Templates:**
-1. **Quick Chat** - Basic session with ask mode
-2. **Safe Mode** - Read-only exploration
-3. **Development** - Allow-all with common dev skills
+**Default Templates Created:**
+1. **Code Review** - Safe mode with review prompt
+2. **Feature Build** - Allow-all with thinking level 3, gather context
+3. **Bug Investigation** - Safe mode with investigation prompt, gather context
+4. **Documentation** - Ask mode with gather context
+5. **Refactoring** - Ask mode with thinking level 3, gather context
+6. **Quick Question** - Safe mode with thinking level 0
+
+Only creates templates if workspace has none. Returns empty array if templates already exist.
 
 ---
 
@@ -391,12 +403,95 @@ const popular = templates
 
 ---
 
+## New Features (2026-01-26)
+
+### Gather Context Field
+
+The `gatherContext` field instructs Claude on what information to gather from the user before starting work:
+
+```typescript
+{
+  "gatherContext": "Ask the user: 1) What feature to build? 2) Requirements? 3) Affected files?"
+}
+```
+
+When a session starts from this template, Claude asks these questions first, then proceeds once it has context.
+
+**Benefits:**
+- Makes templates flexible and reusable
+- Ensures Claude has necessary context before starting
+- Reduces back-and-forth clarification
+
+**Example:**
+```typescript
+await ipcRenderer.invoke('template:create', {
+  name: 'Feature Build',
+  scope: 'workspace',
+  workspaceId: 'workspace-123',
+  permissionMode: 'allow-all',
+  thinkingLevel: 3,
+  gatherContext: 'Ask: 1) What feature? 2) Requirements? 3) Which files are involved?'
+});
+```
+
+### Schedule Creation Tool
+
+The `schedule_create` tool enables conversational schedule creation from within sessions:
+
+**Location:** `packages/shared/src/agent/session-scoped-tools.ts`
+
+**Tool signature:**
+```typescript
+interface ScheduleCreateData {
+  name: string;
+  prompt: string;
+  scheduleType: 'recurring' | 'once';
+  // Recurring options
+  frequency?: 'hourly' | 'daily' | 'weekdays' | 'weekly' | 'monthly' | 'custom';
+  hour?: number;        // 0-23
+  minute?: number;      // 0-59
+  dayOfWeek?: number;   // 0-6 (Sun=0)
+  dayOfMonth?: number;  // 1-31
+  customCron?: string;
+  // One-time options
+  scheduledFor?: string; // ISO timestamp
+}
+```
+
+**Example usage:**
+```
+User: "Remind me to review PRs every weekday at 10am"
+Claude: [uses schedule_create tool]
+✓ Schedule "Review PRs" created!
+Schedule: Every weekday at 10:00 AM
+Next run: 2026-01-27T10:00:00Z
+```
+
+**Validation:**
+- Minimum interval: 1 minute
+- Past timestamps rejected (1-minute tolerance)
+- Maximum 100 schedules per workspace
+
+### Default Starter Templates
+
+When `template:create-defaults` is called, creates 6 ready-to-use templates:
+
+1. **Code Review** - Safe mode, review prompt
+2. **Feature Build** - Allow-all, extended thinking, gather context
+3. **Bug Investigation** - Safe mode, investigation prompt, gather context
+4. **Documentation** - Ask mode, gather context
+5. **Refactoring** - Ask mode, extended thinking, gather context
+6. **Quick Question** - Safe mode, no extended thinking
+
+Only creates if workspace has no templates.
+
 ## Best Practices
 
 1. **Use workspace scope** for project-specific workflows
 2. **Use global scope** for reusable patterns across projects
-3. **Include initial prompts** for guided workflows
+3. **Include gather context** instead of hard-coding assumptions
 4. **Track usage** to identify popular templates
 5. **Save successful sessions** as templates for repeatability
-6. **Associate task lists** for structured feature development
-7. **Version control templates** by exporting/importing JSON files
+6. **Associate task lists** for multi-agent coordination
+7. **Use schedule_create** for automated recurring workflows
+8. **Leverage default templates** as starting points for customization
