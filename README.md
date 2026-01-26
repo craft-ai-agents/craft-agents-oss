@@ -40,7 +40,7 @@ bun run electron:start
 
 - **Multi-Session Inbox**: Desktop app with session management, status workflow, and flagging
 - **Claude Code Experience**: Streaming responses, tool visualization, real-time updates
-- **Claude Profiles**: Multi-account OAuth with intelligent automatic switching and real-time usage monitoring
+- **Claude Profiles [NEEDS QA & ENGINEER SUPPORT]**: Multi-account OAuth with intelligent automatic switching and real-time usage monitoring (not fully completed, not E2E tested)
 - **Command Palette**: Fast navigation with CMD+K command palette for session management
 - **Vector Search**: Semantic search over markdown documentation using QMD with collection management
 - **Document Viewer**: Integrated document preview for search results with rich formatting
@@ -56,10 +56,10 @@ bun run electron:start
 - **Inline Flowy Diagrams**: Embedded flowcharts and UI mockups rendered directly in chat messages
 - **MCP Integration**: Connect to MCP servers (Craft, Linear, GitHub, Notion, custom)
 - **Sources**: Connect to REST APIs (Google, Slack, Microsoft) and local filesystems
-- **GitHub OAuth**: Secure OAuth 2.0 authentication with PKCE for GitHub integration and daily reports
-- **Slack Integration**: Connect Slack workspace with Socket Mode for message routing and permission directives
-- **Telegram Integration**: Production-ready multi-account bot support with comprehensive reliability features (deduplication, retry logic, debouncing, rate limiting)
-- **WhatsApp Integration**: Connect WhatsApp to receive and respond to messages via AI agents with permission directives
+- **GitHub OAuth [NEEDS QA & ENGINEER SUPPORT]**: Secure OAuth 2.0 authentication with PKCE for GitHub integration and daily reports (not fully completed, not E2E tested)
+- **Slack Integration [NEEDS QA & ENGINEER SUPPORT]**: Connect Slack workspace with Socket Mode for message routing and permission directives (not fully completed, not E2E tested - see [Clawdbot](https://github.com/anthropics/clawdbot) for reference implementation)
+- **Telegram Integration [NEEDS QA & ENGINEER SUPPORT]**: Production-ready multi-account bot support with comprehensive reliability features (deduplication, retry logic, debouncing, rate limiting) (not fully completed, not E2E tested - see [Clawdbot](https://github.com/anthropics/clawdbot) for reference implementation)
+- **WhatsApp Integration [NEEDS QA & ENGINEER SUPPORT]**: Connect WhatsApp to receive and respond to messages via AI agents with permission directives (not fully completed, not E2E tested - see [Clawdbot](https://github.com/anthropics/clawdbot) for reference implementation)
 - **Notification Settings**: Custom notification sounds with volume control and per-type toggles
 - **Permission Modes**: Three-level system (Explore, Ask to Edit, Auto) with customizable rules
 - **Background Tasks**: Run long-running operations with progress tracking and real-time UI sync
@@ -127,7 +127,9 @@ done
 
 See [Team Skills documentation](docs/user-guide/team-skills.md) for complete installation and usage instructions.
 
-### GitHub OAuth Integration
+### GitHub OAuth Integration [NEEDS QA & ENGINEER SUPPORT]
+
+> **Note**: This feature is not fully completed and not E2E tested.
 
 Connect your GitHub account for daily reports and repository access:
 
@@ -176,7 +178,9 @@ Resume your Vesper session in an external terminal for Claude Code CLI access:
 3. A new terminal window opens with your session automatically resumed
 4. Works on macOS (Terminal.app), Linux (gnome-terminal, konsole, xterm), and Windows (Windows Terminal, PowerShell, cmd.exe)
 
-### Claude Profiles
+### Claude Profiles [NEEDS QA & ENGINEER SUPPORT]
+
+> **Note**: This feature is not fully completed and not E2E tested.
 
 Manage multiple Claude accounts with intelligent automatic switching and real-time usage monitoring:
 
@@ -245,7 +249,9 @@ Create reusable session configurations with production-ready reliability:
 
 **Storage**: Templates stored at `~/.vesper/workspaces/{id}/templates/` with usage tracking
 
-### Telegram Bot Integration
+### Telegram Bot Integration [NEEDS QA & ENGINEER SUPPORT]
+
+> **Note**: This feature is not fully completed and not E2E tested. For a production-ready reference implementation, see [Clawdbot](https://github.com/anthropics/clawdbot).
 
 Production-ready Telegram bot with comprehensive reliability features:
 
