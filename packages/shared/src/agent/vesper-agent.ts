@@ -1,5 +1,5 @@
 import { query, createSdkMcpServer, tool, AbortError, type Query, type SDKMessage, type SDKUserMessage, type SDKAssistantMessageError, type Options } from '@anthropic-ai/claude-agent-sdk';
-import { getDefaultOptions, setAnthropicOptionsEnv } from './options.ts';
+import { getDefaultOptions } from './options.ts';
 import type { ContentBlockParam } from '@anthropic-ai/sdk/resources';
 import { z } from 'zod';
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
@@ -946,6 +946,14 @@ export class VesperAgent {
         // Note: workingDirectory is still used for context injection and shown to the agent.
         cwd: this.config.session?.sdkCwd ??
           (sessionId ? getSessionPath(this.workspaceRootPath, sessionId) : this.workspaceRootPath),
+        // Inject task list ID for SDK subprocess (used by Dispatch skill)
+        // Must be set here when options is created, not later via setAnthropicOptionsEnv
+        ...(this.currentTaskListId && {
+          env: {
+            ...getDefaultOptions().env,
+            CLAUDE_CODE_TASK_LIST_ID: this.currentTaskListId,
+          },
+        }),
         includePartialMessages: true,
         // Enable the full Claude Code toolset
         tools: { type: 'preset', preset: 'claude_code' },
@@ -1562,6 +1570,13 @@ export class VesperAgent {
         plugins: this.buildPluginConfigs(),
       };
 
+      // Log task list ID injection status
+      if (this.currentTaskListId) {
+        debug(`[chat] CLAUDE_CODE_TASK_LIST_ID=${this.currentTaskListId} injected into options.env`);
+      } else {
+        debug(`[chat] No task list ID set for this session`);
+      }
+
       // Track whether we're trying to resume a session (for error handling)
       const wasResuming = !_isRetry && !!this.sessionId;
 
@@ -1595,16 +1610,9 @@ export class VesperAgent {
         SDK_SLASH_COMMANDS.includes(commandName as typeof SDK_SLASH_COMMANDS[number]) &&
         !attachments?.length;
 
-      // Set task list environment variable for this chat invocation
-      // This must be done per-chat to prevent cross-session contamination
-      const env: Record<string, string> = {};
-      if (this.currentTaskListId) {
-        env.CLAUDE_CODE_TASK_LIST_ID = this.currentTaskListId;
-        debug(`[chat] Setting CLAUDE_CODE_TASK_LIST_ID=${this.currentTaskListId}`);
-      } else {
-        debug(`[chat] No task list ID set (env var will be empty)`);
-      }
-      setAnthropicOptionsEnv(env);
+      // NOTE: Task list ID (CLAUDE_CODE_TASK_LIST_ID) is now injected directly into options.env
+      // when options is created (see above), not here. The old setAnthropicOptionsEnv() approach
+      // didn't work because options.env was already snapshotted before this point.
 
       // Create the query - handle slash commands, binary attachments, or regular messages
       if (isSlashCommand) {

@@ -2,21 +2,22 @@
  * Integration tests for VesperAgent task list ID injection
  *
  * These tests verify that VesperAgent correctly injects the CLAUDE_CODE_TASK_LIST_ID
- * environment variable for multi-agent workflow coordination. The env var must be set
- * per-session to prevent cross-contamination between concurrent agent sessions.
+ * environment variable for multi-agent workflow coordination. The env var is injected
+ * directly into options.env when the options object is created, ensuring it's passed
+ * to the SDK subprocess.
  *
  * Key behaviors tested:
  * - setTaskListId() updates internal state
- * - chat() injects CLAUDE_CODE_TASK_LIST_ID env var when taskListId is set
+ * - chat() injects CLAUDE_CODE_TASK_LIST_ID into options.env when taskListId is set
  * - chat() does not inject env var when taskListId is undefined
  * - Per-session isolation (multiple agents don't contaminate each other)
  * - Env var persists across multiple chat() calls
- * - Integration with setAnthropicOptionsEnv()
+ * - Task list ID is passed to SDK via options.env (not via setAnthropicOptionsEnv)
  */
 
 import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
 import { VesperAgent } from '../vesper-agent.ts';
-import { setAnthropicOptionsEnv, getDefaultOptions } from '../options.ts';
+import { getDefaultOptions } from '../options.ts';
 import type { VesperAgentConfig } from '../vesper-agent.ts';
 import { tmpdir } from 'os';
 import { mkdirSync, rmSync } from 'fs';
@@ -31,8 +32,8 @@ mock.module('@anthropic-ai/claude-agent-sdk', () => {
   return {
     query: (params: any) => {
       mockQueryCallCount++;
-      // Capture the env vars that were set before query() was called
-      capturedEnv = { ...getDefaultOptions().env } as Record<string, string>;
+      // Capture the env vars from options.env (where task list ID is now injected)
+      capturedEnv = params.options?.env ? { ...params.options.env } as Record<string, string> : {};
 
       // Return a mock async generator that yields properly formatted events
       return (async function* () {
@@ -102,8 +103,6 @@ function createTestConfig(workspaceId: string = 'test-workspace'): VesperAgentCo
 function resetTestState() {
   capturedEnv = null;
   mockQueryCallCount = 0;
-  // Clear the options env to ensure clean state
-  setAnthropicOptionsEnv({});
   // Clear any existing CLAUDE_CODE_TASK_LIST_ID from process.env
   // This is important because the env var might be set by the parent process
   delete process.env.CLAUDE_CODE_TASK_LIST_ID;
@@ -382,7 +381,7 @@ describe('VesperAgent task list injection', () => {
     });
   });
 
-  describe('integration with setAnthropicOptionsEnv()', () => {
+  describe('integration with options.env', () => {
     it('should merge task list env var with other env vars', async () => {
       const config = createTestConfig();
       testDirs.push(config.workspace.rootPath);
