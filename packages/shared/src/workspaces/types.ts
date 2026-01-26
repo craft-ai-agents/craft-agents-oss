@@ -13,6 +13,7 @@
 
 import type { PermissionMode } from '../agent/mode-manager.ts';
 import type { ThinkingLevel } from '../agent/thinking-levels.ts';
+import type { TelegramAccountConfig } from '../telegram/types.ts';
 
 /**
  * Local MCP server configuration
@@ -53,6 +54,13 @@ export interface WorkspaceConfig {
    * Resolution order: ENV (VESPER_LOCAL_MCP_ENABLED) > workspace config > default (true)
    */
   localMcpServers?: LocalMcpConfig;
+
+  /**
+   * Telegram bot accounts for this workspace.
+   * Map of account ID to account configuration.
+   * Supports multiple bots per workspace with isolated configurations.
+   */
+  telegramAccounts?: Record<string, TelegramAccountConfig>;
 
   createdAt: number;
   updatedAt: number;

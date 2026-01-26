@@ -206,3 +206,63 @@ export const ERROR_MESSAGES: Record<TelegramErrorCode, string> = {
   INTERNAL_ERROR:
     'Something went wrong on our end. Please try again later.',
 };
+
+/**
+ * Access control configuration for Telegram accounts.
+ * Defines policies for DMs, groups, and allowlists.
+ */
+export interface AccessControlConfig {
+  /** DM policy: how to handle direct messages */
+  dmPolicy: 'disabled' | 'pairing' | 'allowlist' | 'open';
+  /** Group policy: how to handle group messages */
+  groupPolicy: 'disabled' | 'allowlist' | 'open';
+  /** Allowed user IDs (Telegram user IDs as strings) */
+  allowedUsers: string[];
+  /** Allowed chat IDs (Telegram chat IDs as strings) */
+  allowedChats: string[];
+  /** Require @bot mention in groups before responding */
+  requireMention?: boolean;
+  /** Reaction level for message status feedback (default: 'off') */
+  reactionLevel?: ReactionLevel;
+}
+
+/**
+ * Token source type for Telegram accounts.
+ */
+export type TokenSource = 'env' | 'config' | 'tokenFile' | 'none';
+
+/**
+ * Reaction level for message status feedback.
+ *
+ * - `off`: No reactions (default, minimal distraction)
+ * - `ack`: Quick acknowledgment (👀) when received
+ * - `minimal`: Acknowledgment + completion status (👀 → ✅/❌)
+ * - `extensive`: All status updates (👀 → ✅/❌, plus 🔄 for processing)
+ */
+export type ReactionLevel = 'off' | 'ack' | 'minimal' | 'extensive';
+
+/**
+ * Configuration for a single Telegram bot account.
+ * Supports multiple bots per workspace with isolated configs.
+ */
+export interface TelegramAccountConfig {
+  /** Unique account ID (e.g., "default", "support-bot", "alerts-bot") */
+  id: string;
+  /** Whether this account is enabled */
+  enabled: boolean;
+  /** Human-readable name for the account */
+  name?: string;
+  /** Token source strategy */
+  tokenSource: TokenSource;
+  /** Account-specific configuration */
+  config: {
+    /** Access control settings (DM/group policies, allowlists) */
+    accessControl?: AccessControlConfig;
+    /** Inbound debounce window in milliseconds (default: 1500ms) */
+    debounceMs?: number;
+    /** Require @bot mention in groups before responding */
+    requireMention?: boolean;
+    /** Reaction level for message status feedback (default: 'off') */
+    reactionLevel?: ReactionLevel;
+  };
+}

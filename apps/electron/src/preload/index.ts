@@ -10,6 +10,8 @@ import {
   type TelegramStatusResponse,
   type TelegramSendMessageResponse,
   type TelegramGetSavedTokenResponse,
+  type TelegramGetAccessControlResponse,
+  type TelegramSetAccessControlResponse,
 } from '../shared/types'
 
 const api: ElectronAPI = {
@@ -628,6 +630,10 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.TELEGRAM_SEND_MESSAGE, { workspaceId, chatId, content }),
   telegramGetSavedToken: (workspaceId: string): Promise<TelegramGetSavedTokenResponse> =>
     ipcRenderer.invoke(IPC_CHANNELS.TELEGRAM_GET_SAVED_TOKEN, { workspaceId }),
+  telegramGetAccessControl: (workspaceId: string): Promise<TelegramGetAccessControlResponse> =>
+    ipcRenderer.invoke(IPC_CHANNELS.TELEGRAM_GET_ACCESS_CONTROL, { workspaceId }),
+  telegramSetAccessControl: (workspaceId: string, accessControl: any): Promise<TelegramSetAccessControlResponse> =>
+    ipcRenderer.invoke(IPC_CHANNELS.TELEGRAM_SET_ACCESS_CONTROL, { workspaceId, accessControl }),
 
   // Telegram event listeners
   onTelegramConnectionStatus: (callback: (data: { workspaceId: string; status: any }) => void) => {

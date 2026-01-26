@@ -362,37 +362,41 @@ export class CredentialManager {
    *
    * @param workspaceId - Workspace ID
    * @param botToken - Telegram bot token from @BotFather
+   * @param accountId - Account ID (default: 'default' for backward compatibility)
    */
   async setTelegramBotToken(
     workspaceId: string,
-    botToken: string
+    botToken: string,
+    accountId: string = 'default'
   ): Promise<void> {
     await this.set(
       {
         type: 'telegram_bot_token',
         workspaceId,
-        sourceId: 'default', // Only one bot per workspace for now
+        sourceId: accountId,
       },
       {
         value: botToken,
       }
     );
-    debug(`[CredentialManager] Saved Telegram bot token for workspace ${workspaceId}`);
+    debug(`[CredentialManager] Saved Telegram bot token for workspace ${workspaceId}, account ${accountId}`);
   }
 
   /**
    * Get Telegram bot token
    *
    * @param workspaceId - Workspace ID
+   * @param accountId - Account ID (default: 'default' for backward compatibility)
    * @returns Bot token or null if not found
    */
   async getTelegramBotToken(
-    workspaceId: string
+    workspaceId: string,
+    accountId: string = 'default'
   ): Promise<string | null> {
     const cred = await this.get({
       type: 'telegram_bot_token',
       workspaceId,
-      sourceId: 'default',
+      sourceId: accountId,
     });
 
     return cred?.value || null;
@@ -402,18 +406,20 @@ export class CredentialManager {
    * Delete Telegram bot token (GDPR compliance)
    *
    * @param workspaceId - Workspace ID
+   * @param accountId - Account ID (default: 'default' for backward compatibility)
    * @returns True if deleted, false if not found
    */
   async deleteTelegramBotToken(
-    workspaceId: string
+    workspaceId: string,
+    accountId: string = 'default'
   ): Promise<boolean> {
     const deleted = await this.delete({
       type: 'telegram_bot_token',
       workspaceId,
-      sourceId: 'default',
+      sourceId: accountId,
     });
     if (deleted) {
-      debug(`[CredentialManager] Deleted Telegram bot token for workspace ${workspaceId}`);
+      debug(`[CredentialManager] Deleted Telegram bot token for workspace ${workspaceId}, account ${accountId}`);
     }
     return deleted;
   }

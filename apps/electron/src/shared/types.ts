@@ -904,6 +904,8 @@ export const IPC_CHANNELS = {
   TELEGRAM_STATUS: 'telegram:status',
   TELEGRAM_SEND_MESSAGE: 'telegram:send-message',
   TELEGRAM_GET_SAVED_TOKEN: 'telegram:get-saved-token',
+  TELEGRAM_GET_ACCESS_CONTROL: 'telegram:get-access-control',
+  TELEGRAM_SET_ACCESS_CONTROL: 'telegram:set-access-control',
   // Telegram events (main → renderer)
   TELEGRAM_CONNECTION_STATUS: 'telegram:connection-status',
   TELEGRAM_ERROR: 'telegram:error',
@@ -1455,6 +1457,23 @@ export interface TelegramSendMessageResponse extends TelegramResult {
 export interface TelegramGetSavedTokenResponse extends TelegramResult {
   token?: string
 }
+
+/**
+ * Telegram get access control result
+ */
+export interface TelegramGetAccessControlResponse extends TelegramResult {
+  accessControl?: {
+    dmPolicy: 'disabled' | 'pairing' | 'allowlist' | 'open'
+    groupPolicy: 'disabled' | 'allowlist' | 'open'
+    allowedUsers: string[]
+    allowedChats: string[]
+  }
+}
+
+/**
+ * Telegram set access control result
+ */
+export interface TelegramSetAccessControlResponse extends TelegramResult {}
 
 /**
  * Loop configuration input from UI

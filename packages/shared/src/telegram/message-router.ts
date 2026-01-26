@@ -1,4 +1,4 @@
-import type { TelegramMessage, TelegramErrorCode, TelegramSessionMetadata } from './types'
+import type { TelegramMessage, TelegramErrorCode, TelegramSessionMetadata, ReactionLevel } from './types'
 import { getSessionId } from './session-mapper'
 import { extractDirective, type PermissionDirective } from './directive-parser'
 import type { AgentEvent } from '@vesper/core/types'
@@ -29,6 +29,18 @@ const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000
  * Implemented by TelegramService to send messages via the bot.
  */
 export type ErrorFeedbackCallback = (chatId: number, errorMessage: string) => Promise<void>
+
+/**
+ * Callback for sending chat actions (typing indicator).
+ * Implemented by TelegramService to show activity indicators.
+ */
+export type ChatActionCallback = (chatId: number, action: 'typing') => Promise<void>
+
+/**
+ * Callback for setting message reactions.
+ * Implemented by TelegramService to add emoji reactions for status updates.
+ */
+export type MessageReactionCallback = (chatId: number, messageId: number, emoji: string | null) => Promise<void>
 
 /**
  * Error thrown during message routing with categorized error code.
@@ -202,6 +214,21 @@ export class TelegramMessageRouter {
   private errorFeedbackCallback: ErrorFeedbackCallback | null = null
 
   /**
+   * Callback for sending chat actions (typing indicator)
+   */
+  private chatActionCallback: ChatActionCallback | null = null
+
+  /**
+   * Callback for setting message reactions
+   */
+  private messageReactionCallback: MessageReactionCallback | null = null
+
+  /**
+   * Reaction level for status feedback (default: 'off')
+   */
+  private reactionLevel: ReactionLevel = 'off'
+
+  /**
    * Timeout duration for agent processing (default 5 minutes)
    */
   private timeoutMs: number
@@ -209,9 +236,10 @@ export class TelegramMessageRouter {
   constructor(
     private workspaceId: string,
     private sessionManager: SessionManager,
-    options?: { timeoutMs?: number }
+    options?: { timeoutMs?: number; reactionLevel?: ReactionLevel }
   ) {
     this.timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS
+    this.reactionLevel = options?.reactionLevel ?? 'off'
   }
 
   /**
@@ -220,6 +248,30 @@ export class TelegramMessageRouter {
    */
   setErrorFeedbackCallback(callback: ErrorFeedbackCallback): void {
     this.errorFeedbackCallback = callback
+  }
+
+  /**
+   * Set the callback for sending chat actions (typing indicator).
+   * This should be called by TelegramService after creating the router.
+   */
+  setChatActionCallback(callback: ChatActionCallback): void {
+    this.chatActionCallback = callback
+  }
+
+  /**
+   * Set the callback for setting message reactions.
+   * This should be called by TelegramService after creating the router.
+   */
+  setMessageReactionCallback(callback: MessageReactionCallback): void {
+    this.messageReactionCallback = callback
+  }
+
+  /**
+   * Set the reaction level for status feedback.
+   * Called by TelegramService when configuration changes.
+   */
+  setReactionLevel(level: ReactionLevel): void {
+    this.reactionLevel = level
   }
 
   /**
@@ -325,11 +377,21 @@ export class TelegramMessageRouter {
       // Step 4: Apply permission mode override BEFORE sending message
       await this.sessionManager.setSessionPermissionMode(sessionId, permissionMode)
 
-      // Step 5: Set up completion callback BEFORE sending message
+      // Step 5: Send typing indicator (shows "typing..." in chat)
+      if (this.chatActionCallback) {
+        void this.chatActionCallback(msg.chatId, 'typing')
+      }
+
+      // Step 6: Set acknowledgment reaction (👀) if enabled
+      if (this.shouldShowReaction('ack')) {
+        void this.setReaction(msg.chatId, msg.id, '👀')
+      }
+
+      // Step 7: Set up completion callback BEFORE sending message
       // This ensures we don't miss the completion event for fast responses
       this.setupCompletionCallback(sessionId, msg)
 
-      // Step 6: Send stripped message to agent (directive prefix removed)
+      // Step 8: Send stripped message to agent (directive prefix removed)
       // Non-blocking: don't wait for agent response
       void this.sessionManager.sendMessage(
         sessionId,
@@ -498,6 +560,12 @@ export class TelegramMessageRouter {
       errorMessage: timedOut ? 'Request timed out' : pending.errorMessage,
     }
 
+    // Set completion reaction (✅/❌) if enabled
+    if (this.shouldShowReaction('minimal')) {
+      const emoji = result.hasError ? '❌' : '✅'
+      void this.setReaction(result.chatId, messageId, emoji)
+    }
+
     // Clean up tracking maps
     this.pendingMessages.delete(messageId)
     this.sessionToMessageId.delete(pending.sessionId)
@@ -509,6 +577,43 @@ export class TelegramMessageRouter {
       } catch (error) {
         console.error('Error in session completion callback:', error)
       }
+    }
+  }
+
+  /**
+   * Check if a reaction should be shown based on the current reaction level.
+   *
+   * @param minLevel - Minimum reaction level required ('ack', 'minimal', 'extensive')
+   * @returns true if reaction should be shown
+   */
+  private shouldShowReaction(minLevel: 'ack' | 'minimal' | 'extensive'): boolean {
+    if (this.reactionLevel === 'off') return false
+
+    const levels: ReactionLevel[] = ['off', 'ack', 'minimal', 'extensive']
+    const currentIndex = levels.indexOf(this.reactionLevel)
+    const minIndex = levels.indexOf(minLevel)
+
+    return currentIndex >= minIndex
+  }
+
+  /**
+   * Set a message reaction via callback.
+   * Best-effort - failures are logged but not propagated.
+   *
+   * @param chatId - The Telegram chat ID
+   * @param messageId - The message ID to react to
+   * @param emoji - The emoji to use as reaction
+   */
+  private async setReaction(chatId: number, messageId: number, emoji: string): Promise<void> {
+    if (!this.messageReactionCallback) {
+      return
+    }
+
+    try {
+      await this.messageReactionCallback(chatId, messageId, emoji)
+    } catch (error) {
+      // Don't propagate - reactions are best-effort
+      console.warn(`Failed to set reaction ${emoji} on ${chatId}:${messageId}:`, error)
     }
   }
 
