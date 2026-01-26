@@ -32,9 +32,9 @@ if (isDebugMode) {
   setPerfEnabled(true)
 }
 
-// Custom URL scheme for deeplinks (e.g., craftagents://auth-complete)
-// Supports multi-instance dev: CRAFT_DEEPLINK_SCHEME env var (craftagents1, craftagents2, etc.)
-const DEEPLINK_SCHEME = process.env.CRAFT_DEEPLINK_SCHEME || 'craftagents'
+// Custom URL scheme for deeplinks (e.g., vesper://auth-complete)
+// Supports multi-instance dev: VESPER_DEEPLINK_SCHEME env var (vesper1, vesper2, etc.)
+const DEEPLINK_SCHEME = process.env.VESPER_DEEPLINK_SCHEME || 'vesper'
 
 let windowManager: WindowManager | null = null
 let sessionManager: SessionManager | null = null
@@ -46,7 +46,7 @@ let pendingDeepLink: string | null = null
 // Supports multi-instance dev: CRAFT_APP_NAME env var (e.g., "Vesper [1]")
 app.setName(process.env.CRAFT_APP_NAME || 'Vesper')
 
-// Register as default protocol client for craftagents:// URLs
+// Register as default protocol client for vesper:// URLs
 // This must be done before app.whenReady() on some platforms
 if (process.defaultApp) {
   // Development mode: need to pass the app path

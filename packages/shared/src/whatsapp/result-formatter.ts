@@ -59,10 +59,10 @@ export function shouldUseDeepLink(result: string): boolean {
  *
  * @param workspaceId - The workspace ID containing the session
  * @param sessionId - The session ID to link to
- * @returns Deep link URL in format: craftagents://session/{workspaceId}/{sessionId}
+ * @returns Deep link URL in format: vesper://session/{workspaceId}/{sessionId}
  */
 export function generateDeepLink(workspaceId: string, sessionId: string): string {
-  return `craftagents://session/${encodeURIComponent(workspaceId)}/${encodeURIComponent(sessionId)}`
+  return `vesper://session/${encodeURIComponent(workspaceId)}/${encodeURIComponent(sessionId)}`
 }
 
 /**

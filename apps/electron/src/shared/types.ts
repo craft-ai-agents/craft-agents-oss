@@ -701,7 +701,7 @@ export const IPC_CHANNELS = {
   MENU_NEW_WINDOW: 'menu:newWindow',
   MENU_OPEN_SETTINGS: 'menu:openSettings',
   MENU_KEYBOARD_SHORTCUTS: 'menu:keyboardShortcuts',
-  // Deep link navigation (main → renderer, for external craftagents:// URLs)
+  // Deep link navigation (main → renderer, for external vesper:// URLs)
   DEEP_LINK_NAVIGATE: 'deeplink:navigate',
 
   // Auth
@@ -1053,7 +1053,7 @@ export interface ElectronAPI {
   onMenuOpenSettings(callback: () => void): () => void
   onMenuKeyboardShortcuts(callback: () => void): () => void
 
-  // Deep link navigation listener (for external craftagents:// URLs)
+  // Deep link navigation listener (for external vesper:// URLs)
   onDeepLinkNavigate(callback: (nav: DeepLinkNavigation) => void): () => void
 
   // Auth

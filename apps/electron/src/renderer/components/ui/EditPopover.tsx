@@ -432,6 +432,13 @@ export interface EditPopoverProps {
    * Useful for context menu triggered popovers where focus management is tricky.
    */
   modal?: boolean
+  /**
+   * Workspace ID for the new session. When provided, the deep link will use
+   * the workspace-prefixed format (vesper://workspace/{id}/action/...) to ensure
+   * the session is created in the correct workspace, avoiding race conditions
+   * with focused window detection.
+   */
+  workspaceId?: string
 }
 
 /**
@@ -506,6 +513,7 @@ export function EditPopover({
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
   modal = false,
+  workspaceId,
 }: EditPopoverProps) {
   // Build placeholder: use override if provided, otherwise default to "change" wording
   // overridePlaceholder allows contexts like add-source/add-skill to say "add" instead of "change"
@@ -562,7 +570,12 @@ export function EditPopover({
     // The &badges= passes badge metadata for hiding the XML context in UI
     // The &workdir= sets the working directory (user_default, none, or absolute path)
     const workdirParam = workingDirectory ? `&workdir=${encodeURIComponent(workingDirectory)}` : ''
-    const url = `craftagents://action/new-chat?window=focused&input=${encodedInput}&send=true&mode=${permissionMode}&badges=${encodedBadges}${workdirParam}`
+    const queryParams = `window=focused&input=${encodedInput}&send=true&mode=${permissionMode}&badges=${encodedBadges}${workdirParam}`
+    // Use workspace-prefixed URL when workspaceId is provided to avoid race conditions
+    // with focused window detection (ensures session is created in the correct workspace)
+    const url = workspaceId
+      ? `vesper://workspace/${workspaceId}/action/new-chat?${queryParams}`
+      : `vesper://action/new-chat?${queryParams}`
 
     try {
       await window.electronAPI.openUrl(url)

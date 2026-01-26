@@ -248,14 +248,14 @@ navigate(routes.sidebar.flagged())        // Show flagged
 
 ### Deep Links
 
-External apps can navigate using `craftagents://` URLs:
+External apps can navigate using `vesper://` URLs:
 
 ```
-craftagents://settings
-craftagents://allChats/chat/session123
-craftagents://sources/source/github
-craftagents://action/new-chat
-craftagents://workspace/{id}/allChats/chat/abc123
+vesper://settings
+vesper://allChats/chat/session123
+vesper://sources/source/github
+vesper://action/new-chat
+vesper://workspace/{id}/allChats/chat/abc123
 ```
 
 See `CLAUDE.md` for complete route reference.

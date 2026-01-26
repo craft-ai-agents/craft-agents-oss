@@ -103,6 +103,7 @@ export function ScheduleList({ workspaceId }: ScheduleListProps) {
             context={scheduleConfig.context}
             example={scheduleConfig.example}
             overridePlaceholder={scheduleConfig.overridePlaceholder}
+            workspaceId={workspaceId}
             secondaryAction={{
               label: 'Advanced',
               onClick: () => setShowAdvancedModal(true),

@@ -45,7 +45,7 @@ async function findAvailablePort(): Promise<number> {
 
 export interface CreateCallbackServerOptions {
   appType?: AppType;
-  /** Deep link URL to redirect to after successful auth (e.g., craftagents://auth-complete) */
+  /** Deep link URL to redirect to after successful auth (e.g., vesper://auth-complete) */
   deeplinkUrl?: string;
 }
 

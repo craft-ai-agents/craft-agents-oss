@@ -24,7 +24,9 @@ Update all visual branding touchpoints:
 4. Electron app configuration
 5. Platform-specific icons (macOS, Windows, Linux)
 
-**Explicitly out of scope**: Package names (`@craft-agent/*`), directory paths (`~/.craft-agent/`), deep link scheme (`craftagents://`), code identifiers.
+**Explicitly out of scope**: Package names (`@craft-agent/*`), directory paths (`~/.craft-agent/`), code identifiers.
+
+> **Note**: The deep link scheme has been updated from `craftagents://` to `vesper://` in a subsequent change.
 
 ---
 
