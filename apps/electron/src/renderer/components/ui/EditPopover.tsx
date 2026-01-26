@@ -68,6 +68,7 @@ export type EditContextKey =
   | 'edit-statuses'
   | 'add-template'     // Create new session template
   | 'add-schedule'     // Create new scheduled task
+  | 'edit-schedule'    // Edit existing scheduled task with AI
 
 /**
  * Full edit configuration including context for agent and example for UI.
@@ -361,6 +362,23 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
     },
     example: 'Remind me to review PRs every day at 9am',
     overridePlaceholder: 'What would you like to schedule?',
+  }),
+
+  // Schedule editing context - location contains JSON with schedule data
+  'edit-schedule': (location) => ({
+    context: {
+      label: 'Edit Schedule',
+      filePath: location, // location is JSON string with schedule data
+      context:
+        'The user wants to modify an existing scheduled task. ' +
+        'The current schedule details are provided below. Parse their natural language request to understand what they want to change. ' +
+        'Common requests: "change the time to 3pm", "make it run hourly", "update the prompt to...", "disable it", "rename it to...". ' +
+        'Use the schedule_update tool with the scheduleId and only the fields being changed. ' +
+        'Always confirm the changes with the user before applying. ' +
+        'If the request is ambiguous, ask clarifying questions.',
+    },
+    example: 'Change it to run at 3pm',
+    overridePlaceholder: 'How would you like to change this schedule?',
   }),
 }
 

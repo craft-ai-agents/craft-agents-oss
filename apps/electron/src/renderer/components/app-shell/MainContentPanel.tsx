@@ -258,6 +258,7 @@ function ScheduleDetailPanelWrapper({ scheduleId, workspaceId }: ScheduleDetailP
   return (
     <ScheduleDetailPanel
       schedule={selectedSchedule}
+      workspaceId={workspaceId}
       onUpdate={handleUpdate}
       onRunNow={handleRunNow}
     />

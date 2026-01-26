@@ -1,23 +1,25 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Clock, Check, X, Play, Loader2, Edit2, ExternalLink } from 'lucide-react'
+import { Clock, Check, X, Play, Loader2, Edit2, ExternalLink, Sparkles } from 'lucide-react'
 import { Cron } from 'croner'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
+import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
 import { navigate, routes } from '@/lib/navigate'
 import type { Schedule } from '../../../shared/types'
 
 interface ScheduleDetailPanelProps {
   schedule: Schedule | null
+  workspaceId?: string
   onUpdate?: (id: string, updates: { prompt: string }) => void
   onRunNow?: (id: string) => void
 }
 
-export function ScheduleDetailPanel({ schedule, onUpdate, onRunNow }: ScheduleDetailPanelProps) {
+export function ScheduleDetailPanel({ schedule, workspaceId, onUpdate, onRunNow }: ScheduleDetailPanelProps) {
   if (!schedule) {
     return <EmptyState />
   }
 
-  return <DetailView schedule={schedule} onUpdate={onUpdate} onRunNow={onRunNow} />
+  return <DetailView schedule={schedule} workspaceId={workspaceId} onUpdate={onUpdate} onRunNow={onRunNow} />
 }
 
 function EmptyState() {
@@ -40,17 +42,33 @@ function EmptyState() {
 
 interface DetailViewProps {
   schedule: Schedule
+  workspaceId?: string
   onUpdate?: (id: string, updates: { prompt: string }) => void
   onRunNow?: (id: string) => void
 }
 
-function DetailView({ schedule, onUpdate, onRunNow }: DetailViewProps) {
+function DetailView({ schedule, workspaceId, onUpdate, onRunNow }: DetailViewProps) {
   const [isEditingPrompt, setIsEditingPrompt] = useState(false)
   const [editedPrompt, setEditedPrompt] = useState(schedule.prompt)
   const [countdown, setCountdown] = useState<string>('')
 
   // Support both 'cron' (standard) and 'customCron' (legacy/manual) fields
   const cronExpression = schedule.cron || (schedule as Record<string, unknown>).customCron as string | undefined
+
+  // Build edit context with schedule details for AI editing
+  const editScheduleConfig = useMemo(() => {
+    // Create a JSON context with schedule details for the AI
+    const scheduleContext = JSON.stringify({
+      scheduleId: schedule.id,
+      name: schedule.name,
+      prompt: schedule.prompt,
+      cron: cronExpression,
+      timezone: schedule.timezone,
+      enabled: schedule.enabled,
+      scheduledFor: schedule.scheduledFor,
+    })
+    return getEditConfig('edit-schedule', scheduleContext)
+  }, [schedule.id, schedule.name, schedule.prompt, cronExpression, schedule.timezone, schedule.enabled, schedule.scheduledFor])
 
   // Calculate next run time
   const nextRun = useMemo(() => {
@@ -145,17 +163,37 @@ function DetailView({ schedule, onUpdate, onRunNow }: DetailViewProps) {
             <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
               Next Run
             </h2>
-            {onRunNow && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => onRunNow(schedule.id)}
-                className="gap-2"
-              >
-                <Play className="w-3 h-3" />
-                Run Now
-              </Button>
-            )}
+            <div className="flex items-center gap-2">
+              {workspaceId && (
+                <EditPopover
+                  trigger={
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-2"
+                    >
+                      <Sparkles className="w-3 h-3" />
+                      Edit with AI
+                    </Button>
+                  }
+                  context={editScheduleConfig.context}
+                  example={editScheduleConfig.example}
+                  overridePlaceholder={editScheduleConfig.overridePlaceholder}
+                  workspaceId={workspaceId}
+                />
+              )}
+              {onRunNow && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => onRunNow(schedule.id)}
+                  className="gap-2"
+                >
+                  <Play className="w-3 h-3" />
+                  Run Now
+                </Button>
+              )}
+            </div>
           </div>
 
           {schedule.enabled ? (

@@ -2,7 +2,7 @@ import { app } from 'electron'
 import { join } from 'path'
 import { existsSync } from 'fs'
 import { rm, readFile } from 'fs/promises'
-import { VesperAgent, type AgentEvent, setPermissionMode, type PermissionMode, unregisterSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest, type ScheduleCreateData, type ScheduleCreateResult } from '@vesper/shared/agent'
+import { VesperAgent, type AgentEvent, setPermissionMode, type PermissionMode, unregisterSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest, type ScheduleCreateData, type ScheduleCreateResult, type ScheduleUpdateData, type ScheduleUpdateResult } from '@vesper/shared/agent'
 import { sessionLog, isDebugMode, getLogFilePath } from './logger'
 import { createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk'
 import type { WindowManager } from './window-manager'
@@ -1515,6 +1515,99 @@ export class SessionManager {
           };
         } catch (error) {
           sessionLog.error(`Failed to create schedule:`, error)
+          return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          };
+        }
+      }
+
+      // Wire up onScheduleUpdate for conversational schedule editing
+      managed.agent.onScheduleUpdate = async (data: ScheduleUpdateData): Promise<ScheduleUpdateResult> => {
+        sessionLog.info(`Schedule update request for session ${managed.id}:`, data.scheduleId)
+        try {
+          const scheduler = getScheduler(managed.workspace.id, managed.workspace.rootPath);
+
+          // Build partial update from provided fields
+          const updates: Partial<{
+            name: string;
+            prompt: string;
+            cron: string | null;
+            scheduledFor: number | null;
+            timezone: string;
+            enabled: boolean;
+          }> = {};
+
+          if (data.name !== undefined) updates.name = data.name;
+          if (data.prompt !== undefined) updates.prompt = data.prompt;
+          if (data.enabled !== undefined) updates.enabled = data.enabled;
+
+          // Handle timing updates - need to regenerate cron if timing fields changed
+          if (data.scheduleType || data.frequency || data.hour !== undefined || data.minute !== undefined ||
+              data.dayOfWeek !== undefined || data.dayOfMonth !== undefined || data.customCron) {
+            // Get the existing schedule to merge with updates
+            const existingSchedules = scheduler.list();
+            const existing = existingSchedules.find(s => s.id === data.scheduleId);
+            if (!existing) {
+              return {
+                success: false,
+                error: `Schedule not found: ${data.scheduleId}`,
+              };
+            }
+
+            // Build create data structure to reuse generateCronFromParams
+            const scheduleType = data.scheduleType || (existing.cron ? 'recurring' : 'once');
+            if (scheduleType === 'recurring') {
+              const createData: ScheduleCreateData = {
+                name: data.name || existing.name,
+                prompt: data.prompt || existing.prompt,
+                scheduleType: 'recurring',
+                frequency: data.frequency || data.customCron ? 'custom' : 'daily',
+                hour: data.hour,
+                minute: data.minute,
+                dayOfWeek: data.dayOfWeek,
+                dayOfMonth: data.dayOfMonth,
+                customCron: data.customCron,
+              };
+              updates.cron = generateCronFromParams(createData);
+              updates.scheduledFor = null;
+            } else if (data.scheduledFor) {
+              updates.cron = null;
+              updates.scheduledFor = Math.floor(new Date(data.scheduledFor).getTime() / 1000);
+            }
+          }
+
+          const schedule = await scheduler.update(data.scheduleId, updates);
+          if (!schedule) {
+            return {
+              success: false,
+              error: `Schedule not found: ${data.scheduleId}`,
+            };
+          }
+
+          const nextRun = scheduler.getNextRun(schedule);
+
+          // Use cronstrue for human-readable if available
+          let humanReadable: string | undefined;
+          if (schedule.cron) {
+            try {
+              const cronstrue = await import('cronstrue');
+              humanReadable = cronstrue.toString(schedule.cron);
+            } catch {
+              humanReadable = undefined;
+            }
+          }
+
+          return {
+            success: true,
+            scheduleId: schedule.id,
+            scheduleName: schedule.name,
+            cronExpression: schedule.cron ?? undefined,
+            humanReadable,
+            nextRun: nextRun?.toISOString(),
+          };
+        } catch (error) {
+          sessionLog.error(`Failed to update schedule:`, error)
           return {
             success: false,
             error: error instanceof Error ? error.message : 'Unknown error',

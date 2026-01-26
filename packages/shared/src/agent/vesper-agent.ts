@@ -481,6 +481,14 @@ export class VesperAgent {
   // This enables auto-enabling sources when the agent tries to use their tools.
   public onSourceActivationRequest: ((sourceSlug: string) => Promise<boolean>) | null = null;
 
+  // Callback when a schedule is created via conversational AI setup.
+  // Set by session manager to handle schedule_create tool calls.
+  public onScheduleCreate: ((data: import('./session-scoped-tools.ts').ScheduleCreateData) => Promise<import('./session-scoped-tools.ts').ScheduleCreateResult>) | null = null;
+
+  // Callback when a schedule is updated via conversational AI editing.
+  // Set by session manager to handle schedule_update tool calls.
+  public onScheduleUpdate: ((data: import('./session-scoped-tools.ts').ScheduleUpdateData) => Promise<import('./session-scoped-tools.ts').ScheduleUpdateResult>) | null = null;
+
   constructor(config: VesperAgentConfig) {
     // Resolve model: prioritize session model > config model > global config > DEFAULT_MODEL
     const resolvedModel = config.session?.model ?? config.model ?? loadStoredConfig()?.model ?? DEFAULT_MODEL;
@@ -521,6 +529,20 @@ export class VesperAgent {
       onAuthRequest: (request) => {
         this.onDebug?.(`[VesperAgent] onAuthRequest received: ${request.sourceSlug} (type: ${request.type})`);
         this.onAuthRequest?.(request);
+      },
+      onScheduleCreate: async (data) => {
+        this.onDebug?.(`[VesperAgent] onScheduleCreate received: ${data.name}`);
+        if (this.onScheduleCreate) {
+          return this.onScheduleCreate(data);
+        }
+        return { success: false, error: 'Schedule creation not available' };
+      },
+      onScheduleUpdate: async (data) => {
+        this.onDebug?.(`[VesperAgent] onScheduleUpdate received: ${data.scheduleId}`);
+        if (this.onScheduleUpdate) {
+          return this.onScheduleUpdate(data);
+        }
+        return { success: false, error: 'Schedule update not available' };
       },
     });
 

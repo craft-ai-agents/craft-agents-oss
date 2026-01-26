@@ -188,6 +188,38 @@ export interface ScheduleCreateResult {
 }
 
 /**
+ * Data required to update a schedule via AI tool.
+ * Only scheduleId is required - all other fields are optional updates.
+ */
+export interface ScheduleUpdateData {
+  scheduleId: string;
+  name?: string;
+  prompt?: string;
+  scheduleType?: 'recurring' | 'once';
+  frequency?: 'hourly' | 'daily' | 'weekdays' | 'weekly' | 'monthly' | 'custom';
+  hour?: number;
+  minute?: number;
+  dayOfWeek?: number;
+  dayOfMonth?: number;
+  customCron?: string;
+  scheduledFor?: string;
+  enabled?: boolean;
+}
+
+/**
+ * Result from schedule_update tool.
+ */
+export interface ScheduleUpdateResult {
+  success: boolean;
+  scheduleId?: string;
+  scheduleName?: string;
+  nextRun?: string;
+  cronExpression?: string;
+  humanReadable?: string;
+  error?: string;
+}
+
+/**
  * Callbacks for session-scoped tool operations.
  * These are registered per-session and invoked by tools.
  */
@@ -206,6 +238,8 @@ export interface SessionScopedToolCallbacks {
   onAuthRequest?: (request: AuthRequest) => void;
   /** Called when a schedule is created via conversational setup */
   onScheduleCreate?: (data: ScheduleCreateData) => Promise<ScheduleCreateResult>;
+  /** Called when a schedule is updated via conversational AI editing */
+  onScheduleUpdate?: (data: ScheduleUpdateData) => Promise<ScheduleUpdateResult>;
 }
 
 /**
@@ -2189,6 +2223,114 @@ export function createScheduleCreateTool(sessionId: string) {
   );
 }
 
+/**
+ * Create a session-scoped schedule_update tool.
+ * Updates existing scheduled tasks via natural language AI editing.
+ */
+export function createScheduleUpdateTool(sessionId: string) {
+  return tool(
+    'schedule_update',
+    `Update an existing scheduled task.
+
+**Use this tool to modify any aspect of a schedule:**
+- Change the name or prompt
+- Update the timing (frequency, hour, minute, day)
+- Enable or disable the schedule
+- Convert between recurring and one-time
+
+**Required:**
+- scheduleId: The ID of the schedule to update (provided in context)
+
+**Optional fields to update:**
+- name: New name for the schedule
+- prompt: New prompt to run
+- scheduleType: Change to "recurring" or "once"
+- frequency: hourly|daily|weekdays|weekly|monthly|custom
+- hour: 0-23
+- minute: 0-59
+- dayOfWeek: 0-6 (0=Sunday)
+- dayOfMonth: 1-31
+- customCron: Raw cron expression
+- scheduledFor: ISO timestamp for one-time
+- enabled: true/false
+
+**Examples:**
+- Change time: { scheduleId: "xxx", hour: 15, minute: 30 }
+- Change prompt: { scheduleId: "xxx", prompt: "New task description" }
+- Disable: { scheduleId: "xxx", enabled: false }
+- Change to weekly: { scheduleId: "xxx", frequency: "weekly", dayOfWeek: 1 }
+
+**IMPORTANT:**
+- Always confirm changes with the user before updating
+- Only include fields that are being changed
+- The scheduleId is provided in the edit context`,
+    {
+      scheduleId: z.string().describe('ID of the schedule to update'),
+      name: z.string().min(1).max(100).optional().describe('New name for the schedule'),
+      prompt: z.string().min(1).optional().describe('New prompt to run'),
+      scheduleType: z.enum(['recurring', 'once']).optional().describe('Type of schedule'),
+      frequency: z.enum(['hourly', 'daily', 'weekdays', 'weekly', 'monthly', 'custom']).optional()
+        .describe('Frequency for recurring schedules'),
+      hour: z.number().min(0).max(23).optional().describe('Hour in 24-hour format (0-23)'),
+      minute: z.number().min(0).max(59).optional().describe('Minute (0-59)'),
+      dayOfWeek: z.number().min(0).max(6).optional().describe('Day of week (0=Sun, 1=Mon, ..., 6=Sat)'),
+      dayOfMonth: z.number().min(1).max(31).optional().describe('Day of month (1-31)'),
+      customCron: z.string().optional().describe('Custom cron expression'),
+      scheduledFor: z.string().optional().describe('ISO timestamp for one-time schedules'),
+      enabled: z.boolean().optional().describe('Enable or disable the schedule'),
+    },
+    async (args) => {
+      const callbacks = sessionScopedToolCallbackRegistry.get(sessionId);
+
+      if (!callbacks?.onScheduleUpdate) {
+        return {
+          content: [{ type: 'text' as const, text: 'Schedule update not available in this context.' }],
+          isError: true,
+        };
+      }
+
+      try {
+        const result = await callbacks.onScheduleUpdate(args);
+
+        if (result.success) {
+          const changes: string[] = [];
+          if (args.name) changes.push(`Name: ${args.name}`);
+          if (args.prompt) changes.push(`Prompt: ${args.prompt.substring(0, 50)}${args.prompt.length > 50 ? '...' : ''}`);
+          if (args.frequency) changes.push(`Frequency: ${args.frequency}`);
+          if (args.hour !== undefined || args.minute !== undefined) {
+            changes.push(`Time: ${args.hour ?? '*'}:${String(args.minute ?? 0).padStart(2, '0')}`);
+          }
+          if (args.enabled !== undefined) changes.push(`Enabled: ${args.enabled}`);
+
+          return {
+            content: [{
+              type: 'text' as const,
+              text: `✓ Schedule "${result.scheduleName}" updated successfully!\n\n` +
+                    (changes.length > 0 ? `Changes:\n${changes.map(c => `  • ${c}`).join('\n')}\n\n` : '') +
+                    `Schedule: ${result.humanReadable || result.cronExpression}\n` +
+                    `Next run: ${result.nextRun}`
+            }],
+            isError: false,
+          };
+        } else {
+          return {
+            content: [{ type: 'text' as const, text: `Failed to update schedule: ${result.error}` }],
+            isError: true,
+          };
+        }
+      } catch (error) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `Error updating schedule: ${error instanceof Error ? error.message : 'Unknown error'}`
+          }],
+          isError: true,
+        };
+      }
+    }
+  );
+}
+
 // ============================================================
 // Session-Scoped Tools Provider
 // ============================================================
@@ -2230,8 +2372,9 @@ export function getSessionScopedTools(sessionId: string, workspaceRootPath: stri
         createCredentialPromptTool(sessionId, workspaceRootPath),
         // UI rendering tool for AI-generated components
         createRenderUiTool(sessionId),
-        // Schedule creation tool for conversational setup
+        // Schedule tools for conversational setup
         createScheduleCreateTool(sessionId),
+        createScheduleUpdateTool(sessionId),
       ],
     });
     sessionScopedToolsCache.set(cacheKey, cached);

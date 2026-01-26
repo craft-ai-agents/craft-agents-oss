@@ -30,6 +30,11 @@ export {
   type SlackOAuthAuthRequest,
   type MicrosoftOAuthAuthRequest,
   type CredentialInputMode,
+  // Schedule types (conversational schedule management)
+  type ScheduleCreateData,
+  type ScheduleCreateResult,
+  type ScheduleUpdateData,
+  type ScheduleUpdateResult,
 } from './session-scoped-tools.ts';
 
 // Export mode-manager - Centralized mode management
