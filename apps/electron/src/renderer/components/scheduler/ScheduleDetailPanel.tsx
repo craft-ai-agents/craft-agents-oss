@@ -49,16 +49,19 @@ function DetailView({ schedule, onUpdate, onRunNow }: DetailViewProps) {
   const [editedPrompt, setEditedPrompt] = useState(schedule.prompt)
   const [countdown, setCountdown] = useState<string>('')
 
+  // Support both 'cron' (standard) and 'customCron' (legacy/manual) fields
+  const cronExpression = schedule.cron || (schedule as Record<string, unknown>).customCron as string | undefined
+
   // Calculate next run time
   const nextRun = useMemo(() => {
-    if (!schedule.enabled || !schedule.cron) return null
+    if (!schedule.enabled || !cronExpression) return null
     try {
-      const cron = new Cron(schedule.cron, { timezone: schedule.timezone })
+      const cron = new Cron(cronExpression, { timezone: schedule.timezone })
       return cron.nextRun()
     } catch {
       return null
     }
-  }, [schedule.cron, schedule.timezone, schedule.enabled])
+  }, [cronExpression, schedule.timezone, schedule.enabled])
 
   // Update countdown every second
   useEffect(() => {

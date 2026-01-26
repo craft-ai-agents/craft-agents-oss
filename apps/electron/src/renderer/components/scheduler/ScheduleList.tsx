@@ -189,8 +189,10 @@ interface ScheduleCardProps {
 }
 
 function ScheduleCard({ schedule, isSelected, onSelect, onEdit, onDelete, onToggle, onRunNow }: ScheduleCardProps) {
-  const nextRun = schedule.enabled && schedule.cron
-    ? getNextRun(schedule.cron, schedule.timezone)
+  // Support both 'cron' (standard) and 'customCron' (legacy/manual) fields
+  const cronExpression = schedule.cron || (schedule as Record<string, unknown>).customCron as string | undefined
+  const nextRun = schedule.enabled && cronExpression
+    ? getNextRun(cronExpression, schedule.timezone)
     : null
 
   return (
@@ -254,11 +256,11 @@ function ScheduleCard({ schedule, isSelected, onSelect, onEdit, onDelete, onTogg
       </div>
 
       <div className="mt-2 text-xs text-muted-foreground">
-        {schedule.cron ? (
+        {cronExpression ? (
           nextRun ? `Next: ${nextRun.toLocaleString()}` : 'Invalid schedule'
         ) : (
           schedule.scheduledFor
-            ? `Scheduled for: ${new Date(schedule.scheduledFor * 1000).toLocaleString()}`
+            ? `Scheduled for: ${formatScheduledFor(schedule.scheduledFor)}`
             : 'Completed'
         )}
         {schedule.lastRunAt && (
@@ -277,5 +279,21 @@ function getNextRun(cron: string, timezone: string): Date | null {
     return cronJob.nextRun()
   } catch {
     return null
+  }
+}
+
+/**
+ * Format scheduledFor value which can be either:
+ * - Unix timestamp (number) - standard format from scheduler.create()
+ * - ISO string - legacy format from manual creation or older tool versions
+ */
+function formatScheduledFor(scheduledFor: number | string): string {
+  try {
+    const date = typeof scheduledFor === 'number'
+      ? new Date(scheduledFor * 1000)
+      : new Date(scheduledFor)
+    return date.toLocaleString()
+  } catch {
+    return 'Invalid Date'
   }
 }
