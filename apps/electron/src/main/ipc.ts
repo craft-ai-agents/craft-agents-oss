@@ -1974,23 +1974,60 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
           const localSkillDir = join(TEAM_SKILLS_DIR, skillDir.name)
           mkdirSync(localSkillDir, { recursive: true })
 
-          // Download all files in the skill directory
-          for (const file of skillFiles) {
-            if (file.type !== 'file' || !file.download_url) continue
+          // Recursive function to download directory contents
+          const downloadDirectory = async (
+            apiPath: string,
+            localPath: string
+          ): Promise<void> => {
+            const dirResponse = await fetch(
+              `https://api.github.com/repos/${owner}/${repo}/contents/${apiPath}`,
+              {
+                headers: {
+                  Authorization: `Bearer ${credential.value}`,
+                  Accept: 'application/vnd.github.v3+json',
+                  'User-Agent': 'Vesper-Team-Skills',
+                },
+                signal: AbortSignal.timeout(30000),
+              }
+            )
 
-            const fileResponse = await fetch(file.download_url, {
-              headers: {
-                Authorization: `Bearer ${credential.value}`,
-                'User-Agent': 'Vesper-Team-Skills',
-              },
-              signal: AbortSignal.timeout(30000),
-            })
+            if (!dirResponse.ok) return
 
-            if (fileResponse.ok) {
-              const content = await fileResponse.text()
-              writeFileSync(join(localSkillDir, file.name), content, 'utf-8')
+            const items = (await dirResponse.json()) as Array<{
+              name: string
+              type: string
+              path: string
+              download_url: string | null
+            }>
+
+            for (const item of items) {
+              if (item.name.startsWith('.')) continue
+
+              if (item.type === 'file' && item.download_url) {
+                // Download file
+                const fileResponse = await fetch(item.download_url, {
+                  headers: {
+                    Authorization: `Bearer ${credential.value}`,
+                    'User-Agent': 'Vesper-Team-Skills',
+                  },
+                  signal: AbortSignal.timeout(30000),
+                })
+
+                if (fileResponse.ok) {
+                  const content = await fileResponse.text()
+                  writeFileSync(join(localPath, item.name), content, 'utf-8')
+                }
+              } else if (item.type === 'dir') {
+                // Create subdirectory and recurse
+                const subDirPath = join(localPath, item.name)
+                mkdirSync(subDirPath, { recursive: true })
+                await downloadDirectory(item.path, subDirPath)
+              }
             }
           }
+
+          // Download skill directory recursively
+          await downloadDirectory(skillDir.path, localSkillDir)
 
           syncedCount++
           ipcLog.info(`Synced team skill: ${skillDir.name}`)
