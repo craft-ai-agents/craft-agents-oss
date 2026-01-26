@@ -430,8 +430,8 @@ Key IPC handlers in `apps/electron/src/main/ipc.ts`:
 
 - **Product Name:** Vesper
 - **Owner:** Tin from Ather Labs
-- **Website:** vesper.atherslabs.com
-- **Repository:** github.com/atherslabs/vesper
+- **Website:** github.com/AskTinNguyen/vesper
+- **Repository:** github.com/AskTinNguyen/vesper
 - **Deep Linking:** `vesper://` protocol
 - **Configuration Dir:** `~/.vesper/`
 - **Logs Dir:** `~/Library/Logs/Vesper/`

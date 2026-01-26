@@ -15,22 +15,21 @@ We built Vesper because we wanted a better, more opinionated approach to working
 
 ## Installation
 
-### One-Line Install (Recommended)
+### Download Pre-Built Binaries (Recommended)
 
-**macOS / Linux:**
-```bash
-curl -fsSL https://vesper.atherslabs.com/install-app.sh | bash
-```
+Download the latest release for your platform from [GitHub Releases](https://github.com/AskTinNguyen/vesper/releases):
 
-**Windows (PowerShell):**
-```powershell
-irm https://vesper.atherslabs.com/install-app.ps1 | iex
-```
+| Platform | File |
+|----------|------|
+| macOS (Apple Silicon) | `Vesper-arm64.dmg` |
+| macOS (Intel) | `Vesper-x64.dmg` |
+| Windows | `Vesper-Setup.exe` |
+| Linux | `Vesper-x64.AppImage` |
 
 ### Build from Source
 
 ```bash
-git clone https://github.com/atherslabs/vesper.git
+git clone https://github.com/AskTinNguyen/vesper.git
 cd vesper
 bun install
 bun run electron:start
