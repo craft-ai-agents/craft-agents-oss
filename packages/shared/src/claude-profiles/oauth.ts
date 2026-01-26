@@ -8,7 +8,6 @@
  */
 
 import { randomBytes, createHash } from 'node:crypto';
-import open from 'open';
 import { getCredentialManager } from '../credentials/manager';
 import type { ClaudeProfile } from './types';
 import { createProfile, updateProfile } from './storage';
@@ -133,10 +132,8 @@ export async function startProfileOAuth(
 
   const authUrl = `${CLAUDE_AUTH_URL}?${params.toString()}`;
 
-  // Open browser
-  onStatus?.('Opening browser for authentication...');
-  await open(authUrl);
-
+  // Note: Browser opening is handled by the caller (IPC handler or frontend)
+  // to avoid duplicate browser windows
   onStatus?.('Waiting for you to copy the authorization code...');
 
   return { authUrl, state };
