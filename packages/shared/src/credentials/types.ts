@@ -104,7 +104,7 @@ export interface StoredCredential {
 // could contain "/" (e.g., URLs like "https://api.example.com")
 const CREDENTIAL_DELIMITER = '::';
 
-/** Source credential types (workspace-scoped credentials) */
+/** Source credential types (workspace-scoped credentials requiring workspaceId + sourceId) */
 const SOURCE_CREDENTIAL_TYPES = [
   'source_oauth',
   'source_bearer',
@@ -114,17 +114,33 @@ const SOURCE_CREDENTIAL_TYPES = [
   'slack_oauth',
   'telegram_bot_token',
   'github_access_token',
+] as const;
+
+/** Profile-scoped credential types (only need sourceId, no workspaceId) */
+const PROFILE_CREDENTIAL_TYPES = [
   'claude_profile',
 ] as const;
 
-/** Check if type is a source credential */
+/** Check if type is a source credential (workspace-scoped) */
 function isSourceCredential(type: CredentialType): boolean {
   return (SOURCE_CREDENTIAL_TYPES as readonly string[]).includes(type);
+}
+
+/** Check if type is a profile credential (profile-scoped, no workspace) */
+function isProfileCredential(type: CredentialType): boolean {
+  return (PROFILE_CREDENTIAL_TYPES as readonly string[]).includes(type);
 }
 
 /** Convert CredentialId to credential store account string */
 export function credentialIdToAccount(id: CredentialId): string {
   const parts: string[] = [id.type];
+
+  // Profile-scoped format (no workspace needed):
+  // claude_profile::{profileId}
+  if (isProfileCredential(id.type) && id.sourceId) {
+    parts.push(id.sourceId);
+    return parts.join(CREDENTIAL_DELIMITER);
+  }
 
   // Workspace-scoped format:
   // Source credentials: source_oauth::{workspaceId}::{sourceId}
@@ -149,6 +165,11 @@ export function accountToCredentialId(account: string): CredentialId | null {
   }
 
   const type = typeStr;
+
+  // Profile-scoped format: claude_profile::{profileId}
+  if (isProfileCredential(type) && parts.length === 2 && parts[1] !== 'global') {
+    return { type, sourceId: parts[1] };
+  }
 
   // Workspace-scoped format:
   // Source credentials: source_oauth::{workspaceId}::{sourceId}

@@ -2,10 +2,12 @@
  * Claude Profiles - Usage Monitor
  *
  * Monitors usage across all Claude profiles by polling Anthropic's usage API.
+ * Falls back to parsing Claude CLI output when API is unavailable.
  * Emits events for UI updates and auto-switching triggers.
  */
 
 import { EventEmitter } from 'events';
+import { spawn } from 'node:child_process';
 import type { ClaudeProfile, ClaudeUsageData } from './types';
 import { listProfiles, updateProfileUsage, recordAuthFailure, isInAuthCooldown } from './storage';
 import { getProfileTokens, isProfileTokenExpired, refreshProfileToken } from './oauth';
@@ -14,6 +16,7 @@ import { debug } from '../utils/debug';
 const USAGE_API_URL = 'https://api.anthropic.com/api/oauth/usage';
 const DEFAULT_POLL_INTERVAL_MS = 30 * 1000; // 30 seconds
 const AUTH_FAILURE_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
+const CLI_TIMEOUT_MS = 10 * 1000; // 10 seconds for CLI command
 
 /**
  * Events emitted by ClaudeUsageMonitor.
@@ -226,11 +229,27 @@ export class ClaudeUsageMonitor extends EventEmitter {
   }
 
   /**
-   * Fetch usage data from Anthropic's API.
-   * Returns null if the endpoint is unavailable (404) or other non-auth errors.
-   * Throws for auth errors (401, 403) so they can be handled specially.
+   * Fetch usage data from Anthropic's API with CLI fallback.
+   * Tries API first, then falls back to parsing Claude CLI output.
+   * Returns null if both methods fail.
    */
   private async fetchUsage(accessToken: string): Promise<ClaudeUsageData | null> {
+    // Try API first
+    const apiResult = await this.fetchUsageViaAPI(accessToken);
+    if (apiResult) {
+      return apiResult;
+    }
+
+    // Fall back to CLI
+    debug('[ClaudeUsageMonitor] API unavailable, trying CLI fallback');
+    return this.fetchUsageViaCLI(accessToken);
+  }
+
+  /**
+   * Fetch usage data from Anthropic's API.
+   * Returns null if the endpoint is unavailable or returns an error.
+   */
+  private async fetchUsageViaAPI(accessToken: string): Promise<ClaudeUsageData | null> {
     try {
       const response = await fetch(USAGE_API_URL, {
         headers: {
@@ -239,21 +258,16 @@ export class ClaudeUsageMonitor extends EventEmitter {
         },
       });
 
-      // Auth errors should be thrown for special handling
-      if (response.status === 401 || response.status === 403) {
-        throw new Error(`Usage API auth error: ${response.status} ${response.statusText}`);
-      }
-
-      // Other errors (including 404) - endpoint may not exist
+      // Any error means API is not available - try CLI fallback
       if (!response.ok) {
-        debug(`[ClaudeUsageMonitor] Usage API returned ${response.status}, usage data unavailable`);
+        const text = await response.text().catch(() => '');
+        debug(`[ClaudeUsageMonitor] Usage API returned ${response.status}: ${text.slice(0, 100)}`);
         return null;
       }
 
       const data = await response.json() as {
         five_hour_utilization?: number;
         seven_day_utilization?: number;
-        // Additional fields we may receive
         is_rate_limited?: boolean;
       };
 
@@ -268,12 +282,106 @@ export class ClaudeUsageMonitor extends EventEmitter {
         timestamp: Date.now(),
       };
     } catch (error) {
-      // Re-throw auth errors
-      if (error instanceof Error && (error.message.includes('401') || error.message.includes('403'))) {
-        throw error;
+      debug('[ClaudeUsageMonitor] Usage API fetch error:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Fetch usage data by parsing Claude CLI output.
+   * Runs `claude /usage` and parses the response.
+   */
+  private async fetchUsageViaCLI(accessToken: string): Promise<ClaudeUsageData | null> {
+    return new Promise((resolve) => {
+      try {
+        // Run claude with the OAuth token in environment
+        const proc = spawn('claude', ['-p', '/usage'], {
+          env: {
+            ...process.env,
+            CLAUDE_CODE_OAUTH_TOKEN: accessToken,
+          },
+          timeout: CLI_TIMEOUT_MS,
+        });
+
+        let stdout = '';
+        let stderr = '';
+
+        proc.stdout?.on('data', (data) => {
+          stdout += data.toString();
+        });
+
+        proc.stderr?.on('data', (data) => {
+          stderr += data.toString();
+        });
+
+        proc.on('error', (error) => {
+          debug('[ClaudeUsageMonitor] CLI spawn error:', error);
+          resolve(null);
+        });
+
+        proc.on('close', (code) => {
+          if (code !== 0) {
+            debug(`[ClaudeUsageMonitor] CLI exited with code ${code}: ${stderr}`);
+            resolve(null);
+            return;
+          }
+
+          const usage = this.parseUsageOutput(stdout);
+          resolve(usage);
+        });
+
+        // Kill process after timeout
+        setTimeout(() => {
+          if (!proc.killed) {
+            proc.kill('SIGTERM');
+            debug('[ClaudeUsageMonitor] CLI command timed out');
+            resolve(null);
+          }
+        }, CLI_TIMEOUT_MS);
+
+      } catch (error) {
+        debug('[ClaudeUsageMonitor] CLI fallback error:', error);
+        resolve(null);
       }
-      // Log and return null for network/other errors
-      debug('[ClaudeUsageMonitor] Usage fetch error:', error);
+    });
+  }
+
+  /**
+   * Parse Claude CLI /usage output to extract usage percentages.
+   *
+   * Example output:
+   *   Current session ████▌ 9% used Resets 11:59pm
+   *   Current week (all models) 79% used Resets Nov 1, 10:59am
+   *   Current week (Opus) 0% used
+   */
+  private parseUsageOutput(output: string): ClaudeUsageData | null {
+    try {
+      // Match session usage: "Current session ... X% used"
+      const sessionMatch = output.match(/Current session[^]*?(\d+)%\s*used/i);
+      // Match weekly usage: "Current week (all models) X% used" or "Current week ... X% used"
+      const weeklyMatch = output.match(/Current week[^]*?(\d+)%\s*used/i);
+
+      if (!sessionMatch && !weeklyMatch) {
+        debug('[ClaudeUsageMonitor] Could not parse usage from CLI output:', output.slice(0, 200));
+        return null;
+      }
+
+      const sessionPercent = sessionMatch ? parseInt(sessionMatch[1], 10) : 0;
+      const weeklyPercent = weeklyMatch ? parseInt(weeklyMatch[1], 10) : 0;
+
+      // Convert percentages to 0-1 range
+      const fiveHourUtilization = sessionPercent / 100;
+      const sevenDayUtilization = weeklyPercent / 100;
+
+      return {
+        fiveHourUtilization,
+        sevenDayUtilization,
+        isSessionLimited: sessionPercent >= 100,
+        isWeeklyLimited: weeklyPercent >= 100,
+        timestamp: Date.now(),
+      };
+    } catch (error) {
+      debug('[ClaudeUsageMonitor] Error parsing CLI output:', error);
       return null;
     }
   }
