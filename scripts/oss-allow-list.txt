@@ -41,11 +41,6 @@ apps/electron/resources/**/*
 # Electron ESLint rules
 apps/electron/eslint-rules/**/*
 
-# Electron scripts (build and packaging)
-apps/electron/scripts/build-dmg.sh
-apps/electron/scripts/build-win.ps1
-apps/electron/scripts/build-linux.sh
-apps/electron/scripts/afterPack.cjs
 
 # =============================================================================
 # APPS - VIEWER (Session Viewer Web App)
