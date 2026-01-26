@@ -16,4 +16,5 @@ export {
   PermissionsSettingsPage,
   ShortcutsPage,
   PreferencesPage,
+  ClaudeProfilesPage,
 } from './settings'

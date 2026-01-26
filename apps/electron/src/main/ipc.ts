@@ -17,6 +17,7 @@ import { registerSlackHandlers } from './slack-ipc'
 import { registerLabelsIpc } from './labels-ipc'
 import { registerTemplateIpcHandlers } from './templates'
 import { registerNotificationIpc } from './notifications-ipc'
+import { registerClaudeProfilesIpc } from './claude-profiles-ipc'
 import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type AuthType, type BillingMethodInfo, type SendMessageOptions } from '../shared/types'
 import { readFileAttachment, perf, validateImageForClaudeAPI, IMAGE_LIMITS } from '@vesper/shared/utils'
 import { getAuthType, setAuthType, getPreferencesPath, getModel, setModel, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, type Workspace } from '@vesper/shared/config'
@@ -2197,6 +2198,9 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
   // Register notification handlers
   registerNotificationIpc()
+
+  // Register Claude profiles handlers (multi-account OAuth)
+  registerClaudeProfilesIpc()
 
   // ============================================================
   // Theme (app-level only)

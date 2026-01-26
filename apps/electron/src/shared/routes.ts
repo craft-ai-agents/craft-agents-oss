@@ -154,7 +154,7 @@ export const routes = {
         : 'schedules' as const,
 
     /** Settings view (settings navigator) */
-    settings: (subpage?: 'app' | 'workspace' | 'permissions' | 'shortcuts' | 'preferences') =>
+    settings: (subpage?: 'app' | 'workspace' | 'permissions' | 'shortcuts' | 'preferences' | 'claude-profiles') =>
       subpage && subpage !== 'app'
         ? `settings/${subpage}` as const
         : 'settings' as const,

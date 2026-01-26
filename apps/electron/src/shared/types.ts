@@ -929,6 +929,43 @@ export const IPC_CHANNELS = {
 
   // Flowy Inline Diagrams
   FLOWY_EMBED_UPDATE: 'flowy:embed-update',
+
+  // Claude Profiles (multi-account OAuth)
+  CLAUDE_PROFILES_LIST: 'claude-profiles:list',
+  CLAUDE_PROFILES_GET: 'claude-profiles:get',
+  CLAUDE_PROFILES_GET_ACTIVE: 'claude-profiles:get-active',
+  CLAUDE_PROFILES_GET_ACTIVE_ID: 'claude-profiles:get-active-id',
+  CLAUDE_PROFILES_START_OAUTH: 'claude-profiles:start-oauth',
+  CLAUDE_PROFILES_COMPLETE_OAUTH: 'claude-profiles:complete-oauth',
+  CLAUDE_PROFILES_VALIDATE_OAUTH_STATE: 'claude-profiles:validate-oauth-state',
+  CLAUDE_PROFILES_REFRESH_TOKEN: 'claude-profiles:refresh-token',
+  CLAUDE_PROFILES_UPDATE: 'claude-profiles:update',
+  CLAUDE_PROFILES_DELETE: 'claude-profiles:delete',
+  CLAUDE_PROFILES_SET_DEFAULT: 'claude-profiles:set-default',
+  CLAUDE_PROFILES_SET_ACTIVE: 'claude-profiles:set-active',
+  CLAUDE_PROFILES_POLL_USAGE: 'claude-profiles:poll-usage',
+  CLAUDE_PROFILES_POLL_ALL_USAGE: 'claude-profiles:poll-all-usage',
+  CLAUDE_PROFILES_START_MONITORING: 'claude-profiles:start-monitoring',
+  CLAUDE_PROFILES_STOP_MONITORING: 'claude-profiles:stop-monitoring',
+  CLAUDE_PROFILES_IS_MONITORING: 'claude-profiles:is-monitoring',
+  CLAUDE_PROFILES_GET_AUTO_SWITCH_SETTINGS: 'claude-profiles:get-auto-switch-settings',
+  CLAUDE_PROFILES_UPDATE_AUTO_SWITCH_SETTINGS: 'claude-profiles:update-auto-switch-settings',
+  CLAUDE_PROFILES_GET_PROFILE_SCORES: 'claude-profiles:get-profile-scores',
+  CLAUDE_PROFILES_SHOULD_PROACTIVE_SWAP: 'claude-profiles:should-proactive-swap',
+  CLAUDE_PROFILES_PERFORM_SWAP: 'claude-profiles:perform-swap',
+  CLAUDE_PROFILES_GET_SWAP_COUNT: 'claude-profiles:get-swap-count',
+  CLAUDE_PROFILES_RESET_SWAP_COUNT: 'claude-profiles:reset-swap-count',
+  CLAUDE_PROFILES_RECORD_SWAP: 'claude-profiles:record-swap',
+  // Claude Profiles events (main → renderer)
+  CLAUDE_PROFILES_CREATED: 'claude-profiles:created',
+  CLAUDE_PROFILES_UPDATED: 'claude-profiles:updated',
+  CLAUDE_PROFILES_DELETED: 'claude-profiles:deleted',
+  CLAUDE_PROFILES_ACTIVE_CHANGED: 'claude-profiles:active-changed',
+  CLAUDE_PROFILES_USAGE_UPDATED: 'claude-profiles:usage-updated',
+  CLAUDE_PROFILES_PROFILE_LIMITED: 'claude-profiles:profile-limited',
+  CLAUDE_PROFILES_AUTH_FAILED: 'claude-profiles:auth-failed',
+  CLAUDE_PROFILES_TOKEN_REFRESHED: 'claude-profiles:token-refreshed',
+  CLAUDE_PROFILES_SWAPPED: 'claude-profiles:swapped',
 } as const
 
 // Re-import types for ElectronAPI
@@ -1305,6 +1342,43 @@ export interface ElectronAPI {
 
   // Flowy Inline Diagrams
   flowyEmbedUpdate(sessionId: string, messageId: string, embedId: string, document: import('@vesper/shared/flowy').FlowyDocument): Promise<{ success: boolean; error?: string }>
+
+  // Claude Profiles (Multi-Account OAuth)
+  claudeProfilesList(): Promise<ClaudeProfile[]>
+  claudeProfilesGet(profileId: string): Promise<ClaudeProfile | null>
+  claudeProfilesGetActive(): Promise<ClaudeProfile | null>
+  claudeProfilesGetActiveId(): Promise<string | null>
+  claudeProfilesStartOAuth(profileName: string): Promise<{ authUrl: string; state: string }>
+  claudeProfilesCompleteOAuth(authorizationCode: string, state: string): Promise<ClaudeProfile>
+  claudeProfilesValidateOAuthState(state: string): Promise<boolean>
+  claudeProfilesRefreshToken(profileId: string): Promise<void>
+  claudeProfilesUpdate(profileId: string, updates: { name?: string }): Promise<ClaudeProfile>
+  claudeProfilesDelete(profileId: string): Promise<void>
+  claudeProfilesSetDefault(profileId: string): Promise<void>
+  claudeProfilesSetActive(profileId: string): Promise<void>
+  claudeProfilesPollUsage(profileId: string): Promise<ClaudeUsageData | null>
+  claudeProfilesPollAllUsage(): Promise<void>
+  claudeProfilesStartMonitoring(): Promise<void>
+  claudeProfilesStopMonitoring(): Promise<void>
+  claudeProfilesIsMonitoring(): Promise<boolean>
+  claudeProfilesGetAutoSwitchSettings(): Promise<ClaudeAutoSwitchSettings>
+  claudeProfilesUpdateAutoSwitchSettings(settings: Partial<ClaudeAutoSwitchSettings>): Promise<void>
+  claudeProfilesGetProfileScores(): Promise<Array<{ profile: ClaudeProfile; score: ClaudeProfileScore }>>
+  claudeProfilesShouldProactiveSwap(profileId: string): Promise<{ shouldSwap: boolean; reason: string }>
+  claudeProfilesPerformSwap(sessionId: string, reason: 'proactive' | 'reactive' | 'manual'): Promise<ClaudeProfile>
+  claudeProfilesGetSwapCount(sessionId: string): Promise<number>
+  claudeProfilesResetSwapCount(sessionId: string): Promise<void>
+  claudeProfilesRecordSwap(sessionId: string, profileId: string): Promise<void>
+  // Claude Profiles event listeners
+  onClaudeProfileCreated(callback: (data: { profile: ClaudeProfile }) => void): () => void
+  onClaudeProfileUpdated(callback: (data: { profile: ClaudeProfile }) => void): () => void
+  onClaudeProfileDeleted(callback: (data: { profileId: string }) => void): () => void
+  onClaudeProfileActiveChanged(callback: (data: { profileId: string | null }) => void): () => void
+  onClaudeProfileUsageUpdated(callback: (data: { profileId: string; usage: ClaudeUsageData }) => void): () => void
+  onClaudeProfileLimited(callback: (data: { profileId: string; limitType: 'session' | 'weekly' }) => void): () => void
+  onClaudeProfileAuthFailed(callback: (data: { profileId: string; error: string }) => void): () => void
+  onClaudeProfileTokenRefreshed(callback: (data: { profileId: string }) => void): () => void
+  onClaudeProfileSwapped(callback: (data: ClaudeProfileSwapEvent) => void): () => void
 }
 
 /**
@@ -1531,6 +1605,67 @@ export interface ClaudeOAuthResult {
   error?: string
 }
 
+// ============================================
+// Claude Profiles Types (Multi-Account OAuth)
+// ============================================
+
+/**
+ * Claude profile with OAuth credentials and usage tracking
+ */
+export interface ClaudeProfile {
+  id: string
+  name: string
+  email: string
+  createdAt: number
+  lastUsedAt?: number
+  isDefault: boolean
+  usage?: ClaudeUsageData
+  lastMonitoredAt?: number
+  lastAuthFailureAt?: number
+}
+
+/**
+ * Usage data from Anthropic's OAuth usage API
+ */
+export interface ClaudeUsageData {
+  fiveHourUtilization: number
+  sevenDayUtilization: number
+  isSessionLimited: boolean
+  isWeeklyLimited: boolean
+  timestamp: number
+}
+
+/**
+ * Profile score for switching decisions
+ */
+export interface ClaudeProfileScore {
+  profileId: string
+  score: number
+  reason: string
+  isAvailable: boolean
+}
+
+/**
+ * Auto-switching configuration
+ */
+export interface ClaudeAutoSwitchSettings {
+  enabled: boolean
+  proactiveThresholdSession: number
+  proactiveThresholdWeekly: number
+  reactiveEnabled: boolean
+  maxSwapsPerSession: number
+}
+
+/**
+ * Profile swap event
+ */
+export interface ClaudeProfileSwapEvent {
+  fromProfileId: string
+  toProfileId: string
+  reason: 'proactive' | 'reactive' | 'manual'
+  timestamp: number
+}
+
 /**
  * Current billing method info for settings
  */
@@ -1627,7 +1762,7 @@ export type SourceFilter =
 /**
  * Settings subpage options
  */
-export type SettingsSubpage = 'app' | 'workspace' | 'permissions' | 'shortcuts' | 'preferences'
+export type SettingsSubpage = 'app' | 'workspace' | 'permissions' | 'shortcuts' | 'preferences' | 'claude-profiles'
 
 /**
  * Chats navigation state - shows SessionList in navigator
@@ -1881,7 +2016,7 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
   if (key === 'settings') return { navigator: 'settings', subpage: 'app' }
   if (key.startsWith('settings:')) {
     const subpage = key.slice(9) as SettingsSubpage
-    if (['app', 'workspace', 'shortcuts', 'preferences'].includes(subpage)) {
+    if (['app', 'workspace', 'permissions', 'shortcuts', 'preferences', 'claude-profiles'].includes(subpage)) {
       return { navigator: 'settings', subpage }
     }
   }

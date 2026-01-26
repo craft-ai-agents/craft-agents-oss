@@ -35,7 +35,9 @@ export type CredentialType =
   // Telegram credentials (workspace-scoped)
   | 'telegram_bot_token' // Telegram bot token from @BotFather
   // GitHub credentials (workspace-scoped)
-  | 'github_access_token'; // GitHub access token from OAuth
+  | 'github_access_token' // GitHub access token from OAuth
+  // Claude Profiles credentials (profile-scoped)
+  | 'claude_profile'; // Claude OAuth tokens for multi-account
 
 /** Valid credential types for validation */
 const VALID_CREDENTIAL_TYPES: readonly CredentialType[] = [
@@ -52,6 +54,7 @@ const VALID_CREDENTIAL_TYPES: readonly CredentialType[] = [
   'slack_oauth',
   'telegram_bot_token',
   'github_access_token',
+  'claude_profile',
 ] as const;
 
 /** Check if a string is a valid CredentialType */
@@ -111,6 +114,7 @@ const SOURCE_CREDENTIAL_TYPES = [
   'slack_oauth',
   'telegram_bot_token',
   'github_access_token',
+  'claude_profile',
 ] as const;
 
 /** Check if type is a source credential */

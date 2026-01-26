@@ -62,7 +62,11 @@
     "./flowy": "./src/flowy/index.ts",
     "./flowy/types": "./src/flowy/types.ts",
     "./flowy/schema": "./src/flowy/schema.ts",
-    "./flowy/templates": "./src/flowy/templates.ts"
+    "./flowy/templates": "./src/flowy/templates.ts",
+    "./statuses": "./src/statuses/index.ts",
+    "./templates": "./src/templates/index.ts",
+    "./labels": "./src/labels/index.ts",
+    "./claude-profiles": "./src/claude-profiles/index.ts"
   },
   "dependencies": {
     "@vesper/core": "workspace:*",

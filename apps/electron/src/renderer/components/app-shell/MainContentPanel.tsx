@@ -26,7 +26,7 @@ import {
   isVectorSearchNavigation,
   isSchedulesNavigation,
 } from '@/contexts/NavigationContext'
-import { AppSettingsPage, WorkspaceSettingsPage, PermissionsSettingsPage, PreferencesPage, ShortcutsPage, SourceInfoPage, ChatPage, DocumentViewerPage } from '@/pages'
+import { AppSettingsPage, WorkspaceSettingsPage, PermissionsSettingsPage, PreferencesPage, ShortcutsPage, ClaudeProfilesPage, SourceInfoPage, ChatPage, DocumentViewerPage } from '@/pages'
 import SkillInfoPage from '@/pages/SkillInfoPage'
 import MarketplaceSkillInfoPage from '@/pages/MarketplaceSkillInfoPage'
 import { ScheduleDetailPanel } from '@/components/scheduler/ScheduleDetailPanel'
@@ -78,6 +78,12 @@ export function MainContentPanel({
         return wrapWithStoplight(
           <Panel variant="grow" className={className}>
             <PreferencesPage />
+          </Panel>
+        )
+      case 'claude-profiles':
+        return wrapWithStoplight(
+          <Panel variant="grow" className={className}>
+            <ClaudeProfilesPage />
           </Panel>
         )
       case 'app':

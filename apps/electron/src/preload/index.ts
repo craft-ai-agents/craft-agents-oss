@@ -747,6 +747,105 @@ const api: ElectronAPI = {
   // Flowy Inline Diagrams
   flowyEmbedUpdate: (sessionId: string, messageId: string, embedId: string, document: import('@vesper/shared/flowy').FlowyDocument) =>
     ipcRenderer.invoke(IPC_CHANNELS.FLOWY_EMBED_UPDATE, sessionId, messageId, embedId, document),
+
+  // Claude Profiles (Multi-Account OAuth)
+  claudeProfilesList: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PROFILES_LIST),
+  claudeProfilesGet: (profileId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PROFILES_GET, profileId),
+  claudeProfilesGetActive: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PROFILES_GET_ACTIVE),
+  claudeProfilesGetActiveId: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PROFILES_GET_ACTIVE_ID),
+  claudeProfilesStartOAuth: (profileName: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PROFILES_START_OAUTH, profileName),
+  claudeProfilesCompleteOAuth: (authorizationCode: string, state: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PROFILES_COMPLETE_OAUTH, authorizationCode, state),
+  claudeProfilesValidateOAuthState: (state: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PROFILES_VALIDATE_OAUTH_STATE, state),
+  claudeProfilesRefreshToken: (profileId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PROFILES_REFRESH_TOKEN, profileId),
+  claudeProfilesUpdate: (profileId: string, updates: { name?: string }) =>
+    ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PROFILES_UPDATE, profileId, updates),
+  claudeProfilesDelete: (profileId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PROFILES_DELETE, profileId),
+  claudeProfilesSetDefault: (profileId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PROFILES_SET_DEFAULT, profileId),
+  claudeProfilesSetActive: (profileId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PROFILES_SET_ACTIVE, profileId),
+  claudeProfilesPollUsage: (profileId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PROFILES_POLL_USAGE, profileId),
+  claudeProfilesPollAllUsage: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PROFILES_POLL_ALL_USAGE),
+  claudeProfilesStartMonitoring: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PROFILES_START_MONITORING),
+  claudeProfilesStopMonitoring: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PROFILES_STOP_MONITORING),
+  claudeProfilesIsMonitoring: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PROFILES_IS_MONITORING),
+  claudeProfilesGetAutoSwitchSettings: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PROFILES_GET_AUTO_SWITCH_SETTINGS),
+  claudeProfilesUpdateAutoSwitchSettings: (settings: any) =>
+    ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PROFILES_UPDATE_AUTO_SWITCH_SETTINGS, settings),
+  claudeProfilesGetProfileScores: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PROFILES_GET_PROFILE_SCORES),
+  claudeProfilesShouldProactiveSwap: (profileId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PROFILES_SHOULD_PROACTIVE_SWAP, profileId),
+  claudeProfilesPerformSwap: (sessionId: string, reason: 'proactive' | 'reactive' | 'manual') =>
+    ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PROFILES_PERFORM_SWAP, sessionId, reason),
+  claudeProfilesGetSwapCount: (sessionId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PROFILES_GET_SWAP_COUNT, sessionId),
+  claudeProfilesResetSwapCount: (sessionId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PROFILES_RESET_SWAP_COUNT, sessionId),
+  claudeProfilesRecordSwap: (sessionId: string, profileId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PROFILES_RECORD_SWAP, sessionId, profileId),
+
+  // Claude Profiles event listeners
+  onClaudeProfileCreated: (callback: (data: { profile: any }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: { profile: any }) => callback(data)
+    ipcRenderer.on(IPC_CHANNELS.CLAUDE_PROFILES_CREATED, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.CLAUDE_PROFILES_CREATED, handler)
+  },
+  onClaudeProfileUpdated: (callback: (data: { profile: any }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: { profile: any }) => callback(data)
+    ipcRenderer.on(IPC_CHANNELS.CLAUDE_PROFILES_UPDATED, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.CLAUDE_PROFILES_UPDATED, handler)
+  },
+  onClaudeProfileDeleted: (callback: (data: { profileId: string }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: { profileId: string }) => callback(data)
+    ipcRenderer.on(IPC_CHANNELS.CLAUDE_PROFILES_DELETED, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.CLAUDE_PROFILES_DELETED, handler)
+  },
+  onClaudeProfileActiveChanged: (callback: (data: { profileId: string | null }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: { profileId: string | null }) => callback(data)
+    ipcRenderer.on(IPC_CHANNELS.CLAUDE_PROFILES_ACTIVE_CHANGED, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.CLAUDE_PROFILES_ACTIVE_CHANGED, handler)
+  },
+  onClaudeProfileUsageUpdated: (callback: (data: { profileId: string; usage: any }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: { profileId: string; usage: any }) => callback(data)
+    ipcRenderer.on(IPC_CHANNELS.CLAUDE_PROFILES_USAGE_UPDATED, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.CLAUDE_PROFILES_USAGE_UPDATED, handler)
+  },
+  onClaudeProfileLimited: (callback: (data: { profileId: string; limitType: 'session' | 'weekly' }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: { profileId: string; limitType: 'session' | 'weekly' }) => callback(data)
+    ipcRenderer.on(IPC_CHANNELS.CLAUDE_PROFILES_PROFILE_LIMITED, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.CLAUDE_PROFILES_PROFILE_LIMITED, handler)
+  },
+  onClaudeProfileAuthFailed: (callback: (data: { profileId: string; error: string }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: { profileId: string; error: string }) => callback(data)
+    ipcRenderer.on(IPC_CHANNELS.CLAUDE_PROFILES_AUTH_FAILED, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.CLAUDE_PROFILES_AUTH_FAILED, handler)
+  },
+  onClaudeProfileTokenRefreshed: (callback: (data: { profileId: string }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: { profileId: string }) => callback(data)
+    ipcRenderer.on(IPC_CHANNELS.CLAUDE_PROFILES_TOKEN_REFRESHED, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.CLAUDE_PROFILES_TOKEN_REFRESHED, handler)
+  },
+  onClaudeProfileSwapped: (callback: (data: any) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: any) => callback(data)
+    ipcRenderer.on(IPC_CHANNELS.CLAUDE_PROFILES_SWAPPED, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.CLAUDE_PROFILES_SWAPPED, handler)
+  },
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)
