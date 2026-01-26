@@ -191,29 +191,31 @@ export class ClaudeUsageMonitor extends EventEmitter {
     try {
       const usage = await this.fetchUsage(tokens.accessToken);
 
-      // Update storage
-      await updateProfileUsage(profileId, usage);
+      if (usage) {
+        // Update storage
+        await updateProfileUsage(profileId, usage);
 
-      // Emit events
-      this.emit('usage-updated', profileId, usage);
+        // Emit events
+        this.emit('usage-updated', profileId, usage);
 
-      // Check limits
-      if (usage.isSessionLimited) {
-        this.emit('profile-limited', profileId, 'session');
-      }
-      if (usage.isWeeklyLimited) {
-        this.emit('profile-limited', profileId, 'weekly');
+        // Check limits
+        if (usage.isSessionLimited) {
+          this.emit('profile-limited', profileId, 'session');
+        }
+        if (usage.isWeeklyLimited) {
+          this.emit('profile-limited', profileId, 'weekly');
+        }
       }
 
       return usage;
     } catch (error) {
       debug(`[ClaudeUsageMonitor] Usage fetch failed for ${profileId}:`, error);
 
-      // Check if it's an auth error
+      // Only record auth failure for actual auth errors (401, 403)
+      // Don't record for 404 (endpoint not found) or other errors
       if (error instanceof Error && (
         error.message.includes('401') ||
-        error.message.includes('403') ||
-        error.message.includes('unauthorized')
+        error.message.includes('403')
       )) {
         await recordAuthFailure(profileId);
         this.emit('auth-failed', profileId, error);
@@ -225,36 +227,55 @@ export class ClaudeUsageMonitor extends EventEmitter {
 
   /**
    * Fetch usage data from Anthropic's API.
+   * Returns null if the endpoint is unavailable (404) or other non-auth errors.
+   * Throws for auth errors (401, 403) so they can be handled specially.
    */
-  private async fetchUsage(accessToken: string): Promise<ClaudeUsageData> {
-    const response = await fetch(USAGE_API_URL, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-    });
+  private async fetchUsage(accessToken: string): Promise<ClaudeUsageData | null> {
+    try {
+      const response = await fetch(USAGE_API_URL, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
 
-    if (!response.ok) {
-      throw new Error(`Usage API error: ${response.status} ${response.statusText}`);
+      // Auth errors should be thrown for special handling
+      if (response.status === 401 || response.status === 403) {
+        throw new Error(`Usage API auth error: ${response.status} ${response.statusText}`);
+      }
+
+      // Other errors (including 404) - endpoint may not exist
+      if (!response.ok) {
+        debug(`[ClaudeUsageMonitor] Usage API returned ${response.status}, usage data unavailable`);
+        return null;
+      }
+
+      const data = await response.json() as {
+        five_hour_utilization?: number;
+        seven_day_utilization?: number;
+        // Additional fields we may receive
+        is_rate_limited?: boolean;
+      };
+
+      const fiveHourUtilization = data.five_hour_utilization ?? 0;
+      const sevenDayUtilization = data.seven_day_utilization ?? 0;
+
+      return {
+        fiveHourUtilization,
+        sevenDayUtilization,
+        isSessionLimited: fiveHourUtilization >= 1.0 || data.is_rate_limited === true,
+        isWeeklyLimited: sevenDayUtilization >= 1.0,
+        timestamp: Date.now(),
+      };
+    } catch (error) {
+      // Re-throw auth errors
+      if (error instanceof Error && (error.message.includes('401') || error.message.includes('403'))) {
+        throw error;
+      }
+      // Log and return null for network/other errors
+      debug('[ClaudeUsageMonitor] Usage fetch error:', error);
+      return null;
     }
-
-    const data = await response.json() as {
-      five_hour_utilization?: number;
-      seven_day_utilization?: number;
-      // Additional fields we may receive
-      is_rate_limited?: boolean;
-    };
-
-    const fiveHourUtilization = data.five_hour_utilization ?? 0;
-    const sevenDayUtilization = data.seven_day_utilization ?? 0;
-
-    return {
-      fiveHourUtilization,
-      sevenDayUtilization,
-      isSessionLimited: fiveHourUtilization >= 1.0 || data.is_rate_limited === true,
-      isWeeklyLimited: sevenDayUtilization >= 1.0,
-      timestamp: Date.now(),
-    };
   }
 
   /**
