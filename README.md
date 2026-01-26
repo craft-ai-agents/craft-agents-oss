@@ -60,7 +60,7 @@ bun run electron:start
 - **Permission Modes**: Three-level system (Explore, Ask to Edit, Auto) with customizable rules
 - **Background Tasks**: Run long-running operations with progress tracking and real-time UI sync
 - **Dynamic Status System**: Customizable session workflow states (Todo, In Progress, Done, etc.)
-- **Theme System**: Cascading themes at app and workspace levels
+- **Theme System**: 20+ preset themes including 4 premium themes (Ivory & Ebony, Sand & Stone, Jade & Midnight, Pure Function) with full OKLCH color customization
 - **Multi-File Diff**: VS Code-style window for viewing all file changes in a turn
 - **Skills**: Specialized agent instructions stored per-workspace
 - **File Attachments**: Drag-drop images, PDFs, Office documents with auto-conversion

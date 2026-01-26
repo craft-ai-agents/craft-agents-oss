@@ -19,13 +19,18 @@ Vesper leverages the Claude Agent SDK and Claude Code while adding significant i
   - Static components: Card, Stack, Text, Badge, Table, Chart, Metric, DataTable
   - Interactive components: Button, TextField, SelectField
   - Actions: copy, open_url, api_call, mcp_fetch, submit, cancel, refresh
-  - MCP data binding via `mcp_fetch` action for dynamic content
+  - **MCP data binding** via `mcp_fetch` action for dynamic content
+    - Fetch live data from connected MCP sources
+    - Supports both HTTP and stdio MCP transports
+    - Automatic authentication handling (OAuth, Bearer tokens)
+    - Button actions can trigger MCP tool calls with parameters
   - Chart component with recharts (bar, line, pie, area)
   - DataTable with sorting, filtering, pagination
 - **Key Files:**
-  - `JSONRenderView.tsx` - Main rendering component
-  - `catalog.ts` - Component registry
+  - `JSONRenderView.tsx` - Main rendering component with action handlers
+  - `catalog.ts` - Component registry with action definitions
   - `packages/shared/src/agent/session-scoped-tools.ts` - render_ui tool
+  - `apps/electron/src/main/ipc.ts` - SOURCES_CALL_MCP_TOOL IPC handler
 
 ### 2. Inline Flowy Diagrams
 - **Location:** `apps/electron/src/renderer/components/diagram/` and `packages/shared/src/flowy/`
@@ -61,34 +66,67 @@ Vesper leverages the Claude Agent SDK and Claude Code while adding significant i
 ### 4. Telegram Bot Integration
 - **Location:** `apps/electron/src/main/telegram-service.ts` and `packages/shared/src/telegram/`
 - **Features:**
-  - Comprehensive Telegram bot integration with in-process polling
-  - Bot token authentication (encrypted storage)
-  - Message queue for rate limiting (30 msgs/sec)
-  - Per-chat rate limiting (token bucket algorithm)
-  - Permission directives (`/safe`, `/ask`, `/allow_all`)
-  - Large result handling (4096 char limit, chunking + deep links)
-  - Session continuity (same chat+user = same session)
+  - **Multi-Account Support:** Run multiple bot accounts per workspace with isolated configurations
+  - **Access Control:**
+    - DM policies: disabled, pairing (with approval codes), allowlist, open
+    - Group policies: disabled, allowlist (by chat and user), open
+    - Pairing mode generates unique codes for new user approval
+  - **Message Processing:**
+    - Inbound debouncing: combines rapid messages within 1.5s window (configurable)
+    - Deduplication: prevents duplicate processing (10-min TTL, max 2000 cache)
+    - Echo tracking: prevents bot from processing its own messages (5-min TTL)
+    - Mention gating: filter group messages by @mention, reply-to-bot, or commands
+  - **Reliability:**
+    - Retry logic with exponential backoff (5 attempts, 1s-30s delays, 25% jitter)
+    - Automatic retry for 429 rate limits and 5xx errors
+    - Skip retry for 4xx client errors (400, 401, 403, 404)
+  - **Other Features:**
+    - Bot token authentication (encrypted storage with account-specific keys)
+    - Message queue for rate limiting (30 msgs/sec)
+    - Per-chat rate limiting (token bucket algorithm: 5 burst, 0.5 tokens/sec)
+    - Permission directives (`/safe`, `/ask`, `/allow_all`)
+    - Large result handling (4096 char limit, chunking + deep links)
+    - Session continuity (same chat+user = same session)
+    - Typing indicators and message reactions (👀/✅/❌)
 - **Key Files:**
-  - `telegram-service.ts` (458 lines) - TelegramService
+  - `telegram-service.ts` (458 lines) - TelegramService with polling
   - `telegram-ipc.ts` (139 lines) - IPC handlers
-  - `packages/shared/src/telegram/message-router.ts` (610 lines)
+  - `message-router.ts` (610 lines) - Message routing and session management
+  - `account-manager.ts` (112 lines) - Multi-account support
+  - `access-control.ts` (110 lines) - DM/group policies and pairing
+  - `debounce.ts` (112 lines) - Inbound message debouncing
+  - `deduplication.ts` (101 lines) - Duplicate message prevention
+  - `retry.ts` (116 lines) - Exponential backoff with jitter
+  - `echo-tracker.ts` (83 lines) - Self-message detection
+  - `mention-gate.ts` (41 lines) - Group mention filtering
+  - `MULTI_ACCOUNT.md` - Multi-account architecture guide
   - `TelegramSettingsSection.tsx` - Bot configuration UI
+- **Storage:**
+  - Bot tokens: `~/.vesper/credentials.enc` (key: `telegram_bot_token:{workspaceId}:{accountId}`)
+  - Account configs: `~/.vesper/config.json` under `telegramAccounts`
+- **Testing:** Comprehensive test suite covering all features in `__tests__/`
 
 ### 5. Session Templates
 - **Location:** `packages/shared/src/templates/` and `apps/electron/src/renderer/components/templates/`
 - **Features:**
   - Create reusable session configuration presets
   - Save templates from existing sessions
-  - Store: permission mode, model, thinking level, working directory, skill IDs
+  - Store: permission mode, model, thinking level, working directory, skill IDs, task list IDs
   - Optional initial prompt inclusion
+  - `gatherContext` field for Claude to ask clarifying questions before starting
+  - Default starter templates (Code Review, Feature Build, Bug Investigation, Documentation, Refactoring, Quick Question)
+  - Workspace-scoped `templatesEnabled` setting to enable/disable templates per workspace
   - Usage count tracking for popularity sorting
   - Global and workspace-scoped templates
   - File-based locking for concurrent updates
+  - Integration with EditPopover for conversational template creation
+  - Schedule creation tool for conversational scheduler setup
 - **Key Files:**
-  - `packages/shared/src/templates/storage.ts` (227 lines)
-  - `apps/electron/src/main/templates.ts` (105 lines)
+  - `packages/shared/src/templates/storage.ts` (394 lines) - CRUD, default templates
+  - `packages/shared/src/templates/types.ts` (48 lines) - Type definitions with gatherContext
+  - `apps/electron/src/main/templates.ts` (140 lines) - IPC handlers, create-defaults
   - `TemplateManager.tsx` - Settings CRUD UI
-  - `TemplatePickerDialog.tsx` - Template selection modal
+  - `session-scoped-tools.ts` - schedule_create tool (133 lines)
 
 ### 6. Notification Settings
 - **Location:** `apps/electron/src/renderer/pages/settings/NotificationSettingsSection.tsx`
@@ -103,6 +141,104 @@ Vesper leverages the Claude Agent SDK and Claude Code while adding significant i
 - **Key Files:**
   - `NotificationSettingsSection.tsx` (294 lines)
   - `notification-sound.ts` (99 lines) - Audio playback utilities
+
+### 7. Team Skills Sync
+- **Location:** `packages/shared/src/skills/` and `apps/electron/src/renderer/components/skills/`
+- **Features:**
+  - Sync shared skills from a private GitHub repository
+  - Three-tier skill precedence: workspace > team > claude-code
+  - Secure GitHub PAT storage (AES-256-GCM encrypted)
+  - On-demand sync with skill count tracking
+  - Path traversal protection with strict slug validation
+  - Repository URL in config.json, token in encrypted credentials
+  - Auto-broadcast skills-changed event after sync
+  - Supports multiple URL formats (owner/repo, https://github.com/owner/repo)
+- **Skill Sources:**
+  - **Workspace:** `~/.vesper/workspaces/{id}/skills/` - Local overrides
+  - **Team:** `~/.vesper/team-skills/` - Synced from GitHub
+  - **Claude Code:** `~/.claude/skills/` and `~/.claude/commands/` - Built-in
+- **GitHub API Integration:**
+  - Fetch repository contents via GitHub API v3
+  - Download all files in each skill directory
+  - 30-second timeout on all requests
+  - Sequential download per skill (graceful error handling)
+- **Key Files:**
+  - `packages/shared/src/skills/storage.ts` - loadTeamSkills(), loadAllSkills()
+  - `apps/electron/src/main/ipc.ts` - team-skills:* IPC handlers
+  - `TeamSkillsSettingsSection.tsx` - Configuration UI
+  - `packages/shared/src/config/paths.ts` - TEAM_SKILLS_DIR constant
+- **Security:**
+  - Skill ID validation: `/^[a-z0-9][a-z0-9-]{0,62}[a-z0-9]?$/`
+  - No path traversal (e.g., `../`, `./`)
+  - Encrypted PAT storage with type `team_skills_token`
+- **Storage:**
+  - Team skills: `~/.vesper/team-skills/`
+  - Config: `~/.vesper/config.json` → `teamSkillsRepoUrl`
+  - Token: `~/.vesper/credentials.enc` (type: `team_skills_token`)
+- **Documentation:**
+  - `docs/user-guide/team-skills.md` - Setup, usage, migration guide
+  - `docs/developer/team-skills-architecture.md` - Technical implementation
+
+### 8. GitHub OAuth Integration
+- **Location:** `packages/shared/src/github/` and `apps/electron/src/renderer/components/orchestration/`
+- **Features:**
+  - OAuth 2.0 authentication with PKCE for enhanced security
+  - CSRF state validation to prevent attacks
+  - Test connection feature for credential validation
+  - Secure credential storage (AES-256-GCM encrypted)
+  - Per-workspace GitHub account connections
+  - Default repository configuration for daily reports
+  - Automatic retry with exponential backoff (3 attempts, jitter)
+  - Comprehensive error handling with user-friendly messages
+  - Support for environment variable credentials (fallback)
+- **OAuth Flow:**
+  - Generate PKCE code verifier and challenge
+  - Create temporary local callback server
+  - Open browser for GitHub authorization
+  - Validate state parameter on callback
+  - Exchange authorization code for access token
+  - Fetch and store user profile information
+- **Key Files:**
+  - `packages/shared/src/github/oauth.ts` (424 lines) - OAuth flow implementation
+  - `GitHubConnectModal.tsx` (231 lines) - OAuth modal dialog
+  - `GitHubSettingsSection.tsx` (553 lines) - 3-step setup UI
+- **Scopes:**
+  - `repo` - Full control of repositories
+  - `read:org` - Read organization membership
+  - `read:user` - Read user profile data
+- **Storage:**
+  - OAuth credentials: `~/.vesper/credentials.enc` (type: `github_oauth_client_id`, `github_oauth_client_secret`)
+  - Access tokens: `~/.vesper/credentials.enc` (type: `github_access_token`, per workspace)
+- **Documentation:**
+  - `docs/user-guide/github-integration.md` - Setup guide with troubleshooting
+  - `docs/api/github-oauth.md` - API reference and technical details
+
+### 9. Premium Themes
+- **Location:** `apps/electron/resources/themes/` and `packages/shared/src/config/theme.ts`
+- **Features:**
+  - 4 premium themes inspired by luxury brands and minimalism
+  - OKLCH color space for perceptually uniform colors
+  - Full light and dark mode support
+  - 6-color semantic system (background, foreground, accent, info, success, destructive)
+  - Surface color overrides for fine-grained control
+  - Scenic mode support with background images
+- **Premium Themes:**
+  - **Ivory & Ebony** - Classic luxury with cognac leather accents (AMAN Hotels inspiration)
+  - **Sand & Stone** - Natural elements with terra cotta warmth (Monocle Magazine inspiration)
+  - **Jade & Midnight** - Asian-inspired refinement with celadon jade aesthetics
+  - **Pure Function** - Dieter Rams minimalism with near-zero chroma
+- **Key Files:**
+  - `packages/shared/src/config/theme.ts` (401 lines) - Theme types, resolution, CSS generation
+  - `apps/electron/resources/themes/ivory-ebony.json` - Ivory & Ebony theme
+  - `apps/electron/resources/themes/sand-stone.json` - Sand & Stone theme
+  - `apps/electron/resources/themes/jade-midnight.json` - Jade & Midnight theme
+  - `apps/electron/resources/themes/pure-function.json` - Pure Function theme
+- **Storage:**
+  - App-level override: `~/.vesper/theme.json`
+  - Preset themes: `apps/electron/resources/themes/*.json`
+- **Documentation:**
+  - `docs/user-guide/themes.md` - User guide with theme descriptions and customization
+  - `docs/developer/theming-architecture.md` - Technical architecture and API reference
 
 ## Project Structure
 
@@ -215,6 +351,13 @@ bun test
 ├── credentials.enc          # Encrypted API keys
 ├── preferences.json         # User preferences
 ├── theme.json              # App theme
+├── task-lists/             # Task lists storage
+│   └── {id}.json           # Individual task lists
+├── team-skills/            # Team skills synced from GitHub
+│   ├── skill-1/
+│   │   └── SKILL.md
+│   └── skill-2/
+│       └── SKILL.md
 └── workspaces/{id}/        # Per-workspace data
     ├── sessions/           # Conversation history
     ├── sources/            # Connected data sources
@@ -239,11 +382,13 @@ Key IPC handlers in `apps/electron/src/main/ipc.ts`:
 - `slack:*` - Slack service controls and messaging
 - `telegram:*` - Telegram bot configuration and messaging
 - `skills-marketplace:*` - Marketplace search, install, and skill details
+- `team-skills:*` - Team skills sync from GitHub (setConfig, sync, getStatus)
 - `terminal:*` - Terminal spawning for session resume
 - `labels:*` - Workspace label management
 - `viewer:*` - Viewer backend configuration
 - `templates:*` - Session template CRUD operations
 - `notification:*` - Notification settings and test notification
+- `task-lists:*` - Task list and task CRUD operations (`apps/electron/src/main/task-lists-ipc.ts`)
 
 ## Recent Bug Fixes
 
@@ -311,5 +456,5 @@ When working on Vesper:
 
 ---
 
-*Last Updated: 2026-01-25*
+*Last Updated: 2026-01-26*
 *For questions or updates, please refer to the main README.md and CONTRIBUTING.md*
