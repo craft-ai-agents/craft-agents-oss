@@ -1,7 +1,7 @@
 /**
- * Real User Test for Ralph Loop
+ * Real User Test for Orchestrate
  *
- * Tests the Ralph Loop by starting a loop with a real PRD and monitoring progress.
+ * Tests the Orchestrate by starting a loop with a real PRD and monitoring progress.
  */
 
 const WebSocket = require('ws');
@@ -29,7 +29,7 @@ async function runRealTest() {
   log('');
 
   // Read the PRD content
-  const prdPath = '/tmp/test-ralph-loop.prd.md';
+  const prdPath = '/tmp/test-orchestrate.prd.md';
   const prdContent = fs.readFileSync(prdPath, 'utf-8');
   log(`Loaded PRD from: ${prdPath}`);
   log(`PRD has ${prdContent.split('### [').length - 1} stories`);
@@ -136,7 +136,7 @@ async function runRealTest() {
         const initResult = await sendCommand('Runtime.evaluate', {
           expression: `(async () => {
             try {
-              await window.electronAPI.sendMessage("${sessionId}", "Initialize session for Ralph Loop test.", []);
+              await window.electronAPI.sendMessage("${sessionId}", "Initialize session for Orchestrate test.", []);
               return JSON.stringify({ success: true });
             } catch (error) {
               return JSON.stringify({ success: false, error: error.message });
@@ -196,7 +196,7 @@ async function runRealTest() {
         if (startResponse.result?.error) {
           log(`Loop start error: ${startResponse.result.error}`);
           log('');
-          log('NOTE: The Ralph Loop requires an active session with an initialized agent.');
+          log('NOTE: The Orchestrate requires an active session with an initialized agent.');
           log('You need to send at least one message in the chat session before starting a loop.');
           log('');
           log('To test manually:');

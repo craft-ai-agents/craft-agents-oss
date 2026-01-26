@@ -80,7 +80,7 @@ export default function WorkspaceSettingsPage() {
   const [templatesEnabled, setTemplatesEnabled] = useState(false)
   const [isLoadingWorkspace, setIsLoadingWorkspace] = useState(true)
 
-  // Mode cycling state (includes 'ralph' for Ralph Loop support)
+  // Mode cycling state (includes 'ralph' for Orchestrate support)
   const [enabledModes, setEnabledModes] = useState<PermissionMode[]>(['safe', 'ask', 'allow-all', 'ralph'])
   const [modeCyclingError, setModeCyclingError] = useState<string | null>(null)
 

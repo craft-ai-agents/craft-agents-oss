@@ -1,6 +1,6 @@
 # Ralph Mode User Guide
 
-Welcome to the Ralph Mode user guide. This document will help you understand and use Ralph Mode and Ralph Loop in Vesper to automate your coding workflows.
+Welcome to the Ralph Mode user guide. This document will help you understand and use Ralph Mode and Orchestrate in Vesper to automate your coding workflows.
 
 ---
 
@@ -8,9 +8,9 @@ Welcome to the Ralph Mode user guide. This document will help you understand and
 
 1. [What is Ralph Mode?](#what-is-ralph-mode)
 2. [How to Enable Ralph Mode](#how-to-enable-ralph-mode)
-3. [What is Ralph Loop?](#what-is-ralph-loop)
-4. [Writing a PRD for Ralph Loop](#writing-a-prd-for-ralph-loop)
-5. [Starting a Ralph Loop](#starting-a-ralph-loop)
+3. [What is Orchestrate?](#what-is-orchestrate)
+4. [Writing a PRD for Orchestrate](#writing-a-prd-for-orchestrate)
+5. [Starting a Orchestrate](#starting-a-orchestrate)
 6. [Monitoring Progress](#monitoring-progress)
 7. [Controlling the Loop](#controlling-the-loop)
 8. [Best Practices](#best-practices)
@@ -71,25 +71,26 @@ When you enable Ralph Mode:
 - The interface signals that you're in an autonomous workflow state
 - Vesper is ready to process tasks from a PRD document
 
-**Note:** Ralph Mode is typically activated automatically when you start a Ralph Loop. You don't usually need to enable it manually. The permission mode is locked during loop execution to prevent accidental changes.
+**Note:** Ralph Mode is typically activated automatically when you start a Orchestrate. You don't usually need to enable it manually. The permission mode is locked during loop execution to prevent accidental changes.
 
 ---
 
-## What is Ralph Loop?
+## What is Orchestrate?
 
-Ralph Loop is a feature that lets Vesper work through a list of tasks automatically. You provide a document (called a PRD or Product Requirements Document) with your tasks listed as checkboxes, and Vesper works through them one by one.
+Orchestrate is a feature that lets Vesper work through a list of tasks automatically. You provide a document (called a PRD or Product Requirements Document) with your tasks listed as checkboxes, and Vesper delegates execution to the dispatch skill for parallel task processing.
 
 ### How It Works
 
 1. You write a PRD with a list of tasks (called "stories")
-2. You start the Ralph Loop
-3. Vesper reads the first unchecked task and works on it
-4. When complete, Vesper marks that task as done and moves to the next
-5. This continues until all tasks are finished (or you stop the loop)
+2. You start the Orchestrate
+3. Orchestrate converts your stories into tasks for the dispatch skill
+4. The dispatch skill executes tasks (potentially in parallel based on configuration)
+5. Orchestrate monitors progress and updates story status
+6. When complete, all stories are marked as done
 
 ### The Concept of Stories
 
-In Ralph Loop, each task is called a "story." Stories are small, focused pieces of work that Vesper can complete independently. For example:
+In Orchestrate, each task is called a "story." Stories are small, focused pieces of work that Vesper can complete independently. For example:
 
 - "Add a login button to the header"
 - "Create a password reset form"
@@ -99,15 +100,17 @@ In Ralph Loop, each task is called a "story." Stories are small, focused pieces 
 
 - **Autonomy**: Process multiple stories without constant user intervention
 - **Structured Progress**: Track completion via checkbox-based PRDs
+- **Parallel Execution**: Dispatch skill can run multiple tasks simultaneously (based on configuration)
 - **Resilience**: Continue working even when individual stories fail
 - **Accountability**: Auto-commit changes with proper attribution
-- **Control**: Pause, resume, or cancel at any time
+- **Native Integration**: Uses Claude Code's native task system for better compatibility
+- **Control**: Cancel at any time (pause/resume handled by dispatch)
 
 ---
 
-## Writing a PRD for Ralph Loop
+## Writing a PRD for Orchestrate
 
-A PRD (Product Requirements Document) is simply a markdown file with a list of tasks formatted as checkboxes. Ralph Loop reads this document to know what work needs to be done.
+A PRD (Product Requirements Document) is simply a markdown file with a list of tasks formatted as checkboxes. Orchestrate reads this document to know what work needs to be done.
 
 ### The Basic Format
 
@@ -218,11 +221,11 @@ Let's break down what each part means:
 
 ---
 
-## Starting a Ralph Loop
+## Starting a Orchestrate
 
 ### How to Initiate the Loop
 
-You can start a Ralph Loop in two ways:
+You can start a Orchestrate in two ways:
 
 **Option A: Using the Accept Plan Button**
 1. Create or paste your PRD content in the chat
@@ -232,30 +235,32 @@ You can start a Ralph Loop in two ways:
 **Option B: Manual Invocation**
 1. Ensure you have a PRD file in your project or paste the content
 2. Reference the PRD in the chat
-3. Ask Vesper to run it as a Ralph Loop
+3. Ask Vesper to run it as a Orchestrate
 
 The "Accept Plan" button provides direct invocation - it immediately starts the loop without requiring LLM interpretation, making it faster and more reliable.
 
 ### Configuration Options
 
-When starting a loop, you can customize these settings:
+When starting an orchestration, you can customize these settings:
 
 | Option | What It Does | Default |
 |--------|-------------|---------|
-| **Max Iterations per Story** | How many attempts Vesper gets to complete each story | 5 |
+| **Parallelism** | How many tasks can run simultaneously | 3 |
 | **Timeout per Story** | Maximum time allowed for each story | 10 minutes |
 | **Auto-commit** | Whether to automatically save changes to git | Yes |
 | **Commit Prefix** | The prefix used for git commit messages | "feat" |
 
 For most users, the default settings work well. You only need to adjust these if:
 
-- Your stories are complex and need more iterations
+- You want more or fewer parallel tasks
 - Your stories involve long-running operations
 - You want to commit changes yourself
 
+**Note:** Parallelism is managed by the dispatch skill. Orchestrate delegates execution and monitors progress.
+
 ### What to Expect When It Starts
 
-When you start a Ralph Loop:
+When you start a Orchestrate:
 
 1. Vesper parses your PRD to find all the stories
 2. The permission mode switches to Ralph (orange) and locks
@@ -267,7 +272,7 @@ When you start a Ralph Loop:
 
 ## Monitoring Progress
 
-Once a Ralph Loop is running, you can monitor its progress through the progress indicator in the chat interface.
+Once a Orchestrate is running, you can monitor its progress through the progress indicator in the chat interface.
 
 ### Understanding the Progress Indicator
 
@@ -333,7 +338,7 @@ Each iteration is a complete try at the story. Vesper learns from previous attem
 
 ## Controlling the Loop
 
-You have full control over the Ralph Loop at any time.
+You have full control over the Orchestrate at any time.
 
 ### How to Pause
 
@@ -407,7 +412,7 @@ You can always:
 If the app crashes or closes during a loop:
 
 1. Loop state is automatically saved to disk
-2. On restart, you'll see a recovery prompt: "Ralph Loop was interrupted. Would you like to resume?"
+2. On restart, you'll see a recovery prompt: "Orchestrate was interrupted. Would you like to resume?"
 3. Choose "Resume" to continue where you left off
 4. Choose "Discard" to clear the interrupted loop state
 
@@ -421,7 +426,7 @@ The recovery system preserves:
 
 ## Best Practices
 
-Follow these recommendations to get the most out of Ralph Loop.
+Follow these recommendations to get the most out of Orchestrate.
 
 ### Keep Stories Small and Focused
 
@@ -453,7 +458,7 @@ Before running a long PRD with many stories:
 4. Once comfortable, run larger PRDs
 
 This helps you:
-- Understand how Ralph Loop works
+- Understand how Orchestrate works
 - Identify any issues with your PRD format
 - Build confidence before automating more work
 
@@ -466,7 +471,7 @@ When the loop finishes:
 3. **Test the code**: Make sure everything works as expected
 4. **Make adjustments**: Fix anything that needs tweaking
 
-Remember: Ralph Loop automates the work, but you're still responsible for the final quality.
+Remember: Orchestrate automates the work, but you're still responsible for the final quality.
 
 ### Start with Clean Working Directory
 
@@ -511,7 +516,7 @@ Here are solutions to common issues you might encounter.
 
 #### Stories aren't being detected
 
-**Symptoms:** Ralph Loop says there are no stories to process.
+**Symptoms:** Orchestrate says there are no stories to process.
 
 **Solutions:**
 - Make sure your checkboxes use the exact format: `### [ ] ID: Title`
@@ -661,4 +666,4 @@ If you continue to have issues:
 
 ---
 
-Happy automating with Ralph Loop!
+Happy automating with Orchestrate!

@@ -13,14 +13,14 @@ Global skills from `~/.claude/skills/` and `~/.craft-agent/global-skills/` are v
 | **UI** (loadAllSkills) | Workspace + Global + Claude Code |
 | **SDK** (plugins config) | Workspace only |
 
-When a user types `@ralph-loop` in chat:
-1. UI shows the skill (loaded from `~/.claude/skills/ralph-loop/`)
-2. Message sent to SDK with `@ralph-loop` mention
+When a user types `@orchestrate` in chat:
+1. UI shows the skill (loaded from `~/.claude/skills/orchestrate/`)
+2. Message sent to SDK with `@orchestrate` mention
 3. SDK's Skill tool searches only in workspace plugins
 4. Skill not found → agent doesn't receive skill instructions
 
 **Affected Skills:** All 20+ skills in `~/.claude/skills/` including:
-- ralph-loop, agent-browser, compound-docs, skill-creator, etc.
+- orchestrate, agent-browser, compound-docs, skill-creator, etc.
 
 ## Proposed Solution
 
@@ -129,9 +129,9 @@ This order ensures workspace skills override global skills with the same slug.
 ### Manual Testing
 
 1. **Verify @mention works for global skills:**
-   - Ensure `~/.claude/skills/ralph-loop/` exists
+   - Ensure `~/.claude/skills/orchestrate/` exists
    - Open Electron app, start new session
-   - Type `@ralph-loop` in chat - should autocomplete
+   - Type `@orchestrate` in chat - should autocomplete
    - Submit message - skill instructions should be included
 
 2. **Verify workspace priority:**

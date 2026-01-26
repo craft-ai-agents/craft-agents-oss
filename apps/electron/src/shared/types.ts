@@ -361,14 +361,14 @@ export interface Session {
     /** Model's context window size in tokens (from SDK modelUsage) */
     contextWindow?: number
   }
-  // Ralph Loop state (when a loop is active)
+  // Orchestrate state (when a loop is active)
   loopState?: LoopStateUI
   // Label IDs assigned to this session
   labelIds?: string[]
 }
 
 /**
- * Ralph Loop state for UI display
+ * Orchestrate state for UI display
  */
 export interface LoopStateUI {
   /** Whether a loop is currently active */
@@ -386,8 +386,8 @@ export interface LoopStateUI {
   progress?: {
     currentStoryIndex: number
     totalStories: number
-    currentIteration: number
-    maxIterations: number
+    currentIteration?: number  // Optional - no longer tracked by orchestrator
+    maxIterations?: number     // Optional - no longer tracked by orchestrator
   }
   /** Elapsed time in milliseconds */
   elapsedMs?: number
@@ -498,7 +498,7 @@ export type SessionEvent =
   | { type: 'usage_update'; sessionId: string; tokenUsage: { inputTokens: number; contextWindow?: number } }
   // JSON Render event (AI-generated UI)
   | { type: 'json_render'; sessionId: string; message: { id: string; content: string; timestamp: number; turnId?: string; jsonRender: { tree: { root: string; elements: Record<string, { type: string; props: Record<string, unknown>; children?: string[] }> } } } }
-  // Ralph Loop events
+  // Orchestrate events
   | { type: 'loop_started'; sessionId: string; loopId: string; totalStories: number; config: { maxIterationsPerStory: number; timeoutPerStoryMs: number; autoCommit: boolean } }
   | { type: 'loop_progress'; sessionId: string; loopId: string; currentStory: { id: string; title: string } | null; storyIndex: number; totalStories: number; currentIteration: number; maxIterations: number; elapsedMs: number; status: 'running' | 'paused' }
   | { type: 'loop_story_complete'; sessionId: string; loopId: string; story: { id: string; title: string }; result: 'success' | 'failed' | 'skipped' | 'timeout'; commitSha?: string; error?: string }
@@ -829,7 +829,7 @@ export const IPC_CHANNELS = {
   WINDOW_FOCUS_STATE: 'window:focusState',  // Broadcast: boolean (isFocused)
   WINDOW_GET_FOCUS_STATE: 'window:getFocusState',
 
-  // Ralph Loop (autonomous coding loops)
+  // Orchestrate (autonomous coding loops)
   LOOP_START: 'loop:start',
   LOOP_PAUSE: 'loop:pause',
   LOOP_RESUME: 'loop:resume',
@@ -1209,7 +1209,7 @@ export interface ElectronAPI {
   broadcastThemePreferences(preferences: { mode: string; colorTheme: string; font: string }): Promise<void>
   onThemePreferencesChange(callback: (preferences: { mode: string; colorTheme: string; font: string }) => void): () => void
 
-  // Ralph Loop (autonomous coding loops)
+  // Orchestrate (autonomous coding loops)
   loopStart(sessionId: string, prdContent: string, config?: LoopConfigInput): Promise<{ loopId: string } | { error: string }>
   loopPause(sessionId: string): Promise<void>
   loopResume(sessionId: string): Promise<void>

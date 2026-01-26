@@ -161,7 +161,7 @@ packages/shared/src/
 │   ├── types.ts      # Task list types
 │   └── storage.ts    # Task CRUD
 │
-├── ralph-loop/       # Ralph Loop
+├── orchestrate/       # Orchestrate
 │   ├── loop-runner.ts
 │   ├── prd-parser.ts
 │   └── types.ts
@@ -242,7 +242,7 @@ __tests__/                 # Test directories
 **Examples:**
 ```
 task-lists/                ✓
-ralph-loop/                ✓
+orchestrate/                ✓
 claude-profiles/           ✓
 __tests__/                 ✓
 ```

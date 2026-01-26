@@ -1,7 +1,7 @@
 /**
  * LoopSummaryCard
  *
- * Displays a summary of a completed Ralph Loop.
+ * Displays a summary of a completed Orchestrate.
  * Shows completed/failed/skipped stories, total time, and commit hashes.
  */
 

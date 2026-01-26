@@ -1,10 +1,12 @@
-# Ralph Loop - Technical Architecture
+# Orchestrate - Technical Architecture
 
 ## Overview
 
-Ralph Loop is an autonomous coding system integrated into the Vesper Electron application. It enables users to execute iterative, goal-driven coding loops directly from the chat interface. Ralph Loop processes a PRD (Product Requirements Document) with checkbox-formatted user stories, working through each story autonomously until completion or iteration limits are reached.
+Orchestrate is an autonomous coding orchestration system integrated into the Vesper Electron application. It enables users to execute structured PRD workflows by delegating to the dispatch skill for parallel task execution. Orchestrate processes a PRD (Product Requirements Document) with checkbox-formatted user stories, converting them to Claude Code native tasks and monitoring progress.
 
-This document provides comprehensive technical details for developers working on or integrating with the Ralph Loop system.
+**Key Architecture Change:** Orchestrate is now a thin orchestration layer that delegates execution to the dispatch skill, using Claude Code's native task system (`~/.claude/tasks/`) instead of Vesper's custom task-lists. This provides better integration with Claude Code's workflows and leverages the dispatch skill's parallel execution capabilities.
+
+This document provides comprehensive technical details for developers working on or integrating with the Orchestrate system.
 
 ---
 
@@ -34,30 +36,35 @@ This document provides comprehensive technical details for developers working on
 |                     Vesper Main Process                              |
 +---------------------------------------------------------------------+
 |  +------------------+    +----------------------------------------+  |
-|  |  SessionManager  |<-->|         RalphLoopRunner                |  |
-|  |  (existing)      |    |  - Story selection & parsing           |  |
-|  +--------+---------+    |  - Iteration control                   |  |
-|           |              |  - Progress event emission             |  |
-|           |              |  - Git commit verification             |  |
+|  |  SessionManager  |<-->|         Orchestrator                     |  |
+|  |  (existing)      |    |  - PRD parsing                         |  |
+|  +--------+---------+    |  - Story → Task conversion             |  |
+|           |              |  - Dispatch delegation                 |  |
+|           |              |  - Progress monitoring                 |  |
 |  +--------v---------+    +----------------+-----------------------+  |
-|  |   CraftAgent     |<------------------>|                        |  |
-|  |   (per story)    |    Reuses existing agent infrastructure    |  |
+|  |   Dispatch Skill |<------------------>|  Metadata encoding     |  |
+|  | (parallel tasks) |    Delegates to Claude Code native dispatch  |  |
 |  +------------------+                                              |  |
+|           |                                                          |
+|  +--------v---------+                                                |
+|  | ~/.claude/tasks/ |  Claude Code native task storage             |  |
+|  | {listId}/        |  File watcher monitors progress              |  |
+|  +------------------+                                                |
 +---------------------------------------------------------------------+
                               ^
-                              | IPC Events (loop_progress, loop_complete, etc.)
+                              | IPC Events (progress, story_complete, etc.)
                               v
 +---------------------------------------------------------------------+
 |                    Renderer Process                                  |
 |  +---------------------------------------------------------------+  |
-|  |  Event Processor (extended for loop events)                   |  |
-|  |  processEvent(state, LoopProgressEvent) => new state          |  |
+|  |  Event Processor (extended for orchestrate events)            |  |
+|  |  processEvent(state, OrchestrateEvent) => new state           |  |
 |  +----------------------------+----------------------------------+  |
 |                               |                                      |
 |  +----------------------------v----------------------------------+  |
-|  |  LoopProgressIndicator (chat integration)                     |  |
+|  |  OrchestrateProgressIndicator (chat integration)              |  |
 |  |  - Story progress (3/5)                                       |  |
-|  |  - Current iteration (2/5)                                    |  |
+|  |  - Task completion tracking                                   |  |
 |  |  - Elapsed time                                               |  |
 |  |  - Pause/Cancel controls                                      |  |
 |  |  - Expandable sections (Completed, Activity, Errors)          |  |
@@ -69,48 +76,49 @@ This document provides comprehensive technical details for developers working on
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
-| Agent Integration | Use Claude Agent SDK directly | Avoids CLI spawning overhead, integrates with existing permission system |
+| Task System | Claude Code native tasks (`~/.claude/tasks/`) | Better integration, leverages dispatch skill, no custom task storage |
+| Execution Model | Delegate to dispatch skill | Parallel execution, proven workflow, less code to maintain |
+| Metadata Storage | HTML comments in task descriptions | Invisible to users, preserves story tracking, survives task updates |
 | Process Location | Main process | Simpler IPC, direct access to SessionManager and git operations |
-| State Management | Extend session state with loop metadata | Consistent with Vesper's Jotai atom architecture |
+| State Management | Extend session state with orchestrate metadata | Consistent with Vesper's Jotai atom architecture |
 | PRD Format | Markdown with `### [ ] US-XXX:` syntax | Compatible with standard checkbox format, easy to edit |
 | Permission Handling | Respect session's current mode | Maintains safety, locks mode during execution |
-| Loop Invocation | Direct IPC call | Faster, more reliable than LLM-mediated flow |
+| Orchestrate Invocation | Direct IPC call | Faster, more reliable than LLM-mediated flow |
 
 ---
 
 ## Core Components
 
-### 1. RalphLoopRunner
+### 1. Orchestrator
 
-**Location:** `packages/shared/src/ralph-loop/loop-runner.ts`
+**Location:** `packages/shared/src/orchestrate/orchestrator.ts`
 
-The central orchestrator for loop execution.
+The central orchestration controller - a thin layer over dispatch.
 
 **Responsibilities:**
-- Manages loop lifecycle (start, pause, resume, cancel)
-- Processes stories sequentially
-- Controls iterations per story (default: 5)
-- Handles timeouts (default: 10 minutes per story)
-- Emits progress events
-- Coordinates with CraftAgent for story execution
-- Integrates with git operations for commit verification
+- Parses PRD into structured stories
+- Converts stories to dispatch-compatible tasks
+- Starts file watcher to monitor task progress
+- Maps task updates back to story progress
+- Emits progress events for UI updates
+- Manages orchestration lifecycle (prepare, cancel, destroy)
 
 **Interface:**
 
 ```typescript
-export class RalphLoopRunner extends EventEmitter {
+export class Orchestrator extends EventEmitter {
   constructor(
     private sessionId: string,
-    private agent: CraftAgent,
-    private gitOps: GitOperations,
-    private config: LoopConfig
+    private config: OrchestrateConfig = DEFAULT_ORCHESTRATE_CONFIG
   ) {}
 
-  async start(prd: PRD): Promise<LoopResult>
-  pause(): void
-  async resume(): Promise<void>
+  async prepare(prd: PRD, taskListId: string): Promise<DispatchTask[]>
+  async start(prd: PRD): Promise<OrchestrateResult>  // Legacy compatibility
+  pause(): void    // Deprecated - handled by dispatch
+  async resume(): Promise<void>  // Deprecated - handled by dispatch
   cancel(): void
-  getState(): LoopState | null
+  destroy(): void
+  getState(): OrchestrateState | null
   isRunning(): boolean
 }
 ```
@@ -118,20 +126,20 @@ export class RalphLoopRunner extends EventEmitter {
 **Event Emissions:**
 
 ```typescript
-export type LoopRunnerEvent =
-  | { type: 'progress'; state: LoopState }
-  | { type: 'story_start'; story: Story }
-  | { type: 'story_complete'; story: Story; result: StoryResult }
-  | { type: 'iteration'; iteration: number; story: Story }
-  | { type: 'error'; error: LoopError }
-  | { type: 'complete'; result: LoopResult }
-  | { type: 'paused'; state: LoopState }
-  | { type: 'resumed'; state: LoopState }
+export type OrchestratorEvents =
+  | { progress: (state: OrchestrateState) => void }
+  | { story_start: (story: Story) => void }
+  | { story_complete: (story: Story, result: StoryResult) => void }
+  | { error: (error: OrchestrateError) => void }
+  | { complete: (result: OrchestrateResult) => void }
+  | { paused: (state: OrchestrateState) => void }
+  | { resumed: (state: OrchestrateState) => void }
+  | { dispatch_ready: (tasks: DispatchTask[], taskListId: string) => void }
 ```
 
 ### 2. PRD Parser
 
-**Location:** `packages/shared/src/ralph-loop/prd-parser.ts`
+**Location:** `packages/shared/src/orchestrate/prd-parser.ts`
 
 Parses markdown PRD documents into structured story objects.
 
@@ -188,9 +196,92 @@ export interface PRD {
 }
 ```
 
-### 3. Git Operations
+### 3. Dispatch Adapter
 
-**Location:** `packages/shared/src/ralph-loop/git-ops.ts`
+**Location:** `packages/shared/src/orchestrate/dispatch-adapter.ts`
+
+Bridges Orchestrate with the dispatch skill by converting stories to tasks.
+
+**Interface:**
+
+```typescript
+export interface DispatchTask {
+  subject: string
+  description: string
+  activeForm: string
+  blockedBy?: string[]
+}
+
+export function storiesToDispatchTasks(
+  stories: Story[],
+  orchestrateId: string
+): DispatchTask[]
+
+export function generateDispatchCommand(
+  taskListId: string,
+  tasks: DispatchTask[],
+  config: OrchestrateConfig
+): string
+```
+
+**Task Description Format:**
+
+Each task description includes embedded metadata:
+```
+[Story content]
+
+<!-- orchestrate-meta: {"storyId":"US-001", "orchestrateId":"orch-...", "lineNumber":10} -->
+```
+
+### 4. Meta Codec
+
+**Location:** `packages/shared/src/orchestrate/meta-codec.ts`
+
+Encodes and decodes Orchestrate metadata in task descriptions.
+
+**Interface:**
+
+```typescript
+export interface OrchestrateMeta {
+  storyId: string
+  orchestrateId: string
+  lineNumber: number
+}
+
+export function encodeMeta(content: string, meta: OrchestrateMeta): string
+export function decodeMeta(description: string): OrchestrateMeta | null
+export function stripMeta(description: string): string
+export function hasMeta(description: string): boolean
+```
+
+### 5. Progress Monitor
+
+**Location:** `packages/shared/src/orchestrate/progress-monitor.ts`
+
+Watches task files in `~/.claude/tasks/{listId}/` for status changes.
+
+**Interface:**
+
+```typescript
+export interface ProgressUpdate {
+  taskId: string
+  status: 'pending' | 'in_progress' | 'completed'
+  meta: OrchestrateMeta | null
+}
+
+export type ProgressCallback = (update: ProgressUpdate) => void
+
+export function watchTaskProgress(
+  taskListId: string,
+  onProgress: ProgressCallback
+): FSWatcher
+
+export function getTaskDir(taskListId: string): string
+```
+
+### 6. Git Operations
+
+**Location:** `packages/shared/src/orchestrate/git-ops.ts`
 
 Handles git operations for commit tracking and auto-commit.
 
@@ -208,6 +299,7 @@ export interface GitOperations {
 }
 
 export function createGitOperations(workingDirectory: string): GitOperations
+export function validateGitRepository(workingDirectory: string): Promise<boolean>
 ```
 
 **Auto-commit Message Format:**
@@ -215,25 +307,29 @@ export function createGitOperations(workingDirectory: string): GitOperations
 ```
 feat(US-XXX): story title
 
-Auto-committed by Ralph Loop
+Auto-committed by Orchestrate
 ```
 
-### 4. Module Index
+### 7. Module Index
 
-**Location:** `packages/shared/src/ralph-loop/index.ts`
+**Location:** `packages/shared/src/orchestrate/index.ts`
 
-Exports all public types and functions for the Ralph Loop system.
+Exports all public types and functions for the Orchestrate system, including legacy aliases for backwards compatibility.
+
+**Legacy Aliases:** `RalphLoopRunner`, `createLoopRunner()`, `LoopConfig`, `LoopStatus`, etc. are maintained during migration.
 
 ### Key File Locations
 
 | File | Purpose |
 |------|---------|
-| `packages/shared/src/ralph-loop/types.ts` | Core type definitions |
-| `packages/shared/src/ralph-loop/loop-runner.ts` | Main loop orchestration |
-| `packages/shared/src/ralph-loop/prd-parser.ts` | PRD parsing and validation |
-| `packages/shared/src/ralph-loop/git-ops.ts` | Git commit operations |
-| `packages/shared/src/ralph-loop/state-storage.ts` | Loop state persistence |
-| `packages/shared/src/ralph-loop/index.ts` | Module exports |
+| `packages/shared/src/orchestrate/types.ts` | Core type definitions (OrchestrateConfig, OrchestrateState, etc.) |
+| `packages/shared/src/orchestrate/orchestrator.ts` | Main orchestration controller |
+| `packages/shared/src/orchestrate/dispatch-adapter.ts` | Story → Task conversion |
+| `packages/shared/src/orchestrate/meta-codec.ts` | Metadata encoding/decoding |
+| `packages/shared/src/orchestrate/progress-monitor.ts` | Task file watcher |
+| `packages/shared/src/orchestrate/prd-parser.ts` | PRD parsing and validation |
+| `packages/shared/src/orchestrate/git-ops.ts` | Git commit operations |
+| `packages/shared/src/orchestrate/index.ts` | Module exports with legacy aliases |
 | `apps/electron/src/main/sessions.ts` | IPC handlers and integration |
 | `apps/electron/src/renderer/components/loop/` | UI components |
 | `apps/electron/src/renderer/event-processor/handlers/loop.ts` | Event handlers |
@@ -244,7 +340,7 @@ Exports all public types and functions for the Ralph Loop system.
 
 ### The 'ralph' Permission Mode
 
-Ralph Loop introduces a dedicated permission mode (`'ralph'`) optimized for autonomous execution workflows.
+Orchestrate introduces a dedicated permission mode (`'ralph'`) optimized for autonomous execution workflows.
 
 **Mode Definition:**
 
@@ -307,7 +403,7 @@ if (mode === 'allow-all' || mode === 'ralph') {
 
 ### Expected Markdown Format
 
-Ralph Loop parses PRD documents with checkbox-formatted user stories. The expected format:
+Orchestrate parses PRD documents with checkbox-formatted user stories. The expected format:
 
 ```markdown
 # Feature Name
@@ -366,7 +462,7 @@ const STORY_HEADER_PATTERN = /^###\s*\[([ xX])\]\s*([A-Za-z]*-?\d+):\s*(.+)$/
 export const IPC_CHANNELS = {
   // ... other channels
 
-  // Ralph Loop (autonomous coding loops)
+  // Orchestrate (autonomous coding loops)
   LOOP_START: 'loop:start',
   LOOP_PAUSE: 'loop:pause',
   LOOP_RESUME: 'loop:resume',
@@ -381,7 +477,7 @@ export const IPC_CHANNELS = {
 
 ```typescript
 interface ElectronAPI {
-  // Ralph Loop (autonomous coding loops)
+  // Orchestrate (autonomous coding loops)
   loopStart(sessionId: string, prdContent: string, config?: LoopConfigInput): Promise<{ loopId: string } | { error: string }>
   loopPause(sessionId: string): Promise<void>
   loopResume(sessionId: string): Promise<void>
@@ -397,7 +493,7 @@ interface ElectronAPI {
 **Location:** `apps/electron/src/preload/index.ts`
 
 ```typescript
-// Ralph Loop (autonomous coding loops)
+// Orchestrate (autonomous coding loops)
 loopStart: (sessionId: string, prdContent: string, config?: LoopConfigInput) =>
   ipcRenderer.invoke(IPC_CHANNELS.LOOP_START, sessionId, prdContent, config),
 loopPause: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.LOOP_PAUSE, sessionId),
@@ -420,7 +516,7 @@ The following event types are emitted from main to renderer during loop executio
 export type SessionEvent =
   // ... other events
 
-  // Ralph Loop events
+  // Orchestrate events
   | { type: 'loop_started'; sessionId: string; loopId: string; totalStories: number; config: { maxIterationsPerStory: number; timeoutPerStoryMs: number; autoCommit: boolean } }
   | { type: 'loop_progress'; sessionId: string; loopId: string; currentStory: { id: string; title: string } | null; storyIndex: number; totalStories: number; currentIteration: number; maxIterations: number; elapsedMs: number; status: 'running' | 'paused' }
   | { type: 'loop_story_complete'; sessionId: string; loopId: string; story: { id: string; title: string }; result: 'success' | 'failed' | 'skipped' | 'timeout'; commitSha?: string; error?: string }
@@ -506,83 +602,114 @@ export interface LoopConfigInput {
 
 ## Execution Flow
 
-### Story Processing Sequence
+### Story Processing Sequence (New Architecture)
 
 ```
 1. Parse PRD into structured stories
 2. Validate PRD (check for duplicates, valid format)
-3. Lock permission mode to 'ralph'
-4. For each pending story:
-   a. Capture current git HEAD
-   b. Mark story as in_progress
-   c. For each iteration (up to maxIterationsPerStory):
-      i.   Generate story prompt
-      ii.  Send to CraftAgent
-      iii. Wait for agent completion
-      iv.  Check for timeout
-      v.   If success, verify/create commit
-      vi.  If failure, continue to next iteration
-   d. Mark story result (success/failed/timeout)
-   e. Emit story_complete event
-   f. Check for pause/cancel
-   g. Persist loop state
-5. Emit loop_complete with summary
-6. Unlock permission mode
+3. Convert stories to dispatch tasks with embedded metadata
+4. Start file watcher on ~/.claude/tasks/{taskListId}/
+5. Emit dispatch_ready event with tasks
+6. Dispatch skill executes tasks in parallel (external to Orchestrate)
+7. File watcher detects task status changes:
+   a. Task file created → pending
+   b. Task status: in_progress → mark story in_progress, emit story_start
+   c. Task status: completed → mark story completed, emit story_complete
+8. When all stories completed:
+   a. Stop file watcher
+   b. Build result summary
+   c. Emit complete event
+9. Cleanup resources on destroy()
 ```
 
-### Iteration Control
+**Note:** The new architecture delegates actual execution to dispatch. Orchestrate is responsible for:
+- PRD parsing and task conversion
+- Progress monitoring via file watcher
+- Event emission for UI updates
+- Metadata correlation between tasks and stories
 
-Each story is processed with configurable iteration limits:
+### Metadata Encoding
 
-- Default: 5 iterations maximum per story
-- Each iteration represents one agent turn
-- If the agent completes the task, iteration stops
-- Timeout applies per-story (default: 10 minutes)
-- Stories can be skipped if they exceed iteration limits
-
-### Timeout Handling
+Stories are tracked by encoding metadata in task descriptions:
 
 ```typescript
-// Set up timeout
-const timeoutId = setTimeout(() => {
-  this.currentAbortController?.abort()
-}, this.config.timeoutPerStoryMs)
-
-try {
-  // Run the agent
-  for await (const event of this.agent.chat(prompt)) {
-    // ... process events
-  }
-} finally {
-  clearTimeout(timeoutId)
+const meta: OrchestrateMeta = {
+  storyId: 'US-001',
+  orchestrateId: 'orch-1234567-abc',
+  lineNumber: 10
 }
+
+const description = encodeMeta(story.content, meta)
+// Result:
+// [Story content]
+//
+// <!-- orchestrate-meta: {"storyId":"US-001", "orchestrateId":"orch-1234567-abc", "lineNumber":10} -->
+```
+
+The metadata is invisible to users but preserved through task updates, enabling progress correlation.
+
+### Progress Monitoring
+
+The file watcher monitors `~/.claude/tasks/{taskListId}/` for changes:
+
+```typescript
+const watcher = watchTaskProgress(taskListId, (update) => {
+  // Decode metadata from task description
+  const meta = decodeMeta(update.description)
+
+  // Find corresponding story
+  const story = prd.stories.find(s => s.id === meta.storyId)
+
+  // Update story status based on task status
+  if (update.status === 'in_progress') {
+    markStoryInProgress(prd, meta.storyId)
+  } else if (update.status === 'completed') {
+    markStoryComplete(prd, meta.storyId)
+  }
+})
 ```
 
 ### Git Commit Integration
 
-The loop integrates with git for change tracking:
+Git operations are handled by the dispatch skill during task execution. The orchestrator tracks commits via:
 
-1. **Before story**: Capture HEAD commit SHA
-2. **After story success**: Check if new commit was created
-3. **Auto-commit**: If no commit and changes exist, create one automatically
+1. **Story completion**: Monitors for commit SHA in story results
+2. **Auto-commit**: Configured via OrchestrateConfig.autoCommit
+3. **Commit tracking**: Associates commits with completed stories
 
 ```typescript
-// Auto-commit message format
-const message = `feat(${storyId}): ${title}\n\nAuto-committed by Ralph Loop`
+// Auto-commit message format (handled by dispatch)
+const message = `feat(${storyId}): ${title}\n\nAuto-committed by Orchestrate`
 ```
 
-### Pause/Resume/Cancel
+### Pause/Resume/Cancel (Deprecated)
 
-- **Pause**: Sets `isPaused` flag; loop completes current story then stops
-- **Resume**: Clears `isPaused` flag and continues with next story
-- **Cancel**: Sets `isCancelled` flag and aborts current operation immediately
+**Note:** In the new architecture, pause/resume/cancel should be handled by the dispatch skill directly. The orchestrator provides these methods for backwards compatibility but they are no-ops:
 
-### Skip Story
+- **Pause**: Deprecated - dispatch skill handles pausing
+- **Resume**: Deprecated - dispatch skill handles resuming
+- **Cancel**: Stops file watcher and cleans up orchestrator state
 
-- **Skip**: Marks current story as skipped with `[~]` checkbox
-- Moves to next pending story
-- Updates PRD with skip marker
-- Emits story_complete event with 'skipped' result
+### Lifecycle Management
+
+```typescript
+// Start orchestration
+const orchestrator = createOrchestrator(sessionId, config)
+const tasks = await orchestrator.prepare(prd, taskListId)
+
+// Tasks ready for dispatch
+orchestrator.on('dispatch_ready', (tasks, taskListId) => {
+  // Pass tasks to dispatch skill for execution
+})
+
+// Monitor progress
+orchestrator.on('story_complete', (story, result) => {
+  console.log(`Story ${story.id} completed:`, result)
+})
+
+// Cleanup
+orchestrator.destroy()
+```
 
 ---
 
@@ -596,7 +723,7 @@ Sessions track loop state for UI display:
 export interface Session {
   // ... other fields
 
-  // Ralph Loop state (when a loop is active)
+  // Orchestrate state (when a loop is active)
   loopState?: LoopStateUI
 }
 
@@ -712,10 +839,10 @@ The `SessionManager` class implements the loop control methods:
 
 ```typescript
 class SessionManager {
-  /** Map of session ID -> running RalphLoopRunner */
-  private loopRunners: Map<string, RalphLoopRunner> = new Map()
+  /** Map of session ID -> running OrchestrateRunner */
+  private loopRunners: Map<string, OrchestrateRunner> = new Map()
 
-  /** Start a Ralph Loop for a session */
+  /** Start a Orchestrate for a session */
   async startLoop(sessionId: string, prdContent: string, config?: LoopConfigInput): Promise<{ loopId: string } | { error: string }>
 
   /** Pause a running loop */
@@ -890,7 +1017,7 @@ export interface ActivityLogEntry {
 
 ### Persistence Storage
 
-**Location:** `packages/shared/src/ralph-loop/state-storage.ts`
+**Location:** `packages/shared/src/orchestrate/state-storage.ts`
 
 ```typescript
 export interface PersistedLoopState {
@@ -924,7 +1051,7 @@ export class LoopStateStorage {
 
 When session loads, check for active loop state:
 
-1. If found, show recovery prompt: "Ralph Loop was interrupted. Would you like to resume?"
+1. If found, show recovery prompt: "Orchestrate was interrupted. Would you like to resume?"
 2. User can choose to resume or discard
 3. Resuming restores:
    - Completed stories list
@@ -963,7 +1090,7 @@ if (persistedState) {
 - Only creates commits if there are actual changes
 - Verifies git repository exists before attempting commits
 - Uses standard git commit format for traceability
-- Includes "Auto-committed by Ralph Loop" attribution
+- Includes "Auto-committed by Orchestrate" attribution
 
 ### Story Isolation
 
@@ -995,7 +1122,7 @@ if (persistedState) {
 **Approach:** Spawn `ralph` CLI as child process, capture stdout for progress.
 
 **Pros:**
-- Direct reuse of existing Ralph Loop code
+- Direct reuse of existing Orchestrate code
 - No SDK integration needed
 
 **Cons:**
@@ -1038,7 +1165,7 @@ if (persistedState) {
 
 #### 4. LLM-Mediated Invocation (Rejected)
 
-**Approach:** Keep the current message-based flow but enhance Claude's prompt to reliably invoke Ralph Loop.
+**Approach:** Keep the current message-based flow but enhance Claude's prompt to reliably invoke Orchestrate.
 
 **Pros:**
 - Minimal code changes
@@ -1141,11 +1268,11 @@ useEffect(() => {
 
 ### Internal Files
 
-- Loop types: `packages/shared/src/ralph-loop/types.ts`
-- Loop runner: `packages/shared/src/ralph-loop/loop-runner.ts`
-- PRD parser: `packages/shared/src/ralph-loop/prd-parser.ts`
-- Git operations: `packages/shared/src/ralph-loop/git-ops.ts`
-- State storage: `packages/shared/src/ralph-loop/state-storage.ts`
+- Loop types: `packages/shared/src/orchestrate/types.ts`
+- Loop runner: `packages/shared/src/orchestrate/loop-runner.ts`
+- PRD parser: `packages/shared/src/orchestrate/prd-parser.ts`
+- Git operations: `packages/shared/src/orchestrate/git-ops.ts`
+- State storage: `packages/shared/src/orchestrate/state-storage.ts`
 - Mode types: `packages/shared/src/agent/mode-types.ts`
 - Mode manager: `packages/shared/src/agent/mode-manager.ts`
 - Session manager: `apps/electron/src/main/sessions.ts`

@@ -227,7 +227,7 @@ Templates can include a task list ID for multi-agent workflows:
 When you start a session from this template, it will automatically connect to that task list, allowing multiple agents to coordinate work.
 
 **Use cases:**
-- Ralph Loop automated workflows
+- Orchestrate automated workflows
 - Team collaboration on complex features
 - Parallel task execution
 

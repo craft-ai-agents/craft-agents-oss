@@ -9,7 +9,7 @@ Welcome to the Vesper documentation. This directory contains comprehensive guide
 End-user documentation for using Vesper features:
 
 - [Task Lists User Guide](user-guide/task-lists.md) - Organize, track, and coordinate work across AI agents
-- [Ralph Mode User Guide](ralph-mode-user-guide.md) - Autonomous coding with Ralph Loop
+- [Ralph Mode User Guide](ralph-mode-user-guide.md) - Autonomous coding with Orchestrate
 
 ---
 
@@ -29,7 +29,7 @@ Detailed feature documentation:
 Technical architecture and design documentation:
 
 - [Session Management Architecture](architecture-session-management.md) - Session storage, persistence, and lifecycle
-- [Ralph Loop Architecture](architecture/ralph-loop.md) - PRD processing and autonomous execution
+- [Orchestrate Architecture](architecture/orchestrate.md) - PRD processing and autonomous execution
 - [Viewer Service Decoupling](architecture/viewer-service-decoupling.md) - Session sharing architecture
 
 ---

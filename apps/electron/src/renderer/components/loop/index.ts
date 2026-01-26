@@ -1,7 +1,7 @@
 /**
  * Loop UI Components
  *
- * Components for displaying Ralph Loop status and progress in the UI.
+ * Components for displaying Orchestrate status and progress in the UI.
  */
 
 export { LoopProgressIndicator, type LoopProgressIndicatorProps } from './LoopProgressIndicator'

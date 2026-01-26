@@ -2255,7 +2255,7 @@ export class SessionManager {
     // Clean up session-scoped tool callbacks to prevent memory accumulation
     unregisterSessionScopedToolCallbacks(sessionId)
 
-    // Clean up Ralph Loop runner if one is running for this session
+    // Clean up Orchestrate runner if one is running for this session
     // This prevents: orphaned loops, memory leaks, IPC events to deleted sessions
     const loopRunner = this.loopRunners.get(sessionId)
     if (loopRunner) {
@@ -3225,17 +3225,19 @@ To view this task's output:
 
                   // Send json_render event to renderer for immediate UI update
                   sessionLog.info(`[render_ui] Sending json_render event to renderer, workspaceId=${workspaceId}, sessionId=${sessionId}`)
-                  this.sendEvent({
-                    type: 'json_render',
-                    sessionId,
-                    message: {
-                      id: renderMessage.id,
-                      content: renderMessage.content,
-                      timestamp: renderMessage.timestamp,
-                      turnId: renderMessage.turnId,
-                      jsonRender: renderMessage.jsonRender,
-                    },
-                  }, workspaceId)
+                  if (renderMessage.jsonRender) {
+                    this.sendEvent({
+                      type: 'json_render',
+                      sessionId,
+                      message: {
+                        id: renderMessage.id,
+                        content: renderMessage.content,
+                        timestamp: renderMessage.timestamp,
+                        turnId: renderMessage.turnId,
+                        jsonRender: renderMessage.jsonRender,
+                      },
+                    }, workspaceId)
+                  }
                 }
               }
             }
@@ -3597,7 +3599,7 @@ To view this task's output:
       unregisterSessionScopedToolCallbacks(sessionId)
     }
 
-    // Cancel and clean up all active Ralph Loop runners
+    // Cancel and clean up all active Orchestrate runners
     // Prevents: orphaned loops continuing after shutdown, dirty git state
     for (const [sessionId, runner] of this.loopRunners.entries()) {
       try {
@@ -3614,14 +3616,14 @@ To view this task's output:
   }
 
   // =============================================================================
-  // Ralph Loop Methods
+  // Orchestrate Methods
   // =============================================================================
 
-  /** Map of session ID -> running RalphLoopRunner */
-  private loopRunners: Map<string, import('@vesper/shared/ralph-loop').RalphLoopRunner> = new Map()
+  /** Map of session ID -> running OrchestrateRunner */
+  private loopRunners: Map<string, import('@vesper/shared/orchestrate').RalphLoopRunner> = new Map()
 
   /**
-   * Start a Ralph Loop for a session
+   * Start an Orchestrate workflow for a session
    */
   async startLoop(
     sessionId: string,
@@ -3638,8 +3640,8 @@ To view this task's output:
       return { error: 'A loop is already running for this session' }
     }
 
-    // Lazy-load loop module to avoid startup cost
-    const { parsePRD, validatePRD, createLoopRunner } = await import('@vesper/shared/ralph-loop')
+    // Lazy-load orchestrate module to avoid startup cost
+    const { parsePRD, validatePRD, createLoopRunner } = await import('@vesper/shared/orchestrate')
 
     // Validate the PRD
     const validation = validatePRD(prdContent)
@@ -3678,9 +3680,8 @@ To view this task's output:
       return { error: `Failed to initialize agent: ${error instanceof Error ? error.message : String(error)}` }
     }
 
-    // Create the loop runner
-    const workingDirectory = managed.workingDirectory || managed.workspace.rootPath
-    const runner = createLoopRunner(sessionId, agent, workingDirectory, config)
+    // Create the loop runner (orchestrator no longer needs agent or workingDirectory)
+    const runner = createLoopRunner(sessionId, config)
 
     // Wire up event handlers
     runner.on('progress', (state) => {
@@ -3688,11 +3689,11 @@ To view this task's output:
         type: 'loop_progress',
         sessionId,
         loopId: state.id,
-        currentStory: state.currentStory ? { id: state.currentStory.id, title: state.currentStory.title } : null,
-        storyIndex: state.prd.stories.findIndex((s: { id: string }) => s.id === state.currentStory?.id) + 1,
+        currentStory: null, // No longer tracked - delegated to Claude Code tasks
+        storyIndex: state.storiesCompleted + state.storiesInProgress,
         totalStories: state.prd.metadata.totalStories,
-        currentIteration: state.currentIteration,
-        maxIterations: state.config.maxIterationsPerStory,
+        currentIteration: 0, // No longer tracked
+        maxIterations: 0, // No longer tracked
         elapsedMs: Date.now() - state.startTime,
         status: state.status as 'running' | 'paused',
       }, managed.workspace.id)
@@ -3846,12 +3847,9 @@ To view this task's output:
       isActive: state.status === 'running' || state.status === 'paused',
       loopId: state.id,
       status: state.status as 'running' | 'paused' | 'completed' | 'cancelled' | 'error',
-      currentStory: state.currentStory ? { id: state.currentStory.id, title: state.currentStory.title } : undefined,
       progress: {
-        currentStoryIndex: state.prd.stories.findIndex(s => s.id === state.currentStory?.id) + 1,
+        currentStoryIndex: state.storiesCompleted + state.storiesInProgress,
         totalStories: state.prd.metadata.totalStories,
-        currentIteration: state.currentIteration,
-        maxIterations: state.config.maxIterationsPerStory,
       },
       elapsedMs: Date.now() - state.startTime,
     }

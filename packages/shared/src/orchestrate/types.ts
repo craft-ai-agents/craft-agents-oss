@@ -1,9 +1,9 @@
 /**
- * Ralph Loop Types
+ * Orchestrate Types
  *
- * Core type definitions for the Ralph Loop autonomous coding system.
- * Ralph Loop processes PRD documents with checkbox-formatted user stories,
- * working through each story autonomously until completion.
+ * Core type definitions for the Orchestrate autonomous coding system.
+ * Orchestrate processes PRD documents with checkbox-formatted user stories,
+ * delegating parallel execution to the dispatch skill.
  */
 
 /**
@@ -45,42 +45,40 @@ export interface PRD {
 }
 
 /**
- * Configuration for a Ralph Loop execution
+ * Configuration for an Orchestrate execution
  */
-export interface LoopConfig {
-  /** Maximum iterations per story before moving on (default: 5) */
-  maxIterationsPerStory: number
+export interface OrchestrateConfig {
+  /** Maximum parallel agents (default: 3) */
+  parallelism: number
   /** Timeout per story in milliseconds (default: 600000 = 10 min) */
   timeoutPerStoryMs: number
   /** Whether to auto-commit changes when agent doesn't (default: true) */
   autoCommit: boolean
   /** Prefix for commit messages (default: "feat") */
   commitMessagePrefix: string
-  /** Optional task list ID for coordination between Ralph Loop and task system */
+  /** Task list ID for dispatch (created if not provided) */
   taskListId?: string
-  /** Whether to automatically create tasks for stories (default: true) */
-  autoCreateTasks?: boolean
 }
 
 /**
  * Default configuration values
  */
-export const DEFAULT_LOOP_CONFIG: LoopConfig = {
-  maxIterationsPerStory: 5,
+export const DEFAULT_ORCHESTRATE_CONFIG: OrchestrateConfig = {
+  parallelism: 3,
   timeoutPerStoryMs: 600000, // 10 minutes
   autoCommit: true,
   commitMessagePrefix: 'feat',
 }
 
 /**
- * Status of a Ralph Loop execution
+ * Status of an Orchestrate execution
  */
-export type LoopStatus = 'idle' | 'running' | 'paused' | 'completed' | 'cancelled' | 'error'
+export type OrchestrateStatus = 'idle' | 'running' | 'paused' | 'completed' | 'cancelled' | 'error'
 
 /**
- * Error that occurred during loop execution
+ * Error that occurred during orchestration
  */
-export interface LoopError {
+export interface OrchestrateError {
   /** Story that failed (if applicable) */
   storyId?: string
   /** Error message */
@@ -101,8 +99,6 @@ export interface StoryResult {
   result: 'success' | 'failed' | 'skipped' | 'timeout'
   /** Git commit SHA if changes were committed */
   commitSha?: string
-  /** Number of iterations taken */
-  iterations: number
   /** Time taken in milliseconds */
   durationMs: number
   /** Error message if failed */
@@ -124,43 +120,41 @@ export interface ChangeSummary {
 }
 
 /**
- * Complete state of a Ralph Loop execution
+ * Complete state of an Orchestrate execution
  */
-export interface LoopState {
-  /** Unique identifier for this loop execution */
+export interface OrchestrateState {
+  /** Unique identifier for this orchestration */
   id: string
-  /** Session this loop is running in */
+  /** Session this orchestration is running in */
   sessionId: string
   /** The PRD being processed */
   prd: PRD
-  /** Configuration for this loop */
-  config: LoopConfig
-  /** Currently processing story (null if between stories or not started) */
-  currentStory: Story | null
-  /** Current iteration number for the current story (1-indexed) */
-  currentIteration: number
-  /** Overall loop status */
-  status: LoopStatus
-  /** When the loop started (Unix timestamp) */
+  /** Configuration for this orchestration */
+  config: OrchestrateConfig
+  /** Overall status */
+  status: OrchestrateStatus
+  /** When the orchestration started (Unix timestamp) */
   startTime: number
   /** Number of stories completed successfully */
   storiesCompleted: number
+  /** Number of stories in progress */
+  storiesInProgress: number
   /** Errors encountered during execution */
-  errors: LoopError[]
+  errors: OrchestrateError[]
   /** Results for each processed story */
   storyResults: StoryResult[]
-  /** Active task list ID for coordinating with task system */
+  /** Task list ID being used */
   taskListId?: string
-  /** Map of story IDs to their corresponding task IDs for coordination (JSON-serializable) */
+  /** Map of story IDs to their corresponding task IDs */
   taskIds?: Record<string, string>
 }
 
 /**
- * Final result of a Ralph Loop execution
+ * Final result of an Orchestrate execution
  */
-export interface LoopResult {
-  /** Unique identifier of the completed loop */
-  loopId: string
+export interface OrchestrateResult {
+  /** Unique identifier of the completed orchestration */
+  orchestrateId: string
   /** Final status */
   status: 'completed' | 'cancelled' | 'error'
   /** Summary statistics */
@@ -175,36 +169,38 @@ export interface LoopResult {
   /** Individual story results */
   storyResults: StoryResult[]
   /** Errors that occurred */
-  errors: LoopError[]
+  errors: OrchestrateError[]
 }
 
 /**
- * Events emitted by the RalphLoopRunner
+ * Events emitted by the Orchestrator
  */
-export type LoopRunnerEvent =
-  | { type: 'progress'; state: LoopState }
+export type OrchestrateEvent =
+  | { type: 'progress'; state: OrchestrateState }
   | { type: 'story_start'; story: Story }
   | { type: 'story_complete'; story: Story; result: StoryResult }
-  | { type: 'iteration'; iteration: number; story: Story }
-  | { type: 'error'; error: LoopError }
-  | { type: 'complete'; result: LoopResult }
-  | { type: 'paused'; state: LoopState }
-  | { type: 'resumed'; state: LoopState }
+  | { type: 'error'; error: OrchestrateError }
+  | { type: 'complete'; result: OrchestrateResult }
+  | { type: 'paused'; state: OrchestrateState }
+  | { type: 'resumed'; state: OrchestrateState }
 
 /**
- * State persisted for crash recovery
+ * Metadata embedded in task descriptions for story tracking
  */
-export interface PersistedLoopState {
-  loopId: string
-  sessionId: string
-  prd: PRD
-  config: LoopConfig
-  currentStoryIndex: number
-  currentIteration: number
-  completedStories: string[]
-  failedStories: string[]
-  skippedStories: string[]
-  storyResults: StoryResult[]
-  startTime: number
-  lastUpdated: number
+export interface OrchestrateMeta {
+  /** Story ID from PRD */
+  storyId: string
+  /** Orchestration ID */
+  orchestrateId: string
+  /** Line number in PRD */
+  lineNumber: number
 }
+
+// Legacy type aliases for backwards compatibility during migration
+export type LoopConfig = OrchestrateConfig
+export type LoopStatus = OrchestrateStatus
+export type LoopError = OrchestrateError
+export type LoopState = OrchestrateState
+export type LoopResult = OrchestrateResult
+export type LoopRunnerEvent = OrchestrateEvent
+export const DEFAULT_LOOP_CONFIG = DEFAULT_ORCHESTRATE_CONFIG

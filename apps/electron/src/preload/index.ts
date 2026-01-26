@@ -448,7 +448,7 @@ const api: ElectronAPI = {
     }
   },
 
-  // Ralph Loop (autonomous coding loops)
+  // Orchestrate (autonomous coding orchestration)
   loopStart: (sessionId: string, prdContent: string, config?: import('../shared/types').LoopConfigInput) =>
     ipcRenderer.invoke(IPC_CHANNELS.LOOP_START, sessionId, prdContent, config),
   loopPause: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.LOOP_PAUSE, sessionId),

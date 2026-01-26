@@ -67,7 +67,6 @@ interface CreateSessionOptions {
   workingDirectory?: string;
   sourceIds?: string[];
   skillIds?: string[];
-  taskListId?: string;
   metadata?: SessionMetadata;
 }
 ```
@@ -143,8 +142,7 @@ const session = await ipcRenderer.invoke('sessions:create', workspaceId, {
   name: 'Code Review',
   permissionMode: 'ask',
   workingDirectory: '/Users/user/project',
-  skillIds: ['review-pr'],
-  taskListId: 'task-list-1'
+  skillIds: ['review-pr']
 });
 ```
 
@@ -646,6 +644,5 @@ Vesper uses human-readable session IDs:
 3. **Permission modes** - Start with `ask`, escalate to `allow-all` for trusted workflows
 4. **Working directory** - Set for file operations to work correctly
 5. **Skills** - Add skills for specialized capabilities
-6. **Task lists** - Associate with task list for structured feature development
-7. **Labels** - Use for organization and filtering
-8. **Session notes** - Document context and decisions
+6. **Labels** - Use for organization and filtering
+7. **Session notes** - Document context and decisions

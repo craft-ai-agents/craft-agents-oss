@@ -46,7 +46,6 @@ bun run electron:start
 - **Vector Search**: Semantic search over markdown documentation using QMD with collection management
 - **Document Viewer**: Integrated document preview for search results with rich formatting
 - **Cron Scheduler**: Visual cron-based scheduling with "Edit with AI" for natural language schedule editing
-- **Task Lists**: Multi-agent coordination system for tracking dependencies and progress across parallel workflows
 - **Skills Marketplace**: Browse and install skills from skills.sh with one-click installation
 - **Team Skills Sync**: Sync shared skills from private GitHub repositories with recursive directory sync and three-tier precedence
 - **Terminal Resume**: Resume Claude Agent SDK sessions in external terminal (cross-platform)
@@ -225,25 +224,6 @@ Manage multiple Claude accounts with intelligent automatic switching and real-ti
 
 **Storage**: OAuth tokens encrypted at `~/.vesper/credentials.enc`, profile metadata at `~/.vesper/claude-profiles/profiles.json`
 
-### Task Lists
-
-Coordinate multi-agent workflows with structured task management:
-
-**Features:**
-- **Task Dependencies**: Define blockers and dependencies between tasks
-- **Progress Tracking**: Three-state lifecycle (pending → in_progress → completed)
-- **Multi-Agent Coordination**: Share task lists across parallel agent sessions
-- **Ralph Loop Integration**: Automatic task creation and status sync for autonomous coding workflows
-- **Flexible Metadata**: Custom fields for priority, labels, and workflow-specific data
-
-**How It Works:**
-1. Create task lists via UI or programmatically
-2. Add tasks with dependencies and assignments
-3. Associate sessions with task lists via environment variables
-4. Agents automatically track progress and update task status
-
-**Storage**: Task lists stored at `~/.vesper/task-lists/{id}.json` with file-based locking
-
 ### Scheduler with AI Editing
 
 Schedule recurring tasks and one-time executions with natural language editing:
@@ -342,13 +322,12 @@ vesper/
             ├── credentials/   # AES-256-GCM encrypted storage
             ├── flowy/         # Inline diagram rendering
             ├── github/        # GitHub OAuth integration
-            ├── ralph-loop/    # Autonomous coding workflows
+            ├── orchestrate/    # Autonomous coding workflows
             ├── sessions/      # Session persistence
             ├── skills/        # Team skills sync
             ├── slack/         # Slack integration
             ├── sources/       # MCP, API, local sources
             ├── statuses/      # Dynamic status system
-            ├── task-lists/    # Multi-agent coordination
             ├── telegram/      # Telegram bot integration
             └── templates/     # Session templates
 ```
@@ -412,8 +391,6 @@ Configuration is stored at `~/.vesper/`:
 ├── theme.json               # App-level theme
 ├── claude-profiles/         # Claude account profiles and usage data
 │   └── profiles.json        # Profile metadata with OAuth tokens
-├── task-lists/              # Multi-agent task coordination
-│   └── {id}.json            # Individual task lists
 ├── team-skills/             # Team skills synced from GitHub
 └── workspaces/
     └── {id}/

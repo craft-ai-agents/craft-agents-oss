@@ -1,7 +1,7 @@
 /**
  * LoopProgressIndicator
  *
- * Displays the current status of an active Ralph Loop.
+ * Displays the current status of an active Orchestrate.
  * Shows story progress, iteration count, elapsed time, and control buttons.
  */
 

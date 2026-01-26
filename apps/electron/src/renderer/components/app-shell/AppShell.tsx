@@ -355,7 +355,7 @@ function AppShellContent({
   // Whether to show template picker on CMD+N (opt-in feature)
   const [templatesEnabled, setTemplatesEnabled] = React.useState(false)
 
-  // Enabled permission modes for Shift+Tab cycling (min 2 modes, includes 'ralph' for Ralph Loop)
+  // Enabled permission modes for Shift+Tab cycling (min 2 modes, includes 'ralph' for Orchestrate)
   const DEFAULT_CYCLABLE_MODES: PermissionMode[] = ['safe', 'ask', 'allow-all', 'ralph']
   const [enabledModes, setEnabledModes] = React.useState<PermissionMode[]>(DEFAULT_CYCLABLE_MODES)
 
@@ -498,7 +498,7 @@ function AppShellContent({
         if (session.selected) {
           const currentOptions = contextValue.sessionOptions.get(session.selected)
           const currentMode = currentOptions?.permissionMode ?? 'ask'
-          // Cycle through enabled permission modes (fallback includes 'ralph' for Ralph Loop)
+          // Cycle through enabled permission modes (fallback includes 'ralph' for Orchestrate)
           const modes = enabledModes.length >= 2 ? enabledModes : DEFAULT_CYCLABLE_MODES
           const currentIndex = modes.indexOf(currentMode)
           // If current mode not in enabled list, jump to first enabled mode

@@ -39,7 +39,7 @@ Vesper uses Electron's IPC mechanism for main/renderer communication:
 - [Scheduler](#scheduler)
 - [Skills](#skills)
 - [Sources](#sources)
-- [Ralph Loop](#ralph-loop)
+- [Orchestrate](#orchestrate)
 - [GitHub Integration](#github-integration)
 - [Configuration](#configuration)
 - [Theme](#theme)
@@ -343,7 +343,7 @@ Full documentation: [telegram.md](./telegram.md)
 
 ---
 
-## Ralph Loop
+## Orchestrate
 
 | Channel | Request | Response | Description |
 |---------|---------|----------|-------------|

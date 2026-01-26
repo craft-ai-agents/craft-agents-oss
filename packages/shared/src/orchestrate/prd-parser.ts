@@ -2,7 +2,7 @@
  * PRD Parser
  *
  * Parses PRD (Product Requirements Document) markdown files into structured
- * Story objects. Supports the Ralph Loop checkbox format:
+ * Story objects. Supports the Orchestrate checkbox format:
  *
  * ### [ ] US-001: Story title
  * Story content...
@@ -194,6 +194,30 @@ export function markStorySkipped(prd: PRD, storyId: string): PRD {
 
   const newStories = prd.stories.map((s) =>
     s.id === storyId ? { ...s, status: 'skipped' as StoryStatus } : s
+  )
+
+  return {
+    source: prd.source,
+    stories: newStories,
+    metadata: calculateMetadata(newStories),
+  }
+}
+
+/**
+ * Mark a story as in_progress in the PRD
+ *
+ * @param prd - The PRD to update
+ * @param storyId - ID of the story to mark in progress
+ * @returns New PRD with story marked in progress
+ */
+export function markStoryInProgress(prd: PRD, storyId: string): PRD {
+  const story = prd.stories.find((s) => s.id === storyId)
+  if (!story) {
+    return prd
+  }
+
+  const newStories = prd.stories.map((s) =>
+    s.id === storyId ? { ...s, status: 'in_progress' as StoryStatus } : s
   )
 
   return {

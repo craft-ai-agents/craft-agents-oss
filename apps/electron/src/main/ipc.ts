@@ -2369,7 +2369,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // and managed via WORKSPACE_SETTINGS_GET/UPDATE channels
 
   // =============================================================================
-  // Ralph Loop Handlers
+  // Orchestrate Handlers
   // =============================================================================
 
   ipcMain.handle(IPC_CHANNELS.LOOP_START, async (_event, sessionId: string, prdContent: string, config?: import('../shared/types').LoopConfigInput) => {

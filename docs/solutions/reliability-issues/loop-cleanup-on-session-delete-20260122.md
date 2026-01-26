@@ -1,7 +1,7 @@
 ---
-title: "Memory Leak - Ralph Loop Runners Not Cleaned Up on Session Deletion"
+title: "Memory Leak - Orchestrate Runners Not Cleaned Up on Session Deletion"
 date: 2026-01-22
-module: "Ralph Loop"
+module: "Orchestrate"
 problem_type: "reliability_issue"
 component: "session_management"
 severity: "critical"
@@ -26,7 +26,7 @@ investigation_log:
 
 ## Problem Statement
 
-Ralph Loop runners are not properly cleaned up when sessions are deleted or the app shuts down. This causes:
+Orchestrate runners are not properly cleaned up when sessions are deleted or the app shuts down. This causes:
 
 1. **Background loops continue running** - A loop processing 100 stories continues even after user deletes the session
 2. **Memory accumulation** - LoopState objects held indefinitely (each ~1MB with large PRDs)
@@ -65,7 +65,7 @@ async deleteSession(sessionId: string): Promise<void> {
 }
 ```
 
-**Issue:** Only cleans up agent, not the Ralph Loop runner
+**Issue:** Only cleans up agent, not the Orchestrate runner
 
 ### Location 2: `apps/electron/src/main/sessions.ts:cleanup() (line 3236)`
 
@@ -90,10 +90,10 @@ cleanup(): void {
 
 **Issue:** Global cleanup on app shutdown doesn't cancel running loops
 
-### Location 3: `packages/shared/src/ralph-loop/loop-runner.ts (no cleanup method)`
+### Location 3: `packages/shared/src/orchestrate/loop-runner.ts (no cleanup method)`
 
 ```typescript
-export class RalphLoopRunner extends EventEmitter {
+export class OrchestrateRunner extends EventEmitter {
   // ❌ MISSING: destroy() or cleanup() method
   // Should remove all event listeners and abort controller
 }
@@ -115,7 +115,7 @@ runner.on('story_complete', (story, result) => { /* ... */ })
 
 ### Scenario 1: Session Deletion Mid-Loop
 
-1. User starts Ralph Loop with 100 stories
+1. User starts Orchestrate with 100 stories
 2. Loop is processing story 45/100
 3. User deletes the session (or navigates away)
 4. **What happens:**
@@ -152,9 +152,9 @@ runner.on('story_complete', (story, result) => { /* ... */ })
 
 ## Solution
 
-### Fix 1: Add Cleanup Method to RalphLoopRunner
+### Fix 1: Add Cleanup Method to OrchestrateRunner
 
-**Location:** `packages/shared/src/ralph-loop/loop-runner.ts`
+**Location:** `packages/shared/src/orchestrate/loop-runner.ts`
 
 ```typescript
 /**
@@ -287,9 +287,9 @@ When adding new EventEmitters or long-lived objects:
 Add tests for proper cleanup:
 
 ```typescript
-describe('RalphLoopRunner - Cleanup', () => {
+describe('OrchestrateRunner - Cleanup', () => {
   it('should remove all event listeners on destroy', () => {
-    const runner = new RalphLoopRunner('session', agent, gitOps, config)
+    const runner = new OrchestrateRunner('session', agent, gitOps, config)
 
     // Register multiple listeners
     runner.on('progress', () => {})
@@ -307,7 +307,7 @@ describe('RalphLoopRunner - Cleanup', () => {
   })
 
   it('should cancel in-flight operations on destroy', async () => {
-    const runner = new RalphLoopRunner('session', agent, gitOps, config)
+    const runner = new OrchestrateRunner('session', agent, gitOps, config)
     const promise = runner.start(prd)
 
     // Let it start
@@ -345,13 +345,13 @@ describe('RalphLoopRunner - Cleanup', () => {
 ## Related Issues
 
 - **[Insufficient Error Context in Logging](../debugging-issues/error-context-logging-20260122.md)** - Cleanup failures may be silent
-- **[Command Injection in Git Operations](../security-vulnerabilities/command-injection-ralph-loop-git-operations-20260122.md)** - Could leave git in dirty state if loop not cleaned properly
+- **[Command Injection in Git Operations](../security-vulnerabilities/command-injection-orchestrate-git-operations-20260122.md)** - Could leave git in dirty state if loop not cleaned properly
 
 ---
 
 ## Implementation Status
 
-- [ ] Add `destroy()` method to RalphLoopRunner
+- [ ] Add `destroy()` method to OrchestrateRunner
 - [ ] Update `deleteSession()` to cleanup loop runners
 - [ ] Update `cleanup()` to cancel all active loops
 - [ ] Add tests for cleanup and listener removal

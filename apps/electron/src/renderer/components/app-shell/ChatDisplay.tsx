@@ -141,7 +141,7 @@ interface ChatDisplayProps {
   // Tutorial
   /** Disable send action (for tutorial guidance) */
   disableSend?: boolean
-  // Ralph Loop control
+  // Orchestrate control
   /** Callback when pause loop button is clicked */
   onPauseLoop?: () => void
   /** Callback when resume loop button is clicked */
@@ -361,7 +361,7 @@ export function ChatDisplay({
   messagesLoading = false,
   // Tutorial
   disableSend = false,
-  // Ralph Loop control
+  // Orchestrate control
   onPauseLoop,
   onResumeLoop,
   onCancelLoop,

@@ -106,12 +106,38 @@ Vesper leverages the Claude Agent SDK and Claude Code while adding significant i
   - Account configs: `~/.vesper/config.json` under `telegramAccounts`
 - **Testing:** Comprehensive test suite covering all features in `__tests__/`
 
-### 5. Session Templates
+### 5. Orchestrate (Autonomous Task Execution)
+- **Location:** `packages/shared/src/orchestrate/`
+- **Architecture:** Thin orchestration layer that delegates to the dispatch skill
+- **Features:**
+  - PRD parsing with checkbox-formatted user stories
+  - Delegates task execution to Claude Code's native dispatch skill
+  - Uses Claude Code native tasks (`~/.claude/tasks/`) for progress tracking
+  - Metadata encoding in task descriptions as HTML comments for story tracking
+  - Progress monitoring via file watcher on task directory
+  - Story status transitions (pending → in_progress → completed/failed)
+  - Real-time progress updates and completion events
+- **Key Files:**
+  - `orchestrator.ts` (318 lines) - Main orchestration controller with EventEmitter
+  - `dispatch-adapter.ts` (69 lines) - Converts stories to dispatch tasks
+  - `progress-monitor.ts` (70 lines) - Watches task files for status changes
+  - `meta-codec.ts` (81 lines) - Encodes/decodes metadata in task descriptions
+  - `prd-parser.ts` (382 lines) - Parses PRD markdown into Story objects
+  - `git-ops.ts` - Git integration for commit tracking
+  - `types.ts` - Type definitions (OrchestrateConfig, OrchestrateState, etc.)
+- **Metadata Pattern:**
+  - Stories embed tracking data as: `<!-- orchestrate-meta: {"storyId":"...", "orchestrateId":"...", "lineNumber":...} -->`
+  - Preserved invisibly in task descriptions for progress correlation
+- **Backwards Compatibility:**
+  - Legacy aliases: `RalphLoopRunner`, `createLoopRunner()` (deprecated)
+  - Maintained for sessions.ts migration, will be removed in future
+
+### 6. Session Templates
 - **Location:** `packages/shared/src/templates/` and `apps/electron/src/renderer/components/templates/`
 - **Features:**
   - Create reusable session configuration presets
   - Save templates from existing sessions
-  - Store: permission mode, model, thinking level, working directory, skill IDs, task list IDs
+  - Store: permission mode, model, thinking level, working directory, skill IDs
   - Optional initial prompt inclusion
   - `gatherContext` field for Claude to ask clarifying questions before starting
   - Default starter templates (Code Review, Feature Build, Bug Investigation, Documentation, Refactoring, Quick Question)
@@ -128,7 +154,7 @@ Vesper leverages the Claude Agent SDK and Claude Code while adding significant i
   - `TemplateManager.tsx` - Settings CRUD UI
   - `session-scoped-tools.ts` - schedule_create tool (133 lines)
 
-### 6. Notification Settings
+### 7. Notification Settings
 - **Location:** `apps/electron/src/renderer/pages/settings/NotificationSettingsSection.tsx`
 - **Features:**
   - Granular notification control with custom sounds
@@ -142,7 +168,7 @@ Vesper leverages the Claude Agent SDK and Claude Code while adding significant i
   - `NotificationSettingsSection.tsx` (294 lines)
   - `notification-sound.ts` (99 lines) - Audio playback utilities
 
-### 7. Team Skills Sync
+### 8. Team Skills Sync
 - **Location:** `packages/shared/src/skills/` and `apps/electron/src/renderer/components/skills/`
 - **Features:**
   - Sync shared skills from a private GitHub repository
@@ -179,7 +205,7 @@ Vesper leverages the Claude Agent SDK and Claude Code while adding significant i
   - `docs/user-guide/team-skills.md` - Setup, usage, migration guide
   - `docs/developer/team-skills-architecture.md` - Technical implementation
 
-### 8. GitHub OAuth Integration
+### 9. GitHub OAuth Integration
 - **Location:** `packages/shared/src/github/` and `apps/electron/src/renderer/components/orchestration/`
 - **Features:**
   - OAuth 2.0 authentication with PKCE for enhanced security
@@ -213,7 +239,7 @@ Vesper leverages the Claude Agent SDK and Claude Code while adding significant i
   - `docs/user-guide/github-integration.md` - Setup guide with troubleshooting
   - `docs/api/github-oauth.md` - API reference and technical details
 
-### 9. Premium Themes
+### 10. Premium Themes
 - **Location:** `apps/electron/resources/themes/` and `packages/shared/src/config/theme.ts`
 - **Features:**
   - 4 premium themes inspired by luxury brands and minimalism
@@ -270,7 +296,7 @@ vesper/
 │   │   │   ├── sources/       # MCP servers, APIs, local files
 │   │   │   ├── statuses/      # Dynamic status system
 │   │   │   ├── skills/        # Custom agent skills
-│   │   │   └── ralph-loop/    # Autonomous Ralph Loop workflows
+│   │   │   └── orchestrate/   # Autonomous Orchestrate workflows
 │   ├── ui/                    # Shared UI components
 │   └── core/                  # Shared utilities
 └── docs/                      # Project documentation
@@ -351,8 +377,6 @@ bun test
 ├── credentials.enc          # Encrypted API keys
 ├── preferences.json         # User preferences
 ├── theme.json              # App theme
-├── task-lists/             # Task lists storage
-│   └── {id}.json           # Individual task lists
 ├── team-skills/            # Team skills synced from GitHub
 │   ├── skill-1/
 │   │   └── SKILL.md
@@ -363,6 +387,9 @@ bun test
     ├── sources/            # Connected data sources
     ├── skills/             # Custom agent skills
     └── statuses/           # Workflow configuration
+
+~/.claude/                  # Claude Code native data
+└── tasks/{listId}/         # Native task lists (used by Orchestrate)
 ```
 
 ### Logs
@@ -388,7 +415,6 @@ Key IPC handlers in `apps/electron/src/main/ipc.ts`:
 - `viewer:*` - Viewer backend configuration
 - `templates:*` - Session template CRUD operations
 - `notification:*` - Notification settings and test notification
-- `task-lists:*` - Task list and task CRUD operations (`apps/electron/src/main/task-lists-ipc.ts`)
 
 ## Recent Bug Fixes
 

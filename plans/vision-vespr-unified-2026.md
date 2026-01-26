@@ -143,7 +143,7 @@ Every operational workflow follows the same pattern:
 | **Assignment Engine** | Match tasks to people by expertise + capacity |
 | **Permission Modes** | Safe (read-only), Ask (approval), Allow-all (autonomous) |
 | **Approval Workflow** | Human decision points with override capability |
-| **Execution Engine** | Ralph Loop for autonomous task completion |
+| **Execution Engine** | Orchestrate for autonomous task completion |
 | **Monitoring** | Real-time progress, blocker detection, risk alerts |
 | **Audit System** | Full trail of all actions, decisions, and changes |
 | **Learning System** | Pattern recognition to improve estimates and assignments |
@@ -158,7 +158,7 @@ VESPR PLATFORM
 │
 ├── Engineering Vertical
 │   ├── Integrations: GitHub, Jira, Sentry, Datadog
-│   ├── Execution: Ralph Loop (autonomous code)
+│   ├── Execution: Orchestrate (autonomous code)
 │   ├── Optimization: Code review, PR creation
 │   └── Metrics: Bug resolution, velocity, deploy frequency
 │
@@ -221,7 +221,7 @@ Not shallow Zapier connections—deep understanding of each domain:
 - Intelligent triage engine with scoring
 - Approval workflow with Slack sync
 - Task decomposition and assignment
-- Ralph Loop autonomous execution for bugs
+- Orchestrate autonomous execution for bugs
 - Code review optimization
 - Metrics dashboard
 

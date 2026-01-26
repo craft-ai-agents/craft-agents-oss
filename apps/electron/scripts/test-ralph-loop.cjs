@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * Test script for Ralph Loop via CDP
+ * Test script for Orchestrate via CDP
  *
- * Usage: node scripts/test-ralph-loop.cjs
+ * Usage: node scripts/test-orchestrate.cjs
  */
 
 const WebSocket = require('ws');
@@ -16,18 +16,18 @@ const LOG_FILE = '/tmp/electron-ralph-test.log';
 
 // PRD for testing - simple file creation tasks
 const TEST_PRD = `---
-title: Ralph Loop Integration Test
+title: Orchestrate Integration Test
 version: 1.0.0
 author: Test Script
 ---
 
 # Goal
-Create simple test files to verify Ralph Loop execution.
+Create simple test files to verify Orchestrate execution.
 
 # User Stories
 
 ## TEST-001: Create a greeting file
-Create a file at /tmp/ralph-test/hello.txt containing "Hello from Ralph Loop!"
+Create a file at /tmp/ralph-test/hello.txt containing "Hello from Orchestrate!"
 
 ## TEST-002: Create a timestamp file
 Create a file at /tmp/ralph-test/timestamp.txt with the current date and time.
@@ -113,7 +113,7 @@ async function evalInPage(ws, expression, awaitPromise = true) {
 
 async function main() {
   console.log('='.repeat(60));
-  console.log('Ralph Loop Integration Test');
+  console.log('Orchestrate Integration Test');
   console.log('='.repeat(60));
 
   // Clean up test directory
@@ -215,13 +215,13 @@ async function main() {
     console.log('\n   WARNING: Recent SDK errors detected in logs');
     console.log('   Recent logs:');
     console.log(recentLines.slice(-1500));
-    console.log('\n   Proceeding anyway to test Ralph Loop...');
+    console.log('\n   Proceeding anyway to test Orchestrate...');
   } else {
     console.log('   Warm-up message successful!');
   }
 
-  // Start Ralph Loop
-  console.log('\n6. Starting Ralph Loop...');
+  // Start Orchestrate
+  console.log('\n6. Starting Orchestrate...');
   const startResult = await evalInPage(ws, `
     window.electronAPI.sessionCommand('${session.id}', {
       type: 'startLoop',

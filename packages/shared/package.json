@@ -42,7 +42,7 @@
     "./version": "./src/version/index.ts",
     "./branding": "./src/branding.ts",
     "./network-interceptor": "./src/network-interceptor.ts",
-    "./ralph-loop": "./src/ralph-loop/index.ts",
+    "./orchestrate": "./src/orchestrate/index.ts",
     "./github": "./src/github/index.ts",
     "./whatsapp": "./src/whatsapp/index.ts",
     "./whatsapp/types": "./src/whatsapp/types.ts",

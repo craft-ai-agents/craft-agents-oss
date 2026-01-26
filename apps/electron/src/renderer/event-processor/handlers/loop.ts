@@ -1,7 +1,7 @@
 /**
  * Loop Event Handlers
  *
- * Handles Ralph Loop events: progress, story_complete, etc.
+ * Handles Orchestrate events: progress, story_complete, etc.
  * Pure functions that return new state - no side effects.
  */
 
@@ -89,6 +89,7 @@ export function handleLoopStoryComplete(
     session: {
       ...state.session,
       loopState: {
+        isActive: state.session.loopState?.isActive ?? true,
         ...state.session.loopState,
         // Accumulate completed stories for progressive display
         completedStories: [

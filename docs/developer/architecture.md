@@ -237,7 +237,7 @@ Structured task management with dependencies and ownership tracking for multi-ag
 - File-based storage with concurrent-safe operations
 - Task dependencies (blocks/blockedBy)
 - Status workflow (pending → in_progress → completed)
-- Ralph Loop integration
+- Orchestrate integration
 - Session template support
 
 **Core Files:**
@@ -261,7 +261,7 @@ await batchCreateTasks(taskList.id, [
 ]);
 ```
 
-### 8. Ralph Loop (`packages/shared/src/ralph-loop/`)
+### 8. Orchestrate (`packages/shared/src/orchestrate/`)
 
 Autonomous coding workflow system with PRD parsing and multi-task execution.
 
@@ -274,7 +274,7 @@ Autonomous coding workflow system with PRD parsing and multi-task execution.
 **Core Files:**
 - `loop-runner.ts` - Main execution loop
 - `prd-parser.ts` - PRD parsing logic
-- `types.ts` - Ralph Loop types
+- `types.ts` - Orchestrate types
 
 ### 9. Messaging Integrations
 

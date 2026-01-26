@@ -1,7 +1,7 @@
 /**
- * E2E Tests for Ralph Loop Integration via CDP
+ * E2E Tests for Orchestrate Integration via CDP
  *
- * Tests the Ralph Loop IPC methods and UI components through the Electron app.
+ * Tests the Orchestrate IPC methods and UI components through the Electron app.
  */
 
 const WebSocket = require('ws');
@@ -40,7 +40,7 @@ async function getTarget() {
 }
 
 async function runTests() {
-  log('Starting Ralph Loop E2E Tests...');
+  log('Starting Orchestrate E2E Tests...');
   log('');
 
   // Get CDP target
@@ -199,7 +199,7 @@ async function runTests() {
             format: 'png'
           });
 
-          const screenshotPath = '/tmp/ralph-loop-e2e-screenshot.png';
+          const screenshotPath = '/tmp/orchestrate-e2e-screenshot.png';
           fs.writeFileSync(screenshotPath, Buffer.from(screenshot.data, 'base64'));
           pass('Screenshot captured', screenshotPath);
           results.screenshots.push(screenshotPath);

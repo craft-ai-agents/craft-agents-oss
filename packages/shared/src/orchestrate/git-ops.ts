@@ -1,7 +1,7 @@
 /**
  * Git Operations
  *
- * Provides git operations for the Ralph Loop system.
+ * Provides git operations for the Orchestrate system.
  * Handles commit verification, auto-commits, and change detection.
  *
  * SECURITY: All git commands use execFile() instead of exec() to prevent
@@ -22,7 +22,7 @@ const MAX_TITLE_LENGTH = 256
 const MAX_STORY_ID_LENGTH = 32
 
 /**
- * Interface for git operations used by Ralph Loop
+ * Interface for git operations used by Orchestrate
  */
 export interface GitOperations {
   /** Get the current HEAD commit SHA */
@@ -83,7 +83,7 @@ async function gitExecSafe(
     const { stdout, stderr } = await execFileAsync('git', args, {
       cwd: workingDirectory,
       maxBuffer: 10 * 1024 * 1024, // 10MB buffer for large diffs
-      timeout: options.timeout || 30000, // 30s default timeout
+      timeout: options.timeout || 30000, // 30s default timeout,
     })
     return { stdout, stderr }
   } catch (error) {
@@ -161,10 +161,10 @@ export function createGitOperations(workingDirectory: string): GitOperations {
         throw new Error('No changes to commit')
       }
 
-      // Create commit with Ralph Loop attribution
+      // Create commit with Orchestrate attribution
       // SECURITY: Using execFile with array args - no shell interpretation
       // The message can safely contain any characters including backticks, $(), etc.
-      const message = `feat(${storyId}): ${title}\n\nAuto-committed by Ralph Loop`
+      const message = `feat(${storyId}): ${title}\n\nAuto-committed by Orchestrate`
 
       await gitExecSafe(['commit', '-m', message], workingDirectory)
 
@@ -194,7 +194,7 @@ export function createGitOperations(workingDirectory: string): GitOperations {
 }
 
 /**
- * Validate that a directory is a valid git repository for Ralph Loop
+ * Validate that a directory is a valid git repository for Orchestrate
  *
  * @param workingDirectory - Directory to validate
  * @returns Object with isValid flag and optional error

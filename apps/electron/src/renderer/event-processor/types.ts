@@ -401,7 +401,7 @@ export interface UsageUpdateEvent {
 }
 
 // ============================================================
-// Ralph Loop Events
+// Orchestrate Events
 // ============================================================
 
 /**
@@ -546,7 +546,7 @@ export type AgentEvent =
   | SourceActivatedEvent
   | UsageUpdateEvent
   | JsonRenderEvent
-  // Ralph Loop events
+  // Orchestrate events
   | LoopProgressEvent
   | LoopStoryCompleteEvent
   | LoopCompleteEvent

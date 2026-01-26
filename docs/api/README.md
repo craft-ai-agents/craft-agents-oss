@@ -59,21 +59,6 @@ Manage AI conversation sessions with message history, configuration, and state.
 
 ---
 
-### [Task Lists API](./task-lists.md)
-Structured task management with dependencies and ownership tracking.
-
-**Key Features:**
-- Create task lists and tasks
-- Batch operations (Ralph Loop)
-- Task dependencies (blocks/blockedBy)
-- Status workflow (pending → in_progress → completed)
-- Session integration via environment variable
-- File-based locking for concurrency
-
-**Use this when:** Implementing multi-agent coordination, Ralph Loop, or structured workflows.
-
----
-
 ### [Templates API](./templates.md)
 Reusable session configuration presets with optional initial prompts and context gathering.
 
@@ -164,8 +149,6 @@ Secure credential storage with AES-256-GCM encryption.
 ├── credentials.enc              # Encrypted credentials (AES-256-GCM)
 ├── preferences.json             # User preferences
 ├── theme.json                   # App theme
-├── task-lists/                  # Task lists
-│   └── {id}.json                # Individual task list
 ├── templates/                   # Global templates
 │   └── {id}.json                # Individual template
 └── workspaces/{id}/             # Workspace-specific data
@@ -396,21 +379,7 @@ const session = await ipcRenderer.invoke('sessions:getMessages', sessionId);
 
 ### Batch Operations
 
-Use batch methods for bulk operations:
-
-```typescript
-// Efficient - single transaction
-const tasks = await ipcRenderer.invoke('task-lists:task-batch-create', taskListId, [
-  { subject: 'Task 1', description: '...' },
-  { subject: 'Task 2', description: '...' },
-  { subject: 'Task 3', description: '...' }
-]);
-
-// Inefficient - multiple transactions
-for (const task of tasks) {
-  await ipcRenderer.invoke('task-lists:task-create', taskListId, task.subject, task.description);
-}
-```
+Use batch methods for bulk operations when available (e.g., templates, sessions).
 
 ### Event Debouncing
 

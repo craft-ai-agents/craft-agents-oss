@@ -1128,7 +1128,7 @@ export default function App() {
     onboarding.handleCancel()
   }, [onboarding])
 
-  // Ralph Loop control handlers
+  // Orchestrate control handlers
   const handlePauseLoop = useCallback((sessionId: string) => {
     window.electronAPI.loopPause(sessionId)
   }, [])
@@ -1185,7 +1185,7 @@ export default function App() {
     onInputChange: handleInputChange,
     // New chat (via deep link navigation)
     openNewChat,
-    // Ralph Loop control
+    // Orchestrate control
     onPauseLoop: handlePauseLoop,
     onResumeLoop: handleResumeLoop,
     onCancelLoop: handleCancelLoop,

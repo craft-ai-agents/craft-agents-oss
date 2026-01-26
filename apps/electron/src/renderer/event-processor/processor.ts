@@ -196,7 +196,7 @@ export function processEvent(
     case 'usage_update':
       return handleUsageUpdate(state, event)
 
-    // Ralph Loop events
+    // Orchestrate events
     case 'loop_started': {
       const newState = handleLoopStarted(state, event)
       return { state: newState, effects: [] }

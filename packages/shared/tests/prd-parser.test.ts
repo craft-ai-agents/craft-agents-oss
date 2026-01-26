@@ -2,7 +2,7 @@
  * Tests for PRD Parser
  *
  * These tests verify the parsing and manipulation of PRD (Product Requirements Document)
- * markdown files used by the Ralph Loop system.
+ * markdown files used by the Orchestrate system.
  */
 import { describe, it, expect } from 'bun:test'
 import {
@@ -15,7 +15,7 @@ import {
   getStoryIndex,
   validatePRD,
   generateStoryPrompt,
-} from '../src/ralph-loop/prd-parser.ts'
+} from '../src/orchestrate/prd-parser.ts'
 
 // ============================================================
 // Sample PRD Content for Testing

@@ -1,11 +1,11 @@
 /**
  * Tests for Git Operations
  *
- * These tests verify the git operations used by Ralph Loop,
+ * These tests verify the git operations used by Orchestrate,
  * with a focus on security (command injection prevention) and validation.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
-import { createGitOperations, validateGitRepository } from '../src/ralph-loop/git-ops.ts'
+import { createGitOperations, validateGitRepository } from '../src/orchestrate/git-ops.ts'
 import { mkdtemp, rm, writeFile, mkdir } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
@@ -137,7 +137,7 @@ describe('Git Operations - Auto-Commit', () => {
     const message = await gitOps.getLastCommitMessage()
     expect(message).toContain('feat(US-001)')
     expect(message).toContain('Add feature')
-    expect(message).toContain('Auto-committed by Ralph Loop')
+    expect(message).toContain('Auto-committed by Orchestrate')
   })
 
   it('should throw error when no changes to commit', async () => {

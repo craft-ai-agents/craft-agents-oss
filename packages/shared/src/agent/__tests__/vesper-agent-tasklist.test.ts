@@ -82,21 +82,17 @@ function createTestConfig(workspaceId: string = 'test-workspace'): VesperAgentCo
       id: workspaceId,
       name: 'Test Workspace',
       rootPath: testDir,
+      createdAt: Date.now(),
     },
     session: {
       id: `session-${Date.now()}`,
-      workspaceId,
+      workspaceRootPath: testDir,
       name: 'Test Session',
-      status: 'active',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      model: 'claude-opus-4-5',
-      thinkingLevel: 'think',
+      createdAt: Date.now(),
+      lastUsedAt: Date.now(),
       permissionMode: 'ask',
-      defaultCwd: testDir,
+      workingDirectory: testDir,
     },
-    claudeApiKey: 'test-api-key',
-    onEvent: async () => {},
   };
 }
 

@@ -338,7 +338,7 @@ cp -r ~/.claude/team-skills/commands/* ~/.claude/commands/
 # Run optional setup scripts
 ~/.claude/team-skills/dispatch/setup.sh      # cc and ccd commands
 ~/.claude/team-skills/github-intel/install.sh # GitHub discovery tools
-~/.claude/team-skills/ralph-loop/install.sh   # ralph command
+~/.claude/team-skills/orchestrate/install.sh   # ralph command
 ```
 
 ### Updating (CLI)
