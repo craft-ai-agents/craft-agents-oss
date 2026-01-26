@@ -220,8 +220,8 @@ describe('Retry Logic', () => {
       expect(attempts).toBe(3)
 
       // Check delays between attempts
-      const delay1 = timestamps[1] - timestamps[0]
-      const delay2 = timestamps[2] - timestamps[1]
+      const delay1 = timestamps[1]! - timestamps[0]!
+      const delay2 = timestamps[2]! - timestamps[1]!
 
       // First delay should be ~50ms
       expect(delay1).toBeGreaterThanOrEqual(45)

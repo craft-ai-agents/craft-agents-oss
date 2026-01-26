@@ -5,8 +5,8 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
-import { InboundDebouncer } from '../debounce'
-import type { TelegramMessage, DebouncedMessage } from '../types'
+import { InboundDebouncer, type DebouncedMessage } from '../debounce'
+import type { TelegramMessage } from '../types'
 
 describe('InboundDebouncer', () => {
   let debouncer: InboundDebouncer
@@ -46,7 +46,7 @@ describe('InboundDebouncer', () => {
     await new Promise(r => setTimeout(r, 100))
 
     expect(flushedMessages.length).toBe(1)
-    expect(flushedMessages[0].combinedContent).toBe('Hello')
+    expect(flushedMessages[0]!.combinedContent).toBe('Hello')
   })
 
   it('should combine rapid sequential messages from same user', async () => {
@@ -58,8 +58,8 @@ describe('InboundDebouncer', () => {
     await new Promise(r => setTimeout(r, 100))
 
     expect(flushedMessages.length).toBe(1)
-    expect(flushedMessages[0].messages.length).toBe(3)
-    expect(flushedMessages[0].combinedContent).toBe('Message 1\n\nMessage 2\n\nMessage 3')
+    expect(flushedMessages[0]!.messages.length).toBe(3)
+    expect(flushedMessages[0]!.combinedContent).toBe('Message 1\n\nMessage 2\n\nMessage 3')
   })
 
   it('should keep messages from different users separate', async () => {
@@ -70,8 +70,8 @@ describe('InboundDebouncer', () => {
     await new Promise(r => setTimeout(r, 100))
 
     expect(flushedMessages.length).toBe(2)
-    expect(flushedMessages[0].combinedContent).toBe('User 1 message')
-    expect(flushedMessages[1].combinedContent).toBe('User 2 message')
+    expect(flushedMessages[0]!.combinedContent).toBe('User 1 message')
+    expect(flushedMessages[1]!.combinedContent).toBe('User 2 message')
   })
 
   it('should keep messages from different chats separate', async () => {
@@ -91,7 +91,7 @@ describe('InboundDebouncer', () => {
     await new Promise(r => setTimeout(r, 10))
 
     expect(flushedMessages.length).toBe(1)
-    expect(flushedMessages[0].combinedContent).toBe('/start')
+    expect(flushedMessages[0]!.combinedContent).toBe('/start')
   })
 
   it('should skip debounce for messages with attachments', async () => {
@@ -131,7 +131,7 @@ describe('InboundDebouncer', () => {
 
     // Now should be flushed
     expect(flushedMessages.length).toBe(1)
-    expect(flushedMessages[0].messages.length).toBe(2)
+    expect(flushedMessages[0]!.messages.length).toBe(2)
   })
 
   it('should handle burst typing scenario', async () => {
@@ -145,9 +145,9 @@ describe('InboundDebouncer', () => {
     await new Promise(r => setTimeout(r, 100))
 
     expect(flushedMessages.length).toBe(1)
-    expect(flushedMessages[0].messages.length).toBe(5)
-    expect(flushedMessages[0].combinedContent).toContain('Part 1')
-    expect(flushedMessages[0].combinedContent).toContain('Part 5')
+    expect(flushedMessages[0]!.messages.length).toBe(5)
+    expect(flushedMessages[0]!.combinedContent).toContain('Part 1')
+    expect(flushedMessages[0]!.combinedContent).toContain('Part 5')
   })
 
   it('should combine messages with double newlines', async () => {
@@ -156,7 +156,7 @@ describe('InboundDebouncer', () => {
 
     await new Promise(r => setTimeout(r, 100))
 
-    expect(flushedMessages[0].combinedContent).toBe('First\n\nSecond')
+    expect(flushedMessages[0]!.combinedContent).toBe('First\n\nSecond')
   })
 
   it('should cleanup timers on cleanup()', async () => {
@@ -189,9 +189,9 @@ describe('InboundDebouncer', () => {
     expect(flushedMessages.length).toBe(3)
 
     // Each should have 2 messages combined
-    expect(flushedMessages[0].messages.length).toBe(2)
-    expect(flushedMessages[1].messages.length).toBe(2)
-    expect(flushedMessages[2].messages.length).toBe(2)
+    expect(flushedMessages[0]!.messages.length).toBe(2)
+    expect(flushedMessages[1]!.messages.length).toBe(2)
+    expect(flushedMessages[2]!.messages.length).toBe(2)
   })
 
   it('should preserve message order in combined content', async () => {
@@ -201,7 +201,7 @@ describe('InboundDebouncer', () => {
 
     await new Promise(r => setTimeout(r, 100))
 
-    const combined = flushedMessages[0].combinedContent
+    const combined = flushedMessages[0]!.combinedContent
     const firstIndex = combined.indexOf('First')
     const secondIndex = combined.indexOf('Second')
     const thirdIndex = combined.indexOf('Third')
