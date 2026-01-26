@@ -335,6 +335,8 @@ export interface Session {
   model?: string
   // Thinking level for this session ('off', 'think', 'max')
   thinkingLevel?: ThinkingLevel
+  // Task list ID for coordinating multi-agent workflows
+  taskListId?: string
   // Role/type of the last message (for badge display without loading messages)
   lastMessageRole?: 'user' | 'assistant' | 'plan' | 'tool' | 'error'
   // Whether an async operation is ongoing (sharing, updating share, revoking, title regeneration)

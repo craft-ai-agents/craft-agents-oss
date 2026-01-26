@@ -97,6 +97,8 @@ export interface SessionConfig {
   };
   /** Label IDs assigned to this session */
   labelIds?: string[];
+  /** Task list ID for coordinating multi-agent workflows and session-specific task tracking */
+  taskListId?: string;
 }
 
 /**
@@ -158,6 +160,8 @@ export interface SessionHeader {
   };
   /** Label IDs assigned to this session */
   labelIds?: string[];
+  /** Task list ID for coordinating multi-agent workflows and session-specific task tracking */
+  taskListId?: string;
   // Pre-computed fields for fast list loading
   /** Number of messages in session */
   messageCount: number;
@@ -206,4 +210,6 @@ export interface SessionMetadata {
   thinkingLevel?: ThinkingLevel;
   /** Label IDs assigned to this session */
   labelIds?: string[];
+  /** Task list ID for coordinating multi-agent workflows and session-specific task tracking */
+  taskListId?: string;
 }

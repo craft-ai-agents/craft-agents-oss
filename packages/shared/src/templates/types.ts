@@ -15,6 +15,7 @@ export interface SessionTemplate {
   model?: string;                // e.g., 'claude-sonnet-4-20250514'
   thinkingLevel?: number;        // 0-5
   workingDirectory?: string;     // Default working directory
+  taskListId?: string;           // Task list ID for coordinating multi-agent workflows
 
   // Metadata
   createdAt: string;             // ISO timestamp
@@ -34,6 +35,7 @@ export interface CreateTemplateOptions {
   model?: string;
   thinkingLevel?: number;
   workingDirectory?: string;
+  taskListId?: string;           // Task list ID for coordinating multi-agent workflows
 }
 
 export interface SaveSessionAsTemplateOptions {

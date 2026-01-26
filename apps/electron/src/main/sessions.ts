@@ -208,6 +208,8 @@ interface ManagedSession {
   model?: string
   // Thinking level for this session ('off', 'think', 'max')
   thinkingLevel?: ThinkingLevel
+  // Task list ID for coordinating multi-agent workflows
+  taskListId?: string
   // Role/type of the last message (for badge display without loading messages)
   lastMessageRole?: 'user' | 'assistant' | 'plan' | 'tool' | 'error'
   // Whether an async operation is ongoing (sharing, updating share, revoking, title regeneration)
@@ -699,6 +701,7 @@ export class SessionManager {
             sdkCwd: meta.sdkCwd,
             model: meta.model,
             thinkingLevel: meta.thinkingLevel,
+            taskListId: meta.taskListId,
             lastMessageRole: meta.lastMessageRole,
             messageQueue: [],
             backgroundShellCommands: new Map(),
@@ -743,6 +746,7 @@ export class SessionManager {
         workingDirectory: managed.workingDirectory,
         sdkCwd: managed.sdkCwd,
         thinkingLevel: managed.thinkingLevel,
+        taskListId: managed.taskListId,
         messages: persistableMessages.map(messageToStored),
         tokenUsage: managed.tokenUsage ?? {
           inputTokens: 0,
@@ -1094,6 +1098,7 @@ export class SessionManager {
       isFlagged: m.isFlagged,
       permissionMode: m.permissionMode,
       thinkingLevel: m.thinkingLevel,
+      taskListId: m.taskListId,
       todoState: m.todoState,
       lastReadMessageId: m.lastReadMessageId,
       workingDirectory: m.workingDirectory,
@@ -1146,6 +1151,7 @@ export class SessionManager {
       managed.enabledSourceSlugs = storedSession.enabledSourceSlugs
       managed.sharedUrl = storedSession.sharedUrl
       managed.sharedId = storedSession.sharedId
+      managed.taskListId = storedSession.taskListId
       // Sync name from disk - ensures title persistence across lazy loading
       managed.name = storedSession.name
       sessionLog.debug(`Lazy-loaded ${managed.messages.length} messages for session ${managed.id}`)
@@ -2344,6 +2350,16 @@ export class SessionManager {
       if (options?.ultrathinkEnabled) {
         sessionLog.info('Ultrathink override ENABLED')
         agent.setUltrathinkOverride(true)
+      }
+
+      // Set task list ID for coordinating multi-agent workflows
+      // This must be called before each chat() to ensure correct CLAUDE_CODE_TASK_LIST_ID env var
+      if (managed.taskListId) {
+        sessionLog.info(`Setting task list ID: ${managed.taskListId}`)
+        agent.setTaskListId(managed.taskListId)
+      } else {
+        // Clear task list ID if not set for this session
+        agent.setTaskListId(undefined)
       }
 
       // Process the message through the agent

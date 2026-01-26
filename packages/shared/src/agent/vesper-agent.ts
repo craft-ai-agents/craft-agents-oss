@@ -1,5 +1,5 @@
 import { query, createSdkMcpServer, tool, AbortError, type Query, type SDKMessage, type SDKUserMessage, type SDKAssistantMessageError, type Options } from '@anthropic-ai/claude-agent-sdk';
-import { getDefaultOptions } from './options.ts';
+import { getDefaultOptions, setAnthropicOptionsEnv } from './options.ts';
 import type { ContentBlockParam } from '@anthropic-ai/sdk/resources';
 import { z } from 'zod';
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
@@ -375,6 +375,8 @@ export class VesperAgent {
   // Cached context window size from modelUsage (for real-time usage_update events)
   // This is captured from the first result message and reused for subsequent usage updates
   private cachedContextWindow?: number;
+  // Task list ID for coordinating multi-agent workflows (set per-session via setTaskListId())
+  private currentTaskListId?: string;
 
   /**
    * Get the session ID for mode operations.
@@ -785,6 +787,18 @@ export class VesperAgent {
     // Only return token if explicitly provided via config
     // Sources handle their own authentication
     return this.config.mcpToken ?? null;
+  }
+
+  /**
+   * Set the task list ID for coordinating multi-agent workflows.
+   * This must be called before each chat() invocation to ensure the correct
+   * CLAUDE_CODE_TASK_LIST_ID environment variable is set per-session.
+   *
+   * @param taskListId - The task list ID to use, or undefined to clear
+   */
+  setTaskListId(taskListId: string | undefined): void {
+    this.currentTaskListId = taskListId;
+    debug(`[setTaskListId] Task list ID set to: ${taskListId || 'none'}`);
   }
 
   async *chat(
@@ -1558,6 +1572,17 @@ export class VesperAgent {
       const isSlashCommand = commandName &&
         SDK_SLASH_COMMANDS.includes(commandName as typeof SDK_SLASH_COMMANDS[number]) &&
         !attachments?.length;
+
+      // Set task list environment variable for this chat invocation
+      // This must be done per-chat to prevent cross-session contamination
+      const env: Record<string, string> = {};
+      if (this.currentTaskListId) {
+        env.CLAUDE_CODE_TASK_LIST_ID = this.currentTaskListId;
+        debug(`[chat] Setting CLAUDE_CODE_TASK_LIST_ID=${this.currentTaskListId}`);
+      } else {
+        debug(`[chat] No task list ID set (env var will be empty)`);
+      }
+      setAnthropicOptionsEnv(env);
 
       // Create the query - handle slash commands, binary attachments, or regular messages
       if (isSlashCommand) {
