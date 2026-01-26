@@ -387,8 +387,8 @@ export class ClaudeUsageMonitor extends EventEmitter {
         return null;
       }
 
-      const sessionPercent = sessionMatch ? parseInt(sessionMatch[1], 10) : 0;
-      const weeklyPercent = weeklyMatch ? parseInt(weeklyMatch[1], 10) : 0;
+      const sessionPercent = sessionMatch?.[1] ? parseInt(sessionMatch[1], 10) : 0;
+      const weeklyPercent = weeklyMatch?.[1] ? parseInt(weeklyMatch[1], 10) : 0;
 
       // Convert percentages to 0-1 range
       const fiveHourUtilization = sessionPercent / 100;

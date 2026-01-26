@@ -462,3 +462,103 @@ export function isInAuthCooldown(profile: ClaudeProfile): boolean {
   const cooldownMs = 5 * 60 * 1000; // 5 minutes
   return Date.now() < profile.lastAuthFailureAt + cooldownMs;
 }
+
+/**
+ * Record a rate limit event for a profile.
+ * Keeps the last 10 events for scoring purposes.
+ */
+export async function recordRateLimit(
+  profileId: string,
+  type: 'session' | 'weekly' | 'unknown' = 'unknown',
+  resetAt?: number
+): Promise<void> {
+  return withLock(async () => {
+    const storage = await loadProfileStorage();
+    const profile = storage.profiles.find(p => p.id === profileId);
+
+    if (!profile) {
+      throw new ProfileStorageError('Profile not found', 'NOT_FOUND', { profileId });
+    }
+
+    // Initialize array if needed
+    if (!profile.rateLimitEvents) {
+      profile.rateLimitEvents = [];
+    }
+
+    // Add new event
+    profile.rateLimitEvents.push({
+      type,
+      hitAt: Date.now(),
+      resetAt,
+    });
+
+    // Keep only last 10 events
+    if (profile.rateLimitEvents.length > 10) {
+      profile.rateLimitEvents = profile.rateLimitEvents.slice(-10);
+    }
+
+    await saveProfileStorage(storage);
+  });
+}
+
+/**
+ * Check if a profile is currently rate-limited.
+ * Returns true if there's a recent rate limit event (within 5 hours for session, 24 hours for weekly).
+ */
+export function isProfileRateLimited(profile: ClaudeProfile): {
+  isLimited: boolean;
+  type?: 'session' | 'weekly';
+  resetAt?: number;
+} {
+  if (!profile.rateLimitEvents || profile.rateLimitEvents.length === 0) {
+    return { isLimited: false };
+  }
+
+  const now = Date.now();
+  const fiveHours = 5 * 60 * 60 * 1000;
+  const twentyFourHours = 24 * 60 * 60 * 1000;
+
+  // Check most recent event (guaranteed to exist after length check above)
+  const lastEvent = profile.rateLimitEvents[profile.rateLimitEvents.length - 1]!;
+
+  // If we have a reset time, use it
+  if (lastEvent.resetAt !== undefined && now < lastEvent.resetAt) {
+    return {
+      isLimited: true,
+      type: lastEvent.type === 'unknown' ? 'session' : lastEvent.type,
+      resetAt: lastEvent.resetAt,
+    };
+  }
+
+  // Otherwise, estimate based on event type and time
+  if (lastEvent.type === 'weekly') {
+    if (now - lastEvent.hitAt < twentyFourHours) {
+      return { isLimited: true, type: 'weekly' };
+    }
+  } else {
+    // Session or unknown - assume 5 hour reset
+    if (now - lastEvent.hitAt < fiveHours) {
+      return { isLimited: true, type: 'session' };
+    }
+  }
+
+  return { isLimited: false };
+}
+
+/**
+ * Clear rate limit events for a profile.
+ * Called when we successfully use a profile after it was limited.
+ */
+export async function clearRateLimitEvents(profileId: string): Promise<void> {
+  return withLock(async () => {
+    const storage = await loadProfileStorage();
+    const profile = storage.profiles.find(p => p.id === profileId);
+
+    if (!profile) {
+      throw new ProfileStorageError('Profile not found', 'NOT_FOUND', { profileId });
+    }
+
+    profile.rateLimitEvents = [];
+    await saveProfileStorage(storage);
+  });
+}

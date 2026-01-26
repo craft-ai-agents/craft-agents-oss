@@ -1899,14 +1899,34 @@ export class VesperAgent {
           return;
         }
 
-        // Rate limit errors - don't retry immediately, surface to user
+        // Rate limit errors - try profile switching first, then surface to user
         const isRateLimitError =
           errorMsg.includes('429') ||
           errorMsg.includes('rate limit') ||
           errorMsg.includes('too many requests');
 
         if (isRateLimitError) {
-          // Parse to typed error using the captured/processed error message
+          // Try reactive profile switching if enabled
+          const swapResult = await this.attemptReactiveProfileSwap();
+
+          if (swapResult.success && swapResult.newProfileId) {
+            // Profile switched successfully - notify user and retry
+            yield {
+              type: 'info',
+              message: `Rate limit hit. Switched to profile: ${swapResult.profileName ?? swapResult.newProfileId}`
+            };
+
+            // Retry with new profile (recursive call with retry flag)
+            debug('[VesperAgent] Retrying with new profile after rate limit');
+            yield* this.chat(userMessage, attachments, undefined, true);
+            return;
+          }
+
+          // No profile switch available - show error as before
+          if (swapResult.reason) {
+            debug(`[VesperAgent] Profile switch not available: ${swapResult.reason}`);
+          }
+
           const typedError = parseError(new Error(rawErrorMsg));
           yield { type: 'typed_error', error: typedError };
           yield { type: 'complete' };
@@ -3522,5 +3542,49 @@ Please continue the conversation naturally from where we left off.
 
     // Clear session
     this.sessionId = null;
+  }
+
+  /**
+   * Attempt reactive profile switching when a rate limit is hit.
+   *
+   * @returns Result of the swap attempt
+   */
+  private async attemptReactiveProfileSwap(): Promise<{
+    success: boolean;
+    newProfileId?: string;
+    profileName?: string;
+    reason?: string;
+  }> {
+    try {
+      // Dynamic import to avoid circular dependencies
+      const { getProfileSwitcher, getActiveProfile } = await import('../claude-profiles/index');
+
+      const switcher = getProfileSwitcher();
+      const sessionId = this.config.session?.id;
+
+      // Record rate limit and attempt swap
+      const swapEvent = await switcher.handleRateLimitError(sessionId, 'unknown');
+
+      if (swapEvent) {
+        // Get the new profile for name
+        const newProfile = await getActiveProfile();
+        return {
+          success: true,
+          newProfileId: swapEvent.toProfileId,
+          profileName: newProfile?.name,
+        };
+      }
+
+      return {
+        success: false,
+        reason: 'No available profiles to switch to',
+      };
+    } catch (error) {
+      debug('[VesperAgent] Profile switch error:', error);
+      return {
+        success: false,
+        reason: error instanceof Error ? error.message : 'Profile switch failed',
+      };
+    }
   }
 }

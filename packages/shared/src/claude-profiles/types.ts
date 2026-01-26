@@ -6,6 +6,20 @@
  */
 
 /**
+ * A rate limit event recorded for a profile.
+ */
+export interface RateLimitEvent {
+  /** Type of rate limit hit */
+  type: 'session' | 'weekly' | 'unknown';
+
+  /** Timestamp when the rate limit was hit (Unix ms) */
+  hitAt: number;
+
+  /** Estimated reset time (Unix ms), if known */
+  resetAt?: number;
+}
+
+/**
  * A Claude account profile with OAuth credentials and usage tracking.
  */
 export interface ClaudeProfile {
@@ -35,6 +49,9 @@ export interface ClaudeProfile {
 
   /** Timestamp of last auth failure (for cooldown) */
   lastAuthFailureAt?: number;
+
+  /** Recent rate limit events (kept for scoring - max 10) */
+  rateLimitEvents?: RateLimitEvent[];
 }
 
 /**

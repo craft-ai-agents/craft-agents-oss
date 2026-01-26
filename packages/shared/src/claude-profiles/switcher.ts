@@ -18,6 +18,8 @@ import {
   setActiveProfile,
   getAutoSwitchSettings,
   updateProfile,
+  recordRateLimit,
+  clearRateLimitEvents,
 } from './storage';
 import { scoreProfiles, scoreProfile, getBestProfile, shouldSwitch } from './scoring';
 import { debug } from '../utils/debug';
@@ -283,6 +285,47 @@ export class ProfileSwitcher extends EventEmitter {
    */
   clearAllSwapCounts(): void {
     this.sessionSwapCounts.clear();
+  }
+
+  /**
+   * Handle a rate limit error from the API.
+   * Records the rate limit and attempts a reactive swap.
+   *
+   * @param sessionId - Session ID for tracking
+   * @param rateLimitType - Type of rate limit ('session' | 'weekly' | 'unknown')
+   * @param resetAt - Optional reset timestamp
+   * @returns The swap event if successful, null if swap not possible
+   */
+  async handleRateLimitError(
+    sessionId?: string,
+    rateLimitType: 'session' | 'weekly' | 'unknown' = 'unknown',
+    resetAt?: number
+  ): Promise<ProfileSwapEvent | null> {
+    const currentProfile = await getActiveProfile();
+
+    if (!currentProfile) {
+      debug('[ProfileSwitcher] No active profile to record rate limit for');
+      return null;
+    }
+
+    // Record the rate limit event
+    debug(`[ProfileSwitcher] Recording rate limit for profile ${currentProfile.id}: ${rateLimitType}`);
+    await recordRateLimit(currentProfile.id, rateLimitType, resetAt);
+
+    // Emit event for UI
+    this.emit('threshold-reached', currentProfile.id, rateLimitType === 'weekly' ? 'weekly' : 'session', 1.0);
+
+    // Attempt reactive swap
+    return this.attemptAutoSwap('reactive', sessionId, [currentProfile.id]);
+  }
+
+  /**
+   * Report successful API usage for a profile.
+   * Clears rate limit events if the profile was previously limited.
+   */
+  async reportSuccessfulUsage(profileId: string): Promise<void> {
+    debug(`[ProfileSwitcher] Successful usage reported for profile ${profileId}`);
+    await clearRateLimitEvents(profileId);
   }
 
   /**

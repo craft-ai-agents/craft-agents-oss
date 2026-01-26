@@ -26,7 +26,7 @@
  */
 
 import type { ClaudeProfile, ProfileScore } from './types';
-import { isInAuthCooldown } from './storage';
+import { isInAuthCooldown, isProfileRateLimited } from './storage';
 import { isProfileTokenExpired, getProfileTokens } from './oauth';
 
 // Scoring constants
@@ -78,17 +78,30 @@ export async function scoreProfile(
     reasons.push('token expired (-2000)');
   }
 
-  // Check rate limits
-  if (profile.usage?.isWeeklyLimited) {
-    score += WEEKLY_LIMITED_PENALTY;
-    reasons.push('weekly limited (-1000)');
+  // Check rate limits from recorded events (reactive mode)
+  const rateLimitStatus = isProfileRateLimited(profile);
+  if (rateLimitStatus.isLimited) {
+    if (rateLimitStatus.type === 'weekly') {
+      score += WEEKLY_LIMITED_PENALTY;
+      reasons.push('weekly limited (-1000)');
+    } else {
+      score += SESSION_LIMITED_PENALTY;
+      reasons.push('session limited (-500)');
+    }
   }
-  if (profile.usage?.isSessionLimited) {
+
+  // Also check rate limits from usage data (proactive mode - if available)
+  if (profile.usage?.isWeeklyLimited && !rateLimitStatus.isLimited) {
+    score += WEEKLY_LIMITED_PENALTY;
+    reasons.push('weekly limited from usage (-1000)');
+  }
+  if (profile.usage?.isSessionLimited && !rateLimitStatus.isLimited) {
     score += SESSION_LIMITED_PENALTY;
-    reasons.push('session limited (-500)');
+    reasons.push('session limited from usage (-500)');
   }
 
   // Apply usage penalties (quadratic to penalize high usage more)
+  // Only if usage data is available (proactive mode)
   if (profile.usage) {
     const sessionPenalty = -(profile.usage.fiveHourUtilization ** 2 * USAGE_SESSION_MULTIPLIER);
     const weeklyPenalty = -(profile.usage.sevenDayUtilization ** 2 * USAGE_WEEKLY_MULTIPLIER);
@@ -121,8 +134,9 @@ export async function scoreProfile(
     reasons.push('never used (+10)');
   }
 
-  // Determine availability
+  // Determine availability (check both rate limit events and usage data)
   const isAvailable =
+    !rateLimitStatus.isLimited &&
     !profile.usage?.isSessionLimited &&
     !profile.usage?.isWeeklyLimited &&
     !isInAuthCooldown(profile) &&

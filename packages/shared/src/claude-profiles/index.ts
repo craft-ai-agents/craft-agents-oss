@@ -59,6 +59,7 @@ export type {
   ProfileScore,
   ProfileSwapEvent,
   ProfileStorage,
+  RateLimitEvent,
 } from './types';
 
 export {
@@ -85,6 +86,9 @@ export {
   updateAutoSwitchSettings,
   recordAuthFailure,
   isInAuthCooldown,
+  recordRateLimit,
+  isProfileRateLimited,
+  clearRateLimitEvents,
 } from './storage';
 
 // OAuth
