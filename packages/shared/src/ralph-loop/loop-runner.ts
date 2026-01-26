@@ -29,6 +29,7 @@ import {
   getStoryIndex,
 } from './prd-parser.ts'
 import { createGitOperations, type GitOperations } from './git-ops.ts'
+import { loadTaskList, batchCreateTasks, updateTask } from '../task-lists/index.ts'
 
 /**
  * Generate a unique loop ID
@@ -122,6 +123,52 @@ export class RalphLoopRunner extends EventEmitter {
 
     this.isPaused = false
     this.isCancelled = false
+
+    // Create tasks upfront if task list is configured
+    if (this.config.taskListId && this.config.autoCreateTasks !== false) {
+      try {
+        // Validate task list exists
+        const taskList = await loadTaskList(this.config.taskListId)
+        if (!taskList) {
+          throw new Error(`Task list not found: ${this.config.taskListId}`)
+        }
+
+        // Prepare task data from PRD stories
+        const tasksToCreate = prd.stories.map(story => ({
+          subject: story.title,
+          description: story.content,
+          activeForm: `Processing ${story.title}`,
+          metadata: {
+            storyId: story.id,
+            loopId: loopId,
+            lineNumber: story.lineNumber,
+          },
+        }))
+
+        // Batch create all tasks at once
+        const createdTasks = await batchCreateTasks(this.config.taskListId, tasksToCreate)
+
+        // Build mapping of story ID -> task ID
+        const taskIds: Record<string, string> = {}
+        createdTasks.forEach((task, index) => {
+          const story = prd.stories[index]
+          if (story) {
+            taskIds[story.id] = task.id
+          }
+        })
+
+        // Update state with task list info
+        if (this.state) {
+          this.state.taskListId = this.config.taskListId
+          this.state.taskIds = taskIds
+        }
+
+        console.log(`[Ralph Loop] Created ${createdTasks.length} tasks in task list ${this.config.taskListId}`)
+      } catch (error) {
+        console.error('[Ralph Loop] Failed to create tasks:', error)
+        // Don't fail the loop, just log the error and continue without task tracking
+      }
+    }
 
     this.emitProgress()
 
@@ -285,6 +332,22 @@ export class RalphLoopRunner extends EventEmitter {
     this.emit('story_start', story)
     this.emitProgress()
 
+    // Update task status to in_progress (non-fatal)
+    if (this.state!.taskListId && this.state!.taskIds) {
+      const taskId = this.state!.taskIds[story.id]
+      if (taskId) {
+        try {
+          await updateTask(this.state!.taskListId, taskId, {
+            status: 'in_progress',
+            owner: this.sessionId,
+          })
+        } catch (error) {
+          console.error('[Ralph Loop] Failed to update task status to in_progress:', error)
+          // Continue processing even if task update fails
+        }
+      }
+    }
+
     // Capture git HEAD before processing
     let beforeHead: string
     try {
@@ -321,6 +384,26 @@ export class RalphLoopRunner extends EventEmitter {
             // Git errors are non-fatal for story completion
           }
 
+          // Update task status to completed (non-fatal)
+          if (this.state!.taskListId && this.state!.taskIds) {
+            const taskId = this.state!.taskIds[story.id]
+            if (taskId) {
+              try {
+                await updateTask(this.state!.taskListId, taskId, {
+                  status: 'completed',
+                  metadata: {
+                    completedAt: new Date().toISOString(),
+                    iterations,
+                    commitSha,
+                  },
+                })
+              } catch (error) {
+                console.error('[Ralph Loop] Failed to update task status to completed:', error)
+                // Continue processing even if task update fails
+              }
+            }
+          }
+
           return {
             storyId: story.id,
             result: 'success',
@@ -342,6 +425,26 @@ export class RalphLoopRunner extends EventEmitter {
           }
           this.state!.errors.push(loopError)
           this.emit('error', loopError)
+
+          // Update task metadata with timeout info (keep status as in_progress)
+          if (this.state!.taskListId && this.state!.taskIds) {
+            const taskId = this.state!.taskIds[story.id]
+            if (taskId) {
+              try {
+                await updateTask(this.state!.taskListId, taskId, {
+                  metadata: {
+                    timeout: true,
+                    timedOutAt: new Date().toISOString(),
+                    iterations,
+                    error: loopError.message,
+                  },
+                })
+              } catch (error) {
+                console.error('[Ralph Loop] Failed to update task metadata for timeout:', error)
+                // Continue processing even if task update fails
+              }
+            }
+          }
 
           return {
             storyId: story.id,
@@ -365,6 +468,26 @@ export class RalphLoopRunner extends EventEmitter {
     }
 
     // Exhausted iterations without success
+    // Update task metadata with failure info (keep status as in_progress)
+    if (this.state!.taskListId && this.state!.taskIds) {
+      const taskId = this.state!.taskIds[story.id]
+      if (taskId) {
+        try {
+          await updateTask(this.state!.taskListId, taskId, {
+            metadata: {
+              failed: true,
+              failedAt: new Date().toISOString(),
+              iterations,
+              error: `Failed after ${iterations} iterations`,
+            },
+          })
+        } catch (error) {
+          console.error('[Ralph Loop] Failed to update task metadata for failed story:', error)
+          // Continue processing even if task update fails
+        }
+      }
+    }
+
     return {
       storyId: story.id,
       result: 'failed',

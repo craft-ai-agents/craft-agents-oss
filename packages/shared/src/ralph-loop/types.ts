@@ -56,6 +56,10 @@ export interface LoopConfig {
   autoCommit: boolean
   /** Prefix for commit messages (default: "feat") */
   commitMessagePrefix: string
+  /** Optional task list ID for coordination between Ralph Loop and task system */
+  taskListId?: string
+  /** Whether to automatically create tasks for stories (default: true) */
+  autoCreateTasks?: boolean
 }
 
 /**
@@ -145,6 +149,10 @@ export interface LoopState {
   errors: LoopError[]
   /** Results for each processed story */
   storyResults: StoryResult[]
+  /** Active task list ID for coordinating with task system */
+  taskListId?: string
+  /** Map of story IDs to their corresponding task IDs for coordination (JSON-serializable) */
+  taskIds?: Record<string, string>
 }
 
 /**
