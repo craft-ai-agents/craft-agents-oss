@@ -14,7 +14,17 @@ export default defineConfig({
       input: {
         main: resolve(__dirname, 'src/renderer/index.html'),
         playground: resolve(__dirname, 'src/renderer/playground.html'),
-      }
+      },
+      // Externalize Node.js modules for Electron renderer
+      // These are resolved at runtime via preload/contextBridge
+      external: [
+        '@vesper/shared/credentials',
+        'crypto',
+        'fs',
+        'os',
+        'path',
+        'child_process',
+      ],
     }
   },
   resolve: {
