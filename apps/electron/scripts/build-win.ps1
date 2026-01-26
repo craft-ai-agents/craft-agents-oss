@@ -243,14 +243,15 @@ try {
     Pop-Location
 }
 
-# Copy resources
-Write-Host "  Copying resources..."
-Push-Location $RootDir
+# Copy all resources and bundled assets using the shared script.
+# Single source of truth — matches Mac/Linux build (bun run build:copy).
+# Copies: resources (icons, DMG bg), docs, tool-icons, themes, permissions, config-defaults.
+Write-Host "  Copying resources and bundled assets..."
+Push-Location $ElectronDir
 try {
-    $ResourcesSrc = "$ElectronDir\resources"
-    $ResourcesDst = "$ElectronDir\dist\resources"
-    if (Test-Path $ResourcesDst) { Remove-Item -Recurse -Force $ResourcesDst }
-    Copy-Item -Recurse $ResourcesSrc $ResourcesDst
+    bun scripts/copy-assets.ts
+    if ($LASTEXITCODE -ne 0) { throw "Asset copy failed" }
+    Write-Host "  Assets copied" -ForegroundColor Green
 } finally {
     Pop-Location
 }

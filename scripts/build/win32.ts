@@ -6,7 +6,7 @@
  */
 
 import { execSync } from 'child_process';
-import { existsSync, rmSync, readdirSync, statSync, cpSync } from 'fs';
+import { existsSync, mkdirSync, rmSync, readdirSync, statSync, cpSync } from 'fs';
 import { join } from 'path';
 import type { BuildConfig } from './common';
 
@@ -164,6 +164,19 @@ export async function buildElectronAppWindows(config: BuildConfig): Promise<void
     rmSync(resourcesDst, { recursive: true, force: true });
   }
   cpSync(resourcesSrc, resourcesDst, { recursive: true });
+
+  // Copy doc assets (matches electron:build:assets step used by Mac/Linux builds)
+  // Without this, loadBundledDocs() can't find the docs and falls back to placeholders
+  console.log('  Copying doc assets...');
+  const docsSrc = join(rootDir, 'packages', 'shared', 'assets', 'docs');
+  const docsDst = join(electronDir, 'dist', 'assets', 'docs');
+  if (existsSync(docsSrc)) {
+    mkdirSync(join(electronDir, 'dist', 'assets'), { recursive: true });
+    cpSync(docsSrc, docsDst, { recursive: true, force: true });
+    console.log('  Doc assets copied ✓');
+  } else {
+    console.warn('  ⚠️ No doc assets found at', docsSrc);
+  }
 }
 
 /**

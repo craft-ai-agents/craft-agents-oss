@@ -4,15 +4,13 @@
  * Provides access to built-in documentation that Claude can reference
  * when performing configuration tasks (sources, agents, permissions, etc.).
  *
- * Docs are stored at ~/.craft-agent/docs/ and copied on first run.
+ * Docs are stored at ~/.craft-agent/docs/ and synced from bundled assets.
  * Source content lives in packages/shared/assets/docs/*.md for easier editing.
  */
 
 import { join } from 'path';
 import { homedir } from 'os';
 import { existsSync, mkdirSync, writeFileSync, readdirSync, readFileSync } from 'fs';
-import { isDebugEnabled } from '../utils/debug.ts';
-import { getAppVersion } from '../version/index.ts';
 import { getBundledAssetsDir } from '../utils/paths.ts';
 
 const CONFIG_DIR = join(homedir(), '.craft-agent');
@@ -111,37 +109,8 @@ export function listDocs(): string[] {
 }
 
 /**
- * Extract version from a doc file's first line.
- * Expected format: <!-- version: X.Y.Z -->
- */
-function extractVersion(content: string): string | null {
-  const match = content.match(/^<!--\s*version:\s*([^\s]+)\s*-->/);
-  return match?.[1] ?? null;
-}
-
-/**
- * Compare semver versions. Returns:
- *  1 if a > b
- *  0 if a == b
- * -1 if a < b
- */
-function compareVersions(a: string, b: string): number {
-  const partsA = a.split('.').map(Number);
-  const partsB = b.split('.').map(Number);
-
-  for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
-    const numA = partsA[i] || 0;
-    const numB = partsB[i] || 0;
-    if (numA > numB) return 1;
-    if (numA < numB) return -1;
-  }
-  return 0;
-}
-
-/**
  * Initialize docs directory with bundled documentation.
- * - Debug mode: Always overwrite docs (once per session)
- * - Production: Only update if bundled version is newer
+ * Always writes all docs on launch to ensure consistency across debug and release modes.
  */
 export function initializeDocs(): void {
   // Skip if already initialized this session (prevents re-init on hot reload)
@@ -154,43 +123,15 @@ export function initializeDocs(): void {
     mkdirSync(DOCS_DIR, { recursive: true });
   }
 
-  const appVersion = getAppVersion();
-  const debugMode = isDebugEnabled();
-
+  // Always write bundled docs to disk on launch.
+  // This ensures consistent behavior between debug and release modes —
+  // docs are always up-to-date with the running version.
   for (const [filename, content] of Object.entries(BUNDLED_DOCS)) {
     const docPath = join(DOCS_DIR, filename);
-    const versionedContent = `<!-- version: ${appVersion} -->\n${content}`;
-
-    if (!existsSync(docPath)) {
-      // File doesn't exist - create it
-      writeFileSync(docPath, versionedContent, 'utf-8');
-      console.log(`[docs] Created ${filename} (v${appVersion})`);
-      continue;
-    }
-
-    if (debugMode) {
-      // Debug mode - always overwrite
-      writeFileSync(docPath, versionedContent, 'utf-8');
-      console.log(`[docs] Updated ${filename} (v${appVersion}, debug mode)`);
-      continue;
-    }
-
-    // Production - check version
-    try {
-      const existingContent = readFileSync(docPath, 'utf-8');
-      const installedVersion = extractVersion(existingContent);
-
-      if (!installedVersion || compareVersions(appVersion, installedVersion) > 0) {
-        // No version or bundled is newer - update
-        writeFileSync(docPath, versionedContent, 'utf-8');
-        console.log(`[docs] Updated ${filename} (v${installedVersion || 'none'} → v${appVersion})`);
-      }
-    } catch {
-      // Error reading - overwrite
-      writeFileSync(docPath, versionedContent, 'utf-8');
-      console.log(`[docs] Recreated ${filename} (v${appVersion})`);
-    }
+    writeFileSync(docPath, content, 'utf-8');
   }
+
+  console.log(`[docs] Synced ${Object.keys(BUNDLED_DOCS).length} docs`);
 }
 
 export { BUNDLED_DOCS };

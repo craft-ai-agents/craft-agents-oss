@@ -252,9 +252,6 @@ export default function AppSettingsPage() {
                 onSubmitCredential={apiSetupOnboarding.handleSubmitCredential}
                 onStartOAuth={apiSetupOnboarding.handleStartOAuth}
                 onFinish={handleApiSetupFinish}
-                existingClaudeToken={apiSetupOnboarding.existingClaudeToken}
-                isClaudeCliInstalled={apiSetupOnboarding.isClaudeCliInstalled}
-                onUseExistingClaudeToken={apiSetupOnboarding.handleUseExistingClaudeToken}
                 isWaitingForCode={apiSetupOnboarding.isWaitingForCode}
                 onSubmitAuthCode={apiSetupOnboarding.handleSubmitAuthCode}
                 onCancelOAuth={apiSetupOnboarding.handleCancelOAuth}

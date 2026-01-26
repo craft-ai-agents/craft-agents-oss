@@ -49,11 +49,7 @@ interface UseOnboardingReturn {
   handleSubmitCredential: (data: ApiKeySubmitData) => void
   handleStartOAuth: () => void
 
-  // Claude OAuth
-  existingClaudeToken: string | null
-  isClaudeCliInstalled: boolean
-  handleUseExistingClaudeToken: () => void
-  // Two-step OAuth flow
+  // Claude OAuth (two-step flow)
   isWaitingForCode: boolean
   handleSubmitAuthCode: (code: string) => void
   handleCancelOAuth: () => void
@@ -266,56 +262,8 @@ export function useOnboarding({
     }
   }, [handleSaveConfig])
 
-  // Claude OAuth state
-  const [existingClaudeToken, setExistingClaudeToken] = useState<string | null>(null)
-  const [isClaudeCliInstalled, setIsClaudeCliInstalled] = useState(false)
-  const [claudeOAuthChecked, setClaudeOAuthChecked] = useState(false)
   // Two-step OAuth flow state
   const [isWaitingForCode, setIsWaitingForCode] = useState(false)
-
-  // Check for existing Claude token when reaching credentials step with OAuth selected
-  useEffect(() => {
-    if (state.step === 'credentials' && state.apiSetupMethod === 'claude_oauth' && !claudeOAuthChecked) {
-      const checkClaudeAuth = async () => {
-        try {
-          const [token, cliInstalled] = await Promise.all([
-            window.electronAPI.getExistingClaudeToken(),
-            window.electronAPI.isClaudeCliInstalled(),
-          ])
-          setExistingClaudeToken(token)
-          setIsClaudeCliInstalled(cliInstalled)
-          setClaudeOAuthChecked(true)
-        } catch (error) {
-          console.error('Failed to check Claude auth:', error)
-          setClaudeOAuthChecked(true)
-        }
-      }
-      checkClaudeAuth()
-    }
-  }, [state.step, state.apiSetupMethod, claudeOAuthChecked])
-
-  // Use existing Claude token (from keychain)
-  const handleUseExistingClaudeToken = useCallback(async () => {
-    if (!existingClaudeToken) return
-
-    setState(s => ({ ...s, credentialStatus: 'validating', errorMessage: undefined }))
-
-    try {
-      await handleSaveConfig(existingClaudeToken)
-
-      setState(s => ({
-        ...s,
-        credentialStatus: 'success',
-        step: 'complete',
-      }))
-    } catch (error) {
-      setState(s => ({
-        ...s,
-        credentialStatus: 'error',
-        errorMessage: error instanceof Error ? error.message : 'Failed to save token',
-      }))
-    }
-  }, [existingClaudeToken, handleSaveConfig])
 
   // Start Claude OAuth (native browser-based OAuth with PKCE - two-step flow)
   const handleStartOAuth = useCallback(async () => {
@@ -361,7 +309,6 @@ export function useOnboarding({
       const result = await window.electronAPI.exchangeClaudeCode(code.trim())
 
       if (result.success && result.token) {
-        setExistingClaudeToken(result.token)
         setIsWaitingForCode(false)
         await handleSaveConfig(result.token)
 
@@ -458,9 +405,6 @@ export function useOnboarding({
       isExistingUser: false,
       errorMessage: undefined,
     })
-    setExistingClaudeToken(null)
-    setIsClaudeCliInstalled(false)
-    setClaudeOAuthChecked(false)
     setIsWaitingForCode(false)
   }, [])
 
@@ -471,9 +415,6 @@ export function useOnboarding({
     handleSelectApiSetupMethod,
     handleSubmitCredential,
     handleStartOAuth,
-    existingClaudeToken,
-    isClaudeCliInstalled,
-    handleUseExistingClaudeToken,
     // Two-step OAuth flow
     isWaitingForCode,
     handleSubmitAuthCode,

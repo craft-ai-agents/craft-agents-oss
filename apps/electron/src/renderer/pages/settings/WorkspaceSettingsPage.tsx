@@ -99,6 +99,10 @@ export default function WorkspaceSettingsPage() {
         for (const ext of ICON_EXTENSIONS) {
           try {
             const iconData = await window.electronAPI.readWorkspaceImage(activeWorkspaceId, `./icon.${ext}`)
+            // IPC returns null for missing files - continue to next extension
+            if (!iconData) {
+              continue
+            }
             // For SVG, wrap in data URL
             if (ext === 'svg' && !iconData.startsWith('data:')) {
               setWsIconUrl(`data:image/svg+xml;base64,${btoa(iconData)}`)
@@ -173,10 +177,12 @@ export default function WorkspaceSettingsPage() {
 
       // Reload the icon locally for settings display
       const iconData = await window.electronAPI.readWorkspaceImage(activeWorkspaceId, `./icon.${ext}`)
-      if (ext === 'svg' && !iconData.startsWith('data:')) {
-        setWsIconUrl(`data:image/svg+xml;base64,${btoa(iconData)}`)
-      } else {
-        setWsIconUrl(iconData)
+      if (iconData) {
+        if (ext === 'svg' && !iconData.startsWith('data:')) {
+          setWsIconUrl(`data:image/svg+xml;base64,${btoa(iconData)}`)
+        } else {
+          setWsIconUrl(iconData)
+        }
       }
 
       // Refresh workspaces to update sidebar icon
