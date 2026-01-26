@@ -94,7 +94,7 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
   // Settings navigator
   if (first === 'settings') {
     const subpage = (segments[1] || 'app') as SettingsSubpage
-    const validSubpages: SettingsSubpage[] = ['app', 'workspace', 'permissions', 'shortcuts', 'preferences']
+    const validSubpages: SettingsSubpage[] = ['app', 'workspace', 'permissions', 'shortcuts', 'preferences', 'claude-profiles']
     if (!validSubpages.includes(subpage)) return null
     return {
       navigator: 'settings',
@@ -561,6 +561,8 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
       return { navigator: 'settings', subpage: 'shortcuts' }
     case 'preferences':
       return { navigator: 'settings', subpage: 'preferences' }
+    case 'claude-profiles':
+      return { navigator: 'settings', subpage: 'claude-profiles' }
     case 'sources':
       return { navigator: 'sources', details: null }
     case 'source-info':
