@@ -1,6 +1,12 @@
 # Team Skills
 
-Team skills enable internal distribution of shared skills through a private GitHub repository. This allows teams to maintain a centralized collection of skills that can be synced to all team members' Vesper instances.
+Team skills enable internal distribution of shared skills through a private GitHub repository. This allows teams to maintain a centralized collection of skills that can be synced to all team members' Vesper instances or installed directly with Claude Code CLI.
+
+## Quick Links
+
+- **Vesper Users**: Continue reading this guide for auto-sync setup
+- **Claude Code CLI Users**: See [Direct Installation for Claude Code CLI](#direct-installation-for-claude-code-cli) below
+- **Official Team Skills Repo**: [github.com/AskTinNguyen/vesper-team-skills](https://github.com/AskTinNguyen/vesper-team-skills)
 
 ## Overview
 
@@ -305,6 +311,74 @@ Once you've verified all skills are working:
 # Remove the old global-skills directory
 rm -rf ~/.vesper/global-skills/
 ```
+
+## Direct Installation for Claude Code CLI
+
+If you're using Claude Code CLI without the Vesper desktop app, you can install team skills directly.
+
+### Quick Start (Claude Code CLI)
+
+```bash
+# Clone the official team skills repository
+git clone https://github.com/AskTinNguyen/vesper-team-skills ~/.claude/team-skills
+
+# Symlink skills to Claude Code skills directory
+mkdir -p ~/.claude/skills
+for skill in ~/.claude/team-skills/*/; do
+  skill_name=$(basename "$skill")
+  if [[ "$skill_name" != "commands" && -f "$skill/SKILL.md" ]]; then
+    ln -sf "$skill" ~/.claude/skills/
+  fi
+done
+
+# Copy commands to Claude Code commands directory
+mkdir -p ~/.claude/commands
+cp -r ~/.claude/team-skills/commands/* ~/.claude/commands/
+
+# Run optional setup scripts
+~/.claude/team-skills/dispatch/setup.sh      # cc and ccd commands
+~/.claude/team-skills/github-intel/install.sh # GitHub discovery tools
+~/.claude/team-skills/ralph-loop/install.sh   # ralph command
+```
+
+### Updating (CLI)
+
+```bash
+cd ~/.claude/team-skills && git pull
+# Skills update automatically via symlinks
+# Commands need to be re-copied
+cp -r commands/* ~/.claude/commands/
+```
+
+### Alternative: Direct Copy
+
+If symlinks don't work on your system:
+
+```bash
+git clone https://github.com/AskTinNguyen/vesper-team-skills /tmp/vesper-team-skills
+
+mkdir -p ~/.claude/skills ~/.claude/commands
+for skill in /tmp/vesper-team-skills/*/; do
+  skill_name=$(basename "$skill")
+  if [[ "$skill_name" != "commands" && -f "$skill/SKILL.md" ]]; then
+    cp -r "$skill" ~/.claude/skills/
+  fi
+done
+cp -r /tmp/vesper-team-skills/commands/* ~/.claude/commands/
+rm -rf /tmp/vesper-team-skills
+```
+
+### Verifying Installation
+
+```bash
+# List installed skills
+ls ~/.claude/skills/
+
+# List installed commands
+ls ~/.claude/commands/
+```
+
+For complete CLI installation documentation, see the [vesper-team-skills README](https://github.com/AskTinNguyen/vesper-team-skills).
 
 ## API Reference
 
