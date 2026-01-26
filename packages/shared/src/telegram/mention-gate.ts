@@ -7,6 +7,9 @@
  * - Start with a command (/)
  *
  * This reduces noise in busy groups by requiring explicit bot interaction.
+ *
+ * Use case: In high-traffic groups, the bot should only respond when explicitly
+ * addressed, not to every message. This prevents spam and reduces API usage.
  */
 
 export function shouldProcessGroupMessage(params: {
@@ -15,17 +18,19 @@ export function shouldProcessGroupMessage(params: {
   requireMention: boolean
   isReplyToBot: boolean
 }): boolean {
-  // Always process in non-mention mode
+  // Always process in non-mention mode (process all messages)
   if (!params.requireMention) return true
 
-  // Check if bot was mentioned
+  // Check if bot was mentioned (case-insensitive, word boundary)
+  // Example: "@mybot can you help?" → true
   const mentionPattern = new RegExp(`@${escapeRegex(params.botUsername)}\\b`, 'i')
   if (mentionPattern.test(params.content)) return true
 
-  // Check if this is a reply to the bot
+  // Check if this is a reply to the bot (threaded conversation)
   if (params.isReplyToBot) return true
 
-  // Check if starts with command
+  // Check if starts with command (always process commands)
+  // Example: "/help" → true
   if (params.content.trim().startsWith('/')) return true
 
   return false

@@ -61,10 +61,12 @@ export class InboundDebouncer {
       return
     }
 
+    // Key format: chatId:userId (messages from same user in same chat are combined)
     const key = `${msg.chatId}:${msg.userId}`
     const existing = this.buffer.get(key)
 
     if (existing) {
+      // Reset timer on new message (debounce window restarts)
       clearTimeout(existing.timer)
       existing.entries.push(msg)
     } else {
@@ -72,8 +74,10 @@ export class InboundDebouncer {
     }
 
     const queue = this.buffer.get(key)!
+    // Create new timer that flushes after debounce window
     queue.timer = setTimeout(async () => {
       this.buffer.delete(key)
+      // Combine messages with double newlines
       const combined = queue.entries.map(m => m.content).join('\n\n')
       await this.onFlush({
         messages: queue.entries,

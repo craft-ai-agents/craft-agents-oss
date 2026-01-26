@@ -81,6 +81,7 @@ export function checkGroupAccess(params: {
   }
 
   // Allowlist: check both group and user
+  // Empty allowlist = all allowed (for that dimension)
   const groupAllowed = params.allowedGroups.length === 0 ||
                        params.allowedGroups.includes(params.chatId)
   const userAllowed = params.allowedUsers.length === 0 ||

@@ -19,14 +19,17 @@ export class EchoTracker {
   /**
    * Track an outbound message ID to detect echoes later.
    *
+   * Use case: In rare cases, Telegram may echo bot's own messages back as updates.
+   * By tracking sent message IDs, we can skip processing them if they appear as incoming.
+   *
    * @param messageId - Telegram message ID from bot.sendMessage()
    */
   track(messageId: number): void {
     this.sentMessageIds.set(messageId, Date.now())
 
-    // Prune if too many items
+    // Prune if too many items (prevent unbounded memory growth)
     if (this.sentMessageIds.size > MAX_ITEMS) {
-      // Find and remove the oldest entry
+      // Find and remove the oldest entry (simple LRU)
       let oldestMessageId: number | null = null
       let oldestTimestamp = Infinity
 

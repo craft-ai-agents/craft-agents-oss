@@ -22,21 +22,22 @@ export class MessageDeduplicator {
    */
   isDuplicate(updateId: number, messageId: number, chatId: number): boolean {
     // Primary key: update_id (unique per Telegram update)
-    // Fallback key: chatId:messageId (for edge cases)
+    // Fallback key: chatId:messageId (for edge cases where update_id is reused)
     const primaryKey = `update:${updateId}`
     const fallbackKey = `msg:${chatId}:${messageId}`
 
     const now = Date.now()
 
-    // Check if seen recently
+    // Check if seen recently (either key matches = duplicate)
     if (this.checkAndMark(primaryKey, now) || this.checkAndMark(fallbackKey, now)) {
       return true
     }
 
-    // Mark both keys
+    // Mark both keys with current timestamp
     this.seenMessages.set(primaryKey, now)
     this.seenMessages.set(fallbackKey, now)
 
+    // Cleanup old entries to prevent unbounded growth
     this.pruneOldEntries(now)
     return false
   }

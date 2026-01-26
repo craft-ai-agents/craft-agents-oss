@@ -13,8 +13,11 @@ import type { CredentialManager } from '../credentials/index.ts';
  * Token resolution priority:
  * 1. Account-specific tokenFile (if tokenSource is 'tokenFile')
  * 2. Account-specific token in credentials (if tokenSource is 'config')
+ *    - Stored at: telegram_bot_token:{workspaceId}:{accountId}
  * 3. Legacy global token (backward compatibility for "default" account)
+ *    - Stored at: telegram_bot_token:{workspaceId}:default
  * 4. Environment variable TELEGRAM_BOT_TOKEN (for "default" account only)
+ *    - Used in development/CI environments
  */
 export async function resolveAccountToken(
   workspaceId: string,

@@ -24,6 +24,16 @@ export const DEFAULT_BACKOFF: BackoffPolicy = {
 /**
  * Compute backoff delay with exponential growth and jitter
  *
+ * Formula: base = min(initialMs * factor^(attempt-1), maxMs)
+ * With jitter: delay = base ± (jitter * base)
+ *
+ * Example with defaults (initialMs=1000, factor=2, maxMs=30000, jitter=0.25):
+ * - Attempt 1: 750-1250ms (1000 ± 25%)
+ * - Attempt 2: 1500-2500ms (2000 ± 25%)
+ * - Attempt 3: 3000-5000ms (4000 ± 25%)
+ * - Attempt 4: 6000-10000ms (8000 ± 25%)
+ * - Attempt 5: 22500-30000ms (30000 capped, ± 25%)
+ *
  * @param policy - Backoff policy configuration
  * @param attempt - Current attempt number (1-based)
  * @returns Delay in milliseconds
@@ -36,6 +46,7 @@ export function computeBackoff(policy: BackoffPolicy, attempt: number): number {
   )
 
   // Add jitter: random value in range [-jitter*base, +jitter*base]
+  // This prevents thundering herd problem when multiple clients retry simultaneously
   const jitterRange = base * policy.jitter
   const jitter = (Math.random() - 0.5) * 2 * jitterRange
 
