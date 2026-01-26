@@ -2131,7 +2131,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     }
 
     if (!existsSync(absolutePath)) {
-      throw new Error(`Image file not found: ${relativePath}`)
+      return null  // Missing optional files - silent fallback to default icons
     }
 
     // Read file as buffer

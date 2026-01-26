@@ -161,7 +161,6 @@ export const onboardingComponents: ComponentEntry[] = [
     ],
     variants: [
       { name: 'Idle', props: { apiSetupMethod: 'claude_oauth', status: 'idle' } },
-      { name: 'Idle (Existing Token)', props: { apiSetupMethod: 'claude_oauth', status: 'idle', existingClaudeToken: 'sk-ant-abc123def456ghi789...' } },
       { name: 'Waiting for Code', props: { apiSetupMethod: 'claude_oauth', status: 'idle', isWaitingForCode: true } },
       { name: 'Waiting for Code - Validating', props: { apiSetupMethod: 'claude_oauth', status: 'validating', isWaitingForCode: true } },
       { name: 'Waiting for Code - Error', props: { apiSetupMethod: 'claude_oauth', status: 'error', isWaitingForCode: true, errorMessage: 'Invalid authorization code.' } },

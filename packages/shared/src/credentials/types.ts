@@ -78,6 +78,8 @@ export interface StoredCredential {
   clientId?: string;
   /** Token type (e.g., "Bearer") */
   tokenType?: string;
+  /** Where the credential came from: 'native' (our OAuth), 'cli' (Claude CLI import) */
+  source?: 'native' | 'cli';
 }
 
 // Using "::" as delimiter instead of "/" because server names and API names

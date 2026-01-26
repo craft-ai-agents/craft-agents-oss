@@ -1792,8 +1792,7 @@ export class CraftAgent {
           errorMsg.includes('invalid x-api-key');
 
         if (isAuthError) {
-          // Auth errors should surface immediately, not retry
-          // Parse to typed error using the captured/processed error message
+          // Auth errors surface immediately - session manager handles retry by recreating agent
           const typedError = parseError(new Error(rawErrorMsg));
           yield { type: 'typed_error', error: typedError };
           yield { type: 'complete' };

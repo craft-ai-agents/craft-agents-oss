@@ -5,7 +5,7 @@
  * with StepFormLayout for the onboarding wizard context.
  */
 
-import { ExternalLink, CheckCircle2 } from "lucide-react"
+import { ExternalLink } from "lucide-react"
 import type { ApiSetupMethod } from "./APISetupStep"
 import { StepFormLayout, BackButton, ContinueButton } from "./primitives"
 import {
@@ -25,10 +25,6 @@ interface CredentialsStepProps {
   onSubmit: (data: ApiKeySubmitData) => void
   onStartOAuth?: () => void
   onBack: () => void
-  // Claude OAuth specific
-  existingClaudeToken?: string | null
-  isClaudeCliInstalled?: boolean
-  onUseExistingClaudeToken?: () => void
   // Two-step OAuth flow
   isWaitingForCode?: boolean
   onSubmitAuthCode?: (code: string) => void
@@ -42,8 +38,6 @@ export function CredentialsStep({
   onSubmit,
   onStartOAuth,
   onBack,
-  existingClaudeToken,
-  onUseExistingClaudeToken,
   isWaitingForCode,
   onSubmitAuthCode,
   onCancelOAuth,
@@ -52,8 +46,6 @@ export function CredentialsStep({
 
   // --- OAuth flow ---
   if (isOAuth) {
-    const hasExistingToken = !!existingClaudeToken
-
     // Waiting for authorization code entry
     if (isWaitingForCode) {
       return (
@@ -76,10 +68,8 @@ export function CredentialsStep({
           <OAuthConnect
             status={status as OAuthStatus}
             errorMessage={errorMessage}
-            existingClaudeToken={existingClaudeToken}
             isWaitingForCode={true}
             onStartOAuth={onStartOAuth!}
-            onUseExistingClaudeToken={onUseExistingClaudeToken}
             onSubmitAuthCode={onSubmitAuthCode}
             onCancelOAuth={onCancelOAuth}
           />
@@ -87,50 +77,30 @@ export function CredentialsStep({
       )
     }
 
-    // Static layout matching the API key step pattern:
-    // Fixed title/description, button shows loading, error below content
-    const description = hasExistingToken
-      ? 'Found an existing Claude token. Use it or sign in with a different account.'
-      : 'Use your Claude subscription to power multi-agent workflows.'
-
     return (
       <StepFormLayout
         title="Connect Claude Account"
-        description={description}
+        description="Use your Claude subscription to power multi-agent workflows."
         actions={
           <>
             <BackButton onClick={onBack} disabled={status === 'validating'} />
-            {hasExistingToken ? (
-              <ContinueButton
-                onClick={onUseExistingClaudeToken}
-                className="gap-2"
-                loading={status === 'validating'}
-                loadingText="Connecting..."
-              >
-                <CheckCircle2 className="size-4" />
-                Use Existing Token
-              </ContinueButton>
-            ) : (
-              <ContinueButton
-                onClick={onStartOAuth}
-                className="gap-2"
-                loading={status === 'validating'}
-                loadingText="Connecting..."
-              >
-                <ExternalLink className="size-4" />
-                Sign in with Claude
-              </ContinueButton>
-            )}
+            <ContinueButton
+              onClick={onStartOAuth}
+              className="gap-2"
+              loading={status === 'validating'}
+              loadingText="Connecting..."
+            >
+              <ExternalLink className="size-4" />
+              Sign in with Claude
+            </ContinueButton>
           </>
         }
       >
         <OAuthConnect
           status={status as OAuthStatus}
           errorMessage={errorMessage}
-          existingClaudeToken={existingClaudeToken}
           isWaitingForCode={false}
           onStartOAuth={onStartOAuth!}
-          onUseExistingClaudeToken={onUseExistingClaudeToken}
           onSubmitAuthCode={onSubmitAuthCode}
           onCancelOAuth={onCancelOAuth}
         />

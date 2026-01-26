@@ -249,6 +249,10 @@ export async function loadSourceIcon(
 async function loadWorkspaceIcon(workspaceId: string, relativePath: string): Promise<string | null> {
   try {
     const result = await window.electronAPI.readWorkspaceImage(workspaceId, relativePath)
+    // IPC returns null for missing files (silent fallback)
+    if (!result) {
+      return null
+    }
     // For SVG, theme and convert to data URL
     // This injects foreground color since currentColor doesn't work in background-image
     if (relativePath.endsWith('.svg')) {
@@ -256,7 +260,7 @@ async function loadWorkspaceIcon(workspaceId: string, relativePath: string): Pro
     }
     return result
   } catch {
-    // File doesn't exist or failed to load - this is expected for auto-discovery
+    // Security errors or I/O failures still throw - handle them gracefully
     return null
   }
 }
@@ -611,6 +615,10 @@ async function loadIconFile(
 ): Promise<{ dataUrl: string; colorable: boolean; rawSvg?: string } | null> {
   try {
     const content = await window.electronAPI.readWorkspaceImage(workspaceId, relativePath)
+    // IPC returns null for missing files (silent fallback)
+    if (!content) {
+      return null
+    }
 
     if (relativePath.endsWith('.svg')) {
       // Detect if SVG uses currentColor (colorable)

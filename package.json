@@ -29,6 +29,7 @@
     "electron:dev:logs": "pgrep -f 'tail -f.*Craft Agents/main.log' > /dev/null || osascript -e \"tell application \\\"Terminal\\\" to do script \\\"$PWD/scripts/tail-electron-logs.sh\\\"\"",
     "sync-secrets": "bash scripts/sync-secrets.sh",
     "fresh-start": "bun run scripts/fresh-start.ts",
+    "fresh-start:token": "bun run scripts/fresh-start.ts --token-only",
     "print:system-prompt": "bun run packages/shared/src/prompts/print-system-prompt.ts",
     "electron:dist": "bun run electron:build && electron-builder --config electron-builder.yml --project apps/electron",
     "electron:dist:mac": "bun run electron:build && electron-builder --config electron-builder.yml --project apps/electron --mac",

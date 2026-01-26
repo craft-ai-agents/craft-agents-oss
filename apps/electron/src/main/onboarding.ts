@@ -11,7 +11,7 @@ import { saveConfig, loadStoredConfig, generateWorkspaceId, type AuthType, type 
 import { getDefaultWorkspacesDir, generateUniqueWorkspacePath } from '@craft-agent/shared/workspaces'
 import { CraftOAuth, getMcpBaseUrl } from '@craft-agent/shared/auth'
 import { validateMcpConnection } from '@craft-agent/shared/mcp'
-import { getExistingClaudeToken, getExistingClaudeCredentials, isClaudeCliInstalled, runClaudeSetupToken, startClaudeOAuth, exchangeClaudeCode, hasValidOAuthState, clearOAuthState } from '@craft-agent/shared/auth'
+import { startClaudeOAuth, exchangeClaudeCode, hasValidOAuthState, clearOAuthState } from '@craft-agent/shared/auth'
 import { getCredentialManager as getCredentialManagerFn } from '@craft-agent/shared/credentials'
 import {
   IPC_CHANNELS,
@@ -109,21 +109,11 @@ export function registerOnboardingHandlers(sessionManager: SessionManager): void
           await manager.setApiKey(config.credential)
           mainLog.info('[Onboarding:Main] API key saved successfully')
         } else if (config.authType === 'oauth_token') {
-          mainLog.info('[Onboarding:Main] Importing full Claude OAuth credentials...')
-          // Import full credentials including refresh token and expiry from Claude CLI
-          const cliCreds = getExistingClaudeCredentials()
-          if (cliCreds) {
-            await manager.setClaudeOAuthCredentials({
-              accessToken: cliCreds.accessToken,
-              refreshToken: cliCreds.refreshToken,
-              expiresAt: cliCreds.expiresAt,
-            })
-            mainLog.info('[Onboarding:Main] Claude OAuth credentials saved with refresh token')
-          } else {
-            // Fallback to just saving the access token
-            await manager.setClaudeOAuth(config.credential)
-            mainLog.info('[Onboarding:Main] Claude OAuth saved (access token only)')
-          }
+          // NOTE: For oauth_token, credentials are saved via ONBOARDING_EXCHANGE_CLAUDE_CODE
+          // which marks them with source: 'native'. We no longer import from Claude CLI.
+          // If we receive a credential here, it means user completed native OAuth flow.
+          mainLog.info('[Onboarding:Main] OAuth token auth type selected')
+          mainLog.info('[Onboarding:Main] Credentials should already be saved via native OAuth flow')
         }
       } else {
         mainLog.info('[Onboarding:Main] Skipping credential save', {
@@ -257,53 +247,6 @@ export function registerOnboardingHandlers(sessionManager: SessionManager): void
     }
   })
 
-  // Get existing Claude OAuth token from keychain/credentials file
-  ipcMain.handle(IPC_CHANNELS.ONBOARDING_GET_EXISTING_CLAUDE_TOKEN, async () => {
-    try {
-      mainLog.info('[Onboarding] Checking for existing Claude token...')
-      const token = getExistingClaudeToken()
-      mainLog.info('[Onboarding] Existing Claude token:', token ? `found (${token.length} chars)` : 'not found')
-      return token
-    } catch (error) {
-      mainLog.error('[Onboarding] Get existing Claude token error:', error)
-      return null
-    }
-  })
-
-  // Check if Claude CLI is installed
-  ipcMain.handle(IPC_CHANNELS.ONBOARDING_IS_CLAUDE_CLI_INSTALLED, async () => {
-    try {
-      mainLog.info('[Onboarding] Checking if Claude CLI is installed...')
-      mainLog.info('[Onboarding] Current PATH (first 300 chars):', (process.env.PATH || '').substring(0, 300))
-      const installed = isClaudeCliInstalled()
-      mainLog.info('[Onboarding] Claude CLI installed:', installed)
-      return installed
-    } catch (error) {
-      mainLog.error('[Onboarding] Check Claude CLI error:', error)
-      return false
-    }
-  })
-
-  // Run claude setup-token to get OAuth token
-  ipcMain.handle(IPC_CHANNELS.ONBOARDING_RUN_CLAUDE_SETUP_TOKEN, async () => {
-    try {
-      mainLog.info('[Onboarding] Starting claude setup-token...')
-      const result = await runClaudeSetupToken((status) => {
-        mainLog.info('[Onboarding] Claude setup-token status:', status)
-      })
-      mainLog.info('[Onboarding] Claude setup-token result:', {
-        success: result.success,
-        hasToken: !!result.token,
-        error: result.error,
-      })
-      return result
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error'
-      mainLog.error('[Onboarding] Run Claude setup-token error:', message, error)
-      return { success: false, error: message }
-    }
-  })
-
   // Start Claude OAuth flow (opens browser, returns URL)
   ipcMain.handle(IPC_CHANNELS.ONBOARDING_START_CLAUDE_OAUTH, async () => {
     try {
@@ -337,15 +280,17 @@ export function registerOnboardingHandlers(sessionManager: SessionManager): void
         mainLog.info('[Onboarding] Claude code exchange status:', status)
       })
 
-      // Save credentials with refresh token support
+      // Save credentials with refresh token support and source marker
       const manager = getCredentialManagerFn()
       await manager.setClaudeOAuthCredentials({
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,
         expiresAt: tokens.expiresAt,
+        source: 'native', // Mark as obtained from our native OAuth flow
       })
 
-      mainLog.info('[Onboarding] Claude OAuth successful')
+      const expiresAtDate = tokens.expiresAt ? new Date(tokens.expiresAt).toISOString() : 'never'
+      mainLog.info(`[Onboarding] Claude OAuth successful (expires: ${expiresAtDate})`)
       return { success: true, token: tokens.accessToken }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'

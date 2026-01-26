@@ -345,6 +345,16 @@ interface ManagedSession {
   // Pending auth request tracking (for unified auth flow)
   pendingAuthRequestId?: string
   pendingAuthRequest?: AuthRequest
+  // Auth retry tracking (for mid-session token expiry)
+  // Store last sent message/attachments to enable retry after token refresh
+  lastSentMessage?: string
+  lastSentAttachments?: FileAttachment[]
+  lastSentStoredAttachments?: StoredAttachment[]
+  lastSentOptions?: SendMessageOptions
+  // Flag to prevent infinite retry loops (reset at start of each sendMessage)
+  authRetryAttempted?: boolean
+  // Flag indicating auth retry is in progress (to prevent complete handler from interfering)
+  authRetryInProgress?: boolean
 }
 
 // Convert runtime Message to StoredMessage for persistence
@@ -1510,6 +1520,8 @@ export class SessionManager {
 
       // Note: Credential requests now flow through onAuthRequest (unified auth flow)
       // The legacy onCredentialRequest callback has been removed from CraftAgent
+      // Auth refresh for mid-session token expiry is handled by the error handler in sendMessage
+      // which destroys/recreates the agent to get fresh credentials
 
       // Set up mode change handlers
       managed.agent.onPermissionModeChange = (mode) => {
@@ -2345,7 +2357,7 @@ export class SessionManager {
     sessionLog.info(`Deleted session ${sessionId}`)
   }
 
-  async sendMessage(sessionId: string, message: string, attachments?: FileAttachment[], storedAttachments?: StoredAttachment[], options?: SendMessageOptions, existingMessageId?: string): Promise<void> {
+  async sendMessage(sessionId: string, message: string, attachments?: FileAttachment[], storedAttachments?: StoredAttachment[], options?: SendMessageOptions, existingMessageId?: string, _isAuthRetry?: boolean): Promise<void> {
     const managed = this.sessions.get(sessionId)
     if (!managed) {
       throw new Error(`Session ${sessionId} not found`)
@@ -2482,6 +2494,22 @@ export class SessionManager {
     managed.streamingText = ''
     managed.processingGeneration++
 
+    // Reset auth retry flag for this new message (allows one retry per message)
+    // IMPORTANT: Skip reset if this is an auth retry call - the flag is already true
+    // and resetting it would allow infinite retry loops
+    // Note: authRetryInProgress is NOT reset here - it's managed by the retry logic
+    if (!_isAuthRetry) {
+      managed.authRetryAttempted = false
+    }
+
+    // Store message/attachments for potential retry after auth refresh
+    // (SDK subprocess caches token at startup, so if it expires mid-session,
+    // we need to recreate the agent and retry the message)
+    managed.lastSentMessage = message
+    managed.lastSentAttachments = attachments
+    managed.lastSentStoredAttachments = storedAttachments
+    managed.lastSentOptions = options
+
     // Capture the generation to detect if a new request supersedes this one.
     // This prevents the finally block from clobbering state when a follow-up message arrives.
     const myGeneration = managed.processingGeneration
@@ -2584,6 +2612,15 @@ export class SessionManager {
         // Handle complete event - SDK always sends this (even after interrupt)
         // This is the central place where processing ends
         if (event.type === 'complete') {
+          // Skip normal completion handling if auth retry is in progress
+          // The retry will handle its own completion
+          if (managed.authRetryInProgress) {
+            sessionLog.info('Chat completed but auth retry is in progress, skipping normal completion handling')
+            sendSpan.mark('chat.complete.auth_retry_pending')
+            sendSpan.end()
+            return  // Exit function - retry will handle completion
+          }
+
           sessionLog.info('Chat completed via complete event')
 
           // Check if we got an assistant response in this turn
@@ -3424,6 +3461,100 @@ To view this task's output:
         }
         // Typed errors have structured information - send both formats for compatibility
         sessionLog.info('typed_error:', JSON.stringify(event.error, null, 2))
+
+        // Check for auth errors that can be retried by refreshing the token
+        // The SDK subprocess caches the token at startup, so if it expires mid-session,
+        // we get invalid_api_key errors. We can fix this by:
+        // 1. Refreshing the token (reinitializeAuth)
+        // 2. Destroying the agent (so it recreates with fresh token)
+        // 3. Retrying the message
+        const isAuthError = event.error.code === 'invalid_api_key' ||
+          event.error.code === 'expired_oauth_token'
+
+        if (isAuthError && !managed.authRetryAttempted && managed.lastSentMessage) {
+          sessionLog.info(`Auth error detected, attempting token refresh and retry for session ${sessionId}`)
+          managed.authRetryAttempted = true
+          managed.authRetryInProgress = true
+
+          // Trigger async retry (don't block the event processing)
+          // We use setImmediate to let the current event loop finish
+          setImmediate(async () => {
+            try {
+              // 1. Refresh auth (this will refresh the OAuth token if expired)
+              sessionLog.info(`[auth-retry] Refreshing auth for session ${sessionId}`)
+              await this.reinitializeAuth()
+
+              // 2. Destroy the agent so it gets recreated with fresh token
+              // The SDK subprocess has the old token cached in its env, so we must restart it
+              sessionLog.info(`[auth-retry] Destroying agent for session ${sessionId}`)
+              managed.agent = null
+
+              // 3. Retry the message
+              // Get the stored message/attachments before they're cleared
+              const retryMessage = managed.lastSentMessage
+              const retryAttachments = managed.lastSentAttachments
+              const retryStoredAttachments = managed.lastSentStoredAttachments
+              const retryOptions = managed.lastSentOptions
+
+              if (retryMessage) {
+                sessionLog.info(`[auth-retry] Retrying message for session ${sessionId}`)
+                // Clear processing state so sendMessage can start fresh
+                managed.isProcessing = false
+                managed.parentToolStack = []
+                managed.toolToParentMap.clear()
+                managed.pendingTextParent = undefined
+                // Note: Don't clear lastSentMessage yet - sendMessage will set new ones
+
+                // Remove the user message that was added for this failed attempt
+                // so we don't get duplicate messages when retrying
+                // Find and remove the last user message (the one we're retrying)
+                const lastUserMsgIndex = managed.messages.findLastIndex(m => m.role === 'user')
+                if (lastUserMsgIndex !== -1) {
+                  managed.messages.splice(lastUserMsgIndex, 1)
+                }
+
+                // Clear authRetryInProgress before calling sendMessage
+                // This allows the new request to be processed normally
+                managed.authRetryInProgress = false
+
+                await this.sendMessage(
+                  sessionId,
+                  retryMessage,
+                  retryAttachments,
+                  retryStoredAttachments,
+                  retryOptions,
+                  undefined,  // existingMessageId
+                  true        // _isAuthRetry - prevents infinite retry loop
+                )
+                sessionLog.info(`[auth-retry] Retry completed for session ${sessionId}`)
+              } else {
+                managed.authRetryInProgress = false
+              }
+            } catch (retryError) {
+              managed.authRetryInProgress = false
+              sessionLog.error(`[auth-retry] Failed to retry after auth refresh for session ${sessionId}:`, retryError)
+              // Show the original error to the user since retry failed
+              const failedMessage: Message = {
+                id: generateMessageId(),
+                role: 'error',
+                content: 'Authentication failed. Please check your credentials.',
+                timestamp: Date.now(),
+                errorCode: event.error.code,
+              }
+              managed.messages.push(failedMessage)
+              this.sendEvent({
+                type: 'typed_error',
+                sessionId,
+                error: event.error
+              }, workspaceId)
+              this.onProcessingStopped(sessionId, 'error')
+            }
+          })
+
+          // Don't add error message or send to renderer - we're handling it via retry
+          break
+        }
+
         // Build rich error message with all diagnostic fields for persistence and UI display
         const typedErrorMessage: Message = {
           id: generateMessageId(),

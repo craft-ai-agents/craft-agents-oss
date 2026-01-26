@@ -8,14 +8,21 @@
  * Based on: https://github.com/grll/claude-code-login
  */
 import { randomBytes, createHash } from 'node:crypto'
-import open from 'open'
+import { CLAUDE_OAUTH_CONFIG } from './claude-oauth-config'
 
-// OAuth configuration
-const CLAUDE_CLIENT_ID = '9d1c250a-e61b-44d9-88ed-5944d1962f5e'
-const CLAUDE_AUTH_URL = 'https://claude.ai/oauth/authorize'
-const CLAUDE_TOKEN_URL = 'https://console.anthropic.com/v1/oauth/token'
-const REDIRECT_URI = 'https://console.anthropic.com/oauth/code/callback'
-const OAUTH_SCOPES = 'org:create_api_key user:profile user:inference'
+// Dynamic import for 'open' to handle ESM/CJS interop in bundled code
+async function openUrl(url: string): Promise<void> {
+  const open = await import('open')
+  const openFn = open.default || open
+  await openFn(url)
+}
+
+// OAuth configuration from shared config
+const CLAUDE_CLIENT_ID = CLAUDE_OAUTH_CONFIG.CLIENT_ID
+const CLAUDE_AUTH_URL = CLAUDE_OAUTH_CONFIG.AUTH_URL
+const CLAUDE_TOKEN_URL = CLAUDE_OAUTH_CONFIG.TOKEN_URL
+const REDIRECT_URI = CLAUDE_OAUTH_CONFIG.REDIRECT_URI
+const OAUTH_SCOPES = CLAUDE_OAUTH_CONFIG.SCOPES
 const STATE_EXPIRY_MS = 10 * 60 * 1000 // 10 minutes
 
 export interface ClaudeTokens {
@@ -93,7 +100,7 @@ export async function startClaudeOAuth(
 
   // Open browser
   onStatus?.('Opening browser for authentication...')
-  await open(authUrl)
+  await openUrl(authUrl)
 
   onStatus?.('Waiting for you to copy the authorization code...')
 
