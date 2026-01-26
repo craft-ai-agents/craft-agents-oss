@@ -266,6 +266,36 @@ Vesper leverages the Claude Agent SDK and Claude Code while adding significant i
   - `docs/user-guide/themes.md` - User guide with theme descriptions and customization
   - `docs/developer/theming-architecture.md` - Technical architecture and API reference
 
+### 11. Task Coordination
+- **Location:** Workspace settings, session metadata, and agent initialization
+- **Features:**
+  - Enable multi-agent workflows with the Dispatch skill
+  - Auto-generate unique task list ID per session (format: `vesper-{sessionId}`)
+  - Workspace-level toggle to enable/disable task coordination for new sessions
+  - Session-scoped task lists prevent cross-contamination between projects
+  - Tasks stored in Claude Code native format at `~/.claude/tasks/{listId}/`
+  - Task list ID displayed in session info panel with copy button
+  - Persistent across app restarts (stored in session metadata)
+- **Key Files:**
+  - `apps/electron/src/shared/types.ts` - `WorkspaceSettings.taskCoordinationEnabled`
+  - `packages/shared/src/workspaces/types.ts` - Workspace config with `taskCoordinationEnabled`
+  - `apps/electron/src/main/sessions.ts` - Auto-generation logic in `createSession()`
+  - `apps/electron/src/main/ipc.ts` - Workspace settings GET/UPDATE handlers
+  - `SessionMetadataPanel.tsx` - Task list ID display with copy button
+  - `packages/shared/src/sessions/types.ts` - `SessionMetadata.taskListId`
+- **Flow:**
+  1. User enables task coordination in workspace settings
+  2. New session created → auto-generate `taskListId = vesper-{sessionId}`
+  3. Agent initialized → call `agent.setTaskListId(taskListId)`
+  4. SDK subprocess spawned with `CLAUDE_CODE_TASK_LIST_ID` env var
+  5. Dispatch skill can now coordinate tasks across parallel agents
+- **Storage:**
+  - Workspace config: `~/.vesper/workspaces/{id}/config.json` → `defaults.taskCoordinationEnabled`
+  - Session metadata: `~/.vesper/workspaces/{id}/sessions/{id}/session.jsonl` → `taskListId`
+  - Task files: `~/.claude/tasks/{listId}/task-*.json` (Claude Code native format)
+- **Documentation:**
+  - `docs/user-guide/task-coordination.md` - User guide for enabling and using task coordination
+
 ## Project Structure
 
 ```

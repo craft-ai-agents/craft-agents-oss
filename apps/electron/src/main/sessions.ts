@@ -1214,6 +1214,13 @@ export class SessionManager {
       model: sessionModel,
     })
 
+    // Auto-generate task list ID if task coordination is enabled for workspace
+    let taskListId: string | undefined
+    if (wsConfig?.defaults?.taskCoordinationEnabled) {
+      taskListId = `vesper-${storedSession.id}`
+      sessionLog.info(`Task coordination enabled, generated list ID: ${taskListId}`)
+    }
+
     const managed: ManagedSession = {
       id: storedSession.id,
       workspace,
@@ -1232,6 +1239,7 @@ export class SessionManager {
       sdkCwd: storedSession.sdkCwd,
       model: storedSession.model,
       thinkingLevel: defaultThinkingLevel,
+      taskListId,
       messageQueue: [],
       backgroundShellCommands: new Map(),
       messagesLoaded: true,  // New sessions don't need to load messages from disk

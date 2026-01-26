@@ -78,6 +78,7 @@ export default function WorkspaceSettingsPage() {
   const [workingDirectory, setWorkingDirectory] = useState('')
   const [localMcpEnabled, setLocalMcpEnabled] = useState(true)
   const [templatesEnabled, setTemplatesEnabled] = useState(false)
+  const [taskCoordinationEnabled, setTaskCoordinationEnabled] = useState(false)
   const [isLoadingWorkspace, setIsLoadingWorkspace] = useState(true)
 
   // Mode cycling state (includes 'ralph' for Orchestrate support)
@@ -134,6 +135,7 @@ export default function WorkspaceSettingsPage() {
           setWorkingDirectory(settings.workingDirectory || '')
           setLocalMcpEnabled(settings.localMcpEnabled ?? true)
           setTemplatesEnabled(settings.templatesEnabled ?? false)
+          setTaskCoordinationEnabled(settings.taskCoordinationEnabled ?? false)
           // Load cyclable permission modes from workspace settings, or reset to defaults
           if (settings.cyclablePermissionModes && settings.cyclablePermissionModes.length >= 2) {
             setEnabledModes(settings.cyclablePermissionModes)
@@ -326,6 +328,14 @@ export default function WorkspaceSettingsPage() {
       }
     },
     [updateWorkspaceSetting, activeWorkspaceId, loadTemplates]
+  )
+
+  const handleTaskCoordinationEnabledChange = useCallback(
+    async (enabled: boolean) => {
+      setTaskCoordinationEnabled(enabled)
+      await updateWorkspaceSetting('taskCoordinationEnabled', enabled)
+    },
+    [updateWorkspaceSetting]
   )
 
   const handleModeToggle = useCallback(
@@ -641,6 +651,12 @@ export default function WorkspaceSettingsPage() {
                     description="Enable stdio subprocess servers"
                     checked={localMcpEnabled}
                     onCheckedChange={handleLocalMcpEnabledChange}
+                  />
+                  <SettingsToggle
+                    label="Enable Task Coordination"
+                    description="When enabled, sessions can coordinate tasks with the Dispatch skill"
+                    checked={taskCoordinationEnabled}
+                    onCheckedChange={handleTaskCoordinationEnabledChange}
                   />
                 </SettingsCard>
               </SettingsSection>

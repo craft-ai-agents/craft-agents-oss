@@ -1710,6 +1710,8 @@ export interface WorkspaceSettings {
   localMcpEnabled?: boolean
   /** Whether to show template picker on CMD+N (default: false - creates blank session) */
   templatesEnabled?: boolean
+  /** Whether task coordination is enabled for sessions (allows Dispatch skill to work) */
+  taskCoordinationEnabled?: boolean
 }
 
 /**

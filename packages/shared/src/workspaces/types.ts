@@ -46,6 +46,7 @@ export interface WorkspaceConfig {
     cyclablePermissionModes?: PermissionMode[]; // Which modes can be cycled with SHIFT+TAB (min 2, default: all 3)
     workingDirectory?: string;
     thinkingLevel?: ThinkingLevel; // Default thinking level ('off', 'think', 'max') - default: 'think'
+    taskCoordinationEnabled?: boolean; // Whether task coordination is enabled for sessions (allows Dispatch skill to work)
   };
 
   /**

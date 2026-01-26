@@ -204,6 +204,28 @@ export function SessionMetadataPanel({ sessionId, closeButton }: SessionMetadata
           </div>
         </div>
 
+        {/* Task List ID - only show when set */}
+        {session?.taskListId && (
+          <div>
+            <label className="text-xs font-medium text-muted-foreground block mb-1.5 select-none">
+              Task List
+            </label>
+            <div className="rounded-lg bg-foreground-2 shadow-minimal p-2 flex items-center justify-between gap-2">
+              <span className="text-sm font-mono text-foreground/80 truncate">
+                {session.taskListId}
+              </span>
+              <button
+                type="button"
+                onClick={() => navigator.clipboard.writeText(session.taskListId || '')}
+                className="shrink-0 text-xs px-2 py-1 rounded hover:bg-foreground/5 transition-colors text-muted-foreground hover:text-foreground"
+                title="Copy task list ID"
+              >
+                📋 Copy
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Notes */}
         <div>
           <label className="text-xs font-medium text-muted-foreground block mb-1.5 select-none">
