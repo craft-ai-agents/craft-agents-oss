@@ -859,6 +859,62 @@ const exponentialSpring = {
 
 **Note:** The sidebar uses `width` animation (not `transform`) for proper layout flow, but the content inside is fixed-width so it doesn't reflow during animation.
 
+## Sentry Error Tracking
+
+The app uses Sentry (`@sentry/electron`) for production error tracking. It captures crashes and chat/SDK errors.
+
+### Architecture
+
+| Process | Package | Init Location |
+|---------|---------|---------------|
+| Main | `@sentry/electron/main` | `src/main/index.ts` (top of file, after `app` import) |
+| Renderer | `@sentry/electron/renderer` + `@sentry/react` | `src/renderer/main.tsx` (dual-init pattern) |
+| Preload | `@sentry/electron/preload` | `src/preload/index.ts` (line 2) |
+
+### What's Captured
+
+- **Crashes**: `uncaughtException` and `unhandledRejection` in main process → `Sentry.captureException()`
+- **React crashes**: `Sentry.ErrorBoundary` wraps the entire React tree in `main.tsx`
+- **Chat/SDK errors**: Critical catch blocks in `sessions.ts` (chat loop, queued messages, auth retry)
+- **Agent errors**: `captureAgentError()` in `useEventProcessor.ts` reports `error`/`typed_error` events
+- **Console errors/warnings**: `captureConsoleIntegration` in renderer promotes `console.warn`/`console.error` calls into Sentry events, providing the same rich context visible in DevTools without sourcemaps. Known-harmless patterns (React StrictMode warnings, duplicate theme registration) are filtered out via `beforeSend` in `main.tsx`.
+
+### Configuration
+
+- **Ingest URL**: Baked at build time via esbuild `--define` (`SENTRY_ELECTRON_INGEST_URL` env var). Must be in CI secrets.
+- **Enabled**: Whenever the ingest URL is available — production (CI-baked) and development (via `.env` / 1Password). Filter by `environment` in Sentry dashboard.
+- **User ID**: Anonymous machine hash (SHA-256 of hostname + homedir, truncated to 16 chars). No PII.
+- **Data scrubbing**: `beforeSend` hook redacts authorization headers, cookies, and breadcrumb fields containing token/key/secret/password/credential/auth.
+- **Context tags**: `authType`, `hasCustomEndpoint`, `model`, `customModel`, `workspaceCount` (set after app init)
+
+### Source Map Upload — Intentionally Disabled
+
+Source map upload is **not enabled**. Stack traces in Sentry will show bundled/minified code. This is a deliberate trade-off to keep the build pipeline simple.
+
+**To enable source map upload in the future:**
+1. Add `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT` to GitHub secrets and CI build steps
+2. Re-enable the `@sentry/vite-plugin` in `vite.config.ts` (handles renderer source maps)
+3. Add `@sentry/esbuild-plugin` to `scripts/electron-build-main.ts` (handles main process source maps)
+
+### Adding Sentry to New Error Paths
+
+When adding error handling for critical paths (session creation, SDK communication, auth flows), include:
+
+```typescript
+import * as Sentry from '@sentry/electron/main'
+
+try {
+  // critical operation
+} catch (error) {
+  sessionLog.error('Operation failed:', error)
+  Sentry.captureException(error, {
+    tags: { errorSource: 'descriptive-tag' },
+  })
+}
+```
+
+**Don't** add Sentry reporting to every catch block — focus on crashes and chat/SDK errors.
+
 ## Logging & Debugging
 
 **Important:** Prefer logging over `console.log` for debugging. Craft Agent (the AI assistant) can read log files directly via Grep/Read tools, making logs the preferred way to surface debug information during development.

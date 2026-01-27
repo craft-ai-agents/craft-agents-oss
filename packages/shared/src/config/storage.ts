@@ -750,6 +750,9 @@ import { readdirSync } from 'fs';
 const APP_THEME_FILE = join(CONFIG_DIR, 'theme.json');
 const APP_THEMES_DIR = join(CONFIG_DIR, 'themes');
 
+// Track if preset themes have been synced this session (prevents re-init on hot reload)
+let presetsInitialized = false;
+
 /**
  * Get the app-level themes directory.
  * Preset themes are stored at ~/.craft-agent/themes/
@@ -787,11 +790,19 @@ export function saveAppTheme(theme: ThemeOverrides): void {
 // ============================================
 
 /**
- * Ensure preset themes directory exists and has bundled themes.
- * Resolves bundled themes path automatically via getBundledAssetsDir('themes').
- * Only copies if theme doesn't exist (preserves user edits).
+ * Sync bundled preset themes to disk on launch.
+ * Always overwrites to ensure presets stay current with the running app version
+ * (e.g., updated color tokens or new preset themes added in a new release).
+ * User-created custom theme files (with non-bundled filenames) are untouched.
+ * User color overrides live in theme.json (separate file) and are never touched.
  */
 export function ensurePresetThemes(): void {
+  // Skip if already initialized this session (prevents re-init on hot reload)
+  if (presetsInitialized) {
+    return;
+  }
+  presetsInitialized = true;
+
   const themesDir = getAppThemesDir();
 
   // Create themes directory if it doesn't exist
@@ -805,16 +816,16 @@ export function ensurePresetThemes(): void {
     return;
   }
 
-  // Copy each bundled theme if it doesn't exist in app themes dir
+  // Always write bundled preset themes to disk on launch.
+  // This ensures theme updates from new app versions are applied immediately.
+  // Only bundled filenames are overwritten — user-created custom themes are untouched.
   try {
     const bundledFiles = readdirSync(bundledThemesDir).filter(f => f.endsWith('.json'));
     for (const file of bundledFiles) {
+      const srcPath = join(bundledThemesDir, file);
       const destPath = join(themesDir, file);
-      if (!existsSync(destPath)) {
-        const srcPath = join(bundledThemesDir, file);
-        const content = readFileSync(srcPath, 'utf-8');
-        writeFileSync(destPath, content, 'utf-8');
-      }
+      const content = readFileSync(srcPath, 'utf-8');
+      writeFileSync(destPath, content, 'utf-8');
     }
   } catch {
     // Ignore errors - themes are optional

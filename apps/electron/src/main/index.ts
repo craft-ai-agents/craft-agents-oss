@@ -4,6 +4,65 @@ import { loadShellEnv } from './shell-env'
 loadShellEnv()
 
 import { app, BrowserWindow } from 'electron'
+import { createHash } from 'crypto'
+import { hostname, homedir } from 'os'
+import * as Sentry from '@sentry/electron/main'
+
+// Initialize Sentry error tracking as early as possible after app import.
+// Only enabled in production (packaged) builds to avoid noise during development.
+// DSN is baked in at build time via esbuild --define (same pattern as OAuth secrets).
+//
+// NOTE: Source map upload is intentionally disabled. Stack traces in Sentry will show
+// bundled/minified code. To enable source map upload in the future:
+//   1. Add SENTRY_AUTH_TOKEN, SENTRY_ORG, SENTRY_PROJECT to CI secrets
+//   2. Re-enable the @sentry/vite-plugin in vite.config.ts (handles renderer maps)
+//   3. Add @sentry/esbuild-plugin to scripts/electron-build-main.ts (handles main process maps)
+Sentry.init({
+  dsn: process.env.SENTRY_ELECTRON_INGEST_URL,
+  environment: app.isPackaged ? 'production' : 'development',
+  release: app.getVersion(),
+  // Enabled whenever the ingest URL is available — works in both production (baked via CI)
+  // and development (injected via .env / 1Password). Filter by environment in Sentry dashboard.
+  enabled: !!process.env.SENTRY_ELECTRON_INGEST_URL,
+
+  // Scrub sensitive data before sending to Sentry.
+  // Removes authorization headers, API keys/tokens, and credential-like values.
+  beforeSend(event) {
+    // Scrub request headers (authorization, cookies)
+    if (event.request?.headers) {
+      const sensitiveHeaders = ['authorization', 'cookie', 'x-api-key']
+      for (const header of sensitiveHeaders) {
+        if (event.request.headers[header]) {
+          event.request.headers[header] = '[REDACTED]'
+        }
+      }
+    }
+
+    // Scrub breadcrumb data that may contain sensitive values
+    if (event.breadcrumbs) {
+      for (const breadcrumb of event.breadcrumbs) {
+        if (breadcrumb.data) {
+          for (const key of Object.keys(breadcrumb.data)) {
+            const lowerKey = key.toLowerCase()
+            if (lowerKey.includes('token') || lowerKey.includes('key') ||
+                lowerKey.includes('secret') || lowerKey.includes('password') ||
+                lowerKey.includes('credential') || lowerKey.includes('auth')) {
+              breadcrumb.data[key] = '[REDACTED]'
+            }
+          }
+        }
+      }
+    }
+
+    return event
+  },
+})
+
+// Set anonymous machine ID for Sentry user tracking (no PII — just a hash).
+// Uses hostname + homedir to produce a stable per-machine identifier.
+const machineId = createHash('sha256').update(hostname() + homedir()).digest('hex').slice(0, 16)
+Sentry.setUser({ id: machineId })
+
 import { join } from 'path'
 import { existsSync } from 'fs'
 import { SessionManager } from './sessions'
@@ -11,7 +70,7 @@ import { registerIpcHandlers } from './ipc'
 import { createApplicationMenu } from './menu'
 import { WindowManager } from './window-manager'
 import { loadWindowState, saveWindowState } from './window-state'
-import { getWorkspaces } from '@craft-agent/shared/config'
+import { getWorkspaces, loadStoredConfig } from '@craft-agent/shared/config'
 import { initializeDocs } from '@craft-agent/shared/docs'
 import { ensureDefaultPermissions } from '@craft-agent/shared/agent/permissions-config'
 import { ensureToolIcons } from '@craft-agent/shared/config'
@@ -214,6 +273,20 @@ app.whenReady().then(async () => {
     // Initialize auth (must happen after window creation for error reporting)
     await sessionManager.initialize()
 
+    // Set Sentry context tags for error grouping (no PII — just config classification).
+    // Runs after init so config and auth state are available.
+    try {
+      const config = loadStoredConfig()
+      const workspaces = getWorkspaces()
+      Sentry.setTag('authType', config?.authType ?? 'unknown')
+      Sentry.setTag('hasCustomEndpoint', String(!!config?.anthropicBaseUrl))
+      Sentry.setTag('model', config?.model ?? 'default')
+      Sentry.setTag('customModel', config?.customModel ?? 'none')
+      Sentry.setTag('workspaceCount', String(workspaces.length))
+    } catch (err) {
+      mainLog.warn('Failed to set Sentry context tags:', err)
+    }
+
     // Initialize auto-update (check immediately on launch)
     // Skip in dev mode to avoid replacing /Applications app and launching it instead
     setAutoUpdateWindowManager(windowManager)
@@ -319,11 +392,14 @@ app.on('before-quit', async (event) => {
   }
 })
 
-// Handle uncaught exceptions to prevent crashes
+// Handle uncaught exceptions — forward to Sentry explicitly since registering
+// a custom handler can interfere with @sentry/electron's automatic capture.
 process.on('uncaughtException', (error) => {
   mainLog.error('Uncaught exception:', error)
+  Sentry.captureException(error)
 })
 
 process.on('unhandledRejection', (reason, promise) => {
   mainLog.error('Unhandled rejection at:', promise, 'reason:', reason)
+  Sentry.captureException(reason instanceof Error ? reason : new Error(String(reason)))
 })

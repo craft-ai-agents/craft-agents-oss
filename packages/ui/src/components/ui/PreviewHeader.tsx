@@ -140,13 +140,13 @@ export function PreviewHeader({
       {/* Left side - space for traffic lights on macOS, flex-1 to balance with right side */}
       <div className="flex-1 min-w-[70px]" />
 
-      {/* Center - badges row */}
-      <div className="flex items-center gap-2 min-w-0">
+      {/* Center - badges row. no-drag so badges are clickable in the window drag region. */}
+      <div className="flex items-center gap-2 min-w-0" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
         {children}
       </div>
 
-      {/* Right side - actions + close button, flex-1 to balance with left side */}
-      <div className="flex-1 min-w-[70px] flex items-center gap-2 justify-end">
+      {/* Right side - actions + close button. no-drag so actions are clickable in the window drag region. */}
+      <div className="flex-1 min-w-[70px] flex items-center gap-2 justify-end" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
         {rightActions}
         {onClose && (
           <button
@@ -156,7 +156,6 @@ export function PreviewHeader({
               'opacity-70 hover:opacity-100 transition-opacity',
               'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring'
             )}
-            style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
             title="Close (Esc)"
           >
             <X className="w-4 h-4" />

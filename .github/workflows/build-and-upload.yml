@@ -249,6 +249,8 @@ jobs:
           SLACK_OAUTH_CLIENT_ID: ${{ secrets.SLACK_OAUTH_CLIENT_ID }}
           SLACK_OAUTH_CLIENT_SECRET: ${{ secrets.SLACK_OAUTH_CLIENT_SECRET }}
           MICROSOFT_OAUTH_CLIENT_ID: ${{ secrets.MICROSOFT_OAUTH_CLIENT_ID }}
+          # Sentry error tracking (ingest URL baked into build)
+          SENTRY_ELECTRON_INGEST_URL: ${{ secrets.SENTRY_ELECTRON_INGEST_URL }}
           # Code signing (optional - set secrets for signed builds)
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -277,6 +279,7 @@ jobs:
           SLACK_OAUTH_CLIENT_ID: ${{ secrets.SLACK_OAUTH_CLIENT_ID }}
           SLACK_OAUTH_CLIENT_SECRET: ${{ secrets.SLACK_OAUTH_CLIENT_SECRET }}
           MICROSOFT_OAUTH_CLIENT_ID: ${{ secrets.MICROSOFT_OAUTH_CLIENT_ID }}
+          SENTRY_ELECTRON_INGEST_URL: ${{ secrets.SENTRY_ELECTRON_INGEST_URL }}
 
       # Windows code signing with Azure Key Vault
       - name: Sign Windows executable
@@ -335,6 +338,7 @@ jobs:
           SLACK_OAUTH_CLIENT_ID: ${{ secrets.SLACK_OAUTH_CLIENT_ID }}
           SLACK_OAUTH_CLIENT_SECRET: ${{ secrets.SLACK_OAUTH_CLIENT_SECRET }}
           MICROSOFT_OAUTH_CLIENT_ID: ${{ secrets.MICROSOFT_OAUTH_CLIENT_ID }}
+          SENTRY_ELECTRON_INGEST_URL: ${{ secrets.SENTRY_ELECTRON_INGEST_URL }}
 
       - name: Verify build outputs
         if: steps.check-artifact.outputs.skip != 'true'

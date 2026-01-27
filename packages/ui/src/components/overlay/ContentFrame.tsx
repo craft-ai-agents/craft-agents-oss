@@ -1,20 +1,32 @@
 /**
  * ContentFrame - Shared terminal-style card frame for all preview overlays
  *
- * Provides the "app window" look: rounded card with fake traffic lights title bar,
+ * Provides the "app window" look: rounded card with a centered title bar,
  * centered on a bg-foreground-3 background. Supports optional left and right sidebars
  * rendered outside the card (e.g., file navigation in MultiDiffPreviewOverlay).
  *
  * The card is always centered in the viewport. Sidebars are positioned absolutely
  * so they hang off the card edges without shifting its center position.
  *
+ * The card grows to fit its content — no internal scrolling. When the card is taller
+ * than the viewport, the outer container scrolls the entire card ("paper scrolling").
+ * Uses margin:auto for centering which gracefully handles overflow (unlike items-center
+ * which can clip the top of overflowing content).
+ *
+ * Width modes:
+ *   - Default: card fills available width up to maxWidth (numeric, default 850px).
+ *   - fitContent: card uses CSS `width: max-content` to grow to its content width.
+ *     Useful for overlays with variable-width content (e.g., diff tables). Capped at
+ *     100% of the outer container, floored at minWidth. More reliable than JS measurement
+ *     because it works with async-rendered content (Shiki syntax highlighting).
+ *
  * Layout:
- *   absolute inset-0, flex centered, p-6
- *     └── relative wrapper (max-w constrained, height: min(100%, 80vh), centered)
+ *   absolute inset-0, flex, pt-6 px-6 (no bottom padding), overflow-auto
+ *     └── relative wrapper (max-w constrained, m-auto centered, grows to content)
  *          ├── leftSidebar?  (absolute, right-full — hangs left of card)
- *          ├── Card (h-full, rounded-2xl, bg-background, shadow-strong)
- *          │    ├── Title bar (traffic lights + title label)
- *          │    └── children (flex-1, min-h-0)
+ *          ├── Card (rounded-2xl, bg-background, shadow-strong, grows to content)
+ *          │    ├── Title bar (centered title label)
+ *          │    └── children (grows naturally)
  *          └── rightSidebar? (absolute, left-full — hangs right of card)
  *
  * Used by: TerminalPreviewOverlay, CodePreviewOverlay, GenericOverlay,
@@ -24,10 +36,18 @@
 import type { ReactNode } from 'react'
 
 export interface ContentFrameProps {
-  /** Title bar label displayed between the traffic lights and the right spacer */
+  /** Title bar label displayed centered in the title bar */
   title: string
-  /** Max width of the card (default: 850). Sidebars are outside this constraint. */
+  /** Max width of the card (default: 850). Sidebars are outside this constraint.
+   *  Ignored when fitContent is true (card uses max-content width instead). */
   maxWidth?: number
+  /** Minimum width of the card. Only used when fitContent is true. */
+  minWidth?: number
+  /** When true, the card uses CSS `width: max-content` to naturally grow to fit
+   *  its content width (e.g., wide diff tables). The card is capped at 100% of
+   *  the viewport (minus padding) and floored at minWidth. This is more reliable
+   *  than JS-based measurement because it works with async-rendered content (Shiki). */
+  fitContent?: boolean
   /** Optional content rendered to the left of the card (e.g., sidebar navigation) */
   leftSidebar?: ReactNode
   /** Optional content rendered to the right of the card */
@@ -39,18 +59,26 @@ export interface ContentFrameProps {
 export function ContentFrame({
   title,
   maxWidth = 850,
+  minWidth,
+  fitContent,
   leftSidebar,
   rightSidebar,
   children,
 }: ContentFrameProps) {
+  // fitContent mode: card uses CSS max-content width to grow to its content (e.g., wide diffs).
+  // Capped at 100% of the outer container so it never exceeds the viewport.
+  // Fallback mode: card fills available width up to maxWidth (fixed/numeric).
+  const wrapperStyle = fitContent
+    ? { width: 'max-content' as const, maxWidth: '100%', minWidth }
+    : { maxWidth }
+
   return (
-    <div className="absolute inset-0 flex items-center justify-center p-6 overflow-auto">
-      {/* Relative wrapper — centered by the parent flex container.
-          Sidebars are absolutely positioned off the card edges so they don't
-          affect centering. maxWidth applies to the card only. */}
+    <div className="absolute inset-0 flex pt-6 px-6 overflow-auto">
+      {/* Relative wrapper — centered via m-auto (safe for overflow, unlike items-center).
+          Card grows to fit content. When taller than viewport, outer container scrolls. */}
       <div
-        className="relative w-full"
-        style={{ maxWidth, height: 'min(100%, 80vh)' }}
+        className={`relative m-auto ${fitContent ? '' : 'w-full'}`}
+        style={wrapperStyle}
       >
         {/* Left sidebar — absolutely positioned to the left of the card */}
         {leftSidebar && (
@@ -59,23 +87,17 @@ export function ContentFrame({
           </div>
         )}
 
-        {/* Main card — the "app window" with title bar and content */}
-        <div className="h-full flex flex-col rounded-2xl overflow-hidden backdrop-blur-sm shadow-strong bg-background">
-          {/* Title bar with decorative traffic lights */}
-          <div className="flex justify-between items-center px-4 py-3 border-b border-foreground/12 select-none shrink-0">
-            <div className="flex gap-2">
-              <div className="w-3 h-3 rounded-full border border-foreground/15" />
-              <div className="w-3 h-3 rounded-full border border-foreground/15" />
-              <div className="w-3 h-3 rounded-full border border-foreground/15" />
-            </div>
+        {/* Main card — grows to fit content, no internal scrolling */}
+        <div className="flex flex-col rounded-2xl overflow-hidden backdrop-blur-sm shadow-strong bg-background min-h-[320px]">
+          {/* Title bar */}
+          <div className="flex justify-center items-center px-4 py-3 border-b border-foreground/7 select-none shrink-0">
             <div className="text-xs font-semibold tracking-wider text-foreground/30">
               {title}
             </div>
-            <div className="w-12" />
           </div>
 
-          {/* Content area — children handle their own scrolling/layout */}
-          <div className="flex-1 min-h-0">
+          {/* Content area — grows naturally with content, no scroll constraint */}
+          <div>
             {children}
           </div>
         </div>

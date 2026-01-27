@@ -4,9 +4,11 @@
  * Global app-level settings that apply across all workspaces.
  *
  * Settings:
- * - Appearance (Theme, Font)
  * - Notifications
  * - API Connection (opens OnboardingWizard for editing)
+ * - About (version, updates)
+ *
+ * Note: Appearance settings (theme, font) have been moved to AppearanceSettingsPage.
  */
 
 import { useState, useEffect, useCallback } from 'react'
@@ -14,9 +16,8 @@ import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import { HeaderMenu } from '@/components/ui/HeaderMenu'
-import { useTheme } from '@/context/ThemeContext'
 import { routes } from '@/lib/navigate'
-import { Monitor, Sun, Moon, X } from 'lucide-react'
+import { X } from 'lucide-react'
 import { Spinner, FullscreenOverlayBase } from '@craft-agent/ui'
 import { useSetAtom } from 'jotai'
 import { fullscreenOverlayOpenAtom } from '@/atoms/overlay'
@@ -28,14 +29,11 @@ import {
   SettingsCard,
   SettingsRow,
   SettingsToggle,
-  SettingsSegmentedControl,
-  SettingsMenuSelect,
 } from '@/components/settings'
 import { useUpdateChecker } from '@/hooks/useUpdateChecker'
 import { useOnboarding } from '@/hooks/useOnboarding'
 import { OnboardingWizard } from '@/components/onboarding'
 import { useAppShellContext } from '@/context/AppShellContext'
-import type { PresetTheme } from '@config/theme'
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
@@ -47,11 +45,7 @@ export const meta: DetailsPageMeta = {
 // ============================================
 
 export default function AppSettingsPage() {
-  const { mode, setMode, colorTheme, setColorTheme, font, setFont } = useTheme()
   const { refreshCustomModel } = useAppShellContext()
-
-  // Preset themes state
-  const [presetThemes, setPresetThemes] = useState<PresetTheme[]>([])
 
   // API Connection state (read-only display — editing is done via OnboardingWizard overlay)
   const [authType, setAuthType] = useState<AuthType>('api_key')
@@ -93,25 +87,6 @@ export default function AppSettingsPage() {
 
   useEffect(() => {
     loadConnectionInfo()
-  }, [])
-
-  // Load preset themes when workspace changes (themes are workspace-scoped)
-  // Load preset themes (app-level, no workspace dependency)
-  useEffect(() => {
-    const loadThemes = async () => {
-      if (!window.electronAPI) {
-        setPresetThemes([])
-        return
-      }
-      try {
-        const themes = await window.electronAPI.loadPresetThemes()
-        setPresetThemes(themes)
-      } catch (error) {
-        console.error('Failed to load preset themes:', error)
-        setPresetThemes([])
-      }
-    }
-    loadThemes()
   }, [])
 
   // Helpers to open/close the fullscreen API setup overlay
@@ -160,48 +135,6 @@ export default function AppSettingsPage() {
         <ScrollArea className="h-full">
           <div className="px-5 py-7 max-w-3xl mx-auto">
           <div className="space-y-8">
-            {/* Appearance */}
-            <SettingsSection title="Appearance">
-              <SettingsCard>
-                <SettingsRow label="Mode">
-                  <SettingsSegmentedControl
-                    value={mode}
-                    onValueChange={setMode}
-                    options={[
-                      { value: 'system', label: 'System', icon: <Monitor className="w-4 h-4" /> },
-                      { value: 'light', label: 'Light', icon: <Sun className="w-4 h-4" /> },
-                      { value: 'dark', label: 'Dark', icon: <Moon className="w-4 h-4" /> },
-                    ]}
-                  />
-                </SettingsRow>
-                <SettingsRow label="Color theme">
-                  <SettingsMenuSelect
-                    value={colorTheme}
-                    onValueChange={setColorTheme}
-                    options={[
-                      { value: 'default', label: 'Default' },
-                      ...presetThemes
-                        .filter(t => t.id !== 'default')
-                        .map(t => ({
-                          value: t.id,
-                          label: t.theme.name || t.id,
-                        })),
-                    ]}
-                  />
-                </SettingsRow>
-                <SettingsRow label="Font">
-                  <SettingsSegmentedControl
-                    value={font}
-                    onValueChange={setFont}
-                    options={[
-                      { value: 'inter', label: 'Inter' },
-                      { value: 'system', label: 'System' },
-                    ]}
-                  />
-                </SettingsRow>
-              </SettingsCard>
-            </SettingsSection>
-
             {/* Notifications */}
             <SettingsSection title="Notifications">
               <SettingsCard>

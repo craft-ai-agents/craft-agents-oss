@@ -35,22 +35,24 @@ function getAssetsDir(): string {
  */
 function loadBundledDocs(): Record<string, string> {
   const assetsDir = getAssetsDir();
-  const docFiles = ['sources.md', 'skills.md', 'permissions.md', 'themes.md', 'statuses.md', 'labels.md'];
-
   const docs: Record<string, string> = {};
 
-  for (const filename of docFiles) {
+  // Auto-discover all files in the bundled docs directory.
+  // No hardcoded list — any file dropped into packages/shared/assets/docs/ is synced automatically.
+  let files: string[];
+  try {
+    files = existsSync(assetsDir) ? readdirSync(assetsDir) : [];
+  } catch {
+    console.warn(`[docs] Could not read assets dir: ${assetsDir}`);
+    return docs;
+  }
+
+  for (const filename of files) {
     const filePath = join(assetsDir, filename);
     try {
-      if (existsSync(filePath)) {
-        docs[filename] = readFileSync(filePath, 'utf-8');
-      } else {
-        console.warn(`[docs] Asset file not found: ${filePath}`);
-        docs[filename] = `# ${filename.replace('.md', '')}\n\nDocumentation not available.`;
-      }
+      docs[filename] = readFileSync(filePath, 'utf-8');
     } catch (error) {
       console.error(`[docs] Failed to load ${filename}:`, error);
-      docs[filename] = `# ${filename.replace('.md', '')}\n\nFailed to load documentation.`;
     }
   }
 
@@ -90,6 +92,7 @@ export const DOC_REFS = {
   themes: `${APP_ROOT}/docs/themes.md`,
   statuses: `${APP_ROOT}/docs/statuses.md`,
   labels: `${APP_ROOT}/docs/labels.md`,
+  toolIcons: `${APP_ROOT}/docs/tool-icons.md`,
   docsDir: `${APP_ROOT}/docs/`,
 } as const;
 

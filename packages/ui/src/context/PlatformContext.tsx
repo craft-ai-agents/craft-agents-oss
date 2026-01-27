@@ -24,6 +24,13 @@ export interface PlatformActions {
   onOpenFile?: (path: string) => void
 
   /**
+   * Open a file directly in the system editor, bypassing the link interceptor.
+   * Used by overlay header badges — when already viewing a file, "Open" should
+   * launch an external editor, not re-trigger the in-app preview.
+   */
+  onOpenFileExternal?: (path: string) => void
+
+  /**
    * Open a URL in the default browser (Electron: shell.openExternal)
    * Web: window.open or navigation
    */
@@ -68,6 +75,12 @@ export interface PlatformActions {
    * Open activity details in a new window/modal
    */
   onOpenActivityDetails?: (sessionId: string, activityId: string) => void
+
+  /**
+   * Reveal a file in the system file manager (Electron: shell.showItemInFolder)
+   * Web: Not available (menu items hidden when undefined)
+   */
+  onRevealInFinder?: (path: string) => void
 
   /**
    * Show/hide macOS traffic light buttons (close/minimize/maximize).

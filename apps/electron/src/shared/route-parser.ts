@@ -94,7 +94,7 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
   // Settings navigator
   if (first === 'settings') {
     const subpage = (segments[1] || 'app') as SettingsSubpage
-    const validSubpages: SettingsSubpage[] = ['app', 'workspace', 'permissions', 'labels', 'shortcuts', 'preferences']
+    const validSubpages: SettingsSubpage[] = ['app', 'appearance', 'workspace', 'permissions', 'labels', 'shortcuts', 'preferences']
     if (!validSubpages.includes(subpage)) return null
     return {
       navigator: 'settings',
@@ -142,6 +142,26 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
   if (first === 'skills') {
     if (segments.length === 1) {
       return { navigator: 'skills', details: null }
+    }
+
+    // skills/gallery — gallery browsing page
+    if (segments[1] === 'gallery' && segments.length === 2) {
+      return {
+        navigator: 'skills',
+        details: { type: 'gallery', id: 'gallery' },
+      }
+    }
+
+    // skills/gallery-skill/{owner}/{repo}/{skillId} — gallery skill detail page
+    if (segments[1] === 'gallery-skill' && segments.length >= 5) {
+      const owner = segments[2]
+      const repo = segments[3]
+      const skillId = segments.slice(4).join('/')
+      // Encode topSource and skillId together in id for downstream parsing
+      return {
+        navigator: 'skills',
+        details: { type: 'gallery-skill', id: `${owner}/${repo}/${skillId}` },
+      }
     }
 
     // skills/skill/{skillSlug}
@@ -230,6 +250,8 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
 
   if (parsed.navigator === 'skills') {
     if (!parsed.details) return 'skills'
+    if (parsed.details.type === 'gallery') return 'skills/gallery'
+    if (parsed.details.type === 'gallery-skill') return `skills/gallery-skill/${parsed.details.id}`
     return `skills/skill/${parsed.details.id}`
   }
 
@@ -341,6 +363,16 @@ function convertCompoundToViewRoute(compound: ParsedCompoundRoute): ParsedRoute 
   if (compound.navigator === 'skills') {
     if (!compound.details) {
       return { type: 'view', name: 'skills', params: {} }
+    }
+    if (compound.details.type === 'gallery') {
+      return { type: 'view', name: 'skill-gallery', params: {} }
+    }
+    if (compound.details.type === 'gallery-skill') {
+      // id contains "owner/repo/skillId" — pass topSource in params for downstream use
+      const parts = compound.details.id.split('/')
+      const topSource = `${parts[0]}/${parts[1]}`
+      const skillId = parts.slice(2).join('/')
+      return { type: 'view', name: 'gallery-skill-detail', id: skillId, params: { topSource } }
     }
     return { type: 'view', name: 'skill-info', id: compound.details.id, params: {} }
   }
@@ -456,6 +488,19 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
     if (!compound.details) {
       return { navigator: 'skills', details: null }
     }
+    if (compound.details.type === 'gallery') {
+      return { navigator: 'skills', details: { type: 'gallery' } }
+    }
+    if (compound.details.type === 'gallery-skill') {
+      // id contains "owner/repo/skillId"
+      const parts = compound.details.id.split('/')
+      const topSource = `${parts[0]}/${parts[1]}`
+      const skillId = parts.slice(2).join('/')
+      return {
+        navigator: 'skills',
+        details: { type: 'gallery-skill', skillId, topSource },
+      }
+    }
     return {
       navigator: 'skills',
       details: { type: 'skill', skillSlug: compound.details.id },
@@ -515,6 +560,20 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
       return { navigator: 'sources', details: null }
     case 'skills':
       return { navigator: 'skills', details: null }
+    case 'skill-gallery':
+      return { navigator: 'skills', details: { type: 'gallery' } }
+    case 'gallery-skill-detail':
+      if (parsed.id && parsed.params.topSource) {
+        return {
+          navigator: 'skills',
+          details: {
+            type: 'gallery-skill',
+            skillId: parsed.id,
+            topSource: parsed.params.topSource,
+          },
+        }
+      }
+      return { navigator: 'skills', details: { type: 'gallery' } }
     case 'skill-info':
       if (parsed.id) {
         return {
@@ -612,7 +671,13 @@ export function buildRouteFromNavigationState(state: NavigationState): string {
   }
 
   if (state.navigator === 'skills') {
-    if (state.details) {
+    if (state.details?.type === 'gallery') {
+      return 'skills/gallery'
+    }
+    if (state.details?.type === 'gallery-skill') {
+      return `skills/gallery-skill/${state.details.topSource}/${state.details.skillId}`
+    }
+    if (state.details?.type === 'skill') {
       return `skills/skill/${state.details.skillSlug}`
     }
     return 'skills'

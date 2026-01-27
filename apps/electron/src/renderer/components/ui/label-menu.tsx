@@ -76,7 +76,7 @@ function segmentScore(part: string, segment: string): number {
  *   "pri/h" → two segments → "Priority / High" scores highest
  *   "pa/b"  → matches "Parent / Balint"
  */
-function filterItems(items: LabelMenuItem[], filter: string): LabelMenuItem[] {
+export function filterItems(items: LabelMenuItem[], filter: string): LabelMenuItem[] {
   if (!filter) return items
 
   const segments = filter.toLowerCase().split('/').map(s => s.trim()).filter(Boolean)
@@ -129,7 +129,7 @@ function filterItems(items: LabelMenuItem[], filter: string): LabelMenuItem[] {
  * Filter states by a simple text match on the state label.
  * Uses the same segmentScore logic for consistency with label filtering.
  */
-function filterStates(states: TodoState[], filter: string): TodoState[] {
+export function filterStates(states: TodoState[], filter: string): TodoState[] {
   if (!filter) return states
 
   const segments = filter.toLowerCase().split('/').map(s => s.trim()).filter(Boolean)

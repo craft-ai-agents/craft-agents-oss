@@ -144,14 +144,19 @@ export const routes = {
         ? `sources/local/source/${sourceSlug}` as const
         : 'sources/local' as const,
 
-    /** Skills view (skills navigator) */
-    skills: (skillSlug?: string) =>
-      skillSlug
-        ? `skills/skill/${skillSlug}` as const
-        : 'skills' as const,
+    /** Skills view (skills navigator). Pass 'gallery' for browse, a slug string for local skill, or an object for gallery skill detail. */
+    skills: (param?: string | { gallerySkillId: string; topSource: string }) => {
+      if (!param) return 'skills' as const
+      if (typeof param === 'object') {
+        // Gallery skill detail: skills/gallery-skill/{owner}/{repo}/{skillId}
+        return `skills/gallery-skill/${param.topSource}/${param.gallerySkillId}` as const
+      }
+      if (param === 'gallery') return 'skills/gallery' as const
+      return `skills/skill/${param}` as const
+    },
 
     /** Settings view (settings navigator) */
-    settings: (subpage?: 'app' | 'workspace' | 'permissions' | 'labels' | 'shortcuts' | 'preferences') =>
+    settings: (subpage?: 'app' | 'appearance' | 'workspace' | 'permissions' | 'labels' | 'shortcuts' | 'preferences') =>
       subpage && subpage !== 'app'
         ? `settings/${subpage}` as const
         : 'settings' as const,

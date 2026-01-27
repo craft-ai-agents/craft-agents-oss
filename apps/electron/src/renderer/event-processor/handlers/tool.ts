@@ -81,16 +81,44 @@ export function handleToolResult(
 
   if (toolIndex !== -1) {
     // Update existing tool message
-    const updatedSession = updateMessageAt(session, toolIndex, {
+    let updatedSession = updateMessageAt(session, toolIndex, {
       toolResult: event.result,
       toolStatus: 'completed',
       isError: event.isError,
     })
+
+    // Safety net: when a parent Task completes, auto-complete any still-pending child tools.
+    // This handles the case where child tool_result events never arrive.
+    const PARENT_TOOLS = ['Task', 'TaskOutput']
+    const completedTool = updatedSession.messages[toolIndex]
+    if (completedTool && PARENT_TOOLS.includes(completedTool.toolName || '')) {
+      const hasOrphanedChildren = updatedSession.messages.some(
+        m => m.parentToolUseId === event.toolUseId
+          && m.toolStatus !== 'completed'
+          && m.toolStatus !== 'error'
+      )
+      if (hasOrphanedChildren) {
+        const updatedMessages = updatedSession.messages.map(m => {
+          if (
+            m.parentToolUseId === event.toolUseId
+            && m.toolStatus !== 'completed'
+            && m.toolStatus !== 'error'
+          ) {
+            return { ...m, toolStatus: 'completed' as const, toolResult: m.toolResult || '' }
+          }
+          return m
+        })
+        updatedSession = { ...updatedSession, messages: updatedMessages }
+      }
+    }
+
     return { session: updatedSession, streaming }
   }
 
-  // Tool not found - create it with result
-  // This handles out-of-order events where result arrives before start
+  // No matching tool_start found — create message from result.
+  // This is normal for background subagent child tools where tool_result arrives
+  // without a prior tool_start. If tool_start arrives later, findToolMessage will
+  // locate this message by toolUseId and update it with input/intent/displayMeta.
   const toolMessage: Message = {
     id: generateMessageId(),
     role: 'tool',

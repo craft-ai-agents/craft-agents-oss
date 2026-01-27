@@ -32,6 +32,21 @@ const AppSettingsIcon = ({ className }: { className?: string }) => (
   </svg>
 )
 
+/** Palette icon for appearance settings */
+const AppearanceIcon = ({ className }: { className?: string }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+  >
+    <path
+      d="M12 2C17.5228 2 22 6.47715 22 12C22 12.6486 21.9378 13.2837 21.8193 13.8994C21.4337 15.9035 19.4222 16.7505 17.7373 16.4697L15.998 16.1797C15.5873 16.1112 15.1685 16.2457 14.874 16.54L14.7852 16.6289C14.4458 16.9682 14.3617 17.4868 14.5762 17.916C14.9989 18.7615 15.0045 19.7284 14.6309 20.5195C14.2469 21.3325 13.4592 21.9498 12.4092 21.9922C12.2735 21.9977 12.1369 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2ZM7.5 11C6.67157 11 6 11.6716 6 12.5C6 13.3284 6.67157 14 7.5 14C8.32843 14 9 13.3284 9 12.5C9 11.6716 8.32843 11 7.5 11ZM9.5 7C8.67157 7 8 7.67157 8 8.5C8 9.32843 8.67157 10 9.5 10C10.3284 10 11 9.32843 11 8.5C11 7.67157 10.3284 7 9.5 7ZM14.5 7C13.6716 7 13 7.67157 13 8.5C13 9.32843 13.6716 10 14.5 10C15.3284 10 16 9.32843 16 8.5C16 7.67157 15.3284 7 14.5 7Z"
+      fill="currentColor"
+    />
+  </svg>
+)
+
 /** Custom workspace icon */
 const WorkspaceIcon = ({ className }: { className?: string }) => (
   <svg
@@ -143,7 +158,13 @@ const settingsItems: SettingsItem[] = [
     id: 'app',
     label: 'App',
     icon: AppSettingsIcon,
-    description: 'Appearance, notifications, API connection',
+    description: 'Notifications, API connection, updates',
+  },
+  {
+    id: 'appearance',
+    label: 'Appearance',
+    icon: AppearanceIcon,
+    description: 'Theme, font, tool icons',
   },
   {
     id: 'workspace',

@@ -24,6 +24,7 @@ import { useSession } from '@/hooks/useSession'
 import { useUpdateChecker } from '@/hooks/useUpdateChecker'
 import { NavigationProvider } from '@/contexts/NavigationContext'
 import { navigate, routes } from './lib/navigate'
+import { stripMarkdown } from './utils/text'
 import { initRendererPerf } from './lib/perf'
 import { DEFAULT_MODEL } from '@config/models'
 import {
@@ -555,7 +556,9 @@ export default function App() {
             const lastMessage = updatedSession.messages.findLast(
               m => m.role === 'assistant' && !m.isIntermediate
             )
-            const preview = lastMessage?.content?.substring(0, 100) || undefined
+            // Strip markdown so OS notifications display clean plain text
+            const rawPreview = lastMessage?.content?.substring(0, 200) || undefined
+            const preview = rawPreview ? stripMarkdown(rawPreview).substring(0, 100) || undefined : undefined
             showSessionNotification(updatedSession, preview)
           }
         }
@@ -1237,11 +1240,18 @@ export default function App() {
   const platformActions = useMemo(() => ({
     onOpenFile: handleOpenFile,
     onOpenUrl: handleOpenUrl,
+    // Bypass link interceptor — opens file directly in system editor.
+    // Used by overlay header badges (when already viewing a file, "Open" should launch editor).
+    onOpenFileExternal: linkInterceptor.openFileExternal,
+    // Reveal a file in the system file manager (Finder on macOS, Explorer on Windows)
+    onRevealInFinder: (path: string) => {
+      window.electronAPI.showInFolder(path).catch(() => {})
+    },
     // Hide/show macOS traffic lights when fullscreen overlays are open
     onSetTrafficLightsVisible: (visible: boolean) => {
       window.electronAPI.setTrafficLightsVisible(visible)
     },
-  }), [handleOpenFile, handleOpenUrl])
+  }), [handleOpenFile, handleOpenUrl, linkInterceptor.openFileExternal])
 
   // Loading state - show splash screen
   if (appState === 'loading') {
@@ -1343,8 +1353,6 @@ export default function App() {
             <FilePreviewRenderer
               state={linkInterceptor.previewState}
               onClose={linkInterceptor.closePreview}
-              onOpenExternal={linkInterceptor.openCurrentExternal}
-              onRevealInFinder={linkInterceptor.revealCurrentInFinder}
               loadDataUrl={linkInterceptor.readFileDataUrl}
               isDark={isDark}
             />
@@ -1377,30 +1385,21 @@ function WindowCloseHandler() {
  * - markdown → DocumentFormattedMarkdownOverlay
  * - json → JSONPreviewOverlay
  *
- * Each overlay shows a clickable file path in the header for opening externally.
+ * File path badges with "Open" / "Reveal in Finder" menus are provided
+ * automatically by PlatformContext — no per-overlay callback props needed.
  */
 function FilePreviewRenderer({
   state,
   onClose,
-  onOpenExternal,
-  onRevealInFinder,
   loadDataUrl,
   isDark,
 }: {
   state: FilePreviewState
   onClose: () => void
-  onOpenExternal: () => void
-  onRevealInFinder: () => void
   loadDataUrl: (path: string) => Promise<string>
   isDark: boolean
 }) {
   const theme = isDark ? 'dark' : 'light' as const
-
-  // Adapt the no-arg callbacks to the (path: string) => void signatures
-  // that overlay components expect. The interceptor already knows the path,
-  // so we just ignore the argument from the overlay.
-  const openExternal = (_path: string) => onOpenExternal()
-  const revealInFinder = (_path: string) => onRevealInFinder()
 
   switch (state.type) {
     case 'image':
@@ -1410,8 +1409,6 @@ function FilePreviewRenderer({
           onClose={onClose}
           filePath={state.filePath}
           loadDataUrl={loadDataUrl}
-          onOpenExternal={openExternal}
-          onRevealInFinder={revealInFinder}
           theme={theme}
         />
       )
@@ -1423,8 +1420,6 @@ function FilePreviewRenderer({
           onClose={onClose}
           filePath={state.filePath}
           loadDataUrl={loadDataUrl}
-          onOpenExternal={openExternal}
-          onRevealInFinder={revealInFinder}
           theme={theme}
         />
       )
@@ -1441,7 +1436,6 @@ function FilePreviewRenderer({
           mode="read"
           theme={theme}
           error={state.error}
-          onOpenFile={openExternal}
         />
       )
 
@@ -1451,6 +1445,7 @@ function FilePreviewRenderer({
           isOpen
           onClose={onClose}
           content={state.content ?? ''}
+          filePath={state.filePath}
         />
       )
 
@@ -1471,7 +1466,6 @@ function FilePreviewRenderer({
             mode="read"
             theme={theme}
             error={state.error}
-            onOpenFile={openExternal}
           />
         )
       }
@@ -1479,6 +1473,7 @@ function FilePreviewRenderer({
         <JSONPreviewOverlay
           isOpen
           onClose={onClose}
+          filePath={state.filePath}
           title={state.filePath.split('/').pop() ?? 'JSON'}
           data={parsedData}
           theme={theme}

@@ -36,6 +36,7 @@ import {
   validateWorkspacePermissions,
   validateSourcePermissions,
   validateAllPermissions,
+  validateToolIcons,
   formatValidationResult,
 } from '../config/validators.ts';
 import { PERMISSION_MODE_CONFIG } from './mode-types.ts';
@@ -366,6 +367,7 @@ Returns structured validation results with errors, warnings, and suggestions.
 - \`statuses\`: Validates ~/.craft-agent/workspaces/{workspace}/statuses/config.json (workflow states)
 - \`preferences\`: Validates ~/.craft-agent/preferences.json (user preferences)
 - \`permissions\`: Validates permissions.json files (workspace, source, and app-level default)
+- \`tool-icons\`: Validates ~/.craft-agent/tool-icons/tool-icons.json (CLI tool icon mappings)
 - \`all\`: Validates all configuration files
 
 **For specific source validation:** Use target='sources' with sourceSlug parameter.
@@ -377,7 +379,7 @@ Returns structured validation results with errors, warnings, and suggestions.
 3. If errors found, fix them and re-validate
 4. Once valid, changes take effect on next reload`,
     {
-      target: z.enum(['config', 'sources', 'statuses', 'preferences', 'permissions', 'all']).describe(
+      target: z.enum(['config', 'sources', 'statuses', 'preferences', 'permissions', 'tool-icons', 'all']).describe(
         'Which config file(s) to validate'
       ),
       sourceSlug: z.string().optional().describe(
@@ -413,6 +415,9 @@ Returns structured validation results with errors, warnings, and suggestions.
             } else {
               result = validateAllPermissions(workspaceRootPath);
             }
+            break;
+          case 'tool-icons':
+            result = validateToolIcons();
             break;
           case 'all':
             result = validateAll(workspaceRootPath);

@@ -165,12 +165,14 @@ export interface TerminalOverlayData {
   exitCode?: number
   toolType: ToolType
   description: string
+  error?: string
 }
 
 export interface GenericOverlayData {
   type: 'generic'
   content: string
   title: string
+  error?: string
 }
 
 export interface JSONOverlayData {
@@ -181,7 +183,17 @@ export interface JSONOverlayData {
   error?: string
 }
 
-export type OverlayData = CodeOverlayData | TerminalOverlayData | GenericOverlayData | JSONOverlayData
+/** Rendered markdown document — used for Write tool results on .md/.txt files */
+export interface DocumentOverlayData {
+  type: 'document'
+  content: string
+  filePath: string
+  /** Tool that produced this content (e.g. "Write") — used for the header type badge */
+  toolName: string
+  error?: string
+}
+
+export type OverlayData = CodeOverlayData | TerminalOverlayData | GenericOverlayData | JSONOverlayData | DocumentOverlayData
 
 // ============================================================================
 // Main Extraction Function
@@ -216,12 +228,23 @@ export function extractOverlayData(activity: ActivityItem): OverlayData | null {
     }
   }
 
-  // Write tool → Code overlay (write mode)
+  // Write tool → Document overlay for .md/.txt (rendered markdown), Code overlay for everything else
   if (toolName === 'write') {
+    const content = (input?.content as string) || rawContent
+    const ext = filePath.split('.').pop()?.toLowerCase()
+    if (ext === 'md' || ext === 'txt') {
+      return {
+        type: 'document',
+        filePath,
+        content,
+        toolName: 'Write',
+        error: activity.error,
+      }
+    }
     return {
       type: 'code',
       filePath,
-      content: (input?.content as string) || rawContent,
+      content,
       mode: 'write',
       error: activity.error,
     }
@@ -240,6 +263,7 @@ export function extractOverlayData(activity: ActivityItem): OverlayData | null {
       exitCode: parsed.exitCode,
       description: (input?.description as string) || activity.displayName || '',
       toolType: 'bash',
+      error: activity.error,
     }
   }
 
@@ -255,6 +279,7 @@ export function extractOverlayData(activity: ActivityItem): OverlayData | null {
       output: parsed.output,
       description: parsed.description,
       toolType: 'grep',
+      error: activity.error,
     }
   }
 
@@ -269,6 +294,7 @@ export function extractOverlayData(activity: ActivityItem): OverlayData | null {
       output: parsed.output,
       description: parsed.description,
       toolType: 'glob',
+      error: activity.error,
     }
   }
 
@@ -296,5 +322,6 @@ export function extractOverlayData(activity: ActivityItem): OverlayData | null {
     type: 'generic',
     content: rawContent || (input ? JSON.stringify(input, null, 2) : ''),
     title: activity.displayName || activity.toolName || 'Activity',
+    error: activity.error,
   }
 }

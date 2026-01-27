@@ -121,10 +121,13 @@ export {
 export {
   // Base overlay components
   FullscreenOverlayBase,
+  FullscreenOverlayBaseHeader,
   PreviewOverlay,
   ContentFrame,
   CopyButton,
   type FullscreenOverlayBaseProps,
+  type FullscreenOverlayBaseHeaderProps,
+  type OverlayTypeBadge,
   type PreviewOverlayProps,
   type ContentFrameProps,
   type BadgeVariant,
@@ -188,6 +191,7 @@ export {
   type TerminalOverlayData,
   type GenericOverlayData,
   type JSONOverlayData,
+  type DocumentOverlayData,
   type OverlayData,
 } from './lib/tool-parsers'
 

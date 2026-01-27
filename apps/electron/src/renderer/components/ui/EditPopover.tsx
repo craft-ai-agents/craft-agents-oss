@@ -12,6 +12,7 @@ import { ArrowUp } from 'lucide-react'
 import { Popover, PopoverTrigger, PopoverContent } from './popover'
 import { Button } from './button'
 import { cn } from '@/lib/utils'
+import { usePlatform } from '@craft-agent/ui'
 import type { ContentBadge } from '../../../shared/types'
 
 /**
@@ -70,6 +71,7 @@ export type EditContextKey =
   | 'edit-auto-rules'
   | 'add-label'
   | 'edit-views'
+  | 'edit-tool-icons'
 
 /**
  * Full edit configuration including context for agent and example for UI.
@@ -396,6 +398,24 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
     },
     example: 'Add a "Stale" view for sessions inactive > 7 days',
   }),
+
+  // Tool icons configuration context
+  'edit-tool-icons': (location) => ({
+    context: {
+      label: 'Tool Icons',
+      filePath: location, // location is the full path to tool-icons.json
+      context:
+        'The user wants to edit CLI tool icon mappings. ' +
+        'The file is tool-icons.json in ~/.craft-agent/tool-icons/. Icon image files live in the same directory. ' +
+        'Schema: { version: 1, tools: [{ id, displayName, icon, commands }] }. ' +
+        'Each tool has: id (unique slug), displayName (shown in UI), icon (filename like "git.ico"), commands (array of CLI command names). ' +
+        'Supported icon formats: .png, .ico, .svg, .jpg. Icons display at 20x20px. ' +
+        'Read ~/.craft-agent/docs/tool-icons.md for full format reference. ' +
+        'After editing, call config_validate with target "tool-icons" to verify the changes are valid. ' +
+        'Confirm clearly when done.',
+    },
+    example: 'Add an icon for my custom CLI tool "deploy"',
+  }),
 }
 
 /**
@@ -422,8 +442,8 @@ export function getEditConfig(key: EditContextKey, location: string): EditConfig
 export interface SecondaryAction {
   /** Button label (e.g., "Edit File") */
   label: string
-  /** Click handler - typically opens a file for manual editing */
-  onClick: () => void
+  /** File path to open directly in the system editor (bypasses link interceptor) */
+  filePath: string
 }
 
 export interface EditPopoverProps {
@@ -541,6 +561,9 @@ export function EditPopover({
   onOpenChange: controlledOnOpenChange,
   modal = false,
 }: EditPopoverProps) {
+  // Open files externally (bypasses link interceptor) for "Edit File" secondary actions
+  const { onOpenFileExternal } = usePlatform()
+
   // Build placeholder: use override if provided, otherwise default to "change" wording
   // overridePlaceholder allows contexts like add-source/add-skill to say "add" instead of "change"
   const basePlaceholder = overridePlaceholder ?? "Describe what you'd like to change..."
@@ -668,7 +691,7 @@ export function EditPopover({
               <button
                 type="button"
                 onClick={() => {
-                  secondaryAction.onClick()
+                  onOpenFileExternal?.(secondaryAction.filePath)
                   setOpen(false)
                 }}
                 className="text-sm text-muted-foreground hover:underline"

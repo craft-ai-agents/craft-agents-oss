@@ -67,7 +67,7 @@ export function TerminalPreviewOverlay({
       isOpen={isOpen}
       onClose={onClose}
       theme={theme}
-      badge={{
+      typeBadge={{
         icon: config.icon,
         label: config.label,
         variant: config.variant,

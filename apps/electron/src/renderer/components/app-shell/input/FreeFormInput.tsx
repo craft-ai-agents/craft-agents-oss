@@ -1167,7 +1167,7 @@ export function FreeFormInput({
             overridePlaceholder={addLabelEditConfig.overridePlaceholder}
             secondaryAction={workspaceRootPath ? {
               label: 'Edit File',
-              onClick: () => appShellCtx?.onOpenFile(`${workspaceRootPath}/labels/config.json`),
+              filePath: `${workspaceRootPath}/labels/config.json`,
             } : undefined}
             side="top"
             align="start"
@@ -1214,7 +1214,8 @@ export function FreeFormInput({
           <EscapeInterruptOverlay isVisible={isProcessing && showEscapeOverlay} />
 
           <div className="flex items-center gap-1 px-2 py-2 border-t border-border/50">
-          {/* Context Badges - Files, Sources, Folder */}
+          {/* Left side: Context badges - shrinkable so model + send always stay visible */}
+          <div className="flex items-center gap-1 min-w-32 shrink overflow-hidden">
           {/* 1. Attach Files Badge */}
           <FreeFormInputContextBadge
             icon={<Paperclip className="h-4 w-4" />}
@@ -1235,7 +1236,7 @@ export function FreeFormInput({
 
           {/* 2. Source Selector Badge - only show if onSourcesChange is provided */}
           {onSourcesChange && (
-            <div className="relative">
+            <div className="relative shrink min-w-0 overflow-hidden">
               <FreeFormInputContextBadge
                 buttonRef={sourceButtonRef}
                 icon={
@@ -1402,10 +1403,13 @@ export function FreeFormInput({
               isEmptySession={isEmptySession}
             />
           )}
+          </div>
 
           {/* Spacer */}
           <div className="flex-1" />
 
+          {/* Right side: Model + Send - never shrink so they're always visible */}
+          <div className="flex items-center shrink-0">
           {/* 5. Model Selector - Radix DropdownMenu for automatic positioning and submenu support */}
           <DropdownMenu open={modelDropdownOpen} onOpenChange={setModelDropdownOpen}>
             <Tooltip>
@@ -1604,6 +1608,7 @@ export function FreeFormInput({
             </Button>
           )}
           </div>
+          </div>
         </div>
       </div>
     </form>
@@ -1742,7 +1747,7 @@ function WorkingDirectoryBadge({
   return (
     <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
       <PopoverTrigger asChild>
-        <span>
+        <span className="shrink min-w-0 overflow-hidden">
           <FreeFormInputContextBadge
             icon={<Icon_Home className="h-4 w-4" />}
             label={folderName}

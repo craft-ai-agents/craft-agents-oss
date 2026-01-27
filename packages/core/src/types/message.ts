@@ -374,7 +374,7 @@ export type AgentEvent =
   | { type: 'text_delta'; text: string; turnId?: string }
   | { type: 'text_complete'; text: string; isIntermediate?: boolean; turnId?: string }
   | { type: 'tool_start'; toolName: string; toolUseId: string; input: Record<string, unknown>; intent?: string; displayName?: string; turnId?: string; parentToolUseId?: string; toolDisplayMeta?: ToolDisplayMeta }
-  | { type: 'tool_result'; toolUseId: string; result: string; isError: boolean; input?: Record<string, unknown>; turnId?: string; parentToolUseId?: string }
+  | { type: 'tool_result'; toolUseId: string; toolName?: string; result: string; isError: boolean; input?: Record<string, unknown>; turnId?: string; parentToolUseId?: string }
   | { type: 'parent_update'; toolUseId: string; parentToolUseId: string }
   | { type: 'permission_request'; requestId: string; toolName: string; command: string; description: string }
   | { type: 'error'; message: string }

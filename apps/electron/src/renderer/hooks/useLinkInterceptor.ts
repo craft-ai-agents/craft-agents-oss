@@ -93,6 +93,8 @@ interface LinkInterceptorResult {
   handleOpenFile: (path: string) => void
   /** Replacement for App.tsx handleOpenUrl — always opens externally */
   handleOpenUrl: (url: string) => void
+  /** Open file directly in external app, bypassing classification/preview */
+  openFileExternal: (path: string) => void
   /** Current preview state, drives which overlay renders in App.tsx */
   previewState: FilePreviewState | null
   /** Close the preview overlay */
@@ -125,8 +127,13 @@ export function useLinkInterceptor(options: LinkInterceptorOptions): LinkInterce
    * Main entry point for file link clicks.
    * Classifies the file by extension, then either opens a preview overlay
    * or falls back to opening externally.
+   *
+   * For text-based files (code, markdown, json, text), reads the content BEFORE
+   * showing the overlay — local filesystem reads are near-instant, so no loading
+   * state is needed. This avoids null-content issues in overlay components
+   * (e.g., @uiw/react-json-view crashes on null value).
    */
-  const handleOpenFile = useCallback((path: string) => {
+  const handleOpenFile = useCallback(async (path: string) => {
     const classification = classifyFile(path)
 
     if (!classification.canPreview || !classification.type) {
@@ -143,25 +150,23 @@ export function useLinkInterceptor(options: LinkInterceptorOptions): LinkInterce
       return
     }
 
-    // For text-based files: set state with null content (shows loading), then read the file
-    const initialState = buildInitialTextState(type, path)
-    setPreviewState(initialState)
+    // For text-based files: read content first, then show overlay with content ready.
+    // Local filesystem reads are near-instant — no loading state needed.
+    try {
+      const content = await optionsRef.current.readFile(path)
+      const state = buildInitialTextState(type, path)
+      setPreviewState({ ...state, content } as FilePreviewState)
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to read file'
+      const state = buildInitialTextState(type, path)
+      setPreviewState({ ...state, content: '', error: errorMsg } as FilePreviewState)
+    }
+  }, []) // Stable: uses optionsRef
 
-    optionsRef.current.readFile(path)
-      .then((content) => {
-        // Update state with loaded content (only if this file is still being previewed)
-        setPreviewState((current) => {
-          if (!current || current.filePath !== path) return current
-          return { ...current, content } as FilePreviewState
-        })
-      })
-      .catch((err) => {
-        const errorMsg = err instanceof Error ? err.message : 'Failed to read file'
-        setPreviewState((current) => {
-          if (!current || current.filePath !== path) return current
-          return { ...current, error: errorMsg } as FilePreviewState
-        })
-      })
+  /** Open file directly in external app, bypassing classification/preview.
+   * Used by overlay header badges — when already viewing a file, "Open" should launch the editor. */
+  const openFileExternal = useCallback((path: string) => {
+    optionsRef.current.openFileExternal(path)
   }, []) // Stable: uses optionsRef
 
   /** URLs always open externally — no in-app browser for security */
@@ -197,6 +202,7 @@ export function useLinkInterceptor(options: LinkInterceptorOptions): LinkInterce
   return {
     handleOpenFile,
     handleOpenUrl,
+    openFileExternal,
     previewState,
     closePreview,
     openCurrentExternal,

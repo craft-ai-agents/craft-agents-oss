@@ -34,6 +34,8 @@ export interface GenericOverlayProps {
   modifiedContent?: string
   /** Render inline without dialog (for playground) */
   embedded?: boolean
+  /** Error message if the tool failed */
+  error?: string
 }
 
 /**
@@ -120,6 +122,7 @@ export function GenericOverlay({
   originalContent = '',
   modifiedContent = '',
   embedded,
+  error,
 }: GenericOverlayProps) {
   // Auto-detect language if not provided
   const detectedLanguage = useMemo(() => {
@@ -137,13 +140,14 @@ export function GenericOverlay({
       isOpen={isOpen}
       onClose={onClose}
       theme={theme}
-      badge={{
+      typeBadge={{
         icon: FileCode,
         label: detectedLanguage,
         variant: 'gray',
       }}
       title={title}
       embedded={embedded}
+      error={error ? { label: 'Tool Failed', message: error } : undefined}
       className="bg-foreground-3"
     >
       <ContentFrame title="Preview">

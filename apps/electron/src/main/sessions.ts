@@ -1,4 +1,5 @@
 import { app } from 'electron'
+import * as Sentry from '@sentry/electron/main'
 import { join } from 'path'
 import { existsSync } from 'fs'
 import { rm, readFile } from 'fs/promises'
@@ -2694,6 +2695,12 @@ export class SessionManager {
         sessionLog.error('Error in chat:', error)
         sessionLog.error('Error message:', error instanceof Error ? error.message : String(error))
         sessionLog.error('Error stack:', error instanceof Error ? error.stack : 'No stack')
+
+        // Report chat/SDK errors to Sentry for crash tracking
+        Sentry.captureException(error, {
+          tags: { errorSource: 'chat', sessionId },
+        })
+
         sendSpan.mark('chat.error')
         sendSpan.setMetadata('error', error instanceof Error ? error.message : String(error))
         sendSpan.end()
@@ -2861,6 +2868,10 @@ export class SessionManager {
         next.messageId
       ).catch(err => {
         sessionLog.error('Error processing queued message:', err)
+        // Report queued message failures to Sentry — these indicate SDK/chat pipeline errors
+        Sentry.captureException(err, {
+          tags: { errorSource: 'chat-queue', sessionId },
+        })
         this.sendEvent({
           type: 'error',
           sessionId,
@@ -3277,8 +3288,8 @@ To view this task's output:
       }
 
       case 'tool_result': {
-        // AgentEvent tool_result only has toolUseId, look up the toolName
-        const toolName = managed.pendingTools.get(event.toolUseId) || 'unknown'
+        // Prefer toolName from event (SDK now includes it), fall back to cache lookup
+        const toolName = event.toolName || managed.pendingTools.get(event.toolUseId) || 'unknown'
         managed.pendingTools.delete(event.toolUseId)
 
         // Parent tool names for defensive cleanup
@@ -3332,8 +3343,11 @@ To view this task's output:
             existingToolMsg.parentToolUseId = storedParentId
           }
         } else {
-          // Fallback: create new message if not found (shouldn't happen normally)
-          // Resolve toolDisplayMeta for MCP source tools (Skill tools need input which we don't have)
+          // No matching tool_start found — create message from result.
+          // This is normal for background subagent child tools where tool_result arrives
+          // without a prior tool_start. If tool_start arrives later, findToolMessage will
+          // locate this message by toolUseId and update it with input/intent/displayMeta.
+          sessionLog.info(`RESULT WITHOUT START: toolUseId=${event.toolUseId}, toolName=${toolName} (creating message from result)`)
           const fallbackWorkspaceRootPath = managed.workspace.rootPath
           const fallbackSources = loadAllSources(fallbackWorkspaceRootPath)
           const fallbackToolDisplayMeta = resolveToolDisplayMeta(toolName, undefined, fallbackWorkspaceRootPath, fallbackSources)
@@ -3347,7 +3361,7 @@ To view this task's output:
             toolUseId: event.toolUseId,
             toolResult: formattedResult,
             toolStatus: 'completed',
-            toolDisplayMeta: fallbackToolDisplayMeta,  // May be undefined for Skill tools (need input)
+            toolDisplayMeta: fallbackToolDisplayMeta,
             parentToolUseId: storedParentId,
             isError: event.isError,
           }
@@ -3357,8 +3371,10 @@ To view this task's output:
         // Use stored parent mapping or existing message's parent
         const finalParentToolUseId = existingToolMsg?.parentToolUseId || storedParentId
 
-        // Only send event to renderer if not already marked complete
-        if (!wasAlreadyComplete) {
+        // Send event to renderer if: (a) first completion, or (b) result content changed
+        // (e.g., safety net auto-completed with empty result, then real result arrived later)
+        const resultChanged = wasAlreadyComplete && formattedResult && existingToolMsg?.toolResult !== formattedResult
+        if (!wasAlreadyComplete || resultChanged) {
           this.sendEvent({
             type: 'tool_result',
             sessionId,
@@ -3369,6 +3385,32 @@ To view this task's output:
             parentToolUseId: finalParentToolUseId,
             isError: event.isError,
           }, workspaceId)
+        }
+
+        // Safety net: when a parent Task completes, mark all its still-pending child tools as completed.
+        // This handles the case where child tool_result events never arrive (e.g., subagent internal tools
+        // whose results aren't surfaced through the parent stream).
+        const PARENT_TOOLS_FOR_CLEANUP = ['Task', 'TaskOutput']
+        if (PARENT_TOOLS_FOR_CLEANUP.includes(toolName)) {
+          const orphanedChildren = managed.messages.filter(
+            m => m.parentToolUseId === event.toolUseId
+              && m.toolStatus !== 'completed'
+              && m.toolStatus !== 'error'
+          )
+          for (const child of orphanedChildren) {
+            child.toolStatus = 'completed'
+            child.toolResult = child.toolResult || ''
+            sessionLog.info(`CHILD AUTO-COMPLETED: toolUseId=${child.toolUseId}, toolName=${child.toolName} (parent ${toolName} completed)`)
+            this.sendEvent({
+              type: 'tool_result',
+              sessionId,
+              toolUseId: child.toolUseId!,
+              toolName: child.toolName || 'unknown',
+              result: child.toolResult || '',
+              turnId: child.turnId,
+              parentToolUseId: event.toolUseId,
+            }, workspaceId)
+          }
         }
 
         // Persist session after tool completes to prevent data loss on quit
@@ -3548,6 +3590,10 @@ To view this task's output:
             } catch (retryError) {
               managed.authRetryInProgress = false
               sessionLog.error(`[auth-retry] Failed to retry after auth refresh for session ${sessionId}:`, retryError)
+              // Report auth retry failures to Sentry — indicates credential/SDK issues
+              Sentry.captureException(retryError, {
+                tags: { errorSource: 'auth-retry', sessionId },
+              })
               // Show the original error to the user since retry failed
               const failedMessage: Message = {
                 id: generateMessageId(),

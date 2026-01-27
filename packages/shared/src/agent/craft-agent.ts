@@ -48,7 +48,7 @@ import {
   type ConfigWatcherCallbacks,
 } from '../config/watcher.ts';
 import type { ValidationIssue } from '../config/validators.ts';
-import { detectConfigFileType, validateConfigFileContent, formatValidationResult } from '../config/validators.ts';
+import { detectConfigFileType, detectAppConfigFileType, validateConfigFileContent, formatValidationResult } from '../config/validators.ts';
 import { type ThinkingLevel, getThinkingTokens, DEFAULT_THINKING_LEVEL } from './thinking-levels.ts';
 import type { LoadedSource } from '../sources/types.ts';
 import { sourceNeedsAuthentication } from '../sources/credential-manager.ts';
@@ -1109,7 +1109,9 @@ export class CraftAgent {
                   const resolvedPath = (updatedInput?.file_path ?? toolInput.file_path) as string | undefined;
 
                   if (resolvedPath) {
-                    const detection = detectConfigFileType(resolvedPath, this.workspaceRootPath);
+                    // Check workspace-scoped configs first, then app-level configs (e.g. tool-icons)
+                    const detection = detectConfigFileType(resolvedPath, this.workspaceRootPath)
+                      ?? detectAppConfigFileType(resolvedPath);
 
                     if (detection) {
                       let contentToValidate: string | null = null;
@@ -1676,6 +1678,7 @@ export class CraftAgent {
                   yield {
                     type: 'tool_result' as const,
                     toolUseId: toolResultEvent.toolUseId,
+                    toolName: toolResultEvent.toolName,
                     result: `Source "${sourceSlug}" could not be activated. It may require authentication. Please check the source status in the sources panel.`,
                     isError: true,
                     input: toolResultEvent.input,
@@ -2879,6 +2882,7 @@ Please continue the conversation naturally from where we left off.
             events.push({
               type: 'tool_result',
               toolUseId,
+              toolName: toolUse?.name,
               result: resultStr,
               isError,
               input: toolUse?.input,

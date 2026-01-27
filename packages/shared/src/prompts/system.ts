@@ -405,6 +405,7 @@ Read relevant context files using the Read tool - they contain architecture info
 | Themes | \`${DOC_REFS.themes}\` | BEFORE customizing colors |
 | Statuses | \`${DOC_REFS.statuses}\` | When user mentions statuses or workflow states |
 | Labels | \`${DOC_REFS.labels}\` | BEFORE creating/modifying labels |
+| Tool Icons | \`${DOC_REFS.toolIcons}\` | BEFORE modifying tool icon mappings |
 
 **IMPORTANT:** Always read the relevant doc file BEFORE making changes. Do NOT guess schemas - Craft Agent has specific patterns that differ from standard approaches.
 

@@ -8,6 +8,7 @@ import {
   CircleAlert,
   ExternalLink,
   Info,
+  PenLine,
   X,
 } from "lucide-react"
 import { motion, AnimatePresence } from "motion/react"
@@ -806,8 +807,18 @@ export function ChatDisplay({
                           })
                         }}
                         onOpenActivityDetails={(activity) => {
+                          // Write tool for .md/.txt → Document overlay (rendered markdown)
+                          // rather than multi-diff, since these are better viewed as formatted documents
+                          const isDocumentWrite = activity.toolName === 'Write' && (() => {
+                            const actInput = activity.toolInput as Record<string, unknown> | undefined
+                            const fp = (actInput?.file_path as string) || ''
+                            const ext = fp.split('.').pop()?.toLowerCase()
+                            return ext === 'md' || ext === 'txt'
+                          })()
+
                           // Edit/Write tool → Multi-file diff overlay (ungrouped, focused on this change)
-                          if (activity.toolName === 'Edit' || activity.toolName === 'Write') {
+                          // Exception: Write to .md/.txt files goes to document overlay instead
+                          if ((activity.toolName === 'Edit' || activity.toolName === 'Write') && !isDocumentWrite) {
                             // Collect all Edit/Write activities from this turn for context
                             const changes: FileChange[] = []
                             for (const a of turn.activities) {
@@ -1013,7 +1024,6 @@ export function ChatDisplay({
           numLines={overlayData.numLines}
           theme={isDark ? 'dark' : 'light'}
           error={overlayData.error}
-          onOpenFile={onOpenFile}
         />
       )}
 
@@ -1026,7 +1036,6 @@ export function ChatDisplay({
           consolidated={overlayState.consolidated}
           focusedChangeId={overlayState.focusedChangeId}
           theme={isDark ? 'dark' : 'light'}
-          onOpenFile={onOpenFile}
           diffViewerSettings={diffViewerSettings}
           onDiffViewerSettingsChange={handleDiffViewerSettingsChange}
         />
@@ -1043,6 +1052,7 @@ export function ChatDisplay({
           toolType={overlayData.toolType}
           description={overlayData.description}
           theme={isDark ? 'dark' : 'light'}
+          error={overlayData.error}
         />
       )}
 
@@ -1054,6 +1064,20 @@ export function ChatDisplay({
           data={overlayData.data}
           title={overlayData.title}
           theme={isDark ? 'dark' : 'light'}
+          error={overlayData.error}
+        />
+      )}
+
+      {/* Document overlay (Write tool → .md/.txt files) — rendered markdown with tool badge */}
+      {overlayData?.type === 'document' && (
+        <DocumentFormattedMarkdownOverlay
+          isOpen={!!overlayState}
+          onClose={handleCloseOverlay}
+          content={overlayData.content}
+          filePath={overlayData.filePath}
+          typeBadge={{ icon: PenLine, label: overlayData.toolName, variant: 'write' }}
+          onOpenUrl={onOpenUrl}
+          onOpenFile={onOpenFile}
           error={overlayData.error}
         />
       )}
@@ -1078,6 +1102,7 @@ export function ChatDisplay({
             content={overlayData.content}
             onOpenUrl={onOpenUrl}
             onOpenFile={onOpenFile}
+            error={overlayData.error}
           />
         ) : (
           <GenericOverlay
@@ -1086,6 +1111,7 @@ export function ChatDisplay({
             content={overlayData.content}
             title={overlayData.title}
             theme={isDark ? 'dark' : 'light'}
+            error={overlayData.error}
           />
         )
       )}

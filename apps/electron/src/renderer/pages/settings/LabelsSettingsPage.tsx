@@ -37,7 +37,7 @@ export const meta: DetailsPageMeta = {
 }
 
 export default function LabelsSettingsPage() {
-  const { activeWorkspaceId, onOpenFile } = useAppShellContext()
+  const { activeWorkspaceId } = useAppShellContext()
   const activeWorkspace = useActiveWorkspace()
   const { labels, isLoading } = useLabels(activeWorkspaceId)
 
@@ -46,13 +46,10 @@ export default function LabelsSettingsPage() {
   const labelsEditConfig = getEditConfig('edit-labels', rootPath)
   const autoRulesEditConfig = getEditConfig('edit-auto-rules', rootPath)
 
-  // Secondary action: open the labels config file via link interceptor for in-app preview
+  // Secondary action: open the labels config file directly in system editor
   const editFileAction = rootPath ? {
     label: 'Edit File',
-    onClick: () => {
-      const configPath = `${rootPath}/labels/config.json`
-      onOpenFile(configPath)
-    },
+    filePath: `${rootPath}/labels/config.json`,
   } : undefined
 
   return (

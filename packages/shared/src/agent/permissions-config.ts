@@ -33,6 +33,9 @@ import {
 
 const APP_PERMISSIONS_DIR = join(CONFIG_DIR, 'permissions');
 
+// Track if permissions have been initialized this session (prevents re-init on hot reload)
+let permissionsInitialized = false;
+
 /**
  * Get the app-level permissions directory.
  * Default permissions are stored at ~/.craft-agent/permissions/
@@ -42,11 +45,19 @@ export function getAppPermissionsDir(): string {
 }
 
 /**
- * Ensure default permissions file exists.
- * Resolves bundled path automatically via getBundledAssetsDir('permissions').
- * Only copies if file doesn't exist (preserves user edits).
+ * Sync bundled default permissions to disk on launch.
+ * Always overwrites to ensure defaults stay current with the running app version
+ * (e.g., new bash/MCP patterns added in a new release).
+ * User customizations live in separate files (workspace/source permissions.json)
+ * and are never touched by this function.
  */
 export function ensureDefaultPermissions(): void {
+  // Skip if already initialized this session (prevents re-init on hot reload)
+  if (permissionsInitialized) {
+    return;
+  }
+  permissionsInitialized = true;
+
   const permissionsDir = getAppPermissionsDir();
 
   // Create permissions directory if it doesn't exist
@@ -60,18 +71,18 @@ export function ensureDefaultPermissions(): void {
     return;
   }
 
-  // Copy default.json if it doesn't exist in app permissions dir
+  // Always write bundled default.json to disk on launch.
+  // This ensures new permission rules from app updates are available immediately.
+  // User customizations go in workspace/source permissions.json files (separate layer).
   const destPath = join(permissionsDir, 'default.json');
-  if (!existsSync(destPath)) {
-    const srcPath = join(bundledPermissionsDir, 'default.json');
-    if (existsSync(srcPath)) {
-      try {
-        const content = readFileSync(srcPath, 'utf-8');
-        writeFileSync(destPath, content, 'utf-8');
-        debug('[Permissions] Copied bundled default.json to', destPath);
-      } catch (error) {
-        debug('[Permissions] Error copying bundled default.json:', error);
-      }
+  const srcPath = join(bundledPermissionsDir, 'default.json');
+  if (existsSync(srcPath)) {
+    try {
+      const content = readFileSync(srcPath, 'utf-8');
+      writeFileSync(destPath, content, 'utf-8');
+      debug('[Permissions] Synced bundled default.json to', destPath);
+    } catch (error) {
+      debug('[Permissions] Error syncing bundled default.json:', error);
     }
   }
 }

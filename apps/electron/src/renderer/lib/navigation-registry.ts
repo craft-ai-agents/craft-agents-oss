@@ -158,6 +158,7 @@ export const NavigationRegistry = {
     displayName: 'Settings',
     detailsPages: {
       app: PlaceholderComponent, // AppSettingsPage
+      appearance: PlaceholderComponent, // AppearanceSettingsPage
       workspace: PlaceholderComponent, // WorkspaceSettingsPage
       permissions: PlaceholderComponent, // PermissionsSettingsPage
       labels: PlaceholderComponent, // LabelsSettingsPage

@@ -34,18 +34,21 @@ function loadEnvFile(): void {
   }
 }
 
-// Get OAuth defines for esbuild
-function getOAuthDefines(): string[] {
-  const oauthVars = [
+// Get build-time defines for esbuild (OAuth, Sentry DSN, etc.)
+// NOTE: Sentry source map upload is intentionally disabled for the main process.
+// To enable in the future, add @sentry/esbuild-plugin. See apps/electron/CLAUDE.md.
+function getBuildDefines(): string[] {
+  const definedVars = [
     "GOOGLE_OAUTH_CLIENT_ID",
     "GOOGLE_OAUTH_CLIENT_SECRET",
     "SLACK_OAUTH_CLIENT_ID",
     "SLACK_OAUTH_CLIENT_SECRET",
     "MICROSOFT_OAUTH_CLIENT_ID",
     "MICROSOFT_OAUTH_CLIENT_SECRET",
+    "SENTRY_ELECTRON_INGEST_URL",
   ];
 
-  return oauthVars.map((varName) => {
+  return definedVars.map((varName) => {
     const value = process.env[varName] || "";
     return `--define:process.env.${varName}="${value}"`;
   });
@@ -115,7 +118,7 @@ async function main(): Promise<void> {
     mkdirSync(DIST_DIR, { recursive: true });
   }
 
-  const oauthDefines = getOAuthDefines();
+  const buildDefines = getBuildDefines();
 
   console.log("🔨 Building main process...");
 
@@ -128,7 +131,7 @@ async function main(): Promise<void> {
       "--format=cjs",
       "--outfile=apps/electron/dist/main.cjs",
       "--external:electron",
-      ...oauthDefines,
+      ...buildDefines,
     ],
     cwd: ROOT_DIR,
     stdout: "inherit",

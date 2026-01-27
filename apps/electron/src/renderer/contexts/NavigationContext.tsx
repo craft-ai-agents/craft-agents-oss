@@ -522,7 +522,14 @@ export function NavigationProvider({
     }
 
     if (isSkillsNavigation(navState) && navState.details) {
-      return skills.some(s => s.slug === navState.details!.skillSlug)
+      // Gallery and gallery-skill pages are always valid (external content)
+      if (navState.details.type === 'gallery') return true
+      if (navState.details.type === 'gallery-skill') return true
+      if (navState.details.type === 'skill') {
+        const { skillSlug } = navState.details
+        return skills.some(s => s.slug === skillSlug)
+      }
+      return true
     }
 
     return true // Routes without details are always valid

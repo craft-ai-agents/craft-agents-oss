@@ -148,7 +148,10 @@ export function ShikiDiffViewer({
         setIsReady(true)
         onReady()
       }, 100)
-      return () => clearTimeout(timer)
+      return () => {
+        clearTimeout(timer)
+        hasCalledReady.current = false // Reset so re-mounts (including StrictMode) re-arm the timer
+      }
     }
   }, [onReady, original, modified, fileDiff])
 

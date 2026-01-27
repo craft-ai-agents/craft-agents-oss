@@ -66,7 +66,9 @@ export interface JSONPreviewOverlayProps {
   onClose: () => void
   /** Parsed JSON data to display */
   data: unknown
-  /** Title to display in header */
+  /** File path — shows dual-trigger menu badge with "Open" + "Reveal in Finder" */
+  filePath?: string
+  /** Title to display in header (fallback when no filePath) */
   title?: string
   /** Theme mode */
   theme?: 'light' | 'dark'
@@ -96,6 +98,7 @@ export function JSONPreviewOverlay({
   isOpen,
   onClose,
   data,
+  filePath,
   title = 'JSON',
   theme = 'dark',
   error,
@@ -115,11 +118,12 @@ export function JSONPreviewOverlay({
     <PreviewOverlay
       isOpen={isOpen}
       onClose={onClose}
-      badge={{
+      typeBadge={{
         icon: Braces,
         label: 'JSON',
         variant: 'blue',
       }}
+      filePath={filePath}
       title={title}
       theme={theme}
       error={error ? { label: 'Parse Error', message: error } : undefined}

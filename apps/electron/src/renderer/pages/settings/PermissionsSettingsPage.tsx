@@ -130,7 +130,7 @@ function buildCustomPermissionsData(config: PermissionsConfigFile): PermissionRo
 }
 
 export default function PermissionsSettingsPage() {
-  const { activeWorkspaceId, onOpenFile } = useAppShellContext()
+  const { activeWorkspaceId } = useAppShellContext()
   const activeWorkspace = useActiveWorkspace()
 
   // Loading and data state
@@ -239,9 +239,7 @@ export default function PermissionsSettingsPage() {
                           {...getEditConfig('default-permissions', defaultPermissionsPath)}
                           secondaryAction={{
                             label: 'Edit File',
-                            onClick: () => {
-                              onOpenFile(defaultPermissionsPath)
-                            },
+                            filePath: defaultPermissionsPath,
                           }}
                         />
                       ) : null
@@ -282,10 +280,7 @@ export default function PermissionsSettingsPage() {
                             context={context}
                             secondaryAction={activeWorkspace ? {
                               label: 'Edit File',
-                              onClick: () => {
-                                const permissionsPath = `${activeWorkspace.rootPath}/permissions.json`
-                                onOpenFile(permissionsPath)
-                              },
+                              filePath: `${activeWorkspace.rootPath}/permissions.json`,
                             } : undefined}
                           />
                         )

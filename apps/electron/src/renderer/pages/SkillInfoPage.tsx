@@ -75,17 +75,6 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
     }
   }, [workspaceId, skillSlug])
 
-  // Handle edit button click
-  const handleEdit = useCallback(async () => {
-    if (!skill) return
-
-    try {
-      await window.electronAPI.openSkillInEditor(workspaceId, skillSlug)
-    } catch (err) {
-      console.error('Failed to open skill in editor:', err)
-    }
-  }, [skill, workspaceId, skillSlug])
-
   // Handle open in finder
   const handleOpenInFinder = useCallback(async () => {
     if (!skill) return
@@ -174,7 +163,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
                 {...getEditConfig('skill-metadata', skill.path)}
                 secondaryAction={{
                   label: 'Edit File',
-                  onClick: handleEdit,
+                  filePath: `${skill.path}/SKILL.md`,
                 }}
               />
             }
@@ -244,7 +233,7 @@ export default function SkillInfoPage({ skillSlug, workspaceId }: SkillInfoPageP
                 {...getEditConfig('skill-instructions', skill.path)}
                 secondaryAction={{
                   label: 'Edit File',
-                  onClick: handleEdit,
+                  filePath: `${skill.path}/SKILL.md`,
                 }}
               />
             }
