@@ -1,0 +1,161 @@
+{
+  "badges": {
+    "new": "Novo",
+    "plan": "Plano"
+  },
+  "processing": {
+    "messages": [
+      "Pensando...",
+      "Ponderando...",
+      "Contemplando...",
+      "Raciocinando...",
+      "Processando...",
+      "Computando...",
+      "Considerando...",
+      "Refletindo...",
+      "Deliberando...",
+      "Cogitando...",
+      "Ruminando...",
+      "Meditando...",
+      "Trabalhando nisso...",
+      "Cuidando disso...",
+      "Processando números...",
+      "Preparando...",
+      "Conectando os pontos...",
+      "Analisando...",
+      "Em pensamento profundo...",
+      "Hmm...",
+      "Deixe-me ver...",
+      "Um momento...",
+      "Espere...",
+      "Aguarde...",
+      "Só um segundo...",
+      "Espere um pouco...",
+      "Chegando lá...",
+      "Quase...",
+      "Trabalhando...",
+      "Ocupado, ocupado...",
+      "Zunindo...",
+      "Agitando...",
+      "Filtrando...",
+      "Cozinhando...",
+      "Preparando...",
+      "Assando...",
+      "Mexendo...",
+      "Iniciando...",
+      "Aquecendo...",
+      "Acelerando...",
+      "Zumbindo...",
+      "Zunindo...",
+      "Tic-tac...",
+      "Clicando...",
+      "Zunindo...",
+      "Voando...",
+      "Acelerando...",
+      "Avançando...",
+      "Seguindo...",
+      "Rodando..."
+    ]
+  },
+  "permissionModes": {
+    "safe": {
+      "display": "Explorar",
+      "short": "Explorar",
+      "description": "Exploração apenas para leitura. Bloqueia escritas, nunca solicita confirmação."
+    },
+    "ask": {
+      "display": "Pedir para Editar",
+      "short": "Pedir",
+      "description": "Solicita confirmação antes de fazer edições."
+    },
+    "allowAll": {
+      "display": "Executar",
+      "short": "Executar",
+      "description": "Execução automática, sem solicitações."
+    },
+    "ultrathink": {
+      "label": "Ultrathink",
+      "description": "Raciocínio estendido para problemas complexos"
+    }
+  },
+  "commandMenu": {
+    "searchPlaceholder": "Pesquisar comandos...",
+    "empty": "Nenhum comando encontrado"
+  },
+  "inputPlaceholders": [
+    "No que você gostaria de trabalhar?",
+    "Use Shift + Tab para alternar entre Explorar e Executar",
+    "Digite @ para mencionar arquivos, pastas ou habilidades",
+    "Digite # para aplicar marcadores a esta conversa",
+    "Pressione Shift + Return para adicionar uma nova linha"
+  ],
+  "input": {
+    "attachFiles": "Anexar arquivos",
+    "attachFilesLabel": "Anexar arquivos",
+    "fileCount": {
+      "one": "1 arquivo",
+      "other": "{{count}} arquivos"
+    },
+    "sourcesTooltip": "Fontes",
+    "chooseSources": "Escolher fontes",
+    "sourcesCount": "{{count}} fontes",
+    "noSourcesConfigured": "Nenhuma fonte configurada.",
+    "addSourcesInSettings": "Adicione fontes nas Configurações.",
+    "searchSourcesPlaceholder": "Pesquisar fontes...",
+    "workingDirectory": "Diretório de trabalho",
+    "workingDirectoryOnBranch": "em {{branch}}",
+    "chooseWorkingDirectory": "Escolher diretório de trabalho",
+    "filterFoldersPlaceholder": "Filtrar pastas...",
+    "modelTooltip": "Modelo",
+    "customApiConnection": "Conexão de API personalizada",
+    "workInFolder": "Trabalhar na pasta",
+    "folderFallback": "Pasta",
+    "noFoldersFound": "Nenhuma pasta encontrada",
+    "chooseFolder": "Escolher pasta...",
+    "reset": "Redefinir"
+  },
+  "inlineSlash": {
+    "sections": {
+      "modes": "Modos",
+      "features": "Recursos",
+      "folders": "Diretórios de trabalho recentes"
+    },
+    "footer": "Use @ para habilidades e arquivos"
+  },
+  "sessionList": {
+    "searchPlaceholder": "Pesquisar conversas...",
+    "searchClose": "Fechar pesquisa",
+    "emptyTitle": "Nenhuma conversa ainda",
+    "emptyDescription": "As conversas com o seu agente aparecerão aqui. Comece uma para iniciar.",
+    "emptyAction": "Nova conversa",
+    "noResults": "Nenhuma conversa encontrada",
+    "clearSearch": "Limpar pesquisa",
+    "ariaLabel": "Sessões",
+    "emptyFlagged": "Nenhuma conversa sinalizada"
+  },
+  "sourcesPanel": {
+    "emptyTitle": "Nenhuma fonte configurada.",
+    "emptyTitleWithType": "Nenhuma fonte de {{type}} configurada.",
+    "description": "As fontes conectam seu agente a dados externos — servidores MCP, APIs REST e pastas locais.",
+    "learnMore": "Saiba mais",
+    "addSource": "Adicionar fonte",
+    "types": {
+      "api": "API",
+      "mcp": "MCP",
+      "local": "pasta local"
+    }
+  },
+  "skillsPanel": {
+    "emptyTitle": "Nenhuma habilidade configurada",
+    "description": "Habilidades são instruções reutilizáveis que ensinam comportamentos especializados ao seu agente.",
+    "learnMore": "Saiba mais",
+    "addSkill": "Adicionar habilidade"
+  },
+  "mentionMenu": {
+    "sections": {
+      "skills": "Habilidades",
+      "sources": "Fontes",
+      "files": "Arquivos"
+    }
+  }
+}

@@ -66,6 +66,7 @@ export const StoredConfigSchema = z.object({
   activeWorkspaceId: z.string().nullable(),
   activeSessionId: z.string().nullable(),
   model: z.string().optional(),
+  uiLanguage: z.string().optional(),
   // Note: tokenDisplay, showCost, cumulativeUsage, defaultPermissionMode removed
   // Permission mode and cyclable modes are now per-workspace in workspace config.json
 });

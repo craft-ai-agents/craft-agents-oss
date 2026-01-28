@@ -1,0 +1,101 @@
+{
+  "nav": {
+    "newChat": "새 채팅",
+    "allChats": "모든 채팅",
+    "flagged": "플래그 지정됨",
+    "status": "상태",
+    "labels": "라벨",
+    "sources": "소스",
+    "skills": "스킬",
+    "settings": "설정"
+  },
+  "sources": {
+    "apis": "APIs",
+    "mcps": "MCPs",
+    "localFolders": "로컬 폴더"
+  },
+  "statuses": {
+    "backlog": "백로그",
+    "todo": "할 일",
+    "needsReview": "검토 필요",
+    "done": "완료",
+    "cancelled": "취소됨"
+  },
+  "titles": {
+    "sources": "소스",
+    "skills": "모든 스킬",
+    "settings": "설정",
+    "allChats": "모든 채팅",
+    "flagged": "플래그 지정됨",
+    "labels": "라벨",
+    "views": "뷰"
+  },
+  "menu": {
+    "openInNewWindow": "새 창에서 열기",
+    "configureStatuses": "상태 구성",
+    "addLabel": "새 라벨 추가",
+    "editLabels": "라벨 편집",
+    "deleteLabel": "라벨 삭제",
+    "editViews": "뷰 편집",
+    "deleteView": "뷰 삭제",
+    "addSource": "소스 추가",
+    "learnMoreSources": "소스에 대해 더 알아보기",
+    "learnMoreApis": "APIs에 대해 더 알아보기",
+    "learnMoreMcp": "MCP에 대해 더 알아보기",
+    "learnMoreLocalFolders": "로컬 폴더에 대해 더 알아보기",
+    "addSkill": "스킬 추가"
+  },
+  "common": {
+    "search": "검색",
+    "learnMore": "더 알아보기"
+  },
+  "help": {
+    "tooltip": "도움말 및 문서",
+    "sources": "소스",
+    "skills": "스킬",
+    "statuses": "상태",
+    "permissions": "권한",
+    "allDocumentation": "모든 문서"
+  },
+  "workspace": {
+    "add": "워크스페이스 추가...",
+    "addTitle": "워크스페이스 추가",
+    "addDescription": "아이디어를 실현할 도구들을 만나는 곳.",
+    "createNew": "새로 만들기",
+    "createNewDescription": "빈 워크스페이스에서 새로 시작합니다.",
+    "openFolder": "폴더 열기",
+    "openFolderDescription": "기존 폴더를 워크스페이스로 선택합니다."
+  },
+  "appMenu": {
+    "craftMenuLabel": "Craft 메뉴",
+    "newChat": "새 채팅",
+    "newWindow": "새 창",
+    "edit": "편집",
+    "undo": "실행 취소",
+    "redo": "다시 실행",
+    "cut": "잘라내기",
+    "copy": "복사",
+    "paste": "붙여넣기",
+    "selectAll": "전체 선택",
+    "view": "보기",
+    "zoomIn": "확대",
+    "zoomOut": "축소",
+    "resetZoom": "확대/축소 초기화",
+    "window": "창",
+    "minimize": "최소화",
+    "maximize": "최대화",
+    "settings": "설정",
+    "settingsEllipsis": "설정...",
+    "storedUserPreferences": "저장된 사용자 설정",
+    "help": "도움말",
+    "helpDocumentation": "도움말 및 문서",
+    "keyboardShortcuts": "키보드 단축키",
+    "debug": "디버그",
+    "checkForUpdates": "업데이트 확인",
+    "installUpdate": "업데이트 설치",
+    "toggleDevTools": "개발자 도구 토글",
+    "quit": "Craft Agents 종료",
+    "goBack": "뒤로 가기",
+    "goForward": "앞으로 가기"
+  }
+}

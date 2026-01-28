@@ -1,0 +1,101 @@
+{
+  "nav": {
+    "newChat": "Novo Chat",
+    "allChats": "Todos os Chats",
+    "flagged": "Sinalizados",
+    "status": "Status",
+    "labels": "Etiquetas",
+    "sources": "Fontes",
+    "skills": "Habilidades",
+    "settings": "Configurações"
+  },
+  "sources": {
+    "apis": "APIs",
+    "mcps": "MCPs",
+    "localFolders": "Pastas Locais"
+  },
+  "statuses": {
+    "backlog": "Backlog",
+    "todo": "A Fazer",
+    "needsReview": "Precisa de Revisão",
+    "done": "Concluído",
+    "cancelled": "Cancelado"
+  },
+  "titles": {
+    "sources": "Fontes",
+    "skills": "Todas as Habilidades",
+    "settings": "Configurações",
+    "allChats": "Todos os Chats",
+    "flagged": "Sinalizados",
+    "labels": "Etiquetas",
+    "views": "Visualizações"
+  },
+  "menu": {
+    "openInNewWindow": "Abrir em Nova Janela",
+    "configureStatuses": "Configurar Status",
+    "addLabel": "Adicionar Nova Etiqueta",
+    "editLabels": "Editar Etiquetas",
+    "deleteLabel": "Excluir Etiqueta",
+    "editViews": "Editar Visualizações",
+    "deleteView": "Excluir Visualização",
+    "addSource": "Adicionar Fonte",
+    "learnMoreSources": "Saiba Mais sobre Fontes",
+    "learnMoreApis": "Saiba Mais sobre APIs",
+    "learnMoreMcp": "Saiba Mais sobre MCP",
+    "learnMoreLocalFolders": "Saiba Mais sobre Pastas Locais",
+    "addSkill": "Adicionar Habilidade"
+  },
+  "common": {
+    "search": "Pesquisar",
+    "learnMore": "Saiba mais"
+  },
+  "help": {
+    "tooltip": "Ajuda e Documentação",
+    "sources": "Fontes",
+    "skills": "Habilidades",
+    "statuses": "Status",
+    "permissions": "Permissões",
+    "allDocumentation": "Toda a Documentação"
+  },
+  "workspace": {
+    "add": "Adicionar Espaço de Trabalho...",
+    "addTitle": "Adicionar Espaço de Trabalho",
+    "addDescription": "Onde suas ideias encontram as ferramentas para fazê-las acontecer.",
+    "createNew": "Criar novo",
+    "createNewDescription": "Comece do zero com um espaço de trabalho vazio.",
+    "openFolder": "Abrir pasta",
+    "openFolderDescription": "Escolha uma pasta existente como espaço de trabalho."
+  },
+  "appMenu": {
+    "craftMenuLabel": "Menu Craft",
+    "newChat": "Nova conversa",
+    "newWindow": "Nova janela",
+    "edit": "Editar",
+    "undo": "Desfazer",
+    "redo": "Refazer",
+    "cut": "Recortar",
+    "copy": "Copiar",
+    "paste": "Colar",
+    "selectAll": "Selecionar tudo",
+    "view": "Exibir",
+    "zoomIn": "Aproximar",
+    "zoomOut": "Afastar",
+    "resetZoom": "Redefinir zoom",
+    "window": "Janela",
+    "minimize": "Minimizar",
+    "maximize": "Maximizar",
+    "settings": "Configurações",
+    "settingsEllipsis": "Configurações...",
+    "storedUserPreferences": "Preferências do usuário armazenadas",
+    "help": "Ajuda",
+    "helpDocumentation": "Ajuda e documentação",
+    "keyboardShortcuts": "Atalhos de teclado",
+    "debug": "Depurar",
+    "checkForUpdates": "Verificar atualizações",
+    "installUpdate": "Instalar atualização",
+    "toggleDevTools": "Alternar ferramentas do desenvolvedor",
+    "quit": "Sair do Craft Agents",
+    "goBack": "Voltar",
+    "goForward": "Avançar"
+  }
+}

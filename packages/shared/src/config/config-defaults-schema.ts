@@ -14,6 +14,7 @@ export interface ConfigDefaults {
     authType: AuthType;
     notificationsEnabled: boolean;
     colorTheme: string;
+    uiLanguage: string;
   };
   workspaceDefaults: {
     thinkingLevel: ThinkingLevel;
@@ -36,6 +37,7 @@ export const BUNDLED_CONFIG_DEFAULTS: ConfigDefaults = {
     authType: 'api_key',
     notificationsEnabled: true,
     colorTheme: 'default',
+    uiLanguage: 'en',
   },
   workspaceDefaults: {
     thinkingLevel: 'think',

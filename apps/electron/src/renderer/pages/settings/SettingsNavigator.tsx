@@ -17,6 +17,7 @@ import {
   StyledDropdownMenuItem,
 } from '@/components/ui/styled-dropdown'
 import { DropdownMenuProvider } from '@/components/ui/menu-context'
+import { useTranslation } from 'react-i18next'
 /** Custom app settings icon */
 const AppSettingsIcon = ({ className }: { className?: string }) => (
   <svg
@@ -138,57 +139,20 @@ interface SettingsItem {
   description: string
 }
 
-const settingsItems: SettingsItem[] = [
-  {
-    id: 'app',
-    label: 'App',
-    icon: AppSettingsIcon,
-    description: 'Appearance, notifications, API connection',
-  },
-  {
-    id: 'workspace',
-    label: 'Workspace',
-    icon: WorkspaceIcon,
-    description: 'Model, mode cycling, advanced',
-  },
-  {
-    id: 'permissions',
-    label: 'Permissions',
-    icon: ShieldIcon,
-    description: 'Allowed commands in Explore mode',
-  },
-  {
-    id: 'labels',
-    label: 'Labels',
-    icon: LabelsIcon,
-    description: 'Label hierarchy and auto-apply rules',
-  },
-  {
-    id: 'shortcuts',
-    label: 'Shortcuts',
-    icon: KeyboardIcon,
-    description: 'Keyboard shortcuts reference',
-  },
-  {
-    id: 'preferences',
-    label: 'Preferences',
-    icon: PreferencesIcon,
-    description: 'Your personal preferences',
-  },
-]
 
 interface SettingsItemRowProps {
   item: SettingsItem
   isSelected: boolean
   isFirst: boolean
   onSelect: () => void
+  openInNewWindowLabel: string
 }
 
 /**
  * SettingsItemRow - Individual settings item with dropdown menu
  * Tracks menu open state to keep "..." button visible when menu is open
  */
-function SettingsItemRow({ item, isSelected, isFirst, onSelect }: SettingsItemRowProps) {
+function SettingsItemRow({ item, isSelected, isFirst, onSelect, openInNewWindowLabel }: SettingsItemRowProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const Icon = item.icon
 
@@ -264,7 +228,7 @@ function SettingsItemRow({ item, isSelected, isFirst, onSelect }: SettingsItemRo
                 <DropdownMenuProvider>
                   <StyledDropdownMenuItem onClick={handleOpenInNewWindow}>
                     <AppWindow className="h-3.5 w-3.5" />
-                    <span className="flex-1">Open in New Window</span>
+                    <span className="flex-1">{openInNewWindowLabel}</span>
                   </StyledDropdownMenuItem>
                 </DropdownMenuProvider>
               </StyledDropdownMenuContent>
@@ -280,6 +244,49 @@ export default function SettingsNavigator({
   selectedSubpage,
   onSelectSubpage,
 }: SettingsNavigatorProps) {
+  const { t } = useTranslation('settings')
+
+  const settingsItems: SettingsItem[] = [
+    {
+      id: 'app',
+      label: t('navigator.items.app.label'),
+      icon: AppSettingsIcon,
+      description: t('navigator.items.app.description'),
+    },
+    {
+      id: 'workspace',
+      label: t('navigator.items.workspace.label'),
+      icon: WorkspaceIcon,
+      description: t('navigator.items.workspace.description'),
+    },
+    {
+      id: 'permissions',
+      label: t('navigator.items.permissions.label'),
+      icon: ShieldIcon,
+      description: t('navigator.items.permissions.description'),
+    },
+    {
+      id: 'labels',
+      label: t('navigator.items.labels.label'),
+      icon: LabelsIcon,
+      description: t('navigator.items.labels.description'),
+    },
+    {
+      id: 'shortcuts',
+      label: t('navigator.items.shortcuts.label'),
+      icon: KeyboardIcon,
+      description: t('navigator.items.shortcuts.description'),
+    },
+    {
+      id: 'preferences',
+      label: t('navigator.items.preferences.label'),
+      icon: PreferencesIcon,
+      description: t('navigator.items.preferences.description'),
+    },
+  ]
+
+  const openInNewWindowLabel = t('navigator.actions.openInNewWindow')
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto">
@@ -291,6 +298,7 @@ export default function SettingsNavigator({
               isSelected={selectedSubpage === item.id}
               isFirst={index === 0}
               onSelect={() => onSelectSubpage(item.id)}
+              openInNewWindowLabel={openInNewWindowLabel}
             />
           ))}
         </div>

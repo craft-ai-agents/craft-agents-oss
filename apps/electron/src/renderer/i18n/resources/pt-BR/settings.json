@@ -1,0 +1,353 @@
+{
+  "common": {
+    "actions": {
+      "edit": "Editar",
+      "closeWithEsc": "Fechar (Esc)",
+      "change": "Alterar",
+      "changeEllipsis": "Alterar...",
+      "clear": "Limpar"
+    },
+    "status": {
+      "loading": "Carregando...",
+      "uploading": "Enviando..."
+    }
+  },
+  "app": {
+    "title": "Configurações do App",
+    "appearance": {
+      "title": "Aparência",
+      "mode": {
+        "label": "Modo",
+        "options": {
+          "system": "Sistema",
+          "light": "Claro",
+          "dark": "Escuro"
+        }
+      },
+      "colorTheme": {
+        "label": "Tema de cor",
+        "options": {
+          "default": "Padrão"
+        }
+      },
+      "font": {
+        "label": "Fonte",
+        "options": {
+          "inter": "Inter",
+          "system": "Sistema"
+        }
+      }
+    },
+    "language": {
+      "title": "Idioma",
+      "description": "Escolha o idioma para a interface do app.",
+      "label": "Idioma do app",
+      "hint": "Isso afeta apenas a interface. Para alterar o idioma das respostas, use Preferências → Idioma."
+    },
+    "notifications": {
+      "title": "Notificações",
+      "desktop": {
+        "label": "Notificações na área de trabalho",
+        "description": "Seja notificado quando a IA terminar de trabalhar em um chat."
+      }
+    },
+    "apiConnection": {
+      "title": "Conexão de API",
+      "description": "Como seus agentes de IA se conectam aos modelos de linguagem.",
+      "connectionType": {
+        "label": "Tipo de conexão",
+        "values": {
+          "claudeSubscription": "Assinatura do Claude — usando sua assinatura do Claude",
+          "apiKey": "Chave de API — Anthropic, OpenRouter ou API compatível",
+          "notConfigured": "Não configurado"
+        }
+      }
+    },
+    "about": {
+      "title": "Sobre",
+      "version": {
+        "label": "Versão",
+        "updateTo": "Atualizar para {{version}}"
+      },
+      "checkForUpdates": {
+        "label": "Verificar atualizações",
+        "checking": "Verificando...",
+        "checkNow": "Verificar agora"
+      },
+      "installUpdate": {
+        "label": "Instalar atualização",
+        "restartToUpdate": "Reiniciar para atualizar"
+      }
+    }
+  },
+  "navigator": {
+    "items": {
+      "app": {
+        "label": "App",
+        "description": "Aparência, notificações, conexão de API"
+      },
+      "workspace": {
+        "label": "Espaço de Trabalho",
+        "description": "Modelo, ciclo de modos, avançado"
+      },
+      "permissions": {
+        "label": "Permissões",
+        "description": "Comandos permitidos no modo Explorar"
+      },
+      "labels": {
+        "label": "Rótulos",
+        "description": "Hierarquia de rótulos e regras de aplicação automática"
+      },
+      "shortcuts": {
+        "label": "Atalhos",
+        "description": "Referência de atalhos de teclado"
+      },
+      "preferences": {
+        "label": "Preferências",
+        "description": "Suas preferências pessoais"
+      }
+    },
+    "actions": {
+      "openInNewWindow": "Abrir em nova janela"
+    }
+  },
+  "shortcuts": {
+    "title": "Atalhos",
+    "sections": {
+      "global": {
+        "title": "Global",
+        "items": {
+          "focusSidebar": "Focar barra lateral",
+          "focusSessionList": "Focar lista de sessões",
+          "focusChatInput": "Focar entrada do chat",
+          "newChat": "Novo chat",
+          "toggleSidebar": "Alternar barra lateral",
+          "openSettings": "Abrir configurações"
+        }
+      },
+      "navigation": {
+        "title": "Navegação",
+        "items": {
+          "nextZone": "Ir para a próxima zona",
+          "cyclePermissionMode": "Alternar modo de permissão",
+          "moveBetweenZones": "Mover entre zonas (em listas)",
+          "navigateList": "Navegar itens na lista",
+          "firstItem": "Ir para o primeiro item",
+          "lastItem": "Ir para o último item",
+          "closeDialog": "Fechar diálogo / remover foco da entrada"
+        }
+      },
+      "sessionList": {
+        "title": "Lista de Sessões",
+        "items": {
+          "focusChatInput": "Focar entrada do chat",
+          "deleteSession": "Excluir sessão"
+        }
+      },
+      "chat": {
+        "title": "Chat",
+        "items": {
+          "sendMessage": "Enviar mensagem",
+          "newLine": "Nova linha"
+        }
+      }
+    }
+  },
+  "preferences": {
+    "title": "Preferências",
+    "basic": {
+      "title": "Informações Básicas",
+      "description": "Ajude o Craft Agent a personalizar as respostas para você.",
+      "name": {
+        "label": "Nome",
+        "description": "Como o Craft Agent deve se dirigir a você.",
+        "placeholder": "Seu nome"
+      },
+      "timezone": {
+        "label": "Fuso horário",
+        "description": "Usado para datas relativas como 'amanhã' ou 'próxima semana'.",
+        "placeholder": "ex: America/Sao_Paulo"
+      },
+      "language": {
+        "label": "Idioma",
+        "description": "Idioma preferido para as respostas do Craft Agent.",
+        "placeholder": "ex: Português"
+      }
+    },
+    "location": {
+      "title": "Localização",
+      "description": "Ativa respostas baseadas em localização, como clima, hora local e contexto regional.",
+      "city": {
+        "label": "Cidade",
+        "description": "Sua cidade para informações locais e contexto.",
+        "placeholder": "ex: São Paulo"
+      },
+      "country": {
+        "label": "País",
+        "description": "Seu país para formatação regional e contexto.",
+        "placeholder": "ex: Brasil"
+      }
+    },
+    "notes": {
+      "title": "Notas",
+      "description": "Contexto livre que ajuda o Craft Agent a entender suas preferências.",
+      "editFile": "Editar Arquivo",
+      "placeholder": "Qualquer contexto adicional que você gostaria que o Craft Agent soubesse..."
+    }
+  },
+  "workspace": {
+    "title": "Configurações do Espaço de Trabalho",
+    "empty": "Nenhum espaço de trabalho selecionado",
+    "info": {
+      "title": "Informações do Espaço de Trabalho",
+      "name": {
+        "label": "Nome",
+        "untitled": "Sem título"
+      },
+      "icon": {
+        "label": "Ícone"
+      }
+    },
+    "rename": {
+      "title": "Renomear espaço de trabalho",
+      "placeholder": "Digite o nome do espaço de trabalho..."
+    },
+    "model": {
+      "title": "Modelo",
+      "defaultModel": {
+        "label": "Modelo padrão",
+        "description": "Modelo de IA para novos chats",
+        "setViaApi": "Definido via conexão de API"
+      },
+      "options": {
+        "opus": {
+          "label": "Opus 4.5",
+          "description": "Mais capaz para trabalhos complexos"
+        },
+        "sonnet": {
+          "label": "Sonnet 4.5",
+          "description": "Melhor para tarefas do dia a dia"
+        },
+        "haiku": {
+          "label": "Haiku 4.5",
+          "description": "Mais rápido para respostas rápidas"
+        }
+      },
+      "thinkingLevel": {
+        "label": "Nível de pensamento",
+        "description": "Profundidade de raciocínio para novos chats"
+      }
+    },
+    "thinkingLevels": {
+      "off": {
+        "name": "Sem Pensamento",
+        "description": "Respostas mais rápidas, sem raciocínio"
+      },
+      "think": {
+        "name": "Pensando",
+        "description": "Equilíbrio entre velocidade e raciocínio"
+      },
+      "max": {
+        "name": "Pensamento Máximo",
+        "description": "Raciocínio mais profundo para tarefas complexas"
+      }
+    },
+    "permissions": {
+      "title": "Permissões",
+      "defaultMode": {
+        "label": "Modo padrão",
+        "description": "Controle o que a IA pode fazer"
+      },
+      "modes": {
+        "safe": {
+          "label": "Seguro",
+          "description": "Somente leitura, sem alterações permitidas"
+        },
+        "ask": {
+          "label": "Perguntar",
+          "description": "Solicita confirmação antes de fazer edições"
+        },
+        "allowAll": {
+          "label": "Permitir tudo",
+          "description": "Execução autônoma completa"
+        }
+      }
+    },
+    "modeCycling": {
+      "title": "Ciclo de Modos",
+      "description": "Selecione quais modos percorrer com Shift+Tab",
+      "errorMinimum": "Pelo menos 2 modos são necessários"
+    },
+    "advanced": {
+      "title": "Avançado",
+      "workingDirectory": {
+        "label": "Diretório de Trabalho Padrão",
+        "notSet": "Não definido (usa a pasta da sessão)"
+      },
+      "localMcp": {
+        "label": "Servidores MCP Locais",
+        "description": "Habilitar servidores de subprocesso stdio"
+      }
+    }
+  },
+  "permissions": {
+    "title": "Permissões",
+    "about": {
+      "title": "Sobre Permissões",
+      "body": "As permissões controlam quanta autonomia seu agente possui. No modo <explore>Explorar</explore>, o agente pode apenas ler e pesquisar — ideal para entender um problema antes de se comprometer com mudanças. Quando estiver pronto, mude para o modo <execute>Executar</execute> para permitir que o agente implemente o plano de forma autônoma.",
+      "workflow": "Um bom fluxo de trabalho: comece em Explorar para deixar o agente investigar, revise o plano proposto e, em seguida, execute com confiança.",
+      "learnMore": "Saiba mais"
+    },
+    "default": {
+      "title": "Permissões Padrão",
+      "description": "Padrões de nível de app permitidos no modo Explorar. Comandos não presentes nesta lista são bloqueados.",
+      "editFile": "Editar Arquivo",
+      "empty": {
+        "title": "Nenhuma permissão padrão encontrada.",
+        "hint": "As permissões padrão devem estar em <code>~/.craft-agent/permissions/default.json</code>"
+      }
+    },
+    "custom": {
+      "title": "Customizações do Espaço de Trabalho",
+      "description": "Padrões de nível de espaço de trabalho que estendem os padrões do app acima.",
+      "editFile": "Editar Arquivo",
+      "empty": {
+        "title": "Nenhuma permissão personalizada configurada.",
+        "hint": "Crie um arquivo <code>permissions.json</code> em seu espaço de trabalho para adicionar regras personalizadas."
+      }
+    },
+    "table": {
+      "writeTo": "Escrever em: {{path}}",
+      "customBlockedTool": "Ferramenta bloqueada personalizada",
+      "customBashPattern": "Padrão bash personalizado",
+      "customMcpPattern": "Padrão MCP personalizado",
+      "customApiEndpoint": "Endpoint de API personalizado",
+      "allowedWritePath": "Caminho de escrita permitido"
+    }
+  },
+  "labels": {
+    "title": "Rótulos",
+    "editFile": "Editar Arquivo",
+    "about": {
+      "title": "Sobre Rótulos",
+      "paragraphs": {
+        "organize": "Os rótulos ajudam você a organizar sessões com etiquetas coloridas. Use-os para categorizar conversas por projeto, tópico ou prioridade — facilitando a filtragem e a localização de sessões relacionadas mais tarde.",
+        "value": "Cada rótulo pode opcionalmente carregar um <value>valor</value> com um tipo específico (texto, número ou data). Isso transforma rótulos em metadados estruturados — por exemplo, um rótulo de \"prioridade\" com valor 3, ou um rótulo \"vencimento\" com uma data.",
+        "autoApply": "As <auto>regras de aplicação automática</auto> atribuem rótulos automaticamente quando uma mensagem corresponde a um padrão regex. Por exemplo, colar uma URL de tarefa do Linear pode marcar automaticamente a sessão com o nome do projeto e o ID da tarefa — sem necessidade de marcação manual."
+      },
+      "learnMore": "Saiba mais"
+    },
+    "hierarchy": {
+      "title": "Hierarquia de Rótulos",
+      "description": "Todos os rótulos configurados para este espaço de trabalho. Rótulos podem ser aninhados para formar grupos.",
+      "empty": {
+        "title": "Nenhum rótulo configurado.",
+        "hint": "Rótulos podem ser criados pelo agente ou editando <code>labels/config.json</code> em seu espaço de trabalho."
+      }
+    },
+    "autoRules": {
+      "title": "Regras de Aplicação Automática",
+      "description": "Padrões de regex que aplicam rótulos automaticamente quando correspondidos em mensagens do usuário. Por exemplo, cole uma URL de tarefa do Linear e marque automaticamente a sessão com o nome do projeto e o ID da tarefa."
+    }
+  }
+}

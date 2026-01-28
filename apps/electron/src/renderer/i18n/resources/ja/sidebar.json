@@ -1,0 +1,101 @@
+{
+  "nav": {
+    "newChat": "新規チャット",
+    "allChats": "すべてのチャット",
+    "flagged": "フラグ付き",
+    "status": "ステータス",
+    "labels": "ラベル",
+    "sources": "ソース",
+    "skills": "スキル",
+    "settings": "設定"
+  },
+  "sources": {
+    "apis": "APIs",
+    "mcps": "MCPs",
+    "localFolders": "ローカルフォルダー"
+  },
+  "statuses": {
+    "backlog": "バックログ",
+    "todo": "Todo",
+    "needsReview": "要レビュー",
+    "done": "完了",
+    "cancelled": "キャンセル済み"
+  },
+  "titles": {
+    "sources": "ソース",
+    "skills": "すべてのスキル",
+    "settings": "設定",
+    "allChats": "すべてのチャット",
+    "flagged": "フラグ付き",
+    "labels": "ラベル",
+    "views": "ビュー"
+  },
+  "menu": {
+    "openInNewWindow": "新しいウィンドウで開く",
+    "configureStatuses": "ステータスを設定",
+    "addLabel": "新しいラベルを追加",
+    "editLabels": "ラベルを編集",
+    "deleteLabel": "ラベルを削除",
+    "editViews": "ビューを編集",
+    "deleteView": "ビューを削除",
+    "addSource": "ソースを追加",
+    "learnMoreSources": "ソースについて詳しく知る",
+    "learnMoreApis": "APIsについて詳しく知る",
+    "learnMoreMcp": "MCPについて詳しく知る",
+    "learnMoreLocalFolders": "ローカルフォルダーについて詳しく知る",
+    "addSkill": "スキルを追加"
+  },
+  "common": {
+    "search": "検索",
+    "learnMore": "詳細はこちら"
+  },
+  "help": {
+    "tooltip": "ヘルプとドキュメント",
+    "sources": "ソース",
+    "skills": "スキル",
+    "statuses": "ステータス",
+    "permissions": "権限",
+    "allDocumentation": "すべてのドキュメント"
+  },
+  "workspace": {
+    "add": "ワークスペースを追加...",
+    "addTitle": "ワークスペースを追加",
+    "addDescription": "あなたのアイデアと、それを形にするためのツールが出会う場所。",
+    "createNew": "新規作成",
+    "createNewDescription": "空のワークスペースで新しく始めます。",
+    "openFolder": "フォルダを開く",
+    "openFolderDescription": "既存のフォルダをワークスペースとして選択します。"
+  },
+  "appMenu": {
+    "craftMenuLabel": "Craft メニュー",
+    "newChat": "新しいチャット",
+    "newWindow": "新しいウィンドウ",
+    "edit": "編集",
+    "undo": "元に戻す",
+    "redo": "やり直し",
+    "cut": "切り取り",
+    "copy": "コピー",
+    "paste": "貼り付け",
+    "selectAll": "すべて選択",
+    "view": "表示",
+    "zoomIn": "拡大",
+    "zoomOut": "縮小",
+    "resetZoom": "倍率をリセット",
+    "window": "ウィンドウ",
+    "minimize": "最小化",
+    "maximize": "最大化",
+    "settings": "設定",
+    "settingsEllipsis": "設定...",
+    "storedUserPreferences": "保存されたユーザー設定",
+    "help": "ヘルプ",
+    "helpDocumentation": "ヘルプとドキュメント",
+    "keyboardShortcuts": "キーボードショートカット",
+    "debug": "デバッグ",
+    "checkForUpdates": "アップデートを確認",
+    "installUpdate": "アップデートをインストール",
+    "toggleDevTools": "デベロッパーツールを切り替え",
+    "quit": "Craft Agents を終了",
+    "goBack": "戻る",
+    "goForward": "進む"
+  }
+}

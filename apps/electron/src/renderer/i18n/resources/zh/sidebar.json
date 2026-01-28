@@ -1,0 +1,101 @@
+{
+  "nav": {
+    "newChat": "新对话",
+    "allChats": "所有对话",
+    "flagged": "已标记",
+    "status": "状态",
+    "labels": "标签",
+    "sources": "来源",
+    "skills": "技能",
+    "settings": "设置"
+  },
+  "sources": {
+    "apis": "APIs",
+    "mcps": "MCPs",
+    "localFolders": "本地文件夹"
+  },
+  "statuses": {
+    "backlog": "待排期",
+    "todo": "待办",
+    "needsReview": "待审核",
+    "done": "已完成",
+    "cancelled": "已取消"
+  },
+  "titles": {
+    "sources": "来源",
+    "skills": "所有技能",
+    "settings": "设置",
+    "allChats": "所有对话",
+    "flagged": "已标记",
+    "labels": "标签",
+    "views": "视图"
+  },
+  "menu": {
+    "openInNewWindow": "在新窗口中打开",
+    "configureStatuses": "配置状态",
+    "addLabel": "添加新标签",
+    "editLabels": "编辑标签",
+    "deleteLabel": "删除标签",
+    "editViews": "编辑视图",
+    "deleteView": "删除视图",
+    "addSource": "添加来源",
+    "learnMoreSources": "了解更多关于来源的信息",
+    "learnMoreApis": "了解更多关于 APIs 的信息",
+    "learnMoreMcp": "了解更多关于 MCP 的信息",
+    "learnMoreLocalFolders": "了解更多关于本地文件夹的信息",
+    "addSkill": "添加技能"
+  },
+  "common": {
+    "search": "搜索",
+    "learnMore": "了解更多"
+  },
+  "help": {
+    "tooltip": "帮助与文档",
+    "sources": "来源",
+    "skills": "技能",
+    "statuses": "状态",
+    "permissions": "权限",
+    "allDocumentation": "所有文档"
+  },
+  "workspace": {
+    "add": "添加工作区...",
+    "addTitle": "添加工作区",
+    "addDescription": "创意与工具在此汇聚，成就无限可能。",
+    "createNew": "新建",
+    "createNewDescription": "从一个全新的空白工作区开始。",
+    "openFolder": "打开文件夹",
+    "openFolderDescription": "选择一个现有文件夹作为工作区。"
+  },
+  "appMenu": {
+    "craftMenuLabel": "Craft 菜单",
+    "newChat": "新建对话",
+    "newWindow": "新建窗口",
+    "edit": "编辑",
+    "undo": "撤销",
+    "redo": "重做",
+    "cut": "剪切",
+    "copy": "复制",
+    "paste": "粘贴",
+    "selectAll": "全选",
+    "view": "视图",
+    "zoomIn": "放大",
+    "zoomOut": "缩小",
+    "resetZoom": "重置缩放",
+    "window": "窗口",
+    "minimize": "最小化",
+    "maximize": "最大化",
+    "settings": "设置",
+    "settingsEllipsis": "设置...",
+    "storedUserPreferences": "存储的用户偏好设置",
+    "help": "帮助",
+    "helpDocumentation": "帮助与文档",
+    "keyboardShortcuts": "键盘快捷键",
+    "debug": "调试",
+    "checkForUpdates": "检查更新",
+    "installUpdate": "安装更新",
+    "toggleDevTools": "切换开发者工具",
+    "quit": "退出 Craft Agents",
+    "goBack": "返回",
+    "goForward": "前进"
+  }
+}

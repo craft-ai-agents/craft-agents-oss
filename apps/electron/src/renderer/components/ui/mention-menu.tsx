@@ -4,6 +4,7 @@ import { FadingText } from '@/components/ui/fading-text'
 import { SkillAvatar } from '@/components/ui/skill-avatar'
 import { SourceAvatar } from '@/components/ui/source-avatar'
 import type { LoadedSkill, LoadedSource, FileSearchResult } from '../../../shared/types'
+import { useTranslation } from 'react-i18next'
 
 // ============================================================================
 // Types
@@ -445,6 +446,7 @@ export function useInlineMention({
   onSelect,
   workspaceId,
 }: UseInlineMentionOptions): UseInlineMentionReturn {
+  const { t } = useTranslation('chat')
   const [isOpen, setIsOpen] = React.useState(false)
   const [filter, setFilter] = React.useState('')
   // committedFilter: only updates when IPC returns (or immediately when no IPC needed).
@@ -479,7 +481,7 @@ export function useInlineMention({
     if (skills.length > 0) {
       result.push({
         id: 'skills',
-        label: 'Skills',
+        label: t('mentionMenu.sections.skills', { defaultValue: 'Skills' }),
         items: skills.map(skill => ({
           id: skill.slug,
           type: 'skill' as const,
@@ -494,7 +496,7 @@ export function useInlineMention({
     if (sources.length > 0) {
       result.push({
         id: 'sources',
-        label: 'Sources',
+        label: t('mentionMenu.sections.sources', { defaultValue: 'Sources' }),
         items: sources
           .filter(source => source.config.slug && source.config.name)
           .map(source => ({
@@ -511,13 +513,13 @@ export function useInlineMention({
     if (fileResults.length > 0) {
       result.push({
         id: 'files',
-        label: 'Files',
+        label: t('mentionMenu.sections.files', { defaultValue: 'Files' }),
         items: fileResults,
       })
     }
 
     return result
-  }, [skills, sources, fileResults])
+  }, [skills, sources, fileResults, t])
 
   const handleInputChange = React.useCallback((value: string, cursorPosition: number) => {
     // Store current state for handleSelect

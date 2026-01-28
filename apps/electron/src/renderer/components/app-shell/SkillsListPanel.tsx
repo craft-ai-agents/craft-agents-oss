@@ -28,6 +28,7 @@ import { SkillMenu } from './SkillMenu'
 import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
 import { cn } from '@/lib/utils'
 import type { LoadedSkill } from '../../../shared/types'
+import { useTranslation } from 'react-i18next'
 
 export interface SkillsListPanelProps {
   skills: LoadedSkill[]
@@ -49,6 +50,7 @@ export function SkillsListPanel({
   workspaceRootPath,
   className,
 }: SkillsListPanelProps) {
+  const { t } = useTranslation('chat')
   // Empty state - rendered outside ScrollArea for proper vertical centering
   if (skills.length === 0) {
     return (
@@ -57,9 +59,9 @@ export function SkillsListPanel({
           <EmptyMedia variant="icon">
             <Zap />
           </EmptyMedia>
-          <EmptyTitle>No skills configured</EmptyTitle>
+          <EmptyTitle>{t('skillsPanel.emptyTitle', { defaultValue: 'No skills configured' })}</EmptyTitle>
           <EmptyDescription>
-            Skills are reusable instructions that teach your agent specialized behaviors.
+            {t('skillsPanel.description', { defaultValue: 'Skills are reusable instructions that teach your agent specialized behaviors.' })}
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
@@ -67,14 +69,14 @@ export function SkillsListPanel({
             onClick={() => window.electronAPI.openUrl(getDocUrl('skills'))}
             className="inline-flex items-center h-7 px-3 text-xs font-medium rounded-[8px] bg-foreground/[0.02] shadow-minimal hover:bg-foreground/[0.05] transition-colors"
           >
-            Learn more
+            {t('skillsPanel.learnMore', { defaultValue: 'Learn more' })}
           </button>
           {workspaceRootPath && (
             <EditPopover
               align="center"
               trigger={
                 <button className="inline-flex items-center h-7 px-3 text-xs font-medium rounded-[8px] bg-background shadow-minimal hover:bg-foreground/[0.03] transition-colors">
-                  Add Skill
+                  {t('skillsPanel.addSkill', { defaultValue: 'Add Skill' })}
                 </button>
               }
               {...getEditConfig('add-skill', workspaceRootPath)}

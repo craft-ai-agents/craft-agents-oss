@@ -61,10 +61,11 @@ import { FreeFormInputContextBadge } from './FreeFormInputContextBadge'
 import type { FileAttachment, LoadedSource, LoadedSkill } from '../../../../shared/types'
 import type { PermissionMode } from '@craft-agent/shared/agent/modes'
 import { PERMISSION_MODE_ORDER } from '@craft-agent/shared/agent/modes'
-import { type ThinkingLevel, THINKING_LEVELS, getThinkingLevelName } from '@craft-agent/shared/agent/thinking-levels'
+import { type ThinkingLevel, THINKING_LEVELS } from '@craft-agent/shared/agent/thinking-levels'
 import { useEscapeInterrupt } from '@/context/EscapeInterruptContext'
 import { hasOpenOverlay } from '@/lib/overlay-detection'
 import { EscapeInterruptOverlay } from './EscapeInterruptOverlay'
+import { useTranslation } from 'react-i18next'
 
 /**
  * Format token count for display (e.g., 1500 -> "1.5k", 200000 -> "200k")
@@ -230,6 +231,7 @@ export function FreeFormInput({
   isEmptySession = false,
   contextStatus,
 }: FreeFormInputProps) {
+  const { t, i18n } = useTranslation(['chat', 'settings'])
   // Read custom model and workspace info from context.
   // Uses optional variant so playground (no provider) doesn't crash.
   const appShellCtx = useOptionalAppShellContext()
@@ -243,10 +245,24 @@ export function FreeFormInput({
     return appShellCtx.workspaces.find(w => w.id === workspaceId)?.rootPath ?? null
   }, [appShellCtx, workspaceId])
 
-  // Shuffle placeholder order once per mount so each session feels fresh
+  const translatedPlaceholders = React.useMemo(() => {
+    const list = t('inputPlaceholders', {
+      ns: 'chat',
+      returnObjects: true,
+      defaultValue: DEFAULT_PLACEHOLDERS,
+    })
+    return Array.isArray(list) && list.length > 0 ? list : DEFAULT_PLACEHOLDERS
+  }, [t, i18n.resolvedLanguage])
+
+  const isDefaultPlaceholder = Array.isArray(placeholder)
+    && placeholder.length === DEFAULT_PLACEHOLDERS.length
+    && placeholder.every((value, index) => value === DEFAULT_PLACEHOLDERS[index])
+  const effectivePlaceholder = isDefaultPlaceholder ? translatedPlaceholders : placeholder
+
+  // Shuffle placeholder order when the source list changes (e.g., language switch)
   const shuffledPlaceholder = React.useMemo(
-    () => Array.isArray(placeholder) ? shuffleArray(placeholder) : placeholder,
-    [] // eslint-disable-line react-hooks/exhaustive-deps -- intentionally shuffle only on mount
+    () => Array.isArray(effectivePlaceholder) ? shuffleArray(effectivePlaceholder) : effectivePlaceholder,
+    [effectivePlaceholder]
   )
 
   // Performance optimization: Always use internal state for typing to avoid parent re-renders
@@ -1099,6 +1115,11 @@ export function FreeFormInput({
   }, [inlineLabel, syncToParent, sessionId, onTodoStateChange])
 
   const hasContent = input.trim() || attachments.length > 0
+  const attachmentLabel = attachments.length > 0
+    ? attachments.length === 1
+      ? t('input.fileCount.one', { ns: 'chat', defaultValue: '1 file' })
+      : t('input.fileCount.other', { ns: 'chat', count: attachments.length, defaultValue: `${attachments.length} files` })
+    : t('input.attachFilesLabel', { ns: 'chat', defaultValue: 'Attach Files' })
 
   return (
     <form onSubmit={handleSubmit}>
@@ -1219,17 +1240,12 @@ export function FreeFormInput({
           <FreeFormInputContextBadge
             icon={<Paperclip className="h-4 w-4" />}
             // Show count ("1 file" / "X files") instead of filename for cleaner UI
-            label={attachments.length > 0
-              ? attachments.length === 1
-                ? "1 file"
-                : `${attachments.length} files`
-              : "Attach Files"
-            }
+            label={attachmentLabel}
             isExpanded={isEmptySession}
             hasSelection={attachments.length > 0}
             showChevron={false}
             onClick={handleAttachClick}
-            tooltip="Attach files"
+            tooltip={t('input.attachFiles', { ns: 'chat', defaultValue: 'Attach files' })}
             disabled={disabled}
           />
 
@@ -1274,12 +1290,12 @@ export function FreeFormInput({
                 }
                 label={
                   optimisticSourceSlugs.length === 0
-                    ? "Choose Sources"
+                    ? t('input.chooseSources', { ns: 'chat', defaultValue: 'Choose Sources' })
                     : (() => {
                         const enabledSources = sources.filter(s => optimisticSourceSlugs.includes(s.config.slug))
                         if (enabledSources.length === 1) return enabledSources[0].config.name
                         if (enabledSources.length === 2) return enabledSources.map(s => s.config.name).join(', ')
-                        return `${enabledSources.length} sources`
+                        return t('input.sourcesCount', { ns: 'chat', count: enabledSources.length, defaultValue: `${enabledSources.length} sources` })
                       })()
                 }
                 isExpanded={isEmptySession}
@@ -1303,7 +1319,7 @@ export function FreeFormInput({
                   }
                   setSourceDropdownOpen(!sourceDropdownOpen)
                 }}
-                tooltip="Sources"
+                tooltip={t('input.sourcesTooltip', { ns: 'chat', defaultValue: 'Sources' })}
               />
               {sourceDropdownOpen && sourceDropdownPosition && ReactDOM.createPortal(
                 <>
@@ -1324,9 +1340,9 @@ export function FreeFormInput({
                   >
                     {sources.length === 0 ? (
                       <div className="text-xs text-muted-foreground p-3 select-none">
-                        No sources configured.
+                        {t('input.noSourcesConfigured', { ns: 'chat', defaultValue: 'No sources configured.' })}
                         <br />
-                        Add sources in Settings.
+                        {t('input.addSourcesInSettings', { ns: 'chat', defaultValue: 'Add sources in Settings.' })}
                       </div>
                     ) : (
                       <CommandPrimitive
@@ -1338,7 +1354,7 @@ export function FreeFormInput({
                             ref={sourceFilterInputRef}
                             value={sourceFilter}
                             onValueChange={setSourceFilter}
-                            placeholder="Search sources..."
+                            placeholder={t('input.searchSourcesPlaceholder', { ns: 'chat', defaultValue: 'Search sources...' })}
                             className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground placeholder:select-none"
                           />
                         </div>
@@ -1424,7 +1440,9 @@ export function FreeFormInput({
                   </button>
                 </DropdownMenuTrigger>
               </TooltipTrigger>
-              <TooltipContent side="top">Model</TooltipContent>
+              <TooltipContent side="top">
+                {t('input.modelTooltip', { ns: 'chat', defaultValue: 'Model' })}
+              </TooltipContent>
             </Tooltip>
             <StyledDropdownMenuContent side="top" align="end" sideOffset={8} className="min-w-[240px]">
               {/* When custom model is active, show it as a static item instead of Anthropic options */}
@@ -1433,10 +1451,12 @@ export function FreeFormInput({
                   disabled
                   className="flex items-center justify-between px-2 py-2 rounded-lg"
                 >
-                  <div className="text-left">
-                    <div className="font-medium text-sm">{customModel}</div>
-                    <div className="text-xs text-muted-foreground">Custom API connection</div>
-                  </div>
+                    <div className="text-left">
+                      <div className="font-medium text-sm">{customModel}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {t('input.customApiConnection', { ns: 'chat', defaultValue: 'Custom API connection' })}
+                      </div>
+                    </div>
                   <Check className="h-4 w-4 text-foreground shrink-0 ml-3" />
                 </StyledDropdownMenuItem>
               ) : (
@@ -1474,8 +1494,18 @@ export function FreeFormInput({
                   <DropdownMenuSub>
                     <StyledDropdownMenuSubTrigger className="flex items-center justify-between px-2 py-2 rounded-lg">
                       <div className="text-left flex-1">
-                        <div className="font-medium text-sm">{getThinkingLevelName(thinkingLevel)}</div>
-                        <div className="text-xs text-muted-foreground">Extended reasoning depth</div>
+                        <div className="font-medium text-sm">
+                          {t(`workspace.thinkingLevels.${thinkingLevel}.name`, {
+                            ns: 'settings',
+                            defaultValue: THINKING_LEVELS.find(level => level.id === thinkingLevel)?.name ?? thinkingLevel,
+                          })}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {t('workspace.model.thinkingLevel.description', {
+                            ns: 'settings',
+                            defaultValue: 'Extended reasoning depth',
+                          })}
+                        </div>
                       </div>
                     </StyledDropdownMenuSubTrigger>
                     <StyledDropdownMenuSubContent className="min-w-[220px]">
@@ -1488,8 +1518,12 @@ export function FreeFormInput({
                             className="flex items-center justify-between px-2 py-2 rounded-lg cursor-pointer"
                           >
                             <div className="text-left">
-                              <div className="font-medium text-sm">{name}</div>
-                              <div className="text-xs text-muted-foreground">{description}</div>
+                              <div className="font-medium text-sm">
+                                {t(`workspace.thinkingLevels.${id}.name`, { ns: 'settings', defaultValue: name })}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {t(`workspace.thinkingLevels.${id}.description`, { ns: 'settings', defaultValue: description })}
+                              </div>
                             </div>
                             {isSelected && (
                               <Check className="h-4 w-4 text-foreground shrink-0 ml-3" />
@@ -1653,6 +1687,7 @@ function WorkingDirectoryBadge({
   sessionFolderPath?: string
   isEmptySession?: boolean
 }) {
+  const { t } = useTranslation('chat')
   const [recentDirs, setRecentDirs] = React.useState<string[]>([])
   const [popoverOpen, setPopoverOpen] = React.useState(false)
   const [homeDir, setHomeDir] = React.useState<string>('')
@@ -1729,7 +1764,10 @@ function WorkingDirectoryBadge({
 
   // Determine label - "Work in Folder" if not set or at session root, otherwise folder name
   const hasFolder = !!workingDirectory && workingDirectory !== sessionFolderPath
-  const folderName = hasFolder ? (getPathBasename(workingDirectory) || 'Folder') : 'Work in Folder'
+  const folderFallback = t('input.folderFallback', { defaultValue: 'Folder' })
+  const folderName = hasFolder
+    ? (getPathBasename(workingDirectory) || folderFallback)
+    : t('input.workInFolder', { defaultValue: 'Work in Folder' })
 
   // Show reset option when a folder is selected and it differs from session folder
   const showReset = hasFolder && sessionFolderPath && sessionFolderPath !== workingDirectory
@@ -1752,12 +1790,18 @@ function WorkingDirectoryBadge({
             isOpen={popoverOpen}
             tooltip={
               hasFolder ? (
-                <span className="flex flex-col gap-0.5">
-                  <span className="font-medium">Working directory</span>
+                  <span className="flex flex-col gap-0.5">
+                  <span className="font-medium">
+                    {t('input.workingDirectory', { defaultValue: 'Working directory' })}
+                  </span>
                   <span className="text-xs opacity-70">{formatPathForDisplay(workingDirectory, homeDir)}</span>
-                  {gitBranch && <span className="text-xs opacity-70">on {gitBranch}</span>}
+                  {gitBranch && (
+                    <span className="text-xs opacity-70">
+                      {t('input.workingDirectoryOnBranch', { branch: gitBranch, defaultValue: 'on {{branch}}' })}
+                    </span>
+                  )}
                 </span>
-              ) : "Choose working directory"
+              ) : t('input.chooseWorkingDirectory', { defaultValue: 'Choose working directory' })
             }
           />
         </span>
@@ -1771,7 +1815,7 @@ function WorkingDirectoryBadge({
                 ref={inputRef}
                 value={filter}
                 onValueChange={setFilter}
-                placeholder="Filter folders..."
+                placeholder={t('input.filterFoldersPlaceholder', { defaultValue: 'Filter folders...' })}
                 className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/50 placeholder:select-none"
               />
             </div>
@@ -1801,7 +1845,7 @@ function WorkingDirectoryBadge({
 
             {/* Recent Directories - filterable (current directory already filtered out via filteredRecent) */}
             {filteredRecent.map((path) => {
-              const recentFolderName = getPathBasename(path) || 'Folder'
+              const recentFolderName = getPathBasename(path) || folderFallback
               return (
                 <CommandPrimitive.Item
                   key={path}
@@ -1821,7 +1865,7 @@ function WorkingDirectoryBadge({
             {/* Empty state when filtering */}
             {showFilter && (
               <CommandPrimitive.Empty className="py-3 text-center text-sm text-muted-foreground">
-                No folders found
+                {t('input.noFoldersFound', { defaultValue: 'No folders found' })}
               </CommandPrimitive.Empty>
             )}
           </CommandPrimitive.List>
@@ -1833,7 +1877,7 @@ function WorkingDirectoryBadge({
               onClick={handleChooseFolder}
               className={cn(MENU_ITEM_STYLE, 'w-full hover:bg-foreground/5')}
             >
-              Choose Folder...
+              {t('input.chooseFolder', { defaultValue: 'Choose Folder...' })}
             </button>
             {showReset && (
               <button
@@ -1841,7 +1885,7 @@ function WorkingDirectoryBadge({
                 onClick={handleReset}
                 className={cn(MENU_ITEM_STYLE, 'w-full hover:bg-foreground/5')}
               >
-                Reset
+                {t('input.reset', { defaultValue: 'Reset' })}
               </button>
             )}
           </div>

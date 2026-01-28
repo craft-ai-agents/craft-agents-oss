@@ -527,6 +527,11 @@ export const IPC_CHANNELS = {
   // Theme
   GET_SYSTEM_THEME: 'theme:getSystemPreference',
   SYSTEM_THEME_CHANGED: 'theme:systemChanged',
+  // UI Language
+  LANGUAGE_GET_UI: 'language:getUi',
+  LANGUAGE_SET_UI: 'language:setUi',
+  LANGUAGE_BROADCAST_UI: 'language:broadcastUi',
+  LANGUAGE_UI_CHANGED: 'language:uiChanged',
 
   // System
   GET_VERSIONS: 'system:versions',
@@ -756,6 +761,11 @@ export interface ElectronAPI {
   // Theme
   getSystemTheme(): Promise<boolean>
   onSystemThemeChange(callback: (isDark: boolean) => void): () => void
+  // UI Language
+  getUiLanguage(): Promise<string | null>
+  setUiLanguage(language: string): Promise<void>
+  broadcastUiLanguage(language: string): Promise<void>
+  onUiLanguageChange(callback: (language: string) => void): () => void
 
   // System
   getVersions(): { node: string; chrome: string; electron: string }

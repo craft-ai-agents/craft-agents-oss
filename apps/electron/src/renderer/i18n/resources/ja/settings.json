@@ -1,0 +1,353 @@
+{
+  "common": {
+    "actions": {
+      "edit": "編集",
+      "closeWithEsc": "閉じる (Esc)",
+      "change": "変更",
+      "changeEllipsis": "変更...",
+      "clear": "クリア"
+    },
+    "status": {
+      "loading": "読み込み中...",
+      "uploading": "アップロード中..."
+    }
+  },
+  "app": {
+    "title": "アプリ設定",
+    "appearance": {
+      "title": "外観",
+      "mode": {
+        "label": "モード",
+        "options": {
+          "system": "システム",
+          "light": "ライト",
+          "dark": "ダーク"
+        }
+      },
+      "colorTheme": {
+        "label": "カラーテーマ",
+        "options": {
+          "default": "デフォルト"
+        }
+      },
+      "font": {
+        "label": "フォント",
+        "options": {
+          "inter": "Inter",
+          "system": "システム"
+        }
+      }
+    },
+    "language": {
+      "title": "言語",
+      "description": "アプリインターフェースの言語を選択してください。",
+      "label": "アプリの言語",
+      "hint": "これはUIにのみ影響します。回答の言語を変更するには、詳細設定 → 言語を使用してください。"
+    },
+    "notifications": {
+      "title": "通知",
+      "desktop": {
+        "label": "デスクトップ通知",
+        "description": "チャットでAIが作業を完了したときに通知を受け取ります。"
+      }
+    },
+    "apiConnection": {
+      "title": "API接続",
+      "description": "AIエージェントが言語モデルに接続する方法。",
+      "connectionType": {
+        "label": "接続タイプ",
+        "values": {
+          "claudeSubscription": "Claude Pro/Max — Claudeのサブスクリプションを使用",
+          "apiKey": "APIキー — Anthropic、OpenRouter、または互換性のあるAPI",
+          "notConfigured": "未設定"
+        }
+      }
+    },
+    "about": {
+      "title": "アプリについて",
+      "version": {
+        "label": "バージョン",
+        "updateTo": "{{version}} にアップデート"
+      },
+      "checkForUpdates": {
+        "label": "アップデートを確認",
+        "checking": "確認中...",
+        "checkNow": "今すぐ確認"
+      },
+      "installUpdate": {
+        "label": "アップデートをインストール",
+        "restartToUpdate": "再起動してアップデート"
+      }
+    }
+  },
+  "navigator": {
+    "items": {
+      "app": {
+        "label": "アプリ",
+        "description": "外観、通知、API接続"
+      },
+      "workspace": {
+        "label": "ワークスペース",
+        "description": "モデル、モード切り替え、詳細設定"
+      },
+      "permissions": {
+        "label": "権限",
+        "description": "探索モードで許可されるコマンド"
+      },
+      "labels": {
+        "label": "ラベル",
+        "description": "ラベル階層と自動適用ルール"
+      },
+      "shortcuts": {
+        "label": "ショートカット",
+        "description": "キーボードショートカットのリファレンス"
+      },
+      "preferences": {
+        "label": "詳細設定",
+        "description": "個人の設定"
+      }
+    },
+    "actions": {
+      "openInNewWindow": "新しいウィンドウで開く"
+    }
+  },
+  "shortcuts": {
+    "title": "ショートカット",
+    "sections": {
+      "global": {
+        "title": "グローバル",
+        "items": {
+          "focusSidebar": "サイドバーにフォーカス",
+          "focusSessionList": "セッションリストにフォーカス",
+          "focusChatInput": "チャット入力にフォーカス",
+          "newChat": "新しいチャット",
+          "toggleSidebar": "サイドバーの切り替え",
+          "openSettings": "設定を開く"
+        }
+      },
+      "navigation": {
+        "title": "ナビゲーション",
+        "items": {
+          "nextZone": "次のゾーンに移動",
+          "cyclePermissionMode": "権限モードを切り替える",
+          "moveBetweenZones": "ゾーン間を移動（リスト内）",
+          "navigateList": "リスト内のアイテムを移動",
+          "firstItem": "最初のアイテムに移動",
+          "lastItem": "最後のアイテムに移動",
+          "closeDialog": "ダイアログを閉じる / 入力のフォーカスを外す"
+        }
+      },
+      "sessionList": {
+        "title": "セッションリスト",
+        "items": {
+          "focusChatInput": "チャット入力にフォーカス",
+          "deleteSession": "セッションを削除"
+        }
+      },
+      "chat": {
+        "title": "チャット",
+        "items": {
+          "sendMessage": "メッセージを送信",
+          "newLine": "改行"
+        }
+      }
+    }
+  },
+  "preferences": {
+    "title": "詳細設定",
+    "basic": {
+      "title": "基本情報",
+      "description": "Craft Agentが回答をパーソナライズするのに役立ちます。",
+      "name": {
+        "label": "名前",
+        "description": "Craft Agentがあなたを呼ぶときの名前。",
+        "placeholder": "あなたの名前"
+      },
+      "timezone": {
+        "label": "タイムゾーン",
+        "description": "「明日」や「来週」などの相対的な日付に使用されます。",
+        "placeholder": "例: Asia/Tokyo"
+      },
+      "language": {
+        "label": "言語",
+        "description": "Craft Agentの回答に使用する優先言語。",
+        "placeholder": "例: 日本語"
+      }
+    },
+    "location": {
+      "title": "場所",
+      "description": "天気、現地時間、地域のコンテキストなど、場所に応じた回答を可能にします。",
+      "city": {
+        "label": "市区町村",
+        "description": "地域情報やコンテキストのための都市名。",
+        "placeholder": "例: 東京都"
+      },
+      "country": {
+        "label": "国",
+        "description": "地域のフォーマットやコンテキストのための国名。",
+        "placeholder": "例: 日本"
+      }
+    },
+    "notes": {
+      "title": "メモ",
+      "description": "Craft Agentがあなたの好みを理解するのに役立つ自由形式のコンテキスト。",
+      "editFile": "ファイルを編集",
+      "placeholder": "Craft Agentに伝えたい追加のコンテキスト..."
+    }
+  },
+  "workspace": {
+    "title": "ワークスペース設定",
+    "empty": "ワークスペースが選択されていません",
+    "info": {
+      "title": "ワークスペース情報",
+      "name": {
+        "label": "名前",
+        "untitled": "無題"
+      },
+      "icon": {
+        "label": "アイコン"
+      }
+    },
+    "rename": {
+      "title": "ワークスペース名を変更",
+      "placeholder": "ワークスペース名を入力..."
+    },
+    "model": {
+      "title": "モデル",
+      "defaultModel": {
+        "label": "デフォルトモデル",
+        "description": "新しいチャット用のAIモデル",
+        "setViaApi": "API接続経由で設定"
+      },
+      "options": {
+        "opus": {
+          "label": "Opus 4.5",
+          "description": "複雑な作業に最も適しています"
+        },
+        "sonnet": {
+          "label": "Sonnet 4.5",
+          "description": "日常的なタスクに最適"
+        },
+        "haiku": {
+          "label": "Haiku 4.5",
+          "description": "素早い回答に最適"
+        }
+      },
+      "thinkingLevel": {
+        "label": "思考レベル",
+        "description": "新しいチャットの推論の深さ"
+      }
+    },
+    "thinkingLevels": {
+      "off": {
+        "name": "思考なし",
+        "description": "最速の回答、推論なし"
+      },
+      "think": {
+        "name": "思考",
+        "description": "速度と推論のバランス"
+      },
+      "max": {
+        "name": "最大思考",
+        "description": "複雑なタスクのための最も深い推論"
+      }
+    },
+    "permissions": {
+      "title": "権限",
+      "defaultMode": {
+        "label": "デフォルトモード",
+        "description": "AIができることを制御"
+      },
+      "modes": {
+        "safe": {
+          "label": "安全",
+          "description": "読み取り専用、変更不可"
+        },
+        "ask": {
+          "label": "確認",
+          "description": "編集前に確認"
+        },
+        "allowAll": {
+          "label": "すべて許可",
+          "description": "完全な自律実行"
+        }
+      }
+    },
+    "modeCycling": {
+      "title": "モード切り替え",
+      "description": "Shift+Tabで切り替えるモードを選択",
+      "errorMinimum": "少なくとも2つのモードが必要です"
+    },
+    "advanced": {
+      "title": "詳細",
+      "workingDirectory": {
+        "label": "デフォルトの作業ディレクトリ",
+        "notSet": "未設定（セッションフォルダを使用）"
+      },
+      "localMcp": {
+        "label": "ローカルMCPサーバー",
+        "description": "stdioサブプロセスサーバーを有効にする"
+      }
+    }
+  },
+  "permissions": {
+    "title": "権限",
+    "about": {
+      "title": "権限について",
+      "body": "権限はエージェントの自律性の度合いを制御します。<explore>探索</explore>モードでは、エージェントは読み取りと調査のみを行うことができ、変更を加える前に問題を理解するのに最適です。準備ができたら<execute>実行</execute>モードに切り替えて、エージェントに計画を自律的に実装させます。",
+      "workflow": "推奨されるワークフロー：探索モードで調査を開始し、提案された計画を確認してから、自信を持って実行します。",
+      "learnMore": "詳細を見る"
+    },
+    "default": {
+      "title": "デフォルトの権限",
+      "description": "探索モードで許可されるアプリレベルのパターン。このリストにないコマンドはブロックされます。",
+      "editFile": "ファイルを編集",
+      "empty": {
+        "title": "デフォルトの権限が見つかりません。",
+        "hint": "デフォルトの権限は <code>~/.craft-agent/permissions/default.json</code> にある必要があります。"
+      }
+    },
+    "custom": {
+      "title": "ワークスペースのカスタマイズ",
+      "description": "上記のアプリのデフォルトを拡張するワークスペースレベルのパターン。",
+      "editFile": "ファイルを編集",
+      "empty": {
+        "title": "カスタム権限が設定されていません。",
+        "hint": "ワークスペースに <code>permissions.json</code> ファイルを作成してカスタムルールを追加してください。"
+      }
+    },
+    "table": {
+      "writeTo": "書き込み先: {{path}}",
+      "customBlockedTool": "カスタムブロックツール",
+      "customBashPattern": "カスタムbashパターン",
+      "customMcpPattern": "カスタムMCPパターン",
+      "customApiEndpoint": "カスタムAPIエンドポイント",
+      "allowedWritePath": "許可された書き込みパス"
+    }
+  },
+  "labels": {
+    "title": "ラベル",
+    "editFile": "ファイルを編集",
+    "about": {
+      "title": "ラベルについて",
+      "paragraphs": {
+        "organize": "ラベルを使用すると、色付きのタグでセッションを整理できます。プロジェクト、トピック、または優先度別に会話を分類して、後で関連するセッションを簡単にフィルタリングして見つけられるようになります。",
+        "value": "各ラベルには、オプションで特定の型（テキスト、数値、または日付）の <value>値</value> を持たせることができます。これにより、ラベルが構造化されたメタデータになります（例：「優先度」ラベルの値が3、または「期限」ラベルに日付）。",
+        "autoApply": "<auto>自動適用ルール</auto>は、メッセージが正規表現パターンに一致したときにラベルを自動的に割り当てます。たとえば、LinearのイシューURLを貼り付けると、セッションにプロジェクト名とイシューIDが自動的にタグ付けされ、手動でタグ付けする必要がなくなります。"
+      },
+      "learnMore": "詳細を見る"
+    },
+    "hierarchy": {
+      "title": "ラベル階層",
+      "description": "このワークスペースに設定されているすべてのラベル。ラベルはネストしてグループを作成できます。",
+      "empty": {
+        "title": "ラベルが設定されていません。",
+        "hint": "ラベルはエージェントによって作成されるか、ワークスペース内の <code>labels/config.json</code> を編集することで作成できます。"
+      }
+    },
+    "autoRules": {
+      "title": "自動適用ルール",
+      "description": "ユーザーメッセージ内で一致したときにラベルを自動的に適用する正規表現パターン。たとえば、LinearのイシューURLを貼り付けると、プロジェクト名とイシューIDがセッションに自動的にタグ付けされます。"
+    }
+  }
+}

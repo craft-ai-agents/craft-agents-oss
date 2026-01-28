@@ -1,0 +1,161 @@
+{
+  "badges": {
+    "new": "新",
+    "plan": "计划"
+  },
+  "processing": {
+    "messages": [
+      "思考中...",
+      "沉思中...",
+      "冥想中...",
+      "推理中...",
+      "处理中...",
+      "计算中...",
+      "考虑中...",
+      "反思中...",
+      "审议中...",
+      "思考中...",
+      "反复思考中...",
+      "冥想中...",
+      "正在努力...",
+      "马上就好...",
+      "数据处理中...",
+      "酝酿中...",
+      "整合信息中...",
+      "仔细考虑中...",
+      "深思中...",
+      "嗯...",
+      "让我想想...",
+      "请稍候...",
+      "稍等...",
+      "请耐心等待...",
+      "马上...",
+      "请坚持下...",
+      "快好了...",
+      "快了...",
+      "工作中...",
+      "忙碌中...",
+      "旋转中...",
+      "运转中...",
+      "渗透中...",
+      "酝酿中...",
+      "准备中...",
+      "制作中...",
+      "整理中...",
+      "启动中...",
+      "预热中...",
+      "加速中...",
+      "忙碌中...",
+      "运转中...",
+      "滴答中...",
+      "处理中...",
+      "飞速处理中...",
+      "飞速中...",
+      "快速处理中...",
+      "持续处理中...",
+      "运行中...",
+      "滚动中..."
+    ]
+  },
+  "permissionModes": {
+    "safe": {
+      "display": "浏览",
+      "short": "浏览",
+      "description": "只读浏览。禁止写入，从不提示。"
+    },
+    "ask": {
+      "display": "询问后编辑",
+      "short": "询问",
+      "description": "在进行编辑前进行提示。"
+    },
+    "allowAll": {
+      "display": "执行",
+      "short": "执行",
+      "description": "自动执行，无需提示。"
+    },
+    "ultrathink": {
+      "label": "深度思考",
+      "description": "针对复杂问题的扩展推理"
+    }
+  },
+  "commandMenu": {
+    "searchPlaceholder": "搜索命令...",
+    "empty": "未找到相关命令"
+  },
+  "inputPlaceholders": [
+    "您想处理什么？",
+    "使用 Shift + Tab 在 浏览 和 执行 之间切换",
+    "输入 @ 以提及文件、文件夹或技能",
+    "输入 # 为此对话应用标签",
+    "按 Shift + Return 添加新行"
+  ],
+  "input": {
+    "attachFiles": "添加文件",
+    "attachFilesLabel": "添加文件",
+    "fileCount": {
+      "one": "1 个文件",
+      "other": "{{count}} 个文件"
+    },
+    "sourcesTooltip": "来源",
+    "chooseSources": "选择来源",
+    "sourcesCount": "{{count}} 个来源",
+    "noSourcesConfigured": "未配置来源。",
+    "addSourcesInSettings": "在设置中添加来源。",
+    "searchSourcesPlaceholder": "搜索来源...",
+    "workingDirectory": "工作目录",
+    "workingDirectoryOnBranch": "在 {{branch}} 分支上",
+    "chooseWorkingDirectory": "选择工作目录",
+    "filterFoldersPlaceholder": "过滤文件夹...",
+    "modelTooltip": "模型",
+    "customApiConnection": "自定义 API 连接",
+    "workInFolder": "在文件夹中工作",
+    "folderFallback": "文件夹",
+    "noFoldersFound": "未找到文件夹",
+    "chooseFolder": "选择文件夹...",
+    "reset": "重置"
+  },
+  "inlineSlash": {
+    "sections": {
+      "modes": "模式",
+      "features": "功能",
+      "folders": "最近的工作目录"
+    },
+    "footer": "使用 @ 调用技能或文件"
+  },
+  "sessionList": {
+    "searchPlaceholder": "搜索对话...",
+    "searchClose": "关闭搜索",
+    "emptyTitle": "暂无对话",
+    "emptyDescription": "您与智能体的对话将显示在这里。开始一个新对话吧。",
+    "emptyAction": "新对话",
+    "noResults": "未找到对话",
+    "clearSearch": "清除搜索",
+    "ariaLabel": "会话列表",
+    "emptyFlagged": "没有标记的会话"
+  },
+  "sourcesPanel": {
+    "emptyTitle": "未配置来源。",
+    "emptyTitleWithType": "未配置 {{type}} 来源。",
+    "description": "来源将您的智能体连接到外部数据 —— MCP 服务器、REST API 和本地文件夹。",
+    "learnMore": "了解详情",
+    "addSource": "添加来源",
+    "types": {
+      "api": "API",
+      "mcp": "MCP",
+      "local": "本地文件夹"
+    }
+  },
+  "skillsPanel": {
+    "emptyTitle": "未配置技能",
+    "description": "技能是可重复使用的指令，用于教导您的智能体特定行为。",
+    "learnMore": "了解详情",
+    "addSkill": "添加技能"
+  },
+  "mentionMenu": {
+    "sections": {
+      "skills": "技能",
+      "sources": "来源",
+      "files": "文件"
+    }
+  }
+}

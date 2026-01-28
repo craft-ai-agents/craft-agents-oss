@@ -26,6 +26,7 @@ import {
 } from '@/contexts/NavigationContext'
 import { AppSettingsPage, WorkspaceSettingsPage, PermissionsSettingsPage, LabelsSettingsPage, PreferencesPage, ShortcutsPage, SourceInfoPage, ChatPage } from '@/pages'
 import SkillInfoPage from '@/pages/SkillInfoPage'
+import { useTranslation } from 'react-i18next'
 
 export interface MainContentPanelProps {
   /** Whether the app is in focused mode (single chat, no sidebar) */
@@ -40,6 +41,7 @@ export function MainContentPanel({
 }: MainContentPanelProps) {
   const navState = useNavigationState()
   const { activeWorkspaceId } = useAppShellContext()
+  const { t } = useTranslation('chat')
 
   // Wrap content with StoplightProvider so PanelHeaders auto-compensate in focused mode
   const wrapWithStoplight = (content: React.ReactNode) => (
@@ -107,7 +109,7 @@ export function MainContentPanel({
     return wrapWithStoplight(
       <Panel variant="grow" className={className}>
         <div className="flex items-center justify-center h-full text-muted-foreground">
-          <p className="text-sm">No sources configured</p>
+          <p className="text-sm">{t('sourcesPanel.emptyTitle', { defaultValue: 'No sources configured.' })}</p>
         </div>
       </Panel>
     )
@@ -129,7 +131,7 @@ export function MainContentPanel({
     return wrapWithStoplight(
       <Panel variant="grow" className={className}>
         <div className="flex items-center justify-center h-full text-muted-foreground">
-          <p className="text-sm">No skills configured</p>
+          <p className="text-sm">{t('skillsPanel.emptyTitle', { defaultValue: 'No skills configured' })}</p>
         </div>
       </Panel>
     )
@@ -150,8 +152,8 @@ export function MainContentPanel({
         <div className="flex items-center justify-center h-full text-muted-foreground">
           <p className="text-sm">
             {navState.filter.kind === 'flagged'
-              ? 'No flagged conversations'
-              : 'No conversations yet'}
+              ? t('sessionList.emptyFlagged', { defaultValue: 'No flagged conversations' })
+              : t('sessionList.emptyTitle', { defaultValue: 'No conversations yet' })}
           </p>
         </div>
       </Panel>

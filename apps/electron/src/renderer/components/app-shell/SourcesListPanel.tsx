@@ -30,6 +30,7 @@ import { SourceMenu } from './SourceMenu'
 import { EditPopover, getEditConfig, type EditContextKey } from '@/components/ui/EditPopover'
 import { cn } from '@/lib/utils'
 import type { LoadedSource, SourceConnectionStatus, SourceFilter } from '../../../shared/types'
+import { useTranslation } from 'react-i18next'
 
 export interface SourcesListPanelProps {
   sources: LoadedSource[]
@@ -45,22 +46,6 @@ export interface SourcesListPanelProps {
   className?: string
 }
 
-/**
- * Get user-friendly label for source type filter (for empty state messages)
- */
-function getSourceTypeFilterLabel(sourceType: 'api' | 'mcp' | 'local'): string {
-  switch (sourceType) {
-    case 'api':
-      return 'API'
-    case 'mcp':
-      return 'MCP'
-    case 'local':
-      return 'local folder'
-    default:
-      return sourceType
-  }
-}
-
 export function SourcesListPanel({
   sources,
   sourceFilter,
@@ -71,6 +56,7 @@ export function SourcesListPanel({
   localMcpEnabled = true,
   className,
 }: SourcesListPanelProps) {
+  const { t, i18n } = useTranslation('chat')
   // Filter sources based on type filter if active
   const filteredSources = React.useMemo(() => {
     if (!sourceFilter) {
@@ -83,10 +69,18 @@ export function SourcesListPanel({
   // Build empty state message based on filter
   const emptyMessage = React.useMemo(() => {
     if (sourceFilter?.kind === 'type') {
-      return `No ${getSourceTypeFilterLabel(sourceFilter.sourceType)} sources configured.`
+      const typeLabel = t(`sourcesPanel.types.${sourceFilter.sourceType}`, {
+        defaultValue: sourceFilter.sourceType === 'local'
+          ? 'local folder'
+          : sourceFilter.sourceType.toUpperCase(),
+      })
+      return t('sourcesPanel.emptyTitleWithType', {
+        type: typeLabel,
+        defaultValue: `No ${typeLabel} sources configured.`,
+      })
     }
-    return 'No sources configured.'
-  }, [sourceFilter])
+    return t('sourcesPanel.emptyTitle', { defaultValue: 'No sources configured.' })
+  }, [sourceFilter, t, i18n.resolvedLanguage])
 
   // Empty state - rendered outside ScrollArea for proper vertical centering
   if (filteredSources.length === 0) {
@@ -98,7 +92,7 @@ export function SourcesListPanel({
           </EmptyMedia>
           <EmptyTitle>{emptyMessage}</EmptyTitle>
           <EmptyDescription>
-            Sources connect your agent to external data — MCP servers, REST APIs, and local folders.
+            {t('sourcesPanel.description', { defaultValue: 'Sources connect your agent to external data — MCP servers, REST APIs, and local folders.' })}
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
@@ -106,14 +100,14 @@ export function SourcesListPanel({
             onClick={() => window.electronAPI.openUrl(getDocUrl('sources'))}
             className="inline-flex items-center h-7 px-3 text-xs font-medium rounded-[8px] bg-foreground/[0.02] shadow-minimal hover:bg-foreground/[0.05] transition-colors"
           >
-            Learn more
+            {t('sourcesPanel.learnMore', { defaultValue: 'Learn more' })}
           </button>
           {workspaceRootPath && (
             <EditPopover
               align="center"
               trigger={
                 <button className="inline-flex items-center h-7 px-3 text-xs font-medium rounded-[8px] bg-background shadow-minimal hover:bg-foreground/[0.03] transition-colors">
-                  Add Source
+                  {t('sourcesPanel.addSource', { defaultValue: 'Add Source' })}
                 </button>
               }
               {...getEditConfig(

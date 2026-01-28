@@ -1,0 +1,353 @@
+{
+  "common": {
+    "actions": {
+      "edit": "편집",
+      "closeWithEsc": "닫기 (Esc)",
+      "change": "변경",
+      "changeEllipsis": "변경...",
+      "clear": "지우기"
+    },
+    "status": {
+      "loading": "로딩 중...",
+      "uploading": "업로드 중..."
+    }
+  },
+  "app": {
+    "title": "앱 설정",
+    "appearance": {
+      "title": "화면 구성",
+      "mode": {
+        "label": "모드",
+        "options": {
+          "system": "시스템",
+          "light": "라이트",
+          "dark": "다크"
+        }
+      },
+      "colorTheme": {
+        "label": "색상 테마",
+        "options": {
+          "default": "기본값"
+        }
+      },
+      "font": {
+        "label": "글꼴",
+        "options": {
+          "inter": "Inter",
+          "system": "시스템"
+        }
+      }
+    },
+    "language": {
+      "title": "언어",
+      "description": "앱 인터페이스에 사용할 언어를 선택하세요.",
+      "label": "앱 언어",
+      "hint": "이 설정은 UI에만 영향을 미칩니다. 응답 언어를 변경하려면 기본 설정 → 언어를 사용하세요."
+    },
+    "notifications": {
+      "title": "알림",
+      "desktop": {
+        "label": "데스크탑 알림",
+        "description": "AI가 채팅에서 작업을 완료하면 알림을 받습니다."
+      }
+    },
+    "apiConnection": {
+      "title": "API 연결",
+      "description": "AI 에이전트가 언어 모델에 연결되는 방법입니다.",
+      "connectionType": {
+        "label": "연결 유형",
+        "values": {
+          "claudeSubscription": "Claude Pro/Max — Claude 구독 사용",
+          "apiKey": "API 키 — Anthropic, OpenRouter 또는 호환되는 API",
+          "notConfigured": "설정되지 않음"
+        }
+      }
+    },
+    "about": {
+      "title": "정보",
+      "version": {
+        "label": "버전",
+        "updateTo": "{{version}}(으)로 업데이트"
+      },
+      "checkForUpdates": {
+        "label": "업데이트 확인",
+        "checking": "확인 중...",
+        "checkNow": "지금 확인"
+      },
+      "installUpdate": {
+        "label": "업데이트 설치",
+        "restartToUpdate": "업데이트를 위해 다시 시작"
+      }
+    }
+  },
+  "navigator": {
+    "items": {
+      "app": {
+        "label": "앱",
+        "description": "화면 구성, 알림, API 연결"
+      },
+      "workspace": {
+        "label": "워크스페이스",
+        "description": "모델, 모드 순환, 고급 설정"
+      },
+      "permissions": {
+        "label": "권한",
+        "description": "Explore 모드에서 허용되는 명령"
+      },
+      "labels": {
+        "label": "라벨",
+        "description": "라벨 계층 구조 및 자동 적용 규칙"
+      },
+      "shortcuts": {
+        "label": "단축키",
+        "description": "키보드 단축키 안내"
+      },
+      "preferences": {
+        "label": "기본 설정",
+        "description": "개인 기본 설정"
+      }
+    },
+    "actions": {
+      "openInNewWindow": "새 창에서 열기"
+    }
+  },
+  "shortcuts": {
+    "title": "단축키",
+    "sections": {
+      "global": {
+        "title": "글로벌",
+        "items": {
+          "focusSidebar": "사이드바 포커스",
+          "focusSessionList": "세션 목록 포커스",
+          "focusChatInput": "채팅 입력창 포커스",
+          "newChat": "새 채팅",
+          "toggleSidebar": "사이드바 토글",
+          "openSettings": "설정 열기"
+        }
+      },
+      "navigation": {
+        "title": "탐색",
+        "items": {
+          "nextZone": "다음 영역으로 이동",
+          "cyclePermissionMode": "권한 모드 순환",
+          "moveBetweenZones": "영역 간 이동 (목록 내)",
+          "navigateList": "목록 항목 탐색",
+          "firstItem": "첫 번째 항목으로 이동",
+          "lastItem": "마지막 항목으로 이동",
+          "closeDialog": "대화 상자 닫기 / 입력창 포커스 해제"
+        }
+      },
+      "sessionList": {
+        "title": "세션 목록",
+        "items": {
+          "focusChatInput": "채팅 입력창 포커스",
+          "deleteSession": "세션 삭제"
+        }
+      },
+      "chat": {
+        "title": "채팅",
+        "items": {
+          "sendMessage": "메시지 전송",
+          "newLine": "줄바꿈"
+        }
+      }
+    }
+  },
+  "preferences": {
+    "title": "기본 설정",
+    "basic": {
+      "title": "기본 정보",
+      "description": "Craft Agent가 사용자에게 맞춤화된 응답을 제공하도록 도와주세요.",
+      "name": {
+        "label": "이름",
+        "description": "Craft Agent가 사용자를 부를 호칭입니다.",
+        "placeholder": "사용자 이름"
+      },
+      "timezone": {
+        "label": "시간대",
+        "description": "'내일' 또는 '다음 주'와 같은 상대적인 날짜에 사용됩니다.",
+        "placeholder": "예: Asia/Seoul"
+      },
+      "language": {
+        "label": "언어",
+        "description": "Craft Agent의 응답에 선호하는 언어입니다.",
+        "placeholder": "예: 한국어"
+      }
+    },
+    "location": {
+      "title": "위치",
+      "description": "날씨, 현지 시간 및 지역 맥락과 같은 위치 기반 응답을 활성화합니다.",
+      "city": {
+        "label": "도시",
+        "description": "지역 정보 및 맥락을 위한 거주 도시입니다.",
+        "placeholder": "예: 서울"
+      },
+      "country": {
+        "label": "국가",
+        "description": "지역 형식 및 맥락을 위한 거주 국가입니다.",
+        "placeholder": "예: 대한민국"
+      }
+    },
+    "notes": {
+      "title": "노트",
+      "description": "Craft Agent가 사용자의 선호도를 이해하는 데 도움이 되는 자유 형식의 문맥입니다.",
+      "editFile": "파일 편집",
+      "placeholder": "Craft Agent가 알았으면 하는 추가 문맥을 입력하세요..."
+    }
+  },
+  "workspace": {
+    "title": "워크스페이스 설정",
+    "empty": "선택된 워크스페이스 없음",
+    "info": {
+      "title": "워크스페이스 정보",
+      "name": {
+        "label": "이름",
+        "untitled": "제목 없음"
+      },
+      "icon": {
+        "label": "아이콘"
+      }
+    },
+    "rename": {
+      "title": "워크스페이스 이름 변경",
+      "placeholder": "워크스페이스 이름 입력..."
+    },
+    "model": {
+      "title": "모델",
+      "defaultModel": {
+        "label": "기본 모델",
+        "description": "새 채팅을 위한 AI 모델",
+        "setViaApi": "API 연결을 통해 설정"
+      },
+      "options": {
+        "opus": {
+          "label": "Opus 4.5",
+          "description": "복잡한 작업에 가장 적합"
+        },
+        "sonnet": {
+          "label": "Sonnet 4.5",
+          "description": "일상적인 작업에 가장 적합"
+        },
+        "haiku": {
+          "label": "Haiku 4.5",
+          "description": "빠른 답변에 가장 적합"
+        }
+      },
+      "thinkingLevel": {
+        "label": "추론 레벨",
+        "description": "새 채팅을 위한 추론 깊이"
+      }
+    },
+    "thinkingLevels": {
+      "off": {
+        "name": "추론 끔",
+        "description": "가장 빠른 응답, 추론 과정 없음"
+      },
+      "think": {
+        "name": "추론",
+        "description": "속도와 추론의 균형"
+      },
+      "max": {
+        "name": "최대 추론",
+        "description": "복잡한 작업을 위한 가장 깊은 추론"
+      }
+    },
+    "permissions": {
+      "title": "권한",
+      "defaultMode": {
+        "label": "기본 모드",
+        "description": "AI가 할 수 있는 작업 제어"
+      },
+      "modes": {
+        "safe": {
+          "label": "안전",
+          "description": "읽기 전용, 변경 불가"
+        },
+        "ask": {
+          "label": "확인",
+          "description": "편집하기 전에 확인 요청"
+        },
+        "allowAll": {
+          "label": "모두 허용",
+          "description": "전적인 자율 실행"
+        }
+      }
+    },
+    "modeCycling": {
+      "title": "모드 순환",
+      "description": "Shift+Tab으로 순환할 모드를 선택하세요.",
+      "errorMinimum": "최소 2개의 모드가 필요합니다."
+    },
+    "advanced": {
+      "title": "고급",
+      "workingDirectory": {
+        "label": "기본 작업 디렉토리",
+        "notSet": "설정되지 않음 (세션 폴더 사용)"
+      },
+      "localMcp": {
+        "label": "로컬 MCP 서버",
+        "description": "stdio 하위 프로세스 서버 활성화"
+      }
+    }
+  },
+  "permissions": {
+    "title": "권한",
+    "about": {
+      "title": "권한 정보",
+      "body": "권한은 에이전트가 가질 자율성의 정도를 제어합니다. <explore>Explore</explore> 모드에서 에이전트는 읽기와 조사만 수행할 수 있으며, 이는 변경 사항을 적용하기 전에 문제를 이해하는 데 적합합니다. 준비가 되면 <execute>Execute</execute> 모드로 전환하여 에이전트가 계획을 자율적으로 실행하도록 하세요.",
+      "workflow": "좋은 워크플로우 예시: Explore 모드에서 에이전트가 조사하게 하고, 제안된 계획을 검토한 다음 확신을 가지고 실행하세요.",
+      "learnMore": "더 알아보기"
+    },
+    "default": {
+      "title": "기본 권한",
+      "description": "Explore 모드에서 허용되는 앱 수준 패턴입니다. 이 목록에 없는 명령은 차단됩니다.",
+      "editFile": "파일 편집",
+      "empty": {
+        "title": "기본 권한을 찾을 수 없습니다.",
+        "hint": "기본 권한은 <code>~/.craft-agent/permissions/default.json</code>에 있어야 합니다."
+      }
+    },
+    "custom": {
+      "title": "워크스페이스 맞춤 설정",
+      "description": "위의 앱 기본값을 확장하는 워크스페이스 수준 패턴입니다.",
+      "editFile": "파일 편집",
+      "empty": {
+        "title": "설정된 맞춤 권한이 없습니다.",
+        "hint": "워크스페이스에 <code>permissions.json</code> 파일을 생성하여 맞춤 규칙을 추가하세요."
+      }
+    },
+    "table": {
+      "writeTo": "쓰기 위치: {{path}}",
+      "customBlockedTool": "맞춤 차단 도구",
+      "customBashPattern": "맞춤 bash 패턴",
+      "customMcpPattern": "맞춤 MCP 패턴",
+      "customApiEndpoint": "맞춤 API 엔드포인트",
+      "allowedWritePath": "허용된 쓰기 경로"
+    }
+  },
+  "labels": {
+    "title": "라벨",
+    "editFile": "파일 편집",
+    "about": {
+      "title": "라벨 정보",
+      "paragraphs": {
+        "organize": "라벨은 색상 태그를 사용하여 세션을 정리하는 데 도움이 됩니다. 프로젝트, 주제 또는 우선순위에 따라 대화를 분류하여 나중에 관련 세션을 쉽게 필터링하고 찾을 수 있습니다.",
+        "value": "각 라벨은 선택적으로 특정 유형(텍스트, 숫자 또는 날짜)의 <value>value</value>를 가질 수 있습니다. 이를 통해 라벨을 구조화된 메타데이터로 전환할 수 있습니다. 예를 들어 값이 3인 \"우선순위\" 라벨이나 날짜가 포함된 \"기한\" 라벨 등이 있습니다.",
+        "autoApply": "<auto>Auto-apply rules</auto>는 메시지가 정규식 패턴과 일치할 때 라벨을 자동으로 할당합니다. 예를 들어 Linear 이슈 URL을 붙여넣으면 수동 태깅 없이도 세션에 프로젝트 이름과 이슈 ID를 자동으로 태그할 수 있습니다."
+      },
+      "learnMore": "더 알아보기"
+    },
+    "hierarchy": {
+      "title": "라벨 계층 구조",
+      "description": "이 워크스페이스에 설정된 모든 라벨입니다. 라벨을 중첩하여 그룹을 형성할 수 있습니다.",
+      "empty": {
+        "title": "설정된 라벨이 없습니다.",
+        "hint": "라벨은 에이전트가 생성하거나 워크스페이스의 <code>labels/config.json</code>을 편집하여 생성할 수 있습니다."
+      }
+    },
+    "autoRules": {
+      "title": "자동 적용 규칙",
+      "description": "사용자 메시지에서 일치할 때 라벨을 자동으로 적용하는 정규식 패턴입니다. 예를 들어 Linear 이슈 URL을 붙여넣으면 프로젝트 이름과 이슈 ID로 세션을 자동으로 태그합니다."
+    }
+  }
+}

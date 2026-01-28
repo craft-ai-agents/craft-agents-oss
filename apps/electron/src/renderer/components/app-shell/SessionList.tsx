@@ -52,6 +52,7 @@ import { getSessionTitle } from "@/utils/session"
 import type { SessionMeta } from "@/atoms/sessions"
 import type { ViewConfig } from "@craft-agent/shared/views"
 import { PERMISSION_MODE_CONFIG, type PermissionMode } from "@craft-agent/shared/agent/modes"
+import { useTranslation } from "react-i18next"
 
 // Pagination constants
 const INITIAL_DISPLAY_LIMIT = 20
@@ -228,6 +229,7 @@ function SessionItem({
   labels,
   onLabelsChange,
 }: SessionItemProps) {
+  const { t } = useTranslation('chat')
   const [menuOpen, setMenuOpen] = useState(false)
   const [contextMenuOpen, setContextMenuOpen] = useState(false)
   const [todoMenuOpen, setTodoMenuOpen] = useState(false)
@@ -360,7 +362,7 @@ function SessionItem({
               )}
               {!item.isProcessing && hasUnreadMessages(item) && (
                 <span className="shrink-0 px-1.5 py-0.5 text-[10px] font-medium rounded bg-accent text-white">
-                  New
+                  {t('badges.new', { defaultValue: 'New' })}
                 </span>
               )}
 
@@ -377,7 +379,7 @@ function SessionItem({
                 )}
                 {item.lastMessageRole === 'plan' && (
                   <span className="shrink-0 h-[18px] px-1.5 text-[10px] font-medium rounded bg-success/10 text-success flex items-center whitespace-nowrap">
-                    Plan
+                    {t('badges.plan', { defaultValue: 'Plan' })}
                   </span>
                 )}
                 {permissionMode && (
@@ -389,7 +391,9 @@ function SessionItem({
                       permissionMode === 'allow-all' && "bg-accent/10 text-accent"
                     )}
                   >
-                    {PERMISSION_MODE_CONFIG[permissionMode].shortName}
+                    {t(`permissionModes.${permissionMode === 'allow-all' ? 'allowAll' : permissionMode}.short`, {
+                      defaultValue: PERMISSION_MODE_CONFIG[permissionMode].shortName,
+                    })}
                   </span>
                 )}
                 {/* Label badges — each badge opens its own LabelValuePopover for
@@ -687,6 +691,7 @@ export function SessionList({
   labels = [],
   onLabelsChange,
 }: SessionListProps) {
+  const { t } = useTranslation('chat')
   const [session] = useSession()
   const { navigate } = useNavigation()
   const navState = useNavigationState()
@@ -936,9 +941,9 @@ export function SessionList({
           <EmptyMedia variant="icon">
             <Inbox />
           </EmptyMedia>
-          <EmptyTitle>No conversations yet</EmptyTitle>
+          <EmptyTitle>{t('sessionList.emptyTitle', { defaultValue: 'No conversations yet' })}</EmptyTitle>
           <EmptyDescription>
-            Conversations with your agent appear here. Start one to get going.
+            {t('sessionList.emptyDescription', { defaultValue: 'Conversations with your agent appear here. Start one to get going.' })}
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
@@ -952,7 +957,7 @@ export function SessionList({
             }}
             className="inline-flex items-center h-7 px-3 text-xs font-medium rounded-[8px] bg-background shadow-minimal hover:bg-foreground/[0.03] transition-colors"
           >
-            New Conversation
+            {t('sessionList.emptyAction', { defaultValue: 'New Conversation' })}
           </button>
         </EmptyContent>
       </Empty>
@@ -974,13 +979,13 @@ export function SessionList({
                 value={searchQuery}
                 onChange={(e) => onSearchChange?.(e.target.value)}
                 onKeyDown={handleSearchKeyDown}
-                placeholder="Search conversations..."
+                placeholder={t('sessionList.searchPlaceholder', { defaultValue: 'Search conversations...' })}
                 className="w-full h-8 pl-8 pr-8 text-sm bg-foreground/5 border-0 rounded-[8px] outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50"
               />
               <button
                 onClick={onSearchClose}
                 className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 hover:bg-foreground/10 rounded"
-                title="Close search"
+                title={t('sessionList.searchClose', { defaultValue: 'Close search' })}
               >
                 <X className="h-3.5 w-3.5 text-muted-foreground" />
               </button>
@@ -992,17 +997,19 @@ export function SessionList({
           className="flex flex-col pb-14 min-w-0"
           data-focus-zone="session-list"
           role="listbox"
-          aria-label="Sessions"
+          aria-label={t('sessionList.ariaLabel', { defaultValue: 'Sessions' })}
         >
           {/* No results message when searching */}
           {searchActive && searchQuery && flatItems.length === 0 && (
             <div className="flex flex-col items-center justify-center py-12 px-4">
-              <p className="text-sm text-muted-foreground">No conversations found</p>
+              <p className="text-sm text-muted-foreground">
+                {t('sessionList.noResults', { defaultValue: 'No conversations found' })}
+              </p>
               <button
                 onClick={() => onSearchChange?.('')}
                 className="text-xs text-foreground hover:underline mt-1"
               >
-                Clear search
+                {t('sessionList.clearSearch', { defaultValue: 'Clear search' })}
               </button>
             </div>
           )}
@@ -1077,4 +1084,3 @@ export function SessionList({
     </>
   )
 }
-

@@ -1,0 +1,353 @@
+{
+  "common": {
+    "actions": {
+      "edit": "编辑",
+      "closeWithEsc": "关闭（Esc）",
+      "change": "更改",
+      "changeEllipsis": "更改...",
+      "clear": "清除"
+    },
+    "status": {
+      "loading": "加载中...",
+      "uploading": "上传中..."
+    }
+  },
+  "app": {
+    "title": "应用设置",
+    "appearance": {
+      "title": "外观",
+      "mode": {
+        "label": "模式",
+        "options": {
+          "system": "系统",
+          "light": "浅色",
+          "dark": "深色"
+        }
+      },
+      "colorTheme": {
+        "label": "颜色主题",
+        "options": {
+          "default": "默认"
+        }
+      },
+      "font": {
+        "label": "字体",
+        "options": {
+          "inter": "Inter",
+          "system": "系统"
+        }
+      }
+    },
+    "language": {
+      "title": "语言",
+      "description": "选择应用界面语言。",
+      "label": "应用语言",
+      "hint": "仅影响界面语言。要更改回复语言，请在“偏好设置 → 语言”中设置。"
+    },
+    "notifications": {
+      "title": "通知",
+      "desktop": {
+        "label": "桌面通知",
+        "description": "当 AI 在对话中完成任务时通知我。"
+      }
+    },
+    "apiConnection": {
+      "title": "API 连接",
+      "description": "你的 AI 助手如何连接语言模型。",
+      "connectionType": {
+        "label": "连接类型",
+        "values": {
+          "claudeSubscription": "Claude Pro/Max — 使用你的 Claude 订阅",
+          "apiKey": "API Key — Anthropic、OpenRouter 或兼容 API",
+          "notConfigured": "未配置"
+        }
+      }
+    },
+    "about": {
+      "title": "关于",
+      "version": {
+        "label": "版本",
+        "updateTo": "更新到 {{version}}"
+      },
+      "checkForUpdates": {
+        "label": "检查更新",
+        "checking": "正在检查...",
+        "checkNow": "立即检查"
+      },
+      "installUpdate": {
+        "label": "安装更新",
+        "restartToUpdate": "重启并更新"
+      }
+    }
+  },
+  "navigator": {
+    "items": {
+      "app": {
+        "label": "应用",
+        "description": "外观、通知、API 连接"
+      },
+      "workspace": {
+        "label": "工作区",
+        "description": "模型、模式循环、高级"
+      },
+      "permissions": {
+        "label": "权限",
+        "description": "Explore 模式允许的命令"
+      },
+      "labels": {
+        "label": "标签",
+        "description": "标签层级与自动应用规则"
+      },
+      "shortcuts": {
+        "label": "快捷键",
+        "description": "快捷键参考"
+      },
+      "preferences": {
+        "label": "偏好设置",
+        "description": "你的个人偏好"
+      }
+    },
+    "actions": {
+      "openInNewWindow": "在新窗口打开"
+    }
+  },
+  "shortcuts": {
+    "title": "快捷键",
+    "sections": {
+      "global": {
+        "title": "全局",
+        "items": {
+          "focusSidebar": "聚焦侧边栏",
+          "focusSessionList": "聚焦会话列表",
+          "focusChatInput": "聚焦聊天输入",
+          "newChat": "新建对话",
+          "toggleSidebar": "切换侧边栏",
+          "openSettings": "打开设置"
+        }
+      },
+      "navigation": {
+        "title": "导航",
+        "items": {
+          "nextZone": "移动到下一个区域",
+          "cyclePermissionMode": "切换权限模式",
+          "moveBetweenZones": "在区域间移动（列表内）",
+          "navigateList": "在列表中导航",
+          "firstItem": "到第一项",
+          "lastItem": "到最后一项",
+          "closeDialog": "关闭对话框 / 取消输入焦点"
+        }
+      },
+      "sessionList": {
+        "title": "会话列表",
+        "items": {
+          "focusChatInput": "聚焦聊天输入",
+          "deleteSession": "删除会话"
+        }
+      },
+      "chat": {
+        "title": "对话",
+        "items": {
+          "sendMessage": "发送消息",
+          "newLine": "换行"
+        }
+      }
+    }
+  },
+  "preferences": {
+    "title": "偏好设置",
+    "basic": {
+      "title": "基本信息",
+      "description": "帮助 Craft Agent 个性化回应。",
+      "name": {
+        "label": "姓名",
+        "description": "Craft Agent 如何称呼你。",
+        "placeholder": "你的名字"
+      },
+      "timezone": {
+        "label": "时区",
+        "description": "用于“明天/下周”等相对时间。",
+        "placeholder": "例如：America/New_York"
+      },
+      "language": {
+        "label": "语言",
+        "description": "Craft Agent 回复的首选语言。",
+        "placeholder": "例如：中文"
+      }
+    },
+    "location": {
+      "title": "位置",
+      "description": "用于天气、本地时间与地区上下文。",
+      "city": {
+        "label": "城市",
+        "description": "用于本地信息与上下文。",
+        "placeholder": "例如：北京"
+      },
+      "country": {
+        "label": "国家",
+        "description": "用于地区格式与上下文。",
+        "placeholder": "例如：中国"
+      }
+    },
+    "notes": {
+      "title": "备注",
+      "description": "有助于 Craft Agent 了解你的偏好的自由文本。",
+      "editFile": "编辑文件",
+      "placeholder": "你希望 Craft Agent 知道的其他信息…"
+    }
+  },
+  "workspace": {
+    "title": "工作区设置",
+    "empty": "未选择工作区",
+    "info": {
+      "title": "工作区信息",
+      "name": {
+        "label": "名称",
+        "untitled": "未命名"
+      },
+      "icon": {
+        "label": "图标"
+      }
+    },
+    "rename": {
+      "title": "重命名工作区",
+      "placeholder": "输入工作区名称..."
+    },
+    "model": {
+      "title": "模型",
+      "defaultModel": {
+        "label": "默认模型",
+        "description": "新对话使用的 AI 模型",
+        "setViaApi": "由 API 连接设置"
+      },
+      "options": {
+        "opus": {
+          "label": "Opus 4.5",
+          "description": "适合复杂任务（最强）"
+        },
+        "sonnet": {
+          "label": "Sonnet 4.5",
+          "description": "日常任务的最佳选择"
+        },
+        "haiku": {
+          "label": "Haiku 4.5",
+          "description": "速度最快，适合快速回答"
+        }
+      },
+      "thinkingLevel": {
+        "label": "思考级别",
+        "description": "新对话的推理深度"
+      }
+    },
+    "thinkingLevels": {
+      "off": {
+        "name": "不思考",
+        "description": "最快，无推理"
+      },
+      "think": {
+        "name": "思考",
+        "description": "速度与推理平衡"
+      },
+      "max": {
+        "name": "深度思考",
+        "description": "适合复杂任务的最深推理"
+      }
+    },
+    "permissions": {
+      "title": "权限",
+      "defaultMode": {
+        "label": "默认模式",
+        "description": "控制 AI 可以做什么"
+      },
+      "modes": {
+        "safe": {
+          "label": "安全",
+          "description": "只读，不允许更改"
+        },
+        "ask": {
+          "label": "询问",
+          "description": "编辑前先询问"
+        },
+        "allowAll": {
+          "label": "允许全部",
+          "description": "完全自动执行"
+        }
+      }
+    },
+    "modeCycling": {
+      "title": "模式循环",
+      "description": "选择使用 Shift+Tab 循环的模式",
+      "errorMinimum": "至少需要 2 种模式"
+    },
+    "advanced": {
+      "title": "高级",
+      "workingDirectory": {
+        "label": "默认工作目录",
+        "notSet": "未设置（使用会话目录）"
+      },
+      "localMcp": {
+        "label": "本地 MCP 服务器",
+        "description": "启用 stdio 子进程服务器"
+      }
+    }
+  },
+  "permissions": {
+    "title": "权限",
+    "about": {
+      "title": "关于权限",
+      "body": "权限控制代理的自主程度。在 <explore>Explore</explore> 模式下，代理只能阅读和研究——非常适合在提交更改前理解问题。准备好后，切换到 <execute>Execute</execute> 模式，让代理自主执行计划。",
+      "workflow": "一个推荐流程：先用 Explore 让代理调查，审阅计划后再执行。",
+      "learnMore": "了解更多"
+    },
+    "default": {
+      "title": "默认权限",
+      "description": "Explore 模式允许的应用级规则。未在列表中的命令将被阻止。",
+      "editFile": "编辑文件",
+      "empty": {
+        "title": "未找到默认权限。",
+        "hint": "默认权限应位于 <code>~/.craft-agent/permissions/default.json</code>"
+      }
+    },
+    "custom": {
+      "title": "工作区自定义",
+      "description": "继承并扩展上方默认权限的工作区规则。",
+      "editFile": "编辑文件",
+      "empty": {
+        "title": "未配置自定义权限。",
+        "hint": "在工作区创建 <code>permissions.json</code> 文件以添加自定义规则。"
+      }
+    },
+    "table": {
+      "writeTo": "写入到：{{path}}",
+      "customBlockedTool": "自定义阻止工具",
+      "customBashPattern": "自定义 Bash 模式",
+      "customMcpPattern": "自定义 MCP 模式",
+      "customApiEndpoint": "自定义 API 端点",
+      "allowedWritePath": "允许的写入路径"
+    }
+  },
+  "labels": {
+    "title": "标签",
+    "editFile": "编辑文件",
+    "about": {
+      "title": "关于标签",
+      "paragraphs": {
+        "organize": "标签用彩色标记帮助你组织会话，可按项目、主题或优先级分类，便于后续筛选与查找。",
+        "value": "每个标签可选带有特定类型（文本、数字或日期）的 <value>值</value>。这让标签具备结构化元数据，例如优先级标签值为 3，或带日期的“截止”标签。",
+        "autoApply": "<auto>自动应用规则</auto> 会在消息匹配正则时自动打标签。例如粘贴 Linear 工单链接即可自动标记项目名称和工单号，无需手动操作。"
+      },
+      "learnMore": "了解更多"
+    },
+    "hierarchy": {
+      "title": "标签层级",
+      "description": "当前工作区的所有标签。标签可嵌套形成分组。",
+      "empty": {
+        "title": "未配置标签。",
+        "hint": "可以由代理创建标签，或在工作区编辑 <code>labels/config.json</code>。"
+      }
+    },
+    "autoRules": {
+      "title": "自动应用规则",
+      "description": "当用户消息匹配正则时自动应用标签。例如粘贴 Linear 工单 URL 会自动为会话打上项目名称和工单 ID。"
+    }
+  }
+}

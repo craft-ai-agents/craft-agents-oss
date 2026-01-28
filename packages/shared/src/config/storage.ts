@@ -16,6 +16,7 @@ import type { StoredAttachment, StoredMessage } from '@craft-agent/core/types';
 import type { Plan } from '../agent/plan-types.ts';
 import type { PermissionMode } from '../agent/mode-manager.ts';
 import { BUNDLED_CONFIG_DEFAULTS, type ConfigDefaults } from './config-defaults-schema.ts';
+import { loadPreferences } from './preferences.ts';
 
 // Re-export CONFIG_DIR for convenience (centralized in paths.ts)
 export { CONFIG_DIR } from './paths.ts';
@@ -44,6 +45,7 @@ export interface StoredConfig {
   notificationsEnabled?: boolean;  // Desktop notifications for task completion (default: true)
   // Appearance
   colorTheme?: string;  // ID of selected preset theme (e.g., 'dracula', 'nord'). Default: 'default'
+  uiLanguage?: string;  // UI language code (e.g., 'en', 'zh')
   // Auto-update
   dismissedUpdateVersion?: string;  // Version that user dismissed (skip notifications for this version)
 }
@@ -1022,6 +1024,103 @@ export function setColorTheme(themeId: string): void {
   const config = loadStoredConfig();
   if (!config) return;
   config.colorTheme = themeId;
+  saveConfig(config);
+}
+
+// ============================================
+// UI Language Selection (stored in config)
+// ============================================
+
+/**
+ * Get the currently selected UI language code.
+ * Returns null if not explicitly set in config.json.
+ */
+export function getUiLanguage(): string | null {
+  const config = loadStoredConfig();
+  return config?.uiLanguage ?? null;
+}
+
+const UI_LANGUAGE_ALIASES: Record<string, string> = {
+  'en': 'en',
+  'en-us': 'en',
+  'en-gb': 'en',
+  'zh': 'zh',
+  'zh-cn': 'zh',
+  'zh-hans': 'zh',
+  'zh-sg': 'zh',
+  'zh-hk': 'zh',
+  'zh-tw': 'zh',
+  'zh-hant': 'zh',
+  'es': 'es',
+  'es-es': 'es',
+  'es-mx': 'es',
+  'fr': 'fr',
+  'fr-fr': 'fr',
+  'de': 'de',
+  'de-de': 'de',
+  'pt': 'pt-BR',
+  'pt-br': 'pt-BR',
+  'pt-pt': 'pt-BR',
+  'ja': 'ja',
+  'ja-jp': 'ja',
+  'ko': 'ko',
+  'ko-kr': 'ko',
+};
+
+const SUPPORTED_UI_LANGUAGES = new Set<string>([
+  'en',
+  'zh',
+  'es',
+  'fr',
+  'de',
+  'pt-BR',
+  'ja',
+  'ko',
+]);
+
+function normalizeUiLanguage(input?: string | null): string | null {
+  if (!input) return null;
+  const normalized = input.replace('_', '-').toLowerCase();
+  if (UI_LANGUAGE_ALIASES[normalized]) {
+    return UI_LANGUAGE_ALIASES[normalized];
+  }
+  const base = normalized.split('-')[0];
+  if (SUPPORTED_UI_LANGUAGES.has(base)) {
+    return base;
+  }
+  return null;
+}
+
+function getSystemLocale(): string | null {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().locale || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve the effective UI language using config, preferences, and system locale.
+ * Fallbacks to 'en' when nothing matches.
+ */
+export function resolveUiLanguageFromConfig(): string {
+  const stored = normalizeUiLanguage(getUiLanguage());
+  if (stored) return stored;
+  const prefs = loadPreferences();
+  const prefLang = normalizeUiLanguage(prefs.language);
+  if (prefLang) return prefLang;
+  const systemLang = normalizeUiLanguage(getSystemLocale());
+  if (systemLang) return systemLang;
+  return 'en';
+}
+
+/**
+ * Set the UI language code.
+ */
+export function setUiLanguage(language: string): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+  config.uiLanguage = language;
   saveConfig(config);
 }
 

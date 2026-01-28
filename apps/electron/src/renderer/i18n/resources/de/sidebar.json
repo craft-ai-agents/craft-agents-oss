@@ -1,0 +1,101 @@
+{
+  "nav": {
+    "newChat": "Neuer Chat",
+    "allChats": "Alle Chats",
+    "flagged": "Markiert",
+    "status": "Status",
+    "labels": "Labels",
+    "sources": "Quellen",
+    "skills": "Skills",
+    "settings": "Einstellungen"
+  },
+  "sources": {
+    "apis": "APIs",
+    "mcps": "MCPs",
+    "localFolders": "Lokale Ordner"
+  },
+  "statuses": {
+    "backlog": "Backlog",
+    "todo": "Todo",
+    "needsReview": "Benötigt Prüfung",
+    "done": "Erledigt",
+    "cancelled": "Abgebrochen"
+  },
+  "titles": {
+    "sources": "Quellen",
+    "skills": "Alle Skills",
+    "settings": "Einstellungen",
+    "allChats": "Alle Chats",
+    "flagged": "Markiert",
+    "labels": "Labels",
+    "views": "Ansichten"
+  },
+  "menu": {
+    "openInNewWindow": "In neuem Fenster öffnen",
+    "configureStatuses": "Status konfigurieren",
+    "addLabel": "Neues Label hinzufügen",
+    "editLabels": "Labels bearbeiten",
+    "deleteLabel": "Label löschen",
+    "editViews": "Ansichten bearbeiten",
+    "deleteView": "Ansicht löschen",
+    "addSource": "Quelle hinzufügen",
+    "learnMoreSources": "Mehr über Quellen erfahren",
+    "learnMoreApis": "Mehr über APIs erfahren",
+    "learnMoreMcp": "Mehr über MCP erfahren",
+    "learnMoreLocalFolders": "Mehr über lokale Ordner erfahren",
+    "addSkill": "Skill hinzufügen"
+  },
+  "common": {
+    "search": "Suche",
+    "learnMore": "Mehr erfahren"
+  },
+  "help": {
+    "tooltip": "Hilfe & Dokumentation",
+    "sources": "Quellen",
+    "skills": "Fähigkeiten",
+    "statuses": "Status",
+    "permissions": "Berechtigungen",
+    "allDocumentation": "Alle Dokumentationen"
+  },
+  "workspace": {
+    "add": "Arbeitsbereich hinzufügen...",
+    "addTitle": "Arbeitsbereich hinzufügen",
+    "addDescription": "Wo Ihre Ideen auf die Werkzeuge treffen, um sie zu verwirklichen.",
+    "createNew": "Neu erstellen",
+    "createNewDescription": "Beginnen Sie neu mit einem leeren Arbeitsbereich.",
+    "openFolder": "Ordner öffnen",
+    "openFolderDescription": "Wählen Sie einen vorhandenen Ordner als Arbeitsbereich."
+  },
+  "appMenu": {
+    "craftMenuLabel": "Craft-Menü",
+    "newChat": "Neuer Chat",
+    "newWindow": "Neues Fenster",
+    "edit": "Bearbeiten",
+    "undo": "Rückgängig",
+    "redo": "Wiederholen",
+    "cut": "Ausschneiden",
+    "copy": "Kopieren",
+    "paste": "Einfügen",
+    "selectAll": "Alles auswählen",
+    "view": "Ansicht",
+    "zoomIn": "Vergrößern",
+    "zoomOut": "Verkleinern",
+    "resetZoom": "Zoom zurücksetzen",
+    "window": "Fenster",
+    "minimize": "Minimieren",
+    "maximize": "Maximieren",
+    "settings": "Einstellungen",
+    "settingsEllipsis": "Einstellungen...",
+    "storedUserPreferences": "Gespeicherte Benutzereinstellungen",
+    "help": "Hilfe",
+    "helpDocumentation": "Hilfe & Dokumentation",
+    "keyboardShortcuts": "Tastaturkürzel",
+    "debug": "Debuggen",
+    "checkForUpdates": "Nach Updates suchen",
+    "installUpdate": "Update installieren",
+    "toggleDevTools": "Entwicklertools umschalten",
+    "quit": "Craft Agents beenden",
+    "goBack": "Zurück",
+    "goForward": "Vorwärts"
+  }
+}
