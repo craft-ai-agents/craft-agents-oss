@@ -29,7 +29,7 @@ import { parseDiffFromFile, type FileContents } from '@pierre/diffs'
 import { getDiffStats } from '../code-viewer'
 import { TurnCardActionsMenu } from './TurnCardActionsMenu'
 import { computeLastChildSet, groupActivitiesByParent, isActivityGroup, formatDuration, formatTokens, deriveTurnPhase, shouldShowThinkingIndicator, type ActivityGroup, type AssistantTurn } from './turn-utils'
-import { DocumentFormattedMarkdownOverlay } from '../overlay'
+import { DocumentFormattedMarkdownOverlay, MarkdownSourceOverlay } from '../overlay'
 import { AcceptPlanDropdown } from './AcceptPlanDropdown'
 
 // ============================================================================
@@ -1114,6 +1114,8 @@ export function ResponseCard({
   const [copied, setCopied] = useState(false)
   // Fullscreen state
   const [isFullscreen, setIsFullscreen] = useState(false)
+  // Source view state
+  const [showSourceOverlay, setShowSourceOverlay] = useState(false)
   // Dark mode detection - scroll fade only shown in dark mode
   const [isDarkMode, setIsDarkMode] = useState(false)
 
@@ -1264,19 +1266,18 @@ export function ResponseCard({
                   </>
                 )}
               </button>
-              {onPopOut && (
-                <button
-                  onClick={onPopOut}
-                  className={cn(
-                    "flex items-center gap-1.5 transition-colors select-none",
-                    "text-muted-foreground hover:text-foreground",
-                    "focus:outline-none focus-visible:underline"
-                  )}
-                >
-                  <ExternalLink className={SIZE_CONFIG.iconSize} />
-                  <span>View as Markdown</span>
-                </button>
-              )}
+              <button
+                onClick={() => setShowSourceOverlay(true)}
+                className={cn(
+                  "flex items-center gap-1.5 transition-colors select-none",
+                  "text-muted-foreground hover:text-foreground",
+                  "focus:outline-none focus-visible:underline"
+                )}
+                title="View raw markdown source"
+              >
+                <ExternalLink className={SIZE_CONFIG.iconSize} />
+                <span>View as Markdown</span>
+              </button>
             </div>
 
             {/* Right side - Accept Plan dropdown (only shown for plan variant when it's the last response) */}
@@ -1309,6 +1310,13 @@ export function ResponseCard({
           variant={isPlan ? 'plan' : undefined}
           onOpenUrl={onOpenUrl}
           onOpenFile={onOpenFile}
+        />
+
+        {/* Source view overlay for raw markdown */}
+        <MarkdownSourceOverlay
+          source={text}
+          isOpen={showSourceOverlay}
+          onClose={() => setShowSourceOverlay(false)}
         />
       </>
     )

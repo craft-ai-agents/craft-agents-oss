@@ -16,6 +16,7 @@ export { GenericOverlay, detectLanguage, detectLanguageFromPath, type GenericOve
 export { JSONPreviewOverlay, type JSONPreviewOverlayProps } from './JSONPreviewOverlay'
 export { DataTableOverlay, type DataTableOverlayProps } from './DataTableOverlay'
 export { DocumentFormattedMarkdownOverlay, type DocumentFormattedMarkdownOverlayProps } from './DocumentFormattedMarkdownOverlay'
+export { MarkdownSourceOverlay, type MarkdownSourceOverlayProps } from './MarkdownSourceOverlay'
 export { ImagePreviewOverlay, type ImagePreviewOverlayProps } from './ImagePreviewOverlay'
 export { PDFPreviewOverlay, type PDFPreviewOverlayProps } from './PDFPreviewOverlay'
 export { MermaidPreviewOverlay, type MermaidPreviewOverlayProps } from './MermaidPreviewOverlay'
