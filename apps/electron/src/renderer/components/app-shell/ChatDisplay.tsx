@@ -545,9 +545,9 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
 
   // Filter to only valid matches that exist in DOM (actualMatchIds is updated after highlighting)
   const validMatches = useMemo(() => {
-    // Wait for highlighting to complete before showing count
-    // This prevents flashing high numbers then dropping (e.g., 126 -> 1)
-    if (actualMatchIds.size === 0) return []
+    // Before highlighting runs, show all potential matches
+    // After highlighting, filter to only matches that exist in DOM
+    if (actualMatchIds.size === 0) return matchingOccurrences
     const startTime = performance.now()
     const filtered = matchingOccurrences.filter(m => actualMatchIds.has(m.matchId))
     console.log('[ChatDisplay Perf] validMatches filter:', (performance.now() - startTime).toFixed(2), 'ms,', matchingOccurrences.length, '->', filtered.length)
