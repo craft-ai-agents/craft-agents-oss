@@ -73,6 +73,15 @@ packages/shared/**/*
 packages/ui/**/*
 
 # =============================================================================
+# PACKAGES - MERMAID (Diagram Rendering)
+# NOTE: Excludes Cloudflare deployment config and build output
+# =============================================================================
+packages/mermaid/**/*
+!packages/mermaid/wrangler.toml
+!packages/mermaid/samples.html.bak
+!packages/mermaid/dist/**/*
+
+# =============================================================================
 # SCRIPTS (Public Only)
 # =============================================================================
 scripts/sync-version.ts

@@ -312,6 +312,12 @@ async function generateHtml(): Promise<string> {
       padding: 2rem;
       padding-top: 0;
     }
+    @media (max-width: 768px) {
+      .content-wrapper {
+        padding: 1rem;
+        padding-top: 0;
+      }
+    }
     @media (min-width: 1000px) {
       .content-wrapper {
         padding: 3rem;
@@ -351,6 +357,11 @@ async function generateHtml(): Promise<string> {
       align-items: center;
       gap: 0.75rem;
       overflow: visible;
+    }
+    @media (max-width: 768px) {
+      .theme-bar {
+        padding: 0.5rem 1rem;
+      }
     }
     .theme-label {
       font-size: 0.7rem;
@@ -495,7 +506,6 @@ async function generateHtml(): Promise<string> {
       height: 14px;
       flex-shrink: 0;
     }
-
     /* -- Brand dropdown -- */
     .brand-dropdown {
       display: none;
@@ -579,6 +589,13 @@ async function generateHtml(): Promise<string> {
       width: 14px;
       height: 14px;
       flex-shrink: 0;
+    }
+    /* Hide contents button on smaller screens */
+    @media (max-width: 1024px) {
+      .contents-btn,
+      .mega-menu {
+        display: none !important;
+      }
     }
     /* -- Craft shadow + radius utilities -- */
     .rounded-6px { border-radius: 6px; }
@@ -953,7 +970,9 @@ async function generateHtml(): Promise<string> {
     }
     .hero-buttons {
       display: flex;
-      gap: 0.75rem;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.5rem;
     }
     .hero-btn {
       display: inline-flex;
@@ -1014,6 +1033,14 @@ async function generateHtml(): Promise<string> {
       font-size: 0.85rem;
       color: color-mix(in srgb, var(--t-fg) 40%, var(--t-bg));
       margin: 0.15rem 0;
+    }
+    .hero-meta .meta a {
+      color: color-mix(in srgb, var(--t-fg) 50%, var(--t-bg));
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+    .hero-meta .meta a:hover {
+      color: var(--t-fg);
     }
 
     /* -- Section title -- */
@@ -1121,7 +1148,7 @@ async function generateHtml(): Promise<string> {
     </div>
     <div class="hero-meta">
       <p class="meta" id="total-timing">Rendering ${samples.length * 2} samples\u2026</p>
-      <div class="meta">Samples rendered client-side in real time</div>
+      <div class="meta">ASCII rendering based on <a href="https://github.com/AlexanderGrooff/mermaid-ascii" target="_blank" rel="noopener">Mermaid-ASCII</a></div>
       <div class="meta">Early preview — actively evolving</div>
     </div>
   </header>
@@ -1505,7 +1532,7 @@ ${bundleJs}
 
   // Done — show total time
   var totalMs = (performance.now() - totalStart).toFixed(0);
-  totalTimingEl.textContent = (samples.length * 2) + ' samples (SVG+ASCII) rendered in ' + totalMs + ' ms';
+  totalTimingEl.textContent = samples.length + ' samples rendered client-side in ' + totalMs + ' ms';
 
   function escapeHtml(text) {
     return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');

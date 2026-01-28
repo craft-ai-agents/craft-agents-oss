@@ -59,13 +59,28 @@ Options:
 
 /**
  * Read and parse the allow-list file
+ * Returns both include patterns and exclude patterns (prefixed with !)
  */
-function readAllowList(): string[] {
+function readAllowList(): { includes: string[]; excludes: string[] } {
   const content = readFileSync(allowListPath, 'utf-8');
-  return content
+  const lines = content
     .split('\n')
     .map((line) => line.trim())
     .filter((line) => line && !line.startsWith('#'));
+
+  const includes: string[] = [];
+  const excludes: string[] = [];
+
+  for (const line of lines) {
+    if (line.startsWith('!')) {
+      // Negation pattern - remove the ! prefix
+      excludes.push(line.slice(1));
+    } else {
+      includes.push(line);
+    }
+  }
+
+  return { includes, excludes };
 }
 
 /**
@@ -91,15 +106,23 @@ async function getGitFiles(): Promise<string[]> {
 }
 
 /**
- * Filter files by allow-list
+ * Filter files by allow-list (includes and excludes)
+ * Files must match an include pattern AND not match any exclude pattern
  */
-function filterFilesByAllowList(files: string[], patterns: string[]): { allowed: string[]; excluded: string[] } {
+function filterFilesByAllowList(
+  files: string[],
+  includes: string[],
+  excludes: string[]
+): { allowed: string[]; excluded: string[] } {
   const allowed: string[] = [];
   const excluded: string[] = [];
 
   for (const file of files) {
-    const matches = patterns.some((pattern) => matchesPattern(file, pattern));
-    if (matches) {
+    const matchesInclude = includes.some((pattern) => matchesPattern(file, pattern));
+    const matchesExclude = excludes.some((pattern) => matchesPattern(file, pattern));
+
+    // File must match an include pattern and NOT match any exclude pattern
+    if (matchesInclude && !matchesExclude) {
       allowed.push(file);
     } else {
       excluded.push(file);
@@ -301,8 +324,8 @@ async function main(): Promise<void> {
 
   // Get all git-tracked files
   const allFiles = await getGitFiles();
-  const patterns = readAllowList();
-  const { allowed: allowedFiles, excluded: excludedFiles } = filterFilesByAllowList(allFiles, patterns);
+  const { includes, excludes } = readAllowList();
+  const { allowed: allowedFiles, excluded: excludedFiles } = filterFilesByAllowList(allFiles, includes, excludes);
 
   console.log(colors.green(`Files to sync: ${allowedFiles.length}`));
   console.log(colors.yellow(`Files excluded: ${excludedFiles.length}`));
@@ -365,7 +388,7 @@ async function main(): Promise<void> {
     }
 
     // Remove directories that would be fully replaced
-    for (const pattern of patterns) {
+    for (const pattern of includes) {
       if (pattern.endsWith('/**/*') || pattern.endsWith('/**')) {
         const base = pattern.replace(/\/\*\*\/?\*?$/, '');
         const targetSubDir = join(targetDir, base);
