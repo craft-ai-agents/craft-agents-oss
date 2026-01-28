@@ -50,6 +50,7 @@ import { useTurnCardExpansion } from "@/hooks/useTurnCardExpansion"
 import type { SessionMeta } from "@/atoms/sessions"
 import { CHAT_LAYOUT } from "@/config/layout"
 import { flattenLabels } from "@craft-agent/shared/labels"
+import { useTranslation } from "react-i18next"
 
 // ============================================================================
 // Overlay State Types
@@ -155,7 +156,7 @@ interface ChatDisplayProps {
  * Processing status messages - cycles through these randomly
  * Inspired by Claude Code's playful status messages
  */
-const PROCESSING_MESSAGES = [
+const DEFAULT_PROCESSING_MESSAGES = [
   'Thinking...',
   'Pondering...',
   'Contemplating...',
@@ -230,10 +231,25 @@ interface ProcessingIndicatorProps {
  * Matches TurnCard header layout for visual continuity
  */
 function ProcessingIndicator({ startTime, statusMessage }: ProcessingIndicatorProps) {
+  const { t, i18n } = useTranslation('chat')
   const [elapsed, setElapsed] = React.useState(0)
+  const processingMessages = useMemo(() => {
+    const list = t('processing.messages', {
+      returnObjects: true,
+      defaultValue: DEFAULT_PROCESSING_MESSAGES,
+    })
+    return Array.isArray(list) && list.length > 0 ? list : DEFAULT_PROCESSING_MESSAGES
+  }, [t, i18n.resolvedLanguage])
   const [messageIndex, setMessageIndex] = React.useState(() =>
-    Math.floor(Math.random() * PROCESSING_MESSAGES.length)
+    Math.floor(Math.random() * processingMessages.length)
   )
+  React.useEffect(() => {
+    if (processingMessages.length === 0) {
+      setMessageIndex(0)
+      return
+    }
+    setMessageIndex(prev => Math.min(prev, processingMessages.length - 1))
+  }, [processingMessages])
 
   // Update elapsed time every second using provided startTime
   React.useEffect(() => {
@@ -253,18 +269,18 @@ function ProcessingIndicator({ startTime, statusMessage }: ProcessingIndicatorPr
     const interval = setInterval(() => {
       setMessageIndex(prev => {
         // Pick a random different message
-        let next = Math.floor(Math.random() * PROCESSING_MESSAGES.length)
-        while (next === prev && PROCESSING_MESSAGES.length > 1) {
-          next = Math.floor(Math.random() * PROCESSING_MESSAGES.length)
+        let next = Math.floor(Math.random() * processingMessages.length)
+        while (next === prev && processingMessages.length > 1) {
+          next = Math.floor(Math.random() * processingMessages.length)
         }
         return next
       })
     }, 10000)
     return () => clearInterval(interval)
-  }, [statusMessage])
+  }, [statusMessage, processingMessages])
 
   // Use status message if provided, otherwise cycle through default messages
-  const displayMessage = statusMessage || PROCESSING_MESSAGES[messageIndex]
+  const displayMessage = statusMessage || processingMessages[messageIndex]
 
   return (
     <div className="flex items-center gap-2 px-3 py-1 -mb-1 text-[13px] text-muted-foreground">

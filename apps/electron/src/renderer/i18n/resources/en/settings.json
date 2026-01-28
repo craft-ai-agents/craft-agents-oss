@@ -1,0 +1,353 @@
+{
+  "common": {
+    "actions": {
+      "edit": "Edit",
+      "closeWithEsc": "Close (Esc)",
+      "change": "Change",
+      "changeEllipsis": "Change...",
+      "clear": "Clear"
+    },
+    "status": {
+      "loading": "Loading...",
+      "uploading": "Uploading..."
+    }
+  },
+  "app": {
+    "title": "App Settings",
+    "appearance": {
+      "title": "Appearance",
+      "mode": {
+        "label": "Mode",
+        "options": {
+          "system": "System",
+          "light": "Light",
+          "dark": "Dark"
+        }
+      },
+      "colorTheme": {
+        "label": "Color theme",
+        "options": {
+          "default": "Default"
+        }
+      },
+      "font": {
+        "label": "Font",
+        "options": {
+          "inter": "Inter",
+          "system": "System"
+        }
+      }
+    },
+    "language": {
+      "title": "Language",
+      "description": "Choose the language for the app interface.",
+      "label": "App language",
+      "hint": "This only affects the UI. To change response language, use Preferences → Language."
+    },
+    "notifications": {
+      "title": "Notifications",
+      "desktop": {
+        "label": "Desktop notifications",
+        "description": "Get notified when AI finishes working in a chat."
+      }
+    },
+    "apiConnection": {
+      "title": "API Connection",
+      "description": "How your AI agents connect to language models.",
+      "connectionType": {
+        "label": "Connection type",
+        "values": {
+          "claudeSubscription": "Claude Pro/Max — using your Claude subscription",
+          "apiKey": "API Key — Anthropic, OpenRouter, or compatible API",
+          "notConfigured": "Not configured"
+        }
+      }
+    },
+    "about": {
+      "title": "About",
+      "version": {
+        "label": "Version",
+        "updateTo": "Update to {{version}}"
+      },
+      "checkForUpdates": {
+        "label": "Check for updates",
+        "checking": "Checking...",
+        "checkNow": "Check Now"
+      },
+      "installUpdate": {
+        "label": "Install update",
+        "restartToUpdate": "Restart to Update"
+      }
+    }
+  },
+  "navigator": {
+    "items": {
+      "app": {
+        "label": "App",
+        "description": "Appearance, notifications, API connection"
+      },
+      "workspace": {
+        "label": "Workspace",
+        "description": "Model, mode cycling, advanced"
+      },
+      "permissions": {
+        "label": "Permissions",
+        "description": "Allowed commands in Explore mode"
+      },
+      "labels": {
+        "label": "Labels",
+        "description": "Label hierarchy and auto-apply rules"
+      },
+      "shortcuts": {
+        "label": "Shortcuts",
+        "description": "Keyboard shortcuts reference"
+      },
+      "preferences": {
+        "label": "Preferences",
+        "description": "Your personal preferences"
+      }
+    },
+    "actions": {
+      "openInNewWindow": "Open in New Window"
+    }
+  },
+  "shortcuts": {
+    "title": "Shortcuts",
+    "sections": {
+      "global": {
+        "title": "Global",
+        "items": {
+          "focusSidebar": "Focus sidebar",
+          "focusSessionList": "Focus session list",
+          "focusChatInput": "Focus chat input",
+          "newChat": "New chat",
+          "toggleSidebar": "Toggle sidebar",
+          "openSettings": "Open settings"
+        }
+      },
+      "navigation": {
+        "title": "Navigation",
+        "items": {
+          "nextZone": "Move to next zone",
+          "cyclePermissionMode": "Cycle permission mode",
+          "moveBetweenZones": "Move between zones (in lists)",
+          "navigateList": "Navigate items in list",
+          "firstItem": "Go to first item",
+          "lastItem": "Go to last item",
+          "closeDialog": "Close dialog / blur input"
+        }
+      },
+      "sessionList": {
+        "title": "Session List",
+        "items": {
+          "focusChatInput": "Focus chat input",
+          "deleteSession": "Delete session"
+        }
+      },
+      "chat": {
+        "title": "Chat",
+        "items": {
+          "sendMessage": "Send message",
+          "newLine": "New line"
+        }
+      }
+    }
+  },
+  "preferences": {
+    "title": "Preferences",
+    "basic": {
+      "title": "Basic Info",
+      "description": "Help Craft Agent personalize responses to you.",
+      "name": {
+        "label": "Name",
+        "description": "How Craft Agent should address you.",
+        "placeholder": "Your name"
+      },
+      "timezone": {
+        "label": "Timezone",
+        "description": "Used for relative dates like 'tomorrow' or 'next week'.",
+        "placeholder": "e.g., America/New_York"
+      },
+      "language": {
+        "label": "Language",
+        "description": "Preferred language for Craft Agent's responses.",
+        "placeholder": "e.g., English"
+      }
+    },
+    "location": {
+      "title": "Location",
+      "description": "Enables location-aware responses like weather, local time, and regional context.",
+      "city": {
+        "label": "City",
+        "description": "Your city for local information and context.",
+        "placeholder": "e.g., New York"
+      },
+      "country": {
+        "label": "Country",
+        "description": "Your country for regional formatting and context.",
+        "placeholder": "e.g., USA"
+      }
+    },
+    "notes": {
+      "title": "Notes",
+      "description": "Free-form context that helps Craft Agent understand your preferences.",
+      "editFile": "Edit File",
+      "placeholder": "Any additional context you'd like Craft Agent to know..."
+    }
+  },
+  "workspace": {
+    "title": "Workspace Settings",
+    "empty": "No workspace selected",
+    "info": {
+      "title": "Workspace Info",
+      "name": {
+        "label": "Name",
+        "untitled": "Untitled"
+      },
+      "icon": {
+        "label": "Icon"
+      }
+    },
+    "rename": {
+      "title": "Rename workspace",
+      "placeholder": "Enter workspace name..."
+    },
+    "model": {
+      "title": "Model",
+      "defaultModel": {
+        "label": "Default model",
+        "description": "AI model for new chats",
+        "setViaApi": "Set via API connection"
+      },
+      "options": {
+        "opus": {
+          "label": "Opus 4.5",
+          "description": "Most capable for complex work"
+        },
+        "sonnet": {
+          "label": "Sonnet 4.5",
+          "description": "Best for everyday tasks"
+        },
+        "haiku": {
+          "label": "Haiku 4.5",
+          "description": "Fastest for quick answers"
+        }
+      },
+      "thinkingLevel": {
+        "label": "Thinking level",
+        "description": "Reasoning depth for new chats"
+      }
+    },
+    "thinkingLevels": {
+      "off": {
+        "name": "No Thinking",
+        "description": "Fastest responses, no reasoning"
+      },
+      "think": {
+        "name": "Thinking",
+        "description": "Balanced speed and reasoning"
+      },
+      "max": {
+        "name": "Max Thinking",
+        "description": "Deepest reasoning for complex tasks"
+      }
+    },
+    "permissions": {
+      "title": "Permissions",
+      "defaultMode": {
+        "label": "Default mode",
+        "description": "Control what AI can do"
+      },
+      "modes": {
+        "safe": {
+          "label": "Safe",
+          "description": "Read-only, no changes allowed"
+        },
+        "ask": {
+          "label": "Ask",
+          "description": "Prompts before making edits"
+        },
+        "allowAll": {
+          "label": "Allow all",
+          "description": "Full autonomous execution"
+        }
+      }
+    },
+    "modeCycling": {
+      "title": "Mode Cycling",
+      "description": "Select which modes to cycle through with Shift+Tab",
+      "errorMinimum": "At least 2 modes required"
+    },
+    "advanced": {
+      "title": "Advanced",
+      "workingDirectory": {
+        "label": "Default Working Directory",
+        "notSet": "Not set (uses session folder)"
+      },
+      "localMcp": {
+        "label": "Local MCP Servers",
+        "description": "Enable stdio subprocess servers"
+      }
+    }
+  },
+  "permissions": {
+    "title": "Permissions",
+    "about": {
+      "title": "About Permissions",
+      "body": "Permissions control how much autonomy your agent has. In <explore>Explore</explore> mode, the agent can only read and research — perfect for understanding a problem before committing to changes. When you're ready, switch to <execute>Execute</execute> mode to let the agent implement the plan autonomously.",
+      "workflow": "A good workflow: start in Explore to let the agent investigate, review the proposed plan, then execute with confidence.",
+      "learnMore": "Learn more"
+    },
+    "default": {
+      "title": "Default Permissions",
+      "description": "App-level patterns allowed in Explore mode. Commands not on this list are blocked.",
+      "editFile": "Edit File",
+      "empty": {
+        "title": "No default permissions found.",
+        "hint": "Default permissions should be at <code>~/.craft-agent/permissions/default.json</code>"
+      }
+    },
+    "custom": {
+      "title": "Workspace Customizations",
+      "description": "Workspace-level patterns that extend the app defaults above.",
+      "editFile": "Edit File",
+      "empty": {
+        "title": "No custom permissions configured.",
+        "hint": "Create a <code>permissions.json</code> file in your workspace to add custom rules."
+      }
+    },
+    "table": {
+      "writeTo": "Write to: {{path}}",
+      "customBlockedTool": "Custom blocked tool",
+      "customBashPattern": "Custom bash pattern",
+      "customMcpPattern": "Custom MCP pattern",
+      "customApiEndpoint": "Custom API endpoint",
+      "allowedWritePath": "Allowed write path"
+    }
+  },
+  "labels": {
+    "title": "Labels",
+    "editFile": "Edit File",
+    "about": {
+      "title": "About Labels",
+      "paragraphs": {
+        "organize": "Labels help you organize sessions with colored tags. Use them to categorize conversations by project, topic, or priority — making it easy to filter and find related sessions later.",
+        "value": "Each label can optionally carry a <value>value</value> with a specific type (text, number, or date). This turns labels into structured metadata — for example, a \"priority\" label with value 3, or a \"due\" label with a date.",
+        "autoApply": "<auto>Auto-apply rules</auto> assign labels automatically when a message matches a regex pattern. For example, pasting a Linear issue URL can auto-tag the session with the project name and issue ID — no manual tagging needed."
+      },
+      "learnMore": "Learn more"
+    },
+    "hierarchy": {
+      "title": "Label Hierarchy",
+      "description": "All labels configured for this workspace. Labels can be nested to form groups.",
+      "empty": {
+        "title": "No labels configured.",
+        "hint": "Labels can be created by the agent or by editing <code>labels/config.json</code> in your workspace."
+      }
+    },
+    "autoRules": {
+      "title": "Auto-Apply Rules",
+      "description": "Regex patterns that automatically apply labels when matched in user messages. For example, paste a Linear issue URL and automatically tag the session with the project name and issue ID."
+    }
+  }
+}

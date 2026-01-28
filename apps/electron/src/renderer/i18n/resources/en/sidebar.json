@@ -1,0 +1,101 @@
+{
+  "nav": {
+    "newChat": "New Chat",
+    "allChats": "All Chats",
+    "flagged": "Flagged",
+    "status": "Status",
+    "labels": "Labels",
+    "sources": "Sources",
+    "skills": "Skills",
+    "settings": "Settings"
+  },
+  "sources": {
+    "apis": "APIs",
+    "mcps": "MCPs",
+    "localFolders": "Local Folders"
+  },
+  "statuses": {
+    "backlog": "Backlog",
+    "todo": "Todo",
+    "needsReview": "Needs Review",
+    "done": "Done",
+    "cancelled": "Cancelled"
+  },
+  "titles": {
+    "sources": "Sources",
+    "skills": "All Skills",
+    "settings": "Settings",
+    "allChats": "All Chats",
+    "flagged": "Flagged",
+    "labels": "Labels",
+    "views": "Views"
+  },
+  "menu": {
+    "openInNewWindow": "Open in New Window",
+    "configureStatuses": "Configure Statuses",
+    "addLabel": "Add New Label",
+    "editLabels": "Edit Labels",
+    "deleteLabel": "Delete Label",
+    "editViews": "Edit Views",
+    "deleteView": "Delete View",
+    "addSource": "Add Source",
+    "learnMoreSources": "Learn More about Sources",
+    "learnMoreApis": "Learn More about APIs",
+    "learnMoreMcp": "Learn More about MCP",
+    "learnMoreLocalFolders": "Learn More about Local Folders",
+    "addSkill": "Add Skill"
+  },
+  "common": {
+    "search": "Search",
+    "learnMore": "Learn More"
+  },
+  "help": {
+    "tooltip": "Help & Documentation",
+    "sources": "Sources",
+    "skills": "Skills",
+    "statuses": "Statuses",
+    "permissions": "Permissions",
+    "allDocumentation": "All Documentation"
+  },
+  "workspace": {
+    "add": "Add Workspace...",
+    "addTitle": "Add Workspace",
+    "addDescription": "Where your ideas meet the tools to make them happen.",
+    "createNew": "Create new",
+    "createNewDescription": "Start fresh with an empty workspace.",
+    "openFolder": "Open folder",
+    "openFolderDescription": "Choose an existing folder as workspace."
+  },
+  "appMenu": {
+    "craftMenuLabel": "Craft menu",
+    "newChat": "New Chat",
+    "newWindow": "New Window",
+    "edit": "Edit",
+    "undo": "Undo",
+    "redo": "Redo",
+    "cut": "Cut",
+    "copy": "Copy",
+    "paste": "Paste",
+    "selectAll": "Select All",
+    "view": "View",
+    "zoomIn": "Zoom In",
+    "zoomOut": "Zoom Out",
+    "resetZoom": "Reset Zoom",
+    "window": "Window",
+    "minimize": "Minimize",
+    "maximize": "Maximize",
+    "settings": "Settings",
+    "settingsEllipsis": "Settings...",
+    "storedUserPreferences": "Stored User Preferences",
+    "help": "Help",
+    "helpDocumentation": "Help & Documentation",
+    "keyboardShortcuts": "Keyboard Shortcuts",
+    "debug": "Debug",
+    "checkForUpdates": "Check for Updates",
+    "installUpdate": "Install Update",
+    "toggleDevTools": "Toggle DevTools",
+    "quit": "Quit Craft Agents",
+    "goBack": "Go back",
+    "goForward": "Go forward"
+  }
+}

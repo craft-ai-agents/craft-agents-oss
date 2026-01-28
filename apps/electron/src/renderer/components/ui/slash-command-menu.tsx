@@ -4,6 +4,7 @@ import { Brain, Check } from 'lucide-react'
 import { Icon_Folder } from '@craft-agent/ui'
 import { cn } from '@/lib/utils'
 import { PERMISSION_MODE_CONFIG, PERMISSION_MODE_ORDER, type PermissionMode } from '@craft-agent/shared/agent/modes'
+import { useTranslation } from 'react-i18next'
 
 // ============================================================================
 // Types
@@ -77,6 +78,12 @@ function PermissionModeIcon({ mode, className }: PermissionModeIconProps) {
 
 // Icon size constant
 const MENU_ICON_SIZE = 'h-3.5 w-3.5'
+
+const PERMISSION_MODE_TRANSLATION_KEYS: Record<Exclude<SlashCommandId, 'ultrathink'>, 'safe' | 'ask' | 'allowAll'> = {
+  'safe': 'safe',
+  'ask': 'ask',
+  'allow-all': 'allowAll',
+}
 
 // Generate permission mode commands from centralized config
 const permissionModeCommands: SlashCommand[] = PERMISSION_MODE_ORDER.map(mode => {
@@ -198,11 +205,16 @@ export function SlashCommandMenu({
   activeCommands = [],
   onSelect,
   showFilter = false,
-  filterPlaceholder = 'Search commands...',
+  filterPlaceholder,
   className,
 }: SlashCommandMenuProps) {
+  const { t } = useTranslation('chat')
   const [filter, setFilter] = React.useState('')
   const inputRef = React.useRef<HTMLInputElement>(null)
+  const resolvedFilterPlaceholder = filterPlaceholder ?? t('commandMenu.searchPlaceholder', {
+    defaultValue: 'Search commands...',
+  })
+  const emptyText = t('commandMenu.empty', { defaultValue: 'No commands found' })
 
   // If groups provided, filter within each group; otherwise use flat commands
   const filteredGroups = React.useMemo(() => {
@@ -270,7 +282,7 @@ export function SlashCommandMenu({
             ref={inputRef}
             value={filter}
             onValueChange={setFilter}
-            placeholder={filterPlaceholder}
+            placeholder={resolvedFilterPlaceholder}
             className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
         </div>
@@ -278,7 +290,7 @@ export function SlashCommandMenu({
       <CommandPrimitive.List className={MENU_LIST_STYLE}>
         {allFilteredCommands.length === 0 ? (
           <CommandPrimitive.Empty className="py-4 text-center text-sm text-muted-foreground">
-            No commands found
+            {emptyText}
           </CommandPrimitive.Empty>
         ) : filteredGroups ? (
           // Group-based rendering with smart separators
@@ -327,6 +339,7 @@ export function InlineSlashCommand({
   position,
   className,
 }: InlineSlashCommandProps) {
+  const { t } = useTranslation('chat')
   const menuRef = React.useRef<HTMLDivElement>(null)
   const listRef = React.useRef<HTMLDivElement>(null)
   const [selectedIndex, setSelectedIndex] = React.useState(0)
@@ -482,7 +495,7 @@ export function InlineSlashCommand({
       {/* Always-visible footer hint for @ mentions */}
       <div className="h-px bg-border/50 mx-2" />
       <div className="px-3 py-2.5 select-none text-xs text-muted-foreground">
-        Use @ for skills and files
+        {t('inlineSlash.footer', { defaultValue: 'Use @ for skills and files' })}
       </div>
     </div>
   )
@@ -547,12 +560,32 @@ export function useInlineSlashCommand({
   recentFolders = [],
   homeDir,
 }: UseInlineSlashCommandOptions): UseInlineSlashCommandReturn {
+  const { t, i18n } = useTranslation('chat')
   const [isOpen, setIsOpen] = React.useState(false)
   const [filter, setFilter] = React.useState('')
   const [position, setPosition] = React.useState({ x: 0, y: 0 })
   const [slashStart, setSlashStart] = React.useState(-1)
   // Store current input state for handleSelect
   const currentInputRef = React.useRef({ value: '', cursorPosition: 0 })
+
+  const localizedPermissionCommands = React.useMemo(() => {
+    return permissionModeCommands.map(command => {
+      if (command.id === 'ultrathink') return command
+      const key = PERMISSION_MODE_TRANSLATION_KEYS[command.id as Exclude<SlashCommandId, 'ultrathink'>]
+      const config = PERMISSION_MODE_CONFIG[command.id as PermissionMode]
+      return {
+        ...command,
+        label: t(`permissionModes.${key}.display`, { defaultValue: config.displayName }),
+        description: t(`permissionModes.${key}.description`, { defaultValue: config.description }),
+      }
+    })
+  }, [t, i18n.resolvedLanguage])
+
+  const localizedUltrathinkCommand = React.useMemo(() => ({
+    ...ultrathinkCommand,
+    label: t('permissionModes.ultrathink.label', { defaultValue: ultrathinkCommand.label }),
+    description: t('permissionModes.ultrathink.description', { defaultValue: ultrathinkCommand.description }),
+  }), [t, i18n.resolvedLanguage])
 
   // Build sections from commands and folders
   const sections = React.useMemo((): SlashSection[] => {
@@ -561,15 +594,15 @@ export function useInlineSlashCommand({
     // Modes section
     result.push({
       id: 'modes',
-      label: 'Modes',
-      items: permissionModeCommands,
+      label: t('inlineSlash.sections.modes', { defaultValue: 'Modes' }),
+      items: localizedPermissionCommands,
     })
 
     // Features section
     result.push({
       id: 'features',
-      label: 'Features',
-      items: [ultrathinkCommand],
+      label: t('inlineSlash.sections.features', { defaultValue: 'Features' }),
+      items: [localizedUltrathinkCommand],
     })
 
     // Recent folders section - sorted alphabetically by folder name, show all
@@ -583,7 +616,7 @@ export function useInlineSlashCommand({
 
       result.push({
         id: 'folders',
-        label: 'Recent Working Directories',
+        label: t('inlineSlash.sections.folders', { defaultValue: 'Recent Working Directories' }),
         items: sortedFolders.map(path => ({
           id: path,
           type: 'folder' as const,
@@ -595,7 +628,7 @@ export function useInlineSlashCommand({
     }
 
     return result
-  }, [recentFolders, homeDir])
+  }, [recentFolders, homeDir, t, i18n.resolvedLanguage, localizedPermissionCommands, localizedUltrathinkCommand])
 
   const handleInputChange = React.useCallback((value: string, cursorPosition: number) => {
     // Store current state for handleSelect

@@ -6,7 +6,25 @@
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import { getDefaultOptions } from '../agent/options.ts';
 import { SUMMARIZATION_MODEL } from '../config/models.ts';
-import { resolveModelId } from '../config/storage.ts';
+import { resolveModelId, resolveUiLanguageFromConfig } from '../config/storage.ts';
+
+const TITLE_LANGUAGE_MAP: Record<string, string> = {
+  en: 'English',
+  zh: 'Simplified Chinese',
+  es: 'Spanish',
+  fr: 'French',
+  de: 'German',
+  'pt-BR': 'Portuguese (Brazil)',
+  ja: 'Japanese',
+  ko: 'Korean',
+};
+
+function getTitleLanguageInstruction(): string | null {
+  const resolvedLanguage = resolveUiLanguageFromConfig();
+  const languageName = TITLE_LANGUAGE_MAP[resolvedLanguage];
+  if (!languageName || languageName === 'English') return null;
+  return `Write the title in ${languageName}.`;
+}
 
 /**
  * Generate a task-focused title (2-5 words) from the user's first message.
@@ -22,15 +40,17 @@ export async function generateSessionTitle(
   try {
     const userSnippet = userMessage.slice(0, 500);
 
+    const languageInstruction = getTitleLanguageInstruction();
     const prompt = [
       'What is the user trying to do? Reply with ONLY a short task description (2-5 words).',
       'Start with a verb. Use plain text only - no markdown.',
+      languageInstruction,
       'Examples: "Fix authentication bug", "Add dark mode", "Refactor API layer", "Explain codebase structure"',
       '',
       'User: ' + userSnippet,
       '',
       'Task:',
-    ].join('\n');
+    ].filter(Boolean).join('\n');
 
     const defaultOptions = getDefaultOptions();
     const options = {
@@ -85,10 +105,12 @@ export async function regenerateSessionTitle(
       .join('\n\n');
     const assistantSnippet = lastAssistantResponse.slice(0, 500);
 
+    const languageInstruction = getTitleLanguageInstruction();
     const prompt = [
       'Based on these recent messages, what is the current focus of this conversation?',
       'Reply with ONLY a short task description (2-5 words).',
       'Start with a verb. Use plain text only - no markdown.',
+      languageInstruction,
       'Examples: "Fix authentication bug", "Add dark mode", "Refactor API layer", "Explain codebase structure"',
       '',
       'Recent user messages:',
@@ -98,7 +120,7 @@ export async function regenerateSessionTitle(
       assistantSnippet,
       '',
       'Current focus:',
-    ].join('\n');
+    ].filter(Boolean).join('\n');
 
     const defaultOptions = getDefaultOptions();
     const options = {

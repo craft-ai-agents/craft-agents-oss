@@ -18,6 +18,7 @@ import { CrossfadeAvatar } from "@/components/ui/avatar"
 import { FadingText } from "@/components/ui/fading-text"
 import { WorkspaceCreationScreen } from "@/components/workspace"
 import type { Workspace } from "../../../shared/types"
+import { useTranslation } from "react-i18next"
 
 interface WorkspaceSwitcherProps {
   isCollapsed: boolean
@@ -45,6 +46,7 @@ export function WorkspaceSwitcher({
   onSelect,
   onWorkspaceCreated,
 }: WorkspaceSwitcherProps) {
+  const { t } = useTranslation('sidebar')
   const [showCreationScreen, setShowCreationScreen] = useState(false)
   const setFullscreenOverlayOpen = useSetAtom(fullscreenOverlayOpenAtom)
   // Cache stores { dataUrl, sourceUrl } to detect when icon file changes
@@ -215,7 +217,7 @@ export function WorkspaceSwitcher({
           className="font-sans"
         >
           <FolderPlus className="h-4 w-4" />
-          Add Workspace...
+          {t('workspace.add', { defaultValue: 'Add Workspace...' })}
         </StyledDropdownMenuItem>
       </StyledDropdownMenuContent>
     </DropdownMenu>

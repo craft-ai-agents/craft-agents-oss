@@ -1,0 +1,353 @@
+{
+  "common": {
+    "actions": {
+      "edit": "Editar",
+      "closeWithEsc": "Cerrar (Esc)",
+      "change": "Cambiar",
+      "changeEllipsis": "Cambiar...",
+      "clear": "Borrar"
+    },
+    "status": {
+      "loading": "Cargando...",
+      "uploading": "Subiendo..."
+    }
+  },
+  "app": {
+    "title": "Configuración de la aplicación",
+    "appearance": {
+      "title": "Apariencia",
+      "mode": {
+        "label": "Modo",
+        "options": {
+          "system": "Sistema",
+          "light": "Claro",
+          "dark": "Oscuro"
+        }
+      },
+      "colorTheme": {
+        "label": "Tema de color",
+        "options": {
+          "default": "Predeterminado"
+        }
+      },
+      "font": {
+        "label": "Fuente",
+        "options": {
+          "inter": "Inter",
+          "system": "Sistema"
+        }
+      }
+    },
+    "language": {
+      "title": "Idioma",
+      "description": "Elige el idioma de la interfaz de la aplicación.",
+      "label": "Idioma de la aplicación",
+      "hint": "Esto solo afecta a la interfaz de usuario. Para cambiar el idioma de las respuestas, ve a Preferencias → Idioma."
+    },
+    "notifications": {
+      "title": "Notificaciones",
+      "desktop": {
+        "label": "Notificaciones de escritorio",
+        "description": "Recibe una notificación cuando la IA termine de trabajar en un chat."
+      }
+    },
+    "apiConnection": {
+      "title": "Conexión API",
+      "description": "Cómo se conectan tus agentes de IA a los modelos de lenguaje.",
+      "connectionType": {
+        "label": "Tipo de conexión",
+        "values": {
+          "claudeSubscription": "Claude Pro/Max — usando tu suscripción de Claude",
+          "apiKey": "Clave API — Anthropic, OpenRouter o API compatible",
+          "notConfigured": "No configurada"
+        }
+      }
+    },
+    "about": {
+      "title": "Acerca de",
+      "version": {
+        "label": "Versión",
+        "updateTo": "Actualizar a {{version}}"
+      },
+      "checkForUpdates": {
+        "label": "Buscar actualizaciones",
+        "checking": "Buscando...",
+        "checkNow": "Buscar ahora"
+      },
+      "installUpdate": {
+        "label": "Instalar actualización",
+        "restartToUpdate": "Reiniciar para actualizar"
+      }
+    }
+  },
+  "navigator": {
+    "items": {
+      "app": {
+        "label": "Aplicación",
+        "description": "Apariencia, notificaciones, conexión API"
+      },
+      "workspace": {
+        "label": "Espacio de trabajo",
+        "description": "Modelo, ciclo de modos, avanzado"
+      },
+      "permissions": {
+        "label": "Permisos",
+        "description": "Comandos permitidos en modo Explorar"
+      },
+      "labels": {
+        "label": "Etiquetas",
+        "description": "Jerarquía de etiquetas y reglas de aplicación automática"
+      },
+      "shortcuts": {
+        "label": "Atajos",
+        "description": "Referencia de atajos de teclado"
+      },
+      "preferences": {
+        "label": "Preferencias",
+        "description": "Tus preferencias personales"
+      }
+    },
+    "actions": {
+      "openInNewWindow": "Abrir en una ventana nueva"
+    }
+  },
+  "shortcuts": {
+    "title": "Atajos",
+    "sections": {
+      "global": {
+        "title": "Global",
+        "items": {
+          "focusSidebar": "Enfocar barra lateral",
+          "focusSessionList": "Enfocar lista de sesiones",
+          "focusChatInput": "Enfocar entrada de chat",
+          "newChat": "Nuevo chat",
+          "toggleSidebar": "Alternar barra lateral",
+          "openSettings": "Abrir configuración"
+        }
+      },
+      "navigation": {
+        "title": "Navegación",
+        "items": {
+          "nextZone": "Mover a la siguiente zona",
+          "cyclePermissionMode": "Ciclar modo de permisos",
+          "moveBetweenZones": "Moverse entre zonas (en listas)",
+          "navigateList": "Navegar por los elementos de la lista",
+          "firstItem": "Ir al primer elemento",
+          "lastItem": "Ir al último elemento",
+          "closeDialog": "Cerrar diálogo / quitar foco de entrada"
+        }
+      },
+      "sessionList": {
+        "title": "Lista de sesiones",
+        "items": {
+          "focusChatInput": "Enfocar entrada de chat",
+          "deleteSession": "Eliminar sesión"
+        }
+      },
+      "chat": {
+        "title": "Chat",
+        "items": {
+          "sendMessage": "Enviar mensaje",
+          "newLine": "Nueva línea"
+        }
+      }
+    }
+  },
+  "preferences": {
+    "title": "Preferencias",
+    "basic": {
+      "title": "Información básica",
+      "description": "Ayuda a Craft Agent a personalizar las respuestas para ti.",
+      "name": {
+        "label": "Nombre",
+        "description": "Cómo debe dirigirse a ti Craft Agent.",
+        "placeholder": "Tu nombre"
+      },
+      "timezone": {
+        "label": "Zona horaria",
+        "description": "Se usa para fechas relativas como 'mañana' o 'la próxima semana'.",
+        "placeholder": "p. ej., Europe/Madrid"
+      },
+      "language": {
+        "label": "Idioma",
+        "description": "Idioma preferido para las respuestas de Craft Agent.",
+        "placeholder": "p. ej., Español"
+      }
+    },
+    "location": {
+      "title": "Ubicación",
+      "description": "Permite respuestas basadas en la ubicación, como el tiempo, la hora local y el contexto regional.",
+      "city": {
+        "label": "Ciudad",
+        "description": "Tu ciudad para información local y contexto.",
+        "placeholder": "p. ej., Madrid"
+      },
+      "country": {
+        "label": "País",
+        "description": "Tu país para el formato regional y el contexto.",
+        "placeholder": "p. ej., España"
+      }
+    },
+    "notes": {
+      "title": "Notas",
+      "description": "Contexto de forma libre que ayuda a Craft Agent a entender tus preferencias.",
+      "editFile": "Editar archivo",
+      "placeholder": "Cualquier contexto adicional que desees que Craft Agent conozca..."
+    }
+  },
+  "workspace": {
+    "title": "Configuración del espacio de trabajo",
+    "empty": "No se ha seleccionado ningún espacio de trabajo",
+    "info": {
+      "title": "Información del espacio de trabajo",
+      "name": {
+        "label": "Nombre",
+        "untitled": "Sin título"
+      },
+      "icon": {
+        "label": "Icono"
+      }
+    },
+    "rename": {
+      "title": "Renombrar espacio de trabajo",
+      "placeholder": "Introduce el nombre del espacio de trabajo..."
+    },
+    "model": {
+      "title": "Modelo",
+      "defaultModel": {
+        "label": "Modelo predeterminado",
+        "description": "Modelo de IA para nuevos chats",
+        "setViaApi": "Configurado mediante conexión API"
+      },
+      "options": {
+        "opus": {
+          "label": "Opus 4.5",
+          "description": "El más capaz para trabajos complejos"
+        },
+        "sonnet": {
+          "label": "Sonnet 4.5",
+          "description": "El mejor para tareas cotidianas"
+        },
+        "haiku": {
+          "label": "Haiku 4.5",
+          "description": "El más rápido para respuestas rápidas"
+        }
+      },
+      "thinkingLevel": {
+        "label": "Nivel de razonamiento",
+        "description": "Profundidad de razonamiento para nuevos chats"
+      }
+    },
+    "thinkingLevels": {
+      "off": {
+        "name": "Sin razonamiento",
+        "description": "Respuestas más rápidas, sin razonamiento"
+      },
+      "think": {
+        "name": "Razonamiento",
+        "description": "Velocidad y razonamiento equilibrados"
+      },
+      "max": {
+        "name": "Razonamiento máximo",
+        "description": "Razonamiento más profundo para tareas complejas"
+      }
+    },
+    "permissions": {
+      "title": "Permisos",
+      "defaultMode": {
+        "label": "Modo predeterminado",
+        "description": "Controla lo que la IA puede hacer"
+      },
+      "modes": {
+        "safe": {
+          "label": "Seguro",
+          "description": "Solo lectura, no se permiten cambios"
+        },
+        "ask": {
+          "label": "Preguntar",
+          "description": "Pregunta antes de realizar ediciones"
+        },
+        "allowAll": {
+          "label": "Permitir todo",
+          "description": "Ejecución autónoma completa"
+        }
+      }
+    },
+    "modeCycling": {
+      "title": "Ciclo de modos",
+      "description": "Selecciona qué modos ciclar con Mayús+Tab",
+      "errorMinimum": "Se requieren al menos 2 modos"
+    },
+    "advanced": {
+      "title": "Avanzado",
+      "workingDirectory": {
+        "label": "Directorio de trabajo predeterminado",
+        "notSet": "No establecido (usa la carpeta de la sesión)"
+      },
+      "localMcp": {
+        "label": "Servidores MCP locales",
+        "description": "Habilitar servidores de subprocesos stdio"
+      }
+    }
+  },
+  "permissions": {
+    "title": "Permisos",
+    "about": {
+      "title": "Acerca de los permisos",
+      "body": "Los permisos controlan cuánta autonomía tiene tu agente. En el modo <explore>Explorar</explore>, el agente solo puede leer e investigar, lo cual es perfecto para entender un problema antes de comprometerse con los cambios. Cuando estés listo, cambia al modo <execute>Ejecutar</execute> para permitir que el agente implemente el plan de forma autónoma.",
+      "workflow": "Un buen flujo de trabajo: comienza en Explorar para dejar que el agente investigue, revisa el plan propuesto y luego ejecuta con confianza.",
+      "learnMore": "Más información"
+    },
+    "default": {
+      "title": "Permisos predeterminados",
+      "description": "Patrones a nivel de aplicación permitidos en el modo Explorar. Los comandos que no estén en esta lista serán bloqueados.",
+      "editFile": "Editar archivo",
+      "empty": {
+        "title": "No se han encontrado permisos predeterminados.",
+        "hint": "Los permisos predeterminados deberían estar en <code>~/.craft-agent/permissions/default.json</code>"
+      }
+    },
+    "custom": {
+      "title": "Personalizaciones del espacio de trabajo",
+      "description": "Patrones a nivel de espacio de trabajo que extienden los ajustes predeterminados de la aplicación de arriba.",
+      "editFile": "Editar archivo",
+      "empty": {
+        "title": "No se han configurado permisos personalizados.",
+        "hint": "Crea un archivo <code>permissions.json</code> en tu espacio de trabajo para añadir reglas personalizadas."
+      }
+    },
+    "table": {
+      "writeTo": "Escribir en: {{path}}",
+      "customBlockedTool": "Herramienta bloqueada personalizada",
+      "customBashPattern": "Patrón de bash personalizado",
+      "customMcpPattern": "Patrón de MCP personalizado",
+      "customApiEndpoint": "Endpoint de API personalizado",
+      "allowedWritePath": "Ruta de escritura permitida"
+    }
+  },
+  "labels": {
+    "title": "Etiquetas",
+    "editFile": "Editar archivo",
+    "about": {
+      "title": "Acerca de las etiquetas",
+      "paragraphs": {
+        "organize": "Las etiquetas te ayudan a organizar las sesiones con marcas de colores. Úsalas para categorizar las conversaciones por proyecto, tema o prioridad, facilitando así el filtrado y la búsqueda de sesiones relacionadas más tarde.",
+        "value": "Cada etiqueta puede llevar opcionalmente un <value>valor</value> con un tipo específico (texto, número o fecha). Esto convierte las etiquetas en metadatos estructurados; por ejemplo, una etiqueta de «prioridad» con valor 3, o una etiqueta de «vencimiento» con una fecha.",
+        "autoApply": "Las <auto>reglas de aplicación automática</auto> asignan etiquetas automáticamente cuando un mensaje coincide con un patrón regex. Por ejemplo, al pegar una URL de un problema de Linear, se puede etiquetar automáticamente la sesión con el nombre del proyecto y el ID del problema, sin necesidad de etiquetado manual."
+      },
+      "learnMore": "Más información"
+    },
+    "hierarchy": {
+      "title": "Jerarquía de etiquetas",
+      "description": "Todas las etiquetas configuradas para este espacio de trabajo. Las etiquetas se pueden anidar para formar grupos.",
+      "empty": {
+        "title": "No hay etiquetas configuradas.",
+        "hint": "Las etiquetas pueden ser creadas por el agente o editando <code>labels/config.json</code> en tu espacio de trabajo."
+      }
+    },
+    "autoRules": {
+      "title": "Reglas de aplicación automática",
+      "description": "Patrones regex que aplican etiquetas automáticamente cuando coinciden en los mensajes del usuario. Por ejemplo, pega una URL de un problema de Linear y etiqueta automáticamente la sesión con el nombre del proyecto y el ID del problema."
+    }
+  }
+}

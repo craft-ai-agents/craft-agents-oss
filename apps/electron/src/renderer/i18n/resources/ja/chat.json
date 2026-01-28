@@ -1,0 +1,161 @@
+{
+  "badges": {
+    "new": "新規",
+    "plan": "プラン"
+  },
+  "processing": {
+    "messages": [
+      "思考中...",
+      "思索中...",
+      "熟考中...",
+      "推論中...",
+      "処理中...",
+      "計算中...",
+      "検討中...",
+      "思案中...",
+      "審議中...",
+      "思考中...",
+      "黙考中...",
+      "瞑想中...",
+      "作業中...",
+      "対応中...",
+      "解析中...",
+      "準備中...",
+      "点と点をつなぎ合わせ中...",
+      "じっくり検討中...",
+      "思考に没頭中...",
+      "うーん...",
+      "ええと...",
+      "少々お待ちください...",
+      "お待ちください...",
+      "そのままお待ちください...",
+      "ちょっとお待ちを...",
+      "すぐ終わります...",
+      "もうすぐです...",
+      "あと少し...",
+      "実行中...",
+      "作業中...",
+      "動作中...",
+      "稼働中...",
+      "検討中...",
+      "準備中...",
+      "作成中...",
+      "生成中...",
+      "調整中...",
+      "起動中...",
+      "準備運動中...",
+      "エンジン回転中...",
+      "活発に動作中...",
+      "順調に動作中...",
+      "刻んでいます...",
+      "連動中...",
+      "高速処理中...",
+      "加速中...",
+      "爆走中...",
+      "進行中...",
+      "進んでいます...",
+      "進行中..."
+    ]
+  },
+  "permissionModes": {
+    "safe": {
+      "display": "閲覧",
+      "short": "閲覧",
+      "description": "読み取り専用の探索。書き込みをブロックし、確認を求めません。"
+    },
+    "ask": {
+      "display": "編集時に確認",
+      "short": "確認",
+      "description": "編集を行う前に確認を求めます。"
+    },
+    "allowAll": {
+      "display": "実行",
+      "short": "実行",
+      "description": "自動実行。確認を求めません。"
+    },
+    "ultrathink": {
+      "label": "Ultrathink",
+      "description": "複雑な問題のための拡張推論"
+    }
+  },
+  "commandMenu": {
+    "searchPlaceholder": "コマンドを検索...",
+    "empty": "コマンドが見つかりませんでした"
+  },
+  "inputPlaceholders": [
+    "どのような作業を始めますか？",
+    "Shift + Tab で閲覧と実行を切り替えます",
+    "@ を入力してファイル、フォルダ、スキルを指定します",
+    "# を入力してこの会話にラベルを適用します",
+    "Shift + Return で改行します"
+  ],
+  "input": {
+    "attachFiles": "ファイルを添付",
+    "attachFilesLabel": "ファイルを添付",
+    "fileCount": {
+      "one": "1つのファイル",
+      "other": "{{count}}個のファイル"
+    },
+    "sourcesTooltip": "ソース",
+    "chooseSources": "ソースを選択",
+    "sourcesCount": "{{count}}個のソース",
+    "noSourcesConfigured": "ソースが設定されていません。",
+    "addSourcesInSettings": "設定でソースを追加してください。",
+    "searchSourcesPlaceholder": "ソースを検索...",
+    "workingDirectory": "作業ディレクトリ",
+    "workingDirectoryOnBranch": "{{branch}} ブランチ",
+    "chooseWorkingDirectory": "作業ディレクトリを選択",
+    "filterFoldersPlaceholder": "フォルダを絞り込む...",
+    "modelTooltip": "モデル",
+    "customApiConnection": "カスタムAPI接続",
+    "workInFolder": "フォルダ内で作業",
+    "folderFallback": "フォルダ",
+    "noFoldersFound": "フォルダが見つかりませんでした",
+    "chooseFolder": "フォルダを選択...",
+    "reset": "リセット"
+  },
+  "inlineSlash": {
+    "sections": {
+      "modes": "モード",
+      "features": "機能",
+      "folders": "最近の作業ディレクトリ"
+    },
+    "footer": "@ を使用してスキルやファイルにアクセス"
+  },
+  "sessionList": {
+    "searchPlaceholder": "会話を検索...",
+    "searchClose": "検索を閉じる",
+    "emptyTitle": "会話はまだありません",
+    "emptyDescription": "エージェントとの会話がここに表示されます。開始するには新しく会話を始めてください。",
+    "emptyAction": "新しい会話",
+    "noResults": "会話が見つかりませんでした",
+    "clearSearch": "検索をクリア",
+    "ariaLabel": "セッション",
+    "emptyFlagged": "フラグ付きの会話はありません"
+  },
+  "sourcesPanel": {
+    "emptyTitle": "ソースが設定されていません。",
+    "emptyTitleWithType": "{{type}} ソースが設定されていません。",
+    "description": "ソースは、エージェントを外部データ（MCPサーバー、REST API、ローカルフォルダなど）に接続します。",
+    "learnMore": "詳細を見る",
+    "addSource": "ソースを追加",
+    "types": {
+      "api": "API",
+      "mcp": "MCP",
+      "local": "ローカルフォルダ"
+    }
+  },
+  "skillsPanel": {
+    "emptyTitle": "スキルが設定されていません",
+    "description": "スキルは、エージェントに専門的な動作を教えるための再利用可能な指示です。",
+    "learnMore": "詳細を見る",
+    "addSkill": "スキルを追加"
+  },
+  "mentionMenu": {
+    "sections": {
+      "skills": "スキル",
+      "sources": "ソース",
+      "files": "ファイル"
+    }
+  }
+}

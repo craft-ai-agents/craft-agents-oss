@@ -1,0 +1,161 @@
+{
+  "badges": {
+    "new": "Neu",
+    "plan": "Plan"
+  },
+  "processing": {
+    "messages": [
+      "Denkt nach...",
+      "Grübelt...",
+      "Überlegt...",
+      "Zieht Schlüsse...",
+      "Verarbeitet...",
+      "Berechnet...",
+      "Wägt ab...",
+      "Reflektiert...",
+      "Berät...",
+      "Denkt scharf nach...",
+      "Sinniert...",
+      "Spekuliert...",
+      "Arbeite daran...",
+      "Bin dran...",
+      "Verarbeitet Daten...",
+      "Braut zusammen...",
+      "Verknüpft Punkte...",
+      "Geht es durch...",
+      "In Gedanken vertieft...",
+      "Hmm...",
+      "Lass mich sehen...",
+      "Einen Moment...",
+      "Sekunde...",
+      "Geduld bitte...",
+      "Einen Augenblick...",
+      "Bleib dran...",
+      "Gleich soweit...",
+      "Fast fertig...",
+      "Arbeitet...",
+      "Beschäftigt...",
+      "Surrt...",
+      "Rührt...",
+      "Sickert durch...",
+      "Köchelt...",
+      "Kocht...",
+      "Backt...",
+      "Rührt...",
+      "Fährt hoch...",
+      "Wärmt auf...",
+      "Dreht auf...",
+      "Summt...",
+      "Brummt...",
+      "Tickt...",
+      "Klickt...",
+      "Sausst...",
+      "Zoomt...",
+      "Flitzt...",
+      "Tuckert...",
+      "Fährt...",
+      "Rollt..."
+    ]
+  },
+  "permissionModes": {
+    "safe": {
+      "display": "Erkunden",
+      "short": "Erkunden",
+      "description": "Nur-Lese-Erkundung. Blockiert Schreibvorgänge, fragt nie nach."
+    },
+    "ask": {
+      "display": "Nach Bearbeitung fragen",
+      "short": "Fragen",
+      "description": "Fragt vor Bearbeitungen nach."
+    },
+    "allowAll": {
+      "display": "Ausführen",
+      "short": "Ausführen",
+      "description": "Automatische Ausführung, keine Nachfragen."
+    },
+    "ultrathink": {
+      "label": "Ultrathink",
+      "description": "Erweitertes Denken für komplexe Probleme"
+    }
+  },
+  "commandMenu": {
+    "searchPlaceholder": "Befehle suchen...",
+    "empty": "Keine Befehle gefunden"
+  },
+  "inputPlaceholders": [
+    "Woran möchten Sie arbeiten?",
+    "Nutzen Sie Shift + Tab, um zwischen Erkunden und Ausführen zu wechseln",
+    "Tippen Sie @, um Dateien, Ordner oder Skills zu erwähnen",
+    "Tippen Sie #, um dieser Konversation Labels zuzuweisen",
+    "Drücken Sie Shift + Return, um eine neue Zeile hinzuzufügen"
+  ],
+  "input": {
+    "attachFiles": "Dateien anhängen",
+    "attachFilesLabel": "Dateien anhängen",
+    "fileCount": {
+      "one": "1 Datei",
+      "other": "{{count}} Dateien"
+    },
+    "sourcesTooltip": "Quellen",
+    "chooseSources": "Quellen auswählen",
+    "sourcesCount": "{{count}} Quellen",
+    "noSourcesConfigured": "Keine Quellen konfiguriert.",
+    "addSourcesInSettings": "Quellen in den Einstellungen hinzufügen.",
+    "searchSourcesPlaceholder": "Quellen suchen...",
+    "workingDirectory": "Arbeitsverzeichnis",
+    "workingDirectoryOnBranch": "auf {{branch}}",
+    "chooseWorkingDirectory": "Arbeitsverzeichnis auswählen",
+    "filterFoldersPlaceholder": "Ordner filtern...",
+    "modelTooltip": "Modell",
+    "customApiConnection": "Benutzerdefinierte API-Verbindung",
+    "workInFolder": "In Ordner arbeiten",
+    "folderFallback": "Ordner",
+    "noFoldersFound": "Keine Ordner gefunden",
+    "chooseFolder": "Ordner auswählen...",
+    "reset": "Zurücksetzen"
+  },
+  "inlineSlash": {
+    "sections": {
+      "modes": "Modi",
+      "features": "Funktionen",
+      "folders": "Zuletzt verwendete Arbeitsverzeichnisse"
+    },
+    "footer": "@ für Skills und Dateien verwenden"
+  },
+  "sessionList": {
+    "searchPlaceholder": "Konversationen suchen...",
+    "searchClose": "Suche schließen",
+    "emptyTitle": "Noch keine Konversationen",
+    "emptyDescription": "Hier werden Konversationen mit Ihrem Agenten angezeigt. Starten Sie eine, um loszulegen.",
+    "emptyAction": "Neue Konversation",
+    "noResults": "Keine Konversationen gefunden",
+    "clearSearch": "Suche löschen",
+    "ariaLabel": "Sitzungen",
+    "emptyFlagged": "Keine markierten Unterhaltungen"
+  },
+  "sourcesPanel": {
+    "emptyTitle": "Keine Quellen konfiguriert.",
+    "emptyTitleWithType": "Keine {{type}}-Quellen konfiguriert.",
+    "description": "Quellen verbinden Ihren Agenten mit externen Daten – MCP-Servern, REST-APIs und lokalen Ordnern.",
+    "learnMore": "Mehr erfahren",
+    "addSource": "Quelle hinzufügen",
+    "types": {
+      "api": "API",
+      "mcp": "MCP",
+      "local": "Lokaler Ordner"
+    }
+  },
+  "skillsPanel": {
+    "emptyTitle": "Keine Skills konfiguriert",
+    "description": "Skills sind wiederverwendbare Anweisungen, die Ihrem Agenten spezialisierte Verhaltensweisen beibringen.",
+    "learnMore": "Mehr erfahren",
+    "addSkill": "Skill hinzufügen"
+  },
+  "mentionMenu": {
+    "sections": {
+      "skills": "Skills",
+      "sources": "Quellen",
+      "files": "Dateien"
+    }
+  }
+}

@@ -2277,6 +2277,33 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     }
   })
 
+  // ============================================================
+  // UI Language (app-level)
+  // ============================================================
+
+  ipcMain.handle(IPC_CHANNELS.LANGUAGE_GET_UI, async () => {
+    const { getUiLanguage } = await import('@craft-agent/shared/config/storage')
+    return getUiLanguage()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.LANGUAGE_SET_UI, async (_event, language: string) => {
+    const { setUiLanguage } = await import('@craft-agent/shared/config/storage')
+    setUiLanguage(language)
+  })
+
+  // Broadcast UI language to all other windows (for cross-window sync)
+  ipcMain.handle(IPC_CHANNELS.LANGUAGE_BROADCAST_UI, async (event, language: string) => {
+    const senderId = event.sender.id
+    for (const managed of windowManager.getAllWindows()) {
+      if (!managed.window.isDestroyed() &&
+          !managed.window.webContents.isDestroyed() &&
+          managed.window.webContents.mainFrame &&
+          managed.window.webContents.id !== senderId) {
+        managed.window.webContents.send(IPC_CHANNELS.LANGUAGE_UI_CHANGED, language)
+      }
+    }
+  })
+
   // Logo URL resolution (uses Node.js filesystem cache for provider domains)
   ipcMain.handle(IPC_CHANNELS.LOGO_GET_URL, async (_event, serviceUrl: string, provider?: string) => {
     const { getLogoUrl } = await import('@craft-agent/shared/utils/logo')

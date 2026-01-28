@@ -1,0 +1,161 @@
+{
+  "badges": {
+    "new": "Nouveau",
+    "plan": "Plan"
+  },
+  "processing": {
+    "messages": [
+      "Réflexion...",
+      "Méditation...",
+      "Contemplation...",
+      "Raisonnement...",
+      "Traitement...",
+      "Calcul...",
+      "Examen...",
+      "Réflexion...",
+      "Délibération...",
+      "Cogitation...",
+      "Rumination...",
+      "Songeries...",
+      "J'y travaille...",
+      "Je m'en occupe...",
+      "Analyse des données...",
+      "Préparation...",
+      "Liaison des points...",
+      "Analyse en cours...",
+      "En pleine réflexion...",
+      "Hmm...",
+      "Voyons voir...",
+      "Un instant...",
+      "Attendez...",
+      "Patientez...",
+      "Une seconde...",
+      "Tenez bon...",
+      "On y arrive...",
+      "Presque...",
+      "Travail en cours...",
+      "Très occupé...",
+      "Ça tourne...",
+      "En mouvement...",
+      "Infusion...",
+      "Mijotage...",
+      "En cuisine...",
+      "Cuisson...",
+      "Mélange...",
+      "Démarrage...",
+      "Préchauffage...",
+      "Accélération...",
+      "Bourdonnement...",
+      "Ronronnement...",
+      "Tic-tac...",
+      "Clic-clac...",
+      "Vrombissement...",
+      "Zoom...",
+      "Vitesse...",
+      "Avancement...",
+      "En route...",
+      "C'est parti..."
+    ]
+  },
+  "permissionModes": {
+    "safe": {
+      "display": "Explorer",
+      "short": "Explorer",
+      "description": "Exploration en lecture seule. Bloque les écritures, ne demande jamais confirmation."
+    },
+    "ask": {
+      "display": "Demander pour modifier",
+      "short": "Demander",
+      "description": "Demande avant d'effectuer des modifications."
+    },
+    "allowAll": {
+      "display": "Exécuter",
+      "short": "Exécuter",
+      "description": "Exécution automatique, sans confirmation."
+    },
+    "ultrathink": {
+      "label": "Ultrathink",
+      "description": "Raisonnement étendu pour les problèmes complexes"
+    }
+  },
+  "commandMenu": {
+    "searchPlaceholder": "Rechercher des commandes...",
+    "empty": "Aucune commande trouvée"
+  },
+  "inputPlaceholders": [
+    "Sur quoi aimeriez-vous travailler ?",
+    "Utilisez Shift + Tab pour basculer entre Explorer et Exécuter",
+    "Tapez @ pour mentionner des fichiers, dossiers ou compétences",
+    "Tapez # pour appliquer des étiquettes à cette conversation",
+    "Appuyez sur Shift + Return pour ajouter une nouvelle ligne"
+  ],
+  "input": {
+    "attachFiles": "Joindre des fichiers",
+    "attachFilesLabel": "Joindre des fichiers",
+    "fileCount": {
+      "one": "1 fichier",
+      "other": "{{count}} fichiers"
+    },
+    "sourcesTooltip": "Sources",
+    "chooseSources": "Choisir les sources",
+    "sourcesCount": "{{count}} sources",
+    "noSourcesConfigured": "Aucune source configurée.",
+    "addSourcesInSettings": "Ajouter des sources dans les paramètres.",
+    "searchSourcesPlaceholder": "Rechercher des sources...",
+    "workingDirectory": "Répertoire de travail",
+    "workingDirectoryOnBranch": "sur {{branch}}",
+    "chooseWorkingDirectory": "Choisir le répertoire de travail",
+    "filterFoldersPlaceholder": "Filtrer les dossiers...",
+    "modelTooltip": "Modèle",
+    "customApiConnection": "Connexion API personnalisée",
+    "workInFolder": "Travailler dans le dossier",
+    "folderFallback": "Dossier",
+    "noFoldersFound": "Aucun dossier trouvé",
+    "chooseFolder": "Choisir un dossier...",
+    "reset": "Réinitialiser"
+  },
+  "inlineSlash": {
+    "sections": {
+      "modes": "Modes",
+      "features": "Fonctionnalités",
+      "folders": "Répertoires de travail récents"
+    },
+    "footer": "Utilisez @ pour les compétences et les fichiers"
+  },
+  "sessionList": {
+    "searchPlaceholder": "Rechercher des conversations...",
+    "searchClose": "Fermer la recherche",
+    "emptyTitle": "Pas encore de conversations",
+    "emptyDescription": "Les conversations avec votre agent apparaîtront ici. Commencez-en une pour débuter.",
+    "emptyAction": "Nouvelle conversation",
+    "noResults": "Aucune conversation trouvée",
+    "clearSearch": "Effacer la recherche",
+    "ariaLabel": "Sessions",
+    "emptyFlagged": "Aucune conversation signalée"
+  },
+  "sourcesPanel": {
+    "emptyTitle": "Aucune source configurée.",
+    "emptyTitleWithType": "Aucune source {{type}} configurée.",
+    "description": "Les sources connectent votre agent à des données externes — serveurs MCP, API REST et dossiers locaux.",
+    "learnMore": "En savoir plus",
+    "addSource": "Ajouter une source",
+    "types": {
+      "api": "API",
+      "mcp": "MCP",
+      "local": "dossier local"
+    }
+  },
+  "skillsPanel": {
+    "emptyTitle": "Aucune compétence configurée",
+    "description": "Les compétences sont des instructions réutilisables qui enseignent à votre agent des comportements spécialisés.",
+    "learnMore": "En savoir plus",
+    "addSkill": "Ajouter une compétence"
+  },
+  "mentionMenu": {
+    "sections": {
+      "skills": "Compétences",
+      "sources": "Sources",
+      "files": "Fichiers"
+    }
+  }
+}

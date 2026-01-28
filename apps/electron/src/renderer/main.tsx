@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { Provider as JotaiProvider } from 'jotai'
 import App from './App'
 import { ThemeProvider } from './context/ThemeContext'
+import { LanguageProvider } from './context/LanguageContext'
 import { Toaster } from '@/components/ui/sonner'
 import './index.css'
 
@@ -17,10 +18,12 @@ function Root() {
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <JotaiProvider>
-      <ThemeProvider>
-        <Root />
-        <Toaster />
-      </ThemeProvider>
+      <LanguageProvider>
+        <ThemeProvider>
+          <Root />
+          <Toaster />
+        </ThemeProvider>
+      </LanguageProvider>
     </JotaiProvider>
   </React.StrictMode>
 )

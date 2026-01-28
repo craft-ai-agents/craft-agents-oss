@@ -25,6 +25,7 @@ import type { PermissionMode, ThinkingLevel, WorkspaceSettings } from '../../../
 import { PERMISSION_MODE_CONFIG } from '@craft-agent/shared/agent/mode-types'
 import { DEFAULT_THINKING_LEVEL, THINKING_LEVELS } from '@craft-agent/shared/agent/thinking-levels'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
+import { useTranslation } from 'react-i18next'
 
 import {
   SettingsSection,
@@ -44,6 +45,7 @@ export const meta: DetailsPageMeta = {
 // ============================================
 
 export default function WorkspaceSettingsPage() {
+  const { t } = useTranslation('settings')
   // Get model, onModelChange, and active workspace from context
   const appShellContext = useAppShellContext()
   const onModelChange = appShellContext.onModelChange
@@ -267,7 +269,7 @@ export default function WorkspaceSettingsPage() {
 
       // Validate: at least 2 modes required
       if (newModes.length < 2) {
-        setModeCyclingError('At least 2 modes required')
+        setModeCyclingError(t('workspace.modeCycling.errorMinimum'))
         // Auto-dismiss after 2 seconds
         setTimeout(() => {
           setModeCyclingError(null)
@@ -284,16 +286,16 @@ export default function WorkspaceSettingsPage() {
         console.error('Failed to save mode cycling settings:', error)
       }
     },
-    [enabledModes, updateWorkspaceSetting]
+    [enabledModes, updateWorkspaceSetting, t]
   )
 
   // Show empty state if no workspace is active
   if (!activeWorkspaceId) {
     return (
       <div className="h-full flex flex-col">
-        <PanelHeader title="Workspace Settings" actions={<HeaderMenu route={routes.view.settings('workspace')} helpFeature="workspaces" />} />
+        <PanelHeader title={t('workspace.title')} actions={<HeaderMenu route={routes.view.settings('workspace')} helpFeature="workspaces" />} />
         <div className="flex-1 flex items-center justify-center">
-          <p className="text-sm text-muted-foreground">No workspace selected</p>
+          <p className="text-sm text-muted-foreground">{t('workspace.empty')}</p>
         </div>
       </div>
     )
@@ -303,7 +305,7 @@ export default function WorkspaceSettingsPage() {
   if (isLoadingWorkspace) {
     return (
       <div className="h-full flex flex-col">
-        <PanelHeader title="Workspace Settings" actions={<HeaderMenu route={routes.view.settings('workspace')} helpFeature="workspaces" />} />
+        <PanelHeader title={t('workspace.title')} actions={<HeaderMenu route={routes.view.settings('workspace')} helpFeature="workspaces" />} />
         <div className="flex-1 flex items-center justify-center">
           <Spinner className="text-muted-foreground" />
         </div>
@@ -313,17 +315,17 @@ export default function WorkspaceSettingsPage() {
 
   return (
     <div className="h-full flex flex-col">
-      <PanelHeader title="Workspace Settings" actions={<HeaderMenu route={routes.view.settings('workspace')} helpFeature="workspaces" />} />
+      <PanelHeader title={t('workspace.title')} actions={<HeaderMenu route={routes.view.settings('workspace')} helpFeature="workspaces" />} />
       <div className="flex-1 min-h-0 mask-fade-y">
         <ScrollArea className="h-full">
           <div className="px-5 py-7 max-w-3xl mx-auto">
           <div className="space-y-8">
             {/* Workspace Info */}
-            <SettingsSection title="Workspace Info">
+            <SettingsSection title={t('workspace.info.title')}>
               <SettingsCard>
                 <SettingsRow
-                  label="Name"
-                  description={wsName || 'Untitled'}
+                  label={t('workspace.info.name.label')}
+                  description={wsName || t('workspace.info.name.untitled')}
                   action={
                     <button
                       type="button"
@@ -333,12 +335,12 @@ export default function WorkspaceSettingsPage() {
                       }}
                       className="inline-flex items-center h-8 px-3 text-sm rounded-lg bg-background shadow-minimal hover:bg-foreground/[0.02] transition-colors"
                     >
-                      Edit
+                      {t('common.actions.edit')}
                     </button>
                   }
                 />
                 <SettingsRow
-                  label="Icon"
+                  label={t('workspace.info.icon.label')}
                   action={
                     <label className="cursor-pointer">
                       <input
@@ -349,7 +351,7 @@ export default function WorkspaceSettingsPage() {
                         disabled={isUploadingIcon}
                       />
                       <span className="inline-flex items-center h-8 px-3 text-sm rounded-lg bg-background shadow-minimal hover:bg-foreground/[0.02] transition-colors">
-                        {isUploadingIcon ? 'Uploading...' : 'Change'}
+                        {isUploadingIcon ? t('common.status.uploading') : t('common.actions.change')}
                       </span>
                     </label>
                   }
@@ -376,7 +378,7 @@ export default function WorkspaceSettingsPage() {
               <RenameDialog
                 open={renameDialogOpen}
                 onOpenChange={setRenameDialogOpen}
-                title="Rename workspace"
+                title={t('workspace.rename.title')}
                 value={wsNameEditing}
                 onValueChange={setWsNameEditing}
                 onSubmit={() => {
@@ -388,60 +390,84 @@ export default function WorkspaceSettingsPage() {
                   }
                   setRenameDialogOpen(false)
                 }}
-                placeholder="Enter workspace name..."
+                placeholder={t('workspace.rename.placeholder')}
               />
             </SettingsSection>
 
             {/* Model */}
-            <SettingsSection title="Model">
+            <SettingsSection title={t('workspace.model.title')}>
               <SettingsCard>
                 {/* When a custom API connection is active, model is fixed — show info instead of selector */}
                 {customModel ? (
                   <SettingsRow
-                    label="Default model"
-                    description="Set via API connection"
+                    label={t('workspace.model.defaultModel.label')}
+                    description={t('workspace.model.defaultModel.setViaApi')}
                   >
                     <span className="text-sm text-muted-foreground">{customModel}</span>
                   </SettingsRow>
                 ) : (
                   <SettingsMenuSelectRow
-                    label="Default model"
-                    description="AI model for new chats"
+                    label={t('workspace.model.defaultModel.label')}
+                    description={t('workspace.model.defaultModel.description')}
                     value={wsModel}
                     onValueChange={handleModelChange}
                     options={[
-                      { value: 'claude-opus-4-5-20251101', label: 'Opus 4.5', description: 'Most capable for complex work' },
-                      { value: 'claude-sonnet-4-5-20250929', label: 'Sonnet 4.5', description: 'Best for everyday tasks' },
-                      { value: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5', description: 'Fastest for quick answers' },
+                      {
+                        value: 'claude-opus-4-5-20251101',
+                        label: t('workspace.model.options.opus.label'),
+                        description: t('workspace.model.options.opus.description'),
+                      },
+                      {
+                        value: 'claude-sonnet-4-5-20250929',
+                        label: t('workspace.model.options.sonnet.label'),
+                        description: t('workspace.model.options.sonnet.description'),
+                      },
+                      {
+                        value: 'claude-haiku-4-5-20251001',
+                        label: t('workspace.model.options.haiku.label'),
+                        description: t('workspace.model.options.haiku.description'),
+                      },
                     ]}
                   />
                 )}
                 <SettingsMenuSelectRow
-                  label="Thinking level"
-                  description="Reasoning depth for new chats"
+                  label={t('workspace.model.thinkingLevel.label')}
+                  description={t('workspace.model.thinkingLevel.description')}
                   value={wsThinkingLevel}
                   onValueChange={(v) => handleThinkingLevelChange(v as ThinkingLevel)}
                   options={THINKING_LEVELS.map(({ id, name, description }) => ({
                     value: id,
-                    label: name,
-                    description,
+                    label: t(`workspace.thinkingLevels.${id}.name`, { defaultValue: name }),
+                    description: t(`workspace.thinkingLevels.${id}.description`, { defaultValue: description }),
                   }))}
                 />
               </SettingsCard>
             </SettingsSection>
 
             {/* Permissions */}
-            <SettingsSection title="Permissions">
+            <SettingsSection title={t('workspace.permissions.title')}>
               <SettingsCard>
                 <SettingsMenuSelectRow
-                  label="Default mode"
-                  description="Control what AI can do"
+                  label={t('workspace.permissions.defaultMode.label')}
+                  description={t('workspace.permissions.defaultMode.description')}
                   value={permissionMode}
                   onValueChange={(v) => handlePermissionModeChange(v as PermissionMode)}
                   options={[
-                    { value: 'safe', label: PERMISSION_MODE_CONFIG['safe'].shortName, description: 'Read-only, no changes allowed' },
-                    { value: 'ask', label: PERMISSION_MODE_CONFIG['ask'].shortName, description: 'Prompts before making edits' },
-                    { value: 'allow-all', label: PERMISSION_MODE_CONFIG['allow-all'].shortName, description: 'Full autonomous execution' },
+                    {
+                      value: 'safe',
+                      label: t('workspace.permissions.modes.safe.label', { defaultValue: PERMISSION_MODE_CONFIG['safe'].shortName }),
+                      description: t('workspace.permissions.modes.safe.description', { defaultValue: 'Read-only, no changes allowed' }),
+                    },
+                    {
+                      value: 'ask',
+                      label: t('workspace.permissions.modes.ask.label', { defaultValue: PERMISSION_MODE_CONFIG['ask'].shortName }),
+                      description: t('workspace.permissions.modes.ask.description', { defaultValue: 'Prompts before making edits' }),
+                    },
+                    {
+                      value: 'allow-all',
+                      label: t('workspace.permissions.modes.allowAll.label', { defaultValue: PERMISSION_MODE_CONFIG['allow-all'].shortName }),
+                      description: t('workspace.permissions.modes.allowAll.description', { defaultValue: 'Full autonomous execution' }),
+                    },
                   ]}
                 />
               </SettingsCard>
@@ -449,8 +475,8 @@ export default function WorkspaceSettingsPage() {
 
             {/* Mode Cycling */}
             <SettingsSection
-              title="Mode Cycling"
-              description="Select which modes to cycle through with Shift+Tab"
+              title={t('workspace.modeCycling.title')}
+              description={t('workspace.modeCycling.description')}
             >
               <SettingsCard>
                 {(['safe', 'ask', 'allow-all'] as const).map((m) => {
@@ -483,11 +509,11 @@ export default function WorkspaceSettingsPage() {
             </SettingsSection>
 
             {/* Advanced */}
-            <SettingsSection title="Advanced">
+            <SettingsSection title={t('workspace.advanced.title')}>
               <SettingsCard>
                 <SettingsRow
-                  label="Default Working Directory"
-                  description={workingDirectory || 'Not set (uses session folder)'}
+                  label={t('workspace.advanced.workingDirectory.label')}
+                  description={workingDirectory || t('workspace.advanced.workingDirectory.notSet')}
                   action={
                     <div className="flex items-center gap-2">
                       {workingDirectory && (
@@ -496,7 +522,7 @@ export default function WorkspaceSettingsPage() {
                           onClick={handleClearWorkingDirectory}
                           className="inline-flex items-center h-8 px-3 text-sm rounded-lg bg-background shadow-minimal hover:bg-foreground/[0.02] transition-colors text-foreground/60 hover:text-foreground"
                         >
-                          Clear
+                          {t('common.actions.clear')}
                         </button>
                       )}
                       <button
@@ -504,14 +530,14 @@ export default function WorkspaceSettingsPage() {
                         onClick={handleChangeWorkingDirectory}
                         className="inline-flex items-center h-8 px-3 text-sm rounded-lg bg-background shadow-minimal hover:bg-foreground/[0.02] transition-colors"
                       >
-                        Change...
+                        {t('common.actions.changeEllipsis')}
                       </button>
                     </div>
                   }
                 />
                 <SettingsToggle
-                  label="Local MCP Servers"
-                  description="Enable stdio subprocess servers"
+                  label={t('workspace.advanced.localMcp.label')}
+                  description={t('workspace.advanced.localMcp.description')}
                   checked={localMcpEnabled}
                   onCheckedChange={handleLocalMcpEnabledChange}
                 />

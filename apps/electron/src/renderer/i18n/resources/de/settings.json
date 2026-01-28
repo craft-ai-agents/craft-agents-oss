@@ -1,0 +1,353 @@
+{
+  "common": {
+    "actions": {
+      "edit": "Bearbeiten",
+      "closeWithEsc": "Schließen (Esc)",
+      "change": "Ändern",
+      "changeEllipsis": "Ändern...",
+      "clear": "Leeren"
+    },
+    "status": {
+      "loading": "Wird geladen...",
+      "uploading": "Wird hochgeladen..."
+    }
+  },
+  "app": {
+    "title": "App-Einstellungen",
+    "appearance": {
+      "title": "Erscheinungsbild",
+      "mode": {
+        "label": "Modus",
+        "options": {
+          "system": "System",
+          "light": "Hell",
+          "dark": "Dunkel"
+        }
+      },
+      "colorTheme": {
+        "label": "Farbthema",
+        "options": {
+          "default": "Standard"
+        }
+      },
+      "font": {
+        "label": "Schriftart",
+        "options": {
+          "inter": "Inter",
+          "system": "System"
+        }
+      }
+    },
+    "language": {
+      "title": "Sprache",
+      "description": "Wählen Sie die Sprache für die App-Oberfläche.",
+      "label": "App-Sprache",
+      "hint": "Dies betrifft nur die Benutzeroberfläche. Um die Antwortsprache zu ändern, verwenden Sie Präferenzen → Sprache."
+    },
+    "notifications": {
+      "title": "Benachrichtigungen",
+      "desktop": {
+        "label": "Desktop-Benachrichtigungen",
+        "description": "Lassen Sie sich benachrichtigen, wenn die KI die Arbeit in einem Chat beendet."
+      }
+    },
+    "apiConnection": {
+      "title": "API-Verbindung",
+      "description": "Wie sich Ihre KI-Agenten mit Sprachmodellen verbinden.",
+      "connectionType": {
+        "label": "Verbindungstyp",
+        "values": {
+          "claudeSubscription": "Claude Pro/Max — verwendet Ihr Claude-Abonnement",
+          "apiKey": "API-Schlüssel — Anthropic, OpenRouter oder kompatible API",
+          "notConfigured": "Nicht konfiguriert"
+        }
+      }
+    },
+    "about": {
+      "title": "Über",
+      "version": {
+        "label": "Version",
+        "updateTo": "Update auf {{version}}"
+      },
+      "checkForUpdates": {
+        "label": "Nach Updates suchen",
+        "checking": "Suche...",
+        "checkNow": "Jetzt prüfen"
+      },
+      "installUpdate": {
+        "label": "Update installieren",
+        "restartToUpdate": "Zum Aktualisieren neu starten"
+      }
+    }
+  },
+  "navigator": {
+    "items": {
+      "app": {
+        "label": "App",
+        "description": "Erscheinungsbild, Benachrichtigungen, API-Verbindung"
+      },
+      "workspace": {
+        "label": "Workspace",
+        "description": "Modell, Modus-Wechsel, Erweitert"
+      },
+      "permissions": {
+        "label": "Berechtigungen",
+        "description": "Erlaubte Befehle im Erkundungsmodus"
+      },
+      "labels": {
+        "label": "Labels",
+        "description": "Label-Hierarchie und Regeln zur automatischen Zuweisung"
+      },
+      "shortcuts": {
+        "label": "Tastenkürzel",
+        "description": "Referenz für Tastenkürzel"
+      },
+      "preferences": {
+        "label": "Präferenzen",
+        "description": "Ihre persönlichen Präferenzen"
+      }
+    },
+    "actions": {
+      "openInNewWindow": "In neuem Fenster öffnen"
+    }
+  },
+  "shortcuts": {
+    "title": "Tastenkürzel",
+    "sections": {
+      "global": {
+        "title": "Global",
+        "items": {
+          "focusSidebar": "Seitenleiste fokussieren",
+          "focusSessionList": "Sitzungsliste fokussieren",
+          "focusChatInput": "Chat-Eingabe fokussieren",
+          "newChat": "Neuer Chat",
+          "toggleSidebar": "Seitenleiste umschalten",
+          "openSettings": "Einstellungen öffnen"
+        }
+      },
+      "navigation": {
+        "title": "Navigation",
+        "items": {
+          "nextZone": "Nächste Zone",
+          "cyclePermissionMode": "Berechtigungsmodus umschalten",
+          "moveBetweenZones": "Zwischen Zonen bewegen (in Listen)",
+          "navigateList": "Elemente in Liste navigieren",
+          "firstItem": "Zum ersten Element gehen",
+          "lastItem": "Zum letzten Element gehen",
+          "closeDialog": "Dialog schließen / Eingabe verlassen"
+        }
+      },
+      "sessionList": {
+        "title": "Sitzungsliste",
+        "items": {
+          "focusChatInput": "Chat-Eingabe fokussieren",
+          "deleteSession": "Sitzung löschen"
+        }
+      },
+      "chat": {
+        "title": "Chat",
+        "items": {
+          "sendMessage": "Nachricht senden",
+          "newLine": "Neue Zeile"
+        }
+      }
+    }
+  },
+  "preferences": {
+    "title": "Präferenzen",
+    "basic": {
+      "title": "Basis-Info",
+      "description": "Helfen Sie Craft Agent, Antworten für Sie zu personalisieren.",
+      "name": {
+        "label": "Name",
+        "description": "Wie Craft Agent Sie ansprechen soll.",
+        "placeholder": "Ihr Name"
+      },
+      "timezone": {
+        "label": "Zeitzone",
+        "description": "Verwendet für relative Daten wie 'morgen' oder 'nächste Woche'.",
+        "placeholder": "z. B. Europe/Berlin"
+      },
+      "language": {
+        "label": "Sprache",
+        "description": "Bevorzugte Sprache für die Antworten von Craft Agent.",
+        "placeholder": "z. B. Deutsch"
+      }
+    },
+    "location": {
+      "title": "Standort",
+      "description": "Ermöglicht standortbezogene Antworten wie Wetter, Ortszeit und regionalen Kontext.",
+      "city": {
+        "label": "Stadt",
+        "description": "Ihre Stadt für lokale Informationen und Kontext.",
+        "placeholder": "z. B. Berlin"
+      },
+      "country": {
+        "label": "Land",
+        "description": "Ihr Land für regionale Formatierung und Kontext.",
+        "placeholder": "z. B. Deutschland"
+      }
+    },
+    "notes": {
+      "title": "Notizen",
+      "description": "Freiform-Kontext, der Craft Agent hilft, Ihre Vorlieben zu verstehen.",
+      "editFile": "Datei bearbeiten",
+      "placeholder": "Zusätzlicher Kontext, den Craft Agent wissen sollte..."
+    }
+  },
+  "workspace": {
+    "title": "Workspace-Einstellungen",
+    "empty": "Kein Workspace ausgewählt",
+    "info": {
+      "title": "Workspace-Info",
+      "name": {
+        "label": "Name",
+        "untitled": "Unbenannt"
+      },
+      "icon": {
+        "label": "Icon"
+      }
+    },
+    "rename": {
+      "title": "Workspace umbenennen",
+      "placeholder": "Workspace-Namen eingeben..."
+    },
+    "model": {
+      "title": "Modell",
+      "defaultModel": {
+        "label": "Standardmodell",
+        "description": "KI-Modell für neue Chats",
+        "setViaApi": "Über API-Verbindung festgelegt"
+      },
+      "options": {
+        "opus": {
+          "label": "Opus 4.5",
+          "description": "Am leistungsfähigsten für komplexe Aufgaben"
+        },
+        "sonnet": {
+          "label": "Sonnet 4.5",
+          "description": "Am besten für alltägliche Aufgaben"
+        },
+        "haiku": {
+          "label": "Haiku 4.5",
+          "description": "Am schnellsten für kurze Antworten"
+        }
+      },
+      "thinkingLevel": {
+        "label": "Denkniveau",
+        "description": "Argumentationstiefe für neue Chats"
+      }
+    },
+    "thinkingLevels": {
+      "off": {
+        "name": "Kein Denken",
+        "description": "Schnellste Antworten, keine Argumentation"
+      },
+      "think": {
+        "name": "Denken",
+        "description": "Ausgewogene Geschwindigkeit und Argumentation"
+      },
+      "max": {
+        "name": "Maximales Denken",
+        "description": "Tiefste Argumentation für komplexe Aufgaben"
+      }
+    },
+    "permissions": {
+      "title": "Berechtigungen",
+      "defaultMode": {
+        "label": "Standardmodus",
+        "description": "Steuern, was die KI tun darf"
+      },
+      "modes": {
+        "safe": {
+          "label": "Sicher",
+          "description": "Nur Lesezugriff, keine Änderungen erlaubt"
+        },
+        "ask": {
+          "label": "Fragen",
+          "description": "Fragt vor Änderungen nach"
+        },
+        "allowAll": {
+          "label": "Alle zulassen",
+          "description": "Vollständige autonome Ausführung"
+        }
+      }
+    },
+    "modeCycling": {
+      "title": "Modus-Wechsel",
+      "description": "Wählen Sie die Modi, die mit Shift+Tab durchlaufen werden",
+      "errorMinimum": "Mindestens 2 Modi erforderlich"
+    },
+    "advanced": {
+      "title": "Erweitert",
+      "workingDirectory": {
+        "label": "Standard-Arbeitsverzeichnis",
+        "notSet": "Nicht festgelegt (verwendet Sitzungsordner)"
+      },
+      "localMcp": {
+        "label": "Lokale MCP-Server",
+        "description": "Stdio-Subprozess-Server aktivieren"
+      }
+    }
+  },
+  "permissions": {
+    "title": "Berechtigungen",
+    "about": {
+      "title": "Über Berechtigungen",
+      "body": "Berechtigungen steuern, wie viel Autonomie Ihr Agent hat. Im <explore>Erkunden</explore>-Modus kann der Agent nur lesen und recherchieren — perfekt, um ein Problem zu verstehen, bevor Änderungen vorgenommen werden. Wenn Sie bereit sind, wechseln Sie in den <execute>Ausführen</execute>-Modus, um den Agenten den Plan autonom umsetzen zu lassen.",
+      "workflow": "Ein guter Workflow: Starten Sie im Erkunden-Modus, um den Agenten untersuchen zu lassen, prüfen Sie den vorgeschlagenen Plan und führen Sie ihn dann mit Zuversicht aus.",
+      "learnMore": "Mehr erfahren"
+    },
+    "default": {
+      "title": "Standardberechtigungen",
+      "description": "Im Erkunden-Modus erlaubte App-Muster. Befehle, die nicht auf dieser Liste stehen, werden blockiert.",
+      "editFile": "Datei bearbeiten",
+      "empty": {
+        "title": "Keine Standardberechtigungen gefunden.",
+        "hint": "Standardberechtigungen sollten unter <code>~/.craft-agent/permissions/default.json</code> liegen"
+      }
+    },
+    "custom": {
+      "title": "Workspace-Anpassungen",
+      "description": "Workspace-Muster, die die oben genannten App-Standards erweitern.",
+      "editFile": "Datei bearbeiten",
+      "empty": {
+        "title": "Keine benutzerdefinierten Berechtigungen konfiguriert.",
+        "hint": "Erstellen Sie eine <code>permissions.json</code>-Datei in Ihrem Workspace, um benutzerdefinierte Regeln hinzuzufügen."
+      }
+    },
+    "table": {
+      "writeTo": "Schreiben nach: {{path}}",
+      "customBlockedTool": "Benutzerdefiniertes blockiertes Tool",
+      "customBashPattern": "Benutzerdefiniertes Bash-Muster",
+      "customMcpPattern": "Benutzerdefiniertes MCP-Muster",
+      "customApiEndpoint": "Benutzerdefinierter API-Endpunkt",
+      "allowedWritePath": "Erlaubter Schreibpfad"
+    }
+  },
+  "labels": {
+    "title": "Labels",
+    "editFile": "Datei bearbeiten",
+    "about": {
+      "title": "Über Labels",
+      "paragraphs": {
+        "organize": "Labels helfen Ihnen, Sitzungen mit farbigen Tags zu organisieren. Verwenden Sie sie, um Konversationen nach Projekt, Thema oder Priorität zu kategorisieren — so lassen sich verwandte Sitzungen später leicht filtern und finden.",
+        "value": "Jedes Label kann optional einen <value>Wert</value> mit einem bestimmten Typ (Text, Zahl oder Datum) tragen. Dies macht Labels zu strukturierten Metadaten — zum Beispiel ein \"Priorität\"-Label mit dem Wert 3 oder ein \"fällig\"-Label mit einem Datum.",
+        "autoApply": "<auto>Regeln zur automatischen Zuweisung</auto> weisen Labels automatisch zu, wenn eine Nachricht mit einem Regex-Muster übereinstimmt. Beispielsweise kann das Einfügen einer Linear-Ticket-URL die Sitzung automatisch mit dem Projektnamen und der Ticket-ID taggen — kein manuelles Tagging erforderlich."
+      },
+      "learnMore": "Mehr erfahren"
+    },
+    "hierarchy": {
+      "title": "Label-Hierarchie",
+      "description": "Alle für diesen Workspace konfigurierten Labels. Labels können verschachtelt werden, um Gruppen zu bilden.",
+      "empty": {
+        "title": "Keine Labels konfiguriert.",
+        "hint": "Labels können vom Agenten oder durch Bearbeiten von <code>labels/config.json</code> in Ihrem Workspace erstellt werden."
+      }
+    },
+    "autoRules": {
+      "title": "Regeln zur automatischen Zuweisung",
+      "description": "Regex-Muster, die Labels automatisch zuweisen, wenn sie in Benutzernachrichten erkannt werden. Fügen Sie beispielsweise eine Linear-Ticket-URL ein und taggen Sie die Sitzung automatisch mit dem Projektnamen und der Ticket-ID."
+    }
+  }
+}

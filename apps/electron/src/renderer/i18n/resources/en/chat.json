@@ -1,0 +1,161 @@
+{
+  "badges": {
+    "new": "New",
+    "plan": "Plan"
+  },
+  "processing": {
+    "messages": [
+      "Thinking...",
+      "Pondering...",
+      "Contemplating...",
+      "Reasoning...",
+      "Processing...",
+      "Computing...",
+      "Considering...",
+      "Reflecting...",
+      "Deliberating...",
+      "Cogitating...",
+      "Ruminating...",
+      "Musing...",
+      "Working on it...",
+      "On it...",
+      "Crunching...",
+      "Brewing...",
+      "Connecting dots...",
+      "Mulling it over...",
+      "Deep in thought...",
+      "Hmm...",
+      "Let me see...",
+      "One moment...",
+      "Hold on...",
+      "Bear with me...",
+      "Just a sec...",
+      "Hang tight...",
+      "Getting there...",
+      "Almost...",
+      "Working...",
+      "Busy busy...",
+      "Whirring...",
+      "Churning...",
+      "Percolating...",
+      "Simmering...",
+      "Cooking...",
+      "Baking...",
+      "Stirring...",
+      "Spinning up...",
+      "Warming up...",
+      "Revving...",
+      "Buzzing...",
+      "Humming...",
+      "Ticking...",
+      "Clicking...",
+      "Whizzing...",
+      "Zooming...",
+      "Zipping...",
+      "Chugging...",
+      "Trucking...",
+      "Rolling..."
+    ]
+  },
+  "permissionModes": {
+    "safe": {
+      "display": "Explore",
+      "short": "Explore",
+      "description": "Read-only exploration. Blocks writes, never prompts."
+    },
+    "ask": {
+      "display": "Ask to Edit",
+      "short": "Ask",
+      "description": "Prompts before making edits."
+    },
+    "allowAll": {
+      "display": "Execute",
+      "short": "Execute",
+      "description": "Automatic execution, no prompts."
+    },
+    "ultrathink": {
+      "label": "Ultrathink",
+      "description": "Extended reasoning for complex problems"
+    }
+  },
+  "commandMenu": {
+    "searchPlaceholder": "Search commands...",
+    "empty": "No commands found"
+  },
+  "input": {
+    "attachFiles": "Attach files",
+    "attachFilesLabel": "Attach Files",
+    "fileCount": {
+      "one": "1 file",
+      "other": "{{count}} files"
+    },
+    "sourcesTooltip": "Sources",
+    "chooseSources": "Choose Sources",
+    "sourcesCount": "{{count}} sources",
+    "noSourcesConfigured": "No sources configured.",
+    "addSourcesInSettings": "Add sources in Settings.",
+    "searchSourcesPlaceholder": "Search sources...",
+    "workingDirectory": "Working directory",
+    "workingDirectoryOnBranch": "on {{branch}}",
+    "chooseWorkingDirectory": "Choose working directory",
+    "filterFoldersPlaceholder": "Filter folders...",
+    "workInFolder": "Work in Folder",
+    "folderFallback": "Folder",
+    "noFoldersFound": "No folders found",
+    "chooseFolder": "Choose Folder...",
+    "reset": "Reset",
+    "modelTooltip": "Model",
+    "customApiConnection": "Custom API connection"
+  },
+  "inlineSlash": {
+    "sections": {
+      "modes": "Modes",
+      "features": "Features",
+      "folders": "Recent Working Directories"
+    },
+    "footer": "Use @ for skills and files"
+  },
+  "sessionList": {
+    "searchPlaceholder": "Search conversations...",
+    "searchClose": "Close search",
+    "emptyTitle": "No conversations yet",
+    "emptyFlagged": "No flagged conversations",
+    "emptyDescription": "Conversations with your agent appear here. Start one to get going.",
+    "emptyAction": "New Conversation",
+    "noResults": "No conversations found",
+    "clearSearch": "Clear search",
+    "ariaLabel": "Sessions"
+  },
+  "sourcesPanel": {
+    "emptyTitle": "No sources configured.",
+    "emptyTitleWithType": "No {{type}} sources configured.",
+    "description": "Sources connect your agent to external data — MCP servers, REST APIs, and local folders.",
+    "learnMore": "Learn more",
+    "addSource": "Add Source",
+    "types": {
+      "api": "API",
+      "mcp": "MCP",
+      "local": "local folder"
+    }
+  },
+  "skillsPanel": {
+    "emptyTitle": "No skills configured",
+    "description": "Skills are reusable instructions that teach your agent specialized behaviors.",
+    "learnMore": "Learn more",
+    "addSkill": "Add Skill"
+  },
+  "mentionMenu": {
+    "sections": {
+      "skills": "Skills",
+      "sources": "Sources",
+      "files": "Files"
+    }
+  },
+  "inputPlaceholders": [
+    "What would you like to work on?",
+    "Use Shift + Tab to switch between Explore and Execute",
+    "Type @ to mention files, folders, or skills",
+    "Type # to apply labels to this conversation",
+    "Press Shift + Return to add a new line"
+  ]
+}

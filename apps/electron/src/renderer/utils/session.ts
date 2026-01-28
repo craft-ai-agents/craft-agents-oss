@@ -1,5 +1,6 @@
 import type { Session } from "../../shared/types"
 import type { SessionMeta } from "../atoms/sessions"
+import { i18n } from "@/i18n"
 
 /** Common session fields used by getSessionTitle */
 type SessionLike = Pick<Session, 'name' | 'preview'> & { messages?: Session['messages'] }
@@ -47,7 +48,7 @@ export function getSessionTitle(session: SessionLike | SessionMeta): string {
     }
   }
 
-  return 'New chat'
+  return i18n.t('nav.newChat', { ns: 'sidebar' })
 }
 
 /**

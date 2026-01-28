@@ -85,6 +85,7 @@ bun run electron:start
 - **Multi-File Diff**: VS Code-style window for viewing all file changes in a turn
 - **Skills**: Specialized agent instructions stored per-workspace
 - **File Attachments**: Drag-drop images, PDFs, Office documents with auto-conversion
+- **UI Languages**: English (en), 简体中文 (zh), Español (es), Français (fr), Deutsch (de), Português (Brasil) (pt-BR), 日本語 (ja), 한국어 (ko)
 
 ## Quick Start
 

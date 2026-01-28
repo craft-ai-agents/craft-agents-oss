@@ -1,0 +1,101 @@
+{
+  "nav": {
+    "newChat": "Nouveau Chat",
+    "allChats": "Tous les Chats",
+    "flagged": "Marqués",
+    "status": "Statut",
+    "labels": "Libellés",
+    "sources": "Sources",
+    "skills": "Compétences",
+    "settings": "Paramètres"
+  },
+  "sources": {
+    "apis": "APIs",
+    "mcps": "MCPs",
+    "localFolders": "Dossiers locaux"
+  },
+  "statuses": {
+    "backlog": "Backlog",
+    "todo": "À faire",
+    "needsReview": "À réviser",
+    "done": "Terminé",
+    "cancelled": "Annulé"
+  },
+  "titles": {
+    "sources": "Sources",
+    "skills": "Toutes les Compétences",
+    "settings": "Paramètres",
+    "allChats": "Tous les Chats",
+    "flagged": "Marqués",
+    "labels": "Libellés",
+    "views": "Vues"
+  },
+  "menu": {
+    "openInNewWindow": "Ouvrir dans une nouvelle fenêtre",
+    "configureStatuses": "Configurer les statuts",
+    "addLabel": "Ajouter un nouveau libellé",
+    "editLabels": "Modifier les libellés",
+    "deleteLabel": "Supprimer le libellé",
+    "editViews": "Modifier les vues",
+    "deleteView": "Supprimer la vue",
+    "addSource": "Ajouter une source",
+    "learnMoreSources": "En savoir plus sur les Sources",
+    "learnMoreApis": "En savoir plus sur les APIs",
+    "learnMoreMcp": "En savoir plus sur le MCP",
+    "learnMoreLocalFolders": "En savoir plus sur les dossiers locaux",
+    "addSkill": "Ajouter une compétence"
+  },
+  "common": {
+    "search": "Rechercher",
+    "learnMore": "En savoir plus"
+  },
+  "help": {
+    "tooltip": "Aide et Documentation",
+    "sources": "Sources",
+    "skills": "Compétences",
+    "statuses": "Statuts",
+    "permissions": "Autorisations",
+    "allDocumentation": "Toute la documentation"
+  },
+  "workspace": {
+    "add": "Ajouter un espace de travail...",
+    "addTitle": "Ajouter un espace de travail",
+    "addDescription": "Là où vos idées rencontrent les outils pour les réaliser.",
+    "createNew": "Créer nouveau",
+    "createNewDescription": "Commencez à zéro avec un espace de travail vide.",
+    "openFolder": "Ouvrir le dossier",
+    "openFolderDescription": "Choisissez un dossier existant comme espace de travail."
+  },
+  "appMenu": {
+    "craftMenuLabel": "Menu Craft",
+    "newChat": "Nouvelle discussion",
+    "newWindow": "Nouvelle fenêtre",
+    "edit": "Modifier",
+    "undo": "Annuler",
+    "redo": "Rétablir",
+    "cut": "Couper",
+    "copy": "Copier",
+    "paste": "Coller",
+    "selectAll": "Tout sélectionner",
+    "view": "Affichage",
+    "zoomIn": "Zoom avant",
+    "zoomOut": "Zoom arrière",
+    "resetZoom": "Réinitialiser le zoom",
+    "window": "Fenêtre",
+    "minimize": "Réduire",
+    "maximize": "Agrandir",
+    "settings": "Paramètres",
+    "settingsEllipsis": "Paramètres...",
+    "storedUserPreferences": "Préférences utilisateur enregistrées",
+    "help": "Aide",
+    "helpDocumentation": "Aide et documentation",
+    "keyboardShortcuts": "Raccourcis clavier",
+    "debug": "Débogage",
+    "checkForUpdates": "Vérifier les mises à jour",
+    "installUpdate": "Installer la mise à jour",
+    "toggleDevTools": "Afficher/Masquer les outils de développement",
+    "quit": "Quitter Craft Agents",
+    "goBack": "Précédent",
+    "goForward": "Suivant"
+  }
+}

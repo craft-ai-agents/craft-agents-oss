@@ -76,6 +76,7 @@ import { useFocusZone, useGlobalShortcuts } from "@/hooks/keyboard"
 import { useFocusContext } from "@/context/FocusContext"
 import { getSessionTitle } from "@/utils/session"
 import { useSetAtom } from "jotai"
+import { useTranslation } from "react-i18next"
 import type { Session, Workspace, FileAttachment, PermissionRequest, LoadedSource, LoadedSkill, PermissionMode, SourceFilter } from "../../../shared/types"
 import { sessionMetaMapAtom, type SessionMeta } from "@/atoms/sessions"
 import { sourcesAtom } from "@/atoms/sources"
@@ -265,6 +266,20 @@ function FilterLabelItems({
 
 const PANEL_WINDOW_EDGE_SPACING = 6 // Padding between panels and window edge
 const PANEL_PANEL_SPACING = 5 // Gap between adjacent panels
+const DEFAULT_STATUS_LABELS: Record<string, string> = {
+  backlog: "Backlog",
+  todo: "Todo",
+  "needs-review": "Needs Review",
+  done: "Done",
+  cancelled: "Cancelled",
+}
+const STATUS_TRANSLATION_KEYS: Record<string, string> = {
+  backlog: "backlog",
+  todo: "todo",
+  "needs-review": "needsReview",
+  done: "done",
+  cancelled: "cancelled",
+}
 
 /**
  * AppShell - Main 3-panel layout container
@@ -296,6 +311,7 @@ function AppShellContent({
   menuNewChatTrigger,
   isFocusedMode = false,
 }: AppShellProps) {
+  const { t } = useTranslation("sidebar")
   // Destructure commonly used values from context
   // Note: sessions is NOT destructured here - we use sessionMetaMapAtom instead
   // to prevent closures from retaining the full messages array
@@ -560,6 +576,13 @@ function AppShellContent({
   const { statuses: statusConfigs, isLoading: isLoadingStatuses } = useStatuses(activeWorkspace?.id || null)
   const [todoStates, setTodoStates] = React.useState<TodoState[]>([])
 
+  const translateTodoState = React.useCallback((state: TodoState): TodoState => {
+    const defaultLabel = DEFAULT_STATUS_LABELS[state.id]
+    const translationKey = STATUS_TRANSLATION_KEYS[state.id]
+    if (!defaultLabel || !translationKey || state.label !== defaultLabel) return state
+    return { ...state, label: t(`statuses.${translationKey}`) }
+  }, [t])
+
   // Convert StatusConfig to TodoState with resolved icons
   React.useEffect(() => {
     if (!activeWorkspace?.id || statusConfigs.length === 0) {
@@ -567,8 +590,10 @@ function AppShellContent({
       return
     }
 
-    setTodoStates(statusConfigsToTodoStates(statusConfigs, activeWorkspace.id, isDark))
-  }, [statusConfigs, activeWorkspace?.id, isDark])
+    const resolvedStates = statusConfigsToTodoStates(statusConfigs, activeWorkspace.id, isDark)
+      .map(translateTodoState)
+    setTodoStates(resolvedStates)
+  }, [statusConfigs, activeWorkspace?.id, isDark, translateTodoState])
 
   // Optimistic status order: immediately reflects drag-drop order while IPC propagates.
   // Cleared when statusConfigs changes (config watcher is source of truth).
@@ -1397,35 +1422,37 @@ function AppShellContent({
   const listTitle = React.useMemo(() => {
     // Sources navigator
     if (isSourcesNavigation(navState)) {
-      return 'Sources'
+      return t('titles.sources')
     }
 
     // Skills navigator
     if (isSkillsNavigation(navState)) {
-      return 'All Skills'
+      return t('titles.skills')
     }
 
     // Settings navigator
-    if (isSettingsNavigation(navState)) return 'Settings'
+    if (isSettingsNavigation(navState)) return t('titles.settings')
 
     // Chats navigator - use chatFilter
-    if (!chatFilter) return 'All Chats'
+    if (!chatFilter) return t('titles.allChats')
 
     switch (chatFilter.kind) {
       case 'flagged':
-        return 'Flagged'
+        return t('titles.flagged')
       case 'state': {
         const state = effectiveTodoStates.find(s => s.id === chatFilter.stateId)
-        return state?.label || 'All Chats'
+        return state?.label || t('titles.allChats')
       }
       case 'label':
-        return chatFilter.labelId === '__all__' ? 'Labels' : getLabelDisplayName(labelConfigs, chatFilter.labelId)
+        return chatFilter.labelId === '__all__' ? t('titles.labels') : getLabelDisplayName(labelConfigs, chatFilter.labelId)
       case 'view':
-        return chatFilter.viewId === '__all__' ? 'Views' : viewConfigs.find(v => v.id === chatFilter.viewId)?.name || 'Views'
+        return chatFilter.viewId === '__all__'
+          ? t('titles.views')
+          : viewConfigs.find(v => v.id === chatFilter.viewId)?.name || t('titles.views')
       default:
-        return 'All Chats'
+        return t('titles.allChats')
     }
-  }, [navState, chatFilter, effectiveTodoStates, labelConfigs, viewConfigs])
+  }, [navState, chatFilter, effectiveTodoStates, labelConfigs, viewConfigs, t])
 
   // Build recursive sidebar items from label tree.
   // Each node renders with condensed height (compact: true) since many labels expected.
@@ -1563,7 +1590,7 @@ function AppShellContent({
                         data-tutorial="new-chat-button"
                       >
                         <SquarePenRounded className="h-3.5 w-3.5 shrink-0" />
-                        New Chat
+                        {t('nav.newChat')}
                       </Button>
                     </ContextMenuTrigger>
                     <StyledContextMenuContent>
@@ -1583,7 +1610,7 @@ function AppShellContent({
                     // --- Chats Section ---
                     {
                       id: "nav:allChats",
-                      title: "All Chats",
+                      title: t('nav.allChats'),
                       label: String(workspaceSessionMetas.length),
                       icon: Inbox,
                       variant: chatFilter?.kind === 'allChats' ? "default" : "ghost",
@@ -1591,7 +1618,7 @@ function AppShellContent({
                     },
                     {
                       id: "nav:flagged",
-                      title: "Flagged",
+                      title: t('nav.flagged'),
                       label: String(flaggedCount),
                       icon: <Flag className="h-3.5 w-3.5" />,
                       variant: chatFilter?.kind === 'flagged' ? "default" : "ghost",
@@ -1600,7 +1627,7 @@ function AppShellContent({
                     // States: expandable section with status sub-items (drag-and-drop reorder)
                     {
                       id: "nav:states",
-                      title: "Status",
+                      title: t('nav.status'),
                       icon: CheckCircle2,
                       variant: "ghost",
                       onClick: () => toggleExpanded('nav:states'),
@@ -1632,7 +1659,7 @@ function AppShellContent({
                     // Labels: navigable header (shows all labeled sessions) + hierarchical tree (drag-and-drop reorder + re-parent)
                     {
                       id: "nav:labels",
-                      title: "Labels",
+                      title: t('nav.labels'),
                       icon: Tag,
                       // Only highlighted when "Labels" itself is selected (not sub-labels)
                       variant: (chatFilter?.kind === 'label' && chatFilter.labelId === '__all__') ? "default" as const : "ghost" as const,
@@ -1653,7 +1680,7 @@ function AppShellContent({
                     // --- Sources & Skills Section ---
                     {
                       id: "nav:sources",
-                      title: "Sources",
+                      title: t('nav.sources'),
                       label: String(sources.length),
                       icon: DatabaseZap,
                       variant: (isSourcesNavigation(navState) && !sourceFilter) ? "default" : "ghost",
@@ -1669,7 +1696,7 @@ function AppShellContent({
                       items: [
                         {
                           id: "nav:sources:api",
-                          title: "APIs",
+                          title: t('sources.apis'),
                           label: String(sourceTypeCounts.api),
                           icon: Globe,
                           variant: (sourceFilter?.kind === 'type' && sourceFilter.sourceType === 'api') ? "default" : "ghost",
@@ -1682,7 +1709,7 @@ function AppShellContent({
                         },
                         {
                           id: "nav:sources:mcp",
-                          title: "MCPs",
+                          title: t('sources.mcps'),
                           label: String(sourceTypeCounts.mcp),
                           icon: <McpIcon className="h-3.5 w-3.5" />,
                           variant: (sourceFilter?.kind === 'type' && sourceFilter.sourceType === 'mcp') ? "default" : "ghost",
@@ -1695,7 +1722,7 @@ function AppShellContent({
                         },
                         {
                           id: "nav:sources:local",
-                          title: "Local Folders",
+                          title: t('sources.localFolders'),
                           label: String(sourceTypeCounts.local),
                           icon: FolderOpen,
                           variant: (sourceFilter?.kind === 'type' && sourceFilter.sourceType === 'local') ? "default" : "ghost",
@@ -1710,7 +1737,7 @@ function AppShellContent({
                     },
                     {
                       id: "nav:skills",
-                      title: "Skills",
+                      title: t('nav.skills'),
                       label: String(skills.length),
                       icon: Zap,
                       variant: isSkillsNavigation(navState) ? "default" : "ghost",
@@ -1725,7 +1752,7 @@ function AppShellContent({
                     // --- Settings ---
                     {
                       id: "nav:settings",
-                      title: "Settings",
+                      title: t('nav.settings'),
                       icon: Settings,
                       variant: isSettingsNavigation(navState) ? "default" : "ghost",
                       onClick: () => handleSettingsClick('app'),
@@ -1763,34 +1790,36 @@ function AppShellContent({
                             </button>
                           </DropdownMenuTrigger>
                         </TooltipTrigger>
-                        <TooltipContent side="top">Help & Documentation</TooltipContent>
+                        <TooltipContent side="top">
+                          {t('help.tooltip', { defaultValue: 'Help & Documentation' })}
+                        </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
                     <StyledDropdownMenuContent align="end" side="top" sideOffset={8}>
                       <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('sources'))}>
                         <DatabaseZap className="h-3.5 w-3.5" />
-                        <span className="flex-1">Sources</span>
+                        <span className="flex-1">{t('help.sources', { defaultValue: 'Sources' })}</span>
                         <ExternalLink className="h-3 w-3 text-muted-foreground" />
                       </StyledDropdownMenuItem>
                       <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('skills'))}>
                         <Zap className="h-3.5 w-3.5" />
-                        <span className="flex-1">Skills</span>
+                        <span className="flex-1">{t('help.skills', { defaultValue: 'Skills' })}</span>
                         <ExternalLink className="h-3 w-3 text-muted-foreground" />
                       </StyledDropdownMenuItem>
                       <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('statuses'))}>
                         <CheckCircle2 className="h-3.5 w-3.5" />
-                        <span className="flex-1">Statuses</span>
+                        <span className="flex-1">{t('help.statuses', { defaultValue: 'Statuses' })}</span>
                         <ExternalLink className="h-3 w-3 text-muted-foreground" />
                       </StyledDropdownMenuItem>
                       <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('permissions'))}>
                         <Settings className="h-3.5 w-3.5" />
-                        <span className="flex-1">Permissions</span>
+                        <span className="flex-1">{t('help.permissions', { defaultValue: 'Permissions' })}</span>
                         <ExternalLink className="h-3 w-3 text-muted-foreground" />
                       </StyledDropdownMenuItem>
                       <StyledDropdownMenuSeparator />
                       <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl('https://agents.craft.do/docs')}>
                         <ExternalLink className="h-3.5 w-3.5" />
-                        <span className="flex-1">All Documentation</span>
+                        <span className="flex-1">{t('help.allDocumentation', { defaultValue: 'All Documentation' })}</span>
                       </StyledDropdownMenuItem>
                     </StyledDropdownMenuContent>
                   </DropdownMenu>
@@ -1932,7 +1961,7 @@ function AppShellContent({
                         <DropdownMenuSub>
                           <StyledDropdownMenuSubTrigger>
                             <Inbox className="h-3.5 w-3.5" />
-                            <span className="flex-1">Statuses</span>
+                            <span className="flex-1">{t('help.statuses', { defaultValue: 'Statuses' })}</span>
                           </StyledDropdownMenuSubTrigger>
                           <StyledDropdownMenuSubContent minWidth="min-w-[180px]">
                             {effectiveTodoStates.map(state => {
@@ -2009,27 +2038,27 @@ function AppShellContent({
                           }}
                         >
                           <Search className="h-3.5 w-3.5" />
-                          <span className="flex-1">Search</span>
-                        </StyledDropdownMenuItem>
-                        <StyledDropdownMenuSeparator />
-                        <StyledDropdownMenuItem
-                          onClick={() => {
-                            window.electronAPI?.openUrl(getDocUrl('statuses'))
-                          }}
-                        >
-                          <ExternalLink className="h-3.5 w-3.5" />
-                          <span className="flex-1">Learn More</span>
-                        </StyledDropdownMenuItem>
-                      </StyledDropdownMenuContent>
-                    </DropdownMenu>
-                  )}
+                        <span className="flex-1">{t('common.search', { defaultValue: 'Search' })}</span>
+                      </StyledDropdownMenuItem>
+                      <StyledDropdownMenuSeparator />
+                      <StyledDropdownMenuItem
+                        onClick={() => {
+                          window.electronAPI?.openUrl(getDocUrl('statuses'))
+                        }}
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        <span className="flex-1">{t('common.learnMore', { defaultValue: 'Learn More' })}</span>
+                      </StyledDropdownMenuItem>
+                    </StyledDropdownMenuContent>
+                  </DropdownMenu>
+                )}
                   {/* Add Source button (only for sources mode) - uses filter-aware edit config */}
                   {isSourcesNavigation(navState) && activeWorkspace && (
                     <EditPopover
                       trigger={
                         <HeaderIconButton
                           icon={<Plus className="h-4 w-4" />}
-                          tooltip="Add Source"
+                          tooltip={t('menu.addSource', { defaultValue: 'Add Source' })}
                           data-tutorial="add-source-button"
                         />
                       }
@@ -2045,7 +2074,7 @@ function AppShellContent({
                       trigger={
                         <HeaderIconButton
                           icon={<Plus className="h-4 w-4" />}
-                          tooltip="Add Skill"
+                          tooltip={t('menu.addSkill', { defaultValue: 'Add Skill' })}
                           data-tutorial="add-skill-button"
                         />
                       }

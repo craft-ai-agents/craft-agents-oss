@@ -1,0 +1,161 @@
+{
+  "badges": {
+    "new": "새",
+    "plan": "계획"
+  },
+  "processing": {
+    "messages": [
+      "생각 중...",
+      "숙고 중...",
+      "심사숙고 중...",
+      "추론 중...",
+      "처리 중...",
+      "계산 중...",
+      "검토 중...",
+      "성찰 중...",
+      "심의 중...",
+      "사색 중...",
+      "되새기는 중...",
+      "명상 중...",
+      "작업 중...",
+      "진행 중...",
+      "분석 중...",
+      "준비 중...",
+      "정보 연결 중...",
+      "검토 중...",
+      "깊은 생각 중...",
+      "흠...",
+      "어디 보자...",
+      "잠시만요...",
+      "잠깐만요...",
+      "잠시만 기다려 주세요...",
+      "잠시만요...",
+      "조금만 기다려 주세요...",
+      "거의 다 됐습니다...",
+      "거의 완료됨...",
+      "작업 중...",
+      "바쁘게 움직이는 중...",
+      "돌아가는 중...",
+      "처리 중...",
+      "준비 중...",
+      "다듬는 중...",
+      "요리 중...",
+      "굽는 중...",
+      "휘젓는 중...",
+      "시동 거는 중...",
+      "예열 중...",
+      "가속 중...",
+      "작동 중...",
+      "진동 중...",
+      "째깍째깍...",
+      "클릭 중...",
+      "쌩쌩 돌아가는 중...",
+      "확대 중...",
+      "압축 중...",
+      "진행 중...",
+      "이동 중...",
+      "실행 중..."
+    ]
+  },
+  "permissionModes": {
+    "safe": {
+      "display": "탐색",
+      "short": "탐색",
+      "description": "읽기 전용 탐색입니다. 쓰기를 차단하며, 확인창을 띄우지 않습니다."
+    },
+    "ask": {
+      "display": "수정 시 확인",
+      "short": "확인",
+      "description": "수정하기 전에 확인합니다."
+    },
+    "allowAll": {
+      "display": "실행",
+      "short": "실행",
+      "description": "자동 실행이며, 확인창을 띄우지 않습니다."
+    },
+    "ultrathink": {
+      "label": "울트라씽크",
+      "description": "복잡한 문제 해결을 위한 심층 추론"
+    }
+  },
+  "commandMenu": {
+    "searchPlaceholder": "명령어 검색...",
+    "empty": "검색 결과 없음"
+  },
+  "input": {
+    "attachFiles": "파일 첨부",
+    "attachFilesLabel": "파일 첨부",
+    "fileCount": {
+      "one": "1개 파일",
+      "other": "{{count}}개 파일"
+    },
+    "sourcesTooltip": "소스",
+    "chooseSources": "소스 선택",
+    "sourcesCount": "{{count}}개 소스",
+    "noSourcesConfigured": "설정된 소스가 없습니다.",
+    "addSourcesInSettings": "설정에서 소스를 추가하세요.",
+    "searchSourcesPlaceholder": "소스 검색...",
+    "workingDirectory": "작업 디렉터리",
+    "workingDirectoryOnBranch": "{{branch}} 브랜치",
+    "chooseWorkingDirectory": "작업 디렉터리 선택",
+    "filterFoldersPlaceholder": "폴더 필터링...",
+    "modelTooltip": "모델",
+    "customApiConnection": "사용자 지정 API 연결",
+    "workInFolder": "폴더에서 작업",
+    "folderFallback": "폴더",
+    "noFoldersFound": "폴더를 찾을 수 없음",
+    "chooseFolder": "폴더 선택...",
+    "reset": "초기화"
+  },
+  "inlineSlash": {
+    "sections": {
+      "modes": "모드",
+      "features": "기능",
+      "folders": "최근 작업 디렉토리"
+    },
+    "footer": "기술 및 파일 활용을 위해 @를 입력하세요"
+  },
+  "sessionList": {
+    "searchPlaceholder": "대화 검색...",
+    "searchClose": "검색 닫기",
+    "emptyTitle": "아직 대화가 없습니다",
+    "emptyDescription": "에이전트와의 대화가 여기에 표시됩니다. 대화를 시작해 보세요.",
+    "emptyAction": "새 대화",
+    "noResults": "대화를 찾을 수 없습니다",
+    "clearSearch": "검색 지우기",
+    "ariaLabel": "세션",
+    "emptyFlagged": "플래그 표시된 대화가 없습니다"
+  },
+  "inputPlaceholders": [
+    "무엇을 도와드릴까요?",
+    "Shift + Tab을 눌러 탐색과 실행 모드를 전환하세요",
+    "파일, 폴더 또는 기술을 언급하려면 @를 입력하세요",
+    "대화에 라벨을 적용하려면 #를 입력하세요",
+    "Shift + Return을 눌러 줄바꿈하세요"
+  ],
+  "sourcesPanel": {
+    "emptyTitle": "설정된 소스가 없습니다.",
+    "emptyTitleWithType": "설정된 {{type}} 소스가 없습니다.",
+    "description": "소스는 에이전트를 MCP 서버, REST API, 로컬 폴더와 같은 외부 데이터에 연결합니다.",
+    "learnMore": "자세히 알아보기",
+    "addSource": "소스 추가",
+    "types": {
+      "api": "API",
+      "mcp": "MCP",
+      "local": "로컬 폴더"
+    }
+  },
+  "skillsPanel": {
+    "emptyTitle": "설정된 스킬이 없습니다.",
+    "description": "스킬은 에이전트에게 전용 동작을 가르치는 재사용 가능한 지침입니다.",
+    "learnMore": "자세히 알아보기",
+    "addSkill": "스킬 추가"
+  },
+  "mentionMenu": {
+    "sections": {
+      "skills": "스킬",
+      "sources": "소스",
+      "files": "파일"
+    }
+  }
+}
