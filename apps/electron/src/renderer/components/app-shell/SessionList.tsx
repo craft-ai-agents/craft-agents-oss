@@ -577,7 +577,13 @@ function SessionItem({
         )}>
           <button
             onClick={(e) => { e.stopPropagation(); onNavigatePrev?.() }}
-            className="p-0.5 hover:bg-foreground/10 rounded transition-colors"
+            className={cn(
+              "p-0.5 rounded transition-colors",
+              (chatMatchIndex ?? 0) <= 0
+                ? "opacity-30 cursor-default"
+                : "hover:bg-foreground/10"
+            )}
+            disabled={(chatMatchIndex ?? 0) <= 0}
             title="Previous match"
           >
             <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
@@ -587,7 +593,13 @@ function SessionItem({
           </span>
           <button
             onClick={(e) => { e.stopPropagation(); onNavigateNext?.() }}
-            className="p-0.5 hover:bg-foreground/10 rounded transition-colors"
+            className={cn(
+              "p-0.5 rounded transition-colors",
+              (chatMatchIndex ?? 0) >= (chatMatchCount ?? 1) - 1
+                ? "opacity-30 cursor-default"
+                : "hover:bg-foreground/10"
+            )}
+            disabled={(chatMatchIndex ?? 0) >= (chatMatchCount ?? 1) - 1}
             title="Next match"
           >
             <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />

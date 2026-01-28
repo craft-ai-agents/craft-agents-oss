@@ -445,6 +445,8 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   // Current match index for navigation (internal state, exposed via ref)
   const [currentMatchIndex, setCurrentMatchIndex] = useState(0)
   const turnRefs = React.useRef<Map<string, HTMLDivElement>>(new Map())
+  // Track actual match IDs created in DOM (state so it triggers re-renders)
+  const [actualMatchIds, setActualMatchIds] = useState<Set<string>>(new Set())
   // Flag to control when scrolling to matches should happen
   // Only scroll when: session changes with search active, or user clicks navigation
   const shouldScrollToMatchRef = React.useRef(false)
@@ -455,11 +457,12 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   const isSearchActive = Boolean(searchQuery.trim())
 
   // Focus textarea when session changes (tab switch) or zone gains focus via keyboard
+  // But NOT when search is active (to avoid stealing focus from search input)
   useEffect(() => {
-    if (session) {
+    if (session && !isSearchActive) {
       textareaRef.current?.focus()
     }
-  }, [session?.id, isFocused])
+  }, [session?.id, isFocused, isSearchActive])
 
   // Reset match index when session or search query changes
   useEffect(() => {
@@ -537,6 +540,12 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     return Array.from(uniqueTurnIds)
   }, [matchingOccurrences])
 
+  // Filter to only valid matches that exist in DOM (actualMatchIds is updated after highlighting)
+  const validMatches = useMemo(() => {
+    if (actualMatchIds.size === 0) return matchingOccurrences // Before highlighting, show all
+    return matchingOccurrences.filter(m => actualMatchIds.has(m.matchId))
+  }, [matchingOccurrences, actualMatchIds])
+
   // For pagination: get turn data (unique turns with their indices)
   const matchingTurnData = useMemo(() => {
     const seen = new Set<string>()
@@ -552,21 +561,21 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   // Auto-scroll to match ONLY when there's exactly one match
   // Multiple matches: user navigates with chevrons to avoid jarring scroll
   useEffect(() => {
-    if (matchingOccurrences.length === 1 && isSearchActive) {
+    if (validMatches.length === 1 && isSearchActive) {
       shouldScrollToMatchRef.current = true
     }
-  }, [matchingOccurrences.length, isSearchActive])
+  }, [validMatches.length, isSearchActive])
 
   // Scroll to current match (with delay to wait for DOM rendering)
   // Only scrolls when shouldScrollToMatchRef is true (single match auto-scroll or nav button click)
   useEffect(() => {
-    console.log('[ChatDisplay Scroll] Effect triggered, matchCount:', matchingOccurrences.length, 'currentIndex:', currentMatchIndex, 'shouldScroll:', shouldScrollToMatchRef.current)
+    console.log('[ChatDisplay Scroll] Effect triggered, validMatchCount:', validMatches.length, 'currentIndex:', currentMatchIndex, 'shouldScroll:', shouldScrollToMatchRef.current)
 
     // Only scroll if explicitly requested (session change or navigation click)
     if (!shouldScrollToMatchRef.current) return
 
-    if (matchingOccurrences.length > 0 && currentMatchIndex < matchingOccurrences.length) {
-      const matchData = matchingOccurrences[currentMatchIndex]
+    if (validMatches.length > 0 && currentMatchIndex < validMatches.length) {
+      const matchData = validMatches[currentMatchIndex]
       const { matchId, turnIndex } = matchData
       const totalTurns = totalTurnCountRef.current
 
@@ -586,10 +595,9 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
 
       // Use multiple attempts to ensure DOM is ready (highlights are applied)
       let attempts = 0
-      const maxAttempts = 15 // Increased for highlight timing
+      const maxAttempts = 15
 
       const tryScroll = () => {
-        // First try to find the specific match element by ID
         const matchEl = document.getElementById(matchId)
         console.log('[ChatDisplay Scroll] Try scroll to match:', matchId, 'element found:', !!matchEl)
         if (matchEl) {
@@ -600,14 +608,13 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
           document.querySelectorAll('mark.search-highlight.ring-2').forEach(el => {
             if (el.id !== matchId) el.classList.remove('ring-2', 'ring-info')
           })
-          // Clear the scroll flag after successful scroll
           shouldScrollToMatchRef.current = false
         } else if (attempts < maxAttempts) {
-          // Ref not ready yet, retry after a short delay
           attempts++
           setTimeout(tryScroll, 50)
         } else {
-          // Give up and clear the flag
+          // Give up - validMatches should only contain valid matches, but timing can cause this
+          console.log('[ChatDisplay Scroll] Match not found after retries')
           shouldScrollToMatchRef.current = false
         }
       }
@@ -616,7 +623,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
       const rafId = requestAnimationFrame(tryScroll)
       return () => cancelAnimationFrame(rafId)
     }
-  }, [matchingOccurrences, currentMatchIndex, session?.id, visibleTurnCount])
+  }, [validMatches, currentMatchIndex, session?.id, visibleTurnCount])
 
   // Text highlighting within messages
   // Uses DOM manipulation after render to highlight matching text
@@ -634,10 +641,12 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     }
 
     clearHighlights()
+    setActualMatchIds(new Set())
 
     if (!searchQuery.trim() || !isSearchActive) return
 
     const query = searchQuery.toLowerCase()
+    const createdMatchIds: string[] = [] // Collect IDs as we create marks
 
     // Highlighting function - applies highlights only to MATCHING turn refs
     // Assigns unique IDs to each mark for navigation
@@ -736,10 +745,12 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
             // Highlighted match with unique ID
             const mark = document.createElement('mark')
             const matchIdIndex = reverseCounter - (nodeMatches.length - 1 - j)
-            mark.id = `${turnId}-match-${matchIdIndex}`
+            const markId = `${turnId}-match-${matchIdIndex}`
+            mark.id = markId
             mark.className = 'search-highlight px-1 py-0.5 bg-yellow-300 rounded-[4px] text-black/90'
             mark.textContent = text.slice(matchStart, matchEnd)
             fragments.unshift(mark)
+            createdMatchIds.push(markId)
 
             lastIndex = matchStart
           }
@@ -779,7 +790,9 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
       console.log('[ChatDisplay Highlight] Try highlight, attempt:', attempts, 'refCount:', refCount, 'matchingTurns:', matchingTurnIds.length, 'matchingInRefs:', matchingInRefs)
       if (refCount > 0 && matchingInRefs > 0) {
         applyHighlights()
-        console.log('[ChatDisplay Highlight] Applied highlights to', matchingInRefs, 'matching turns')
+        // Store actual match IDs for navigation (triggers re-render to update validMatches)
+        setActualMatchIds(new Set(createdMatchIds))
+        console.log('[ChatDisplay Highlight] Applied highlights to', matchingInRefs, 'matching turns, created', createdMatchIds.length, 'marks')
       } else if (attempts < maxAttempts) {
         // Refs not ready yet - retry with increasing delay
         attempts++
@@ -800,52 +813,46 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     }
   }, [searchQuery, isSearchActive, matchingTurnIds, session?.id, visibleTurnCount]) // Added visibleTurnCount to re-highlight after pagination
 
-  // Navigate to next match (now navigates between individual occurrences)
+  // Navigate to next match (no looping - stops at last match)
   const goToNextMatch = useCallback(() => {
-    console.log('[ChatDisplay Nav] goToNextMatch called, matchCount:', matchingOccurrences.length)
-    if (matchingOccurrences.length === 0) return
-    // Enable scroll to the next match
-    shouldScrollToMatchRef.current = true
+    if (validMatches.length === 0) return
     setCurrentMatchIndex(prev => {
-      const next = (prev + 1) % matchingOccurrences.length
-      console.log('[ChatDisplay Nav] Next index:', next, 'matchId:', matchingOccurrences[next]?.matchId)
-      return next
+      // Don't loop - stop at last match
+      if (prev >= validMatches.length - 1) return prev
+      shouldScrollToMatchRef.current = true
+      return prev + 1
     })
-  }, [matchingOccurrences])
+  }, [validMatches])
 
-  // Navigate to previous match (now navigates between individual occurrences)
+  // Navigate to previous match (no looping - stops at first match)
   const goToPrevMatch = useCallback(() => {
-    console.log('[ChatDisplay Nav] goToPrevMatch called, matchCount:', matchingOccurrences.length)
-    if (matchingOccurrences.length === 0) return
-    // Enable scroll to the previous match
-    shouldScrollToMatchRef.current = true
+    if (validMatches.length === 0) return
     setCurrentMatchIndex(prev => {
-      const next = (prev - 1 + matchingOccurrences.length) % matchingOccurrences.length
-      console.log('[ChatDisplay Nav] Prev index:', next, 'matchId:', matchingOccurrences[next]?.matchId)
-      return next
+      // Don't loop - stop at first match
+      if (prev <= 0) return prev
+      shouldScrollToMatchRef.current = true
+      return prev - 1
     })
-  }, [matchingOccurrences])
+  }, [validMatches])
 
   // Expose navigation via imperative handle (for session list navigation controls)
   React.useImperativeHandle(ref, () => ({
     goToNextMatch,
     goToPrevMatch,
-    matchCount: matchingOccurrences.length,
+    matchCount: validMatches.length,
     currentMatchIndex,
-  }), [goToNextMatch, goToPrevMatch, matchingOccurrences.length, currentMatchIndex])
+  }), [goToNextMatch, goToPrevMatch, validMatches.length, currentMatchIndex])
 
   // Notify parent when match count changes
   useEffect(() => {
-    onMatchCountChange?.(matchingOccurrences.length)
-  }, [matchingOccurrences.length, onMatchCountChange])
+    onMatchCountChange?.(validMatches.length)
+  }, [validMatches.length, onMatchCountChange])
 
   // Notify parent when match info (count and index) changes
-  // The useMemos calculate matches synchronously, so we always have accurate count
   useEffect(() => {
-    console.log('[ChatDisplay MatchInfo] Reporting matches:', matchingOccurrences.length, 'index:', currentMatchIndex, 'sessionId:', session?.id)
-    // Always report current match state - this prevents stale data from previous session
-    onMatchInfoChange?.({ count: matchingOccurrences.length, index: currentMatchIndex })
-  }, [matchingOccurrences.length, currentMatchIndex, session?.id, onMatchInfoChange])
+    console.log('[ChatDisplay MatchInfo] Reporting matches:', validMatches.length, 'index:', currentMatchIndex, 'sessionId:', session?.id)
+    onMatchInfoChange?.({ count: validMatches.length, index: currentMatchIndex })
+  }, [validMatches.length, currentMatchIndex, session?.id, onMatchInfoChange])
 
   // ============================================================================
   // Overlay State Management
