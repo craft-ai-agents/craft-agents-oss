@@ -90,11 +90,11 @@ function arrowMarkerDefs(): string {
   const w = ARROW_HEAD.width
   const h = ARROW_HEAD.height
   return (
-    // Forward arrow (marker-end)
-    `  <marker id="arrowhead" markerWidth="${w}" markerHeight="${h}" refX="${w}" refY="${h / 2}" orient="auto-start-reverse">` +
+    // Forward arrow (marker-end) — orient="auto" ensures arrow points along line direction
+    `  <marker id="arrowhead" markerWidth="${w}" markerHeight="${h}" refX="${w}" refY="${h / 2}" orient="auto">` +
     `\n    <polygon points="0 0, ${w} ${h / 2}, 0 ${h}" fill="var(--_arrow)" />` +
     `\n  </marker>` +
-    // Reverse arrow (marker-start) — refX=0 so it sits at the line start
+    // Reverse arrow (marker-start) — refX=0 so it sits at the line start, auto-start-reverse flips it
     `\n  <marker id="arrowhead-start" markerWidth="${w}" markerHeight="${h}" refX="0" refY="${h / 2}" orient="auto-start-reverse">` +
     `\n    <polygon points="${w} 0, 0 ${h / 2}, ${w} ${h}" fill="var(--_arrow)" />` +
     `\n  </marker>`

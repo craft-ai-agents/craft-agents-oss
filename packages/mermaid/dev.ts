@@ -70,9 +70,8 @@ function onFileChange(_event: string, filename: string | null): void {
   }, 150)
 }
 
-// Watch the src/ directory recursively and index.ts for definition changes
-watch(join(ROOT, 'src'), { recursive: true }, onFileChange)
-watch(join(ROOT, 'index.ts'), onFileChange)
+// Watch the entire mermaid package for changes (excludes index.html output)
+watch(ROOT, { recursive: true }, onFileChange)
 
 // ============================================================================
 // HTTP server

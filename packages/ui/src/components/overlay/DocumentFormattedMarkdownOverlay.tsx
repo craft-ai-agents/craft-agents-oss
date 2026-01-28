@@ -77,6 +77,7 @@ export function DocumentFormattedMarkdownOverlay({
                 mode="minimal"
                 onUrlClick={onOpenUrl}
                 onFileClick={onOpenFile}
+                hideFirstMermaidExpand={false}
               >
                 {content}
               </Markdown>

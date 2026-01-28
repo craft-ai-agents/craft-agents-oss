@@ -189,6 +189,9 @@
       "dependencies": {
         "@dagrejs/dagre": "^1.1.8",
       },
+      "devDependencies": {
+        "shiki": "^3.19.0",
+      },
     },
     "packages/shared": {
       "name": "@craft-agent/shared",

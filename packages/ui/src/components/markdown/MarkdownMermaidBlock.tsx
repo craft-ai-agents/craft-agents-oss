@@ -20,9 +20,13 @@ import { MermaidPreviewOverlay } from '../overlay/MermaidPreviewOverlay'
 interface MarkdownMermaidBlockProps {
   code: string
   className?: string
+  /** Whether to show the inline expand button. Default true.
+   *  Set to false when the mermaid block is the first block in a message,
+   *  where the TurnCard's own fullscreen button already occupies the same position. */
+  showExpandButton?: boolean
 }
 
-export function MarkdownMermaidBlock({ code, className }: MarkdownMermaidBlockProps) {
+export function MarkdownMermaidBlock({ code, className, showExpandButton = true }: MarkdownMermaidBlockProps) {
   const [svg, setSvg] = React.useState<string | null>(null)
   const [error, setError] = React.useState<Error | null>(null)
   const [isFullscreen, setIsFullscreen] = React.useState(false)
@@ -73,20 +77,24 @@ export function MarkdownMermaidBlock({ code, className }: MarkdownMermaidBlockPr
     <>
       {/* Wrapper with group class so the expand button shows on hover */}
       <div className={cn('relative group', className)}>
-        {/* Expand button — matches code block expand button style (TurnCard pattern) */}
-        <button
-          onClick={() => setIsFullscreen(true)}
-          className={cn(
-            "absolute top-2 right-2 p-1 rounded-[6px] transition-all z-10 select-none",
-            "opacity-0 group-hover:opacity-100",
-            "bg-background shadow-minimal",
-            "text-muted-foreground/50 hover:text-foreground",
-            "focus:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:opacity-100"
-          )}
-          title="View Fullscreen"
-        >
-          <Maximize2 className="w-3.5 h-3.5" />
-        </button>
+        {/* Expand button — matches code block expand button style (TurnCard pattern).
+            Hidden when showExpandButton is false (first block in message, where
+            TurnCard's own fullscreen button occupies the same top-right position). */}
+        {showExpandButton && (
+          <button
+            onClick={() => setIsFullscreen(true)}
+            className={cn(
+              "absolute top-2 right-2 p-1 rounded-[6px] transition-all z-10 select-none",
+              "opacity-0 group-hover:opacity-100",
+              "bg-background shadow-minimal",
+              "text-muted-foreground/50 hover:text-foreground",
+              "focus:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:opacity-100"
+            )}
+            title="View Fullscreen"
+          >
+            <Maximize2 className="w-3.5 h-3.5" />
+          </button>
+        )}
 
         {/* Inline SVG diagram */}
         <div

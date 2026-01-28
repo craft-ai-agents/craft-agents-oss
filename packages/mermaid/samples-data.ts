@@ -16,10 +16,37 @@ export interface Sample {
   source: string
   /** Optional category tag for grouping in the Table of Contents */
   category?: string
-  options?: { bg?: string; fg?: string; line?: string; accent?: string; muted?: string; surface?: string; border?: string; font?: string; padding?: number }
+  options?: { bg?: string; fg?: string; line?: string; accent?: string; muted?: string; surface?: string; border?: string; font?: string; padding?: number; transparent?: boolean }
 }
 
 export const samples: Sample[] = [
+
+  // ══════════════════════════════════════════════════════════════════════════
+  //  HERO — Showcase diagram
+  // ══════════════════════════════════════════════════════════════════════════
+
+  {
+    title: 'Beautiful Mermaid',
+    category: 'Hero',
+    description: 'Mermaid rendering, made beautiful.',
+    source: `stateDiagram-v2
+    direction LR
+    [*] --> Input
+    Input --> Parse: DSL
+    Parse --> Layout: AST
+    Layout --> SVG: Vector
+    Layout --> ASCII: Text
+    SVG --> Theme
+    Theme --> Light
+    Theme --> Dark
+    Theme --> Custom
+    Light --> Output
+    Dark --> Output
+    Custom --> Output
+    ASCII --> Output
+    Output --> [*]`,
+    options: { transparent: true },
+  },
 
   // ══════════════════════════════════════════════════════════════════════════
   //  FLOWCHART — Shapes

@@ -4,8 +4,8 @@ Craft Agent renders Mermaid diagrams natively as beautiful themed SVGs. Use this
 
 ## Flowcharts
 
-**Header:** `graph TD` (top-down) or `graph LR` (left-right)
-**Directions:** TD, TB, LR, RL, BT
+**Header:** `graph LR` (left-right, preferred) or `graph TD` (top-down)
+**Directions:** LR (preferred), RL, TD, TB, BT
 
 ### Node Shapes
 
@@ -49,7 +49,7 @@ graph LR
 ### Subgraphs
 
 ```mermaid
-graph TD
+graph LR
     subgraph Backend
         API --> DB
     end
@@ -89,7 +89,7 @@ graph LR
 ### Parallel Links
 
 ```mermaid
-graph TD
+graph LR
     A & B --> C & D
 ```
 
@@ -409,6 +409,21 @@ erDiagram
 
 ## Best Practices
 
+### Prefer Horizontal (Landscape) Orientations
+
+**IMPORTANT**: Use horizontal layouts (LR, RL) whenever possible. Horizontal diagrams are much easier to view and navigate in the UI.
+
+- **Flowcharts**: Use `graph LR` (left-right) instead of `graph TD` (top-down)
+- **State Diagrams**: Add `direction LR` after the header
+- **Sequence Diagrams**: Naturally horizontal, no changes needed
+- **Class Diagrams**: For wide hierarchies, consider splitting into multiple horizontal diagrams
+- **ER Diagrams**: Naturally horizontal, no changes needed
+
+**Only use vertical layouts (TD, BT) when**:
+- The diagram is inherently hierarchical (org charts, tree structures)
+- The vertical layout is significantly clearer than horizontal
+- The diagram has very few nodes (3-4 max)
+
 ### Keep Diagrams Focused
 
 One concept per diagram. If a diagram gets complex, split it into multiple diagrams.
@@ -424,10 +439,13 @@ graph LR
 
 ### Choose the Right Direction
 
-- **TD (top-down)**: Hierarchies, inheritance, org charts
-- **LR (left-right)**: Flows, pipelines, timelines
-- **BT (bottom-top)**: Dependencies pointing upward
-- **RL (right-left)**: Reverse flows
+**Horizontal (preferred)**:
+- **LR (left-right)**: DEFAULT - Use for flows, pipelines, state machines, processes, and most diagrams
+- **RL (right-left)**: Reverse flows (when semantically meaningful)
+
+**Vertical (use sparingly)**:
+- **TD (top-down)**: Only for hierarchies, inheritance, org charts where vertical structure is essential
+- **BT (bottom-top)**: Only for dependencies pointing upward
 
 ### Validate Complex Diagrams
 

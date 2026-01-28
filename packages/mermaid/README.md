@@ -350,6 +350,7 @@ Render a Mermaid diagram to SVG. Auto-detects diagram type.
 | `surface` | `string?` | — | Node fill tint |
 | `border` | `string?` | — | Node stroke color |
 | `font` | `string` | `Inter` | Font family |
+| `transparent` | `boolean` | `false` | Render with transparent background |
 
 ### `renderMermaidAscii(text, options?): string`
 

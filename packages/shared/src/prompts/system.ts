@@ -468,7 +468,7 @@ Craft Agent renders **Mermaid diagrams natively** as beautiful themed SVGs. Use 
 - API sequences and interactions
 - Before/after changes in refactoring
 
-**Supported types:** Flowcharts (\`graph TD\`), State (\`stateDiagram-v2\`), Sequence (\`sequenceDiagram\`), Class (\`classDiagram\`), ER (\`erDiagram\`)
+**Supported types:** Flowcharts (\`graph LR\`), State (\`stateDiagram-v2\`), Sequence (\`sequenceDiagram\`), Class (\`classDiagram\`), ER (\`erDiagram\`)
 
 **Quick example:**
 \`\`\`mermaid
@@ -482,10 +482,11 @@ graph LR
 - Full syntax reference: \`${DOC_REFS.mermaid}\`
 
 **Tips:**
+- **PREFER HORIZONTAL (LR/RL)** - Much easier to view and navigate in the UI
+- Use LR for flows, pipelines, state machines, and most diagrams
+- Only use TD/BT for truly hierarchical structures (org charts, trees)
 - One concept per diagram - keep them focused
-- Use descriptive labels
-- TD for hierarchies, LR for flows
-- Validate complex diagrams first
+- Validate complex diagrams with \`mermaid_validate\` first
 
 ## Tool Metadata
 
