@@ -157,7 +157,7 @@ function highlightMatch(text: string, query: string): React.ReactNode {
   return (
     <>
       {before}
-      <span className="bg-info/30 rounded-sm">{match}</span>
+      <span className="px-1 py-0.5 bg-yellow-300 rounded-[4px] text-black/90">{match}</span>
       {highlightMatch(after, query)}
     </>
   )
@@ -568,27 +568,31 @@ function SessionItem({
         </button>
 
         {/* Match navigation - vertically stacked chevrons on right side when selected with matches */}
-        {isSelected && searchQuery && chatMatchCount != null && chatMatchCount > 0 && (
-          <div className="absolute right-2 top-0 bottom-0 flex flex-col items-center justify-center gap-0.5 py-2 z-10">
-            <button
-              onClick={(e) => { e.stopPropagation(); console.log('[SessionItem] Prev clicked'); onNavigatePrev?.() }}
-              className="p-0.5 hover:bg-foreground/10 rounded transition-colors"
-              title="Previous match"
-            >
-              <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
-            </button>
-            <span className="text-[9px] text-muted-foreground tabular-nums text-center leading-tight">
-              {(chatMatchIndex ?? 0) + 1}/{chatMatchCount}
-            </span>
-            <button
-              onClick={(e) => { e.stopPropagation(); console.log('[SessionItem] Next clicked'); onNavigateNext?.() }}
-              className="p-0.5 hover:bg-foreground/10 rounded transition-colors"
-              title="Next match"
-            >
-              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-            </button>
-          </div>
-        )}
+        {/* Always rendered but uses opacity transition for smooth show/hide */}
+        <div className={cn(
+          "absolute right-2 top-0 bottom-0 flex flex-col items-center justify-center gap-0.5 py-2 z-10 transition-opacity duration-150",
+          isSelected && searchQuery && chatMatchCount != null && chatMatchCount > 0
+            ? "opacity-100"
+            : "opacity-0 pointer-events-none"
+        )}>
+          <button
+            onClick={(e) => { e.stopPropagation(); onNavigatePrev?.() }}
+            className="p-0.5 hover:bg-foreground/10 rounded transition-colors"
+            title="Previous match"
+          >
+            <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
+          </button>
+          <span className="text-[9px] text-muted-foreground tabular-nums text-center leading-tight">
+            {(chatMatchIndex ?? 0) + 1}/{chatMatchCount ?? 0}
+          </span>
+          <button
+            onClick={(e) => { e.stopPropagation(); onNavigateNext?.() }}
+            className="p-0.5 hover:bg-foreground/10 rounded transition-colors"
+            title="Next match"
+          >
+            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+          </button>
+        </div>
 
         {/* Action buttons - visible on hover or when menu is open, hidden in search mode with matches */}
         {!(isSelected && searchQuery && chatMatchCount && chatMatchCount > 0) && (

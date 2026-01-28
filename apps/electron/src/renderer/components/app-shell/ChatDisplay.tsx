@@ -462,12 +462,9 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   }, [session?.id, isFocused])
 
   // Reset match index when session or search query changes
-  // NOTE: We intentionally do NOT auto-scroll on session change to avoid jarring UX.
-  // User can use chevron navigation to jump to matches if desired.
   useEffect(() => {
     prevSessionIdForScrollRef.current = session?.id ?? null
     setCurrentMatchIndex(0)
-    // Don't set shouldScrollToMatchRef - only scroll on explicit chevron click
   }, [session?.id, searchQuery, isSearchActive])
 
   // Helper to count occurrences of a substring
@@ -552,8 +549,16 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
       .map(m => ({ turnId: m.turnId, turnIndex: m.turnIndex }))
   }, [matchingOccurrences])
 
+  // Auto-scroll to match ONLY when there's exactly one match
+  // Multiple matches: user navigates with chevrons to avoid jarring scroll
+  useEffect(() => {
+    if (matchingOccurrences.length === 1 && isSearchActive) {
+      shouldScrollToMatchRef.current = true
+    }
+  }, [matchingOccurrences.length, isSearchActive])
+
   // Scroll to current match (with delay to wait for DOM rendering)
-  // Only scrolls when shouldScrollToMatchRef is true (session change or nav button click)
+  // Only scrolls when shouldScrollToMatchRef is true (single match auto-scroll or nav button click)
   useEffect(() => {
     console.log('[ChatDisplay Scroll] Effect triggered, matchCount:', matchingOccurrences.length, 'currentIndex:', currentMatchIndex, 'shouldScroll:', shouldScrollToMatchRef.current)
 
@@ -732,7 +737,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
             const mark = document.createElement('mark')
             const matchIdIndex = reverseCounter - (nodeMatches.length - 1 - j)
             mark.id = `${turnId}-match-${matchIdIndex}`
-            mark.className = 'search-highlight bg-info/40 text-inherit rounded-sm px-0.5'
+            mark.className = 'search-highlight px-1 py-0.5 bg-yellow-300 rounded-[4px] text-black/90'
             mark.textContent = text.slice(matchStart, matchEnd)
             fragments.unshift(mark)
 
