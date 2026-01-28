@@ -678,10 +678,11 @@ export const RichTextInput = React.forwardRef<RichTextInputHandle, RichTextInput
 
       // Restore cursor position after innerHTML update.
       // Always restore if we have a pending position (from setSelectionRange call).
-      // Otherwise restore to end of value.
+      // Otherwise preserve the current cursor position from the last input event.
+      // Only default to end of value if we have no cursor info at all.
       // Note: We restore even if not focused because focus can momentarily shift
       // during React re-renders, and we don't want cursor to reset to 0.
-      const cursorPos = pendingCursorRef.current ?? value.length
+      const cursorPos = pendingCursorRef.current ?? cursorPositionRef.current ?? value.length
       setCursorPosition(divRef.current, cursorPos)
       pendingCursorRef.current = null // Clear after use
     }, [value, skills, sources, skillSlugs, sourceSlugs, workspaceId])

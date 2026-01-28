@@ -1032,6 +1032,8 @@ export function FreeFormInput({
       const capitalizedFirst = value.charAt(0).toUpperCase()
       if (capitalizedFirst !== value.charAt(0)) {
         newValue = capitalizedFirst + value.slice(1)
+        // Set cursor position BEFORE state update so it's used when useEffect syncs the value
+        richInputRef.current?.setSelectionRange(cursorPosition, cursorPosition)
         setInput(newValue)
         syncToParent(newValue)
         return
@@ -1042,12 +1044,10 @@ export function FreeFormInput({
     const typography = applySmartTypography(value, cursorPosition)
     if (typography.replaced) {
       newValue = typography.text
+      // Set cursor position BEFORE state update so it's used when useEffect syncs the value
+      richInputRef.current?.setSelectionRange(typography.cursor, typography.cursor)
       setInput(newValue)
       syncToParent(newValue)
-      // Restore cursor position after React re-render
-      requestAnimationFrame(() => {
-        richInputRef.current?.setSelectionRange(typography.cursor, typography.cursor)
-      })
     }
   }, [inlineSlash, inlineMention, inlineLabel, syncToParent])
 
