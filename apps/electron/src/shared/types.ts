@@ -357,6 +357,10 @@ export interface CreateSessionOptions {
    * - Absolute path string: Use this specific path
    */
   workingDirectory?: string | 'user_default' | 'none'
+  /** Model override for the session (e.g., 'haiku', 'sonnet') */
+  model?: string
+  /** System prompt preset for the session ('default' | 'mini' or custom string) */
+  systemPrompt?: 'default' | 'mini' | string
 }
 
 // Events sent from main to renderer

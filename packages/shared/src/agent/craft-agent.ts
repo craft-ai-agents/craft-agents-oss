@@ -118,6 +118,8 @@ export interface CraftAgentConfig {
     enabled: boolean;          // Whether debug mode is active
     logFilePath?: string;      // Path to the log file for querying
   };
+  /** System prompt preset for mini agents ('default' | 'mini' or custom string) */
+  systemPromptPreset?: 'default' | 'mini' | string;
 }
 
 // Permission request tracking
@@ -857,6 +859,17 @@ export class CraftAgent {
       const isClaude = isClaudeModel(model);
       const useAnthropicBetas = isClaude;
 
+      // Log mini agent detection
+      const isMiniAgent = this.config.systemPromptPreset === 'mini';
+      if (isMiniAgent) {
+        debug('[CraftAgent] 🤖 MINI AGENT mode - using lean system prompt without Claude Code preset');
+        debug('[CraftAgent] Mini agent config:', {
+          model,
+          systemPromptPreset: this.config.systemPromptPreset,
+          workspaceRootPath: this.workspaceRootPath,
+        });
+      }
+
       const options: Options = {
         ...getDefaultOptions(),
         model,
@@ -878,19 +891,22 @@ export class CraftAgent {
         // Extended thinking: tokens based on effective thinking level (session level + ultrathink override)
         // Non-Claude models don't support extended thinking, so pass 0 to disable
         maxThinkingTokens: isClaude ? thinkingTokens : 0,
-        // Option A: Append to Claude Code's system prompt (recommended by docs)
-        // Use pinned values for consistency after compaction (SDK expects stable system prompt)
-        systemPrompt: {
-          type: 'preset',
-          preset: 'claude_code',
-          // Working directory included for monorepo context file discovery
-          append: getSystemPrompt(
-            this.pinnedPreferencesPrompt ?? undefined,
-            this.config.debugMode,
-            this.workspaceRootPath,
-            this.config.session?.workingDirectory
-          ),
-        },
+        // System prompt configuration:
+        // - Mini agents: Use custom (lean) system prompt without Claude Code preset
+        // - Normal agents: Append to Claude Code's system prompt (recommended by docs)
+        systemPrompt: this.config.systemPromptPreset === 'mini'
+          ? getSystemPrompt(undefined, undefined, this.workspaceRootPath, undefined, 'mini')
+          : {
+              type: 'preset' as const,
+              preset: 'claude_code' as const,
+              // Working directory included for monorepo context file discovery
+              append: getSystemPrompt(
+                this.pinnedPreferencesPrompt ?? undefined,
+                this.config.debugMode,
+                this.workspaceRootPath,
+                this.config.session?.workingDirectory
+              ),
+            },
         // Use sdkCwd for SDK session storage - this is set once at session creation and never changes.
         // This ensures SDK can always find session transcripts regardless of workingDirectory changes.
         // Note: workingDirectory is still used for context injection and shown to the agent.

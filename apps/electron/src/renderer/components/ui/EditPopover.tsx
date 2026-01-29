@@ -82,6 +82,10 @@ export interface EditConfig {
   example: string
   /** Optional custom placeholder text - overrides the default "Describe what you'd like to change" */
   overridePlaceholder?: string
+  /** Optional model for mini agent (e.g., 'haiku', 'sonnet') */
+  model?: string
+  /** Optional system prompt preset for mini agent (e.g., 'mini' for focused edits) */
+  systemPrompt?: 'default' | 'mini'
 }
 
 /**
@@ -324,6 +328,8 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Confirm clearly when done.',
     },
     example: 'Add a "Blocked" status',
+    model: 'haiku',           // Use fast model for quick config edits
+    systemPrompt: 'mini',     // Use focused mini prompt
   }),
 
   // Label configuration context
@@ -342,6 +348,8 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Confirm clearly when done.',
     },
     example: 'Add a "Bug" label with red color',
+    model: 'haiku',           // Use fast model for quick config edits
+    systemPrompt: 'mini',     // Use focused mini prompt
   }),
 
   // Auto-label rules context (focused on regex patterns within labels)
@@ -442,6 +450,10 @@ export interface EditPopoverProps {
    * - Absolute path string: Use this specific path
    */
   workingDirectory?: string | 'user_default' | 'none'
+  /** Model override for mini agent (e.g., 'haiku', 'sonnet') */
+  model?: string
+  /** System prompt preset for mini agent (e.g., 'mini' for focused edits) */
+  systemPrompt?: 'default' | 'mini'
   /** Width of the popover (default: 320) */
   width?: number
   /** Additional className for the trigger */
@@ -531,6 +543,8 @@ export function EditPopover({
   context,
   permissionMode = 'allow-all',
   workingDirectory = 'none', // Default to session folder for config edits
+  model,
+  systemPrompt,
   width = 320,
   triggerClassName,
   side = 'bottom',
@@ -595,8 +609,12 @@ export function EditPopover({
     // The &mode= sets the permission mode for the new session
     // The &badges= passes badge metadata for hiding the XML context in UI
     // The &workdir= sets the working directory (user_default, none, or absolute path)
+    // The &model= sets the model for mini agents (e.g., 'haiku')
+    // The &systemPrompt= sets the system prompt preset (e.g., 'mini')
     const workdirParam = workingDirectory ? `&workdir=${encodeURIComponent(workingDirectory)}` : ''
-    const url = `craftagents://action/new-chat?window=focused&input=${encodedInput}&send=true&mode=${permissionMode}&badges=${encodedBadges}${workdirParam}`
+    const modelParam = model ? `&model=${encodeURIComponent(model)}` : ''
+    const systemPromptParam = systemPrompt ? `&systemPrompt=${encodeURIComponent(systemPrompt)}` : ''
+    const url = `craftagents://action/new-chat?window=focused&input=${encodedInput}&send=true&mode=${permissionMode}&badges=${encodedBadges}${workdirParam}${modelParam}${systemPromptParam}`
 
     try {
       await window.electronAPI.openUrl(url)

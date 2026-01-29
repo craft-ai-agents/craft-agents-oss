@@ -256,17 +256,66 @@ export interface SystemPromptOptions {
 }
 
 /**
+ * System prompt preset types for different agent contexts.
+ * - 'default': Full Craft Agent system prompt
+ * - 'mini': Focused prompt for quick configuration edits
+ */
+export type SystemPromptPreset = 'default' | 'mini';
+
+/**
+ * Get a focused system prompt for mini agents (quick edit tasks).
+ * Optimized for configuration edits with minimal context.
+ *
+ * @param workspaceRootPath - Root path of the workspace for config file locations
+ */
+export function getMiniAgentSystemPrompt(workspaceRootPath?: string): string {
+  const workspaceContext = workspaceRootPath
+    ? `\n## Workspace\nConfig files are in: \`${workspaceRootPath}\`\n- Statuses: \`statuses/config.json\`\n- Labels: \`labels/config.json\`\n- Permissions: \`permissions.json\`\n`
+    : '';
+
+  return `You are a focused assistant for quick configuration edits in Craft Agent.
+
+## Your Role
+You help users make targeted changes to configuration files. Be concise and efficient.
+${workspaceContext}
+## Guidelines
+- Make the requested change directly
+- Validate with config_validate after editing
+- Confirm completion briefly
+- Don't add unrequested features or changes
+- Keep responses short and to the point
+
+## Available Tools
+Use Read, Edit, Write tools for file operations.
+Use config_validate to verify changes match the expected schema.
+`;
+}
+
+/**
  * Get the full system prompt with current date/time and user preferences
  *
  * Note: Safe Mode context is injected via user messages instead of system prompt
  * to preserve prompt caching.
+ *
+ * @param pinnedPreferencesPrompt - Pre-formatted preferences (for session consistency)
+ * @param debugMode - Debug mode configuration
+ * @param workspaceRootPath - Root path of the workspace
+ * @param workingDirectory - Working directory for context file discovery
+ * @param preset - System prompt preset ('default' | 'mini' | custom string)
  */
 export function getSystemPrompt(
   pinnedPreferencesPrompt?: string,
   debugMode?: DebugModeConfig,
   workspaceRootPath?: string,
-  workingDirectory?: string
+  workingDirectory?: string,
+  preset?: SystemPromptPreset | string
 ): string {
+  // Use mini agent prompt for quick edits (pass workspace root for config paths)
+  if (preset === 'mini') {
+    debug('[getSystemPrompt] 🤖 Generating MINI agent system prompt for workspace:', workspaceRootPath);
+    return getMiniAgentSystemPrompt(workspaceRootPath);
+  }
+
   // Use pinned preferences if provided (for session consistency after compaction)
   const preferences = pinnedPreferencesPrompt ?? formatPreferencesForPrompt();
   const debugContext = debugMode?.enabled ? formatDebugModeContext(debugMode.logFilePath) : '';

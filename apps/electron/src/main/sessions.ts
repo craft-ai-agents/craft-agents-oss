@@ -316,6 +316,8 @@ interface ManagedSession {
   model?: string
   // Thinking level for this session ('off', 'think', 'max')
   thinkingLevel?: ThinkingLevel
+  // System prompt preset for mini agents ('default' | 'mini')
+  systemPromptPreset?: 'default' | 'mini' | string
   // Role/type of the last message (for badge display without loading messages)
   lastMessageRole?: 'user' | 'assistant' | 'plan' | 'tool' | 'error'
   // ID of the last final (non-intermediate) assistant message - pre-computed for unread detection
@@ -1396,6 +1398,14 @@ export class SessionManager {
       workingDirectory: resolvedWorkingDir,
     })
 
+    // Model priority: options.model > storedSession.model > workspace default
+    const resolvedModel = options?.model || storedSession.model || defaultModel
+
+    // Log mini agent session creation
+    if (options?.systemPrompt === 'mini' || options?.model) {
+      sessionLog.info(`🤖 Creating mini agent session: model=${resolvedModel}, systemPrompt=${options?.systemPrompt}`)
+    }
+
     const managed: ManagedSession = {
       id: storedSession.id,
       workspace,
@@ -1414,8 +1424,10 @@ export class SessionManager {
       workingDirectory: resolvedWorkingDir,
       sdkCwd: storedSession.sdkCwd,
       // Session-specific model takes priority, then workspace default
-      model: storedSession.model || defaultModel,
+      model: resolvedModel,
       thinkingLevel: defaultThinkingLevel,
+      // System prompt preset for mini agents
+      systemPromptPreset: options?.systemPrompt,
       messageQueue: [],
       backgroundShellCommands: new Map(),
       messagesLoaded: true,  // New sessions don't need to load messages from disk
@@ -1454,6 +1466,8 @@ export class SessionManager {
         // Initialize thinking level at construction to avoid race conditions
         thinkingLevel: managed.thinkingLevel,
         isHeadless: !AGENT_FLAGS.defaultModesEnabled,
+        // System prompt preset for mini agents (focused prompts for quick edits)
+        systemPromptPreset: managed.systemPromptPreset,
         // Always pass session object - id is required for plan mode callbacks
         // sdkSessionId is optional and used for conversation resumption
         session: {
