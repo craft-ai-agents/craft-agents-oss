@@ -86,7 +86,7 @@ export class HeadlessRunner {
       this.workspaceRootPath = this.config.workspace.rootPath;
 
       // 2. Create CraftAgent with headless callbacks
-      this.createAgent();
+      await this.createAgent();
 
       // 3. Execute query
       yield { type: 'status', message: 'Processing...' };
@@ -187,7 +187,7 @@ ${this.config.prompt}
   /**
    * Create CraftAgent with headless callbacks for permissions and questions.
    */
-  private createAgent(): void {
+  private async createAgent(): Promise<void> {
     // Map permission policy to the new PermissionMode system
     const permissionMode = policyToPermissionMode(this.config.permissionPolicy);
     debug('[HeadlessRunner] Using permission mode:', permissionMode, 'from policy:', this.config.permissionPolicy || 'deny-all');
@@ -235,7 +235,7 @@ ${this.config.prompt}
     // Default: fresh session (don't set any - SDK will create new)
     if (this.config.sessionId && this.workspaceRootPath) {
       // --session: get or create session with this ID
-      const session = getOrCreateSessionById(this.workspaceRootPath, this.config.sessionId);
+      const session = await getOrCreateSessionById(this.workspaceRootPath, this.config.sessionId);
       this.sessionIdToUpdate = session.id;  // Save to update SDK session ID after run
       if (session.sdkSessionId) {
         debug('[HeadlessRunner] Resuming session (--session) - craft:', session.id, 'sdk:', session.sdkSessionId);

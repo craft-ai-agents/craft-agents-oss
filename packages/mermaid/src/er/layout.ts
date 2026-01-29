@@ -124,7 +124,7 @@ export async function layoutErDiagram(
   })
 
   // 5. Extract relationship paths
-  const relationships: PositionedErRelationship[] = g.edges().map(edgeObj => {
+  const relationships: PositionedErRelationship[] = g.edges().map((edgeObj: { v: string; w: string }) => {
     const dagreEdge = g.edge(edgeObj)
     const rel = diagram.relationships[dagreEdge._index as number]!
     const rawPoints = dagreEdge.points ?? []

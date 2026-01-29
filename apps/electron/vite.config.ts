@@ -58,8 +58,12 @@ export default defineConfig({
     dedupe: ['react', 'react-dom']
   },
   optimizeDeps: {
-    include: ['react', 'react-dom', 'jotai', 'filtrex'],
-    exclude: ['@craft-agent/ui']
+    include: ['react', 'react-dom', 'jotai', 'filtrex', 'pdfjs-dist'],
+    exclude: ['@craft-agent/ui'],
+    esbuildOptions: {
+      supported: { 'top-level-await': true },
+      target: 'esnext'
+    }
   },
   server: {
     port: 5173,

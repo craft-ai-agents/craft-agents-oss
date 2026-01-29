@@ -18,6 +18,7 @@ import {
   MultiDiffPreviewOverlay,
   TerminalPreviewOverlay,
   JSONPreviewOverlay,
+  DocumentFormattedMarkdownOverlay,
   extractOverlayData,
   type PlatformActions,
   type ActivityItem,
@@ -272,6 +273,19 @@ export function App() {
           data={overlayData.data}
           title={overlayData.title}
           theme={theme}
+          error={overlayData.error}
+        />
+      )}
+
+      {/* Document overlay for formatted markdown content (Write tool on .md/.txt, WebSearch results) */}
+      {overlayData?.type === 'document' && (
+        <DocumentFormattedMarkdownOverlay
+          isOpen={!!overlayActivity}
+          onClose={handleCloseOverlay}
+          content={overlayData.content}
+          filePath={overlayData.filePath}
+          typeBadge={{ label: overlayData.toolName, variant: 'default' }}
+          onOpenUrl={platformActions.onOpenUrl}
           error={overlayData.error}
         />
       )}

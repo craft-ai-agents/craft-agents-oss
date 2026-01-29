@@ -22,16 +22,18 @@ import { FONT_SIZES, FONT_WEIGHTS, STROKE_WIDTHS, ARROW_HEAD, estimateTextWidth,
  * Render a positioned sequence diagram as an SVG string.
  *
  * @param colors - DiagramColors with bg/fg and optional enrichment variables.
+ * @param transparent - If true, renders with transparent background.
  */
 export function renderSequenceSvg(
   diagram: PositionedSequenceDiagram,
   colors: DiagramColors,
-  font: string = 'Inter'
+  font: string = 'Inter',
+  transparent: boolean = false
 ): string {
   const parts: string[] = []
 
   // SVG root with CSS variables + style block + defs
-  parts.push(svgOpenTag(diagram.width, diagram.height, colors))
+  parts.push(svgOpenTag(diagram.width, diagram.height, colors, transparent))
   parts.push(buildStyleBlock(font, false))
   parts.push('<defs>')
 

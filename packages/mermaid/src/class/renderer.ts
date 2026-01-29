@@ -29,16 +29,18 @@ const CLS_FONT = {
  * Render a positioned class diagram as an SVG string.
  *
  * @param colors - DiagramColors with bg/fg and optional enrichment variables.
+ * @param transparent - If true, renders with transparent background.
  */
 export function renderClassSvg(
   diagram: PositionedClassDiagram,
   colors: DiagramColors,
-  font: string = 'Inter'
+  font: string = 'Inter',
+  transparent: boolean = false
 ): string {
   const parts: string[] = []
 
   // SVG root with CSS variables + style block (with mono font) + defs
-  parts.push(svgOpenTag(diagram.width, diagram.height, colors))
+  parts.push(svgOpenTag(diagram.width, diagram.height, colors, transparent))
   parts.push(buildStyleBlock(font, true))
   parts.push('<defs>')
   parts.push(relationshipMarkerDefs())
@@ -150,7 +152,7 @@ function renderClassBox(cls: PositionedClassNode): string {
   const memberRowH = 20
   for (let i = 0; i < cls.attributes.length; i++) {
     const member = cls.attributes[i]!
-    const memberY = attrTop + i * memberRowH + memberRowH / 2
+    const memberY = attrTop + 4 + i * memberRowH + memberRowH / 2
     parts.push(renderMember(member, x + CLS.boxPadX, memberY))
   }
 
@@ -164,7 +166,7 @@ function renderClassBox(cls: PositionedClassNode): string {
   // Methods
   for (let i = 0; i < cls.methods.length; i++) {
     const member = cls.methods[i]!
-    const memberY = methodTop + i * memberRowH + memberRowH / 2
+    const memberY = methodTop + 4 + i * memberRowH + memberRowH / 2
     parts.push(renderMember(member, x + CLS.boxPadX, memberY))
   }
 

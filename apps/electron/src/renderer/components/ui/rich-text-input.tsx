@@ -626,26 +626,10 @@ export const RichTextInput = React.forwardRef<RichTextInputHandle, RichTextInput
         return
       }
 
-      // Use Selection API to insert text at cursor position
-      const selection = window.getSelection()
-      if (!selection || !selection.rangeCount) return
-
-      const range = selection.getRangeAt(0)
-      range.deleteContents()
-
-      const textNode = document.createTextNode(text)
-      range.insertNode(textNode)
-
-      // Move cursor to end of inserted text
-      range.setStartAfter(textNode)
-      range.collapse(true)
-      selection.removeAllRanges()
-      selection.addRange(range)
-
-      // Trigger input event to update state
-      if (divRef.current) {
-        divRef.current.dispatchEvent(new Event('input', { bubbles: true }))
-      }
+      // Use execCommand to insert text - this integrates with the browser's
+      // native undo stack so CMD+Z works after paste. Manual DOM manipulation
+      // (range.insertNode) bypasses the undo history.
+      document.execCommand('insertText', false, text)
     }, [onPaste, onLongTextPaste])
 
     // Handle focus

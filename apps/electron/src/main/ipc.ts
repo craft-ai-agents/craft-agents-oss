@@ -446,6 +446,21 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     }
   })
 
+  // Read a file as raw binary (Uint8Array) for react-pdf.
+  // Returns Uint8Array which IPC automatically converts to ArrayBuffer for the renderer.
+  ipcMain.handle(IPC_CHANNELS.READ_FILE_BINARY, async (_event, path: string) => {
+    try {
+      const safePath = await validateFilePath(path)
+      const buffer = await readFile(safePath)
+      // Return as Uint8Array (serializes to ArrayBuffer over IPC)
+      return new Uint8Array(buffer)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      ipcLog.error('readFileBinary error:', message)
+      throw new Error(`Failed to read file as binary: ${message}`)
+    }
+  })
+
   // Open native file dialog for selecting files to attach
   ipcMain.handle(IPC_CHANNELS.OPEN_FILE_DIALOG, async () => {
     const result = await dialog.showOpenDialog({

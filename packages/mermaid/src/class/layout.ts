@@ -23,13 +23,15 @@ export const CLS = {
   /** Padding around the diagram */
   padding: 40,
   /** Horizontal padding inside class boxes — used by both layout and renderer */
-  boxPadX: 12,
+  boxPadX: 8,
   /** Header height (class name + annotation) */
   headerBaseHeight: 32,
   /** Extra height when annotation is present */
   annotationHeight: 16,
   /** Height per member row (attribute or method) */
   memberRowHeight: 20,
+  /** Vertical padding around member sections (4px top + 4px bottom) */
+  sectionPadY: 8,
   /** Minimum empty section height (when no attrs or no methods) */
   emptySectionHeight: 8,
   /** Minimum box width */
@@ -67,11 +69,11 @@ export async function layoutClassDiagram(
       : CLS.headerBaseHeight
 
     const attrHeight = cls.attributes.length > 0
-      ? cls.attributes.length * CLS.memberRowHeight
+      ? cls.attributes.length * CLS.memberRowHeight + CLS.sectionPadY
       : CLS.emptySectionHeight
 
     const methodHeight = cls.methods.length > 0
-      ? cls.methods.length * CLS.memberRowHeight
+      ? cls.methods.length * CLS.memberRowHeight + CLS.sectionPadY
       : CLS.emptySectionHeight
 
     // Width: max of header text, widest attribute, widest method
@@ -149,7 +151,7 @@ export async function layoutClassDiagram(
   })
 
   // 5. Extract relationship paths and label positions
-  const relationships: PositionedClassRelationship[] = g.edges().map(edgeObj => {
+  const relationships: PositionedClassRelationship[] = g.edges().map((edgeObj: { v: string; w: string }) => {
     const dagreEdge = g.edge(edgeObj)
     const rel = diagram.relationships[dagreEdge._index as number]!
     const rawPoints = dagreEdge.points ?? []

@@ -59,6 +59,7 @@ import { getSourceCredentialManager } from '../sources/index.ts';
 import { inferGoogleServiceFromUrl, inferSlackServiceFromUrl, inferMicrosoftServiceFromUrl, isApiOAuthProvider, type GoogleService, type SlackService, type MicrosoftService } from '../sources/types.ts';
 import { buildAuthorizationHeader } from '../sources/api-tools.ts';
 import { DOC_REFS } from '../docs/index.ts';
+import { renderMermaid } from '@craft-agent/mermaid';
 
 // ============================================================
 // Session-Scoped Tool Callbacks
@@ -1756,6 +1757,17 @@ After successful authentication, the tokens are stored and the source is marked 
           service = inferMicrosoftServiceFromUrl(api?.baseUrl);
         }
 
+        // Require explicit service configuration if it can't be inferred
+        if (!service) {
+          return {
+            content: [{
+              type: 'text' as const,
+              text: `Cannot determine Microsoft service for source '${args.sourceSlug}'. Set microsoftService ('outlook', 'microsoft-calendar', 'onedrive', 'teams', or 'sharepoint') in api config.`,
+            }],
+            isError: true,
+          };
+        }
+
         // Get session callbacks
         const callbacks = getSessionScopedToolCallbacks(sessionId);
 
@@ -1927,6 +1939,67 @@ source_credential_prompt({
 }
 
 // ============================================================
+// Mermaid Validation Tool
+// ============================================================
+
+/**
+ * Create the mermaid_validate tool for validating Mermaid diagram syntax.
+ *
+ * This tool helps the agent verify diagram syntax before outputting complex diagrams.
+ * It attempts to parse and optionally render the diagram, returning structured
+ * validation results with specific error messages if invalid.
+ */
+function createMermaidValidateTool() {
+  return tool(
+    'mermaid_validate',
+    `Validate Mermaid diagram syntax before outputting.
+
+Use this when:
+- Creating complex diagrams with many nodes/relationships
+- Unsure about syntax for a specific diagram type
+- Debugging a diagram that failed to render
+
+Returns validation result with specific error messages if invalid.`,
+    {
+      code: z.string().describe('The mermaid diagram code to validate'),
+      render: z.boolean().optional().describe('Also attempt to render (catches layout errors). Default: true'),
+    },
+    async (args) => {
+      const { code, render = true } = args;
+
+      try {
+        // Attempt to render the diagram (this parses + layouts, catching most errors)
+        if (render) {
+          await renderMermaid(code);
+        }
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              valid: true,
+              message: 'Diagram syntax is valid' + (render ? ' and renders successfully' : ''),
+            }, null, 2),
+          }],
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              valid: false,
+              error: message,
+              suggestion: `Check the syntax against ${DOC_REFS.mermaid}`,
+            }, null, 2),
+          }],
+        };
+      }
+    }
+  );
+}
+
+// ============================================================
 // Session-Scoped Tools Provider
 // ============================================================
 
@@ -1958,6 +2031,8 @@ export function getSessionScopedTools(sessionId: string, workspaceRootPath: stri
         createConfigValidateTool(sessionId, workspaceRootPath),
         // Skill validation tool
         createSkillValidateTool(sessionId, workspaceRootPath),
+        // Mermaid diagram validation tool
+        createMermaidValidateTool(),
         // Source tools: test + auth only (CRUD via file editing)
         createSourceTestTool(sessionId, workspaceRootPath),
         createOAuthTriggerTool(sessionId, workspaceRootPath),

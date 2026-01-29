@@ -6,7 +6,7 @@ classDiagram
 +--------+
      :
    uses
-     >
+     v
 +--------+
 | Server |
 +--------+

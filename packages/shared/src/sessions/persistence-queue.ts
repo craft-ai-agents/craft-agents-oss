@@ -3,6 +3,7 @@ import type { StoredSession, SessionHeader } from './types.js'
 import { getSessionFilePath, ensureSessionsDir, ensureSessionDir } from './storage.js'
 import { toPortablePath } from '../utils/paths.js'
 import { createSessionHeader } from './jsonl.js'
+import { debug } from '../utils/debug.js'
 
 interface PendingWrite {
   data: StoredSession
@@ -80,7 +81,7 @@ class SessionPersistenceQueue {
       // On Windows, rename fails if target exists. Delete first for cross-platform compatibility.
       try { await unlink(filePath) } catch { /* ignore if doesn't exist */ }
       await rename(tmpFile, filePath)
-      console.log(`[PersistenceQueue] Wrote session ${sessionId}`)
+      debug(`[PersistenceQueue] Wrote session ${sessionId}`)
     } catch (error) {
       console.error(`[PersistenceQueue] Failed to write session ${sessionId}:`, error)
     }
@@ -105,7 +106,7 @@ class SessionPersistenceQueue {
     if (entry) {
       clearTimeout(entry.timer)
       this.pending.delete(sessionId)
-      console.log(`[PersistenceQueue] Cancelled pending write for session ${sessionId}`)
+      debug(`[PersistenceQueue] Cancelled pending write for session ${sessionId}`)
     }
   }
 

@@ -3,10 +3,10 @@
  *
  * Usage: bun run packages/mermaid/dev.ts
  *
- * - Runs `samples.ts` to generate samples.html on startup
- * - Watches `src/` and `samples.ts` for file changes
- * - On change, rebuilds samples.html and notifies browsers via SSE
- * - Serves samples.html with an injected live-reload script
+ * - Runs `index.ts` to generate index.html on startup
+ * - Watches `src/` and `index.ts` for file changes
+ * - On change, rebuilds index.html and notifies browsers via SSE
+ * - Serves index.html with an injected live-reload script
  *
  * This avoids manually re-running the build and refreshing the browser —
  * just save a file and the page updates automatically.
@@ -31,7 +31,7 @@ async function rebuild(): Promise<void> {
   console.log('\x1b[36m[dev]\x1b[0m Rebuilding samples...')
   const t0 = performance.now()
 
-  const proc = Bun.spawn(['bun', 'run', join(ROOT, 'samples.ts')], {
+  const proc = Bun.spawn(['bun', 'run', join(ROOT, 'index.ts')], {
     cwd: ROOT,
     stdout: 'inherit',
     stderr: 'inherit',
@@ -61,8 +61,8 @@ async function rebuild(): Promise<void> {
 
 let debounce: Timer | null = null
 function onFileChange(_event: string, filename: string | null): void {
-  // Ignore samples.html itself (it's the output, not a source)
-  if (filename === 'samples.html') return
+  // Ignore index.html itself (it's the output, not a source)
+  if (filename === 'index.html') return
   if (debounce) clearTimeout(debounce)
   debounce = setTimeout(() => {
     console.log(`\x1b[90m[dev]\x1b[0m Change detected${filename ? `: ${filename}` : ''}`)
@@ -70,9 +70,8 @@ function onFileChange(_event: string, filename: string | null): void {
   }, 150)
 }
 
-// Watch the src/ directory recursively and samples.ts for definition changes
-watch(join(ROOT, 'src'), { recursive: true }, onFileChange)
-watch(join(ROOT, 'samples.ts'), onFileChange)
+// Watch the entire mermaid package for changes (excludes index.html output)
+watch(ROOT, { recursive: true }, onFileChange)
 
 // ============================================================================
 // HTTP server
@@ -82,7 +81,7 @@ watch(join(ROOT, 'samples.ts'), onFileChange)
 await rebuild()
 
 console.log(`\x1b[36m[dev]\x1b[0m Server running at \x1b[1mhttp://localhost:${PORT}\x1b[0m`)
-console.log(`\x1b[36m[dev]\x1b[0m Watching for changes in src/ and samples.ts\n`)
+console.log(`\x1b[36m[dev]\x1b[0m Watching for changes in src/ and index.ts\n`)
 
 Bun.serve({
   port: PORT,
@@ -110,10 +109,10 @@ Bun.serve({
       })
     }
 
-    // Serve samples.html with injected live-reload script
-    const file = Bun.file(join(ROOT, 'samples.html'))
+    // Serve index.html with injected live-reload script
+    const file = Bun.file(join(ROOT, 'index.html'))
     if (!(await file.exists())) {
-      return new Response('samples.html not found — build may have failed', { status: 404 })
+      return new Response('index.html not found — build may have failed', { status: 404 })
     }
 
     let html = await file.text()

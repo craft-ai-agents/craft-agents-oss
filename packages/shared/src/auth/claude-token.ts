@@ -1,4 +1,5 @@
 import { CLAUDE_OAUTH_CONFIG } from './claude-oauth-config';
+import { debug } from '../utils/debug.ts';
 
 export interface ClaudeOAuthCredential {
   accessToken: string;
@@ -65,7 +66,7 @@ export async function refreshClaudeToken(refreshToken: string): Promise<{
 
   // Log what we received from the API for debugging
   const expiresAt = data.expires_in ? Date.now() + data.expires_in * 1000 : undefined;
-  console.log(`[claude-token] Refresh response - expires_in: ${data.expires_in ?? 'NOT PROVIDED'}, calculated expiresAt: ${expiresAt ? new Date(expiresAt).toISOString() : 'undefined'}`);
+  debug(`[claude-token] Refresh response - expires_in: ${data.expires_in ?? 'NOT PROVIDED'}, calculated expiresAt: ${expiresAt ? new Date(expiresAt).toISOString() : 'undefined'}`);
 
   return {
     accessToken: data.access_token,

@@ -1451,14 +1451,14 @@ export class CraftAgent {
           SubagentStart: [{
             hooks: [async (input, _hookToolUseID) => {
               const typedInput = input as { agent_id?: string; agent_type?: string };
-              console.log(`[CraftAgent] SubagentStart: agent_id=${typedInput.agent_id}, type=${typedInput.agent_type}`);
+              debug(`[CraftAgent] SubagentStart: agent_id=${typedInput.agent_id}, type=${typedInput.agent_type}`);
               return { continue: true };
             }],
           }],
           SubagentStop: [{
             hooks: [async (input, _toolUseID) => {
               const typedInput = input as { agent_id?: string };
-              console.log(`[CraftAgent] SubagentStop: agent_id=${typedInput.agent_id}`);
+              debug(`[CraftAgent] SubagentStop: agent_id=${typedInput.agent_id}`);
               return { continue: true };
             }],
           }],
@@ -1541,12 +1541,15 @@ export class CraftAgent {
       //
       // This eliminates order-dependent matching. Same messages → same output.
       //
-      // Only two data structures are needed:
+      // Three data structures are needed:
       // - toolIndex: append-only map of toolUseId → {name, input} (order-independent)
       // - emittedToolStarts: append-only set for stream/assistant dedup (order-independent)
+      // - activeParentTools: tracks running Task tool IDs for fallback parent assignment
+      //   (used when SDK's parent_tool_use_id is null but a Task is active)
       // ═══════════════════════════════════════════════════════════════════════════
       const toolIndex = new ToolIndex();
       const emittedToolStarts = new Set<string>();
+      const activeParentTools = new Set<string>();
 
       // Process SDK messages and convert to AgentEvents
       let receivedComplete = false;
@@ -1585,6 +1588,7 @@ export class CraftAgent {
             message,
             toolIndex,
             emittedToolStarts,
+            activeParentTools,
             pendingTextForStopReason,
             (text) => { pendingTextForStopReason = text; },
             currentTurnId,
@@ -2427,6 +2431,7 @@ Please continue the conversation naturally from where we left off.
     message: SDKMessage,
     toolIndex: ToolIndex,
     emittedToolStarts: Set<string>,
+    activeParentTools: Set<string>,
     pendingText: string | null,
     setPendingText: (text: string | null) => void,
     turnId: string | null,
@@ -2496,7 +2501,8 @@ Please continue the conversation naturally from where we left off.
           }
         }
 
-        // Stateless tool start extraction — uses SDK's parent_tool_use_id directly
+        // Stateless tool start extraction — uses SDK's parent_tool_use_id directly.
+        // Falls back to activeParentTools when SDK doesn't provide parent info.
         const sdkParentId = message.parent_tool_use_id;
         const toolStartEvents = extractToolStarts(
           content as ContentBlock[],
@@ -2504,7 +2510,19 @@ Please continue the conversation naturally from where we left off.
           toolIndex,
           emittedToolStarts,
           turnId || undefined,
+          activeParentTools,
         );
+
+        // Track active Task tools for fallback parent assignment.
+        // When a Task tool starts, add it to the active set.
+        // This enables fallback parent assignment for child tools when SDK's
+        // parent_tool_use_id is null.
+        for (const event of toolStartEvents) {
+          if (event.type === 'tool_start' && event.toolName === 'Task') {
+            activeParentTools.add(event.toolUseId);
+          }
+        }
+
         events.push(...toolStartEvents);
 
         if (textContent) {
@@ -2547,6 +2565,7 @@ Please continue the conversation naturally from where we left off.
         } else if (event.type === 'content_block_start' && event.content_block.type === 'tool_use') {
           // Stateless tool start extraction from stream events.
           // SDK's parent_tool_use_id is authoritative for parent assignment.
+          // Falls back to activeParentTools when SDK doesn't provide parent info.
           // Stream events arrive with empty input — the full input comes later
           // in the assistant message (extractToolStarts handles dedup + re-emit).
           const toolBlock = event.content_block;
@@ -2555,7 +2574,7 @@ Please continue the conversation naturally from where we left off.
             type: 'tool_use' as const,
             id: toolBlock.id,
             name: toolBlock.name,
-            input: toolBlock.input ?? {},
+            input: (toolBlock.input ?? {}) as Record<string, unknown>,
           }];
           const streamEvents = extractToolStarts(
             streamBlocks,
@@ -2563,7 +2582,16 @@ Please continue the conversation naturally from where we left off.
             toolIndex,
             emittedToolStarts,
             turnId || undefined,
+            activeParentTools,
           );
+
+          // Track active Task tools for fallback parent assignment
+          for (const evt of streamEvents) {
+            if (evt.type === 'tool_start' && evt.toolName === 'Task') {
+              activeParentTools.add(evt.toolUseId);
+            }
+          }
+
           events.push(...streamEvents);
         }
         break;
@@ -2600,6 +2628,16 @@ Please continue the conversation naturally from where we left off.
             toolIndex,
             turnId || undefined,
           );
+
+          // Remove completed Task tools from activeParentTools.
+          // When a Task tool result arrives, we no longer need to track it
+          // as an active parent for fallback assignment.
+          for (const event of resultEvents) {
+            if (event.type === 'tool_result' && event.toolName === 'Task') {
+              activeParentTools.delete(event.toolUseId);
+            }
+          }
+
           events.push(...resultEvents);
         }
         break;
@@ -2642,7 +2680,16 @@ Please continue the conversation naturally from where we left off.
             toolIndex,
             emittedToolStarts,
             turnId || undefined,
+            activeParentTools,
           );
+
+          // Track active Task tools discovered via progress events
+          for (const evt of progressEvents) {
+            if (evt.type === 'tool_start' && evt.toolName === 'Task') {
+              activeParentTools.add(evt.toolUseId);
+            }
+          }
+
           events.push(...progressEvents);
         }
         break;

@@ -159,7 +159,7 @@ function preComputeSubgraphLayout(
   }
 
   // Extract positioned edges
-  const edges: PositionedEdge[] = subG.edges().map(edgeObj => {
+  const edges: PositionedEdge[] = subG.edges().map((edgeObj: { v: string; w: string }) => {
     const dagreEdge = subG.edge(edgeObj)
     const originalEdge = graph.edges[dagreEdge._index as number]!
     const rawPoints: Point[] = dagreEdge.points ?? []
@@ -620,7 +620,7 @@ function extractPositionedGraph(
   const verticalFirst = graph.direction === 'TD' || graph.direction === 'TB' || graph.direction === 'BT'
 
   // Extract edges — dagre gives us flat points arrays (no sections/container offsets)
-  const edges: PositionedEdge[] = g.edges().map(edgeObj => {
+  const edges: PositionedEdge[] = g.edges().map((edgeObj: { v: string; w: string }) => {
     const dagreEdge = g.edge(edgeObj)
     // Retrieve the original edge index stored during graph construction
     const originalEdge = graph.edges[dagreEdge._index as number]!

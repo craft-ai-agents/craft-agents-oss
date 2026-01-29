@@ -530,6 +530,7 @@ export const IPC_CHANNELS = {
   // File operations
   READ_FILE: 'file:read',
   READ_FILE_DATA_URL: 'file:readDataUrl',
+  READ_FILE_BINARY: 'file:readBinary',
   OPEN_FILE_DIALOG: 'file:openDialog',
   READ_FILE_ATTACHMENT: 'file:readAttachment',
   STORE_ATTACHMENT: 'file:storeAttachment',

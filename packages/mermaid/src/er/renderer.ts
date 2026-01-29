@@ -28,16 +28,18 @@ const ER_FONT = {
  * Render a positioned ER diagram as an SVG string.
  *
  * @param colors - DiagramColors with bg/fg and optional enrichment variables.
+ * @param transparent - If true, renders with transparent background.
  */
 export function renderErSvg(
   diagram: PositionedErDiagram,
   colors: DiagramColors,
-  font: string = 'Inter'
+  font: string = 'Inter',
+  transparent: boolean = false
 ): string {
   const parts: string[] = []
 
   // SVG root with CSS variables + style block (with mono font) + defs
-  parts.push(svgOpenTag(diagram.width, diagram.height, colors))
+  parts.push(svgOpenTag(diagram.width, diagram.height, colors, transparent))
   parts.push(buildStyleBlock(font, true))
   parts.push('<defs>')
   parts.push('</defs>') // No marker defs — we draw crow's foot inline

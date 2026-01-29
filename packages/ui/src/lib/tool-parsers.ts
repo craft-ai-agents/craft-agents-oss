@@ -143,6 +143,32 @@ export function parseGlobResult(
   return { output, description, command }
 }
 
+/**
+ * Parse WebSearch tool result to format embedded JSON links properly.
+ * Converts raw JSON arrays in "Links: [...]" to formatted markdown lists.
+ * Handles multiple Links sections in a single result.
+ */
+export function parseWebSearchResult(rawContent: string): string {
+  // Find all Links: [...] patterns (may span multiple lines)
+  // Use a function replacer to process each match individually
+  return rawContent.replace(/Links: (\[[\s\S]*?\])(?=\n|$)/g, (match, jsonArray) => {
+    try {
+      const links = JSON.parse(jsonArray) as Array<{ title: string; url: string }>
+
+      // Format as markdown list with domain prefix
+      const linksList = links.map(link => {
+        const domain = new URL(link.url).hostname.replace(/^www\./, '')
+        return `- [${domain} - ${link.title}](${link.url})`
+      }).join('\n')
+
+      return `**Links:**\n${linksList}`
+    } catch {
+      // If JSON parsing fails, wrap in code block instead
+      return `Links:\n\`\`\`json\n${jsonArray}\n\`\`\``
+    }
+  })
+}
+
 // ============================================================================
 // Overlay Data Types
 // ============================================================================
@@ -298,7 +324,19 @@ export function extractOverlayData(activity: ActivityItem): OverlayData | null {
     }
   }
 
-  // Try to detect JSON content for unknown tools (MCP tools, WebSearch, WebFetch, etc.)
+  // WebSearch tool → Document overlay with formatted links
+  if (toolName === 'websearch') {
+    const formattedContent = parseWebSearchResult(rawContent)
+    return {
+      type: 'document',
+      filePath: 'Web Search Results',
+      content: formattedContent,
+      toolName: 'WebSearch',
+      error: activity.error,
+    }
+  }
+
+  // Try to detect JSON content for unknown tools (MCP tools, WebFetch, etc.)
   // JSON objects/arrays get interactive tree viewer, other content falls through to generic
   const trimmedContent = rawContent.trim()
   if ((trimmedContent.startsWith('{') && trimmedContent.endsWith('}')) ||

@@ -186,11 +186,15 @@ const downloads = [
 export default function HomePage() {
   const [downloadOpen, setDownloadOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const dropdownRef2 = useRef<HTMLDivElement>(null)
 
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+      const target = e.target as Node
+      const isInsideDropdown1 = dropdownRef.current?.contains(target)
+      const isInsideDropdown2 = dropdownRef2.current?.contains(target)
+      if (!isInsideDropdown1 && !isInsideDropdown2) {
         setDownloadOpen(false)
       }
     }
@@ -542,7 +546,7 @@ export default function HomePage() {
       {/* CTA buttons */}
       <div className="flex gap-3 max-w-xl w-full mt-8 mb-8">
         {/* Download dropdown */}
-        <div className="relative flex-1">
+        <div ref={dropdownRef2} className="relative flex-1">
           <button
             onClick={() => setDownloadOpen(!downloadOpen)}
             className="w-full bg-foreground text-background rounded-[12px] shadow-strong py-3 px-6 text-center text-[14px] font-medium hover:opacity-90 transition-opacity flex items-center justify-center gap-2"

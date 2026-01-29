@@ -179,77 +179,184 @@ export interface NodeRect {
  *
  * This function corrects both endpoints so they connect to the side the edge
  * actually approaches from:
- *   - Horizontal last segment → endpoint on left/right side at node's vertical center
- *   - Vertical last segment  → endpoint on top/bottom at node's horizontal center
+ *   - Horizontal last segment → endpoint on left/right side
+ *   - Vertical last segment  → endpoint on top/bottom
  *   - Similarly for the first segment and source node
  *
- * Only adjusts the last 2 / first 2 points, which preserves orthogonality of
- * inner segments (since adjacent segments alternate between H and V).
+ * When the edge path is within the node's bounds, connects at the natural
+ * position to avoid unnecessary bends. Otherwise routes to node center.
  *
- * Requires 3+ points — 2-point edges are direct orthogonal connections where
- * dagre's original boundary intersection is already correct.
+ * For 2-point edges (direct connections), clips based on the overall direction
+ * between endpoints to ensure arrowheads render at node boundaries.
  */
 export function clipEndpointsToNodes(
   points: Point[],
   sourceNode: NodeRect | null,
   targetNode: NodeRect | null,
 ): Point[] {
-  // 2-point edges are direct connections — dagre's intersectRect is correct
-  if (points.length < 3) return points
+  if (points.length < 2) return points
   const result = points.map(p => ({ ...p }))
 
-  // --- Fix target endpoint (last segment) ---
+  // --- Fix target endpoint ---
   if (targetNode) {
     const last = result.length - 1
-    const prev = result[last - 1]!
-    const curr = result[last]!
 
-    const isHorizontal = Math.abs(curr.y - prev.y) < 1
-    const isVertical = Math.abs(curr.x - prev.x) < 1
+    if (points.length === 2) {
+      // 2-point edge: clip based on overall direction between endpoints
+      // This ensures arrowheads render at node boundaries, not inside nodes
+      const first = result[0]!
+      const curr = result[last]!
+      const dx = Math.abs(curr.x - first.x)
+      const dy = Math.abs(curr.y - first.y)
 
-    if (isHorizontal) {
-      // Arrow approaches horizontally → connect to left/right side at vertical center
-      const approachFromLeft = curr.x > prev.x
-      const sideX = approachFromLeft
-        ? targetNode.cx - targetNode.hw
-        : targetNode.cx + targetNode.hw
-      result[last] = { x: sideX, y: targetNode.cy }
-      result[last - 1] = { ...prev, y: targetNode.cy }
-    } else if (isVertical) {
-      // Arrow approaches vertically → connect to top/bottom at horizontal center
-      const approachFromTop = curr.y > prev.y
-      const sideY = approachFromTop
-        ? targetNode.cy - targetNode.hh
-        : targetNode.cy + targetNode.hh
-      result[last] = { x: targetNode.cx, y: sideY }
-      result[last - 1] = { ...prev, x: targetNode.cx }
+      if (dy >= dx) {
+        // Primarily vertical — clip to top/bottom
+        const approachFromTop = curr.y > first.y
+        const sideY = approachFromTop
+          ? targetNode.cy - targetNode.hh
+          : targetNode.cy + targetNode.hh
+        result[last] = { x: curr.x, y: sideY }
+      } else {
+        // Primarily horizontal — clip to left/right
+        const approachFromLeft = curr.x > first.x
+        const sideX = approachFromLeft
+          ? targetNode.cx - targetNode.hw
+          : targetNode.cx + targetNode.hw
+        result[last] = { x: sideX, y: curr.y }
+      }
+    } else {
+      // 3+ point edge: use last segment direction
+      const prev = result[last - 1]!
+      const curr = result[last]!
+      const dx = Math.abs(curr.x - prev.x)
+      const dy = Math.abs(curr.y - prev.y)
+
+      // Strictly axis-aligned segments (< 1px deviation) route to center for visual balance.
+      // Primarily axis-aligned segments (dx >> dy) can use natural positions within bounds.
+      const isStrictlyHorizontal = dy < 1 && dx >= 1
+      const isStrictlyVertical = dx < 1 && dy >= 1
+      const isPrimarilyHorizontal = !isStrictlyHorizontal && !isStrictlyVertical && dy < dx
+      const isPrimarilyVertical = !isStrictlyHorizontal && !isStrictlyVertical && dx < dy
+
+      if (isStrictlyHorizontal) {
+        // Strictly horizontal — route to center for visual balance
+        const approachFromLeft = curr.x > prev.x
+        const sideX = approachFromLeft
+          ? targetNode.cx - targetNode.hw
+          : targetNode.cx + targetNode.hw
+        result[last] = { x: sideX, y: targetNode.cy }
+        result[last - 1] = { ...prev, y: targetNode.cy }
+      } else if (isStrictlyVertical) {
+        // Strictly vertical — route to center for visual balance
+        const approachFromTop = curr.y > prev.y
+        const sideY = approachFromTop
+          ? targetNode.cy - targetNode.hh
+          : targetNode.cy + targetNode.hh
+        result[last] = { x: targetNode.cx, y: sideY }
+        result[last - 1] = { ...prev, x: targetNode.cx }
+      } else if (isPrimarilyHorizontal) {
+        // Primarily horizontal — use natural Y if within bounds
+        const approachFromLeft = curr.x > prev.x
+        const sideX = approachFromLeft
+          ? targetNode.cx - targetNode.hw
+          : targetNode.cx + targetNode.hw
+
+        const withinVerticalBounds =
+          prev.y >= targetNode.cy - targetNode.hh &&
+          prev.y <= targetNode.cy + targetNode.hh
+
+        if (withinVerticalBounds) {
+          result[last] = { x: sideX, y: prev.y }
+        } else {
+          result[last] = { x: sideX, y: targetNode.cy }
+          result[last - 1] = { ...prev, y: targetNode.cy }
+        }
+      } else if (isPrimarilyVertical) {
+        // Primarily vertical — use natural X if within bounds
+        const approachFromTop = curr.y > prev.y
+        const sideY = approachFromTop
+          ? targetNode.cy - targetNode.hh
+          : targetNode.cy + targetNode.hh
+
+        const withinHorizontalBounds =
+          prev.x >= targetNode.cx - targetNode.hw &&
+          prev.x <= targetNode.cx + targetNode.hw
+
+        if (withinHorizontalBounds) {
+          result[last] = { x: prev.x, y: sideY }
+        } else {
+          result[last] = { x: targetNode.cx, y: sideY }
+          result[last - 1] = { ...prev, x: targetNode.cx }
+        }
+      }
     }
   }
 
   // --- Fix source endpoint (first segment) ---
-  if (sourceNode) {
+  if (sourceNode && points.length >= 3) {
+    // Only process 3+ point edges for source — 2-point edges don't need source adjustment
     const first = result[0]!
     const next = result[1]!
+    const dx = Math.abs(next.x - first.x)
+    const dy = Math.abs(next.y - first.y)
 
-    const isHorizontal = Math.abs(next.y - first.y) < 1
-    const isVertical = Math.abs(next.x - first.x) < 1
+    // Strictly axis-aligned segments (< 1px deviation) route to center for visual balance.
+    // Primarily axis-aligned segments (dx >> dy) can use natural positions within bounds.
+    const isStrictlyHorizontal = dy < 1 && dx >= 1
+    const isStrictlyVertical = dx < 1 && dy >= 1
+    const isPrimarilyHorizontal = !isStrictlyHorizontal && !isStrictlyVertical && dy < dx
+    const isPrimarilyVertical = !isStrictlyHorizontal && !isStrictlyVertical && dx < dy
 
-    if (isHorizontal) {
-      // Edge exits horizontally → connect to left/right side at vertical center
+    if (isStrictlyHorizontal) {
+      // Strictly horizontal — route from center for visual balance
       const exitToRight = next.x > first.x
       const sideX = exitToRight
         ? sourceNode.cx + sourceNode.hw
         : sourceNode.cx - sourceNode.hw
       result[0] = { x: sideX, y: sourceNode.cy }
       result[1] = { ...result[1]!, y: sourceNode.cy }
-    } else if (isVertical) {
-      // Edge exits vertically → connect to top/bottom at horizontal center
+    } else if (isStrictlyVertical) {
+      // Strictly vertical — route from center for visual balance
       const exitDownward = next.y > first.y
       const sideY = exitDownward
         ? sourceNode.cy + sourceNode.hh
         : sourceNode.cy - sourceNode.hh
       result[0] = { x: sourceNode.cx, y: sideY }
       result[1] = { ...result[1]!, x: sourceNode.cx }
+    } else if (isPrimarilyHorizontal) {
+      // Primarily horizontal — use natural Y if within bounds
+      const exitToRight = next.x > first.x
+      const sideX = exitToRight
+        ? sourceNode.cx + sourceNode.hw
+        : sourceNode.cx - sourceNode.hw
+
+      const withinVerticalBounds =
+        next.y >= sourceNode.cy - sourceNode.hh &&
+        next.y <= sourceNode.cy + sourceNode.hh
+
+      if (withinVerticalBounds) {
+        result[0] = { x: sideX, y: next.y }
+      } else {
+        result[0] = { x: sideX, y: sourceNode.cy }
+        result[1] = { ...result[1]!, y: sourceNode.cy }
+      }
+    } else if (isPrimarilyVertical) {
+      // Primarily vertical — use natural X if within bounds
+      const exitDownward = next.y > first.y
+      const sideY = exitDownward
+        ? sourceNode.cy + sourceNode.hh
+        : sourceNode.cy - sourceNode.hh
+
+      const withinHorizontalBounds =
+        next.x >= sourceNode.cx - sourceNode.hw &&
+        next.x <= sourceNode.cx + sourceNode.hw
+
+      if (withinHorizontalBounds) {
+        result[0] = { x: next.x, y: sideY }
+      } else {
+        result[0] = { x: sourceNode.cx, y: sideY }
+        result[1] = { ...result[1]!, x: sourceNode.cx }
+      }
     }
   }
 

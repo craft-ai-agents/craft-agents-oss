@@ -82,8 +82,10 @@ interface LinkInterceptorOptions {
   showInFolder: (path: string) => Promise<void>
   /** Read file as UTF-8 text (for code, markdown, json, text previews) */
   readFile: (path: string) => Promise<string>
-  /** Read file as data URL (for image and PDF previews) */
+  /** Read file as data URL (for image previews) */
   readFileDataUrl: (path: string) => Promise<string>
+  /** Read file as binary (Uint8Array) for PDF previews via react-pdf */
+  readFileBinary: (path: string) => Promise<Uint8Array>
 }
 
 // ── Hook return type ───────────────────────────────────────────────────────────
@@ -103,8 +105,10 @@ interface LinkInterceptorResult {
   openCurrentExternal: () => void
   /** Reveal the currently previewed file in Finder */
   revealCurrentInFinder: () => void
-  /** Read file as data URL — passed to image/PDF overlays as their loader */
+  /** Read file as data URL — passed to image overlays as their loader */
   readFileDataUrl: (path: string) => Promise<string>
+  /** Read file as binary — passed to PDF overlays for react-pdf */
+  readFileBinary: (path: string) => Promise<Uint8Array>
 }
 
 // ── Hook implementation ────────────────────────────────────────────────────────
@@ -199,6 +203,11 @@ export function useLinkInterceptor(options: LinkInterceptorOptions): LinkInterce
     return optionsRef.current.readFileDataUrl(path)
   }, []) // Stable: uses optionsRef
 
+  /** Stable reference to readFileBinary for PDF overlay */
+  const readFileBinary = useCallback((path: string) => {
+    return optionsRef.current.readFileBinary(path)
+  }, []) // Stable: uses optionsRef
+
   return {
     handleOpenFile,
     handleOpenUrl,
@@ -208,6 +217,7 @@ export function useLinkInterceptor(options: LinkInterceptorOptions): LinkInterce
     openCurrentExternal,
     revealCurrentInFinder,
     readFileDataUrl,
+    readFileBinary,
   }
 }
 

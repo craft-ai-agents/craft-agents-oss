@@ -53,47 +53,70 @@ function buildClassSections(cls: ClassNode): string[][] {
 // ============================================================================
 
 interface RelMarker {
-  /** Characters drawn at the "from" end of the line */
-  fromChar: string
-  /** Characters drawn at the "to" end of the line */
-  toChar: string
+  /** Relationship type (determines marker shape) */
+  type: RelationshipType
+  /** Which end the marker is placed at */
+  markerAt: 'from' | 'to'
   /** Whether the line is dashed */
   dashed: boolean
 }
 
 /**
- * Build the marker for a relationship, placing the UML shape on the correct
- * end of the line based on `markerAt` (from the parser's arrow direction).
+ * Build the marker metadata for a relationship.
+ * The actual marker character will be determined at placement time based on line direction.
  */
-function getRelMarker(type: RelationshipType, markerAt: 'from' | 'to', useAscii: boolean): RelMarker {
-  const shape = getMarkerShape(type, useAscii)
+function getRelMarker(type: RelationshipType, markerAt: 'from' | 'to'): RelMarker {
   const dashed = type === 'dependency' || type === 'realization'
-
-  // Place the shape character on whichever end the arrow syntax specified
-  if (markerAt === 'from') {
-    return { fromChar: shape, toChar: '', dashed }
-  } else {
-    return { fromChar: '', toChar: shape, dashed }
-  }
+  return { type, markerAt, dashed }
 }
 
-/** Get the UML marker shape character for a relationship type */
-function getMarkerShape(type: RelationshipType, useAscii: boolean): string {
+/**
+ * Get the UML marker shape character for a relationship type.
+ * For directional arrows (association/dependency), the direction parameter
+ * specifies which way the arrow should point.
+ */
+function getMarkerShape(
+  type: RelationshipType,
+  useAscii: boolean,
+  direction?: 'up' | 'down' | 'left' | 'right'
+): string {
   switch (type) {
     case 'inheritance':
     case 'realization':
-      // Hollow triangle (inheritance/realization)
-      return useAscii ? '<|' : '◁'
+      // Hollow triangle - rotate based on line direction
+      // Triangle points TOWARD the parent class
+      if (direction === 'down') {
+        // Line goes down (parent above, child below) - triangle points UP
+        return useAscii ? '^' : '△'
+      } else if (direction === 'up') {
+        // Line goes up (parent below, child above) - triangle points DOWN
+        return useAscii ? 'v' : '▽'
+      } else if (direction === 'left') {
+        // Line goes left - triangle points LEFT
+        return useAscii ? '>' : '◁'
+      } else {
+        // Default: line goes right - triangle points RIGHT
+        return useAscii ? '<' : '▷'
+      }
     case 'composition':
-      // Filled diamond
+      // Filled diamond - omnidirectional shape
       return useAscii ? '*' : '◆'
     case 'aggregation':
-      // Hollow diamond
+      // Hollow diamond - omnidirectional shape
       return useAscii ? 'o' : '◇'
     case 'association':
     case 'dependency':
-      // Open arrow
-      return useAscii ? '>' : '▶'
+      // Directional arrow - rotate based on line direction
+      if (direction === 'down') {
+        return useAscii ? 'v' : '▼'
+      } else if (direction === 'up') {
+        return useAscii ? '^' : '▲'
+      } else if (direction === 'left') {
+        return useAscii ? '<' : '◀'
+      } else {
+        // Default to right (or when direction not specified)
+        return useAscii ? '>' : '▶'
+      }
   }
 }
 
@@ -166,10 +189,18 @@ export function renderClassAscii(text: string, config: AsciiConfig): string {
   const children = new Map<string, Set<string>>() // parent → set of child IDs
 
   for (const rel of diagram.relationships) {
-    if (!parents.has(rel.to)) parents.set(rel.to, new Set())
-    parents.get(rel.to)!.add(rel.from)
-    if (!children.has(rel.from)) children.set(rel.from, new Set())
-    children.get(rel.from)!.add(rel.to)
+    // For inheritance/realization, the marker (hollow triangle) points to the parent.
+    // - `Animal <|-- Dog` (markerAt='from'): Animal is parent, Dog is child
+    // - `Bird ..|> Flyable` (markerAt='to'): Flyable is parent, Bird is child
+    // For other relationships, use the default from→to direction.
+    const isHierarchical = rel.type === 'inheritance' || rel.type === 'realization'
+    const parentId = isHierarchical && rel.markerAt === 'to' ? rel.to : rel.from
+    const childId = isHierarchical && rel.markerAt === 'to' ? rel.from : rel.to
+
+    if (!parents.has(childId)) parents.set(childId, new Set())
+    parents.get(childId)!.add(parentId)
+    if (!children.has(parentId)) children.set(parentId, new Set())
+    children.get(parentId)!.add(childId)
   }
 
   // BFS from roots (classes that have no parents) to assign levels.
@@ -283,7 +314,7 @@ export function renderClassAscii(text: string, config: AsciiConfig): string {
     const toP = placed.get(rel.to)
     if (!fromP || !toP) continue
 
-    const marker = getRelMarker(rel.type, rel.markerAt, useAscii)
+    const marker = getRelMarker(rel.type, rel.markerAt)
     const lineH = marker.dashed ? dashH : H
     const lineV = marker.dashed ? dashV : V
 
@@ -329,23 +360,26 @@ export function renderClassAscii(text: string, config: AsciiConfig): string {
         if (y < totalH) canvas[toCX]![y] = lineV
       }
 
-      // Draw markers
-      if (marker.toChar.length > 0) {
+      // Draw markers - arrows point in the direction of the vertical segment
+      if (marker.markerAt === 'to') {
+        // Marker at target (pointing down into the target box)
+        const markerChar = getMarkerShape(marker.type, useAscii, 'down')
         const my = toTY - 1
         if (my >= 0 && my < totalH) {
-          // Place marker character(s) just above target box
-          for (let i = 0; i < marker.toChar.length; i++) {
-            const mx = toCX - Math.floor(marker.toChar.length / 2) + i
-            if (mx >= 0 && mx < totalW) canvas[mx]![my] = marker.toChar[i]!
+          for (let i = 0; i < markerChar.length; i++) {
+            const mx = toCX - Math.floor(markerChar.length / 2) + i
+            if (mx >= 0 && mx < totalW) canvas[mx]![my] = markerChar[i]!
           }
         }
       }
-      if (marker.fromChar.length > 0) {
+      if (marker.markerAt === 'from') {
+        // Marker at source (pointing down away from source box)
+        const markerChar = getMarkerShape(marker.type, useAscii, 'down')
         const my = fromBY + 1
         if (my < totalH) {
-          for (let i = 0; i < marker.fromChar.length; i++) {
-            const mx = fromCX - Math.floor(marker.fromChar.length / 2) + i
-            if (mx >= 0 && mx < totalW) canvas[mx]![my] = marker.fromChar[i]!
+          for (let i = 0; i < markerChar.length; i++) {
+            const mx = fromCX - Math.floor(markerChar.length / 2) + i
+            if (mx >= 0 && mx < totalW) canvas[mx]![my] = markerChar[i]!
           }
         }
       }
@@ -380,22 +414,30 @@ export function renderClassAscii(text: string, config: AsciiConfig): string {
         if (y >= 0 && y < totalH) canvas[toCX]![y] = lineV
       }
 
-      // Markers (from: just above source box, to: just below target box)
-      if (marker.fromChar.length > 0) {
+      // Draw markers - arrows point in the direction of the vertical segment (upward)
+      if (marker.markerAt === 'from') {
+        // Marker at source (pointing up away from source box)
+        const markerChar = getMarkerShape(marker.type, useAscii, 'up')
         const my = fromTY - 1
         if (my >= 0 && my < totalH) {
-          for (let i = 0; i < marker.fromChar.length; i++) {
-            const mx = fromCX - Math.floor(marker.fromChar.length / 2) + i
-            if (mx >= 0 && mx < totalW) canvas[mx]![my] = marker.fromChar[i]!
+          for (let i = 0; i < markerChar.length; i++) {
+            const mx = fromCX - Math.floor(markerChar.length / 2) + i
+            if (mx >= 0 && mx < totalW) canvas[mx]![my] = markerChar[i]!
           }
         }
       }
-      if (marker.toChar.length > 0) {
+      if (marker.markerAt === 'to') {
+        // Marker at target (pointing up into the target box from below)
+        // For inheritance/realization, triangle points toward parent - use 'down' to get △
+        // For association/dependency, arrow points in line direction - use 'up' to get ▲
+        const isHierarchical = marker.type === 'inheritance' || marker.type === 'realization'
+        const markerDir = isHierarchical ? 'down' : 'up'
+        const markerChar = getMarkerShape(marker.type, useAscii, markerDir)
         const my = toBY + 1
         if (my < totalH) {
-          for (let i = 0; i < marker.toChar.length; i++) {
-            const mx = toCX - Math.floor(marker.toChar.length / 2) + i
-            if (mx >= 0 && mx < totalW) canvas[mx]![my] = marker.toChar[i]!
+          for (let i = 0; i < markerChar.length; i++) {
+            const mx = toCX - Math.floor(markerChar.length / 2) + i
+            if (mx >= 0 && mx < totalW) canvas[mx]![my] = markerChar[i]!
           }
         }
       }
@@ -419,36 +461,55 @@ export function renderClassAscii(text: string, config: AsciiConfig): string {
         canvas[toCX]![y] = lineV
       }
 
-      // Markers (from: just below source box, to: just below target box)
-      if (marker.fromChar.length > 0) {
+      // Draw markers - same-level routing uses vertical segments at both ends
+      if (marker.markerAt === 'from') {
+        // Marker at source (pointing down away from source box)
+        const markerChar = getMarkerShape(marker.type, useAscii, 'down')
         const my = fromBY + 1
         if (my < totalH) {
-          for (let i = 0; i < marker.fromChar.length; i++) {
-            const mx = fromCX - Math.floor(marker.fromChar.length / 2) + i
-            if (mx >= 0 && mx < totalW) canvas[mx]![my] = marker.fromChar[i]!
+          for (let i = 0; i < markerChar.length; i++) {
+            const mx = fromCX - Math.floor(markerChar.length / 2) + i
+            if (mx >= 0 && mx < totalW) canvas[mx]![my] = markerChar[i]!
           }
         }
       }
-      if (marker.toChar.length > 0) {
+      if (marker.markerAt === 'to') {
+        // Marker at target bottom (pointing up into the target box)
+        const markerChar = getMarkerShape(marker.type, useAscii, 'up')
         const my = toP.y + toP.height
         if (my < totalH) {
-          for (let i = 0; i < marker.toChar.length; i++) {
-            const mx = toCX - Math.floor(marker.toChar.length / 2) + i
-            if (mx >= 0 && mx < totalW) canvas[mx]![my] = marker.toChar[i]!
+          for (let i = 0; i < markerChar.length; i++) {
+            const mx = toCX - Math.floor(markerChar.length / 2) + i
+            if (mx >= 0 && mx < totalW) canvas[mx]![my] = markerChar[i]!
           }
         }
       }
     }
 
     // Draw relationship label at midpoint if present
+    // Add padding around the label for readability
     if (rel.label) {
+      const paddedLabel = ` ${rel.label} `  // Add space padding on both sides
       const midX = Math.floor((fromCX + toCX) / 2)
-      const midY = Math.floor(((fromBY + 1) + (toTY > fromBY ? toTY - 1 : fromP.y - 1)) / 2)
-      const labelStart = midX - Math.floor(rel.label.length / 2)
-      for (let i = 0; i < rel.label.length; i++) {
+      // Calculate midY based on routing direction
+      let midY: number
+      if (fromBY < toTY) {
+        // Target below source: midpoint between source bottom and target top
+        midY = Math.floor((fromBY + 1 + toTY - 1) / 2)
+      } else if (toP.y + toP.height - 1 < fromP.y) {
+        // Target above source: midpoint between target bottom and source top
+        const toBY = toP.y + toP.height - 1
+        midY = Math.floor((toBY + 1 + fromP.y - 1) / 2)
+      } else {
+        // Same level: place label at midpoint of the detour line
+        midY = Math.max(fromBY, toP.y + toP.height - 1) + 2
+      }
+      const labelStart = midX - Math.floor(paddedLabel.length / 2)
+      // Clear the area first (overwrite line characters) then draw the padded label
+      for (let i = 0; i < paddedLabel.length; i++) {
         const lx = labelStart + i
         if (lx >= 0 && lx < totalW && midY >= 0 && midY < totalH) {
-          canvas[lx]![midY] = rel.label[i]!
+          canvas[lx]![midY] = paddedLabel[i]!
         }
       }
     }

@@ -151,4 +151,6 @@ export interface RenderOptions {
   nodeSpacing?: number
   /** Vertical spacing between layers. Default: 40 */
   layerSpacing?: number
+  /** Render with transparent background (no background style on SVG). Default: false */
+  transparent?: boolean
 }

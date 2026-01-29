@@ -7,13 +7,13 @@ classDiagram
   K ..|> L : implements
 ---
 +---+    +---+    +---+    +---+    +---+    +---+
-| A |    | C |    | E |    | G |    | I |    | K |
+| A |    | C |    | E |    | G |    | I |    | L |
 +---+    +---+    +---+    +---+    +---+    +---+
- <|        *        o        |        :        :
-herits   owns      has     uses    dependsimplements
-  |        |        |        >        >       <|
+  ^        *        o        |        :        ^
+herits   owns      has     uses    depend implements
+  |        |        |        v        v        :
 +---+    +---+    +---+    +---+    +---+    +---+
-| B |    | D |    | F |    | H |    | J |    | L |
+| B |    | D |    | F |    | H |    | J |    | K |
 +---+    +---+    +---+    +---+    +---+    +---+
 
 

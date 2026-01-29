@@ -44,6 +44,9 @@ apps/electron/eslint-rules/**/*
 # Electron build hook (macOS Liquid Glass icon, referenced by electron-builder.yml)
 apps/electron/scripts/afterPack.cjs
 
+# Electron asset copying script (required for build)
+apps/electron/scripts/copy-assets.ts
+
 
 # =============================================================================
 # APPS - VIEWER (Session Viewer Web App)
@@ -71,6 +74,15 @@ packages/shared/**/*
 # PACKAGES - UI (React Components)
 # =============================================================================
 packages/ui/**/*
+
+# =============================================================================
+# PACKAGES - MERMAID (Diagram Rendering)
+# NOTE: Excludes Cloudflare deployment config and build output
+# =============================================================================
+packages/mermaid/**/*
+!packages/mermaid/wrangler.toml
+!packages/mermaid/samples.html.bak
+!packages/mermaid/dist/**/*
 
 # =============================================================================
 # SCRIPTS (Public Only)

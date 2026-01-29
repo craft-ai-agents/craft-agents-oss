@@ -1101,3 +1101,37 @@ html.dark[data-scenic] .fullscreen-overlay-background {
   background: linear-gradient(rgba(var(--success-rgb), 0.15), rgba(var(--success-rgb), 0.15)),
     oklch(from var(--popover) l c h / 0.8) !important;
 }
+
+/* ============================================================================
+   PDF Viewer (react-pdf)
+   ============================================================================ */
+
+/* PDF document container */
+.react-pdf__Document {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Individual PDF page */
+.react-pdf__Page {
+  max-width: 100%;
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.1);
+  margin-bottom: 1rem;
+}
+
+/* PDF canvas rendering */
+.react-pdf__Page__canvas {
+  max-width: 100%;
+  height: auto !important;
+}
+
+/* PDF text layer (for text selection) */
+.react-pdf__Page__textContent {
+  border: none !important;
+}
+
+/* PDF annotation layer (for links and form fields) */
+.react-pdf__Page__annotations {
+  border: none !important;
+}

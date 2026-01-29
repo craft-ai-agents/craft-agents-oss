@@ -1057,6 +1057,7 @@ export default function App() {
     },
     readFile: (path) => window.electronAPI.readFile(path),
     readFileDataUrl: (path) => window.electronAPI.readFileDataUrl(path),
+    readFileBinary: (path) => window.electronAPI.readFileBinary(path),
   })
 
   const handleOpenFile = linkInterceptor.handleOpenFile
@@ -1354,6 +1355,7 @@ export default function App() {
               state={linkInterceptor.previewState}
               onClose={linkInterceptor.closePreview}
               loadDataUrl={linkInterceptor.readFileDataUrl}
+              loadPdfData={linkInterceptor.readFileBinary}
               isDark={isDark}
             />
           )}
@@ -1392,11 +1394,13 @@ function FilePreviewRenderer({
   state,
   onClose,
   loadDataUrl,
+  loadPdfData,
   isDark,
 }: {
   state: FilePreviewState
   onClose: () => void
   loadDataUrl: (path: string) => Promise<string>
+  loadPdfData: (path: string) => Promise<Uint8Array>
   isDark: boolean
 }) {
   const theme = isDark ? 'dark' : 'light' as const
@@ -1419,6 +1423,7 @@ function FilePreviewRenderer({
           isOpen
           onClose={onClose}
           filePath={state.filePath}
+          loadPdfData={loadPdfData}
           theme={theme}
         />
       )

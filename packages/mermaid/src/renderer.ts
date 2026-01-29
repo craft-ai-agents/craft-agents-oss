@@ -28,16 +28,18 @@ import { FONT_SIZES, FONT_WEIGHTS, STROKE_WIDTHS, ARROW_HEAD, estimateTextWidth,
  * @param colors - DiagramColors with bg/fg and optional enrichment variables.
  *                 These are set as CSS custom properties on the <svg> tag.
  *                 All element colors reference derived --_xxx variables.
+ * @param transparent - If true, renders with transparent background.
  */
 export function renderSvg(
   graph: PositionedGraph,
   colors: DiagramColors,
-  font: string = 'Inter'
+  font: string = 'Inter',
+  transparent: boolean = false
 ): string {
   const parts: string[] = []
 
   // SVG root with CSS variables + style block + defs
-  parts.push(svgOpenTag(graph.width, graph.height, colors))
+  parts.push(svgOpenTag(graph.width, graph.height, colors, transparent))
   parts.push(buildStyleBlock(font, false))
   parts.push('<defs>')
   parts.push(arrowMarkerDefs())
@@ -88,11 +90,11 @@ function arrowMarkerDefs(): string {
   const w = ARROW_HEAD.width
   const h = ARROW_HEAD.height
   return (
-    // Forward arrow (marker-end)
-    `  <marker id="arrowhead" markerWidth="${w}" markerHeight="${h}" refX="${w}" refY="${h / 2}" orient="auto-start-reverse">` +
+    // Forward arrow (marker-end) — orient="auto" ensures arrow points along line direction
+    `  <marker id="arrowhead" markerWidth="${w}" markerHeight="${h}" refX="${w}" refY="${h / 2}" orient="auto">` +
     `\n    <polygon points="0 0, ${w} ${h / 2}, 0 ${h}" fill="var(--_arrow)" />` +
     `\n  </marker>` +
-    // Reverse arrow (marker-start) — refX=0 so it sits at the line start
+    // Reverse arrow (marker-start) — refX=0 so it sits at the line start, auto-start-reverse flips it
     `\n  <marker id="arrowhead-start" markerWidth="${w}" markerHeight="${h}" refX="0" refY="${h / 2}" orient="auto-start-reverse">` +
     `\n    <polygon points="${w} 0, 0 ${h / 2}, ${w} ${h}" fill="var(--_arrow)" />` +
     `\n  </marker>`
@@ -167,7 +169,7 @@ function renderEdgeLabel(edge: PositionedEdge, font: string): string {
   const mid = edge.labelPosition ?? edgeMidpoint(edge.points)
   const label = edge.label!
   const textWidth = estimateTextWidth(label, FONT_SIZES.edgeLabel, FONT_WEIGHTS.edgeLabel)
-  const padding = 4
+  const padding = 8
 
   // Background pill behind text for readability
   const bgWidth = textWidth + padding * 2
@@ -175,7 +177,7 @@ function renderEdgeLabel(edge: PositionedEdge, font: string): string {
 
   return (
     `<rect x="${mid.x - bgWidth / 2}" y="${mid.y - bgHeight / 2}" ` +
-    `width="${bgWidth}" height="${bgHeight}" rx="2" ry="2" ` +
+    `width="${bgWidth}" height="${bgHeight}" rx="4" ry="4" ` +
     `fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />\n` +
     `<text x="${mid.x}" y="${mid.y}" text-anchor="middle" dy="${TEXT_BASELINE_SHIFT}" ` +
     `font-size="${FONT_SIZES.edgeLabel}" font-weight="${FONT_WEIGHTS.edgeLabel}" ` +

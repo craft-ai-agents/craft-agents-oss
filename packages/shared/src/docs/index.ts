@@ -12,6 +12,7 @@ import { join } from 'path';
 import { homedir } from 'os';
 import { existsSync, mkdirSync, writeFileSync, readdirSync, readFileSync } from 'fs';
 import { getBundledAssetsDir } from '../utils/paths.ts';
+import { debug } from '../utils/debug.ts';
 
 const CONFIG_DIR = join(homedir(), '.craft-agent');
 const DOCS_DIR = join(CONFIG_DIR, 'docs');
@@ -93,6 +94,7 @@ export const DOC_REFS = {
   statuses: `${APP_ROOT}/docs/statuses.md`,
   labels: `${APP_ROOT}/docs/labels.md`,
   toolIcons: `${APP_ROOT}/docs/tool-icons.md`,
+  mermaid: `${APP_ROOT}/docs/mermaid.md`,
   docsDir: `${APP_ROOT}/docs/`,
 } as const;
 
@@ -134,7 +136,7 @@ export function initializeDocs(): void {
     writeFileSync(docPath, content, 'utf-8');
   }
 
-  console.log(`[docs] Synced ${Object.keys(BUNDLED_DOCS).length} docs`);
+  debug(`[docs] Synced ${Object.keys(BUNDLED_DOCS).length} docs`);
 }
 
 export { BUNDLED_DOCS };

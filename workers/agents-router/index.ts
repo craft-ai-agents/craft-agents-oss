@@ -8,6 +8,7 @@
  * - /install-app.ps1 → R2 bucket (Windows install script)
  * - /docs/* → Mintlify documentation site
  * - /s/* → Session viewer Pages site
+ * - /mermaid/* → Mermaid visual test suite Pages site
  * - /* → Proxy to Pages marketing site
  */
 
@@ -61,6 +62,12 @@ export default {
         headers: request.headers,
         body: request.body,
       });
+    }
+
+    // Mermaid site: /mermaid routes
+    if (path === '/mermaid' || path.startsWith('/mermaid/')) {
+      const mermaidPath = path === '/mermaid' ? '/' : path.slice('/mermaid'.length);
+      return fetch(`https://craft-agents-mermaid.pages.dev${mermaidPath}${url.search}`);
     }
 
     // Everything else → Pages marketing site

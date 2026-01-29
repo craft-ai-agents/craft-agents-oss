@@ -115,6 +115,7 @@ export async function renderMermaid(
 ): Promise<string> {
   const colors = buildColors(options)
   const font = options.font ?? 'Inter'
+  const transparent = options.transparent ?? false
   const diagramType = detectDiagramType(text)
 
   // Preprocess: strip leading/trailing whitespace, filter comments
@@ -124,24 +125,24 @@ export async function renderMermaid(
     case 'sequence': {
       const diagram = parseSequenceDiagram(lines)
       const positioned = layoutSequenceDiagram(diagram, options)
-      return renderSequenceSvg(positioned, colors, font)
+      return renderSequenceSvg(positioned, colors, font, transparent)
     }
     case 'class': {
       const diagram = parseClassDiagram(lines)
       const positioned = await layoutClassDiagram(diagram, options)
-      return renderClassSvg(positioned, colors, font)
+      return renderClassSvg(positioned, colors, font, transparent)
     }
     case 'er': {
       const diagram = parseErDiagram(lines)
       const positioned = await layoutErDiagram(diagram, options)
-      return renderErSvg(positioned, colors, font)
+      return renderErSvg(positioned, colors, font, transparent)
     }
     case 'flowchart':
     default: {
       // Flowchart + state diagram pipeline (original)
       const graph = parseMermaid(text)
       const positioned = await layoutGraph(graph, options)
-      return renderSvg(positioned, colors, font)
+      return renderSvg(positioned, colors, font, transparent)
     }
   }
 }

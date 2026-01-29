@@ -50,3 +50,5 @@ for (const dir of ['themes', 'permissions']) {
 if (existsSync('resources/config-defaults.json')) {
   cpSync('resources/config-defaults.json', 'dist/assets/config-defaults.json');
 }
+
+// Note: PDF.js worker is handled by Vite via ?url import in PDFPreviewOverlay.tsx

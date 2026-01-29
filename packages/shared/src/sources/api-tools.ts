@@ -643,7 +643,7 @@ export function createApiTool(
               isError: true,
             };
           }
-          console.log(`[api-tools] ${config.name}: Binary file saved: ${result.path} (${result.sizeHuman})`);
+          debug(`[api-tools] ${config.name}: Binary file saved: ${result.path} (${result.sizeHuman})`);
           return {
             content: [{
               type: 'text' as const,
@@ -668,7 +668,7 @@ export function createApiTool(
               isError: true,
             };
           }
-          console.log(`[api-tools] ${config.name}: Binary file saved: ${result.path} (${result.sizeHuman})`);
+          debug(`[api-tools] ${config.name}: Binary file saved: ${result.path} (${result.sizeHuman})`);
           return {
             content: [{
               type: 'text' as const,
@@ -711,7 +711,7 @@ export function createApiTool(
                     isError: true,
                   };
                 }
-                console.log(`[api-tools] ${config.name}: Gmail attachment saved: ${result.path} (${result.sizeHuman})`);
+                debug(`[api-tools] ${config.name}: Gmail attachment saved: ${result.path} (${result.sizeHuman})`);
                 return {
                   content: [{
                     type: 'text' as const,
@@ -736,14 +736,14 @@ export function createApiTool(
 
         if (estimatedTokens > TOKEN_LIMIT) {
           // Log when large response handling is triggered
-          console.log(`[api-tools] ${config.name} large response: ${text.length} bytes, ~${estimatedTokens} tokens (limit=${TOKEN_LIMIT}, max=${MAX_SUMMARIZATION_INPUT})`);
+          debug(`[api-tools] ${config.name} large response: ${text.length} bytes, ~${estimatedTokens} tokens (limit=${TOKEN_LIMIT}, max=${MAX_SUMMARIZATION_INPUT})`);
 
           // Always save full response to file first (if sessionPath is available)
           let filePath: string | undefined;
           if (sessionPath) {
             try {
               filePath = saveLargeResponse(sessionPath, config.name, path, text);
-              console.log(`[api-tools] Full response saved to: ${filePath}`);
+              debug(`[api-tools] Full response saved to: ${filePath}`);
             } catch (e) {
               console.error(`[api-tools] Failed to save response: ${e}`);
             }
@@ -751,7 +751,7 @@ export function createApiTool(
 
           // Check if response is too large even for Haiku to summarize
           if (estimatedTokens > MAX_SUMMARIZATION_INPUT) {
-            console.log(`[api-tools] Too large for Haiku summarization, providing file reference + preview...`);
+            debug(`[api-tools] Too large for Haiku summarization, providing file reference + preview...`);
             const preview = text.substring(0, 2000);
             const fileRef = filePath
               ? `Full response saved to: ${filePath}\nUse Read tool to view, or Grep to search.\n\n`

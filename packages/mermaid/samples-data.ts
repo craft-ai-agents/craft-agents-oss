@@ -2,7 +2,7 @@
  * Sample definitions for the @craft-agent/mermaid visual test suite.
  *
  * Shared by:
- *   - samples.ts   — generates the HTML visual test page
+ *   - index.ts     — generates the HTML visual test page
  *   - bench.ts     — runs performance benchmarks in Bun (no browser)
  *   - dev.ts       — dev server with live reload
  *
@@ -16,10 +16,32 @@ export interface Sample {
   source: string
   /** Optional category tag for grouping in the Table of Contents */
   category?: string
-  options?: { bg?: string; fg?: string; line?: string; accent?: string; muted?: string; surface?: string; border?: string; font?: string; padding?: number }
+  options?: { bg?: string; fg?: string; line?: string; accent?: string; muted?: string; surface?: string; border?: string; font?: string; padding?: number; transparent?: boolean }
 }
 
 export const samples: Sample[] = [
+
+  // ══════════════════════════════════════════════════════════════════════════
+  //  HERO — Showcase diagram
+  // ══════════════════════════════════════════════════════════════════════════
+
+  {
+    title: 'Beautiful Mermaid',
+    category: 'Hero',
+    description: 'Mermaid rendering, made beautiful.',
+    source: `stateDiagram-v2
+    direction LR
+    [*] --> Input
+    Input --> Parse: DSL
+    Parse --> Layout: AST
+    Layout --> SVG: Vector
+    Layout --> ASCII: Text
+    SVG --> Theme
+    ASCII --> Theme
+    Theme --> Output
+    Output --> [*]`,
+    options: { transparent: true },
+  },
 
   // ══════════════════════════════════════════════════════════════════════════
   //  FLOWCHART — Shapes
@@ -45,7 +67,7 @@ export const samples: Sample[] = [
   {
     title: 'Batch 1 Shapes',
     category: 'Flowchart',
-    description: 'Subroutine [[text]], double circle (((text))), and hexagon {{text}}.',
+    description: 'Subroutine `[[text]]`, double circle `(((text)))`, and hexagon `{{text}}`.',
     source: `graph LR
   A[[Subroutine]] --> B(((Double Circle)))
   B --> C{{Hexagon}}`,
@@ -53,7 +75,7 @@ export const samples: Sample[] = [
   {
     title: 'Batch 2 Shapes',
     category: 'Flowchart',
-    description: 'Cylinder [(text)], asymmetric >text], trapezoid [/text\\], and inverse trapezoid [\\text/].',
+    description: 'Cylinder `[(text)]`, asymmetric `>text]`, trapezoid `[/text\\]`, and inverse trapezoid `[\\text/]`.',
     source: `graph LR
   A[(Database)] --> B>Flag Shape]
   B --> C[/Wider Bottom\\]
@@ -93,7 +115,7 @@ export const samples: Sample[] = [
   {
     title: 'No-Arrow Edges',
     category: 'Flowchart',
-    description: 'Lines without arrowheads: solid (---), dotted (-.-), thick (===).',
+    description: 'Lines without arrowheads: solid `---`, dotted `-.-`, thick `===`.',
     source: `graph TD
   A[Node 1] ---|related| B[Node 2]
   B -.- C[Node 3]
@@ -102,7 +124,7 @@ export const samples: Sample[] = [
   {
     title: 'Bidirectional Arrows',
     category: 'Flowchart',
-    description: 'Arrows in both directions: <-->, <-.->, <==>.',
+    description: 'Arrows in both directions: `<-->`, `<-.->`, `<==>`.',
     source: `graph LR
   A[Client] <-->|sync| B[Server]
   B <-.->|heartbeat| C[Monitor]
@@ -111,7 +133,7 @@ export const samples: Sample[] = [
   {
     title: 'Parallel Links (&)',
     category: 'Flowchart',
-    description: 'Using & to create multiple edges from/to groups of nodes.',
+    description: 'Using `&` to create multiple edges from/to groups of nodes.',
     source: `graph TD
   A[Input] & B[Config] --> C[Processor]
   C --> D[Output] & E[Log]`,
@@ -196,7 +218,7 @@ export const samples: Sample[] = [
   {
     title: '::: Class Shorthand',
     category: 'Flowchart',
-    description: 'Assigning classes with ::: syntax directly on node definitions.',
+    description: 'Assigning classes with `:::` syntax directly on node definitions.',
     source: `graph TD
   A[Normal]:::default --> B[Highlighted]:::highlight --> C[Error]:::error
   classDef default fill:#f4f4f5,stroke:#a1a1aa
@@ -284,53 +306,13 @@ export const samples: Sample[] = [
   },
 
   // ══════════════════════════════════════════════════════════════════════════
-  //  FLOWCHART — Dark Theme
-  // ══════════════════════════════════════════════════════════════════════════
-
-  {
-    title: 'Dark Theme — CI/CD Pipeline',
-    category: 'Flowchart',
-    description: 'The CI/CD pipeline rendered with the dark zinc monochrome palette.',
-    source: `graph TD
-  subgraph ci [CI Pipeline]
-    A[Push Code] --> B{Tests Pass?}
-    B -->|Yes| C[Build Image]
-    B -->|No| D[Fix & Retry]
-    D -.-> A
-  end
-  C --> E([Deploy Staging])
-  E --> F{QA Approved?}
-  F -->|Yes| G((Production))
-  F -->|No| D`,
-    options: { bg: '#18181B', fg: '#FAFAFA' },
-  },
-  {
-    title: 'Dark Theme — All 12 Shapes',
-    category: 'Flowchart',
-    description: 'Every flowchart shape rendered in dark mode.',
-    source: `graph LR
-  A[Rectangle] --> B(Rounded)
-  B --> C{Diamond}
-  C --> D([Stadium])
-  D --> E((Circle))
-  E --> F[[Subroutine]]
-  F --> G(((Double Circle)))
-  G --> H{{Hexagon}}
-  H --> I[(Database)]
-  I --> J>Flag]
-  J --> K[/Trapezoid\\]
-  K --> L[\\Inverse Trap/]`,
-    options: { bg: '#18181B', fg: '#FAFAFA' },
-  },
-
-  // ══════════════════════════════════════════════════════════════════════════
   //  STATE DIAGRAMS
   // ══════════════════════════════════════════════════════════════════════════
 
   {
     title: 'Basic State Diagram',
     category: 'State',
-    description: 'A simple stateDiagram-v2 with start/end pseudostates and transitions.',
+    description: 'A simple `stateDiagram-v2` with start/end pseudostates and transitions.',
     source: `stateDiagram-v2
   [*] --> Idle
   Idle --> Active : start
@@ -369,19 +351,6 @@ export const samples: Sample[] = [
   Reconnecting --> Closed : max_retries
   Disconnecting --> Closed : done
   Closed --> [*]`,
-  },
-  {
-    title: 'State: Dark Theme',
-    category: 'State',
-    description: 'State diagram rendered with the dark zinc palette.',
-    source: `stateDiagram-v2
-  [*] --> Ready
-  Ready --> Running : start
-  Running --> Paused : pause
-  Paused --> Running : resume
-  Running --> Stopped : stop
-  Stopped --> [*]`,
-    options: { bg: '#18181B', fg: '#FAFAFA' },
   },
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -424,7 +393,7 @@ export const samples: Sample[] = [
   {
     title: 'Sequence: Arrow Types',
     category: 'Sequence',
-    description: 'All arrow types: solid (->>) and dashed (-->>) with filled arrowheads, open arrows (-).',
+    description: 'All arrow types: solid `->>` and dashed `-->>` with filled arrowheads, open arrows `-)` .',
     source: `sequenceDiagram
   A->>B: Solid arrow (sync)
   B-->>A: Dashed arrow (return)
@@ -434,7 +403,7 @@ export const samples: Sample[] = [
   {
     title: 'Sequence: Activation Boxes',
     category: 'Sequence',
-    description: 'Using + and - to show when participants are active.',
+    description: 'Using `+` and `-` to show when participants are active.',
     source: `sequenceDiagram
   participant C as Client
   participant S as Server
@@ -461,7 +430,7 @@ export const samples: Sample[] = [
   {
     title: 'Sequence: Loop Block',
     category: 'Sequence',
-    description: 'A loop construct wrapping repeated message exchanges.',
+    description: 'A `loop` construct wrapping repeated message exchanges.',
     source: `sequenceDiagram
   participant C as Client
   participant S as Server
@@ -475,7 +444,7 @@ export const samples: Sample[] = [
   {
     title: 'Sequence: Alt/Else Block',
     category: 'Sequence',
-    description: 'Conditional branching with alt (if) and else blocks.',
+    description: 'Conditional branching with `alt` (if) and `else` blocks.',
     source: `sequenceDiagram
   participant C as Client
   participant S as Server
@@ -507,7 +476,7 @@ export const samples: Sample[] = [
   {
     title: 'Sequence: Par Block',
     category: 'Sequence',
-    description: 'Parallel execution with par/and constructs.',
+    description: 'Parallel execution with `par`/`and` constructs.',
     source: `sequenceDiagram
   participant C as Client
   participant A as AuthService
@@ -624,43 +593,6 @@ export const samples: Sample[] = [
   },
 
   // ══════════════════════════════════════════════════════════════════════════
-  //  SEQUENCE DIAGRAMS — Theme Variants
-  // ══════════════════════════════════════════════════════════════════════════
-
-  {
-    title: 'Sequence: Dark Theme',
-    category: 'Sequence',
-    description: 'Sequence diagram with the dark zinc monochrome palette.',
-    source: `sequenceDiagram
-  actor U as User
-  participant S as System
-  participant DB as Database
-  U->>S: Request
-  S->>DB: Query
-  Note right of DB: Processing
-  DB-->>S: Results
-  S-->>U: Response`,
-    options: { bg: '#18181B', fg: '#FAFAFA' },
-  },
-  {
-    title: 'Sequence: Dark Theme — Blocks',
-    category: 'Sequence',
-    description: 'Loop and alt blocks rendered in dark mode.',
-    source: `sequenceDiagram
-  participant A as Client
-  participant B as Server
-  loop Retry 3 times
-    A->>B: Request
-    alt Success
-      B-->>A: 200
-    else Error
-      B-->>A: 500
-    end
-  end`,
-    options: { bg: '#18181B', fg: '#FAFAFA' },
-  },
-
-  // ══════════════════════════════════════════════════════════════════════════
   //  CLASS DIAGRAMS — Core Features
   // ══════════════════════════════════════════════════════════════════════════
 
@@ -679,7 +611,7 @@ export const samples: Sample[] = [
   {
     title: 'Class: Visibility Markers',
     category: 'Class',
-    description: 'All four visibility levels: + (public), - (private), # (protected), ~ (package).',
+    description: 'All four visibility levels: `+` (public), `-` (private), `#` (protected), `~` (package).',
     source: `classDiagram
   class User {
     +String name
@@ -695,7 +627,7 @@ export const samples: Sample[] = [
   {
     title: 'Class: Interface Annotation',
     category: 'Class',
-    description: 'Using <<interface>> annotation above the class name.',
+    description: 'Using `<<interface>>` annotation above the class name.',
     source: `classDiagram
   class Serializable {
     <<interface>>
@@ -706,7 +638,7 @@ export const samples: Sample[] = [
   {
     title: 'Class: Abstract Annotation',
     category: 'Class',
-    description: 'Using <<abstract>> annotation for abstract classes.',
+    description: 'Using `<<abstract>>` annotation for abstract classes.',
     source: `classDiagram
   class Shape {
     <<abstract>>
@@ -718,7 +650,7 @@ export const samples: Sample[] = [
   {
     title: 'Class: Enum Annotation',
     category: 'Class',
-    description: 'Using <<enumeration>> annotation for enum types.',
+    description: 'Using `<<enumeration>>` annotation for enum types.',
     source: `classDiagram
   class Status {
     <<enumeration>>
@@ -955,42 +887,6 @@ export const samples: Sample[] = [
   },
 
   // ══════════════════════════════════════════════════════════════════════════
-  //  CLASS DIAGRAMS — Theme Variants
-  // ══════════════════════════════════════════════════════════════════════════
-
-  {
-    title: 'Class: Dark Theme',
-    category: 'Class',
-    description: 'Class diagram with attributes and methods rendered in dark mode.',
-    source: `classDiagram
-  class User {
-    +String name
-    -String email
-    +login() bool
-    +logout() void
-  }
-  class Admin {
-    +String role
-    +manage() void
-  }
-  User <|-- Admin`,
-    options: { bg: '#18181B', fg: '#FAFAFA' },
-  },
-  {
-    title: 'Class: Dark Theme — All Relationships',
-    category: 'Class',
-    description: 'Every relationship type rendered in dark mode.',
-    source: `classDiagram
-  A <|-- B : inherits
-  C *-- D : owns
-  E o-- F : has
-  G --> H : uses
-  I ..> J : depends
-  K ..|> L : implements`,
-    options: { bg: '#18181B', fg: '#FAFAFA' },
-  },
-
-  // ══════════════════════════════════════════════════════════════════════════
   //  ER DIAGRAMS — Core Features
   // ══════════════════════════════════════════════════════════════════════════
 
@@ -1004,7 +900,7 @@ export const samples: Sample[] = [
   {
     title: 'ER: Entity with Attributes',
     category: 'ER',
-    description: 'An entity with typed attributes and PK/FK/UK key badges.',
+    description: 'An entity with typed attributes and `PK`/`FK`/`UK` key badges.',
     source: `erDiagram
   CUSTOMER {
     int id PK
@@ -1201,212 +1097,5 @@ export const samples: Sample[] = [
   TEACHER ||--o{ COURSE : teaches
   STUDENT ||--o{ ENROLLMENT : enrolled
   COURSE ||--o{ ENROLLMENT : has`,
-  },
-
-  // ══════════════════════════════════════════════════════════════════════════
-  //  ER DIAGRAMS — Theme Variants
-  // ══════════════════════════════════════════════════════════════════════════
-
-  {
-    title: 'ER: Dark Theme',
-    category: 'ER',
-    description: 'ER diagram rendered with the dark zinc monochrome palette.',
-    source: `erDiagram
-  CUSTOMER {
-    int id PK
-    string name
-    string email UK
-  }
-  ORDER {
-    int id PK
-    date created
-    int customer_id FK
-  }
-  CUSTOMER ||--o{ ORDER : places`,
-    options: { bg: '#18181B', fg: '#FAFAFA' },
-  },
-  {
-    title: 'ER: Dark Theme — Full Schema',
-    category: 'ER',
-    description: 'Complex ER diagram in dark mode.',
-    source: `erDiagram
-  USER {
-    int id PK
-    string name
-    string email UK
-  }
-  POST {
-    int id PK
-    string title
-    int user_id FK
-  }
-  COMMENT {
-    int id PK
-    text body
-    int post_id FK
-  }
-  USER ||--o{ POST : writes
-  POST ||--o{ COMMENT : has
-  USER ||--o{ COMMENT : authors`,
-    options: { bg: '#18181B', fg: '#FAFAFA' },
-  },
-
-  // ══════════════════════════════════════════════════════════════════════════
-  //  THEME SHOWCASE — Same diagram rendered with different named theme palettes
-  //  Demonstrates the CSS variable theming system with optional enrichment colors.
-  // ══════════════════════════════════════════════════════════════════════════
-
-  {
-    title: 'Theme: Tokyo Night',
-    category: 'Theme Showcase',
-    description: 'System architecture rendered with Tokyo Night enrichment colors (line, accent, muted).',
-    source: `graph LR
-  subgraph clients [Client Layer]
-    A([Web App]) --> B[API Gateway]
-    C([Mobile App]) --> B
-  end
-  subgraph services [Service Layer]
-    B --> D[Auth Service]
-    B --> E[User Service]
-    B --> F[Order Service]
-  end
-  subgraph data [Data Layer]
-    D --> G[(Auth DB)]
-    E --> H[(User DB)]
-    F --> I[(Order DB)]
-  end`,
-    options: { bg: '#1a1b26', fg: '#a9b1d6', line: '#3d59a1', accent: '#7aa2f7', muted: '#565f89' },
-  },
-  {
-    title: 'Theme: Catppuccin Mocha',
-    category: 'Theme Showcase',
-    description: 'CI/CD pipeline with Catppuccin Mocha enrichment colors.',
-    source: `graph TD
-  subgraph ci [CI Pipeline]
-    A[Push Code] --> B{Tests Pass?}
-    B -->|Yes| C[Build Image]
-    B -->|No| D[Fix & Retry]
-    D -.-> A
-  end
-  C --> E([Deploy Staging])
-  E --> F{QA Approved?}
-  F -->|Yes| G((Production))
-  F -->|No| D`,
-    options: { bg: '#1e1e2e', fg: '#cdd6f4', line: '#585b70', accent: '#cba6f7', muted: '#6c7086' },
-  },
-  {
-    title: 'Theme: Nord',
-    category: 'Theme Showcase',
-    description: 'Decision tree with Nord enrichment colors.',
-    source: `graph TD
-  A{Is it raining?} -->|Yes| B{Have umbrella?}
-  A -->|No| C([Go outside])
-  B -->|Yes| D([Go with umbrella])
-  B -->|No| E{Is it heavy?}
-  E -->|Yes| F([Stay inside])
-  E -->|No| G([Run for it])`,
-    options: { bg: '#2e3440', fg: '#d8dee9', line: '#4c566a', accent: '#88c0d0', muted: '#616e88' },
-  },
-  {
-    title: 'Theme: GitHub Light',
-    category: 'Theme Showcase',
-    description: 'Class diagram with GitHub Light enrichment colors.',
-    source: `classDiagram
-  class Animal {
-    <<abstract>>
-    +String name
-    +int age
-    +eat() void
-  }
-  class Dog {
-    +String breed
-    +bark() void
-  }
-  class Cat {
-    +bool isIndoor
-    +meow() void
-  }
-  Animal <|-- Dog
-  Animal <|-- Cat`,
-    options: { bg: '#ffffff', fg: '#1f2328', line: '#d1d9e0', accent: '#0969da', muted: '#59636e' },
-  },
-  {
-    title: 'Theme: GitHub Dark',
-    category: 'Theme Showcase',
-    description: 'ER diagram with GitHub Dark enrichment colors.',
-    source: `erDiagram
-  CUSTOMER {
-    int id PK
-    string name
-    string email UK
-  }
-  ORDER {
-    int id PK
-    date created
-    int customer_id FK
-  }
-  PRODUCT {
-    int id PK
-    string name
-    float price
-  }
-  CUSTOMER ||--o{ ORDER : places
-  ORDER ||--|{ LINE_ITEM : contains
-  PRODUCT ||--o{ LINE_ITEM : includes`,
-    options: { bg: '#0d1117', fg: '#e6edf3', line: '#3d444d', accent: '#4493f8', muted: '#9198a1' },
-  },
-  {
-    title: 'Theme: Dracula',
-    category: 'Theme Showcase',
-    description: 'Sequence diagram with Dracula enrichment colors.',
-    source: `sequenceDiagram
-  actor U as User
-  participant App as Client App
-  participant Auth as Auth Server
-  participant API as Resource API
-  U->>App: Click Login
-  App->>Auth: Authorization request
-  Auth->>U: Login page
-  U->>Auth: Credentials
-  Auth-->>App: Authorization code
-  App->>Auth: Exchange code
-  Auth-->>App: Access token
-  App->>API: Request + token
-  API-->>App: Protected resource
-  App-->>U: Display data`,
-    options: { bg: '#282a36', fg: '#f8f8f2', line: '#6272a4', accent: '#bd93f9', muted: '#6272a4' },
-  },
-  {
-    title: 'Theme: Solarized Light',
-    category: 'Theme Showcase',
-    description: 'Simple flow with Solarized Light enrichment colors.',
-    source: `graph TD
-  A[Start] --> B{Decision}
-  B -->|Yes| C[Process A]
-  B -->|No| D[Process B]
-  C --> E[End]
-  D --> E`,
-    options: { bg: '#fdf6e3', fg: '#657b83', line: '#93a1a1', accent: '#268bd2', muted: '#93a1a1' },
-  },
-  {
-    title: 'Theme: Mono (zinc dark, no enrichment)',
-    category: 'Theme Showcase',
-    description: 'Same architecture diagram with only bg/fg — all colors derived via color-mix().',
-    source: `graph LR
-  subgraph clients [Client Layer]
-    A([Web App]) --> B[API Gateway]
-    C([Mobile App]) --> B
-  end
-  subgraph services [Service Layer]
-    B --> D[Auth Service]
-    B --> E[User Service]
-    B --> F[Order Service]
-  end
-  subgraph data [Data Layer]
-    D --> G[(Auth DB)]
-    E --> H[(User DB)]
-    F --> I[(Order DB)]
-  end`,
-    options: { bg: '#18181B', fg: '#FAFAFA' },
   },
 ]

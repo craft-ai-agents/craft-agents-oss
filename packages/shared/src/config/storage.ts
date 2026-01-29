@@ -377,7 +377,7 @@ export function setActiveWorkspace(workspaceId: string): void {
  * @param workspaceId The ID of the workspace to switch to
  * @returns The workspace and session, or null if workspace not found
  */
-export function switchWorkspaceAtomic(workspaceId: string): { workspace: Workspace; session: SessionConfig } | null {
+export async function switchWorkspaceAtomic(workspaceId: string): Promise<{ workspace: Workspace; session: SessionConfig } | null> {
   const config = loadStoredConfig();
   if (!config) return null;
 
@@ -385,7 +385,7 @@ export function switchWorkspaceAtomic(workspaceId: string): { workspace: Workspa
   if (!workspace) return null;
 
   // Get or create the latest session for this workspace
-  const session = getOrCreateLatestSession(workspace.rootPath);
+  const session = await getOrCreateLatestSession(workspace.rootPath);
 
   // Update active workspace in config
   config.activeWorkspaceId = workspaceId;
