@@ -968,12 +968,13 @@ export function FreeFormInput({
       }
     }
 
-    if (e.key === 'Enter' && !e.shiftKey) {
+    // Skip submission during IME composition - user is confirming composed characters, not sending
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault()
       // Submit message - backend handles interruption if processing
       submitMessage()
     }
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.nativeEvent.isComposing) {
       e.preventDefault()
       // Submit message - backend handles interruption if processing
       submitMessage()

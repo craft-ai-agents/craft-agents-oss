@@ -281,6 +281,100 @@ describe('extractToolStarts', () => {
     expect(events).toHaveLength(1)
     expect(events[0]).toMatchObject({ toolName: 'Read' })
   })
+
+  // --- Fallback parent assignment (when SDK parent_tool_use_id is null) ---
+
+  it('assigns fallback parent when SDK parent is null and exactly one Task is active', () => {
+    const activeParents = new Set(['toolu_task1'])
+
+    const blocks: ContentBlock[] = [
+      makeToolUseBlock('Grep', { pattern: 'foo' }, 'toolu_child1'),
+    ]
+
+    // SDK says parent is null, but we have one active Task
+    const events = extractToolStarts(blocks, null, toolIndex, emittedIds, undefined, activeParents)
+
+    expect(events[0]).toMatchObject({
+      toolName: 'Grep',
+      toolUseId: 'toolu_child1',
+      parentToolUseId: 'toolu_task1',  // Fallback assigned
+    })
+  })
+
+  it('does not assign fallback when SDK provides explicit parent', () => {
+    const activeParents = new Set(['toolu_task1'])
+
+    const blocks: ContentBlock[] = [
+      makeToolUseBlock('Read', {}, 'toolu_child2'),
+    ]
+
+    // SDK says parent is toolu_task2 (different from activeParents)
+    const events = extractToolStarts(blocks, 'toolu_task2', toolIndex, emittedIds, undefined, activeParents)
+
+    expect(events[0]).toMatchObject({
+      parentToolUseId: 'toolu_task2',  // SDK value takes precedence
+    })
+  })
+
+  it('does not assign fallback when multiple Tasks are active (ambiguous)', () => {
+    const activeParents = new Set(['toolu_taskA', 'toolu_taskB'])
+
+    const blocks: ContentBlock[] = [
+      makeToolUseBlock('Bash', { command: 'ls' }, 'toolu_child'),
+    ]
+
+    // SDK says null, but multiple Tasks are active — can't safely assign
+    const events = extractToolStarts(blocks, null, toolIndex, emittedIds, undefined, activeParents)
+
+    expect(events[0]).toMatchObject({
+      parentToolUseId: undefined,  // Not assigned — ambiguous
+    })
+  })
+
+  it('does not assign fallback when no Tasks are active', () => {
+    const activeParents = new Set<string>()
+
+    const blocks: ContentBlock[] = [
+      makeToolUseBlock('Read', {}, 'toolu_1'),
+    ]
+
+    const events = extractToolStarts(blocks, null, toolIndex, emittedIds, undefined, activeParents)
+
+    expect(events[0]).toMatchObject({
+      parentToolUseId: undefined,  // No active Tasks
+    })
+  })
+
+  it('does not self-reference Task tool as its own parent', () => {
+    // When a Task tool starts, it should NOT be assigned as its own parent
+    const activeParents = new Set(['toolu_task1'])
+
+    const blocks: ContentBlock[] = [
+      makeToolUseBlock('Task', { prompt: 'nested' }, 'toolu_task1'),
+    ]
+
+    const events = extractToolStarts(blocks, null, toolIndex, emittedIds, undefined, activeParents)
+
+    expect(events[0]).toMatchObject({
+      toolName: 'Task',
+      toolUseId: 'toolu_task1',
+      parentToolUseId: undefined,  // Not self-referencing
+    })
+  })
+
+  it('activeParentTools parameter is optional (backward compatible)', () => {
+    const blocks: ContentBlock[] = [
+      makeToolUseBlock('Read', {}, 'toolu_1'),
+    ]
+
+    // Call without activeParentTools parameter
+    const events = extractToolStarts(blocks, null, toolIndex, emittedIds)
+
+    expect(events[0]).toMatchObject({
+      toolName: 'Read',
+      parentToolUseId: undefined,
+    })
+  })
 })
 
 // ============================================================================
