@@ -90,7 +90,7 @@ mkdir -p "$ELECTRON_DIR/vendor/bun"
 if [ "$ARCH" = "arm64" ]; then
     BUN_DOWNLOAD="bun-linux-aarch64"
 else
-    BUN_DOWNLOAD="bun-linux-x64"
+    BUN_DOWNLOAD="bun-linux-x64-baseline"
 fi
 
 # Create temp directory to avoid race conditions
