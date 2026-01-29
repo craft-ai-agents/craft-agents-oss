@@ -368,15 +368,6 @@ function SessionItem({
                 {searchQuery ? highlightMatch(getSessionTitle(item), searchQuery) : getSessionTitle(item)}
               </div>
             </div>
-            {/* Content match snippet - shown when found in conversation content */}
-            {contentMatch && contentMatch.snippet && (
-              <div className="flex items-center gap-1.5 text-xs text-foreground/50 w-full pr-6 min-w-0">
-                <Search className="h-3 w-3 shrink-0 text-info/70" />
-                <span className="truncate italic">
-                  {searchQuery ? highlightMatch(contentMatch.snippet, searchQuery) : contentMatch.snippet}
-                </span>
-              </div>
-            )}
             {/* Subtitle row — badges scroll horizontally when they overflow */}
             <div className="flex items-center gap-1.5 text-xs text-foreground/70 w-full -mb-[2px] min-w-0">
               {/* Fixed indicators (Spinner + New) — always visible */}
@@ -552,47 +543,51 @@ function SessionItem({
                 </Tooltip>
               )}
             </div>
+            {/* Content match snippet - shown when found in conversation content (at bottom) */}
+            {contentMatch && contentMatch.snippet && (
+              <div className="flex items-center gap-1.5 text-xs text-foreground/50 w-full min-w-0 pl-2 pr-1.5 mt-1.5 mb-1 h-8 border border-border rounded-md">
+                  <Search className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} style={{ color: 'color-mix(in oklch, var(--foreground) 60%, transparent)' }} />
+                  <span className="truncate flex-1 min-w-0">
+                    {searchQuery ? highlightMatch(contentMatch.snippet, searchQuery) : contentMatch.snippet}
+                  </span>
+                  {/* Match navigation chevrons - inline on right when selected with matches */}
+                  {isSelected && chatMatchCount != null && chatMatchCount > 0 && (
+                    <div className="flex items-center shrink-0 gap-0.5 ml-1.5">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onNavigatePrev?.() }}
+                        className={cn(
+                          "p-0.5 rounded transition-colors",
+                          (chatMatchIndex ?? 0) <= 0
+                            ? "opacity-30 cursor-default"
+                            : "hover:bg-foreground/5"
+                        )}
+                        disabled={(chatMatchIndex ?? 0) <= 0}
+                        title="Previous match"
+                      >
+                        <ChevronUp className="size-4 text-muted-foreground" strokeWidth={1.5} />
+                      </button>
+                      <span className="text-[9px] text-muted-foreground tabular-nums leading-tight">
+                        {(chatMatchIndex ?? 0) + 1}/{chatMatchCount ?? 0}
+                      </span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onNavigateNext?.() }}
+                        className={cn(
+                          "p-0.5 rounded transition-colors",
+                          (chatMatchIndex ?? 0) >= (chatMatchCount ?? 1) - 1
+                            ? "opacity-30 cursor-default"
+                            : "hover:bg-foreground/5"
+                        )}
+                        disabled={(chatMatchIndex ?? 0) >= (chatMatchCount ?? 1) - 1}
+                        title="Next match"
+                      >
+                        <ChevronDown className="size-4 text-muted-foreground" strokeWidth={1.5} />
+                      </button>
+                    </div>
+                  )}
+              </div>
+            )}
           </div>
         </button>
-
-        {/* Match navigation - vertically stacked chevrons on right side when selected with matches */}
-        {/* Always rendered but uses opacity transition for smooth show/hide */}
-        <div className={cn(
-          "absolute right-2 top-0 bottom-0 flex flex-col items-center justify-center gap-0.5 py-2 z-10 transition-opacity duration-150",
-          isSelected && searchQuery && chatMatchCount != null && chatMatchCount > 0
-            ? "opacity-100"
-            : "opacity-0 pointer-events-none"
-        )}>
-          <button
-            onClick={(e) => { e.stopPropagation(); onNavigatePrev?.() }}
-            className={cn(
-              "p-0.5 rounded transition-colors",
-              (chatMatchIndex ?? 0) <= 0
-                ? "opacity-30 cursor-default"
-                : "hover:bg-foreground/10"
-            )}
-            disabled={(chatMatchIndex ?? 0) <= 0}
-            title="Previous match"
-          >
-            <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
-          </button>
-          <span className="text-[9px] text-muted-foreground tabular-nums text-center leading-tight">
-            {(chatMatchIndex ?? 0) + 1}/{chatMatchCount ?? 0}
-          </span>
-          <button
-            onClick={(e) => { e.stopPropagation(); onNavigateNext?.() }}
-            className={cn(
-              "p-0.5 rounded transition-colors",
-              (chatMatchIndex ?? 0) >= (chatMatchCount ?? 1) - 1
-                ? "opacity-30 cursor-default"
-                : "hover:bg-foreground/10"
-            )}
-            disabled={(chatMatchIndex ?? 0) >= (chatMatchCount ?? 1) - 1}
-            title="Next match"
-          >
-            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-          </button>
-        </div>
 
         {/* Action buttons - visible on hover or when menu is open, hidden in search mode with matches */}
         {!(isSelected && searchQuery && chatMatchCount && chatMatchCount > 0) && (
@@ -787,6 +782,8 @@ export function SessionList({
   // Content search state (full-text search via ripgrep)
   const [contentSearchResults, setContentSearchResults] = useState<Map<string, { matchCount: number; snippet: string }>>(new Map())
   const [isSearchingContent, setIsSearchingContent] = useState(false)
+  // Track if search input has actual DOM focus (for proper keyboard navigation gating)
+  const [isSearchInputFocused, setIsSearchInputFocused] = useState(false)
 
   // Debounced content search - triggers when search query changes and length >= 2
   useEffect(() => {
@@ -821,13 +818,10 @@ export function SessionList({
     }
   }, [workspaceId, searchActive, searchQuery])
 
-  // Focus search input when search becomes active (with delay to let dropdown close)
+  // Focus search input when search becomes active
   useEffect(() => {
     if (searchActive) {
-      const timer = setTimeout(() => {
-        searchInputRef.current?.focus()
-      }, 50)
-      return () => clearTimeout(timer)
+      searchInputRef.current?.focus()
     }
   }, [searchActive])
 
@@ -956,6 +950,11 @@ export function SessionList({
     } else if (currentFilter.kind === 'state') {
       navigate(routes.view.state(currentFilter.stateId, item.id))
     }
+    // Scroll the selected item into view
+    requestAnimationFrame(() => {
+      const element = document.querySelector(`[data-session-id="${item.id}"]`)
+      element?.scrollIntoView({ block: 'nearest', behavior: 'instant' })
+    })
   }, [navigate, currentFilter])
 
   // NOTE: We intentionally do NOT auto-select sessions while typing in search.
@@ -1002,10 +1001,14 @@ export function SessionList({
   }, [onDelete])
 
   // Roving tabindex for keyboard navigation
+  // During search: enabled but moveFocus=false so focus stays on search input
+  const rovingEnabled = isFocused || (searchActive && isSearchInputFocused)
+
   const {
     activeIndex,
     setActiveIndex,
     getItemProps,
+    getContainerProps,
     focusActiveItem,
   } = useRovingTabIndex({
     items: flatItems,
@@ -1015,45 +1018,9 @@ export function SessionList({
     onActiveChange: handleActiveChange,
     onEnter: handleEnter,
     initialIndex: selectedIndex >= 0 ? selectedIndex : 0,
-    enabled: isFocused,
+    enabled: rovingEnabled,
+    moveFocus: !searchActive, // Keep focus on search input during search
   })
-
-  // Global keyboard listener for arrow keys during search mode
-  // Works anywhere in the app while search is active (not just when input is focused)
-  useEffect(() => {
-    if (!searchActive) return
-
-    const handleArrowKeys = (e: KeyboardEvent) => {
-      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
-
-      // Prevent ALL default behavior (scrolling) immediately
-      e.preventDefault()
-      e.stopPropagation()
-
-      if (flatItems.length === 0) return
-
-      const newIndex = e.key === 'ArrowDown'
-        ? (activeIndex < flatItems.length - 1 ? activeIndex + 1 : 0)
-        : (activeIndex > 0 ? activeIndex - 1 : flatItems.length - 1)
-
-      setActiveIndex(newIndex)
-      handleActiveChange(flatItems[newIndex])
-
-      // Scroll the selected item into view and re-focus search input
-      requestAnimationFrame(() => {
-        const selectedItem = flatItems[newIndex]
-        if (selectedItem) {
-          const element = document.querySelector(`[data-session-id="${selectedItem.id}"]`)
-          element?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-        }
-        searchInputRef.current?.focus()
-      })
-    }
-
-    // Use capture phase on window to intercept before any scroll handlers
-    window.addEventListener('keydown', handleArrowKeys, { capture: true })
-    return () => window.removeEventListener('keydown', handleArrowKeys, { capture: true })
-  }, [searchActive, flatItems, activeIndex, setActiveIndex, handleActiveChange])
 
   // Sync activeIndex when selection changes externally
   useEffect(() => {
@@ -1105,9 +1072,6 @@ export function SessionList({
 
   // Handle search input key events (Arrow keys handled by native listener above)
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    // Stop propagation to prevent roving tabindex from intercepting keys
-    e.stopPropagation()
-
     if (e.key === 'Escape') {
       e.preventDefault()
       onSearchClose?.()
@@ -1118,6 +1082,13 @@ export function SessionList({
     if (e.key === 'Enter') {
       e.preventDefault()
       onFocusChatInput?.()
+      return
+    }
+
+    // Forward arrow keys to roving tabindex (search input is outside the container)
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault()
+      getContainerProps().onKeyDown(e)
       return
     }
   }
@@ -1172,6 +1143,8 @@ export function SessionList({
               value={searchQuery}
               onChange={(e) => onSearchChange?.(e.target.value)}
               onKeyDown={handleSearchKeyDown}
+              onFocus={() => setIsSearchInputFocused(true)}
+              onBlur={() => setIsSearchInputFocused(false)}
               placeholder="Search titles and content..."
               className="w-full h-8 pl-8 pr-8 text-sm bg-transparent border-0 rounded-[8px] outline-none focus-visible:ring-0 focus-visible:outline-none placeholder:text-muted-foreground/50"
             />

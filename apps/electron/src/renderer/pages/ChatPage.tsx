@@ -60,6 +60,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     onDeleteSession,
     rightSidebarButton,
     sessionListSearchQuery,
+    isSearchModeActive,
     chatDisplayRef,
     onChatMatchInfoChange,
   } = useAppShellContext()
@@ -478,6 +479,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
                 onWorkingDirectoryChange={handleWorkingDirectoryChange}
                 messagesLoading={true}
                 searchQuery={sessionListSearchQuery}
+                isSearchModeActive={isSearchModeActive}
                 onMatchInfoChange={onChatMatchInfoChange}
               />
             </div>
@@ -551,6 +553,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
             sessionFolderPath={session?.sessionFolderPath}
             messagesLoading={!messagesLoaded}
             searchQuery={sessionListSearchQuery}
+            isSearchModeActive={isSearchModeActive}
             onMatchInfoChange={onChatMatchInfoChange}
           />
         </div>

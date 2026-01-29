@@ -21,6 +21,8 @@ interface UseRovingTabIndexOptions<T> {
   enabled?: boolean
   /** Called to open context menu on focused item */
   onContextMenu?: (item: T, index: number, element: HTMLElement) => void
+  /** Whether to move focus to items on navigation (default: true). Set false to keep focus elsewhere (e.g., search input) */
+  moveFocus?: boolean
 }
 
 interface UseRovingTabIndexReturn<T> {
@@ -71,6 +73,7 @@ export function useRovingTabIndex<T>({
   initialIndex = 0,
   enabled = true,
   onContextMenu,
+  moveFocus = true,
 }: UseRovingTabIndexOptions<T>): UseRovingTabIndexReturn<T> {
   const [activeIndex, setActiveIndexState] = useState(() =>
     Math.min(initialIndex, Math.max(0, items.length - 1))
@@ -108,13 +111,15 @@ export function useRovingTabIndex<T>({
     if (nextIndex >= 0 && nextIndex < items.length && nextIndex !== activeIndex) {
       setActiveIndexState(nextIndex)
       onActiveChange?.(items[nextIndex], nextIndex)
-      // Focus new item after state update
-      requestAnimationFrame(() => {
-        const id = getId(items[nextIndex], nextIndex)
-        itemRefs.current.get(id)?.focus()
-      })
+      // Focus new item after state update (unless moveFocus is false)
+      if (moveFocus) {
+        requestAnimationFrame(() => {
+          const id = getId(items[nextIndex], nextIndex)
+          itemRefs.current.get(id)?.focus()
+        })
+      }
     }
-  }, [items, activeIndex, getId, onActiveChange])
+  }, [items, activeIndex, getId, onActiveChange, moveFocus])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (!enabled || items.length === 0) return

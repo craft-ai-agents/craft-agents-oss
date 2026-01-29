@@ -128,6 +128,8 @@ export interface AppShellContextType {
   // Session list search state (for ChatDisplay highlighting)
   /** Current search query from session list - used to highlight matches in ChatDisplay */
   sessionListSearchQuery?: string
+  /** Whether search mode is active (prevents focus stealing to chat input even with empty query) */
+  isSearchModeActive?: boolean
   /** Callback to update session list search query */
   setSessionListSearchQuery?: (query: string) => void
   /** Ref to ChatDisplay for navigation between matches */

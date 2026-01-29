@@ -636,7 +636,6 @@ function AppShellContent({
 
   // Callback for immediate match info updates from ChatDisplay
   const handleChatMatchInfoChange = React.useCallback((info: { count: number; index: number }) => {
-    console.log('[AppShell] Received match info from ChatDisplay:', info)
     setChatMatchInfo(info)
   }, [])
 
@@ -1353,6 +1352,7 @@ function AppShellContent({
     rightSidebarButton: rightSidebarOpenButton,
     // Search state for ChatDisplay highlighting
     sessionListSearchQuery: searchActive ? searchQuery : undefined,
+    isSearchModeActive: searchActive,
     chatDisplayRef,
     onChatMatchInfoChange: handleChatMatchInfoChange,
   }), [contextValue, handleDeleteSession, sources, skills, labelConfigs, handleSessionLabelsChange, enabledModes, effectiveTodoStates, handleSessionSourcesChange, rightSidebarOpenButton, searchActive, searchQuery, handleChatMatchInfoChange])
@@ -1562,6 +1562,10 @@ function AppShellContent({
   // Create a new chat and select it
   const handleNewChat = useCallback(async (_useCurrentAgent: boolean = true) => {
     if (!activeWorkspace) return
+
+    // Exit search mode and switch to All Chats
+    setSearchActive(false)
+    setSearchQuery('')
 
     const newSession = await onCreateSession(activeWorkspace.id)
     // Navigate to the new session via central routing
