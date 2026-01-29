@@ -1339,6 +1339,17 @@ export class SessionManager {
       managed.lastReadMessageId = storedSession.lastReadMessageId
       managed.hasUnread = storedSession.hasUnread  // Explicit unread flag for NEW badge state machine
       managed.enabledSourceSlugs = storedSession.enabledSourceSlugs
+      // Backfill: if no sources were saved, auto-enable all authenticated sources
+      if (!managed.enabledSourceSlugs || managed.enabledSourceSlugs.length === 0) {
+        const allSources = loadAllSources(managed.workspace.rootPath)
+        const readySlugs = allSources
+          .filter(s => s.config.enabled && s.config.isAuthenticated)
+          .map(s => s.config.slug)
+        if (readySlugs.length > 0) {
+          managed.enabledSourceSlugs = readySlugs
+          sessionLog.info(`Auto-enabled ${readySlugs.length} sources for session ${managed.id} (backfill): ${readySlugs.join(', ')}`)
+        }
+      }
       managed.sharedUrl = storedSession.sharedUrl
       managed.sharedId = storedSession.sharedId
       // Sync name from disk - ensures title persistence across lazy loading
@@ -1418,6 +1429,16 @@ export class SessionManager {
       messageQueue: [],
       backgroundShellCommands: new Map(),
       messagesLoaded: true,  // New sessions don't need to load messages from disk
+    }
+
+    // Auto-enable all authenticated sources for new sessions
+    const allSources = loadAllSources(workspaceRootPath)
+    const readySlugs = allSources
+      .filter(s => s.config.enabled && s.config.isAuthenticated)
+      .map(s => s.config.slug)
+    if (readySlugs.length > 0) {
+      managed.enabledSourceSlugs = readySlugs
+      sessionLog.info(`Auto-enabled ${readySlugs.length} sources for new session ${storedSession.id}: ${readySlugs.join(', ')}`)
     }
 
     this.sessions.set(storedSession.id, managed)
