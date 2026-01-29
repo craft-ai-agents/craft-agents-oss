@@ -541,6 +541,25 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     return matches
   }, [searchQuery, session?.messages, countOccurrences])
 
+  // Auto-expand pagination when search is active to show all matching turns
+  // This ensures match count is stable and all matches are highlightable from the start
+  useEffect(() => {
+    if (!isSearchActive || matchingOccurrences.length === 0) return
+
+    // Find the earliest matching turn index
+    const earliestMatchTurnIndex = Math.min(...matchingOccurrences.map(m => m.turnIndex))
+    const totalTurns = groupMessagesByTurn(session?.messages || []).length
+
+    // Calculate how many turns we need to show to include all matches
+    // totalTurns - visibleTurnCount = startIndex, so we need visibleTurnCount = totalTurns - earliestMatchTurnIndex + buffer
+    const requiredVisibleCount = totalTurns - earliestMatchTurnIndex + 5 // +5 buffer for context
+
+    if (requiredVisibleCount > visibleTurnCount) {
+      console.log('[ChatDisplay Search] Expanding pagination to show all matches, from', visibleTurnCount, 'to', requiredVisibleCount)
+      setVisibleTurnCount(requiredVisibleCount)
+    }
+  }, [isSearchActive, matchingOccurrences, session?.messages, visibleTurnCount])
+
   // Extract unique turn IDs that have matches (for highlighting)
   const matchingTurnIds = useMemo(() => {
     const uniqueTurnIds = new Set(matchingOccurrences.map(m => m.turnId))
