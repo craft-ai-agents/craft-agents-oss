@@ -1,0 +1,22 @@
+{
+  "name": "@craft-agent/cli",
+  "version": "0.1.0",
+  "description": "CLI for Craft Agents",
+  "type": "module",
+  "bin": {
+    "craft": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "bun build src/index.ts --outdir dist --target node",
+    "dev": "bun run src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@craft-agent/shared": "workspace:*",
+    "@craft-agent/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "typescript": "^5.0.0"
+  }
+}
