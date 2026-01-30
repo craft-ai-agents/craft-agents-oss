@@ -439,6 +439,27 @@ REST APIs become flexible tools that Claude can call.
 }
 ```
 
+**Basic auth with optional password:**
+
+Some APIs use HTTP Basic Auth but only require the username field (API key), leaving the password empty. For these APIs, use `passwordRequired: false` when prompting for credentials:
+
+```typescript
+source_credential_prompt({
+  sourceSlug: "ashby",
+  mode: "basic",
+  passwordRequired: false,  // Password field becomes optional
+  labels: { username: "API Key" },
+  description: "Enter your Ashby API key"
+})
+```
+
+When `passwordRequired: false`:
+- The password field shows "(optional)" label and "Optional - leave blank" placeholder
+- The Save button enables with just a username
+- Empty string is submitted for password (per HTTP Basic Auth spec: `base64(username:)`)
+
+**Note:** `passwordRequired` only applies to `mode: "basic"`. It defaults to `true` for backward compatibility with services like Jira or Amplitude that require both username and password.
+
 ### testEndpoint Configuration
 
 The `testEndpoint` specifies which endpoint to call when validating credentials:
@@ -667,6 +688,7 @@ Technical steps:
    - `source_oauth_trigger` for MCP OAuth
    - `source_gmail_oauth_trigger` for Gmail
    - `source_credential_prompt` for API keys/tokens
+   - For basic auth with optional password: `source_credential_prompt({ mode: "basic", passwordRequired: false })`
 
 7. Confirm with user that the source is working as expected
 
