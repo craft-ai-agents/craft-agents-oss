@@ -197,6 +197,7 @@ export interface Message {
   authDescription?: string;       // Description/instructions
   authHint?: string;              // Hint about where to find credentials
   authSourceUrl?: string;         // Source URL for password manager domain matching (1Password)
+  authPasswordRequired?: boolean; // For basic auth: whether password is required (default true)
   authError?: string;             // Error message if auth failed
   authEmail?: string;             // Authenticated email (for OAuth)
   authWorkspace?: string;         // Authenticated workspace (for Slack)
@@ -265,6 +266,7 @@ export interface StoredMessage {
   authDescription?: string;
   authHint?: string;
   authSourceUrl?: string;
+  authPasswordRequired?: boolean;
   authError?: string;
   authEmail?: string;
   authWorkspace?: string;

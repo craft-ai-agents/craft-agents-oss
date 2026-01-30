@@ -1626,6 +1626,7 @@ export class SessionManager {
             authHint: request.hint,
             authHeaderName: request.headerName,
             authSourceUrl: request.sourceUrl,
+            authPasswordRequired: request.passwordRequired,
           }),
         }
 

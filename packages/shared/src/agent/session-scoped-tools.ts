@@ -106,6 +106,8 @@ export interface CredentialAuthRequest extends BaseAuthRequest {
   headerName?: string;
   /** Source URL/domain for password manager credential matching (1Password, etc.) */
   sourceUrl?: string;
+  /** For basic auth: whether password is required. Default true for backward compatibility. */
+  passwordRequired?: boolean;
 }
 
 /**
@@ -1867,9 +1869,21 @@ source_credential_prompt({
       }).optional().describe('Custom field labels'),
       description: z.string().optional().describe('Description shown to user'),
       hint: z.string().optional().describe('Hint about where to find credentials'),
+      passwordRequired: z.boolean().optional().describe('For basic auth: whether password field is required (default: true)'),
     },
     async (args) => {
       debug('[source_credential_prompt] Requesting credentials:', args.sourceSlug, args.mode);
+
+      // Validate that passwordRequired only applies to basic auth
+      if (args.passwordRequired !== undefined && args.mode !== 'basic') {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `Error: passwordRequired parameter only applies to basic auth mode. You specified mode="${args.mode}" with passwordRequired=${args.passwordRequired}.`,
+          }],
+          isError: true,
+        };
+      }
 
       try {
         // Load source to get name and validate
@@ -1911,6 +1925,7 @@ source_credential_prompt({
           headerName: source.api?.headerName,
           // Pass source URL so password managers (1Password) can match stored credentials by domain
           sourceUrl: source.api?.baseUrl || source.mcp?.url,
+          passwordRequired: args.passwordRequired,
         };
 
         // Trigger auth request - this will cause the session manager to forceAbort

@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 import type { Message, CredentialResponse } from '../../../shared/types'
 import type { AuthRequestType, AuthStatus } from '@craft-agent/core/types'
+import { validateBasicAuthCredentials, getPasswordValue, getPasswordLabel, getPasswordPlaceholder } from '@/utils/auth-validation'
 
 // ============================================================================
 // Primitives
@@ -180,15 +181,17 @@ export function AuthRequestCard({ message, onRespondToCredential, sessionId, isI
     authDescription,
     authHint,
     authSourceUrl,
+    authPasswordRequired,
     authError,
     authEmail,
     authWorkspace,
   } = message
 
   const isBasicAuth = authCredentialMode === 'basic'
+  const passwordRequired = authPasswordRequired ?? true  // default true for backward compatibility
   const isValid = isBasicAuth
-    ? username.trim() && password.trim()
-    : value.trim()
+    ? validateBasicAuthCredentials(username, password, passwordRequired)
+    : value.trim().length > 0
 
   const handleSubmit = useCallback(() => {
     if (!isValid || !authRequestId || !onRespondToCredential) return
@@ -199,7 +202,7 @@ export function AuthRequestCard({ message, onRespondToCredential, sessionId, isI
       onRespondToCredential(sessionId, authRequestId, {
         type: 'credential',
         username: username.trim(),
-        password: password.trim(),
+        password: getPasswordValue(password, passwordRequired),
         cancelled: false
       })
     } else {
@@ -245,7 +248,9 @@ export function AuthRequestCard({ message, onRespondToCredential, sessionId, isI
   const credentialLabel = authLabels?.credential ||
     (authCredentialMode === 'bearer' ? 'Bearer Token' : 'API Key')
   const usernameLabel = authLabels?.username || 'Username'
-  const passwordLabel = authLabels?.password || 'Password'
+  const basePasswordLabel = authLabels?.password || 'Password'
+  const passwordLabel = getPasswordLabel(basePasswordLabel, passwordRequired)
+  const passwordPlaceholder = getPasswordPlaceholder(basePasswordLabel, passwordRequired)
 
   // Get auth type label
   const getAuthTypeLabel = (type: AuthRequestType | undefined) => {
@@ -430,7 +435,7 @@ export function AuthRequestCard({ message, onRespondToCredential, sessionId, isI
                   onChange={(e) => setPassword(e.target.value)}
                   onKeyDown={handleKeyDown}
                   className="pl-9 pr-9"
-                  placeholder={`Enter ${passwordLabel.toLowerCase()}`}
+                  placeholder={passwordPlaceholder}
                   disabled={isSubmitting}
                 />
                 <button

@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 import type { CredentialRequest as CredentialRequestType, CredentialResponse } from '../../../../../shared/types'
+import { validateBasicAuthCredentials, getPasswordValue, getPasswordLabel, getPasswordPlaceholder } from '@/utils/auth-validation'
 
 interface CredentialRequestProps {
   request: CredentialRequestType
@@ -29,9 +30,10 @@ export function CredentialRequest({ request, onResponse, unstyled = false }: Cre
   const [showPassword, setShowPassword] = useState(false)
 
   const isBasicAuth = request.mode === 'basic'
+  const passwordRequired = request.passwordRequired ?? true  // default true for backward compatibility
   const isValid = isBasicAuth
-    ? username.trim() && password.trim()
-    : value.trim()
+    ? validateBasicAuthCredentials(username, password, passwordRequired)
+    : value.trim().length > 0
 
   const handleSubmit = useCallback(() => {
     if (!isValid) return
@@ -40,7 +42,7 @@ export function CredentialRequest({ request, onResponse, unstyled = false }: Cre
       onResponse({
         type: 'credential',
         username: username.trim(),
-        password: password.trim(),
+        password: getPasswordValue(password, passwordRequired),
         cancelled: false
       })
     } else {
@@ -73,7 +75,9 @@ export function CredentialRequest({ request, onResponse, unstyled = false }: Cre
   const credentialLabel = request.labels?.credential ||
     (request.mode === 'bearer' ? 'Bearer Token' : 'API Key')
   const usernameLabel = request.labels?.username || 'Username'
-  const passwordLabel = request.labels?.password || 'Password'
+  const basePasswordLabel = request.labels?.password || 'Password'
+  const passwordLabel = getPasswordLabel(basePasswordLabel, passwordRequired)
+  const passwordPlaceholder = getPasswordPlaceholder(basePasswordLabel, passwordRequired)
 
   return (
     <div className={cn(
@@ -151,7 +155,7 @@ export function CredentialRequest({ request, onResponse, unstyled = false }: Cre
                       onChange={(e) => setPassword(e.target.value)}
                       onKeyDown={handleKeyDown}
                       className="pl-9 pr-9"
-                      placeholder={`Enter ${passwordLabel.toLowerCase()}`}
+                      placeholder={passwordPlaceholder}
                     />
                     <button
                       type="button"
