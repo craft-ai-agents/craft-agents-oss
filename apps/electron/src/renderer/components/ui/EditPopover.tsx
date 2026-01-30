@@ -9,15 +9,14 @@
 
 import * as React from 'react'
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import { ArrowUp, GripHorizontal } from 'lucide-react'
+import { GripHorizontal } from 'lucide-react'
 import { Popover, PopoverTrigger, PopoverContent } from './popover'
 import { Button } from './button'
 import { cn } from '@/lib/utils'
 import { usePlatform } from '@craft-agent/ui'
-import type { ContentBadge, Session } from '../../../shared/types'
-import { useActiveWorkspace } from '@/context/AppShellContext'
+import type { ContentBadge, Session, CreateSessionOptions } from '../../../shared/types'
+import { useActiveWorkspace, useAppShellContext, useSession } from '@/context/AppShellContext'
 import { ChatDisplay } from '../app-shell/ChatDisplay'
-import { useInlineSession } from '@/hooks/useInlineSession'
 
 /**
  * Context passed to the new chat session so the agent knows exactly
@@ -114,6 +113,9 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Confirm clearly when done.',
     },
     example: "Allow running 'make build' in Explore mode",
+    model: 'haiku',
+    systemPromptPreset: 'mini',
+    inlineExecution: true,
   }),
 
   'default-permissions': (location) => ({
@@ -130,6 +132,9 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Confirm clearly when done.',
     },
     example: 'Allow git fetch command',
+    model: 'haiku',
+    systemPromptPreset: 'mini',
+    inlineExecution: true,
   }),
 
   // Skill editing contexts
@@ -146,6 +151,9 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Confirm clearly when done.',
     },
     example: 'Add error handling guidelines',
+    model: 'haiku',
+    systemPromptPreset: 'mini',
+    inlineExecution: true,
   }),
 
   'skill-metadata': (location) => ({
@@ -160,6 +168,9 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Confirm clearly when done.',
     },
     example: 'Update the skill description',
+    model: 'haiku',
+    systemPromptPreset: 'mini',
+    inlineExecution: true,
   }),
 
   // Source editing contexts
@@ -174,6 +185,9 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Confirm clearly when done.',
     },
     example: 'Add rate limit documentation',
+    model: 'haiku',
+    systemPromptPreset: 'mini',
+    inlineExecution: true,
   }),
 
   'source-config': (location) => ({
@@ -188,6 +202,9 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Confirm clearly when done.',
     },
     example: 'Update the display name',
+    model: 'haiku',
+    systemPromptPreset: 'mini',
+    inlineExecution: true,
   }),
 
   'source-permissions': (location) => ({
@@ -202,6 +219,9 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Confirm clearly when done.',
     },
     example: 'Allow list operations in Explore mode',
+    model: 'haiku',
+    systemPromptPreset: 'mini',
+    inlineExecution: true,
   }),
 
   'source-tool-permissions': (location) => ({
@@ -218,6 +238,9 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Confirm clearly when done.',
     },
     example: 'Only allow read operations (list, get, search)',
+    model: 'haiku',
+    systemPromptPreset: 'mini',
+    inlineExecution: true,
   }),
 
   // Preferences editing context
@@ -233,6 +256,9 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Confirm clearly when done.',
     },
     example: 'Add coding style preferences',
+    model: 'haiku',
+    systemPromptPreset: 'mini',
+    inlineExecution: true,
   }),
 
   // Add new source/skill contexts - use overridePlaceholder for inspiring, contextual prompts
@@ -608,8 +634,7 @@ export function EditPopover({
   defaultValue = '',
   inlineExecution = false,
 }: EditPopoverProps) {
-  // Open files externally (bypasses link interceptor) for "Edit File" secondary actions
-  const { onOpenFileExternal, onOpenFile, onOpenUrl } = usePlatform()
+  const { onOpenFile, onOpenUrl } = usePlatform()
   const workspace = useActiveWorkspace()
 
   // Build placeholder: use override if provided, otherwise default to "change" wording
@@ -633,25 +658,15 @@ export function EditPopover({
     }
   }
 
-  // Legacy mode state (non-inline execution)
-  const [input, setInput] = useState('')
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  // Use App context for session management (same code path as main chat)
+  const { onCreateSession, onSendMessage } = useAppShellContext()
 
-  // Inline session management via hook
-  const {
-    session: inlineSession,
-    isProcessing,
-    sendMessage: sendInlineMessage,
-    reset: resetInlineSession,
-  } = useInlineSession({
-    workspaceId: workspace?.id || '',
-    createOptions: {
-      model: model || 'haiku',
-      systemPromptPreset: systemPromptPreset || 'mini',
-      permissionMode,
-      workingDirectory,
-    },
-  })
+  // Session ID for inline execution (created on first message)
+  const [inlineSessionId, setInlineSessionId] = useState<string | null>(null)
+
+  // Get session data from Jotai atom (same as main chat - includes optimistic updates)
+  // Pass empty string when no session yet - atom returns null for unknown IDs
+  const inlineSession = useSession(inlineSessionId || '')
 
   // Model state for ChatDisplay (starts with prop value, can be changed by user)
   const [currentModel, setCurrentModel] = useState(model || 'haiku')
@@ -669,6 +684,11 @@ export function EditPopover({
 
   // Use real session if available, otherwise stub
   const displaySession = inlineSession || stubSession
+
+  // Reset inline session when popover closes
+  const resetInlineSession = useCallback(() => {
+    setInlineSessionId(null)
+  }, [])
 
   // Drag state for movable popover
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
@@ -762,80 +782,54 @@ export function EditPopover({
     }
   }, [isResizing])
 
-  // Auto-focus textarea when popover opens (legacy mode)
-  useEffect(() => {
-    if (open && !inlineExecution) {
-      // Small delay to let the popover render and avoid focus race conditions
-      const timer = setTimeout(() => {
-        textareaRef.current?.focus()
-      }, 0)
-      return () => clearTimeout(timer)
-    }
-  }, [open, inlineExecution])
-
-  // Reset state when popover closes
+  // Reset state when popover opens
   useEffect(() => {
     if (open) {
-      setInput(defaultValue)
       setCurrentModel(model || 'haiku')
       resetInlineSession()
-    } else {
-      setInput('')
     }
-  }, [open, defaultValue, model, resetInlineSession])
+  }, [open, model, resetInlineSession])
 
   // Handle sending message from ChatDisplay (inline mode)
-  // Wraps user message with edit context and badges
-  const handleInlineSendMessage = useCallback((message: string) => {
+  // Creates hidden session on first message, then uses App context for sending
+  const handleInlineSendMessage = useCallback(async (message: string) => {
     const { prompt, badges } = buildEditPrompt(context, message)
-    sendInlineMessage(prompt, badges)
-  }, [context, sendInlineMessage])
 
-  // Legacy mode submit handler
-  const handleSubmit = async () => {
-    if (!input.trim()) return
+    // Create session on first message
+    let sessionId = inlineSessionId
+    if (!sessionId && workspace?.id) {
+      const createOptions: CreateSessionOptions = {
+        model: model || 'haiku',
+        systemPromptPreset: systemPromptPreset || 'mini',
+        permissionMode,
+        workingDirectory,
+        hidden: true, // Hidden sessions use same App code path but don't appear in list
+      }
+      const newSession = await onCreateSession(workspace.id, createOptions)
+      sessionId = newSession.id
+      setInlineSessionId(sessionId)
+    }
 
-    const { prompt, badges } = buildEditPrompt(context, input.trim())
+    // Send message via App context (includes optimistic user message update)
+    if (sessionId) {
+      onSendMessage(sessionId, prompt)
+    }
+  }, [context, inlineSessionId, workspace?.id, model, systemPromptPreset, permissionMode, workingDirectory, onCreateSession, onSendMessage])
 
-    // Legacy mode: open new focused window
+  // Legacy mode: opens new window with message
+  const handleLegacySendMessage = useCallback((message: string) => {
+    const { prompt, badges } = buildEditPrompt(context, message)
     const encodedInput = encodeURIComponent(prompt)
-    // Encode badges as JSON for passing through deep link
     const encodedBadges = encodeURIComponent(JSON.stringify(badges))
 
-    // Open new focused window with auto-send
-    // The ?window=focused creates a smaller window (900x700) focused on single session
-    // The &send=true auto-sends the message immediately
-    // The &mode= sets the permission mode for the new session
-    // The &badges= passes badge metadata for hiding the XML context in UI
-    // The &workdir= sets the working directory (user_default, none, or absolute path)
-    // The &model= sets the model for mini agents (e.g., 'haiku')
-    // The &systemPrompt= sets the system prompt preset (e.g., 'mini')
     const workdirParam = workingDirectory ? `&workdir=${encodeURIComponent(workingDirectory)}` : ''
     const modelParam = model ? `&model=${encodeURIComponent(model)}` : ''
     const systemPromptParam = systemPromptPreset ? `&systemPrompt=${encodeURIComponent(systemPromptPreset)}` : ''
     const url = `craftagents://action/new-chat?window=focused&input=${encodedInput}&send=true&mode=${permissionMode}&badges=${encodedBadges}${workdirParam}${modelParam}${systemPromptParam}`
 
-    try {
-      await window.electronAPI.openUrl(url)
-    } catch (error) {
-      console.error('[EditPopover] Failed to open new chat window:', error)
-    }
-
-    // Close the popover
+    window.electronAPI.openUrl(url)
     setOpen(false)
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // Enter submits, Shift+Enter inserts newline
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      handleSubmit()
-    }
-    // Escape closes the popover
-    if (e.key === 'Escape') {
-      setOpen(false)
-    }
-  }
+  }, [context, workingDirectory, model, systemPromptPreset, permissionMode, setOpen])
 
   return (
     <Popover open={open} onOpenChange={setOpen} modal={modal}>
@@ -865,72 +859,19 @@ export function EditPopover({
             <GripHorizontal className="w-4 h-4 text-muted-foreground/50" />
           </div>
 
-          {/* Content area */}
-          {inlineExecution ? (
-            // Inline execution: full compact ChatDisplay
-            <div className="flex-1 flex flex-col" style={{ height: 'calc(100% - 34px)' }}>
-              <ChatDisplay
-                session={displaySession}
-                onSendMessage={handleInlineSendMessage}
-                onOpenFile={onOpenFile || (() => {})}
-                onOpenUrl={onOpenUrl || (() => {})}
-                currentModel={currentModel}
-                onModelChange={setCurrentModel}
-                compactMode={true}
-                placeholder={placeholder}
-              />
-            </div>
-          ) : (
-            // Legacy mode: textarea with send button
-            <div className="p-4 pt-2">
-              {/* Textarea */}
-              <textarea
-                ref={textareaRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={placeholder}
-                autoFocus
-                className={cn(
-                  'w-full min-h-[100px] resize-none px-0 py-0 text-sm leading-relaxed',
-                  'bg-transparent border-none',
-                  'placeholder:text-muted-foreground placeholder:leading-relaxed',
-                  'focus:outline-none focus-visible:outline-none focus-visible:ring-0',
-                  'field-sizing-content'
-                )}
-              />
-
-              {/* Footer row: secondary action on left, send button on right */}
-              <div className="flex items-center justify-between mt-2">
-                {/* Secondary action - plain text link */}
-                {secondaryAction ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onOpenFileExternal?.(secondaryAction.filePath)
-                      setOpen(false)
-                    }}
-                    className="text-sm text-muted-foreground hover:underline"
-                  >
-                    {secondaryAction.label}
-                  </button>
-                ) : (
-                  <div />
-                )}
-
-                {/* Send button */}
-                <Button
-                  type="button"
-                  size="icon"
-                  className="h-7 w-7 rounded-full shrink-0"
-                  onClick={handleSubmit}
-                  disabled={!input.trim()}
-                >
-                  <ArrowUp className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          )}
+          {/* Content area - always uses compact ChatDisplay */}
+          <div className="flex-1 flex flex-col" style={{ height: 'calc(100% - 34px)' }}>
+            <ChatDisplay
+              session={displaySession}
+              onSendMessage={inlineExecution ? handleInlineSendMessage : handleLegacySendMessage}
+              onOpenFile={onOpenFile || (() => {})}
+              onOpenUrl={onOpenUrl || (() => {})}
+              currentModel={currentModel}
+              onModelChange={setCurrentModel}
+              compactMode={true}
+              placeholder={placeholder}
+            />
+          </div>
 
           {/* Bottom-right resize handle - invisible hit area */}
           <div

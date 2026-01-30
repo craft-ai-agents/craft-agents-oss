@@ -4,7 +4,7 @@ import type { ComponentEntry } from './types'
 import type { Session } from '../../../shared/types'
 import type { Message } from '@craft-agent/core/types'
 import { ChatDisplay } from '../../components/app-shell/ChatDisplay'
-import { EditPopover } from '../../components/ui/EditPopover'
+import { EditPopover, type EditContext } from '../../components/ui/EditPopover'
 import { FocusProvider } from '../../context/FocusContext'
 import { EscapeInterruptProvider } from '../../context/EscapeInterruptContext'
 import { AppShellProvider } from '../../context/AppShellContext'
@@ -251,11 +251,15 @@ function CompactChatPreview({
 // Mock AppShell context for playground
 const mockAppShellContext = {
   sessions: [],
-  workspaces: [{ id: 'playground-workspace', name: 'Playground', path: '/playground' }],
+  workspaces: [{ id: 'playground-workspace', name: 'Playground', path: '/playground', rootPath: '/playground' }],
   activeWorkspaceId: 'playground-workspace',
   activeSessionId: null,
   pendingPermissions: new Map(),
   pendingCredentials: new Map(),
+  currentModel: 'haiku',
+  customModel: null,
+  sessionOptions: new Map(),
+  getDraft: () => '',
   onSelectSession: () => {},
   onSelectWorkspace: () => {},
   onOpenSettings: () => {},
@@ -264,11 +268,43 @@ const mockAppShellContext = {
   onReset: () => {},
   onSessionOptionsChange: () => {},
   onInputChange: () => {},
+  onOpenFile: () => {},
+  onOpenUrl: () => {},
+  onModelChange: () => {},
+  refreshCustomModel: async () => {},
+  onRefreshWorkspaces: () => {},
+  // Session callbacks required by EditPopover
+  onCreateSession: async (workspaceId: string) => ({
+    id: 'mock-session-' + Date.now(),
+    workspaceId,
+    workspaceName: 'Playground',
+    messages: [],
+    isProcessing: false,
+    lastMessageAt: Date.now(),
+  }),
+  onSendMessage: (sessionId: string, message: string) => {
+    console.log('[Playground] Send message to session:', sessionId, message)
+  },
+  onRenameSession: () => {},
+  onFlagSession: () => {},
+  onUnflagSession: () => {},
+  onMarkSessionRead: () => {},
+  onMarkSessionUnread: () => {},
+  onSetActiveViewingSession: () => {},
+  onTodoStateChange: () => {},
+  onDeleteSession: async () => true,
+}
+
+// Sample edit context for playground
+const sampleEditContext: EditContext = {
+  label: 'Label Configuration',
+  filePath: '/playground/labels/config.json',
+  context: 'Playground demo of EditPopover component.',
 }
 
 interface EditPopoverPreviewProps {
   inlineExecution?: boolean
-  placeholder?: string
+  example?: string
   triggerLabel?: string
 }
 
@@ -277,21 +313,9 @@ interface EditPopoverPreviewProps {
  */
 function EditPopoverPreview({
   inlineExecution = true,
-  placeholder = "Describe what you'd like to change...",
+  example = 'Add a "Bug" label with red color',
   triggerLabel = "Edit",
 }: EditPopoverPreviewProps) {
-  const handleSubmit = (value: string) => {
-    console.log('[Playground] EditPopover submit:', value)
-  }
-
-  const handleOpenFile = (path: string) => {
-    console.log('[Playground] Open file:', path)
-  }
-
-  const handleOpenUrl = (url: string) => {
-    console.log('[Playground] Open URL:', url)
-  }
-
   return (
     <AppShellProvider value={mockAppShellContext as any}>
       <FocusProvider>
@@ -304,10 +328,8 @@ function EditPopoverPreview({
                   {triggerLabel}
                 </Button>
               }
-              placeholder={placeholder}
-              onSubmit={handleSubmit}
-              onOpenFile={handleOpenFile}
-              onOpenUrl={handleOpenUrl}
+              context={sampleEditContext}
+              example={example}
               inlineExecution={inlineExecution}
             />
             <p className="text-xs text-muted-foreground">Click the button to open the popover</p>
@@ -337,10 +359,10 @@ export const editPopoverComponents: ComponentEntry[] = [
         defaultValue: true,
       },
       {
-        name: 'placeholder',
-        description: 'Placeholder text for the input',
-        control: { type: 'string', placeholder: 'Enter placeholder...' },
-        defaultValue: "Describe what you'd like to change...",
+        name: 'example',
+        description: 'Example text shown in placeholder',
+        control: { type: 'string', placeholder: 'Enter example...' },
+        defaultValue: 'Add a "Bug" label with red color',
       },
       {
         name: 'triggerLabel',
@@ -355,16 +377,16 @@ export const editPopoverComponents: ComponentEntry[] = [
         description: 'Uses compact ChatDisplay for inline agent execution',
         props: {
           inlineExecution: true,
-          placeholder: "Describe what you'd like to change...",
+          example: 'Add a "Bug" label with red color',
           triggerLabel: "Edit with AI",
         },
       },
       {
         name: 'Legacy Mode',
-        description: 'Simple textarea with send button (no inline execution)',
+        description: 'Opens new window instead of inline execution',
         props: {
           inlineExecution: false,
-          placeholder: "Enter your changes...",
+          example: 'Update the status colors',
           triggerLabel: "Quick Edit",
         },
       },
@@ -373,7 +395,7 @@ export const editPopoverComponents: ComponentEntry[] = [
         description: 'Styled for adding a new source',
         props: {
           inlineExecution: true,
-          placeholder: "What would you like to connect?",
+          example: 'Connect to my GitHub repo',
           triggerLabel: "Add Source",
         },
       },
@@ -382,7 +404,7 @@ export const editPopoverComponents: ComponentEntry[] = [
         description: 'Styled for adding a new skill',
         props: {
           inlineExecution: true,
-          placeholder: "What should I learn to do?",
+          example: 'Review PRs following our code standards',
           triggerLabel: "Add Skill",
         },
       },

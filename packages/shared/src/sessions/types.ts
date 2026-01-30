@@ -241,4 +241,6 @@ export interface SessionMetadata {
   hasUnread?: boolean;
   /** Token usage statistics (from JSONL header, available without loading messages) */
   tokenUsage?: SessionTokenUsage;
+  /** When true, session is hidden from session list (e.g., mini edit sessions) */
+  hidden?: boolean;
 }

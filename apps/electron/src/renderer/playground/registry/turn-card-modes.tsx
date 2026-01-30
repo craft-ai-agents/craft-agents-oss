@@ -192,8 +192,8 @@ function TurnCardModesDemo({
         { ...activity, status: 'running' }
       ])
 
-      // Random "running" duration: 150-400ms
-      await new Promise(resolve => setTimeout(resolve, 150 + Math.random() * 250))
+      // Random "running" duration: 1000-2000ms
+      await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000))
       if (playbackRef.current.cancel) return
 
       // Mark as "completed"
@@ -201,10 +201,7 @@ function TurnCardModesDemo({
         prev.map((a, idx) => idx === prev.length - 1 ? { ...a, status: 'completed' } : a)
       )
 
-      // Random delay before next activity: 200-800ms
-      if (i < activities.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 200 + Math.random() * 600))
-      }
+      // No delay between activities - next one starts immediately after completion
     }
 
     // Show response after small delay
@@ -299,6 +296,7 @@ function TurnCardModesDemo({
         isComplete={isComplete}
         defaultExpanded={true}
         displayMode={mode}
+        animateResponse={hasPlaybackStarted}
         onOpenFile={(path) => console.log('[Playground] Open file:', path)}
         onOpenUrl={(url) => console.log('[Playground] Open URL:', url)}
         onOpenActivityDetails={(activity) => console.log('[Playground] Open activity details:', activity.id, activity.toolName)}

@@ -48,7 +48,7 @@ import { Input } from "@/components/ui/input"
 import { RenameDialog } from "@/components/ui/rename-dialog"
 import { useSession } from "@/hooks/useSession"
 import { useFocusZone, useRovingTabIndex } from "@/hooks/keyboard"
-import { useNavigation, useNavigationState, routes, isChatsNavigation } from "@/contexts/NavigationContext"
+import { useNavigation, useNavigationState, routes, isChatsNavigation, type ChatFilter } from "@/contexts/NavigationContext"
 import { useFocusContext } from "@/context/FocusContext"
 import { getSessionTitle } from "@/utils/session"
 import type { SessionMeta } from "@/atoms/sessions"
@@ -140,6 +140,103 @@ function hasMessages(session: SessionMeta): boolean {
   return session.lastFinalMessageId !== undefined
 }
 
+/** Options for sessionMatchesCurrentFilter including secondary filters */
+interface FilterMatchOptions {
+  evaluateViews?: (meta: SessionMeta) => ViewConfig[]
+  /** Secondary status filter (status chips) */
+  statusFilter?: Map<string, 'include' | 'exclude'>
+  /** Secondary label filter (label chips) */
+  labelFilterMap?: Map<string, 'include' | 'exclude'>
+}
+
+/**
+ * Check if a session matches the current navigation filter AND secondary filters.
+ * Used to split search results into "Matching Current Filters" vs "All Results".
+ *
+ * Filter layers:
+ * 1. Primary filter (chatFilter) - "All Chats", "Flagged", specific state/label/view
+ * 2. Secondary filters (statusFilter, labelFilterMap) - user-applied chips on top
+ *
+ * A session must pass BOTH layers to be considered "matching".
+ */
+function sessionMatchesCurrentFilter(
+  session: SessionMeta,
+  currentFilter: ChatFilter | undefined,
+  options: FilterMatchOptions = {}
+): boolean {
+  const { evaluateViews, statusFilter, labelFilterMap } = options
+
+  // Helper: Check if session passes secondary status filter
+  const passesStatusFilter = (): boolean => {
+    if (!statusFilter || statusFilter.size === 0) return true
+    const sessionState = (session.todoState || 'todo') as string
+
+    let hasIncludes = false
+    let matchesInclude = false
+    for (const [stateId, mode] of statusFilter) {
+      if (mode === 'exclude' && sessionState === stateId) return false
+      if (mode === 'include') {
+        hasIncludes = true
+        if (sessionState === stateId) matchesInclude = true
+      }
+    }
+    return !hasIncludes || matchesInclude
+  }
+
+  // Helper: Check if session passes secondary label filter
+  const passesLabelFilter = (): boolean => {
+    if (!labelFilterMap || labelFilterMap.size === 0) return true
+    const sessionLabelIds = session.labels?.map(l => parseLabelEntry(l).id) || []
+
+    let hasIncludes = false
+    let matchesInclude = false
+    for (const [labelId, mode] of labelFilterMap) {
+      if (mode === 'exclude' && sessionLabelIds.includes(labelId)) return false
+      if (mode === 'include') {
+        hasIncludes = true
+        if (sessionLabelIds.includes(labelId)) matchesInclude = true
+      }
+    }
+    return !hasIncludes || matchesInclude
+  }
+
+  // Must pass BOTH secondary filters first
+  if (!passesStatusFilter() || !passesLabelFilter()) return false
+
+  // Then check primary filter
+  if (!currentFilter) return true
+
+  switch (currentFilter.kind) {
+    case 'allChats':
+      return true // Secondary filters already checked above
+
+    case 'flagged':
+      return session.isFlagged === true
+
+    case 'state':
+      // Default to 'todo' for sessions without explicit todoState (matches getSessionTodoState logic)
+      return (session.todoState || 'todo') === currentFilter.stateId
+
+    case 'label': {
+      if (!session.labels?.length) return false
+      if (currentFilter.labelId === '__all__') return true
+      const labelIds = session.labels.map(l => parseLabelEntry(l).id)
+      return labelIds.includes(currentFilter.labelId)
+    }
+
+    case 'view':
+      if (!evaluateViews) return true
+      const matched = evaluateViews(session)
+      if (currentFilter.viewId === '__all__') return matched.length > 0
+      return matched.some(v => v.id === currentFilter.viewId)
+
+    default:
+      // Exhaustive check - TypeScript will error if we miss a case
+      const _exhaustive: never = currentFilter
+      return true
+  }
+}
+
 /**
  * Highlight matching text in a string
  * Returns React nodes with matched portions wrapped in a highlight span
@@ -160,7 +257,7 @@ function highlightMatch(text: string, query: string): React.ReactNode {
   return (
     <>
       {before}
-      <span className="bg-yellow-300/30 rounded-[4px]">{match}</span>
+      <span className="bg-yellow-300/30 rounded-[2px]">{match}</span>
       {highlightMatch(after, query)}
     </>
   )
@@ -519,9 +616,8 @@ function SessionItem({
                 )}
               </div>
               {/* Timestamp — outside stacking container so it never overlaps badges.
-                  shrink-0 keeps it fixed-width; the badges container clips instead.
-                  Hidden when in search mode with matches for selected session. */}
-              {item.lastMessageAt && !(isSelected && searchQuery && chatMatchCount && chatMatchCount > 0) && (
+                  shrink-0 keeps it fixed-width; the badges container clips instead. */}
+              {item.lastMessageAt && (
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span className="shrink-0 text-[11px] text-foreground/40 whitespace-nowrap cursor-default">
@@ -544,7 +640,7 @@ function SessionItem({
               className={cn(
                 "inline-flex items-center justify-center min-w-[24px] px-1 py-1 rounded-[6px] text-[10px] font-medium tabular-nums leading-tight whitespace-nowrap",
                 isSelected
-                  ? "bg-yellow-300 border border-yellow-500 text-yellow-900"
+                  ? "bg-yellow-300/50 border border-yellow-500 text-yellow-900"
                   : "bg-yellow-300/10 border border-yellow-600/20 text-yellow-800"
               )}
               style={{ boxShadow: isSelected ? '0 1px 2px 0 rgba(234, 179, 8, 0.3)' : '0 1px 2px 0 rgba(133, 77, 14, 0.15)' }}
@@ -632,10 +728,10 @@ function SessionItem({
 }
 
 /**
- * DateHeader - Simple date group header rendered inline with content.
+ * SessionListSectionHeader - Section header for date groups and search result sections.
  * No sticky behavior - just scrolls with the list.
  */
-function DateHeader({ label }: { label: string }) {
+function SessionListSectionHeader({ label }: { label: string }) {
   return (
     <div className="px-4 py-2">
       <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
@@ -644,6 +740,9 @@ function DateHeader({ label }: { label: string }) {
     </div>
   )
 }
+
+/** Filter mode for tri-state filtering: include shows only matching, exclude hides matching */
+type FilterMode = 'include' | 'exclude'
 
 interface SessionListProps {
   items: SessionMeta[]
@@ -681,6 +780,10 @@ interface SessionListProps {
   onLabelsChange?: (sessionId: string, labels: string[]) => void
   /** Workspace ID for content search (optional - if not provided, content search is disabled) */
   workspaceId?: string
+  /** Secondary status filter (status chips in "All Chats" view) - for search result grouping */
+  statusFilter?: Map<string, FilterMode>
+  /** Secondary label filter (label chips) - for search result grouping */
+  labelFilterMap?: Map<string, FilterMode>
 }
 
 // Re-export TodoStateId for use by parent components
@@ -718,6 +821,8 @@ export function SessionList({
   labels = [],
   onLabelsChange,
   workspaceId,
+  statusFilter,
+  labelFilterMap,
 }: SessionListProps) {
   const [session] = useSession()
   const { navigate } = useNavigation()
@@ -845,6 +950,55 @@ export function SessionList({
       })
   }, [sortedItems, searchQuery, contentSearchResults])
 
+  // Split search results: sessions matching current filter vs all others
+  const { matchingFilterItems, otherResultItems } = useMemo(() => {
+    // Check if ANY filtering is active (primary OR secondary)
+    const hasActiveFilters =
+      (currentFilter && currentFilter.kind !== 'allChats') ||
+      (statusFilter && statusFilter.size > 0) ||
+      (labelFilterMap && labelFilterMap.size > 0)
+
+    // DEBUG: Trace values to diagnose grouping issue
+    if (searchQuery.trim() && searchFilteredItems.length > 0) {
+      searchLog.info('search:grouping', {
+        searchQuery,
+        currentFilterKind: currentFilter?.kind,
+        currentFilterStateId: currentFilter?.kind === 'state' ? currentFilter.stateId : undefined,
+        hasActiveFilters,
+        statusFilterSize: statusFilter?.size ?? 0,
+        labelFilterSize: labelFilterMap?.size ?? 0,
+        itemCount: searchFilteredItems.length,
+      })
+    }
+
+    if (!searchQuery.trim() || !hasActiveFilters) {
+      // No grouping needed - all results go to "matching"
+      return { matchingFilterItems: searchFilteredItems, otherResultItems: [] as SessionMeta[] }
+    }
+
+    const matching: SessionMeta[] = []
+    const others: SessionMeta[] = []
+
+    for (const item of searchFilteredItems) {
+      const matches = sessionMatchesCurrentFilter(item, currentFilter, { evaluateViews, statusFilter, labelFilterMap })
+      if (matches) {
+        matching.push(item)
+      } else {
+        others.push(item)
+      }
+    }
+
+    // DEBUG: Log split result
+    if (searchFilteredItems.length > 0) {
+      searchLog.info('search:grouping:result', {
+        matchingCount: matching.length,
+        othersCount: others.length,
+      })
+    }
+
+    return { matchingFilterItems: matching, otherResultItems: others }
+  }, [searchFilteredItems, currentFilter, evaluateViews, searchQuery, statusFilter, labelFilterMap])
+
   // Reset display limit when search query changes
   useEffect(() => {
     setDisplayLimit(INITIAL_DISPLAY_LIMIT)
@@ -880,13 +1034,18 @@ export function SessionList({
     return () => observer.disconnect()
   }, [hasMore, loadMore])
 
-  // Group sessions by date (use paginated items)
+  // Group sessions by date (only used in normal mode, not search mode)
   const dateGroups = useMemo(() => groupSessionsByDate(paginatedItems), [paginatedItems])
 
-  // Create flat list for keyboard navigation (maintains order across groups)
+  // Create flat list for keyboard navigation (maintains order across groups/sections)
   const flatItems = useMemo(() => {
+    if (searchActive && searchQuery) {
+      // Search mode: flat list of matching + other results (no date grouping)
+      return [...matchingFilterItems, ...otherResultItems]
+    }
+    // Normal mode: flatten date groups
     return dateGroups.flatMap(group => group.sessions)
-  }, [dateGroups])
+  }, [searchActive, searchQuery, matchingFilterItems, otherResultItems, dateGroups])
 
   // Create a lookup map for session ID -> flat index
   const sessionIndexMap = useMemo(() => {
@@ -1035,10 +1194,12 @@ export function SessionList({
   }
 
   // Handle search input key events (Arrow keys handled by native listener above)
+  // Note: Escape blurs the input but doesn't close search - only the X button closes it
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // Escape: Blur the input but keep search visible
     if (e.key === 'Escape') {
       e.preventDefault()
-      onSearchClose?.()
+      searchInputRef.current?.blur()
       return
     }
 
@@ -1128,56 +1289,159 @@ export function SessionList({
               </button>
             </div>
           )}
-          {dateGroups.map((group) => (
-            <div key={group.date.toISOString()}>
-              {/* Date header - scrolls with content */}
-              <DateHeader label={group.label} />
-              {/* Sessions in this date group */}
-              {group.sessions.map((item, indexInGroup) => {
-                const flatIndex = sessionIndexMap.get(item.id) ?? 0
-                const itemProps = getItemProps(item, flatIndex)
 
-                return (
-                  <SessionItem
-                    key={item.id}
-                    item={item}
-                    index={flatIndex}
-                    itemProps={itemProps}
-                    isSelected={session.selected === item.id}
-                    isLast={flatIndex === flatItems.length - 1}
-                    isFirstInGroup={indexInGroup === 0}
-                    onKeyDown={handleKeyDown}
-                    onRenameClick={handleRenameClick}
-                    onTodoStateChange={onTodoStateChange}
-                    onFlag={onFlag ? handleFlagWithToast : undefined}
-                    onUnflag={onUnflag ? handleUnflagWithToast : undefined}
-                    onMarkUnread={onMarkUnread}
-                    onDelete={handleDeleteWithToast}
-                    onSelect={() => {
-                      // Navigate to session with filter context (updates URL and selection)
-                      if (!currentFilter || currentFilter.kind === 'allChats') {
-                        navigate(routes.view.allChats(item.id))
-                      } else if (currentFilter.kind === 'flagged') {
-                        navigate(routes.view.flagged(item.id))
-                      } else if (currentFilter.kind === 'state') {
-                        navigate(routes.view.state(currentFilter.stateId, item.id))
-                      }
-                      // Notify parent
-                      onSessionSelect?.(item)
-                    }}
-                    onOpenInNewWindow={() => onOpenInNewWindow?.(item)}
-                    permissionMode={sessionOptions?.get(item.id)?.permissionMode}
-                    searchQuery={searchQuery}
-                    todoStates={todoStates}
-                    flatLabels={flatLabels}
-                    labels={labels}
-                    onLabelsChange={onLabelsChange}
-                    chatMatchCount={contentSearchResults.get(item.id)?.matchCount}
-                  />
-                )
-              })}
-          </div>
-          ))}
+          {/* Search mode: flat list with two sections (Matching Filters + Other Matches) */}
+          {searchActive && searchQuery ? (
+            <>
+              {/* No results in current filter message */}
+              {matchingFilterItems.length === 0 && otherResultItems.length > 0 && (
+                <div className="px-4 py-3 text-sm text-muted-foreground">
+                  No results in current filter
+                </div>
+              )}
+
+              {/* Matching Filters section - flat list, no date grouping */}
+              {matchingFilterItems.length > 0 && (
+                <>
+                  <SessionListSectionHeader label="Matching Filters" />
+                  {matchingFilterItems.map((item, index) => {
+                    const flatIndex = sessionIndexMap.get(item.id) ?? 0
+                    const itemProps = getItemProps(item, flatIndex)
+                    return (
+                      <SessionItem
+                        key={item.id}
+                        item={item}
+                        index={flatIndex}
+                        itemProps={itemProps}
+                        isSelected={session.selected === item.id}
+                        isLast={flatIndex === flatItems.length - 1}
+                        isFirstInGroup={index === 0}
+                        onKeyDown={handleKeyDown}
+                        onRenameClick={handleRenameClick}
+                        onTodoStateChange={onTodoStateChange}
+                        onFlag={onFlag ? handleFlagWithToast : undefined}
+                        onUnflag={onUnflag ? handleUnflagWithToast : undefined}
+                        onMarkUnread={onMarkUnread}
+                        onDelete={handleDeleteWithToast}
+                        onSelect={() => {
+                          if (!currentFilter || currentFilter.kind === 'allChats') {
+                            navigate(routes.view.allChats(item.id))
+                          } else if (currentFilter.kind === 'flagged') {
+                            navigate(routes.view.flagged(item.id))
+                          } else if (currentFilter.kind === 'state') {
+                            navigate(routes.view.state(currentFilter.stateId, item.id))
+                          }
+                          onSessionSelect?.(item)
+                        }}
+                        onOpenInNewWindow={() => onOpenInNewWindow?.(item)}
+                        permissionMode={sessionOptions?.get(item.id)?.permissionMode}
+                        searchQuery={searchQuery}
+                        todoStates={todoStates}
+                        flatLabels={flatLabels}
+                        labels={labels}
+                        onLabelsChange={onLabelsChange}
+                        chatMatchCount={contentSearchResults.get(item.id)?.matchCount}
+                      />
+                    )
+                  })}
+                </>
+              )}
+
+              {/* Other Matches section - flat list, no date grouping */}
+              {otherResultItems.length > 0 && (
+                <>
+                  <SessionListSectionHeader label="Other Matches" />
+                  {otherResultItems.map((item, index) => {
+                    const flatIndex = sessionIndexMap.get(item.id) ?? 0
+                    const itemProps = getItemProps(item, flatIndex)
+                    return (
+                      <SessionItem
+                        key={item.id}
+                        item={item}
+                        index={flatIndex}
+                        itemProps={itemProps}
+                        isSelected={session.selected === item.id}
+                        isLast={flatIndex === flatItems.length - 1}
+                        isFirstInGroup={index === 0}
+                        onKeyDown={handleKeyDown}
+                        onRenameClick={handleRenameClick}
+                        onTodoStateChange={onTodoStateChange}
+                        onFlag={onFlag ? handleFlagWithToast : undefined}
+                        onUnflag={onUnflag ? handleUnflagWithToast : undefined}
+                        onMarkUnread={onMarkUnread}
+                        onDelete={handleDeleteWithToast}
+                        onSelect={() => {
+                          if (!currentFilter || currentFilter.kind === 'allChats') {
+                            navigate(routes.view.allChats(item.id))
+                          } else if (currentFilter.kind === 'flagged') {
+                            navigate(routes.view.flagged(item.id))
+                          } else if (currentFilter.kind === 'state') {
+                            navigate(routes.view.state(currentFilter.stateId, item.id))
+                          }
+                          onSessionSelect?.(item)
+                        }}
+                        onOpenInNewWindow={() => onOpenInNewWindow?.(item)}
+                        permissionMode={sessionOptions?.get(item.id)?.permissionMode}
+                        searchQuery={searchQuery}
+                        todoStates={todoStates}
+                        flatLabels={flatLabels}
+                        labels={labels}
+                        onLabelsChange={onLabelsChange}
+                        chatMatchCount={contentSearchResults.get(item.id)?.matchCount}
+                      />
+                    )
+                  })}
+                </>
+              )}
+            </>
+          ) : (
+            /* Normal mode: show date-grouped sessions */
+            dateGroups.map((group) => (
+              <div key={group.date.toISOString()}>
+                <SessionListSectionHeader label={group.label} />
+                {group.sessions.map((item, indexInGroup) => {
+                  const flatIndex = sessionIndexMap.get(item.id) ?? 0
+                  const itemProps = getItemProps(item, flatIndex)
+                  return (
+                    <SessionItem
+                      key={item.id}
+                      item={item}
+                      index={flatIndex}
+                      itemProps={itemProps}
+                      isSelected={session.selected === item.id}
+                      isLast={flatIndex === flatItems.length - 1}
+                      isFirstInGroup={indexInGroup === 0}
+                      onKeyDown={handleKeyDown}
+                      onRenameClick={handleRenameClick}
+                      onTodoStateChange={onTodoStateChange}
+                      onFlag={onFlag ? handleFlagWithToast : undefined}
+                      onUnflag={onUnflag ? handleUnflagWithToast : undefined}
+                      onMarkUnread={onMarkUnread}
+                      onDelete={handleDeleteWithToast}
+                      onSelect={() => {
+                        if (!currentFilter || currentFilter.kind === 'allChats') {
+                          navigate(routes.view.allChats(item.id))
+                        } else if (currentFilter.kind === 'flagged') {
+                          navigate(routes.view.flagged(item.id))
+                        } else if (currentFilter.kind === 'state') {
+                          navigate(routes.view.state(currentFilter.stateId, item.id))
+                        }
+                        onSessionSelect?.(item)
+                      }}
+                      onOpenInNewWindow={() => onOpenInNewWindow?.(item)}
+                      permissionMode={sessionOptions?.get(item.id)?.permissionMode}
+                      searchQuery={searchQuery}
+                      todoStates={todoStates}
+                      flatLabels={flatLabels}
+                      labels={labels}
+                      onLabelsChange={onLabelsChange}
+                      chatMatchCount={contentSearchResults.get(item.id)?.matchCount}
+                    />
+                  )
+                })}
+              </div>
+            ))
+          )}
           {/* Load more sentinel - triggers infinite scroll */}
           {hasMore && (
             <div ref={sentinelRef} className="flex justify-center py-4">

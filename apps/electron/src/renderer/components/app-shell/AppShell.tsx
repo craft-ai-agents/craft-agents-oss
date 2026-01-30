@@ -2802,7 +2802,7 @@ function AppShellContent({
                 {/* Key on sidebarMode forces full remount when switching views, skipping animations */}
                 <SessionList
                   key={chatFilter?.kind}
-                  items={filteredSessionMetas}
+                  items={searchActive ? workspaceSessionMetas : filteredSessionMetas}
                   onDelete={handleDeleteSession}
                   onFlag={onFlagSession}
                   onUnflag={onUnflagSession}
@@ -2849,6 +2849,8 @@ function AppShellContent({
                   labels={labelConfigs}
                   onLabelsChange={handleSessionLabelsChange}
                   workspaceId={activeWorkspaceId ?? undefined}
+                  statusFilter={listFilter}
+                  labelFilterMap={labelFilter}
                 />
               </>
             )}

@@ -1294,10 +1294,7 @@ export function FreeFormInput({
           skills={skills}
           sources={sources}
           workspaceId={workspaceId}
-          className={cn(
-            "pl-5 pr-4 pt-4 pb-3 overflow-y-auto",
-            compactMode ? "min-h-[60px]" : "min-h-[88px]"
-          )}
+          className="pl-5 pr-4 pt-4 pb-3 overflow-y-auto min-h-[88px]"
           style={{ maxHeight: inputMaxHeight }}
           data-tutorial="chat-input"
           spellCheck={spellCheck}
@@ -1309,7 +1306,7 @@ export function FreeFormInput({
           {/* Escape interrupt overlay - shown on first Esc press during processing */}
           <EscapeInterruptOverlay isVisible={isProcessing && showEscapeOverlay} />
 
-          <div className="flex items-center gap-1 px-2 py-2 border-t border-border/50">
+          <div className={cn("flex items-center gap-1 px-2 py-2", !compactMode && "border-t border-border/50")}>
           {/* Left side: Context badges - shrinkable so model + send always stay visible */}
           {/* Hidden in compact mode (EditPopover embedding) */}
           {!compactMode && (

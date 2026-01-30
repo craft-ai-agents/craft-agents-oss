@@ -824,7 +824,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
             const markId = `${turnId}-match-${matchIdIndex}`
             mark.id = markId
             // All highlights start as passive (subtle 30% opacity yellow)
-            mark.className = 'search-highlight px-1 py-0.5 bg-yellow-300/30 rounded-[4px]'
+            mark.className = 'search-highlight bg-yellow-300/30 rounded-[2px]'
             mark.textContent = text.slice(matchStart, matchEnd)
             fragments.unshift(mark)
             createdMatchIds.push(markId)
@@ -1377,6 +1377,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                         onOpenFile={onOpenFile}
                         onOpenUrl={onOpenUrl}
                         isLastResponse={isLastResponse}
+                        compactMode={compactMode}
                         onAcceptPlan={() => {
                           window.dispatchEvent(new CustomEvent('craft:approve-plan', {
                             detail: { text: 'Plan approved, please execute.', sessionId: session?.id }
