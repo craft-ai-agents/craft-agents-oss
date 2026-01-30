@@ -36,6 +36,12 @@ else
     error "Either curl or wget is required but neither is installed"
 fi
 
+# Check if yq is available (optional, for YAML parsing)
+HAS_YQ=false
+if command -v yq >/dev/null 2>&1; then
+    HAS_YQ=true
+fi
+
 # Check if jq is available (optional)
 HAS_JQ=false
 if command -v jq >/dev/null 2>&1; then
@@ -91,19 +97,60 @@ get_json_value() {
     return 1
 }
 
-# Extract checksum from manifest for a specific platform
-get_checksum_from_manifest() {
-    local json="$1"
-    local platform="$2"
+# Extract sha512 from YAML for a specific architecture
+# YAML format: files array with url, sha512, arch fields
+get_sha512_from_yaml() {
+    local yaml="$1"
+    local target_arch="$2"
 
-    # Normalize JSON to single line
-    json=$(echo "$json" | tr -d '\n\r\t' | sed 's/ \+/ /g')
+    # Find the line with the target arch and extract sha512 from preceding lines
+    local in_target_block=false
+    local sha512=""
 
-    # Extract checksum for platform using bash regex
-    if [[ $json =~ \"$platform\"[^}]*\"sha256\"[[:space:]]*:[[:space:]]*\"([a-f0-9]{64})\" ]]; then
-        echo "${BASH_REMATCH[1]}"
-        return 0
-    fi
+    while IFS= read -r line; do
+        # Check if we're entering a new file entry
+        if [[ $line =~ ^[[:space:]]*-[[:space:]]*url: ]]; then
+            in_target_block=false
+            sha512=""
+        fi
+        # Extract sha512
+        if [[ $line =~ sha512:[[:space:]]*(.+) ]]; then
+            sha512="${BASH_REMATCH[1]}"
+        fi
+        # Check arch
+        if [[ $line =~ arch:[[:space:]]*(.+) ]]; then
+            local arch="${BASH_REMATCH[1]}"
+            if [ "$arch" = "$target_arch" ] && [ -n "$sha512" ]; then
+                echo "$sha512"
+                return 0
+            fi
+        fi
+    done <<< "$yaml"
+
+    return 1
+}
+
+# Extract filename from YAML for a specific architecture
+get_filename_from_yaml() {
+    local yaml="$1"
+    local target_arch="$2"
+
+    local url=""
+
+    while IFS= read -r line; do
+        # Check if we're entering a new file entry
+        if [[ $line =~ ^[[:space:]]*-[[:space:]]*url:[[:space:]]*(.+) ]]; then
+            url="${BASH_REMATCH[1]}"
+        fi
+        # Check arch
+        if [[ $line =~ arch:[[:space:]]*(.+) ]]; then
+            local arch="${BASH_REMATCH[1]}"
+            if [ "$arch" = "$target_arch" ] && [ -n "$url" ]; then
+                echo "$url"
+                return 0
+            fi
+        fi
+    done <<< "$yaml"
 
     return 1
 }
@@ -120,7 +167,8 @@ if [ "$OS_TYPE" = "darwin" ]; then
     platform="darwin-${arch}"
     APP_NAME="Craft Agents.app"
     INSTALL_DIR="/Applications"
-    ext="dmg"
+    ext="zip"
+    yml_file="latest-mac.yml"
 else
     # Linux only supports x64 currently
     if [ "$arch" != "x64" ]; then
@@ -130,6 +178,7 @@ else
     APP_NAME="Craft-Agent-x64.AppImage"
     INSTALL_DIR="$HOME/.local/bin"
     ext="AppImage"
+    yml_file="latest-linux.yml"
 fi
 
 echo ""
@@ -154,30 +203,34 @@ fi
 
 info "Latest version: $version"
 
-# Download manifest and extract checksum
-info "Fetching manifest..."
-manifest_json=$(download_file "$VERSIONS_URL/$version/manifest.json")
+# Download YAML manifest and extract checksum
+info "Fetching release info..."
+manifest_yaml=$(download_file "$VERSIONS_URL/$version/$yml_file")
 
-if [ "$HAS_JQ" = true ]; then
-    checksum=$(echo "$manifest_json" | jq -r ".binaries[\"$platform\"].sha256 // empty")
-    filename=$(echo "$manifest_json" | jq -r ".binaries[\"$platform\"].filename // empty")
+if [ -z "$manifest_yaml" ]; then
+    error "Failed to fetch release info from $yml_file"
+fi
+
+# Extract sha512 and filename for our architecture
+if [ "$HAS_YQ" = true ]; then
+    checksum=$(echo "$manifest_yaml" | yq -r ".files[] | select(.arch == \"$arch\") | .sha512")
+    filename=$(echo "$manifest_yaml" | yq -r ".files[] | select(.arch == \"$arch\") | .url")
 else
-    checksum=$(get_checksum_from_manifest "$manifest_json" "$platform")
-    # Fallback filename if not using jq
-    filename="Craft-Agent-${arch}.${ext}"
+    checksum=$(get_sha512_from_yaml "$manifest_yaml" "$arch")
+    filename=$(get_filename_from_yaml "$manifest_yaml" "$arch")
 fi
 
-# Validate checksum format (SHA256 = 64 hex characters)
-if [ -z "$checksum" ] || [[ ! "$checksum" =~ ^[a-f0-9]{64}$ ]]; then
-    error "Platform $platform not found in manifest"
+# Validate checksum format (SHA512 base64 = 88 characters)
+if [ -z "$checksum" ] || [ ${#checksum} -lt 80 ]; then
+    error "Architecture $arch not found in $yml_file"
 fi
 
-# Use default filename if not in manifest
+# Use default filename if not found
 if [ -z "$filename" ]; then
     filename="Craft-Agent-${arch}.${ext}"
 fi
 
-info "Expected checksum: ${checksum:0:16}..."
+info "Expected sha512: ${checksum:0:20}..."
 
 # Download installer
 installer_url="$VERSIONS_URL/$version/$filename"
@@ -191,12 +244,14 @@ if ! download_file "$installer_url" "$installer_path" true; then
 fi
 echo ""
 
-# Verify checksum
+# Verify checksum (sha512, base64 encoded)
 info "Verifying checksum..."
 if [ "$OS_TYPE" = "darwin" ]; then
-    actual=$(shasum -a 256 "$installer_path" | cut -d' ' -f1)
+    # macOS: shasum outputs hex, convert to base64
+    actual=$(shasum -a 512 "$installer_path" | cut -d' ' -f1 | xxd -r -p | base64)
 else
-    actual=$(sha256sum "$installer_path" | cut -d' ' -f1)
+    # Linux: sha512sum outputs hex, convert to base64
+    actual=$(sha512sum "$installer_path" | cut -d' ' -f1 | xxd -r -p | base64 | tr -d '\n')
 fi
 
 if [ "$actual" != "$checksum" ]; then
@@ -208,8 +263,8 @@ success "Checksum verified!"
 
 # Platform-specific installation
 if [ "$OS_TYPE" = "darwin" ]; then
-    # macOS installation
-    dmg_path="$installer_path"
+    # macOS installation (from ZIP)
+    zip_path="$installer_path"
 
     # Quit the app if it's running (use bundle ID for reliability)
     APP_BUNDLE_ID="com.lukilabs.craft-agent"
@@ -240,32 +295,32 @@ if [ "$OS_TYPE" = "darwin" ]; then
         rm -rf "$INSTALL_DIR/$APP_NAME"
     fi
 
-    # Mount DMG
-    info "Mounting disk image..."
-    mount_point=$(hdiutil attach "$dmg_path" -nobrowse -mountrandom /tmp 2>/dev/null | tail -1 | awk '{print $NF}')
-
-    if [ -z "$mount_point" ] || [ ! -d "$mount_point" ]; then
-        rm -f "$dmg_path"
-        error "Failed to mount DMG"
+    # Extract ZIP to temp directory
+    info "Extracting..."
+    temp_dir=$(mktemp -d)
+    if ! unzip -q "$zip_path" -d "$temp_dir"; then
+        rm -rf "$temp_dir"
+        rm -f "$zip_path"
+        error "Failed to extract ZIP"
     fi
 
-    # Find the .app in the mounted volume
-    app_source=$(find "$mount_point" -maxdepth 1 -name "*.app" -type d | head -1)
+    # Find the .app in the extracted contents
+    app_source=$(find "$temp_dir" -maxdepth 1 -name "*.app" -type d | head -1)
 
     if [ -z "$app_source" ]; then
-        hdiutil detach "$mount_point" -quiet 2>/dev/null || true
-        rm -f "$dmg_path"
-        error "No .app found in DMG"
+        rm -rf "$temp_dir"
+        rm -f "$zip_path"
+        error "No .app found in ZIP"
     fi
 
     # Copy app to /Applications
     info "Installing to $INSTALL_DIR..."
     cp -R "$app_source" "$INSTALL_DIR/$APP_NAME"
 
-    # Unmount DMG
+    # Clean up
     info "Cleaning up..."
-    hdiutil detach "$mount_point" -quiet 2>/dev/null || true
-    rm -f "$dmg_path"
+    rm -rf "$temp_dir"
+    rm -f "$zip_path"
 
     # Remove quarantine attribute if present
     xattr -rd com.apple.quarantine "$INSTALL_DIR/$APP_NAME" 2>/dev/null || true
