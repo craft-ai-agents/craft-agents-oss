@@ -144,13 +144,17 @@ export function FullscreenOverlayBase({
               className="h-full overflow-y-auto"
               style={{ paddingTop: contentPaddingTop, paddingBottom: FADE_SIZE, scrollPaddingTop: contentPaddingTop }}
             >
-              {/* Error banner — inside scroll flow, positioned below the header clearance */}
-              {error && (
-                <div className="px-6 pb-4">
-                  <OverlayErrorBanner label={error.label} message={error.message} />
-                </div>
-              )}
-              {children}
+              {/* Centering wrapper — error + content move together as a unit.
+                  min-h-full ensures centering when content is small; content can grow beyond. */}
+              <div className="min-h-full flex flex-col justify-center">
+                {/* Error banner — inside centering flow, above content */}
+                {error && (
+                  <div className="px-6 pb-4">
+                    <OverlayErrorBanner label={error.label} message={error.message} />
+                  </div>
+                )}
+                {children}
+              </div>
             </div>
           </div>
 

@@ -154,9 +154,13 @@ export function NavigationProvider({
   }, [])
 
   // Helper: Filter sessions by ChatFilter
+  // Always excludes hidden sessions - they should never appear in navigation
   const filterSessionsByFilter = useCallback(
     (filter: ChatFilter): SessionMeta[] => {
-      return sessionMetas.filter((session) => {
+      // First filter out hidden sessions - they should never appear in any view
+      const visibleSessions = sessionMetas.filter(s => !s.hidden)
+
+      return visibleSessions.filter((session) => {
         switch (filter.kind) {
           case 'allChats':
             return true
@@ -218,6 +222,21 @@ export function NavigationProvider({
           // Handle workdir param: 'user_default', 'none', or absolute path
           if (parsed.params.workdir) {
             createOptions.workingDirectory = parsed.params.workdir as 'user_default' | 'none' | string
+          }
+          // Model override for mini agents (e.g., 'haiku', 'sonnet')
+          if (parsed.params.model) {
+            createOptions.model = parsed.params.model
+          }
+          // System prompt preset for mini agents (e.g., 'mini')
+          if (parsed.params.systemPrompt) {
+            createOptions.systemPromptPreset = parsed.params.systemPrompt as 'default' | 'mini' | string
+          }
+          // Log mini agent deep link params
+          if (parsed.params.model || parsed.params.systemPrompt) {
+            console.log('[NavigationContext] 🤖 Mini agent params from deep link:', {
+              model: parsed.params.model,
+              systemPromptPreset: parsed.params.systemPrompt,
+            })
           }
           const session = await onCreateSession(workspaceId, createOptions)
 
@@ -509,12 +528,15 @@ export function NavigationProvider({
   }, [navigate])
 
   // Helper: Check if a route points to a valid session/source/skill
+  // For sessions, also check that the session is not hidden (hidden sessions are not directly navigable)
   const isRouteValid = useCallback((route: Route): boolean => {
     const navState = parseRouteToNavigationState(route)
     if (!navState) return true // Non-navigation routes are always valid
 
     if (isChatsNavigation(navState) && navState.details) {
-      return sessionMetaMap.has(navState.details.sessionId)
+      const meta = sessionMetaMap.get(navState.details.sessionId)
+      // Session must exist and not be hidden
+      return meta != null && !meta.hidden
     }
 
     if (isSourcesNavigation(navState) && navState.details) {

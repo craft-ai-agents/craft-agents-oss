@@ -10,6 +10,7 @@ import * as React from 'react'
 import { createContext, useContext, useCallback } from 'react'
 import { useAtomValue } from 'jotai'
 import type { RichTextInputHandle } from '@/components/ui/rich-text-input'
+import type { ChatDisplayHandle } from '@/components/app-shell/ChatDisplay'
 import type {
   Session,
   Workspace,
@@ -60,8 +61,8 @@ export interface AppShellContextType {
   sessionOptions: Map<string, SessionOptions>
 
   // Session callbacks
-  onCreateSession: (workspaceId: string) => Promise<Session>
-  onSendMessage: (sessionId: string, message: string, attachments?: FileAttachment[], skillSlugs?: string[]) => void
+  onCreateSession: (workspaceId: string, options?: import('../../shared/types').CreateSessionOptions) => Promise<Session>
+  onSendMessage: (sessionId: string, message: string, attachments?: FileAttachment[], skillSlugs?: string[], badges?: import('@craft-agent/core').ContentBadge[]) => void
   onRenameSession: (sessionId: string, name: string) => void
   onFlagSession: (sessionId: string) => void
   onUnflagSession: (sessionId: string) => void
@@ -123,6 +124,18 @@ export interface AppShellContextType {
 
   // Right sidebar button (for page headers)
   rightSidebarButton?: React.ReactNode
+
+  // Session list search state (for ChatDisplay highlighting)
+  /** Current search query from session list - used to highlight matches in ChatDisplay */
+  sessionListSearchQuery?: string
+  /** Whether search mode is active (prevents focus stealing to chat input even with empty query) */
+  isSearchModeActive?: boolean
+  /** Callback to update session list search query */
+  setSessionListSearchQuery?: (query: string) => void
+  /** Ref to ChatDisplay for navigation between matches */
+  chatDisplayRef?: React.RefObject<ChatDisplayHandle>
+  /** Callback when ChatDisplay match info changes (for immediate UI updates) */
+  onChatMatchInfoChange?: (info: { count: number; index: number }) => void
 }
 
 const AppShellContext = createContext<AppShellContextType | null>(null)

@@ -20,7 +20,7 @@ export interface ComponentVariant {
   props: Record<string, unknown>
 }
 
-export type Category = 'Sources' | 'Onboarding' | 'Agent Setup' | 'Chat' | 'Turn Cards' | 'Fullscreen' | 'Chat Messages' | 'Chat Inputs' | 'Toast Messages' | 'Markdown' | 'Icons' | 'Settings' | 'Feedback' | 'OAuth'
+export type Category = 'Sources' | 'Onboarding' | 'Agent Setup' | 'Chat' | 'Session List' | 'Edit Popover' | 'Turn Cards' | 'TurnCard Modes' | 'Fullscreen' | 'Chat Messages' | 'Chat Inputs' | 'Toast Messages' | 'Markdown' | 'Icons' | 'Settings' | 'Feedback' | 'OAuth'
 
 export interface ComponentEntry {
   id: string

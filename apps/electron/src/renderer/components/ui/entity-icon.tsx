@@ -65,7 +65,7 @@ export interface EntityIconProps {
 // Component
 // ============================================================================
 
-export function EntityIcon({
+function EntityIconComponent({
   icon,
   size = 'md',
   fallbackIcon: FallbackIcon,
@@ -177,3 +177,9 @@ export function EntityIcon({
     />
   )
 }
+
+// Static marker so LeftSidebar can identify components that accept the `bare` prop
+// (avoids passing `bare` to Lucide icons which forward unknown props to SVG DOM elements)
+type EntityIconWithMarker = typeof EntityIconComponent & { acceptsBare: true }
+export const EntityIcon = EntityIconComponent as EntityIconWithMarker
+EntityIcon.acceptsBare = true

@@ -74,8 +74,11 @@ export function readSessionJsonl(sessionFile: string): StoredSession | null {
       sharedUrl: header.sharedUrl,
       sharedId: header.sharedId,
       model: header.model,
+      thinkingLevel: header.thinkingLevel,
+      pendingPlanExecution: header.pendingPlanExecution,
       messages,
       tokenUsage: header.tokenUsage,
+      hidden: header.hidden,
     };
   } catch (error) {
     debug('[jsonl] Failed to read session:', sessionFile, error);
@@ -131,12 +134,16 @@ export function createSessionHeader(session: StoredSession): SessionHeader {
     sharedUrl: session.sharedUrl,
     sharedId: session.sharedId,
     model: session.model,
+    thinkingLevel: session.thinkingLevel,
+    pendingPlanExecution: session.pendingPlanExecution,
     // Pre-computed fields
     messageCount: session.messages.length,
     lastMessageRole: extractLastMessageRole(session.messages),
     preview: extractPreview(session.messages),
     tokenUsage: session.tokenUsage,
     lastFinalMessageId: extractLastFinalMessageId(session.messages),
+    // Hidden flag for mini-agent sessions (not shown in session list)
+    hidden: session.hidden,
   };
 }
 

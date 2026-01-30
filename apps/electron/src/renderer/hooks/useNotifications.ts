@@ -172,8 +172,9 @@ export function useNotifications({
     }
 
     // Count sessions that have unread messages using metadata
+    // Exclude hidden sessions (mini-agent sessions) from badge count
     const metas = Array.from(sessionMetaMap.values())
-    const unreadSessions = metas.filter(hasUnreadMessagesFromMeta)
+    const unreadSessions = metas.filter(m => hasUnreadMessagesFromMeta(m) && !m.hidden)
     const totalUnread = unreadSessions.length
 
     // Skip badge update if any session is processing AND the count hasn't changed

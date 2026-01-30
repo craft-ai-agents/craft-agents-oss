@@ -12,8 +12,8 @@
  */
 
 import { URL } from 'url';
-import open from 'open';
 import { randomBytes, createHash } from 'crypto';
+import { openUrl } from '../utils/open-url.ts';
 import { createCallbackServer, type AppType } from './callback-server.ts';
 import { type GoogleService } from '../sources/types.ts';
 
@@ -279,7 +279,7 @@ export async function startGoogleOAuth(
     authUrl.searchParams.set('prompt', 'consent'); // Always show consent to get refresh token
 
     // Open browser for authorization
-    await open(authUrl.toString());
+    await openUrl(authUrl.toString());
 
     // Wait for callback
     const callback = await callbackServer.promise;

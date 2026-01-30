@@ -47,11 +47,13 @@
     "./validation": "./src/validation/index.ts",
     "./version": "./src/version/index.ts",
     "./branding": "./src/branding.ts",
-    "./network-interceptor": "./src/network-interceptor.ts"
+    "./network-interceptor": "./src/network-interceptor.ts",
+    "./search": "./src/search/index.ts"
   },
   "dependencies": {
     "@craft-agent/core": "workspace:*",
     "@isaacs/ttlcache": "^2.1.4",
+    "@leeoniya/ufuzzy": "^1.0.19",
     "bash-parser": "^0.5.0",
     "filtrex": "^3.1.0",
     "incr-regex-package": "^1.0.4",

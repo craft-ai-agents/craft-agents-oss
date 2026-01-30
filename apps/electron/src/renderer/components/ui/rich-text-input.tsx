@@ -661,13 +661,15 @@ export const RichTextInput = React.forwardRef<RichTextInputHandle, RichTextInput
       divRef.current.innerHTML = html || '<br>'
 
       // Restore cursor position after innerHTML update.
-      // Always restore if we have a pending position (from setSelectionRange call).
-      // Otherwise restore to end of value.
-      // Note: We restore even if not focused because focus can momentarily shift
-      // during React re-renders, and we don't want cursor to reset to 0.
-      const cursorPos = pendingCursorRef.current ?? value.length
-      setCursorPosition(divRef.current, cursorPos)
-      pendingCursorRef.current = null // Clear after use
+      // Only restore if:
+      // 1. We have a pending position from setSelectionRange (explicit programmatic positioning), OR
+      // 2. The element is actually focused (user is actively editing)
+      // This prevents stealing focus during session changes when search is active.
+      if (pendingCursorRef.current !== null || document.activeElement === divRef.current) {
+        const cursorPos = pendingCursorRef.current ?? cursorPositionRef.current ?? value.length
+        setCursorPosition(divRef.current, cursorPos)
+        pendingCursorRef.current = null // Clear after use
+      }
     }, [value, skills, sources, skillSlugs, sourceSlugs, workspaceId])
 
     // Initialize content on mount

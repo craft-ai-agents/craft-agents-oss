@@ -323,6 +323,8 @@ interface ManagedSession {
   model?: string
   // Thinking level for this session ('off', 'think', 'max')
   thinkingLevel?: ThinkingLevel
+  // System prompt preset for mini agents ('default' | 'mini')
+  systemPromptPreset?: 'default' | 'mini' | string
   // Role/type of the last message (for badge display without loading messages)
   lastMessageRole?: 'user' | 'assistant' | 'plan' | 'tool' | 'error'
   // ID of the last final (non-intermediate) assistant message - pre-computed for unread detection
@@ -362,6 +364,8 @@ interface ManagedSession {
   authRetryAttempted?: boolean
   // Flag indicating auth retry is in progress (to prevent complete handler from interfering)
   authRetryInProgress?: boolean
+  // Whether this session is hidden from session list (e.g., mini edit sessions)
+  hidden?: boolean
 }
 
 // Convert runtime Message to StoredMessage for persistence
@@ -889,6 +893,7 @@ export class SessionManager {
             // Shared viewer state - loaded from metadata for persistence across restarts
             sharedUrl: meta.sharedUrl,
             sharedId: meta.sharedId,
+            hidden: meta.hidden,
           }
 
           this.sessions.set(meta.id, managed)
@@ -938,6 +943,7 @@ export class SessionManager {
           contextTokens: 0,
           costUsd: 0,
         },
+        hidden: managed.hidden,
       }
 
       // Queue for async persistence with debouncing
@@ -1259,6 +1265,7 @@ export class SessionManager {
         tokenUsage: m.tokenUsage,
         createdAt: m.createdAt,
         messageCount: m.messageCount,
+        hidden: m.hidden,
       }))
       .sort((a, b) => b.lastMessageAt - a.lastMessageAt)
   }
@@ -1300,6 +1307,7 @@ export class SessionManager {
       sharedId: m.sharedId,
       lastMessageRole: m.lastMessageRole,
       tokenUsage: m.tokenUsage,
+      hidden: m.hidden,
     }
   }
 
@@ -1397,7 +1405,16 @@ export class SessionManager {
     const storedSession = await createStoredSession(workspaceRootPath, {
       permissionMode: defaultPermissionMode,
       workingDirectory: resolvedWorkingDir,
+      hidden: options?.hidden,
     })
+
+    // Model priority: options.model > storedSession.model > workspace default
+    const resolvedModel = options?.model || storedSession.model || defaultModel
+
+    // Log mini agent session creation
+    if (options?.systemPromptPreset === 'mini' || options?.model) {
+      sessionLog.info(`🤖 Creating mini agent session: model=${resolvedModel}, systemPromptPreset=${options?.systemPromptPreset}`)
+    }
 
     const managed: ManagedSession = {
       id: storedSession.id,
@@ -1413,11 +1430,14 @@ export class SessionManager {
       workingDirectory: resolvedWorkingDir,
       sdkCwd: storedSession.sdkCwd,
       // Session-specific model takes priority, then workspace default
-      model: storedSession.model || defaultModel,
+      model: resolvedModel,
       thinkingLevel: defaultThinkingLevel,
+      // System prompt preset for mini agents
+      systemPromptPreset: options?.systemPromptPreset,
       messageQueue: [],
       backgroundShellCommands: new Map(),
       messagesLoaded: true,  // New sessions don't need to load messages from disk
+      hidden: options?.hidden,
     }
 
     this.sessions.set(storedSession.id, managed)
@@ -1436,6 +1456,7 @@ export class SessionManager {
       model: managed.model,
       thinkingLevel: defaultThinkingLevel,
       sessionFolderPath: getSessionStoragePath(workspaceRootPath, storedSession.id),
+      hidden: options?.hidden,
     }
   }
 
@@ -1453,6 +1474,8 @@ export class SessionManager {
         // Initialize thinking level at construction to avoid race conditions
         thinkingLevel: managed.thinkingLevel,
         isHeadless: !AGENT_FLAGS.defaultModesEnabled,
+        // System prompt preset for mini agents (focused prompts for quick edits)
+        systemPromptPreset: managed.systemPromptPreset,
         // Always pass session object - id is required for plan mode callbacks
         // sdkSessionId is optional and used for conversation resumption
         session: {
@@ -2780,7 +2803,15 @@ export class SessionManager {
       }
     }
 
-    // 3. Check queue and process or complete
+    // 3. Auto-complete mini agent sessions to avoid session list clutter
+    //    Mini agents are spawned from EditPopovers for quick config edits
+    //    and should automatically move to 'done' when finished
+    if (reason === 'complete' && managed.systemPromptPreset === 'mini' && managed.todoState !== 'done') {
+      sessionLog.info(`Auto-completing mini agent session ${sessionId}`)
+      await this.setTodoState(sessionId, 'done')
+    }
+
+    // 4. Check queue and process or complete
     if (managed.messageQueue.length > 0) {
       // Has queued messages - process next
       this.processNextQueuedMessage(sessionId)
@@ -2794,7 +2825,7 @@ export class SessionManager {
       }, managed.workspace.id)
     }
 
-    // 4. Always persist
+    // 5. Always persist
     this.persistSession(managed)
   }
 
@@ -3174,6 +3205,14 @@ To view this task's output:
           if (toolDisplayMeta && !existingStartMsg.toolDisplayMeta) {
             existingStartMsg.toolDisplayMeta = toolDisplayMeta
           }
+          // Update toolIntent if not already set (second event has intent from complete input)
+          if (event.intent && !existingStartMsg.toolIntent) {
+            existingStartMsg.toolIntent = event.intent
+          }
+          // Update toolDisplayName if not already set
+          if (event.displayName && !existingStartMsg.toolDisplayName) {
+            existingStartMsg.toolDisplayName = event.displayName
+          }
         } else {
           // Add tool message immediately (will be updated on tool_result)
           // This ensures tool calls are persisted even if they don't complete
@@ -3185,7 +3224,7 @@ To view this task's output:
             toolName: event.toolName,
             toolUseId: event.toolUseId,
             toolInput: formattedToolInput,
-            toolStatus: 'pending',
+            toolStatus: 'executing',
             toolIntent: event.intent,
             toolDisplayName: event.displayName,
             toolDisplayMeta,  // Includes base64 icon for viewer compatibility

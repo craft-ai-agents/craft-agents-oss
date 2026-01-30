@@ -36,6 +36,26 @@ export const mockElectronAPI = {
     console.log('[Playground] openFile called:', path)
     alert(`Would open file in system editor:\n${path}`)
   },
+
+  // ChatDisplay required mocks
+  readPreferences: async () => {
+    return { diffViewerSettings: { showFilePath: true, expandedSections: {} } }
+  },
+
+  writePreferences: async (prefs: unknown) => {
+    console.log('[Playground] writePreferences called:', prefs)
+  },
+
+  // FreeFormInput required mocks
+  getAutoCapitalisation: async () => false,
+
+  getPendingPlanExecution: async (sessionId: string) => {
+    console.log('[Playground] getPendingPlanExecution called:', sessionId)
+    return null
+  },
+
+  getSendMessageKey: async () => 'enter',
+  getSpellCheck: async () => true,
 }
 
 /**

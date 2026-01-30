@@ -15,8 +15,8 @@
  */
 
 import { URL } from 'url';
-import open from 'open';
 import { randomBytes, createHash } from 'crypto';
+import { openUrl } from '../utils/open-url.ts';
 import { createCallbackServer, type AppType } from './callback-server.ts';
 import { type MicrosoftService } from '../sources/types.ts';
 
@@ -313,7 +313,7 @@ export async function startMicrosoftOAuth(
     authUrl.searchParams.set('prompt', 'consent');
 
     // Open browser for authorization
-    await open(authUrl.toString());
+    await openUrl(authUrl.toString());
 
     // Wait for callback
     const callback = await callbackServer.promise;

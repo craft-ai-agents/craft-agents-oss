@@ -12,8 +12,8 @@
  */
 
 import { URL } from 'url';
-import open from 'open';
 import { randomBytes } from 'crypto';
+import { openUrl } from '../utils/open-url.ts';
 import { createCallbackServer, type AppType } from './callback-server.ts';
 import type { SlackService } from '../sources/types.ts';
 
@@ -291,7 +291,7 @@ export async function startSlackOAuth(options: SlackOAuthOptions = {}): Promise<
     authUrl.searchParams.set('user_scope', userScopes.join(','));
 
     // Open browser for authorization
-    await open(authUrl.toString());
+    await openUrl(authUrl.toString());
 
     // Wait for callback
     const callback = await callbackServer.promise;

@@ -256,17 +256,66 @@ export interface SystemPromptOptions {
 }
 
 /**
+ * System prompt preset types for different agent contexts.
+ * - 'default': Full Craft Agent system prompt
+ * - 'mini': Focused prompt for quick configuration edits
+ */
+export type SystemPromptPreset = 'default' | 'mini';
+
+/**
+ * Get a focused system prompt for mini agents (quick edit tasks).
+ * Optimized for configuration edits with minimal context.
+ *
+ * @param workspaceRootPath - Root path of the workspace for config file locations
+ */
+export function getMiniAgentSystemPrompt(workspaceRootPath?: string): string {
+  const workspaceContext = workspaceRootPath
+    ? `\n## Workspace\nConfig files are in: \`${workspaceRootPath}\`\n- Statuses: \`statuses/config.json\`\n- Labels: \`labels/config.json\`\n- Permissions: \`permissions.json\`\n`
+    : '';
+
+  return `You are a focused assistant for quick configuration edits in Craft Agent.
+
+## Your Role
+You help users make targeted changes to configuration files. Be concise and efficient.
+${workspaceContext}
+## Guidelines
+- Make the requested change directly
+- Validate with config_validate after editing
+- Confirm completion briefly
+- Don't add unrequested features or changes
+- Keep responses short and to the point
+
+## Available Tools
+Use Read, Edit, Write tools for file operations.
+Use config_validate to verify changes match the expected schema.
+`;
+}
+
+/**
  * Get the full system prompt with current date/time and user preferences
  *
  * Note: Safe Mode context is injected via user messages instead of system prompt
  * to preserve prompt caching.
+ *
+ * @param pinnedPreferencesPrompt - Pre-formatted preferences (for session consistency)
+ * @param debugMode - Debug mode configuration
+ * @param workspaceRootPath - Root path of the workspace
+ * @param workingDirectory - Working directory for context file discovery
+ * @param preset - System prompt preset ('default' | 'mini' | custom string)
  */
 export function getSystemPrompt(
   pinnedPreferencesPrompt?: string,
   debugMode?: DebugModeConfig,
   workspaceRootPath?: string,
-  workingDirectory?: string
+  workingDirectory?: string,
+  preset?: SystemPromptPreset | string
 ): string {
+  // Use mini agent prompt for quick edits (pass workspace root for config paths)
+  if (preset === 'mini') {
+    debug('[getSystemPrompt] 🤖 Generating MINI agent system prompt for workspace:', workspaceRootPath);
+    return getMiniAgentSystemPrompt(workspaceRootPath);
+  }
+
   // Use pinned preferences if provided (for session consistency after compaction)
   const preferences = pinnedPreferencesPrompt ?? formatPreferencesForPrompt();
   const debugContext = debugMode?.enabled ? formatDebugModeContext(debugMode.logFilePath) : '';
@@ -457,7 +506,11 @@ Never try to execute a plan without submitting it first - it will fail, especial
 ## Web Search
 
 You have access to web search for up-to-date information. Use it proactively to get up-to-date information and best practices.
-Your memory might be limited, contain wrong info, or be out-of-date, specifically for fast-changing topics like technology, current events, and recent developments.
+Your memory is limited as of cut-off date, so it contain wrong or stale info, or be out-of-date, specifically for fast-changing topics like technology, current events, and recent developments.
+I.e. there is now iOS/MacOS26, it's 2026, the world has changed a lot since your training data!
+
+## Code Diffs and Visualization
+Craft Agent renders **unified code diffs natively** as beautiful diff views. Use diffs where it makes sense to show changes. Users will love it.
 
 ## Diagrams and Visualization
 
@@ -469,6 +522,7 @@ Craft Agent renders **Mermaid diagrams natively** as beautiful themed SVGs. Use 
 - Before/after changes in refactoring
 
 **Supported types:** Flowcharts (\`graph LR\`), State (\`stateDiagram-v2\`), Sequence (\`sequenceDiagram\`), Class (\`classDiagram\`), ER (\`erDiagram\`)
+Whenever thinking of creating an ASCII visualisation, deeply consider replacing it with a Mermaid diagram instead for much better clarity.
 
 **Quick example:**
 \`\`\`mermaid
@@ -482,9 +536,8 @@ graph LR
 - Full syntax reference: \`${DOC_REFS.mermaid}\`
 
 **Tips:**
-- **PREFER HORIZONTAL (LR/RL)** - Much easier to view and navigate in the UI
-- Use LR for flows, pipelines, state machines, and most diagrams
-- Only use TD/BT for truly hierarchical structures (org charts, trees)
+- **The user sees a 4:3 aspect ratio** - Choose HORIZONTAL (LR/RL) or VERTICAL (TD/BT) for easier viewing and navigation in the UI based on diagram size. I.e. If it's a small diagram, use horizontal (LR/RL). If it's a large diagram with many nodes, use vertical (TD/BT).
+- IMPORTANT! : If long diagrams are needed, split them into multiple focused diagrams instead. The user can view several smaller diagrams more easily than one massive one, the UI handles them better, and it reduces the risk of rendering issues.
 - One concept per diagram - keep them focused
 - Validate complex diagrams with \`mermaid_validate\` first
 

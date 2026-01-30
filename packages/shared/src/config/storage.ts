@@ -46,6 +46,10 @@ export interface StoredConfig {
   colorTheme?: string;  // ID of selected preset theme (e.g., 'dracula', 'nord'). Default: 'default'
   // Auto-update
   dismissedUpdateVersion?: string;  // Version that user dismissed (skip notifications for this version)
+  // Input settings
+  autoCapitalisation?: boolean;  // Auto-capitalize first letter when typing (default: true)
+  sendMessageKey?: 'enter' | 'cmd-enter';  // Key to send messages (default: 'enter')
+  spellCheck?: boolean;  // Enable spell check in input (default: false)
 }
 
 const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
@@ -249,6 +253,74 @@ export function setNotificationsEnabled(enabled: boolean): void {
   const config = loadStoredConfig();
   if (!config) return;
   config.notificationsEnabled = enabled;
+  saveConfig(config);
+}
+
+/**
+ * Get whether auto-capitalisation is enabled.
+ * Defaults to true if not set.
+ */
+export function getAutoCapitalisation(): boolean {
+  const config = loadStoredConfig();
+  if (config?.autoCapitalisation !== undefined) {
+    return config.autoCapitalisation;
+  }
+  const defaults = loadConfigDefaults();
+  return defaults.defaults.autoCapitalisation;
+}
+
+/**
+ * Set whether auto-capitalisation is enabled.
+ */
+export function setAutoCapitalisation(enabled: boolean): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+  config.autoCapitalisation = enabled;
+  saveConfig(config);
+}
+
+/**
+ * Get the key combination used to send messages.
+ * Defaults to 'enter' if not set.
+ */
+export function getSendMessageKey(): 'enter' | 'cmd-enter' {
+  const config = loadStoredConfig();
+  if (config?.sendMessageKey !== undefined) {
+    return config.sendMessageKey;
+  }
+  const defaults = loadConfigDefaults();
+  return defaults.defaults.sendMessageKey;
+}
+
+/**
+ * Set the key combination used to send messages.
+ */
+export function setSendMessageKey(key: 'enter' | 'cmd-enter'): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+  config.sendMessageKey = key;
+  saveConfig(config);
+}
+
+/**
+ * Get whether spell check is enabled in the input.
+ */
+export function getSpellCheck(): boolean {
+  const config = loadStoredConfig();
+  if (config?.spellCheck !== undefined) {
+    return config.spellCheck;
+  }
+  const defaults = loadConfigDefaults();
+  return defaults.defaults.spellCheck;
+}
+
+/**
+ * Set whether spell check is enabled in the input.
+ */
+export function setSpellCheck(enabled: boolean): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+  config.spellCheck = enabled;
   saveConfig(config);
 }
 

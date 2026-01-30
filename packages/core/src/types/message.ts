@@ -315,6 +315,7 @@ export type ErrorCode =
   | 'model_no_tool_support'  // Model doesn't support tool/function calling
   | 'invalid_model'          // Model ID not found
   | 'data_policy_error'      // OpenRouter data policy restriction
+  | 'invalid_request'        // API rejected the request (e.g., bad image, invalid content)
   | 'unknown_error';
 
 /**

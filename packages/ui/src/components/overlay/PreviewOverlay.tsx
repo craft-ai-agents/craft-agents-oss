@@ -123,10 +123,9 @@ export function PreviewOverlay({
   )
 
   // Error banner — uses shared OverlayErrorBanner with tinted-shadow styling.
-  // In fullscreen mode, error is passed to FullscreenOverlayBase which renders it above children.
-  // In modal/embedded mode, we render it inline between header and content.
+  // Rendered inside the centering wrapper so error + content are centered together.
   const errorBanner = error && (
-    <div className="px-4 pt-3">
+    <div className="px-6 pb-4">
       <OverlayErrorBanner label={error.label} message={error.message} />
     </div>
   )
@@ -146,7 +145,11 @@ export function PreviewOverlay({
         className="absolute inset-0 overflow-y-auto"
         style={{ paddingTop: FADE_SIZE, paddingBottom: FADE_SIZE, scrollPaddingTop: FADE_SIZE }}
       >
-        {children}
+        {/* Centering wrapper — error + content are vertically centered together when small */}
+        <div className="min-h-full flex flex-col justify-center">
+          {errorBanner}
+          {children}
+        </div>
       </div>
     </div>
   )
@@ -156,7 +159,6 @@ export function PreviewOverlay({
     return (
       <div className={`flex flex-col ${bgClass} h-full w-full overflow-hidden rounded-lg border border-foreground/5`}>
         {header}
-        {errorBanner}
         {contentArea}
       </div>
     )
@@ -200,7 +202,6 @@ export function PreviewOverlay({
         }}
       >
         {header}
-        {errorBanner}
         {contentArea}
       </div>
     </div>,

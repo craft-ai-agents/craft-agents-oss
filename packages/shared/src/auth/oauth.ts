@@ -1,7 +1,7 @@
 import { createServer, type Server } from 'http';
 import { URL } from 'url';
-import open from 'open';
 import { randomBytes, createHash } from 'crypto';
+import { openUrl } from '../utils/open-url.ts';
 import { generateCallbackPage } from './callback-page.ts';
 
 export interface OAuthConfig {
@@ -271,7 +271,7 @@ export class CraftOAuth {
 
     // 6. Open browser for authorization
     this.callbacks.onStatus('Opening browser for authorization...');
-    await open(authUrl.toString());
+    await openUrl(authUrl.toString());
 
     // 7. Wait for the authorization code
     this.callbacks.onStatus('Waiting for you to authorize in browser...');

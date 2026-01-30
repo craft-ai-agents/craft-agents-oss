@@ -74,11 +74,11 @@ export function ContentFrame({
     : { maxWidth }
 
   return (
-    <div className="flex px-6 min-h-full">
-      {/* Relative wrapper — centered via m-auto (safe for overflow, unlike items-center).
-          Card grows to fit content. When taller than viewport, parent scroll container scrolls. */}
+    <div className="flex px-6">
+      {/* Relative wrapper — horizontally centered via mx-auto. Vertical centering is handled
+          by parent (FullscreenOverlayBase's centering wrapper). Card grows to fit content. */}
       <div
-        className={`relative m-auto ${fitContent ? '' : 'w-full'}`}
+        className={`relative mx-auto ${fitContent ? '' : 'w-full'}`}
         style={wrapperStyle}
       >
         {/* Left sidebar — absolutely positioned to the left of the card */}

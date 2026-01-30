@@ -6,7 +6,7 @@ import { homedir, tmpdir } from 'os'
 import { randomUUID } from 'crypto'
 import { execSync } from 'child_process'
 import { SessionManager } from './sessions'
-import { ipcLog, windowLog } from './logger'
+import { ipcLog, windowLog, searchLog } from './logger'
 import { WindowManager } from './window-manager'
 import { registerOnboardingHandlers } from './onboarding'
 import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type AuthType, type ApiSetupInfo, type SendMessageOptions } from '../shared/types'
@@ -1957,6 +1957,45 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   })
 
   // ============================================================
+  // Session Content Search
+  // ============================================================
+
+  // Search session content using ripgrep
+  ipcMain.handle(IPC_CHANNELS.SEARCH_SESSIONS, async (_event, workspaceId: string, query: string, searchId?: string) => {
+    const id = searchId || Date.now().toString(36)
+    searchLog.info('ipc:request', { searchId: id, query })
+
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) {
+      ipcLog.warn('SEARCH_SESSIONS: Workspace not found:', workspaceId)
+      return []
+    }
+
+    const { searchSessions } = await import('./search')
+    const { getWorkspaceSessionsPath } = await import('@craft-agent/shared/workspaces')
+
+    const sessionsDir = getWorkspaceSessionsPath(workspace.rootPath)
+    ipcLog.debug(`SEARCH_SESSIONS: Searching "${query}" in ${sessionsDir}`)
+
+    const results = await searchSessions(query, sessionsDir, {
+      timeout: 5000,
+      maxMatchesPerSession: 3,
+      maxSessions: 50,
+      searchId: id,
+    })
+
+    // Filter out hidden sessions (e.g., mini edit sessions)
+    const allSessions = await sessionManager.getSessions()
+    const hiddenSessionIds = new Set(
+      allSessions.filter(s => s.hidden).map(s => s.id)
+    )
+    const filteredResults = results.filter(r => !hiddenSessionIds.has(r.sessionId))
+
+    searchLog.info('ipc:response', { searchId: id, resultCount: filteredResults.length, totalFound: results.length })
+    return filteredResults
+  })
+
+  // ============================================================
   // Skills (Workspace-scoped)
   // ============================================================
 
@@ -2384,6 +2423,42 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       const { showNotification } = await import('./notifications')
       showNotification('Notifications enabled', 'You will be notified when tasks complete.', '', '')
     }
+  })
+
+  // Get auto-capitalisation setting
+  ipcMain.handle(IPC_CHANNELS.INPUT_GET_AUTO_CAPITALISATION, async () => {
+    const { getAutoCapitalisation } = await import('@craft-agent/shared/config/storage')
+    return getAutoCapitalisation()
+  })
+
+  // Set auto-capitalisation setting
+  ipcMain.handle(IPC_CHANNELS.INPUT_SET_AUTO_CAPITALISATION, async (_event, enabled: boolean) => {
+    const { setAutoCapitalisation } = await import('@craft-agent/shared/config/storage')
+    setAutoCapitalisation(enabled)
+  })
+
+  // Get send message key setting
+  ipcMain.handle(IPC_CHANNELS.INPUT_GET_SEND_MESSAGE_KEY, async () => {
+    const { getSendMessageKey } = await import('@craft-agent/shared/config/storage')
+    return getSendMessageKey()
+  })
+
+  // Set send message key setting
+  ipcMain.handle(IPC_CHANNELS.INPUT_SET_SEND_MESSAGE_KEY, async (_event, key: 'enter' | 'cmd-enter') => {
+    const { setSendMessageKey } = await import('@craft-agent/shared/config/storage')
+    setSendMessageKey(key)
+  })
+
+  // Get spell check setting
+  ipcMain.handle(IPC_CHANNELS.INPUT_GET_SPELL_CHECK, async () => {
+    const { getSpellCheck } = await import('@craft-agent/shared/config/storage')
+    return getSpellCheck()
+  })
+
+  // Set spell check setting
+  ipcMain.handle(IPC_CHANNELS.INPUT_SET_SPELL_CHECK, async (_event, enabled: boolean) => {
+    const { setSpellCheck } = await import('@craft-agent/shared/config/storage')
+    setSpellCheck(enabled)
   })
 
   // Update app badge count

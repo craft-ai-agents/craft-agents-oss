@@ -9,13 +9,7 @@
  */
 import { randomBytes, createHash } from 'node:crypto'
 import { CLAUDE_OAUTH_CONFIG } from './claude-oauth-config'
-
-// Dynamic import for 'open' to handle ESM/CJS interop in bundled code
-async function openUrl(url: string): Promise<void> {
-  const open = await import('open')
-  const openFn = open.default || open
-  await openFn(url)
-}
+import { openUrl } from '../utils/open-url.ts'
 
 // OAuth configuration from shared config
 const CLAUDE_CLIENT_ID = CLAUDE_OAUTH_CONFIG.CLIENT_ID

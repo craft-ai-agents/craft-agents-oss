@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { motion, AnimatePresence } from 'motion/react'
+import { motion, AnimatePresence, useMotionValue, useMotionValueEvent, animate } from 'motion/react'
 import { cn } from '@/lib/utils'
 import { FreeFormInput, type FreeFormInputProps } from './FreeFormInput'
 import { StructuredInput } from './StructuredInput'
@@ -14,6 +14,8 @@ interface InputContainerProps extends Omit<FreeFormInputProps, 'inputRef'> {
   onStructuredResponse?: (response: StructuredResponse) => void
   /** External ref for the input (for focus control) */
   textareaRef?: React.RefObject<RichTextInputHandle>
+  /** Per-frame callback during height animation (for scroll sync) */
+  onAnimatedHeightChange?: (delta: number) => void
 }
 
 // Animation timing - synced across height and opacity
@@ -23,6 +25,7 @@ const TRANSITION_EASE = [0.4, 0, 0.2, 1] as const
 // Fallback heights (used on first render before measurement)
 const FALLBACK_HEIGHTS: Record<InputMode | string, number> = {
   freeform: 114,
+  'freeform-compact': 70,  // Smaller for compact mode
   permission: 200,
   credential: 240,  // Taller for form fields + hint
 }
@@ -40,13 +43,19 @@ export function InputContainer({
   structuredInput,
   onStructuredResponse,
   textareaRef,
+  compactMode,
+  isProcessing,
+  onAnimatedHeightChange,
   ...freeFormProps
 }: InputContainerProps) {
   const mode: InputMode = structuredInput ? 'structured' : 'freeform'
   const measureRef = React.useRef<HTMLDivElement>(null)
   const containerRef = React.useRef<HTMLDivElement>(null)
   // Separate height states: freeform uses callback, structured uses measuring div
-  const [freeformHeight, setFreeformHeight] = React.useState<number>(FALLBACK_HEIGHTS.freeform)
+  // Use smaller fallback height for compact mode
+  const [freeformHeight, setFreeformHeight] = React.useState<number>(
+    compactMode ? FALLBACK_HEIGHTS['freeform-compact'] : FALLBACK_HEIGHTS.freeform
+  )
   const [structuredHeight, setStructuredHeight] = React.useState<number | null>(null)
   const [containerWidth, setContainerWidth] = React.useState<number>(600)
   const [isFocused, setIsFocused] = React.useState(false)
@@ -91,6 +100,19 @@ export function InputContainer({
       return () => clearTimeout(timer)
     }
   }, [contentKey, isTransitioning])
+
+  // Track isProcessing changes in compact mode - animate height collapse/expand
+  const prevIsProcessingRef = React.useRef(isProcessing)
+  React.useEffect(() => {
+    if (compactMode && prevIsProcessingRef.current !== isProcessing) {
+      prevIsProcessingRef.current = isProcessing
+      setIsAnimating(true)
+      const timer = setTimeout(() => {
+        setIsAnimating(false)
+      }, TRANSITION_DURATION * 1000 + 100)
+      return () => clearTimeout(timer)
+    }
+  }, [compactMode, isProcessing])
 
   // Handle height changes from FreeFormInput (synchronous, no measuring div needed)
   const handleFreeformHeightChange = React.useCallback((height: number) => {
@@ -137,6 +159,33 @@ export function InputContainer({
     ? freeformHeight
     : (structuredHeight ?? FALLBACK_HEIGHTS[structuredInput?.type ?? 'freeform'] ?? FALLBACK_HEIGHTS.freeform)
 
+  // Motion value for frame-synchronized height animation
+  const heightMotionValue = useMotionValue(targetHeight)
+  const prevAnimatedHeightRef = React.useRef(targetHeight)
+
+  // Emit delta on every animation frame for scroll sync
+  useMotionValueEvent(heightMotionValue, "change", (latest) => {
+    const delta = latest - prevAnimatedHeightRef.current
+    prevAnimatedHeightRef.current = latest
+    if (delta !== 0) {
+      onAnimatedHeightChange?.(delta)
+    }
+  })
+
+  // Animate height changes using motion value
+  React.useEffect(() => {
+    if (shouldAnimateHeight) {
+      animate(heightMotionValue, targetHeight, {
+        duration: TRANSITION_DURATION,
+        ease: TRANSITION_EASE
+      })
+    } else {
+      // Instant update - no animation
+      heightMotionValue.set(targetHeight)
+      prevAnimatedHeightRef.current = targetHeight
+    }
+  }, [targetHeight, shouldAnimateHeight, heightMotionValue])
+
   const handleStructuredResponse = (response: StructuredResponse) => {
     onStructuredResponse?.(response)
   }
@@ -147,6 +196,8 @@ export function InputContainer({
       return (
         <FreeFormInput
           {...freeFormProps}
+          compactMode={compactMode}
+          isProcessing={isProcessing}
           inputRef={forMeasuring ? undefined : textareaRef}
           onHeightChange={forMeasuring ? undefined : handleFreeformHeightChange}
           onFocusChange={forMeasuring ? undefined : handleFocusChange}
@@ -184,13 +235,7 @@ export function InputContainer({
         className={cn(
           "input-container relative rounded-[12px] shadow-middle overflow-hidden transition-colors bg-background"
         )}
-        initial={false}
-        animate={{ height: targetHeight }}
-        transition={{
-          // Only animate on mode transitions, not on textarea auto-grow
-          duration: shouldAnimateHeight ? TRANSITION_DURATION : 0,
-          ease: TRANSITION_EASE
-        }}
+        style={{ height: heightMotionValue }}
       >
         {/* Ultrathink Pulsing Border shader effect - covers entire input */}
         <UltrathinkGlow

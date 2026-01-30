@@ -1,11 +1,12 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react"
 import { formatDistanceToNow, formatDistanceToNowStrict, isToday, isYesterday, format, startOfDay } from "date-fns"
 import type { Locale } from "date-fns"
-import { MoreHorizontal, Flag, Search, X, Copy, Link2Off, CloudUpload, Globe, RefreshCw, Inbox } from "lucide-react"
+import { MoreHorizontal, Flag, Copy, Link2Off, CloudUpload, Globe, RefreshCw, Inbox } from "lucide-react"
 import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
 import { rendererPerf } from "@/lib/perf"
+import { searchLog } from "@/lib/logger"
 import type { LabelConfig } from "@craft-agent/shared/labels"
 import { flattenLabels, parseLabelEntry, formatLabelEntry, formatDisplayValue } from "@craft-agent/shared/labels"
 import { resolveEntityColor } from "@craft-agent/shared/colors"
@@ -35,6 +36,7 @@ import {
 } from "@/components/ui/styled-context-menu"
 import { DropdownMenuProvider, ContextMenuProvider } from "@/components/ui/menu-context"
 import { SessionMenu } from "./SessionMenu"
+import { SessionSearchHeader } from "./SessionSearchHeader"
 import {
   Dialog,
   DialogContent,
@@ -46,16 +48,18 @@ import { Input } from "@/components/ui/input"
 import { RenameDialog } from "@/components/ui/rename-dialog"
 import { useSession } from "@/hooks/useSession"
 import { useFocusZone, useRovingTabIndex } from "@/hooks/keyboard"
-import { useNavigation, useNavigationState, routes, isChatsNavigation } from "@/contexts/NavigationContext"
+import { useNavigation, useNavigationState, routes, isChatsNavigation, type ChatFilter } from "@/contexts/NavigationContext"
 import { useFocusContext } from "@/context/FocusContext"
 import { getSessionTitle } from "@/utils/session"
 import type { SessionMeta } from "@/atoms/sessions"
 import type { ViewConfig } from "@craft-agent/shared/views"
 import { PERMISSION_MODE_CONFIG, type PermissionMode } from "@craft-agent/shared/agent/modes"
+import { fuzzyScore } from "@craft-agent/shared/search"
 
 // Pagination constants
 const INITIAL_DISPLAY_LIMIT = 20
 const BATCH_SIZE = 20
+const MAX_SEARCH_RESULTS = 100
 
 /** Short relative time locale for date-fns formatDistanceToNowStrict.
  *  Produces compact strings: "7m", "2h", "3d", "2w", "5mo", "1y" */
@@ -137,6 +141,103 @@ function hasMessages(session: SessionMeta): boolean {
   return session.lastFinalMessageId !== undefined
 }
 
+/** Options for sessionMatchesCurrentFilter including secondary filters */
+interface FilterMatchOptions {
+  evaluateViews?: (meta: SessionMeta) => ViewConfig[]
+  /** Secondary status filter (status chips) */
+  statusFilter?: Map<string, 'include' | 'exclude'>
+  /** Secondary label filter (label chips) */
+  labelFilterMap?: Map<string, 'include' | 'exclude'>
+}
+
+/**
+ * Check if a session matches the current navigation filter AND secondary filters.
+ * Used to split search results into "Matching Current Filters" vs "All Results".
+ *
+ * Filter layers:
+ * 1. Primary filter (chatFilter) - "All Chats", "Flagged", specific state/label/view
+ * 2. Secondary filters (statusFilter, labelFilterMap) - user-applied chips on top
+ *
+ * A session must pass BOTH layers to be considered "matching".
+ */
+function sessionMatchesCurrentFilter(
+  session: SessionMeta,
+  currentFilter: ChatFilter | undefined,
+  options: FilterMatchOptions = {}
+): boolean {
+  const { evaluateViews, statusFilter, labelFilterMap } = options
+
+  // Helper: Check if session passes secondary status filter
+  const passesStatusFilter = (): boolean => {
+    if (!statusFilter || statusFilter.size === 0) return true
+    const sessionState = (session.todoState || 'todo') as string
+
+    let hasIncludes = false
+    let matchesInclude = false
+    for (const [stateId, mode] of statusFilter) {
+      if (mode === 'exclude' && sessionState === stateId) return false
+      if (mode === 'include') {
+        hasIncludes = true
+        if (sessionState === stateId) matchesInclude = true
+      }
+    }
+    return !hasIncludes || matchesInclude
+  }
+
+  // Helper: Check if session passes secondary label filter
+  const passesLabelFilter = (): boolean => {
+    if (!labelFilterMap || labelFilterMap.size === 0) return true
+    const sessionLabelIds = session.labels?.map(l => parseLabelEntry(l).id) || []
+
+    let hasIncludes = false
+    let matchesInclude = false
+    for (const [labelId, mode] of labelFilterMap) {
+      if (mode === 'exclude' && sessionLabelIds.includes(labelId)) return false
+      if (mode === 'include') {
+        hasIncludes = true
+        if (sessionLabelIds.includes(labelId)) matchesInclude = true
+      }
+    }
+    return !hasIncludes || matchesInclude
+  }
+
+  // Must pass BOTH secondary filters first
+  if (!passesStatusFilter() || !passesLabelFilter()) return false
+
+  // Then check primary filter
+  if (!currentFilter) return true
+
+  switch (currentFilter.kind) {
+    case 'allChats':
+      return true // Secondary filters already checked above
+
+    case 'flagged':
+      return session.isFlagged === true
+
+    case 'state':
+      // Default to 'todo' for sessions without explicit todoState (matches getSessionTodoState logic)
+      return (session.todoState || 'todo') === currentFilter.stateId
+
+    case 'label': {
+      if (!session.labels?.length) return false
+      if (currentFilter.labelId === '__all__') return true
+      const labelIds = session.labels.map(l => parseLabelEntry(l).id)
+      return labelIds.includes(currentFilter.labelId)
+    }
+
+    case 'view':
+      if (!evaluateViews) return true
+      const matched = evaluateViews(session)
+      if (currentFilter.viewId === '__all__') return matched.length > 0
+      return matched.some(v => v.id === currentFilter.viewId)
+
+    default:
+      // Exhaustive check - TypeScript will error if we miss a case
+      const _exhaustive: never = currentFilter
+      return true
+  }
+}
+
 /**
  * Highlight matching text in a string
  * Returns React nodes with matched portions wrapped in a highlight span
@@ -157,7 +258,7 @@ function highlightMatch(text: string, query: string): React.ReactNode {
   return (
     <>
       {before}
-      <span className="bg-info/30 rounded-sm">{match}</span>
+      <span className="bg-yellow-300/30 rounded-[2px]">{match}</span>
       {highlightMatch(after, query)}
     </>
   )
@@ -199,6 +300,8 @@ interface SessionItemProps {
   labels: LabelConfig[]
   /** Callback when session labels are toggled */
   onLabelsChange?: (sessionId: string, labels: string[]) => void
+  /** Number of matches in ChatDisplay (only set when session is selected and loaded) */
+  chatMatchCount?: number
 }
 
 /**
@@ -227,6 +330,7 @@ function SessionItem({
   flatLabels,
   labels,
   onLabelsChange,
+  chatMatchCount,
 }: SessionItemProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [contextMenuOpen, setContextMenuOpen] = useState(false)
@@ -269,6 +373,7 @@ function SessionItem({
     <div
       className="session-item"
       data-selected={isSelected || undefined}
+      data-session-id={item.id}
     >
       {/* Separator - only show if not first in group */}
       {!isFirstInGroup && (
@@ -528,10 +633,30 @@ function SessionItem({
             </div>
           </div>
         </button>
-        {/* Action buttons - visible on hover or when menu is open */}
+
+        {/* Match count badge - shown on right side for all items with matches */}
+        {chatMatchCount != null && chatMatchCount > 0 && (
+          <div className="absolute right-3 top-2 z-10">
+            <span
+              className={cn(
+                "inline-flex items-center justify-center min-w-[24px] px-1 py-1 rounded-[6px] text-[10px] font-medium tabular-nums leading-tight whitespace-nowrap",
+                isSelected
+                  ? "bg-yellow-300/50 border border-yellow-500 text-yellow-900"
+                  : "bg-yellow-300/10 border border-yellow-600/20 text-yellow-800"
+              )}
+              style={{ boxShadow: isSelected ? '0 1px 2px 0 rgba(234, 179, 8, 0.3)' : '0 1px 2px 0 rgba(133, 77, 14, 0.15)' }}
+              title="Matches found (⌘G next, ⌘⇧G prev)"
+            >
+              {chatMatchCount}
+            </span>
+          </div>
+        )}
+
+        {/* Action buttons - visible on hover or when menu is open, hidden when match badge is visible */}
+        {!(chatMatchCount != null && chatMatchCount > 0) && (
         <div
           className={cn(
-            "absolute right-2 top-2 transition-opacity z-10",
+            "absolute right-2 top-2 transition-opacity z-10 flex items-center gap-1",
             menuOpen || contextMenuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100"
           )}
         >
@@ -570,6 +695,7 @@ function SessionItem({
             </DropdownMenu>
           </div>
         </div>
+        )}
           </div>
         </ContextMenuTrigger>
         {/* Context menu - same content as dropdown */}
@@ -603,10 +729,10 @@ function SessionItem({
 }
 
 /**
- * DateHeader - Simple date group header rendered inline with content.
+ * SessionListSectionHeader - Section header for date groups and search result sections.
  * No sticky behavior - just scrolls with the list.
  */
-function DateHeader({ label }: { label: string }) {
+function SessionListSectionHeader({ label }: { label: string }) {
   return (
     <div className="px-4 py-2">
       <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
@@ -615,6 +741,9 @@ function DateHeader({ label }: { label: string }) {
     </div>
   )
 }
+
+/** Filter mode for tri-state filtering: include shows only matching, exclude hides matching */
+type FilterMode = 'include' | 'exclude'
 
 interface SessionListProps {
   items: SessionMeta[]
@@ -650,6 +779,12 @@ interface SessionListProps {
   labels?: LabelConfig[]
   /** Callback when session labels are toggled (for labels submenu in SessionMenu) */
   onLabelsChange?: (sessionId: string, labels: string[]) => void
+  /** Workspace ID for content search (optional - if not provided, content search is disabled) */
+  workspaceId?: string
+  /** Secondary status filter (status chips in "All Chats" view) - for search result grouping */
+  statusFilter?: Map<string, FilterMode>
+  /** Secondary label filter (label chips) - for search result grouping */
+  labelFilterMap?: Map<string, FilterMode>
 }
 
 // Re-export TodoStateId for use by parent components
@@ -686,6 +821,9 @@ export function SessionList({
   evaluateViews,
   labels = [],
   onLabelsChange,
+  workspaceId,
+  statusFilter,
+  labelFilterMap,
 }: SessionListProps) {
   const [session] = useSession()
   const { navigate } = useNavigation()
@@ -693,6 +831,9 @@ export function SessionList({
 
   // Pre-flatten label tree once for efficient ID lookups in each SessionItem
   const flatLabels = useMemo(() => flattenLabels(labels), [labels])
+
+  // Filter out hidden sessions (e.g., mini edit sessions) before any processing
+  const visibleItems = useMemo(() => items.filter(item => !item.hidden), [items])
 
   // Get current filter from navigation state (for preserving context in tab routes)
   const currentFilter = isChatsNavigation(navState) ? navState.filter : undefined
@@ -704,43 +845,175 @@ export function SessionList({
   const searchInputRef = useRef<HTMLInputElement>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
 
-  // Focus search input when search becomes active (with delay to let dropdown close)
+  // Content search state (full-text search via ripgrep)
+  const [contentSearchResults, setContentSearchResults] = useState<Map<string, { matchCount: number; snippet: string }>>(new Map())
+  const [isSearchingContent, setIsSearchingContent] = useState(false)
+  // Track if search input has actual DOM focus (for proper keyboard navigation gating)
+  const [isSearchInputFocused, setIsSearchInputFocused] = useState(false)
+
+  // Content search - triggers immediately when search query changes (ripgrep cancels previous search)
+  useEffect(() => {
+    if (!workspaceId || !searchActive || searchQuery.length < 2) {
+      setContentSearchResults(new Map())
+      return
+    }
+
+    const searchId = Date.now().toString(36)
+    searchLog.info('query:change', { searchId, query: searchQuery })
+
+    // Track if this effect was cleaned up (user typed new query)
+    let cancelled = false
+
+    setIsSearchingContent(true)
+
+    // 100ms debounce to prevent I/O contention from overlapping ripgrep searches
+    const timer = setTimeout(async () => {
+      try {
+        searchLog.info('ipc:call', { searchId })
+        const ipcStart = performance.now()
+
+        const results = await window.electronAPI.searchSessionContent(workspaceId, searchQuery, searchId)
+
+        // Ignore results if user already typed a new query
+        if (cancelled) return
+
+        searchLog.info('ipc:received', {
+          searchId,
+          durationMs: Math.round(performance.now() - ipcStart),
+          resultCount: results.length,
+        })
+
+        const resultMap = new Map<string, { matchCount: number; snippet: string }>()
+        for (const result of results) {
+          resultMap.set(result.sessionId, {
+            matchCount: result.matchCount,
+            snippet: result.matches[0]?.snippet || '',
+          })
+        }
+        setContentSearchResults(resultMap)
+
+        // Log render complete after React commits the state update
+        requestAnimationFrame(() => {
+          searchLog.info('render:complete', { searchId, sessionsDisplayed: resultMap.size })
+        })
+      } catch (error) {
+        if (cancelled) return
+        console.error('[SessionList] Content search error:', error)
+        setContentSearchResults(new Map())
+      } finally {
+        if (!cancelled) {
+          setIsSearchingContent(false)
+        }
+      }
+    }, 100)
+
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+      setIsSearchingContent(false)
+    }
+  }, [workspaceId, searchActive, searchQuery])
+
+  // Focus search input when search becomes active
   useEffect(() => {
     if (searchActive) {
-      const timer = setTimeout(() => {
-        searchInputRef.current?.focus()
-      }, 50)
-      return () => clearTimeout(timer)
+      searchInputRef.current?.focus()
     }
   }, [searchActive])
 
   // Sort by most recent activity first
-  const sortedItems = [...items].sort((a, b) =>
+  const sortedItems = [...visibleItems].sort((a, b) =>
     (b.lastMessageAt || 0) - (a.lastMessageAt || 0)
   )
 
-  // Filter items by search query — matches title, label names, and label values.
-  // '#' characters are stripped when matching labels (so "#bug" finds label "bug").
-  // A bare '#' matches all sessions that have any labels.
+  // Filter items by search query — ripgrep content search only for consistent results
+  // When query < 2 chars, apply current filter to maintain filtered view
   const searchFilteredItems = useMemo(() => {
-    if (!searchQuery.trim()) return sortedItems
-    const query = searchQuery.toLowerCase()
-    const labelQuery = query.replace(/#/g, '')
-    return sortedItems.filter(item => {
-      if (getSessionTitle(item).toLowerCase().includes(query)) return true
-      // Bare '#' (no text after stripping) matches any session with labels
-      if (!labelQuery && item.labels && item.labels.length > 0) return true
-      // Match against label names and values (with # stripped)
-      if (labelQuery && item.labels?.some(entry => {
-        const parsed = parseLabelEntry(entry)
-        const config = flatLabels.find(l => l.id === parsed.id)
-        if (config?.name.toLowerCase().includes(labelQuery)) return true
-        if (parsed.rawValue?.toLowerCase().includes(labelQuery)) return true
-        return false
-      })) return true
-      return false
-    })
-  }, [sortedItems, searchQuery, flatLabels])
+    // With short/no query, filter to current view (same as non-search mode)
+    if (searchQuery.length < 2) {
+      return sortedItems.filter(item =>
+        sessionMatchesCurrentFilter(item, currentFilter, { evaluateViews, statusFilter, labelFilterMap })
+      )
+    }
+
+    // 2+ chars: show sessions with ripgrep content matches (from ALL sessions)
+    // Sort by: fuzzy title score first, then by match count
+    return sortedItems
+      .filter(item => contentSearchResults.has(item.id))
+      .sort((a, b) => {
+        const aScore = fuzzyScore(getSessionTitle(a), searchQuery)
+        const bScore = fuzzyScore(getSessionTitle(b), searchQuery)
+
+        // Title matches come first, sorted by fuzzy score (higher = better)
+        if (aScore > 0 && bScore === 0) return -1
+        if (aScore === 0 && bScore > 0) return 1
+        if (aScore !== bScore) return bScore - aScore
+
+        // Then sort by ripgrep match count
+        const countA = contentSearchResults.get(a.id)?.matchCount || 0
+        const countB = contentSearchResults.get(b.id)?.matchCount || 0
+        return countB - countA
+      })
+  }, [sortedItems, searchQuery, contentSearchResults, currentFilter, evaluateViews, statusFilter, labelFilterMap])
+
+  // Split search results: sessions matching current filter vs all others
+  // Also limits total results to MAX_SEARCH_RESULTS (100)
+  const { matchingFilterItems, otherResultItems, exceededSearchLimit } = useMemo(() => {
+    // Check if ANY filtering is active (primary OR secondary)
+    const hasActiveFilters =
+      (currentFilter && currentFilter.kind !== 'allChats') ||
+      (statusFilter && statusFilter.size > 0) ||
+      (labelFilterMap && labelFilterMap.size > 0)
+
+    // DEBUG: Trace values to diagnose grouping issue
+    if (searchQuery.trim() && searchFilteredItems.length > 0) {
+      searchLog.info('search:grouping', {
+        searchQuery,
+        currentFilterKind: currentFilter?.kind,
+        currentFilterStateId: currentFilter?.kind === 'state' ? currentFilter.stateId : undefined,
+        hasActiveFilters,
+        statusFilterSize: statusFilter?.size ?? 0,
+        labelFilterSize: labelFilterMap?.size ?? 0,
+        itemCount: searchFilteredItems.length,
+      })
+    }
+
+    // Check if we have more results than the limit
+    const totalCount = searchFilteredItems.length
+    const exceeded = totalCount > MAX_SEARCH_RESULTS
+
+    if (searchQuery.length < 2 || !hasActiveFilters) {
+      // No grouping needed - all results go to "matching", but limit to MAX_SEARCH_RESULTS
+      const limitedItems = searchFilteredItems.slice(0, MAX_SEARCH_RESULTS)
+      return { matchingFilterItems: limitedItems, otherResultItems: [] as SessionMeta[], exceededSearchLimit: exceeded }
+    }
+
+    const matching: SessionMeta[] = []
+    const others: SessionMeta[] = []
+
+    // Split results, stopping once we hit MAX_SEARCH_RESULTS total
+    for (const item of searchFilteredItems) {
+      if (matching.length + others.length >= MAX_SEARCH_RESULTS) break
+
+      const matches = sessionMatchesCurrentFilter(item, currentFilter, { evaluateViews, statusFilter, labelFilterMap })
+      if (matches) {
+        matching.push(item)
+      } else {
+        others.push(item)
+      }
+    }
+
+    // DEBUG: Log split result
+    if (searchFilteredItems.length > 0) {
+      searchLog.info('search:grouping:result', {
+        matchingCount: matching.length,
+        othersCount: others.length,
+        exceeded,
+      })
+    }
+
+    return { matchingFilterItems: matching, otherResultItems: others, exceededSearchLimit: exceeded }
+  }, [searchFilteredItems, currentFilter, evaluateViews, searchQuery, statusFilter, labelFilterMap])
 
   // Reset display limit when search query changes
   useEffect(() => {
@@ -777,13 +1050,18 @@ export function SessionList({
     return () => observer.disconnect()
   }, [hasMore, loadMore])
 
-  // Group sessions by date (use paginated items)
+  // Group sessions by date (only used in normal mode, not search mode)
   const dateGroups = useMemo(() => groupSessionsByDate(paginatedItems), [paginatedItems])
 
-  // Create flat list for keyboard navigation (maintains order across groups)
+  // Create flat list for keyboard navigation (maintains order across groups/sections)
   const flatItems = useMemo(() => {
+    if (searchActive && searchQuery.length >= 2) {
+      // Search mode: flat list of matching + other results (no date grouping)
+      return [...matchingFilterItems, ...otherResultItems]
+    }
+    // Normal mode: flatten date groups
     return dateGroups.flatMap(group => group.sessions)
-  }, [dateGroups])
+  }, [searchActive, searchQuery, matchingFilterItems, otherResultItems, dateGroups])
 
   // Create a lookup map for session ID -> flat index
   const sessionIndexMap = useMemo(() => {
@@ -811,7 +1089,16 @@ export function SessionList({
     } else if (currentFilter.kind === 'state') {
       navigate(routes.view.state(currentFilter.stateId, item.id))
     }
+    // Scroll the selected item into view
+    requestAnimationFrame(() => {
+      const element = document.querySelector(`[data-session-id="${item.id}"]`)
+      element?.scrollIntoView({ block: 'nearest', behavior: 'instant' })
+    })
   }, [navigate, currentFilter])
+
+  // NOTE: We intentionally do NOT auto-select sessions while typing in search.
+  // Auto-selecting causes: 1) ChatDisplay to scroll, 2) focus loss from search input
+  // Selection only changes via: arrow key navigation or explicit click
 
   // Handle Enter to focus chat input
   const handleEnter = useCallback(() => {
@@ -853,10 +1140,14 @@ export function SessionList({
   }, [onDelete])
 
   // Roving tabindex for keyboard navigation
+  // During search: enabled but moveFocus=false so focus stays on search input
+  const rovingEnabled = isFocused || (searchActive && isSearchInputFocused)
+
   const {
     activeIndex,
     setActiveIndex,
     getItemProps,
+    getContainerProps,
     focusActiveItem,
   } = useRovingTabIndex({
     items: flatItems,
@@ -866,7 +1157,8 @@ export function SessionList({
     onActiveChange: handleActiveChange,
     onEnter: handleEnter,
     initialIndex: selectedIndex >= 0 ? selectedIndex : 0,
-    enabled: isFocused,
+    enabled: rovingEnabled,
+    moveFocus: !searchActive, // Keep focus on search input during search
   })
 
   // Sync activeIndex when selection changes externally
@@ -917,14 +1209,28 @@ export function SessionList({
     setRenameName("")
   }
 
-  // Handle search input key events
-  const handleSearchKeyDown = (e: React.KeyboardEvent) => {
-    // Stop propagation to prevent roving tabindex from intercepting keys (e.g. Backspace as Delete)
-    e.stopPropagation()
-
+  // Handle search input key events (Arrow keys handled by native listener above)
+  // Note: Escape blurs the input but doesn't close search - only the X button closes it
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // Escape: Blur the input but keep search visible
     if (e.key === 'Escape') {
       e.preventDefault()
-      onSearchClose?.()
+      searchInputRef.current?.blur()
+      return
+    }
+
+    // Enter: Focus the chat input (same as pressing Enter on a selected session)
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      onFocusChatInput?.()
+      return
+    }
+
+    // Forward arrow keys to roving tabindex (search input is outside the container)
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault()
+      getContainerProps().onKeyDown(e)
+      return
     }
   }
 
@@ -960,33 +1266,24 @@ export function SessionList({
   }
 
   return (
-    <>
+    <div className="flex flex-col h-screen">
+      {/* Search header - input + status row (shared with playground) */}
+      {searchActive && (
+        <SessionSearchHeader
+          searchQuery={searchQuery}
+          onSearchChange={onSearchChange}
+          onSearchClose={onSearchClose}
+          onKeyDown={handleSearchKeyDown}
+          onFocus={() => setIsSearchInputFocused(true)}
+          onBlur={() => setIsSearchInputFocused(false)}
+          isSearching={isSearchingContent}
+          resultCount={matchingFilterItems.length + otherResultItems.length}
+          exceededLimit={exceededSearchLimit}
+          inputRef={searchInputRef}
+        />
+      )}
       {/* ScrollArea with mask-fade-top-short - shorter fade to avoid header overlap */}
-      <ScrollArea className="h-screen select-none mask-fade-top-short">
-        {/* Search input - sticky at top */}
-        {searchActive && (
-          <div className="sticky top-0 z-sticky px-2 py-2 border-b border-border/50">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-              <input
-                ref={searchInputRef}
-                type="text"
-                value={searchQuery}
-                onChange={(e) => onSearchChange?.(e.target.value)}
-                onKeyDown={handleSearchKeyDown}
-                placeholder="Search conversations..."
-                className="w-full h-8 pl-8 pr-8 text-sm bg-foreground/5 border-0 rounded-[8px] outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50"
-              />
-              <button
-                onClick={onSearchClose}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 hover:bg-foreground/10 rounded"
-                title="Close search"
-              >
-                <X className="h-3.5 w-3.5 text-muted-foreground" />
-              </button>
-            </div>
-          </div>
-        )}
+      <ScrollArea className="flex-1 select-none mask-fade-top-short">
         <div
           ref={zoneRef}
           className="flex flex-col pb-14 min-w-0"
@@ -995,66 +1292,173 @@ export function SessionList({
           aria-label="Sessions"
         >
           {/* No results message when searching */}
-          {searchActive && searchQuery && flatItems.length === 0 && (
+          {searchActive && searchQuery && flatItems.length === 0 && !isSearchingContent && (
             <div className="flex flex-col items-center justify-center py-12 px-4">
               <p className="text-sm text-muted-foreground">No conversations found</p>
+              <p className="text-xs text-muted-foreground/60 mt-0.5">
+                Searched titles and message content
+              </p>
               <button
                 onClick={() => onSearchChange?.('')}
-                className="text-xs text-foreground hover:underline mt-1"
+                className="text-xs text-foreground hover:underline mt-2"
               >
                 Clear search
               </button>
             </div>
           )}
-          {dateGroups.map((group) => (
-            <div key={group.date.toISOString()}>
-              {/* Date header - scrolls with content */}
-              <DateHeader label={group.label} />
-              {/* Sessions in this date group */}
-              {group.sessions.map((item, indexInGroup) => {
-                const flatIndex = sessionIndexMap.get(item.id) ?? 0
-                const itemProps = getItemProps(item, flatIndex)
 
-                return (
-                  <SessionItem
-                    key={item.id}
-                    item={item}
-                    index={flatIndex}
-                    itemProps={itemProps}
-                    isSelected={session.selected === item.id}
-                    isLast={flatIndex === flatItems.length - 1}
-                    isFirstInGroup={indexInGroup === 0}
-                    onKeyDown={handleKeyDown}
-                    onRenameClick={handleRenameClick}
-                    onTodoStateChange={onTodoStateChange}
-                    onFlag={onFlag ? handleFlagWithToast : undefined}
-                    onUnflag={onUnflag ? handleUnflagWithToast : undefined}
-                    onMarkUnread={onMarkUnread}
-                    onDelete={handleDeleteWithToast}
-                    onSelect={() => {
-                      // Navigate to session with filter context (updates URL and selection)
-                      if (!currentFilter || currentFilter.kind === 'allChats') {
-                        navigate(routes.view.allChats(item.id))
-                      } else if (currentFilter.kind === 'flagged') {
-                        navigate(routes.view.flagged(item.id))
-                      } else if (currentFilter.kind === 'state') {
-                        navigate(routes.view.state(currentFilter.stateId, item.id))
-                      }
-                      // Notify parent
-                      onSessionSelect?.(item)
-                    }}
-                    onOpenInNewWindow={() => onOpenInNewWindow?.(item)}
-                    permissionMode={sessionOptions?.get(item.id)?.permissionMode}
-                    searchQuery={searchQuery}
-                    todoStates={todoStates}
-                    flatLabels={flatLabels}
-                    labels={labels}
-                    onLabelsChange={onLabelsChange}
-                  />
-                )
-              })}
-          </div>
-          ))}
+          {/* Search mode: flat list with two sections (In Current View + Other Conversations) */}
+          {searchActive && searchQuery.length >= 2 ? (
+            <>
+              {/* No results in current filter message */}
+              {matchingFilterItems.length === 0 && otherResultItems.length > 0 && (
+                <div className="px-4 py-3 text-sm text-muted-foreground">
+                  No results in current filter
+                </div>
+              )}
+
+              {/* Matching Filters section - flat list, no date grouping */}
+              {matchingFilterItems.length > 0 && (
+                <>
+                  <SessionListSectionHeader label="In Current View" />
+                  {matchingFilterItems.map((item, index) => {
+                    const flatIndex = sessionIndexMap.get(item.id) ?? 0
+                    const itemProps = getItemProps(item, flatIndex)
+                    return (
+                      <SessionItem
+                        key={item.id}
+                        item={item}
+                        index={flatIndex}
+                        itemProps={itemProps}
+                        isSelected={session.selected === item.id}
+                        isLast={flatIndex === flatItems.length - 1}
+                        isFirstInGroup={index === 0}
+                        onKeyDown={handleKeyDown}
+                        onRenameClick={handleRenameClick}
+                        onTodoStateChange={onTodoStateChange}
+                        onFlag={onFlag ? handleFlagWithToast : undefined}
+                        onUnflag={onUnflag ? handleUnflagWithToast : undefined}
+                        onMarkUnread={onMarkUnread}
+                        onDelete={handleDeleteWithToast}
+                        onSelect={() => {
+                          if (!currentFilter || currentFilter.kind === 'allChats') {
+                            navigate(routes.view.allChats(item.id))
+                          } else if (currentFilter.kind === 'flagged') {
+                            navigate(routes.view.flagged(item.id))
+                          } else if (currentFilter.kind === 'state') {
+                            navigate(routes.view.state(currentFilter.stateId, item.id))
+                          }
+                          onSessionSelect?.(item)
+                        }}
+                        onOpenInNewWindow={() => onOpenInNewWindow?.(item)}
+                        permissionMode={sessionOptions?.get(item.id)?.permissionMode}
+                        searchQuery={searchQuery}
+                        todoStates={todoStates}
+                        flatLabels={flatLabels}
+                        labels={labels}
+                        onLabelsChange={onLabelsChange}
+                        chatMatchCount={contentSearchResults.get(item.id)?.matchCount}
+                      />
+                    )
+                  })}
+                </>
+              )}
+
+              {/* Other Matches section - flat list, no date grouping */}
+              {otherResultItems.length > 0 && (
+                <>
+                  <SessionListSectionHeader label="Other Conversations" />
+                  {otherResultItems.map((item, index) => {
+                    const flatIndex = sessionIndexMap.get(item.id) ?? 0
+                    const itemProps = getItemProps(item, flatIndex)
+                    return (
+                      <SessionItem
+                        key={item.id}
+                        item={item}
+                        index={flatIndex}
+                        itemProps={itemProps}
+                        isSelected={session.selected === item.id}
+                        isLast={flatIndex === flatItems.length - 1}
+                        isFirstInGroup={index === 0}
+                        onKeyDown={handleKeyDown}
+                        onRenameClick={handleRenameClick}
+                        onTodoStateChange={onTodoStateChange}
+                        onFlag={onFlag ? handleFlagWithToast : undefined}
+                        onUnflag={onUnflag ? handleUnflagWithToast : undefined}
+                        onMarkUnread={onMarkUnread}
+                        onDelete={handleDeleteWithToast}
+                        onSelect={() => {
+                          if (!currentFilter || currentFilter.kind === 'allChats') {
+                            navigate(routes.view.allChats(item.id))
+                          } else if (currentFilter.kind === 'flagged') {
+                            navigate(routes.view.flagged(item.id))
+                          } else if (currentFilter.kind === 'state') {
+                            navigate(routes.view.state(currentFilter.stateId, item.id))
+                          }
+                          onSessionSelect?.(item)
+                        }}
+                        onOpenInNewWindow={() => onOpenInNewWindow?.(item)}
+                        permissionMode={sessionOptions?.get(item.id)?.permissionMode}
+                        searchQuery={searchQuery}
+                        todoStates={todoStates}
+                        flatLabels={flatLabels}
+                        labels={labels}
+                        onLabelsChange={onLabelsChange}
+                        chatMatchCount={contentSearchResults.get(item.id)?.matchCount}
+                      />
+                    )
+                  })}
+                </>
+              )}
+            </>
+          ) : (
+            /* Normal mode: show date-grouped sessions */
+            dateGroups.map((group) => (
+              <div key={group.date.toISOString()}>
+                <SessionListSectionHeader label={group.label} />
+                {group.sessions.map((item, indexInGroup) => {
+                  const flatIndex = sessionIndexMap.get(item.id) ?? 0
+                  const itemProps = getItemProps(item, flatIndex)
+                  return (
+                    <SessionItem
+                      key={item.id}
+                      item={item}
+                      index={flatIndex}
+                      itemProps={itemProps}
+                      isSelected={session.selected === item.id}
+                      isLast={flatIndex === flatItems.length - 1}
+                      isFirstInGroup={indexInGroup === 0}
+                      onKeyDown={handleKeyDown}
+                      onRenameClick={handleRenameClick}
+                      onTodoStateChange={onTodoStateChange}
+                      onFlag={onFlag ? handleFlagWithToast : undefined}
+                      onUnflag={onUnflag ? handleUnflagWithToast : undefined}
+                      onMarkUnread={onMarkUnread}
+                      onDelete={handleDeleteWithToast}
+                      onSelect={() => {
+                        if (!currentFilter || currentFilter.kind === 'allChats') {
+                          navigate(routes.view.allChats(item.id))
+                        } else if (currentFilter.kind === 'flagged') {
+                          navigate(routes.view.flagged(item.id))
+                        } else if (currentFilter.kind === 'state') {
+                          navigate(routes.view.state(currentFilter.stateId, item.id))
+                        }
+                        onSessionSelect?.(item)
+                      }}
+                      onOpenInNewWindow={() => onOpenInNewWindow?.(item)}
+                      permissionMode={sessionOptions?.get(item.id)?.permissionMode}
+                      searchQuery={searchQuery}
+                      todoStates={todoStates}
+                      flatLabels={flatLabels}
+                      labels={labels}
+                      onLabelsChange={onLabelsChange}
+                      chatMatchCount={contentSearchResults.get(item.id)?.matchCount}
+                    />
+                  )
+                })}
+              </div>
+            ))
+          )}
           {/* Load more sentinel - triggers infinite scroll */}
           {hasMore && (
             <div ref={sentinelRef} className="flex justify-center py-4">
@@ -1074,7 +1478,7 @@ export function SessionList({
         onSubmit={handleRenameSubmit}
         placeholder="Enter a name..."
       />
-    </>
+    </div>
   )
 }
 

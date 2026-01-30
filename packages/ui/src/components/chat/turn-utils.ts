@@ -11,6 +11,23 @@ import type { ActivityItem, ActivityStatus, ActivityType, ResponseContent, TodoI
 // Re-export ActivityItem for consumers
 export type { ActivityItem }
 
+// ============================================================================
+// Helpers
+// ============================================================================
+
+/**
+ * Strip XML-like error wrapper tags from SDK error messages.
+ * The Claude Agent SDK wraps errors in tags like <error><tool_use_error>...</tool_use_error></error>
+ * which aren't user-friendly. This extracts the inner message.
+ */
+function stripErrorTags(content: string | undefined): string | undefined {
+  if (!content) return content
+  return content
+    .replace(/<\/?error>/gi, '')
+    .replace(/<\/?tool_use_error>/gi, '')
+    .trim()
+}
+
 /** Convert StoredMessage to Message format for turn processing */
 export function storedToMessage(stored: StoredMessage): Message {
   return {
@@ -234,7 +251,7 @@ function messageToActivity(message: Message, existingActivities: ActivityItem[] 
     displayName: message.toolDisplayName,  // LLM-generated human-friendly name
     toolDisplayMeta: message.toolDisplayMeta,  // Embedded metadata with base64 icon for viewer
     timestamp: message.timestamp,
-    error: message.isError ? message.content : undefined,
+    error: message.isError ? stripErrorTags(message.content) : undefined,
     // parentId: The toolUseId of the parent tool (e.g., Task subagent).
     // This is tracked by session manager's parentToolStack, NOT the SDK's
     // parent_tool_use_id which is for result-matching, not hierarchy.

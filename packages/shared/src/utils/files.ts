@@ -760,7 +760,7 @@ function readImageFile(tempFile: string): FileAttachment | null {
     return {
       type: 'image',
       path: 'clipboard',
-      name: `clipboard-${Date.now()}.png`,
+      name: `pasted-image.png`, // Renderer assigns sequential name
       mimeType: 'image/png',
       base64,
       size: stats.size,

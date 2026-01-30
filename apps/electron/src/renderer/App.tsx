@@ -551,7 +551,8 @@ export default function App() {
           store.set(sessionMetaMapAtom, newMetaMap)
 
           // Show notification on complete (when window is not focused)
-          if (event.type === 'complete') {
+          // Skip hidden sessions (mini-agent sessions) - they shouldn't trigger notifications
+          if (event.type === 'complete' && !updatedSession.hidden) {
             // Get the last assistant message as preview
             const lastMessage = updatedSession.messages.findLast(
               m => m.role === 'assistant' && !m.isIntermediate
@@ -713,7 +714,7 @@ export default function App() {
     window.electronAPI.sessionCommand(sessionId, { type: 'rename', name })
   }, [updateSessionById])
 
-  const handleSendMessage = useCallback(async (sessionId: string, message: string, attachments?: FileAttachment[], skillSlugs?: string[]) => {
+  const handleSendMessage = useCallback(async (sessionId: string, message: string, attachments?: FileAttachment[], skillSlugs?: string[], externalBadges?: ContentBadge[]) => {
     try {
       // Step 1: Store attachments and get persistent metadata
       let storedAttachments: StoredAttachment[] | undefined
@@ -788,9 +789,11 @@ export default function App() {
 
       // Step 4: Extract badges from mentions (sources/skills) with embedded icons
       // Badges are self-contained for display in UserMessageBubble and viewer
-      const badges: ContentBadge[] = windowWorkspaceId
+      // Merge with any externally provided badges (e.g., from EditPopover context badges)
+      const mentionBadges: ContentBadge[] = windowWorkspaceId
         ? extractBadges(message, skills, sources, windowWorkspaceId)
         : []
+      const badges: ContentBadge[] = [...(externalBadges || []), ...mentionBadges]
 
       // Step 4.1: Detect SDK slash commands (e.g., /compact) and create command badges
       // This makes /compact render as an inline badge rather than raw text
@@ -1443,15 +1446,21 @@ function FilePreviewRenderer({
         />
       )
 
-    case 'markdown':
+    case 'markdown': {
+      // Show PLAN header for .md files in plans folder (handles both absolute and relative paths)
+      const isPlanFile =
+        (state.filePath.includes('/plans/') || state.filePath.startsWith('plans/')) &&
+        state.filePath.endsWith('.md')
       return (
         <DocumentFormattedMarkdownOverlay
           isOpen
           onClose={onClose}
           content={state.content ?? ''}
           filePath={state.filePath}
+          variant={isPlanFile ? 'plan' : 'response'}
         />
       )
+    }
 
     case 'json': {
       // JSONPreviewOverlay expects parsed data, not a raw string

@@ -66,6 +66,8 @@ export interface SessionMeta {
   createdAt?: number
   /** Total number of messages in this session */
   messageCount?: number
+  /** When true, session is hidden from session list (e.g., mini edit sessions) */
+  hidden?: boolean
 }
 
 /**
@@ -118,6 +120,8 @@ export function extractSessionMeta(session: Session): SessionMeta {
     model: session.model,
     createdAt: session.createdAt,
     tokenUsage: session.tokenUsage,
+    // Hidden sessions (e.g., mini edit sessions in EditPopover)
+    hidden: session.hidden,
   }
 }
 

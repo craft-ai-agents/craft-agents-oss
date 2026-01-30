@@ -20,6 +20,7 @@ export type ErrorCode =
   | 'model_no_tool_support'  // Model doesn't support tool/function calling
   | 'invalid_model'          // Model ID not found
   | 'data_policy_error'      // OpenRouter data policy restriction
+  | 'invalid_request'        // API rejected the request (e.g., bad image, invalid content)
   | 'unknown_error';
 
 export interface RecoveryAction {
@@ -173,6 +174,14 @@ const ERROR_DEFINITIONS: Record<ErrorCode, Omit<AgentError, 'code' | 'originalEr
       { key: 's', label: 'Open Settings', command: '/settings', action: 'settings' },
     ],
     canRetry: false,
+  },
+  invalid_request: {
+    title: 'Invalid Request',
+    message: 'The API rejected this request.',
+    actions: [
+      { key: 'r', label: 'Retry', action: 'retry' },
+    ],
+    canRetry: true,
   },
   unknown_error: {
     title: 'Error',
