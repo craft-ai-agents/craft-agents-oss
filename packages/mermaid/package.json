@@ -1,6 +1,6 @@
 {
   "name": "@craft-agent/mermaid",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "license": "Apache-2.0",
   "description": "Mermaid flowchart to styled SVG renderer with zinc monochrome palette",
   "type": "module",

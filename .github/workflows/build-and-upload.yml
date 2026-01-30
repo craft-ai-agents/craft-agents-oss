@@ -1,111 +1,71 @@
-name: Build and Upload
+name: Build
 
 on:
   workflow_dispatch:
     inputs:
-      build_macos:
-        description: 'Build macOS (arm64 + x64 DMG)'
+      targets:
+        description: 'Targets to build (comma-separated: macos-arm64, macos-x64, windows, linux, or "all")'
         required: false
-        type: boolean
-        default: true
-      build_windows:
-        description: 'Build Windows (x64 EXE)'
-        required: false
-        type: boolean
-        default: true
-      build_linux:
-        description: 'Build Linux (x64 AppImage)'
-        required: false
-        type: boolean
-        default: true
-      isLatest:
-        description: 'Also upload to /latest folder'
-        required: false
-        type: boolean
-        default: true
-      uploadScript:
-        description: 'Upload install scripts (install-app.sh for macOS/Linux, install-app.ps1 for Windows)'
-        required: false
-        type: boolean
-        default: false
-      createRelease:
-        description: 'Create a GitHub release with binaries'
-        required: false
-        type: boolean
-        default: true
-      legacyManifest:
-        description: 'Also generate legacy manifest.json (for transitioning existing users from old updater)'
-        required: false
-        type: boolean
-        default: true
-      forceRebuild:
-        description: 'Force rebuild even if artifact already exists in S3'
-        required: false
-        type: boolean
-        default: true
+        type: string
+        default: 'all'
 
 permissions:
-  contents: write
+  contents: read
 
-# Prevent concurrent builds of the same version to avoid race conditions
 concurrency:
-  group: build-${{ github.ref }}-${{ github.sha }}
-  cancel-in-progress: false
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  # Prepare job to compute build matrix
   prepare:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
-      version: ${{ steps.get-version.outputs.version }}
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      version: ${{ steps.version.outputs.version }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+      - uses: actions/checkout@v4
 
-      - name: Get version from app
-        id: get-version
+      - name: Get version
+        id: version
         run: |
           VERSION=$(jq -r .version packages/shared/package.json)
-          echo "Version: $VERSION"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Version: $VERSION"
 
-      - name: Compute build matrix
-        id: set-matrix
+      - name: Build matrix
+        id: matrix
         run: |
+          TARGETS="${{ inputs.targets || 'all' }}"
           MATRIX='{"include":['
           FIRST=true
 
-          # macOS arm64
-          if [ "${{ inputs.build_macos }}" = "true" ]; then
+          add_target() {
             if [ "$FIRST" = true ]; then FIRST=false; else MATRIX+=','; fi
-            MATRIX+='{"os":"macos-14","platform":"darwin","arch":"arm64","script":"build-dmg.sh","ext":"dmg"}'
+            MATRIX+="$1"
+          }
+
+          if [[ "$TARGETS" == "all" || "$TARGETS" == *"macos-arm64"* ]]; then
+            add_target '{"os":"macos-14","platform":"darwin","arch":"arm64","ext":"dmg"}'
           fi
 
-          # macOS x64
-          if [ "${{ inputs.build_macos }}" = "true" ]; then
-            if [ "$FIRST" = true ]; then FIRST=false; else MATRIX+=','; fi
-            MATRIX+='{"os":"macos-15-intel","platform":"darwin","arch":"x64","script":"build-dmg.sh","ext":"dmg"}'
+          if [[ "$TARGETS" == "all" || "$TARGETS" == *"macos-x64"* ]]; then
+            add_target '{"os":"macos-15-intel","platform":"darwin","arch":"x64","ext":"dmg"}'
           fi
 
-          # Windows x64
-          if [ "${{ inputs.build_windows }}" = "true" ]; then
-            if [ "$FIRST" = true ]; then FIRST=false; else MATRIX+=','; fi
-            MATRIX+='{"os":"windows-2019","platform":"win32","arch":"x64","script":"build-win.ps1","ext":"exe"}'
+          if [[ "$TARGETS" == "all" || "$TARGETS" == *"windows"* ]]; then
+            add_target '{"os":"windows-2019","platform":"win32","arch":"x64","ext":"exe"}'
           fi
 
-          # Linux x64
-          if [ "${{ inputs.build_linux }}" = "true" ]; then
-            if [ "$FIRST" = true ]; then FIRST=false; else MATRIX+=','; fi
-            MATRIX+='{"os":"ubuntu-latest","platform":"linux","arch":"x64","script":"build-linux.sh","ext":"AppImage"}'
+          if [[ "$TARGETS" == "all" || "$TARGETS" == *"linux"* ]]; then
+            add_target '{"os":"ubuntu-latest","platform":"linux","arch":"x64","ext":"AppImage"}'
           fi
 
           MATRIX+=']}'
           echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
-          echo "Build matrix: $MATRIX"
+          echo "Targets: $TARGETS"
+          echo "Matrix: $MATRIX"
 
-  # Build jobs run in parallel
   build:
     needs: prepare
     timeout-minutes: 30
@@ -114,106 +74,31 @@ jobs:
       matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
-
-      # Check if artifact already exists in S3 (skip build if it does)
-      - name: Check if artifact exists
-        id: check-artifact
-        shell: bash
-        run: |
-          VERSION="${{ needs.prepare.outputs.version }}"
-          ARTIFACT_NAME="Craft-Agent-${{ matrix.arch }}.${{ matrix.ext }}"
-          ARTIFACT_URL="https://agents.craft.do/electron/${VERSION}/${ARTIFACT_NAME}"
-
-          echo "Checking for existing artifact: $ARTIFACT_URL"
-
-          # Check if artifact exists (HEAD request) with retry logic
-          for i in 1 2 3; do
-            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --head --connect-timeout 10 "$ARTIFACT_URL" || echo "000")
-            if [ "$HTTP_STATUS" != "000" ]; then
-              break
-            fi
-            echo "Attempt $i failed, retrying in $((i * 2)) seconds..."
-            sleep $((i * 2))
-          done
-
-          if [ "$HTTP_STATUS" = "200" ] && [ "${{ inputs.forceRebuild }}" != "true" ]; then
-            echo "Artifact already exists in S3, skipping build"
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "Artifact not found or force rebuild requested, will build"
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Download existing artifact
-        if: steps.check-artifact.outputs.skip == 'true'
-        shell: bash
-        run: |
-          VERSION="${{ needs.prepare.outputs.version }}"
-          ARTIFACT_NAME="Craft-Agent-${{ matrix.arch }}.${{ matrix.ext }}"
-          ARTIFACT_URL="https://agents.craft.do/electron/${VERSION}/${ARTIFACT_NAME}"
-
-          mkdir -p apps/electron/release
-          echo "Downloading existing artifact from S3..."
-
-          # Download main binary with retry logic
-          for i in 1 2 3; do
-            if curl -fsSL --connect-timeout 30 --retry 2 "$ARTIFACT_URL" -o "apps/electron/release/${ARTIFACT_NAME}"; then
-              echo "Downloaded: apps/electron/release/${ARTIFACT_NAME}"
-              break
-            fi
-            echo "Attempt $i failed, retrying in $((i * 5)) seconds..."
-            sleep $((i * 5))
-            if [ $i -eq 3 ]; then
-              echo "Failed to download artifact after 3 attempts"
-              exit 1
-            fi
-          done
-
-          # For macOS: also download the zip (needed by electron-updater for auto-updates)
-          if [ "${{ matrix.platform }}" = "darwin" ]; then
-            ZIP_NAME="Craft-Agent-${{ matrix.arch }}.zip"
-            ZIP_URL="https://agents.craft.do/electron/${VERSION}/${ZIP_NAME}"
-            echo "Downloading existing zip from S3..."
-            curl -fsSL --connect-timeout 30 --retry 2 "$ZIP_URL" -o "apps/electron/release/${ZIP_NAME}" || \
-              echo "Warning: zip not found in S3 (may not have been uploaded for this version)"
-          fi
-
-          ls -la apps/electron/release/
+      - uses: actions/checkout@v4
 
       - name: Setup Bun
-        if: steps.check-artifact.outputs.skip != 'true'
-        uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5  # v2.0.1
+        uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
 
-      # Cache bun dependencies
-      - name: Cache bun dependencies
-        if: steps.check-artifact.outputs.skip != 'true'
-        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57  # v4.2.0
+      - name: Cache dependencies
+        uses: actions/cache@v4
         with:
           path: |
             ~/.bun/install/cache
             node_modules
-            apps/electron/node_modules
-            packages/*/node_modules
           key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-bun-
 
       - name: Install dependencies
-        if: steps.check-artifact.outputs.skip != 'true'
         run: bun install
 
-      # macOS code signing certificate
-      - name: Import Code Signing Certificate
-        if: steps.check-artifact.outputs.skip != 'true' && matrix.platform == 'darwin' && env.APPLE_CERTIFICATE_BASE64 != ''
+      # macOS code signing
+      - name: Import Code Signing Certificate (macOS)
+        if: matrix.platform == 'darwin' && env.APPLE_CERTIFICATE_BASE64 != ''
         env:
           APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
         run: |
-          # Create temporary keychain
           KEYCHAIN_PATH=$RUNNER_TEMP/build.keychain-db
           KEYCHAIN_PASSWORD=$(openssl rand -base64 24)
 
@@ -221,58 +106,40 @@ jobs:
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
-          # Import certificate
           CERT_PATH=$RUNNER_TEMP/certificate.p12
           echo "$APPLE_CERTIFICATE_BASE64" | base64 --decode > "$CERT_PATH"
-          security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
           rm "$CERT_PATH"
 
-          # Add keychain to search list and set as default
-          # shellcheck disable=SC2046
           security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
           security default-keychain -s "$KEYCHAIN_PATH"
-
-          # Allow codesign to access the keychain
           security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
-          # Verify certificate was imported
-          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
-
-      # macOS builds
-      - name: Build Electron app (macOS)
-        if: steps.check-artifact.outputs.skip != 'true' && matrix.platform == 'darwin'
-        run: bash apps/electron/scripts/build-dmg.sh ${{ matrix.arch }}
+      - name: Build (macOS)
+        if: matrix.platform == 'darwin'
+        run: bun run scripts/build.ts --platform=darwin --arch=${{ matrix.arch }}
         env:
-          # OAuth credentials (baked into build)
           GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
           GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
           SLACK_OAUTH_CLIENT_ID: ${{ secrets.SLACK_OAUTH_CLIENT_ID }}
           SLACK_OAUTH_CLIENT_SECRET: ${{ secrets.SLACK_OAUTH_CLIENT_SECRET }}
           MICROSOFT_OAUTH_CLIENT_ID: ${{ secrets.MICROSOFT_OAUTH_CLIENT_ID }}
-          # Sentry error tracking (ingest URL baked into build)
           SENTRY_ELECTRON_INGEST_URL: ${{ secrets.SENTRY_ELECTRON_INGEST_URL }}
-          # Code signing (optional - set secrets for signed builds)
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
 
-      # Windows builds
-      - name: Configure Windows Defender exclusions
-        if: steps.check-artifact.outputs.skip != 'true' && matrix.platform == 'win32'
+      - name: Configure Defender exclusions (Windows)
+        if: matrix.platform == 'win32'
         shell: powershell
         run: |
-          # Add exclusions for build directories to prevent file locking
-          $workDir = "${{ github.workspace }}"
-          Add-MpPreference -ExclusionPath "$workDir" -ErrorAction SilentlyContinue
-          Add-MpPreference -ExclusionPath "$workDir\apps\electron\vendor" -ErrorAction SilentlyContinue
-          Add-MpPreference -ExclusionPath "$workDir\apps\electron\release" -ErrorAction SilentlyContinue
+          Add-MpPreference -ExclusionPath "${{ github.workspace }}" -ErrorAction SilentlyContinue
           Add-MpPreference -ExclusionProcess "bun.exe" -ErrorAction SilentlyContinue
-          Write-Host "Added Defender exclusions for build directories"
 
-      - name: Build Electron app (Windows)
-        if: steps.check-artifact.outputs.skip != 'true' && matrix.platform == 'win32'
-        run: powershell -ExecutionPolicy Bypass -File apps/electron/scripts/build-win.ps1
+      - name: Build (Windows)
+        if: matrix.platform == 'win32'
+        run: bun run scripts/build.ts --platform=win32 --arch=${{ matrix.arch }}
         env:
           GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
           GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
@@ -281,9 +148,9 @@ jobs:
           MICROSOFT_OAUTH_CLIENT_ID: ${{ secrets.MICROSOFT_OAUTH_CLIENT_ID }}
           SENTRY_ELECTRON_INGEST_URL: ${{ secrets.SENTRY_ELECTRON_INGEST_URL }}
 
-      # Windows code signing with Azure Key Vault
+      # Windows code signing
       - name: Sign Windows executable
-        if: steps.check-artifact.outputs.skip != 'true' && matrix.platform == 'win32' && env.AZURE_CERT_KVU != ''
+        if: matrix.platform == 'win32' && env.AZURE_CERT_KVU != ''
         env:
           AZURE_CERT_KVU: ${{ secrets.AZURE_CERT_KVU }}
           AZURE_CERT_KVC: ${{ secrets.AZURE_CERT_KVC }}
@@ -292,16 +159,8 @@ jobs:
           AZURE_CERT_KVT: ${{ secrets.AZURE_CERT_KVT }}
         shell: powershell
         run: |
-          Write-Host "Installing AzureSignTool..."
           dotnet tool install --global AzureSignTool
-
           $ExePath = Get-ChildItem -Path "apps/electron/release" -Filter "*.exe" | Select-Object -First 1
-          if (-not $ExePath) {
-            Write-Host "ERROR: No exe found to sign" -ForegroundColor Red
-            exit 1
-          }
-
-          Write-Host "Signing $($ExePath.FullName)..."
           AzureSignTool sign `
             --azure-key-vault-url "$env:AZURE_CERT_KVU" `
             --azure-key-vault-client-id "$env:AZURE_CERT_KVI" `
@@ -309,29 +168,12 @@ jobs:
             --azure-key-vault-tenant-id "$env:AZURE_CERT_KVT" `
             --azure-key-vault-certificate "$env:AZURE_CERT_KVC" `
             --timestamp-rfc3161 "http://timestamp.digicert.com" `
-            --timestamp-digest sha256 `
             --file-digest sha256 `
-            --description "Craft Agent" `
-            --description-url "https://agents.craft.do" `
             "$($ExePath.FullName)"
 
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "ERROR: Code signing failed" -ForegroundColor Red
-            exit 1
-          }
-
-          Write-Host "Code signing successful" -ForegroundColor Green
-
-          # Verify the signature
-          Write-Host "Verifying signature..."
-          $sig = Get-AuthenticodeSignature "$($ExePath.FullName)"
-          Write-Host "Status: $($sig.Status)"
-          Write-Host "Signer: $($sig.SignerCertificate.Subject)"
-
-      # Linux builds
-      - name: Build Electron app (Linux)
-        if: steps.check-artifact.outputs.skip != 'true' && matrix.platform == 'linux'
-        run: bash apps/electron/scripts/build-linux.sh ${{ matrix.arch }}
+      - name: Build (Linux)
+        if: matrix.platform == 'linux'
+        run: bun run scripts/build.ts --platform=linux --arch=${{ matrix.arch }}
         env:
           GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
           GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
@@ -340,230 +182,26 @@ jobs:
           MICROSOFT_OAUTH_CLIENT_ID: ${{ secrets.MICROSOFT_OAUTH_CLIENT_ID }}
           SENTRY_ELECTRON_INGEST_URL: ${{ secrets.SENTRY_ELECTRON_INGEST_URL }}
 
-      - name: Verify build outputs
-        if: steps.check-artifact.outputs.skip != 'true'
-        shell: bash
-        run: |
-          echo "=== Verifying build outputs ==="
-          RELEASE_DIR="apps/electron/release"
-          BINARY="$RELEASE_DIR/Craft-Agent-${{ matrix.arch }}.${{ matrix.ext }}"
-
-          # Check main binary exists
-          if [ ! -f "$BINARY" ]; then
-            echo "::error::Main binary not found: $BINARY"
-            exit 1
-          fi
-          echo "✓ Binary: $(basename $BINARY) ($(du -h "$BINARY" | cut -f1))"
-
-          # macOS: ZIP is required for electron-updater auto-updates (it downloads zip, not dmg)
-          if [ "${{ matrix.platform }}" = "darwin" ]; then
-            ZIP="$RELEASE_DIR/Craft-Agent-${{ matrix.arch }}.zip"
-            if [ ! -f "$ZIP" ]; then
-              echo "::error::macOS ZIP not found: $ZIP — electron-updater requires this for auto-updates!"
-              echo "::error::Check that electron-builder.yml has 'zip' in mac.target"
-              exit 1
-            fi
-            echo "✓ ZIP:    $(basename $ZIP) ($(du -h "$ZIP" | cut -f1))"
-          fi
-
-          echo "=== All build outputs verified ==="
-
-      - name: Upload build artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.0
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
         with:
           name: build-${{ matrix.platform }}-${{ matrix.arch }}
-          # Include main binary plus electron-updater files (zip for macOS updates,
-          # yml manifests, and blockmap for differential updates)
           path: |
             apps/electron/release/Craft-Agent-${{ matrix.arch }}.${{ matrix.ext }}
             apps/electron/release/Craft-Agent-${{ matrix.arch }}.zip
-            apps/electron/release/*.yml
-            apps/electron/release/*.blockmap
           retention-days: 7
 
-  # Upload all builds to S3 and create GitHub release
-  upload:
+  summary:
     needs: [prepare, build]
     runs-on: ubuntu-latest
-    timeout-minutes: 15
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5  # v2.0.1
-        with:
-          bun-version: latest
-
-      # Cache bun dependencies for upload job
-      - name: Cache bun dependencies
-        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57  # v4.2.0
-        with:
-          path: |
-            ~/.bun/install/cache
-            node_modules
-          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-bun-
-
-      - name: Install dependencies
-        run: bun install
-
-      - name: Download all build artifacts
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
-        with:
-          path: apps/electron/release
-          pattern: build-*
-          merge-multiple: true
-
-      - name: Verify downloaded artifacts
+      - name: Print artifact links
         run: |
-          echo "=== Downloaded Artifacts ==="
-          ls -la apps/electron/release/
-          echo ""
-
-          # Verify we have at least one binary
-          BINARIES=$(find apps/electron/release -name "*.dmg" -o -name "*.exe" -o -name "*.AppImage" | wc -l | tr -d ' ')
-          echo "Binary count: $BINARIES"
-          if [ "$BINARIES" -eq 0 ]; then
-            echo "::error::No binaries found in release directory!"
-            exit 1
-          fi
-
-          # Verify macOS zips exist if DMGs exist (required for electron-updater)
-          for DMG in apps/electron/release/Craft-Agent-*.dmg; do
-            [ -f "$DMG" ] || continue
-            ARCH=$(echo "$DMG" | grep -oE '(arm64|x64)')
-            ZIP="apps/electron/release/Craft-Agent-${ARCH}.zip"
-            if [ ! -f "$ZIP" ]; then
-              echo "::error::Found $DMG but missing corresponding $ZIP — electron-updater needs zip for auto-updates!"
-              exit 1
-            fi
-            echo "✓ macOS $ARCH: DMG + ZIP present"
-          done
-
-          echo "=== Artifacts verified ==="
-
-      - name: Upload builds to S3
-        env:
-          S3_VERSIONS_BUCKET_ENDPOINT: ${{ secrets.S3_VERSIONS_BUCKET_ENDPOINT }}
-          S3_VERSIONS_BUCKET_ACCESS_KEY_ID: ${{ secrets.S3_VERSIONS_BUCKET_ACCESS_KEY_ID }}
-          S3_VERSIONS_BUCKET_SECRET_ACCESS_KEY: ${{ secrets.S3_VERSIONS_BUCKET_SECRET_ACCESS_KEY }}
-        run: |
-          echo "=== Upload Configuration ==="
-          echo "inputs.isLatest: ${{ inputs.isLatest }}"
-          echo "inputs.uploadScript: ${{ inputs.uploadScript }}"
-
-          FLAGS=""
-          if [ "${{ inputs.isLatest }}" = "true" ]; then
-            FLAGS="$FLAGS --latest"
-          fi
-          if [ "${{ inputs.legacyManifest }}" = "true" ]; then
-            FLAGS="$FLAGS --legacy-manifest"
-          fi
-          if [ "${{ inputs.uploadScript }}" = "true" ]; then
-            FLAGS="$FLAGS --script"
-          fi
-
-          echo "FLAGS: $FLAGS"
-          echo "Running: bun run scripts/upload.ts $FLAGS"
-          echo "==========================="
-          bun run scripts/upload.ts $FLAGS
-
-      - name: Print update manifests
-        run: |
-          echo "=== electron-updater Manifests (uploaded to S3) ==="
-          echo ""
-          for YML in apps/electron/release/latest-mac.yml apps/electron/release/latest.yml apps/electron/release/latest-linux.yml; do
-            if [ -f "$YML" ]; then
-              echo "── $(basename $YML) ──"
-              cat "$YML"
-              echo ""
-            fi
-          done
-          if [ -f "apps/electron/release/manifest.json" ]; then
-            echo "── manifest.json (legacy, for old updater transition) ──"
-            cat apps/electron/release/manifest.json
-            echo ""
-          fi
-          echo "=== Update URL: https://agents.craft.do/electron/latest/ ==="
-
-      - name: Create git tag
-        if: github.ref == 'refs/heads/main'
-        run: |
-          VERSION="${{ needs.prepare.outputs.version }}"
-          TAG="v${VERSION}"
-
-          # Check if tag already exists on remote (not just locally)
-          if git ls-remote --tags origin | grep -q "refs/tags/${TAG}$"; then
-            echo "Tag $TAG already exists on remote, skipping"
-          else
-            echo "Creating tag $TAG"
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git tag -a "$TAG" -m "Release $TAG"
-
-            # Push and verify success
-            if git push origin "$TAG"; then
-              echo "Tag $TAG created and pushed successfully"
-            else
-              echo "ERROR: Failed to push tag $TAG"
-              exit 1
-            fi
-          fi
-
-      - name: Create GitHub Release
-        if: ${{ inputs.createRelease }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          VERSION="${{ needs.prepare.outputs.version }}"
-          # Check if release already exists
-          if gh release view "v${VERSION}" &>/dev/null; then
-            # Upload all installers to existing release
-            gh release upload "v${VERSION}" apps/electron/release/*.dmg apps/electron/release/*.exe apps/electron/release/*.AppImage --clobber 2>/dev/null || true
-          else
-            # Create new release with all installers
-            gh release create "v${VERSION}" \
-              --title "v${VERSION}" \
-              --generate-notes \
-              apps/electron/release/*.dmg apps/electron/release/*.exe apps/electron/release/*.AppImage 2>/dev/null || \
-            gh release create "v${VERSION}" \
-              --title "v${VERSION}" \
-              --generate-notes
-          fi
-
-      - name: Print install commands
-        run: |
-          VERSION="${{ needs.prepare.outputs.version }}"
-          BASE_URL="https://agents.craft.do/electron"
           echo ""
           echo "=========================================="
-          echo "  Build Complete - Version $VERSION"
+          echo "  Build v${{ needs.prepare.outputs.version }} complete"
           echo "=========================================="
           echo ""
-          echo "Install commands:"
-          echo ""
-          echo "  macOS / Linux:"
-          echo "    curl -fsSL https://agents.craft.do/install-app.sh | bash"
-          echo ""
-          echo "  Windows (PowerShell):"
-          echo "    irm https://agents.craft.do/install-app.ps1 | iex"
-          echo ""
-          echo "Direct download URLs:"
-          echo ""
-          echo "  macOS (Apple Silicon):"
-          echo "    ${BASE_URL}/${VERSION}/Craft-Agent-arm64.dmg"
-          echo ""
-          echo "  macOS (Intel):"
-          echo "    ${BASE_URL}/${VERSION}/Craft-Agent-x64.dmg"
-          echo ""
-          echo "  Windows:"
-          echo "    ${BASE_URL}/${VERSION}/Craft-Agent-x64.exe"
-          echo ""
-          echo "  Linux:"
-          echo "    ${BASE_URL}/${VERSION}/Craft-Agent-x64.AppImage"
-          echo ""
-          echo "Version folder:"
-          echo "  ${BASE_URL}/${VERSION}/"
+          echo "Download artifacts from:"
+          echo "  ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           echo ""
