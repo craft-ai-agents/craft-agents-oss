@@ -18,6 +18,7 @@ import { usePlatform } from '@craft-agent/ui'
 import type { ContentBadge, Session, CreateSessionOptions } from '../../../shared/types'
 import { useActiveWorkspace, useAppShellContext, useSession } from '@/context/AppShellContext'
 import { useEscapeInterrupt } from '@/context/EscapeInterruptContext'
+import { useRegisterModal } from '@/context/ModalContext'
 import { ChatDisplay } from '../app-shell/ChatDisplay'
 
 /** Rotating placeholders for compact mode input - short, action-oriented */
@@ -670,6 +671,9 @@ export function EditPopover({
       setInternalOpen(value)
     }
   }
+
+  // Register with modal context so Ctrl+W/Cmd+W closes the popover first
+  useRegisterModal(open, () => setOpen(false))
 
   // Use App context for session management (same code path as main chat)
   const { onCreateSession, onSendMessage } = useAppShellContext()
