@@ -135,6 +135,9 @@ linux:
     - target: AppImage
       arch:
         - x64
+    - target: dir
+      arch:
+        - x64
   artifactName: "Craft-Agent-${arch}.${ext}"
   # Exclude ripgrep binaries for other platforms
   files:
