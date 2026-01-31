@@ -824,7 +824,14 @@ export class CraftAgent {
       debug('[chat] sourceMcpServers:', sourceMcpResult.servers);
       debug('[chat] sourceApiServers:', this.sourceApiServers);
 
-      const mcpServers: Options['mcpServers'] = isMiniAgent
+      // Headless agents use minimal MCP servers to avoid HTTP connection delays
+      // (e.g., craft-agents-docs hangs when 7+ agents connect simultaneously)
+      const mcpServers: Options['mcpServers'] = this.isHeadless
+        ? {
+            // Headless: only session-scoped tools (in-process, no network)
+            session: getSessionScopedTools(sessionId, this.workspaceRootPath),
+          }
+        : isMiniAgent
         ? {
             // Mini agents need session tools (config_validate) and docs for reference
             session: getSessionScopedTools(sessionId, this.workspaceRootPath),
@@ -1516,7 +1523,8 @@ export class CraftAgent {
         // Selectively disable tools - file tools are disabled (use MCP), web/code controlled by settings
         disallowedTools,
         // Load workspace as SDK plugin (enables skills, commands, agents from workspace)
-        plugins: [{ type: 'local' as const, path: this.workspaceRootPath }],
+        // Skip plugins for headless agents — not needed and adds startup overhead
+        ...(this.isHeadless ? {} : { plugins: [{ type: 'local' as const, path: this.workspaceRootPath }] }),
       };
 
       // Track whether we're trying to resume a session (for error handling)
@@ -1600,8 +1608,16 @@ export class CraftAgent {
       // Track whether we received any assistant content (for empty response detection)
       // When SDK returns empty response (e.g., failed resume), we need to detect and recover
       let receivedAssistantContent = false;
+      let firstMessageReceived = false;
+      if (this.isHeadless) {
+        console.error(`[CraftAgent:headless] Waiting for first SDK message... (session=${sessionId}, model=${model})`);
+      }
       try {
         for await (const message of this.currentQuery) {
+          if (!firstMessageReceived && this.isHeadless) {
+            firstMessageReceived = true;
+            console.error(`[CraftAgent:headless] First SDK message received (type=${'type' in message ? (message as any).type : 'unknown'})`);
+          }
           // Track if we got any text content from assistant
           if ('type' in message && message.type === 'assistant' && 'message' in message) {
             const assistantMsg = message.message as { content?: unknown[] };
@@ -1729,6 +1745,9 @@ export class CraftAgent {
       } catch (sdkError) {
         // Debug: log inner catch trigger (stderr to avoid SDK JSON pollution)
         console.error(`[CraftAgent] INNER CATCH triggered: ${sdkError instanceof Error ? sdkError.message : String(sdkError)}`);
+        if (this.isHeadless) {
+          console.error(`[CraftAgent:headless] Error details: firstMessageReceived=${firstMessageReceived}, session=${sessionId}`);
+        }
 
         // Handle user interruption
         if (sdkError instanceof AbortError) {

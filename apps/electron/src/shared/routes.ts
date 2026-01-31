@@ -155,6 +155,12 @@ export const routes = {
       subpage && subpage !== 'app'
         ? `settings/${subpage}` as const
         : 'settings' as const,
+
+    /** Lab view (lab navigator) */
+    lab: (projectId?: string) => {
+      if (!projectId) return 'lab' as const
+      return `lab/project/${projectId}` as const
+    },
   },
 } as const
 

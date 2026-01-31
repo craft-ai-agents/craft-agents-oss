@@ -2488,4 +2488,196 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // Note: Permission mode cycling settings (cyclablePermissionModes) are now workspace-level
   // and managed via WORKSPACE_SETTINGS_GET/UPDATE channels
 
+  // ============================================================
+  // Lab (workspace-scoped)
+  // ============================================================
+
+  ipcMain.handle(IPC_CHANNELS.LAB_GET_PROJECTS, async (_event, workspaceId: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) return []
+    const { loadAllProjects } = await import('@craft-agent/shared/lab')
+    return loadAllProjects(workspace.rootPath)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.LAB_CREATE_PROJECT, async (_event, workspaceId: string, input: any) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
+    const { createProject } = await import('@craft-agent/shared/lab')
+    return createProject(workspace.rootPath, input)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.LAB_DELETE_PROJECT, async (_event, workspaceId: string, projectId: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) return false
+    const { deleteProject } = await import('@craft-agent/shared/lab')
+    return deleteProject(workspace.rootPath, projectId)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.LAB_SAVE_PROJECT, async (_event, workspaceId: string, project: any) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
+    const { saveProject } = await import('@craft-agent/shared/lab')
+    saveProject(workspace.rootPath, project)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.LAB_GET_PERSONAS, async (_event, workspaceId: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) return []
+    const { loadAllPersonas } = await import('@craft-agent/shared/lab')
+    return loadAllPersonas(workspace.rootPath)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.LAB_CREATE_PERSONA, async (_event, workspaceId: string, input: any) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
+    const { createPersona } = await import('@craft-agent/shared/lab')
+    return createPersona(workspace.rootPath, input)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.LAB_SAVE_PERSONA, async (_event, workspaceId: string, persona: any) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
+    const { savePersona } = await import('@craft-agent/shared/lab')
+    savePersona(workspace.rootPath, persona)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.LAB_DELETE_PERSONA, async (_event, workspaceId: string, personaId: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) return false
+    const { deletePersona } = await import('@craft-agent/shared/lab')
+    return deletePersona(workspace.rootPath, personaId)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.LAB_GET_PIPELINES, async (_event, workspaceId: string, projectId: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) return []
+    const { loadProjectPipelines } = await import('@craft-agent/shared/lab')
+    return loadProjectPipelines(workspace.rootPath, projectId)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.LAB_CREATE_PIPELINE, async (_event, workspaceId: string, projectId: string, prompt: string, maxIterations?: number) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
+    const { createPipeline } = await import('@craft-agent/shared/lab')
+    return createPipeline(workspace.rootPath, projectId, prompt, maxIterations)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.LAB_DELETE_PIPELINE, async (_event, workspaceId: string, projectId: string, pipelineId: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) return false
+    const { deletePipeline } = await import('@craft-agent/shared/lab')
+    return deletePipeline(workspace.rootPath, projectId, pipelineId)
+  })
+
+  // Track active pipeline AbortControllers for cancellation
+  const activePipelineAbortControllers = new Map<string, AbortController>()
+
+  // Run a pipeline (War Room execution) - runs asynchronously and broadcasts events
+  ipcMain.handle(IPC_CHANNELS.LAB_RUN_PIPELINE, async (_event, workspaceId: string, projectId: string, pipelineId: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
+
+    const { loadProject, loadPipeline, resolvePersonas, runPipeline } = await import('@craft-agent/shared/lab')
+
+    const project = loadProject(workspace.rootPath, projectId)
+    if (!project) throw new Error(`Project not found: ${projectId}`)
+
+    const pipeline = loadPipeline(workspace.rootPath, projectId, pipelineId)
+    if (!pipeline) throw new Error(`Pipeline not found: ${pipelineId}`)
+
+    const personas = resolvePersonas(workspace.rootPath, project.personaIds)
+
+    // Ensure auth is set up before spawning agents.
+    // SessionManager.initialize() may have failed (common in dev mode), leaving
+    // process.env without CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY.
+    // The auth retry flow in normal sessions handles this, but headless agents don't
+    // have that mechanism — they just crash with "process exited with code 1".
+    await sessionManager.reinitializeAuth()
+
+    // Create AbortController for this pipeline run
+    const abortController = new AbortController()
+    activePipelineAbortControllers.set(pipelineId, abortController)
+
+    // Run pipeline asynchronously - don't await, let it run in the background
+    // Broadcast events to all renderer windows
+    runPipeline({
+      workspace,
+      workspaceRootPath: workspace.rootPath,
+      project,
+      personas,
+      pipeline,
+      signal: abortController.signal,
+      onEvent: (pipelineEvent) => {
+        // Broadcast to all windows
+        for (const win of BrowserWindow.getAllWindows()) {
+          win.webContents.send(IPC_CHANNELS.LAB_PIPELINE_EVENT, pipelineEvent)
+        }
+      },
+    }).catch((err: Error) => {
+      ipcLog.error(`Pipeline ${pipelineId} failed:`, err.message)
+    }).finally(() => {
+      activePipelineAbortControllers.delete(pipelineId)
+    })
+
+    // Return immediately - pipeline runs in background
+  })
+
+  // Stop a running pipeline
+  ipcMain.handle(IPC_CHANNELS.LAB_STOP_PIPELINE, async (_event, workspaceId: string, projectId: string, pipelineId: string) => {
+    ipcLog.info(`[lab:stop] Stop requested for pipeline ${pipelineId}`)
+    const controller = activePipelineAbortControllers.get(pipelineId)
+    if (controller) {
+      // Pipeline is actively running in this process — abort it
+      ipcLog.info(`[lab:stop] Aborting active pipeline ${pipelineId}`)
+      controller.abort()
+      activePipelineAbortControllers.delete(pipelineId)
+    } else {
+      // No active controller — pipeline is stale (orphaned from a previous app session).
+      // Update it on disk to cancelled and notify the renderer.
+      ipcLog.info(`[lab:stop] No active controller — marking stale pipeline ${pipelineId} as cancelled`)
+      const workspace = getWorkspaceByNameOrId(workspaceId)
+      if (workspace) {
+        const { loadPipeline, savePipeline } = await import('@craft-agent/shared/lab')
+        const pipeline = loadPipeline(workspace.rootPath, projectId, pipelineId)
+        if (pipeline && !['completed', 'failed', 'cancelled'].includes(pipeline.status)) {
+          pipeline.status = 'cancelled'
+          pipeline.completedAt = Date.now()
+          // Mark all running agents as failed
+          for (const phase of pipeline.phases) {
+            for (const agent of phase.agents) {
+              if (agent.status === 'running') {
+                agent.status = 'failed'
+                agent.error = 'Stopped (process no longer running)'
+                agent.completedAt = Date.now()
+              }
+            }
+            if (phase.status === 'running') {
+              phase.status = 'failed'
+              phase.completedAt = Date.now()
+            }
+          }
+          savePipeline(workspace.rootPath, pipeline)
+
+          // Notify renderer
+          for (const win of BrowserWindow.getAllWindows()) {
+            win.webContents.send(IPC_CHANNELS.LAB_PIPELINE_EVENT, {
+              type: 'pipeline_cancelled',
+              pipelineId: pipeline.id,
+              error: 'Pipeline was stopped (process no longer running)',
+            })
+          }
+        }
+      }
+    }
+  })
+
+  // Clear all pipeline history for a project
+  ipcMain.handle(IPC_CHANNELS.LAB_CLEAR_PIPELINES, async (_event, workspaceId: string, projectId: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
+
+    const { deleteAllPipelines } = await import('@craft-agent/shared/lab')
+    return deleteAllPipelines(workspace.rootPath, projectId)
+  })
+
 }

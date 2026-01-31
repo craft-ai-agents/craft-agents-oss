@@ -193,6 +193,14 @@ export function getDefaultOptions(): Partial<Options> {
     const nullDevice = process.platform === 'win32' ? 'NUL' : '/dev/null';
     const envFileFlag = `--env-file=${nullDevice}`;
 
+    // Ensure bun is findable in PATH for subprocess spawning.
+    // Electron GUI apps on macOS get a minimal PATH from launchd that doesn't include ~/.bun/bin.
+    // The SDK resolves 'bun' by name, so it must be in PATH even if we set the absolute path.
+    const bunBinDir = join(homedir(), '.bun', 'bin');
+    const currentPath = process.env.PATH || '';
+    const pathSep = process.platform === 'win32' ? ';' : ':';
+    const enhancedPath = currentPath.includes(bunBinDir) ? currentPath : `${bunBinDir}${pathSep}${currentPath}`;
+
     // If custom path is set (e.g., for Electron), use it with minimal options
     if (customPathToClaudeCodeExecutable) {
         const executableArgs = [envFileFlag];
@@ -207,6 +215,7 @@ export function getDefaultOptions(): Partial<Options> {
             executableArgs,
             env: {
                 ...process.env,
+                PATH: enhancedPath,
                 ... optionsEnv,
                 // Propagate debug mode from argv flag OR existing env var
                 CRAFT_DEBUG: (process.argv.includes('--debug') || process.env.CRAFT_DEBUG === '1') ? '1' : '0',
@@ -226,6 +235,7 @@ export function getDefaultOptions(): Partial<Options> {
             executableArgs: [envFileFlag, '--preload', join(baseDir, 'network-interceptor.ts')],
             env: {
                 ...process.env,
+                PATH: enhancedPath,
                 BUN_BE_BUN: '1',
                 ... optionsEnv,
                 // Propagate debug mode from argv flag OR existing env var
@@ -237,6 +247,7 @@ export function getDefaultOptions(): Partial<Options> {
         executableArgs: [envFileFlag],
         env: {
             ... process.env,
+            PATH: enhancedPath,
             ... optionsEnv,
             // Propagate debug mode from argv flag OR existing env var
             CRAFT_DEBUG: (process.argv.includes('--debug') || process.env.CRAFT_DEBUG === '1') ? '1' : '0',
