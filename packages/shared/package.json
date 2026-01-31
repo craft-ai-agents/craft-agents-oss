@@ -48,7 +48,11 @@
     "./version": "./src/version/index.ts",
     "./branding": "./src/branding.ts",
     "./network-interceptor": "./src/network-interceptor.ts",
-    "./search": "./src/search/index.ts"
+    "./search": "./src/search/index.ts",
+    "./lab": "./src/lab/index.ts",
+    "./lab/persona-templates": "./src/lab/persona-templates.ts",
+    "./lab/types": "./src/lab/types.ts",
+    "./lab/storage": "./src/lab/storage.ts"
   },
   "dependencies": {
     "@craft-agent/core": "workspace:*",

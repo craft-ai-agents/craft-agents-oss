@@ -436,6 +436,41 @@ const api: ElectronAPI = {
   browseForGitBash: () => ipcRenderer.invoke(IPC_CHANNELS.GITBASH_BROWSE),
   setGitBashPath: (path: string) => ipcRenderer.invoke(IPC_CHANNELS.GITBASH_SET_PATH, path),
 
+  // Lab (workspace-scoped)
+  getLabProjects: (workspaceId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.LAB_GET_PROJECTS, workspaceId),
+  createLabProject: (workspaceId: string, input: any) =>
+    ipcRenderer.invoke(IPC_CHANNELS.LAB_CREATE_PROJECT, workspaceId, input),
+  deleteLabProject: (workspaceId: string, projectId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.LAB_DELETE_PROJECT, workspaceId, projectId),
+  saveLabProject: (workspaceId: string, project: any) =>
+    ipcRenderer.invoke(IPC_CHANNELS.LAB_SAVE_PROJECT, workspaceId, project),
+  getLabPersonas: (workspaceId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.LAB_GET_PERSONAS, workspaceId),
+  createLabPersona: (workspaceId: string, input: any) =>
+    ipcRenderer.invoke(IPC_CHANNELS.LAB_CREATE_PERSONA, workspaceId, input),
+  saveLabPersona: (workspaceId: string, persona: any) =>
+    ipcRenderer.invoke(IPC_CHANNELS.LAB_SAVE_PERSONA, workspaceId, persona),
+  deleteLabPersona: (workspaceId: string, personaId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.LAB_DELETE_PERSONA, workspaceId, personaId),
+  getLabPipelines: (workspaceId: string, projectId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.LAB_GET_PIPELINES, workspaceId, projectId),
+  createLabPipeline: (workspaceId: string, projectId: string, prompt: string, maxIterations?: number) =>
+    ipcRenderer.invoke(IPC_CHANNELS.LAB_CREATE_PIPELINE, workspaceId, projectId, prompt, maxIterations),
+  deleteLabPipeline: (workspaceId: string, projectId: string, pipelineId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.LAB_DELETE_PIPELINE, workspaceId, projectId, pipelineId),
+  runLabPipeline: (workspaceId: string, projectId: string, pipelineId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.LAB_RUN_PIPELINE, workspaceId, projectId, pipelineId),
+  onLabPipelineEvent: (callback: (event: any) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, pipelineEvent: any) => {
+      callback(pipelineEvent)
+    }
+    ipcRenderer.on(IPC_CHANNELS.LAB_PIPELINE_EVENT, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.LAB_PIPELINE_EVENT, handler)
+    }
+  },
+
   // Menu actions (for unified Craft menu)
   menuQuit: () => ipcRenderer.invoke(IPC_CHANNELS.MENU_QUIT),
   menuNewWindow: () => ipcRenderer.invoke(IPC_CHANNELS.MENU_NEW_WINDOW),

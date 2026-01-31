@@ -197,9 +197,14 @@ ${this.config.prompt}
       model: this.config.model,
       isHeadless: true,
       // Create a minimal session config with the permission mode
+      // sdkCwd MUST be set to an existing directory — without it, CraftAgent falls back
+      // to getSessionPath(workspaceRootPath, sessionId) which points to a non-existent
+      // directory, causing child_process.spawn() to fail with ENOENT (misleadingly
+      // reported as the executable not being found).
       session: {
-        id: `headless-${Date.now()}`,
+        id: `headless-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         workspaceRootPath: this.config.workspace.rootPath,
+        sdkCwd: this.config.workspace.rootPath,
         createdAt: Date.now(),
         lastUsedAt: Date.now(),
         permissionMode,

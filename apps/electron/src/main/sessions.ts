@@ -831,8 +831,18 @@ export class SessionManager {
       }
       sessionLog.info('Setting executable:', bunPath)
       setExecutable(bunPath)
+    } else {
+      // In development: use absolute path to bun
+      const bunPath = join(homedir(), '.bun', 'bin', 'bun')
+      if (existsSync(bunPath)) {
+        sessionLog.info('Setting executable (dev):', bunPath)
+        setExecutable(bunPath)
+      } else {
+        // Fallback: try to find bun in PATH
+        sessionLog.warn(`Bun not found at ${bunPath}, using 'bun' from PATH`)
+        setExecutable('bun')
+      }
     }
-    // In development: use system 'bun' (works on Windows now, supports --preload for interceptor)
 
     // Set up authentication environment variables (critical for SDK to work)
     await this.reinitializeAuth()

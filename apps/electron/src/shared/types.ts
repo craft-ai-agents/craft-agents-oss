@@ -658,6 +658,21 @@ export const IPC_CHANNELS = {
   SKILLS_OPEN_FINDER: 'skills:openFinder',
   SKILLS_CHANGED: 'skills:changed',
 
+  // Lab (workspace-scoped)
+  LAB_GET_PROJECTS: 'lab:getProjects',
+  LAB_CREATE_PROJECT: 'lab:createProject',
+  LAB_DELETE_PROJECT: 'lab:deleteProject',
+  LAB_SAVE_PROJECT: 'lab:saveProject',
+  LAB_GET_PERSONAS: 'lab:getPersonas',
+  LAB_CREATE_PERSONA: 'lab:createPersona',
+  LAB_SAVE_PERSONA: 'lab:savePersona',
+  LAB_DELETE_PERSONA: 'lab:deletePersona',
+  LAB_GET_PIPELINES: 'lab:getPipelines',
+  LAB_CREATE_PIPELINE: 'lab:createPipeline',
+  LAB_DELETE_PIPELINE: 'lab:deletePipeline',
+  LAB_RUN_PIPELINE: 'lab:runPipeline',
+  LAB_PIPELINE_EVENT: 'lab:pipelineEvent',
+
   // Status management (workspace-scoped)
   STATUSES_LIST: 'statuses:list',
   STATUSES_REORDER: 'statuses:reorder',  // Reorder statuses (drag-and-drop)
@@ -932,6 +947,21 @@ export interface ElectronAPI {
   // Skills change listener (live updates when skills are added/removed/modified)
   onSkillsChanged(callback: (skills: LoadedSkill[]) => void): () => void
 
+  // Lab (workspace-scoped)
+  getLabProjects(workspaceId: string): Promise<import('@craft-agent/shared/lab').LabProject[]>
+  createLabProject(workspaceId: string, input: import('@craft-agent/shared/lab').CreateProjectInput): Promise<import('@craft-agent/shared/lab').LabProject>
+  deleteLabProject(workspaceId: string, projectId: string): Promise<boolean>
+  saveLabProject(workspaceId: string, project: import('@craft-agent/shared/lab').LabProject): Promise<void>
+  getLabPersonas(workspaceId: string): Promise<import('@craft-agent/shared/lab').LabPersona[]>
+  createLabPersona(workspaceId: string, input: import('@craft-agent/shared/lab').CreatePersonaInput): Promise<import('@craft-agent/shared/lab').LabPersona>
+  saveLabPersona(workspaceId: string, persona: import('@craft-agent/shared/lab').LabPersona): Promise<void>
+  deleteLabPersona(workspaceId: string, personaId: string): Promise<boolean>
+  getLabPipelines(workspaceId: string, projectId: string): Promise<import('@craft-agent/shared/lab').LabPipeline[]>
+  createLabPipeline(workspaceId: string, projectId: string, prompt: string, maxIterations?: number): Promise<import('@craft-agent/shared/lab').LabPipeline>
+  deleteLabPipeline(workspaceId: string, projectId: string, pipelineId: string): Promise<boolean>
+  runLabPipeline(workspaceId: string, projectId: string, pipelineId: string): Promise<void>
+  onLabPipelineEvent(callback: (event: import('@craft-agent/shared/lab/pipeline-runner').PipelineEvent) => void): () => void
+
   // Statuses (workspace-scoped)
   listStatuses(workspaceId: string): Promise<import('@craft-agent/shared/statuses').StatusConfig[]>
   reorderStatuses(workspaceId: string, orderedIds: string[]): Promise<void>
@@ -1176,6 +1206,17 @@ export interface SkillsNavigationState {
 }
 
 /**
+ * Lab navigation state - shows LabProjectListPanel in navigator
+ */
+export interface LabNavigationState {
+  navigator: 'lab'
+  /** Selected project details, or null for empty state */
+  details: { type: 'lab-project'; projectId: string } | null
+  /** Optional right sidebar panel state */
+  rightSidebar?: RightSidebarPanel
+}
+
+/**
  * Unified navigation state - single source of truth for all 3 panels
  *
  * From this state we can derive:
@@ -1188,6 +1229,7 @@ export type NavigationState =
   | SourcesNavigationState
   | SettingsNavigationState
   | SkillsNavigationState
+  | LabNavigationState
 
 /**
  * Type guard to check if state is chats navigation
@@ -1218,6 +1260,13 @@ export const isSkillsNavigation = (
 ): state is SkillsNavigationState => state.navigator === 'skills'
 
 /**
+ * Type guard to check if state is lab navigation
+ */
+export const isLabNavigation = (
+  state: NavigationState
+): state is LabNavigationState => state.navigator === 'lab'
+
+/**
  * Default navigation state - allChats with no selection
  */
 export const DEFAULT_NAVIGATION_STATE: NavigationState = {
@@ -1230,6 +1279,12 @@ export const DEFAULT_NAVIGATION_STATE: NavigationState = {
  * Get a persistence key for localStorage from NavigationState
  */
 export const getNavigationStateKey = (state: NavigationState): string => {
+  if (state.navigator === 'lab') {
+    if (state.details) {
+      return `lab/project/${state.details.projectId}`
+    }
+    return 'lab'
+  }
   if (state.navigator === 'sources') {
     if (state.details) {
       return `sources/source/${state.details.sourceSlug}`
@@ -1263,6 +1318,16 @@ export const getNavigationStateKey = (state: NavigationState): string => {
  * Returns null if the key is invalid
  */
 export const parseNavigationStateKey = (key: string): NavigationState | null => {
+  // Handle lab
+  if (key === 'lab') return { navigator: 'lab', details: null }
+  if (key.startsWith('lab/project/')) {
+    const projectId = key.slice(12)
+    if (projectId) {
+      return { navigator: 'lab', details: { type: 'lab-project', projectId } }
+    }
+    return { navigator: 'lab', details: null }
+  }
+
   // Handle sources
   if (key === 'sources') return { navigator: 'sources', details: null }
   if (key.startsWith('sources/source/')) {

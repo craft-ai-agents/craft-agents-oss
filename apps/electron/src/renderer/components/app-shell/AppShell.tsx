@@ -24,6 +24,7 @@ import {
   FolderOpen,
   HelpCircle,
   ExternalLink,
+  FlaskConical,
 } from "lucide-react"
 import { PanelRightRounded } from "../icons/PanelRightRounded"
 import { PanelLeftRounded } from "../icons/PanelLeftRounded"
@@ -101,6 +102,7 @@ import {
   isSourcesNavigation,
   isSettingsNavigation,
   isSkillsNavigation,
+  isLabNavigation,
   type NavigationState,
   type ChatFilter,
 } from "@/contexts/NavigationContext"
@@ -112,6 +114,9 @@ import { EditPopover, getEditConfig, type EditContextKey } from "@/components/ui
 import { getDocUrl } from "@craft-agent/shared/docs/doc-links"
 import SettingsNavigator from "@/pages/settings/SettingsNavigator"
 import { RightSidebar } from "./RightSidebar"
+import { labProjectsAtom, labPersonasAtom } from "@/atoms/lab"
+import { LabProjectListPanel } from "@/components/lab/LabProjectListPanel"
+import { CreateProjectDialog } from "@/components/lab/CreateProjectDialog"
 import type { RichTextInputHandle } from "@/components/ui/rich-text-input"
 import { hasOpenOverlay } from "@/lib/overlay-detection"
 import { clearSourceIconCaches } from "@/lib/icon-cache"
@@ -793,6 +798,26 @@ function AppShellContent({
     return cleanup
   }, [])
 
+  // Lab state (workspace-scoped)
+  const [labProjects, setLabProjects] = React.useState<import('@craft-agent/shared/lab/types').LabProject[]>([])
+  const setLabProjectsAtom = useSetAtom(labProjectsAtom)
+  React.useEffect(() => {
+    setLabProjectsAtom(labProjects)
+  }, [labProjects, setLabProjectsAtom])
+
+  // Load Lab projects from backend on mount
+  React.useEffect(() => {
+    if (!activeWorkspaceId) return
+    window.electronAPI.getLabProjects(activeWorkspaceId).then((loaded) => {
+      setLabProjects(loaded || [])
+    }).catch(err => {
+      console.error('[Lab] Failed to load projects:', err)
+    })
+  }, [activeWorkspaceId])
+
+  // Create project dialog state
+  const [showCreateProjectDialog, setShowCreateProjectDialog] = React.useState(false)
+
   // Handle session source selection changes
   const handleSessionSourcesChange = React.useCallback(async (sessionId: string, sourceSlugs: string[]) => {
     try {
@@ -1439,6 +1464,43 @@ function AppShellContent({
     navigate(routes.view.skills())
   }, [])
 
+  // Handler for Lab view
+  const handleLabClick = useCallback(() => {
+    navigate(routes.view.lab())
+  }, [])
+
+  // Handle selecting a lab project from the list
+  const handleLabProjectSelect = React.useCallback((project: import('@craft-agent/shared/lab/types').LabProject) => {
+    navigate(routes.view.lab(project.id))
+  }, [navigate])
+
+  // Handle creating a new lab project
+  const handleCreateLabProject = React.useCallback(async (input: import('@craft-agent/shared/lab/types').CreateProjectInput) => {
+    if (!activeWorkspaceId) return
+    try {
+      const project = await window.electronAPI.createLabProject(activeWorkspaceId, input)
+      setLabProjects(prev => [project, ...prev])
+      navigate(routes.view.lab(project.id))
+    } catch (err) {
+      console.error('[Lab] Failed to create project:', err)
+    }
+  }, [activeWorkspaceId, navigate])
+
+  // Handle deleting a lab project
+  const handleDeleteLabProject = React.useCallback(async (projectId: string) => {
+    if (!activeWorkspaceId) return
+    try {
+      await window.electronAPI.deleteLabProject(activeWorkspaceId, projectId)
+      setLabProjects(prev => prev.filter(p => p.id !== projectId))
+      // If we were viewing the deleted project, navigate to Lab root
+      if (isLabNavigation(navState) && navState.details?.projectId === projectId) {
+        navigate(routes.view.lab())
+      }
+    } catch (err) {
+      console.error('[Lab] Failed to delete project:', err)
+    }
+  }, [activeWorkspaceId, navState, navigate])
+
   // Handler for settings view
   const handleSettingsClick = useCallback((subpage: SettingsSubpage = 'app') => {
     navigate(routes.view.settings(subpage))
@@ -1640,13 +1702,14 @@ function AppShellContent({
     }
     flattenTree(labelTree)
 
-    // 3. Sources, Skills, Settings
+    // 3. Sources, Skills, Lab, Settings
     result.push({ id: 'nav:sources', type: 'nav', action: handleSourcesClick })
     result.push({ id: 'nav:skills', type: 'nav', action: handleSkillsClick })
+    result.push({ id: 'nav:lab', type: 'nav', action: handleLabClick })
     result.push({ id: 'nav:settings', type: 'nav', action: () => handleSettingsClick('app') })
 
     return result
-  }, [handleAllChatsClick, handleFlaggedClick, handleTodoStateClick, effectiveTodoStates, handleLabelClick, labelConfigs, labelTree, viewConfigs, handleViewClick, handleSourcesClick, handleSkillsClick, handleSettingsClick])
+  }, [handleAllChatsClick, handleFlaggedClick, handleTodoStateClick, effectiveTodoStates, handleLabelClick, labelConfigs, labelTree, viewConfigs, handleViewClick, handleSourcesClick, handleSkillsClick, handleLabClick, handleSettingsClick])
 
   // Toggle folder expanded state
   const handleToggleFolder = React.useCallback((path: string) => {
@@ -2080,6 +2143,14 @@ function AppShellContent({
                         type: 'skills',
                         onAddSkill: openAddSkill,
                       },
+                    },
+                    {
+                      id: "nav:lab",
+                      title: "Lab",
+                      label: labProjects.length > 0 ? String(labProjects.length) : undefined,
+                      icon: FlaskConical,
+                      variant: isLabNavigation(navState) ? "default" : "ghost",
+                      onClick: handleLabClick,
                     },
                     // --- Separator ---
                     { id: "separator:skills-settings", type: "separator" },
@@ -2762,6 +2833,14 @@ function AppShellContent({
                       {...getEditConfig('add-skill', activeWorkspace.rootPath)}
                     />
                   )}
+                  {/* New Project button (only for lab mode) */}
+                  {isLabNavigation(navState) && (
+                    <HeaderIconButton
+                      icon={<Plus className="h-4 w-4" />}
+                      tooltip="New Project"
+                      onClick={() => setShowCreateProjectDialog(true)}
+                    />
+                  )}
                 </>
               }
             />
@@ -2787,6 +2866,16 @@ function AppShellContent({
                 onSkillClick={handleSkillSelect}
                 onDeleteSkill={handleDeleteSkill}
                 selectedSkillSlug={isSkillsNavigation(navState) && navState.details?.type === 'skill' ? navState.details.skillSlug : null}
+              />
+            )}
+            {isLabNavigation(navState) && activeWorkspaceId && (
+              /* Lab Project List */
+              <LabProjectListPanel
+                projects={labProjects}
+                selectedProjectId={isLabNavigation(navState) && navState.details ? navState.details.projectId : null}
+                onProjectClick={handleLabProjectSelect}
+                onCreateProject={() => setShowCreateProjectDialog(true)}
+                onDeleteProject={handleDeleteLabProject}
               />
             )}
             {isSettingsNavigation(navState) && (
@@ -3148,6 +3237,13 @@ function AppShellContent({
       )}
 
       </TooltipProvider>
+
+      {/* Lab: Create Project Dialog */}
+      <CreateProjectDialog
+        open={showCreateProjectDialog}
+        onOpenChange={setShowCreateProjectDialog}
+        onSubmit={handleCreateLabProject}
+      />
     </AppShellProvider>
   )
 }

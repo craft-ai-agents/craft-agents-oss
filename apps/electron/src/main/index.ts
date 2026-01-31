@@ -3,6 +3,20 @@
 import { loadShellEnv } from './shell-env'
 loadShellEnv()
 
+// Ensure ~/.bun/bin is in PATH for subprocess spawning.
+// loadShellEnv() skips in dev mode (VITE_DEV_SERVER_URL is set), and even when it runs,
+// the shell env may not propagate correctly. This is a safety net for spawn('bun', ...).
+import { join as _joinPath } from 'path'
+import { homedir as _homedir, platform as _platform } from 'os'
+;(() => {
+  const bunBinDir = _joinPath(_homedir(), '.bun', 'bin')
+  const currentPath = process.env.PATH || ''
+  if (!currentPath.includes(bunBinDir)) {
+    const sep = _platform() === 'win32' ? ';' : ':'
+    process.env.PATH = `${bunBinDir}${sep}${currentPath}`
+  }
+})()
+
 import { app, BrowserWindow } from 'electron'
 import { createHash } from 'crypto'
 import { hostname, homedir } from 'os'
