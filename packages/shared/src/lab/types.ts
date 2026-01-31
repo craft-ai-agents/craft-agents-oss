@@ -159,6 +159,12 @@ export interface LabAgentRun {
   completedAt?: number;
   /** Error message if failed */
   error?: string;
+  /** Streaming text — accumulated during execution (transient, not persisted) */
+  streamingText?: string;
+  /** Currently active tool name (transient, not persisted) */
+  activeTool?: string;
+  /** Number of tool calls made so far (transient, not persisted) */
+  toolCallCount?: number;
 }
 
 /**
@@ -223,7 +229,7 @@ export type PipelineEvent =
   | { type: 'pipeline_started'; pipelineId: string }
   | { type: 'phase_started'; pipelineId: string; phaseId: string; phaseType: string; phaseIndex: number }
   | { type: 'agent_started'; pipelineId: string; phaseIndex: number; agentRunId: string; personaId: string; personaName: string; personaIcon: string }
-  | { type: 'agent_progress'; pipelineId: string; phaseIndex: number; personaId: string; text: string }
+  | { type: 'agent_progress'; pipelineId: string; phaseIndex: number; agentRunId: string; personaId: string; text: string; activeTool?: string; toolCallCount?: number }
   | { type: 'agent_completed'; pipelineId: string; phaseIndex: number; agentRunId: string; personaId: string; output: string; tokenUsage?: LabAgentRun['tokenUsage'] }
   | { type: 'agent_failed'; pipelineId: string; phaseIndex: number; agentRunId: string; personaId: string; error: string }
   | { type: 'phase_completed'; pipelineId: string; phaseIndex: number; phaseType: string }

@@ -1,6 +1,7 @@
 import * as React from "react"
 import { useRef, useState, useEffect, useCallback, useMemo } from "react"
 import { useAtomValue } from "jotai"
+import { labActivePipelineStatusAtom } from "@/atoms/lab"
 import { motion, AnimatePresence } from "motion/react"
 import {
   CheckCircle2,
@@ -801,6 +802,8 @@ function AppShellContent({
   // Lab state (workspace-scoped)
   const [labProjects, setLabProjects] = React.useState<import('@craft-agent/shared/lab/types').LabProject[]>([])
   const setLabProjectsAtom = useSetAtom(labProjectsAtom)
+  const labPipelineStatuses = useAtomValue(labActivePipelineStatusAtom)
+  const hasRunningLabPipeline = Object.keys(labPipelineStatuses).length > 0
   React.useEffect(() => {
     setLabProjectsAtom(labProjects)
   }, [labProjects, setLabProjectsAtom])
@@ -2147,7 +2150,7 @@ function AppShellContent({
                     {
                       id: "nav:lab",
                       title: "Lab",
-                      label: labProjects.length > 0 ? String(labProjects.length) : undefined,
+                      label: hasRunningLabPipeline ? "●" : (labProjects.length > 0 ? String(labProjects.length) : undefined),
                       icon: FlaskConical,
                       variant: isLabNavigation(navState) ? "default" : "ghost",
                       onClick: handleLabClick,

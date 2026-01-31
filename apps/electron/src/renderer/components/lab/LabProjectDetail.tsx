@@ -18,14 +18,16 @@ import {
   X,
   Sparkles,
   Trash2,
+  Pencil,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
-import type { LabProject, LabPersona, LabPipeline } from '@craft-agent/shared/lab/types'
+import type { LabProject, LabPersona, LabPipeline, CreatePersonaInput } from '@craft-agent/shared/lab/types'
 import { PERSONA_TEMPLATES, type PersonaTemplate } from '@craft-agent/shared/lab/persona-templates'
 import { PipelineView } from './PipelineView'
+import { PersonaDialog } from './PersonaDialog'
 
 interface LabProjectDetailProps {
   project: LabProject
@@ -37,6 +39,8 @@ interface LabProjectDetailProps {
   onAddPersona: (personaId: string) => void
   onRemovePersona: (personaId: string) => void
   onCreatePersonaFromTemplate: (template: PersonaTemplate) => void
+  onCreatePersona: (input: CreatePersonaInput) => void
+  onEditPersona: (persona: LabPersona) => void
   onStartPipeline: (prompt: string) => void
   onSelectPipeline: (pipeline: LabPipeline) => void
   onClearActivePipeline?: () => void
@@ -54,6 +58,8 @@ export function LabProjectDetail({
   onAddPersona,
   onRemovePersona,
   onCreatePersonaFromTemplate,
+  onCreatePersona,
+  onEditPersona,
   onStartPipeline,
   onSelectPipeline,
   onClearActivePipeline,
@@ -62,6 +68,8 @@ export function LabProjectDetail({
 }: LabProjectDetailProps) {
   const [pipelinePrompt, setPipelinePrompt] = useState('')
   const [showTemplates, setShowTemplates] = useState(false)
+  const [personaDialogOpen, setPersonaDialogOpen] = useState(false)
+  const [editingPersona, setEditingPersona] = useState<LabPersona | null>(null)
 
   // Personas NOT yet in this project
   const availablePersonas = useMemo(
@@ -134,6 +142,18 @@ export function LabProjectDetail({
                 variant="ghost"
                 size="sm"
                 className="h-7 text-xs gap-1"
+                onClick={() => {
+                  setEditingPersona(null)
+                  setPersonaDialogOpen(true)
+                }}
+              >
+                <Plus className="h-3 w-3" />
+                Create Custom
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs gap-1"
                 onClick={() => setShowTemplates(!showTemplates)}
               >
                 <Sparkles className="h-3 w-3" />
@@ -148,6 +168,10 @@ export function LabProjectDetail({
               <PersonaCard
                 key={persona.id}
                 persona={persona}
+                onEdit={() => {
+                  setEditingPersona(persona)
+                  setPersonaDialogOpen(true)
+                }}
                 onRemove={() => onRemovePersona(persona.id)}
               />
             ))}
@@ -312,6 +336,15 @@ export function LabProjectDetail({
           </>
         )}
       </div>
+
+      {/* Persona create/edit dialog */}
+      <PersonaDialog
+        open={personaDialogOpen}
+        onOpenChange={setPersonaDialogOpen}
+        persona={editingPersona}
+        onCreate={onCreatePersona}
+        onSave={onEditPersona}
+      />
     </ScrollArea>
   )
 }
@@ -322,9 +355,11 @@ export function LabProjectDetail({
 
 function PersonaCard({
   persona,
+  onEdit,
   onRemove,
 }: {
   persona: LabPersona
+  onEdit: () => void
   onRemove: () => void
 }) {
   const [expanded, setExpanded] = useState(false)
@@ -345,6 +380,15 @@ function PersonaCard({
             {persona.model}
           </span>
         )}
+        <button
+          className="shrink-0 h-5 w-5 rounded flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-foreground/10 transition-opacity"
+          onClick={(e) => {
+            e.stopPropagation()
+            onEdit()
+          }}
+        >
+          <Pencil className="h-3 w-3 text-muted-foreground" />
+        </button>
         <button
           className="shrink-0 h-5 w-5 rounded flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-foreground/10 transition-opacity"
           onClick={(e) => {

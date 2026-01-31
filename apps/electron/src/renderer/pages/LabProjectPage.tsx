@@ -7,10 +7,12 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useSetAtom } from 'jotai'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { LabProjectDetail } from '@/components/lab/LabProjectDetail'
 import { applyPipelineEvent } from '@/components/lab/PipelineView'
 import { PERSONA_TEMPLATES } from '@craft-agent/shared/lab/persona-templates'
+import { labActivePipelineStatusAtom } from '@/atoms/lab'
 import type {
   LabProject,
   LabPersona,
@@ -32,10 +34,24 @@ export default function LabProjectPage({ projectId }: LabProjectPageProps) {
   const [pipelines, setPipelines] = useState<LabPipeline[]>([])
   const [activePipeline, setActivePipeline] = useState<LabPipeline | null>(null)
   const [loading, setLoading] = useState(true)
+  const setActivePipelineStatuses = useSetAtom(labActivePipelineStatusAtom)
 
   // Ref for active pipeline to avoid stale closures in event listener
   const activePipelineRef = useRef<LabPipeline | null>(null)
   activePipelineRef.current = activePipeline
+
+  // Sync pipeline status to atom for sidebar indicators
+  useEffect(() => {
+    if (!activePipeline || !projectId) return
+    const isTerminal = ['completed', 'failed', 'cancelled'].includes(activePipeline.status)
+    setActivePipelineStatuses(prev => {
+      if (isTerminal) {
+        const { [projectId]: _, ...rest } = prev
+        return rest
+      }
+      return { ...prev, [projectId]: activePipeline.status }
+    })
+  }, [activePipeline?.status, projectId, setActivePipelineStatuses])
 
   // Load project, personas, and pipelines
   useEffect(() => {
@@ -65,6 +81,10 @@ export default function LabProjectPage({ projectId }: LabProjectPageProps) {
       if (!current || event.pipelineId !== current.id) return
 
       const updated = applyPipelineEvent(current, event)
+
+      // CRITICAL: Update ref immediately so subsequent events see the latest state
+      // (React re-renders are async, so ref would be stale without this)
+      activePipelineRef.current = updated
       setActivePipeline(updated)
 
       // Update in pipelines list on terminal events
@@ -145,6 +165,35 @@ export default function LabProjectPage({ projectId }: LabProjectPageProps) {
       console.error('[LabProjectPage] Failed to create persona:', err)
     }
   }, [activeWorkspaceId, project, handleUpdateProject])
+
+  // Create a custom persona and add to project
+  const handleCreatePersona = useCallback(async (input: CreatePersonaInput) => {
+    if (!activeWorkspaceId || !project) return
+    try {
+      const persona = await window.electronAPI.createLabPersona(activeWorkspaceId, input)
+      setAllPersonas(prev => [...prev, persona])
+
+      // Also add to current project
+      const updated = {
+        ...project,
+        personaIds: [...project.personaIds, persona.id],
+      }
+      await handleUpdateProject(updated)
+    } catch (err) {
+      console.error('[LabProjectPage] Failed to create persona:', err)
+    }
+  }, [activeWorkspaceId, project, handleUpdateProject])
+
+  // Edit an existing persona
+  const handleEditPersona = useCallback(async (persona: LabPersona) => {
+    if (!activeWorkspaceId) return
+    try {
+      await window.electronAPI.saveLabPersona(activeWorkspaceId, persona)
+      setAllPersonas(prev => prev.map(p => p.id === persona.id ? persona : p))
+    } catch (err) {
+      console.error('[LabProjectPage] Failed to save persona:', err)
+    }
+  }, [activeWorkspaceId])
 
   // Start a pipeline
   const handleStartPipeline = useCallback(async (prompt: string) => {
@@ -243,6 +292,8 @@ export default function LabProjectPage({ projectId }: LabProjectPageProps) {
       onAddPersona={handleAddPersona}
       onRemovePersona={handleRemovePersona}
       onCreatePersonaFromTemplate={handleCreatePersonaFromTemplate}
+      onCreatePersona={handleCreatePersona}
+      onEditPersona={handleEditPersona}
       onStartPipeline={handleStartPipeline}
       onSelectPipeline={handleSelectPipeline}
       onClearActivePipeline={handleClearActivePipeline}

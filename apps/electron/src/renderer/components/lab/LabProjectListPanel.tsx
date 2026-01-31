@@ -6,8 +6,10 @@
  */
 
 import { useState, useCallback } from 'react'
-import { FlaskConical, Plus, MoreHorizontal, Trash2, FolderOpen } from 'lucide-react'
+import { useAtomValue } from 'jotai'
+import { FlaskConical, Plus, MoreHorizontal, Trash2, FolderOpen, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { labActivePipelineStatusAtom } from '@/atoms/lab'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from '@/components/ui/empty'
 import { Separator } from '@/components/ui/separator'
@@ -108,6 +110,15 @@ export function LabProjectListPanel({
 // Project Item
 // ============================================================
 
+const PIPELINE_STATUS_LABELS: Record<string, { label: string; color: string }> = {
+  thinking: { label: 'Thinking', color: 'text-blue-500' },
+  synthesizing: { label: 'Synthesizing', color: 'text-violet-500' },
+  building: { label: 'Building', color: 'text-amber-500' },
+  reviewing: { label: 'Reviewing', color: 'text-cyan-500' },
+  iterating: { label: 'Iterating', color: 'text-orange-500' },
+  pending: { label: 'Starting', color: 'text-muted-foreground' },
+}
+
 interface ProjectItemProps {
   project: LabProject
   isSelected: boolean
@@ -125,6 +136,9 @@ function ProjectItem({
 }: ProjectItemProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [contextMenuOpen, setContextMenuOpen] = useState(false)
+  const pipelineStatuses = useAtomValue(labActivePipelineStatusAtom)
+  const pipelineStatus = pipelineStatuses[project.id]
+  const statusConfig = pipelineStatus ? PIPELINE_STATUS_LABELS[pipelineStatus] : null
 
   const menuContent = (
     <>
@@ -179,12 +193,17 @@ function ProjectItem({
               <div className="text-xs text-muted-foreground truncate mt-0.5">
                 {project.description || 'No description'}
               </div>
-              {project.personaIds.length > 0 && (
+              {statusConfig ? (
+                <div className={cn('flex items-center gap-1 text-[10px] mt-1', statusConfig.color)}>
+                  <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                  <span className="font-medium">{statusConfig.label}</span>
+                </div>
+              ) : project.personaIds.length > 0 ? (
                 <div className="text-[10px] text-muted-foreground/70 mt-1">
                   {project.personaIds.length} persona{project.personaIds.length !== 1 ? 's' : ''}
                   {project.goals.length > 0 && ` · ${project.goals.length} goal${project.goals.length !== 1 ? 's' : ''}`}
                 </div>
-              )}
+              ) : null}
             </div>
 
             {/* More button */}

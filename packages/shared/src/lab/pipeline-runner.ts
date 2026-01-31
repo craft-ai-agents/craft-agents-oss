@@ -17,6 +17,8 @@ import { homedir } from 'os';
 import { existsSync } from 'fs';
 import type { Workspace } from '@craft-agent/core/types';
 import type { LabProject, LabPersona, LabPipeline, LabPhase, LabAgentRun, PipelineStatus, AgentRunStatus, PipelineEvent } from './types.ts';
+import type { HeadlessResult, HeadlessEvent } from '../headless/types.ts';
+import { HeadlessRunner } from '../headless/index.ts';
 import { savePipeline } from './storage.ts';
 import { createLogger } from '../utils/debug.ts';
 import { setExecutable, setPathToClaudeCodeExecutable } from '../agent/options.ts';
@@ -109,6 +111,43 @@ ${briefSections}
 You have full access to the filesystem and tools. Implement the solution now.`;
 }
 
+function buildIteratePrompt(
+  project: LabProject,
+  userPrompt: string,
+  reviews: Array<{ personaName: string; personaRole: string; output: string }>,
+  iteration: number,
+): string {
+  const reviewSections = reviews.map(r =>
+    `### ${r.personaName} (${r.personaRole})\n${r.output}`
+  ).join('\n\n---\n\n');
+
+  return `You are the Project Manager and Lead Implementer for this project.
+
+## Project Context
+**Project:** ${project.name}
+**Description:** ${project.description}
+${project.goals.length > 0 ? `**Goals:**\n${project.goals.map(g => `- ${g}`).join('\n')}` : ''}
+${project.workingDirectory ? `**Working Directory:** ${project.workingDirectory}` : ''}
+
+## Original Task
+"${userPrompt}"
+
+## Review Feedback (Iteration ${iteration})
+Your team of experts has reviewed the current implementation and found issues that need to be addressed:
+
+${reviewSections}
+
+## Your Mission
+1. **Read** the review feedback above carefully — each reviewer has identified specific issues
+2. **Fix** each MAJOR_ISSUES item — these are blocking problems that must be resolved
+3. **Address** MINOR_ISSUES where practical
+4. **Do NOT** rewrite from scratch — fix the existing implementation
+
+Focus on the specific issues raised. Be surgical — make targeted fixes, not wholesale rewrites.
+
+You have full access to the filesystem and tools. Fix the issues now.`;
+}
+
 function buildReviewPrompt(
   persona: LabPersona,
   project: LabProject,
@@ -169,6 +208,199 @@ export interface PipelineRunnerConfig {
  *
  * Returns the final pipeline state.
  */
+// ============================================================
+// Streaming Helper
+// ============================================================
+
+/**
+ * Format a tool call into a readable log entry for the streaming UI.
+ */
+function formatToolEntry(name: string, input: unknown): string {
+  const inp = input && typeof input === 'object' ? input as Record<string, unknown> : {};
+  switch (name) {
+    case 'WebSearch':
+      return `**Searching** — "${inp.query || ''}"`;
+    case 'WebFetch':
+      return `**Fetching** — ${inp.url || ''}`;
+    case 'Read':
+      return `**Reading** — \`${shortenPath(String(inp.file_path || ''))}\``;
+    case 'Write':
+      return `**Writing** — \`${shortenPath(String(inp.file_path || ''))}\``;
+    case 'Edit':
+      return `**Editing** — \`${shortenPath(String(inp.file_path || ''))}\``;
+    case 'Bash':
+      return `**Running** — \`${truncate(String(inp.command || ''), 120)}\``;
+    case 'Grep':
+      return `**Searching code** — \`${inp.pattern || ''}\``;
+    case 'Glob':
+      return `**Finding files** — \`${inp.pattern || ''}\``;
+    case 'Task':
+      return `**Sub-task** — ${inp.description || ''}`;
+    default:
+      return `**${name}**`;
+  }
+}
+
+function shortenPath(p: string): string {
+  if (!p) return '';
+  const parts = p.split('/');
+  return parts.length > 3 ? '.../' + parts.slice(-3).join('/') : p;
+}
+
+function truncate(s: string, max: number): string {
+  return s.length > max ? s.slice(0, max) + '...' : s;
+}
+
+/**
+ * Run an agent with streaming, emitting agent_progress events
+ * as text and tool calls arrive. Returns the final HeadlessResult.
+ *
+ * Includes a watchdog that:
+ * - Shows live elapsed time during initialization ("Starting agent... (15s)")
+ * - Aborts the agent after ABORT_TIMEOUT_MS of no events (likely stuck subprocess)
+ * - Caps streaming log to MAX_LOG_LENGTH chars to keep UI responsive
+ */
+async function runAgentWithStreaming(
+  runner: { runStreaming(): AsyncGenerator<HeadlessEvent>; abort?(): void },
+  pipelineId: string,
+  phaseIndex: number,
+  agentRunId: string,
+  personaId: string,
+  emit: PipelineEventCallback,
+): Promise<HeadlessResult> {
+  let streamingLog = '';
+  let activeTool: string | undefined;
+  let toolCallCount = 0;
+  let lastEmitTime = 0;
+  let lastEventTime = Date.now();
+  let hasContent = false; // true once we get text_delta or tool_start
+  let aborted = false;
+  const startTime = Date.now();
+
+  const THROTTLE_MS = 200;
+  const MAX_LOG_LENGTH = 4000;
+  const ABORT_TIMEOUT_MS = 120_000; // Abort after 2min of total silence
+
+  const trimLog = () => {
+    if (streamingLog.length > MAX_LOG_LENGTH) {
+      const excess = streamingLog.length - MAX_LOG_LENGTH;
+      const cutPoint = streamingLog.indexOf('\n\n', excess);
+      streamingLog = (cutPoint > 0 ? streamingLog.slice(cutPoint) : streamingLog.slice(excess));
+    }
+  };
+
+  const emitProgress = (force = false) => {
+    const now = Date.now();
+    if (force || now - lastEmitTime >= THROTTLE_MS) {
+      emit({
+        type: 'agent_progress',
+        pipelineId,
+        phaseIndex,
+        agentRunId,
+        personaId,
+        text: streamingLog,
+        activeTool,
+        toolCallCount,
+      });
+      lastEmitTime = now;
+    }
+  };
+
+  // Watchdog: runs every 3s to show status and detect stuck agents.
+  // If no content events arrive for ABORT_TIMEOUT_MS, kills the agent.
+  const watchdogInterval = setInterval(() => {
+    const silentMs = Date.now() - lastEventTime;
+    const elapsedSecs = Math.round((Date.now() - startTime) / 1000);
+
+    if (!aborted && silentMs >= ABORT_TIMEOUT_MS) {
+      // Agent subprocess is stuck — abort it
+      aborted = true;
+      log(`Agent ${agentRunId} unresponsive for ${Math.round(silentMs / 1000)}s — aborting`);
+      console.error(`[lab:pipeline] Agent ${personaId} unresponsive for ${Math.round(silentMs / 1000)}s, aborting subprocess`);
+      streamingLog += `\n\n**Agent unresponsive — restarting...**\n`;
+      emitProgress(true);
+      runner.abort?.();
+      return;
+    }
+
+    if (!hasContent) {
+      // Still initializing — show live elapsed so user knows something is happening
+      streamingLog = `*Starting agent subprocess... (${elapsedSecs}s)*`;
+      emitProgress(true);
+    } else {
+      // Has content — just keep heartbeat alive for timer updates
+      emitProgress(true);
+    }
+  }, 3000);
+
+  try {
+    log(`Starting streaming for agent ${agentRunId} (persona: ${personaId}, phase: ${phaseIndex})`);
+
+    for await (const event of runner.runStreaming()) {
+      lastEventTime = Date.now();
+
+      switch (event.type) {
+        case 'status':
+          // Show initialization status — replace the watchdog's startup message
+          streamingLog = `*${event.message}*`;
+          emitProgress(true);
+          break;
+
+        case 'text_delta':
+          if (!hasContent) {
+            // First real content — clear the initialization status
+            streamingLog = '';
+            hasContent = true;
+          }
+          streamingLog += event.text;
+          trimLog();
+          emitProgress();
+          break;
+
+        case 'tool_start': {
+          if (!hasContent) {
+            streamingLog = '';
+            hasContent = true;
+          }
+          activeTool = event.name;
+          const entry = formatToolEntry(event.name, event.input);
+          streamingLog += `\n\n${entry}\n\n`;
+          trimLog();
+          emitProgress(true);
+          break;
+        }
+
+        case 'tool_result':
+          activeTool = undefined;
+          toolCallCount++;
+          emitProgress(true);
+          break;
+
+        case 'error':
+          log(`Agent ${agentRunId} error: ${event.message}`);
+          console.error(`[lab:pipeline] Agent ${personaId} error:`, event.message);
+          streamingLog += `\n\n**Error:** ${event.message}\n\n`;
+          emitProgress(true);
+          break;
+
+        case 'complete':
+          if (streamingLog || toolCallCount > 0) {
+            emitProgress(true);
+          }
+          log(`Agent ${agentRunId} completed (${toolCallCount} tool calls, ${Math.round((Date.now() - startTime) / 1000)}s)`);
+          return event.result;
+      }
+    }
+  } finally {
+    clearInterval(watchdogInterval);
+  }
+
+  return {
+    success: false,
+    error: { code: 'execution_error', message: aborted ? 'Agent was unresponsive and was aborted' : 'No completion event received' },
+  };
+}
+
 /**
  * Ensure the SDK executable paths are configured for subprocess spawning.
  * In Electron dev mode, the SessionManager.initialize() may fail before setting these,
@@ -214,7 +446,7 @@ export async function runPipeline(config: PipelineRunnerConfig): Promise<LabPipe
   ensureExecutablePaths();
 
   // Track active HeadlessRunner instances for abort support
-  const activeRunners: Set<InstanceType<typeof import('../headless/index.ts').HeadlessRunner>> = new Set();
+  const activeRunners = new Set<HeadlessRunner>();
 
   // When signal fires, abort all active runners
   const onAbort = () => {
@@ -301,7 +533,6 @@ export async function runPipeline(config: PipelineRunnerConfig): Promise<LabPipe
 
       try {
         checkAborted();
-        const { HeadlessRunner } = await import('../headless/index.ts');
         const prompt = buildThinkPrompt(persona, project, pipeline.prompt);
 
         const runner = new HeadlessRunner({
@@ -312,7 +543,7 @@ export async function runPipeline(config: PipelineRunnerConfig): Promise<LabPipe
         });
         activeRunners.add(runner);
 
-        const result = await runner.run();
+        const result = await runAgentWithStreaming(runner, pipeline.id, 0, agentRun.id, persona.id, emit);
         activeRunners.delete(runner);
 
         if (result.success && result.response) {
@@ -410,6 +641,8 @@ export async function runPipeline(config: PipelineRunnerConfig): Promise<LabPipe
     // ============================================================
     // ACT 2: BUILD (sequential implementation)
     // ============================================================
+    let lastReviewFeedback: Array<{ personaName: string; personaRole: string; output: string }> = [];
+
     for (let iteration = 0; iteration <= pipeline.maxIterations; iteration++) {
       pipeline.iteration = iteration;
       updatePipeline({ status: iteration === 0 ? 'building' : 'iterating' });
@@ -445,8 +678,9 @@ export async function runPipeline(config: PipelineRunnerConfig): Promise<LabPipe
 
       try {
         checkAborted();
-        const { HeadlessRunner } = await import('../headless/index.ts');
-        const buildPrompt = buildSynthesizeAndBuildPrompt(project, pipeline.prompt, successfulBriefs);
+        const buildPrompt = iteration === 0
+          ? buildSynthesizeAndBuildPrompt(project, pipeline.prompt, successfulBriefs)
+          : buildIteratePrompt(project, pipeline.prompt, lastReviewFeedback, iteration);
 
         const runner = new HeadlessRunner({
           prompt: buildPrompt,
@@ -456,7 +690,7 @@ export async function runPipeline(config: PipelineRunnerConfig): Promise<LabPipe
         });
         activeRunners.add(runner);
 
-        const result = await runner.run();
+        const result = await runAgentWithStreaming(runner, pipeline.id, buildPhaseIndex, buildRun.id, 'manager', emit);
         activeRunners.delete(runner);
 
         if (result.success && result.response) {
@@ -553,7 +787,6 @@ export async function runPipeline(config: PipelineRunnerConfig): Promise<LabPipe
 
         try {
           checkAborted();
-          const { HeadlessRunner } = await import('../headless/index.ts');
           const prompt = buildReviewPrompt(persona, project, pipeline.prompt);
 
           const runner = new HeadlessRunner({
@@ -564,7 +797,7 @@ export async function runPipeline(config: PipelineRunnerConfig): Promise<LabPipe
           });
           activeRunners.add(runner);
 
-          const result = await runner.run();
+          const result = await runAgentWithStreaming(runner, pipeline.id, reviewPhaseIndex, reviewRun.id, persona.id, emit);
           activeRunners.delete(runner);
 
           if (result.success && result.response) {
@@ -637,8 +870,8 @@ export async function runPipeline(config: PipelineRunnerConfig): Promise<LabPipe
       emit({ type: 'phase_completed', pipelineId: pipeline.id, phaseIndex: reviewPhaseIndex, phaseType: 'review' });
 
       // Check if reviews indicate major issues requiring iteration
-      const reviews = reviewPhase.agents.filter(r => r.status === 'completed' && r.output);
-      const hasMajorIssues = reviews.some(r =>
+      const reviewResults = reviewPhase.agents.filter(r => r.status === 'completed' && r.output);
+      const hasMajorIssues = reviewResults.some(r =>
         r.output?.toUpperCase().includes('MAJOR_ISSUES')
       );
 
@@ -647,9 +880,17 @@ export async function runPipeline(config: PipelineRunnerConfig): Promise<LabPipe
         break;
       }
 
-      log(`Iteration ${iteration + 1}: Major issues found, re-running build phase`);
-      // Loop back to build phase (Act 2) with review feedback
-      // The next build iteration can read the review files
+      // Collect review feedback for the next iteration's prompt
+      lastReviewFeedback = reviewResults.map(r => {
+        const persona = personas.find(p => p.id === r.personaId);
+        return {
+          personaName: r.personaName,
+          personaRole: persona?.role || 'Reviewer',
+          output: r.output!,
+        };
+      });
+
+      log(`Iteration ${iteration + 1}: Major issues found, re-running build phase with review feedback`);
     }
 
     // ============================================================

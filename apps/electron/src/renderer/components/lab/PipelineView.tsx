@@ -25,6 +25,8 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { StreamingMarkdown } from '@/components/markdown/StreamingMarkdown'
+import { MemoizedMarkdown } from '@craft-agent/ui'
 import type { LabPipeline, LabPhase, LabAgentRun, PipelineStatus, PhaseStatus, AgentRunStatus } from '@craft-agent/shared/lab/types'
 
 // ============================================================
@@ -157,26 +159,50 @@ const PHASE_ICONS: Record<string, typeof Brain> = {
 }
 
 function PhaseTimeline({ phases, pipelineStatus }: { phases: LabPhase[]; pipelineStatus: PipelineStatus }) {
-  const expectedPhases = ['think', 'build', 'review'] as const
-  const actualPhaseMap = new Map(phases.map(p => [p.type, p]))
+  // Build timeline from base phases + any iterate phases that actually exist
+  const basePhases = ['think', 'build', 'review'] as const
+  const actualPhases = phases.map(p => p.type)
+  // Include iterate phases that come after the base 3
+  const extraPhases = actualPhases.filter(t => !basePhases.includes(t as any))
+  const timelinePhases: string[] = [...basePhases, ...extraPhases]
+  const actualPhaseMap = new Map(phases.map(p => [p.type + '-' + phases.indexOf(p), p]))
+  // For dedup: map by index in actual phases array
+  const phaseByIndex = new Map(phases.map((p, i) => [i, p]))
+
+  // Build a deduplicated timeline: base phases (by type), then actual iterate/review cycles
+  const timelineEntries: Array<{ key: string; type: string; phase?: LabPhase }> = []
+  const usedTypes = new Set<string>()
+
+  // Add base phases first
+  for (const type of basePhases) {
+    const phase = phases.find(p => p.type === type)
+    timelineEntries.push({ key: type, type, phase })
+    if (phase) usedTypes.add(phase.id)
+  }
+
+  // Add any iterate/review cycles beyond the first
+  for (const phase of phases) {
+    if (!usedTypes.has(phase.id)) {
+      timelineEntries.push({ key: phase.id, type: phase.type, phase })
+    }
+  }
 
   return (
-    <div className="flex items-center gap-1">
-      {expectedPhases.map((phaseType, i) => {
-        const phase = actualPhaseMap.get(phaseType)
-        const status: PhaseStatus = phase?.status || 'pending'
-        const Icon = PHASE_ICONS[phaseType] || Brain
-        const isLast = i === expectedPhases.length - 1
+    <div className="flex items-center gap-1 flex-wrap">
+      {timelineEntries.map((entry, i) => {
+        const status: PhaseStatus = entry.phase?.status || 'pending'
+        const Icon = PHASE_ICONS[entry.type] || Brain
+        const isLast = i === timelineEntries.length - 1
 
         // Progress text for running phases
         let progressText = ''
-        if (phase && status === 'running' && phase.agents.length > 0) {
-          const done = phase.agents.filter(a => a.status === 'completed' || a.status === 'failed').length
-          progressText = ` ${done}/${phase.agents.length}`
+        if (entry.phase && status === 'running' && entry.phase.agents.length > 0) {
+          const done = entry.phase.agents.filter(a => a.status === 'completed' || a.status === 'failed').length
+          progressText = ` ${done}/${entry.phase.agents.length}`
         }
 
         return (
-          <div key={phaseType} className="flex items-center gap-1">
+          <div key={entry.key} className="flex items-center gap-1">
             <div
               className={cn(
                 'flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-medium transition-colors',
@@ -196,7 +222,7 @@ function PhaseTimeline({ phases, pipelineStatus }: { phases: LabPhase[]; pipelin
               ) : (
                 <Icon className="h-3 w-3" />
               )}
-              <span className="capitalize">{phaseType}</span>
+              <span className="capitalize">{entry.type}</span>
               {progressText && (
                 <span className="tabular-nums opacity-75">{progressText}</span>
               )}
@@ -336,6 +362,14 @@ function AgentRunCard({ agent, phaseCompleted }: { agent: LabAgentRun; phaseComp
   // Auto-show output when phase is completed (so user sees results without clicking)
   const [showOutput, setShowOutput] = useState(false)
   const elapsed = useLiveElapsed(agent.startedAt, agent.completedAt)
+  const streamRef = useRef<HTMLDivElement>(null)
+
+  // Auto-scroll streaming content to bottom
+  useEffect(() => {
+    if (streamRef.current) {
+      streamRef.current.scrollTop = streamRef.current.scrollHeight
+    }
+  }, [agent.streamingText])
 
   // Auto-expand output when agent completes and phase is done
   useEffect(() => {
@@ -370,6 +404,11 @@ function AgentRunCard({ agent, phaseCompleted }: { agent: LabAgentRun; phaseComp
         <span className="text-sm">{agent.personaIcon}</span>
         <span className="text-xs font-medium flex-1 truncate">{agent.personaName}</span>
         <AgentStatusIndicator status={agent.status} />
+        {agent.status === 'running' && agent.toolCallCount != null && agent.toolCallCount > 0 && (
+          <span className="text-[10px] text-muted-foreground tabular-nums">
+            {agent.toolCallCount} {agent.toolCallCount === 1 ? 'tool call' : 'tool calls'}
+          </span>
+        )}
         {elapsed && (
           <span className="text-[10px] text-muted-foreground tabular-nums">
             {elapsed}
@@ -388,6 +427,28 @@ function AgentRunCard({ agent, phaseCompleted }: { agent: LabAgentRun; phaseComp
           )
         )}
       </div>
+
+      {/* Streaming content (live) */}
+      {agent.status === 'running' && (
+        <div ref={streamRef} className="border-t border-foreground/5 px-3 py-2 max-h-[300px] overflow-y-auto">
+          {agent.activeTool && (
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <Loader2 className="h-3 w-3 animate-spin text-accent" />
+              <span className="text-[10px] font-mono text-accent">{agent.activeTool}</span>
+            </div>
+          )}
+          {agent.streamingText ? (
+            <div className="text-xs [&_p]:text-xs [&_p]:leading-relaxed [&_p]:my-1 [&_strong]:text-accent [&_code]:text-[10px] [&_code]:bg-foreground/5 [&_code]:px-1 [&_code]:rounded">
+              <StreamingMarkdown content={agent.streamingText} isStreaming={true} mode="minimal" />
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground/60">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              <span>Initializing agent...</span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Inline preview when output exists but not expanded */}
       {!showOutput && agent.status === 'completed' && outputPreview && (
@@ -410,10 +471,10 @@ function AgentRunCard({ agent, phaseCompleted }: { agent: LabAgentRun; phaseComp
 
       {/* Full Output */}
       {showOutput && agent.output && (
-        <div className="border-t border-foreground/5 px-3 py-2 max-h-[300px] overflow-y-auto">
-          <pre className="text-[11px] text-foreground/70 whitespace-pre-wrap font-mono leading-relaxed">
-            {agent.output}
-          </pre>
+        <div className="border-t border-foreground/5 px-3 py-2 max-h-[400px] overflow-y-auto">
+          <div className="text-xs [&_p]:text-xs [&_p]:leading-relaxed [&_p]:my-1 [&_h1]:text-sm [&_h1]:font-bold [&_h1]:mt-3 [&_h1]:mb-1 [&_h2]:text-xs [&_h2]:font-bold [&_h2]:mt-2 [&_h2]:mb-1 [&_h3]:text-xs [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-1 [&_ul]:text-xs [&_ul]:pl-4 [&_ol]:text-xs [&_ol]:pl-4 [&_li]:my-0.5 [&_code]:text-[10px] [&_code]:bg-foreground/5 [&_code]:px-1 [&_code]:rounded [&_pre]:text-[10px] [&_pre]:bg-foreground/5 [&_pre]:p-2 [&_pre]:rounded [&_pre]:overflow-x-auto [&_strong]:font-semibold">
+            <MemoizedMarkdown mode="minimal">{agent.output}</MemoizedMarkdown>
+          </div>
         </div>
       )}
     </div>
@@ -560,6 +621,22 @@ export function applyPipelineEvent(
       break
     }
 
+    case 'agent_progress': {
+      updated.phases = updated.phases.map((p, i) =>
+        i === event.phaseIndex
+          ? {
+              ...p,
+              agents: p.agents.map(a =>
+                a.id === event.agentRunId && a.status === 'running'
+                  ? { ...a, streamingText: event.text, activeTool: event.activeTool, toolCallCount: event.toolCallCount }
+                  : a
+              ),
+            }
+          : p
+      )
+      break
+    }
+
     case 'agent_completed': {
       updated.phases = updated.phases.map((p, i) =>
         i === event.phaseIndex
@@ -567,7 +644,7 @@ export function applyPipelineEvent(
               ...p,
               agents: p.agents.map(a =>
                 a.id === event.agentRunId
-                  ? { ...a, status: 'completed' as const, output: event.output, tokenUsage: event.tokenUsage, completedAt: Date.now() }
+                  ? { ...a, status: 'completed' as const, output: event.output, tokenUsage: event.tokenUsage, completedAt: Date.now(), streamingText: undefined, activeTool: undefined, toolCallCount: undefined }
                   : a
               ),
             }
