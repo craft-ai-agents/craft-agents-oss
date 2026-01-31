@@ -962,7 +962,7 @@ export interface ElectronAPI {
   createLabPipeline(workspaceId: string, projectId: string, prompt: string, maxIterations?: number): Promise<import('@craft-agent/shared/lab').LabPipeline>
   deleteLabPipeline(workspaceId: string, projectId: string, pipelineId: string): Promise<boolean>
   runLabPipeline(workspaceId: string, projectId: string, pipelineId: string): Promise<void>
-  stopLabPipeline(workspaceId: string, pipelineId: string): Promise<void>
+  stopLabPipeline(workspaceId: string, projectId: string, pipelineId: string): Promise<void>
   clearLabPipelines(workspaceId: string, projectId: string): Promise<number>
   onLabPipelineEvent(callback: (event: import('@craft-agent/shared/lab/pipeline-runner').PipelineEvent) => void): () => void
 

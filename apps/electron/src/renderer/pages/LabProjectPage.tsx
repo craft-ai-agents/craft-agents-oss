@@ -189,13 +189,18 @@ export default function LabProjectPage({ projectId }: LabProjectPageProps) {
 
   // Stop the active pipeline
   const handleStopPipeline = useCallback(async () => {
-    if (!activeWorkspaceId || !activePipeline) return
+    if (!activeWorkspaceId || !activePipeline || !project) {
+      console.warn('[LabProjectPage] Stop called but missing context', { activeWorkspaceId, projectId: project?.id, pipelineId: activePipeline?.id })
+      return
+    }
+    console.log('[LabProjectPage] Stopping pipeline:', activePipeline.id)
     try {
-      await window.electronAPI.stopLabPipeline(activeWorkspaceId, activePipeline.id)
+      await window.electronAPI.stopLabPipeline(activeWorkspaceId, project.id, activePipeline.id)
+      console.log('[LabProjectPage] Stop IPC call completed')
     } catch (err) {
       console.error('[LabProjectPage] Failed to stop pipeline:', err)
     }
-  }, [activeWorkspaceId, activePipeline])
+  }, [activeWorkspaceId, activePipeline, project])
 
   // Clear all pipeline history
   const handleClearHistory = useCallback(async () => {

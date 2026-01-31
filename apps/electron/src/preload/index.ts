@@ -461,8 +461,8 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.LAB_DELETE_PIPELINE, workspaceId, projectId, pipelineId),
   runLabPipeline: (workspaceId: string, projectId: string, pipelineId: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.LAB_RUN_PIPELINE, workspaceId, projectId, pipelineId),
-  stopLabPipeline: (workspaceId: string, pipelineId: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.LAB_STOP_PIPELINE, workspaceId, pipelineId),
+  stopLabPipeline: (workspaceId: string, projectId: string, pipelineId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.LAB_STOP_PIPELINE, workspaceId, projectId, pipelineId),
   clearLabPipelines: (workspaceId: string, projectId: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.LAB_CLEAR_PIPELINES, workspaceId, projectId),
   onLabPipelineEvent: (callback: (event: any) => void) => {

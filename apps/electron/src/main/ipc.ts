@@ -2623,12 +2623,51 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   })
 
   // Stop a running pipeline
-  ipcMain.handle(IPC_CHANNELS.LAB_STOP_PIPELINE, async (_event, _workspaceId: string, pipelineId: string) => {
+  ipcMain.handle(IPC_CHANNELS.LAB_STOP_PIPELINE, async (_event, workspaceId: string, projectId: string, pipelineId: string) => {
+    ipcLog.info(`[lab:stop] Stop requested for pipeline ${pipelineId}`)
     const controller = activePipelineAbortControllers.get(pipelineId)
     if (controller) {
-      ipcLog.info(`Stopping pipeline ${pipelineId}`)
+      // Pipeline is actively running in this process — abort it
+      ipcLog.info(`[lab:stop] Aborting active pipeline ${pipelineId}`)
       controller.abort()
       activePipelineAbortControllers.delete(pipelineId)
+    } else {
+      // No active controller — pipeline is stale (orphaned from a previous app session).
+      // Update it on disk to cancelled and notify the renderer.
+      ipcLog.info(`[lab:stop] No active controller — marking stale pipeline ${pipelineId} as cancelled`)
+      const workspace = getWorkspaceByNameOrId(workspaceId)
+      if (workspace) {
+        const { loadPipeline, savePipeline } = await import('@craft-agent/shared/lab')
+        const pipeline = loadPipeline(workspace.rootPath, projectId, pipelineId)
+        if (pipeline && !['completed', 'failed', 'cancelled'].includes(pipeline.status)) {
+          pipeline.status = 'cancelled'
+          pipeline.completedAt = Date.now()
+          // Mark all running agents as failed
+          for (const phase of pipeline.phases) {
+            for (const agent of phase.agents) {
+              if (agent.status === 'running') {
+                agent.status = 'failed'
+                agent.error = 'Stopped (process no longer running)'
+                agent.completedAt = Date.now()
+              }
+            }
+            if (phase.status === 'running') {
+              phase.status = 'failed'
+              phase.completedAt = Date.now()
+            }
+          }
+          savePipeline(workspace.rootPath, pipeline)
+
+          // Notify renderer
+          for (const win of BrowserWindow.getAllWindows()) {
+            win.webContents.send(IPC_CHANNELS.LAB_PIPELINE_EVENT, {
+              type: 'pipeline_cancelled',
+              pipelineId: pipeline.id,
+              error: 'Pipeline was stopped (process no longer running)',
+            })
+          }
+        }
+      }
     }
   })
 
