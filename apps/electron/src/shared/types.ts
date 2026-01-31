@@ -671,6 +671,8 @@ export const IPC_CHANNELS = {
   LAB_CREATE_PIPELINE: 'lab:createPipeline',
   LAB_DELETE_PIPELINE: 'lab:deletePipeline',
   LAB_RUN_PIPELINE: 'lab:runPipeline',
+  LAB_STOP_PIPELINE: 'lab:stopPipeline',
+  LAB_CLEAR_PIPELINES: 'lab:clearPipelines',
   LAB_PIPELINE_EVENT: 'lab:pipelineEvent',
 
   // Status management (workspace-scoped)
@@ -960,6 +962,8 @@ export interface ElectronAPI {
   createLabPipeline(workspaceId: string, projectId: string, prompt: string, maxIterations?: number): Promise<import('@craft-agent/shared/lab').LabPipeline>
   deleteLabPipeline(workspaceId: string, projectId: string, pipelineId: string): Promise<boolean>
   runLabPipeline(workspaceId: string, projectId: string, pipelineId: string): Promise<void>
+  stopLabPipeline(workspaceId: string, pipelineId: string): Promise<void>
+  clearLabPipelines(workspaceId: string, projectId: string): Promise<number>
   onLabPipelineEvent(callback: (event: import('@craft-agent/shared/lab/pipeline-runner').PipelineEvent) => void): () => void
 
   // Statuses (workspace-scoped)

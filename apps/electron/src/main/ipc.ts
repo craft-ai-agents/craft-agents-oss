@@ -2569,6 +2569,9 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     return deletePipeline(workspace.rootPath, projectId, pipelineId)
   })
 
+  // Track active pipeline AbortControllers for cancellation
+  const activePipelineAbortControllers = new Map<string, AbortController>()
+
   // Run a pipeline (War Room execution) - runs asynchronously and broadcasts events
   ipcMain.handle(IPC_CHANNELS.LAB_RUN_PIPELINE, async (_event, workspaceId: string, projectId: string, pipelineId: string) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
@@ -2591,6 +2594,10 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     // have that mechanism — they just crash with "process exited with code 1".
     await sessionManager.reinitializeAuth()
 
+    // Create AbortController for this pipeline run
+    const abortController = new AbortController()
+    activePipelineAbortControllers.set(pipelineId, abortController)
+
     // Run pipeline asynchronously - don't await, let it run in the background
     // Broadcast events to all renderer windows
     runPipeline({
@@ -2599,6 +2606,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       project,
       personas,
       pipeline,
+      signal: abortController.signal,
       onEvent: (pipelineEvent) => {
         // Broadcast to all windows
         for (const win of BrowserWindow.getAllWindows()) {
@@ -2607,9 +2615,30 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       },
     }).catch((err: Error) => {
       ipcLog.error(`Pipeline ${pipelineId} failed:`, err.message)
+    }).finally(() => {
+      activePipelineAbortControllers.delete(pipelineId)
     })
 
     // Return immediately - pipeline runs in background
+  })
+
+  // Stop a running pipeline
+  ipcMain.handle(IPC_CHANNELS.LAB_STOP_PIPELINE, async (_event, _workspaceId: string, pipelineId: string) => {
+    const controller = activePipelineAbortControllers.get(pipelineId)
+    if (controller) {
+      ipcLog.info(`Stopping pipeline ${pipelineId}`)
+      controller.abort()
+      activePipelineAbortControllers.delete(pipelineId)
+    }
+  })
+
+  // Clear all pipeline history for a project
+  ipcMain.handle(IPC_CHANNELS.LAB_CLEAR_PIPELINES, async (_event, workspaceId: string, projectId: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
+
+    const { deleteAllPipelines } = await import('@craft-agent/shared/lab')
+    return deleteAllPipelines(workspace.rootPath, projectId)
   })
 
 }

@@ -158,6 +158,7 @@ export interface PipelineRunnerConfig {
   personas: LabPersona[];
   pipeline: LabPipeline;
   onEvent?: PipelineEventCallback;
+  signal?: AbortSignal;
 }
 
 /**
@@ -207,10 +208,23 @@ function ensureExecutablePaths(): void {
 }
 
 export async function runPipeline(config: PipelineRunnerConfig): Promise<LabPipeline> {
-  const { workspace, workspaceRootPath, project, personas, pipeline, onEvent } = config;
+  const { workspace, workspaceRootPath, project, personas, pipeline, onEvent, signal } = config;
 
   // Ensure executable paths are configured before spawning agent subprocesses
   ensureExecutablePaths();
+
+  // Track active HeadlessRunner instances for abort support
+  const activeRunners: Set<InstanceType<typeof import('../headless/index.ts').HeadlessRunner>> = new Set();
+
+  // When signal fires, abort all active runners
+  const onAbort = () => {
+    log(`Pipeline ${pipeline.id} received abort signal, killing ${activeRunners.size} active runners`);
+    for (const runner of activeRunners) {
+      runner.abort();
+    }
+    activeRunners.clear();
+  };
+  signal?.addEventListener('abort', onAbort, { once: true });
 
   // Increase max listeners to avoid warning when running many concurrent agents
   // Each HeadlessRunner → CraftAgent → SDK subprocess adds an 'exit' listener
@@ -253,6 +267,13 @@ export async function runPipeline(config: PipelineRunnerConfig): Promise<LabPipe
     emit({ type: 'pipeline_started', pipelineId: pipeline.id });
     updatePipeline({ status: 'thinking' });
 
+    // Helper to check abort before starting a new phase
+    const checkAborted = () => {
+      if (signal?.aborted) {
+        throw new Error('Pipeline cancelled');
+      }
+    };
+
     // ============================================================
     // ACT 1: THINK (parallel briefs from each persona)
     // ============================================================
@@ -279,6 +300,7 @@ export async function runPipeline(config: PipelineRunnerConfig): Promise<LabPipe
       });
 
       try {
+        checkAborted();
         const { HeadlessRunner } = await import('../headless/index.ts');
         const prompt = buildThinkPrompt(persona, project, pipeline.prompt);
 
@@ -288,8 +310,10 @@ export async function runPipeline(config: PipelineRunnerConfig): Promise<LabPipe
           model: persona.model || 'haiku',
           permissionPolicy: 'allow-all', // Headless agents must be autonomous (no user to approve)
         });
+        activeRunners.add(runner);
 
         const result = await runner.run();
+        activeRunners.delete(runner);
 
         if (result.success && result.response) {
           agentRun.status = 'completed';
@@ -420,6 +444,7 @@ export async function runPipeline(config: PipelineRunnerConfig): Promise<LabPipe
       });
 
       try {
+        checkAborted();
         const { HeadlessRunner } = await import('../headless/index.ts');
         const buildPrompt = buildSynthesizeAndBuildPrompt(project, pipeline.prompt, successfulBriefs);
 
@@ -429,8 +454,10 @@ export async function runPipeline(config: PipelineRunnerConfig): Promise<LabPipe
           model: 'sonnet', // Manager uses a capable model
           permissionPolicy: 'allow-all', // Build phase needs write access
         });
+        activeRunners.add(runner);
 
         const result = await runner.run();
+        activeRunners.delete(runner);
 
         if (result.success && result.response) {
           buildRun.status = 'completed';
@@ -525,6 +552,7 @@ export async function runPipeline(config: PipelineRunnerConfig): Promise<LabPipe
         });
 
         try {
+          checkAborted();
           const { HeadlessRunner } = await import('../headless/index.ts');
           const prompt = buildReviewPrompt(persona, project, pipeline.prompt);
 
@@ -534,8 +562,10 @@ export async function runPipeline(config: PipelineRunnerConfig): Promise<LabPipe
             model: persona.model || 'haiku',
             permissionPolicy: 'allow-all', // Headless agents must be autonomous (no user to approve)
           });
+          activeRunners.add(runner);
 
           const result = await runner.run();
+          activeRunners.delete(runner);
 
           if (result.success && result.response) {
             reviewRun.status = 'completed';
@@ -646,26 +676,35 @@ export async function runPipeline(config: PipelineRunnerConfig): Promise<LabPipe
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
     const errorStack = err instanceof Error ? err.stack : undefined;
+    const isCancelled = errorMsg === 'Pipeline cancelled' || signal?.aborted;
 
     // Always log errors to stderr regardless of debug mode
-    console.error(`[lab:pipeline] Pipeline ${pipeline.id} failed:`, errorMsg);
-    if (errorStack) {
+    console.error(`[lab:pipeline] Pipeline ${pipeline.id} ${isCancelled ? 'cancelled' : 'failed'}:`, errorMsg);
+    if (errorStack && !isCancelled) {
       console.error('[lab:pipeline] Stack:', errorStack);
     }
 
+    // Abort any still-running agents
+    for (const runner of activeRunners) {
+      runner.abort();
+    }
+    activeRunners.clear();
+
     updatePipeline({
-      status: 'failed',
+      status: isCancelled ? 'cancelled' : 'failed',
       totalCostUsd,
       totalTokens,
     });
 
     emit({
-      type: 'pipeline_error',
+      type: isCancelled ? 'pipeline_cancelled' : 'pipeline_error',
       pipelineId: pipeline.id,
-      error: errorMsg,
-    });
+      error: isCancelled ? 'Pipeline was stopped by user' : errorMsg,
+    } as any); // pipeline_cancelled shares same shape as pipeline_error
 
-    log(`Pipeline ${pipeline.id} failed: ${errorMsg}`);
+    log(`Pipeline ${pipeline.id} ${isCancelled ? 'cancelled' : 'failed'}: ${errorMsg}`);
     return pipeline;
+  } finally {
+    signal?.removeEventListener('abort', onAbort);
   }
 }

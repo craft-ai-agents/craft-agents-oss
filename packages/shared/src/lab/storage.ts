@@ -499,3 +499,21 @@ export function deletePipeline(
   log(`Deleted pipeline ${pipelineId}`);
   return true;
 }
+
+/**
+ * Delete all pipelines for a project (clear history).
+ */
+export function deleteAllPipelines(
+  workspaceRootPath: string,
+  projectId: string,
+): number {
+  const dir = getPipelinesPath(workspaceRootPath, projectId);
+  if (!existsSync(dir)) return 0;
+
+  const files = readdirSync(dir).filter(f => f.endsWith('.json'));
+  for (const file of files) {
+    rmSync(join(dir, file));
+  }
+  log(`Deleted ${files.length} pipelines for project ${projectId}`);
+  return files.length;
+}

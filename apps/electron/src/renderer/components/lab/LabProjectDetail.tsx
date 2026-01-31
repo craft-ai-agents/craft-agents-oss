@@ -17,6 +17,7 @@ import {
   GitBranch,
   X,
   Sparkles,
+  Trash2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -39,6 +40,8 @@ interface LabProjectDetailProps {
   onStartPipeline: (prompt: string) => void
   onSelectPipeline: (pipeline: LabPipeline) => void
   onClearActivePipeline?: () => void
+  onStopPipeline?: () => void
+  onClearHistory?: () => void
 }
 
 export function LabProjectDetail({
@@ -54,6 +57,8 @@ export function LabProjectDetail({
   onStartPipeline,
   onSelectPipeline,
   onClearActivePipeline,
+  onStopPipeline,
+  onClearHistory,
 }: LabProjectDetailProps) {
   const [pipelinePrompt, setPipelinePrompt] = useState('')
   const [showTemplates, setShowTemplates] = useState(false)
@@ -218,6 +223,7 @@ export function LabProjectDetail({
               <PipelineView
                 pipeline={activePipeline}
                 onClose={onClearActivePipeline}
+                onStop={onStopPipeline}
               />
             </section>
             <Separator />
@@ -271,12 +277,25 @@ export function LabProjectDetail({
           <>
             <Separator />
             <section className="space-y-3">
-              <div className="flex items-center gap-2">
-                <GitBranch className="h-4 w-4 text-muted-foreground" />
-                <h2 className="text-sm font-medium">Pipeline History</h2>
-                <span className="text-xs text-muted-foreground">
-                  ({pipelines.length})
-                </span>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <GitBranch className="h-4 w-4 text-muted-foreground" />
+                  <h2 className="text-sm font-medium">Pipeline History</h2>
+                  <span className="text-xs text-muted-foreground">
+                    ({pipelines.length})
+                  </span>
+                </div>
+                {onClearHistory && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs gap-1 text-muted-foreground hover:text-destructive"
+                    onClick={onClearHistory}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    Clear
+                  </Button>
+                )}
               </div>
 
               <div className="space-y-2">

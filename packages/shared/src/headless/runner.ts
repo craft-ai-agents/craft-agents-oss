@@ -61,6 +61,15 @@ export class HeadlessRunner {
   }
 
   /**
+   * Abort any running query. Kills the SDK subprocess immediately.
+   */
+  abort(): void {
+    if (this.agent) {
+      this.agent.forceAbort();
+    }
+  }
+
+  /**
    * Run the query and return result.
    * For streaming output, use runStreaming() instead.
    */

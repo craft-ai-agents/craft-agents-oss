@@ -67,8 +67,8 @@ export default function LabProjectPage({ projectId }: LabProjectPageProps) {
       const updated = applyPipelineEvent(current, event)
       setActivePipeline(updated)
 
-      // Update in pipelines list too
-      if (event.type === 'pipeline_completed' || event.type === 'pipeline_error') {
+      // Update in pipelines list on terminal events
+      if (event.type === 'pipeline_completed' || event.type === 'pipeline_error' || (event as any).type === 'pipeline_cancelled') {
         setPipelines(prev => prev.map(p =>
           p.id === updated.id ? updated : p
         ))
@@ -159,6 +159,10 @@ export default function LabProjectPage({ projectId }: LabProjectPageProps) {
       )
       setPipelines(prev => [pipeline, ...prev])
       setActivePipeline(pipeline)
+      // CRITICAL: Set ref immediately so the event listener can match events
+      // before React re-renders. Without this, early events (pipeline_started,
+      // phase_started) arrive before the re-render updates the ref, and get dropped.
+      activePipelineRef.current = pipeline
 
       // Kick off pipeline execution (async, returns immediately)
       window.electronAPI.runLabPipeline(
@@ -182,6 +186,29 @@ export default function LabProjectPage({ projectId }: LabProjectPageProps) {
   const handleClearActivePipeline = useCallback(() => {
     setActivePipeline(null)
   }, [])
+
+  // Stop the active pipeline
+  const handleStopPipeline = useCallback(async () => {
+    if (!activeWorkspaceId || !activePipeline) return
+    try {
+      await window.electronAPI.stopLabPipeline(activeWorkspaceId, activePipeline.id)
+    } catch (err) {
+      console.error('[LabProjectPage] Failed to stop pipeline:', err)
+    }
+  }, [activeWorkspaceId, activePipeline])
+
+  // Clear all pipeline history
+  const handleClearHistory = useCallback(async () => {
+    if (!activeWorkspaceId || !project) return
+    try {
+      await window.electronAPI.clearLabPipelines(activeWorkspaceId, project.id)
+      setPipelines([])
+      setActivePipeline(null)
+      activePipelineRef.current = null
+    } catch (err) {
+      console.error('[LabProjectPage] Failed to clear history:', err)
+    }
+  }, [activeWorkspaceId, project])
 
   if (loading) {
     return (
@@ -214,6 +241,8 @@ export default function LabProjectPage({ projectId }: LabProjectPageProps) {
       onStartPipeline={handleStartPipeline}
       onSelectPipeline={handleSelectPipeline}
       onClearActivePipeline={handleClearActivePipeline}
+      onStopPipeline={handleStopPipeline}
+      onClearHistory={handleClearHistory}
     />
   )
 }

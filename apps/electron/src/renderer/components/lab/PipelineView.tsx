@@ -2,11 +2,11 @@
  * PipelineView
  *
  * Real-time visualization of a War Room pipeline execution.
- * Shows phase timeline, agent cards with status indicators,
- * output previews, and cost tracking.
+ * Shows phase timeline with progress counters, agent cards with
+ * live elapsed timers, auto-expanding phases, and output previews.
  */
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   Brain,
   Hammer,
@@ -21,41 +21,81 @@ import {
   DollarSign,
   Zap,
   AlertCircle,
+  Square,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import type { LabPipeline, LabPhase, LabAgentRun, PipelineStatus, PhaseStatus, AgentRunStatus } from '@craft-agent/shared/lab/types'
+
+// ============================================================
+// Live Elapsed Time Hook
+// ============================================================
+
+function useLiveElapsed(startedAt: number | undefined, completedAt: number | undefined): string {
+  const [now, setNow] = useState(Date.now())
+
+  useEffect(() => {
+    if (!startedAt || completedAt) return
+    const interval = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(interval)
+  }, [startedAt, completedAt])
+
+  if (!startedAt) return ''
+  const end = completedAt || now
+  const seconds = Math.floor((end - startedAt) / 1000)
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  const remainingSeconds = seconds % 60
+  return `${minutes}m ${remainingSeconds}s`
+}
+
+// ============================================================
+// Main PipelineView
+// ============================================================
 
 interface PipelineViewProps {
   pipeline: LabPipeline
   onClose?: () => void
+  onStop?: () => void
 }
 
-export function PipelineView({ pipeline, onClose }: PipelineViewProps) {
+export function PipelineView({ pipeline, onClose, onStop }: PipelineViewProps) {
   const isActive = !['completed', 'failed', 'cancelled'].includes(pipeline.status)
-  const elapsed = getElapsed(pipeline.createdAt, pipeline.completedAt)
+  const elapsed = useLiveElapsed(pipeline.createdAt, pipeline.completedAt)
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 mb-1">
             <PipelineStatusBadge status={pipeline.status} />
             {isActive && (
-              <span className="text-[10px] text-muted-foreground animate-pulse">
-                Running...
+              <span className="text-[10px] text-muted-foreground tabular-nums">
+                {elapsed}
               </span>
             )}
           </div>
           <p className="text-sm text-foreground/80 line-clamp-2">{pipeline.prompt}</p>
         </div>
-        {onClose && (
-          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 shrink-0" onClick={onClose}>
-            <X className="h-3.5 w-3.5" />
-          </Button>
-        )}
+        <div className="flex items-center gap-1 shrink-0">
+          {isActive && onStop && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs gap-1 text-destructive hover:text-destructive hover:bg-destructive/10"
+              onClick={onStop}
+            >
+              <Square className="h-3 w-3 fill-current" />
+              Stop
+            </Button>
+          )}
+          {onClose && (
+            <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onClose}>
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Phase Timeline */}
@@ -64,7 +104,7 @@ export function PipelineView({ pipeline, onClose }: PipelineViewProps) {
       {/* Phase Details */}
       <div className="space-y-3">
         {pipeline.phases.map((phase, i) => (
-          <PhaseSection key={phase.id} phase={phase} index={i} />
+          <PhaseSection key={phase.id} phase={phase} index={i} pipelineStatus={pipeline.status} />
         ))}
       </div>
 
@@ -77,27 +117,29 @@ export function PipelineView({ pipeline, onClose }: PipelineViewProps) {
       )}
 
       {/* Stats Footer */}
-      <div className="flex items-center gap-4 text-[10px] text-muted-foreground pt-1 border-t border-foreground/5">
-        <span className="flex items-center gap-1">
-          <Clock className="h-3 w-3" />
-          {elapsed}
-        </span>
-        {pipeline.totalCostUsd != null && (
+      {(pipeline.status === 'completed' || pipeline.status === 'failed') && (
+        <div className="flex items-center gap-4 text-[10px] text-muted-foreground pt-1 border-t border-foreground/5">
           <span className="flex items-center gap-1">
-            <DollarSign className="h-3 w-3" />
-            ${pipeline.totalCostUsd.toFixed(3)}
+            <Clock className="h-3 w-3" />
+            {elapsed}
           </span>
-        )}
-        {pipeline.totalTokens != null && pipeline.totalTokens > 0 && (
-          <span className="flex items-center gap-1">
-            <Zap className="h-3 w-3" />
-            {formatTokens(pipeline.totalTokens)} tokens
+          {pipeline.totalCostUsd != null && (
+            <span className="flex items-center gap-1">
+              <DollarSign className="h-3 w-3" />
+              ${pipeline.totalCostUsd.toFixed(3)}
+            </span>
+          )}
+          {pipeline.totalTokens != null && pipeline.totalTokens > 0 && (
+            <span className="flex items-center gap-1">
+              <Zap className="h-3 w-3" />
+              {formatTokens(pipeline.totalTokens)} tokens
+            </span>
+          )}
+          <span>
+            Iteration {pipeline.iteration}/{pipeline.maxIterations}
           </span>
-        )}
-        <span>
-          Iteration {pipeline.iteration}/{pipeline.maxIterations}
-        </span>
-      </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -115,8 +157,6 @@ const PHASE_ICONS: Record<string, typeof Brain> = {
 }
 
 function PhaseTimeline({ phases, pipelineStatus }: { phases: LabPhase[]; pipelineStatus: PipelineStatus }) {
-  // Build expected phase list: always show Think → Build → Review
-  // Show actual phases if they exist, otherwise show pending placeholders
   const expectedPhases = ['think', 'build', 'review'] as const
   const actualPhaseMap = new Map(phases.map(p => [p.type, p]))
 
@@ -127,6 +167,13 @@ function PhaseTimeline({ phases, pipelineStatus }: { phases: LabPhase[]; pipelin
         const status: PhaseStatus = phase?.status || 'pending'
         const Icon = PHASE_ICONS[phaseType] || Brain
         const isLast = i === expectedPhases.length - 1
+
+        // Progress text for running phases
+        let progressText = ''
+        if (phase && status === 'running' && phase.agents.length > 0) {
+          const done = phase.agents.filter(a => a.status === 'completed' || a.status === 'failed').length
+          progressText = ` ${done}/${phase.agents.length}`
+        }
 
         return (
           <div key={phaseType} className="flex items-center gap-1">
@@ -150,6 +197,9 @@ function PhaseTimeline({ phases, pipelineStatus }: { phases: LabPhase[]; pipelin
                 <Icon className="h-3 w-3" />
               )}
               <span className="capitalize">{phaseType}</span>
+              {progressText && (
+                <span className="tabular-nums opacity-75">{progressText}</span>
+              )}
             </div>
             {!isLast && (
               <div className={cn(
@@ -165,14 +215,36 @@ function PhaseTimeline({ phases, pipelineStatus }: { phases: LabPhase[]; pipelin
 }
 
 // ============================================================
-// Phase Section (expandable)
+// Phase Section (auto-expands when running, shows progress)
 // ============================================================
 
-function PhaseSection({ phase, index }: { phase: LabPhase; index: number }) {
+function PhaseSection({ phase, index, pipelineStatus }: { phase: LabPhase; index: number; pipelineStatus: PipelineStatus }) {
   const [expanded, setExpanded] = useState(
     phase.status === 'running' || phase.status === 'failed'
   )
+  const prevStatusRef = useRef(phase.status)
   const Icon = PHASE_ICONS[phase.type] || Brain
+  const elapsed = useLiveElapsed(phase.startedAt, phase.completedAt)
+
+  // Auto-expand when status transitions to 'running' or 'completed' (to show results)
+  useEffect(() => {
+    if (prevStatusRef.current !== phase.status) {
+      if (phase.status === 'running' || phase.status === 'completed' || phase.status === 'failed') {
+        setExpanded(true)
+      }
+      prevStatusRef.current = phase.status
+    }
+  }, [phase.status])
+
+  // Progress counts
+  const totalAgents = phase.agents.length
+  const completedAgents = phase.agents.filter(a => a.status === 'completed').length
+  const failedAgents = phase.agents.filter(a => a.status === 'failed').length
+  const runningAgents = phase.agents.filter(a => a.status === 'running').length
+  const finishedAgents = completedAgents + failedAgents
+
+  // Phase cost
+  const phaseCost = phase.agents.reduce((sum, a) => sum + (a.tokenUsage?.costUsd || 0), 0)
 
   return (
     <div className={cn(
@@ -194,20 +266,62 @@ function PhaseSection({ phase, index }: { phase: LabPhase; index: number }) {
         )}
         <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
         <span className="text-xs font-medium flex-1">{phase.label}</span>
-        <PhaseStatusIndicator status={phase.status} />
-        {phase.startedAt && phase.completedAt && (
+
+        {/* Progress counter */}
+        {totalAgents > 0 && phase.status === 'running' && (
+          <span className="text-[10px] text-muted-foreground tabular-nums">
+            {finishedAgents}/{totalAgents} done
+          </span>
+        )}
+        {totalAgents > 0 && phase.status === 'completed' && (
           <span className="text-[10px] text-muted-foreground">
-            {getElapsed(phase.startedAt, phase.completedAt)}
+            {completedAgents} completed{failedAgents > 0 ? `, ${failedAgents} failed` : ''}
+          </span>
+        )}
+
+        <PhaseStatusIndicator status={phase.status} />
+
+        {elapsed && (
+          <span className="text-[10px] text-muted-foreground tabular-nums">
+            {elapsed}
+          </span>
+        )}
+
+        {phaseCost > 0 && (
+          <span className="text-[10px] text-muted-foreground">
+            ${phaseCost.toFixed(3)}
           </span>
         )}
       </button>
+
+      {/* Running agents progress bar */}
+      {phase.status === 'running' && totalAgents > 0 && (
+        <div className="px-3 pb-2">
+          <div className="h-1 rounded-full bg-foreground/5 overflow-hidden">
+            <div
+              className="h-full rounded-full bg-accent/40 transition-all duration-500"
+              style={{ width: `${(finishedAgents / totalAgents) * 100}%` }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Agent Runs */}
       {expanded && phase.agents.length > 0 && (
         <div className="px-3 pb-3 space-y-2">
           {phase.agents.map(agent => (
-            <AgentRunCard key={agent.id} agent={agent} />
+            <AgentRunCard key={agent.id} agent={agent} phaseCompleted={phase.status === 'completed'} />
           ))}
+        </div>
+      )}
+
+      {/* Empty state for running phase with no agents yet */}
+      {expanded && phase.agents.length === 0 && phase.status === 'running' && (
+        <div className="px-3 pb-3">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            <span>Starting agents...</span>
+          </div>
         </div>
       )}
     </div>
@@ -215,16 +329,35 @@ function PhaseSection({ phase, index }: { phase: LabPhase; index: number }) {
 }
 
 // ============================================================
-// Agent Run Card
+// Agent Run Card (with live timer and auto-show output)
 // ============================================================
 
-function AgentRunCard({ agent }: { agent: LabAgentRun }) {
+function AgentRunCard({ agent, phaseCompleted }: { agent: LabAgentRun; phaseCompleted?: boolean }) {
+  // Auto-show output when phase is completed (so user sees results without clicking)
   const [showOutput, setShowOutput] = useState(false)
+  const elapsed = useLiveElapsed(agent.startedAt, agent.completedAt)
+
+  // Auto-expand output when agent completes and phase is done
+  useEffect(() => {
+    if (phaseCompleted && agent.status === 'completed' && agent.output) {
+      setShowOutput(true)
+    }
+  }, [phaseCompleted, agent.status, agent.output])
+
+  // Truncated preview of output (first ~150 chars)
+  const outputPreview = agent.output
+    ? agent.output.length > 150
+      ? agent.output.slice(0, 150).trim() + '...'
+      : agent.output
+    : null
 
   return (
     <div className={cn(
-      'rounded-md border border-foreground/5 overflow-hidden',
-      agent.status === 'running' && 'border-accent/10',
+      'rounded-md border overflow-hidden',
+      agent.status === 'running' && 'border-accent/15 bg-accent/[0.02]',
+      agent.status === 'completed' && 'border-foreground/8',
+      agent.status === 'failed' && 'border-destructive/15 bg-destructive/[0.01]',
+      agent.status === 'pending' && 'border-foreground/5 opacity-60',
     )}>
       {/* Agent Header */}
       <div
@@ -237,6 +370,11 @@ function AgentRunCard({ agent }: { agent: LabAgentRun }) {
         <span className="text-sm">{agent.personaIcon}</span>
         <span className="text-xs font-medium flex-1 truncate">{agent.personaName}</span>
         <AgentStatusIndicator status={agent.status} />
+        {elapsed && (
+          <span className="text-[10px] text-muted-foreground tabular-nums">
+            {elapsed}
+          </span>
+        )}
         {agent.tokenUsage && (
           <span className="text-[10px] text-muted-foreground">
             ${agent.tokenUsage.costUsd.toFixed(3)}
@@ -251,6 +389,18 @@ function AgentRunCard({ agent }: { agent: LabAgentRun }) {
         )}
       </div>
 
+      {/* Inline preview when output exists but not expanded */}
+      {!showOutput && agent.status === 'completed' && outputPreview && (
+        <div
+          className="px-3 pb-2 cursor-pointer"
+          onClick={() => setShowOutput(true)}
+        >
+          <p className="text-[10px] text-muted-foreground/70 line-clamp-2 italic">
+            {outputPreview}
+          </p>
+        </div>
+      )}
+
       {/* Error */}
       {agent.error && (
         <div className="px-3 pb-2">
@@ -258,9 +408,9 @@ function AgentRunCard({ agent }: { agent: LabAgentRun }) {
         </div>
       )}
 
-      {/* Output Preview */}
+      {/* Full Output */}
       {showOutput && agent.output && (
-        <div className="border-t border-foreground/5 px-3 py-2 max-h-[200px] overflow-y-auto">
+        <div className="border-t border-foreground/5 px-3 py-2 max-h-[300px] overflow-y-auto">
           <pre className="text-[11px] text-foreground/70 whitespace-pre-wrap font-mono leading-relaxed">
             {agent.output}
           </pre>
@@ -274,28 +424,29 @@ function AgentRunCard({ agent }: { agent: LabAgentRun }) {
 // Status Indicators
 // ============================================================
 
-const PIPELINE_STATUS_STYLES: Record<PipelineStatus, string> = {
-  pending: 'bg-muted-foreground/20 text-muted-foreground',
-  thinking: 'bg-blue-500/10 text-blue-500',
-  synthesizing: 'bg-violet-500/10 text-violet-500',
-  building: 'bg-amber-500/10 text-amber-500',
-  reviewing: 'bg-cyan-500/10 text-cyan-500',
-  iterating: 'bg-orange-500/10 text-orange-500',
-  completed: 'bg-emerald-500/10 text-emerald-500',
-  failed: 'bg-destructive/10 text-destructive',
-  cancelled: 'bg-muted-foreground/10 text-muted-foreground',
+const PIPELINE_STATUS_CONFIG: Record<PipelineStatus, { style: string; label: string }> = {
+  pending: { style: 'bg-muted-foreground/20 text-muted-foreground', label: 'Pending' },
+  thinking: { style: 'bg-blue-500/10 text-blue-500', label: 'Thinking' },
+  synthesizing: { style: 'bg-violet-500/10 text-violet-500', label: 'Synthesizing' },
+  building: { style: 'bg-amber-500/10 text-amber-500', label: 'Building' },
+  reviewing: { style: 'bg-cyan-500/10 text-cyan-500', label: 'Reviewing' },
+  iterating: { style: 'bg-orange-500/10 text-orange-500', label: 'Iterating' },
+  completed: { style: 'bg-emerald-500/10 text-emerald-500', label: 'Completed' },
+  failed: { style: 'bg-destructive/10 text-destructive', label: 'Failed' },
+  cancelled: { style: 'bg-muted-foreground/10 text-muted-foreground', label: 'Cancelled' },
 }
 
 function PipelineStatusBadge({ status }: { status: PipelineStatus }) {
+  const config = PIPELINE_STATUS_CONFIG[status] || PIPELINE_STATUS_CONFIG.pending
+  const isRunning = ['thinking', 'synthesizing', 'building', 'reviewing', 'iterating'].includes(status)
+
   return (
     <span className={cn(
       'inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium',
-      PIPELINE_STATUS_STYLES[status],
+      config.style,
     )}>
-      {['thinking', 'synthesizing', 'building', 'reviewing', 'iterating'].includes(status) && (
-        <Loader2 className="h-2.5 w-2.5 animate-spin" />
-      )}
-      {status}
+      {isRunning && <Loader2 className="h-2.5 w-2.5 animate-spin" />}
+      {config.label}
     </span>
   )
 }
@@ -311,7 +462,10 @@ function AgentStatusIndicator({ status }: { status: AgentRunStatus }) {
   if (status === 'running') {
     return (
       <span className="flex items-center gap-1 text-[10px] text-accent">
-        <Loader2 className="h-2.5 w-2.5 animate-spin" />
+        <span className="relative flex h-2 w-2">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75" />
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-accent" />
+        </span>
         working
       </span>
     )
@@ -323,22 +477,13 @@ function AgentStatusIndicator({ status }: { status: AgentRunStatus }) {
     return <X className="h-3 w-3 text-destructive" />
   }
   return (
-    <span className="text-[10px] text-muted-foreground/50">pending</span>
+    <span className="text-[10px] text-muted-foreground/50">queued</span>
   )
 }
 
 // ============================================================
 // Utilities
 // ============================================================
-
-function getElapsed(startedAt: number, completedAt?: number): string {
-  const end = completedAt || Date.now()
-  const seconds = Math.floor((end - startedAt) / 1000)
-  if (seconds < 60) return `${seconds}s`
-  const minutes = Math.floor(seconds / 60)
-  const remainingSeconds = seconds % 60
-  return `${minutes}m ${remainingSeconds}s`
-}
 
 function formatTokens(tokens: number): string {
   if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M`
@@ -358,7 +503,6 @@ export function applyPipelineEvent(
   pipeline: LabPipeline,
   event: import('@craft-agent/shared/lab/types').PipelineEvent,
 ): LabPipeline {
-  // Only process events for this pipeline
   if (event.pipelineId !== pipeline.id) return pipeline
 
   const updated = { ...pipeline, phases: [...pipeline.phases], updatedAt: Date.now() }
@@ -369,34 +513,49 @@ export function applyPipelineEvent(
       break
 
     case 'phase_started': {
-      const newPhase: LabPhase = {
-        id: event.phaseId,
-        type: event.phaseType as LabPhase['type'],
-        label: getPhaseLabel(event.phaseType),
-        status: 'running',
-        agents: [],
-        startedAt: Date.now(),
+      // Only add phase if not already present (guard against duplicate events)
+      const exists = updated.phases.some(p => p.id === event.phaseId)
+      if (!exists) {
+        const newPhase: LabPhase = {
+          id: event.phaseId,
+          type: event.phaseType as LabPhase['type'],
+          label: getPhaseLabel(event.phaseType),
+          status: 'running',
+          agents: [],
+          startedAt: Date.now(),
+        }
+        updated.phases = [...updated.phases, newPhase]
       }
-      updated.phases = [...updated.phases, newPhase]
+
+      // Update pipeline status based on phase type
+      if (event.phaseType === 'think') updated.status = 'thinking'
+      else if (event.phaseType === 'build') updated.status = 'building'
+      else if (event.phaseType === 'review') updated.status = 'reviewing'
+      else if (event.phaseType === 'iterate') updated.status = 'iterating'
+      else if (event.phaseType === 'synthesize') updated.status = 'synthesizing'
       break
     }
 
     case 'agent_started': {
       const phase = updated.phases[event.phaseIndex]
       if (phase) {
-        const newAgent: LabAgentRun = {
-          id: event.agentRunId,
-          personaId: event.personaId,
-          personaName: event.personaName,
-          personaIcon: event.personaIcon,
-          status: 'running',
-          startedAt: Date.now(),
+        // Only add if not already present
+        const agentExists = phase.agents.some(a => a.id === event.agentRunId)
+        if (!agentExists) {
+          const newAgent: LabAgentRun = {
+            id: event.agentRunId,
+            personaId: event.personaId,
+            personaName: event.personaName,
+            personaIcon: event.personaIcon,
+            status: 'running',
+            startedAt: Date.now(),
+          }
+          updated.phases = updated.phases.map((p, i) =>
+            i === event.phaseIndex
+              ? { ...p, agents: [...p.agents, newAgent] }
+              : p
+          )
         }
-        updated.phases = updated.phases.map((p, i) =>
-          i === event.phaseIndex
-            ? { ...p, agents: [...p.agents, newAgent] }
-            : p
-        )
       }
       break
     }
@@ -439,7 +598,7 @@ export function applyPipelineEvent(
           ? { ...p, status: 'completed' as const, completedAt: Date.now() }
           : p
       )
-      // Update pipeline status based on phase type
+      // Update pipeline status to next phase
       if (event.phaseType === 'think') updated.status = 'building'
       else if (event.phaseType === 'build' || event.phaseType === 'iterate') updated.status = 'reviewing'
       break
@@ -454,6 +613,11 @@ export function applyPipelineEvent(
 
     case 'pipeline_error':
       updated.status = 'failed'
+      break
+
+    case 'pipeline_cancelled' as any:
+      updated.status = 'cancelled'
+      updated.completedAt = Date.now()
       break
   }
 

@@ -57,6 +57,7 @@ export {
   listPipelineIds,
   savePipeline,
   deletePipeline,
+  deleteAllPipelines,
 } from './storage.ts';
 
 // Persona templates
