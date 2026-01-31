@@ -348,8 +348,9 @@ function createComponents(
     em: ({ children }) => <em className="italic">{children}</em>,
     del: ({ children }) => <del className="line-through text-muted-foreground">{children}</del>,
     // Handle unknown <markdown> tags that may come through rehype-raw
-    markdown: ({ children }) => <>{children}</>,
-  }
+    // Type assertion needed because 'markdown' is not a standard HTML element
+    markdown: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  } as Partial<Components>
 }
 
 /**

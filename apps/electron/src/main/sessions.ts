@@ -611,7 +611,7 @@ export class SessionManager {
         // Todo state
         if (managed.todoState !== header.todoState) {
           managed.todoState = header.todoState
-          this.sendEvent({ type: 'todo_state_changed', sessionId, todoState: header.todoState }, managed.workspace.id)
+          this.sendEvent({ type: 'todo_state_changed', sessionId, todoState: header.todoState ?? '' }, managed.workspace.id)
           changed = true
         }
 

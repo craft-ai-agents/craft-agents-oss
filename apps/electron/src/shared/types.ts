@@ -427,6 +427,7 @@ export type SessionEvent =
   // Session metadata events (for multi-window sync)
   | { type: 'session_flagged'; sessionId: string }
   | { type: 'session_unflagged'; sessionId: string }
+  | { type: 'name_changed'; sessionId: string; name?: string }
   | { type: 'session_model_changed'; sessionId: string; model: string | null }
   | { type: 'todo_state_changed'; sessionId: string; todoState: TodoState }
   | { type: 'session_deleted'; sessionId: string }
@@ -801,6 +802,8 @@ export interface ElectronAPI {
 
   // File operations
   readFile(path: string): Promise<string>
+  /** Read a file as binary data (Uint8Array) */
+  readFileBinary(path: string): Promise<Uint8Array>
   /** Read a file as a data URL (data:{mime};base64,...) for binary preview (images, PDFs) */
   readFileDataUrl(path: string): Promise<string>
   openFileDialog(): Promise<string[]>
@@ -840,6 +843,8 @@ export interface ElectronAPI {
   onMenuNewChat(callback: () => void): () => void
   onMenuOpenSettings(callback: () => void): () => void
   onMenuKeyboardShortcuts(callback: () => void): () => void
+  onMenuToggleFocusMode(callback: () => void): () => void
+  onMenuToggleSidebar(callback: () => void): () => void
 
   // Deep link navigation listener (for external craftagents:// URLs)
   onDeepLinkNavigate(callback: (nav: DeepLinkNavigation) => void): () => void

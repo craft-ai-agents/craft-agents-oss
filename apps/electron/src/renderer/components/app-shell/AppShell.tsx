@@ -1921,9 +1921,7 @@ function AppShellContent({
               canGoBack={canGoBack}
               canGoForward={canGoForward}
               onToggleSidebar={() => setIsSidebarVisible(prev => !prev)}
-              isSidebarVisible={isSidebarVisible}
               onToggleFocusMode={() => setIsFocusModeActive(prev => !prev)}
-              isFocusMode={effectiveFocusMode}
             />
           </motion.div>
         )

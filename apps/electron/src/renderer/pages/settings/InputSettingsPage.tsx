@@ -72,9 +72,10 @@ export default function InputSettingsPage() {
     await window.electronAPI.setSpellCheck(enabled)
   }, [])
 
-  const handleSendMessageKeyChange = useCallback(async (key: 'enter' | 'cmd-enter') => {
+  const handleSendMessageKeyChange = useCallback((value: string) => {
+    const key = value as 'enter' | 'cmd-enter'
     setSendMessageKey(key)
-    await window.electronAPI.setSendMessageKey(key)
+    window.electronAPI.setSendMessageKey(key)
   }, [])
 
   return (

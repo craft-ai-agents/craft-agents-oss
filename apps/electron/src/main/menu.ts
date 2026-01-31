@@ -1,6 +1,7 @@
 import { Menu, app, shell, BrowserWindow } from 'electron'
 import { IPC_CHANNELS } from '../shared/types'
-import { EDIT_MENU, VIEW_MENU, WINDOW_MENU, MenuItem } from '../shared/menu-schema'
+import { EDIT_MENU, VIEW_MENU, WINDOW_MENU } from '../shared/menu-schema'
+import type { MenuItem } from '../shared/menu-schema'
 import type { WindowManager } from './window-manager'
 import { mainLog } from './logger'
 

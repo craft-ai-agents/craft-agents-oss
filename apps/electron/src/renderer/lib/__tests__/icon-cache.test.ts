@@ -15,7 +15,7 @@ import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test'
 // ============================================================================
 
 // Mock window.electronAPI
-const mockReadWorkspaceImage = mock(() => Promise.resolve(null))
+const mockReadWorkspaceImage = mock((workspaceId: string, path: string) => Promise.resolve(null as string | null))
 
 // We need to mock the window object before importing the module
 const originalWindow = globalThis.window
@@ -23,7 +23,7 @@ const originalWindow = globalThis.window
 beforeEach(() => {
   // Reset mock
   mockReadWorkspaceImage.mockReset()
-  mockReadWorkspaceImage.mockImplementation(() => Promise.resolve(null))
+  mockReadWorkspaceImage.mockImplementation((_workspaceId: string, _path: string) => Promise.resolve(null))
 
   // Setup mock window.electronAPI
   ;(globalThis as unknown as { window: unknown }).window = {
@@ -268,8 +268,8 @@ describe('string method null safety', () => {
     const content: string | null = null
 
     expect(() => {
-      // This is what was crashing
-      ;(content as string).includes('currentColor')
+      // This is what was crashing - intentionally unsafe cast for testing
+      ;(content as unknown as string).includes('currentColor')
     }).toThrow(TypeError)
   })
 
@@ -277,35 +277,38 @@ describe('string method null safety', () => {
     const content: string | null = null
 
     expect(() => {
-      ;(content as string).startsWith('data:')
+      // Intentionally unsafe cast for testing
+      ;(content as unknown as string).startsWith('data:')
     }).toThrow(TypeError)
   })
 
   it('null check prevents .includes() crash', () => {
-    const content: string | null = null
+    // Test with a function that may return null to prevent TypeScript narrowing
+    const getContent = (): string | null => null
+    const content = getContent()
 
-    // Safe pattern
-    if (!content) {
+    // Safe pattern - null check prevents crash
+    if (content) {
+      const hasColor = content.includes('currentColor')
+      expect(hasColor).toBeDefined()
+    } else {
+      // Null was handled safely
       expect(true).toBe(true)
-      return
     }
-
-    // This is now safe
-    const hasColor = content.includes('currentColor')
-    expect(hasColor).toBeDefined()
   })
 
   it('null check prevents .startsWith() crash', () => {
-    const content: string | null = null
+    // Test with a function that may return null to prevent TypeScript narrowing
+    const getContent = (): string | null => null
+    const content = getContent()
 
-    // Safe pattern
-    if (!content) {
+    // Safe pattern - null check prevents crash
+    if (content) {
+      const isDataUrl = content.startsWith('data:')
+      expect(isDataUrl).toBeDefined()
+    } else {
+      // Null was handled safely
       expect(true).toBe(true)
-      return
     }
-
-    // This is now safe
-    const isDataUrl = content.startsWith('data:')
-    expect(isDataUrl).toBeDefined()
   })
 })

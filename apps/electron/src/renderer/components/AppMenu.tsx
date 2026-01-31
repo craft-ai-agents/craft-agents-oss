@@ -19,10 +19,9 @@ import {
   EDIT_MENU,
   VIEW_MENU,
   WINDOW_MENU,
-  MenuItem,
-  MenuSection,
   getShortcutDisplay,
 } from "../../shared/menu-schema"
+import type { MenuItem, MenuSection } from "../../shared/menu-schema"
 
 // Map of action handlers for menu items that need custom behavior
 type MenuActionHandlers = {
@@ -70,8 +69,12 @@ function renderMenuItem(
 
   if (item.type === 'role') {
     const handler = roleHandlers[item.role]
+    // Gracefully handle missing role handlers with console warning
+    const safeHandler = handler ?? (() => {
+      console.warn(`[AppMenu] No handler registered for role: ${item.role}`)
+    })
     return (
-      <StyledDropdownMenuItem key={item.role} onClick={handler}>
+      <StyledDropdownMenuItem key={item.role} onClick={safeHandler}>
         {Icon && <Icon className="h-3.5 w-3.5" />}
         {item.label}
         {shortcut && <DropdownMenuShortcut className="pl-6">{shortcut}</DropdownMenuShortcut>}
@@ -130,9 +133,7 @@ interface AppMenuProps {
   canGoBack?: boolean
   canGoForward?: boolean
   onToggleSidebar?: () => void
-  isSidebarVisible?: boolean
   onToggleFocusMode?: () => void
-  isFocusMode?: boolean
 }
 
 /**
@@ -162,9 +163,7 @@ export function AppMenu({
   canGoBack = true,
   canGoForward = true,
   onToggleSidebar,
-  isSidebarVisible = true,
   onToggleFocusMode,
-  isFocusMode = false,
 }: AppMenuProps) {
   const [isDebugMode, setIsDebugMode] = useState(false)
   const modKey = isMac ? '⌘' : 'Ctrl+'

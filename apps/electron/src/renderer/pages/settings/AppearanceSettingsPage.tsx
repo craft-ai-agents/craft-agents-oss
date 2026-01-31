@@ -139,7 +139,7 @@ export default function AppearanceSettingsPage() {
     <div className="h-full flex flex-col">
       <PanelHeader
         title="Appearance"
-        actions={<HeaderMenu route={routes.view.settings('appearance')} helpFeature="appearance" />}
+        actions={<HeaderMenu route={routes.view.settings('appearance')} helpFeature="themes" />}
       />
       <div className="flex-1 min-h-0 mask-fade-y">
         <ScrollArea className="h-full">

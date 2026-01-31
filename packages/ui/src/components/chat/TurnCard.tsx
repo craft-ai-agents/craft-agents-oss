@@ -818,7 +818,7 @@ function ActivityRow({ activity, onOpenDetails, isLastChild, sessionFolderPath, 
   }
 
   // For non-MCP tools or informative mode, use the appropriate display name
-  const displayedName = isMcpOrApiTool ? sourceName : fullDisplayName
+  const displayedName: string = isMcpOrApiTool ? sourceName : fullDisplayName
 
   // Intent for MCP tools, description for Bash commands
   const intentOrDescription = activity.intent || (activity.toolInput?.description as string | undefined)
@@ -911,18 +911,18 @@ function ActivityRow({ activity, onOpenDetails, isLastChild, sessionFolderPath, 
               >{diffStats.additions}</span>
             )}
             {/* Filename badge */}
-            {activity.toolInput?.file_path && (
+            {typeof activity.toolInput?.file_path === 'string' && (
               <span className="px-1.5 py-0.5 bg-background shadow-minimal rounded-[4px] text-[11px] text-foreground/70">
-                {(activity.toolInput.file_path as string).split('/').pop()}
+                {activity.toolInput.file_path.split('/').pop()}
               </span>
             )}
           </span>
         )}
         {/* Filename badge for Read tool (no diff stats) */}
-        {!isMcpOrApiTool && !isBackgrounded && !diffStats && activity.toolName === 'Read' && activity.toolInput?.file_path && (
+        {!isMcpOrApiTool && !isBackgrounded && !diffStats && activity.toolName === 'Read' && typeof activity.toolInput?.file_path === 'string' && (
           <span className="flex items-center gap-1.5 text-[10px] shrink-0">
             <span className="px-1.5 py-0.5 bg-background shadow-minimal rounded-[4px] text-[11px] text-foreground/70">
-              {(activity.toolInput.file_path as string).split('/').pop()}
+              {activity.toolInput.file_path.split('/').pop()}
             </span>
           </span>
         )}
