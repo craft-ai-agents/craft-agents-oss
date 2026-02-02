@@ -1,3 +1,4 @@
+import { useI18n } from '@/i18n'
 import { CraftAgentsSymbol } from "@/components/icons/CraftAgentsSymbol"
 import { StepFormLayout, ContinueButton } from "./primitives"
 
@@ -21,6 +22,8 @@ export function WelcomeStep({
   isExistingUser = false,
   isLoading = false
 }: WelcomeStepProps) {
+  const { t } = useI18n('onboarding')
+
   return (
     <StepFormLayout
       iconElement={
@@ -28,15 +31,15 @@ export function WelcomeStep({
           <CraftAgentsSymbol className="size-10 text-accent" />
         </div>
       }
-      title={isExistingUser ? 'Update Settings' : 'Welcome to Craft Agents'}
+      title={isExistingUser ? t('welcome.existingUserTitle') : t('welcome.newUserTitle')}
       description={
         isExistingUser
-          ? 'Update your API connection or change your setup.'
-          : 'Agents with the UX they deserve. Connect anything. Organize your sessions. Everything you need to do the work of your life!'
+          ? t('welcome.existingUserDescription')
+          : t('welcome.newUserDescription')
       }
       actions={
-        <ContinueButton onClick={onContinue} className="w-full" loading={isLoading} loadingText="Checking...">
-          {isExistingUser ? 'Continue' : 'Get Started'}
+        <ContinueButton onClick={onContinue} className="w-full" loading={isLoading} loadingText={t('welcome.checkingText')}>
+          {isExistingUser ? t('welcome.continueButton') : t('welcome.getStartedButton')}
         </ContinueButton>
       }
     />

@@ -1,6 +1,39 @@
 {
-  "welcome": {},
-  "apiSetup": {},
-  "credentials": {},
-  "completion": {}
+  "welcome": {
+    "newUserTitle": "Bienvenue dans Craft Agents",
+    "newUserDescription": "Des agents avec l'UX qu'ils méritent. Connectez ce que vous voulez. Organisez vos sessions. Tout ce dont vous avez besoin pour faire le travail de votre vie!",
+    "existingUserTitle": "Mettre à jour les paramètres",
+    "existingUserDescription": "Mettez à jour votre connexion API ou changez votre configuration.",
+    "getStartedButton": "Commencer",
+    "continueButton": "Continuer",
+    "checkingText": "Vérification..."
+  },
+  "apiSetup": {
+    "title": "Configurer la connexion API",
+    "description": "Sélectionnez comment vous souhaitez alimenter vos agents IA.",
+    "claudeOption": "Claude Pro/Max",
+    "claudeDescription": "Utilisez votre abonnement Claude pour un accès illimité.",
+    "apiKeyOption": "Clé API",
+    "apiKeyDescription": "API Anthropic, OpenRouter, Ollama ou compatible.",
+    "recommended": "Recommandé"
+  },
+  "credentials": {
+    "authorizationCodeTitle": "Entrez le code d'autorisation",
+    "authorizationCodeDescription": "Copiez le code de la page du navigateur et collez-le ci-dessous.",
+    "connectClaudeTitle": "Connecter votre compte Claude",
+    "connectClaudeDescription": "Utilisez votre abonnement Claude pour alimenter les flux de travail multi-agents.",
+    "apiConfigTitle": "Configuration API",
+    "apiConfigDescription": "Entrez votre clé API. Configurez optionnellement un point de terminaison personnalisé pour OpenRouter, Ollama ou les API compatibles.",
+    "signInButton": "Se connecter avec Claude",
+    "cancelButton": "Annuler",
+    "connectingText": "Connexion...",
+    "validatingText": "Validation..."
+  },
+  "completion": {
+    "savingTitle": "Configuration...",
+    "savingDescription": "Enregistrement de votre configuration...",
+    "completeTitle": "C'est prêt !",
+    "completeDescription": "Commencez simplement une discussion et mettez-vous au travail.",
+    "getStartedButton": "Commencer"
+  }
 }
