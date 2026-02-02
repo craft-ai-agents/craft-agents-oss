@@ -30,7 +30,213 @@
       "editFile": "Modifier le fichier"
     }
   },
-  "workspace": {},
-  "appearance": {},
-  "permissions": {}
+  "input": {
+    "title": "Saisie",
+    "typing": {
+      "title": "Frappe",
+      "description": "Contrôlez comment le texte est saisi dans le champ de discussion.",
+      "autoCapitalisation": "Majuscule automatique",
+      "autoCapitalisationDescription": "Mettre automatiquement une majuscule à la première lettre lors de la saisie d'un message.",
+      "spellCheck": "Vérification orthographique",
+      "spellCheckDescription": "Souligner les mots mal orthographiés pendant la frappe."
+    },
+    "sending": {
+      "title": "Envoi",
+      "description": "Choisissez comment envoyer les messages.",
+      "sendMessageWith": "Envoyer un message avec",
+      "sendMessageWithDescription": "Raccourci clavier pour envoyer des messages",
+      "enterOption": "Entrée",
+      "enterOptionDescription": "Utilisez Maj+Entrée pour les nouvelles lignes",
+      "cmdEnterOption": "⌘ Entrée",
+      "cmdEnterOptionDescription": "Utilisez Entrée pour les nouvelles lignes"
+    }
+  },
+  "shortcuts": {
+    "title": "Raccourcis",
+    "global": {
+      "title": "Globaux",
+      "focusSidebar": "Focus sur la barre latérale",
+      "focusSessionList": "Focus sur la liste des sessions",
+      "focusChatInput": "Focus sur le champ de saisie",
+      "newChat": "Nouvelle discussion",
+      "toggleSidebar": "Basculer la barre latérale",
+      "openSettings": "Ouvrir les paramètres"
+    },
+    "navigation": {
+      "title": "Navigation",
+      "moveToNextZone": "Passer à la zone suivante",
+      "cyclePermissionMode": "Changer le mode de permissions",
+      "moveBetweenZones": "Se déplacer entre les zones (dans les listes)",
+      "navigateItems": "Naviguer dans les éléments de la liste",
+      "goToFirst": "Aller au premier élément",
+      "goToLast": "Aller au dernier élément",
+      "closeDialog": "Fermer le dialogue / désélectionner le champ"
+    },
+    "sessionList": {
+      "title": "Liste des sessions",
+      "focusChatInput": "Focus sur le champ de saisie",
+      "deleteSession": "Supprimer la session"
+    },
+    "chat": {
+      "title": "Discussion",
+      "sendMessage": "Envoyer le message",
+      "newLine": "Nouvelle ligne",
+      "sendMessageCmd": "Envoyer le message"
+    }
+  },
+  "appearance": {
+    "title": "Apparence",
+    "theme": {
+      "title": "Thème",
+      "mode": "Mode",
+      "system": "Système",
+      "light": "Clair",
+      "dark": "Sombre",
+      "colorTheme": "Thème de couleur",
+      "default": "Par défaut",
+      "font": "Police",
+      "inter": "Inter",
+      "systemFont": "Système"
+    },
+    "toolIcons": {
+      "title": "Icônes d'outils",
+      "description": "Icônes affichées à côté des commandes CLI dans l'activité de discussion. Stockées dans ~/.craft-agent/tool-icons/.",
+      "editFile": "Modifier le fichier",
+      "iconHeader": "Icône",
+      "toolHeader": "Outil",
+      "commandsHeader": "Commandes",
+      "searchPlaceholder": "Rechercher des outils...",
+      "emptyContent": "Aucune correspondance d'icône d'outil trouvée"
+    }
+  },
+  "app": {
+    "title": "Paramètres de l'application",
+    "notifications": {
+      "title": "Notifications",
+      "desktop": "Notifications de bureau",
+      "desktopDescription": "Être notifié lorsque l'IA a fini de travailler dans une discussion."
+    },
+    "apiConnection": {
+      "title": "Connexion API",
+      "description": "Comment vos agents IA se connectent aux modèles de langage.",
+      "connectionType": "Type de connexion",
+      "claudeProMax": "Claude Pro/Max — utilisant votre abonnement Claude",
+      "apiKey": "Clé API — Anthropic, OpenRouter ou API compatible",
+      "notConfigured": "Non configuré",
+      "edit": "Modifier",
+      "closeEsc": "Fermer (Échap)"
+    },
+    "about": {
+      "title": "À propos",
+      "version": "Version",
+      "loading": "Chargement...",
+      "updateTo": "Mettre à jour vers {{version}}",
+      "checkForUpdates": "Rechercher des mises à jour",
+      "checkNow": "Vérifier maintenant",
+      "checking": "Vérification...",
+      "installUpdate": "Installer la mise à jour",
+      "restartToUpdate": "Redémarrer pour mettre à jour"
+    }
+  },
+  "labels": {
+    "title": "Étiquettes",
+    "aboutLabels": {
+      "title": "À propos des étiquettes",
+      "paragraph1": "Les étiquettes vous aident à organiser les sessions avec des tags colorés. Utilisez-les pour catégoriser les conversations par projet, sujet ou priorité — facilitant ainsi le filtrage et la recherche de sessions connexes ultérieurement.",
+      "paragraph2": "Chaque étiquette peut optionnellement porter une valeur avec un type spécifique (texte, nombre ou date). Cela transforme les étiquettes en métadonnées structurées — par exemple, une étiquette \"priorité\" avec la valeur 3, ou une étiquette \"échéance\" avec une date.",
+      "paragraph3": "Les règles d'application automatique attribuent des étiquettes automatiquement lorsqu'un message correspond à un motif regex. Par exemple, coller une URL d'issue Linear peut automatiquement taguer la session avec le nom du projet et l'ID de l'issue — pas besoin de marquage manuel.",
+      "learnMore": "En savoir plus"
+    },
+    "labelHierarchy": {
+      "title": "Hiérarchie des étiquettes",
+      "description": "Toutes les étiquettes configurées pour cet espace de travail. Les étiquettes peuvent être imbriquées pour former des groupes.",
+      "empty": "Aucune étiquette configurée.",
+      "emptyHint": "Les étiquettes peuvent être créées par l'agent ou en modifiant labels/config.json dans votre espace de travail."
+    },
+    "autoRules": {
+      "title": "Règles d'application automatique",
+      "description": "Motifs regex qui appliquent automatiquement des étiquettes lorsqu'ils correspondent aux messages utilisateur. Par exemple, coller une URL d'issue Linear et automatiquement taguer la session avec le nom du projet et l'ID de l'issue.",
+      "fullscreenTitle": "Règles d'application automatique"
+    },
+    "editFile": "Modifier le fichier"
+  },
+  "permissions": {
+    "title": "Permissions",
+    "aboutPermissions": {
+      "title": "À propos des permissions",
+      "paragraph1": "Les permissions contrôlent le niveau d'autonomie de votre agent. En mode Exploration, l'agent peut seulement lire et rechercher — parfait pour comprendre un problème avant de s'engager dans des modifications. Lorsque vous êtes prêt, passez en mode Exécution pour laisser l'agent implémenter le plan de manière autonome.",
+      "paragraph2": "Un bon workflow : commencez en Exploration pour laisser l'agent enquêter, examinez le plan proposé, puis exécutez en toute confiance.",
+      "learnMore": "En savoir plus"
+    },
+    "defaultPermissions": {
+      "title": "Permissions par défaut",
+      "description": "Motifs autorisés au niveau de l'application en mode Exploration. Les commandes qui ne figurent pas dans cette liste sont bloquées.",
+      "editFile": "Modifier le fichier",
+      "empty": "Aucune permission par défaut trouvée.",
+      "emptyHint": "Les permissions par défaut devraient être dans ~/.craft-agent/permissions/default.json",
+      "fullscreenTitle": "Permissions par défaut"
+    },
+    "workspaceCustomizations": {
+      "title": "Personnalisations de l'espace de travail",
+      "description": "Motifs au niveau de l'espace de travail qui étendent les paramètres par défaut de l'application ci-dessus.",
+      "editFile": "Modifier le fichier",
+      "empty": "Aucune permission personnalisée configurée.",
+      "emptyHint": "Créez un fichier permissions.json dans votre espace de travail pour ajouter des règles personnalisées.",
+      "fullscreenTitle": "Personnalisations de l'espace de travail"
+    }
+  },
+  "workspace": {
+    "title": "Paramètres de l'espace de travail",
+    "noWorkspace": "Aucun espace de travail sélectionné",
+    "workspaceInfo": {
+      "title": "Informations de l'espace de travail",
+      "name": "Nom",
+      "untitled": "Sans titre",
+      "edit": "Modifier",
+      "icon": "Icône",
+      "change": "Changer",
+      "uploading": "Téléchargement...",
+      "renameTitle": "Renommer l'espace de travail",
+      "renamePlaceholder": "Entrez le nom de l'espace de travail..."
+    },
+    "model": {
+      "title": "Modèle",
+      "defaultModel": "Modèle par défaut",
+      "setViaApi": "Défini via la connexion API",
+      "aiModelDescription": "Modèle d'IA pour les nouvelles discussions",
+      "opus": "Opus 4.5",
+      "opusDescription": "Le plus performant pour les tâches complexes",
+      "sonnet": "Sonnet 4.5",
+      "sonnetDescription": "Le meilleur pour les tâches quotidiennes",
+      "haiku": "Haiku 4.5",
+      "haikuDescription": "Le plus rapide pour les réponses rapides",
+      "thinkingLevel": "Niveau de réflexion",
+      "thinkingLevelDescription": "Profondeur de raisonnement pour les nouvelles discussions"
+    },
+    "permissions": {
+      "title": "Permissions",
+      "defaultMode": "Mode par défaut",
+      "defaultModeDescription": "Contrôlez ce que l'IA peut faire",
+      "safeMode": "Exploration",
+      "safeModeDescription": "Lecture seule, aucune modification autorisée",
+      "askMode": "Demander avant modification",
+      "askModeDescription": "Demande avant de faire des modifications",
+      "allowAllMode": "Exécution",
+      "allowAllModeDescription": "Exécution autonome complète"
+    },
+    "modeCycling": {
+      "title": "Changement de mode",
+      "description": "Sélectionnez les modes à parcourir avec Maj+Tab",
+      "errorMinimum": "Au moins 2 modes sont requis"
+    },
+    "advanced": {
+      "title": "Avancé",
+      "workingDirectory": "Répertoire de travail par défaut",
+      "notSet": "Non défini (utilise le dossier de session)",
+      "clear": "Effacer",
+      "change": "Changer...",
+      "localMcp": "Serveurs MCP locaux",
+      "localMcpDescription": "Activer les serveurs de sous-processus stdio"
+    }
+  }
 }

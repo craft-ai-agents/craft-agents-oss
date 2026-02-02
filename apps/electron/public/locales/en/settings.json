@@ -30,7 +30,213 @@
       "editFile": "Edit File"
     }
   },
-  "workspace": {},
-  "appearance": {},
-  "permissions": {}
+  "input": {
+    "title": "Input",
+    "typing": {
+      "title": "Typing",
+      "description": "Control how text is entered in the chat input.",
+      "autoCapitalisation": "Auto capitalisation",
+      "autoCapitalisationDescription": "Automatically capitalise the first letter when typing a message.",
+      "spellCheck": "Spell check",
+      "spellCheckDescription": "Underline misspelled words while typing."
+    },
+    "sending": {
+      "title": "Sending",
+      "description": "Choose how to send messages.",
+      "sendMessageWith": "Send message with",
+      "sendMessageWithDescription": "Keyboard shortcut for sending messages",
+      "enterOption": "Enter",
+      "enterOptionDescription": "Use Shift+Enter for new lines",
+      "cmdEnterOption": "⌘ Enter",
+      "cmdEnterOptionDescription": "Use Enter for new lines"
+    }
+  },
+  "shortcuts": {
+    "title": "Shortcuts",
+    "global": {
+      "title": "Global",
+      "focusSidebar": "Focus sidebar",
+      "focusSessionList": "Focus session list",
+      "focusChatInput": "Focus chat input",
+      "newChat": "New chat",
+      "toggleSidebar": "Toggle sidebar",
+      "openSettings": "Open settings"
+    },
+    "navigation": {
+      "title": "Navigation",
+      "moveToNextZone": "Move to next zone",
+      "cyclePermissionMode": "Cycle permission mode",
+      "moveBetweenZones": "Move between zones (in lists)",
+      "navigateItems": "Navigate items in list",
+      "goToFirst": "Go to first item",
+      "goToLast": "Go to last item",
+      "closeDialog": "Close dialog / blur input"
+    },
+    "sessionList": {
+      "title": "Session List",
+      "focusChatInput": "Focus chat input",
+      "deleteSession": "Delete session"
+    },
+    "chat": {
+      "title": "Chat",
+      "sendMessage": "Send message",
+      "newLine": "New line",
+      "sendMessageCmd": "Send message"
+    }
+  },
+  "appearance": {
+    "title": "Appearance",
+    "theme": {
+      "title": "Theme",
+      "mode": "Mode",
+      "system": "System",
+      "light": "Light",
+      "dark": "Dark",
+      "colorTheme": "Color theme",
+      "default": "Default",
+      "font": "Font",
+      "inter": "Inter",
+      "systemFont": "System"
+    },
+    "toolIcons": {
+      "title": "Tool Icons",
+      "description": "Icons shown next to CLI commands in chat activity. Stored in ~/.craft-agent/tool-icons/.",
+      "editFile": "Edit File",
+      "iconHeader": "Icon",
+      "toolHeader": "Tool",
+      "commandsHeader": "Commands",
+      "searchPlaceholder": "Search tools...",
+      "emptyContent": "No tool icon mappings found"
+    }
+  },
+  "app": {
+    "title": "App Settings",
+    "notifications": {
+      "title": "Notifications",
+      "desktop": "Desktop notifications",
+      "desktopDescription": "Get notified when AI finishes working in a chat."
+    },
+    "apiConnection": {
+      "title": "API Connection",
+      "description": "How your AI agents connect to language models.",
+      "connectionType": "Connection type",
+      "claudeProMax": "Claude Pro/Max — using your Claude subscription",
+      "apiKey": "API Key — Anthropic, OpenRouter, or compatible API",
+      "notConfigured": "Not configured",
+      "edit": "Edit",
+      "closeEsc": "Close (Esc)"
+    },
+    "about": {
+      "title": "About",
+      "version": "Version",
+      "loading": "Loading...",
+      "updateTo": "Update to {{version}}",
+      "checkForUpdates": "Check for updates",
+      "checkNow": "Check Now",
+      "checking": "Checking...",
+      "installUpdate": "Install update",
+      "restartToUpdate": "Restart to Update"
+    }
+  },
+  "labels": {
+    "title": "Labels",
+    "aboutLabels": {
+      "title": "About Labels",
+      "paragraph1": "Labels help you organize sessions with colored tags. Use them to categorize conversations by project, topic, or priority — making it easy to filter and find related sessions later.",
+      "paragraph2": "Each label can optionally carry a value with a specific type (text, number, or date). This turns labels into structured metadata — for example, a \"priority\" label with value 3, or a \"due\" label with a date.",
+      "paragraph3": "Auto-apply rules assign labels automatically when a message matches a regex pattern. For example, pasting a Linear issue URL can auto-tag the session with the project name and issue ID — no manual tagging needed.",
+      "learnMore": "Learn more"
+    },
+    "labelHierarchy": {
+      "title": "Label Hierarchy",
+      "description": "All labels configured for this workspace. Labels can be nested to form groups.",
+      "empty": "No labels configured.",
+      "emptyHint": "Labels can be created by the agent or by editing labels/config.json in your workspace."
+    },
+    "autoRules": {
+      "title": "Auto-Apply Rules",
+      "description": "Regex patterns that automatically apply labels when matched in user messages. For example, paste a Linear issue URL and automatically tag the session with the project name and issue ID.",
+      "fullscreenTitle": "Auto-Apply Rules"
+    },
+    "editFile": "Edit File"
+  },
+  "permissions": {
+    "title": "Permissions",
+    "aboutPermissions": {
+      "title": "About Permissions",
+      "paragraph1": "Permissions control how much autonomy your agent has. In Explore mode, the agent can only read and research — perfect for understanding a problem before committing to changes. When you're ready, switch to Execute mode to let the agent implement the plan autonomously.",
+      "paragraph2": "A good workflow: start in Explore to let the agent investigate, review the proposed plan, then execute with confidence.",
+      "learnMore": "Learn more"
+    },
+    "defaultPermissions": {
+      "title": "Default Permissions",
+      "description": "App-level patterns allowed in Explore mode. Commands not on this list are blocked.",
+      "editFile": "Edit File",
+      "empty": "No default permissions found.",
+      "emptyHint": "Default permissions should be at ~/.craft-agent/permissions/default.json",
+      "fullscreenTitle": "Default Permissions"
+    },
+    "workspaceCustomizations": {
+      "title": "Workspace Customizations",
+      "description": "Workspace-level patterns that extend the app defaults above.",
+      "editFile": "Edit File",
+      "empty": "No custom permissions configured.",
+      "emptyHint": "Create a permissions.json file in your workspace to add custom rules.",
+      "fullscreenTitle": "Workspace Customizations"
+    }
+  },
+  "workspace": {
+    "title": "Workspace Settings",
+    "noWorkspace": "No workspace selected",
+    "workspaceInfo": {
+      "title": "Workspace Info",
+      "name": "Name",
+      "untitled": "Untitled",
+      "edit": "Edit",
+      "icon": "Icon",
+      "change": "Change",
+      "uploading": "Uploading...",
+      "renameTitle": "Rename workspace",
+      "renamePlaceholder": "Enter workspace name..."
+    },
+    "model": {
+      "title": "Model",
+      "defaultModel": "Default model",
+      "setViaApi": "Set via API connection",
+      "aiModelDescription": "AI model for new chats",
+      "opus": "Opus 4.5",
+      "opusDescription": "Most capable for complex work",
+      "sonnet": "Sonnet 4.5",
+      "sonnetDescription": "Best for everyday tasks",
+      "haiku": "Haiku 4.5",
+      "haikuDescription": "Fastest for quick answers",
+      "thinkingLevel": "Thinking level",
+      "thinkingLevelDescription": "Reasoning depth for new chats"
+    },
+    "permissions": {
+      "title": "Permissions",
+      "defaultMode": "Default mode",
+      "defaultModeDescription": "Control what AI can do",
+      "safeMode": "Explore",
+      "safeModeDescription": "Read-only, no changes allowed",
+      "askMode": "Ask to Edit",
+      "askModeDescription": "Prompts before making edits",
+      "allowAllMode": "Execute",
+      "allowAllModeDescription": "Full autonomous execution"
+    },
+    "modeCycling": {
+      "title": "Mode Cycling",
+      "description": "Select which modes to cycle through with Shift+Tab",
+      "errorMinimum": "At least 2 modes required"
+    },
+    "advanced": {
+      "title": "Advanced",
+      "workingDirectory": "Default Working Directory",
+      "notSet": "Not set (uses session folder)",
+      "clear": "Clear",
+      "change": "Change...",
+      "localMcp": "Local MCP Servers",
+      "localMcpDescription": "Enable stdio subprocess servers"
+    }
+  }
 }

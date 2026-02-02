@@ -16,6 +16,7 @@ import { routes } from '@/lib/navigate'
 import { Monitor, Sun, Moon } from 'lucide-react'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import type { ToolIconMapping } from '../../../shared/types'
+import { useI18n } from '@/i18n'
 
 import {
   SettingsSection,
@@ -41,10 +42,10 @@ export const meta: DetailsPageMeta = {
  * Column definitions for the tool icon mappings table.
  * Shows a preview icon, tool name, and the CLI commands that trigger it.
  */
-const toolIconColumns: ColumnDef<ToolIconMapping>[] = [
+const createToolIconColumns = (t: (key: string) => string): ColumnDef<ToolIconMapping>[] => [
   {
     accessorKey: 'iconDataUrl',
-    header: () => <span className="p-1.5 pl-2.5">Icon</span>,
+    header: () => <span className="p-1.5 pl-2.5">{t('appearance.toolIcons.iconHeader')}</span>,
     cell: ({ row }) => (
       <div className="p-1.5 pl-2.5">
         <img
@@ -59,7 +60,7 @@ const toolIconColumns: ColumnDef<ToolIconMapping>[] = [
   },
   {
     accessorKey: 'displayName',
-    header: ({ column }) => <SortableHeader column={column} title="Tool" />,
+    header: ({ column }) => <SortableHeader column={column} title={t('appearance.toolIcons.toolHeader')} />,
     cell: ({ row }) => (
       <div className="p-1.5 pl-2.5 font-medium">
         {row.original.displayName}
@@ -69,7 +70,7 @@ const toolIconColumns: ColumnDef<ToolIconMapping>[] = [
   },
   {
     accessorKey: 'commands',
-    header: () => <span className="p-1.5 pl-2.5">Commands</span>,
+    header: () => <span className="p-1.5 pl-2.5">{t('appearance.toolIcons.commandsHeader')}</span>,
     cell: ({ row }) => (
       <div className="p-1.5 pl-2.5 flex flex-wrap gap-1">
         {row.original.commands.map(cmd => (
@@ -89,6 +90,7 @@ const toolIconColumns: ColumnDef<ToolIconMapping>[] = [
 // ============================================
 
 export default function AppearanceSettingsPage() {
+  const { t } = useI18n('settings')
   const { mode, setMode, colorTheme, setColorTheme, font, setFont } = useTheme()
   // Preset themes for the color theme dropdown
   const [presetThemes, setPresetThemes] = useState<PresetTheme[]>([])
@@ -138,7 +140,7 @@ export default function AppearanceSettingsPage() {
   return (
     <div className="h-full flex flex-col">
       <PanelHeader
-        title="Appearance"
+        title={t('appearance.title')}
         actions={<HeaderMenu route={routes.view.settings('appearance')} helpFeature="appearance" />}
       />
       <div className="flex-1 min-h-0 mask-fade-y">
@@ -147,25 +149,25 @@ export default function AppearanceSettingsPage() {
             <div className="space-y-8">
 
               {/* Theme & Font */}
-              <SettingsSection title="Theme">
+              <SettingsSection title={t('appearance.theme.title')}>
                 <SettingsCard>
-                  <SettingsRow label="Mode">
+                  <SettingsRow label={t('appearance.theme.mode')}>
                     <SettingsSegmentedControl
                       value={mode}
                       onValueChange={setMode}
                       options={[
-                        { value: 'system', label: 'System', icon: <Monitor className="w-4 h-4" /> },
-                        { value: 'light', label: 'Light', icon: <Sun className="w-4 h-4" /> },
-                        { value: 'dark', label: 'Dark', icon: <Moon className="w-4 h-4" /> },
+                        { value: 'system', label: t('appearance.theme.system'), icon: <Monitor className="w-4 h-4" /> },
+                        { value: 'light', label: t('appearance.theme.light'), icon: <Sun className="w-4 h-4" /> },
+                        { value: 'dark', label: t('appearance.theme.dark'), icon: <Moon className="w-4 h-4" /> },
                       ]}
                     />
                   </SettingsRow>
-                  <SettingsRow label="Color theme">
+                  <SettingsRow label={t('appearance.theme.colorTheme')}>
                     <SettingsMenuSelect
                       value={colorTheme}
                       onValueChange={setColorTheme}
                       options={[
-                        { value: 'default', label: 'Default' },
+                        { value: 'default', label: t('appearance.theme.default') },
                         ...presetThemes
                           .filter(t => t.id !== 'default')
                           .map(t => ({
@@ -175,13 +177,13 @@ export default function AppearanceSettingsPage() {
                       ]}
                     />
                   </SettingsRow>
-                  <SettingsRow label="Font">
+                  <SettingsRow label={t('appearance.theme.font')}>
                     <SettingsSegmentedControl
                       value={font}
                       onValueChange={setFont}
                       options={[
-                        { value: 'inter', label: 'Inter' },
-                        { value: 'system', label: 'System' },
+                        { value: 'inter', label: t('appearance.theme.inter') },
+                        { value: 'system', label: t('appearance.theme.systemFont') },
                       ]}
                     />
                   </SettingsRow>
@@ -190,15 +192,15 @@ export default function AppearanceSettingsPage() {
 
               {/* Tool Icons — shows the command → icon mapping used in turn cards */}
               <SettingsSection
-                title="Tool Icons"
-                description="Icons shown next to CLI commands in chat activity. Stored in ~/.craft-agent/tool-icons/."
+                title={t('appearance.toolIcons.title')}
+                description={t('appearance.toolIcons.description')}
                 action={
                   toolIconsJsonPath ? (
                     <EditPopover
                       trigger={<EditButton />}
                       {...getEditConfig('edit-tool-icons', toolIconsJsonPath)}
                       secondaryAction={{
-                        label: 'Edit File',
+                        label: t('appearance.toolIcons.editFile'),
                         filePath: toolIconsJsonPath,
                       }}
                     />
@@ -207,11 +209,11 @@ export default function AppearanceSettingsPage() {
               >
                 <SettingsCard>
                   <Info_DataTable
-                    columns={toolIconColumns}
+                    columns={createToolIconColumns(t)}
                     data={toolIcons}
-                    searchable={{ placeholder: 'Search tools...' }}
+                    searchable={{ placeholder: t('appearance.toolIcons.searchPlaceholder') }}
                     maxHeight={480}
-                    emptyContent="No tool icon mappings found"
+                    emptyContent={t('appearance.toolIcons.emptyContent')}
                   />
                 </SettingsCard>
               </SettingsSection>
