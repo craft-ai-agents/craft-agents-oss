@@ -1,6 +1,36 @@
 {
+  "preferences": {
+    "title": "Preferences",
+    "basicInfo": {
+      "title": "Basic Info",
+      "description": "Help Craft Agent personalize responses to you.",
+      "name": "Name",
+      "nameDescription": "How Craft Agent should address you.",
+      "namePlaceholder": "Your name",
+      "timezone": "Timezone",
+      "timezoneDescription": "Used for relative dates like 'tomorrow' or 'next week'.",
+      "timezonePlaceholder": "e.g., America/New_York",
+      "language": "Language",
+      "languageDescription": "Language for the Craft Agent interface."
+    },
+    "location": {
+      "title": "Location",
+      "description": "Enables location-aware responses like weather, local time, and regional context.",
+      "city": "City",
+      "cityDescription": "Your city for local information and context.",
+      "cityPlaceholder": "e.g., New York",
+      "country": "Country",
+      "countryDescription": "Your country for regional formatting and context.",
+      "countryPlaceholder": "e.g., USA"
+    },
+    "notes": {
+      "title": "Notes",
+      "description": "Free-form context that helps Craft Agent understand your preferences.",
+      "placeholder": "Any additional context you'd like Craft Agent to know...",
+      "editFile": "Edit File"
+    }
+  },
   "workspace": {},
   "appearance": {},
-  "permissions": {},
-  "preferences": {}
+  "permissions": {}
 }

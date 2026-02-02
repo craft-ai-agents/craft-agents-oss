@@ -1,6 +1,36 @@
 {
+  "preferences": {
+    "title": "Préférences",
+    "basicInfo": {
+      "title": "Informations de base",
+      "description": "Aidez Craft Agent à personnaliser ses réponses.",
+      "name": "Nom",
+      "nameDescription": "Comment Craft Agent doit s'adresser à vous.",
+      "namePlaceholder": "Votre nom",
+      "timezone": "Fuseau horaire",
+      "timezoneDescription": "Utilisé pour les dates relatives comme 'demain' ou 'la semaine prochaine'.",
+      "timezonePlaceholder": "ex : Europe/Paris",
+      "language": "Langue",
+      "languageDescription": "Langue de l'interface Craft Agent."
+    },
+    "location": {
+      "title": "Localisation",
+      "description": "Active les réponses tenant compte de la localisation comme la météo, l'heure locale et le contexte régional.",
+      "city": "Ville",
+      "cityDescription": "Votre ville pour les informations locales et le contexte.",
+      "cityPlaceholder": "ex : Paris",
+      "country": "Pays",
+      "countryDescription": "Votre pays pour le formatage régional et le contexte.",
+      "countryPlaceholder": "ex : France"
+    },
+    "notes": {
+      "title": "Notes",
+      "description": "Contexte libre qui aide Craft Agent à comprendre vos préférences.",
+      "placeholder": "Tout contexte supplémentaire que vous souhaitez que Craft Agent connaisse...",
+      "editFile": "Modifier le fichier"
+    }
+  },
   "workspace": {},
   "appearance": {},
-  "permissions": {},
-  "preferences": {}
+  "permissions": {}
 }
