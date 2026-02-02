@@ -19,8 +19,10 @@ import {
   SettingsSection,
   SettingsCard,
   SettingsInput,
+  SettingsSelect,
   SettingsTextarea,
 } from '@/components/settings'
+import { useI18n } from '@/i18n'
 import { EditPopover, EditButton, getEditConfig } from '@/components/ui/EditPopover'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 
@@ -86,6 +88,7 @@ function serializePreferences(state: PreferencesFormState): string {
 }
 
 export default function PreferencesPage() {
+  const { language, changeLanguage } = useI18n()
   const [formState, setFormState] = useState<PreferencesFormState>(emptyFormState)
   const [isLoading, setIsLoading] = useState(true)
   const [preferencesPath, setPreferencesPath] = useState<string | null>(null)
@@ -216,12 +219,18 @@ export default function PreferencesPage() {
                 placeholder="e.g., America/New_York"
                 inCard
               />
-              <SettingsInput
+              <SettingsSelect
                 label="Language"
-                description="Preferred language for Craft Agent's responses."
-                value={formState.language}
-                onChange={(v) => updateField('language', v)}
-                placeholder="e.g., English"
+                description="Language for the Craft Agent interface."
+                value={language}
+                onValueChange={(lng) => {
+                  changeLanguage(lng)
+                  updateField('language', lng)
+                }}
+                options={[
+                  { value: 'en', label: 'English' },
+                  { value: 'fr', label: 'Français' },
+                ]}
                 inCard
               />
             </SettingsCard>
