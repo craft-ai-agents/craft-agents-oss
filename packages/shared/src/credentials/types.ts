@@ -76,6 +76,8 @@ export interface StoredCredential {
   expiresAt?: number;
   /** OAuth client ID (needed for token refresh) */
   clientId?: string;
+  /** OAuth client secret (needed for Google token refresh - Google requires both ID and secret) */
+  clientSecret?: string;
   /** Token type (e.g., "Bearer") */
   tokenType?: string;
   /** Where the credential came from: 'native' (our OAuth), 'cli' (Claude CLI import) */

@@ -55,11 +55,29 @@ This source provides a single flexible `api_google-calendar` tool that accepts:
   "api": {
     "baseUrl": "https://www.googleapis.com/calendar/v3/",
     "authType": "bearer",
-    "googleService": "calendar"
+    "googleService": "calendar",
+    "googleOAuthClientId": "your-client-id.apps.googleusercontent.com",
+    "googleOAuthClientSecret": "your-client-secret"
   },
   "iconUrl": "https://calendar.google.com"
 }
 ```
 
+### Google OAuth Setup
+
+You need to create your own Google OAuth credentials:
+
+1. **Create a Google Cloud Project** at [console.cloud.google.com](https://console.cloud.google.com)
+2. **Enable the Google Calendar API** in APIs & Services → Library
+3. **Configure OAuth Consent Screen** (APIs & Services → OAuth consent screen):
+   - Select "External" user type
+   - Fill in app name and contact email
+   - Add yourself as a test user
+4. **Create OAuth Credentials** (APIs & Services → Credentials):
+   - Create Credentials → OAuth Client ID
+   - Application type: **Desktop app**
+   - Note the Client ID and Client Secret
+5. Add the credentials to your source's `config.json` as shown above
+
 ### Authentication
-Use `source_google_oauth_trigger` to start the Google OAuth flow.
+Use `source_google_oauth_trigger` to start the Google OAuth flow after configuring your credentials.

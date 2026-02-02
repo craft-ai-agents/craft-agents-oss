@@ -176,17 +176,75 @@ bun run typecheck:all
 
 ### Environment Variables
 
-OAuth integrations (Google, Slack, Microsoft) require credentials. Create a `.env` file:
+OAuth integrations (Slack, Microsoft) require credentials baked into the build. Create a `.env` file:
 
 ```bash
 MICROSOFT_OAUTH_CLIENT_ID=your-client-id
-GOOGLE_OAUTH_CLIENT_SECRET=your-google-client-secret
-GOOGLE_OAUTH_CLIENT_ID=your-client-id.apps.googleusercontent.com
 SLACK_OAUTH_CLIENT_ID=your-slack-client-id
 SLACK_OAUTH_CLIENT_SECRET=your-slack-client-secret
 ```
 
-See [Google Cloud Console](https://console.cloud.google.com/apis/credentials) to create OAuth credentials.
+**Note:** Google OAuth credentials are NOT baked into the build. Users provide their own credentials via source configuration. See the [Google OAuth Setup](#google-oauth-setup-gmail-calendar-drive) section below.
+
+### Google OAuth Setup (Gmail, Calendar, Drive)
+
+Google integrations require you to create your own OAuth credentials. This is a one-time setup.
+
+#### 1. Create a Google Cloud Project
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com)
+2. Create a new project (or select an existing one)
+3. Note your Project ID
+
+#### 2. Enable Required APIs
+
+Go to **APIs & Services → Library** and enable the APIs you need:
+- **Gmail API** - for email integration
+- **Google Calendar API** - for calendar integration
+- **Google Drive API** - for file storage integration
+
+#### 3. Configure OAuth Consent Screen
+
+1. Go to **APIs & Services → OAuth consent screen**
+2. Select **External** user type (unless you have Google Workspace)
+3. Fill in required fields:
+   - App name: e.g., "My Craft Agent"
+   - User support email: your email
+   - Developer contact: your email
+4. Add scopes (optional - can leave default)
+5. Add yourself as a test user (required for External apps in testing mode)
+6. Complete the wizard
+
+#### 4. Create OAuth Credentials
+
+1. Go to **APIs & Services → Credentials**
+2. Click **Create Credentials → OAuth Client ID**
+3. Application type: **Desktop app**
+4. Name: e.g., "Craft Agent Desktop"
+5. Click **Create**
+6. Note the **Client ID** and **Client Secret**
+
+#### 5. Configure in Craft Agent
+
+When setting up a Google source (Gmail, Calendar, Drive), add these fields to your source's `config.json`:
+
+```json
+{
+  "api": {
+    "googleService": "gmail",
+    "googleOAuthClientId": "your-client-id.apps.googleusercontent.com",
+    "googleOAuthClientSecret": "your-client-secret"
+  }
+}
+```
+
+Or simply tell the agent you want to connect Gmail/Calendar/Drive - it will guide you through entering your credentials.
+
+#### Security Notes
+
+- Your OAuth credentials are stored encrypted alongside other source credentials
+- Never commit credentials to version control
+- For production use, consider getting your OAuth consent screen verified by Google
 
 ## Configuration
 
