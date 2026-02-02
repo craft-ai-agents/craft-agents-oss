@@ -1,0 +1,30 @@
+{
+  "chat": {
+    "title": "Chat",
+    "renameDialog": {
+      "title": "Rename Chat",
+      "placeholder": "Enter chat name..."
+    },
+    "noSession": "This session no longer exists",
+    "share": {
+      "openInBrowser": "Open in Browser",
+      "copyLink": "Copy Link",
+      "updateShare": "Update Share",
+      "stopSharing": "Stop Sharing",
+      "shareOnline": "Share Online",
+      "learnMore": "Learn More"
+    }
+  },
+  "toasts": {
+    "linkCopied": "Link copied to clipboard",
+    "failedToShare": "Failed to share",
+    "shareUpdated": "Share updated",
+    "failedToUpdateShare": "Failed to update share",
+    "sharingStopped": "Sharing stopped",
+    "failedToStopSharing": "Failed to stop sharing"
+  },
+  "share": {},
+  "notifications": {},
+  "dialogs": {},
+  "states": {}
+}

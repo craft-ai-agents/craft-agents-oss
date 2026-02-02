@@ -1,0 +1,30 @@
+{
+  "chat": {
+    "title": "Discussion",
+    "renameDialog": {
+      "title": "Renommer la discussion",
+      "placeholder": "Entrez le nom de la discussion..."
+    },
+    "noSession": "Cette session n'existe plus",
+    "share": {
+      "openInBrowser": "Ouvrir dans le navigateur",
+      "copyLink": "Copier le lien",
+      "updateShare": "Mettre à jour le partage",
+      "stopSharing": "Arrêter le partage",
+      "shareOnline": "Partager en ligne",
+      "learnMore": "En savoir plus"
+    }
+  },
+  "toasts": {
+    "linkCopied": "Lien copié dans le presse-papiers",
+    "failedToShare": "Impossible de partager",
+    "shareUpdated": "Partage mis à jour",
+    "failedToUpdateShare": "Impossible de mettre à jour le partage",
+    "sharingStopped": "Partage arrêté",
+    "failedToStopSharing": "Impossible d'arrêter le partage"
+  },
+  "share": {},
+  "notifications": {},
+  "dialogs": {},
+  "states": {}
+}

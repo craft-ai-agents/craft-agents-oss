@@ -10,6 +10,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { SettingsSection, SettingsCard, SettingsRow } from '@/components/settings'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import { isMac } from '@/lib/platform'
+import { useI18n } from '@/i18n'
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
@@ -28,47 +29,6 @@ interface ShortcutSection {
 
 const cmdKey = isMac ? '⌘' : 'Ctrl'
 
-const sections: ShortcutSection[] = [
-  {
-    title: 'Global',
-    shortcuts: [
-      { keys: [cmdKey, '1'], description: 'Focus sidebar' },
-      { keys: [cmdKey, '2'], description: 'Focus session list' },
-      { keys: [cmdKey, '3'], description: 'Focus chat input' },
-      { keys: [cmdKey, 'N'], description: 'New chat' },
-      { keys: [cmdKey, 'B'], description: 'Toggle sidebar' },
-      { keys: [cmdKey, ','], description: 'Open settings' },
-    ],
-  },
-  {
-    title: 'Navigation',
-    shortcuts: [
-      { keys: ['Tab'], description: 'Move to next zone' },
-      { keys: ['Shift', 'Tab'], description: 'Cycle permission mode' },
-      { keys: ['←', '→'], description: 'Move between zones (in lists)' },
-      { keys: ['↑', '↓'], description: 'Navigate items in list' },
-      { keys: ['Home'], description: 'Go to first item' },
-      { keys: ['End'], description: 'Go to last item' },
-      { keys: ['Esc'], description: 'Close dialog / blur input' },
-    ],
-  },
-  {
-    title: 'Session List',
-    shortcuts: [
-      { keys: ['Enter'], description: 'Focus chat input' },
-      { keys: ['Delete'], description: 'Delete session' },
-    ],
-  },
-  {
-    title: 'Chat',
-    shortcuts: [
-      { keys: ['Enter'], description: 'Send message' },
-      { keys: ['Shift', 'Enter'], description: 'New line' },
-      { keys: [cmdKey, 'Enter'], description: 'Send message' },
-    ],
-  },
-]
-
 function Kbd({ children }: { children: React.ReactNode }) {
   return (
     <kbd className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-[11px] font-medium bg-muted border border-border rounded shadow-sm">
@@ -78,9 +38,52 @@ function Kbd({ children }: { children: React.ReactNode }) {
 }
 
 export default function ShortcutsPage() {
+  const { t } = useI18n('settings')
+
+  const sections: ShortcutSection[] = [
+    {
+      title: t('shortcuts.global.title'),
+      shortcuts: [
+        { keys: [cmdKey, '1'], description: t('shortcuts.global.focusSidebar') },
+        { keys: [cmdKey, '2'], description: t('shortcuts.global.focusSessionList') },
+        { keys: [cmdKey, '3'], description: t('shortcuts.global.focusChatInput') },
+        { keys: [cmdKey, 'N'], description: t('shortcuts.global.newChat') },
+        { keys: [cmdKey, 'B'], description: t('shortcuts.global.toggleSidebar') },
+        { keys: [cmdKey, ','], description: t('shortcuts.global.openSettings') },
+      ],
+    },
+    {
+      title: t('shortcuts.navigation.title'),
+      shortcuts: [
+        { keys: ['Tab'], description: t('shortcuts.navigation.moveToNextZone') },
+        { keys: ['Shift', 'Tab'], description: t('shortcuts.navigation.cyclePermissionMode') },
+        { keys: ['←', '→'], description: t('shortcuts.navigation.moveBetweenZones') },
+        { keys: ['↑', '↓'], description: t('shortcuts.navigation.navigateItems') },
+        { keys: ['Home'], description: t('shortcuts.navigation.goToFirst') },
+        { keys: ['End'], description: t('shortcuts.navigation.goToLast') },
+        { keys: ['Esc'], description: t('shortcuts.navigation.closeDialog') },
+      ],
+    },
+    {
+      title: t('shortcuts.sessionList.title'),
+      shortcuts: [
+        { keys: ['Enter'], description: t('shortcuts.sessionList.focusChatInput') },
+        { keys: ['Delete'], description: t('shortcuts.sessionList.deleteSession') },
+      ],
+    },
+    {
+      title: t('shortcuts.chat.title'),
+      shortcuts: [
+        { keys: ['Enter'], description: t('shortcuts.chat.sendMessage') },
+        { keys: ['Shift', 'Enter'], description: t('shortcuts.chat.newLine') },
+        { keys: [cmdKey, 'Enter'], description: t('shortcuts.chat.sendMessageCmd') },
+      ],
+    },
+  ]
+
   return (
     <div className="h-full flex flex-col">
-      <PanelHeader title="Shortcuts" />
+      <PanelHeader title={t('shortcuts.title')} />
       <div className="flex-1 min-h-0 mask-fade-y">
         <ScrollArea className="h-full">
           <div className="px-5 py-7 max-w-3xl mx-auto space-y-8">

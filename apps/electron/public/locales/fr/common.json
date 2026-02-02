@@ -1,0 +1,115 @@
+{
+  "sidebar": {
+    "newChat": "Nouvelle discussion",
+    "allChats": "Toutes les discussions",
+    "flagged": "Favoris",
+    "status": "Statut",
+    "labels": "Étiquettes",
+    "sources": "Sources",
+    "apis": "APIs",
+    "mcps": "MCPs",
+    "localFolders": "Dossiers locaux",
+    "skills": "Compétences",
+    "settings": "Paramètres",
+    "helpDocumentation": "Aide & Documentation",
+    "allDocumentation": "Toute la documentation",
+    "permissions": "Permissions",
+    "statuses": "Statuts"
+  },
+  "filter": {
+    "title": "Filtrer les discussions",
+    "clear": "Effacer",
+    "include": "Inclure",
+    "exclude": "Exclure",
+    "remove": "Retirer"
+  },
+  "actions": {
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "delete": "Supprimer",
+    "edit": "Modifier",
+    "add": "Ajouter",
+    "remove": "Retirer",
+    "close": "Fermer",
+    "open": "Ouvrir",
+    "copy": "Copier",
+    "rename": "Renommer",
+    "refresh": "Actualiser"
+  },
+  "states": {
+    "loading": "Chargement...",
+    "error": "Erreur",
+    "success": "Succès",
+    "empty": "Aucun élément",
+    "notFound": "Introuvable"
+  },
+  "time": {
+    "now": "à l'instant",
+    "minutesAgo": "il y a {{count}} minute",
+    "minutesAgo_plural": "il y a {{count}} minutes",
+    "hoursAgo": "il y a {{count}} heure",
+    "hoursAgo_plural": "il y a {{count}} heures",
+    "daysAgo": "il y a {{count}} jour",
+    "daysAgo_plural": "il y a {{count}} jours",
+    "weeksAgo": "il y a {{count}} semaine",
+    "weeksAgo_plural": "il y a {{count}} semaines",
+    "monthsAgo": "il y a {{count}} mois",
+    "monthsAgo_plural": "il y a {{count}} mois"
+  },
+  "menu": {
+    "app": {
+      "about": "À propos de Craft Agents",
+      "installUpdate": "Installer la mise à jour…",
+      "checkForUpdates": "Rechercher des mises à jour…",
+      "settings": "Réglages...",
+      "hide": "Masquer Craft Agents",
+      "hideOthers": "Masquer les autres",
+      "unhide": "Tout afficher",
+      "quit": "Quitter Craft Agents"
+    },
+    "file": {
+      "title": "Fichier",
+      "newChat": "Nouvelle discussion",
+      "newWindow": "Nouvelle fenêtre",
+      "close": "Fermer",
+      "quit": "Quitter"
+    },
+    "edit": {
+      "title": "Édition",
+      "undo": "Annuler",
+      "redo": "Rétablir",
+      "cut": "Couper",
+      "copy": "Copier",
+      "paste": "Coller",
+      "selectAll": "Tout sélectionner"
+    },
+    "view": {
+      "title": "Présentation",
+      "zoomIn": "Zoom avant",
+      "zoomOut": "Zoom arrière",
+      "resetZoom": "Taille réelle",
+      "reload": "Actualiser",
+      "forceReload": "Forcer l'actualisation",
+      "toggleDevTools": "Activer/Désactiver les outils de développement"
+    },
+    "window": {
+      "title": "Fenêtre",
+      "minimize": "Réduire",
+      "zoom": "Zoom",
+      "bringAllToFront": "Tout ramener au premier plan"
+    },
+    "debug": {
+      "title": "Débogage",
+      "checkForUpdates": "Rechercher des mises à jour",
+      "installUpdate": "Installer la mise à jour",
+      "resetToDefaults": "Réinitialiser...",
+      "resetMessage": "Réinitialiser aux valeurs par défaut",
+      "resetDetail": "Pour réinitialiser Craft Agent aux valeurs par défaut, quittez l'application et exécutez :\n\nbun run fresh-start\n\nCela supprimera toute la configuration, les identifiants, les espaces de travail et les sessions."
+    },
+    "help": {
+      "title": "Aide",
+      "helpDocumentation": "Aide & Documentation",
+      "keyboardShortcuts": "Raccourcis clavier"
+    }
+  }
+}

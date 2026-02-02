@@ -1,0 +1,39 @@
+{
+  "welcome": {
+    "newUserTitle": "Welcome to Craft Agents",
+    "newUserDescription": "Agents with the UX they deserve. Connect anything. Organize your sessions. Everything you need to do the work of your life!",
+    "existingUserTitle": "Update Settings",
+    "existingUserDescription": "Update your API connection or change your setup.",
+    "getStartedButton": "Get Started",
+    "continueButton": "Continue",
+    "checkingText": "Checking..."
+  },
+  "apiSetup": {
+    "title": "Set Up API Connection",
+    "description": "Select how you'd like to power your AI agents.",
+    "claudeOption": "Claude Pro/Max",
+    "claudeDescription": "Use your Claude subscription for unlimited access.",
+    "apiKeyOption": "API Key",
+    "apiKeyDescription": "Anthropic, OpenRouter, Ollama, or compatible APIs.",
+    "recommended": "Recommended"
+  },
+  "credentials": {
+    "authorizationCodeTitle": "Enter Authorization Code",
+    "authorizationCodeDescription": "Copy the code from the browser page and paste it below.",
+    "connectClaudeTitle": "Connect Claude Account",
+    "connectClaudeDescription": "Use your Claude subscription to power multi-agent workflows.",
+    "apiConfigTitle": "API Configuration",
+    "apiConfigDescription": "Enter your API key. Optionally configure a custom endpoint for OpenRouter, Ollama, or compatible APIs.",
+    "signInButton": "Sign in with Claude",
+    "cancelButton": "Cancel",
+    "connectingText": "Connecting...",
+    "validatingText": "Validating..."
+  },
+  "completion": {
+    "savingTitle": "Setting up...",
+    "savingDescription": "Saving your configuration...",
+    "completeTitle": "You're all set!",
+    "completeDescription": "Just start a chat and get to work.",
+    "getStartedButton": "Get Started"
+  }
+}
