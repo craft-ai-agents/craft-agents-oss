@@ -1440,6 +1440,47 @@ After successful authentication, the tokens are stored and the source is marked 
           };
         }
 
+        // Check if Google OAuth credentials are configured (in source config or env vars)
+        const api = source.api;
+        if (!isGoogleOAuthConfigured(api?.googleOAuthClientId, api?.googleOAuthClientSecret)) {
+          return {
+            content: [{
+              type: 'text' as const,
+              text: `Google OAuth credentials not configured for source '${args.sourceSlug}'.
+
+To authenticate with Google services, you need to provide your own OAuth credentials.
+
+**Option 1: Add credentials to source config**
+Edit the source's config.json and add:
+\`\`\`json
+{
+  "api": {
+    "googleOAuthClientId": "YOUR_CLIENT_ID.apps.googleusercontent.com",
+    "googleOAuthClientSecret": "YOUR_CLIENT_SECRET"
+  }
+}
+\`\`\`
+
+**Option 2: Set environment variables**
+\`\`\`bash
+export GOOGLE_OAUTH_CLIENT_ID="YOUR_CLIENT_ID.apps.googleusercontent.com"
+export GOOGLE_OAUTH_CLIENT_SECRET="YOUR_CLIENT_SECRET"
+\`\`\`
+
+**How to get credentials:**
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a project (or select existing)
+3. Enable the required API (Gmail API, Calendar API, etc.)
+4. Go to "APIs & Services" → "Credentials"
+5. Create OAuth 2.0 Client ID (Desktop app type)
+6. Copy the Client ID and Client Secret
+
+See the source's guide.md for detailed instructions.`,
+            }],
+            isError: true,
+          };
+        }
+
         // Check if source has valid credentials (not just isAuthenticated flag)
         const hasValidToken = await verifySourceHasValidToken(workspaceRootPath, source, args.sourceSlug);
         if (hasValidToken) {
@@ -1457,7 +1498,6 @@ After successful authentication, the tokens are stored and the source is marked 
 
         // Determine service from config for new pattern
         let service: GoogleService | undefined;
-        const api = source.api;
 
         if (api?.googleService) {
           service = api.googleService;

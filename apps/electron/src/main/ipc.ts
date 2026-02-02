@@ -12,7 +12,7 @@ import { registerOnboardingHandlers } from './onboarding'
 import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type AuthType, type ApiSetupInfo, type SendMessageOptions } from '../shared/types'
 import { readFileAttachment, perf, validateImageForClaudeAPI, IMAGE_LIMITS } from '@craft-agent/shared/utils'
 import { getAuthType, setAuthType, getPreferencesPath, getCustomModel, setCustomModel, getModel, setModel, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, getAnthropicBaseUrl, setAnthropicBaseUrl, loadStoredConfig, saveConfig, type Workspace, SUMMARIZATION_MODEL } from '@craft-agent/shared/config'
-import { getSessionAttachmentsPath } from '@craft-agent/shared/sessions'
+import { getSessionAttachmentsPath, validateSessionId } from '@craft-agent/shared/sessions'
 import { loadWorkspaceSources, getSourcesBySlugs, type LoadedSource } from '@craft-agent/shared/sources'
 import { isValidThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
@@ -568,6 +568,10 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
         throw new Error(`Workspace not found: ${workspaceId}`)
       }
       const workspaceRootPath = workspace.rootPath
+
+      // SECURITY: Validate sessionId to prevent path traversal attacks
+      // This must happen before using sessionId in any file path operations
+      validateSessionId(sessionId)
 
       // Create attachments directory if it doesn't exist
       const attachmentsDir = getSessionAttachmentsPath(workspaceRootPath, sessionId)

@@ -69,14 +69,17 @@ The `:batchUpdate` endpoint accepts an array of requests:
   "api": {
     "baseUrl": "https://docs.googleapis.com/v1/",
     "authType": "bearer",
-    "googleService": "docs"
+    "googleService": "docs",
+    "googleOAuthClientId": "your-client-id.apps.googleusercontent.com",
+    "googleOAuthClientSecret": "your-client-secret"
   },
   "iconUrl": "https://docs.google.com"
 }
 ```
 
 ### Authentication
-Use `source_google_oauth_trigger` to start the Google OAuth flow.
+
+See [Google OAuth Setup](/source-guides/google-oauth-setup) for instructions on creating OAuth credentials, then use `source_google_oauth_trigger` to start the OAuth flow.
 
 ### Rate Limits
 - 300 read requests per minute per user

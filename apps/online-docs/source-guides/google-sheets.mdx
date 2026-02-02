@@ -72,14 +72,17 @@ Query parameters:
   "api": {
     "baseUrl": "https://sheets.googleapis.com/v4/",
     "authType": "bearer",
-    "googleService": "sheets"
+    "googleService": "sheets",
+    "googleOAuthClientId": "your-client-id.apps.googleusercontent.com",
+    "googleOAuthClientSecret": "your-client-secret"
   },
   "iconUrl": "https://sheets.google.com"
 }
 ```
 
 ### Authentication
-Use `source_google_oauth_trigger` to start the Google OAuth flow.
+
+See [Google OAuth Setup](/source-guides/google-oauth-setup) for instructions on creating OAuth credentials, then use `source_google_oauth_trigger` to start the OAuth flow.
 
 ### Rate Limits
 - 300 read requests per minute per user

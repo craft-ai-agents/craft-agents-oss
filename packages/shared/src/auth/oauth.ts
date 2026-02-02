@@ -48,24 +48,18 @@ export class CraftOAuth {
     this.callbacks = callbacks;
   }
 
-  // Get OAuth server metadata
-  private async getServerMetadata(): Promise<{
-    authorization_endpoint: string;
-    token_endpoint: string;
-    registration_endpoint?: string;
-  }> {
-    const metadataUrl = `${this.config.mcpBaseUrl}/.well-known/oauth-authorization-server`;
+  // Get OAuth server metadata using progressive discovery
+  private async getServerMetadata(): Promise<OAuthMetadata> {
+    const metadata = await discoverOAuthMetadata(
+      this.config.mcpBaseUrl,
+      (msg) => this.callbacks.onStatus(msg)
+    );
 
-    const response = await fetch(metadataUrl);
-    if (!response.ok) {
-      throw new Error(`Failed to get OAuth metadata: ${response.status}`);
+    if (!metadata) {
+      throw new Error(`No OAuth metadata found for ${this.config.mcpBaseUrl}`);
     }
 
-    return response.json() as Promise<{
-      authorization_endpoint: string;
-      token_endpoint: string;
-      registration_endpoint?: string;
-    }>;
+    return metadata;
   }
 
   // Register OAuth client dynamically
@@ -182,16 +176,20 @@ export class CraftOAuth {
 
   // Check if the MCP server requires OAuth
   async checkAuthRequired(): Promise<boolean> {
-    const metadataUrl = `${this.config.mcpBaseUrl}/.well-known/oauth-authorization-server`;
     this.callbacks.onStatus('Checking if authentication is required...');
 
     try {
-      const response = await fetch(metadataUrl);
-      if (response.ok) {
+      const metadata = await discoverOAuthMetadata(
+        this.config.mcpBaseUrl,
+        (msg) => this.callbacks.onStatus(msg)
+      );
+
+      if (metadata) {
         this.callbacks.onStatus('OAuth required - server has OAuth metadata');
         return true;
       }
-      // 404 or other error means no OAuth
+
+      // No metadata found at any candidate URL
       this.callbacks.onStatus('No OAuth metadata found - server may be public');
       return false;
     } catch (error) {
@@ -434,8 +432,90 @@ export class CraftOAuth {
   }
 }
 
-// Helper to extract the base MCP URL from a full MCP URL
+/**
+ * Extract the origin (scheme + host + port) from an MCP URL.
+ * This is the base URL for OAuth discovery per RFC 8414.
+ */
 export function getMcpBaseUrl(mcpUrl: string): string {
-  // Remove /mcp or /sse suffix if present
-  return mcpUrl.replace(/\/(mcp|sse)\/?$/, '');
+  try {
+    return new URL(mcpUrl).origin;
+  } catch {
+    // If URL parsing fails, return as-is and let caller handle it
+    return mcpUrl;
+  }
+}
+
+export interface OAuthMetadata {
+  authorization_endpoint: string;
+  token_endpoint: string;
+  registration_endpoint?: string;
+}
+
+/**
+ * Try to fetch OAuth metadata from a specific URL.
+ * Returns the metadata if successful, null if not found or error.
+ */
+async function tryFetchMetadata(
+  url: string,
+  onLog?: (message: string) => void
+): Promise<OAuthMetadata | null> {
+  try {
+    onLog?.(`  Trying: ${url}`);
+    const response = await fetch(url);
+    if (response.ok) {
+      const data = await response.json() as OAuthMetadata;
+      if (data.authorization_endpoint && data.token_endpoint) {
+        onLog?.(`  ✓ Found OAuth metadata at ${url}`);
+        return data;
+      }
+      onLog?.(`  ✗ Invalid metadata at ${url} (missing required fields)`);
+    } else {
+      onLog?.(`  ✗ ${response.status} at ${url}`);
+    }
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    onLog?.(`  ✗ Error fetching ${url}: ${msg}`);
+  }
+  return null;
+}
+
+/**
+ * Discovers OAuth metadata by trying multiple candidate URLs per RFC 8414.
+ * Returns the first successful metadata, or null if all fail.
+ *
+ * Discovery order:
+ * 1. Origin root: `{origin}/.well-known/oauth-authorization-server`
+ * 2. Path-scoped: `{origin}/.well-known/oauth-authorization-server{pathname}`
+ */
+export async function discoverOAuthMetadata(
+  mcpUrl: string,
+  onLog?: (message: string) => void
+): Promise<OAuthMetadata | null> {
+  let url: URL;
+  try {
+    url = new URL(mcpUrl);
+  } catch {
+    onLog?.(`Invalid MCP URL: ${mcpUrl}`);
+    return null;
+  }
+
+  onLog?.(`Discovering OAuth metadata for ${mcpUrl}`);
+
+  // Try locations in order of likelihood
+  const candidates = [
+    // 1. Origin root (most common for MCP servers)
+    `${url.origin}/.well-known/oauth-authorization-server`,
+    // 2. Path-scoped (RFC 8414 allows this)
+    `${url.origin}/.well-known/oauth-authorization-server${url.pathname}`,
+  ];
+
+  for (const candidate of candidates) {
+    const metadata = await tryFetchMetadata(candidate, onLog);
+    if (metadata) {
+      return metadata;
+    }
+  }
+
+  onLog?.(`No OAuth metadata found for ${mcpUrl}`);
+  return null;
 }

@@ -55,11 +55,14 @@ Use the `q` parameter:
   "api": {
     "baseUrl": "https://www.googleapis.com/drive/v3/",
     "authType": "bearer",
-    "googleService": "drive"
+    "googleService": "drive",
+    "googleOAuthClientId": "your-client-id.apps.googleusercontent.com",
+    "googleOAuthClientSecret": "your-client-secret"
   },
   "iconUrl": "https://drive.google.com"
 }
 ```
 
 ### Authentication
-Use `source_google_oauth_trigger` to start the Google OAuth flow.
+
+See [Google OAuth Setup](/source-guides/google-oauth-setup) for instructions on creating OAuth credentials, then use `source_google_oauth_trigger` to start the OAuth flow.

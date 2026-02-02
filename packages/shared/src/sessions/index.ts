@@ -88,4 +88,10 @@ export {
 // Word lists (for customization if needed)
 export { ADJECTIVES, NOUNS } from './word-lists.ts';
 
+// Session ID validation (security)
+export {
+  validateSessionId,
+  sanitizeSessionId,
+} from './validation.ts';
+
 

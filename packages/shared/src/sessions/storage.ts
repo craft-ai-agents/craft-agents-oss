@@ -25,6 +25,7 @@ import { join } from 'path';
 import { getWorkspaceSessionsPath } from '../workspaces/storage.ts';
 import { generateUniqueSessionId } from './slug-generator.ts';
 import { toPortablePath, expandPath } from '../utils/paths.ts';
+import { sanitizeSessionId } from './validation.ts';
 import { perf } from '../utils/perf.ts';
 import type {
   SessionConfig,
@@ -60,9 +61,14 @@ export function ensureSessionsDir(workspaceRootPath: string): string {
 
 /**
  * Get path to a session's directory
+ *
+ * SECURITY: Uses sanitizeSessionId() as defense-in-depth to prevent path traversal.
+ * Callers should still validate sessionId before calling this function.
  */
 export function getSessionPath(workspaceRootPath: string, sessionId: string): string {
-  return join(getWorkspaceSessionsPath(workspaceRootPath), sessionId);
+  // Defense-in-depth: strip any path components from sessionId
+  const safeSessionId = sanitizeSessionId(sessionId);
+  return join(getWorkspaceSessionsPath(workspaceRootPath), safeSessionId);
 }
 
 /**

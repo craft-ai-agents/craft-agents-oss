@@ -20,12 +20,12 @@ import { type GoogleService } from '../sources/types.ts';
 // Re-export GoogleService type for convenient access
 export type { GoogleService };
 
-// Google OAuth configuration - must be set via environment variables
-// These are baked into the build at compile time
-// Used for all Google services (Gmail, Calendar, Drive, etc.)
+// Google OAuth configuration - environment variables used as fallback
+// Users can provide their own credentials via source config (preferred for OSS)
+// These env vars are only used if credentials are not provided explicitly
 // Note: Google requires client_secret for Desktop apps despite PKCE support
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_OAUTH_CLIENT_ID || '';
-const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_OAUTH_CLIENT_SECRET || '';
+const GOOGLE_CLIENT_ID_ENV = process.env.GOOGLE_OAUTH_CLIENT_ID || '';
+const GOOGLE_CLIENT_SECRET_ENV = process.env.GOOGLE_OAUTH_CLIENT_SECRET || '';
 
 // Google OAuth endpoints
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
@@ -69,6 +69,10 @@ export interface GoogleOAuthOptions {
   scopes?: string[];
   /** App type for callback server styling */
   appType?: AppType;
+  /** OAuth client ID (user-provided, falls back to env var) */
+  clientId?: string;
+  /** OAuth client secret (user-provided, falls back to env var) */
+  clientSecret?: string;
 }
 
 /**
@@ -81,6 +85,10 @@ export interface GoogleOAuthResult {
   expiresAt?: number;
   email?: string;
   error?: string;
+  /** OAuth client ID used (for storage alongside tokens) */
+  clientId?: string;
+  /** OAuth client secret used (for storage alongside tokens - needed for refresh) */
+  clientSecret?: string;
 }
 
 /**
@@ -105,11 +113,13 @@ function generateState(): string {
 async function exchangeCodeForTokens(
   code: string,
   codeVerifier: string,
-  redirectUri: string
+  redirectUri: string,
+  clientId: string,
+  clientSecret: string
 ): Promise<{ accessToken: string; refreshToken?: string; expiresIn?: number }> {
   const params = new URLSearchParams({
-    client_id: GOOGLE_CLIENT_ID,
-    client_secret: GOOGLE_CLIENT_SECRET,
+    client_id: clientId,
+    client_secret: clientSecret,
     code,
     code_verifier: codeVerifier,
     grant_type: 'authorization_code',
@@ -158,14 +168,32 @@ async function getUserEmail(accessToken: string): Promise<string> {
 
 /**
  * Refresh Google access token using refresh token
+ *
+ * @param refreshToken - The refresh token from initial OAuth
+ * @param clientId - OAuth client ID (falls back to env var if not provided)
+ * @param clientSecret - OAuth client secret (falls back to env var if not provided)
  */
-export async function refreshGoogleToken(refreshToken: string): Promise<{
+export async function refreshGoogleToken(
+  refreshToken: string,
+  clientId?: string,
+  clientSecret?: string
+): Promise<{
   accessToken: string;
   expiresAt?: number;
 }> {
+  const id = clientId || GOOGLE_CLIENT_ID_ENV;
+  const secret = clientSecret || GOOGLE_CLIENT_SECRET_ENV;
+
+  if (!id || !secret) {
+    throw new Error(
+      'Google OAuth credentials not available for token refresh. ' +
+        'Credentials must be stored with the token or set via environment variables.'
+    );
+  }
+
   const params = new URLSearchParams({
-    client_id: GOOGLE_CLIENT_ID,
-    client_secret: GOOGLE_CLIENT_SECRET,
+    client_id: id,
+    client_secret: secret,
     grant_type: 'refresh_token',
     refresh_token: refreshToken,
   });
@@ -192,10 +220,16 @@ export async function refreshGoogleToken(refreshToken: string): Promise<{
 }
 
 /**
- * Check if Google OAuth is configured (client ID and secret are set)
+ * Check if Google OAuth is configured (client ID and secret are available)
+ *
+ * @param clientId - Optional user-provided client ID
+ * @param clientSecret - Optional user-provided client secret
+ * @returns true if credentials are available (either provided or from env vars)
  */
-export function isGoogleOAuthConfigured(): boolean {
-  return Boolean(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET);
+export function isGoogleOAuthConfigured(clientId?: string, clientSecret?: string): boolean {
+  const id = clientId || GOOGLE_CLIENT_ID_ENV;
+  const secret = clientSecret || GOOGLE_CLIENT_SECRET_ENV;
+  return Boolean(id && secret);
 }
 
 /**
@@ -245,12 +279,17 @@ export async function startGoogleOAuth(
   options: GoogleOAuthOptions = {}
 ): Promise<GoogleOAuthResult> {
   try {
+    // Resolve credentials: use provided values or fall back to env vars
+    const clientId = options.clientId || GOOGLE_CLIENT_ID_ENV;
+    const clientSecret = options.clientSecret || GOOGLE_CLIENT_SECRET_ENV;
+
     // Verify OAuth credentials are configured
-    if (!isGoogleOAuthConfigured()) {
+    if (!isGoogleOAuthConfigured(clientId, clientSecret)) {
       return {
         success: false,
         error:
-          'Google OAuth not configured. Set GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET environment variables.',
+          'Google OAuth not configured. Provide clientId and clientSecret in source config, ' +
+          'or set GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET environment variables.',
       };
     }
 
@@ -268,7 +307,7 @@ export async function startGoogleOAuth(
 
     // Build authorization URL
     const authUrl = new URL(GOOGLE_AUTH_URL);
-    authUrl.searchParams.set('client_id', GOOGLE_CLIENT_ID);
+    authUrl.searchParams.set('client_id', clientId);
     authUrl.searchParams.set('redirect_uri', redirectUri);
     authUrl.searchParams.set('response_type', 'code');
     authUrl.searchParams.set('scope', scopes.join(' '));
@@ -309,8 +348,8 @@ export async function startGoogleOAuth(
       };
     }
 
-    // Exchange code for tokens
-    const tokens = await exchangeCodeForTokens(code, pkce.verifier, redirectUri);
+    // Exchange code for tokens (pass credentials for token exchange)
+    const tokens = await exchangeCodeForTokens(code, pkce.verifier, redirectUri, clientId, clientSecret);
 
     // Get user email
     const email = await getUserEmail(tokens.accessToken);
@@ -321,6 +360,9 @@ export async function startGoogleOAuth(
       refreshToken: tokens.refreshToken,
       expiresAt: tokens.expiresIn ? Date.now() + tokens.expiresIn * 1000 : undefined,
       email,
+      // Return credentials so they can be stored for token refresh
+      clientId,
+      clientSecret,
     };
   } catch (error) {
     return {

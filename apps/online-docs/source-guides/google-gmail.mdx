@@ -7,17 +7,13 @@ description: "Connect Gmail for email access and management in Craft Agents"
 
 Access and manage your Gmail emails through the Gmail API.
 
-<Warning>
-**Unverified App — 100-User Limit**
+<Note>
+**Bring Your Own Google OAuth Credentials**
 
-Craft Agents' Google OAuth app is currently unverified, which means Google enforces a **100-user cap**. If authentication fails, errors out, or you cannot connect, we may have hit this limit while we complete Google's verification process.
+Craft Agents does not include pre-configured Google OAuth credentials. See [Google OAuth Setup](/source-guides/google-oauth-setup) for a 5-minute setup guide.
 
-**Alternatives:** You can connect Gmail through third-party MCP aggregators instead:
-- **Zapier MCP** — Go to [zapier.com/mcp](https://zapier.com/mcp), connect Gmail, and add the generated MCP server URL as a source.
-- **Composio** — Go to [composio.dev](https://composio.dev), connect Gmail, and use their MCP server URL as a source.
-
-If the user hits authentication errors (e.g., `access_denied`, `org_internal`, quota errors), explain the 100-user cap situation and proactively walk them through setting up Zapier or Composio as an alternative MCP source.
-</Warning>
+**Alternatives:** [Zapier MCP](https://zapier.com/mcp) or [Composio](https://composio.dev) can connect Gmail without your own credentials.
+</Note>
 
 ## API Reference
 
@@ -71,14 +67,17 @@ Combine operators: `from:john@example.com after:2024/01/01 has:attachment`
   "api": {
     "baseUrl": "https://gmail.googleapis.com/",
     "authType": "bearer",
-    "googleService": "gmail"
+    "googleService": "gmail",
+    "googleOAuthClientId": "your-client-id.apps.googleusercontent.com",
+    "googleOAuthClientSecret": "your-client-secret"
   },
   "iconUrl": "https://mail.google.com"
 }
 ```
 
 ### Authentication
-Use `source_google_oauth_trigger` to start the Google OAuth flow.
+
+See [Google OAuth Setup](/source-guides/google-oauth-setup) for instructions on creating OAuth credentials, then use `source_google_oauth_trigger` to start the OAuth flow.
 
 ### Rate Limits
 - 250 quota units per user per second

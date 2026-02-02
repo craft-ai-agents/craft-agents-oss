@@ -430,6 +430,9 @@ export class SourceCredentialManager {
         service,
         scopes,
         appType: 'electron',
+        // Pass user-provided OAuth credentials from source config (if available)
+        clientId: api?.googleOAuthClientId,
+        clientSecret: api?.googleOAuthClientSecret,
       };
 
       const result: GoogleOAuthResult = await startGoogleOAuth(options);
@@ -438,11 +441,13 @@ export class SourceCredentialManager {
         return { success: false, error: result.error || 'Google OAuth failed' };
       }
 
-      // Save the credentials
+      // Save the credentials (including clientId/clientSecret for token refresh)
       await this.save(source, {
         value: result.accessToken!,
         refreshToken: result.refreshToken,
         expiresAt: result.expiresAt,
+        clientId: result.clientId,
+        clientSecret: result.clientSecret,
       });
 
       // Mark source as authenticated in config.json
@@ -661,7 +666,12 @@ export class SourceCredentialManager {
     cred: StoredCredential
   ): Promise<string | null> {
     try {
-      const result = await refreshGoogleToken(cred.refreshToken!);
+      // Pass stored credentials (or fall back to env vars via undefined)
+      const result = await refreshGoogleToken(
+        cred.refreshToken!,
+        cred.clientId,
+        cred.clientSecret
+      );
 
       // Update stored credentials
       await this.save(source, {

@@ -634,9 +634,14 @@ For favicon resolution, a cache maps provider names to their canonical domains a
 
 ## Common Providers
 
-### Gmail
-Provider: `gmail`, Type: `api`
-Uses OAuth via `source_gmail_oauth_trigger`.
+### Gmail (and other Google services)
+Provider: `google`, Type: `api`
+Requires user-provided OAuth credentials in the source config:
+- `googleOAuthClientId`: Your Google OAuth Client ID
+- `googleOAuthClientSecret`: Your Google OAuth Client Secret
+
+Create credentials at [Google Cloud Console](https://console.cloud.google.com/apis/credentials) (Desktop app type).
+Uses OAuth via `source_google_oauth_trigger`.
 
 ### Linear
 Provider: `linear`, Type: `mcp`
@@ -686,7 +691,9 @@ Technical steps:
 
 6. If auth is required, trigger the appropriate flow:
    - `source_oauth_trigger` for MCP OAuth
-   - `source_gmail_oauth_trigger` for Gmail
+   - `source_google_oauth_trigger` for Google services (Gmail, Calendar, Drive, Docs, Sheets)
+   - `source_microsoft_oauth_trigger` for Microsoft services
+   - `source_slack_oauth_trigger` for Slack
    - `source_credential_prompt` for API keys/tokens
    - For basic auth with optional password: `source_credential_prompt({ mode: "basic", passwordRequired: false })`
 

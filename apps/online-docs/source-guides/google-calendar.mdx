@@ -55,11 +55,14 @@ This source provides a single flexible `api_google-calendar` tool that accepts:
   "api": {
     "baseUrl": "https://www.googleapis.com/calendar/v3/",
     "authType": "bearer",
-    "googleService": "calendar"
+    "googleService": "calendar",
+    "googleOAuthClientId": "your-client-id.apps.googleusercontent.com",
+    "googleOAuthClientSecret": "your-client-secret"
   },
   "iconUrl": "https://calendar.google.com"
 }
 ```
 
 ### Authentication
-Use `source_google_oauth_trigger` to start the Google OAuth flow.
+
+See [Google OAuth Setup](/source-guides/google-oauth-setup) for instructions on creating OAuth credentials, then use `source_google_oauth_trigger` to start the OAuth flow.
