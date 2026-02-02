@@ -1,6 +1,59 @@
 {
-  "sidebar": {},
-  "actions": {},
-  "states": {},
-  "time": {}
+  "sidebar": {
+    "newChat": "Nouvelle discussion",
+    "allChats": "Toutes les discussions",
+    "flagged": "Favoris",
+    "status": "Statut",
+    "labels": "Étiquettes",
+    "sources": "Sources",
+    "apis": "APIs",
+    "mcps": "MCPs",
+    "localFolders": "Dossiers locaux",
+    "skills": "Compétences",
+    "settings": "Paramètres",
+    "helpDocumentation": "Aide & Documentation",
+    "allDocumentation": "Toute la documentation",
+    "permissions": "Permissions",
+    "statuses": "Statuts"
+  },
+  "filter": {
+    "title": "Filtrer les discussions",
+    "clear": "Effacer",
+    "include": "Inclure",
+    "exclude": "Exclure",
+    "remove": "Retirer"
+  },
+  "actions": {
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "delete": "Supprimer",
+    "edit": "Modifier",
+    "add": "Ajouter",
+    "remove": "Retirer",
+    "close": "Fermer",
+    "open": "Ouvrir",
+    "copy": "Copier",
+    "rename": "Renommer",
+    "refresh": "Actualiser"
+  },
+  "states": {
+    "loading": "Chargement...",
+    "error": "Erreur",
+    "success": "Succès",
+    "empty": "Aucun élément",
+    "notFound": "Introuvable"
+  },
+  "time": {
+    "now": "à l'instant",
+    "minutesAgo": "il y a {{count}} minute",
+    "minutesAgo_plural": "il y a {{count}} minutes",
+    "hoursAgo": "il y a {{count}} heure",
+    "hoursAgo_plural": "il y a {{count}} heures",
+    "daysAgo": "il y a {{count}} jour",
+    "daysAgo_plural": "il y a {{count}} jours",
+    "weeksAgo": "il y a {{count}} semaine",
+    "weeksAgo_plural": "il y a {{count}} semaines",
+    "monthsAgo": "il y a {{count}} mois",
+    "monthsAgo_plural": "il y a {{count}} mois"
+  }
 }
