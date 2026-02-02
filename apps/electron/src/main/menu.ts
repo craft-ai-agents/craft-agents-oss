@@ -2,6 +2,7 @@ import { Menu, app, shell, BrowserWindow } from 'electron'
 import { IPC_CHANNELS } from '../shared/types'
 import type { WindowManager } from './window-manager'
 import { mainLog } from './logger'
+import i18n from './i18n'
 
 // Store reference for rebuilding menu
 let cachedWindowManager: WindowManager | null = null
@@ -42,16 +43,19 @@ export async function rebuildMenu(): Promise<void> {
   const updateInfo = getUpdateInfo()
   const updateReady = updateInfo.available && updateInfo.downloadState === 'ready'
 
+  // Helper to translate menu strings
+  const t = (key: string, options?: any) => i18n.t(key, options)
+
   // Build the update menu item based on state
   const updateMenuItem: Electron.MenuItemConstructorOptions = updateReady
     ? {
-        label: `Install Update…\t【${updateInfo.latestVersion}】`,
+        label: `${t('menu.app.installUpdate')}\t【${updateInfo.latestVersion}】`,
         click: async () => {
           await installUpdate()
         }
       }
     : {
-        label: 'Check for Updates…',
+        label: t('menu.app.checkForUpdates'),
         click: async () => {
           await checkForUpdates({ autoDownload: true })
         }
@@ -62,34 +66,34 @@ export async function rebuildMenu(): Promise<void> {
     ...(isMac ? [{
       label: 'Craft Agents',
       submenu: [
-        { role: 'about' as const, label: 'About Craft Agents' },
+        { role: 'about' as const, label: t('menu.app.about') },
         updateMenuItem,
         { type: 'separator' as const },
         {
-          label: 'Settings...',
+          label: t('menu.app.settings'),
           accelerator: 'CmdOrCtrl+,',
           click: () => sendToRenderer(IPC_CHANNELS.MENU_OPEN_SETTINGS)
         },
         { type: 'separator' as const },
-        { role: 'hide' as const, label: 'Hide Craft Agents' },
-        { role: 'hideOthers' as const },
-        { role: 'unhide' as const },
+        { role: 'hide' as const, label: t('menu.app.hide') },
+        { role: 'hideOthers' as const, label: t('menu.app.hideOthers') },
+        { role: 'unhide' as const, label: t('menu.app.unhide') },
         { type: 'separator' as const },
-        { role: 'quit' as const, label: 'Quit Craft Agents' }
+        { role: 'quit' as const, label: t('menu.app.quit') }
       ]
     }] : []),
 
     // File menu
     {
-      label: 'File',
+      label: t('menu.file.title'),
       submenu: [
         {
-          label: 'New Chat',
+          label: t('menu.file.newChat'),
           accelerator: 'CmdOrCtrl+N',
           click: () => sendToRenderer(IPC_CHANNELS.MENU_NEW_CHAT)
         },
         {
-          label: 'New Window',
+          label: t('menu.file.newWindow'),
           accelerator: 'CmdOrCtrl+Shift+N',
           click: () => {
             const focused = BrowserWindow.getFocusedWindow()
@@ -102,61 +106,61 @@ export async function rebuildMenu(): Promise<void> {
           }
         },
         { type: 'separator' as const },
-        isMac ? { role: 'close' as const } : { role: 'quit' as const }
+        isMac ? { role: 'close' as const, label: t('menu.file.close') } : { role: 'quit' as const, label: t('menu.file.quit') }
       ]
     },
 
     // Edit menu (standard roles for text editing)
     {
-      label: 'Edit',
+      label: t('menu.edit.title'),
       submenu: [
-        { role: 'undo' as const },
-        { role: 'redo' as const },
+        { role: 'undo' as const, label: t('menu.edit.undo') },
+        { role: 'redo' as const, label: t('menu.edit.redo') },
         { type: 'separator' as const },
-        { role: 'cut' as const },
-        { role: 'copy' as const },
-        { role: 'paste' as const },
-        { role: 'selectAll' as const }
+        { role: 'cut' as const, label: t('menu.edit.cut') },
+        { role: 'copy' as const, label: t('menu.edit.copy') },
+        { role: 'paste' as const, label: t('menu.edit.paste') },
+        { role: 'selectAll' as const, label: t('menu.edit.selectAll') }
       ]
     },
 
     // View menu
     {
-      label: 'View',
+      label: t('menu.view.title'),
       submenu: [
-        { role: 'zoomIn' as const },
-        { role: 'zoomOut' as const },
-        { role: 'resetZoom' as const },
+        { role: 'zoomIn' as const, label: t('menu.view.zoomIn') },
+        { role: 'zoomOut' as const, label: t('menu.view.zoomOut') },
+        { role: 'resetZoom' as const, label: t('menu.view.resetZoom') },
         // Dev tools only in development
         ...(!app.isPackaged ? [
           { type: 'separator' as const },
-          { role: 'reload' as const },
-          { role: 'forceReload' as const },
+          { role: 'reload' as const, label: t('menu.view.reload') },
+          { role: 'forceReload' as const, label: t('menu.view.forceReload') },
           { type: 'separator' as const },
-          { role: 'toggleDevTools' as const }
+          { role: 'toggleDevTools' as const, label: t('menu.view.toggleDevTools') }
         ] : [])
       ]
     },
 
     // Window menu
     {
-      label: 'Window',
+      label: t('menu.window.title'),
       submenu: [
-        { role: 'minimize' as const },
-        { role: 'zoom' as const },
+        { role: 'minimize' as const, label: t('menu.window.minimize') },
+        { role: 'zoom' as const, label: t('menu.window.zoom') },
         ...(isMac ? [
           { type: 'separator' as const },
-          { role: 'front' as const }
+          { role: 'front' as const, label: t('menu.window.bringAllToFront') }
         ] : [])
       ]
     },
 
     // Debug menu (development only)
     ...(!app.isPackaged ? [{
-      label: 'Debug',
+      label: t('menu.debug.title'),
       submenu: [
         {
-          label: 'Check for Updates',
+          label: t('menu.debug.checkForUpdates'),
           click: async () => {
             const { checkForUpdates } = await import('./auto-update')
             const info = await checkForUpdates({ autoDownload: true })
@@ -164,7 +168,7 @@ export async function rebuildMenu(): Promise<void> {
           }
         },
         {
-          label: 'Install Update',
+          label: t('menu.debug.installUpdate'),
           click: async () => {
             const { installUpdate } = await import('./auto-update')
             try {
@@ -176,13 +180,13 @@ export async function rebuildMenu(): Promise<void> {
         },
         { type: 'separator' as const },
         {
-          label: 'Reset to Defaults...',
+          label: t('menu.debug.resetToDefaults'),
           click: async () => {
             const { dialog } = await import('electron')
             await dialog.showMessageBox({
               type: 'info',
-              message: 'Reset to Defaults',
-              detail: 'To reset Craft Agent to defaults, quit the app and run:\n\nbun run fresh-start\n\nThis will delete all configuration, credentials, workspaces, and sessions.',
+              message: t('menu.debug.resetMessage'),
+              detail: t('menu.debug.resetDetail'),
               buttons: ['OK']
             })
           }
@@ -192,14 +196,14 @@ export async function rebuildMenu(): Promise<void> {
 
     // Help menu
     {
-      label: 'Help',
+      label: t('menu.help.title'),
       submenu: [
         {
-          label: 'Help & Documentation',
+          label: t('menu.help.helpDocumentation'),
           click: () => shell.openExternal('https://agents.craft.do/docs')
         },
         {
-          label: 'Keyboard Shortcuts',
+          label: t('menu.help.keyboardShortcuts'),
           accelerator: 'CmdOrCtrl+/',
           click: () => sendToRenderer(IPC_CHANNELS.MENU_KEYBOARD_SHORTCUTS)
         }

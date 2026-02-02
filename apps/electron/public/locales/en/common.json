@@ -55,5 +55,61 @@
     "weeksAgo_plural": "{{count}} weeks ago",
     "monthsAgo": "{{count}} month ago",
     "monthsAgo_plural": "{{count}} months ago"
+  },
+  "menu": {
+    "app": {
+      "about": "About Craft Agents",
+      "installUpdate": "Install Update…",
+      "checkForUpdates": "Check for Updates…",
+      "settings": "Settings...",
+      "hide": "Hide Craft Agents",
+      "hideOthers": "Hide Others",
+      "unhide": "Unhide",
+      "quit": "Quit Craft Agents"
+    },
+    "file": {
+      "title": "File",
+      "newChat": "New Chat",
+      "newWindow": "New Window",
+      "close": "Close",
+      "quit": "Quit"
+    },
+    "edit": {
+      "title": "Edit",
+      "undo": "Undo",
+      "redo": "Redo",
+      "cut": "Cut",
+      "copy": "Copy",
+      "paste": "Paste",
+      "selectAll": "Select All"
+    },
+    "view": {
+      "title": "View",
+      "zoomIn": "Zoom In",
+      "zoomOut": "Zoom Out",
+      "resetZoom": "Reset Zoom",
+      "reload": "Reload",
+      "forceReload": "Force Reload",
+      "toggleDevTools": "Toggle Developer Tools"
+    },
+    "window": {
+      "title": "Window",
+      "minimize": "Minimize",
+      "zoom": "Zoom",
+      "bringAllToFront": "Bring All to Front"
+    },
+    "debug": {
+      "title": "Debug",
+      "checkForUpdates": "Check for Updates",
+      "installUpdate": "Install Update",
+      "resetToDefaults": "Reset to Defaults...",
+      "resetMessage": "Reset to Defaults",
+      "resetDetail": "To reset Craft Agent to defaults, quit the app and run:\n\nbun run fresh-start\n\nThis will delete all configuration, credentials, workspaces, and sessions."
+    },
+    "help": {
+      "title": "Help",
+      "helpDocumentation": "Help & Documentation",
+      "keyboardShortcuts": "Keyboard Shortcuts"
+    }
   }
 }

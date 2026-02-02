@@ -55,5 +55,61 @@
     "weeksAgo_plural": "il y a {{count}} semaines",
     "monthsAgo": "il y a {{count}} mois",
     "monthsAgo_plural": "il y a {{count}} mois"
+  },
+  "menu": {
+    "app": {
+      "about": "À propos de Craft Agents",
+      "installUpdate": "Installer la mise à jour…",
+      "checkForUpdates": "Rechercher des mises à jour…",
+      "settings": "Réglages...",
+      "hide": "Masquer Craft Agents",
+      "hideOthers": "Masquer les autres",
+      "unhide": "Tout afficher",
+      "quit": "Quitter Craft Agents"
+    },
+    "file": {
+      "title": "Fichier",
+      "newChat": "Nouvelle discussion",
+      "newWindow": "Nouvelle fenêtre",
+      "close": "Fermer",
+      "quit": "Quitter"
+    },
+    "edit": {
+      "title": "Édition",
+      "undo": "Annuler",
+      "redo": "Rétablir",
+      "cut": "Couper",
+      "copy": "Copier",
+      "paste": "Coller",
+      "selectAll": "Tout sélectionner"
+    },
+    "view": {
+      "title": "Présentation",
+      "zoomIn": "Zoom avant",
+      "zoomOut": "Zoom arrière",
+      "resetZoom": "Taille réelle",
+      "reload": "Actualiser",
+      "forceReload": "Forcer l'actualisation",
+      "toggleDevTools": "Activer/Désactiver les outils de développement"
+    },
+    "window": {
+      "title": "Fenêtre",
+      "minimize": "Réduire",
+      "zoom": "Zoom",
+      "bringAllToFront": "Tout ramener au premier plan"
+    },
+    "debug": {
+      "title": "Débogage",
+      "checkForUpdates": "Rechercher des mises à jour",
+      "installUpdate": "Installer la mise à jour",
+      "resetToDefaults": "Réinitialiser...",
+      "resetMessage": "Réinitialiser aux valeurs par défaut",
+      "resetDetail": "Pour réinitialiser Craft Agent aux valeurs par défaut, quittez l'application et exécutez :\n\nbun run fresh-start\n\nCela supprimera toute la configuration, les identifiants, les espaces de travail et les sessions."
+    },
+    "help": {
+      "title": "Aide",
+      "helpDocumentation": "Aide & Documentation",
+      "keyboardShortcuts": "Raccourcis clavier"
+    }
   }
 }
