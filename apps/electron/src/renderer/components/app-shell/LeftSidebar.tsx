@@ -41,6 +41,14 @@ export interface SidebarContextMenuConfig {
   viewId?: string
   /** Handler for "Delete View" action */
   onDeleteView?: (id: string) => void
+  /** Workspace root path for EditPopover contexts (used by scheduled prompts) */
+  workspaceRootPath?: string
+  /** Schedule ID for individual schedule items */
+  scheduleId?: string
+  /** Handler for "Add Schedule" action - for scheduled type */
+  onAddSchedule?: () => void
+  /** Handler for "Edit Schedules" action - for scheduled/schedule types */
+  onEditSchedules?: () => void
 }
 
 /**
@@ -242,6 +250,10 @@ export function LeftSidebar({ links, isCollapsed, getItemProps, focusedItemId, i
                         onConfigureViews={link.contextMenu.onConfigureViews}
                         viewId={link.contextMenu.viewId}
                         onDeleteView={link.contextMenu.onDeleteView}
+                        workspaceRootPath={link.contextMenu.workspaceRootPath}
+                        scheduleId={link.contextMenu.scheduleId}
+                        onAddSchedule={link.contextMenu.onAddSchedule}
+                        onEditSchedules={link.contextMenu.onEditSchedules}
                       />
                     </ContextMenuProvider>
                   </StyledContextMenuContent>
@@ -389,6 +401,10 @@ function SortableStatusList({ items, onReorder, getItemProps, focusedItemId }: S
                         onConfigureViews={item.contextMenu.onConfigureViews}
                         viewId={item.contextMenu.viewId}
                         onDeleteView={item.contextMenu.onDeleteView}
+                        workspaceRootPath={item.contextMenu.workspaceRootPath}
+                        scheduleId={item.contextMenu.scheduleId}
+                        onAddSchedule={item.contextMenu.onAddSchedule}
+                        onEditSchedules={item.contextMenu.onEditSchedules}
                       />
                     </ContextMenuProvider>
                   </StyledContextMenuContent>

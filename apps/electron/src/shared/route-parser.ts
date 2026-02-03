@@ -34,7 +34,7 @@ export interface ParsedRoute {
 // Compound Route Types (new format)
 // =============================================================================
 
-export type NavigatorType = 'chats' | 'sources' | 'skills' | 'settings'
+export type NavigatorType = 'chats' | 'sources' | 'skills' | 'schedules' | 'settings'
 
 export interface ParsedCompoundRoute {
   /** The navigator type */
@@ -58,7 +58,7 @@ export interface ParsedCompoundRoute {
  * Known prefixes that indicate a compound route
  */
 const COMPOUND_ROUTE_PREFIXES = [
-  'allChats', 'flagged', 'state', 'label', 'view', 'sources', 'skills', 'settings'
+  'allChats', 'flagged', 'state', 'label', 'view', 'sources', 'skills', 'schedules', 'settings'
 ]
 
 /**
@@ -155,6 +155,11 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
     return null
   }
 
+  // Schedules navigator
+  if (first === 'schedules') {
+    return { navigator: 'schedules', details: null }
+  }
+
   // Chats navigator (allChats, flagged, state)
   let chatFilter: ChatFilter
   let detailsStartIndex: number
@@ -231,6 +236,10 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
   if (parsed.navigator === 'skills') {
     if (!parsed.details) return 'skills'
     return `skills/skill/${parsed.details.id}`
+  }
+
+  if (parsed.navigator === 'schedules') {
+    return 'schedules'
   }
 
   // Chats navigator
@@ -462,6 +471,11 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
     }
   }
 
+  // Schedules
+  if (compound.navigator === 'schedules') {
+    return { navigator: 'schedules' }
+  }
+
   // Chats
   const filter = compound.chatFilter || { kind: 'allChats' as const }
   if (compound.details) {
@@ -526,6 +540,8 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
         }
       }
       return { navigator: 'skills', details: null }
+    case 'schedules':
+      return { navigator: 'schedules' }
     case 'chat':
       if (parsed.id) {
         // Reconstruct filter from params
@@ -616,6 +632,10 @@ export function buildRouteFromNavigationState(state: NavigationState): string {
       return `skills/skill/${state.details.skillSlug}`
     }
     return 'skills'
+  }
+
+  if (state.navigator === 'schedules') {
+    return 'schedules'
   }
 
   // Chats

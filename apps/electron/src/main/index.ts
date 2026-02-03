@@ -69,6 +69,7 @@ import { SessionManager } from './sessions'
 import { registerIpcHandlers } from './ipc'
 import { createApplicationMenu } from './menu'
 import { WindowManager } from './window-manager'
+import { SchedulerService } from './scheduler'
 import { loadWindowState, saveWindowState } from './window-state'
 import { getWorkspaces, loadStoredConfig } from '@craft-agent/shared/config'
 import { initializeDocs } from '@craft-agent/shared/docs'
@@ -98,6 +99,7 @@ const DEEPLINK_SCHEME = process.env.CRAFT_DEEPLINK_SCHEME || 'craftagents'
 
 let windowManager: WindowManager | null = null
 let sessionManager: SessionManager | null = null
+let schedulerService: SchedulerService | null = null
 
 // Store pending deep link if app not ready yet (cold start)
 let pendingDeepLink: string | null = null
@@ -264,6 +266,10 @@ app.whenReady().then(async () => {
     // Initialize notification service
     initNotificationService(windowManager)
 
+    // Initialize scheduler service (checks for scheduled prompts every minute)
+    schedulerService = new SchedulerService(sessionManager, windowManager)
+    schedulerService.start()
+
     // Register IPC handlers (must happen before window creation)
     registerIpcHandlers(sessionManager, windowManager)
 
@@ -378,6 +384,11 @@ app.on('before-quit', async (event) => {
     }
     // Clean up SessionManager resources (file watchers, timers, etc.)
     sessionManager.cleanup()
+
+    // Stop scheduler service
+    if (schedulerService) {
+      schedulerService.stop()
+    }
 
     // If update is in progress, let electron-updater handle the quit flow
     // Force exit breaks the NSIS installer on Windows

@@ -84,6 +84,8 @@ export type EditContextKey =
   | 'add-label'
   | 'edit-views'
   | 'edit-tool-icons'
+  | 'edit-schedules'
+  | 'add-schedule'
 
 /**
  * Full edit configuration including context for agent and example for UI.
@@ -478,6 +480,42 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
     model: 'haiku',               // Use fast model for quick config edits
     systemPromptPreset: 'mini',   // Use focused mini prompt
     inlineExecution: true,        // Execute inline in popover
+  }),
+
+  // Scheduled prompts configuration context
+  'edit-schedules': (location) => ({
+    context: {
+      label: 'Scheduled Prompts',
+      filePath: `${location}/schedules/config.json`,
+      context:
+        'The user wants to configure scheduled prompts that run automatically. ' +
+        'Schedules are stored in schedules/config.json with schema: { version: 1, schedules: [...] }. ' +
+        'Each schedule has: id (slug), name (display name), prompt (text to send), times (array of {hour, minute} in 24-hour format), ' +
+        'days (optional array of weekday names: mon, tue, wed, thu, fri, sat, sun - empty means every day), enabled (boolean), createdAt (timestamp). ' +
+        'When the app is open at scheduled times, it creates a new chat and sends the prompt automatically. ' +
+        'Confirm clearly when done.',
+    },
+    example: 'Add a daily standup prompt at 9am',
+  }),
+
+  // Add new scheduled prompt context
+  'add-schedule': (location) => ({
+    context: {
+      label: 'Add Schedule',
+      filePath: `${location}/schedules/config.json`,
+      context:
+        'The user wants to add a new scheduled prompt. ' +
+        'Ask what prompt they want to run and when (time of day, which days). ' +
+        'Create a new entry in schedules/config.json (create the file if it doesn\'t exist). ' +
+        'Schema: { version: 1, schedules: [{ id, name, prompt, times, days, enabled, createdAt }] }. ' +
+        'Fields: id (slug like "morning-standup"), name (display name), prompt (the message to send), ' +
+        'times (array of {hour, minute} in 24-hour format, e.g., [{hour: 9, minute: 0}]), ' +
+        'days (optional array: mon, tue, wed, thu, fri, sat, sun - omit for every day), ' +
+        'enabled: true, createdAt: Date.now(). ' +
+        'Confirm clearly when done.',
+    },
+    example: 'Check my email inbox every morning',
+    overridePlaceholder: 'What would you like to run on a schedule?',
   }),
 }
 

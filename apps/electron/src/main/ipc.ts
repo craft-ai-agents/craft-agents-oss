@@ -2137,6 +2137,19 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   })
 
   // ============================================================
+  // Schedule Management (Workspace-scoped)
+  // ============================================================
+
+  // List all scheduled prompts for a workspace
+  ipcMain.handle(IPC_CHANNELS.SCHEDULES_LIST, async (_event, workspaceId: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const { listSchedules } = await import('@craft-agent/shared/schedules/storage')
+    return listSchedules(workspace.rootPath)
+  })
+
+  // ============================================================
   // Label Management (Workspace-scoped)
   // ============================================================
 
