@@ -2149,6 +2149,36 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     return listSchedules(workspace.rootPath)
   })
 
+  // Update a scheduled prompt
+  ipcMain.handle(
+    IPC_CHANNELS.SCHEDULES_UPDATE,
+    async (
+      _event,
+      workspaceId: string,
+      scheduleId: string,
+      updates: Partial<import('@craft-agent/shared/schedules').ScheduledPromptConfig>
+    ) => {
+      const workspace = getWorkspaceByNameOrId(workspaceId)
+      if (!workspace) throw new Error('Workspace not found')
+
+      const { updateSchedule } = await import('@craft-agent/shared/schedules/storage')
+      const result = updateSchedule(workspace.rootPath, scheduleId, updates)
+      windowManager.broadcastToAll(IPC_CHANNELS.SCHEDULES_CHANGED, workspaceId)
+      return result
+    }
+  )
+
+  // Delete a scheduled prompt
+  ipcMain.handle(IPC_CHANNELS.SCHEDULES_DELETE, async (_event, workspaceId: string, scheduleId: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const { deleteSchedule } = await import('@craft-agent/shared/schedules/storage')
+    const result = deleteSchedule(workspace.rootPath, scheduleId)
+    windowManager.broadcastToAll(IPC_CHANNELS.SCHEDULES_CHANGED, workspaceId)
+    return result
+  })
+
   // ============================================================
   // Label Management (Workspace-scoped)
   // ============================================================

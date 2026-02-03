@@ -79,7 +79,7 @@
     },
     "apps/electron": {
       "name": "@craft-agent/electron",
-      "version": "0.3.0",
+      "version": "0.3.2",
       "dependencies": {
         "@craft-agent/core": "workspace:*",
         "@craft-agent/shared": "workspace:*",
@@ -117,7 +117,7 @@
     },
     "apps/viewer": {
       "name": "@craft-agent/viewer",
-      "version": "0.3.0",
+      "version": "0.3.2",
       "dependencies": {
         "@craft-agent/core": "workspace:*",
         "@craft-agent/ui": "workspace:*",
@@ -144,7 +144,7 @@
     },
     "packages/core": {
       "name": "@craft-agent/core",
-      "version": "0.3.0",
+      "version": "0.3.2",
       "devDependencies": {
         "@types/uuid": "^11.0.0",
       },
@@ -156,7 +156,7 @@
     },
     "packages/mermaid": {
       "name": "@craft-agent/mermaid",
-      "version": "0.3.0",
+      "version": "0.3.2",
       "dependencies": {
         "@dagrejs/dagre": "^1.1.8",
       },
@@ -166,10 +166,11 @@
     },
     "packages/shared": {
       "name": "@craft-agent/shared",
-      "version": "0.3.0",
+      "version": "0.3.2",
       "dependencies": {
         "@craft-agent/core": "workspace:*",
         "@isaacs/ttlcache": "^2.1.4",
+        "@leeoniya/ufuzzy": "^1.0.19",
         "bash-parser": "^0.5.0",
         "filtrex": "^3.1.0",
         "incr-regex-package": "^1.0.4",
@@ -188,7 +189,7 @@
     },
     "packages/ui": {
       "name": "@craft-agent/ui",
-      "version": "0.3.0",
+      "version": "0.3.2",
       "dependencies": {
         "@craft-agent/core": "workspace:*",
         "@craft-agent/mermaid": "workspace:*",
@@ -581,6 +582,8 @@
     "@kenjiuno/msgreader": ["@kenjiuno/msgreader@1.27.0", "", { "dependencies": { "@kenjiuno/decompressrtf": "^0.1.3", "iconv-lite": "^0.6.3" } }, "sha512-gElRDjxQGZQBVAqQYfZ4g82DqBQQubg9pg+nz6DsWG7tTx0TozNqaglGovT6tz3vqNE07u/wu88w8ymU1BIxYw=="],
 
     "@keyv/serialize": ["@keyv/serialize@1.1.1", "", {}, "sha512-dXn3FZhPv0US+7dtJsIi2R+c7qWYiReoEh5zUntWCf4oSpMNib8FDhSoed6m3QyZdx5hK7iLFkYk3rNxwt8vTA=="],
+
+    "@leeoniya/ufuzzy": ["@leeoniya/ufuzzy@1.0.19", "", {}, "sha512-0pikDeYt0IHEUPza5RTCDXc/17S1pTrYnReEMp8Aa6k1ovzw5QdZLwicW8TjljwEZRb6oYag0xmALohrcq/yOQ=="],
 
     "@malept/cross-spawn-promise": ["@malept/cross-spawn-promise@2.0.0", "", { "dependencies": { "cross-spawn": "^7.0.1" } }, "sha512-1DpKU0Z5ThltBwjNySMC14g0CkbyhCaz9FkhxqNsZI6uAPJXFS8cMXlBKo26FJ8ZuW6S9GCMcR9IO5k2X5/9Fg=="],
 

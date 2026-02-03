@@ -2929,10 +2929,11 @@ function AppShellContent({
                 selectedSkillSlug={isSkillsNavigation(navState) && navState.details?.type === 'skill' ? navState.details.skillSlug : null}
               />
             )}
-            {isSchedulesNavigation(navState) && (
+            {isSchedulesNavigation(navState) && activeWorkspace?.id && (
               /* Schedules Panel */
               <SchedulesPanel
                 schedules={schedules}
+                workspaceId={activeWorkspace.id}
                 workspaceRootPath={activeWorkspace?.rootPath}
                 onAddSchedule={openAddSchedule}
                 onEditSchedules={openEditSchedules}

@@ -680,6 +680,8 @@ export const IPC_CHANNELS = {
 
   // Schedule management (workspace-scoped)
   SCHEDULES_LIST: 'schedules:list',
+  SCHEDULES_UPDATE: 'schedules:update',
+  SCHEDULES_DELETE: 'schedules:delete',
   SCHEDULES_CHANGED: 'schedules:changed',  // Broadcast event
 
   // Label management (workspace-scoped)
@@ -970,6 +972,12 @@ export interface ElectronAPI {
 
   // Schedules (workspace-scoped)
   listSchedules(workspaceId: string): Promise<import('@craft-agent/shared/schedules').ScheduledPromptConfig[]>
+  updateSchedule(
+    workspaceId: string,
+    scheduleId: string,
+    updates: Partial<Omit<import('@craft-agent/shared/schedules').ScheduledPromptConfig, 'id' | 'createdAt'>>
+  ): Promise<import('@craft-agent/shared/schedules').ScheduledPromptConfig | null>
+  deleteSchedule(workspaceId: string, scheduleId: string): Promise<boolean>
   // Schedules change listener (live updates when schedules config changes)
   onSchedulesChanged(callback: (workspaceId: string) => void): () => void
 

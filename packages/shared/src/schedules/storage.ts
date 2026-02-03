@@ -121,6 +121,54 @@ export function updateLastRunAt(
 }
 
 /**
+ * Update a schedule by ID
+ * Returns the updated schedule, or null if not found
+ */
+export function updateSchedule(
+  workspaceRootPath: string,
+  scheduleId: string,
+  updates: Partial<Omit<ScheduledPromptConfig, 'id' | 'createdAt'>>
+): ScheduledPromptConfig | null {
+  const config = loadSchedulesConfig(workspaceRootPath)
+  const index = config.schedules.findIndex(s => s.id === scheduleId)
+
+  if (index === -1) return null
+
+  const existing = config.schedules[index]!
+  const updated: ScheduledPromptConfig = {
+    id: existing.id,
+    createdAt: existing.createdAt,
+    name: updates.name ?? existing.name,
+    prompt: updates.prompt ?? existing.prompt,
+    times: updates.times ?? existing.times,
+    days: updates.days !== undefined ? updates.days : existing.days,
+    enabled: updates.enabled ?? existing.enabled,
+    lastRunAt: updates.lastRunAt !== undefined ? updates.lastRunAt : existing.lastRunAt,
+  }
+  config.schedules[index] = updated
+  saveSchedulesConfig(workspaceRootPath, config)
+  return updated
+}
+
+/**
+ * Delete a schedule by ID
+ * Returns true if deleted, false if not found
+ */
+export function deleteSchedule(
+  workspaceRootPath: string,
+  scheduleId: string
+): boolean {
+  const config = loadSchedulesConfig(workspaceRootPath)
+  const index = config.schedules.findIndex(s => s.id === scheduleId)
+
+  if (index === -1) return false
+
+  config.schedules.splice(index, 1)
+  saveSchedulesConfig(workspaceRootPath, config)
+  return true
+}
+
+/**
  * Get the path to the schedules config file
  */
 export function getSchedulesConfigPath(workspaceRootPath: string): string {
