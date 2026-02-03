@@ -150,6 +150,9 @@ export const routes = {
       return `skills/skill/${skillSlug}` as const
     },
 
+    /** Schedules view (schedules navigator) */
+    schedules: () => 'schedules' as const,
+
     /** Settings view (settings navigator) */
     settings: (subpage?: 'app' | 'appearance' | 'input' | 'workspace' | 'permissions' | 'labels' | 'shortcuts' | 'preferences') =>
       subpage && subpage !== 'app'

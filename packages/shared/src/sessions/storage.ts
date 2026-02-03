@@ -172,6 +172,7 @@ export async function createSession(
     todoState?: SessionConfig['todoState'];
     labels?: string[];
     isFlagged?: boolean;
+    triggeredBy?: SessionConfig['triggeredBy'];
   }
 ): Promise<SessionConfig> {
   ensureSessionsDir(workspaceRootPath);
@@ -202,6 +203,7 @@ export async function createSession(
     todoState: options?.todoState,
     labels: options?.labels,
     isFlagged: options?.isFlagged,
+    triggeredBy: options?.triggeredBy,
   };
 
   // Save empty session

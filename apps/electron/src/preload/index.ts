@@ -318,6 +318,25 @@ const api: ElectronAPI = {
     }
   },
 
+  // Schedule management
+  listSchedules: (workspaceId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SCHEDULES_LIST, workspaceId),
+  updateSchedule: (workspaceId: string, scheduleId: string, updates: any) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SCHEDULES_UPDATE, workspaceId, scheduleId, updates),
+  deleteSchedule: (workspaceId: string, scheduleId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SCHEDULES_DELETE, workspaceId, scheduleId),
+
+  // Schedules change listener (live updates when schedules config changes)
+  onSchedulesChanged: (callback: (workspaceId: string) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, workspaceId: string) => {
+      callback(workspaceId)
+    }
+    ipcRenderer.on(IPC_CHANNELS.SCHEDULES_CHANGED, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.SCHEDULES_CHANGED, handler)
+    }
+  },
+
   // Label management
   listLabels: (workspaceId: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.LABELS_LIST, workspaceId),

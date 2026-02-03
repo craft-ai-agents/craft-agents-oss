@@ -119,6 +119,10 @@ export interface ConfigWatcherCallbacks {
   /** Called when labels config.json changes */
   onLabelConfigChange?: (workspaceId: string) => void;
 
+  // Schedule callbacks
+  /** Called when schedules config.json changes */
+  onScheduleConfigChange?: (workspaceId: string) => void;
+
   // Theme callbacks (app-level only)
   /** Called when app-level theme.json changes */
   onAppThemeChange?: (theme: ThemeOverrides | null) => void;
@@ -416,6 +420,17 @@ export class ConfigWatcher {
       // config.json change
       if (file === 'config.json') {
         this.debounce('labels-config', () => this.handleLabelConfigChange());
+        return;
+      }
+    }
+
+    // Schedules changes: schedules/...
+    if (parts[0] === 'schedules' && parts.length >= 2) {
+      const file = parts[1];
+
+      // config.json change
+      if (file === 'config.json') {
+        this.debounce('schedules-config', () => this.handleScheduleConfigChange());
         return;
       }
     }
@@ -846,6 +861,18 @@ export class ConfigWatcher {
   private handleLabelConfigChange(): void {
     debug('[ConfigWatcher] Labels config.json changed:', this.workspaceId);
     this.callbacks.onLabelConfigChange?.(this.workspaceId);
+  }
+
+  // ============================================================
+  // Schedules Handlers
+  // ============================================================
+
+  /**
+   * Handle schedules config.json change.
+   */
+  private handleScheduleConfigChange(): void {
+    debug('[ConfigWatcher] Schedules config.json changed:', this.workspaceId);
+    this.callbacks.onScheduleConfigChange?.(this.workspaceId);
   }
 
   // ============================================================

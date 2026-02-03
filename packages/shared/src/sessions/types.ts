@@ -108,6 +108,15 @@ export interface SessionConfig {
   };
   /** When true, session is hidden from session list (e.g., mini edit sessions) */
   hidden?: boolean;
+  /** Automation trigger info - set when session was created by a schedule */
+  triggeredBy?: {
+    /** Type of trigger (currently only 'schedule') */
+    type: 'schedule';
+    /** ID of the schedule that triggered this session */
+    scheduleId: string;
+    /** Name of the schedule (for display) */
+    scheduleName: string;
+  };
 }
 
 /**
@@ -179,6 +188,15 @@ export interface SessionHeader {
   };
   /** When true, session is hidden from session list (e.g., mini edit sessions) */
   hidden?: boolean;
+  /** Automation trigger info - set when session was created by a schedule */
+  triggeredBy?: {
+    /** Type of trigger (currently only 'schedule') */
+    type: 'schedule';
+    /** ID of the schedule that triggered this session */
+    scheduleId: string;
+    /** Name of the schedule (for display) */
+    scheduleName: string;
+  };
   // Pre-computed fields for fast list loading
   /** Number of messages in session */
   messageCount: number;
@@ -245,4 +263,10 @@ export interface SessionMetadata {
   tokenUsage?: SessionTokenUsage;
   /** When true, session is hidden from session list (e.g., mini edit sessions) */
   hidden?: boolean;
+  /** Automation trigger info - set when session was created by a schedule */
+  triggeredBy?: {
+    type: 'schedule';
+    scheduleId: string;
+    scheduleName: string;
+  };
 }
