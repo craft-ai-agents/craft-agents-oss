@@ -155,23 +155,30 @@ async function getMcpOAuthSourcesNeedingRefresh(
   sources: LoadedSource[]
 ): Promise<LoadedSource[]> {
   const credManager = getSourceCredentialManager()
-  const needRefresh: LoadedSource[] = []
 
-  for (const source of sources) {
-    // Only check MCP sources with OAuth auth
-    if (source.config.type !== 'mcp') continue
-    if (source.config.mcp?.authType !== 'oauth') continue
-    if (!source.config.isAuthenticated) continue
+  // Filter to MCP OAuth sources first (sync operation)
+  const mcpOAuthSources = sources.filter(source =>
+    source.config.type === 'mcp' &&
+    source.config.mcp?.authType === 'oauth' &&
+    source.config.isAuthenticated
+  )
 
-    const cred = await credManager.load(source)
-    if (!cred) continue
-
-    if (credManager.isExpired(cred) || credManager.needsRefresh(cred)) {
-      needRefresh.push(source)
-    }
+  if (mcpOAuthSources.length === 0) {
+    return []
   }
 
-  return needRefresh
+  // Load all credentials in parallel
+  const results = await Promise.all(
+    mcpOAuthSources.map(async (source) => {
+      const cred = await credManager.load(source)
+      return { source, cred }
+    })
+  )
+
+  // Filter to sources needing refresh
+  return results
+    .filter(({ cred }) => cred && (credManager.isExpired(cred) || credManager.needsRefresh(cred)))
+    .map(({ source }) => source)
 }
 
 /**
@@ -184,8 +191,7 @@ async function getMcpOAuthSourcesNeedingRefresh(
 async function refreshMcpOAuthTokensIfNeeded(
   agent: CraftAgent,
   sources: LoadedSource[],
-  sessionPath: string,
-  enabledSourceSlugs: string[]
+  sessionPath: string
 ): Promise<boolean> {
   const needRefresh = await getMcpOAuthSourcesNeedingRefresh(sources)
 
@@ -194,26 +200,31 @@ async function refreshMcpOAuthTokensIfNeeded(
   }
 
   const credManager = getSourceCredentialManager()
-  let refreshed = 0
 
-  for (const source of needRefresh) {
-    try {
-      sessionLog.debug(`[OAuth] Refreshing MCP token for ${source.config.slug}`)
-      const token = await credManager.refresh(source)
-      if (token) {
-        refreshed++
-        sessionLog.info(`[OAuth] Refreshed MCP token for ${source.config.slug}`)
-      } else {
-        sessionLog.warn(`[OAuth] Refresh returned null for ${source.config.slug}`)
-        // Mark as needing re-auth
-        credManager.markSourceNeedsReauth(source, 'Token refresh failed')
+  // Refresh all tokens in parallel
+  const refreshResults = await Promise.all(
+    needRefresh.map(async (source) => {
+      try {
+        sessionLog.debug(`[OAuth] Refreshing MCP token for ${source.config.slug}`)
+        const token = await credManager.refresh(source)
+        if (token) {
+          sessionLog.info(`[OAuth] Refreshed MCP token for ${source.config.slug}`)
+          return { source, success: true }
+        } else {
+          sessionLog.warn(`[OAuth] Refresh returned null for ${source.config.slug}`)
+          credManager.markSourceNeedsReauth(source, 'Token refresh failed')
+          return { source, success: false }
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        sessionLog.warn(`[OAuth] Refresh failed for ${source.config.slug}: ${msg}`)
+        credManager.markSourceNeedsReauth(source, `Refresh error: ${msg}`)
+        return { source, success: false }
       }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      sessionLog.warn(`[OAuth] Refresh failed for ${source.config.slug}: ${msg}`)
-      credManager.markSourceNeedsReauth(source, `Refresh error: ${msg}`)
-    }
-  }
+    })
+  )
+
+  const refreshed = refreshResults.filter(r => r.success).length
 
   if (refreshed > 0) {
     // Rebuild server configs with fresh tokens
@@ -2672,8 +2683,7 @@ export class SessionManager {
       const tokensRefreshed = await refreshMcpOAuthTokensIfNeeded(
         agent,
         sources,
-        sessionPath,
-        managed.enabledSourceSlugs
+        sessionPath
       )
       if (tokensRefreshed) {
         sendSpan.mark('oauth.tokens.refreshed')
