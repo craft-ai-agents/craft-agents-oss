@@ -179,7 +179,7 @@ bun run electron:start
 # Type checking
 bun run typecheck:all
 
-# Debug logging (writes to ~/Library/Logs/Craft Agents/)
+# Debug logging — see "Troubleshooting > Debug Logging" below
 # Logs are automatically enabled in development
 ```
 
@@ -254,6 +254,66 @@ Or simply tell the agent you want to connect Gmail/Calendar/Drive - it will guid
 - Your OAuth credentials are stored encrypted alongside other source credentials
 - Never commit credentials to version control
 - For production use, consider getting your OAuth consent screen verified by Google
+
+## Troubleshooting
+
+### Debug Logging
+
+In development (`bun run electron:start` or `bun run electron:dev`),
+debug logging is enabled automatically.
+Logs are written to both the console and a log file.
+
+In packaged builds, logs are disabled by default.
+To enable them, launch the app with the `--debug` flag:
+
+```bash
+# macOS
+/Applications/Craft\ Agents.app/Contents/MacOS/Craft\ Agents --debug
+
+# Linux
+craft-agents --debug
+```
+
+You can also set the `CRAFT_DEBUG=1` environment variable
+to enable debug output from the shared/SDK layer.
+(This is separate from `--debug`, which controls the Electron main process logs.)
+
+Logs are written by `electron-log` to a platform-specific app logs directory.
+The most reliable way to find the exact path is to launch with `--debug`
+and look for the startup line:
+
+```text
+Debug mode enabled - logs at: /path/to/log/file.log
+```
+
+You can also search for a `Craft Agents` folder within your OS logs
+or app-data directory.
+
+### WSL2 Notes
+
+On WSL2, OAuth login (Claude Max / Claude Pro) may fail because Electron's `shell.openExternal`
+cannot open a browser on the Windows host by default.
+
+**Fix: install `wslu`** to bridge `xdg-open` to the Windows side:
+
+```bash
+sudo apt install wslu
+```
+
+Also ensure WSL interop is enabled (it is by default on most distros).
+You can verify with:
+
+```bash
+cat /proc/sys/fs/binfmt_misc/WSLInterop
+```
+
+If you see output (not "No such file"), interop is working.
+
+**Alternative:** If you are running WSLg
+(GUI support built into recent Windows 11 builds),
+a Linux browser can handle the OAuth redirect directly.
+In that case `wslu` is not required,
+but you need a browser installed inside WSL.
 
 ## Configuration
 
