@@ -14,15 +14,19 @@ import type { McpToolCallStatus } from "./McpToolCallStatus";
 import type { PatchApplyStatus } from "./PatchApplyStatus";
 import type { UserInput } from "./UserInput";
 
-export type ThreadItem = { "type": "userMessage", id: string, content: Array<UserInput>, } | { "type": "agentMessage", id: string, text: string, } | { "type": "reasoning", id: string, summary: Array<string>, content: Array<string>, } | { "type": "commandExecution", id: string, 
+export type ThreadItem = { "type": "userMessage", id: string, content: Array<UserInput>, } | { "type": "agentMessage", id: string, text: string, } | { "type": "reasoning", id: string, summary: Array<string>, content: Array<string>, } | { "type": "commandExecution", id: string,
 /**
  * The command to be executed.
  */
-command: string, 
+command: string,
+/**
+ * LLM-provided description of what this command does.
+ */
+description: string | null,
 /**
  * The command's working directory.
  */
-cwd: string, 
+cwd: string,
 /**
  * Identifier for the underlying PTY process (when available).
  */

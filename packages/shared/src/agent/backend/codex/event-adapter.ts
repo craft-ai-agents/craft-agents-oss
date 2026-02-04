@@ -10,6 +10,8 @@
 
 import type { AgentEvent, AgentEventUsage } from '@craft-agent/core/types';
 
+import { parseReadCommand, type ReadCommandInfo } from './read-patterns';
+
 // Import v2 types from generated codex-types
 import type {
   ThreadItem,
@@ -22,6 +24,7 @@ import type {
   TurnPlanStep,
   ThreadStartedNotification,
   FileUpdateChange,
+  CommandAction,
 } from '@craft-agent/codex-types/v2';
 
 // Simplified notification types for delta events
@@ -52,6 +55,9 @@ export class EventAdapter {
   // Track command output for tool results
   private commandOutput: Map<string, string> = new Map();
 
+  // Track commands detected as file reads (for Read tool display)
+  private readCommands: Map<string, ReadCommandInfo> = new Map();
+
   // Current turn ID for event correlation
   private currentTurnId: string | null = null;
 
@@ -63,6 +69,7 @@ export class EventAdapter {
     this.turnIndex++;
     this.itemIndex = 0;
     this.commandOutput.clear();
+    this.readCommands.clear();
     this.currentTurnId = turnId || null;
   }
 
@@ -144,12 +151,49 @@ export class EventAdapter {
     const item = notification.item;
 
     switch (item.type) {
-      case 'commandExecution':
+      case 'commandExecution': {
+        // First: Check Codex's built-in commandActions for read classification
+        const readAction = item.commandActions.find(
+          (a): a is CommandAction & { type: 'read' } => a.type === 'read'
+        );
+
+        if (readAction) {
+          // Use Codex's classification directly
+          const readInfo: ReadCommandInfo = {
+            filePath: readAction.path,
+            originalCommand: item.command,
+          };
+          this.readCommands.set(item.id, readInfo);
+          yield this.createToolStart(item.id, 'Read', {
+            file_path: readAction.path,
+            _command: item.command,
+          });
+          break;
+        }
+
+        // Fallback: Parse command ourselves for edge cases Codex doesn't classify
+        const parsedReadInfo = parseReadCommand(item.command);
+        if (parsedReadInfo) {
+          this.readCommands.set(item.id, parsedReadInfo);
+          yield this.createToolStart(item.id, 'Read', {
+            file_path: parsedReadInfo.filePath,
+            offset: parsedReadInfo.startLine,
+            limit: parsedReadInfo.endLine
+              ? parsedReadInfo.endLine - (parsedReadInfo.startLine || 1) + 1
+              : undefined,
+            _command: parsedReadInfo.originalCommand,
+          });
+          break;
+        }
+
+        // Not a read command - emit as Bash
         yield this.createToolStart(item.id, 'Bash', {
           command: item.command,
           cwd: item.cwd,
+          description: item.description,
         });
         break;
+      }
 
       case 'fileChange':
         yield this.createToolStart(item.id, 'Edit', {
@@ -339,6 +383,7 @@ export class EventAdapter {
 
   /**
    * Create tool result for command execution.
+   * If the command was detected as a file read, emits as Read tool result.
    */
   private createCommandResult(item: ThreadItem & { type: 'commandExecution' }): AgentEvent {
     const isError =
@@ -346,6 +391,20 @@ export class EventAdapter {
 
     // Use accumulated output from deltas, or fallback to item output
     const output = this.commandOutput.get(item.id) || item.aggregatedOutput || '';
+
+    // Check if this was detected as a file read
+    const readInfo = this.readCommands.get(item.id);
+    if (readInfo) {
+      this.readCommands.delete(item.id);
+      return {
+        type: 'tool_result',
+        toolUseId: item.id,
+        toolName: 'Read',
+        result: output || (isError ? `Exit code: ${item.exitCode}` : ''),
+        isError,
+        turnId: this.currentTurnId || undefined,
+      };
+    }
 
     return {
       type: 'tool_result',
