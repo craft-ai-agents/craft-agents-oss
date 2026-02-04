@@ -169,55 +169,21 @@ export function cleanBuildArtifacts(config: BuildConfig): void {
 
 /**
  * Install dependencies
- * On Windows, reinstalls esbuild in isolation to avoid symlink issues
+ * On Windows, uses hoisted linker to avoid .bun symlink directory
  */
 export async function installDependencies(config: BuildConfig): Promise<void> {
   const { rootDir, platform } = config;
 
-  console.log('Installing dependencies...');
-  await $`cd ${rootDir} && bun install`.quiet();
-
   if (platform === 'win32') {
-    // Bun creates symlinks to .bun/ that esbuild can't traverse on Windows
-    // ("Access is denied" errors). npm can't run in the main directory because
-    // it chokes on workspace:* dependencies. Solution: install esbuild in an
-    // isolated temp directory with minimal package.json, then copy it back.
-    console.log('Reinstalling esbuild for Windows (avoiding symlink issues)...');
-
-    const tempDir = join(rootDir, '.esbuild-temp');
-    mkdirSync(tempDir, { recursive: true });
-
-    // Create minimal package.json for isolated install
-    await Bun.write(
-      join(tempDir, 'package.json'),
-      JSON.stringify({
-        name: 'esbuild-temp',
-        private: true,
-        dependencies: {
-          esbuild: '*',
-          '@esbuild/win32-x64': '*',
-        },
-      })
-    );
-
-    // Install with npm in isolated directory
-    await $`cd ${tempDir} && npm install --no-package-lock`.quiet();
-
-    // Remove bun's symlinked versions
-    const mainEsbuild = join(rootDir, 'node_modules', 'esbuild');
-    const mainEsbuildPlatform = join(rootDir, 'node_modules', '@esbuild');
-
-    if (existsSync(mainEsbuild)) rmSync(mainEsbuild, { recursive: true, force: true });
-    if (existsSync(mainEsbuildPlatform)) rmSync(mainEsbuildPlatform, { recursive: true, force: true });
-
-    // Copy fresh non-symlinked versions
-    cpSync(join(tempDir, 'node_modules', 'esbuild'), mainEsbuild, { recursive: true });
-    cpSync(join(tempDir, 'node_modules', '@esbuild'), mainEsbuildPlatform, { recursive: true });
-
-    // Cleanup temp directory
-    rmSync(tempDir, { recursive: true, force: true });
-
-    console.log('  ✓ esbuild reinstalled without symlinks');
+    // Use hoisted linker on Windows - Bun's default isolated mode creates
+    // node_modules/.bun/ with symlinks that esbuild can't traverse on Windows
+    // ("Access is denied" errors with junction points)
+    // Hoisted mode creates flat npm-style node_modules without .bun
+    console.log('Installing dependencies (Windows hoisted mode)...');
+    await $`cd ${rootDir} && bun install --linker=hoisted`.quiet();
+  } else {
+    console.log('Installing dependencies...');
+    await $`cd ${rootDir} && bun install`.quiet();
   }
 }
 
