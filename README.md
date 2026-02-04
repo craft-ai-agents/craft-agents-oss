@@ -274,9 +274,14 @@ To enable them, launch the app with the `--debug` flag:
 craft-agents --debug
 ```
 
+```powershell
+# Windows (PowerShell) - from the install directory
+.\"Craft Agents.exe\" --debug
+```
+
 You can also set the `CRAFT_DEBUG=1` environment variable
 to enable debug output from the shared/SDK layer.
-(This is separate from `--debug`, which controls the Electron main process logs.)
+(Note: in the desktop app, `--debug` also enables `CRAFT_DEBUG`.)
 
 Logs are written by `electron-log` to a platform-specific app logs directory.
 The most reliable way to find the exact path is to launch with `--debug`
@@ -286,8 +291,7 @@ and look for the startup line:
 Debug mode enabled - logs at: /path/to/log/file.log
 ```
 
-You can also search for a `Craft Agents` folder within your OS logs
-or app-data directory.
+You can also search for a `Craft Agents` folder within your app-data directory.
 
 ### WSL2 Notes
 
