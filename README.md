@@ -276,7 +276,7 @@ craft-agents --debug
 
 ```powershell
 # Windows (PowerShell) - from the install directory
-.\"Craft Agents.exe\" --debug
+& ".\Craft Agents.exe" --debug
 ```
 
 You can also set the `CRAFT_DEBUG=1` environment variable
