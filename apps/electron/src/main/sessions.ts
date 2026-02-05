@@ -4002,6 +4002,16 @@ To view this task's output:
   }
 
   /**
+   * Resolve @mentions in hook prompts to valid source slugs
+   * Filters mentions to only return sources that exist in the workspace
+   */
+  private resolveSourceMentions(workspaceRootPath: string, mentions: string[]): string[] {
+    const sources = loadWorkspaceSources(workspaceRootPath)
+    const sourceSlugs = sources.map(s => s.config.slug)
+    return mentions.filter(m => sourceSlugs.includes(m))
+  }
+
+  /**
    * Execute a prompt hook by creating a new session and sending the prompt
    * Used for SchedulerTick prompt hooks
    */
@@ -4012,8 +4022,9 @@ To view this task's output:
     mentions: string[],
     options?: { cron?: string; timezone?: string; labels?: string[] }
   ): Promise<{ sessionId: string; success: boolean }> {
-    // 1. Resolve @mentions to skill slugs
+    // 1. Resolve @mentions to skill and source slugs
     const skillSlugs = this.resolveSkillMentions(workspaceRootPath, mentions)
+    const sourceSlugs = this.resolveSourceMentions(workspaceRootPath, mentions)
 
     // 2. Create new session with allow-all permissions
     const session = await this.createSession(workspaceId, {
@@ -4027,12 +4038,18 @@ To view this task's output:
       },
     })
 
-    // 3. Send the prompt with skill activation
+    // 3. Activate sources mentioned in the prompt (before sending message)
+    if (sourceSlugs.length > 0) {
+      sessionLog.info(`[Hooks] Auto-activating sources for hook session: ${sourceSlugs.join(', ')}`)
+      await this.setSessionSources(session.id, sourceSlugs)
+    }
+
+    // 4. Send the prompt with skill activation
     await this.sendMessage(session.id, prompt, [], [], {
       skillSlugs,
     })
 
-    // 4. Broadcast to UI
+    // 5. Broadcast to UI
     this.windowManager?.broadcastToAll('hook:promptTriggered', {
       workspaceId,
       sessionId: session.id,
