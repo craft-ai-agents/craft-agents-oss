@@ -9,20 +9,27 @@
  *   3. Call emitHook('StatusChange', { oldStatus: 'todo', newStatus: 'done' })
  */
 
-import { exec } from 'node:child_process';
-import { promisify } from 'node:util';
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { z } from 'zod';
+import { createLogger } from '../utils/debug.ts';
+import { HooksConfigSchema, zodErrorToIssues } from './schemas.ts';
+import { isValidLabelId } from '../labels/storage.ts';
+import { extractLabelId } from '../labels/values.ts';
+import { sanitizeForShell } from './security.ts';
+import { matchesCron } from './cron-matcher.ts';
 import {
-  permissionsConfigCache,
-  type PermissionsContext,
-  type MergedPermissionsConfig,
-} from '../agent/permissions-config.ts';
-import { getBashRejectionReason, formatBashRejectionMessage } from '../agent/mode-manager.ts';
+  setPermissionsContext,
+  clearPermissionsContext,
+  isCommandAllowed,
+  getPermissionsConfig,
+  executeCommand,
+} from './command-executor.ts';
+import { Cron } from 'croner';
 import type { ValidationResult, ValidationIssue } from '../config/validators.ts';
+import type { PermissionsContext } from '../agent/permissions-config.ts';
 
-const execAsync = promisify(exec);
+// Use shared debug infrastructure (controlled via CRAFT_DEBUG=1)
+const log = createLogger('hooks');
 
 // ============================================================================
 // Types (minimal)
@@ -30,21 +37,38 @@ const execAsync = promisify(exec);
 
 /** App events - handled by Craft */
 export type AppEvent =
-  | 'StatusChange'
   | 'LabelAdd'
   | 'LabelRemove'
-  | 'PermissionModeChange';
+  | 'LabelConfigChange'
+  | 'PermissionModeChange'
+  | 'FlagChange'
+  | 'TodoStateChange'
+  | 'SchedulerTick';
 
 /** Agent events - passed to Claude SDK */
 export type AgentEvent =
   | 'PreToolUse'
   | 'PostToolUse'
-  | 'Stop';
+  | 'PostToolUseFailure'
+  | 'Notification'
+  | 'UserPromptSubmit'
+  | 'SessionStart'
+  | 'SessionEnd'
+  | 'Stop'
+  | 'SubagentStart'
+  | 'SubagentStop'
+  | 'PreCompact'
+  | 'PermissionRequest'
+  | 'Setup';
 
 export type HookEvent = AppEvent | AgentEvent;
 
-const APP_EVENTS: AppEvent[] = ['StatusChange', 'LabelAdd', 'LabelRemove', 'PermissionModeChange'];
-const AGENT_EVENTS: AgentEvent[] = ['PreToolUse', 'PostToolUse', 'Stop'];
+const APP_EVENTS: AppEvent[] = ['LabelAdd', 'LabelRemove', 'LabelConfigChange', 'PermissionModeChange', 'FlagChange', 'TodoStateChange', 'SchedulerTick'];
+const AGENT_EVENTS: AgentEvent[] = [
+  'PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'Notification',
+  'UserPromptSubmit', 'SessionStart', 'SessionEnd', 'Stop',
+  'SubagentStart', 'SubagentStop', 'PreCompact', 'PermissionRequest', 'Setup'
+];
 
 /** A command hook - executes a shell command */
 export interface CommandHookDefinition {
@@ -62,7 +86,16 @@ export interface PromptHookDefinition {
 export type HookDefinition = CommandHookDefinition | PromptHookDefinition;
 
 export interface HookMatcher {
+  /** Regex pattern for matching event data (not used for SchedulerTick) */
   matcher?: string;
+  /** Cron expression for SchedulerTick events (5-field format) */
+  cron?: string;
+  /** IANA timezone for cron evaluation (e.g., "Europe/Budapest", "America/New_York") */
+  timezone?: string;
+  /** Permission mode for command hooks. 'allow-all' bypasses security checks. */
+  permissionMode?: 'safe' | 'ask' | 'allow-all';
+  /** Labels to apply to sessions created by prompt hooks */
+  labels?: string[];
   hooks: HookDefinition[];
 }
 
@@ -113,6 +146,8 @@ export interface PendingPrompt {
    * The caller should resolve which are sources vs skills based on available configurations.
    */
   mentions: string[];
+  /** Labels to apply to the created session */
+  labels?: string[];
 }
 
 export interface HookResult {
@@ -124,57 +159,8 @@ export interface HookResult {
 }
 
 // ============================================================================
-// Zod Schema for Validation
+// Validation (schemas imported from ./schemas.ts)
 // ============================================================================
-
-const CommandHookSchema = z.object({
-  type: z.literal('command'),
-  command: z.string().min(1, 'Command cannot be empty'),
-  timeout: z.number().positive().optional(),
-});
-
-const PromptHookSchema = z.object({
-  type: z.literal('prompt'),
-  prompt: z.string().min(1, 'Prompt cannot be empty'),
-});
-
-const HookDefinitionSchema = z.discriminatedUnion('type', [
-  CommandHookSchema,
-  PromptHookSchema,
-]);
-
-const HookMatcherSchema = z.object({
-  matcher: z.string().optional(),
-  hooks: z.array(HookDefinitionSchema).min(1, 'At least one hook required'),
-});
-
-const VALID_EVENTS = [
-  'StatusChange', 'LabelAdd', 'LabelRemove', 'PermissionModeChange',
-  'PreToolUse', 'PostToolUse', 'Stop',
-] as const;
-
-const HooksConfigSchema = z.object({
-  version: z.number().optional(),
-  hooks: z.record(z.string(), z.array(HookMatcherSchema)).optional().default({}),
-}).transform((data) => {
-  // Filter out invalid event names and warn
-  const validHooks: Record<string, z.infer<typeof HookMatcherSchema>[]> = {};
-  const invalidEvents: string[] = [];
-
-  for (const [event, matchers] of Object.entries(data.hooks)) {
-    if (VALID_EVENTS.includes(event as (typeof VALID_EVENTS)[number])) {
-      validHooks[event] = matchers;
-    } else {
-      invalidEvents.push(event);
-    }
-  }
-
-  if (invalidEvents.length > 0) {
-    console.warn(`[hooks] Unknown event types ignored: ${invalidEvents.join(', ')}`);
-  }
-
-  return { version: data.version, hooks: validHooks };
-});
 
 /** Internal validation result that includes the parsed config */
 export type HooksValidationResult = {
@@ -182,18 +168,6 @@ export type HooksValidationResult = {
   errors: string[];
   config: HooksConfig | null;
 };
-
-/**
- * Convert Zod error to ValidationIssues (matches validators.ts pattern)
- */
-function zodErrorToIssues(error: z.ZodError, file: string): ValidationIssue[] {
-  return error.issues.map((issue) => ({
-    file,
-    path: issue.path.join('.') || 'root',
-    message: issue.message,
-    severity: 'error' as const,
-  }));
-}
 
 /**
  * Validate hooks config (internal - returns parsed config)
@@ -265,23 +239,90 @@ export function validateHooksContent(jsonString: string): ValidationResult {
     });
   }
 
-  // Validate regex patterns in matchers
+  // Validate regex patterns, cron expressions, and timezones in matchers
   for (const [event, matchers] of Object.entries(config.hooks)) {
     if (!matchers) continue;
     for (let i = 0; i < matchers.length; i++) {
       const matcher = matchers[i];
+      if (!matcher) continue;
       if (matcher.matcher) {
-        try {
-          new RegExp(matcher.matcher);
-        } catch (e) {
+        // ReDoS prevention: limit regex complexity
+        const MAX_REGEX_LENGTH = 500;
+        if (matcher.matcher.length > MAX_REGEX_LENGTH) {
           errors.push({
             file,
             path: `hooks.${event}[${i}].matcher`,
-            message: `Invalid regex pattern: ${e instanceof Error ? e.message : 'Unknown error'}`,
+            message: `Regex pattern too long (${matcher.matcher.length} chars, max ${MAX_REGEX_LENGTH})`,
             severity: 'error',
-            suggestion: 'Fix the regex pattern or remove the matcher to match all events',
+            suggestion: 'Simplify the regex pattern or split into multiple matchers',
+          });
+        } else {
+          try {
+            // Validate regex syntax
+            new RegExp(matcher.matcher);
+
+            // Warn about potentially catastrophic backtracking patterns
+            const riskyPatterns = /(\.\*){2,}|(\.\+){2,}|\(\.\*\)\+|\(\.\+\)\*/;
+            if (riskyPatterns.test(matcher.matcher)) {
+              warnings.push({
+                file,
+                path: `hooks.${event}[${i}].matcher`,
+                message: 'Regex pattern may cause performance issues (nested quantifiers)',
+                severity: 'warning',
+                suggestion: 'Avoid patterns like .*.*, .+.+, or (.*)+',
+              });
+            }
+          } catch (e) {
+            errors.push({
+              file,
+              path: `hooks.${event}[${i}].matcher`,
+              message: `Invalid regex pattern: ${e instanceof Error ? e.message : 'Unknown error'}`,
+              severity: 'error',
+              suggestion: 'Fix the regex pattern or remove the matcher to match all events',
+            });
+          }
+        }
+      }
+
+      // Validate cron expressions
+      if (matcher.cron) {
+        try {
+          new Cron(matcher.cron);
+        } catch (e) {
+          errors.push({
+            file,
+            path: `hooks.${event}[${i}].cron`,
+            message: `Invalid cron expression: ${e instanceof Error ? e.message : 'Unknown error'}`,
+            severity: 'error',
+            suggestion: 'Use standard 5-field cron format: minute hour day-of-month month day-of-week',
           });
         }
+      }
+
+      // Validate timezone
+      if (matcher.timezone) {
+        try {
+          Intl.DateTimeFormat(undefined, { timeZone: matcher.timezone });
+        } catch {
+          errors.push({
+            file,
+            path: `hooks.${event}[${i}].timezone`,
+            message: `Invalid timezone: ${matcher.timezone}`,
+            severity: 'error',
+            suggestion: 'Use IANA timezone format like "Europe/Budapest" or "America/New_York"',
+          });
+        }
+      }
+
+      // Warn if cron is used on non-SchedulerTick event
+      if (matcher.cron && event !== 'SchedulerTick') {
+        warnings.push({
+          file,
+          path: `hooks.${event}[${i}].cron`,
+          message: `Cron expressions are only used for SchedulerTick events`,
+          severity: 'warning',
+          suggestion: `Move this hook to the SchedulerTick event or use matcher instead`,
+        });
       }
     }
   }
@@ -331,66 +372,50 @@ export function validateHooks(workspaceRoot: string): ValidationResult {
     };
   }
 
-  return validateHooksContent(raw);
-}
-
-// ============================================================================
-// Command Permission Rules (uses global permissions from Settings)
-// ============================================================================
-
-/**
- * Permissions context for checking commands
- */
-let permissionsContext: PermissionsContext | null = null;
-let permissionsConfig: MergedPermissionsConfig | null = null;
-
-/**
- * Set the permissions context for command checking.
- * This loads the merged permissions from the global settings.
- */
-export function setPermissionsContext(ctx: PermissionsContext): void {
-  permissionsContext = ctx;
-  permissionsConfig = permissionsConfigCache.getMergedConfig(ctx);
-}
-
-/**
- * Clear permissions context
- */
-export function clearPermissionsContext(): void {
-  permissionsContext = null;
-  permissionsConfig = null;
-}
-
-/**
- * Check if a command is allowed using the global permission patterns.
- *
- * Uses the allowlist approach from Settings:
- * - Commands matching allowedBashPatterns are allowed
- * - Commands not matching any pattern are blocked
- */
-export function isCommandAllowed(command: string): { allowed: boolean; reason?: string } {
-  // If no permissions config, allow all (permissive fallback for testing)
-  if (!permissionsConfig) {
-    return { allowed: true };
+  // First validate content (JSON + schema)
+  const contentResult = validateHooksContent(raw);
+  if (!contentResult.valid) {
+    return contentResult;
   }
 
-  // Use the global bash permission checker
-  const rejection = getBashRejectionReason(command, permissionsConfig);
+  // Additional workspace-aware validations
+  const warnings = [...contentResult.warnings];
 
-  if (!rejection) {
-    return { allowed: true };
+  // Validate labels exist in workspace
+  try {
+    const config = JSON.parse(raw) as { hooks?: Record<string, Array<{ labels?: string[] }>> };
+    if (config.hooks) {
+      for (const [event, matchers] of Object.entries(config.hooks)) {
+        if (!matchers) continue;
+        for (let i = 0; i < matchers.length; i++) {
+          const matcher = matchers[i];
+          if (matcher?.labels) {
+            for (const label of matcher.labels) {
+              // Extract label ID (handles "priority::3" -> "priority")
+              const labelId = extractLabelId(label);
+              if (!isValidLabelId(workspaceRoot, labelId)) {
+                warnings.push({
+                  file,
+                  path: `hooks.${event}[${i}].labels`,
+                  message: `Label "${labelId}" does not exist in workspace`,
+                  severity: 'warning',
+                  suggestion: `Create this label in labels/config.json or use an existing label ID`,
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+  } catch {
+    // JSON already validated, this shouldn't happen
   }
 
-  // Command not in allowlist - format a helpful error message
-  const reason = formatBashRejectionMessage(rejection, permissionsConfig);
-  return { allowed: false, reason };
-}
-
-/**
- * Get the current permissions config (for debugging/display)
- */
-export function getPermissionsConfig(): MergedPermissionsConfig | null {
-  return permissionsConfig;
+  return {
+    valid: contentResult.valid,
+    errors: contentResult.errors,
+    warnings,
+  };
 }
 
 // ============================================================================
@@ -422,6 +447,7 @@ export function initHooks(options: {
   activeSourceSlugs?: string[];
 }): InitHooksResult {
   const configPath = join(options.workspaceRootPath, 'hooks.json');
+  log.debug(`[hooks] initHooks called: configPath=${configPath}`);
 
   // Set up permissions context for command validation
   setPermissionsContext({
@@ -430,6 +456,7 @@ export function initHooks(options: {
   });
 
   if (!existsSync(configPath)) {
+    log.debug(`[hooks] No hooks.json found at ${configPath}`);
     config = { hooks: {} };
     context = {
       sessionId: options.sessionId,
@@ -466,6 +493,15 @@ export function initHooks(options: {
       (sum, matchers) => sum + (matchers?.reduce((s, m) => s + m.hooks.length, 0) ?? 0),
       0
     );
+
+    log.debug(`[hooks] Loaded ${hookCount} hooks from ${configPath}`);
+    log.debug(`[hooks] Events configured: ${Object.keys(config.hooks).join(', ')}`);
+    for (const [event, matchers] of Object.entries(config.hooks)) {
+      log.debug(`[hooks]   ${event}: ${matchers?.length || 0} matchers`);
+      for (const m of matchers || []) {
+        log.debug(`[hooks]     - cron=${m.cron}, timezone=${m.timezone}, hooks=${m.hooks.length}`);
+      }
+    }
 
     return { success: true, errors: [], hookCount };
   } catch (e) {
@@ -527,18 +563,42 @@ export async function emitHook(
   event: HookEvent,
   data: Record<string, unknown>
 ): Promise<HookResult> {
+  log.debug(`[hooks] emitHook called: event=${event}, config exists=${!!config}`);
   if (!config) {
+    log.debug(`[hooks] No config, returning early`);
     return { event, matched: 0, results: [], pendingPrompts: [] };
   }
 
   const matchers = config.hooks[event] ?? [];
-  const matchValue = getMatchValue(event, data);
+  log.debug(`[hooks] Found ${matchers.length} matchers for event ${event}`);
 
-  // Find matching hooks
-  const matchingHooks: HookDefinition[] = [];
-  for (const m of matchers) {
-    if (!m.matcher || new RegExp(m.matcher).test(matchValue)) {
-      matchingHooks.push(...m.hooks);
+  // Find matching hooks with their permission mode and labels
+  type HookWithMeta = { hook: HookDefinition; permissionMode?: 'safe' | 'ask' | 'allow-all'; labels?: string[] };
+  const matchingHooks: HookWithMeta[] = [];
+
+  if (event === 'SchedulerTick') {
+    // Use cron matching for SchedulerTick events
+    log.debug(`[hooks] Checking ${matchers.length} SchedulerTick matchers`);
+    for (const m of matchers) {
+      log.debug(`[hooks] Matcher: cron=${m.cron}, timezone=${m.timezone}`);
+      const cronMatches = m.cron && matchesCron(m.cron, m.timezone);
+      log.debug(`[hooks] Cron matches: ${cronMatches}`);
+      if (m.cron && cronMatches) {
+        for (const hook of m.hooks) {
+          matchingHooks.push({ hook, permissionMode: m.permissionMode, labels: m.labels });
+        }
+      }
+    }
+    log.debug(`[hooks] SchedulerTick: ${matchingHooks.length} hooks matched`);
+  } else {
+    // Use regex matching for other events
+    const matchValue = getMatchValue(event, data);
+    for (const m of matchers) {
+      if (!m.matcher || new RegExp(m.matcher).test(matchValue)) {
+        for (const hook of m.hooks) {
+          matchingHooks.push({ hook, permissionMode: m.permissionMode, labels: m.labels });
+        }
+      }
     }
   }
 
@@ -562,56 +622,42 @@ export async function emitHook(
     env[`CRAFT_${toSnakeCase(key).toUpperCase()}`] = String(value);
   }
 
-  // Separate command and prompt hooks
-  const commandHooks = matchingHooks.filter((h): h is CommandHookDefinition => h.type === 'command');
-  const promptHooks = matchingHooks.filter((h): h is PromptHookDefinition => h.type === 'prompt');
+  // Separate command and prompt hooks (with metadata)
+  type CommandWithMeta = { hook: CommandHookDefinition; permissionMode?: 'safe' | 'ask' | 'allow-all'; labels?: string[] };
+  type PromptWithMeta = { hook: PromptHookDefinition; permissionMode?: 'safe' | 'ask' | 'allow-all'; labels?: string[] };
+
+  const commandHooks: CommandWithMeta[] = matchingHooks
+    .filter((h): h is HookWithMeta & { hook: CommandHookDefinition } => h.hook.type === 'command');
+  const promptHooks: PromptWithMeta[] = matchingHooks
+    .filter((h): h is HookWithMeta & { hook: PromptHookDefinition } => h.hook.type === 'prompt');
 
   // Validate: prompt hooks are only valid for App events
   if (promptHooks.length > 0 && !isAppEvent(event)) {
     console.warn(`[hooks] Prompt hooks are only supported for App events, ignoring ${promptHooks.length} prompt(s) for ${event}`);
   }
 
-  // Execute command hooks in parallel (with permission check)
+  // Execute command hooks in parallel (with permission check via executeCommand)
   const commandResults: HookExecutionResult[] = await Promise.all(
-    commandHooks.map(async (hook) => {
-      // Check if command is allowed
-      const permission = isCommandAllowed(hook.command);
-      if (!permission.allowed) {
-        console.warn(`[hooks] Blocked command: ${hook.command} - ${permission.reason}`);
-        return {
-          type: 'command' as const,
-          command: hook.command,
-          success: false,
-          stdout: '',
-          stderr: permission.reason ?? 'Command blocked by security rules',
-          blocked: true,
-        };
+    commandHooks.map(async ({ hook, permissionMode }) => {
+      const result = await executeCommand(hook.command, {
+        env,
+        timeout: hook.timeout ?? 60000,
+        cwd: context.workingDir,
+        permissionMode,
+      });
+
+      if (result.blocked) {
+        console.warn(`[hooks] Blocked command: ${hook.command} - ${result.stderr}`);
       }
 
-      try {
-        const { stdout, stderr } = await execAsync(hook.command, {
-          env,
-          timeout: hook.timeout ?? 60000,
-          cwd: context.workingDir,
-          shell: '/bin/bash',
-        });
-        return {
-          type: 'command' as const,
-          command: hook.command,
-          success: true,
-          stdout: stdout.trim(),
-          stderr: stderr.trim(),
-        };
-      } catch (e: unknown) {
-        const err = e as { stdout?: string; stderr?: string; message?: string };
-        return {
-          type: 'command' as const,
-          command: hook.command,
-          success: false,
-          stdout: err.stdout?.trim() ?? '',
-          stderr: err.stderr?.trim() ?? err.message ?? 'Unknown error',
-        };
-      }
+      return {
+        type: 'command' as const,
+        command: hook.command,
+        success: result.success,
+        stdout: result.stdout,
+        stderr: result.stderr,
+        blocked: result.blocked,
+      };
     })
   );
 
@@ -620,7 +666,7 @@ export async function emitHook(
   const pendingPrompts: PendingPrompt[] = [];
 
   if (isAppEvent(event)) {
-    for (const hook of promptHooks) {
+    for (const { hook, labels } of promptHooks) {
       // Expand environment variables in the prompt
       const expandedPrompt = expandEnvVars(hook.prompt, env);
 
@@ -634,10 +680,18 @@ export async function emitHook(
         references,
       });
 
+      // Expand environment variables in labels (e.g., "scheduled::$CRAFT_LOCAL_TIME" -> "scheduled::17:30")
+      const expandedLabels = labels?.map(label => {
+        const expanded = expandEnvVars(label, env);
+        console.log(`[hooks] Label expansion: "${label}" -> "${expanded}" (CRAFT_LOCAL_TIME=${env.CRAFT_LOCAL_TIME})`);
+        return expanded;
+      });
+
       pendingPrompts.push({
         sessionId: context.sessionId,
         prompt: expandedPrompt,
         mentions: references.mentions,
+        labels: expandedLabels,
       });
     }
   }
@@ -656,16 +710,23 @@ export async function emitHook(
 
 function getMatchValue(event: HookEvent, data: Record<string, unknown>): string {
   switch (event) {
-    case 'StatusChange':
-      return String(data.newStatus ?? '');
     case 'LabelAdd':
     case 'LabelRemove':
       return String(data.label ?? '');
+    case 'LabelConfigChange':
+      return ''; // Always matches
     case 'PermissionModeChange':
       return String(data.newMode ?? '');
+    case 'FlagChange':
+      return String(data.isFlagged ?? false);
+    case 'TodoStateChange':
+      return String(data.newStatus ?? '');
     case 'PreToolUse':
     case 'PostToolUse':
       return String(data.toolName ?? '');
+    case 'SchedulerTick':
+      // SchedulerTick uses cron matching, not regex
+      return '';
     default:
       return JSON.stringify(data);
   }
@@ -703,11 +764,233 @@ export function parsePromptReferences(prompt: string): PromptReferences {
   // Avoid matching email addresses by requiring whitespace or start of string before @
   const matches = prompt.matchAll(/(?:^|[\s(])@([a-zA-Z][a-zA-Z0-9-]*)/g);
   for (const match of matches) {
-    const mention = match[1].toLowerCase();
-    if (!mentions.includes(mention)) {
-      mentions.push(mention);
+    const captured = match[1];
+    if (captured) {
+      const mention = captured.toLowerCase();
+      if (!mentions.includes(mention)) {
+        mentions.push(mention);
+      }
     }
   }
 
   return { mentions };
 }
+
+// ============================================================================
+// SDK Hook Integration
+// ============================================================================
+
+/**
+ * SDK hook input type - union of all possible SDK event inputs
+ */
+export interface SdkHookInput {
+  hook_event_name: string;
+  // Tool events
+  tool_name?: string;
+  tool_input?: Record<string, unknown>;
+  tool_response?: string;
+  // Session events
+  source?: string;  // startup, resume, clear, compact
+  model?: string;
+  // Subagent events
+  agent_id?: string;
+  agent_type?: string;
+  // User prompt events
+  prompt?: string;
+  // Notification events
+  message?: string;
+  title?: string;
+  // Error events
+  error?: string;
+}
+
+/**
+ * Build environment variables from SDK hook input.
+ * Maps SDK input fields to CRAFT_* environment variables.
+ */
+export function buildEnvFromSdkInput(event: AgentEvent, input: SdkHookInput): Record<string, string> {
+  const env: Record<string, string> = {
+    ...process.env as Record<string, string>,
+    CRAFT_EVENT: event,
+  };
+
+  // Add context if available
+  if (context.sessionId) env.CRAFT_SESSION_ID = context.sessionId;
+  if (context.workspaceId) env.CRAFT_WORKSPACE_ID = context.workspaceId;
+  if (context.workingDir) env.CRAFT_WORKING_DIR = context.workingDir;
+
+  // Map SDK input fields to env vars based on event type
+  // User-provided values are sanitized to prevent shell injection
+  switch (event) {
+    case 'PreToolUse':
+    case 'PostToolUse':
+      if (input.tool_name) env.CRAFT_TOOL_NAME = input.tool_name; // Tool names are internal, not user input
+      if (input.tool_input) env.CRAFT_TOOL_INPUT = sanitizeForShell(JSON.stringify(input.tool_input));
+      if (input.tool_response) env.CRAFT_TOOL_RESPONSE = sanitizeForShell(input.tool_response);
+      break;
+
+    case 'PostToolUseFailure':
+      if (input.tool_name) env.CRAFT_TOOL_NAME = input.tool_name;
+      if (input.tool_input) env.CRAFT_TOOL_INPUT = sanitizeForShell(JSON.stringify(input.tool_input));
+      if (input.error) env.CRAFT_ERROR = sanitizeForShell(input.error);
+      break;
+
+    case 'UserPromptSubmit':
+      // User prompts are user-controlled and must be sanitized
+      if (input.prompt) env.CRAFT_PROMPT = sanitizeForShell(input.prompt);
+      break;
+
+    case 'SessionStart':
+      if (input.source) env.CRAFT_SOURCE = input.source; // Internal values
+      if (input.model) env.CRAFT_MODEL = input.model;
+      break;
+
+    case 'SubagentStart':
+    case 'SubagentStop':
+      if (input.agent_id) env.CRAFT_AGENT_ID = input.agent_id; // Internal values
+      if (input.agent_type) env.CRAFT_AGENT_TYPE = input.agent_type;
+      break;
+
+    case 'Notification':
+      // Notification content could contain user data
+      if (input.message) env.CRAFT_MESSAGE = sanitizeForShell(input.message);
+      if (input.title) env.CRAFT_TITLE = sanitizeForShell(input.title);
+      break;
+
+    // SessionEnd, Stop, PreCompact, PermissionRequest, Setup have no additional fields
+    default:
+      break;
+  }
+
+  return env;
+}
+
+/**
+ * SDK hook callback signature (matches Claude SDK HookCallback type)
+ */
+export type SdkHookCallback = (
+  input: SdkHookInput,
+  toolUseId: string,
+  options: { signal?: AbortSignal }
+) => Promise<{ continue: boolean; reason?: string }>;
+
+/**
+ * SDK hook matcher format (matches Claude SDK HookCallbackMatcher type)
+ */
+export interface SdkHookCallbackMatcher {
+  matcher?: string;
+  timeout?: number;
+  hooks: SdkHookCallback[];
+}
+
+/**
+ * Execute hooks for a matcher and return SDK-compatible result.
+ * Runs command hooks and returns appropriate response.
+ */
+async function executeHooksForSdkMatcher(
+  matcher: HookMatcher,
+  event: AgentEvent,
+  env: Record<string, string>,
+  signal?: AbortSignal
+): Promise<{ continue: boolean; reason?: string }> {
+  // Filter to command hooks only (prompt hooks not supported for SDK events)
+  const commandHooks = matcher.hooks.filter((h): h is CommandHookDefinition => h.type === 'command');
+
+  if (commandHooks.length === 0) {
+    return { continue: true };
+  }
+
+  // Execute command hooks
+  for (const hook of commandHooks) {
+    // Check for abort
+    if (signal?.aborted) {
+      return { continue: false, reason: 'Aborted' };
+    }
+
+    const result = await executeCommand(hook.command, {
+      env,
+      timeout: hook.timeout ?? 60000,
+      cwd: context.workingDir,
+      permissionMode: matcher.permissionMode,
+    });
+
+    if (result.blocked) {
+      console.warn(`[hooks] Blocked command in ${event}: ${hook.command} - ${result.stderr}`);
+      continue; // Skip this hook but continue with others
+    }
+
+    if (!result.success) {
+      console.warn(`[hooks] Command failed in ${event}: ${hook.command}`, result.stderr);
+      // Continue with other hooks even if one fails
+    }
+  }
+
+  return { continue: true };
+}
+
+/**
+ * Build SDK hooks callbacks from hooks.json definitions.
+ * This is the bridge between hooks.json and the Claude SDK hook system.
+ *
+ * Returns a partial record of event name → array of hook matchers in SDK format.
+ * The caller should merge these with any internal hooks.
+ */
+export function buildSdkHooks(): Partial<Record<AgentEvent, SdkHookCallbackMatcher[]>> {
+  if (!config) return {};
+
+  const sdkHooks: Partial<Record<AgentEvent, SdkHookCallbackMatcher[]>> = {};
+
+  for (const event of AGENT_EVENTS) {
+    const matchers = config.hooks[event];
+    if (!matchers?.length) continue;
+
+    sdkHooks[event] = matchers.map(matcher => ({
+      matcher: matcher.matcher,
+      timeout: 30,
+      hooks: [async (input: SdkHookInput, _toolUseId: string, options: { signal?: AbortSignal }) => {
+        // Build environment variables from SDK input
+        const env = buildEnvFromSdkInput(event, input);
+
+        // Execute hooks using existing command execution
+        const result = await executeHooksForSdkMatcher(matcher, event, env, options.signal);
+
+        return result;
+      }],
+    }));
+  }
+
+  return sdkHooks;
+}
+
+/**
+ * Get the current hooks config (for external access)
+ */
+export function getHooksConfig(): HooksConfig | null {
+  return config;
+}
+
+// Re-export emitter for convenience
+export { HookEmitter, type SessionMetadataChange, type HookEmitterOptions, type HookEmitResult, type SessionMetadataSnapshot } from './emitter.ts';
+
+// Re-export event logger
+export { HookEventLogger, type LoggedHookEvent, type LoggedHookEventInput } from './event-logger.ts';
+
+// Re-export schemas for external validation
+export { HooksConfigSchema, zodErrorToIssues, VALID_EVENTS } from './schemas.ts';
+
+// Re-export security utilities
+export { sanitizeForShell } from './security.ts';
+
+// Re-export cron matching
+export { matchesCron } from './cron-matcher.ts';
+
+// Re-export command executor utilities
+export {
+  setPermissionsContext,
+  clearPermissionsContext,
+  isCommandAllowed,
+  getPermissionsConfig,
+  executeCommand,
+  type CommandExecutionOptions,
+  type CommandExecutionResult,
+} from './command-executor.ts';

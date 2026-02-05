@@ -635,7 +635,8 @@ export class SessionManager {
             event: 'LabelConfigChange',
             payload: { workspaceId },
           }]).then((results) => {
-            if (results.length > 0 && results[0].result.matched > 0) {
+            const firstResult = results[0]
+            if (firstResult?.result?.matched && firstResult.result.matched > 0) {
               sessionLog.info(`[Hooks] Emitted LabelConfigChange hook`)
             }
           }).catch((error) => {
@@ -715,9 +716,48 @@ export class SessionManager {
         // Emit hooks based on file-to-file diff
         const emitter = this.hookEmitters.get(workspaceRootPath)
         if (emitter) {
-          emitter.diffAndEmit(prev, next, sessionId).then((results) => {
+          emitter.diffAndEmit(prev, next, sessionId).then(async (results) => {
             if (results.length > 0) {
               sessionLog.info(`[Hooks] Emitted ${results.length} hook(s) for session ${sessionId}`)
+            }
+
+            // Collect and execute pending prompts from hook results
+            const allPendingPrompts: Array<{
+              prompt: string
+              mentions: string[]
+              labels?: string[]
+            }> = []
+
+            for (const result of results) {
+              if (result?.result?.pendingPrompts) {
+                for (const pending of result.result.pendingPrompts) {
+                  allPendingPrompts.push(pending)
+                }
+              }
+            }
+
+            if (allPendingPrompts.length > 0) {
+              sessionLog.info(`[Hooks] Processing ${allPendingPrompts.length} pending prompt(s) from session ${sessionId}`)
+              const promptResults = await Promise.allSettled(
+                allPendingPrompts.map(pending =>
+                  this.executePromptHook(
+                    managed.workspace.id,
+                    workspaceRootPath,
+                    pending.prompt,
+                    pending.mentions,
+                    { labels: pending.labels }
+                  )
+                )
+              )
+
+              // Log any failures
+              for (const [idx, result] of promptResults.entries()) {
+                if (result.status === 'rejected') {
+                  sessionLog.error(`[Hooks] Failed to execute prompt hook ${idx + 1}:`, result.reason)
+                } else if (result.status === 'fulfilled') {
+                  sessionLog.info(`[Hooks] Created session ${result.value.sessionId} from prompt hook`)
+                }
+              }
             }
           }).catch((error) => {
             sessionLog.error(`[Hooks] Failed to emit hooks for session ${sessionId}:`, error)
@@ -820,21 +860,45 @@ export class SessionManager {
                 event: 'SchedulerTick',
                 payload: payload as unknown as Record<string, unknown>,
               }])
-              sessionLog.info(`[Scheduler] Emit results: ${JSON.stringify(results.map(r => ({ event: r.event, matched: r.result.matched, pendingPrompts: r.result.pendingPrompts.length })))}`)
+              sessionLog.info(`[Scheduler] Emit results: ${JSON.stringify(results.map(r => ({
+                event: r.event,
+                matched: r.result?.matched ?? 0,
+                pendingPrompts: r.result?.pendingPrompts?.length ?? 0
+              })))}`)
 
-              // Process pending prompts from hook results
+              // Collect all pending prompts from hook results
+              const allPendingPrompts: Array<{
+                prompt: string
+                mentions: string[]
+                labels?: string[]
+              }> = []
+
               for (const result of results) {
-                for (const pending of result.result.pendingPrompts) {
-                  try {
-                    await this.executePromptHook(
+                if (result?.result?.pendingPrompts) {
+                  for (const pending of result.result.pendingPrompts) {
+                    allPendingPrompts.push(pending)
+                  }
+                }
+              }
+
+              // Execute all prompts in parallel for better performance
+              if (allPendingPrompts.length > 0) {
+                const promptResults = await Promise.allSettled(
+                  allPendingPrompts.map(pending =>
+                    this.executePromptHook(
                       wsId,
                       wsPath,
                       pending.prompt,
                       pending.mentions,
                       { labels: pending.labels }
                     )
-                  } catch (error) {
-                    sessionLog.error(`[Scheduler] Failed to execute prompt hook:`, error)
+                  )
+                )
+
+                // Log any failures
+                for (const [idx, result] of promptResults.entries()) {
+                  if (result.status === 'rejected') {
+                    sessionLog.error(`[Scheduler] Failed to execute prompt hook ${idx + 1}:`, result.reason)
                   }
                 }
               }
@@ -2625,6 +2689,9 @@ export class SessionManager {
       managed.agent.dispose()
     }
 
+    // Clean up hook metadata cache for this session (prevents memory leak)
+    this.lastKnownMetadata.delete(sessionId)
+
     this.sessions.delete(sessionId)
 
     // Clean up last known metadata for hook diffing
@@ -4134,6 +4201,20 @@ To view this task's output:
     for (const sessionId of this.sessions.keys()) {
       unregisterSessionScopedToolCallbacks(sessionId)
     }
+
+    // Dispose all hook emitters and their event loggers
+    for (const [workspacePath, emitter] of this.hookEmitters) {
+      try {
+        emitter.dispose()
+        sessionLog.info(`Disposed hook emitter for ${workspacePath}`)
+      } catch (error) {
+        sessionLog.error(`Failed to dispose hook emitter for ${workspacePath}:`, error)
+      }
+    }
+    this.hookEmitters.clear()
+
+    // Clear hook metadata cache
+    this.lastKnownMetadata.clear()
 
     sessionLog.info('Cleanup complete')
   }

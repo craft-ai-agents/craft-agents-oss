@@ -41,7 +41,7 @@ describe('hooks-simple', () => {
   });
 
   test('emitHook returns empty when no config', async () => {
-    const result = await emitHook('StatusChange', { oldStatus: 'a', newStatus: 'b' });
+    const result = await emitHook('TodoStateChange', { oldStatus: 'a', newStatus: 'b' });
     expect(result.matched).toBe(0);
   });
 
@@ -49,7 +49,7 @@ describe('hooks-simple', () => {
     // Use 'ls' which is in the default allowlist
     const config: HooksConfig = {
       hooks: {
-        StatusChange: [
+        TodoStateChange: [
           { hooks: [{ type: 'command', command: 'ls' }] },
         ],
       },
@@ -58,7 +58,7 @@ describe('hooks-simple', () => {
 
     initHooks({ workspaceRootPath: testDir });
 
-    const result = await emitHook('StatusChange', { oldStatus: 'todo', newStatus: 'done' });
+    const result = await emitHook('TodoStateChange', { oldStatus: 'todo', newStatus: 'done' });
 
     expect(result.matched).toBe(1);
     // 'ls' is in the global allowlist, so it should execute successfully
@@ -70,7 +70,7 @@ describe('hooks-simple', () => {
     // Use 'ls' which is in the default allowlist
     const config: HooksConfig = {
       hooks: {
-        StatusChange: [
+        TodoStateChange: [
           { matcher: 'done', hooks: [{ type: 'command', command: 'ls' }] },
         ],
       },
@@ -80,16 +80,16 @@ describe('hooks-simple', () => {
     initHooks({ workspaceRootPath: testDir });
 
     // Should NOT match (newStatus doesn't contain 'done')
-    let result = await emitHook('StatusChange', { newStatus: 'in-progress' });
+    let result = await emitHook('TodoStateChange', { newStatus: 'in-progress' });
     expect(result.matched).toBe(0);
 
     // Should match (newStatus contains 'done')
-    result = await emitHook('StatusChange', { newStatus: 'done' });
+    result = await emitHook('TodoStateChange', { newStatus: 'done' });
     expect(result.matched).toBe(1);
   });
 
   test('isAppEvent identifies event types', () => {
-    expect(isAppEvent('StatusChange')).toBe(true);
+    expect(isAppEvent('TodoStateChange')).toBe(true);
     expect(isAppEvent('LabelAdd')).toBe(true);
     expect(isAppEvent('PreToolUse')).toBe(false);
   });
@@ -99,7 +99,7 @@ describe('hooks-simple', () => {
       const config = {
         version: 1,
         hooks: {
-          StatusChange: [
+          TodoStateChange: [
             { hooks: [{ type: 'command', command: 'echo test' }] },
           ],
         },
@@ -114,7 +114,7 @@ describe('hooks-simple', () => {
       const config = {
         hooks: {
           InvalidEvent: [{ hooks: [{ type: 'command', command: 'echo' }] }],
-          StatusChange: [{ hooks: [{ type: 'command', command: 'echo valid' }] }],
+          TodoStateChange: [{ hooks: [{ type: 'command', command: 'echo valid' }] }],
         },
       };
 
@@ -124,13 +124,13 @@ describe('hooks-simple', () => {
       // Invalid event should be filtered out
       expect(result.config?.hooks['InvalidEvent' as keyof typeof result.config.hooks]).toBeUndefined();
       // Valid event should remain
-      expect(result.config?.hooks.StatusChange).toHaveLength(1);
+      expect(result.config?.hooks.TodoStateChange).toHaveLength(1);
     });
 
     test('validateHooksConfig rejects empty command', () => {
       const config = {
         hooks: {
-          StatusChange: [{ hooks: [{ type: 'command', command: '' }] }],
+          TodoStateChange: [{ hooks: [{ type: 'command', command: '' }] }],
         },
       };
 
@@ -142,7 +142,7 @@ describe('hooks-simple', () => {
       // Missing required 'hooks' array for matcher
       const config = {
         hooks: {
-          StatusChange: [{ matcher: 'test' }], // Missing hooks array
+          TodoStateChange: [{ matcher: 'test' }], // Missing hooks array
         },
       };
       writeFileSync(join(testDir, 'hooks.json'), JSON.stringify(config));
@@ -156,7 +156,7 @@ describe('hooks-simple', () => {
     test('validateHooksContent returns ValidationResult format', () => {
       const jsonContent = JSON.stringify({
         hooks: {
-          StatusChange: [{ hooks: [{ type: 'command', command: 'ls' }] }],
+          TodoStateChange: [{ hooks: [{ type: 'command', command: 'ls' }] }],
         },
       });
 
@@ -179,7 +179,7 @@ describe('hooks-simple', () => {
     test('validateHooksContent catches invalid regex in matcher', () => {
       const jsonContent = JSON.stringify({
         hooks: {
-          StatusChange: [
+          TodoStateChange: [
             { matcher: '[invalid(regex', hooks: [{ type: 'command', command: 'ls' }] },
           ],
         },
@@ -238,7 +238,7 @@ describe('hooks-simple', () => {
     test('blocked commands are not executed', async () => {
       const config: HooksConfig = {
         hooks: {
-          StatusChange: [
+          TodoStateChange: [
             { hooks: [{ type: 'command', command: 'rm -rf /' }] },
           ],
         },
@@ -248,7 +248,7 @@ describe('hooks-simple', () => {
       // Initialize with permissions context
       initHooks({ workspaceRootPath: testDir });
 
-      const result = await emitHook('StatusChange', { newStatus: 'done' });
+      const result = await emitHook('TodoStateChange', { newStatus: 'done' });
 
       expect(result.matched).toBe(1);
       expect(result.results[0].success).toBe(false);
@@ -259,7 +259,7 @@ describe('hooks-simple', () => {
   test('getAgentHooks returns only agent hooks', () => {
     const config: HooksConfig = {
       hooks: {
-        StatusChange: [{ hooks: [{ type: 'command', command: 'echo app' }] }],
+        TodoStateChange: [{ hooks: [{ type: 'command', command: 'echo app' }] }],
         PreToolUse: [{ hooks: [{ type: 'command', command: 'echo agent' }] }],
         PostToolUse: [{ hooks: [{ type: 'command', command: 'echo agent2' }] }],
       },
@@ -272,14 +272,14 @@ describe('hooks-simple', () => {
 
     expect(agentHooks.PreToolUse).toBeDefined();
     expect(agentHooks.PostToolUse).toBeDefined();
-    expect((agentHooks as Record<string, unknown>).StatusChange).toBeUndefined();
+    expect((agentHooks as Record<string, unknown>).TodoStateChange).toBeUndefined();
   });
 
   describe('prompt hooks', () => {
     test('prompt hooks are returned in pendingPrompts for App events', async () => {
       const config: HooksConfig = {
         hooks: {
-          StatusChange: [
+          TodoStateChange: [
             { hooks: [{ type: 'prompt', prompt: 'Status changed to $CRAFT_NEW_STATUS' }] },
           ],
         },
@@ -288,7 +288,7 @@ describe('hooks-simple', () => {
 
       initHooks({ workspaceRootPath: testDir, sessionId: 'test-session' });
 
-      const result = await emitHook('StatusChange', { newStatus: 'done' });
+      const result = await emitHook('TodoStateChange', { newStatus: 'done' });
 
       expect(result.matched).toBe(1);
       expect(result.pendingPrompts).toHaveLength(1);
@@ -337,7 +337,7 @@ describe('hooks-simple', () => {
     test('mixed command and prompt hooks work together', async () => {
       const config: HooksConfig = {
         hooks: {
-          StatusChange: [
+          TodoStateChange: [
             {
               hooks: [
                 { type: 'command', command: 'ls' },
@@ -351,7 +351,7 @@ describe('hooks-simple', () => {
 
       initHooks({ workspaceRootPath: testDir });
 
-      const result = await emitHook('StatusChange', { newStatus: 'in-progress' });
+      const result = await emitHook('TodoStateChange', { newStatus: 'in-progress' });
 
       expect(result.matched).toBe(2);
       expect(result.results).toHaveLength(2);
@@ -372,7 +372,7 @@ describe('hooks-simple', () => {
     test('prompt hooks parse @mentions (sources and skills)', async () => {
       const config: HooksConfig = {
         hooks: {
-          StatusChange: [
+          TodoStateChange: [
             { hooks: [{ type: 'prompt', prompt: 'Create a ticket in @linear and run @commit' }] },
           ],
         },
@@ -381,7 +381,7 @@ describe('hooks-simple', () => {
 
       initHooks({ workspaceRootPath: testDir });
 
-      const result = await emitHook('StatusChange', { newStatus: 'done' });
+      const result = await emitHook('TodoStateChange', { newStatus: 'done' });
 
       expect(result.pendingPrompts).toHaveLength(1);
       expect(result.pendingPrompts[0].mentions).toContain('linear');
@@ -391,7 +391,7 @@ describe('hooks-simple', () => {
     test('prompt hooks parse multiple @mentions', async () => {
       const config: HooksConfig = {
         hooks: {
-          StatusChange: [
+          TodoStateChange: [
             { hooks: [{ type: 'prompt', prompt: 'Use @github then @linear and @slack to notify everyone' }] },
           ],
         },
@@ -400,7 +400,7 @@ describe('hooks-simple', () => {
 
       initHooks({ workspaceRootPath: testDir });
 
-      const result = await emitHook('StatusChange', { newStatus: 'done' });
+      const result = await emitHook('TodoStateChange', { newStatus: 'done' });
 
       expect(result.pendingPrompts).toHaveLength(1);
       expect(result.pendingPrompts[0].mentions).toHaveLength(3);
@@ -412,7 +412,7 @@ describe('hooks-simple', () => {
     test('prompt hooks deduplicate @mentions', async () => {
       const config: HooksConfig = {
         hooks: {
-          StatusChange: [
+          TodoStateChange: [
             { hooks: [{ type: 'prompt', prompt: 'Use @linear to create ticket, then @linear again' }] },
           ],
         },
@@ -421,7 +421,7 @@ describe('hooks-simple', () => {
 
       initHooks({ workspaceRootPath: testDir });
 
-      const result = await emitHook('StatusChange', { newStatus: 'done' });
+      const result = await emitHook('TodoStateChange', { newStatus: 'done' });
 
       expect(result.pendingPrompts).toHaveLength(1);
       expect(result.pendingPrompts[0].mentions).toHaveLength(1);
@@ -431,7 +431,7 @@ describe('hooks-simple', () => {
     test('validateHooksContent accepts prompt hooks', () => {
       const jsonContent = JSON.stringify({
         hooks: {
-          StatusChange: [
+          TodoStateChange: [
             { hooks: [{ type: 'prompt', prompt: 'Test prompt' }] },
           ],
         },
@@ -446,7 +446,7 @@ describe('hooks-simple', () => {
     test('validateHooksContent rejects empty prompt', () => {
       const jsonContent = JSON.stringify({
         hooks: {
-          StatusChange: [
+          TodoStateChange: [
             { hooks: [{ type: 'prompt', prompt: '' }] },
           ],
         },

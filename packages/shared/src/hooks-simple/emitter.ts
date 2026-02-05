@@ -9,8 +9,12 @@
  * (SessionManager) handles state management.
  */
 
-import { emitHook, initHooks, type HookResult, type AppEvent } from './index.ts';
+import { emitHook, initHooks, clearHooks, type HookResult, type AppEvent } from './index.ts';
 import type { HookEventLogger } from './event-logger.ts';
+import { createLogger } from '../utils/debug.ts';
+
+// Use shared debug infrastructure (controlled via CRAFT_DEBUG=1)
+const log = createLogger('hooks-emitter');
 
 // ============================================================================
 // Types
@@ -69,16 +73,16 @@ export class HookEmitter {
    * Safe to call multiple times - will only initialize once.
    */
   async initialize(): Promise<{ success: boolean; errors: string[]; hookCount: number }> {
-    if (this.initialized) {
-      return { success: true, errors: [], hookCount: 0 };
-    }
+    log.debug(`[HookEmitter] initialize called, already initialized: ${this.initialized}`);
 
+    // Allow re-initialization (for config reload)
     const result = initHooks({
       workspaceRootPath: this.options.workspaceRootPath,
       workspaceId: this.options.workspaceId,
       activeSourceSlugs: this.options.activeSourceSlugs,
     });
 
+    log.debug(`[HookEmitter] initHooks result: success=${result.success}, hookCount=${result.hookCount}, errors=${result.errors.join(', ')}`);
     this.initialized = true;
     return result;
   }
@@ -171,15 +175,19 @@ export class HookEmitter {
    * prevent other hooks from running.
    */
   async emitAll(changes: SessionMetadataChange[]): Promise<HookEmitResult[]> {
+    log.debug(`[HookEmitter] emitAll called with ${changes.length} changes`);
     const results: HookEmitResult[] = [];
 
     for (const change of changes) {
+      log.debug(`[HookEmitter] Processing change: event=${change.event}`);
       const startTime = Date.now();
 
       try {
         this.options.onEmit?.(change.event, change.payload);
 
+        log.debug(`[HookEmitter] Calling emitHook for ${change.event}`);
         const result = await emitHook(change.event, change.payload);
+        log.debug(`[HookEmitter] emitHook result: matched=${result.matched}, pendingPrompts=${result.pendingPrompts.length}`);
         const durationMs = Date.now() - startTime;
 
         // Log event to event stream
@@ -251,5 +259,24 @@ export class HookEmitter {
     }
 
     return this.emitAll(changes);
+  }
+
+  /**
+   * Dispose the emitter, cleaning up resources.
+   * Flushes the event logger and clears hooks state.
+   */
+  async dispose(): Promise<void> {
+    log.debug(`[HookEmitter] Disposing emitter for ${this.options.workspaceRootPath}`);
+
+    // Flush and close the event logger
+    if (this.options.eventLogger) {
+      await this.options.eventLogger.dispose();
+    }
+
+    // Clear hooks state for this workspace
+    clearHooks();
+
+    this.initialized = false;
+    log.debug(`[HookEmitter] Disposed`);
   }
 }

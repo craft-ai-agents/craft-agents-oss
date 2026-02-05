@@ -332,11 +332,12 @@ export function validateAll(workspaceId?: string, workspaceRoot?: string): Valid
     results.push(validateAllSources(workspaceId));
   }
 
-  // Include skill, status, label, and permissions validation if workspaceRoot is provided
+  // Include skill, status, label, hooks, and permissions validation if workspaceRoot is provided
   if (workspaceRoot) {
     results.push(validateAllSkills(workspaceRoot));
     results.push(validateStatuses(workspaceRoot));
     results.push(validateLabels(workspaceRoot));
+    results.push(validateHooks(workspaceRoot));
     results.push(validateAllPermissions(workspaceRoot));
   }
 
@@ -1307,7 +1308,7 @@ import {
   getSourcePermissionsPath,
   getAppPermissionsDir,
 } from '../agent/permissions-config.ts';
-import { validateHooksContent } from '../hooks-simple/index.ts';
+import { validateHooksContent, validateHooks } from '../hooks-simple/index.ts';
 
 /**
  * Internal: Validate a single permissions.json file
