@@ -92,11 +92,23 @@ export function rangeSelect(
     return state
   }
 
-  // Clamp indices to valid range
+  // Clamp target index to valid range
   const clampedToIndex = Math.max(0, Math.min(toIndex, items.length - 1))
-  const anchorIndex = state.anchorIndex >= 0 && state.anchorIndex < items.length
-    ? state.anchorIndex
-    : 0
+
+  // Find anchor position using key-based lookup (handles reordering and stale indices)
+  let anchorIndex: number
+  if (state.anchorIndex >= 0 && state.anchorIndex < items.length &&
+      items[state.anchorIndex] === state.anchorId) {
+    // Fast path: cached index is still valid
+    anchorIndex = state.anchorIndex
+  } else if (state.anchorId) {
+    // Look up anchor by ID (handles reordering)
+    const foundIndex = items.indexOf(state.anchorId)
+    anchorIndex = foundIndex >= 0 ? foundIndex : clampedToIndex
+  } else {
+    // No anchor set - use target as anchor (first shift+click/arrow)
+    anchorIndex = clampedToIndex
+  }
 
   // Determine range direction
   const startIndex = Math.min(anchorIndex, clampedToIndex)

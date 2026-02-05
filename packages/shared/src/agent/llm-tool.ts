@@ -24,7 +24,7 @@ type ToolResult = {
 };
 import { readFile } from 'fs/promises';
 import { existsSync, statSync } from 'fs';
-import { getAnthropicApiKey, getAnthropicBaseUrl, getClaudeOAuthToken } from '../config/storage.ts';
+import { getAnthropicApiKey, getClaudeOAuthToken, getDefaultLlmConnection, getLlmConnection } from '../config/storage.ts';
 
 // Import allowed models from centralized registry
 import { ALLOWED_LLM_TOOL_MODELS } from '../config/models.ts';
@@ -577,7 +577,9 @@ For large files (>2000 lines), use {path, startLine, endLine} to select a portio
       // BUILD CLIENT
       // ========================================
 
-      const baseUrl = getAnthropicBaseUrl();
+      const defaultConnSlug = getDefaultLlmConnection();
+      const defaultConn = defaultConnSlug ? getLlmConnection(defaultConnSlug) : null;
+      const baseUrl = defaultConn?.baseUrl;
 
       // Build client with API key (OAuth-only case already handled above with clear error)
       const client = new Anthropic({

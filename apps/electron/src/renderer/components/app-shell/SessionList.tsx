@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react"
+import { useAction, useActionLabel } from "@/actions"
 import { formatDistanceToNow, formatDistanceToNowStrict, isToday, isYesterday, format, startOfDay } from "date-fns"
 import type { Locale } from "date-fns"
 import { MoreHorizontal, Flag, Copy, Link2Off, CloudUpload, Globe, RefreshCw, Inbox, Check, Archive } from "lucide-react"
@@ -48,6 +49,7 @@ import { Input } from "@/components/ui/input"
 import { RenameDialog } from "@/components/ui/rename-dialog"
 import { useSessionSelection } from "@/hooks/useSession"
 import { useFocusZone, useRovingTabIndex } from "@/hooks/keyboard"
+import { useEscapeInterrupt } from "@/context/EscapeInterruptContext"
 import { useNavigation, useNavigationState, routes, isSessionsNavigation, type SessionFilter } from "@/contexts/NavigationContext"
 import { useFocusContext } from "@/context/FocusContext"
 import { getSessionTitle } from "@/utils/session"
@@ -368,6 +370,10 @@ function SessionItem({
   // Tracks which label badge's LabelValuePopover is open (by index), null = all closed
   const [openLabelIndex, setOpenLabelIndex] = useState<number | null>(null)
 
+  // Get hotkey labels from centralized action registry
+  const nextMatchHotkey = useActionLabel('chat.nextSearchMatch').hotkey
+  const prevMatchHotkey = useActionLabel('chat.prevSearchMatch').hotkey
+
   // Get current todo state from session properties
   const currentTodoState = getSessionTodoState(item)
 
@@ -447,6 +453,10 @@ function SessionItem({
       <ContextMenu modal={true} onOpenChange={setContextMenuOpen}>
         <ContextMenuTrigger asChild>
           <div className="session-content relative group select-none pl-2 mr-2">
+        {/* Multi-select indicator bar */}
+        {isInMultiSelect && (
+          <div className="absolute left-0 inset-y-0 w-[2px] bg-accent" />
+        )}
         {/* Todo State Icon - positioned absolutely, outside the button */}
         <Popover modal={true} open={todoMenuOpen} onOpenChange={setTodoMenuOpen}>
           <PopoverTrigger asChild>
@@ -499,11 +509,10 @@ function SessionItem({
             "flex w-full items-start gap-2 pl-2 pr-4 py-3 text-left text-sm outline-none rounded-[8px]",
             // Fast hover transition (75ms vs default 150ms), selection is instant
             "transition-[background-color] duration-75",
-            isSelected
-              ? "bg-foreground/5 hover:bg-foreground/7"
-              : isInMultiSelect
-                ? "bg-accent/5 hover:bg-accent/10"
-                : "hover:bg-foreground/2"
+            // Unified selection states: same color family, graduated intensity
+            (isSelected || isInMultiSelect)
+              ? "bg-foreground/3"
+              : "hover:bg-foreground/2"
           )}
           // Handle all click logic in onMouseDown for proper modifier key handling
           onMouseDown={handleClick}
@@ -713,7 +722,7 @@ function SessionItem({
                   : "bg-yellow-300/10 border border-yellow-600/20 text-yellow-800"
               )}
               style={{ boxShadow: isSelected ? '0 1px 2px 0 rgba(234, 179, 8, 0.3)' : '0 1px 2px 0 rgba(133, 77, 14, 0.15)' }}
-              title="Matches found (⌘G next, ⌘⇧G prev)"
+              title={`Matches found (${nextMatchHotkey} next, ${prevMatchHotkey} prev)`}
             >
               {chatMatchCount}
             </span>
@@ -871,10 +880,9 @@ export type { TodoStateId }
  *
  * Keyboard shortcuts:
  * - Arrow Up/Down: Navigate and select sessions (immediate selection)
+ * - Arrow Left/Right: Navigate between zones
  * - Enter: Focus chat input
- * - Delete/Backspace: Delete session
- * - C: Mark complete/incomplete
- * - R: Rename session
+ * - Home/End: Jump to first/last session
  */
 export function SessionList({
   items,
@@ -915,6 +923,7 @@ export function SessionList({
   } = useSessionSelection()
   const { navigate } = useNavigation()
   const navState = useNavigationState()
+  const { showEscapeOverlay } = useEscapeInterrupt()
 
   // Pre-flatten label tree once for efficient ID lookups in each SessionItem
   const flatLabels = useMemo(() => flattenLabels(labels), [labels])
@@ -1176,7 +1185,7 @@ export function SessionList({
   const { zoneRef, isFocused, shouldMoveDOMFocus } = useFocusZone({ zoneId: 'session-list' })
 
   // Handle keyboard navigation (arrow keys) - scrolls into view and selects
-  // When multi-select is active, only scrolls (preserves multi-selection)
+  // Arrow key during multi-select exits multi-select and navigates (provides keyboard escape hatch)
   const handleNavigate = useCallback((item: SessionMeta, index: number) => {
     // Scroll the item into view
     requestAnimationFrame(() => {
@@ -1184,21 +1193,24 @@ export function SessionList({
       element?.scrollIntoView({ block: 'nearest', behavior: 'instant' })
     })
 
-    // Select the session (unless multi-select is active)
-    if (!isMultiSelectActive) {
-      selectSession(item.id, index)
-      // Navigate using view routes to preserve filter context
-      if (!currentFilter || currentFilter.kind === 'allSessions') {
-        navigate(routes.view.allSessions(item.id))
-      } else if (currentFilter.kind === 'flagged') {
-        navigate(routes.view.flagged(item.id))
-      } else if (currentFilter.kind === 'archived') {
-        navigate(routes.view.archived(item.id))
-      } else if (currentFilter.kind === 'state') {
-        navigate(routes.view.state(currentFilter.stateId, item.id))
-      }
+    // Exit multi-select on plain arrow navigation (provides keyboard escape hatch)
+    if (isMultiSelectActive) {
+      clearMultiSelect()
     }
-  }, [isMultiSelectActive, selectSession, navigate, currentFilter])
+
+    // Select the session and navigate
+    selectSession(item.id, index)
+    // Navigate using view routes to preserve filter context
+    if (!currentFilter || currentFilter.kind === 'allSessions') {
+      navigate(routes.view.allSessions(item.id))
+    } else if (currentFilter.kind === 'flagged') {
+      navigate(routes.view.flagged(item.id))
+    } else if (currentFilter.kind === 'archived') {
+      navigate(routes.view.archived(item.id))
+    } else if (currentFilter.kind === 'state') {
+      navigate(routes.view.state(currentFilter.stateId, item.id))
+    }
+  }, [isMultiSelectActive, clearMultiSelect, selectSession, navigate, currentFilter])
 
   // Handle click selection - selects the item and navigates to it
   const handleSelectSession = useCallback((item: SessionMeta, index: number) => {
@@ -1222,7 +1234,8 @@ export function SessionList({
     toggleSession(item.id, index)
   }, [focusZone, toggleSession])
 
-  // Handle range select (shift+click)
+  // Handle range select (shift+click or shift+arrow)
+  // No navigation - MultiSelectPanel shows automatically via isMultiSelectActive
   const handleRangeSelect = useCallback((toIndex: number) => {
     // Activate zone for keyboard shortcuts, but don't steal DOM focus from chat input
     focusZone('session-list', { intent: 'click', moveFocus: false })
@@ -1321,33 +1334,26 @@ export function SessionList({
   // requires partial keyboard support (arrows yes, Cmd+A no).
   const isKeyboardEligible = isFocused || (searchActive && isSearchInputFocused)
 
-  // Cmd+A to select all, Escape to clear multi-select
-  useEffect(() => {
-    const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      // Only handle when keyboard-eligible (see comment above)
-      if (!isKeyboardEligible) return
+  // Helper: check if focus is within the session list container
+  const isFocusWithinZone = () => zoneRef.current?.contains(document.activeElement) ?? false
 
-      // Cmd/Ctrl+A: Select all visible sessions
-      if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
-        // Don't intercept Cmd+A when an input is focused (let user select text)
-        if (document.activeElement?.tagName === 'INPUT') return
-        e.preventDefault()
-        const allIds = flatItems.map(item => item.id)
-        selectAllSessions(allIds)
-        return
-      }
+  // Cmd+A to select all sessions
+  // Uses containment check: fires when focus is anywhere within the zone container
+  useAction('sessionList.selectAll', () => {
+    const allIds = flatItems.map(item => item.id)
+    selectAllSessions(allIds)
+  }, {
+    enabled: isFocusWithinZone,
+  }, [flatItems, selectAllSessions])
 
-      // Escape: Clear multi-select (if active)
-      if (e.key === 'Escape' && isMultiSelectActive) {
-        e.preventDefault()
-        clearMultiSelect()
-        return
-      }
-    }
-
-    window.addEventListener('keydown', handleGlobalKeyDown)
-    return () => window.removeEventListener('keydown', handleGlobalKeyDown)
-  }, [isKeyboardEligible, flatItems, selectAllSessions, isMultiSelectActive, clearMultiSelect])
+  // Escape to clear multi-select (globally - works from any zone)
+  // inputSafe flag in action definition allows this to fire from INPUT/TEXTAREA
+  // Defers to interrupt flow when escape overlay is showing (processing interrupt takes priority)
+  useAction('sessionList.clearSelection', () => {
+    clearMultiSelect()
+  }, {
+    enabled: () => isMultiSelectActive && !showEscapeOverlay,
+  }, [isMultiSelectActive, showEscapeOverlay, clearMultiSelect])
 
   // Roving tabindex enabled when keyboard-eligible (see isKeyboardEligible comment above)
   // moveFocus=false during search so DOM focus stays on input while activeIndex changes

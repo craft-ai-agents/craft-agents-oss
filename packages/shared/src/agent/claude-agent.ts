@@ -8,7 +8,7 @@ import type { BackendConfig, PermissionRequestType } from './backend/types.ts';
 // Plan types are used by UI components; not needed in craft-agent.ts since Safe Mode is user-controlled
 import { parseError, type AgentError } from './errors.ts';
 import { runErrorDiagnostics } from './diagnostics.ts';
-import { loadStoredConfig, loadConfigDefaults, getAnthropicBaseUrl, resolveModelId, type Workspace } from '../config/storage.ts';
+import { loadStoredConfig, loadConfigDefaults, resolveModelId, type Workspace, type AuthType, getDefaultLlmConnection, getLlmConnection } from '../config/storage.ts';
 import { isLocalMcpEnabled } from '../workspaces/storage.ts';
 import { loadPlanFromPath, type SessionConfig as Session } from '../sessions/storage.ts';
 import { DEFAULT_MODEL, isClaudeModel, ANTHROPIC_MODELS, type ModelDefinition as RegistryModelDefinition } from '../config/models.ts';
@@ -709,7 +709,9 @@ export class ClaudeAgent extends BaseAgent {
       const model = resolveModelId(modelConfig);
 
       // Log provider context for diagnostics (custom base URL = third-party provider)
-      const activeBaseUrl = getAnthropicBaseUrl();
+      const defaultConnSlug = getDefaultLlmConnection();
+      const defaultConn = defaultConnSlug ? getLlmConnection(defaultConnSlug) : null;
+      const activeBaseUrl = defaultConn?.baseUrl;
       if (activeBaseUrl) {
         debug(`[chat] Custom provider: baseUrl=${activeBaseUrl}, model=${model}, hasApiKey=${!!process.env.ANTHROPIC_API_KEY}`);
       }
@@ -1677,9 +1679,21 @@ export class ClaudeAgent extends BaseAgent {
           debug('[SESSION_DEBUG] >>> TAKING PATH: Run diagnostics (not session expired)');
 
           // Run diagnostics to identify specific cause (2s timeout)
-          const storedConfig = loadStoredConfig();
+          // Derive authType from the default LLM connection
+          const { getDefaultLlmConnection, getLlmConnection } = await import('../config/storage.ts');
+          const defaultConnSlug = getDefaultLlmConnection();
+          const connection = defaultConnSlug ? getLlmConnection(defaultConnSlug) : null;
+          // Map connection authType to legacy AuthType format for diagnostics
+          let diagnosticAuthType: AuthType | undefined;
+          if (connection) {
+            if (connection.authType === 'api_key' || connection.authType === 'api_key_with_endpoint' || connection.authType === 'bearer_token') {
+              diagnosticAuthType = 'api_key';
+            } else if (connection.authType === 'oauth') {
+              diagnosticAuthType = 'oauth_token';
+            }
+          }
           const diagnostics = await runErrorDiagnostics({
-            authType: storedConfig?.authType,
+            authType: diagnosticAuthType,
             workspaceId: this.config.workspace?.id,
             rawError: stderrContext || rawErrorMsg,
           });

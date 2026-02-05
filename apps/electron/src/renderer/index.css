@@ -782,35 +782,6 @@ html.dark[data-scenic] .fullscreen-overlay-background {
   }
 }
 
-/* =============================================================================
-   KEYBOARD NAVIGATION FOCUS STYLES
-
-   Consistent focus indicators for keyboard navigation across all focusable
-   components: session list items, sidebar buttons, agent tree items, etc.
-
-   Uses inset ring to avoid layout shifts and keep focus within bounds.
-============================================================================= */
-
-/* Session list items, nav buttons, tree items - consistent focus ring */
-[role="listbox"] button:focus-visible,
-[role="tree"] button:focus-visible,
-[role="treeitem"]:focus-visible,
-[role="option"]:focus-visible,
-[data-focus-zone] button:focus-visible {
-  outline: none;
-  box-shadow: inset 0 0 0 1px var(--ring);
-}
-
-/* Ensure focus is visible even on selected/highlighted items */
-[role="option"][aria-selected="true"]:focus-visible,
-[role="treeitem"][aria-selected="true"]:focus-visible {
-  box-shadow: inset 0 0 0 1px var(--ring);
-}
-
-/* Focus zone containers - subtle indicator when zone has focus */
-[data-focus-zone]:focus-visible {
-  outline: none;
-}
 
 /* =============================================================================
    SESSION LIST - SEPARATOR VISIBILITY

@@ -92,6 +92,16 @@ export default [
 
       // Custom link interceptor rule — prevents bypassing in-app file preview
       'craft-links/no-direct-file-open': 'error',
+
+      // Enforce centralized action registry for keyboard shortcuts
+      'no-restricted-imports': ['error', {
+        paths: [
+          {
+            name: 'react-hotkeys-hook',
+            message: 'Use useAction from @/actions instead. See actions/index.ts'
+          }
+        ],
+      }],
     },
   },
 ]

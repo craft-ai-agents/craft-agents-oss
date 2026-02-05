@@ -253,7 +253,7 @@ export async function getAuthState(): Promise<AuthState> {
   const defaultConnectionSlug = getDefaultLlmConnection();
   const connection = defaultConnectionSlug ? getLlmConnection(defaultConnectionSlug) : null;
 
-  // Determine auth type from connection (with fallback to legacy config.authType)
+  // Determine auth type from connection (no legacy fallback - migration ensures all users have connections)
   let effectiveAuthType: AuthType | null = null;
   if (connection) {
     // Map connection authType to legacy AuthType format for backwards compatibility
@@ -265,10 +265,8 @@ export async function getAuthState(): Promise<AuthState> {
       effectiveAuthType = 'oauth_token';
     }
     // Other auth types (iam_credentials, service_account_file, environment, none) don't map to legacy types
-  } else {
-    // Fallback to legacy config.authType
-    effectiveAuthType = config?.authType ?? null;
   }
+  // No fallback to legacy config.authType - if no connection, return unauthenticated state
 
   // Check credentials based on the effective auth type and connection
   let hasCredentials = false;

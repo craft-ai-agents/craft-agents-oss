@@ -5,7 +5,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { getLastApiError } from '../network-interceptor.ts';
-import { getAnthropicApiKey, getAnthropicBaseUrl, getClaudeOAuthToken, type AuthType } from '../config/storage.ts';
+import { getAnthropicApiKey, getClaudeOAuthToken, type AuthType, getDefaultLlmConnection, getLlmConnection } from '../config/storage.ts';
 
 export type DiagnosticCode =
   | 'billing_error'         // HTTP 402 from Anthropic API
@@ -243,7 +243,10 @@ async function validateApiKeyWithAnthropic(apiKey: string, baseUrl?: string | nu
 async function checkApiKey(): Promise<CheckResult> {
   try {
     const apiKey = await getAnthropicApiKey();
-    const baseUrl = getAnthropicBaseUrl();
+    // Get baseUrl from default LLM connection
+    const defaultConnSlug = getDefaultLlmConnection();
+    const connection = defaultConnSlug ? getLlmConnection(defaultConnSlug) : null;
+    const baseUrl = connection?.baseUrl ?? null;
 
     if (!apiKey) {
       return {

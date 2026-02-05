@@ -9,9 +9,9 @@ import { SessionManager } from './sessions'
 import { ipcLog, windowLog, searchLog } from './logger'
 import { WindowManager } from './window-manager'
 import { registerOnboardingHandlers } from './onboarding'
-import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type AuthType, type ApiSetupInfo, type SendMessageOptions } from '../shared/types'
+import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type AuthType, type ApiSetupInfo, type SendMessageOptions, type LlmConnectionSetup } from '../shared/types'
 import { readFileAttachment, perf, validateImageForClaudeAPI, IMAGE_LIMITS } from '@craft-agent/shared/utils'
-import { getAuthType, setAuthType, getPreferencesPath, getCustomModel, setCustomModel, getModel, setModel, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, getAnthropicBaseUrl, setAnthropicBaseUrl, loadStoredConfig, saveConfig, type Workspace, DEFAULT_MODEL, SUMMARIZATION_MODEL, getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, type LlmConnection, type LlmConnectionWithStatus } from '@craft-agent/shared/config'
+import { getPreferencesPath, getModel, setModel, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, loadStoredConfig, saveConfig, type Workspace, DEFAULT_MODEL, SUMMARIZATION_MODEL, getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, type LlmConnection, type LlmConnectionWithStatus } from '@craft-agent/shared/config'
 import { getSessionAttachmentsPath, validateSessionId } from '@craft-agent/shared/sessions'
 import { loadWorkspaceSources, getSourcesBySlugs, type LoadedSource } from '@craft-agent/shared/sources'
 import { isValidThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
@@ -50,6 +50,51 @@ function getWorkspaceOrThrow(workspaceId: string): Workspace {
     throw new Error(`Workspace not found: ${workspaceId}`)
   }
   return workspace
+}
+
+/**
+ * Create an LLM connection configuration from a connection slug.
+ * Used by the unified setupLlmConnection handler.
+ */
+function createConnectionFromSlug(slug: string, baseUrl?: string | null): LlmConnection {
+  const hasCustomEndpoint = !!baseUrl
+
+  switch (slug) {
+    case 'anthropic-api':
+      return {
+        slug: 'anthropic-api',
+        name: hasCustomEndpoint ? 'Custom Anthropic-Compatible' : 'Anthropic (API Key)',
+        providerType: hasCustomEndpoint ? 'anthropic_compat' : 'anthropic',
+        authType: hasCustomEndpoint ? 'api_key_with_endpoint' : 'api_key',
+        createdAt: Date.now(),
+      }
+    case 'claude-max':
+      return {
+        slug: 'claude-max',
+        name: 'Claude Max',
+        providerType: 'anthropic',
+        authType: 'oauth',
+        createdAt: Date.now(),
+      }
+    case 'codex':
+      return {
+        slug: 'codex',
+        name: 'Codex (ChatGPT Plus)',
+        providerType: 'openai',
+        authType: 'oauth',
+        createdAt: Date.now(),
+      }
+    case 'codex-api':
+      return {
+        slug: 'codex-api',
+        name: hasCustomEndpoint ? 'Codex (Custom Endpoint)' : 'Codex (OpenAI API Key)',
+        providerType: 'openai',
+        authType: hasCustomEndpoint ? 'api_key_with_endpoint' : 'api_key',
+        createdAt: Date.now(),
+      }
+    default:
+      throw new Error(`Unknown connection slug: ${slug}`)
+  }
 }
 
 /**
@@ -1200,28 +1245,52 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // ============================================================
 
   // Get current API setup and credential status
+  // Derives values from the default LLM connection
   ipcMain.handle(IPC_CHANNELS.SETTINGS_GET_API_SETUP, async (): Promise<ApiSetupInfo> => {
-    const authType = getAuthType()
     const manager = getCredentialManager()
+
+    // Get the default LLM connection
+    const defaultConnectionSlug = getDefaultLlmConnection()
+    const connection = defaultConnectionSlug ? getLlmConnection(defaultConnectionSlug) : null
 
     let hasCredential = false
     let apiKey: string | undefined
     let anthropicBaseUrl: string | undefined
     let customModel: string | undefined
 
-    if (authType === 'api_key') {
-      apiKey = await manager.getLlmApiKey('anthropic-api') ?? undefined
-      anthropicBaseUrl = getAnthropicBaseUrl() ?? undefined
-      customModel = getCustomModel() ?? undefined
-      // Keyless providers (Ollama) are valid when a custom base URL is configured
-      hasCredential = !!apiKey || !!anthropicBaseUrl
-    } else if (authType === 'oauth_token') {
-      const oauth = await manager.getLlmOAuth('claude-max')
-      hasCredential = !!oauth?.accessToken
+    // Derive auth type from connection
+    let authType: AuthType = 'api_key' // default
+    if (connection) {
+      // Map connection authType to legacy AuthType format
+      if (connection.authType === 'api_key' || connection.authType === 'api_key_with_endpoint' || connection.authType === 'bearer_token') {
+        authType = 'api_key'
+      } else if (connection.authType === 'oauth') {
+        // Check provider type to determine specific auth type
+        if (connection.providerType === 'openai') {
+          authType = 'codex_oauth'
+        } else {
+          authType = 'oauth_token'
+        }
+      }
+
+      // Derive values from connection
+      anthropicBaseUrl = connection.baseUrl ?? undefined
+      customModel = connection.defaultModel ?? undefined
+
+      // Check credentials based on connection type
+      if (connection.authType === 'api_key' || connection.authType === 'api_key_with_endpoint' || connection.authType === 'bearer_token') {
+        apiKey = await manager.getLlmApiKey(defaultConnectionSlug!) ?? undefined
+        // Keyless providers (Ollama) are valid when a custom base URL is configured
+        hasCredential = !!apiKey || !!connection.baseUrl
+      } else if (connection.authType === 'oauth') {
+        const oauth = await manager.getLlmOAuth(defaultConnectionSlug!)
+        hasCredential = !!oauth?.accessToken
+      }
     }
 
     return {
       authType,
+      defaultConnectionSlug: defaultConnectionSlug ?? undefined,
       hasCredential,
       apiKey,
       anthropicBaseUrl,
@@ -1229,74 +1298,59 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     }
   })
 
-  // Update API setup and credential
-  // NOTE: This handler is deprecated - use LLM connections instead.
-  // Kept for backwards compatibility but no longer deletes credentials when switching auth types.
-  ipcMain.handle(IPC_CHANNELS.SETTINGS_UPDATE_API_SETUP, async (_event, authType: AuthType, credential?: string, anthropicBaseUrl?: string | null, customModel?: string | null) => {
-    const manager = getCredentialManager()
-
-    // REMOVED: Credential deletion when switching auth types
-    // Multiple auth types can now coexist via LLM connections.
-    // Each connection has its own credentials that don't interfere with each other.
-
-    // Set new auth type (kept for backwards compat, but defaultLlmConnection is authoritative)
-    setAuthType(authType)
-
-    // Update Anthropic base URL (null to clear, undefined to keep unchanged)
-    if (anthropicBaseUrl !== undefined) {
-      try {
-        setAnthropicBaseUrl(anthropicBaseUrl)
-        if (anthropicBaseUrl) {
-          ipcLog.info('Anthropic base URL updated (HTTPS enforced)')
-        } else {
-          ipcLog.info('Anthropic base URL cleared')
-        }
-      } catch (error) {
-        ipcLog.error('Failed to set Anthropic base URL:', error)
-        throw error
-      }
-    }
-
-    // Update custom model (null to clear, undefined to keep unchanged)
-    if (customModel !== undefined) {
-      setCustomModel(customModel)
-      if (customModel) {
-        ipcLog.info('Custom model set:', customModel)
-      } else {
-        ipcLog.info('Custom model cleared')
-      }
-    }
-
-    // Store or clear credential (new system only - legacy migration handles old users)
-    if (credential) {
-      if (authType === 'api_key') {
-        await manager.setLlmApiKey('anthropic-api', credential)
-        ipcLog.info('Saved API key to LLM connection')
-      } else if (authType === 'oauth_token') {
-        // Save the access token (refresh token and expiry are managed by the OAuth flow)
-        await manager.setLlmOAuth('claude-max', { accessToken: credential })
-        ipcLog.info('Saved Claude OAuth access token to LLM connection')
-      }
-    } else if (credential === '') {
-      // Empty string means user explicitly cleared the credential
-      if (authType === 'api_key') {
-        await manager.deleteLlmCredentials('anthropic-api')
-        ipcLog.info('API key cleared from LLM connection')
-      } else if (authType === 'oauth_token') {
-        await manager.deleteLlmCredentials('claude-max')
-        ipcLog.info('Claude OAuth cleared from LLM connection')
-      }
-    }
-
-    ipcLog.info(`API setup updated to: ${authType}`)
-
-    // Reinitialize SessionManager auth to pick up new credentials
+  // Unified handler for LLM connection setup
+  ipcMain.handle(IPC_CHANNELS.SETUP_LLM_CONNECTION, async (_event, setup: LlmConnectionSetup): Promise<{ success: boolean; error?: string }> => {
     try {
+      const manager = getCredentialManager()
+
+      // Ensure connection exists in config
+      let connection = getLlmConnection(setup.slug)
+      if (!connection) {
+        // Create connection with appropriate defaults based on slug
+        const newConnection = createConnectionFromSlug(setup.slug, setup.baseUrl)
+        addLlmConnection(newConnection)
+        connection = newConnection
+        ipcLog.info(`Created LLM connection: ${setup.slug}`)
+      }
+
+      // Update connection settings if provided
+      if (setup.baseUrl !== undefined || setup.defaultModel !== undefined) {
+        const updates: Partial<LlmConnection> = {}
+        if (setup.baseUrl !== undefined) {
+          updates.baseUrl = setup.baseUrl ?? undefined
+        }
+        if (setup.defaultModel !== undefined) {
+          updates.defaultModel = setup.defaultModel ?? undefined
+        }
+        updateLlmConnection(setup.slug, updates)
+        ipcLog.info(`Updated LLM connection settings: ${setup.slug}`)
+      }
+
+      // Store credential if provided
+      if (setup.credential) {
+        const authType = connection.authType
+        if (authType === 'oauth') {
+          await manager.setLlmOAuth(setup.slug, { accessToken: setup.credential })
+          ipcLog.info('Saved OAuth access token to LLM connection')
+        } else {
+          await manager.setLlmApiKey(setup.slug, setup.credential)
+          ipcLog.info('Saved API key to LLM connection')
+        }
+      }
+
+      // Set as default
+      setDefaultLlmConnection(setup.slug)
+      ipcLog.info(`Set default LLM connection: ${setup.slug}`)
+
+      // Reinitialize auth
       await sessionManager.reinitializeAuth()
-      ipcLog.info('Reinitialized auth after billing update')
-    } catch (authError) {
-      ipcLog.error('Failed to reinitialize auth:', authError)
-      // Don't fail the whole operation if auth reinit fails
+      ipcLog.info('Reinitialized auth after LLM connection setup')
+
+      return { success: true }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      ipcLog.error('Failed to setup LLM connection:', message)
+      return { success: false, error: message }
     }
   })
 
@@ -2869,8 +2923,8 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
   // Returns capabilities from the current backend (models, thinking levels, etc.)
   // Returns null if no backend is active yet (UI falls back to hardcoded values)
-  ipcMain.handle(IPC_CHANNELS.GET_BACKEND_CAPABILITIES, async () => {
-    return sessionManager.getCapabilities()
+  ipcMain.handle(IPC_CHANNELS.GET_BACKEND_CAPABILITIES, async (_, sessionId?: string) => {
+    return sessionManager.getCapabilities(sessionId)
   })
 
   // ============================================================

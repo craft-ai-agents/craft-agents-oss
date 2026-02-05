@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { isMac } from "@/lib/platform"
+import { useActionLabel } from "@/actions"
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -172,7 +173,15 @@ export function AppMenu({
   onToggleFocusMode,
 }: AppMenuProps) {
   const [isDebugMode, setIsDebugMode] = useState(false)
-  const modKey = isMac ? '⌘' : 'Ctrl+'
+
+  // Get hotkey labels from centralized action registry
+  const newChatHotkey = useActionLabel('app.newChat').hotkey
+  const newWindowHotkey = useActionLabel('app.newWindow').hotkey
+  const settingsHotkey = useActionLabel('app.settings').hotkey
+  const keyboardShortcutsHotkey = useActionLabel('app.keyboardShortcuts').hotkey
+  const quitHotkey = useActionLabel('app.quit').hotkey
+  const goBackHotkey = useActionLabel('nav.goBackAlt').hotkey
+  const goForwardHotkey = useActionLabel('nav.goForwardAlt').hotkey
 
   useEffect(() => {
     window.electronAPI.isDebugMode().then(setIsDebugMode)
@@ -198,13 +207,13 @@ export function AppMenu({
           <StyledDropdownMenuItem onClick={onNewChat}>
             <SquarePenRounded className="h-3.5 w-3.5" />
             New Chat
-            <DropdownMenuShortcut className="pl-6">{modKey}N</DropdownMenuShortcut>
+            {newChatHotkey && <DropdownMenuShortcut className="pl-6">{newChatHotkey}</DropdownMenuShortcut>}
           </StyledDropdownMenuItem>
           {onNewWindow && (
             <StyledDropdownMenuItem onClick={onNewWindow}>
               <Icons.AppWindow className="h-3.5 w-3.5" />
               New Window
-              <DropdownMenuShortcut className="pl-6">{modKey}⇧N</DropdownMenuShortcut>
+              {newWindowHotkey && <DropdownMenuShortcut className="pl-6">{newWindowHotkey}</DropdownMenuShortcut>}
             </StyledDropdownMenuItem>
           )}
 
@@ -228,7 +237,7 @@ export function AppMenu({
               <StyledDropdownMenuItem onClick={onOpenSettings}>
                 <Icons.Settings className="h-3.5 w-3.5" />
                 Settings...
-                <DropdownMenuShortcut className="pl-6">{modKey},</DropdownMenuShortcut>
+                {settingsHotkey && <DropdownMenuShortcut className="pl-6">{settingsHotkey}</DropdownMenuShortcut>}
               </StyledDropdownMenuItem>
               <StyledDropdownMenuSeparator />
               {/* All settings subpages from shared schema */}
@@ -262,7 +271,7 @@ export function AppMenu({
               <StyledDropdownMenuItem onClick={onOpenKeyboardShortcuts}>
                 <Icons.Keyboard className="h-3.5 w-3.5" />
                 Keyboard Shortcuts
-                <DropdownMenuShortcut className="pl-6">{modKey}/</DropdownMenuShortcut>
+                {keyboardShortcutsHotkey && <DropdownMenuShortcut className="pl-6">{keyboardShortcutsHotkey}</DropdownMenuShortcut>}
               </StyledDropdownMenuItem>
             </StyledDropdownMenuSubContent>
           </DropdownMenuSub>
@@ -301,7 +310,7 @@ export function AppMenu({
           <StyledDropdownMenuItem onClick={() => window.electronAPI.menuQuit()}>
             <Icons.LogOut className="h-3.5 w-3.5" />
             Quit Craft Agents
-            <DropdownMenuShortcut className="pl-6">{modKey}Q</DropdownMenuShortcut>
+            {quitHotkey && <DropdownMenuShortcut className="pl-6">{quitHotkey}</DropdownMenuShortcut>}
           </StyledDropdownMenuItem>
         </StyledDropdownMenuContent>
       </DropdownMenu>
@@ -320,7 +329,7 @@ export function AppMenu({
             <Icons.ChevronLeft className="h-[22px] w-[22px] text-foreground/70" strokeWidth={1.5} />
           </TopBarButton>
         </TooltipTrigger>
-        <TooltipContent side="bottom">Back {isMac ? '⌘←' : 'Ctrl+←'}</TooltipContent>
+        <TooltipContent side="bottom">Back {goBackHotkey}</TooltipContent>
       </Tooltip>
 
       {/* Forward Navigation */}
@@ -334,7 +343,7 @@ export function AppMenu({
             <Icons.ChevronRight className="h-[22px] w-[22px] text-foreground/70" strokeWidth={1.5} />
           </TopBarButton>
         </TooltipTrigger>
-        <TooltipContent side="bottom">Forward {isMac ? '⌘→' : 'Ctrl+→'}</TooltipContent>
+        <TooltipContent side="bottom">Forward {goForwardHotkey}</TooltipContent>
       </Tooltip>
     </div>
   )

@@ -39,12 +39,7 @@ import { ANTHROPIC_MODELS, OPENAI_MODELS } from './models.ts';
 
 // Config stored in JSON file (credentials stored in encrypted file, not here)
 export interface StoredConfig {
-  // Legacy auth fields (kept for backwards compat, migrated to llmConnections)
-  authType?: AuthType;
-  anthropicBaseUrl?: string;  // Custom Anthropic API base URL (for third-party compatible APIs)
-  customModel?: string;  // Custom model ID override (for third-party APIs like OpenRouter, Ollama)
-
-  // LLM Connections (replaces authType/anthropicBaseUrl/customModel)
+  // LLM Connections (authoritative source for auth and model config)
   llmConnections?: LlmConnection[];
   defaultLlmConnection?: string;  // Slug of default connection for new sessions
 
@@ -200,46 +195,29 @@ export async function updateApiKey(newApiKey: string): Promise<boolean> {
   const manager = getCredentialManager();
   await manager.setLlmApiKey('anthropic-api', newApiKey);
 
-  // Update auth type in config (but not the key itself)
-  config.authType = 'api_key';
+  // Ensure anthropic-api connection exists and is set as default
+  const connectionExists = config.llmConnections?.some(c => c.slug === 'anthropic-api');
+  if (!connectionExists) {
+    if (!config.llmConnections) {
+      config.llmConnections = [];
+    }
+    config.llmConnections.push({
+      slug: 'anthropic-api',
+      name: 'Anthropic (API Key)',
+      providerType: 'anthropic',
+      authType: 'api_key',
+      createdAt: Date.now(),
+    });
+  }
+  config.defaultLlmConnection = 'anthropic-api';
   saveConfig(config);
   return true;
 }
 
-export function getAuthType(): AuthType {
-  const config = loadStoredConfig();
-  if (config?.authType !== undefined) {
-    return config.authType;
-  }
-  const defaults = loadConfigDefaults();
-  return defaults.defaults.authType;
-}
-
-export function setAuthType(authType: AuthType): void {
-  const config = loadStoredConfig();
-  if (!config) return;
-  config.authType = authType;
-  saveConfig(config);
-}
-
-export function setAnthropicBaseUrl(baseUrl: string | null): void {
-  const config = loadStoredConfig();
-  if (!config) return;
-
-  if (baseUrl) {
-    const trimmed = baseUrl.trim();
-    // URL validation deferred to Test Connection button
-    config.anthropicBaseUrl = trimmed;
-  } else {
-    delete config.anthropicBaseUrl;
-  }
-  saveConfig(config);
-}
-
-export function getAnthropicBaseUrl(): string | null {
-  const config = loadStoredConfig();
-  return config?.anthropicBaseUrl ?? null;
-}
+// Legacy getters/setters removed - use LLM connections instead:
+// - getAuthType/setAuthType -> derive from getDefaultLlmConnection()/getLlmConnection()
+// - getAnthropicBaseUrl/setAnthropicBaseUrl -> use connection.baseUrl
+// - getCustomModel/setCustomModel -> use connection.defaultModel
 
 export function getModel(): string | null {
   const config = loadStoredConfig();
@@ -1187,43 +1165,20 @@ export function clearDismissedUpdateVersion(): void {
 }
 
 // ============================================
-// Custom Model (for third-party APIs)
+// Model Resolution
 // ============================================
 
 /**
- * Get custom model ID override for third-party APIs.
- * When set, this single model is used for ALL API calls (main, summarization, etc.)
- */
-export function getCustomModel(): string | null {
-  const config = loadStoredConfig();
-  return config?.customModel?.trim() || null;
-}
-
-/**
- * Set custom model ID for third-party APIs.
- * Pass null to clear and use default Anthropic models.
- */
-export function setCustomModel(model: string | null): void {
-  const config = loadStoredConfig();
-  if (!config) return;
-
-  if (model?.trim()) {
-    config.customModel = model.trim();
-  } else {
-    delete config.customModel;
-  }
-  saveConfig(config);
-}
-
-/**
- * Resolve model ID based on custom model override.
+ * Resolve model ID based on custom model override from the default LLM connection.
  * When a custom model is configured (for OpenRouter, Ollama, etc.),
  * it overrides ALL model calls (main, summarization, extraction).
  * @param defaultModelId - The default Anthropic model ID
- * @returns The custom model if set, otherwise the default
+ * @returns The connection's custom model if set, otherwise the default
  */
 export function resolveModelId(defaultModelId: string): string {
-  const customModel = getCustomModel();
+  const defaultConnSlug = getDefaultLlmConnection();
+  const connection = defaultConnSlug ? getLlmConnection(defaultConnSlug) : null;
+  const customModel = connection?.defaultModel?.trim();
   if (customModel) return customModel;
   return defaultModelId;
 }
@@ -1249,8 +1204,7 @@ export type {
  * - Legacy anthropicBaseUrl → LlmConnection.baseUrl
  * - Legacy customModel → LlmConnection.defaultModel
  *
- * After migration, the legacy fields are preserved for backwards compatibility
- * but are no longer read by the LLM connections system.
+ * After migration, the legacy fields are deleted since they are no longer used.
  */
 export function migrateLegacyLlmConnectionsConfig(): void {
   const config = loadStoredConfig();
@@ -1258,6 +1212,26 @@ export function migrateLegacyLlmConnectionsConfig(): void {
 
   // Already migrated - llmConnections array exists
   if (config.llmConnections !== undefined) {
+    // Clean up any remaining legacy fields from previous runs
+    let needsSave = false;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const configAny = config as any;
+    if ('authType' in config) {
+      delete configAny.authType;
+      needsSave = true;
+    }
+    if ('anthropicBaseUrl' in config) {
+      delete configAny.anthropicBaseUrl;
+      needsSave = true;
+    }
+    if ('customModel' in config) {
+      delete configAny.customModel;
+      needsSave = true;
+    }
+    if (needsSave) {
+      console.log('[storage] Cleaned up legacy config fields');
+      saveConfig(config);
+    }
     return;
   }
 
@@ -1265,10 +1239,16 @@ export function migrateLegacyLlmConnectionsConfig(): void {
   config.llmConnections = [];
 
   // Legacy migration: if user had authType set, create a connection for them
-  if (config.authType) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const configAny = config as any;
+  const legacyAuthType = configAny.authType as AuthType | undefined;
+  const legacyBaseUrl = configAny.anthropicBaseUrl as string | undefined;
+  const legacyCustomModel = configAny.customModel as string | undefined;
+
+  if (legacyAuthType) {
     let migrated: LlmConnection | null = null;
 
-    if (config.authType === 'oauth_token') {
+    if (legacyAuthType === 'oauth_token') {
       // Claude Max OAuth
       migrated = {
         slug: 'claude-max',
@@ -1279,7 +1259,7 @@ export function migrateLegacyLlmConnectionsConfig(): void {
         models: ANTHROPIC_MODELS,
         createdAt: Date.now(),
       };
-    } else if (config.authType === 'codex_oauth') {
+    } else if (legacyAuthType === 'codex_oauth') {
       // ChatGPT Plus OAuth (Codex)
       migrated = {
         slug: 'codex',
@@ -1290,9 +1270,9 @@ export function migrateLegacyLlmConnectionsConfig(): void {
         models: OPENAI_MODELS,
         createdAt: Date.now(),
       };
-    } else if (config.authType === 'codex_api_key') {
+    } else if (legacyAuthType === 'codex_api_key') {
       // OpenAI API Key via Codex (OpenRouter, Vercel AI Gateway compatible)
-      const hasCustomEndpoint = !!config.anthropicBaseUrl;
+      const hasCustomEndpoint = !!legacyBaseUrl;
       migrated = {
         slug: 'codex-api',
         name: hasCustomEndpoint ? 'Codex (Custom Endpoint)' : 'Codex (OpenAI API Key)',
@@ -1302,9 +1282,9 @@ export function migrateLegacyLlmConnectionsConfig(): void {
         models: OPENAI_MODELS,
         createdAt: Date.now(),
       };
-    } else if (config.authType === 'api_key') {
+    } else if (legacyAuthType === 'api_key') {
       // Anthropic API Key - check if custom endpoint (compat mode)
-      const hasCustomEndpoint = !!config.anthropicBaseUrl;
+      const hasCustomEndpoint = !!legacyBaseUrl;
       migrated = {
         slug: 'anthropic-api',
         name: hasCustomEndpoint ? 'Custom Anthropic-Compatible' : 'Anthropic (API Key)',
@@ -1318,20 +1298,25 @@ export function migrateLegacyLlmConnectionsConfig(): void {
 
     if (migrated) {
       // Apply legacy baseUrl if set
-      if (config.anthropicBaseUrl) {
-        migrated.baseUrl = config.anthropicBaseUrl;
+      if (legacyBaseUrl) {
+        migrated.baseUrl = legacyBaseUrl;
       }
 
       // Apply legacy customModel if set
-      if (config.customModel) {
-        migrated.defaultModel = config.customModel;
+      if (legacyCustomModel) {
+        migrated.defaultModel = legacyCustomModel;
       }
 
-      console.log(`[storage] Migrated legacy authType '${config.authType}' to LLM connection '${migrated.slug}'`);
+      console.log(`[storage] Migrated legacy authType '${legacyAuthType}' to LLM connection '${migrated.slug}'`);
       config.llmConnections.push(migrated);
       config.defaultLlmConnection = migrated.slug;
     }
   }
+
+  // Delete legacy fields after migration
+  delete configAny.authType;
+  delete configAny.anthropicBaseUrl;
+  delete configAny.customModel;
 
   saveConfig(config);
 }

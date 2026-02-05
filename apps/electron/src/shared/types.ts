@@ -62,6 +62,17 @@ export type { AgentCapabilities };
 import type { LlmConnection, LlmConnectionWithStatus, LlmAuthType, LlmProviderType } from '@craft-agent/shared/config';
 export type { LlmConnection, LlmConnectionWithStatus, LlmAuthType, LlmProviderType };
 
+/**
+ * Setup data for creating/updating an LLM connection via IPC.
+ * Combines connection identity with credential (which isn't stored in config).
+ */
+export interface LlmConnectionSetup {
+  slug: string              // Connection slug: 'anthropic-api', 'claude-max', 'codex', 'codex-api'
+  credential?: string       // API key or OAuth token (stored in credential manager, not config)
+  baseUrl?: string | null   // Custom API endpoint (null to clear)
+  defaultModel?: string | null  // Custom model override (null to clear)
+}
+
 
 /**
  * File/directory entry in a skill folder
@@ -254,15 +265,6 @@ export interface GitBashStatus {
   found: boolean
   path: string | null
   platform: 'win32' | 'darwin' | 'linux'
-}
-
-/**
- * Result of saving onboarding configuration
- */
-export interface OnboardingSaveResult {
-  success: boolean
-  error?: string
-  workspaceId?: string
 }
 
 /**
@@ -676,7 +678,6 @@ export const IPC_CHANNELS = {
   ONBOARDING_GET_AUTH_STATE: 'onboarding:getAuthState',
   ONBOARDING_VALIDATE_MCP: 'onboarding:validateMcp',
   ONBOARDING_START_MCP_OAUTH: 'onboarding:startMcpOAuth',
-  ONBOARDING_SAVE_CONFIG: 'onboarding:saveConfig',
   // Claude OAuth (two-step flow)
   ONBOARDING_START_CLAUDE_OAUTH: 'onboarding:startClaudeOAuth',
   ONBOARDING_EXCHANGE_CLAUDE_CODE: 'onboarding:exchangeClaudeCode',
@@ -704,7 +705,7 @@ export const IPC_CHANNELS = {
 
   // Settings - API Setup
   SETTINGS_GET_API_SETUP: 'settings:getApiSetup',
-  SETTINGS_UPDATE_API_SETUP: 'settings:updateApiSetup',
+  SETUP_LLM_CONNECTION: 'settings:setupLlmConnection',
   SETTINGS_TEST_API_CONNECTION: 'settings:testApiConnection',
   SETTINGS_TEST_OPENAI_CONNECTION: 'settings:testOpenAiConnection',
 
@@ -969,14 +970,6 @@ export interface ElectronAPI {
   getAuthState(): Promise<AuthState>
   getSetupNeeds(): Promise<SetupNeeds>
   startWorkspaceMcpOAuth(mcpUrl: string): Promise<OAuthResult & { accessToken?: string; clientId?: string }>
-  saveOnboardingConfig(config: {
-    authType?: AuthType  // Optional - if not provided, preserves existing auth type (for add workspace)
-    workspace?: { name: string; iconUrl?: string; mcpUrl?: string }  // Optional - if not provided, only updates billing
-    credential?: string  // API key or OAuth token based on authType
-    mcpCredentials?: { accessToken: string; clientId?: string }  // MCP OAuth credentials
-    anthropicBaseUrl?: string | null  // Custom Anthropic API base URL
-    customModel?: string | null  // Custom model ID override
-  }): Promise<OnboardingSaveResult>
   // Claude OAuth (two-step flow)
   startClaudeOAuth(): Promise<{ success: boolean; authUrl?: string; error?: string }>
   exchangeClaudeCode(code: string): Promise<ClaudeOAuthResult>
@@ -995,7 +988,8 @@ export interface ElectronAPI {
 
   // Settings - API Setup
   getApiSetup(): Promise<ApiSetupInfo>
-  updateApiSetup(authType: AuthType, credential?: string, anthropicBaseUrl?: string | null, customModel?: string | null): Promise<void>
+  /** Unified LLM connection setup */
+  setupLlmConnection(setup: LlmConnectionSetup): Promise<{ success: boolean; error?: string }>
   testApiConnection(apiKey: string, baseUrl?: string, modelName?: string): Promise<{ success: boolean; error?: string; modelCount?: number }>
   testOpenAiConnection(apiKey: string, baseUrl?: string): Promise<{ success: boolean; error?: string }>
 
@@ -1184,7 +1178,8 @@ export interface ClaudeOAuthResult {
  * Current API setup info for settings
  */
 export interface ApiSetupInfo {
-  authType: AuthType
+  authType: AuthType  // @deprecated - use defaultConnectionSlug instead
+  defaultConnectionSlug?: string  // The slug of the default LLM connection (e.g., 'anthropic-api', 'claude-max')
   hasCredential: boolean
   apiKey?: string  // The stored API key (only returned for api_key auth type)
   anthropicBaseUrl?: string  // Custom Anthropic API base URL (for third-party compatible APIs)

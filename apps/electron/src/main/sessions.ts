@@ -19,7 +19,7 @@ import {
   getCredentialCachePath,
   type CredentialCacheEntry,
 } from '@craft-agent/shared/codex'
-import { getAuthType, getLlmConnection, getDefaultLlmConnection } from '@craft-agent/shared/config'
+import { getLlmConnection, getDefaultLlmConnection } from '@craft-agent/shared/config'
 import { sessionLog, isDebugMode, getLogFilePath } from './logger'
 import { createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk'
 import type { WindowManager } from './window-manager'
@@ -28,7 +28,6 @@ import {
   getWorkspaces,
   getWorkspaceByNameOrId,
   loadConfigDefaults,
-  getAnthropicBaseUrl,
   resolveModelId,
   migrateLegacyCredentials,
   type Workspace,
@@ -975,7 +974,10 @@ export class SessionManager {
         sessionLog.info(`No LLM connection found for slug: ${slug}, using legacy auth`)
         const authState = await getAuthState()
         const { billing } = authState
-        const customBaseUrl = getAnthropicBaseUrl()
+        // Get baseUrl from default connection if available
+        const defaultConnSlug = getDefaultLlmConnection()
+        const defaultConn = defaultConnSlug ? getLlmConnection(defaultConnSlug) : null
+        const customBaseUrl = defaultConn?.baseUrl
 
         if (customBaseUrl) {
           process.env.ANTHROPIC_BASE_URL = customBaseUrl
@@ -1955,12 +1957,19 @@ export class SessionManager {
         authType = connectionAuthTypeToBackendAuthType(connection.authType)
         sessionLog.info(`Using LLM connection "${connection.slug}" (${connection.providerType}) for session ${managed.id}`)
       } else {
-        // Fallback to legacy detection
-        const legacyAuthType = getAuthType()
-        provider = detectProvider(legacyAuthType)
-        // Map legacy AuthType to LlmAuthType (oauth_token -> oauth, codex_* handled separately)
-        authType = legacyAuthType === 'oauth_token' ? 'oauth' : legacyAuthType === 'api_key' ? 'api_key' : undefined
-        sessionLog.info(`Using legacy auth detection (${legacyAuthType}) for session ${managed.id}`)
+        // Fallback: try to get default connection
+        const defaultConnSlug = getDefaultLlmConnection()
+        const defaultConn = defaultConnSlug ? getLlmConnection(defaultConnSlug) : null
+        if (defaultConn) {
+          provider = providerTypeToAgentProvider(defaultConn.providerType || 'anthropic')
+          authType = connectionAuthTypeToBackendAuthType(defaultConn.authType)
+          sessionLog.info(`Using default LLM connection "${defaultConn.slug}" (${defaultConn.providerType}) for session ${managed.id}`)
+        } else {
+          // No connections at all - fall back to anthropic provider
+          provider = 'anthropic'
+          authType = undefined
+          sessionLog.warn(`No LLM connection found for session ${managed.id}, using default anthropic provider`)
+        }
       }
 
       // Create the appropriate backend based on provider
@@ -4532,8 +4541,15 @@ To view this task's output:
    * The capabilities include available models, thinking levels, and feature support.
    * UI uses this to adapt model/thinking selectors based on the current backend.
    */
-  getCapabilities(): ReturnType<CraftAgent['capabilities']> | ReturnType<CodexBackend['capabilities']> | null {
-    // Try to get capabilities from any session with an active agent
+  getCapabilities(sessionId?: string): ReturnType<CraftAgent['capabilities']> | ReturnType<CodexBackend['capabilities']> | null {
+    // If sessionId provided, return capabilities for that specific session
+    if (sessionId) {
+      const managed = this.sessions.get(sessionId)
+      if (managed?.agent) {
+        return managed.agent.capabilities()
+      }
+    }
+    // Fallback: return capabilities from any active session (for backward compat)
     for (const [_, managed] of this.sessions) {
       if (managed.agent) {
         return managed.agent.capabilities()

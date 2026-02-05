@@ -16,7 +16,6 @@ import { SplashScreen } from '@/components/SplashScreen'
 import { TooltipProvider } from '@craft-agent/ui'
 import { FocusProvider } from '@/context/FocusContext'
 import { ModalProvider } from '@/context/ModalContext'
-import { useGlobalShortcuts } from '@/hooks/keyboard'
 import { useWindowCloseHandler } from '@/hooks/useWindowCloseHandler'
 import { useOnboarding } from '@/hooks/useOnboarding'
 import { useNotifications } from '@/hooks/useNotifications'
@@ -53,6 +52,7 @@ import {
   JSONPreviewOverlay,
 } from '@craft-agent/ui'
 import { useLinkInterceptor, type FilePreviewState } from '@/hooks/useLinkInterceptor'
+import { ActionRegistryProvider } from '@/actions'
 
 type AppState = 'loading' | 'onboarding' | 'reauth' | 'ready'
 
@@ -180,17 +180,38 @@ export default function App() {
   // Window's workspace ID - fixed for this window (multi-window architecture)
   const [windowWorkspaceId, setWindowWorkspaceId] = useState<string | null>(null)
   const [currentModel, setCurrentModel] = useState(DEFAULT_MODEL)
-  // Custom model override from API connection settings (OpenRouter, Ollama, etc.)
-  // When set, the Anthropic model selector is hidden and this model is shown instead.
-  const [customModel, setCustomModel] = useState<string | null>(null)
-  // Current authentication type (determines which backend is active: Anthropic vs OpenAI)
-  const [authType, setAuthType] = useState<AuthType | null>(null)
   // Backend capabilities (models, thinking levels) - adapts UI based on provider
   const [capabilities, setCapabilities] = useState<AgentCapabilities | null>(null)
   // LLM connections with authentication status (for provider selection)
   const [llmConnections, setLlmConnections] = useState<LlmConnectionWithStatus[]>([])
   // Workspace default LLM connection (for new sessions)
   const [workspaceDefaultLlmConnection, setWorkspaceDefaultLlmConnection] = useState<string | undefined>()
+  // Global default LLM connection slug (from app config)
+  const [defaultLlmConnectionSlug, setDefaultLlmConnectionSlug] = useState<string | undefined>()
+
+  // Derive customModel and authType from the default LLM connection
+  const defaultConnection = useMemo(() => {
+    return llmConnections.find(c => c.slug === defaultLlmConnectionSlug) ?? null
+  }, [llmConnections, defaultLlmConnectionSlug])
+
+  // Custom model derived from default connection's defaultModel field
+  const customModel = defaultConnection?.defaultModel ?? null
+
+  // Auth type derived from default connection for backwards compatibility
+  const authType: AuthType | null = useMemo(() => {
+    if (!defaultConnection) return null
+    // Map connection authType to legacy AuthType format
+    if (defaultConnection.authType === 'api_key' || defaultConnection.authType === 'api_key_with_endpoint' || defaultConnection.authType === 'bearer_token') {
+      return 'api_key'
+    } else if (defaultConnection.authType === 'oauth') {
+      // Check provider type to determine specific auth type
+      if (defaultConnection.providerType === 'openai') {
+        return 'codex_oauth'
+      }
+      return 'oauth_token'
+    }
+    return null
+  }, [defaultConnection])
   const [menuNewChatTrigger, setMenuNewChatTrigger] = useState(0)
   // Permission requests per session (queue to handle multiple concurrent requests)
   const [pendingPermissions, setPendingPermissions] = useState<Map<string, PermissionRequest[]>>(new Map())
@@ -256,13 +277,16 @@ export default function App() {
 
   const DRAFT_SAVE_DEBOUNCE_MS = 500
 
-  // Re-fetch custom model and auth type from API setup config (called after API connection changes).
-  // Also refreshes backend capabilities since they depend on the auth type.
+  // Re-fetch LLM connections and default after API connection changes.
+  // Also refreshes backend capabilities since they depend on the connection.
   // Defined early so it can be passed to useOnboarding's onConfigSaved.
   const refreshCustomModel = useCallback(async () => {
+    // Refresh LLM connections to pick up new/updated connections
+    const connections = await window.electronAPI.listLlmConnectionsWithStatus()
+    setLlmConnections(connections)
+    // Refresh default connection slug
     const billing = await window.electronAPI.getApiSetup()
-    setCustomModel(billing.customModel || null)
-    setAuthType(billing.authType)
+    setDefaultLlmConnectionSlug(billing.defaultConnectionSlug ?? connections[0]?.slug)
     // Refresh capabilities in case backend changed
     const caps = await window.electronAPI.getBackendCapabilities()
     setCapabilities(caps)
@@ -277,6 +301,9 @@ export default function App() {
       const settings = await window.electronAPI.getWorkspaceSettings(windowWorkspaceId)
       setWorkspaceDefaultLlmConnection(settings?.defaultLlmConnection)
     }
+    // Also refresh global default connection slug
+    const billing = await window.electronAPI.getApiSetup()
+    setDefaultLlmConnectionSlug(billing.defaultConnectionSlug ?? connections[0]?.slug)
   }, [windowWorkspaceId])
 
   // Handle onboarding completion
@@ -416,10 +443,9 @@ export default function App() {
         setCurrentModel(storedModel)
       }
     })
-    // Load custom model override and auth type from API connection settings
+    // Load default LLM connection slug from API setup
     window.electronAPI.getApiSetup().then((billing) => {
-      setCustomModel(billing.customModel || null)
-      setAuthType(billing.authType)
+      setDefaultLlmConnectionSlug(billing.defaultConnectionSlug)
     })
     // Load backend capabilities (for capabilities-driven model/thinking selectors)
     window.electronAPI.getBackendCapabilities().then((caps) => {
@@ -1401,6 +1427,7 @@ export default function App() {
   return (
     <PlatformProvider actions={platformActions}>
     <ShikiThemeProvider shikiTheme={shikiTheme}>
+      <ActionRegistryProvider>
       <FocusProvider>
         <ModalProvider>
         <TooltipProvider>
@@ -1452,6 +1479,7 @@ export default function App() {
         </TooltipProvider>
         </ModalProvider>
       </FocusProvider>
+      </ActionRegistryProvider>
     </ShikiThemeProvider>
     </PlatformProvider>
   )

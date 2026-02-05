@@ -45,8 +45,9 @@ import {
 } from '../mcp/validation.ts';
 import {
   getAnthropicApiKey,
-  getAnthropicBaseUrl,
   getClaudeOAuthToken,
+  getDefaultLlmConnection,
+  getLlmConnection,
 } from '../config/storage.ts';
 import {
   loadSourceConfig as loadSourceConfigImpl,
@@ -196,7 +197,9 @@ export function createClaudeContext(options: ClaudeContextOptions): SessionToolC
     }
 
     try {
-      const baseUrl = getAnthropicBaseUrl();
+      const defaultConnSlug = getDefaultLlmConnection();
+      const defaultConn = defaultConnSlug ? getLlmConnection(defaultConnSlug) : null;
+      const baseUrl = defaultConn?.baseUrl;
       const client = new Anthropic({
         apiKey: apiKey!,
         ...(baseUrl ? { baseURL: baseUrl } : {}),

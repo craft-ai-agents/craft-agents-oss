@@ -75,7 +75,8 @@ import { AppShellProvider, type AppShellContextType } from "@/context/AppShellCo
 import { EscapeInterruptProvider, useEscapeInterrupt } from "@/context/EscapeInterruptContext"
 import { useTheme } from "@/context/ThemeContext"
 import { getResizeGradientStyle } from "@/hooks/useResizeGradient"
-import { useFocusZone, useGlobalShortcuts } from "@/hooks/keyboard"
+import { useAction, useActionLabel } from "@/actions"
+import { useFocusZone } from "@/hooks/keyboard"
 import { useFocusContext } from "@/context/FocusContext"
 import { getSessionTitle } from "@/utils/session"
 import { useSetAtom } from "jotai"
@@ -484,6 +485,9 @@ function AppShellContent({
     openNewChat,
   } = contextValue
 
+  // Get hotkey labels from centralized action registry
+  const newChatHotkey = useActionLabel('app.newChat').hotkey
+
   const [isSidebarVisible, setIsSidebarVisible] = React.useState(() => {
     return storage.get(storage.KEYS.sidebarVisible, !defaultCollapsed)
   })
@@ -688,16 +692,7 @@ function AppShellContent({
   }, [navState])
 
   // Cmd+F to activate search
-  React.useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
-        e.preventDefault()
-        setSearchActive(true)
-      }
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [])
+  useAction('app.search', () => setSearchActive(true))
 
   // Track window width for responsive right sidebar behavior
   React.useEffect(() => {
@@ -994,72 +989,99 @@ function AppShellContent({
     chatInputRef.current?.focus()
   }, [])
 
-  // Global keyboard shortcuts
-  useGlobalShortcuts({
-    shortcuts: [
-      // Zone navigation - explicit keyboard intent, always move DOM focus
-      { key: '1', cmd: true, action: () => focusZone('sidebar', { intent: 'keyboard' }) },
-      { key: '2', cmd: true, action: () => focusZone('session-list', { intent: 'keyboard' }) },
-      { key: '3', cmd: true, action: () => focusZone('chat', { intent: 'keyboard' }) },
-      // Tab navigation between zones
-      { key: 'Tab', action: focusNextZone, when: () => !document.querySelector('[role="dialog"]') },
-      // Shift+Tab cycles permission mode through enabled modes (textarea handles its own, this handles when focus is elsewhere)
-      { key: 'Tab', shift: true, action: () => {
-        if (session.selected) {
-          const currentOptions = contextValue.sessionOptions.get(session.selected)
-          const currentMode = currentOptions?.permissionMode ?? 'ask'
-          // Cycle through enabled permission modes
-          const modes = enabledModes.length >= 2 ? enabledModes : ['safe', 'ask', 'allow-all'] as PermissionMode[]
-          const currentIndex = modes.indexOf(currentMode)
-          // If current mode not in enabled list, jump to first enabled mode
-          const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % modes.length
-          const nextMode = modes[nextIndex]
-          contextValue.onSessionOptionsChange(session.selected, { permissionMode: nextMode })
-        }
-      }, when: () => !document.querySelector('[role="dialog"]') && document.activeElement?.tagName !== 'TEXTAREA' },
-      // Sidebar toggle (CMD+B)
-      { key: 'b', cmd: true, action: () => setIsSidebarVisible(v => !v) },
-      // Focus mode toggle (CMD+.) - hides both sidebars
-      { key: '.', cmd: true, action: () => setIsFocusModeActive(v => !v) },
-      // New chat
-      { key: 'n', cmd: true, action: () => handleNewChat(true) },
-      // Settings
-      { key: ',', cmd: true, action: onOpenSettings },
-      // History navigation
-      { key: '[', cmd: true, action: goBack },
-      { key: ']', cmd: true, action: goForward },
-      { key: 'ArrowLeft', cmd: true, action: goBack },
-      { key: 'ArrowRight', cmd: true, action: goForward },
-      // Search match navigation (CMD+G next, CMD+SHIFT+G prev)
-      { key: 'g', cmd: true, action: () => chatDisplayRef.current?.goToNextMatch(), when: () => searchActive && (chatMatchInfo.count ?? 0) > 0 },
-      { key: 'g', cmd: true, shift: true, action: () => chatDisplayRef.current?.goToPrevMatch(), when: () => searchActive && (chatMatchInfo.count ?? 0) > 0 },
-      // ESC to stop processing - requires double-press within 1 second
-      // First press shows warning overlay, second press interrupts
-      { key: 'Escape', action: () => {
-        if (session.selected) {
-          const meta = sessionMetaMap.get(session.selected)
-          if (meta?.isProcessing) {
-            // handleEscapePress returns true on second press (within timeout)
-            const shouldInterrupt = handleEscapePress()
-            if (shouldInterrupt) {
-              window.electronAPI.cancelProcessing(session.selected, false).catch(err => {
-                console.error('[AppShell] Failed to cancel processing:', err)
-              })
-            }
-          }
-        }
-      }, when: () => {
-        // Only active when no overlay is open and session is processing
-        // Overlays (dialogs, menus, popovers, etc.) should handle their own Escape
-        if (hasOpenOverlay()) return false
-        if (!session.selected) return false
-        const meta = sessionMetaMap.get(session.selected)
-        return meta?.isProcessing ?? false
-      }},
-      // Theme toggle (CMD+SHIFT+A)
-      { key: 'a', cmd: true, shift: true, action: () => setMode(resolvedMode === 'dark' ? 'light' : 'dark') },
-    ],
+  // Global keyboard shortcuts using centralized action registry
+  // Actions are defined in @/actions/definitions.ts
+
+  // Zone navigation - explicit keyboard intent, always move DOM focus
+  useAction('nav.focusSidebar', () => focusZone('sidebar', { intent: 'keyboard' }))
+  useAction('nav.focusSessionList', () => focusZone('session-list', { intent: 'keyboard' }))
+  useAction('nav.focusChat', () => focusZone('chat', { intent: 'keyboard' }))
+
+  // Tab navigation between zones
+  useAction('nav.nextZone', () => {
+    focusNextZone()
+  }, { enabled: () => !document.querySelector('[role="dialog"]') })
+
+  // Shift+Tab cycles permission mode through enabled modes (textarea handles its own, this handles when focus is elsewhere)
+  useAction('chat.cyclePermissionMode', () => {
+    if (session.selected) {
+      const currentOptions = contextValue.sessionOptions.get(session.selected)
+      const currentMode = currentOptions?.permissionMode ?? 'ask'
+      // Cycle through enabled permission modes
+      const modes = enabledModes.length >= 2 ? enabledModes : ['safe', 'ask', 'allow-all'] as PermissionMode[]
+      const currentIndex = modes.indexOf(currentMode)
+      // If current mode not in enabled list, jump to first enabled mode
+      const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % modes.length
+      const nextMode = modes[nextIndex]
+      contextValue.onSessionOptionsChange(session.selected, { permissionMode: nextMode })
+    }
+  }, { enabled: () => !document.querySelector('[role="dialog"]') && document.activeElement?.tagName !== 'TEXTAREA' })
+
+  // Sidebar toggle (CMD+B)
+  useAction('view.toggleSidebar', () => setIsSidebarVisible(v => !v))
+
+  // Focus mode toggle (CMD+.) - hides both sidebars
+  useAction('view.toggleFocusMode', () => setIsFocusModeActive(v => !v))
+
+  // New chat
+  useAction('app.newChat', () => handleNewChat(true))
+
+  // Settings
+  useAction('app.settings', onOpenSettings)
+
+  // Keyboard shortcuts
+  useAction('app.keyboardShortcuts', onOpenKeyboardShortcuts)
+
+  // New window
+  useAction('app.newWindow', () => window.electronAPI.newWindow())
+
+  // Quit (note: also handled by native menu on macOS)
+  useAction('app.quit', () => window.electronAPI.menuQuit())
+
+  // History navigation
+  useAction('nav.goBack', goBack)
+  useAction('nav.goForward', goForward)
+
+  // History navigation (arrow key alternatives)
+  useAction('nav.goBackAlt', goBack)
+  useAction('nav.goForwardAlt', goForward)
+
+  // Search match navigation (CMD+G next, CMD+SHIFT+G prev)
+  useAction('chat.nextSearchMatch', () => chatDisplayRef.current?.goToNextMatch(), {
+    enabled: () => searchActive && (chatMatchInfo.count ?? 0) > 0
   })
+  useAction('chat.prevSearchMatch', () => chatDisplayRef.current?.goToPrevMatch(), {
+    enabled: () => searchActive && (chatMatchInfo.count ?? 0) > 0
+  })
+
+  // ESC to stop processing - requires double-press within 1 second
+  // First press shows warning overlay, second press interrupts
+  useAction('chat.stopProcessing', () => {
+    if (session.selected) {
+      const meta = sessionMetaMap.get(session.selected)
+      if (meta?.isProcessing) {
+        // handleEscapePress returns true on second press (within timeout)
+        const shouldInterrupt = handleEscapePress()
+        if (shouldInterrupt) {
+          window.electronAPI.cancelProcessing(session.selected, false).catch(err => {
+            console.error('[AppShell] Failed to cancel processing:', err)
+          })
+        }
+      }
+    }
+  }, {
+    // Only active when no overlay is open and session is processing
+    // Overlays (dialogs, menus, popovers, etc.) should handle their own Escape
+    enabled: () => {
+      if (hasOpenOverlay()) return false
+      if (!session.selected) return false
+      const meta = sessionMetaMap.get(session.selected)
+      return meta?.isProcessing ?? false
+    }
+  })
+
+  // Theme toggle (CMD+SHIFT+A)
+  useAction('app.toggleTheme', () => setMode(resolvedMode === 'dark' ? 'light' : 'dark'))
 
   // Global paste listener for file attachments
   // Fires when Cmd+V is pressed anywhere in the app (not just textarea)
@@ -2046,7 +2068,7 @@ function AppShellContent({
                           </ContextMenu>
                         </div>
                       </TooltipTrigger>
-                      <TooltipContent side="right">{isMac ? '⌘N' : 'Ctrl+N'}</TooltipContent>
+                      <TooltipContent side="right">{newChatHotkey}</TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
                 </div>

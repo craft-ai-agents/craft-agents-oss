@@ -18,7 +18,7 @@ import type {
   ApiSetupMethod,
 } from '@/components/onboarding'
 import type { ApiKeySubmitData } from '@/components/apisetup'
-import type { AuthType, SetupNeeds, GitBashStatus } from '../../shared/types'
+import type { SetupNeeds, GitBashStatus, LlmConnectionSetup } from '../../shared/types'
 
 interface UseOnboardingOptions {
   /** Called when onboarding is complete */
@@ -68,14 +68,35 @@ interface UseOnboardingReturn {
   reset: () => void
 }
 
-// Map ApiSetupMethod to AuthType for backend persistence (legacy)
-// This maps to the legacy AuthType stored in config.authType for backwards compatibility
-function apiSetupMethodToAuthType(method: ApiSetupMethod): AuthType {
+// Map ApiSetupMethod to LlmConnectionSetup for the new unified connection system
+function apiSetupMethodToConnectionSetup(
+  method: ApiSetupMethod,
+  options: { credential?: string; baseUrl?: string; customModel?: string }
+): LlmConnectionSetup {
   switch (method) {
-    case 'anthropic_api_key': return 'api_key'
-    case 'claude_oauth': return 'oauth_token'
-    case 'chatgpt_oauth': return 'codex_oauth'
-    case 'openai_api_key': return 'codex_api_key'
+    case 'anthropic_api_key':
+      return {
+        slug: 'anthropic-api',
+        credential: options.credential,
+        baseUrl: options.baseUrl,
+        defaultModel: options.customModel,
+      }
+    case 'claude_oauth':
+      return {
+        slug: 'claude-max',
+        credential: options.credential,
+      }
+    case 'chatgpt_oauth':
+      return {
+        slug: 'codex',
+        credential: options.credential,
+      }
+    case 'openai_api_key':
+      return {
+        slug: 'codex-api',
+        credential: options.credential,
+        baseUrl: options.baseUrl,
+      }
   }
 }
 
@@ -114,7 +135,7 @@ export function useOnboarding({
     checkGitBash()
   }, [])
 
-  // Save configuration
+  // Save configuration using the new unified LLM connection API
   const handleSaveConfig = useCallback(async (credential?: string, options?: { baseUrl?: string; customModel?: string }) => {
     if (!state.apiSetupMethod) {
       console.log('[Onboarding] No API setup method selected, returning early')
@@ -124,15 +145,16 @@ export function useOnboarding({
     setState(s => ({ ...s, completionStatus: 'saving' }))
 
     try {
-      const authType = apiSetupMethodToAuthType(state.apiSetupMethod)
-      console.log('[Onboarding] Saving config with authType:', authType)
-
-      const result = await window.electronAPI.saveOnboardingConfig({
-        authType,
+      // Build connection setup from UI state
+      const setup = apiSetupMethodToConnectionSetup(state.apiSetupMethod, {
         credential,
-        anthropicBaseUrl: options?.baseUrl || null,
-        customModel: options?.customModel || null,
+        baseUrl: options?.baseUrl,
+        customModel: options?.customModel,
       })
+      console.log('[Onboarding] Saving config with connection setup:', setup.slug)
+
+      // Use new unified API
+      const result = await window.electronAPI.setupLlmConnection(setup)
 
       if (result.success) {
         console.log('[Onboarding] Save successful')

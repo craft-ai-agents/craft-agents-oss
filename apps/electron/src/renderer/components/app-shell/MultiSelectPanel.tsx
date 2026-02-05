@@ -11,6 +11,7 @@ import * as React from 'react'
 import { Trash2, CheckCircle2, Circle, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { isMac } from '@/lib/platform'
 
 export interface MultiSelectPanelProps {
   /** Number of selected sessions */
@@ -48,7 +49,7 @@ export function MultiSelectPanel({
           {count} {count === 1 ? 'Chat' : 'Chats'} selected
         </h2>
         <p className="text-sm text-muted-foreground">
-          Use Cmd+Click to toggle, Shift+Click for range
+          Use {isMac ? '⌘' : 'Ctrl'}+Click to toggle, Shift+Click for range
         </p>
       </div>
 
@@ -57,7 +58,7 @@ export function MultiSelectPanel({
         {onSetStatus && (
           <>
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
               onClick={() => onSetStatus('done')}
               className="gap-2 shadow-minimal"
@@ -66,7 +67,7 @@ export function MultiSelectPanel({
               Mark Done
             </Button>
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
               onClick={() => onSetStatus('todo')}
               className="gap-2 shadow-minimal"
@@ -78,7 +79,7 @@ export function MultiSelectPanel({
         )}
         {onDelete && (
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
             onClick={onDelete}
             className="gap-2 text-destructive hover:text-destructive hover:bg-destructive/10 shadow-tinted"

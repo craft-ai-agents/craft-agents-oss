@@ -304,13 +304,18 @@ app.whenReady().then(async () => {
 
     // Set Sentry context tags for error grouping (no PII — just config classification).
     // Runs after init so config and auth state are available.
+    // Derives values from the default LLM connection instead of legacy config fields.
     try {
+      const { getLlmConnection, getDefaultLlmConnection } = await import('@craft-agent/shared/config')
       const config = loadStoredConfig()
       const workspaces = getWorkspaces()
-      Sentry.setTag('authType', config?.authType ?? 'unknown')
-      Sentry.setTag('hasCustomEndpoint', String(!!config?.anthropicBaseUrl))
+      const defaultConnSlug = getDefaultLlmConnection()
+      const defaultConn = defaultConnSlug ? getLlmConnection(defaultConnSlug) : null
+      Sentry.setTag('authType', defaultConn?.authType ?? 'unknown')
+      Sentry.setTag('providerType', defaultConn?.providerType ?? 'unknown')
+      Sentry.setTag('hasCustomEndpoint', String(!!defaultConn?.baseUrl))
       Sentry.setTag('model', config?.model ?? 'default')
-      Sentry.setTag('customModel', config?.customModel ?? 'none')
+      Sentry.setTag('customModel', defaultConn?.defaultModel ?? 'none')
       Sentry.setTag('workspaceCount', String(workspaces.length))
     } catch (err) {
       mainLog.warn('Failed to set Sentry context tags:', err)
