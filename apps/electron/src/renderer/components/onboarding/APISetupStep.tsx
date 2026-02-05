@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 import { Check, CreditCard, Key } from "lucide-react"
 import { StepFormLayout, BackButton, ContinueButton } from "./primitives"
@@ -6,8 +7,8 @@ export type ApiSetupMethod = 'api_key' | 'claude_oauth'
 
 interface ApiSetupOption {
   id: ApiSetupMethod
-  name: string
-  description: string
+  nameKey: string
+  descriptionKey: string
   icon: React.ReactNode
   recommended?: boolean
 }
@@ -15,15 +16,15 @@ interface ApiSetupOption {
 const API_SETUP_OPTIONS: ApiSetupOption[] = [
   {
     id: 'claude_oauth',
-    name: 'Claude Pro/Max',
-    description: 'Use your Claude subscription for unlimited access.',
+    nameKey: 'onboarding.claudeProMax',
+    descriptionKey: 'onboarding.claudeProMaxDesc',
     icon: <CreditCard className="size-4" />,
     recommended: true,
   },
   {
     id: 'api_key',
-    name: 'API Key',
-    description: 'Anthropic, OpenRouter, Ollama, or compatible APIs.',
+    nameKey: 'onboarding.apiKey',
+    descriptionKey: 'onboarding.apiKeyDesc',
     icon: <Key className="size-4" />,
   },
 ]
@@ -48,10 +49,12 @@ export function APISetupStep({
   onContinue,
   onBack
 }: APISetupStepProps) {
+  const { t } = useTranslation()
+
   return (
     <StepFormLayout
-      title="Set Up API Connection"
-      description="Select how you'd like to power your AI agents."
+      title={t('onboarding.setupApiConnection')}
+      description={t('onboarding.selectPowerMethod')}
       actions={
         <>
           <BackButton onClick={onBack} />
@@ -90,15 +93,15 @@ export function APISetupStep({
               {/* Content */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="font-medium text-sm">{option.name}</span>
+                  <span className="font-medium text-sm">{t(option.nameKey)}</span>
                   {option.recommended && (
                     <span className="rounded-[4px] bg-background shadow-minimal px-2 py-0.5 text-[11px] font-medium text-foreground/70">
-                      Recommended
+                      {t('common.recommended')}
                     </span>
                   )}
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {option.description}
+                  {t(option.descriptionKey)}
                 </p>
               </div>
 

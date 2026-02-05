@@ -8,6 +8,7 @@
  */
 
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { MoreHorizontal, AppWindow } from 'lucide-react'
 import {
   DropdownMenu,
@@ -37,17 +38,17 @@ interface SettingsNavigatorProps {
 
 interface SettingsItem {
   id: SettingsSubpage
-  label: string
+  labelKey: string
   icon: React.ComponentType<{ className?: string }>
-  description: string
+  descriptionKey: string
 }
 
 // Derive settings items from shared schema, using shared custom SVG icons
 const settingsItems: SettingsItem[] = SETTINGS_ITEMS.map((item) => ({
   id: item.id,
-  label: item.label,
+  labelKey: `settingsNav.${item.id}`,
   icon: SETTINGS_ICONS[item.id],
-  description: item.description,
+  descriptionKey: `settingsNav.${item.id}Desc`,
 }))
 
 interface SettingsItemRowProps {
@@ -62,6 +63,7 @@ interface SettingsItemRowProps {
  * Tracks menu open state to keep "..." button visible when menu is open
  */
 function SettingsItemRow({ item, isSelected, isFirst, onSelect }: SettingsItemRowProps) {
+  const { t } = useTranslation()
   const [menuOpen, setMenuOpen] = useState(false)
   const Icon = item.icon
 
@@ -112,10 +114,10 @@ function SettingsItemRow({ item, isSelected, isFirst, onSelect }: SettingsItemRo
                 isSelected ? 'text-foreground' : 'text-foreground/80'
               )}
             >
-              {item.label}
+              {t(item.labelKey)}
             </span>
             <span className="text-xs text-foreground/60 line-clamp-1">
-              {item.description}
+              {t(item.descriptionKey)}
             </span>
           </div>
         </button>
@@ -137,7 +139,7 @@ function SettingsItemRow({ item, isSelected, isFirst, onSelect }: SettingsItemRo
                 <DropdownMenuProvider>
                   <StyledDropdownMenuItem onClick={handleOpenInNewWindow}>
                     <AppWindow className="h-3.5 w-3.5" />
-                    <span className="flex-1">Open in New Window</span>
+                    <span className="flex-1">{t('common.openInNewWindow')}</span>
                   </StyledDropdownMenuItem>
                 </DropdownMenuProvider>
               </StyledDropdownMenuContent>

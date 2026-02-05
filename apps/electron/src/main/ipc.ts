@@ -2437,6 +2437,20 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       .filter(Boolean)
   })
 
+  // Broadcast language to all other windows (for cross-window sync)
+  ipcMain.handle(IPC_CHANNELS.LANGUAGE_BROADCAST, async (event, language: string) => {
+    const senderId = event.sender.id
+    // Broadcast to all windows except the sender
+    for (const managed of windowManager.getAllWindows()) {
+      if (!managed.window.isDestroyed() &&
+          !managed.window.webContents.isDestroyed() &&
+          managed.window.webContents.mainFrame &&
+          managed.window.webContents.id !== senderId) {
+        managed.window.webContents.send(IPC_CHANNELS.LANGUAGE_CHANGED, language)
+      }
+    }
+  })
+
   // Logo URL resolution (uses Node.js filesystem cache for provider domains)
   ipcMain.handle(IPC_CHANNELS.LOGO_GET_URL, async (_event, serviceUrl: string, provider?: string) => {
     const { getLogoUrl } = await import('@craft-agent/shared/utils/logo')

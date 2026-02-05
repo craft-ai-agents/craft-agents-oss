@@ -401,6 +401,19 @@ const api: ElectronAPI = {
     }
   },
 
+  // Language preferences sync across windows
+  broadcastLanguage: (language: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.LANGUAGE_BROADCAST, language),
+  onLanguageChange: (callback: (language: string) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, language: string) => {
+      callback(language)
+    }
+    ipcRenderer.on(IPC_CHANNELS.LANGUAGE_CHANGED, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.LANGUAGE_CHANGED, handler)
+    }
+  },
+
   // Notifications
   showNotification: (title: string, body: string, workspaceId: string, sessionId: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_SHOW, title, body, workspaceId, sessionId),

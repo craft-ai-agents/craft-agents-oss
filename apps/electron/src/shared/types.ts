@@ -714,6 +714,10 @@ export const IPC_CHANNELS = {
   // Tool icon mappings (for Appearance settings)
   TOOL_ICONS_GET_MAPPINGS: 'toolIcons:getMappings',
 
+  // Language preferences sync across windows
+  LANGUAGE_BROADCAST: 'language:broadcast',  // Send language to main for broadcast
+  LANGUAGE_CHANGED: 'language:changed',  // Broadcast: language changed in another window
+
   // Logo URL resolution (uses Node.js filesystem cache)
   LOGO_GET_URL: 'logo:getUrl',
 
@@ -1024,6 +1028,10 @@ export interface ElectronAPI {
   // Workspace theme sync across windows
   broadcastWorkspaceThemeChange(workspaceId: string, themeId: string | null): Promise<void>
   onWorkspaceThemeChange(callback: (data: { workspaceId: string; themeId: string | null }) => void): () => void
+
+  // Language preferences sync across windows
+  broadcastLanguage(language: string): Promise<void>
+  onLanguageChange(callback: (language: string) => void): () => void
 
   // Git operations
   getGitBranch(dirPath: string): Promise<string | null>

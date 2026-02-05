@@ -12,6 +12,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
@@ -45,6 +46,7 @@ export const meta: DetailsPageMeta = {
 // ============================================
 
 export default function AppSettingsPage() {
+  const { t } = useTranslation()
   const { refreshCustomModel } = useAppShellContext()
 
   // API Connection state (read-only display — editing is done via OnboardingWizard overlay)
@@ -130,17 +132,17 @@ export default function AppSettingsPage() {
 
   return (
     <div className="h-full flex flex-col">
-      <PanelHeader title="App Settings" actions={<HeaderMenu route={routes.view.settings('app')} helpFeature="app-settings" />} />
+      <PanelHeader title={t('settings.title')} actions={<HeaderMenu route={routes.view.settings('app')} helpFeature="app-settings" />} />
       <div className="flex-1 min-h-0 mask-fade-y">
         <ScrollArea className="h-full">
           <div className="px-5 py-7 max-w-3xl mx-auto">
           <div className="space-y-8">
             {/* Notifications */}
-            <SettingsSection title="Notifications">
+            <SettingsSection title={t('settings.notifications')}>
               <SettingsCard>
                 <SettingsToggle
-                  label="Desktop notifications"
-                  description="Get notified when AI finishes working in a chat."
+                  label={t('settings.desktopNotifications')}
+                  description={t('settings.notificationDesc')}
                   checked={notificationsEnabled}
                   onCheckedChange={handleNotificationsEnabledChange}
                 />
@@ -148,16 +150,16 @@ export default function AppSettingsPage() {
             </SettingsSection>
 
             {/* API Connection */}
-            <SettingsSection title="API Connection" description="How your AI agents connect to language models.">
+            <SettingsSection title={t('settings.apiConnection')} description={t('settings.apiConnectionDesc')}>
               <SettingsCard>
                 <SettingsRow
-                  label="Connection type"
+                  label={t('settings.connectionType')}
                   description={
                     authType === 'oauth_token' && hasCredential
-                      ? 'Claude Pro/Max — using your Claude subscription'
+                      ? t('settings.oauthDesc')
                       : authType === 'api_key' && hasCredential
-                        ? 'API Key — Anthropic, OpenRouter, or compatible API'
-                        : 'Not configured'
+                        ? t('settings.apiKeyDesc')
+                        : t('settings.notConfigured')
                   }
                 >
                   <Button
@@ -165,7 +167,7 @@ export default function AppSettingsPage() {
                     size="sm"
                     onClick={openApiSetup}
                   >
-                    Edit
+                    {t('common.edit')}
                   </Button>
                 </SettingsRow>
               </SettingsCard>
@@ -206,27 +208,27 @@ export default function AppSettingsPage() {
             </FullscreenOverlayBase>
 
             {/* About */}
-            <SettingsSection title="About">
+            <SettingsSection title={t('settings.about')}>
               <SettingsCard>
-                <SettingsRow label="Version">
+                <SettingsRow label={t('settings.version')}>
                   <div className="flex items-center gap-2">
                     <span className="text-muted-foreground">
-                      {updateChecker.updateInfo?.currentVersion ?? 'Loading...'}
+                      {updateChecker.updateInfo?.currentVersion ?? t('common.loading')}
                     </span>
                     {/* Show downloading indicator when update is being downloaded */}
                     {updateChecker.isDownloading && updateChecker.updateInfo?.latestVersion && (
                       <div className="flex items-center gap-2 text-muted-foreground text-sm">
                         <Spinner className="w-3 h-3" />
                         {updateChecker.isIndeterminate ? (
-                          <span>Downloading v{updateChecker.updateInfo.latestVersion}...</span>
+                          <span>{t('settings.downloading', { version: updateChecker.updateInfo.latestVersion })}</span>
                         ) : (
-                          <span>Downloading v{updateChecker.updateInfo.latestVersion} ({updateChecker.downloadProgress}%)</span>
+                          <span>{t('settings.downloadingProgress', { version: updateChecker.updateInfo.latestVersion, progress: updateChecker.downloadProgress })}</span>
                         )}
                       </div>
                     )}
                   </div>
                 </SettingsRow>
-                <SettingsRow label="Check for updates">
+                <SettingsRow label={t('settings.checkForUpdates')}>
                   <Button
                     variant="outline"
                     size="sm"
@@ -236,20 +238,20 @@ export default function AppSettingsPage() {
                     {isCheckingForUpdates ? (
                       <>
                         <Spinner className="mr-1.5" />
-                        Checking...
+                        {t('common.checking')}
                       </>
                     ) : (
-                      'Check Now'
+                      t('common.checkNow')
                     )}
                   </Button>
                 </SettingsRow>
                 {updateChecker.isReadyToInstall && updateChecker.updateInfo?.latestVersion && (
-                  <SettingsRow label="Update ready">
+                  <SettingsRow label={t('settings.installUpdate')}>
                     <Button
                       size="sm"
                       onClick={updateChecker.installUpdate}
                     >
-                      Restart to Update to v{updateChecker.updateInfo.latestVersion}
+                      {t('settings.restartToUpdate', { version: updateChecker.updateInfo.latestVersion })}
                     </Button>
                   </SettingsRow>
                 )}

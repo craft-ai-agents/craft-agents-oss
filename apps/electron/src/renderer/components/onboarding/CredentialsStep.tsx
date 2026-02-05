@@ -5,6 +5,7 @@
  * with StepFormLayout for the onboarding wizard context.
  */
 
+import { useTranslation } from "react-i18next"
 import { ExternalLink } from "lucide-react"
 import type { ApiSetupMethod } from "./APISetupStep"
 import { StepFormLayout, BackButton, ContinueButton } from "./primitives"
@@ -42,6 +43,7 @@ export function CredentialsStep({
   onSubmitAuthCode,
   onCancelOAuth,
 }: CredentialsStepProps) {
+  const { t } = useTranslation()
   const isOAuth = apiSetupMethod === 'claude_oauth'
 
   // --- OAuth flow ---
@@ -50,17 +52,17 @@ export function CredentialsStep({
     if (isWaitingForCode) {
       return (
         <StepFormLayout
-          title="Enter Authorization Code"
-          description="Copy the code from the browser page and paste it below."
+          title={t('onboarding.enterAuthCode')}
+          description={t('onboarding.copyCodeDesc')}
           actions={
             <>
-              <BackButton onClick={onCancelOAuth} disabled={status === 'validating'}>Cancel</BackButton>
+              <BackButton onClick={onCancelOAuth} disabled={status === 'validating'}>{t('common.cancel')}</BackButton>
               <ContinueButton
                 type="submit"
                 form="auth-code-form"
                 disabled={false}
                 loading={status === 'validating'}
-                loadingText="Connecting..."
+                loadingText={t('onboarding.connecting')}
               />
             </>
           }
@@ -79,8 +81,8 @@ export function CredentialsStep({
 
     return (
       <StepFormLayout
-        title="Connect Claude Account"
-        description="Use your Claude subscription to power multi-agent workflows."
+        title={t('onboarding.connectClaudeAccount')}
+        description={t('onboarding.useClaudeSubscription')}
         actions={
           <>
             <BackButton onClick={onBack} disabled={status === 'validating'} />
@@ -88,10 +90,10 @@ export function CredentialsStep({
               onClick={onStartOAuth}
               className="gap-2"
               loading={status === 'validating'}
-              loadingText="Connecting..."
+              loadingText={t('onboarding.connecting')}
             >
               <ExternalLink className="size-4" />
-              Sign in with Claude
+              {t('onboarding.signInWithClaude')}
             </ContinueButton>
           </>
         }
@@ -111,8 +113,8 @@ export function CredentialsStep({
   // --- API Key flow ---
   return (
     <StepFormLayout
-      title="API Configuration"
-      description="Enter your API key. Optionally configure a custom endpoint for OpenRouter, Ollama, or compatible APIs."
+      title={t('onboarding.apiConfiguration')}
+      description={t('onboarding.apiConfigDesc')}
       actions={
         <>
           <BackButton onClick={onBack} disabled={status === 'validating'} />
@@ -121,7 +123,7 @@ export function CredentialsStep({
             form="api-key-form"
             disabled={false}
             loading={status === 'validating'}
-            loadingText="Validating..."
+            loadingText={t('onboarding.validating')}
           />
         </>
       }

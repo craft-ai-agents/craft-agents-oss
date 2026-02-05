@@ -6,7 +6,9 @@ import { captureConsoleIntegration } from '@sentry/react'
 import { Provider as JotaiProvider } from 'jotai'
 import App from './App'
 import { ThemeProvider } from './context/ThemeContext'
+import { I18nProvider } from './context/I18nContext'
 import { Toaster } from '@/components/ui/sonner'
+import './i18n'
 import './index.css'
 
 // Known-harmless console messages that should NOT be sent to Sentry.
@@ -110,7 +112,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <Sentry.ErrorBoundary fallback={<CrashFallback />}>
       <JotaiProvider>
-        <Root />
+        <I18nProvider>
+          <Root />
+        </I18nProvider>
       </JotaiProvider>
     </Sentry.ErrorBoundary>
   </React.StrictMode>

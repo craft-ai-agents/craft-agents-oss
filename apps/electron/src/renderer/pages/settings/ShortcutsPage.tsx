@@ -5,6 +5,7 @@
  */
 
 import * as React from 'react'
+import { useTranslation } from 'react-i18next'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { SettingsSection, SettingsCard, SettingsRow } from '@/components/settings'
@@ -18,11 +19,11 @@ export const meta: DetailsPageMeta = {
 
 interface ShortcutItem {
   keys: string[]
-  description: string
+  descriptionKey: string
 }
 
 interface ShortcutSection {
-  title: string
+  titleKey: string
   shortcuts: ShortcutItem[]
 }
 
@@ -30,41 +31,41 @@ const cmdKey = isMac ? '⌘' : 'Ctrl'
 
 const sections: ShortcutSection[] = [
   {
-    title: 'Global',
+    titleKey: 'shortcutsSettings.global',
     shortcuts: [
-      { keys: [cmdKey, '1'], description: 'Focus sidebar' },
-      { keys: [cmdKey, '2'], description: 'Focus session list' },
-      { keys: [cmdKey, '3'], description: 'Focus chat input' },
-      { keys: [cmdKey, 'N'], description: 'New chat' },
-      { keys: [cmdKey, 'B'], description: 'Toggle sidebar' },
-      { keys: [cmdKey, ','], description: 'Open settings' },
+      { keys: [cmdKey, '1'], descriptionKey: 'shortcutsSettings.focusSidebar' },
+      { keys: [cmdKey, '2'], descriptionKey: 'shortcutsSettings.focusSessionList' },
+      { keys: [cmdKey, '3'], descriptionKey: 'shortcutsSettings.focusChatInput' },
+      { keys: [cmdKey, 'N'], descriptionKey: 'shortcutsSettings.newChat' },
+      { keys: [cmdKey, 'B'], descriptionKey: 'shortcutsSettings.toggleSidebar' },
+      { keys: [cmdKey, ','], descriptionKey: 'shortcutsSettings.openSettings' },
     ],
   },
   {
-    title: 'Navigation',
+    titleKey: 'shortcutsSettings.navigation',
     shortcuts: [
-      { keys: ['Tab'], description: 'Move to next zone' },
-      { keys: ['Shift', 'Tab'], description: 'Cycle permission mode' },
-      { keys: ['←', '→'], description: 'Move between zones (in lists)' },
-      { keys: ['↑', '↓'], description: 'Navigate items in list' },
-      { keys: ['Home'], description: 'Go to first item' },
-      { keys: ['End'], description: 'Go to last item' },
-      { keys: ['Esc'], description: 'Close dialog / blur input' },
+      { keys: ['Tab'], descriptionKey: 'shortcutsSettings.moveToNextZone' },
+      { keys: ['Shift', 'Tab'], descriptionKey: 'shortcutsSettings.cyclePermissionMode' },
+      { keys: ['←', '→'], descriptionKey: 'shortcutsSettings.moveBetweenZones' },
+      { keys: ['↑', '↓'], descriptionKey: 'shortcutsSettings.navigateItems' },
+      { keys: ['Home'], descriptionKey: 'shortcutsSettings.goToFirst' },
+      { keys: ['End'], descriptionKey: 'shortcutsSettings.goToLast' },
+      { keys: ['Esc'], descriptionKey: 'shortcutsSettings.closeDialogBlur' },
     ],
   },
   {
-    title: 'Session List',
+    titleKey: 'shortcutsSettings.sessionList',
     shortcuts: [
-      { keys: ['Enter'], description: 'Focus chat input' },
-      { keys: ['Delete'], description: 'Delete session' },
+      { keys: ['Enter'], descriptionKey: 'shortcutsSettings.focusChatInputFromList' },
+      { keys: ['Delete'], descriptionKey: 'shortcutsSettings.deleteSession' },
     ],
   },
   {
-    title: 'Chat',
+    titleKey: 'shortcutsSettings.chat',
     shortcuts: [
-      { keys: ['Enter'], description: 'Send message' },
-      { keys: ['Shift', 'Enter'], description: 'New line' },
-      { keys: [cmdKey, 'Enter'], description: 'Send message' },
+      { keys: ['Enter'], descriptionKey: 'shortcutsSettings.sendMessage' },
+      { keys: ['Shift', 'Enter'], descriptionKey: 'shortcutsSettings.newLine' },
+      { keys: [cmdKey, 'Enter'], descriptionKey: 'shortcutsSettings.sendMessage' },
     ],
   },
 ]
@@ -78,17 +79,19 @@ function Kbd({ children }: { children: React.ReactNode }) {
 }
 
 export default function ShortcutsPage() {
+  const { t } = useTranslation()
+
   return (
     <div className="h-full flex flex-col">
-      <PanelHeader title="Shortcuts" />
+      <PanelHeader title={t('shortcutsSettings.title')} />
       <div className="flex-1 min-h-0 mask-fade-y">
         <ScrollArea className="h-full">
           <div className="px-5 py-7 max-w-3xl mx-auto space-y-8">
             {sections.map((section) => (
-              <SettingsSection key={section.title} title={section.title}>
+              <SettingsSection key={section.titleKey} title={t(section.titleKey)}>
                 <SettingsCard>
                   {section.shortcuts.map((shortcut, index) => (
-                    <SettingsRow key={index} label={shortcut.description}>
+                    <SettingsRow key={index} label={t(shortcut.descriptionKey)}>
                       <div className="flex items-center gap-1">
                         {shortcut.keys.map((key, keyIndex) => (
                           <Kbd key={keyIndex}>{key}</Kbd>

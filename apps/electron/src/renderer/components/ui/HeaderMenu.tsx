@@ -7,6 +7,7 @@
  */
 
 import * as React from 'react'
+import { useTranslation } from 'react-i18next'
 import { MoreHorizontal, AppWindow, ExternalLink } from 'lucide-react'
 import { HeaderIconButton } from './HeaderIconButton'
 import {
@@ -30,6 +31,8 @@ interface HeaderMenuProps {
 }
 
 export function HeaderMenu({ route, children, helpFeature }: HeaderMenuProps) {
+  const { t } = useTranslation()
+
   const handleOpenInNewWindow = async () => {
     const separator = route.includes('?') ? '&' : '?'
     const url = `craftagents://${route}${separator}window=focused`
@@ -56,14 +59,14 @@ export function HeaderMenu({ route, children, helpFeature }: HeaderMenuProps) {
         {children && <StyledDropdownMenuSeparator />}
         <StyledDropdownMenuItem onClick={handleOpenInNewWindow}>
           <AppWindow className="h-3.5 w-3.5" />
-          <span className="flex-1">Open in New Window</span>
+          <span className="flex-1">{t('common.openInNewWindow')}</span>
         </StyledDropdownMenuItem>
         {helpFeature && (
           <>
             <StyledDropdownMenuSeparator />
             <StyledDropdownMenuItem onClick={handleLearnMore}>
               <ExternalLink className="h-3.5 w-3.5" />
-              <span className="flex-1">Learn More</span>
+              <span className="flex-1">{t('common.learnMore')}</span>
             </StyledDropdownMenuItem>
           </>
         )}
