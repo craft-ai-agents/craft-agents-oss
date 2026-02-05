@@ -85,8 +85,9 @@ export class EventAdapter {
    */
   *adaptTurnStarted(notification: TurnStartedNotification): Generator<AgentEvent> {
     // Capture turn ID for event correlation
+    // Note: No status event emitted - TurnCard shows "Thinking..." automatically
+    // via shouldShowThinkingIndicator() based on turn phase
     this.currentTurnId = notification.turn?.id || null;
-    yield { type: 'status', message: 'Thinking...' };
   }
 
   /**
