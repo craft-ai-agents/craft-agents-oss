@@ -63,15 +63,16 @@ export class WindowManager {
     const { workspaceId, focused = false, initialDeepLink, restoreUrl } = options
 
     // Load platform-specific app icon
+    // In packaged app, resources are at dist/resources/ (same level as __dirname)
+    // In dev, resources are at ../resources/ (sibling of dist/)
     const getIconPath = () => {
-      const resourcesDir = join(__dirname, '../resources')
-      if (process.platform === 'darwin') {
-        return join(resourcesDir, 'icon.icns')
-      } else if (process.platform === 'win32') {
-        return join(resourcesDir, 'icon.ico')
-      } else {
-        return join(resourcesDir, 'icon.png')
-      }
+      const iconName = process.platform === 'darwin' ? 'icon.icns'
+        : process.platform === 'win32' ? 'icon.ico'
+        : 'icon.png'
+      return [
+        join(__dirname, 'resources', iconName),
+        join(__dirname, '../resources', iconName),
+      ].find(p => existsSync(p)) ?? join(__dirname, '../resources', iconName)
     }
 
     const iconPath = getIconPath()

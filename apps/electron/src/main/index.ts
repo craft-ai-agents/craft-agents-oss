@@ -253,8 +253,14 @@ app.whenReady().then(async () => {
 
   // Set dock icon on macOS (required for dev mode, bundled apps use Info.plist)
   if (process.platform === 'darwin' && app.dock) {
-    const dockIconPath = join(__dirname, '../resources/icon.png')
-    if (existsSync(dockIconPath)) {
+    // In packaged app, resources are at dist/resources/ (same level as __dirname)
+    // In dev, resources are at ../resources/ (sibling of dist/)
+    const dockIconPath = [
+      join(__dirname, 'resources/icon.png'),
+      join(__dirname, '../resources/icon.png'),
+    ].find(p => existsSync(p))
+
+    if (dockIconPath) {
       app.dock.setIcon(dockIconPath)
       // Initialize badge icon for canvas-based badge overlay
       initBadgeIcon(dockIconPath)
