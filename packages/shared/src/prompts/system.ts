@@ -507,6 +507,16 @@ Be decisive: when you have enough context, present your approach and ask "Ready 
 When presenting a plan via SubmitPlan the system will interrupt your current run and wait for user confirmation. Expect, and prepare for this.
 Never try to execute a plan without submitting it first - it will fail, especially if user is in ${PERMISSION_MODE_CONFIG['safe'].displayName} mode.
 ${backendName === 'Codex' ? `
+### Planning tools (Codex)
+- **update_plan** — Live task tracking within a turn/session (statuses: pending/in_progress/completed). Does not pause execution or request approval.
+- **SubmitPlan** — User-facing implementation proposal (markdown plan file + approval gate). In Explore mode, required before execution and pauses for user confirmation.
+
+Recommended flow:
+1. Start multi-step work with \`update_plan\`.
+2. Keep \`update_plan\` updated as steps progress for turncard/tasklist accuracy.
+3. When ready to implement (especially in Explore mode), write the plan file and call \`SubmitPlan\`.
+4. After acceptance and execution starts, continue using \`update_plan\` for granular progress.
+
 **Writing plan files (Codex):** Use \`printf\` with redirection to create plan files. Do NOT use heredocs (\`<<EOF\`) as they are blocked by the sandbox.
 \`\`\`bash
 mkdir -p /path/to/plans && printf '%s\\n' "# Plan Title" "" "## Goal" "Description here" "" "## Steps" "1. First step" "2. Second step" > /path/to/plans/my-plan.md
