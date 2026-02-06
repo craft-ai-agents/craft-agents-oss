@@ -5,10 +5,9 @@
  *
  * Settings:
  * - Identity (Name, Icon)
+ * - Model
  * - Permissions (Default mode, Mode cycling)
  * - Advanced (Working directory, Local MCP servers)
- *
- * Note: AI settings (model, thinking, connection) have been moved to AiSettingsPage.
  */
 
 import * as React from 'react'
@@ -22,8 +21,9 @@ import { cn } from '@/lib/utils'
 import { routes } from '@/lib/navigate'
 import { Spinner } from '@craft-agent/ui'
 import { RenameDialog } from '@/components/ui/rename-dialog'
-import type { PermissionMode, WorkspaceSettings } from '../../../shared/types'
+import type { PermissionMode, ThinkingLevel, WorkspaceSettings } from '../../../shared/types'
 import { PERMISSION_MODE_CONFIG } from '@craft-agent/shared/agent/mode-types'
+import { DEFAULT_THINKING_LEVEL, THINKING_LEVELS } from '@craft-agent/shared/agent/thinking-levels'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 
 import {
@@ -44,10 +44,12 @@ export const meta: DetailsPageMeta = {
 // ============================================
 
 export default function WorkspaceSettingsPage() {
-  // Get active workspace from context
+  // Get model, onModelChange, and active workspace from context
   const appShellContext = useAppShellContext()
+  const onModelChange = appShellContext.onModelChange
   const activeWorkspaceId = appShellContext.activeWorkspaceId
   const onRefreshWorkspaces = appShellContext.onRefreshWorkspaces
+  const customModel = appShellContext.customModel
 
   // Workspace settings state
   const [wsName, setWsName] = useState('')
@@ -55,6 +57,8 @@ export default function WorkspaceSettingsPage() {
   const [renameDialogOpen, setRenameDialogOpen] = useState(false)
   const [wsIconUrl, setWsIconUrl] = useState<string | null>(null)
   const [isUploadingIcon, setIsUploadingIcon] = useState(false)
+  const [wsModel, setWsModel] = useState('claude-sonnet-4-5-20250929')
+  const [wsThinkingLevel, setWsThinkingLevel] = useState<ThinkingLevel>(DEFAULT_THINKING_LEVEL)
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('ask')
   const [workingDirectory, setWorkingDirectory] = useState('')
   const [localMcpEnabled, setLocalMcpEnabled] = useState(true)
@@ -78,6 +82,8 @@ export default function WorkspaceSettingsPage() {
         if (settings) {
           setWsName(settings.name || '')
           setWsNameEditing(settings.name || '')
+          setWsModel(settings.model || 'claude-sonnet-4-5-20250929')
+          setWsThinkingLevel(settings.thinkingLevel || DEFAULT_THINKING_LEVEL)
           setPermissionMode(settings.permissionMode || 'ask')
           setWorkingDirectory(settings.workingDirectory || '')
           setLocalMcpEnabled(settings.localMcpEnabled ?? true)
@@ -191,6 +197,24 @@ export default function WorkspaceSettingsPage() {
   }, [activeWorkspaceId, onRefreshWorkspaces])
 
   // Workspace settings handlers
+  const handleModelChange = useCallback(
+    async (newModel: string) => {
+      setWsModel(newModel)
+      await updateWorkspaceSetting('model', newModel)
+      // Also update the global model context so it takes effect immediately
+      onModelChange?.(newModel)
+    },
+    [updateWorkspaceSetting, onModelChange]
+  )
+
+  const handleThinkingLevelChange = useCallback(
+    async (newLevel: ThinkingLevel) => {
+      setWsThinkingLevel(newLevel)
+      await updateWorkspaceSetting('thinkingLevel', newLevel)
+    },
+    [updateWorkspaceSetting]
+  )
+
   const handlePermissionModeChange = useCallback(
     async (newMode: PermissionMode) => {
       setPermissionMode(newMode)
@@ -366,6 +390,45 @@ export default function WorkspaceSettingsPage() {
                 }}
                 placeholder="Enter workspace name..."
               />
+            </SettingsSection>
+
+            {/* Model */}
+            <SettingsSection title="Model">
+              <SettingsCard>
+                {/* When a custom API connection is active, model is fixed — show info instead of selector */}
+                {customModel ? (
+                  <SettingsRow
+                    label="Default model"
+                    description="Set via API connection"
+                  >
+                    <span className="text-sm text-muted-foreground">{customModel}</span>
+                  </SettingsRow>
+                ) : (
+                  <SettingsMenuSelectRow
+                    label="Default model"
+                    description="AI model for new chats"
+                    value={wsModel}
+                    onValueChange={handleModelChange}
+                    options={[
+                      { value: 'claude-opus-4-6', label: 'Opus 4.6', description: 'Most capable for complex work' },
+                      { value: 'claude-opus-4-5-20251101', label: 'Opus 4.5', description: 'Previous generation' },
+                      { value: 'claude-sonnet-4-5-20250929', label: 'Sonnet 4.5', description: 'Best for everyday tasks' },
+                      { value: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5', description: 'Fastest for quick answers' },
+                    ]}
+                  />
+                )}
+                <SettingsMenuSelectRow
+                  label="Thinking level"
+                  description="Reasoning depth for new chats"
+                  value={wsThinkingLevel}
+                  onValueChange={(v) => handleThinkingLevelChange(v as ThinkingLevel)}
+                  options={THINKING_LEVELS.map(({ id, name, description }) => ({
+                    value: id,
+                    label: name,
+                    description,
+                  }))}
+                />
+              </SettingsCard>
             </SettingsSection>
 
             {/* Permissions */}

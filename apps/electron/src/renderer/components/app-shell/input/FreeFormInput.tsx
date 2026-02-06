@@ -10,8 +10,6 @@ import {
   DatabaseZap,
   ChevronDown,
   Loader2,
-  Lock,
-  AlertCircle,
 } from 'lucide-react'
 import { Icon_Home, Icon_Folder } from '@craft-agent/ui'
 
@@ -55,8 +53,7 @@ import { cn } from '@/lib/utils'
 import { isMac, PATH_SEP, getPathBasename } from '@/lib/platform'
 import { applySmartTypography } from '@/lib/smart-typography'
 import { AttachmentPreview } from '../AttachmentPreview'
-import { ANTHROPIC_MODELS, getModelShortName, getModelContextWindow, isCodexModel } from '@config/models'
-import { resolveEffectiveConnectionSlug, isCompatProvider, isAnthropicProvider } from '@config/llm-connections'
+import { MODELS, getModelShortName, getModelContextWindow, isClaudeModel } from '@config/models'
 import { useOptionalAppShellContext } from '@/context/AppShellContext'
 import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
 import { SourceAvatar } from '@/components/ui/source-avatar'
@@ -121,8 +118,8 @@ export interface FreeFormInputProps {
   inputRef?: React.RefObject<RichTextInputHandle>
   /** Current model ID */
   currentModel: string
-  /** Callback when model changes (includes connection slug for proper persistence) */
-  onModelChange: (model: string, connection?: string) => void
+  /** Callback when model changes */
+  onModelChange: (model: string) => void
   // Thinking level (session-level setting)
   /** Current thinking level ('off', 'think', 'max') */
   thinkingLevel?: ThinkingLevel
@@ -190,13 +187,6 @@ export interface FreeFormInputProps {
   }
   /** Enable compact mode - hides attach, sources, working directory for popover embedding */
   compactMode?: boolean
-  // Connection selection (hierarchical connection → model selector)
-  /** Current LLM connection slug (locked after first message) */
-  currentConnection?: string
-  /** Callback when connection changes (only works when session is empty) */
-  onConnectionChange?: (connectionSlug: string) => void
-  /** When true, the session's locked connection has been removed */
-  connectionUnavailable?: boolean
 }
 
 /**
@@ -247,103 +237,11 @@ export function FreeFormInput({
   isEmptySession = false,
   contextStatus,
   compactMode = false,
-  currentConnection,
-  onConnectionChange,
-  connectionUnavailable = false,
 }: FreeFormInputProps) {
-  // Read connection default model, connections, and workspace info from context.
+  // Read custom model and workspace info from context.
   // Uses optional variant so playground (no provider) doesn't crash.
   const appShellCtx = useOptionalAppShellContext()
-  const llmConnections = appShellCtx?.llmConnections ?? []
-  const workspaceDefaultConnection = appShellCtx?.workspaceDefaultLlmConnection
-
-  // Derive connectionDefaultModel per-session from the effective connection.
-  // Only non-null for compat providers (custom endpoints with fixed models).
-  // Standard providers (anthropic, openai, bedrock, vertex) → null → normal model picker.
-  const connectionDefaultModel = React.useMemo(() => {
-    const effectiveSlug = resolveEffectiveConnectionSlug(currentConnection, workspaceDefaultConnection, llmConnections)
-    const conn = llmConnections.find(c => c.slug === effectiveSlug)
-    if (!conn) return null
-    if (!isCompatProvider(conn.providerType)) return null
-    // Allow model switching when connection has multiple models
-    if (conn.models && conn.models.length > 1) return null
-    return conn.defaultModel ?? null
-  }, [currentConnection, workspaceDefaultConnection, llmConnections])
-
-  // Compute available models from the effective connection.
-  // All connections have models populated by backfillAllConnectionModels().
-  const availableModels = React.useMemo(() => {
-    // Connection removed — don't fall through to another connection's models
-    if (connectionUnavailable) return []
-
-    // Determine effective connection using the canonical fallback chain
-    const effectiveSlug = resolveEffectiveConnectionSlug(currentConnection, workspaceDefaultConnection, llmConnections)
-    const connection = llmConnections.find(c => c.slug === effectiveSlug)
-
-    if (!connection) {
-      return ANTHROPIC_MODELS // Safety net — shouldn't happen
-    }
-
-    return connection.models || ANTHROPIC_MODELS
-  }, [llmConnections, currentConnection, workspaceDefaultConnection, connectionUnavailable])
-
-  const availableThinkingLevels = THINKING_LEVELS
-
-  // Group connections by provider type for hierarchical dropdown
-  // Each provider (Anthropic, OpenAI) can have multiple connections (API Key, Claude Max, etc.)
-  const connectionsByProvider = React.useMemo(() => {
-    const groups: Record<string, typeof llmConnections> = {
-      'Anthropic': [],
-      'OpenAI': [],
-    }
-    for (const conn of llmConnections) {
-      const provider = conn.providerType || 'anthropic'
-      // Group by SDK: anthropic/anthropic_compat/bedrock/vertex use Anthropic SDK
-      if (provider === 'anthropic' || provider === 'anthropic_compat' || provider === 'bedrock' || provider === 'vertex') {
-        groups['Anthropic'].push(conn)
-      } else if (provider === 'openai' || provider === 'openai_compat') {
-        groups['OpenAI'].push(conn)
-      }
-    }
-    // Return only non-empty groups
-    return Object.entries(groups).filter(([, conns]) => conns.length > 0)
-  }, [llmConnections])
-
-  // Find current connection details for display
-  const currentConnectionDetails = React.useMemo(() => {
-    if (!currentConnection) return null
-    return llmConnections.find(c => c.slug === currentConnection) ?? null
-  }, [llmConnections, currentConnection])
-
-  // Effective connection: canonical fallback chain (session → workspace default → global default → first)
-  const effectiveConnection = resolveEffectiveConnectionSlug(currentConnection, workspaceDefaultConnection, llmConnections)
-
-  // Effective connection details (with fallbacks) for model list
-  // Unlike currentConnectionDetails which is null when no explicit connection is set,
-  // this resolves to the actual connection being used (including workspace default)
-  const effectiveConnectionDetails = React.useMemo(() => {
-    if (!effectiveConnection) return null
-    return llmConnections.find(c => c.slug === effectiveConnection) ?? null
-  }, [llmConnections, effectiveConnection])
-
-  // Detect provider mismatch: session is locked to one provider (e.g. Anthropic)
-  // but the current default connection is a different provider (e.g. OpenAI).
-  // This warns the user that switching the default doesn't affect this session.
-  const providerMismatch = React.useMemo(() => {
-    if (!currentConnection || isEmptySession || !currentConnectionDetails) return false
-    // Find what the default connection would be (ignoring session lock)
-    const defaultSlug = workspaceDefaultConnection
-      ?? llmConnections.find(c => c.isDefault)?.slug
-      ?? llmConnections[0]?.slug
-    if (!defaultSlug || defaultSlug === currentConnection) return false
-    const defaultConn = llmConnections.find(c => c.slug === defaultSlug)
-    if (!defaultConn) return false
-    // Compare provider families (anthropic/bedrock/vertex vs openai)
-    const lockedIsAnthropic = isAnthropicProvider(currentConnectionDetails.providerType)
-    const defaultIsAnthropic = isAnthropicProvider(defaultConn.providerType)
-    return lockedIsAnthropic !== defaultIsAnthropic
-  }, [currentConnection, isEmptySession, currentConnectionDetails, workspaceDefaultConnection, llmConnections])
-
+  const customModel = appShellCtx?.customModel ?? null
   // Access todoStates and onTodoStateChange from context for the # menu state picker
   const todoStates = appShellCtx?.todoStates ?? []
   const onTodoStateChange = appShellCtx?.onTodoStateChange
@@ -457,7 +355,7 @@ export function FreeFormInput({
           window.electronAPI.getSpellCheck(),
         ])
         setAutoCapitalisation(autoCapEnabled)
-        setSendMessageKey(sendKey ?? 'enter')
+        setSendMessageKey(sendKey)
         setSpellCheck(spellCheckEnabled)
       } catch (error) {
         console.error('Failed to load input settings:', error)
@@ -620,6 +518,7 @@ export function FreeFormInput({
       // Compaction completed but we never sent the execution message (page reloaded).
       // Send it now and clear the pending state.
       hasExecuted = true
+      console.log('[FreeFormInput] Resuming pending plan execution after reload:', pending.planPath)
       onSubmit(`Read the plan at ${pending.planPath} and execute it.`, undefined)
 
       await window.electronAPI.sessionCommand(sessionId, {
@@ -938,8 +837,8 @@ export function FreeFormInput({
           try {
             const thumb = await window.electronAPI.generateThumbnail(base64, mimeType)
             if (thumb) thumbnailBase64 = thumb
-          } catch {
-            // Thumbnail generation is optional, continue without it
+          } catch (err) {
+            console.log('[FreeFormInput] Thumbnail generation failed:', err)
           }
         }
 
@@ -1408,7 +1307,7 @@ export function FreeFormInput({
           disabled={disabled}
           skills={skills}
           sources={sources}
-          workspaceId={workspaceSlug}
+          workspaceId={workspaceId}
           className="pl-5 pr-4 pt-4 pb-3 overflow-y-auto min-h-[88px]"
           style={{ maxHeight: inputMaxHeight }}
           data-tutorial="chat-input"
@@ -1621,7 +1520,7 @@ export function FreeFormInput({
 
           {/* Right side: Model + Send - never shrink so they're always visible */}
           <div className="flex items-center shrink-0">
-          {/* 5. Model/Connection Selector - Hidden in compact mode (EditPopover embedding) */}
+          {/* 5. Model Selector - Hidden in compact mode (EditPopover embedding) */}
           {!compactMode && (
           <DropdownMenu open={modelDropdownOpen} onOpenChange={setModelDropdownOpen}>
             <Tooltip>
@@ -1631,170 +1530,60 @@ export function FreeFormInput({
                     type="button"
                     className={cn(
                       "inline-flex items-center h-7 px-1.5 gap-0.5 text-[13px] shrink-0 rounded-[6px] hover:bg-foreground/5 transition-colors select-none",
-                      modelDropdownOpen && "bg-foreground/5",
-                      connectionUnavailable && "text-destructive",
-                      providerMismatch && "text-amber-500"
+                      modelDropdownOpen && "bg-foreground/5"
                     )}
                   >
-                    {connectionUnavailable ? (
-                      <>
-                        <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                        Unavailable
-                      </>
-                    ) : (
-                      <>
-                        {providerMismatch && <Lock className="h-3 w-3 shrink-0" />}
-                        {getModelShortName(connectionDefaultModel ?? currentModel)}
-                        {!connectionDefaultModel && <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />}
-                      </>
-                    )}
+                    {/* Show custom model name when a custom API connection is active */}
+                    {getModelShortName(customModel || currentModel)}
+                    {!customModel && <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />}
                   </button>
                 </DropdownMenuTrigger>
               </TooltipTrigger>
-              <TooltipContent side="top">
-                {providerMismatch
-                  ? `Locked to ${currentConnectionDetails?.name ?? 'this connection'} — changing the default provider won't affect this session`
-                  : 'Model'}
-              </TooltipContent>
+              <TooltipContent side="top">Model</TooltipContent>
             </Tooltip>
-            <StyledDropdownMenuContent side="top" align="end" sideOffset={8} className="min-w-[260px]">
-              {/* Connection unavailable message */}
-              {connectionUnavailable ? (
-                <div className="flex flex-col items-center justify-center py-6 px-4 text-center">
-                  <AlertCircle className="h-8 w-8 text-destructive mb-2" />
-                  <div className="font-medium text-sm mb-1">Connection Unavailable</div>
-                  <div className="text-xs text-muted-foreground">
-                    The connection used by this session has been removed. Create a new session to continue.
-                  </div>
-                </div>
-              ) : connectionDefaultModel ? (
+            <StyledDropdownMenuContent side="top" align="end" sideOffset={8} className="min-w-[240px]">
+              {/* When custom model is active, show it as a static item instead of Anthropic options */}
+              {customModel ? (
                 <StyledDropdownMenuItem
                   disabled
                   className="flex items-center justify-between px-2 py-2 rounded-lg"
                 >
                   <div className="text-left">
-                    <div className="font-medium text-sm">{connectionDefaultModel}</div>
-                    <div className="text-xs text-muted-foreground">Connection default</div>
+                    <div className="font-medium text-sm">{customModel}</div>
+                    <div className="text-xs text-muted-foreground">Custom API connection</div>
                   </div>
                   <Check className="h-4 w-4 text-foreground shrink-0 ml-3" />
                 </StyledDropdownMenuItem>
-              ) : isEmptySession && llmConnections.length > 1 ? (
-                /* Hierarchical view: Provider → Connection → Models (for new sessions with multiple connections) */
-                connectionsByProvider.map(([providerName, connections], index) => (
-                  <React.Fragment key={providerName}>
-                    {/* Provider group label */}
-                    <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wide select-none">
-                      {providerName}
-                    </div>
-                    {connections.map((conn) => {
-                      const isCurrentConnection = effectiveConnection === conn.slug
-                      const isAuthenticated = conn.isAuthenticated
-                      return (
-                        <DropdownMenuSub key={conn.slug}>
-                          <StyledDropdownMenuSubTrigger
-                            disabled={!isAuthenticated}
-                            className={cn(
-                              "flex items-center justify-between px-2 py-2 rounded-lg",
-                              isCurrentConnection && "bg-foreground/5"
-                            )}
-                          >
-                            <div className="text-left flex-1">
-                              <div className="font-medium text-sm flex items-center gap-2">
-                                {conn.name}
-                                {isCurrentConnection && <Check className="h-3 w-3 text-foreground" />}
-                              </div>
-                              {!isAuthenticated && (
-                                <div className="text-xs text-muted-foreground">Not authenticated</div>
-                              )}
-                            </div>
-                          </StyledDropdownMenuSubTrigger>
-                          {isAuthenticated && (
-                            <StyledDropdownMenuSubContent className="min-w-[220px]">
-                              {/* Show models for this connection - use provider-specific models as fallback */}
-                              {(conn.models || ANTHROPIC_MODELS).map((model) => {
-                                const modelId = typeof model === 'string' ? model : model.id
-                                const modelName = typeof model === 'string' ? getModelShortName(model) : model.name
-                                const isSelectedModel = isCurrentConnection && currentModel === modelId
-                                return (
-                                  <StyledDropdownMenuItem
-                                    key={modelId}
-                                    onSelect={() => {
-                                      // If selecting a different connection, update both connection and model
-                                      if (!isCurrentConnection && onConnectionChange) {
-                                        onConnectionChange(conn.slug)
-                                      }
-                                      // Always pass connection with model for proper persistence
-                                      onModelChange(modelId, conn.slug)
-                                    }}
-                                    className="flex items-center justify-between px-2 py-2 rounded-lg cursor-pointer"
-                                  >
-                                    <div className="font-medium text-sm">{modelName}</div>
-                                    {isSelectedModel && (
-                                      <Check className="h-4 w-4 text-foreground shrink-0 ml-3" />
-                                    )}
-                                  </StyledDropdownMenuItem>
-                                )
-                              })}
-                            </StyledDropdownMenuSubContent>
-                          )}
-                        </DropdownMenuSub>
-                      )
-                    })}
-                    {index < connectionsByProvider.length - 1 && (
-                      <StyledDropdownMenuSeparator className="my-1" />
-                    )}
-                  </React.Fragment>
-                ))
               ) : (
-                /* Flat model list (single connection or session started) */
-                <>
-                  {/* Lock indicator showing which connection is being used */}
-                  {!isEmptySession && currentConnectionDetails && llmConnections.length > 1 && (
-                    <>
-                      <div className={cn(
-                        "flex items-center gap-2 px-2 py-1.5 text-xs select-none",
-                        providerMismatch ? "text-amber-500" : "text-muted-foreground"
-                      )}>
-                        <Lock className="h-3 w-3" />
-                        <span>
-                          {providerMismatch
-                            ? `Locked to ${currentConnectionDetails.name} — default provider changed`
-                            : `Using ${currentConnectionDetails.name}`}
-                        </span>
+                /* Standard Anthropic model options */
+                MODELS.map((model) => {
+                  const isSelected = currentModel === model.id
+                  const descriptions: Record<string, string> = {
+                    'claude-opus-4-6': 'Most capable for complex work',
+                    'claude-opus-4-5-20251101': 'Previous generation',
+                    'claude-sonnet-4-5-20250929': 'Best for everyday tasks',
+                    'claude-haiku-4-5-20251001': 'Fastest for quick answers',
+                  }
+                  return (
+                    <StyledDropdownMenuItem
+                      key={model.id}
+                      onSelect={() => onModelChange(model.id)}
+                      className="flex items-center justify-between px-2 py-2 rounded-lg cursor-pointer"
+                    >
+                      <div className="text-left">
+                        <div className="font-medium text-sm">{model.name}</div>
+                        <div className="text-xs text-muted-foreground">{descriptions[model.id] || model.description}</div>
                       </div>
-                      <StyledDropdownMenuSeparator className="my-1" />
-                    </>
-                  )}
-                  {/* Model options based on effective connection's provider type */}
-                  {availableModels.map((model) => {
-                    const modelId = typeof model === 'string' ? model : model.id
-                    const modelName = typeof model === 'string' ? getModelShortName(model) : model.name
-                    const isSelected = currentModel === modelId
-                    const description = typeof model !== 'string' && 'description' in model ? (model.description as string) : ''
-                    return (
-                      <StyledDropdownMenuItem
-                        key={modelId}
-                        onSelect={() => onModelChange(modelId, effectiveConnection)}
-                        className="flex items-center justify-between px-2 py-2 rounded-lg cursor-pointer"
-                      >
-                        <div className="text-left">
-                          <div className="font-medium text-sm">{modelName}</div>
-                          {description && (
-                            <div className="text-xs text-muted-foreground">{description}</div>
-                          )}
-                        </div>
-                        {isSelected && (
-                          <Check className="h-4 w-4 text-foreground shrink-0 ml-3" />
-                        )}
-                      </StyledDropdownMenuItem>
-                    )
-                  })}
-                </>
+                      {isSelected && (
+                        <Check className="h-4 w-4 text-foreground shrink-0 ml-3" />
+                      )}
+                    </StyledDropdownMenuItem>
+                  )
+                })
               )}
 
-              {/* Thinking level selector — only shown when thinking levels are available
-                  (Claude supports extended thinking, OpenAI backends may not) */}
-              {availableThinkingLevels.length > 0 && (
+              {/* Thinking level selector — only shown for Claude models (extended thinking is Claude-specific) */}
+              {(!customModel || isClaudeModel(customModel)) && (
                 <>
                   <StyledDropdownMenuSeparator className="my-1" />
 
@@ -1806,7 +1595,7 @@ export function FreeFormInput({
                       </div>
                     </StyledDropdownMenuSubTrigger>
                     <StyledDropdownMenuSubContent className="min-w-[220px]">
-                      {availableThinkingLevels.map(({ id, name, description }) => {
+                      {THINKING_LEVELS.map(({ id, name, description }) => {
                         const isSelected = thinkingLevel === id
                         return (
                           <StyledDropdownMenuItem
@@ -1840,7 +1629,16 @@ export function FreeFormInput({
                         {contextStatus.isCompacting && (
                           <Loader2 className="h-3 w-3 animate-spin" />
                         )}
-                        {formatTokenCount(contextStatus.inputTokens)} tokens used
+                        {formatTokenCount(contextStatus.inputTokens)}
+                        {/* Show compaction threshold (~77.5% of context window) as the limit,
+                            since that's when auto-compaction kicks in - not the full context window.
+                            Falls back to known model context window when SDK hasn't reported usage yet. */}
+                        {(() => {
+                          const ctxWindow = contextStatus.contextWindow || getModelContextWindow(customModel || currentModel)
+                          return ctxWindow ? (
+                            <span className="opacity-60">/ {formatTokenCount(Math.round(ctxWindow * 0.775))}</span>
+                          ) : null
+                        })()}
                       </span>
                     </div>
                   </div>
@@ -1856,7 +1654,7 @@ export function FreeFormInput({
             // not the full context window - this gives users meaningful warnings before compaction kicks in.
             // SDK triggers compaction at ~155k tokens for a 200k context window.
             // Falls back to known per-model context window when SDK hasn't reported usage yet.
-            const effectiveContextWindow = contextStatus?.contextWindow || getModelContextWindow(currentModel)
+            const effectiveContextWindow = contextStatus?.contextWindow || getModelContextWindow(customModel || currentModel)
             const compactionThreshold = effectiveContextWindow
               ? Math.round(effectiveContextWindow * 0.775)
               : null
@@ -1864,7 +1662,7 @@ export function FreeFormInput({
               ? Math.min(99, Math.round((contextStatus.inputTokens / compactionThreshold) * 100))
               : null
             // Show badge when >= 80% of compaction threshold AND not currently compacting
-            const showWarning = usagePercent !== null && usagePercent >= 80 && !contextStatus?.isCompacting && !isCodexModel(currentModel)
+            const showWarning = usagePercent !== null && usagePercent >= 80 && !contextStatus?.isCompacting
 
             if (!showWarning) return null
 

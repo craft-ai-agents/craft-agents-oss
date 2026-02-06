@@ -3,7 +3,7 @@ title: "Configuration File"
 description: "Reference for ~/.craft-agent/config.json"
 ---
 
-The main configuration file stores your workspace list, LLM connections, and app-wide defaults.
+The main configuration file stores your authentication method, model preferences, and workspace connections.
 
 ## Location
 
@@ -15,17 +15,8 @@ The main configuration file stores your workspace list, LLM connections, and app
 
 ```json
 {
-  "llmConnections": [
-    {
-      "slug": "anthropic-api",
-      "name": "Anthropic (API Key)",
-      "providerType": "anthropic",
-      "authType": "api_key",
-      "defaultModel": "claude-sonnet-4-5-20250929",
-      "createdAt": 1737451800000
-    }
-  ],
-  "defaultLlmConnection": "anthropic-api",
+  "authType": "oauth_token",
+  "model": "claude-sonnet-4-5-20250929",
   "workspaces": [
     {
       "id": "ws-abc123",
@@ -43,15 +34,49 @@ The main configuration file stores your workspace list, LLM connections, and app
 
 ## Fields
 
-### llmConnections
+### authType
 
-Array of LLM connection configurations. Each connection represents a provider setup (Anthropic, Codex/OpenAI, OpenRouter, etc.).
+How you authenticate with the AI provider.
 
-See [LLM Connections](/reference/config/llm-connections) for schema details and examples.
+| Value | Description |
+|-------|-------------|
+| `api_key` | Using an API key (Anthropic, OpenRouter, Vercel AI Gateway, Ollama, or custom endpoint) |
+| `oauth_token` | Using OAuth token (Claude Pro/Max subscription) |
 
-### defaultLlmConnection
+### anthropicBaseUrl
 
-Slug of the default LLM connection used for new sessions (unless overridden by a workspace). If omitted, the first connection in `llmConnections` is used.
+Custom API endpoint URL. Only set when using a non-Anthropic provider. Omitted when using the default Anthropic API.
+
+| Example Values | Provider |
+|-------|-------------|
+| `https://openrouter.ai/api` | OpenRouter |
+| `https://ai-gateway.vercel.sh` | Vercel AI Gateway |
+| `http://localhost:11434` | Ollama (local) |
+
+See [API Providers](/reference/config/custom-endpoint) for setup details.
+
+### customModel
+
+Model name override for non-Anthropic providers. Only set when the provider requires a specific model identifier format.
+
+| Example Values | Provider |
+|-------|-------------|
+| `anthropic/claude-sonnet-4` | OpenRouter / Vercel |
+| `llama3.2` | Ollama |
+| `openai/gpt-4o` | OpenRouter |
+
+When omitted, Craft Agents uses its default model routing (Sonnet, Opus, Haiku).
+
+### model
+
+The default Claude model to use.
+
+| Value | Model |
+|-------|-------|
+| `claude-opus-4-6` | Claude Opus 4.6 |
+| `claude-opus-4-5-20251101` | Claude Opus 4.5 |
+| `claude-sonnet-4-5-20250929` | Claude Sonnet 4.5 |
+| `claude-haiku-4-5-20251001` | Claude Haiku 4.5 |
 
 ### workspaces
 
@@ -94,10 +119,6 @@ Enable or disable desktop notifications for task completion events. Default: `tr
 
 ID of the selected preset theme (e.g., `"dracula"`, `"nord"`). Default: `"default"`.
 
-<Note>
-For per‑workspace defaults, use `defaults.colorTheme` in each workspace config. See [Workspaces](/go-further/workspaces).
-</Note>
-
 ### dismissedUpdateVersion
 
 Version string of an update the user has dismissed. The app won't prompt to update to this specific version again.
@@ -114,31 +135,51 @@ Object containing information about an update ready for auto-install on next lau
 }
 ```
 
-## Example Configuration
+## Example Configurations
 
-For the modern multi-provider setup, use `llmConnections` plus `defaultLlmConnection`. Example:
+**Claude Pro/Max (OAuth):**
 
 ```json
 {
-  "llmConnections": [
-    {
-      "slug": "anthropic-api",
-      "name": "Anthropic (API Key)",
-      "providerType": "anthropic",
-      "authType": "api_key",
-      "defaultModel": "claude-sonnet-4-5-20250929",
-      "createdAt": 1737451800000
-    },
-    {
-      "slug": "codex",
-      "name": "OpenAI (Codex)",
-      "providerType": "openai",
-      "authType": "oauth",
-      "defaultModel": "codex-mini-latest",
-      "createdAt": 1737451800000
-    }
-  ],
-  "defaultLlmConnection": "anthropic-api",
+  "authType": "oauth_token",
+  "model": "claude-sonnet-4-5-20250929",
+  "workspaces": [...],
+  "activeWorkspaceId": "ws-personal",
+  "notificationsEnabled": true,
+  "colorTheme": "default"
+}
+```
+
+**Anthropic API Key (default):**
+
+```json
+{
+  "authType": "api_key",
+  "model": "claude-sonnet-4-5-20250929",
+  "workspaces": [...],
+  "activeWorkspaceId": "ws-personal"
+}
+```
+
+**OpenRouter:**
+
+```json
+{
+  "authType": "api_key",
+  "anthropicBaseUrl": "https://openrouter.ai/api",
+  "customModel": "anthropic/claude-sonnet-4",
+  "workspaces": [...],
+  "activeWorkspaceId": "ws-personal"
+}
+```
+
+**Ollama (local):**
+
+```json
+{
+  "authType": "api_key",
+  "anthropicBaseUrl": "http://localhost:11434",
+  "customModel": "llama3.2",
   "workspaces": [...],
   "activeWorkspaceId": "ws-personal"
 }
