@@ -22,6 +22,7 @@ export type CredentialType =
   | 'claude_oauth'       // Claude OAuth token (Max subscription)
   // Workspace credentials
   | 'workspace_oauth'    // Workspace MCP OAuth token
+  | 'cloud_apikey'       // Cloud workspace API key (for cloud-worker auth)
   // Source credentials (stored at ~/.craft-agent/workspaces/{ws}/sources/{slug}/)
   | 'source_oauth'       // OAuth tokens for MCP/API sources
   | 'source_bearer'      // Bearer tokens
@@ -33,6 +34,7 @@ const VALID_CREDENTIAL_TYPES: readonly CredentialType[] = [
   'anthropic_api_key',
   'claude_oauth',
   'workspace_oauth',
+  'cloud_apikey',
   'source_oauth',
   'source_bearer',
   'source_apikey',
@@ -107,7 +109,8 @@ export function credentialIdToAccount(id: CredentialId): string {
 
   // Workspace-scoped format (no source):
   // workspace_oauth::{workspaceId}
-  if (id.type === 'workspace_oauth' && id.workspaceId) {
+  // cloud_apikey::{workspaceId}
+  if ((id.type === 'workspace_oauth' || id.type === 'cloud_apikey') && id.workspaceId) {
     parts.push(id.workspaceId);
     return parts.join(CREDENTIAL_DELIMITER);
   }
@@ -138,7 +141,8 @@ export function accountToCredentialId(account: string): CredentialId | null {
 
   // Workspace-scoped format (no source):
   // workspace_oauth::{workspaceId}
-  if (type === 'workspace_oauth' && parts.length === 2) {
+  // cloud_apikey::{workspaceId}
+  if ((type === 'workspace_oauth' || type === 'cloud_apikey') && parts.length === 2) {
     return { type, workspaceId: parts[1] };
   }
 

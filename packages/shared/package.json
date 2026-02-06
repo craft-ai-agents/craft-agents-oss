@@ -20,6 +20,7 @@
     "./auth/callback-page": "./src/auth/callback-page.ts",
     "./auth/types": "./src/auth/types.ts",
     "./config": "./src/config/index.ts",
+    "./config/models": "./src/config/models.ts",
     "./docs": "./src/docs/index.ts",
     "./docs/doc-links": "./src/docs/doc-links.ts",
     "./config/types": "./src/config/types.ts",
@@ -48,7 +49,8 @@
     "./version": "./src/version/index.ts",
     "./branding": "./src/branding.ts",
     "./network-interceptor": "./src/network-interceptor.ts",
-    "./search": "./src/search/index.ts"
+    "./search": "./src/search/index.ts",
+    "./storage": "./src/storage/index.ts"
   },
   "dependencies": {
     "@craft-agent/core": "workspace:*",

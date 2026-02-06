@@ -17,7 +17,8 @@ export interface ModelDefinition {
 // ============================================
 
 export const MODELS: ModelDefinition[] = [
-  { id: 'claude-opus-4-5-20251101', name: 'Opus 4.5', shortName: 'Opus', description: 'Most capable', contextWindow: 200000 },
+  { id: 'claude-opus-4-6', name: 'Opus 4.6', shortName: 'Opus', description: 'Most capable', contextWindow: 200000 },
+  { id: 'claude-opus-4-5-20251101', name: 'Opus 4.5', shortName: 'Opus 4.5', description: 'Previous flagship', contextWindow: 200000 },
   { id: 'claude-sonnet-4-5-20250929', name: 'Sonnet 4.5', shortName: 'Sonnet', description: 'Balanced', contextWindow: 200000 },
   { id: 'claude-haiku-4-5-20251001', name: 'Haiku 4.5', shortName: 'Haiku', description: 'Fast & efficient', contextWindow: 200000 },
 ];
@@ -80,4 +81,20 @@ export function isOpusModel(modelId: string): boolean {
 export function isClaudeModel(modelId: string): boolean {
   const lower = modelId.toLowerCase();
   return lower.startsWith('claude-') || lower.includes('/claude');
+}
+
+/** UI select option format */
+export interface ModelSelectOption {
+  value: string;
+  label: string;
+  description: string;
+}
+
+/** Get models as UI select options (value/label/description format) */
+export function getModelSelectOptions(): ModelSelectOption[] {
+  return MODELS.map(m => ({
+    value: m.id,
+    label: m.name,
+    description: m.description,
+  }));
 }

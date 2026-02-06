@@ -21,6 +21,8 @@ export interface AuthState {
     apiKey: string | null;
     /** Claude Max OAuth token (if using oauth_token auth type) */
     claudeOAuthToken: string | null;
+    /** Migration info if user needs to re-authenticate */
+    migrationRequired?: { reason: 'legacy_token'; message: string };
   };
 
   /** Workspace/MCP configuration */
@@ -40,6 +42,8 @@ export interface SetupNeeds {
   needsCredentials: boolean;
   /** Everything complete → go straight to App */
   isFullyConfigured: boolean;
+  /** User has legacy tokens that need migration */
+  needsMigration?: { reason: 'legacy_token'; message: string };
 }
 
 /**

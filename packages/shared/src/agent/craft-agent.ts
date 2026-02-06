@@ -123,6 +123,8 @@ export interface CraftAgentConfig {
   };
   /** System prompt preset for mini agents ('default' | 'mini' or custom string) */
   systemPromptPreset?: 'default' | 'mini' | string;
+  /** Storage provider for cloud-aware tools (status CRUD, config validation) */
+  storageProvider?: import('../storage/types.ts').IStorageProvider;
 }
 
 // Permission request tracking
@@ -416,9 +418,16 @@ export class CraftAgent {
 
   /**
    * Get the workspace root path for workspace-scoped operations.
+   * For cloud workspaces without a local rootPath, returns an empty string.
+   * Callers that do filesystem operations should check this.isCloudWorkspace first.
    */
   private get workspaceRootPath(): string {
-    return this.config.workspace.rootPath;
+    return this.config.workspace.rootPath ?? '';
+  }
+
+  /** Whether this workspace uses cloud storage */
+  private get isCloudWorkspace(): boolean {
+    return this.config.workspace.storageType === 'cloud';
   }
 
   // Callback for permission requests - set by application to receive permission prompts
@@ -516,6 +525,9 @@ export class CraftAgent {
     if (this.configWatcher) {
       return; // Already running
     }
+
+    // Config watcher is only for local workspaces (cloud uses WebSocket events)
+    if (this.isCloudWorkspace) return;
 
     this.configWatcher = createConfigWatcher(this.workspaceRootPath, {
       onSourceChange: (slug, source) => {
@@ -827,7 +839,7 @@ export class CraftAgent {
       const mcpServers: Options['mcpServers'] = isMiniAgent
         ? {
             // Mini agents need session tools (config_validate) and docs for reference
-            session: getSessionScopedTools(sessionId, this.workspaceRootPath),
+            session: getSessionScopedTools(sessionId, this.workspaceRootPath, this.config.storageProvider),
             'craft-agents-docs': {
               type: 'http',
               url: 'https://agents.craft.do/docs/mcp',
@@ -836,7 +848,7 @@ export class CraftAgent {
         : {
             preferences: getPreferencesServer(false),
             // Session-scoped tools (SubmitPlan, source_test, etc.)
-            session: getSessionScopedTools(sessionId, this.workspaceRootPath),
+            session: getSessionScopedTools(sessionId, this.workspaceRootPath, this.config.storageProvider),
             // Craft Agents documentation - always available for searching setup guides
             // This is a public Mintlify MCP server, no auth needed
             'craft-agents-docs': {
@@ -888,6 +900,10 @@ export class CraftAgent {
         });
       }
 
+      // Cloud workspaces store session data in the cloud, not locally
+      // Skip session folder path for cloud - use workspace root instead (always exists)
+      const isCloud = this.config.workspace.storageType === 'cloud';
+
       const options: Options = {
         ...getDefaultOptions(),
         model,
@@ -924,13 +940,16 @@ export class CraftAgent {
                 this.config.debugMode,
                 this.workspaceRootPath,
                 this.config.session?.workingDirectory
-              ),
+              ) + (isCloud
+                ? '\n\n## Cloud Status Management\n\nThis is a cloud workspace. For status configuration, use the status_list, status_create, status_update, status_delete, and status_save_config tools. Do not use Write/Edit on statuses/config.json — cloud workspaces store statuses remotely.'
+                : ''),
             },
         // Use sdkCwd for SDK session storage - this is set once at session creation and never changes.
         // This ensures SDK can always find session transcripts regardless of workingDirectory changes.
         // Note: workingDirectory is still used for context injection and shown to the agent.
+        // For cloud workspaces, skip session folder lookup (doesn't exist locally) - use workspace root.
         cwd: this.config.session?.sdkCwd ??
-          (sessionId ? getSessionPath(this.workspaceRootPath, sessionId) : this.workspaceRootPath),
+          (sessionId && !isCloud ? getSessionPath(this.workspaceRootPath, sessionId) : this.workspaceRootPath),
         includePartialMessages: true,
         // Tools configuration:
         // - Mini agents: minimal set for quick config edits (reduces token count ~70%)
@@ -1137,6 +1156,21 @@ export class CraftAgent {
                   const expandedPath = expandPath(toolInput.path);
                   this.onDebug?.(`Expanding search path: ${toolInput.path} → ${expandedPath}`);
                   updatedInput = { ...(updatedInput || toolInput), path: expandedPath };
+                }
+
+                // ============================================================
+                // CLOUD STATUS CONFIG GUARD: Block Write/Edit to statuses/config.json
+                // for cloud workspaces. Cloud workspaces use status_* tools instead.
+                // ============================================================
+                if (this.isCloudWorkspace && (input.tool_name === 'Write' || input.tool_name === 'Edit')) {
+                  const resolvedFilePath = (updatedInput?.file_path ?? toolInput.file_path) as string | undefined;
+                  if (resolvedFilePath && resolvedFilePath.includes('statuses/config.json')) {
+                    return {
+                      continue: false,
+                      decision: 'block' as const,
+                      reason: 'Cloud workspaces store statuses remotely. Use the status_list, status_create, status_update, status_delete, or status_save_config tools instead of direct file editing.',
+                    };
+                  }
                 }
 
                 // ============================================================
@@ -1518,7 +1552,8 @@ export class CraftAgent {
         // Selectively disable tools - file tools are disabled (use MCP), web/code controlled by settings
         disallowedTools,
         // Load workspace as SDK plugin (enables skills, commands, agents from workspace)
-        plugins: [{ type: 'local' as const, path: this.workspaceRootPath }],
+        // Cloud workspaces don't have a local plugin path
+        plugins: this.workspaceRootPath ? [{ type: 'local' as const, path: this.workspaceRootPath }] : [],
       };
 
       // Track whether we're trying to resume a session (for error handling)
@@ -2173,8 +2208,8 @@ export class CraftAgent {
   private formatWorkspaceCapabilities(): string {
     const capabilities: string[] = [];
 
-    // Check local MCP server capability
-    const localMcpEnabled = isLocalMcpEnabled(this.workspaceRootPath);
+    // Check local MCP server capability (requires local workspace path)
+    const localMcpEnabled = !this.isCloudWorkspace && isLocalMcpEnabled(this.workspaceRootPath);
     if (localMcpEnabled) {
       capabilities.push('local-mcp: enabled (stdio subprocess servers supported)');
     } else {
@@ -2252,8 +2287,9 @@ Please continue the conversation naturally from where we left off.
       parts.push(workingDirContext);
     }
 
-    // Add file attachments with stored path info (agent uses Read tool to access content)
-    // Text files are NOT embedded inline to prevent context overflow from large files
+    // Add file attachments with stored path info
+    // For local: storedPath is a file path (agent uses Read tool)
+    // For cloud: storedPath is a signed HTTPS URL (agent can use WebFetch)
     if (attachments) {
       for (const attachment of attachments) {
         if (attachment.storedPath) {
@@ -2311,10 +2347,10 @@ Please continue the conversation naturally from where we left off.
 
     // Add attachments - images/PDFs are uploaded inline, text files are path-only
     // Text files are NOT embedded to prevent context overflow; agent uses Read tool
+    // For local: storedPath is a file path; for cloud: storedPath is a signed HTTPS URL
     if (attachments) {
       for (const attachment of attachments) {
-        // Add path info text block so the agent knows where the file is stored
-        // This enables the agent to use the Read tool to access text/office files
+        // Add path info text block so agent knows where the file is stored
         if (attachment.storedPath) {
           let pathInfo = `[Attached file: ${attachment.name}]\n[Stored at: ${attachment.storedPath}]`;
           if (attachment.markdownPath) {
@@ -3197,7 +3233,7 @@ Please continue the conversation naturally from where we left off.
   private filterMcpServersByLocalEnabled(
     servers: Record<string, SdkMcpServerConfig>
   ): { servers: Record<string, SdkMcpServerConfig>; skipped: string[] } {
-    const localEnabled = isLocalMcpEnabled(this.workspaceRootPath);
+    const localEnabled = this.workspaceRootPath ? isLocalMcpEnabled(this.workspaceRootPath) : false;
 
     if (localEnabled) {
       // Local MCP is enabled, return all servers

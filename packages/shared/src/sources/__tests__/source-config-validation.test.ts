@@ -55,6 +55,7 @@ describe('Multi-header source config validation', () => {
       name: 'Datadog',
       type: 'api',
       enabled: true,
+      provider: 'datadog',
       api: {
         baseUrl: 'https://api.datadoghq.com/',
         authType: 'none', // BUG: should be 'header'
@@ -77,6 +78,7 @@ describe('Multi-header source config validation', () => {
       name: 'Datadog',
       type: 'api',
       enabled: true,
+      provider: 'datadog',
       api: {
         baseUrl: 'https://api.datadoghq.com/',
         authType: 'header',
@@ -97,6 +99,7 @@ describe('Multi-header source config validation', () => {
       name: 'My API',
       type: 'api',
       enabled: true,
+      provider: 'custom',
       api: {
         baseUrl: 'https://api.example.com/',
         authType: 'header',
@@ -117,6 +120,7 @@ describe('Multi-header source config validation', () => {
       name: 'My API',
       type: 'api',
       enabled: true,
+      provider: 'custom',
       api: {
         baseUrl: 'https://api.example.com/',
         authType: 'header',
@@ -138,6 +142,7 @@ describe('Multi-header source config validation', () => {
       name: 'Public API',
       type: 'api',
       enabled: true,
+      provider: 'custom',
       api: {
         baseUrl: 'https://api.example.com/',
         authType: 'none',
@@ -158,6 +163,7 @@ describe('Multi-header source config validation', () => {
       name: 'MCP Source',
       type: 'mcp',
       enabled: true,
+      provider: 'custom',
       mcp: {
         transport: 'stdio',
         command: 'npx',
@@ -203,6 +209,7 @@ describe('Real-world API config examples', () => {
       name: 'Algolia',
       type: 'api',
       enabled: true,
+      provider: 'algolia',
       api: {
         baseUrl: 'https://api.algolia.com/',
         authType: 'header',
@@ -221,6 +228,7 @@ describe('Real-world API config examples', () => {
       name: 'Cloudflare',
       type: 'api',
       enabled: true,
+      provider: 'cloudflare',
       api: {
         baseUrl: 'https://api.cloudflare.com/client/v4/',
         authType: 'header',

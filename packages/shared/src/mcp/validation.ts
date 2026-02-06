@@ -24,7 +24,7 @@ export interface InvalidProperty {
 export interface McpValidationResult {
   success: boolean;
   error?: string;
-  errorType?: 'failed' | 'needs-auth' | 'pending' | 'invalid-schema' | 'unknown';
+  errorType?: 'failed' | 'needs-auth' | 'pending' | 'invalid-schema' | 'disabled' | 'unknown';
   /** Typed error for API/billing failures - display as ErrorBanner */
   typedError?: AgentError;
   serverInfo?: {

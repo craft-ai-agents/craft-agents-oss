@@ -83,7 +83,7 @@ export class HeadlessRunner {
     try {
       // 1. Initialize
       yield { type: 'status', message: 'Connecting to workspace...' };
-      this.workspaceRootPath = this.config.workspace.rootPath;
+      this.workspaceRootPath = this.config.workspace.rootPath ?? null;
 
       // 2. Create CraftAgent with headless callbacks
       await this.createAgent();

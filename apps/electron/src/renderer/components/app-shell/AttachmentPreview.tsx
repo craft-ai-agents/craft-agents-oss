@@ -1,5 +1,5 @@
 import * as React from "react"
-import { X, Image as ImageIcon } from "lucide-react"
+import { X, Image as ImageIcon, AlertCircle } from "lucide-react"
 import { Spinner, FileTypeIcon, getFileTypeLabel } from "@craft-agent/ui"
 import { cn } from "@/lib/utils"
 import type { FileAttachment } from "../../../shared/types"
@@ -7,11 +7,22 @@ import type { FileAttachment } from "../../../shared/types"
 // Re-export for backward compatibility
 export { FileTypeIcon, getFileTypeLabel }
 
+/**
+ * Extended attachment type with upload state for background uploading.
+ * Compatible with base FileAttachment (uploadState defaults to 'uploaded').
+ */
+export type AttachmentWithUploadState = FileAttachment & {
+  uploadState?: 'pending' | 'uploading' | 'uploaded' | 'error'
+  uploadError?: string
+}
+
 interface AttachmentPreviewProps {
-  attachments: FileAttachment[]
+  attachments: AttachmentWithUploadState[]
   onRemove: (index: number) => void
   disabled?: boolean
   loadingCount?: number
+  /** @deprecated Use per-attachment uploadState instead. Kept for backward compatibility. */
+  isUploading?: boolean
 }
 
 /**
@@ -24,7 +35,7 @@ interface AttachmentPreviewProps {
  * - Horizontally scrollable when many files
  * - Loading placeholders while files are being read
  */
-export function AttachmentPreview({ attachments, onRemove, disabled, loadingCount = 0 }: AttachmentPreviewProps) {
+export function AttachmentPreview({ attachments, onRemove, disabled, loadingCount = 0, isUploading = false }: AttachmentPreviewProps) {
   if (attachments.length === 0 && loadingCount === 0) return null
 
   return (
@@ -35,6 +46,7 @@ export function AttachmentPreview({ attachments, onRemove, disabled, loadingCoun
           attachment={attachment}
           onRemove={() => onRemove(index)}
           disabled={disabled}
+          isUploading={isUploading}
         />
       ))}
       {/* Loading placeholders */}
@@ -54,15 +66,22 @@ function LoadingBubble() {
 }
 
 interface AttachmentBubbleProps {
-  attachment: FileAttachment
+  attachment: AttachmentWithUploadState
   onRemove: () => void
   disabled?: boolean
+  /** @deprecated Use attachment.uploadState instead */
+  isUploading?: boolean
 }
 
-function AttachmentBubble({ attachment, onRemove, disabled }: AttachmentBubbleProps) {
+function AttachmentBubble({ attachment, onRemove, disabled, isUploading: globalIsUploading }: AttachmentBubbleProps) {
   const isImage = attachment.type === 'image'
   const hasThumbnail = !!attachment.thumbnailBase64
   const hasImageBase64 = isImage && attachment.base64
+
+  // Check per-attachment upload state (fall back to global for backward compat)
+  const uploadState = attachment.uploadState ?? (globalIsUploading ? 'uploading' : 'uploaded')
+  const isAttachmentUploading = uploadState === 'uploading' || uploadState === 'pending'
+  const hasUploadError = uploadState === 'error'
 
   // For images, use full base64; for docs, use Quick Look thumbnail
   const imageSrc = hasImageBase64
@@ -73,8 +92,8 @@ function AttachmentBubble({ attachment, onRemove, disabled }: AttachmentBubblePr
 
   return (
     <div className="relative group shrink-0 select-none">
-      {/* Remove button - appears on hover */}
-      {!disabled && (
+      {/* Remove button - appears on hover (always visible for errors so user can remove) */}
+      {!disabled && (!isAttachmentUploading || hasUploadError) && (
         <button
           onClick={onRemove}
           className={cn(
@@ -83,11 +102,29 @@ function AttachmentBubble({ attachment, onRemove, disabled }: AttachmentBubblePr
             "bg-muted-foreground/90 text-background",
             "flex items-center justify-center",
             "opacity-0 group-hover:opacity-100 transition-opacity",
-            "hover:bg-muted-foreground"
+            "hover:bg-muted-foreground",
+            hasUploadError && "opacity-100" // Always show remove for errors
           )}
         >
           <X className="h-3 w-3" />
         </button>
+      )}
+
+      {/* Upload spinner overlay */}
+      {isAttachmentUploading && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center rounded-[8px] bg-background/70">
+          <Spinner className="text-muted-foreground" />
+        </div>
+      )}
+
+      {/* Error overlay */}
+      {hasUploadError && (
+        <div
+          className="absolute inset-0 z-10 flex items-center justify-center rounded-[8px] bg-destructive/10 border border-destructive/30"
+          title={attachment.uploadError || 'Upload failed'}
+        >
+          <AlertCircle className="h-5 w-5 text-destructive" />
+        </div>
       )}
 
       {isImage ? (
@@ -122,7 +159,7 @@ function AttachmentBubble({ attachment, onRemove, disabled }: AttachmentBubblePr
               {attachment.name}
             </span>
             <span className="text-[10px] text-muted-foreground">
-              {getFileTypeLabel(attachment.type, attachment.mimeType, attachment.name)}
+              {hasUploadError ? 'Upload failed' : getFileTypeLabel(attachment.type, attachment.mimeType, attachment.name)}
             </span>
           </div>
         </div>

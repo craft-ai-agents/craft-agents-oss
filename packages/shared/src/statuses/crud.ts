@@ -3,9 +3,12 @@
  *
  * Create, Read, Update, Delete operations for status configurations.
  * Enforces business rules (fixed statuses, default statuses, uniqueness).
+ *
+ * All functions accept an IStatusStorage interface, making them work
+ * with both local filesystem and cloud (WebSocket → Durable Object) storage.
  */
 
-import { loadStatusConfig, saveStatusConfig } from './storage.ts';
+import type { IStatusStorage, ISessionStorage } from '../storage/types.ts';
 import type { StatusConfig, CreateStatusInput, UpdateStatusInput } from './types.ts';
 
 /**
@@ -23,11 +26,11 @@ function generateStatusSlug(label: string): string {
  * Create a new custom status
  * @throws Error if ID conflicts or validation fails
  */
-export function createStatus(
-  workspaceRootPath: string,
+export async function createStatus(
+  storage: IStatusStorage,
   input: CreateStatusInput
-): StatusConfig {
-  const config = loadStatusConfig(workspaceRootPath);
+): Promise<StatusConfig> {
+  const config = await storage.loadStatusConfig();
 
   // Generate unique ID
   let id = generateStatusSlug(input.label);
@@ -51,7 +54,7 @@ export function createStatus(
   };
 
   config.statuses.push(status);
-  saveStatusConfig(workspaceRootPath, config);
+  await storage.saveStatusConfig(config);
 
   return status;
 }
@@ -61,12 +64,12 @@ export function createStatus(
  * Cannot change ID or isFixed/isDefault flags
  * @throws Error if status is fixed and trying to change protected fields
  */
-export function updateStatus(
-  workspaceRootPath: string,
+export async function updateStatus(
+  storage: IStatusStorage,
   statusId: string,
   updates: UpdateStatusInput
-): StatusConfig {
-  const config = loadStatusConfig(workspaceRootPath);
+): Promise<StatusConfig> {
+  const config = await storage.loadStatusConfig();
   const status = config.statuses.find(s => s.id === statusId);
 
   if (!status) {
@@ -84,7 +87,7 @@ export function updateStatus(
   if (updates.icon !== undefined) status.icon = updates.icon;
   if (updates.category !== undefined) status.category = updates.category;
 
-  saveStatusConfig(workspaceRootPath, config);
+  await storage.saveStatusConfig(config);
   return status;
 }
 
@@ -93,11 +96,12 @@ export function updateStatus(
  * @throws Error if status is fixed or default
  * @returns Number of sessions that were auto-migrated to 'todo'
  */
-export function deleteStatus(
-  workspaceRootPath: string,
+export async function deleteStatus(
+  storage: IStatusStorage,
+  sessionStorage: ISessionStorage,
   statusId: string
-): { migrated: number } {
-  const config = loadStatusConfig(workspaceRootPath);
+): Promise<{ migrated: number }> {
+  const config = await storage.loadStatusConfig();
   const status = config.statuses.find(s => s.id === statusId);
 
   if (!status) {
@@ -114,10 +118,10 @@ export function deleteStatus(
 
   // Remove from config
   config.statuses = config.statuses.filter(s => s.id !== statusId);
-  saveStatusConfig(workspaceRootPath, config);
+  await storage.saveStatusConfig(config);
 
   // Migrate sessions using this status to 'todo'
-  const migrated = migrateSessionsFromDeletedStatus(workspaceRootPath, statusId);
+  const migrated = await migrateSessionsFromDeletedStatus(sessionStorage, statusId);
 
   return { migrated };
 }
@@ -125,11 +129,11 @@ export function deleteStatus(
 /**
  * Reorder statuses
  */
-export function reorderStatuses(
-  workspaceRootPath: string,
+export async function reorderStatuses(
+  storage: IStatusStorage,
   orderedIds: string[]
-): void {
-  const config = loadStatusConfig(workspaceRootPath);
+): Promise<void> {
+  const config = await storage.loadStatusConfig();
 
   // Validate all IDs exist
   const validIds = new Set(config.statuses.map(s => s.id));
@@ -147,26 +151,28 @@ export function reorderStatuses(
     }
   }
 
-  saveStatusConfig(workspaceRootPath, config);
+  await storage.saveStatusConfig(config);
 }
 
 /**
  * Reset to default configuration
  * WARNING: Deletes all custom statuses
  */
-export function resetToDefaults(workspaceRootPath: string): void {
-  const { getDefaultStatusConfig } = require('./storage.ts');
+export async function resetToDefaults(
+  storage: IStatusStorage,
+  sessionStorage: ISessionStorage
+): Promise<void> {
+  const { getDefaultStatusConfig } = await import('./storage.ts');
   const config = getDefaultStatusConfig();
-  saveStatusConfig(workspaceRootPath, config);
+  await storage.saveStatusConfig(config);
 
   // Migrate any sessions with now-invalid statuses
   const validIds = new Set(config.statuses.map((s: StatusConfig) => s.id));
-  const { listSessions, updateSessionMetadata } = require('../sessions/storage.ts');
-  const sessions = listSessions(workspaceRootPath);
+  const sessions = await sessionStorage.listSessions();
 
   for (const session of sessions) {
     if (session.todoState && !validIds.has(session.todoState)) {
-      updateSessionMetadata(workspaceRootPath, session.id, { todoState: 'todo' });
+      await sessionStorage.updateSessionMetadata(session.id, { todoState: 'todo' });
     }
   }
 }
@@ -175,19 +181,16 @@ export function resetToDefaults(workspaceRootPath: string): void {
  * Migrate sessions from a deleted status to 'todo'
  * Called internally by deleteStatus()
  */
-function migrateSessionsFromDeletedStatus(
-  workspaceRootPath: string,
+async function migrateSessionsFromDeletedStatus(
+  sessionStorage: ISessionStorage,
   deletedStatusId: string
-): number {
-  // Import session storage functions
-  const { listSessions, updateSessionMetadata } = require('../sessions/storage.ts');
-
-  const sessions = listSessions(workspaceRootPath);
+): Promise<number> {
+  const sessions = await sessionStorage.listSessions();
   let migratedCount = 0;
 
   for (const session of sessions) {
     if (session.todoState === deletedStatusId) {
-      updateSessionMetadata(workspaceRootPath, session.id, { todoState: 'todo' });
+      await sessionStorage.updateSessionMetadata(session.id, { todoState: 'todo' });
       migratedCount++;
     }
   }

@@ -1,0 +1,39 @@
+name = "craft-agent-cloud"
+main = "src/index.ts"
+compatibility_date = "2025-12-01"
+compatibility_flags = ["nodejs_compat"]
+account_id = "ab7347813b21ea6079df4cb18c4bb9e8"
+
+# Secrets (set via `wrangler secret put <NAME>`):
+# - API_KEY: API key for authenticating requests
+# - GITHUB_CLIENT_ID: GitHub OAuth App client ID
+# - GITHUB_CLIENT_SECRET: GitHub OAuth App client secret
+# - ENCRYPTION_KEY: 32-byte hex key for encrypting credentials (generate with: openssl rand -hex 32)
+# - ANTHROPIC_API_KEY: API key for Claude in sandboxes
+
+[[durable_objects.bindings]]
+name = "WORKSPACE"
+class_name = "WorkspaceDO"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["WorkspaceDO"]
+
+# R2 bucket for file storage (attachments, downloads, long_responses)
+[[r2_buckets]]
+binding = "FILES"
+bucket_name = "craft-agent-files-prod"
+
+# Sandbox container for remote code execution
+[[containers]]
+class_name = "Sandbox"
+image = "./Dockerfile"
+instance_type = "basic"
+
+[[durable_objects.bindings]]
+name = "Sandbox"
+class_name = "Sandbox"
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["Sandbox"]

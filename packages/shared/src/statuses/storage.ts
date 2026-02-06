@@ -94,6 +94,8 @@ export function getDefaultStatusConfig(): WorkspaceStatusConfig {
  * Creates missing icon files from embedded SVG strings
  */
 export function ensureDefaultIconFiles(workspaceRootPath: string): void {
+  if (!workspaceRootPath) return; // Cloud workspaces — defaults seeded via R2
+
   const iconsDir = join(workspaceRootPath, STATUS_ICONS_DIR);
 
   // Create icons directory if missing

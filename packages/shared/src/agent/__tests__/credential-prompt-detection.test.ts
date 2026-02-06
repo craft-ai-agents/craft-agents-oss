@@ -176,8 +176,8 @@ describe('Real-world scenarios', () => {
       },
     };
 
-    const mode = detectCredentialMode(simpleSource, 'header');
-    const headerNames = getEffectiveHeaderNames(simpleSource);
+    const mode = detectCredentialMode(simpleSource as { api?: { headerNames?: string[] } }, 'header');
+    const headerNames = getEffectiveHeaderNames(simpleSource as { api?: { headerNames?: string[] } });
 
     expect(mode).toBe('header');
     expect(headerNames).toBeUndefined();

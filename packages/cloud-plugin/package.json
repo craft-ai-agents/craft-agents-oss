@@ -1,0 +1,21 @@
+{
+  "name": "@craft-agent/cloud-plugin",
+  "version": "0.3.4",
+  "private": true,
+  "license": "Apache-2.0",
+  "description": "Cloud workspace plugin for Craft Agents - remote storage, sandbox execution, and real-time sync",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./main": "./src/main/index.ts",
+    "./renderer": "./src/renderer/index.ts",
+    "./preload": "./src/preload/index.ts",
+    "./shared": "./src/shared/index.ts"
+  },
+  "dependencies": {
+    "@craft-agent/core": "workspace:*",
+    "@craft-agent/shared": "workspace:*"
+  }
+}

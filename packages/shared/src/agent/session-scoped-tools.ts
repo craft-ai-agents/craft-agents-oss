@@ -57,10 +57,12 @@ import {
 import type { FolderSourceConfig, LoadedSource } from '../sources/types.ts';
 import { getSourceCredentialManager } from '../sources/index.ts';
 import { inferGoogleServiceFromUrl, inferSlackServiceFromUrl, inferMicrosoftServiceFromUrl, isApiOAuthProvider, type GoogleService, type SlackService, type MicrosoftService } from '../sources/types.ts';
+import { isGoogleOAuthConfigured } from '../auth/google-oauth.ts';
 import { buildAuthorizationHeader } from '../sources/api-tools.ts';
 import { DOC_REFS } from '../docs/index.ts';
 import { renderMermaid } from '@craft-agent/mermaid';
 import { createLLMTool } from './llm-tool.ts';
+import type { IStorageProvider } from '../storage/types.ts';
 
 // ============================================================
 // Session-Scoped Tool Callbacks
@@ -405,7 +407,7 @@ Brief description of what this plan accomplishes.
  * Create a session-scoped config_validate tool.
  * Validates configuration files and returns structured error reports.
  */
-export function createConfigValidateTool(sessionId: string, workspaceRootPath: string) {
+export function createConfigValidateTool(sessionId: string, workspaceRootPath: string, storageProvider?: IStorageProvider) {
   return tool(
     'config_validate',
     `Validate Craft Agent configuration files.
@@ -456,7 +458,14 @@ Returns structured validation results with errors, warnings, and suggestions.
             }
             break;
           case 'statuses':
-            result = validateStatuses(workspaceRootPath);
+            if (storageProvider) {
+              // Cloud-aware: load config via storage provider, validate content
+              const { validateStatusesContent } = await import('../config/validators.ts');
+              const statusConfig = await storageProvider.statuses.loadStatusConfig();
+              result = validateStatusesContent(JSON.stringify(statusConfig));
+            } else {
+              result = validateStatuses(workspaceRootPath);
+            }
             break;
           case 'preferences':
             result = validatePreferences();
@@ -2124,6 +2133,285 @@ Returns validation result with specific error messages if invalid.`,
 }
 
 // ============================================================
+// Status CRUD Tools
+// ============================================================
+
+/**
+ * Create status CRUD tools that work for both local and cloud workspaces.
+ * Uses IStorageProvider to abstract storage — same tools, different backends.
+ */
+function createStatusCrudTools(storageProvider: IStorageProvider) {
+  const statusListTool = tool(
+    'status_list',
+    `List all statuses for the current workspace.
+
+Returns the full status configuration as JSON, including all statuses with their
+id, label, color, icon, category, isFixed, isDefault, and order fields.
+
+Use this to inspect current statuses before making changes.`,
+    {},
+    async () => {
+      try {
+        const config = await storageProvider.statuses.loadStatusConfig();
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify(config, null, 2),
+          }],
+        };
+      } catch (error) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `Error listing statuses: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  const statusCreateTool = tool(
+    'status_create',
+    `Create a new custom status.
+
+Creates a status with the given label, color, icon, and category.
+The ID is auto-generated from the label (slug format).
+
+**Parameters:**
+- label: Display name (required)
+- color: EntityColor - system color string (e.g., "accent", "info/80") or custom { light, dark } (optional)
+- icon: Emoji character or URL (optional)
+- category: "open" (inbox) or "closed" (archive) (required)
+
+**Example:**
+\`\`\`json
+{ "label": "In Review", "category": "open", "icon": "👀", "color": "info" }
+\`\`\``,
+    {
+      label: z.string().min(1).describe('Display name for the status'),
+      color: z.union([
+        z.string(),
+        z.object({ light: z.string(), dark: z.string() }),
+      ]).optional().describe('Color: system string or { light, dark } custom'),
+      icon: z.string().optional().describe('Emoji or URL icon'),
+      category: z.enum(['open', 'closed']).describe('open = inbox, closed = archive'),
+    },
+    async (args) => {
+      try {
+        const { createStatus } = await import('../statuses/crud.ts');
+        const status = await createStatus(storageProvider.statuses, {
+          label: args.label,
+          color: args.color as import('../colors/types.ts').EntityColor | undefined,
+          icon: args.icon,
+          category: args.category,
+        });
+
+        // Handle icon downloads for cloud workspaces
+        if (storageProvider.type === 'cloud' && status.icon && storageProvider.assets) {
+          const { isIconUrl } = await import('../utils/icon-constants.ts');
+          if (isIconUrl(status.icon)) {
+            const { downloadIconToStorage } = await import('../utils/icon.ts');
+            downloadIconToStorage(
+              status.icon,
+              `statuses/icons/${status.id}.svg`,
+              storageProvider.assets,
+              'status_create'
+            ).catch(err => debug(`[status_create] Icon download failed: ${err}`));
+          }
+        }
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `Status created: ${JSON.stringify(status, null, 2)}`,
+          }],
+        };
+      } catch (error) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `Error creating status: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  const statusUpdateTool = tool(
+    'status_update',
+    `Update an existing status.
+
+Updates the label, color, icon, and/or category of a status.
+Cannot change the ID or isFixed/isDefault flags.
+Fixed statuses (todo, done, cancelled) cannot change category.
+
+**Parameters:**
+- statusId: The ID of the status to update (required)
+- label: New display name (optional)
+- color: New EntityColor (optional)
+- icon: New emoji or URL icon (optional)
+- category: New category "open" or "closed" (optional)`,
+    {
+      statusId: z.string().describe('ID of the status to update'),
+      label: z.string().optional().describe('New display name'),
+      color: z.union([
+        z.string(),
+        z.object({ light: z.string(), dark: z.string() }),
+      ]).optional().describe('New color'),
+      icon: z.string().optional().describe('New emoji or URL icon'),
+      category: z.enum(['open', 'closed']).optional().describe('New category'),
+    },
+    async (args) => {
+      try {
+        const { updateStatus } = await import('../statuses/crud.ts');
+        const status = await updateStatus(storageProvider.statuses, args.statusId, {
+          label: args.label,
+          color: args.color as import('../colors/types.ts').EntityColor | undefined,
+          icon: args.icon,
+          category: args.category,
+        });
+
+        // Handle icon downloads for cloud workspaces
+        if (storageProvider.type === 'cloud' && args.icon && storageProvider.assets) {
+          const { isIconUrl } = await import('../utils/icon-constants.ts');
+          if (isIconUrl(args.icon)) {
+            const { downloadIconToStorage } = await import('../utils/icon.ts');
+            downloadIconToStorage(
+              args.icon,
+              `statuses/icons/${status.id}.svg`,
+              storageProvider.assets,
+              'status_update'
+            ).catch(err => debug(`[status_update] Icon download failed: ${err}`));
+          }
+        }
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `Status updated: ${JSON.stringify(status, null, 2)}`,
+          }],
+        };
+      } catch (error) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `Error updating status: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  const statusDeleteTool = tool(
+    'status_delete',
+    `Delete a custom status.
+
+Cannot delete fixed statuses (todo, done, cancelled) or default statuses.
+Sessions using the deleted status are automatically migrated to 'todo'.
+
+**Parameters:**
+- statusId: The ID of the status to delete (required)
+
+**Returns:** Number of sessions that were migrated.`,
+    {
+      statusId: z.string().describe('ID of the status to delete'),
+    },
+    async (args) => {
+      try {
+        const { deleteStatus } = await import('../statuses/crud.ts');
+        const result = await deleteStatus(
+          storageProvider.statuses,
+          storageProvider.sessions,
+          args.statusId
+        );
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `Status '${args.statusId}' deleted. ${result.migrated} session(s) migrated to 'todo'.`,
+          }],
+        };
+      } catch (error) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `Error deleting status: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  const statusSaveConfigTool = tool(
+    'status_save_config',
+    `Bulk save the entire status configuration.
+
+Use this when you need to make multiple changes at once or restructure
+the status configuration. Validates the config before saving.
+
+**Input:** Full WorkspaceStatusConfig as a JSON string.
+
+**Schema:**
+\`\`\`json
+{
+  "version": 1,
+  "defaultStatusId": "todo",
+  "statuses": [
+    { "id": "todo", "label": "Todo", "category": "open", "isFixed": true, "isDefault": false, "order": 0 },
+    ...
+  ]
+}
+\`\`\`
+
+**Required statuses:** todo, done, cancelled (must be isFixed: true)`,
+    {
+      config: z.string().describe('Full WorkspaceStatusConfig as JSON string'),
+    },
+    async (args) => {
+      try {
+        // Validate the config first
+        const { validateStatusesContent } = await import('../config/validators.ts');
+        const validationResult = validateStatusesContent(args.config);
+        if (!validationResult.valid) {
+          const { formatValidationResult } = await import('../config/validators.ts');
+          return {
+            content: [{
+              type: 'text' as const,
+              text: `Invalid status config:\n\n${formatValidationResult(validationResult)}\n\nFix the errors and try again.`,
+            }],
+            isError: true,
+          };
+        }
+
+        const config = JSON.parse(args.config);
+        await storageProvider.statuses.saveStatusConfig(config);
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `Status configuration saved successfully (${config.statuses.length} statuses).`,
+          }],
+        };
+      } catch (error) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `Error saving status config: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  return [statusListTool, statusCreateTool, statusUpdateTool, statusDeleteTool, statusSaveConfigTool];
+}
+
+// ============================================================
 // Session-Scoped Tools Provider
 // ============================================================
 
@@ -2139,37 +2427,47 @@ const sessionScopedToolsCache = new Map<string, ReturnType<typeof createSdkMcpSe
  * @param sessionId - Unique session identifier
  * @param workspaceRootPath - Absolute path to workspace folder (e.g., ~/.craft-agent/workspaces/xxx)
  */
-export function getSessionScopedTools(sessionId: string, workspaceRootPath: string): ReturnType<typeof createSdkMcpServer> {
+export function getSessionScopedTools(
+  sessionId: string,
+  workspaceRootPath: string,
+  storageProvider?: IStorageProvider
+): ReturnType<typeof createSdkMcpServer> {
   const cacheKey = `${sessionId}::${workspaceRootPath}`;
   let cached = sessionScopedToolsCache.get(cacheKey);
   if (!cached) {
     // Create session-scoped tools that capture the sessionId and workspaceRootPath in their closures
     // Note: Source CRUD is done via standard file editing tools (Read/Write/Edit).
     // See ~/.craft-agent/docs/ for config format documentation.
+    // Build tools array — status CRUD tools added when storage provider is available
+    // (works for both local and cloud via storage abstraction)
+    const baseTools = [
+      createSubmitPlanTool(sessionId),
+      // Config validation tool (cloud-aware when storageProvider is passed)
+      createConfigValidateTool(sessionId, workspaceRootPath, storageProvider),
+      // Skill validation tool
+      createSkillValidateTool(sessionId, workspaceRootPath),
+      // Mermaid diagram validation tool
+      createMermaidValidateTool(),
+      // Source tools: test + auth only (CRUD via file editing)
+      createSourceTestTool(sessionId, workspaceRootPath),
+      createOAuthTriggerTool(sessionId, workspaceRootPath),
+      createGoogleOAuthTriggerTool(sessionId, workspaceRootPath),
+      createSlackOAuthTriggerTool(sessionId, workspaceRootPath),
+      createMicrosoftOAuthTriggerTool(sessionId, workspaceRootPath),
+      createCredentialPromptTool(sessionId, workspaceRootPath),
+      // LLM tool - invoke secondary Claude calls for subtasks
+      createLLMTool({ sessionId }),
+      // Status CRUD tools (when storage provider is available)
+      ...(storageProvider ? createStatusCrudTools(storageProvider) : []),
+    ];
+
     cached = createSdkMcpServer({
       name: 'session',
       version: '1.0.0',
-      tools: [
-        createSubmitPlanTool(sessionId),
-        // Config validation tool
-        createConfigValidateTool(sessionId, workspaceRootPath),
-        // Skill validation tool
-        createSkillValidateTool(sessionId, workspaceRootPath),
-        // Mermaid diagram validation tool
-        createMermaidValidateTool(),
-        // Source tools: test + auth only (CRUD via file editing)
-        createSourceTestTool(sessionId, workspaceRootPath),
-        createOAuthTriggerTool(sessionId, workspaceRootPath),
-        createGoogleOAuthTriggerTool(sessionId, workspaceRootPath),
-        createSlackOAuthTriggerTool(sessionId, workspaceRootPath),
-        createMicrosoftOAuthTriggerTool(sessionId, workspaceRootPath),
-        createCredentialPromptTool(sessionId, workspaceRootPath),
-        // LLM tool - invoke secondary Claude calls for subtasks
-        createLLMTool({ sessionId }),
-      ],
+      tools: baseTools as Parameters<typeof createSdkMcpServer>[0]['tools'],
     });
     sessionScopedToolsCache.set(cacheKey, cached);
-    debug(`[SessionScopedTools] Created tools provider for session ${sessionId} in workspace ${workspaceRootPath}`);
+    debug(`[SessionScopedTools] Created tools provider for session ${sessionId} in workspace ${workspaceRootPath} (storageProvider=${storageProvider?.type ?? 'none'})`);
   }
   return cached;
 }

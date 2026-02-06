@@ -58,7 +58,22 @@ import { useOptionalAppShellContext } from '@/context/AppShellContext'
 import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
 import { SourceAvatar } from '@/components/ui/source-avatar'
 import { FreeFormInputContextBadge } from './FreeFormInputContextBadge'
-import type { FileAttachment, LoadedSource, LoadedSkill } from '../../../../shared/types'
+import { SandboxToggle } from './SandboxToggle'
+import type { FileAttachment, LoadedSource, LoadedSkill, StoredAttachment } from '../../../../shared/types'
+
+/**
+ * Extended attachment type that tracks upload state for background uploading.
+ * When a file is attached, upload starts immediately. By the time user sends,
+ * the file is usually already uploaded (or nearly done).
+ */
+export interface AttachmentWithUploadState extends FileAttachment {
+  /** Upload state: pending (not started), uploading, uploaded, or error */
+  uploadState: 'pending' | 'uploading' | 'uploaded' | 'error'
+  /** Result from storeAttachment IPC (set when uploadState='uploaded') */
+  storedData?: StoredAttachment
+  /** Error message if upload failed */
+  uploadError?: string
+}
 import type { PermissionMode } from '@craft-agent/shared/agent/modes'
 import { PERMISSION_MODE_ORDER } from '@craft-agent/shared/agent/modes'
 import { type ThinkingLevel, THINKING_LEVELS, getThinkingLevelName } from '@craft-agent/shared/agent/thinking-levels'
@@ -110,8 +125,8 @@ export interface FreeFormInputProps {
   disabled?: boolean
   /** Whether the session is currently processing */
   isProcessing?: boolean
-  /** Callback when message is submitted (skillSlugs from @mentions) */
-  onSubmit: (message: string, attachments?: FileAttachment[], skillSlugs?: string[]) => void
+  /** Callback when message is submitted (skillSlugs from @mentions). Returns Promise so caller can show loading state during upload. */
+  onSubmit: (message: string, attachments?: FileAttachment[], skillSlugs?: string[], isRemoteSandbox?: boolean) => void | Promise<void>
   /** Callback to stop processing. Pass silent=true to skip "Response interrupted" message */
   onStop?: (silent?: boolean) => void
   /** External ref for the input */
@@ -187,6 +202,15 @@ export interface FreeFormInputProps {
   }
   /** Enable compact mode - hides attach, sources, working directory for popover embedding */
   compactMode?: boolean
+  // Remote sandbox options (cloud workspaces only)
+  /** Whether this is a cloud workspace (shows sandbox toggle) */
+  isCloudWorkspace?: boolean
+  /** Whether remote sandbox mode is enabled */
+  isRemoteSandbox?: boolean
+  /** Callback when remote sandbox mode is toggled */
+  onRemoteSandboxToggle?: (enabled: boolean) => void
+  /** Whether this is the first message (can only toggle sandbox before first message) */
+  isFirstMessage?: boolean
 }
 
 /**
@@ -237,6 +261,11 @@ export function FreeFormInput({
   isEmptySession = false,
   contextStatus,
   compactMode = false,
+  // Remote sandbox props
+  isCloudWorkspace = false,
+  isRemoteSandbox = false,
+  onRemoteSandboxToggle,
+  isFirstMessage = true,
 }: FreeFormInputProps) {
   // Read custom model and workspace info from context.
   // Uses optional variant so playground (no provider) doesn't crash.
@@ -269,10 +298,10 @@ export function FreeFormInput({
   // Sync FROM parent on mount/change (for restoring drafts)
   // Sync TO parent on blur/submit (debounced persistence)
   const [input, setInput] = React.useState(inputValue ?? '')
-  const [attachments, setAttachments] = React.useState<FileAttachment[]>([])
+  const [attachments, setAttachments] = React.useState<AttachmentWithUploadState[]>([])
 
   // Ref to track current attachments for use in event handlers (avoids stale closure issues)
-  const attachmentsRef = React.useRef<FileAttachment[]>([])
+  const attachmentsRef = React.useRef<AttachmentWithUploadState[]>([])
   React.useEffect(() => {
     attachmentsRef.current = attachments
   }, [attachments])
@@ -338,6 +367,7 @@ export function FreeFormInput({
   const [isFocused, setIsFocused] = React.useState(false)
   const [inputMaxHeight, setInputMaxHeight] = React.useState(540)
   const [modelDropdownOpen, setModelDropdownOpen] = React.useState(false)
+  const [isUploading, setIsUploading] = React.useState(false)
 
   // Input settings (loaded from config)
   const [autoCapitalisation, setAutoCapitalisation] = React.useState(true)
@@ -578,6 +608,9 @@ export function FreeFormInput({
     return maxNum + 1
   }
 
+  // Ref for addAttachmentAndStartUpload callback (defined later, used by paste-files effect)
+  const addAttachmentAndStartUploadRef = React.useRef<((attachment: FileAttachment) => void) | null>(null)
+
   // Listen for craft:paste-files events (for global paste when input not focused)
   React.useEffect(() => {
     const handlePasteFiles = async (e: CustomEvent<{ files: File[] }>) => {
@@ -601,8 +634,8 @@ export function FreeFormInput({
       for (let i = 0; i < files.length; i++) {
         try {
           const attachment = await readFileAsAttachment(files[i], fileNames[i])
-          if (attachment) {
-            setAttachments(prev => [...prev, attachment])
+          if (attachment && addAttachmentAndStartUploadRef.current) {
+            addAttachmentAndStartUploadRef.current(attachment)
           }
         } catch (error) {
           console.error('[FreeFormInput] Failed to process pasted file:', error)
@@ -763,6 +796,53 @@ export function FreeFormInput({
   // Check if running in Electron environment (has electronAPI)
   const hasElectronAPI = typeof window !== 'undefined' && !!window.electronAPI
 
+  /**
+   * Add an attachment and immediately start uploading it in the background.
+   * When upload completes, the attachment state is updated with storedData.
+   * This allows uploads to happen while the user types their message.
+   */
+  const addAttachmentAndStartUpload = React.useCallback((attachment: FileAttachment) => {
+    // Create a unique key for this attachment (use timestamp + name for uniqueness)
+    const uploadKey = `${Date.now()}-${attachment.name}`
+
+    // Add attachment with uploading state
+    const attachmentWithState: AttachmentWithUploadState = {
+      ...attachment,
+      uploadState: hasElectronAPI && sessionId ? 'uploading' : 'uploaded', // Skip upload if no electron/session
+      path: uploadKey, // Use uploadKey as path for matching (original path may not be unique)
+    }
+    setAttachments(prev => [...prev, attachmentWithState])
+
+    // Start background upload if we have electron and session
+    if (hasElectronAPI && sessionId) {
+      window.electronAPI.storeAttachment(sessionId, attachment)
+        .then((storedData) => {
+          // Update attachment state with stored data
+          setAttachments(prev => prev.map(a =>
+            a.path === uploadKey
+              ? { ...a, uploadState: 'uploaded' as const, storedData }
+              : a
+          ))
+        })
+        .catch((error) => {
+          console.error('[FreeFormInput] Background upload failed:', error)
+          // Update attachment state with error
+          setAttachments(prev => prev.map(a =>
+            a.path === uploadKey
+              ? { ...a, uploadState: 'error' as const, uploadError: error?.message || 'Upload failed' }
+              : a
+          ))
+          // Show toast notification for upload error
+          toast.error(`Failed to upload "${attachment.name}"`)
+        })
+    }
+  }, [hasElectronAPI, sessionId])
+
+  // Keep the ref updated for use in event handlers (avoids stale closures)
+  React.useEffect(() => {
+    addAttachmentAndStartUploadRef.current = addAttachmentAndStartUpload
+  }, [addAttachmentAndStartUpload])
+
   // File attachment handlers
   const handleAttachClick = async () => {
     if (disabled || !hasElectronAPI) return
@@ -771,7 +851,7 @@ export function FreeFormInput({
       for (const path of paths) {
         const attachment = await window.electronAPI.readFileAttachment(path)
         if (attachment) {
-          setAttachments(prev => [...prev, attachment])
+          addAttachmentAndStartUpload(attachment)
         }
       }
     } catch (error) {
@@ -885,7 +965,7 @@ export function FreeFormInput({
       try {
         const attachment = await readFileAsAttachment(files[i], fileNames[i])
         if (attachment) {
-          setAttachments(prev => [...prev, attachment])
+          addAttachmentAndStartUpload(attachment)
         }
       } catch (error) {
         console.error('[FreeFormInput] Failed to read pasted file:', error)
@@ -906,10 +986,10 @@ export function FreeFormInput({
       text: text,
       size: new Blob([text]).size,
     }
-    setAttachments(prev => [...prev, attachment])
+    addAttachmentAndStartUpload(attachment)
     // Focus input after adding attachment
     richInputRef.current?.focus()
-  }, []) // No deps needed - uses ref
+  }, [addAttachmentAndStartUpload])
 
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault()
@@ -927,7 +1007,7 @@ export function FreeFormInput({
         try {
           const attachment = await window.electronAPI.readFileAttachment(filePath)
           if (attachment) {
-            setAttachments(prev => [...prev, attachment])
+            addAttachmentAndStartUpload(attachment)
             setLoadingCount(prev => prev - 1)
             continue
           }
@@ -939,7 +1019,7 @@ export function FreeFormInput({
       try {
         const attachment = await readFileAsAttachment(file)
         if (attachment) {
-          setAttachments(prev => [...prev, attachment])
+          addAttachmentAndStartUpload(attachment)
         }
       } catch (error) {
         console.error('[FreeFormInput] Failed to read dropped file:', error)
@@ -949,12 +1029,24 @@ export function FreeFormInput({
   }
 
   // Submit message - backend handles queueing and interruption
-  const submitMessage = React.useCallback(() => {
+  const submitMessage = React.useCallback(async () => {
     const hasContent = input.trim() || attachments.length > 0
-    if (!hasContent || disabled) return false
+    if (!hasContent || disabled || isUploading) return false
 
     // Tutorial may disable sending to guide user through specific steps
     if (disableSend) return false
+
+    // Check for attachments with upload errors - don't send those
+    const errorAttachments = attachments.filter(a => a.uploadState === 'error')
+    if (errorAttachments.length > 0) {
+      toast.error(`${errorAttachments.length} attachment(s) failed to upload. Remove them to send.`)
+      return false
+    }
+
+    // Check if any attachments are still uploading
+    const pendingAttachments = attachments.filter(a =>
+      a.uploadState === 'uploading' || a.uploadState === 'pending'
+    )
 
     // Parse all @mentions (skills, sources, folders)
     const skillSlugs = skills.map(s => s.slug)
@@ -970,17 +1062,62 @@ export function FreeFormInput({
       }
     }
 
-    onSubmit(
-      input.trim(),
-      attachments.length > 0 ? attachments : undefined,
-      mentions.skills.length > 0 ? mentions.skills : undefined
-    )
-    setInput('')
-    setAttachments([])
-    // Clear draft immediately (cancel any pending debounced sync)
-    if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current)
-    onInputChange?.('')
-    prevInputValueRef.current = ''
+    try {
+      // If uploads are still pending, show loading state and wait for them
+      if (pendingAttachments.length > 0) {
+        setIsUploading(true)
+        // Wait for all uploads to complete by polling state
+        // The uploads are running in background, we just need to wait
+        await new Promise<void>((resolve, reject) => {
+          const checkInterval = setInterval(() => {
+            const current = attachmentsRef.current
+            const stillPending = current.filter(a =>
+              a.uploadState === 'uploading' || a.uploadState === 'pending'
+            )
+            const hasErrors = current.some(a => a.uploadState === 'error')
+
+            if (hasErrors) {
+              clearInterval(checkInterval)
+              reject(new Error('One or more uploads failed'))
+            } else if (stillPending.length === 0) {
+              clearInterval(checkInterval)
+              resolve()
+            }
+          }, 100)
+
+          // Timeout after 60 seconds
+          setTimeout(() => {
+            clearInterval(checkInterval)
+            reject(new Error('Upload timeout'))
+          }, 60000)
+        })
+      }
+
+      // Get current attachments with their storedData
+      const currentAttachments = attachmentsRef.current
+
+      // Await the send - attachments now have storedData from background upload
+      await onSubmit(
+        input.trim(),
+        currentAttachments.length > 0 ? currentAttachments : undefined,
+        mentions.skills.length > 0 ? mentions.skills : undefined,
+        isRemoteSandbox
+      )
+
+      // Only clear AFTER successful send
+      setInput('')
+      setAttachments([])
+      // Clear draft immediately (cancel any pending debounced sync)
+      if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current)
+      onInputChange?.('')
+      prevInputValueRef.current = ''
+    } catch (error) {
+      console.error('[FreeFormInput] Failed to send message:', error)
+      // Don't clear attachments on error - let user retry
+      toast.error('Failed to send message. Please try again.')
+    } finally {
+      setIsUploading(false)
+    }
 
     // Restore focus after state updates
     requestAnimationFrame(() => {
@@ -988,7 +1125,7 @@ export function FreeFormInput({
     })
 
     return true
-  }, [input, attachments, disabled, disableSend, onInputChange, onSubmit, skills, sources, optimisticSourceSlugs, onSourcesChange, onWorkingDirectoryChange, homeDir])
+  }, [input, attachments, disabled, disableSend, isUploading, onInputChange, onSubmit, skills, sources, optimisticSourceSlugs, onSourcesChange, isRemoteSandbox])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -1281,8 +1418,9 @@ export function FreeFormInput({
         <AttachmentPreview
           attachments={attachments}
           onRemove={handleRemoveAttachment}
-          disabled={disabled}
+          disabled={disabled || isUploading}
           loadingCount={loadingCount}
+          isUploading={isUploading}
         />
 
         {/* Rich Text Input with inline mention badges */}
@@ -1512,6 +1650,19 @@ export function FreeFormInput({
               isEmptySession={isEmptySession}
             />
           )}
+
+          {/* 4. Remote Sandbox Toggle (cloud workspaces only) */}
+          {isCloudWorkspace && onRemoteSandboxToggle && (
+            <SandboxToggle
+              workspaceId={workspaceId || ''}
+              isCloudWorkspace={isCloudWorkspace}
+              workingDirectory={workingDirectory}
+              isRemote={isRemoteSandbox}
+              onRemoteToggle={onRemoteSandboxToggle}
+              isProcessing={isProcessing}
+              isFirstMessage={isFirstMessage}
+            />
+          )}
           </div>
           )}
 
@@ -1713,10 +1864,14 @@ export function FreeFormInput({
               type="submit"
               size="icon"
               className="h-7 w-7 rounded-full shrink-0 ml-2"
-              disabled={!hasContent || disabled}
+              disabled={!hasContent || disabled || isUploading}
               data-tutorial="send-button"
             >
-              <ArrowUp className="h-4 w-4" />
+              {isUploading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <ArrowUp className="h-4 w-4" />
+              )}
             </Button>
           )}
           </div>

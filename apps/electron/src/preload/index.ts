@@ -1,7 +1,7 @@
 // Capture errors in the isolated preload context and forward to Sentry
 import '@sentry/electron/preload'
 import { contextBridge, ipcRenderer } from 'electron'
-import { IPC_CHANNELS, type SessionEvent, type ElectronAPI, type FileAttachment, type AuthType } from '../shared/types'
+import { IPC_CHANNELS, type SessionEvent, type CloudSyncEvent, type ElectronAPI, type FileAttachment, type AuthType } from '../shared/types'
 
 const api: ElectronAPI = {
   // Session management
@@ -30,6 +30,10 @@ const api: ElectronAPI = {
   getWorkspaces: () => ipcRenderer.invoke(IPC_CHANNELS.GET_WORKSPACES),
   createWorkspace: (folderPath: string, name: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.CREATE_WORKSPACE, folderPath, name),
+  createCloudWorkspace: (name: string, remoteUrl: string, apiKey: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.CREATE_CLOUD_WORKSPACE, name, remoteUrl, apiKey),
+  setCloudApiKey: (workspaceId: string, apiKey: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_CLOUD_API_KEY, workspaceId, apiKey),
   checkWorkspaceSlug: (slug: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.CHECK_WORKSPACE_SLUG, slug),
 
@@ -264,6 +268,16 @@ const api: ElectronAPI = {
   // Status management
   listStatuses: (workspaceId: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.STATUSES_LIST, workspaceId),
+  createStatus: (workspaceId: string, input: import('@craft-agent/shared/statuses').CreateStatusInput) =>
+    ipcRenderer.invoke(IPC_CHANNELS.STATUSES_CREATE, workspaceId, input),
+  updateStatus: (workspaceId: string, statusId: string, updates: import('@craft-agent/shared/statuses').UpdateStatusInput) =>
+    ipcRenderer.invoke(IPC_CHANNELS.STATUSES_UPDATE, workspaceId, statusId, updates),
+  deleteStatus: (workspaceId: string, statusId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.STATUSES_DELETE, workspaceId, statusId),
+  resetStatuses: (workspaceId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.STATUSES_RESET, workspaceId),
+  saveStatusConfig: (workspaceId: string, config: import('@craft-agent/shared/statuses').WorkspaceStatusConfig) =>
+    ipcRenderer.invoke(IPC_CHANNELS.STATUSES_SAVE_CONFIG, workspaceId, config),
   reorderStatuses: (workspaceId: string, orderedIds: string[]) =>
     ipcRenderer.invoke(IPC_CHANNELS.STATUSES_REORDER, workspaceId, orderedIds),
 
@@ -460,11 +474,47 @@ const api: ElectronAPI = {
   },
   getGitBranch: (dirPath: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.GET_GIT_BRANCH, dirPath),
+  getGitInfo: (dirPath: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.GET_GIT_INFO, dirPath),
+
+  // Remote sandbox operations
+  sandboxCheckAuth: (workspaceId: string, repoKey: string, repoUrl: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SANDBOX_CHECK_AUTH, workspaceId, repoKey, repoUrl),
+  sandboxCreate: (workspaceId: string, repoKey: string, branch: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SANDBOX_CREATE, workspaceId, repoKey, branch),
+  sandboxGetStatus: (workspaceId: string, sessionId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SANDBOX_GET_STATUS, workspaceId, sessionId),
+  sandboxTerminate: (workspaceId: string, sessionId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SANDBOX_TERMINATE, workspaceId, sessionId),
+  sandboxHeartbeat: (workspaceId: string, sessionId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SANDBOX_HEARTBEAT, workspaceId, sessionId),
+  sandboxListSessions: (workspaceId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SANDBOX_LIST_SESSIONS, workspaceId),
+  sandboxEncryptApiKey: (workspaceId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SANDBOX_ENCRYPT_API_KEY, workspaceId),
+
+  // GitHub OAuth callback event
+  onGitHubOAuthCallback: (callback: (result: { success: boolean; repo?: string; username?: string; error?: string }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, result: { success: boolean; repo?: string; username?: string; error?: string }) => {
+      callback(result)
+    }
+    ipcRenderer.on(IPC_CHANNELS.GITHUB_OAUTH_CALLBACK, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.GITHUB_OAUTH_CALLBACK, handler)
+  },
 
   // Git Bash (Windows)
   checkGitBash: () => ipcRenderer.invoke(IPC_CHANNELS.GITBASH_CHECK),
   browseForGitBash: () => ipcRenderer.invoke(IPC_CHANNELS.GITBASH_BROWSE),
   setGitBashPath: (path: string) => ipcRenderer.invoke(IPC_CHANNELS.GITBASH_SET_PATH, path),
+
+  // Cloud sync events (remote changes from cloud-worker WebSocket)
+  onCloudSyncEvent: (callback: (event: CloudSyncEvent) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, syncEvent: CloudSyncEvent) => {
+      callback(syncEvent)
+    }
+    ipcRenderer.on(IPC_CHANNELS.CLOUD_SYNC_EVENT, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.CLOUD_SYNC_EVENT, handler)
+  },
 
   // Menu actions (for unified Craft menu)
   menuQuit: () => ipcRenderer.invoke(IPC_CHANNELS.MENU_QUIT),

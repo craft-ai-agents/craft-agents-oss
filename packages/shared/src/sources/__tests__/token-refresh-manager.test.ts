@@ -11,6 +11,7 @@ function createMockSource(overrides: Partial<LoadedSource['config']> = {}): Load
       name: 'Test Source',
       slug: 'test-source',
       enabled: true,
+      provider: 'test',
       type: 'mcp',
       mcp: {
         url: 'https://test.example.com/mcp',
@@ -20,6 +21,9 @@ function createMockSource(overrides: Partial<LoadedSource['config']> = {}): Load
       ...overrides,
     },
     folderPath: '/test/path',
+    guide: null,
+    workspaceRootPath: '/test/workspace',
+    workspaceId: 'test-workspace',
   };
 }
 
@@ -287,7 +291,7 @@ describe('TokenRefreshManager', () => {
       const result = await manager.getSourcesNeedingRefresh(sources);
 
       expect(result.length).toBe(1);
-      expect(result[0].config.slug).toBe('mcp-oauth');
+      expect(result[0]!.config.slug).toBe('mcp-oauth');
     });
 
     test('excludes sources in cooldown', async () => {
@@ -307,7 +311,7 @@ describe('TokenRefreshManager', () => {
       const result = await manager.getSourcesNeedingRefresh([source1, source2]);
 
       expect(result.length).toBe(1);
-      expect(result[0].config.slug).toBe('source-2');
+      expect(result[0]!.config.slug).toBe('source-2');
     });
 
     test('excludes unauthenticated sources', async () => {
@@ -325,7 +329,7 @@ describe('TokenRefreshManager', () => {
       const result = await manager.getSourcesNeedingRefresh(sources);
 
       expect(result.length).toBe(1);
-      expect(result[0].config.slug).toBe('authenticated');
+      expect(result[0]!.config.slug).toBe('authenticated');
     });
   });
 
@@ -377,7 +381,7 @@ describe('TokenRefreshManager', () => {
 
       expect(refreshed.length).toBe(1);
       expect(failed.length).toBe(1);
-      expect(failed[0].source.config.slug).toBe('source-2');
+      expect(failed[0]!.source.config.slug).toBe('source-2');
     });
   });
 });

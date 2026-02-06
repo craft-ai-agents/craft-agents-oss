@@ -2,6 +2,7 @@
 export { InputContainer } from './InputContainer'
 export { FreeFormInput } from './FreeFormInput'
 export { StructuredInput } from './StructuredInput'
+export { SandboxToggle } from './SandboxToggle'
 
 // Structured input components
 export { PermissionRequest } from './structured/PermissionRequest'

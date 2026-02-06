@@ -3,7 +3,7 @@
 import { loadShellEnv } from './shell-env'
 loadShellEnv()
 
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, ipcMain } from 'electron'
 import { createHash } from 'crypto'
 import { hostname, homedir } from 'os'
 import * as Sentry from '@sentry/electron/main'
@@ -77,6 +77,7 @@ import { ensureToolIcons } from '@craft-agent/shared/config'
 import { setBundledAssetsRoot } from '@craft-agent/shared/utils'
 import { handleDeepLink } from './deep-link'
 import { registerThumbnailScheme, registerThumbnailHandler } from './thumbnail-protocol'
+import { IPC_CHANNELS } from '../shared/types'
 import log, { isDebugMode, mainLog, getLogFilePath } from './logger'
 import { setPerfEnabled, enableDebug } from '@craft-agent/shared/utils'
 import { initNotificationService, clearBadgeCount, initBadgeIcon, initInstanceBadge } from './notifications'
@@ -112,10 +113,14 @@ if (process.defaultApp) {
   // Development mode: need to pass the app path
   if (process.argv.length >= 2) {
     app.setAsDefaultProtocolClient(DEEPLINK_SCHEME, process.execPath, [process.argv[1]])
+    // Also register craft-agent:// for GitHub OAuth callbacks
+    app.setAsDefaultProtocolClient('craft-agent', process.execPath, [process.argv[1]])
   }
 } else {
   // Production mode
   app.setAsDefaultProtocolClient(DEEPLINK_SCHEME)
+  // Also register craft-agent:// for GitHub OAuth callbacks
+  app.setAsDefaultProtocolClient('craft-agent')
 }
 
 // Register thumbnail:// custom protocol for file preview thumbnails in the sidebar.
@@ -127,6 +132,12 @@ app.on('open-url', (event, url) => {
   event.preventDefault()
   mainLog.info('Received deeplink:', url)
 
+  // Handle craft-agent://oauth/callback URLs (GitHub OAuth)
+  if (url.startsWith('craft-agent://oauth/callback')) {
+    handleGitHubOAuthCallback(url)
+    return
+  }
+
   if (windowManager) {
     handleDeepLink(url, windowManager).catch(err => {
       mainLog.error('Failed to handle deep link:', err)
@@ -137,6 +148,46 @@ app.on('open-url', (event, url) => {
   }
 })
 
+/**
+ * Handle GitHub OAuth callback from craft-agent://oauth/callback?...
+ * Broadcasts the result to all windows via IPC
+ */
+function handleGitHubOAuthCallback(url: string): void {
+  try {
+    const parsed = new URL(url)
+    const success = parsed.searchParams.get('success') === 'true'
+    const repo = parsed.searchParams.get('repo') || undefined
+    const username = parsed.searchParams.get('username') || undefined
+    const error = parsed.searchParams.get('error') || undefined
+
+    mainLog.info('GitHub OAuth callback:', { success, repo, username, error })
+
+    // Broadcast to all windows
+    if (windowManager) {
+      const windows = windowManager.getAllWindows()
+      for (const { window } of windows) {
+        if (!window.isDestroyed() && !window.webContents.isDestroyed()) {
+          window.webContents.send(IPC_CHANNELS.GITHUB_OAUTH_CALLBACK, {
+            success,
+            repo,
+            username,
+            error,
+          })
+        }
+      }
+
+      // Focus the first window to show the result
+      if (windows.length > 0) {
+        const win = windows[0].window
+        if (win.isMinimized()) win.restore()
+        win.focus()
+      }
+    }
+  } catch (err) {
+    mainLog.error('Failed to handle GitHub OAuth callback:', err)
+  }
+}
+
 // Handle deeplink on Windows/Linux (single instance check)
 const gotTheLock = app.requestSingleInstanceLock()
 if (!gotTheLock) {
@@ -146,6 +197,14 @@ if (!gotTheLock) {
     // Someone tried to run a second instance, we should focus our window.
     // On Windows/Linux, the deeplink is in commandLine
     const url = commandLine.find(arg => arg.startsWith(`${DEEPLINK_SCHEME}://`))
+    const craftAgentUrl = commandLine.find(arg => arg.startsWith('craft-agent://'))
+
+    // Handle GitHub OAuth callback first
+    if (craftAgentUrl?.startsWith('craft-agent://oauth/callback')) {
+      handleGitHubOAuthCallback(craftAgentUrl)
+      return
+    }
+
     if (url && windowManager) {
       mainLog.info('Received deeplink from second instance:', url)
       handleDeepLink(url, windowManager).catch(err => {
@@ -261,11 +320,23 @@ app.whenReady().then(async () => {
     sessionManager = new SessionManager()
     sessionManager.setWindowManager(windowManager)
 
+    // Register cloud plugin (extends app with cloud sync, sandbox, and cloud storage)
+    const { registerPlugin } = await import('./plugins')
+    const { cloudPlugin } = await import('./cloud-plugin')
+    registerPlugin(cloudPlugin)
+
     // Initialize notification service
     initNotificationService(windowManager)
 
     // Register IPC handlers (must happen before window creation)
+    // Note: Plugin IPC handlers are registered at the end of registerIpcHandlers()
     registerIpcHandlers(sessionManager, windowManager)
+
+    // Run plugin onAppReady lifecycle (cloud sync init, etc.)
+    const { getPlugins } = await import('./plugins')
+    for (const plugin of getPlugins()) {
+      await plugin.onAppReady?.({ ipcMain, sessionManager, windowManager })
+    }
 
     // Create initial windows (restores from saved state or opens first workspace)
     await createInitialWindows()
@@ -378,6 +449,15 @@ app.on('before-quit', async (event) => {
     }
     // Clean up SessionManager resources (file watchers, timers, etc.)
     sessionManager.cleanup()
+
+    // Run plugin onAppQuit lifecycle (disconnect cloud sync, etc.)
+    try {
+      const { getPlugins } = await import('./plugins')
+      for (const plugin of getPlugins()) {
+        await plugin.onAppQuit?.()
+      }
+      mainLog.info('Plugins cleaned up')
+    } catch { /* ignore cleanup errors */ }
 
     // If update is in progress, let electron-updater handle the quit flow
     // Force exit breaks the NSIS installer on Windows

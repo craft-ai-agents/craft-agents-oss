@@ -113,9 +113,11 @@ export function loadStoredConfig(): StoredConfig | null {
       return null;
     }
 
-    // Expand path variables (~ and ${HOME}) for portability
+    // Expand path variables (~ and ${HOME}) for portability (local workspaces only)
     for (const workspace of config.workspaces) {
-      workspace.rootPath = expandPath(workspace.rootPath);
+      if (workspace.rootPath) {
+        workspace.rootPath = expandPath(workspace.rootPath);
+      }
     }
 
     // Validate active workspace exists
@@ -125,11 +127,34 @@ export function loadStoredConfig(): StoredConfig | null {
       config.activeWorkspaceId = config.workspaces[0]?.id || null;
     }
 
-    // Ensure workspace folder structure exists for all workspaces
+    // Ensure workspace folder structure exists for local workspaces only
+    // Cloud workspaces have no local footprint — all data lives on the cloud worker
+    let configNeedsSave = false;
     for (const workspace of config.workspaces) {
-      if (!isValidWorkspace(workspace.rootPath)) {
+      if (workspace.storageType === 'cloud') {
+        // Migration: clean up any leftover local directories from cloud workspaces
+        if (workspace.rootPath) {
+          try {
+            if (existsSync(workspace.rootPath)) {
+              rmSync(workspace.rootPath, { recursive: true });
+              console.log(`[config] Cleaned up local directory for cloud workspace "${workspace.name}": ${workspace.rootPath}`);
+            }
+          } catch (err) {
+            console.error(`[config] Failed to clean up cloud workspace dir: ${workspace.rootPath}`, err);
+          }
+          delete workspace.rootPath;
+          configNeedsSave = true;
+        }
+        continue;
+      }
+      if (workspace.rootPath && !isValidWorkspace(workspace.rootPath)) {
         createWorkspaceAtPath(workspace.rootPath, workspace.name);
       }
+    }
+
+    // Save config if cloud workspace rootPaths were cleaned up
+    if (configNeedsSave) {
+      saveConfig(config);
     }
 
     return config;
@@ -160,11 +185,12 @@ export function saveConfig(config: StoredConfig): void {
   ensureConfigDir();
 
   // Convert paths to portable form (~ prefix) for cross-machine compatibility
+  // Cloud workspaces have no rootPath
   const storageConfig: StoredConfig = {
     ...config,
     workspaces: config.workspaces.map(ws => ({
       ...ws,
-      rootPath: toPortablePath(ws.rootPath),
+      rootPath: ws.rootPath ? toPortablePath(ws.rootPath) : undefined,
     })),
   };
 
@@ -386,14 +412,19 @@ export function getWorkspaces(): Workspace[] {
 
   // Resolve workspace names from folder config and local icons
   return workspaces.map(w => {
-    // Read name from workspace folder config (single source of truth)
-    const wsConfig = loadWorkspaceConfig(w.rootPath);
-    const name = wsConfig?.name || w.rootPath.split('/').pop() || 'Untitled';
+    // Cloud workspaces: name is stored in the global config entry, no local files
+    if (w.storageType === 'cloud') {
+      return { ...w, name: w.name || 'Untitled' };
+    }
+
+    // Local workspaces: read name from workspace folder config (single source of truth)
+    const wsConfig = w.rootPath ? loadWorkspaceConfig(w.rootPath) : null;
+    const name = wsConfig?.name || w.rootPath?.split('/').pop() || 'Untitled';
 
     // If workspace has a stored iconUrl that's a remote URL, use it
     // Otherwise check for local icon file
     let iconUrl = w.iconUrl;
-    if (!iconUrl || (!iconUrl.startsWith('http://') && !iconUrl.startsWith('https://'))) {
+    if (w.rootPath && (!iconUrl || (!iconUrl.startsWith('http://') && !iconUrl.startsWith('https://')))) {
       const localIcon = findWorkspaceIcon(w.rootPath);
       if (localIcon) {
         // Convert absolute path to file:// URL for Electron renderer
@@ -449,15 +480,19 @@ export function setActiveWorkspace(workspaceId: string): void {
  * @param workspaceId The ID of the workspace to switch to
  * @returns The workspace and session, or null if workspace not found
  */
-export async function switchWorkspaceAtomic(workspaceId: string): Promise<{ workspace: Workspace; session: SessionConfig } | null> {
+export async function switchWorkspaceAtomic(workspaceId: string): Promise<{ workspace: Workspace; session: SessionConfig | null } | null> {
   const config = loadStoredConfig();
   if (!config) return null;
 
   const workspace = config.workspaces.find(w => w.id === workspaceId);
   if (!workspace) return null;
 
-  // Get or create the latest session for this workspace
-  const session = await getOrCreateLatestSession(workspace.rootPath);
+  // Cloud workspaces: sessions are managed by SessionManager via the cloud provider
+  // Local workspaces: get or create a local session
+  let session: SessionConfig | null = null;
+  if (workspace.storageType !== 'cloud' && workspace.rootPath) {
+    session = await getOrCreateLatestSession(workspace.rootPath);
+  }
 
   // Update active workspace in config
   config.activeWorkspaceId = workspaceId;
@@ -477,20 +512,43 @@ export function addWorkspace(workspace: Omit<Workspace, 'id' | 'createdAt'>): Wo
     throw new Error('No config found');
   }
 
-  // Check if workspace with same rootPath already exists
-  const existing = config.workspaces.find(w => w.rootPath === workspace.rootPath);
-  if (existing) {
-    // Update existing workspace with new settings
-    const updated: Workspace = {
-      ...existing,
-      ...workspace,
-      id: existing.id,
-      createdAt: existing.createdAt,
-    };
-    const existingIndex = config.workspaces.indexOf(existing);
-    config.workspaces[existingIndex] = updated;
-    saveConfig(config);
-    return updated;
+  const isCloud = workspace.storageType === 'cloud';
+
+  // Check if workspace with same rootPath already exists (local workspaces only)
+  if (!isCloud && workspace.rootPath) {
+    const existing = config.workspaces.find(w => w.rootPath === workspace.rootPath);
+    if (existing) {
+      // Update existing workspace with new settings
+      const updated: Workspace = {
+        ...existing,
+        ...workspace,
+        id: existing.id,
+        createdAt: existing.createdAt,
+      };
+      const existingIndex = config.workspaces.indexOf(existing);
+      config.workspaces[existingIndex] = updated;
+      saveConfig(config);
+      return updated;
+    }
+  }
+
+  // For cloud workspaces, check if one with the same slug already exists
+  if (isCloud && workspace.cloudConfig) {
+    const existing = config.workspaces.find(
+      w => w.storageType === 'cloud' && w.cloudConfig?.workspaceSlug === workspace.cloudConfig?.workspaceSlug
+    );
+    if (existing) {
+      const updated: Workspace = {
+        ...existing,
+        ...workspace,
+        id: existing.id,
+        createdAt: existing.createdAt,
+      };
+      const existingIndex = config.workspaces.indexOf(existing);
+      config.workspaces[existingIndex] = updated;
+      saveConfig(config);
+      return updated;
+    }
   }
 
   const newWorkspace: Workspace = {
@@ -499,8 +557,8 @@ export function addWorkspace(workspace: Omit<Workspace, 'id' | 'createdAt'>): Wo
     createdAt: Date.now(),
   };
 
-  // Create workspace folder structure if it doesn't exist
-  if (!isValidWorkspace(newWorkspace.rootPath)) {
+  // Create workspace folder structure if it doesn't exist (local workspaces only)
+  if (!isCloud && newWorkspace.rootPath && !isValidWorkspace(newWorkspace.rootPath)) {
     createWorkspaceAtPath(newWorkspace.rootPath, newWorkspace.name);
   }
 
@@ -525,7 +583,7 @@ export function syncWorkspaces(): void {
   if (!config) return;
 
   const discoveredPaths = discoverWorkspacesInDefaultLocation();
-  const trackedPaths = new Set(config.workspaces.map(w => w.rootPath));
+  const trackedPaths = new Set(config.workspaces.filter(w => w.rootPath).map(w => w.rootPath));
 
   let added = false;
   for (const rootPath of discoveredPaths) {

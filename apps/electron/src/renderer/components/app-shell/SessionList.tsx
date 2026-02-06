@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react"
 import { formatDistanceToNow, formatDistanceToNowStrict, isToday, isYesterday, format, startOfDay } from "date-fns"
 import type { Locale } from "date-fns"
-import { MoreHorizontal, Flag, Copy, Link2Off, CloudUpload, Globe, RefreshCw, Inbox } from "lucide-react"
+import { MoreHorizontal, Flag, Copy, Link2Off, CloudUpload, Globe, RefreshCw, Inbox, Cloud } from "lucide-react"
 import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
@@ -54,6 +54,7 @@ import { getSessionTitle } from "@/utils/session"
 import type { SessionMeta } from "@/atoms/sessions"
 import type { ViewConfig } from "@craft-agent/shared/views"
 import { PERMISSION_MODE_CONFIG, type PermissionMode } from "@craft-agent/shared/agent/modes"
+import type { SandboxStatus } from "../../../shared/types"
 import { fuzzyScore } from "@craft-agent/shared/search"
 
 // Pagination constants
@@ -302,6 +303,10 @@ interface SessionItemProps {
   onLabelsChange?: (sessionId: string, labels: string[]) => void
   /** Number of matches in ChatDisplay (only set when session is selected and loaded) */
   chatMatchCount?: number
+  /** Sandbox status for this session (if running in cloud sandbox) */
+  sandboxStatus?: SandboxStatus
+  /** Callback to terminate sandbox for this session */
+  onTerminateSandbox?: (sessionId: string) => Promise<boolean>
 }
 
 /**
@@ -331,6 +336,8 @@ function SessionItem({
   labels,
   onLabelsChange,
   chatMatchCount,
+  sandboxStatus,
+  onTerminateSandbox,
 }: SessionItemProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [contextMenuOpen, setContextMenuOpen] = useState(false)
@@ -496,6 +503,35 @@ function SessionItem({
                   >
                     {PERMISSION_MODE_CONFIG[permissionMode].shortName}
                   </span>
+                )}
+                {/* Cloud sandbox indicator - shows when session uses remote sandbox */}
+                {item.isRemoteSandbox && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className={cn(
+                        "shrink-0 h-[18px] px-1.5 text-[10px] font-medium rounded flex items-center gap-1 whitespace-nowrap",
+                        sandboxStatus ? "bg-info/10 text-info" : "bg-foreground/5 text-foreground/60"
+                      )}>
+                        <Cloud className="h-[10px] w-[10px]" />
+                        {sandboxStatus && (
+                          <span className={cn(
+                            "w-1.5 h-1.5 rounded-full",
+                            sandboxStatus.status === 'ready' && "bg-success",
+                            sandboxStatus.status === 'idle' && "bg-warning",
+                            (sandboxStatus.status === 'provisioning' || sandboxStatus.status === 'cloning') && "bg-info animate-pulse",
+                            sandboxStatus.status === 'expired' && "bg-foreground/30"
+                          )} />
+                        )}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" sideOffset={4}>
+                      {sandboxStatus ? (
+                        <span>Cloud Sandbox: {sandboxStatus.status}</span>
+                      ) : (
+                        <span>Cloud Sandbox (inactive)</span>
+                      )}
+                    </TooltipContent>
+                  </Tooltip>
                 )}
                 {/* Label badges — each badge opens its own LabelValuePopover for
                     editing the value or removing the label. Uses onMouseDown +
@@ -682,6 +718,8 @@ function SessionItem({
                     sessionLabels={item.labels ?? []}
                     labels={labels}
                     onLabelsChange={onLabelsChange ? (newLabels) => onLabelsChange(item.id, newLabels) : undefined}
+                    sandboxStatus={sandboxStatus}
+                    onTerminateSandbox={onTerminateSandbox ? () => onTerminateSandbox(item.id) : undefined}
                     onRename={() => onRenameClick(item.id, getSessionTitle(item))}
                     onFlag={() => onFlag?.(item.id)}
                     onUnflag={() => onUnflag?.(item.id)}
@@ -713,6 +751,8 @@ function SessionItem({
               sessionLabels={item.labels ?? []}
               labels={labels}
               onLabelsChange={onLabelsChange ? (newLabels) => onLabelsChange(item.id, newLabels) : undefined}
+              sandboxStatus={sandboxStatus}
+              onTerminateSandbox={onTerminateSandbox ? () => onTerminateSandbox(item.id) : undefined}
               onRename={() => onRenameClick(item.id, getSessionTitle(item))}
               onFlag={() => onFlag?.(item.id)}
               onUnflag={() => onUnflag?.(item.id)}
@@ -785,6 +825,12 @@ interface SessionListProps {
   statusFilter?: Map<string, FilterMode>
   /** Secondary label filter (label chips) - for search result grouping */
   labelFilterMap?: Map<string, FilterMode>
+  /** Map of sessionId -> SandboxStatus for active sandboxes */
+  sandboxStatuses?: Map<string, SandboxStatus>
+  /** Callback to terminate a sandbox */
+  onTerminateSandbox?: (sessionId: string) => Promise<boolean>
+  /** Whether sessions are still being loaded (e.g., from cloud API) */
+  isLoading?: boolean
 }
 
 // Re-export TodoStateId for use by parent components
@@ -824,6 +870,9 @@ export function SessionList({
   workspaceId,
   statusFilter,
   labelFilterMap,
+  sandboxStatuses,
+  onTerminateSandbox,
+  isLoading,
 }: SessionListProps) {
   const [session] = useSession()
   const { navigate } = useNavigation()
@@ -1242,6 +1291,15 @@ export function SessionList({
     }
   }
 
+  // Loading state - show spinner while sessions are being fetched (e.g., from cloud API)
+  if (isLoading && flatItems.length === 0 && !searchActive) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <Spinner className="text-foreground/30" />
+      </div>
+    )
+  }
+
   // Empty state - render outside ScrollArea for proper vertical centering
   if (flatItems.length === 0 && !searchActive) {
     return (
@@ -1359,13 +1417,15 @@ export function SessionList({
                           onSessionSelect?.(item)
                         }}
                         onOpenInNewWindow={() => onOpenInNewWindow?.(item)}
-                        permissionMode={sessionOptions?.get(item.id)?.permissionMode}
+                        permissionMode={sessionOptions?.get(item.id)?.permissionMode ?? item.permissionMode as PermissionMode}
                         searchQuery={highlightQuery}
                         todoStates={todoStates}
                         flatLabels={flatLabels}
                         labels={labels}
                         onLabelsChange={onLabelsChange}
                         chatMatchCount={isSearchMode ? contentSearchResults.get(item.id)?.matchCount : undefined}
+                        sandboxStatus={sandboxStatuses?.get(item.sandboxSessionId || item.id)}
+                        onTerminateSandbox={onTerminateSandbox}
                       />
                     )
                   })}
@@ -1406,13 +1466,15 @@ export function SessionList({
                           onSessionSelect?.(item)
                         }}
                         onOpenInNewWindow={() => onOpenInNewWindow?.(item)}
-                        permissionMode={sessionOptions?.get(item.id)?.permissionMode}
+                        permissionMode={sessionOptions?.get(item.id)?.permissionMode ?? item.permissionMode as PermissionMode}
                         searchQuery={highlightQuery}
                         todoStates={todoStates}
                         flatLabels={flatLabels}
                         labels={labels}
                         onLabelsChange={onLabelsChange}
                         chatMatchCount={isSearchMode ? contentSearchResults.get(item.id)?.matchCount : undefined}
+                        sandboxStatus={sandboxStatuses?.get(item.sandboxSessionId || item.id)}
+                        onTerminateSandbox={onTerminateSandbox}
                       />
                     )
                   })}
@@ -1454,13 +1516,15 @@ export function SessionList({
                         onSessionSelect?.(item)
                       }}
                       onOpenInNewWindow={() => onOpenInNewWindow?.(item)}
-                      permissionMode={sessionOptions?.get(item.id)?.permissionMode}
+                      permissionMode={sessionOptions?.get(item.id)?.permissionMode ?? item.permissionMode as PermissionMode}
                       searchQuery={searchQuery}
                       todoStates={todoStates}
                       flatLabels={flatLabels}
                       labels={labels}
                       onLabelsChange={onLabelsChange}
                       chatMatchCount={contentSearchResults.get(item.id)?.matchCount}
+                      sandboxStatus={sandboxStatuses?.get(item.sandboxSessionId || item.id)}
+                      onTerminateSandbox={onTerminateSandbox}
                     />
                   )
                 })}

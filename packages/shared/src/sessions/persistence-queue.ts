@@ -52,6 +52,9 @@ class SessionPersistenceQueue {
 
     try {
       const { data } = entry
+      // Persistence queue is only used for local workspaces (cloud uses provider directly)
+      if (!data.workspaceRootPath) return
+
       ensureSessionsDir(data.workspaceRootPath)
       ensureSessionDir(data.workspaceRootPath, sessionId)
 

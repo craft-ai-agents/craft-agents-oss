@@ -15,6 +15,10 @@ import { getCredentialManager } from '../credentials/index.ts';
 import { loadStoredConfig, getActiveWorkspace, type AuthType, type Workspace } from '../config/storage.ts';
 import { refreshClaudeToken, isTokenExpired } from './claude-token.ts';
 import { debug } from '../utils/debug.ts';
+import type { AuthState, SetupNeeds } from './types.ts';
+
+// Re-export so existing consumers still work
+export type { AuthState, SetupNeeds };
 
 // ============================================
 // Types
@@ -30,39 +34,6 @@ export interface MigrationInfo {
 export interface TokenResult {
   accessToken: string | null;
   migrationRequired?: MigrationInfo;
-}
-
-export interface AuthState {
-  /** Claude API billing configuration */
-  billing: {
-    /** Configured billing type, or null if not yet configured */
-    type: AuthType | null;
-    /** True if we have the required credentials for the configured billing type */
-    hasCredentials: boolean;
-    /** Anthropic API key (if using api_key auth type) */
-    apiKey: string | null;
-    /** Claude Max OAuth token (if using oauth_token auth type) */
-    claudeOAuthToken: string | null;
-    /** Migration info if user needs to re-authenticate */
-    migrationRequired?: MigrationInfo;
-  };
-
-  /** Workspace/MCP configuration */
-  workspace: {
-    hasWorkspace: boolean;
-    active: Workspace | null;
-  };
-}
-
-export interface SetupNeeds {
-  /** No billing type configured → show billing picker */
-  needsBillingConfig: boolean;
-  /** Billing type set but missing credentials → show credential entry */
-  needsCredentials: boolean;
-  /** Everything complete → go straight to App */
-  isFullyConfigured: boolean;
-  /** User has legacy tokens that need migration */
-  needsMigration?: MigrationInfo;
 }
 
 // ============================================

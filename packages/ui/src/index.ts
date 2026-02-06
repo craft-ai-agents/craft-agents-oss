@@ -169,6 +169,7 @@ export {
 // File classification (for link interceptor)
 export {
   classifyFile,
+  isRemoteUrl,
   type FilePreviewType,
   type FileClassification,
 } from './lib/file-classification'

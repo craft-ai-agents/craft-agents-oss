@@ -48,6 +48,9 @@ import { generateSessionTitle, regenerateSessionTitle, formatPathsToRelative, fo
 import { loadWorkspaceSkills, type LoadedSkill } from '@craft-agent/shared/skills'
 import type { ToolDisplayMeta } from '@craft-agent/core/types'
 import { DEFAULT_MODEL, getToolIconsDir } from '@craft-agent/shared/config'
+import { SandboxClient, type SandboxEvent, type SandboxAttachment } from './sandbox-client'
+import type { CloudStorageProvider, RemoteChangeEvent, IStorageProvider } from '@craft-agent/shared/storage'
+import { resolvePluginStorage } from './plugins'
 import { type ThinkingLevel, DEFAULT_THINKING_LEVEL } from '@craft-agent/shared/agent/thinking-levels'
 import { evaluateAutoLabels } from '@craft-agent/shared/labels/auto'
 import { listLabels } from '@craft-agent/shared/labels/storage'
@@ -165,7 +168,7 @@ interface McpTokenRefreshResult {
 async function refreshMcpOAuthTokensIfNeeded(
   agent: CraftAgent,
   sources: LoadedSource[],
-  sessionPath: string,
+  sessionPath: string | undefined,
   tokenRefreshManager: TokenRefreshManager
 ): Promise<McpTokenRefreshResult> {
   sessionLog.debug('[OAuth] Checking if any MCP OAuth tokens need refresh')
@@ -370,6 +373,8 @@ interface ManagedSession {
   labels?: string[]
   // Working directory for this session (used by agent for bash commands)
   workingDirectory?: string
+  // Whether remote sandbox execution is enabled (cloud workspaces only)
+  isRemoteSandbox?: boolean
   // SDK cwd for session storage - set once at creation, never changes.
   // Ensures SDK can find session transcripts regardless of workingDirectory changes.
   sdkCwd?: string
@@ -424,6 +429,16 @@ interface ManagedSession {
   authRetryInProgress?: boolean
   // Whether this session is hidden from session list (e.g., mini edit sessions)
   hidden?: boolean
+  // Remote sandbox session state (cloud workspaces only)
+  sandboxSession?: {
+    sessionId: string
+    sandboxId: string
+    wsUrl: string
+    /** WebSocket connection to sandbox (managed by SandboxClient) */
+    client?: import('./sandbox-client').SandboxClient
+    /** Heartbeat interval to keep sandbox alive */
+    heartbeatInterval?: NodeJS.Timeout
+  }
   // Token refresh manager for this session (handles OAuth token refresh with rate limiting)
   tokenRefreshManager?: TokenRefreshManager
 }
@@ -567,6 +582,10 @@ export class SessionManager {
    * workspaceId must be the global config ID (what the renderer knows).
    */
   setupConfigWatcher(workspaceRootPath: string, workspaceId: string): void {
+    // Cloud workspaces don't use filesystem config watchers - they use WebSocket events
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (workspace && this.isCloudWorkspace(workspace)) return
+
     // Check if already watching this workspace
     if (this.configWatchers.has(workspaceRootPath)) {
       return // Already watching this workspace
@@ -756,11 +775,11 @@ export class SessionManager {
   private async reloadSessionSources(managed: ManagedSession): Promise<void> {
     if (!managed.agent) return  // No agent = nothing to update (fresh build on next message)
 
-    const workspaceRootPath = managed.workspace.rootPath
+    const workspaceRootPath = managed.workspace.rootPath!
     sessionLog.info(`Reloading sources for session ${managed.id}`)
 
-    // Reload all sources from disk (craft-agents-docs is always available as MCP server)
-    const allSources = loadAllSources(workspaceRootPath)
+    // Reload all sources (from cloud for cloud workspaces, from disk for local)
+    const allSources = await this.resolveAllSources(managed.workspace)
     managed.agent.setAllSources(allSources)
 
     // Rebuild MCP and API servers for session's enabled sources
@@ -769,7 +788,7 @@ export class SessionManager {
       enabledSlugs.includes(s.config.slug) && s.config.enabled && s.config.isAuthenticated
     )
     // Pass session path so large API responses can be saved to session folder
-    const sessionPath = getSessionStoragePath(workspaceRootPath, managed.id)
+    const sessionPath = this.isCloudWorkspace(managed.workspace) ? undefined : getSessionStoragePath(workspaceRootPath, managed.id)
     const { mcpServers, apiServers } = await buildServersFromSources(enabledSources, sessionPath)
     const intendedSlugs = enabledSources.map(s => s.config.slug)
     managed.agent.setSourceServers(mcpServers, apiServers, intendedSlugs)
@@ -897,35 +916,33 @@ export class SessionManager {
     // Set up authentication environment variables (critical for SDK to work)
     await this.reinitializeAuth()
 
-    // Load existing sessions from disk
-    this.loadSessionsFromDisk()
+    // Load existing sessions (from disk for local, cloud API for cloud workspaces)
+    await this.loadSessions()
   }
 
-  // Load all existing sessions from disk into memory (metadata only - messages are lazy-loaded)
-  private loadSessionsFromDisk(): void {
-    try {
-      const workspaces = getWorkspaces()
-      let totalSessions = 0
+  /**
+   * Load sessions for a specific workspace.
+   * Used when a new workspace is created to immediately load its sessions.
+   */
+  async loadSessionsForWorkspace(workspace: Workspace): Promise<number> {
+    let loadedCount = 0
 
-      // Iterate over each workspace and load its sessions
-      for (const workspace of workspaces) {
-        const workspaceRootPath = workspace.rootPath
-        const sessionMetadata = listStoredSessions(workspaceRootPath)
-        // Load workspace config once per workspace for default working directory
-        const wsConfig = loadWorkspaceConfig(workspaceRootPath)
-        const wsDefaultWorkingDir = wsConfig?.defaults?.workingDirectory
-
-        for (const meta of sessionMetadata) {
-          // Create managed session from metadata only (messages lazy-loaded on demand)
-          // This dramatically reduces memory usage at startup - messages are loaded
-          // when getSession() is called for a specific session
+    if (this.isCloudWorkspace(workspace)) {
+      // Cloud workspace: fetch session metadata from cloud backend
+      try {
+        const provider = await this.getCloudProvider(workspace)
+        if (!provider) return 0
+        const remoteSessions = await provider.sessions.listSessions()
+        sessionLog.info(`[LoadSessions] Cloud sessions received: ${remoteSessions.length}`)
+        for (const meta of remoteSessions) {
+          sessionLog.info(`[LoadSessions] Session ${meta.id}: isRemoteSandbox=${meta.isRemoteSandbox}`)
           const managed: ManagedSession = {
             id: meta.id,
             workspace,
-            agent: null,  // Lazy-load agent when needed
-            messages: [],  // Lazy-load messages when needed
+            agent: null,
+            messages: [],
             isProcessing: false,
-            lastMessageAt: meta.lastMessageAt ?? meta.lastUsedAt,  // Fallback for sessions saved before lastMessageAt was persisted
+            lastMessageAt: meta.lastMessageAt ?? meta.lastUsedAt,
             streamingText: '',
             processingGeneration: 0,
             name: meta.name,
@@ -935,39 +952,201 @@ export class SessionManager {
             isFlagged: meta.isFlagged ?? false,
             permissionMode: meta.permissionMode,
             sdkSessionId: meta.sdkSessionId,
-            tokenUsage: meta.tokenUsage,  // From JSONL header (updated on save)
+            tokenUsage: meta.tokenUsage,
             todoState: meta.todoState,
-            lastReadMessageId: meta.lastReadMessageId,  // Pre-computed for unread detection
-            lastFinalMessageId: meta.lastFinalMessageId,  // Pre-computed for unread detection
-            hasUnread: meta.hasUnread,  // Explicit unread flag for NEW badge state machine
-            enabledSourceSlugs: undefined,  // Loaded with messages
+            lastReadMessageId: meta.lastReadMessageId,
+            lastFinalMessageId: meta.lastFinalMessageId,
+            hasUnread: meta.hasUnread,
+            enabledSourceSlugs: undefined,
             labels: meta.labels,
-            workingDirectory: meta.workingDirectory ?? wsDefaultWorkingDir,
+            workingDirectory: meta.workingDirectory,
             sdkCwd: meta.sdkCwd,
             model: meta.model,
             thinkingLevel: meta.thinkingLevel,
             lastMessageRole: meta.lastMessageRole,
             messageQueue: [],
             backgroundShellCommands: new Map(),
-            messagesLoaded: false,  // Mark as not loaded
-            // Shared viewer state - loaded from metadata for persistence across restarts
+            messagesLoaded: false,
             sharedUrl: meta.sharedUrl,
             sharedId: meta.sharedId,
             hidden: meta.hidden,
+            isRemoteSandbox: meta.isRemoteSandbox,
             // Initialize TokenRefreshManager for this session
             tokenRefreshManager: new TokenRefreshManager(getSourceCredentialManager(), {
               log: (msg) => sessionLog.debug(msg),
             }),
           }
-
           this.sessions.set(meta.id, managed)
-          totalSessions++
+          loadedCount++
+        }
+      } catch (err) {
+        sessionLog.error(`Failed to load cloud sessions for workspace "${workspace.name}":`, err)
+      }
+    } else {
+      // Local workspace: read from disk
+      const workspaceRootPath = workspace.rootPath!
+      const sessionMetadata = listStoredSessions(workspaceRootPath)
+      // Load workspace config once per workspace for default working directory
+      const wsConfig = loadWorkspaceConfig(workspaceRootPath)
+      const wsDefaultWorkingDir = wsConfig?.defaults?.workingDirectory
+
+      for (const meta of sessionMetadata) {
+        const managed: ManagedSession = {
+          id: meta.id,
+          workspace,
+          agent: null,
+          messages: [],
+          isProcessing: false,
+          lastMessageAt: meta.lastMessageAt ?? meta.lastUsedAt,
+          streamingText: '',
+          processingGeneration: 0,
+          name: meta.name,
+          preview: meta.preview,
+          createdAt: meta.createdAt,
+          messageCount: meta.messageCount,
+          isFlagged: meta.isFlagged ?? false,
+          permissionMode: meta.permissionMode,
+          sdkSessionId: meta.sdkSessionId,
+          tokenUsage: meta.tokenUsage,
+          todoState: meta.todoState,
+          lastReadMessageId: meta.lastReadMessageId,
+          lastFinalMessageId: meta.lastFinalMessageId,
+          hasUnread: meta.hasUnread,
+          enabledSourceSlugs: undefined,
+          labels: meta.labels,
+          workingDirectory: meta.workingDirectory ?? wsDefaultWorkingDir,
+          sdkCwd: meta.sdkCwd,
+          model: meta.model,
+          thinkingLevel: meta.thinkingLevel,
+          lastMessageRole: meta.lastMessageRole,
+          messageQueue: [],
+          backgroundShellCommands: new Map(),
+          messagesLoaded: false,
+          sharedUrl: meta.sharedUrl,
+          sharedId: meta.sharedId,
+          hidden: meta.hidden,
+        }
+        this.sessions.set(meta.id, managed)
+        loadedCount++
+      }
+    }
+
+    sessionLog.info(`Loaded ${loadedCount} sessions for workspace "${workspace.name}"`)
+    return loadedCount
+  }
+
+  // Load all existing sessions into memory (metadata only - messages are lazy-loaded)
+  // For local workspaces, reads from disk. For cloud workspaces, fetches from cloud API.
+  private async loadSessions(): Promise<void> {
+    try {
+      const workspaces = getWorkspaces()
+      let totalSessions = 0
+
+      // Iterate over each workspace and load its sessions
+      for (const workspace of workspaces) {
+        if (this.isCloudWorkspace(workspace)) {
+          // Cloud workspace: fetch session metadata from cloud backend
+          try {
+            const provider = await this.getCloudProvider(workspace)
+            if (!provider) continue
+            const remoteSessions = await provider.sessions.listSessions()
+            for (const meta of remoteSessions) {
+              const managed: ManagedSession = {
+                id: meta.id,
+                workspace,
+                agent: null,
+                messages: [],
+                isProcessing: false,
+                lastMessageAt: meta.lastMessageAt ?? meta.lastUsedAt,
+                streamingText: '',
+                processingGeneration: 0,
+                name: meta.name,
+                preview: meta.preview,
+                createdAt: meta.createdAt,
+                messageCount: meta.messageCount,
+                isFlagged: meta.isFlagged ?? false,
+                permissionMode: meta.permissionMode,
+                sdkSessionId: meta.sdkSessionId,
+                tokenUsage: meta.tokenUsage,
+                todoState: meta.todoState,
+                lastReadMessageId: meta.lastReadMessageId,
+                lastFinalMessageId: meta.lastFinalMessageId,
+                hasUnread: meta.hasUnread,
+                enabledSourceSlugs: undefined,
+                labels: meta.labels,
+                workingDirectory: meta.workingDirectory,
+                sdkCwd: meta.sdkCwd,
+                model: meta.model,
+                thinkingLevel: meta.thinkingLevel,
+                lastMessageRole: meta.lastMessageRole,
+                messageQueue: [],
+                backgroundShellCommands: new Map(),
+                messagesLoaded: false,
+                sharedUrl: meta.sharedUrl,
+                sharedId: meta.sharedId,
+                hidden: meta.hidden,
+                isRemoteSandbox: meta.isRemoteSandbox,
+              }
+              this.sessions.set(meta.id, managed)
+              totalSessions++
+            }
+          } catch (err) {
+            sessionLog.error(`Failed to load cloud sessions for workspace "${workspace.name}":`, err)
+          }
+        } else {
+          // Local workspace: read from disk
+          const workspaceRootPath = workspace.rootPath!
+          const sessionMetadata = listStoredSessions(workspaceRootPath)
+          // Load workspace config once per workspace for default working directory
+          const wsConfig = loadWorkspaceConfig(workspaceRootPath)
+          const wsDefaultWorkingDir = wsConfig?.defaults?.workingDirectory
+
+          for (const meta of sessionMetadata) {
+            const managed: ManagedSession = {
+              id: meta.id,
+              workspace,
+              agent: null,
+              messages: [],
+              isProcessing: false,
+              lastMessageAt: meta.lastMessageAt ?? meta.lastUsedAt,
+              streamingText: '',
+              processingGeneration: 0,
+              name: meta.name,
+              preview: meta.preview,
+              createdAt: meta.createdAt,
+              messageCount: meta.messageCount,
+              isFlagged: meta.isFlagged ?? false,
+              permissionMode: meta.permissionMode,
+              sdkSessionId: meta.sdkSessionId,
+              tokenUsage: meta.tokenUsage,
+              todoState: meta.todoState,
+              lastReadMessageId: meta.lastReadMessageId,
+              lastFinalMessageId: meta.lastFinalMessageId,
+              hasUnread: meta.hasUnread,
+              enabledSourceSlugs: undefined,
+              labels: meta.labels,
+              workingDirectory: meta.workingDirectory ?? wsDefaultWorkingDir,
+              sdkCwd: meta.sdkCwd,
+              model: meta.model,
+              thinkingLevel: meta.thinkingLevel,
+              lastMessageRole: meta.lastMessageRole,
+              messageQueue: [],
+              backgroundShellCommands: new Map(),
+              messagesLoaded: false,
+              sharedUrl: meta.sharedUrl,
+              sharedId: meta.sharedId,
+              hidden: meta.hidden,
+            }
+
+            this.sessions.set(meta.id, managed)
+            totalSessions++
+          }
         }
       }
 
-      sessionLog.info(`Loaded ${totalSessions} sessions from disk (metadata only)`)
+      sessionLog.info(`Loaded ${totalSessions} sessions (metadata only)`)
     } catch (error) {
-      sessionLog.error('Failed to load sessions from disk:', error)
+      sessionLog.error('Failed to load sessions:', error)
     }
   }
 
@@ -1008,23 +1187,210 @@ export class SessionManager {
           costUsd: 0,
         },
         hidden: managed.hidden,
+        isRemoteSandbox: managed.isRemoteSandbox,
       }
 
-      // Queue for async persistence with debouncing
-      sessionPersistenceQueue.enqueue(storedSession)
+      if (this.isCloudWorkspace(managed.workspace)) {
+        // Cloud workspaces: save directly to cloud (fire-and-forget, skip local disk)
+        void (async () => {
+          try {
+            const provider = await this.getCloudProvider(managed.workspace)
+            if (provider) await provider.sessions.saveSession(storedSession)
+          } catch (err) {
+            sessionLog.error(`Cloud save failed for session ${storedSession.id}:`, err)
+          }
+        })()
+      } else {
+        // Local workspaces: queue for async persistence with debouncing
+        sessionPersistenceQueue.enqueue(storedSession)
+      }
     } catch (error) {
       sessionLog.error(`Failed to queue session ${managed.id} for persistence:`, error)
     }
   }
 
+  // ── Cloud workspace helpers ──
+
+  /** Check if a workspace uses cloud storage */
+  private isCloudWorkspace(workspace: Workspace): boolean {
+    return workspace.storageType === 'cloud' && !!workspace.cloudConfig
+  }
+
+  /** Get the CloudStorageProvider for a cloud workspace, or null for local */
+  private async getCloudProvider(workspace: Workspace): Promise<CloudStorageProvider | null> {
+    if (!this.isCloudWorkspace(workspace)) return null
+    try {
+      const provider = await resolvePluginStorage(workspace)
+      return provider as CloudStorageProvider | null
+    } catch (err) {
+      sessionLog.error(`Failed to get cloud provider for workspace "${workspace.name}":`, err instanceof Error ? err.message : err)
+      return null
+    }
+  }
+
+  /** Get the storage provider for a workspace (cloud or local) */
+  private async getStorageProvider(workspace: Workspace): Promise<IStorageProvider> {
+    const pluginProvider = await resolvePluginStorage(workspace)
+    if (pluginProvider) return pluginProvider
+    if (!workspace.rootPath) {
+      throw new Error(`Local storage provider requires rootPath (workspace: ${workspace.id})`)
+    }
+    const { LocalStorageProvider } = await import('@craft-agent/shared/storage')
+    return new LocalStorageProvider(workspace.id, workspace.rootPath)
+  }
+
+  /** Update session metadata via cloud provider (for cloud workspaces) */
+  private async cloudUpdateMetadata(
+    workspace: Workspace,
+    sessionId: string,
+    updates: Record<string, unknown>,
+  ): Promise<void> {
+    sessionLog.info(`[CloudUpdateMetadata] Sending updates for session ${sessionId}:`, JSON.stringify(updates))
+    const provider = await this.getCloudProvider(workspace)
+    if (!provider) {
+      sessionLog.warn(`[CloudUpdateMetadata] No cloud provider available`)
+      return
+    }
+    await provider.sessions.updateSessionMetadata(sessionId, updates as Parameters<typeof provider.sessions.updateSessionMetadata>[1])
+    sessionLog.info(`[CloudUpdateMetadata] Successfully sent updates`)
+  }
+
+  /** Load all sources for a workspace (cloud or local), including built-ins */
+  private async resolveAllSources(workspace: Workspace): Promise<LoadedSource[]> {
+    const provider = await this.getStorageProvider(workspace)
+    return provider.sources.loadWorkspaceSources()
+  }
+
+  /** Load specific sources by slugs for a workspace (cloud or local) */
+  private async resolveSourcesBySlugs(workspace: Workspace, slugs: string[]): Promise<LoadedSource[]> {
+    const provider = await this.getStorageProvider(workspace)
+    const allSources = await provider.sources.loadWorkspaceSources()
+    return allSources.filter(s => slugs.includes(s.config.slug))
+  }
+
+  /** Load workspace sources list (cloud or local), not including built-ins */
+  private async resolveWorkspaceSources(workspace: Workspace): Promise<LoadedSource[]> {
+    const provider = await this.getStorageProvider(workspace)
+    return provider.sources.loadWorkspaceSources()
+  }
+
+  /** Load labels for a workspace (cloud or local) */
+  private async resolveLabels(workspace: Workspace): Promise<import('@craft-agent/shared/labels').LabelConfig[]> {
+    const provider = await this.getStorageProvider(workspace)
+    return provider.labels.listLabels()
+  }
+
   // Flush a specific session immediately (call on session close/switch)
+  // No-op for cloud workspace sessions (they save directly via WebSocket).
   async flushSession(sessionId: string): Promise<void> {
+    const managed = this.sessions.get(sessionId)
+    if (managed && this.isCloudWorkspace(managed.workspace)) return
     await sessionPersistenceQueue.flush(sessionId)
   }
 
   // Flush all pending sessions (call on app quit)
   async flushAllSessions(): Promise<void> {
     await sessionPersistenceQueue.flushAll()
+  }
+
+  /**
+   * Handle remote session changes from cloud sync.
+   * Updates the in-memory sessions map so getSessions() returns fresh data.
+   * Called by CloudSyncManager BEFORE broadcasting to renderer.
+   */
+  async handleRemoteSessionChange(workspaceId: string, event: RemoteChangeEvent): Promise<void> {
+    if (event.entity !== 'session') return
+
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace || !this.isCloudWorkspace(workspace)) return
+
+    const provider = await this.getCloudProvider(workspace)
+    if (!provider) return
+
+    const sessionMeta = event.data
+    // For delete events, the worker sends { sessionId } instead of { id }
+    const sessionId = sessionMeta?.id ?? (sessionMeta as { sessionId?: string })?.sessionId
+    if (!sessionId) return
+
+    switch (event.action) {
+      case 'created':
+      case 'updated': {
+        // Check if we already have this session in-memory
+        const now = Date.now()
+        const existing = this.sessions.get(sessionId)
+        if (existing) {
+          // Update metadata fields from the remote event
+          existing.name = sessionMeta.name
+          existing.preview = sessionMeta.preview
+          existing.lastMessageAt = sessionMeta.lastMessageAt ?? sessionMeta.lastUsedAt ?? now
+          existing.messageCount = sessionMeta.messageCount
+          existing.isFlagged = sessionMeta.isFlagged ?? false
+          existing.permissionMode = sessionMeta.permissionMode
+          existing.todoState = sessionMeta.todoState
+          existing.labels = sessionMeta.labels
+          existing.workingDirectory = sessionMeta.workingDirectory
+          existing.model = sessionMeta.model
+          existing.thinkingLevel = sessionMeta.thinkingLevel
+          existing.lastMessageRole = sessionMeta.lastMessageRole
+          existing.sharedUrl = sessionMeta.sharedUrl
+          existing.sharedId = sessionMeta.sharedId
+          existing.hidden = sessionMeta.hidden
+          existing.isRemoteSandbox = sessionMeta.isRemoteSandbox
+          // Mark messages as stale so next load fetches fresh data
+          existing.messagesLoaded = false
+          sessionLog.info(`Updated in-memory session ${sessionId} from remote change`)
+        } else {
+          // Create new ManagedSession entry from the metadata
+          const managed: ManagedSession = {
+            id: sessionMeta.id,
+            workspace,
+            agent: null,
+            messages: [],
+            isProcessing: false,
+            lastMessageAt: sessionMeta.lastMessageAt ?? sessionMeta.lastUsedAt ?? now,
+            streamingText: '',
+            processingGeneration: 0,
+            name: sessionMeta.name,
+            preview: sessionMeta.preview,
+            createdAt: sessionMeta.createdAt ?? now,
+            messageCount: sessionMeta.messageCount,
+            isFlagged: sessionMeta.isFlagged ?? false,
+            permissionMode: sessionMeta.permissionMode,
+            sdkSessionId: sessionMeta.sdkSessionId,
+            tokenUsage: sessionMeta.tokenUsage,
+            todoState: sessionMeta.todoState,
+            lastReadMessageId: sessionMeta.lastReadMessageId,
+            lastFinalMessageId: sessionMeta.lastFinalMessageId,
+            hasUnread: sessionMeta.hasUnread,
+            enabledSourceSlugs: undefined,
+            labels: sessionMeta.labels,
+            workingDirectory: sessionMeta.workingDirectory,
+            sdkCwd: sessionMeta.sdkCwd,
+            model: sessionMeta.model,
+            thinkingLevel: sessionMeta.thinkingLevel,
+            lastMessageRole: sessionMeta.lastMessageRole,
+            messageQueue: [],
+            backgroundShellCommands: new Map(),
+            messagesLoaded: false,
+            sharedUrl: sessionMeta.sharedUrl,
+            sharedId: sessionMeta.sharedId,
+            hidden: sessionMeta.hidden,
+            isRemoteSandbox: sessionMeta.isRemoteSandbox,
+          }
+          this.sessions.set(sessionId, managed)
+          sessionLog.info(`Added new session ${sessionId} from remote change`)
+        }
+        break
+      }
+
+      case 'deleted': {
+        if (this.sessions.has(sessionId)) {
+          this.sessions.delete(sessionId)
+          sessionLog.info(`Removed session ${sessionId} from remote delete`)
+        }
+        break
+      }
+    }
   }
 
   // ============================================
@@ -1075,8 +1441,8 @@ export class SessionManager {
 
     sessionLog.info(`Running OAuth flow for ${request.sourceSlug} (type: ${request.type})`)
 
-    // Find the source in workspace sources
-    const sources = loadWorkspaceSources(managed.workspace.rootPath)
+    // Find the source in workspace sources (cloud or local)
+    const sources = await this.resolveWorkspaceSources(managed.workspace)
     const source = sources.find(s => s.config.slug === request.sourceSlug)
 
     if (!source) {
@@ -1244,7 +1610,7 @@ export class SessionManager {
       // Store credentials using existing workspace ID extraction pattern
       const credManager = getCredentialManager()
       // Extract workspace ID from root path (last segment of path)
-      const wsId = managed.workspace.rootPath.split('/').pop() || managed.workspace.id
+      const wsId = managed.workspace.rootPath!.split('/').pop() || managed.workspace.id
 
       if (request.mode === 'basic') {
         // Store value as JSON string {username, password} - credential-manager.ts parses it for basic auth
@@ -1273,7 +1639,7 @@ export class SessionManager {
 
       // Update source config to mark as authenticated
       const { markSourceAuthenticated } = await import('@craft-agent/shared/sources')
-      markSourceAuthenticated(managed.workspace.rootPath, request.sourceSlug)
+      markSourceAuthenticated(managed.workspace.rootPath!, request.sourceSlug)
 
       // Mark source as unseen so fresh guide is injected on next message
       if (managed.agent) {
@@ -1311,7 +1677,13 @@ export class SessionManager {
   getSessions(): Session[] {
     // Returns session metadata only - messages are NOT included to save memory
     // Use getSession(id) to load messages for a specific session
-    return Array.from(this.sessions.values())
+    const sessions = Array.from(this.sessions.values())
+    // Log sessions with isRemoteSandbox set for debugging
+    const remoteSandboxSessions = sessions.filter(s => s.isRemoteSandbox)
+    if (remoteSandboxSessions.length > 0) {
+      sessionLog.info(`[GetSessions] Sessions with isRemoteSandbox=true: ${remoteSandboxSessions.map(s => s.id).join(', ')}`)
+    }
+    return sessions
       .map(m => ({
         id: m.id,
         workspaceId: m.workspace.id,
@@ -1339,6 +1711,8 @@ export class SessionManager {
         createdAt: m.createdAt,
         messageCount: m.messageCount,
         hidden: m.hidden,
+        isRemoteSandbox: m.isRemoteSandbox,
+        sandboxSessionId: m.session?.sandboxSessionId,
       }))
       .sort((a, b) => b.lastMessageAt - a.lastMessageAt)
   }
@@ -1373,7 +1747,7 @@ export class SessionManager {
       hasUnread: m.hasUnread,  // Explicit unread flag for NEW badge state machine
       workingDirectory: m.workingDirectory,
       model: m.model,
-      sessionFolderPath: getSessionStoragePath(m.workspace.rootPath, m.id),
+      sessionFolderPath: getSessionStoragePath(m.workspace.rootPath!, m.id),
       enabledSourceSlugs: m.enabledSourceSlugs,
       labels: m.labels,
       sharedUrl: m.sharedUrl,
@@ -1381,6 +1755,8 @@ export class SessionManager {
       lastMessageRole: m.lastMessageRole,
       tokenUsage: m.tokenUsage,
       hidden: m.hidden,
+      isRemoteSandbox: m.isRemoteSandbox,
+      sandboxSessionId: m.session?.sandboxSessionId,
     }
   }
 
@@ -1399,7 +1775,7 @@ export class SessionManager {
       return existingPromise
     }
 
-    const loadPromise = this.loadMessagesFromDisk(managed)
+    const loadPromise = this.loadMessages(managed)
     this.messageLoadingPromises.set(managed.id, loadPromise)
 
     try {
@@ -1410,32 +1786,53 @@ export class SessionManager {
   }
 
   /**
-   * Internal: Load messages from disk storage into the managed session.
+   * Internal: Load messages for a managed session.
+   * For cloud workspaces, fetches from cloud API. For local, reads from disk.
    */
-  private async loadMessagesFromDisk(managed: ManagedSession): Promise<void> {
-    const storedSession = loadStoredSession(managed.workspace.rootPath, managed.id)
+  private async loadMessages(managed: ManagedSession): Promise<void> {
+    let storedSession: StoredSession | null = null
+
+    if (this.isCloudWorkspace(managed.workspace)) {
+      // Cloud workspace: fetch full session (with messages) from cloud
+      try {
+        const provider = await this.getCloudProvider(managed.workspace)
+        if (provider) {
+          storedSession = await provider.sessions.loadSession(managed.id)
+        }
+      } catch (err) {
+        sessionLog.error(`Failed to load cloud messages for session ${managed.id}:`, err)
+      }
+    } else {
+      // Local workspace: read from disk
+      storedSession = loadStoredSession(managed.workspace.rootPath!, managed.id)
+    }
+
     if (storedSession) {
+      sessionLog.info(`[LoadMessages] Session ${managed.id}: storedSession.isRemoteSandbox=${storedSession.isRemoteSandbox}`)
       managed.messages = (storedSession.messages || []).map(storedToMessage)
       managed.tokenUsage = storedSession.tokenUsage
       managed.lastReadMessageId = storedSession.lastReadMessageId
-      managed.hasUnread = storedSession.hasUnread  // Explicit unread flag for NEW badge state machine
+      managed.hasUnread = storedSession.hasUnread
       managed.enabledSourceSlugs = storedSession.enabledSourceSlugs
       managed.sharedUrl = storedSession.sharedUrl
       managed.sharedId = storedSession.sharedId
-      // Sync name from disk - ensures title persistence across lazy loading
       managed.name = storedSession.name
+      managed.isRemoteSandbox = storedSession.isRemoteSandbox
+      sessionLog.info(`[LoadMessages] After assignment, managed.isRemoteSandbox=${managed.isRemoteSandbox}`)
       sessionLog.debug(`Lazy-loaded ${managed.messages.length} messages for session ${managed.id}`)
     }
     managed.messagesLoaded = true
   }
 
   /**
-   * Get the filesystem path to a session's folder
+   * Get the filesystem path to a session's folder.
+   * Returns null for cloud workspaces (no local path).
    */
   getSessionPath(sessionId: string): string | null {
     const managed = this.sessions.get(sessionId)
     if (!managed) return null
-    return getSessionStoragePath(managed.workspace.rootPath, sessionId)
+    if (this.isCloudWorkspace(managed.workspace)) return null
+    return getSessionStoragePath(managed.workspace.rootPath!, sessionId)
   }
 
   async createSession(workspaceId: string, options?: import('../shared/types').CreateSessionOptions): Promise<Session> {
@@ -1446,7 +1843,7 @@ export class SessionManager {
 
     // Get new session defaults from workspace config (with global fallback)
     // Options.permissionMode overrides the workspace default (used by EditPopover for auto-execute)
-    const workspaceRootPath = workspace.rootPath
+    const workspaceRootPath = workspace.rootPath!
     const wsConfig = loadWorkspaceConfig(workspaceRootPath)
     const globalDefaults = loadConfigDefaults()
 
@@ -1474,18 +1871,39 @@ export class SessionManager {
       resolvedWorkingDir = options.workingDirectory
     }
 
-    // Use storage layer to create and persist the session
-    const storedSession = await createStoredSession(workspaceRootPath, {
-      permissionMode: defaultPermissionMode,
-      workingDirectory: resolvedWorkingDir,
-      hidden: options?.hidden,
-      todoState: options?.todoState,
-      labels: options?.labels,
-      isFlagged: options?.isFlagged,
-    })
+    let sessionId: string
+    let lastMessageAt: number
+    let sdkCwd: string | undefined
 
-    // Model priority: options.model > storedSession.model > workspace default
-    const resolvedModel = options?.model || storedSession.model || defaultModel
+    if (this.isCloudWorkspace(workspace)) {
+      // Cloud workspace: create session via cloud provider (no local disk)
+      const provider = await this.getCloudProvider(workspace)
+      if (!provider) throw new Error(`Cloud provider unavailable for workspace ${workspace.name}`)
+      const cloudConfig = await provider.sessions.createSession({
+        permissionMode: defaultPermissionMode,
+        workingDirectory: resolvedWorkingDir,
+        hidden: options?.hidden,
+      })
+      sessionId = cloudConfig.id
+      lastMessageAt = cloudConfig.lastUsedAt ?? Date.now()
+      sdkCwd = undefined // No local SDK cwd for cloud sessions
+    } else {
+      // Local workspace: use storage layer to create and persist on disk
+      const storedSession = await createStoredSession(workspaceRootPath, {
+        permissionMode: defaultPermissionMode,
+        workingDirectory: resolvedWorkingDir,
+        hidden: options?.hidden,
+        todoState: options?.todoState,
+        labels: options?.labels,
+        isFlagged: options?.isFlagged,
+      })
+      sessionId = storedSession.id
+      lastMessageAt = storedSession.lastMessageAt ?? storedSession.lastUsedAt
+      sdkCwd = storedSession.sdkCwd
+    }
+
+    // Model priority: options.model > workspace default
+    const resolvedModel = options?.model || defaultModel
 
     // Log mini agent session creation
     if (options?.systemPromptPreset === 'mini' || options?.model) {
@@ -1493,12 +1911,12 @@ export class SessionManager {
     }
 
     const managed: ManagedSession = {
-      id: storedSession.id,
+      id: sessionId,
       workspace,
       agent: null,  // Lazy-load agent on first message
       messages: [],
       isProcessing: false,
-      lastMessageAt: storedSession.lastMessageAt ?? storedSession.lastUsedAt,  // Fallback for sessions saved before lastMessageAt was persisted
+      lastMessageAt,
       streamingText: '',
       processingGeneration: 0,
       isFlagged: options?.isFlagged ?? false,
@@ -1506,7 +1924,7 @@ export class SessionManager {
       labels: options?.labels,
       permissionMode: defaultPermissionMode,
       workingDirectory: resolvedWorkingDir,
-      sdkCwd: storedSession.sdkCwd,
+      sdkCwd,
       // Session-specific model takes priority, then workspace default
       model: resolvedModel,
       thinkingLevel: defaultThinkingLevel,
@@ -1514,7 +1932,7 @@ export class SessionManager {
       systemPromptPreset: options?.systemPromptPreset,
       messageQueue: [],
       backgroundShellCommands: new Map(),
-      messagesLoaded: true,  // New sessions don't need to load messages from disk
+      messagesLoaded: true,  // New sessions don't need to load messages
       hidden: options?.hidden,
       // Initialize TokenRefreshManager for this session (handles OAuth token refresh with rate limiting)
       tokenRefreshManager: new TokenRefreshManager(getSourceCredentialManager(), {
@@ -1522,10 +1940,10 @@ export class SessionManager {
       }),
     }
 
-    this.sessions.set(storedSession.id, managed)
+    this.sessions.set(sessionId, managed)
 
     return {
-      id: storedSession.id,
+      id: sessionId,
       workspaceId: workspace.id,
       workspaceName: workspace.name,
       lastMessageAt: managed.lastMessageAt,
@@ -1538,7 +1956,7 @@ export class SessionManager {
       workingDirectory: resolvedWorkingDir,
       model: managed.model,
       thinkingLevel: defaultThinkingLevel,
-      sessionFolderPath: getSessionStoragePath(workspaceRootPath, storedSession.id),
+      sessionFolderPath: this.isCloudWorkspace(workspace) ? undefined : getSessionStoragePath(workspaceRootPath, sessionId),
       hidden: options?.hidden,
     }
   }
@@ -1550,8 +1968,13 @@ export class SessionManager {
     if (!managed.agent) {
       const end = perf.start('agent.create', { sessionId: managed.id })
       const config = loadStoredConfig()
+      // Resolve storage provider for cloud-aware tools (status CRUD, config validation)
+      const storageProvider = await this.getStorageProvider(managed.workspace)
+
       managed.agent = new CraftAgent({
         workspace: managed.workspace,
+        // Storage provider enables cloud-aware session-scoped tools
+        storageProvider,
         // Session model takes priority, fallback to global config, then resolve with customModel override
         model: resolveModelId(managed.model || config?.model || DEFAULT_MODEL),
         // Initialize thinking level at construction to avoid race conditions
@@ -1750,7 +2173,7 @@ export class SessionManager {
       managed.agent.onSourceActivationRequest = async (sourceSlug: string): Promise<boolean> => {
         sessionLog.info(`Source activation request for session ${managed.id}:`, sourceSlug)
 
-        const workspaceRootPath = managed.workspace.rootPath
+        const workspaceRootPath = managed.workspace.rootPath!
 
         // Check if source is already enabled
         if (managed.enabledSourceSlugs?.includes(sourceSlug)) {
@@ -1758,8 +2181,8 @@ export class SessionManager {
           // Source is in the list but server might not be active (e.g., build failed previously)
         }
 
-        // Load the source to check if it exists and is ready
-        const sources = getSourcesBySlugs(workspaceRootPath, [sourceSlug])
+        // Load the source to check if it exists and is ready (cloud or local)
+        const sources = await this.resolveSourcesBySlugs(managed.workspace, [sourceSlug])
         if (sources.length === 0) {
           sessionLog.warn(`Source ${sourceSlug} not found in workspace`)
           return false
@@ -1790,10 +2213,10 @@ export class SessionManager {
           sessionLog.info(`Added source ${sourceSlug} to session enabled sources`)
         }
 
-        // Build server configs for all enabled sources
-        const allEnabledSources = getSourcesBySlugs(workspaceRootPath, managed.enabledSourceSlugs || [])
+        // Build server configs for all enabled sources (cloud or local)
+        const allEnabledSources = await this.resolveSourcesBySlugs(managed.workspace, managed.enabledSourceSlugs || [])
         // Pass session path so large API responses can be saved to session folder
-        const sessionPath = getSessionStoragePath(workspaceRootPath, managed.id)
+        const sessionPath = this.isCloudWorkspace(managed.workspace) ? undefined : getSessionStoragePath(workspaceRootPath, managed.id)
         const { mcpServers, apiServers, errors } = await buildServersFromSources(allEnabledSources, sessionPath)
 
         if (errors.length > 0) {
@@ -1848,6 +2271,550 @@ export class SessionManager {
     return managed.agent
   }
 
+  /**
+   * Ensure sandbox is connected for remote execution.
+   * Creates sandbox session if needed and connects WebSocket client.
+   */
+  private async ensureSandboxConnected(managed: ManagedSession): Promise<void> {
+    // Already connected?
+    if (managed.sandboxSession?.client?.isConnected()) {
+      sessionLog.info(`Sandbox already connected for session ${managed.id}`)
+
+      // Ensure sandboxSessionId is stored on session (may be missing from older sessions)
+      if (managed.session && managed.sandboxSession.sessionId && !managed.session.sandboxSessionId) {
+        managed.session.sandboxSessionId = managed.sandboxSession.sessionId
+        this.saveSession(managed.session)
+        sessionLog.info(`[SANDBOX] Saved sandboxSessionId ${managed.sandboxSession.sessionId} to session ${managed.id}`)
+      }
+      return
+    }
+
+    const workspace = managed.workspace
+    if (!this.isCloudWorkspace(workspace)) {
+      sessionLog.warn(`Cannot use sandbox mode for non-cloud workspace ${workspace.id}`)
+      return
+    }
+
+    sessionLog.info(`[SANDBOX] ====== Starting sandbox setup for session ${managed.id} ======`)
+
+    // Emit status to UI - sandbox is booting
+    this.sendEvent({
+      type: 'status',
+      sessionId: managed.id,
+      message: 'Starting sandbox...',
+    }, managed.workspace.id)
+
+    try {
+      // Get git info from working directory
+      const workingDir = managed.workingDirectory
+      sessionLog.info(`[SANDBOX] Step 1: Checking working directory: ${workingDir || 'NOT SET'}`)
+      if (!workingDir) {
+        throw new Error('Working directory required for sandbox mode')
+      }
+
+      sessionLog.info(`[SANDBOX] Step 2: Getting git info...`)
+      const { getGitInfo } = await import('./git')
+      const gitInfo = await getGitInfo(workingDir)
+      sessionLog.info(`[SANDBOX] Git info result: ${gitInfo ? JSON.stringify(gitInfo) : 'NOT FOUND'}`)
+      if (!gitInfo) {
+        throw new Error('Git repository required for sandbox mode')
+      }
+
+      const { repoKey, branch } = gitInfo
+      const cloudConfig = workspace.cloudConfig!
+      sessionLog.info(`[SANDBOX] Step 3: Cloud config - remoteUrl: ${cloudConfig.remoteUrl}, workspaceSlug: ${cloudConfig.workspaceSlug}`)
+
+      // Get workspace API key from credential manager
+      sessionLog.info(`[SANDBOX] Step 4: Looking up workspace API key for workspace ${workspace.id}...`)
+      const credManager = getCredentialManager()
+      const workspaceCredential = await credManager.get({ type: 'cloud_apikey', workspaceId: workspace.id })
+      sessionLog.info(`[SANDBOX] Workspace API key lookup: ${workspaceCredential ? 'FOUND' : 'NOT FOUND'}`)
+      if (!workspaceCredential) {
+        throw new Error(`No API key found for cloud workspace "${workspace.name}"`)
+      }
+      const workspaceApiKey = workspaceCredential.value
+
+      // Create sandbox session if not already created
+      if (!managed.sandboxSession) {
+        sessionLog.info(`[SANDBOX] Step 5: Creating sandbox session for repo ${repoKey}, branch ${branch}`)
+
+        // Call the sandbox create API directly
+        const createUrl = `${cloudConfig.remoteUrl}/api/sandbox/create`
+        sessionLog.info(`[SANDBOX] POST ${createUrl}`)
+        const response = await fetch(createUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${workspaceApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            workspaceSlug: cloudConfig.workspaceSlug,
+            repoKey,
+            branch,
+          }),
+        })
+
+        sessionLog.info(`[SANDBOX] Create response status: ${response.status} ${response.statusText}`)
+        if (!response.ok) {
+          const errorBody = await response.text()
+          sessionLog.error(`[SANDBOX] Create failed: ${errorBody}`)
+          throw new Error(`Failed to create sandbox: ${response.statusText}`)
+        }
+
+        const result = await response.json() as { sessionId: string; sandboxId: string; wsUrl: string }
+        sessionLog.info(`[SANDBOX] Sandbox created successfully: sessionId=${result.sessionId}, sandboxId=${result.sandboxId}, wsUrl=${result.wsUrl}`)
+
+        managed.sandboxSession = {
+          sessionId: result.sessionId,
+          sandboxId: result.sandboxId,
+          wsUrl: result.wsUrl,
+        }
+
+        // Store sandbox session ID on the session for status lookups from renderer
+        if (managed.session) {
+          managed.session.sandboxSessionId = result.sessionId
+          this.saveSession(managed.session)
+        }
+      } else {
+        sessionLog.info(`[SANDBOX] Step 5: Using existing sandbox session: ${managed.sandboxSession.sessionId}`)
+
+        // Ensure sandbox session ID is stored on session (may be missing from older sessions)
+        if (managed.session && !managed.session.sandboxSessionId) {
+          managed.session.sandboxSessionId = managed.sandboxSession.sessionId
+          this.saveSession(managed.session)
+        }
+      }
+
+      // Create and connect the WebSocket client
+      const { wsUrl } = managed.sandboxSession
+      const workspaceSlug = cloudConfig.workspaceSlug
+
+      sessionLog.info(`[SANDBOX] Step 6: Creating WebSocket client for ${wsUrl}`)
+      const client = new SandboxClient(wsUrl, workspaceApiKey, workspaceSlug)
+
+      // Get the user's Anthropic API key or OAuth token
+      // API keys use ANTHROPIC_API_KEY, OAuth tokens use CLAUDE_CODE_OAUTH_TOKEN
+      sessionLog.info(`[SANDBOX] Step 7: Looking up Anthropic credentials...`)
+      let anthropicCredential = await credManager.get({ type: 'anthropic_api_key' })
+      let tokenType: 'api_key' | 'oauth' = 'api_key'
+      sessionLog.info(`[SANDBOX] anthropic_api_key lookup: ${anthropicCredential ? 'FOUND' : 'NOT FOUND'}`)
+
+      if (!anthropicCredential) {
+        // Fall back to OAuth token (Claude Max subscription)
+        sessionLog.info(`[SANDBOX] Trying claude_oauth as fallback...`)
+        anthropicCredential = await credManager.get({ type: 'claude_oauth' })
+        tokenType = 'oauth'
+        sessionLog.info(`[SANDBOX] claude_oauth lookup: ${anthropicCredential ? 'FOUND' : 'NOT FOUND'}`)
+      }
+
+      if (!anthropicCredential) {
+        sessionLog.error(`[SANDBOX] FAILED: No Anthropic API key or OAuth token found in credential manager.`)
+        throw new Error('Anthropic API key or OAuth token required for sandbox execution. Please configure your credentials in Settings.')
+      }
+      sessionLog.info(`[SANDBOX] Using auth method: ${tokenType}`)
+
+      sessionLog.info(`[SANDBOX] Step 8: Setting Anthropic credential on client (type=${tokenType})...`)
+      await client.setAnthropicApiKey(anthropicCredential.value, tokenType)
+
+      sessionLog.info(`[SANDBOX] Step 9: Connecting WebSocket...`)
+      await client.connect()
+
+      managed.sandboxSession.client = client
+      sessionLog.info(`[SANDBOX] Step 10: WebSocket connected successfully!`)
+
+      // Start heartbeat to keep sandbox alive
+      managed.sandboxSession.heartbeatInterval = this.startSandboxHeartbeat(managed)
+      sessionLog.info(`[SANDBOX] Step 11: Heartbeat started`)
+
+      // Emit status event to inform UI
+      this.sendEvent({
+        type: 'status',
+        sessionId: managed.id,
+        message: 'Connected to remote sandbox',
+      }, managed.workspace.id)
+
+      sessionLog.info(`[SANDBOX] ====== Sandbox setup complete for session ${managed.id} ======`)
+
+    } catch (error) {
+      sessionLog.error(`[SANDBOX] ====== FAILED: Sandbox setup for session ${managed.id} ======`)
+      sessionLog.error(`[SANDBOX] Error:`, error)
+      // Clear sandbox session on error
+      managed.sandboxSession = undefined
+      throw error
+    }
+  }
+
+  /**
+   * Execute a message in the remote sandbox.
+   * Runs the entire Claude Code agent in the sandbox and streams events back.
+   * Routes events through processEvent() for consistent handling with local agent.
+   */
+  private async executeSandboxMessage(
+    managed: ManagedSession,
+    message: string,
+    attachments?: FileAttachment[],
+    storedAttachments?: StoredAttachment[],
+    options?: SendMessageOptions,
+    userMessage?: Message
+  ): Promise<void> {
+    const client = managed.sandboxSession?.client
+    if (!client) {
+      throw new Error('Sandbox client not connected')
+    }
+
+    sessionLog.info(`[SANDBOX] Starting remote execution for session ${managed.id}`)
+
+    // Build context from conversation history
+    const context = this.buildSandboxContext(managed)
+
+    // Emit status to UI
+    this.sendEvent({
+      type: 'status',
+      sessionId: managed.id,
+      message: 'Executing in remote sandbox...',
+    }, managed.workspace.id)
+
+    // Generate a turn ID for correlating events in this execution
+    const turnId = `sandbox-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
+    // Track accumulated text for text_complete event
+    let accumulatedText = ''
+    let lastEventWasText = false
+
+    // Track usage from sandbox result
+    let sandboxUsage: { inputTokens: number; outputTokens: number } | undefined
+
+    try {
+      // Convert attachments to sandbox format
+      const sandboxAttachments: SandboxAttachment[] | undefined = attachments?.map(a => ({
+        name: a.name,
+        type: a.type,
+        content: a.base64Content || '', // Already base64 encoded
+      }))
+
+      // Execute in sandbox and stream events back
+      await client.executePrompt(
+        message,
+        context,
+        sandboxAttachments,
+        async (event: SandboxEvent) => {
+          // Capture usage from the result event
+          if (event.type === 'usage') {
+            sandboxUsage = {
+              inputTokens: event.inputTokens || 0,
+              outputTokens: event.outputTokens || 0,
+            }
+            return // Don't convert to AgentEvent, will be included in complete
+          }
+
+          // Convert sandbox event to AgentEvent and route through processEvent
+          // This ensures consistent handling with local agent (batching, message creation, etc.)
+          const agentEvent = this.sandboxEventToAgentEvent(event, turnId)
+
+          if (agentEvent) {
+            // Track text for text_complete
+            if (agentEvent.type === 'text_delta') {
+              accumulatedText += agentEvent.text
+              lastEventWasText = true
+            } else if (lastEventWasText && agentEvent.type !== 'text_delta') {
+              // Emit text_complete before non-text event
+              if (accumulatedText) {
+                await this.processEvent(managed, {
+                  type: 'text_complete',
+                  text: accumulatedText,
+                  isIntermediate: agentEvent.type === 'tool_start', // Intermediate if followed by tool
+                  turnId,
+                })
+                accumulatedText = ''
+              }
+              lastEventWasText = false
+            }
+
+            await this.processEvent(managed, agentEvent)
+          }
+        }
+      )
+
+      // Emit final text_complete if we have remaining text
+      if (accumulatedText) {
+        await this.processEvent(managed, {
+          type: 'text_complete',
+          text: accumulatedText,
+          isIntermediate: false,
+          turnId,
+        })
+      }
+
+      // Emit completion event through processEvent with usage (updates session token tracking)
+      await this.processEvent(managed, {
+        type: 'complete',
+        usage: sandboxUsage ? {
+          inputTokens: sandboxUsage.inputTokens,
+          outputTokens: sandboxUsage.outputTokens,
+        } : undefined,
+      })
+
+      // Flush any pending text deltas before sending complete
+      this.flushDelta(managed.id, managed.workspace.id)
+
+      // Send complete event to renderer (processEvent doesn't do this)
+      this.sendEvent({
+        type: 'complete',
+        sessionId: managed.id,
+        usage: sandboxUsage,
+      }, managed.workspace.id)
+
+      sessionLog.info(`[SANDBOX] Remote execution completed for session ${managed.id}`)
+
+      // Persist session
+      this.persistSession(managed)
+
+      // Signal processing stopped (matches local agent flow)
+      this.onProcessingStopped(managed.id, 'complete')
+
+    } catch (error) {
+      sessionLog.error(`[SANDBOX] Remote execution failed:`, error)
+
+      // Handle disconnect - try to reconnect once
+      if (error instanceof Error && error.message === 'SANDBOX_DISCONNECTED') {
+        this.sendEvent({
+          type: 'status',
+          sessionId: managed.id,
+          message: 'Reconnecting to sandbox...',
+        }, managed.workspace.id)
+
+        // Clear and reconnect
+        managed.sandboxSession = undefined
+        try {
+          await this.ensureSandboxConnected(managed)
+          // Retry execution (recursive, but only one retry)
+          await this.executeSandboxMessage(managed, message, attachments, storedAttachments, options, userMessage)
+          return
+        } catch (reconnectError) {
+          sessionLog.error(`[SANDBOX] Reconnection failed:`, reconnectError)
+        }
+      }
+
+      // Emit error to UI
+      this.sendEvent({
+        type: 'error',
+        sessionId: managed.id,
+        message: error instanceof Error ? error.message : 'Sandbox execution failed',
+      }, managed.workspace.id)
+
+      // Signal processing stopped with error
+      this.onProcessingStopped(managed.id, 'error')
+    }
+  }
+
+  /**
+   * Build context string from conversation history for sandbox execution.
+   * Includes recent messages so the sandbox agent has context.
+   */
+  private buildSandboxContext(managed: ManagedSession): string {
+    const messages = managed.messages || []
+
+    // Get last 10 messages for context
+    const recentMessages = messages.slice(-10)
+
+    let context = ''
+    for (const msg of recentMessages) {
+      if (msg.role === 'user') {
+        context += `Human: ${msg.content}\n\n`
+      } else if (msg.role === 'assistant') {
+        context += `Assistant: ${msg.content}\n\n`
+      }
+    }
+
+    return context
+  }
+
+  /**
+   * Map sandbox events to UI session events for rendering.
+   */
+  private mapSandboxEventToUIEvent(event: SandboxEvent, sessionId: string): SessionEvent {
+    switch (event.type) {
+      case 'text_delta':
+        return {
+          type: 'text_delta',
+          sessionId,
+          text: event.text || '',
+        }
+
+      case 'tool_start':
+        return {
+          type: 'tool_start',
+          sessionId,
+          toolName: event.toolName || 'Unknown',
+          toolUseId: event.toolId || '',
+          toolInput: event.input || {},
+        }
+
+      case 'tool_result':
+        return {
+          type: 'tool_result',
+          sessionId,
+          toolUseId: event.toolId || '',
+          toolResult: event.output || '',
+          isError: event.isError || false,
+        }
+
+      case 'usage':
+        return {
+          type: 'usage',
+          sessionId,
+          inputTokens: event.inputTokens || 0,
+          outputTokens: event.outputTokens || 0,
+        }
+
+      case 'error':
+        return {
+          type: 'error',
+          sessionId,
+          message: event.message || 'Unknown error',
+        }
+
+      case 'typed_error':
+        // Typed errors have structured error data - send as typed_error event for proper UI display
+        return {
+          type: 'typed_error',
+          sessionId,
+          error: event.errorData!,
+        }
+
+      default:
+        return {
+          type: 'status',
+          sessionId,
+          message: event.message || '',
+        }
+    }
+  }
+
+  /**
+   * Convert sandbox event to AgentEvent format for routing through processEvent.
+   * This ensures sandbox events are handled identically to local agent events.
+   */
+  private sandboxEventToAgentEvent(event: SandboxEvent, turnId: string): AgentEvent | null {
+    switch (event.type) {
+      case 'text_delta':
+        return {
+          type: 'text_delta',
+          text: event.text || '',
+          turnId,
+        }
+
+      case 'tool_start':
+        return {
+          type: 'tool_start',
+          toolName: event.toolName || 'Unknown',
+          toolUseId: event.toolId || `tool-${Date.now()}`,
+          input: event.input || {},
+          turnId,
+        }
+
+      case 'tool_result':
+        return {
+          type: 'tool_result',
+          toolUseId: event.toolId || '',
+          result: event.output || '',
+          isError: event.isError || false,
+          turnId,
+        }
+
+      case 'usage':
+        // Usage is included in the complete event, not a separate event
+        return null
+
+      case 'error':
+        return {
+          type: 'error',
+          message: event.message || 'Unknown error',
+        }
+
+      case 'typed_error':
+        // Convert sandbox typed error to AgentEvent typed_error
+        // This ensures API errors show in the red error box UI, matching non-remote behavior
+        return {
+          type: 'typed_error',
+          error: event.errorData!,
+        }
+
+      case 'status':
+        return {
+          type: 'status',
+          message: event.message || '',
+        }
+
+      default:
+        return null
+    }
+  }
+
+  /**
+   * Clean up sandbox session - disconnect WebSocket and optionally terminate sandbox
+   */
+  private async cleanupSandbox(managed: ManagedSession): Promise<void> {
+    if (!managed.sandboxSession) return
+
+    sessionLog.info(`Cleaning up sandbox for session ${managed.id}`)
+
+    // Stop heartbeat interval
+    if (managed.sandboxSession.heartbeatInterval) {
+      clearInterval(managed.sandboxSession.heartbeatInterval)
+    }
+
+    // Disconnect WebSocket client
+    if (managed.sandboxSession.client) {
+      managed.sandboxSession.client.disconnect()
+    }
+
+    // Optionally terminate the sandbox (let the cloud worker handle expiration)
+    // For immediate cleanup, we could call the terminate API here
+    if (this.isCloudWorkspace(managed.workspace)) {
+      try {
+        const cloudConfig = managed.workspace.cloudConfig!
+        const credManager = getCredentialManager()
+        const credential = await credManager.get({ type: 'cloud_apikey', workspaceId: managed.workspace.id })
+        if (credential) {
+          await fetch(`${cloudConfig.remoteUrl}/api/sandbox/${cloudConfig.workspaceSlug}/${managed.sandboxSession.sessionId}/terminate`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${credential.value}`,
+            },
+          })
+          sessionLog.info(`Sandbox terminated for session ${managed.id}`)
+        }
+      } catch (err) {
+        // Sandbox may already be expired - not an error
+        sessionLog.warn(`Failed to terminate sandbox for session ${managed.id}:`, err)
+      }
+    }
+
+    managed.sandboxSession = undefined
+  }
+
+  /**
+   * Start heartbeat interval for sandbox session
+   * Sends heartbeats every 2 minutes to keep sandbox alive during long operations
+   */
+  private startSandboxHeartbeat(managed: ManagedSession): NodeJS.Timeout | undefined {
+    if (!managed.sandboxSession?.client) return undefined
+
+    const interval = setInterval(() => {
+      if (managed.sandboxSession?.client?.isConnected()) {
+        managed.sandboxSession.client.sendHeartbeat().catch(err => {
+          sessionLog.warn(`Sandbox heartbeat failed for session ${managed.id}:`, err)
+        })
+      } else {
+        // Connection lost - stop heartbeat
+        clearInterval(interval)
+      }
+    }, 2 * 60 * 1000) // Every 2 minutes
+
+    return interval
+  }
+
   async flagSession(sessionId: string): Promise<void> {
     const managed = this.sessions.get(sessionId)
     if (managed) {
@@ -1896,7 +2863,8 @@ export class SessionManager {
   async setPendingPlanExecution(sessionId: string, planPath: string): Promise<void> {
     const managed = this.sessions.get(sessionId)
     if (managed) {
-      await setStoredPendingPlanExecution(managed.workspace.rootPath, sessionId, planPath)
+      if (this.isCloudWorkspace(managed.workspace)) return // Plan execution state is local-only for now
+      await setStoredPendingPlanExecution(managed.workspace.rootPath!, sessionId, planPath)
       sessionLog.info(`Session ${sessionId}: set pending plan execution for ${planPath}`)
     }
   }
@@ -1909,7 +2877,8 @@ export class SessionManager {
   async markCompactionComplete(sessionId: string): Promise<void> {
     const managed = this.sessions.get(sessionId)
     if (managed) {
-      await markStoredCompactionComplete(managed.workspace.rootPath, sessionId)
+      if (this.isCloudWorkspace(managed.workspace)) return
+      await markStoredCompactionComplete(managed.workspace.rootPath!, sessionId)
       sessionLog.info(`Session ${sessionId}: compaction marked complete for pending plan`)
     }
   }
@@ -1922,7 +2891,8 @@ export class SessionManager {
   async clearPendingPlanExecution(sessionId: string): Promise<void> {
     const managed = this.sessions.get(sessionId)
     if (managed) {
-      await clearStoredPendingPlanExecution(managed.workspace.rootPath, sessionId)
+      if (this.isCloudWorkspace(managed.workspace)) return
+      await clearStoredPendingPlanExecution(managed.workspace.rootPath!, sessionId)
       sessionLog.info(`Session ${sessionId}: cleared pending plan execution`)
     }
   }
@@ -1934,7 +2904,8 @@ export class SessionManager {
   getPendingPlanExecution(sessionId: string): { planPath: string; awaitingCompaction: boolean } | null {
     const managed = this.sessions.get(sessionId)
     if (!managed) return null
-    return getStoredPendingPlanExecution(managed.workspace.rootPath, sessionId)
+    if (this.isCloudWorkspace(managed.workspace)) return null
+    return getStoredPendingPlanExecution(managed.workspace.rootPath!, sessionId)
   }
 
   // ============================================
@@ -1956,8 +2927,14 @@ export class SessionManager {
     this.sendEvent({ type: 'async_operation', sessionId, isOngoing: true }, managed.workspace.id)
 
     try {
-      // Load session directly from disk (already in correct format)
-      const storedSession = loadStoredSession(managed.workspace.rootPath, sessionId)
+      // Load session data (from cloud for cloud workspaces, from disk for local)
+      let storedSession: StoredSession | null = null
+      if (this.isCloudWorkspace(managed.workspace)) {
+        const provider = await this.getCloudProvider(managed.workspace)
+        if (provider) storedSession = await provider.sessions.loadSession(sessionId)
+      } else {
+        storedSession = loadStoredSession(managed.workspace.rootPath!, sessionId)
+      }
       if (!storedSession) {
         return { success: false, error: 'Session file not found' }
       }
@@ -1982,11 +2959,12 @@ export class SessionManager {
       // Store shared info in session
       managed.sharedUrl = data.url
       managed.sharedId = data.id
-      const workspaceRootPath = managed.workspace.rootPath
-      await updateSessionMetadata(workspaceRootPath, sessionId, {
-        sharedUrl: data.url,
-        sharedId: data.id,
-      })
+      const shareUpdates = { sharedUrl: data.url, sharedId: data.id }
+      if (this.isCloudWorkspace(managed.workspace)) {
+        await this.cloudUpdateMetadata(managed.workspace, sessionId, shareUpdates)
+      } else {
+        await updateSessionMetadata(managed.workspace.rootPath!, sessionId, shareUpdates)
+      }
 
       sessionLog.info(`Session ${sessionId} shared at ${data.url}`)
       // Notify all windows for this workspace
@@ -2020,8 +2998,14 @@ export class SessionManager {
     this.sendEvent({ type: 'async_operation', sessionId, isOngoing: true }, managed.workspace.id)
 
     try {
-      // Load session directly from disk (already in correct format)
-      const storedSession = loadStoredSession(managed.workspace.rootPath, sessionId)
+      // Load session data (from cloud for cloud workspaces, from disk for local)
+      let storedSession: StoredSession | null = null
+      if (this.isCloudWorkspace(managed.workspace)) {
+        const provider = await this.getCloudProvider(managed.workspace)
+        if (provider) storedSession = await provider.sessions.loadSession(sessionId)
+      } else {
+        storedSession = loadStoredSession(managed.workspace.rootPath!, sessionId)
+      }
       if (!storedSession) {
         return { success: false, error: 'Session file not found' }
       }
@@ -2085,11 +3069,12 @@ export class SessionManager {
       // Clear shared info
       delete managed.sharedUrl
       delete managed.sharedId
-      const workspaceRootPath = managed.workspace.rootPath
-      await updateSessionMetadata(workspaceRootPath, sessionId, {
-        sharedUrl: undefined,
-        sharedId: undefined,
-      })
+      const revokeUpdates = { sharedUrl: undefined, sharedId: undefined }
+      if (this.isCloudWorkspace(managed.workspace)) {
+        await this.cloudUpdateMetadata(managed.workspace, sessionId, revokeUpdates)
+      } else {
+        await updateSessionMetadata(managed.workspace.rootPath!, sessionId, revokeUpdates)
+      }
 
       sessionLog.info(`Session ${sessionId} share revoked`)
       // Notify all windows for this workspace
@@ -2120,7 +3105,7 @@ export class SessionManager {
       throw new Error(`Session not found: ${sessionId}`)
     }
 
-    const workspaceRootPath = managed.workspace.rootPath
+    const workspaceRootPath = managed.workspace.rootPath!
     sessionLog.info(`Setting sources for session ${sessionId}:`, sourceSlugs)
 
     // Store the selection
@@ -2128,16 +3113,16 @@ export class SessionManager {
 
     // If agent exists, build and apply servers immediately
     if (managed.agent) {
-      const sources = getSourcesBySlugs(workspaceRootPath, sourceSlugs)
+      const sources = await this.resolveSourcesBySlugs(managed.workspace, sourceSlugs)
       // Pass session path so large API responses can be saved to session folder
-      const sessionPath = getSessionStoragePath(workspaceRootPath, sessionId)
+      const sessionPath = this.isCloudWorkspace(managed.workspace) ? undefined : getSessionStoragePath(workspaceRootPath, sessionId)
       const { mcpServers, apiServers, errors } = await buildServersFromSources(sources, sessionPath)
       if (errors.length > 0) {
         sessionLog.warn(`Source build errors:`, errors)
       }
 
       // Set all sources for context (agent sees full list with descriptions, including built-ins)
-      const allSources = loadAllSources(workspaceRootPath)
+      const allSources = await this.resolveAllSources(managed.workspace)
       managed.agent.setAllSources(allSources)
 
       // Set active source servers (tools are only available from these)
@@ -2252,8 +3237,11 @@ export class SessionManager {
 
     // Persist changes
     if (needsPersist) {
-      const workspaceRootPath = managed.workspace.rootPath
-      await updateSessionMetadata(workspaceRootPath, sessionId, updates)
+      if (this.isCloudWorkspace(managed.workspace)) {
+        await this.cloudUpdateMetadata(managed.workspace, sessionId, updates)
+      } else {
+        await updateSessionMetadata(managed.workspace.rootPath!, sessionId, updates)
+      }
     }
   }
 
@@ -2266,9 +3254,12 @@ export class SessionManager {
     if (managed) {
       managed.hasUnread = true
       managed.lastReadMessageId = undefined
-      // Persist to disk
-      const workspaceRootPath = managed.workspace.rootPath
-      await updateSessionMetadata(workspaceRootPath, sessionId, { hasUnread: true, lastReadMessageId: undefined })
+      const metaUpdates = { hasUnread: true, lastReadMessageId: undefined }
+      if (this.isCloudWorkspace(managed.workspace)) {
+        await this.cloudUpdateMetadata(managed.workspace, sessionId, metaUpdates)
+      } else {
+        await updateSessionMetadata(managed.workspace.rootPath!, sessionId, metaUpdates)
+      }
     }
   }
 
@@ -2373,12 +3364,16 @@ export class SessionManager {
     const managed = this.sessions.get(sessionId)
     if (managed) {
       managed.model = model ?? undefined
-      // Persist to disk
-      await updateSessionMetadata(managed.workspace.rootPath, sessionId, { model: model ?? undefined })
+      // Persist metadata
+      if (this.isCloudWorkspace(managed.workspace)) {
+        await this.cloudUpdateMetadata(managed.workspace, sessionId, { model: model ?? undefined })
+      } else {
+        await updateSessionMetadata(managed.workspace.rootPath!, sessionId, { model: model ?? undefined })
+      }
       // Update agent model if it already exists (takes effect on next query)
       if (managed.agent) {
         // Fallback chain: session model > workspace default > global config > DEFAULT_MODEL
-        const wsConfig = loadWorkspaceConfig(managed.workspace.rootPath)
+        const wsConfig = loadWorkspaceConfig(managed.workspace.rootPath!)
         const effectiveModel = model ?? wsConfig?.defaults?.model ?? loadStoredConfig()?.model ?? DEFAULT_MODEL
         const resolvedModel = resolveModelId(effectiveModel)
         managed.agent.setModel(resolvedModel)
@@ -2421,7 +3416,7 @@ export class SessionManager {
     }
 
     // Get workspace slug before deleting
-    const workspaceRootPath = managed.workspace.rootPath
+    const workspaceRootPath = managed.workspace.rootPath!
 
     // If processing is in progress, force-abort via Query.close() and wait for cleanup
     if (managed.isProcessing && managed.agent) {
@@ -2450,10 +3445,33 @@ export class SessionManager {
       managed.agent.dispose()
     }
 
+    // Clean up sandbox session if one exists
+    if (managed.sandboxSession) {
+      this.cleanupSandbox(managed).catch(err => {
+        sessionLog.error(`Failed to cleanup sandbox for session ${sessionId}:`, err)
+      })
+    }
+
     this.sessions.delete(sessionId)
 
-    // Delete from disk too
-    deleteStoredSession(workspaceRootPath, sessionId)
+    if (this.isCloudWorkspace(managed.workspace)) {
+      // Cloud workspace: delete from cloud only (fire-and-forget)
+      void (async () => {
+        try {
+          const provider = await this.getCloudProvider(managed.workspace)
+          if (provider) {
+            // Delete files from R2 first, then session data from SQLite
+            await provider.files.deleteAllForSession(sessionId)
+            await provider.sessions.deleteSession(sessionId)
+          }
+        } catch (err) {
+          sessionLog.error(`Cloud delete failed for session ${sessionId}:`, err)
+        }
+      })()
+    } else {
+      // Local workspace: delete from disk
+      deleteStoredSession(workspaceRootPath, sessionId)
+    }
 
     // Notify all windows for this workspace that the session was deleted
     this.sendEvent({ type: 'session_deleted', sessionId }, managed.workspace.id)
@@ -2471,7 +3489,9 @@ export class SessionManager {
     // Clear any pending plan execution state when a new user message is sent.
     // This acts as a safety valve - if the user moves on, we don't want to
     // auto-execute an old plan later.
-    await clearStoredPendingPlanExecution(managed.workspace.rootPath, sessionId)
+    if (!this.isCloudWorkspace(managed.workspace)) {
+      await clearStoredPendingPlanExecution(managed.workspace.rootPath!, sessionId)
+    }
 
     // Ensure messages are loaded before we try to add new ones
     await this.ensureMessagesLoaded(managed)
@@ -2581,7 +3601,7 @@ export class SessionManager {
     // fresh and queued messages). Scans regex patterns configured on labels,
     // then merges any new matches into the session's label array.
     try {
-      const labelTree = listLabels(managed.workspace.rootPath)
+      const labelTree = await this.resolveLabels(managed.workspace)
       const autoMatches = evaluateAutoLabels(message, labelTree)
 
       if (autoMatches.length > 0) {
@@ -2637,17 +3657,17 @@ export class SessionManager {
     sendSpan.mark('agent.ready')
 
     // Always set all sources for context (even if none are enabled), including built-ins
-    const workspaceRootPath = managed.workspace.rootPath
-    const allSources = loadAllSources(workspaceRootPath)
+    const workspaceRootPath = managed.workspace.rootPath!
+    const allSources = await this.resolveAllSources(managed.workspace)
     agent.setAllSources(allSources)
     sendSpan.mark('sources.loaded')
 
     // Apply source servers if any are enabled
     if (managed.enabledSourceSlugs?.length) {
       // Always build server configs fresh (no caching - single source of truth)
-      const sources = getSourcesBySlugs(workspaceRootPath, managed.enabledSourceSlugs)
+      const sources = await this.resolveSourcesBySlugs(managed.workspace, managed.enabledSourceSlugs)
       // Pass session path so large API responses can be saved to session folder
-      const sessionPath = getSessionStoragePath(workspaceRootPath, sessionId)
+      const sessionPath = this.isCloudWorkspace(managed.workspace) ? undefined : getSessionStoragePath(workspaceRootPath, sessionId)
       const { mcpServers, apiServers, errors } = await buildServersFromSources(sources, sessionPath)
       if (errors.length > 0) {
         sessionLog.warn(`Source build errors:`, errors)
@@ -2692,12 +3712,26 @@ export class SessionManager {
       }
     }
 
+    // ── Remote Sandbox Session Management ──
+    // If sandbox mode is enabled and this is a cloud workspace, run ENTIRE agent in sandbox
+    if (options?.isRemoteSandbox && this.isCloudWorkspace(managed.workspace)) {
+      await this.ensureSandboxConnected(managed)
+
+      // Route to sandbox execution - skip local agent entirely
+      sessionLog.info(`[SANDBOX] Routing to remote sandbox execution for session ${sessionId}`)
+      await this.executeSandboxMessage(managed, message, attachments, storedAttachments, options, userMessage)
+      return
+    }
+
     try {
       sessionLog.info('Starting chat for session:', sessionId)
       sessionLog.info('Workspace:', JSON.stringify(managed.workspace, null, 2))
       sessionLog.info('Message:', message)
       sessionLog.info('Agent model:', agent.getModel())
       sessionLog.info('process.cwd():', process.cwd())
+      if (managed.sandboxSession?.client) {
+        sessionLog.info('Sandbox mode ENABLED - tools will execute remotely')
+      }
 
       // Set ultrathink override if enabled (single-shot - resets after query)
       // This boosts the session's thinkingLevel to 'max' for this message only
@@ -2928,7 +3962,11 @@ export class SessionManager {
         // User is not watching - mark as unread for NEW badge
         if (!managed.hasUnread) {
           managed.hasUnread = true
-          await updateSessionMetadata(managed.workspace.rootPath, sessionId, { hasUnread: true })
+          if (this.isCloudWorkspace(managed.workspace)) {
+            await this.cloudUpdateMetadata(managed.workspace, sessionId, { hasUnread: true })
+          } else {
+            await updateSessionMetadata(managed.workspace.rootPath!, sessionId, { hasUnread: true })
+          }
         }
       }
     }
@@ -3179,6 +4217,30 @@ To view this task's output:
   }
 
   /**
+   * Set remote sandbox mode for a session (cloud workspaces only).
+   * When enabled, code execution runs in a cloud sandbox instead of locally.
+   */
+  setSessionRemoteSandbox(sessionId: string, enabled: boolean): void {
+    sessionLog.info(`[RemoteSandbox] setSessionRemoteSandbox called: sessionId=${sessionId}, enabled=${enabled}`)
+    const managed = this.sessions.get(sessionId)
+    if (!managed) {
+      sessionLog.warn(`[RemoteSandbox] Session not found: ${sessionId}`)
+      return
+    }
+
+    managed.isRemoteSandbox = enabled
+    sessionLog.info(`[RemoteSandbox] Set managed.isRemoteSandbox = ${enabled}`)
+
+    // Only cloud workspaces support remote sandbox
+    if (this.isCloudWorkspace(managed.workspace)) {
+      sessionLog.info(`[RemoteSandbox] Calling cloudUpdateMetadata for cloud workspace`)
+      void this.cloudUpdateMetadata(managed.workspace, sessionId, { isRemoteSandbox: enabled })
+    } else {
+      sessionLog.info(`[RemoteSandbox] Not a cloud workspace, skipping cloudUpdateMetadata`)
+    }
+  }
+
+  /**
    * Set labels for a session (additive tags, many-per-session).
    * Labels are IDs referencing workspace labels/config.json.
    */
@@ -3244,7 +4306,7 @@ To view this task's output:
     }
   }
 
-  private processEvent(managed: ManagedSession, event: AgentEvent): void {
+  private async processEvent(managed: ManagedSession, event: AgentEvent): Promise<void> {
     const sessionId = managed.id
     const workspaceId = managed.workspace.id
 
@@ -3295,10 +4357,10 @@ To view this task's output:
 
         // Resolve tool display metadata (icon, displayName) for skills/sources
         // Only resolve when we have input (second event for SDK dual-event pattern)
-        const workspaceRootPath = managed.workspace.rootPath
+        const workspaceRootPath = managed.workspace.rootPath!
         let toolDisplayMeta: ToolDisplayMeta | undefined
         if (formattedToolInput && Object.keys(formattedToolInput).length > 0) {
-          const allSources = loadAllSources(workspaceRootPath)
+          const allSources = await this.resolveAllSources(managed.workspace)
           toolDisplayMeta = resolveToolDisplayMeta(event.toolName, formattedToolInput, workspaceRootPath, allSources)
         }
 
@@ -3414,8 +4476,8 @@ To view this task's output:
           // without a prior tool_start. If tool_start arrives later, findToolMessage will
           // locate this message by toolUseId and update it with input/intent/displayMeta.
           sessionLog.info(`RESULT WITHOUT START: toolUseId=${event.toolUseId}, toolName=${toolName} (creating message from result)`)
-          const fallbackWorkspaceRootPath = managed.workspace.rootPath
-          const fallbackSources = loadAllSources(fallbackWorkspaceRootPath)
+          const fallbackWorkspaceRootPath = managed.workspace.rootPath!
+          const fallbackSources = await this.resolveAllSources(managed.workspace)
           const fallbackToolDisplayMeta = resolveToolDisplayMeta(toolName, undefined, fallbackWorkspaceRootPath, fallbackSources)
 
           const toolMessage: Message = {
@@ -3509,7 +4571,9 @@ To view this task's output:
           // This is done here (backend) rather than in the renderer so it's
           // not affected by CMD+R during compaction. The frontend reload
           // recovery will see awaitingCompaction=false and trigger execution.
-          void markStoredCompactionComplete(managed.workspace.rootPath, sessionId)
+          if (!this.isCloudWorkspace(managed.workspace)) {
+            void markStoredCompactionComplete(managed.workspace.rootPath!, sessionId)
+          }
           sessionLog.info(`Session ${sessionId}: compaction complete, marked pending plan ready`)
 
           // Emit usage_update so the context count badge refreshes immediately

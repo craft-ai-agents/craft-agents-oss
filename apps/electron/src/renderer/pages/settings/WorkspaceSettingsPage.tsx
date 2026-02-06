@@ -16,7 +16,7 @@ import { motion, AnimatePresence } from 'motion/react'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { HeaderMenu } from '@/components/ui/HeaderMenu'
-import { useAppShellContext } from '@/context/AppShellContext'
+import { useAppShellContext, useActiveWorkspace } from '@/context/AppShellContext'
 import { cn } from '@/lib/utils'
 import { routes } from '@/lib/navigate'
 import { Spinner } from '@craft-agent/ui'
@@ -24,6 +24,7 @@ import { RenameDialog } from '@/components/ui/rename-dialog'
 import type { PermissionMode, ThinkingLevel, WorkspaceSettings } from '../../../shared/types'
 import { PERMISSION_MODE_CONFIG } from '@craft-agent/shared/agent/mode-types'
 import { DEFAULT_THINKING_LEVEL, THINKING_LEVELS } from '@craft-agent/shared/agent/thinking-levels'
+import { getModelSelectOptions } from '@craft-agent/shared/config/models'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 
 import {
@@ -50,6 +51,14 @@ export default function WorkspaceSettingsPage() {
   const activeWorkspaceId = appShellContext.activeWorkspaceId
   const onRefreshWorkspaces = appShellContext.onRefreshWorkspaces
   const customModel = appShellContext.customModel
+  const activeWorkspace = useActiveWorkspace()
+
+  // Cloud workspace state
+  const isCloudWorkspace = !!(activeWorkspace?.storageType === 'cloud' && activeWorkspace?.cloudConfig)
+  const [cloudApiKey, setCloudApiKey] = useState('')
+  const [cloudApiKeyError, setCloudApiKeyError] = useState<string | null>(null)
+  const [isUpdatingApiKey, setIsUpdatingApiKey] = useState(false)
+  const [apiKeyUpdateSuccess, setApiKeyUpdateSuccess] = useState(false)
 
   // Workspace settings state
   const [wsName, setWsName] = useState('')
@@ -256,6 +265,27 @@ export default function WorkspaceSettingsPage() {
     [updateWorkspaceSetting]
   )
 
+  const handleUpdateCloudApiKey = useCallback(async () => {
+    if (!window.electronAPI || !activeWorkspaceId || !cloudApiKey.trim()) return
+
+    setIsUpdatingApiKey(true)
+    setCloudApiKeyError(null)
+    setApiKeyUpdateSuccess(false)
+
+    try {
+      const result = await window.electronAPI.setCloudApiKey(activeWorkspaceId, cloudApiKey.trim())
+      if (result.success) {
+        setCloudApiKey('')
+        setApiKeyUpdateSuccess(true)
+        setTimeout(() => setApiKeyUpdateSuccess(false), 3000)
+      }
+    } catch (error) {
+      setCloudApiKeyError(error instanceof Error ? error.message : 'Failed to update API key')
+    } finally {
+      setIsUpdatingApiKey(false)
+    }
+  }, [activeWorkspaceId, cloudApiKey])
+
   const handleModeToggle = useCallback(
     async (mode: PermissionMode, checked: boolean) => {
       if (!window.electronAPI) return
@@ -392,6 +422,70 @@ export default function WorkspaceSettingsPage() {
               />
             </SettingsSection>
 
+            {/* Cloud Workspace */}
+            {isCloudWorkspace && activeWorkspace?.cloudConfig && (
+              <SettingsSection title="Cloud Sync">
+                <SettingsCard>
+                  <SettingsRow
+                    label="Remote URL"
+                    description={activeWorkspace.cloudConfig.remoteUrl}
+                  >
+                    <span className="text-xs font-mono text-muted-foreground">
+                      {activeWorkspace.cloudConfig.workspaceSlug}
+                    </span>
+                  </SettingsRow>
+                  <SettingsRow
+                    label="API Key"
+                    description={
+                      apiKeyUpdateSuccess
+                        ? 'Updated successfully — reconnecting...'
+                        : cloudApiKeyError
+                        ? cloudApiKeyError
+                        : 'Enter a new key to update credentials'
+                    }
+                    action={
+                      <button
+                        type="button"
+                        onClick={handleUpdateCloudApiKey}
+                        disabled={!cloudApiKey.trim() || isUpdatingApiKey}
+                        className={cn(
+                          'inline-flex items-center h-8 px-3 text-sm rounded-lg bg-background shadow-minimal transition-colors',
+                          !cloudApiKey.trim() || isUpdatingApiKey
+                            ? 'opacity-50 cursor-not-allowed'
+                            : 'hover:bg-foreground/[0.02]'
+                        )}
+                      >
+                        {isUpdatingApiKey ? 'Updating...' : 'Update'}
+                      </button>
+                    }
+                  >
+                    <input
+                      type="password"
+                      value={cloudApiKey}
+                      onChange={(e) => {
+                        setCloudApiKey(e.target.value)
+                        setCloudApiKeyError(null)
+                        setApiKeyUpdateSuccess(false)
+                      }}
+                      placeholder="Enter new API key"
+                      className={cn(
+                        'h-8 w-48 px-2.5 text-sm rounded-lg bg-background shadow-minimal',
+                        'border-0 outline-none focus:ring-1 focus:ring-primary/30',
+                        'placeholder:text-muted-foreground/50',
+                        cloudApiKeyError && 'ring-1 ring-destructive/50'
+                      )}
+                    />
+                  </SettingsRow>
+                  {activeWorkspace.cloudConfig.lastSyncedAt && (
+                    <SettingsRow
+                      label="Last Synced"
+                      description={new Date(activeWorkspace.cloudConfig.lastSyncedAt).toLocaleString()}
+                    />
+                  )}
+                </SettingsCard>
+              </SettingsSection>
+            )}
+
             {/* Model */}
             <SettingsSection title="Model">
               <SettingsCard>
@@ -409,11 +503,7 @@ export default function WorkspaceSettingsPage() {
                     description="AI model for new chats"
                     value={wsModel}
                     onValueChange={handleModelChange}
-                    options={[
-                      { value: 'claude-opus-4-5-20251101', label: 'Opus 4.5', description: 'Most capable for complex work' },
-                      { value: 'claude-sonnet-4-5-20250929', label: 'Sonnet 4.5', description: 'Best for everyday tasks' },
-                      { value: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5', description: 'Fastest for quick answers' },
-                    ]}
+                    options={getModelSelectOptions()}
                   />
                 )}
                 <SettingsMenuSelectRow

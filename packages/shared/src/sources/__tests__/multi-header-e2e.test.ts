@@ -283,6 +283,6 @@ describe('Auth type verification', () => {
     });
 
     const apiConfig = serverBuilder.buildApiConfig(source);
-    expect(apiConfig.auth?.type).toBe(expectedAuthType);
+    expect(apiConfig.auth?.type).toBe(expectedAuthType as any);
   });
 });

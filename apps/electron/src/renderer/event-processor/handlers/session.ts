@@ -51,20 +51,16 @@ export function handleComplete(
 ): ProcessResult {
   const { session } = state
 
-  // Fail-safe: mark any running tools as complete
+  // Filter out status messages (transient UI state) and fail-safe mark any running tools as complete
   let updatedMessages = session.messages
-  const hasRunningTools = session.messages.some(
-    m => m.role === 'tool' && m.toolStatus === 'executing'
-  )
-
-  if (hasRunningTools) {
-    updatedMessages = session.messages.map(m => {
+    .filter(m => m.role !== 'status')  // Remove transient status messages
+    .map(m => {
+      // Mark any still-running tools as complete
       if (m.role === 'tool' && m.toolStatus === 'executing') {
         return { ...m, toolStatus: 'completed' as const }
       }
       return m
     })
-  }
 
   return {
     state: {

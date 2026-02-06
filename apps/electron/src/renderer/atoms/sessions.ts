@@ -68,6 +68,10 @@ export interface SessionMeta {
   messageCount?: number
   /** When true, session is hidden from session list (e.g., mini edit sessions) */
   hidden?: boolean
+  /** Whether remote sandbox execution is enabled for this session (cloud workspaces only) */
+  isRemoteSandbox?: boolean
+  /** Cloud sandbox session ID (for matching with sandbox status API) */
+  sandboxSessionId?: string
 }
 
 /**
@@ -122,6 +126,10 @@ export function extractSessionMeta(session: Session): SessionMeta {
     tokenUsage: session.tokenUsage,
     // Hidden sessions (e.g., mini edit sessions in EditPopover)
     hidden: session.hidden,
+    // Remote sandbox execution flag (cloud workspaces only)
+    isRemoteSandbox: session.isRemoteSandbox,
+    // Cloud sandbox session ID (for matching with sandbox status API)
+    sandboxSessionId: session.sandboxSessionId,
   }
 }
 
@@ -144,6 +152,13 @@ export const sessionMetaMapAtom = atom<Map<string, SessionMeta>>(new Map())
  * Derived atom: ordered list of session IDs (for list ordering)
  */
 export const sessionIdsAtom = atom<string[]>([])
+
+/**
+ * Track whether the initial session list is still loading (e.g., from cloud API).
+ * Starts true so SessionList shows a spinner instead of the empty state
+ * until the first getSessions() call resolves.
+ */
+export const sessionsLoadingAtom = atom<boolean>(true)
 
 /**
  * Track which sessions have had their messages loaded (for lazy loading)

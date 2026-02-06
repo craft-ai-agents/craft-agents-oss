@@ -5,6 +5,7 @@
 // Workspace and config types
 export type {
   Workspace,
+  WorkspaceStorageType,
   McpAuthType,
   AuthType,
   OAuthCredentials,
@@ -18,6 +19,16 @@ export type {
   SessionMetadata,
   SessionStatus,
 } from './session.ts';
+
+// Cloud workspace types
+export type {
+  CloudWorkspaceConfig,
+  WSClientMessage,
+  WSServerMessage,
+  WSRemoteChangeEvent,
+  CloudConnectionState,
+  CloudConnectionStatus,
+} from './cloud.ts';
 
 // Message types
 export type {

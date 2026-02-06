@@ -178,6 +178,55 @@ export async function downloadIcon(
 }
 
 /**
+ * Download an icon from a URL and upload it to cloud asset storage.
+ * Cloud-equivalent of downloadIcon() for workspaces without a local filesystem.
+ *
+ * @param iconUrl - URL to download the icon from
+ * @param relativePath - Workspace-relative path (e.g. 'sources/linear/icon.svg')
+ * @param storage - IAssetStorage instance (cloud R2 storage)
+ * @param context - Context for debug logging
+ * @returns The relative path that was uploaded, or null on failure
+ */
+export async function downloadIconToStorage(
+  iconUrl: string,
+  relativePath: string,
+  storage: import('../storage/types.ts').IAssetStorage,
+  context: string = 'Icon'
+): Promise<string | null> {
+  debug(`[${context}] Downloading icon to cloud from:`, iconUrl);
+
+  try {
+    const response = await fetch(iconUrl, {
+      headers: { 'User-Agent': 'Craft-Agent/1.0' },
+    });
+
+    if (!response.ok) {
+      debug(`[${context}] Icon download failed:`, response.status, response.statusText);
+      return null;
+    }
+
+    const contentType = response.headers.get('content-type')?.split(';')[0]?.trim();
+    let ext = contentType ? CONTENT_TYPE_TO_EXT[contentType] : null;
+    if (!ext) ext = getExtensionFromUrl(iconUrl);
+    if (!ext) ext = '.svg';
+
+    // If relativePath has a different extension than what we downloaded, adjust it
+    const baseWithoutExt = relativePath.replace(/\.[^.]+$/, '');
+    const finalPath = `${baseWithoutExt}${ext}`;
+
+    const mimeType = contentType || (ext === '.svg' ? 'image/svg+xml' : 'image/png');
+    const buffer = Buffer.from(await response.arrayBuffer());
+
+    await storage.upload(finalPath, buffer, mimeType);
+    debug(`[${context}] Icon uploaded to cloud:`, finalPath);
+    return finalPath;
+  } catch (error) {
+    debug(`[${context}] Icon download/upload error:`, error);
+    return null;
+  }
+}
+
+/**
  * Check if an icon needs to be downloaded.
  * Returns true if icon is a URL and no local icon file exists.
  */

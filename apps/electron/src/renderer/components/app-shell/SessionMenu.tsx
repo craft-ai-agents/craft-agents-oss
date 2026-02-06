@@ -35,6 +35,7 @@ import {
   RefreshCw,
   Tag,
   Check,
+  CloudOff,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useMenuComponents, type MenuComponents } from '@/components/ui/menu-context'
@@ -43,6 +44,7 @@ import type { TodoState } from '@/config/todo-states'
 import type { LabelConfig } from '@craft-agent/shared/labels'
 import { extractLabelId } from '@craft-agent/shared/labels'
 import { LabelIcon } from '@/components/ui/label-icon'
+import type { SandboxStatus } from '../../../shared/types'
 
 export interface SessionMenuProps {
   /** Session ID */
@@ -67,6 +69,10 @@ export interface SessionMenuProps {
   labels?: LabelConfig[]
   /** Callback when labels are toggled (receives full updated labels array) */
   onLabelsChange?: (labels: string[]) => void
+  /** Sandbox status for this session (if running in cloud sandbox) */
+  sandboxStatus?: SandboxStatus
+  /** Callback to terminate sandbox */
+  onTerminateSandbox?: () => Promise<boolean>
   /** Callbacks */
   onRename: () => void
   onFlag: () => void
@@ -93,6 +99,8 @@ export function SessionMenu({
   sessionLabels = [],
   labels = [],
   onLabelsChange,
+  sandboxStatus,
+  onTerminateSandbox,
   onRename,
   onFlag,
   onUnflag,
@@ -165,6 +173,16 @@ export function SessionMenu({
       toast.success('Title refreshed', { description: result.title })
     } else {
       toast.error('Failed to refresh title', { description: result?.error || 'Unknown error' })
+    }
+  }
+
+  const handleStopSandbox = async () => {
+    if (!onTerminateSandbox) return
+    const success = await onTerminateSandbox()
+    if (success) {
+      toast.success('Sandbox stopped')
+    } else {
+      toast.error('Failed to stop sandbox')
     }
   }
 
@@ -330,6 +348,14 @@ export function SessionMenu({
         <AppWindow className="h-3.5 w-3.5" />
         <span className="flex-1">Open in New Window</span>
       </MenuItem>
+
+      {/* Stop Sandbox - only show when sandbox is active */}
+      {sandboxStatus && sandboxStatus.status !== 'expired' && (
+        <MenuItem onClick={handleStopSandbox}>
+          <CloudOff className="h-3.5 w-3.5" />
+          <span className="flex-1">Stop Sandbox</span>
+        </MenuItem>
+      )}
 
       {/* View in Finder */}
       <MenuItem onClick={handleShowInFinder}>

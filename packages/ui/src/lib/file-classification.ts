@@ -66,12 +66,29 @@ const PDF_EXTENSIONS = new Set(['pdf'])
 /**
  * Extract the file extension from a path, lowercased.
  * Handles compound extensions like .env.local by returning the last segment.
+ * Also handles URLs with query params (e.g., https://host/file.png?sig=xxx)
  */
 function getExtension(filePath: string): string {
-  const basename = filePath.split('/').pop() ?? filePath
+  // For URLs, strip query params before extracting extension
+  let path = filePath
+  try {
+    const url = new URL(filePath)
+    path = url.pathname
+  } catch {
+    // Not a URL, use as-is
+  }
+
+  const basename = path.split('/').pop() ?? path
   const dotIndex = basename.lastIndexOf('.')
   if (dotIndex === -1 || dotIndex === 0) return ''
   return basename.slice(dotIndex + 1).toLowerCase()
+}
+
+/**
+ * Check if a path is a remote URL (http/https)
+ */
+export function isRemoteUrl(path: string): boolean {
+  return path.startsWith('http://') || path.startsWith('https://')
 }
 
 /**

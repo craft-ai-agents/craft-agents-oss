@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { motion } from 'motion/react'
 import { ArrowUp, Paperclip, ChevronDown, Sparkles } from 'lucide-react'
 import type { FileAttachment, PermissionRequest } from '../../../shared/types'
+import { MODELS } from '@craft-agent/shared/config/models'
 import { cn } from '@/lib/utils'
 import {
   ensureMockElectronAPI,
@@ -948,11 +949,7 @@ export const chatComponents: ComponentEntry[] = [
         description: 'Current selected model',
         control: {
           type: 'select',
-          options: [
-            { label: 'Sonnet 4.5', value: 'claude-sonnet-4-5-20250929' },
-            { label: 'Opus 4.5', value: 'claude-opus-4-5-20251101' },
-            { label: 'Haiku 3.5', value: 'claude-3-5-haiku-20241022' },
-          ],
+          options: MODELS.map(m => ({ label: m.name, value: m.id })),
         },
         defaultValue: 'claude-sonnet-4-5-20250929',
       },

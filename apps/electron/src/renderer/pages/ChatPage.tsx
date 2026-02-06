@@ -16,10 +16,10 @@ import { toast } from 'sonner'
 import { HeaderIconButton } from '@/components/ui/HeaderIconButton'
 import { DropdownMenu, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { StyledDropdownMenuContent, StyledDropdownMenuItem, StyledDropdownMenuSeparator } from '@/components/ui/styled-dropdown'
-import { useAppShellContext, usePendingPermission, usePendingCredential, useSessionOptionsFor, useSession as useSessionData } from '@/context/AppShellContext'
+import { useAppShellContext, usePendingPermission, usePendingCredential, useSessionOptionsFor, useSession as useSessionData, useActiveWorkspace } from '@/context/AppShellContext'
 import { rendererPerf } from '@/lib/perf'
 import { routes } from '@/lib/navigate'
-import { ensureSessionMessagesLoadedAtom, loadedSessionsAtom, sessionMetaMapAtom } from '@/atoms/sessions'
+import { ensureSessionMessagesLoadedAtom, loadedSessionsAtom, sessionMetaMapAtom, updateSessionMetaAtom, updateSessionAtom } from '@/atoms/sessions'
 import { getSessionTitle } from '@/utils/session'
 
 export interface ChatPageProps {
@@ -75,6 +75,10 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
   // Use per-session atom for isolated updates
   const session = useSessionData(sessionId)
 
+  // Workspace info for sandbox toggle
+  const activeWorkspace = useActiveWorkspace()
+  const isCloudWorkspace = activeWorkspace?.storageType === 'cloud'
+
   // Track if messages are loaded for this session (for lazy loading)
   const loadedSessions = useAtomValue(loadedSessionsAtom)
   const messagesLoaded = loadedSessions.has(sessionId)
@@ -82,6 +86,24 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
   // Check if session exists in metadata (for loading state detection)
   const sessionMetaMap = useAtomValue(sessionMetaMapAtom)
   const sessionMeta = sessionMetaMap.get(sessionId)
+
+  // Remote sandbox state (persisted per-session via SessionMeta, synced to cloud)
+  const updateSessionMeta = useSetAtom(updateSessionMetaAtom)
+  const updateSession = useSetAtom(updateSessionAtom)
+  const isRemoteSandbox = sessionMeta?.isRemoteSandbox ?? false
+  const handleRemoteSandboxToggle = React.useCallback((enabled: boolean) => {
+    console.log('[RemoteSandbox] Toggle clicked:', { sessionId, enabled })
+    // Update session atom (so events preserve the value during streaming)
+    updateSession(sessionId, (prev) => {
+      console.log('[RemoteSandbox] Updating session atom:', { prev: prev?.isRemoteSandbox, new: enabled })
+      return prev ? { ...prev, isRemoteSandbox: enabled } : prev
+    })
+    // Update metadata map (for immediate UI update)
+    updateSessionMeta(sessionId, { isRemoteSandbox: enabled })
+    // Persist to cloud via IPC
+    console.log('[RemoteSandbox] Sending IPC command')
+    window.electronAPI.sessionCommand(sessionId, { type: 'setRemoteSandbox', enabled })
+  }, [sessionId, updateSession, updateSessionMeta])
 
   // Fallback: ensure messages are loaded when session is viewed
   const ensureMessagesLoaded = useSetAtom(ensureSessionMessagesLoadedAtom)
@@ -481,6 +503,11 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
                 searchQuery={sessionListSearchQuery}
                 isSearchModeActive={isSearchModeActive}
                 onMatchInfoChange={onChatMatchInfoChange}
+                // Remote sandbox props (cloud workspaces only)
+                isCloudWorkspace={isCloudWorkspace}
+                isRemoteSandbox={isRemoteSandbox}
+                onRemoteSandboxToggle={handleRemoteSandboxToggle}
+                isFirstMessage={true}
               />
             </div>
           </div>
@@ -517,9 +544,9 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
           <ChatDisplay
             ref={chatDisplayRef}
             session={session}
-            onSendMessage={(message, attachments, skillSlugs) => {
+            onSendMessage={(message, attachments, skillSlugs, isRemoteSandboxMsg) => {
               if (session) {
-                onSendMessage(session.id, message, attachments, skillSlugs)
+                onSendMessage(session.id, message, attachments, skillSlugs, undefined, isRemoteSandboxMsg)
               }
             }}
             onOpenFile={handleOpenFile}
@@ -555,6 +582,11 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
             searchQuery={sessionListSearchQuery}
             isSearchModeActive={isSearchModeActive}
             onMatchInfoChange={onChatMatchInfoChange}
+            // Remote sandbox props (cloud workspaces only)
+            isCloudWorkspace={isCloudWorkspace}
+            isRemoteSandbox={isRemoteSandbox}
+            onRemoteSandboxToggle={handleRemoteSandboxToggle}
+            isFirstMessage={!session?.messages?.length}
           />
         </div>
       </div>

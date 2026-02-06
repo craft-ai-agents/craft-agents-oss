@@ -15,7 +15,7 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { classifyFile, type FilePreviewType } from '@craft-agent/ui'
+import { classifyFile, isRemoteUrl, type FilePreviewType } from '@craft-agent/ui'
 import { getLanguageFromPath } from '@/lib/file-utils'
 
 // ── Preview state types ────────────────────────────────────────────────────────
@@ -136,28 +136,48 @@ export function useLinkInterceptor(options: LinkInterceptorOptions): LinkInterce
    * showing the overlay — local filesystem reads are near-instant, so no loading
    * state is needed. This avoids null-content issues in overlay components
    * (e.g., @uiw/react-json-view crashes on null value).
+   *
+   * For remote URLs (signed URLs from cloud storage), handles them specially:
+   * - Images/PDFs: passed directly to overlay (browser can load via <img> or fetch)
+   * - Text files: fetched via HTTP instead of local filesystem read
    */
   const handleOpenFile = useCallback(async (path: string) => {
     const classification = classifyFile(path)
+    const isRemote = isRemoteUrl(path)
 
     if (!classification.canPreview || !classification.type) {
-      // No preview available — open in default external app
-      optionsRef.current.openFileExternal(path)
+      // No preview available — open in default external app or browser
+      if (isRemote) {
+        optionsRef.current.openUrl(path)
+      } else {
+        optionsRef.current.openFileExternal(path)
+      }
       return
     }
 
     const type = classification.type
 
     // For image/pdf: set state immediately — the overlay handles its own async loading
+    // For remote URLs, the browser can load them directly via the URL
     if (type === 'image' || type === 'pdf') {
       setPreviewState({ type, filePath: path })
       return
     }
 
     // For text-based files: read content first, then show overlay with content ready.
-    // Local filesystem reads are near-instant — no loading state needed.
     try {
-      const content = await optionsRef.current.readFile(path)
+      let content: string
+      if (isRemote) {
+        // Fetch remote file content via HTTP
+        const response = await fetch(path)
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+        }
+        content = await response.text()
+      } else {
+        // Local filesystem reads are near-instant — no loading state needed.
+        content = await optionsRef.current.readFile(path)
+      }
       const state = buildInitialTextState(type, path)
       setPreviewState({ ...state, content } as FilePreviewState)
     } catch (err) {
@@ -186,25 +206,47 @@ export function useLinkInterceptor(options: LinkInterceptorOptions): LinkInterce
   const openCurrentExternal = useCallback(() => {
     const state = previewStateRef.current
     if (state) {
-      optionsRef.current.openFileExternal(state.filePath)
+      if (isRemoteUrl(state.filePath)) {
+        // Remote URL — open in browser
+        optionsRef.current.openUrl(state.filePath)
+      } else {
+        optionsRef.current.openFileExternal(state.filePath)
+      }
     }
   }, []) // Stable: uses refs
 
   /** Reveal the currently previewed file in Finder (from overlay header) */
   const revealCurrentInFinder = useCallback(() => {
     const state = previewStateRef.current
-    if (state) {
+    if (state && !isRemoteUrl(state.filePath)) {
+      // Only works for local files — remote URLs can't be revealed in Finder
       optionsRef.current.showInFolder(state.filePath)
     }
   }, []) // Stable: uses refs
 
-  /** Stable reference to readFileDataUrl for overlay components */
-  const readFileDataUrl = useCallback((path: string) => {
+  /** Stable reference to readFileDataUrl for overlay components.
+   * For remote URLs, returns the URL directly (browser can load it).
+   * For local files, reads via IPC and returns a data URL. */
+  const readFileDataUrl = useCallback(async (path: string): Promise<string> => {
+    if (isRemoteUrl(path)) {
+      // Remote URLs can be used directly as image src
+      return path
+    }
     return optionsRef.current.readFileDataUrl(path)
   }, []) // Stable: uses optionsRef
 
-  /** Stable reference to readFileBinary for PDF overlay */
-  const readFileBinary = useCallback((path: string) => {
+  /** Stable reference to readFileBinary for PDF overlay.
+   * For remote URLs, fetches the content.
+   * For local files, reads via IPC. */
+  const readFileBinary = useCallback(async (path: string): Promise<Uint8Array> => {
+    if (isRemoteUrl(path)) {
+      const response = await fetch(path)
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      }
+      const buffer = await response.arrayBuffer()
+      return new Uint8Array(buffer)
+    }
     return optionsRef.current.readFileBinary(path)
   }, []) // Stable: uses optionsRef
 
