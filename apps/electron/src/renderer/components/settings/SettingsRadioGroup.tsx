@@ -45,7 +45,7 @@ export interface SettingsRadioGroupProps<T extends string = string> {
  *
  * @example
  * <SettingsRadioGroup value={model} onValueChange={setModel}>
- *   <SettingsRadioCard value="opus" label="Opus 4.5" description="Most capable" />
+ *   <SettingsRadioCard value="opus" label="Opus 4.6" description="Most capable" />
  *   <SettingsRadioCard value="sonnet" label="Sonnet 4.5" description="Balanced" />
  * </SettingsRadioGroup>
  */

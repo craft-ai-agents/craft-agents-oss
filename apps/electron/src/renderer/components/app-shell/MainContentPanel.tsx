@@ -16,11 +16,12 @@
  */
 
 import * as React from 'react'
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
+import { useAtomValue } from 'jotai'
 import { Panel } from './Panel'
 import { MultiSelectPanel } from './MultiSelectPanel'
-import { cn } from '@/lib/utils'
 import { useAppShellContext } from '@/context/AppShellContext'
+import { sessionMetaMapAtom, type SessionMeta } from '@/atoms/sessions'
 import { StoplightProvider } from '@/context/StoplightContext'
 import {
   useNavigationState,
@@ -30,6 +31,8 @@ import {
   isSkillsNavigation,
 } from '@/contexts/NavigationContext'
 import { useSessionSelection, useIsMultiSelectActive, useSelectedIds, useSelectionCount } from '@/hooks/useSession'
+import { extractLabelId } from '@craft-agent/shared/labels'
+import type { TodoStateId } from '@/config/todo-states'
 import { SourceInfoPage, ChatPage } from '@/pages'
 import SkillInfoPage from '@/pages/SkillInfoPage'
 import { getSettingsPageComponent } from '@/pages/settings/settings-pages'
@@ -46,32 +49,82 @@ export function MainContentPanel({
   className,
 }: MainContentPanelProps) {
   const navState = useNavigationState()
-  const { activeWorkspaceId, onTodoStateChange, onDeleteSession } = useAppShellContext()
+  const {
+    activeWorkspaceId,
+    onTodoStateChange,
+    onArchiveSession,
+    onSessionLabelsChange,
+    todoStates,
+    labels,
+  } = useAppShellContext()
 
   // Multi-select state
   const isMultiSelectActive = useIsMultiSelectActive()
   const selectedIds = useSelectedIds()
   const selectionCount = useSelectionCount()
   const { clearMultiSelect } = useSessionSelection()
+  const sessionMetaMap = useAtomValue(sessionMetaMapAtom)
+
+  const selectedMetas = useMemo(() => {
+    const metas: SessionMeta[] = []
+    selectedIds.forEach((id) => {
+      const meta = sessionMetaMap.get(id)
+      if (meta) metas.push(meta)
+    })
+    return metas
+  }, [selectedIds, sessionMetaMap])
+
+  const activeStatusId = useMemo((): TodoStateId | null => {
+    if (selectedMetas.length === 0) return null
+    const first = (selectedMetas[0].todoState || 'todo') as TodoStateId
+    const allSame = selectedMetas.every(meta => (meta.todoState || 'todo') === first)
+    return allSame ? first : null
+  }, [selectedMetas])
+
+  const appliedLabelIds = useMemo(() => {
+    if (selectedMetas.length === 0) return new Set<string>()
+    const toLabelSet = (meta: SessionMeta) =>
+      new Set((meta.labels || []).map(entry => extractLabelId(entry)))
+    const [first, ...rest] = selectedMetas.map(toLabelSet)
+    const intersection = new Set(first)
+    for (const labelSet of rest) {
+      for (const id of [...intersection]) {
+        if (!labelSet.has(id)) intersection.delete(id)
+      }
+    }
+    return intersection
+  }, [selectedMetas])
 
   // Batch operations for multi-select
-  const handleBatchSetStatus = useCallback((status: 'done' | 'todo') => {
+  const handleBatchSetStatus = useCallback((status: TodoStateId) => {
     selectedIds.forEach(sessionId => {
       onTodoStateChange(sessionId, status)
     })
   }, [selectedIds, onTodoStateChange])
 
-  const handleBatchDelete = useCallback(async () => {
-    // Delete all selected sessions (with confirmation for first one)
-    const ids = [...selectedIds]
-    for (let i = 0; i < ids.length; i++) {
-      // Only show confirmation for first session (user confirms "delete X sessions")
-      const skipConfirmation = i > 0
-      await onDeleteSession(ids[i], skipConfirmation)
-    }
-    // Clear selection after deletion
+  const handleBatchArchive = useCallback(() => {
+    selectedIds.forEach(sessionId => {
+      onArchiveSession(sessionId)
+    })
     clearMultiSelect()
-  }, [selectedIds, onDeleteSession, clearMultiSelect])
+  }, [selectedIds, onArchiveSession, clearMultiSelect])
+
+  const handleBatchToggleLabel = useCallback((labelId: string) => {
+    if (!onSessionLabelsChange) return
+    const allHaveLabel = selectedMetas.every(meta =>
+      (meta.labels || []).some(entry => extractLabelId(entry) === labelId)
+    )
+
+    selectedMetas.forEach(meta => {
+      const labels = meta.labels || []
+      const hasLabel = labels.some(entry => extractLabelId(entry) === labelId)
+      const filtered = labels.filter(entry => extractLabelId(entry) !== labelId)
+      const nextLabels = allHaveLabel
+        ? filtered
+        : (hasLabel ? labels : [...labels, labelId])
+      onSessionLabelsChange(meta.id, nextLabels)
+    })
+  }, [selectedMetas, onSessionLabelsChange])
 
   // Wrap content with StoplightProvider so PanelHeaders auto-compensate in focused mode
   const wrapWithStoplight = (content: React.ReactNode) => (
@@ -142,8 +195,13 @@ export function MainContentPanel({
         <Panel variant="grow" className={className}>
           <MultiSelectPanel
             count={selectionCount}
+            todoStates={todoStates}
+            activeStatusId={activeStatusId}
             onSetStatus={handleBatchSetStatus}
-            onDelete={handleBatchDelete}
+            labels={labels}
+            appliedLabelIds={appliedLabelIds}
+            onToggleLabel={handleBatchToggleLabel}
+            onArchive={handleBatchArchive}
             onClearSelection={clearMultiSelect}
           />
         </Panel>

@@ -88,20 +88,23 @@ describe('detectLinks', () => {
   it('detects a bare URL', () => {
     const links = detectLinks('Visit https://example.com today')
     expect(links).toHaveLength(1)
-    expect(links[0].url).toBe('https://example.com')
-    expect(links[0].type).toBe('url')
+    expect(links[0]).toBeDefined()
+    expect(links[0]!.url).toBe('https://example.com')
+    expect(links[0]!.type).toBe('url')
   })
 
   it('detects a bare domain', () => {
     const links = detectLinks('Check example.com')
     expect(links).toHaveLength(1)
-    expect(links[0].type).toBe('url')
+    expect(links[0]).toBeDefined()
+    expect(links[0]!.type).toBe('url')
   })
 
   it('detects file paths', () => {
     const links = detectLinks('See /Users/foo/bar.ts for details')
     expect(links).toHaveLength(1)
-    expect(links[0].type).toBe('file')
-    expect(links[0].url).toBe('/Users/foo/bar.ts')
+    expect(links[0]).toBeDefined()
+    expect(links[0]!.type).toBe('file')
+    expect(links[0]!.url).toBe('/Users/foo/bar.ts')
   })
 })

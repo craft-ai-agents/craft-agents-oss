@@ -14,9 +14,14 @@ interface PendingWrite {
  * Debounced async session persistence queue.
  * Prevents main thread blocking by using async writes and coalescing
  * rapid successive persist calls into a single write.
+ *
+ * IMPORTANT: Writes are serialized per-session to prevent race conditions
+ * when rapid successive flushes (e.g., clearSessionForRecovery + onSdkSessionIdUpdate)
+ * would otherwise write to the same .tmp file concurrently.
  */
 class SessionPersistenceQueue {
   private pending = new Map<string, PendingWrite>()
+  private writeInProgress = new Map<string, Promise<void>>()
   private debounceMs: number
 
   constructor(debounceMs = 500) {
@@ -89,12 +94,29 @@ class SessionPersistenceQueue {
 
   /**
    * Immediately flush a specific session if pending.
+   * Waits for any in-progress write to complete before starting a new one
+   * to prevent race conditions on the shared .tmp file.
    */
   async flush(sessionId: string): Promise<void> {
     const entry = this.pending.get(sessionId)
     if (entry) {
       clearTimeout(entry.timer)
-      await this.write(sessionId)
+
+      // Wait for any in-progress write to complete first
+      const inProgress = this.writeInProgress.get(sessionId)
+      if (inProgress) {
+        await inProgress
+      }
+
+      // Start new write and track it
+      const writePromise = this.write(sessionId)
+      this.writeInProgress.set(sessionId, writePromise)
+
+      try {
+        await writePromise
+      } finally {
+        this.writeInProgress.delete(sessionId)
+      }
     }
   }
 

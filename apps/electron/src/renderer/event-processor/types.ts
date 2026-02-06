@@ -281,6 +281,15 @@ export interface SessionModelChangedEvent {
 }
 
 /**
+ * LLM connection changed event - syncs session.llmConnection to renderer
+ */
+export interface LLMConnectionChangedEvent {
+  type: 'connection_changed'
+  sessionId: string
+  connectionSlug: string
+}
+
+/**
  * Credential request event - prompts user for credentials
  */
 export interface CredentialRequestEvent {
@@ -448,6 +457,7 @@ export type AgentEvent =
   | WorkingDirectoryChangedEvent
   | PermissionModeChangedEvent
   | SessionModelChangedEvent
+  | LLMConnectionChangedEvent
   | TaskBackgroundedEvent
   | ShellBackgroundedEvent
   | TaskProgressEvent

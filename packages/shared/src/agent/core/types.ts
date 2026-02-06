@@ -98,8 +98,8 @@ export interface PromptBuilderConfig {
  * Context block options for building system prompt context
  */
 export interface ContextBlockOptions {
-  /** Current permission mode */
-  permissionMode: string;
+  /** Current permission mode (optional - included in session state via formatSessionState) */
+  permissionMode?: string;
   /** Plans folder path */
   plansFolderPath?: string;
   /** Active source slugs */

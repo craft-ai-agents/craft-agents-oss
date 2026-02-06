@@ -37,7 +37,7 @@ interface OnboardingWizardProps {
   onBack: () => void
   onSelectApiSetupMethod: (method: ApiSetupMethod) => void
   onSubmitCredential: (data: ApiKeySubmitData) => void
-  onStartOAuth?: () => void
+  onStartOAuth?: (methodOverride?: ApiSetupMethod) => void
   onFinish: () => void
 
   // Claude OAuth (two-step flow)

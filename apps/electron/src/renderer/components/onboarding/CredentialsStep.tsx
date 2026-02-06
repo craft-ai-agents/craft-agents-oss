@@ -23,7 +23,7 @@ interface CredentialsStepProps {
   status: CredentialStatus
   errorMessage?: string
   onSubmit: (data: ApiKeySubmitData) => void
-  onStartOAuth?: () => void
+  onStartOAuth?: (methodOverride?: ApiSetupMethod) => void
   onBack: () => void
   // Two-step OAuth flow
   isWaitingForCode?: boolean
@@ -58,7 +58,7 @@ export function CredentialsStep({
           <>
             <BackButton onClick={onBack} disabled={status === 'validating'} />
             <ContinueButton
-              onClick={onStartOAuth}
+              onClick={() => onStartOAuth?.()}
               className="gap-2"
               loading={status === 'validating'}
               loadingText="Connecting..."
@@ -129,7 +129,7 @@ export function CredentialsStep({
           <>
             <BackButton onClick={onBack} disabled={status === 'validating'} />
             <ContinueButton
-              onClick={onStartOAuth}
+              onClick={() => onStartOAuth?.()}
               className="gap-2"
               loading={status === 'validating'}
               loadingText="Connecting..."

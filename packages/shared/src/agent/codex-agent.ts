@@ -482,8 +482,8 @@ export class CodexAgent extends BaseAgent {
     this.client.on('thread/tokenUsage/updated', (notification: ThreadTokenUsageUpdatedNotification) => {
       const usage = notification.tokenUsage;
       if (usage) {
-        // total.inputTokens includes cached tokens (full context size)
-        const inputTokens = usage.total.inputTokens + usage.total.cachedInputTokens;
+        // total.inputTokens already includes cached tokens (OpenAI convention)
+        const inputTokens = usage.total.inputTokens;
         this.enqueueEvent({
           type: 'usage_update',
           usage: {
@@ -492,6 +492,72 @@ export class CodexAgent extends BaseAgent {
           },
         });
       }
+    });
+
+    // ============================================================
+    // Extended Protocol Coverage
+    // ============================================================
+
+    // Error notifications (critical - surface server errors)
+    this.client.on('codex/error', (notification) => {
+      this.debug(`[codex] Server error: ${notification.error?.message}`);
+      for (const event of this.adapter.adaptError(notification)) {
+        this.enqueueEvent(event);
+      }
+    });
+
+    // Context compaction (auto-compaction complete)
+    this.client.on('thread/compacted', (notification) => {
+      this.debug(`[codex] Context compacted for thread ${notification.threadId}`);
+      for (const event of this.adapter.adaptContextCompacted(notification)) {
+        this.enqueueEvent(event);
+      }
+    });
+
+    // File change output delta (debug only)
+    this.client.on('item/fileChange/outputDelta', (notification) => {
+      this.debug(`[codex] File change delta: ${notification.delta?.slice(0, 50)}...`);
+    });
+
+    // MCP tool progress
+    this.client.on('item/mcpToolCall/progress', (notification) => {
+      this.debug(`[codex] MCP progress: ${notification.message}`);
+      for (const event of this.adapter.adaptMcpToolCallProgress(notification)) {
+        this.enqueueEvent(event);
+      }
+    });
+
+    // Terminal interaction (future feature)
+    this.client.on('item/commandExecution/terminalInteraction', (notification) => {
+      this.debug(`[codex] Terminal interaction: ${notification.stdin}`);
+    });
+
+    // Warnings → info messages
+    this.client.on('configWarning', (notification) => {
+      this.debug(`[codex] Config warning: ${notification.summary}`);
+      for (const event of this.adapter.adaptConfigWarning(notification)) {
+        this.enqueueEvent(event);
+      }
+    });
+
+    this.client.on('windows/worldWritableWarning', (notification) => {
+      this.debug(`[codex] Windows security warning: ${notification.samplePaths.length} paths`);
+      for (const event of this.adapter.adaptWindowsWarning(notification)) {
+        this.enqueueEvent(event);
+      }
+    });
+
+    // Legacy auth notifications (debug only)
+    this.client.on('authStatusChange', (notification) => {
+      this.debug(`[codex] Auth status change: ${notification.authMethod}`);
+    });
+
+    this.client.on('loginChatGptComplete', (_notification) => {
+      this.debug(`[codex] Legacy login complete`);
+    });
+
+    this.client.on('sessionConfigured', (_notification) => {
+      this.debug(`[codex] Session configured`);
     });
   }
 
@@ -523,10 +589,34 @@ export class CodexAgent extends BaseAgent {
       return;
     }
 
-    // In explore mode, auto-reject write operations
+    // In explore mode, use proper permission checking instead of blanket decline.
+    // This allows read-only commands and plans folder writes through,
+    // while still blocking unsafe operations.
     if (permissionMode === 'safe') {
-      this.debug('Auto-rejecting command (explore mode)');
-      this.client?.respondToCommandApproval(params.requestId, 'decline');
+      const sessionId = this.config.session?.id;
+      const plansFolderPath = sessionId
+        ? getSessionPlansPath(this.config.workspace.rootPath ?? this.workingDirectory, sessionId)
+        : undefined;
+
+      const permissionsContext = {
+        workspaceRootPath: this.workingDirectory,
+        activeSourceSlugs: Array.from(this.sourceManager.getActiveSlugs()),
+      };
+
+      const result = shouldAllowToolInMode(
+        'Bash',
+        { command },
+        permissionMode,
+        { plansFolderPath, permissionsContext }
+      );
+
+      if (result.allowed) {
+        this.debug('Allowing command in explore mode (passed permission check)');
+        this.client?.respondToCommandApproval(params.requestId, 'accept');
+      } else {
+        this.debug(`Rejecting command in explore mode: ${result.reason}`);
+        this.client?.respondToCommandApproval(params.requestId, 'decline');
+      }
       return;
     }
 
@@ -1541,6 +1631,7 @@ export class CodexAgent extends BaseAgent {
 
   /**
    * Build user input from message and attachments.
+   * Mirrors ClaudeAgent's buildSDKUserMessage() for full context parity.
    */
   private buildUserInput(
     message: string,
@@ -1548,16 +1639,73 @@ export class CodexAgent extends BaseAgent {
   ): UserInput[] {
     const input: UserInput[] = [];
 
-    // Add text message
-    if (message) {
-      input.push({ type: 'text', text: message, text_elements: [] });
+    // ============================================================
+    // CONTEXT INJECTION (matching ClaudeAgent)
+    // ============================================================
+
+    // Build context parts using centralized PromptBuilder
+    // This includes: date/time, session state (with plansFolderPath),
+    // workspace capabilities, and working directory context
+    const contextParts = this.promptBuilder.buildContextParts(
+      {
+        plansFolderPath: getSessionPlansPath(
+          this.config.workspace.rootPath ?? this.workingDirectory,
+          this._sessionId
+        ),
+      },
+      this.sourceManager.formatSourceState()
+    );
+
+    // ============================================================
+    // FILE ATTACHMENTS (text files as path references)
+    // ============================================================
+
+    const attachmentParts: string[] = [];
+    const imageAttachments: FileAttachment[] = [];
+
+    for (const att of attachments || []) {
+      if (att.mimeType?.startsWith('image/') && (att.storedPath || att.path)) {
+        // Images: collect for separate UserInput items (localImage type)
+        imageAttachments.push(att);
+      } else if (att.mimeType === 'application/pdf' && att.storedPath) {
+        // PDFs: add as path reference - Codex can use Read tool to access
+        // (Read tool supports PDFs with page-by-page extraction)
+        const pathInfo = `[Attached PDF: ${att.name}]\n[Stored at: ${att.storedPath}]`;
+        attachmentParts.push(pathInfo);
+      } else if (att.storedPath) {
+        // Text/other files: add as path references (like Claude does)
+        let pathInfo = `[Attached file: ${att.name}]`;
+        pathInfo += `\n[Stored at: ${att.storedPath}]`;
+        if (att.markdownPath) {
+          pathInfo += `\n[Markdown version: ${att.markdownPath}]`;
+        }
+        attachmentParts.push(pathInfo);
+      }
     }
 
-    // Add image attachments
-    for (const att of attachments || []) {
-      if (att.mimeType?.startsWith('image/') && att.path) {
-        input.push({ type: 'localImage', path: att.path });
-      }
+    // ============================================================
+    // COMBINE INTO MESSAGE
+    // ============================================================
+
+    // Combine: context + attachments + user message
+    const allParts = [
+      ...contextParts,
+      ...attachmentParts,
+      message,
+    ].filter(Boolean);
+
+    const fullMessage = allParts.join('\n\n');
+
+    if (fullMessage) {
+      input.push({ type: 'text', text: fullMessage, text_elements: [] });
+    }
+
+    // ============================================================
+    // IMAGE ATTACHMENTS (as localImage type)
+    // ============================================================
+
+    for (const att of imageAttachments) {
+      input.push({ type: 'localImage', path: att.storedPath || att.path });
     }
 
     return input;
@@ -1638,7 +1786,23 @@ export class CodexAgent extends BaseAgent {
 
   forceAbort(reason: AbortReason): void {
     this.abortReason = reason;
-    this.abort(String(reason));
+    this.turnComplete = true;
+    this.signalEventAvailable(true);
+    this.debug(`Force aborting: ${reason}`);
+
+    // Clear pending permission/approval promises (they'll fail anyway on disconnect)
+    for (const [, pending] of this.pendingPermissions) {
+      pending.resolve({ allowed: false, acceptForSession: false });
+    }
+    this.pendingPermissions.clear();
+    this.pendingApprovals.clear();
+
+    // Forcefully disconnect - don't wait for turnInterrupt response
+    if (this.client) {
+      this.client.disconnect().catch(() => {});
+      this.client = null;
+      this.clientConnecting = null;
+    }
   }
 
   /**

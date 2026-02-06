@@ -104,13 +104,22 @@ export function registerOnboardingHandlers(sessionManager: SessionManager): void
       })
 
       // Save credentials with refresh token support
-      const manager = getCredentialManagerFn()
+      const manager = getCredentialManager()
 
-      // Save to LLM connection (new system only - legacy migration handles old users)
+      // Save to new LLM connection system
       await manager.setLlmOAuth('claude-max', {
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,
         expiresAt: tokens.expiresAt,
+      })
+
+      // Also save to legacy key for validation compatibility
+      // (matches dual-write pattern in performTokenRefresh)
+      await manager.setClaudeOAuthCredentials({
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        expiresAt: tokens.expiresAt,
+        source: 'native',
       })
 
       const expiresAtDate = tokens.expiresAt ? new Date(tokens.expiresAt).toISOString() : 'never'

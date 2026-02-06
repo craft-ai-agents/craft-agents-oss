@@ -18,7 +18,7 @@ Invoke secondary Claude calls for focused subtasks. The tool loads file content 
 |-----------|------|-------------|
 | `prompt` | string | Instructions for Claude (required) |
 | `attachments` | array | File/image paths to include |
-| `model` | enum | `claude-3-5-haiku-latest` (default), `claude-sonnet-4-5-20250929`, `claude-opus-4-5-20251101` |
+| `model` | enum | `claude-haiku-4-5-20251001` (default), `claude-sonnet-4-5-20250929`, `claude-opus-4-6` |
 | `systemPrompt` | string | Optional system prompt |
 | `maxTokens` | number | Max output tokens (1-64000, default 4096) |
 | `temperature` | number | Sampling temperature 0-1 (ignored if thinking=true) |

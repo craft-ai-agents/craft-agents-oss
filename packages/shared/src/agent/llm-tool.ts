@@ -27,7 +27,7 @@ import { existsSync, statSync } from 'fs';
 import { getAnthropicApiKey, getClaudeOAuthToken, getDefaultLlmConnection, getLlmConnection } from '../config/storage.ts';
 
 // Import allowed models from centralized registry
-import { ALLOWED_LLM_TOOL_MODELS } from '../config/models.ts';
+import { ALLOWED_LLM_TOOL_MODELS, HAIKU_MODEL_ID, SONNET_MODEL_ID, OPUS_MODEL_ID } from '../config/models.ts';
 
 // ============================================================================
 // CONSTANTS
@@ -420,7 +420,7 @@ For large files (>2000 lines), use {path, startLine, endLine} to select a portio
         .describe(`File/image paths (max ${MAX_ATTACHMENTS}). Use {path, startLine, endLine} for large text files.`),
 
       model: z.enum(ALLOWED_MODELS).optional()
-        .describe('Model to use. Defaults to claude-haiku-4-5-latest'),
+      .describe('Model to use. Defaults to Haiku (fastest, most cost-effective)'),
 
       systemPrompt: z.string().optional()
         .describe('Optional system prompt'),
@@ -483,10 +483,10 @@ For large files (>2000 lines), use {path, startLine, endLine} to select a portio
       }
 
       // --- Validate model + thinking compatibility ---
-      if (args.thinking && args.model === 'claude-haiku-4-5-latest') {
+      if (args.thinking && args.model === HAIKU_MODEL_ID) {
         return errorResponse(
           'Extended thinking not supported on Haiku.\n\n' +
-          'Use claude-sonnet-4-5-20250929 or claude-opus-4-5-20251101 for thinking mode.'
+          `Use ${SONNET_MODEL_ID} or ${OPUS_MODEL_ID} for thinking mode.`
         );
       }
 
@@ -591,7 +591,7 @@ For large files (>2000 lines), use {path, startLine, endLine} to select a portio
       // BUILD REQUEST
       // ========================================
 
-      const model = args.model || 'claude-haiku-4-5-latest';
+      const model = args.model || HAIKU_MODEL_ID;
       const thinkingEnabled = args.thinking === true;
       const thinkingBudget = thinkingEnabled ? (args.thinkingBudget || 10000) : 0;
       const outputTokens = args.maxTokens || 4096;

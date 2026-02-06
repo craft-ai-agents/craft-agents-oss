@@ -47,7 +47,7 @@ interface UseOnboardingReturn {
 
   // Credentials
   handleSubmitCredential: (data: ApiKeySubmitData) => void
-  handleStartOAuth: () => void
+  handleStartOAuth: (methodOverride?: ApiSetupMethod) => void
 
   // Claude OAuth (two-step flow)
   isWaitingForCode: boolean
@@ -316,12 +316,33 @@ export function useOnboarding({
   const [isWaitingForCode, setIsWaitingForCode] = useState(false)
 
   // Start OAuth flow (Claude or ChatGPT depending on selected method)
-  const handleStartOAuth = useCallback(async () => {
-    setState(s => ({ ...s, credentialStatus: 'validating', errorMessage: undefined }))
+  const handleStartOAuth = useCallback(async (methodOverride?: ApiSetupMethod) => {
+    const effectiveMethod = methodOverride ?? state.apiSetupMethod
+
+    if (methodOverride && methodOverride !== state.apiSetupMethod) {
+      setState(s => ({
+        ...s,
+        apiSetupMethod: methodOverride,
+        step: 'credentials',
+        credentialStatus: 'validating',
+        errorMessage: undefined,
+      }))
+    } else {
+      setState(s => ({ ...s, credentialStatus: 'validating', errorMessage: undefined }))
+    }
+
+    if (!effectiveMethod) {
+      setState(s => ({
+        ...s,
+        credentialStatus: 'error',
+        errorMessage: 'Select an authentication method first.',
+      }))
+      return
+    }
 
     try {
       // ChatGPT OAuth (single-step flow - opens browser, captures tokens automatically)
-      if (state.apiSetupMethod === 'chatgpt_oauth') {
+      if (effectiveMethod === 'chatgpt_oauth') {
         const result = await window.electronAPI.startChatGptOAuth()
 
         if (result.success) {
@@ -343,6 +364,15 @@ export function useOnboarding({
       }
 
       // Claude OAuth (two-step flow - opens browser, user copies code)
+      if (effectiveMethod !== 'claude_oauth') {
+        setState(s => ({
+          ...s,
+          credentialStatus: 'error',
+          errorMessage: 'This connection uses API keys, not OAuth.',
+        }))
+        return
+      }
+
       const result = await window.electronAPI.startClaudeOAuth()
 
       if (result.success) {

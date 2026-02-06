@@ -55,7 +55,7 @@ import { isMac, PATH_SEP, getPathBasename } from '@/lib/platform'
 import { applySmartTypography } from '@/lib/smart-typography'
 import { AttachmentPreview } from '../AttachmentPreview'
 import { ANTHROPIC_MODELS, getModelShortName, getModelContextWindow, isClaudeModel } from '@config/models'
-import { isCompatProvider, getModelsForProviderType } from '@config/llm-connections'
+import { isCompatProvider, getModelsForProviderType, resolveEffectiveConnectionSlug } from '@config/llm-connections'
 import { useOptionalAppShellContext } from '@/context/AppShellContext'
 import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
 import { SourceAvatar } from '@/components/ui/source-avatar'
@@ -266,8 +266,9 @@ export function FreeFormInput({
       return capabilities.models
     }
 
-    // Determine effective connection (defined after this memo, so we inline the lookup)
-    const connection = llmConnections.find(c => c.slug === (currentConnection || workspaceDefaultConnection || llmConnections[0]?.slug))
+    // Determine effective connection using the canonical fallback chain
+    const effectiveSlug = resolveEffectiveConnectionSlug(currentConnection, workspaceDefaultConnection, llmConnections)
+    const connection = llmConnections.find(c => c.slug === effectiveSlug)
 
     if (!connection) {
       return ANTHROPIC_MODELS // Safe default
@@ -316,8 +317,8 @@ export function FreeFormInput({
     return llmConnections.find(c => c.slug === currentConnection) ?? null
   }, [llmConnections, currentConnection])
 
-  // Effective connection: use prop, fall back to workspace default, then first available
-  const effectiveConnection = currentConnection || workspaceDefaultConnection || llmConnections[0]?.slug
+  // Effective connection: canonical fallback chain (session → workspace default → global default → first)
+  const effectiveConnection = resolveEffectiveConnectionSlug(currentConnection, workspaceDefaultConnection, llmConnections)
 
   // Effective connection details (with fallbacks) for model list
   // Unlike currentConnectionDetails which is null when no explicit connection is set,
@@ -1609,20 +1610,7 @@ export function FreeFormInput({
                       modelDropdownOpen && "bg-foreground/5"
                     )}
                   >
-                    {/* Show custom model name when a custom API connection is active */}
-                    {customModel ? (
-                      getModelShortName(customModel)
-                    ) : isEmptySession && llmConnections.length > 1 && currentConnectionDetails ? (
-                      // Empty session with multiple connections: show "Connection / Model"
-                      <>
-                        <span className="opacity-60">{currentConnectionDetails.name}</span>
-                        <span className="opacity-40 mx-0.5">/</span>
-                        <span>{getModelShortName(currentModel)}</span>
-                      </>
-                    ) : (
-                      // Active session or single connection: just show model name
-                      getModelShortName(currentModel)
-                    )}
+                    {getModelShortName(customModel ?? currentModel)}
                     {!customModel && <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />}
                   </button>
                 </DropdownMenuTrigger>
@@ -1722,18 +1710,7 @@ export function FreeFormInput({
                   {/* Model options based on effective connection's provider type */}
                   {availableModels.map((model) => {
                     const isSelected = currentModel === model.id
-                    // Fallback descriptions for common models (when capabilities don't provide descriptions)
-                    const defaultDescriptions: Record<string, string> = {
-                      'claude-opus-4-5-20251101': 'Most capable for complex work',
-                      'claude-sonnet-4-5-20250929': 'Best for everyday tasks',
-                      'claude-haiku-4-5-20251001': 'Fastest for quick answers',
-                      'claude-3-5-haiku-latest': 'Fastest for quick answers',
-                      'gpt-5.2-codex': 'OpenAI Codex model',
-                      'gpt-5.1-codex-mini': 'Fast OpenAI model',
-                      'o3': 'OpenAI o3 model',
-                      'o4-mini': 'OpenAI o4-mini model',
-                    }
-                    const description = ('description' in model ? model.description : null) || defaultDescriptions[model.id] || ''
+                    const description = 'description' in model ? (model.description as string) : ''
                     return (
                       <StyledDropdownMenuItem
                         key={model.id}
@@ -1847,28 +1824,36 @@ export function FreeFormInput({
             }
 
             return (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
+              <DropdownMenu>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        disabled={isProcessing}
+                        className="inline-flex items-center h-6 px-2 text-[12px] font-medium bg-info/10 rounded-[6px] shadow-tinted select-none cursor-pointer hover:bg-info/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        style={{
+                          '--shadow-color': 'var(--info-rgb)',
+                          color: 'color-mix(in oklab, var(--info) 30%, var(--foreground))',
+                        } as React.CSSProperties}
+                      >
+                        {usagePercent}%
+                      </button>
+                    </DropdownMenuTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">
+                    {usagePercent}% context used
+                  </TooltipContent>
+                </Tooltip>
+                <StyledDropdownMenuContent align="center" side="top" sideOffset={8}>
+                  <StyledDropdownMenuItem
                     onClick={handleCompactClick}
                     disabled={isProcessing}
-                    className="inline-flex items-center h-6 px-2 text-[12px] font-medium bg-info/10 rounded-[6px] shadow-tinted select-none cursor-pointer hover:bg-info/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    style={{
-                      '--shadow-color': 'var(--info-rgb)',
-                      color: 'color-mix(in oklab, var(--info) 30%, var(--foreground))',
-                    } as React.CSSProperties}
                   >
-                    {usagePercent}%
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="top">
-                  {isProcessing
-                    ? `${usagePercent}% context used — wait for current operation`
-                    : `${usagePercent}% context used — click to compact`
-                  }
-                </TooltipContent>
-              </Tooltip>
+                    Compact
+                  </StyledDropdownMenuItem>
+                </StyledDropdownMenuContent>
+              </DropdownMenu>
             )
           })()}
 

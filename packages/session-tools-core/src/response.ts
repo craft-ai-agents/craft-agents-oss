@@ -13,6 +13,7 @@ import type { ToolResult, TextContent } from './types.ts';
 export function successResponse(text: string): ToolResult {
   return {
     content: [{ type: 'text', text }],
+    structuredContent: {},
     isError: false,
   };
 }
@@ -23,6 +24,7 @@ export function successResponse(text: string): ToolResult {
 export function errorResponse(message: string): ToolResult {
   return {
     content: [{ type: 'text', text: message }],
+    structuredContent: {},
     isError: true,
   };
 }
@@ -40,6 +42,7 @@ export function textContent(text: string): TextContent {
 export function multiBlockResponse(texts: string[], isError?: boolean): ToolResult {
   return {
     content: texts.map(text => ({ type: 'text' as const, text })),
+    structuredContent: {},
     isError,
   };
 }

@@ -463,7 +463,6 @@ function AppShellContent({
   const {
     workspaces,
     activeWorkspaceId,
-    currentModel,
     sessionOptions,
     onSelectWorkspace,
     onRefreshWorkspaces,
@@ -536,7 +535,7 @@ function AppShellContent({
   const rightSidebarHandleRef = React.useRef<HTMLDivElement>(null)
   const [session, setSession] = useSession()
   const { resolvedMode, isDark, setMode } = useTheme()
-  const { canGoBack, canGoForward, goBack, goForward, navigateToSource } = useNavigation()
+  const { canGoBack, canGoForward, goBack, goForward, navigateToSource, navigateToSession } = useNavigation()
 
   // Double-Esc interrupt feature: first Esc shows warning, second Esc interrupts
   const { handleEscapePress } = useEscapeInterrupt()
@@ -2972,20 +2971,7 @@ function AppShellContent({
                   onRename={onRenameSession}
                   onFocusChatInput={focusChatInput}
                   onSessionSelect={(selectedMeta) => {
-                    // Navigate to the session via central routing (with filter context)
-                    if (!sessionFilter || sessionFilter.kind === 'allSessions') {
-                      navigate(routes.view.allSessions(selectedMeta.id))
-                    } else if (sessionFilter.kind === 'flagged') {
-                      navigate(routes.view.flagged(selectedMeta.id))
-                    } else if (sessionFilter.kind === 'archived') {
-                      navigate(routes.view.archived(selectedMeta.id))
-                    } else if (sessionFilter.kind === 'state') {
-                      navigate(routes.view.state(sessionFilter.stateId, selectedMeta.id))
-                    } else if (sessionFilter.kind === 'label') {
-                      navigate(routes.view.label(sessionFilter.labelId, selectedMeta.id))
-                    } else if (sessionFilter.kind === 'view') {
-                      navigate(routes.view.view(sessionFilter.viewId, selectedMeta.id))
-                    }
+                    navigateToSession(selectedMeta.id)
                   }}
                   onOpenInNewWindow={(selectedMeta) => {
                     if (activeWorkspaceId) {

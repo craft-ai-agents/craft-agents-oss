@@ -8,7 +8,7 @@ describe('isClaudeModel', () => {
   // Direct Anthropic model IDs
   it('detects direct Anthropic Claude model IDs', () => {
     expect(isClaudeModel('claude-sonnet-4-5-20250929')).toBe(true);
-    expect(isClaudeModel('claude-opus-4-5-20251101')).toBe(true);
+    expect(isClaudeModel('claude-opus-4-6')).toBe(true);
     expect(isClaudeModel('claude-haiku-4-5-20251001')).toBe(true);
     expect(isClaudeModel('claude-3-5-sonnet-20241022')).toBe(true);
   });
@@ -16,7 +16,7 @@ describe('isClaudeModel', () => {
   // OpenRouter provider-prefixed Claude IDs
   it('detects OpenRouter-prefixed Claude model IDs', () => {
     expect(isClaudeModel('anthropic/claude-sonnet-4')).toBe(true);
-    expect(isClaudeModel('anthropic/claude-opus-4-5')).toBe(true);
+    expect(isClaudeModel('anthropic/claude-opus-4-6')).toBe(true);
     expect(isClaudeModel('anthropic/claude-3.5-haiku')).toBe(true);
   });
 
@@ -42,7 +42,7 @@ describe('isClaudeModel', () => {
   // Case insensitivity
   it('handles case variations', () => {
     expect(isClaudeModel('Claude-Sonnet-4-5-20250929')).toBe(true);
-    expect(isClaudeModel('CLAUDE-OPUS-4-5-20251101')).toBe(true);
+    expect(isClaudeModel('CLAUDE-OPUS-4-6')).toBe(true);
     expect(isClaudeModel('Anthropic/Claude-Sonnet-4')).toBe(true);
   });
 });

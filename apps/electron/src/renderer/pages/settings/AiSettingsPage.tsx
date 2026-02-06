@@ -15,7 +15,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import { HeaderMenu } from '@/components/ui/HeaderMenu'
 import { routes } from '@/lib/navigate'
-import { X, MoreHorizontal, Pencil, Trash2, Star, ChevronDown, ChevronRight, CheckCircle2, AlertTriangle } from 'lucide-react'
+import { X, MoreHorizontal, Pencil, Trash2, Star, ChevronDown, ChevronRight, CheckCircle2, AlertTriangle, RefreshCcw } from 'lucide-react'
 import type { CredentialHealthStatus, CredentialHealthIssue } from '../../../shared/types'
 import { Spinner, FullscreenOverlayBase } from '@craft-agent/ui'
 import { useSetAtom } from 'jotai'
@@ -45,6 +45,8 @@ import { useOnboarding } from '@/hooks/useOnboarding'
 import { useWorkspaceIcon } from '@/hooks/useWorkspaceIcon'
 import { OnboardingWizard } from '@/components/onboarding'
 import { useAppShellContext } from '@/context/AppShellContext'
+import { getDefaultModelForProvider, getModelShortName, getModelOptionsForProvider, DEFAULT_MODEL, DEFAULT_CODEX_MODEL, type ModelDefaults } from '@config/models'
+import type { ModelProvider } from '@config/models'
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
@@ -115,11 +117,12 @@ interface ConnectionRowProps {
   onDelete: () => void
   onSetDefault: () => void
   onValidate: () => void
+  onReauthenticate: () => void
   validationState: ValidationState
   validationError?: string
 }
 
-function ConnectionRow({ connection, isLastConnection, onEdit, onDelete, onSetDefault, onValidate, validationState, validationError }: ConnectionRowProps) {
+function ConnectionRow({ connection, isLastConnection, onEdit, onDelete, onSetDefault, onValidate, onReauthenticate, validationState, validationError }: ConnectionRowProps) {
   const [menuOpen, setMenuOpen] = useState(false)
 
   // Build description with provider, default indicator, auth status, and validation state
@@ -177,6 +180,12 @@ function ConnectionRow({ connection, isLastConnection, onEdit, onDelete, onSetDe
               <span>Set as default</span>
             </StyledDropdownMenuItem>
           )}
+          <StyledDropdownMenuItem
+            onClick={onReauthenticate}
+          >
+            <RefreshCcw className="h-3.5 w-3.5" />
+            <span>Re-authenticate</span>
+          </StyledDropdownMenuItem>
           <StyledDropdownMenuItem
             onClick={onValidate}
             disabled={validationState === 'validating'}
@@ -274,6 +283,14 @@ function WorkspaceOverrideCard({ workspace, llmConnections, customModel, onSetti
   const currentModel = settings?.model || 'global'
   const currentThinking = settings?.thinkingLevel || 'global'
 
+  // Derive model provider from this workspace's connection override (or fall back to default connection)
+  const workspaceModelProvider: ModelProvider = useMemo(() => {
+    const connSlug = settings?.defaultLlmConnection
+    const conn = connSlug ? llmConnections.find(c => c.slug === connSlug) : llmConnections.find(c => c.isDefault)
+    const pt = conn?.providerType
+    return (pt === 'openai' || pt === 'openai_compat') ? 'openai' : 'anthropic'
+  }, [settings?.defaultLlmConnection, llmConnections])
+
   // Get summary text for collapsed state
   const getSummary = () => {
     if (!hasOverrides) return 'Using defaults'
@@ -283,10 +300,7 @@ function WorkspaceOverrideCard({ workspace, llmConnections, customModel, onSetti
       parts.push(conn?.name || settings.defaultLlmConnection)
     }
     if (settings?.model) {
-      const modelName = settings.model.includes('opus') ? 'Opus' :
-        settings.model.includes('sonnet') ? 'Sonnet' :
-        settings.model.includes('haiku') ? 'Haiku' : settings.model
-      parts.push(modelName)
+      parts.push(getModelShortName(settings.model))
     }
     if (settings?.thinkingLevel) {
       const level = THINKING_LEVELS.find(l => l.id === settings.thinkingLevel)
@@ -366,9 +380,7 @@ function WorkspaceOverrideCard({ workspace, llmConnections, customModel, onSetti
                   onValueChange={handleModelChange}
                   options={[
                     { value: 'global', label: 'Use default', description: 'Inherit from app settings' },
-                    { value: 'claude-opus-4-5-20251101', label: 'Opus 4.5', description: 'Most capable' },
-                    { value: 'claude-sonnet-4-5-20250929', label: 'Sonnet 4.5', description: 'Balanced' },
-                    { value: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5', description: 'Fastest' },
+                    ...getModelOptionsForProvider(workspaceModelProvider),
                   ]}
                 />
               )}
@@ -399,7 +411,7 @@ function WorkspaceOverrideCard({ workspace, llmConnections, customModel, onSetti
 // ============================================
 
 export default function AiSettingsPage() {
-  const { refreshCustomModel, llmConnections, refreshLlmConnections, customModel } = useAppShellContext()
+  const { refreshCustomModel, refreshModelDefaults, llmConnections, refreshLlmConnections, customModel } = useAppShellContext()
 
   // API Setup overlay state
   const [showApiSetup, setShowApiSetup] = useState(false)
@@ -410,7 +422,10 @@ export default function AiSettingsPage() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
 
   // Default settings state (app-level)
-  const [defaultModel, setDefaultModel] = useState('claude-sonnet-4-5-20250929')
+  const [modelDefaults, setModelDefaults] = useState<ModelDefaults>({
+    anthropic: DEFAULT_MODEL,
+    openai: DEFAULT_CODEX_MODEL,
+  })
   const [defaultThinking, setDefaultThinking] = useState<ThinkingLevel>(DEFAULT_THINKING_LEVEL)
 
   // Validation state per connection
@@ -430,10 +445,14 @@ export default function AiSettingsPage() {
         const ws = await window.electronAPI.getWorkspaces()
         setWorkspaces(ws)
 
-        // Load default model from first workspace for now (app-level defaults coming)
-        // TODO: Add app-level default model/thinking IPC
-        const model = await window.electronAPI.getModel()
-        if (model) setDefaultModel(model)
+        // Load provider-scoped default models
+        const defaults = await window.electronAPI.getModelDefaults?.()
+        if (defaults) {
+          setModelDefaults({
+            anthropic: defaults.anthropic ?? DEFAULT_MODEL,
+            openai: defaults.openai ?? DEFAULT_CODEX_MODEL,
+          })
+        }
 
         // Check credential health for potential issues (corruption, machine migration)
         const health = await window.electronAPI.getCredentialHealth()
@@ -505,6 +524,16 @@ export default function AiSettingsPage() {
     openApiSetup(slug)
   }, [openApiSetup])
 
+  const handleReauthenticateConnection = useCallback((connection: LlmConnectionWithStatus) => {
+    openApiSetup(connection.slug)
+    apiSetupOnboarding.reset()
+
+    if (connection.authType === 'oauth') {
+      const method = connection.providerType === 'openai' ? 'chatgpt_oauth' : 'claude_oauth'
+      apiSetupOnboarding.handleStartOAuth(method)
+    }
+  }, [apiSetupOnboarding, openApiSetup])
+
   const handleDeleteConnection = useCallback(async (slug: string) => {
     if (!window.electronAPI) return
     try {
@@ -569,22 +598,33 @@ export default function AiSettingsPage() {
     }
   }, [refreshLlmConnections])
 
+  // Get the default connection for display
+  const defaultConnection = useMemo(() => {
+    return llmConnections.find(c => c.isDefault)
+  }, [llmConnections])
+
+  // Derive the model provider from the default connection's provider type
+  const defaultModelProvider: ModelProvider = useMemo(() => {
+    const pt = defaultConnection?.providerType
+    return (pt === 'openai' || pt === 'openai_compat') ? 'openai' : 'anthropic'
+  }, [defaultConnection])
+
+  const defaultModel = useMemo(() => {
+    return modelDefaults[defaultModelProvider] ?? getDefaultModelForProvider(defaultModelProvider)
+  }, [modelDefaults, defaultModelProvider])
+
   // App-level default handlers
   const handleDefaultModelChange = useCallback(async (model: string) => {
     if (!window.electronAPI) return
-    setDefaultModel(model)
-    await window.electronAPI.setModel(model)
-  }, [])
+    await window.electronAPI.setModelDefault?.(defaultModelProvider, model)
+    setModelDefaults(prev => ({ ...prev, [defaultModelProvider]: model }))
+    refreshModelDefaults?.()
+  }, [defaultModelProvider, refreshModelDefaults])
 
   const handleDefaultThinkingChange = useCallback(async (level: ThinkingLevel) => {
     setDefaultThinking(level)
     // TODO: Add app-level thinking level storage
   }, [])
-
-  // Get the default connection for display
-  const defaultConnection = useMemo(() => {
-    return llmConnections.find(c => c.isDefault)
-  }, [llmConnections])
 
   // Refresh callback for workspace cards
   const handleWorkspaceSettingsChange = useCallback(() => {
@@ -632,11 +672,7 @@ export default function AiSettingsPage() {
                       description="AI model for new chats"
                       value={defaultModel}
                       onValueChange={handleDefaultModelChange}
-                      options={[
-                        { value: 'claude-opus-4-5-20251101', label: 'Opus 4.5', description: 'Most capable for complex work' },
-                        { value: 'claude-sonnet-4-5-20250929', label: 'Sonnet 4.5', description: 'Best for everyday tasks' },
-                        { value: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5', description: 'Fastest for quick answers' },
-                      ]}
+                      options={getModelOptionsForProvider(defaultModelProvider)}
                     />
                   ) : (
                     <SettingsRow
@@ -695,6 +731,7 @@ export default function AiSettingsPage() {
                         onDelete={() => handleDeleteConnection(conn.slug)}
                         onSetDefault={() => handleSetDefaultConnection(conn.slug)}
                         onValidate={() => handleValidateConnection(conn.slug)}
+                        onReauthenticate={() => handleReauthenticateConnection(conn)}
                         validationState={validationStates[conn.slug]?.state || 'idle'}
                         validationError={validationStates[conn.slug]?.error}
                       />

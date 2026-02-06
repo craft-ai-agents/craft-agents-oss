@@ -12,6 +12,8 @@ import {
   isReadOnlyBashCommandWithConfig,
   getBashRejectionReason,
   formatBashRejectionMessage,
+  shouldAllowToolInMode,
+  extractBashWriteTarget,
   SAFE_MODE_CONFIG,
   type CompiledBashPattern,
 } from '../src/agent/mode-manager.ts';
@@ -1223,4 +1225,115 @@ describe('getBashRejectionReason with pattern metadata', () => {
       }
     });
   });
+});
+
+// ============================================================
+// extractBashWriteTarget Tests
+// ============================================================
+
+describe('extractBashWriteTarget', () => {
+  describe('Codex subshell pattern (zsh/bash -lc)', () => {
+    it('should extract path from /bin/zsh -lc "cat <<\'EOF\' > /path/to/plans/file.md..."', () => {
+      const cmd = `/bin/zsh -lc "cat <<'EOF' > /Users/test/.craft-agent/workspaces/ws/sessions/s1/plans/plan.md\n# Plan\nEOF"`;
+      expect(extractBashWriteTarget(cmd)).toBe('/Users/test/.craft-agent/workspaces/ws/sessions/s1/plans/plan.md');
+    });
+
+    it('should extract path from bash -c "echo > /path/file"', () => {
+      const cmd = 'bash -c "echo content > /tmp/plans/output.md"';
+      expect(extractBashWriteTarget(cmd)).toBe('/tmp/plans/output.md');
+    });
+
+    it('should extract path from sh -c "cat > /path/file"', () => {
+      const cmd = 'sh -c "cat > /some/plans/file.md"';
+      expect(extractBashWriteTarget(cmd)).toBe('/some/plans/file.md');
+    });
+
+    it('should extract path from zsh -lc (without /bin/ prefix)', () => {
+      const cmd = `zsh -lc "cat <<'EOF' > /Users/test/plans/file.md\ncontent\nEOF"`;
+      expect(extractBashWriteTarget(cmd)).toBe('/Users/test/plans/file.md');
+    });
+  });
+
+  describe('direct redirect pattern', () => {
+    it('should extract path from cat > /path/file', () => {
+      expect(extractBashWriteTarget('cat > /tmp/plans/file.md')).toBe('/tmp/plans/file.md');
+    });
+
+    it('should extract path from echo >> /path/file', () => {
+      expect(extractBashWriteTarget('echo content >> /tmp/plans/file.md')).toBe('/tmp/plans/file.md');
+    });
+  });
+
+  describe('should return null for non-write commands', () => {
+    it('should return null for read-only commands', () => {
+      expect(extractBashWriteTarget('ls -la')).toBeNull();
+      expect(extractBashWriteTarget('git status')).toBeNull();
+      expect(extractBashWriteTarget('cat file.txt')).toBeNull();
+    });
+
+    it('should return null for /dev/null redirects', () => {
+      expect(extractBashWriteTarget('ls > /dev/null')).toBeNull();
+    });
+  });
+});
+
+// ============================================================
+// shouldAllowToolInMode - Bash Plans Folder Exception Tests
+// ============================================================
+
+describe('shouldAllowToolInMode - Bash plans folder exception', () => {
+  const plansFolderPath = '/Users/test/.craft-agent/workspaces/ws/sessions/s1/plans';
+
+  describe('should allow bash writes to plans folder in safe mode', () => {
+    it('should allow Codex-style zsh write to plans folder', () => {
+      const command = `/bin/zsh -lc "cat <<'EOF' > ${plansFolderPath}/my-plan.md\n# Plan\n## Steps\n1. Do thing\nEOF"`;
+      const result = shouldAllowToolInMode(
+        'Bash',
+        { command },
+        'safe',
+        { plansFolderPath }
+      );
+      expect(result.allowed).toBe(true);
+    });
+
+    it('should allow direct redirect to plans folder', () => {
+      const command = `cat > ${plansFolderPath}/plan.md`;
+      const result = shouldAllowToolInMode(
+        'Bash',
+        { command },
+        'safe',
+        { plansFolderPath }
+      );
+      expect(result.allowed).toBe(true);
+    });
+  });
+
+  describe('should block bash writes to other paths in safe mode', () => {
+    it('should block Codex-style zsh write to non-plans path', () => {
+      const command = `/bin/zsh -lc "cat <<'EOF' > /tmp/evil.sh\nrm -rf /\nEOF"`;
+      const result = shouldAllowToolInMode(
+        'Bash',
+        { command },
+        'safe',
+        { plansFolderPath }
+      );
+      expect(result.allowed).toBe(false);
+    });
+
+    it('should block direct redirect to non-plans path', () => {
+      const command = 'echo bad > /etc/hosts';
+      const result = shouldAllowToolInMode(
+        'Bash',
+        { command },
+        'safe',
+        { plansFolderPath }
+      );
+      expect(result.allowed).toBe(false);
+    });
+  });
+
+  // Note: Read-only command tests (ls, git status) are not included here because
+  // shouldAllowToolInMode uses SAFE_MODE_CONFIG which has empty patterns at test time
+  // (patterns are loaded from default.json at runtime). Read-only bash command validation
+  // is thoroughly tested via isReadOnlyBashCommandWithConfig + TEST_MODE_CONFIG above.
 });

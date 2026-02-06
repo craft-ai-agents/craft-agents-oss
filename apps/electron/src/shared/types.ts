@@ -714,6 +714,8 @@ export const IPC_CHANNELS = {
   // Settings - Model
   SETTINGS_GET_MODEL: 'settings:getModel',
   SETTINGS_SET_MODEL: 'settings:setModel',
+  SETTINGS_GET_MODEL_DEFAULTS: 'settings:getModelDefaults',
+  SETTINGS_SET_MODEL_DEFAULT: 'settings:setModelDefault',
   SESSION_GET_MODEL: 'session:getModel',
   SESSION_SET_MODEL: 'session:setModel',
 

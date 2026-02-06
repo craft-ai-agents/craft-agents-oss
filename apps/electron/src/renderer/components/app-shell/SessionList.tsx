@@ -921,7 +921,7 @@ export function SessionList({
     isMultiSelectActive,
     isSelected: isSessionSelected,
   } = useSessionSelection()
-  const { navigate } = useNavigation()
+  const { navigate, navigateToSession } = useNavigation()
   const navState = useNavigationState()
   const { showEscapeOverlay } = useEscapeInterrupt()
 
@@ -1198,34 +1198,16 @@ export function SessionList({
       clearMultiSelect()
     }
 
-    // Select the session and navigate
+    // Select the session and navigate (preserves filter context)
     selectSession(item.id, index)
-    // Navigate using view routes to preserve filter context
-    if (!currentFilter || currentFilter.kind === 'allSessions') {
-      navigate(routes.view.allSessions(item.id))
-    } else if (currentFilter.kind === 'flagged') {
-      navigate(routes.view.flagged(item.id))
-    } else if (currentFilter.kind === 'archived') {
-      navigate(routes.view.archived(item.id))
-    } else if (currentFilter.kind === 'state') {
-      navigate(routes.view.state(currentFilter.stateId, item.id))
-    }
-  }, [isMultiSelectActive, clearMultiSelect, selectSession, navigate, currentFilter])
+    navigateToSession(item.id)
+  }, [isMultiSelectActive, clearMultiSelect, selectSession, navigateToSession])
 
   // Handle click selection - selects the item and navigates to it
   const handleSelectSession = useCallback((item: SessionMeta, index: number) => {
     selectSession(item.id, index)
-    // Navigate using view routes to preserve filter context
-    if (!currentFilter || currentFilter.kind === 'allSessions') {
-      navigate(routes.view.allSessions(item.id))
-    } else if (currentFilter.kind === 'flagged') {
-      navigate(routes.view.flagged(item.id))
-    } else if (currentFilter.kind === 'archived') {
-      navigate(routes.view.archived(item.id))
-    } else if (currentFilter.kind === 'state') {
-      navigate(routes.view.state(currentFilter.stateId, item.id))
-    }
-  }, [selectSession, navigate, currentFilter])
+    navigateToSession(item.id)
+  }, [selectSession, navigateToSession])
 
   // Handle toggle select (cmd/ctrl+click)
   const handleToggleSelect = useCallback((item: SessionMeta, index: number) => {
@@ -1253,19 +1235,10 @@ export function SessionList({
     // In normal mode, Enter selects the item then focuses chat
     if (!isMultiSelectActive) {
       selectSession(item.id, index)
-      // Navigate using view routes to preserve filter context
-      if (!currentFilter || currentFilter.kind === 'allSessions') {
-        navigate(routes.view.allSessions(item.id))
-      } else if (currentFilter.kind === 'flagged') {
-        navigate(routes.view.flagged(item.id))
-      } else if (currentFilter.kind === 'archived') {
-        navigate(routes.view.archived(item.id))
-      } else if (currentFilter.kind === 'state') {
-        navigate(routes.view.state(currentFilter.stateId, item.id))
-      }
+      navigateToSession(item.id)
     }
     onFocusChatInput?.()
-  }, [isMultiSelectActive, selectSession, navigate, currentFilter, onFocusChatInput])
+  }, [isMultiSelectActive, selectSession, navigateToSession, onFocusChatInput])
 
   const handleFlagWithToast = useCallback((sessionId: string) => {
     if (!onFlag) return
@@ -1350,10 +1323,16 @@ export function SessionList({
   // inputSafe flag in action definition allows this to fire from INPUT/TEXTAREA
   // Defers to interrupt flow when escape overlay is showing (processing interrupt takes priority)
   useAction('sessionList.clearSelection', () => {
+    // Get the session that will remain selected after clearing
+    const selectedId = selectionState.selected
     clearMultiSelect()
+    // Navigate to sync sidebar and main content
+    if (selectedId) {
+      navigateToSession(selectedId)
+    }
   }, {
     enabled: () => isMultiSelectActive && !showEscapeOverlay,
-  }, [isMultiSelectActive, showEscapeOverlay, clearMultiSelect])
+  }, [isMultiSelectActive, showEscapeOverlay, clearMultiSelect, selectionState.selected, navigateToSession])
 
   // Roving tabindex enabled when keyboard-eligible (see isKeyboardEligible comment above)
   // moveFocus=false during search so DOM focus stays on input while activeIndex changes

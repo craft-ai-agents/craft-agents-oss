@@ -176,7 +176,9 @@ function createCodexContext(config: SessionConfig): SessionToolContext {
       messageContent.push({ type: 'text', text: params.prompt });
 
       // Build request
-      const model = params.model || 'claude-haiku-4-5-latest';
+      // Default to Haiku (fastest, most cost-effective)
+      // TODO: Import HAIKU_MODEL_ID from @craft-agent/shared/config/models when dependency is added
+      const model = params.model || 'claude-haiku-4-5-20251001';
       const maxTokens = params.maxTokens || 4096;
 
       const request: Anthropic.MessageCreateParams = {
@@ -598,8 +600,9 @@ For large files (>2000 lines), use {path, startLine, endLine} to select a portio
           },
           model: {
             type: 'string',
-            enum: ['claude-opus-4-5-20251101', 'claude-sonnet-4-5-20250929', 'claude-haiku-4-5-latest'],
-            description: 'Model to use. Defaults to claude-haiku-4-5-latest',
+            // TODO: Import from @craft-agent/shared/config/models when dependency is added
+            enum: ['claude-opus-4-6', 'claude-sonnet-4-5-20250929', 'claude-haiku-4-5-20251001'],
+            description: 'Model to use. Defaults to Haiku (fastest, most cost-effective)',
           },
           systemPrompt: {
             type: 'string',

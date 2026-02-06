@@ -92,6 +92,8 @@ interface NavigationContextValue {
   toggleRightSidebar: (panel?: RightSidebarPanel) => void
   /** Navigate to a source (or source list if no slug), preserving the current filter type */
   navigateToSource: (sourceSlug?: string) => void
+  /** Navigate to a session, preserving the current filter type */
+  navigateToSession: (sessionId: string) => void
 }
 
 const NavigationContext = createContext<NavigationContextValue | null>(null)
@@ -881,6 +883,38 @@ export function NavigationProvider({
     navigate(routes.view.sources(sourceSlug ? { sourceSlug } : undefined))
   }, [navigationState, navigate])
 
+  // Navigate to a session while preserving the current filter type
+  const navigateToSession = useCallback((sessionId: string) => {
+    if (!isSessionsNavigation(navigationState)) {
+      navigate(routes.view.allSessions(sessionId))
+      return
+    }
+
+    const filter = navigationState.filter
+    switch (filter.kind) {
+      case 'allSessions':
+        navigate(routes.view.allSessions(sessionId))
+        break
+      case 'flagged':
+        navigate(routes.view.flagged(sessionId))
+        break
+      case 'archived':
+        navigate(routes.view.archived(sessionId))
+        break
+      case 'state':
+        navigate(routes.view.state(filter.stateId, sessionId))
+        break
+      case 'label':
+        navigate(routes.view.label(filter.labelId, sessionId))
+        break
+      case 'view':
+        navigate(routes.view.view(filter.viewId, sessionId))
+        break
+      default:
+        navigate(routes.view.allSessions(sessionId))
+    }
+  }, [navigationState, navigate])
+
   return (
     <NavigationContext.Provider
       value={{
@@ -894,6 +928,7 @@ export function NavigationProvider({
         updateRightSidebar,
         toggleRightSidebar,
         navigateToSource,
+        navigateToSession,
       }}
     >
       {children}

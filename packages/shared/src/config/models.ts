@@ -20,6 +20,12 @@
 export type ModelProvider = 'anthropic' | 'openai';
 
 /**
+ * Stored default model map (by provider).
+ * Keeps app-level defaults scoped to provider.
+ */
+export type ModelDefaults = Partial<Record<ModelProvider, string>>;
+
+/**
  * Full model definition with capabilities and costs.
  * Used throughout the application for model selection and display.
  */
@@ -61,8 +67,8 @@ export const MODEL_REGISTRY: ModelDefinition[] = [
   // Anthropic Claude Models
   // ----------------------------------------
   {
-    id: 'claude-opus-4-5-20251101',
-    name: 'Opus 4.5',
+    id: 'claude-opus-4-6',
+    name: 'Opus 4.6',
     shortName: 'Opus',
     description: 'Most capable for complex work',
     provider: 'anthropic',
@@ -70,8 +76,8 @@ export const MODEL_REGISTRY: ModelDefinition[] = [
     supportsThinking: true,
     supportsVision: true,
     supportsTools: true,
-    inputCostPerM: 15.0,
-    outputCostPerM: 75.0,
+    inputCostPerM: 5.0,
+    outputCostPerM: 25.0,
   },
   {
     id: 'claude-sonnet-4-5-20250929',
@@ -87,7 +93,7 @@ export const MODEL_REGISTRY: ModelDefinition[] = [
     outputCostPerM: 15.0,
   },
   {
-    id: 'claude-haiku-4-5-latest',
+    id: 'claude-haiku-4-5-20251001',
     name: 'Haiku 4.5',
     shortName: 'Haiku',
     description: 'Fastest for quick answers',
@@ -105,7 +111,7 @@ export const MODEL_REGISTRY: ModelDefinition[] = [
   // Model IDs must match actual Codex CLI model identifiers
   // ----------------------------------------
   {
-    id: 'gpt-5.2-codex',
+    id: 'gpt-5.3-codex',
     name: 'Codex',
     shortName: 'Codex',
     description: 'OpenAI reasoning model',
@@ -157,23 +163,49 @@ export const OPENAI_MODELS = getModelsByProvider('openai');
 export const MODELS = ANTHROPIC_MODELS;
 
 // ============================================
+// MODEL ID CONSTANTS (Derived from Registry)
+// ============================================
+
+/** Get the first model ID matching a short name */
+function getModelIdByShortName(shortName: string): string {
+  const model = MODEL_REGISTRY.find(m => m.shortName === shortName);
+  if (!model) throw new Error(`Model not found: ${shortName}`);
+  return model.id;
+}
+
+/** Opus model ID - use this instead of hardcoding */
+export const OPUS_MODEL_ID = getModelIdByShortName('Opus');
+
+/** Sonnet model ID - use this instead of hardcoding */
+export const SONNET_MODEL_ID = getModelIdByShortName('Sonnet');
+
+/** Haiku model ID - use this instead of hardcoding */
+export const HAIKU_MODEL_ID = getModelIdByShortName('Haiku');
+
+/** Codex model ID */
+export const CODEX_MODEL_ID = getModelIdByShortName('Codex');
+
+/** Codex Mini model ID */
+export const CODEX_MINI_MODEL_ID = getModelIdByShortName('Codex Mini');
+
+// ============================================
 // PURPOSE-SPECIFIC DEFAULTS
 // ============================================
 
 /** Default model for main chat (user-facing) */
-export const DEFAULT_MODEL = 'claude-sonnet-4-5-20250929';
+export const DEFAULT_MODEL = SONNET_MODEL_ID;
 
 /** Default model for Codex/OpenAI connections */
-export const DEFAULT_CODEX_MODEL = 'gpt-5.2-codex';
+export const DEFAULT_CODEX_MODEL = CODEX_MODEL_ID;
 
 /** Model for agent definition extraction (always high quality) */
-export const EXTRACTION_MODEL = 'claude-opus-4-5-20251101';
+export const EXTRACTION_MODEL = OPUS_MODEL_ID;
 
 /** Model for API response summarization (cost efficient) */
-export const SUMMARIZATION_MODEL = 'claude-haiku-4-5-20251001';
+export const SUMMARIZATION_MODEL = HAIKU_MODEL_ID;
 
 /** Model for instruction updates (high quality for accurate document editing) */
-export const INSTRUCTION_UPDATE_MODEL = 'claude-opus-4-5-20251101';
+export const INSTRUCTION_UPDATE_MODEL = OPUS_MODEL_ID;
 
 /**
  * Models allowed for secondary LLM calls (call_llm tool).
@@ -212,8 +244,9 @@ export function getModelShortName(modelId: string): string {
   if (modelId.includes('/')) {
     return modelId.split('/').pop() || modelId;
   }
-  // Fallback: strip claude- prefix and date suffix
-  return modelId.replace('claude-', '').replace(/-[\d.-]+$/, '');
+  // Fallback: strip claude- prefix and date suffix, then capitalize
+  const stripped = modelId.replace('claude-', '').replace(/-[\d.-]+$/, '');
+  return stripped.charAt(0).toUpperCase() + stripped.slice(1);
 }
 
 /**
@@ -254,4 +287,22 @@ export function isCodexModel(modelId: string): boolean {
  */
 export function getModelProvider(modelId: string): ModelProvider | undefined {
   return getModelById(modelId)?.provider;
+}
+
+/**
+ * Get the default model ID for a provider.
+ */
+export function getDefaultModelForProvider(provider: ModelProvider): string {
+  return provider === 'openai' ? DEFAULT_CODEX_MODEL : DEFAULT_MODEL;
+}
+
+/**
+ * Convert registry models to settings dropdown options for a provider.
+ */
+export function getModelOptionsForProvider(provider: ModelProvider): Array<{ value: string; label: string; description: string }> {
+  return getModelsByProvider(provider).map(m => ({
+    value: m.id,
+    label: m.name,
+    description: m.description,
+  }));
 }

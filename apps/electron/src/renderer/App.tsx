@@ -25,7 +25,7 @@ import { NavigationProvider } from '@/contexts/NavigationContext'
 import { navigate, routes } from './lib/navigate'
 import { stripMarkdown } from './utils/text'
 import { initRendererPerf } from './lib/perf'
-import { DEFAULT_MODEL } from '@config/models'
+import { DEFAULT_MODEL, DEFAULT_CODEX_MODEL, type ModelDefaults } from '@config/models'
 import {
   initializeSessionsAtom,
   addSessionAtom,
@@ -179,7 +179,10 @@ export default function App() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   // Window's workspace ID - fixed for this window (multi-window architecture)
   const [windowWorkspaceId, setWindowWorkspaceId] = useState<string | null>(null)
-  const [currentModel, setCurrentModel] = useState(DEFAULT_MODEL)
+  const [modelDefaults, setModelDefaults] = useState<ModelDefaults>({
+    anthropic: DEFAULT_MODEL,
+    openai: DEFAULT_CODEX_MODEL,
+  })
   // Backend capabilities (models, thinking levels) - adapts UI based on provider
   const [capabilities, setCapabilities] = useState<AgentCapabilities | null>(null)
   // LLM connections with authentication status (for provider selection)
@@ -437,10 +440,13 @@ export default function App() {
         }
       }
     })
-    // Load stored model preference
-    window.electronAPI.getModel().then((storedModel) => {
-      if (storedModel) {
-        setCurrentModel(storedModel)
+    // Load provider-scoped default models
+    window.electronAPI.getModelDefaults?.().then((defaults) => {
+      if (defaults) {
+        setModelDefaults({
+          anthropic: defaults.anthropic ?? DEFAULT_MODEL,
+          openai: defaults.openai ?? DEFAULT_CODEX_MODEL,
+        })
       }
     })
     // Load default LLM connection slug from API setup
@@ -965,10 +971,14 @@ export default function App() {
     }
   }, [sessionOptions, updateSessionById, skills, sources, windowWorkspaceId])
 
-  const handleModelChange = useCallback((model: string) => {
-    setCurrentModel(model)
-    // Persist to config so it's remembered across launches
-    window.electronAPI.setModel(model)
+  const refreshModelDefaults = useCallback(async () => {
+    if (!window.electronAPI?.getModelDefaults) return
+    const defaults = await window.electronAPI.getModelDefaults()
+    if (!defaults) return
+    setModelDefaults({
+      anthropic: defaults.anthropic ?? DEFAULT_MODEL,
+      openai: defaults.openai ?? DEFAULT_CODEX_MODEL,
+    })
   }, [])
 
   /**
@@ -1273,7 +1283,7 @@ export default function App() {
     // and useSession(id) hook for individual sessions. This prevents memory leaks.
     workspaces,
     activeWorkspaceId: windowWorkspaceId,
-    currentModel,
+    modelDefaults,
     customModel,
     authType,
     capabilities,
@@ -1302,8 +1312,8 @@ export default function App() {
     // File/URL handlers
     onOpenFile: handleOpenFile,
     onOpenUrl: handleOpenUrl,
-    // Model
-    onModelChange: handleModelChange,
+    // Model defaults
+    refreshModelDefaults,
     refreshCustomModel,
     // Workspace
     onSelectWorkspace: handleSelectWorkspace,
@@ -1322,7 +1332,7 @@ export default function App() {
     // NOTE: sessions removed to prevent memory leaks - components use atoms instead
     workspaces,
     windowWorkspaceId,
-    currentModel,
+    modelDefaults,
     customModel,
     authType,
     capabilities,
@@ -1349,7 +1359,7 @@ export default function App() {
     handleRespondToCredential,
     handleOpenFile,
     handleOpenUrl,
-    handleModelChange,
+    refreshModelDefaults,
     refreshCustomModel,
     handleSelectWorkspace,
     handleRefreshWorkspaces,

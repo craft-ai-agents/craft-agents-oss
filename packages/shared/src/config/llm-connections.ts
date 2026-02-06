@@ -298,6 +298,31 @@ export function getModelsForProviderType(providerType: LlmProviderType): ModelDe
 }
 
 /**
+ * Resolve the effective LLM connection slug from available fallbacks.
+ *
+ * Single source of truth for the fallback chain used everywhere in the UI:
+ *   1. Explicit session connection (locked after first message)
+ *   2. Workspace-level default override
+ *   3. Global default (isDefault flag on a connection)
+ *   4. First available connection
+ *
+ * @param sessionConnection  - Per-session connection slug (session.llmConnection)
+ * @param workspaceDefault   - Workspace-level default connection slug
+ * @param connections        - All available connections (with status metadata)
+ * @returns The resolved slug, or undefined when no connections exist
+ */
+export function resolveEffectiveConnectionSlug(
+  sessionConnection: string | undefined,
+  workspaceDefault: string | undefined,
+  connections: Pick<LlmConnectionWithStatus, 'slug' | 'isDefault'>[],
+): string | undefined {
+  return sessionConnection
+    ?? workspaceDefault
+    ?? connections.find(c => c.isDefault)?.slug
+    ?? connections[0]?.slug
+}
+
+/**
  * Check if an auth type uses browser OAuth flow.
  * @param authType - LLM auth type
  * @returns true if OAuth browser flow should be triggered

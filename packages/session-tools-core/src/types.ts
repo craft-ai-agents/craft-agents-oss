@@ -163,6 +163,11 @@ export interface TextContent {
  */
 export interface ToolResult {
   content: TextContent[];
+  /**
+   * Optional structured payload for MCP clients.
+   * Keep this as an object (not null) for compatibility with strict tool_result parsers.
+   */
+  structuredContent?: Record<string, unknown>;
   isError?: boolean;
 }
 

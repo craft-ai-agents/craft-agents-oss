@@ -510,6 +510,26 @@ function formatToolInput(
 }
 
 /**
+ * Extract the action portion from an LLM-provided displayName by stripping
+ * a matching icon/tool prefix.
+ *
+ * Examples:
+ *   extractActionFromDisplayName("Git", "Git Status")  → "Status"
+ *   extractActionFromDisplayName("npm", "Install Deps") → "Install Deps"
+ *   extractActionFromDisplayName("Git", "Check Branch")  → "Check Branch"
+ */
+function extractActionFromDisplayName(iconName: string, llmName: string): string {
+  // If LLM name starts with the icon name, strip the prefix to get the action
+  // "Git Status" with icon "Git" → "Status"
+  if (llmName.toLowerCase().startsWith(iconName.toLowerCase() + ' ')) {
+    return llmName.slice(iconName.length + 1).trim()
+  }
+  // Otherwise use the full LLM name as the action
+  // "Install Dependencies" with icon "npm" → "Install Dependencies"
+  return llmName
+}
+
+/**
  * Format tool display using embedded toolDisplayMeta.
  * toolDisplayMeta is set at storage time in the main process and includes:
  * - displayName: Human-readable name
@@ -536,6 +556,22 @@ function formatToolDisplay(
         }
       }
     }
+
+    // For Bash commands with LLM-provided displayName: merge icon name + action
+    // e.g., icon "Git" + LLM "Git Status" → "Git: Status"
+    // e.g., icon "npm" + LLM "Install Dependencies" → "npm: Install Dependencies"
+    // Special case: for generic "Terminal", show only the action
+    // e.g., icon "Terminal" + LLM "Install Dependencies" → "Install Dependencies"
+    if (toolName === 'Bash' && displayName) {
+      const iconName = toolDisplayMeta.displayName
+      const action = extractActionFromDisplayName(iconName, displayName)
+      return {
+        name: iconName.toLowerCase() === 'terminal' ? action : `${iconName}: ${action}`,
+        icon: toolDisplayMeta.iconDataUrl,
+        description: toolDisplayMeta.description,
+      }
+    }
+
     return {
       name: toolDisplayMeta.displayName,
       icon: toolDisplayMeta.iconDataUrl,

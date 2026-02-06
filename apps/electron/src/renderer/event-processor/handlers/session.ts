@@ -31,6 +31,7 @@ import type {
   WorkingDirectoryChangedEvent,
   PermissionModeChangedEvent,
   SessionModelChangedEvent,
+  LLMConnectionChangedEvent,
   UserMessageEvent,
   SessionSharedEvent,
   SessionUnsharedEvent,
@@ -414,6 +415,24 @@ export function handleSessionModelChanged(
   return {
     state: {
       session: { ...session, model: event.model ?? undefined },
+      streaming,
+    },
+    effects: [],
+  }
+}
+
+/**
+ * Handle connection_changed - sync session.llmConnection to renderer state
+ */
+export function handleConnectionChanged(
+  state: SessionState,
+  event: LLMConnectionChangedEvent
+): ProcessResult {
+  const { session, streaming } = state
+
+  return {
+    state: {
+      session: { ...session, llmConnection: event.connectionSlug },
       streaming,
     },
     effects: [],

@@ -67,6 +67,7 @@ import {
 import { isGoogleOAuthConfigured as isGoogleOAuthConfiguredImpl } from '../auth/google-oauth.ts';
 import Anthropic from '@anthropic-ai/sdk';
 import { debug } from '../utils/debug.ts';
+import { HAIKU_MODEL_ID } from '../config/models.ts';
 import { getSessionPlansPath } from '../sessions/storage.ts';
 
 // Re-export types that may be needed by consumers
@@ -240,7 +241,7 @@ export function createClaudeContext(options: ClaudeContextOptions): SessionToolC
 
       messageContent.push({ type: 'text', text: params.prompt });
 
-      const model = params.model || 'claude-haiku-4-5-latest';
+      const model = params.model || HAIKU_MODEL_ID;
       const maxTokens = params.maxTokens || 4096;
 
       const request: Anthropic.MessageCreateParams = {

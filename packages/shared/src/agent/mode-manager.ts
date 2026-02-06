@@ -1022,6 +1022,34 @@ export function isReadOnlyBashCommand(command: string): boolean {
 }
 
 /**
+ * Extract the write target path from a bash command.
+ * Returns the file path if the command writes to a file via redirect, null otherwise.
+ *
+ * Handles:
+ * - Direct redirects: `echo "x" > /path/file`
+ * - Codex subshell pattern: `/bin/zsh -lc "cat <<'EOF' > /path/file\n...\nEOF"`
+ * - sh/bash -c variants: `bash -c "echo x > /path/file"`
+ */
+export function extractBashWriteTarget(command: string): string | null {
+  // Pattern: shell -c/-lc with inner redirect (Codex pattern)
+  // Match: /bin/zsh -lc "... > /path/to/file ..." or bash -c '... > /path ...'
+  const shellExecMatch = command.match(
+    /(?:\/bin\/)?(?:zsh|bash|sh)\s+(?:-\w+\s+)*["'].*?>\s*([^\s'"]+)/
+  );
+  if (shellExecMatch?.[1] && shellExecMatch[1] !== '/dev/null') {
+    return shellExecMatch[1];
+  }
+
+  // Pattern: Direct redirect - extract path after > or >>
+  const directRedirectMatch = command.match(/>{1,2}\s*([^\s;|&"'>]+)/);
+  if (directRedirectMatch?.[1] && directRedirectMatch[1] !== '/dev/null') {
+    return directRedirectMatch[1];
+  }
+
+  return null;
+}
+
+/**
  * Check if an MCP tool is read-only using the given config
  */
 function isReadOnlyMcpToolWithConfig(toolName: string, config: ToolCheckConfig): boolean {
@@ -1161,6 +1189,22 @@ export function shouldAllowToolInMode(
         // Command is safe - no rejection reason means it passed all checks
         return { allowed: true };
       }
+
+      // Plans folder exception for bash writes.
+      // Codex uses bash redirects like: /bin/zsh -lc "cat <<'EOF' > /path/to/plans/file.md..."
+      // Allow these if the redirect target is within the plans folder.
+      if (options?.plansFolderPath) {
+        const targetPath = extractBashWriteTarget(command);
+        if (targetPath) {
+          const normalizedTarget = targetPath.replace(/\\/g, '/');
+          const normalizedPlansDir = options.plansFolderPath.replace(/\\/g, '/');
+          if (normalizedTarget.startsWith(normalizedPlansDir)) {
+            debug(`[Mode] Allowing Bash write to plans folder: ${targetPath}`);
+            return { allowed: true };
+          }
+        }
+      }
+
       // Return detailed error message explaining exactly why the command was blocked
       return {
         allowed: false,

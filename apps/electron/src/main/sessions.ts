@@ -72,7 +72,7 @@ import { type Session, type Message, type SessionEvent, type FileAttachment, typ
 import { generateSessionTitle, regenerateSessionTitle, formatPathsToRelative, formatToolInputPaths, perf, encodeIconToDataUrl, getEmojiIcon, resetSummarizationClient, resolveToolIcon, type TitleGeneratorOptions } from '@craft-agent/shared/utils'
 import { loadWorkspaceSkills, type LoadedSkill } from '@craft-agent/shared/skills'
 import type { ToolDisplayMeta } from '@craft-agent/core/types'
-import { DEFAULT_MODEL, getToolIconsDir } from '@craft-agent/shared/config'
+import { DEFAULT_MODEL, DEFAULT_CODEX_MODEL, getToolIconsDir } from '@craft-agent/shared/config'
 import { type ThinkingLevel, DEFAULT_THINKING_LEVEL } from '@craft-agent/shared/agent/thinking-levels'
 import { evaluateAutoLabels } from '@craft-agent/shared/labels/auto'
 import { listLabels } from '@craft-agent/shared/labels/storage'
@@ -1973,11 +1973,20 @@ export class SessionManager {
         }
       }
 
+      // Auto-detect provider from model if it's a Codex model
+      // This ensures Codex models (gpt-5.x-codex) always use the OpenAI/Codex backend
+      // even if the connection is set to Anthropic
+      const { isCodexModel } = await import('@craft-agent/shared/config/models')
+      if (managed.model && isCodexModel(managed.model) && provider !== 'openai') {
+        sessionLog.info(`Auto-switching to OpenAI provider for Codex model "${managed.model}" (was: ${provider})`)
+        provider = 'openai'
+      }
+
       // Create the appropriate backend based on provider
       if (provider === 'openai') {
         // Codex backend - uses app-server protocol
-        // Use connection's default model, or session model, or fallback to gpt-5.2-codex
-        const codexModel = managed.model || connection?.defaultModel || 'gpt-5.2-codex'
+        // Use connection's default model, or session model, or fallback to DEFAULT_CODEX_MODEL
+        const codexModel = managed.model || connection?.defaultModel || DEFAULT_CODEX_MODEL
 
         // Set up per-session Codex configuration (MCP servers, etc.)
         // This creates .codex-home/config.toml in the session folder
@@ -4550,19 +4559,32 @@ To view this task's output:
    * UI uses this to adapt model/thinking selectors based on the current backend.
    */
   getCapabilities(sessionId?: string): ReturnType<CraftAgent['capabilities']> | ReturnType<CodexBackend['capabilities']> | null {
+    sessionLog.info(`[DEBUG getCapabilities] called with sessionId: ${sessionId}`)
+
     // If sessionId provided, return capabilities for that specific session
     if (sessionId) {
       const managed = this.sessions.get(sessionId)
+      sessionLog.info(`[DEBUG getCapabilities] managed session:`, {
+        exists: !!managed,
+        hasAgent: !!managed?.agent,
+        llmConnection: managed?.llmConnection,
+      })
+
       if (managed) {
         // If agent exists, use its capabilities (most accurate)
         if (managed.agent) {
-          return managed.agent.capabilities()
+          const caps = managed.agent.capabilities()
+          sessionLog.info(`[DEBUG getCapabilities] from agent:`, caps.provider, caps.models?.map(m => m.id))
+          return caps
         }
         // No agent yet - derive capabilities from session's LLM connection
         if (managed.llmConnection) {
           const connection = getLlmConnection(managed.llmConnection)
+          sessionLog.info(`[DEBUG getCapabilities] connection lookup:`, connection?.slug, connection?.providerType)
           if (connection) {
-            return getStaticCapabilities(connection.providerType)
+            const caps = getStaticCapabilities(connection.providerType)
+            sessionLog.info(`[DEBUG getCapabilities] static caps:`, caps.provider, caps.models?.map(m => m.id))
+            return caps
           }
         }
       }
@@ -4570,10 +4592,13 @@ To view this task's output:
     // Fallback: return capabilities from any active session (for backward compat)
     for (const [_, managed] of this.sessions) {
       if (managed.agent) {
-        return managed.agent.capabilities()
+        const caps = managed.agent.capabilities()
+        sessionLog.info(`[DEBUG getCapabilities] fallback from other agent:`, caps.provider, caps.models?.map(m => m.id))
+        return caps
       }
     }
     // No active agents - return null (UI will fall back to hardcoded values)
+    sessionLog.info(`[DEBUG getCapabilities] returning null - no agents`)
     return null
   }
 

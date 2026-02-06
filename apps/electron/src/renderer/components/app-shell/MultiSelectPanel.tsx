@@ -2,24 +2,40 @@
  * MultiSelectPanel - Empty state panel shown when multiple sessions are selected.
  *
  * Displays the selection count and provides batch action buttons for:
- * - Set status (Mark Done, Mark Todo)
- * - Delete selected sessions
+ * - Change status
+ * - Set labels
+ * - Archive selected sessions
  * - Clear selection
  */
 
 import * as React from 'react'
-import { Trash2, CheckCircle2, Circle, X } from 'lucide-react'
+import { Archive, Tag, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Kbd, KbdGroup } from '@/components/ui/kbd'
 import { cn } from '@/lib/utils'
 import { isMac } from '@/lib/platform'
+import { DropdownMenu, DropdownMenuTrigger, StyledDropdownMenuContent, StyledDropdownMenuItem, StyledDropdownMenuSeparator, StyledDropdownMenuSubContent, StyledDropdownMenuSubTrigger, DropdownMenuSub } from '@/components/ui/styled-dropdown'
+import type { TodoStateId, TodoState } from '@/config/todo-states'
+import type { LabelConfig } from '@craft-agent/shared/labels'
+import { LabelMenuItems, StatusMenuItems } from './SessionMenuParts'
 
 export interface MultiSelectPanelProps {
   /** Number of selected sessions */
   count: number
+  /** Available todo states */
+  todoStates?: TodoState[]
+  /** Active status if all selected share the same state */
+  activeStatusId?: TodoStateId | null
   /** Callback when setting status for all selected */
-  onSetStatus?: (status: 'done' | 'todo') => void
-  /** Callback when deleting all selected */
-  onDelete?: () => void
+  onSetStatus?: (status: TodoStateId) => void
+  /** Available label configs (tree) */
+  labels?: LabelConfig[]
+  /** Labels applied to all selected sessions */
+  appliedLabelIds?: Set<string>
+  /** Callback when toggling a label for all selected */
+  onToggleLabel?: (labelId: string) => void
+  /** Callback when archiving all selected */
+  onArchive?: () => void
   /** Callback when clearing the selection */
   onClearSelection?: () => void
   /** Optional className for the container */
@@ -28,8 +44,13 @@ export interface MultiSelectPanelProps {
 
 export function MultiSelectPanel({
   count,
+  todoStates = [],
+  activeStatusId,
   onSetStatus,
-  onDelete,
+  labels = [],
+  appliedLabelIds = new Set(),
+  onToggleLabel,
+  onArchive,
   onClearSelection,
   className,
 }: MultiSelectPanelProps) {
@@ -48,63 +69,92 @@ export function MultiSelectPanel({
         <h2 className="text-lg font-medium text-foreground">
           {count} {count === 1 ? 'Chat' : 'Chats'} selected
         </h2>
-        <p className="text-sm text-muted-foreground">
-          Use {isMac ? '⌘' : 'Ctrl'}+Click to toggle, Shift+Click for range
-        </p>
+        <div className="text-sm text-foreground/50 flex flex-col items-center gap-1">
+          <span>
+            Use{' '}
+            <KbdGroup>
+              <Kbd>{isMac ? '⌘' : 'Ctrl'}</Kbd>
+              <Kbd>Click</Kbd>
+            </KbdGroup>{' '}
+            to toggle,{' '}
+            <KbdGroup>
+              <Kbd>⇧</Kbd>
+              <Kbd>Click</Kbd>
+            </KbdGroup>{' '}
+            for range
+          </span>
+          <span>
+            Press <Kbd>Esc</Kbd> to clear selection
+          </span>
+        </div>
       </div>
 
       {/* Action buttons */}
       <div className="flex flex-wrap justify-center gap-2">
         {onSetStatus && (
-          <>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onSetStatus('done')}
-              className="gap-2 shadow-minimal"
-            >
-              <CheckCircle2 className="w-4 h-4" />
-              Mark Done
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onSetStatus('todo')}
-              className="gap-2 shadow-minimal"
-            >
-              <Circle className="w-4 h-4" />
-              Mark Todo
-            </Button>
-          </>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-2 bg-background shadow-minimal hover:bg-foreground/[0.03]"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                Change Status
+              </Button>
+            </DropdownMenuTrigger>
+            <StyledDropdownMenuContent align="center">
+              <StatusMenuItems
+                todoStates={todoStates}
+                activeStateId={activeStatusId ?? undefined}
+                onSelect={onSetStatus}
+                menu={{ MenuItem: StyledDropdownMenuItem }}
+              />
+            </StyledDropdownMenuContent>
+          </DropdownMenu>
         )}
-        {onDelete && (
+        {onToggleLabel && labels.length > 0 && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-2 bg-background shadow-minimal hover:bg-foreground/[0.03]"
+              >
+                <Tag className="w-4 h-4" />
+                Set Labels
+              </Button>
+            </DropdownMenuTrigger>
+            <StyledDropdownMenuContent align="center" className="min-w-[220px]">
+              <LabelMenuItems
+                labels={labels}
+                appliedLabelIds={appliedLabelIds}
+                onToggle={onToggleLabel}
+                menu={{
+                  MenuItem: StyledDropdownMenuItem,
+                  Separator: StyledDropdownMenuSeparator,
+                  Sub: DropdownMenuSub,
+                  SubTrigger: StyledDropdownMenuSubTrigger,
+                  SubContent: StyledDropdownMenuSubContent,
+                }}
+              />
+            </StyledDropdownMenuContent>
+          </DropdownMenu>
+        )}
+        {onArchive && (
           <Button
             variant="ghost"
             size="sm"
-            onClick={onDelete}
-            className="gap-2 text-destructive hover:text-destructive hover:bg-destructive/10 shadow-tinted"
+            onClick={onArchive}
+            className="gap-2 bg-background shadow-minimal hover:bg-foreground/[0.03]"
           >
-            <Trash2 className="w-4 h-4" />
-            Delete
+            <Archive className="w-4 h-4" />
+            Archive
           </Button>
         )}
       </div>
 
-      {/* Clear selection link */}
-      {onClearSelection && (
-        <button
-          onClick={onClearSelection}
-          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <X className="w-3.5 h-3.5" />
-          Clear selection
-        </button>
-      )}
-
-      {/* Keyboard hint */}
-      <p className="text-xs text-muted-foreground/60">
-        Press Escape to clear selection
-      </p>
+      {/* Keyboard hint moved below click hint */}
     </div>
   )
 }

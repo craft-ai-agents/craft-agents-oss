@@ -950,7 +950,7 @@ export const chatComponents: ComponentEntry[] = [
           type: 'select',
           options: [
             { label: 'Sonnet 4.5', value: 'claude-sonnet-4-5-20250929' },
-            { label: 'Opus 4.5', value: 'claude-opus-4-5-20251101' },
+            { label: 'Opus 4.6', value: 'claude-opus-4-6' },
             { label: 'Haiku 3.5', value: 'claude-3-5-haiku-20241022' },
           ],
         },

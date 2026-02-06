@@ -193,6 +193,9 @@ const api: ElectronAPI = {
   // Settings - Model (global default)
   getModel: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET_MODEL),
   setModel: (model: string) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SET_MODEL, model),
+  getModelDefaults: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET_MODEL_DEFAULTS),
+  setModelDefault: (provider: 'anthropic' | 'openai', model: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SET_MODEL_DEFAULT, provider, model),
   // Session-specific model (overrides global)
   getSessionModel: (sessionId: string, workspaceId: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SESSION_GET_MODEL, sessionId, workspaceId),

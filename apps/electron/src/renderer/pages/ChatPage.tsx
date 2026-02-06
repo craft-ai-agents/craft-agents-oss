@@ -21,6 +21,8 @@ import { rendererPerf } from '@/lib/perf'
 import { routes } from '@/lib/navigate'
 import { ensureSessionMessagesLoadedAtom, loadedSessionsAtom, sessionMetaMapAtom } from '@/atoms/sessions'
 import { getSessionTitle } from '@/utils/session'
+import { getDefaultModelForProvider, type ModelProvider } from '@config/models'
+import { getModelsForProviderType, isCompatProvider, isOpenAIProvider, resolveEffectiveConnectionSlug } from '@config/llm-connections'
 
 export interface ChatPageProps {
   sessionId: string
@@ -34,7 +36,9 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
 
   const {
     activeWorkspaceId,
-    currentModel,
+    modelDefaults,
+    llmConnections,
+    workspaceDefaultLlmConnection,
     onSendMessage,
     onOpenFile,
     onOpenUrl,
@@ -181,7 +185,33 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
   }, [sessionId])
 
   // Effective model for this session (session-specific or global fallback)
-  const effectiveModel = session?.model || currentModel
+  const effectiveModel = React.useMemo(() => {
+    const connectionSlug = resolveEffectiveConnectionSlug(
+      session?.llmConnection, workspaceDefaultLlmConnection, llmConnections
+    )
+
+    const connection = connectionSlug ? llmConnections.find(c => c.slug === connectionSlug) : null
+    const providerType = connection?.providerType ?? 'anthropic'
+    const provider: ModelProvider = isOpenAIProvider(providerType) ? 'openai' : 'anthropic'
+
+    const available = (() => {
+      if (!connection) return getModelsForProviderType('anthropic')
+      if (isCompatProvider(providerType)) return connection.models ?? []
+      return getModelsForProviderType(providerType)
+    })()
+
+    const availableIds = Array.isArray(available)
+      ? available.map(m => typeof m === 'string' ? m : m.id)
+      : []
+
+    const providerDefault = (modelDefaults?.[provider] ?? getDefaultModelForProvider(provider))
+    if (session?.model) {
+      if (availableIds.length === 0 || availableIds.includes(session.model)) {
+        return session.model
+      }
+    }
+    return providerDefault
+  }, [session?.model, session?.llmConnection, workspaceDefaultLlmConnection, llmConnections, modelDefaults])
 
   // Working directory for this session
   const workingDirectory = session?.workingDirectory

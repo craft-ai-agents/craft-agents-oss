@@ -29,6 +29,10 @@ import type {
   InitializeParams,
   InitializeResponse,
   RequestId,
+  // Legacy notifications (non-v2)
+  AuthStatusChangeNotification,
+  LoginChatGptCompleteNotification,
+  SessionConfiguredNotification,
 } from '@craft-agent/codex-types';
 
 import type {
@@ -50,6 +54,7 @@ import type {
   FileChangeRequestApprovalParams,
   FileChangeRequestApprovalResponse,
   FileChangeApprovalDecision,
+  // Existing notifications
   ItemStartedNotification,
   ItemCompletedNotification,
   AgentMessageDeltaNotification,
@@ -58,6 +63,14 @@ import type {
   TurnPlanUpdatedNotification,
   ThreadStartedNotification,
   ThreadTokenUsageUpdatedNotification,
+  // Kept notifications (used)
+  ErrorNotification,
+  ContextCompactedNotification,
+  FileChangeOutputDeltaNotification,
+  McpToolCallProgressNotification,
+  TerminalInteractionNotification,
+  ConfigWarningNotification,
+  WindowsWorldWritableWarningNotification,
 } from '@craft-agent/codex-types/v2';
 
 // ============================================================
@@ -238,7 +251,7 @@ export interface AppServerOptions {
  * Event types emitted by the client
  */
 export interface AppServerEvents {
-  // Server notifications (v2 protocol)
+  // Server notifications (v2 protocol) - Core
   'thread/started': ThreadStartedNotification;
   'thread/tokenUsage/updated': ThreadTokenUsageUpdatedNotification;
   'turn/started': TurnStartedNotification;
@@ -249,6 +262,22 @@ export interface AppServerEvents {
   'item/agentMessage/delta': AgentMessageDeltaNotification;
   'item/commandExecution/outputDelta': { threadId: string; turnId: string; itemId: string; delta: string };
   'item/reasoning/textDelta': { threadId: string; turnId: string; itemId: string; delta: string };
+
+  // Server notifications (v2 protocol) - Extended coverage (kept)
+  'codex/error': ErrorNotification;
+  'thread/compacted': ContextCompactedNotification;
+  'item/fileChange/outputDelta': FileChangeOutputDeltaNotification;
+  'item/mcpToolCall/progress': McpToolCallProgressNotification;
+  'item/commandExecution/terminalInteraction': TerminalInteractionNotification;
+
+  // Server notifications - Warnings
+  'configWarning': ConfigWarningNotification;
+  'windows/worldWritableWarning': WindowsWorldWritableWarningNotification;
+
+  // Server notifications - Legacy auth (debug only)
+  'authStatusChange': AuthStatusChangeNotification;
+  'loginChatGptComplete': LoginChatGptCompleteNotification;
+  'sessionConfigured': SessionConfiguredNotification;
 
   // Server requests (approval)
   'item/commandExecution/requestApproval': CommandExecutionRequestApprovalParams & { requestId: RequestId };
@@ -953,6 +982,53 @@ export class AppServerClient extends EventEmitter {
       // Token usage notifications
       case 'thread/tokenUsage/updated':
         this.emit('thread/tokenUsage/updated', params as ThreadTokenUsageUpdatedNotification);
+        break;
+
+      // Error notifications (critical)
+      case 'error':
+        this.emit('codex/error', params as ErrorNotification);
+        break;
+
+      // Context management
+      case 'thread/compacted':
+        this.emit('thread/compacted', params as ContextCompactedNotification);
+        break;
+
+      // File change streaming (debug only)
+      case 'item/fileChange/outputDelta':
+        this.emit('item/fileChange/outputDelta', params as FileChangeOutputDeltaNotification);
+        break;
+
+      // MCP tool progress
+      case 'item/mcpToolCall/progress':
+        this.emit('item/mcpToolCall/progress', params as McpToolCallProgressNotification);
+        break;
+
+      // Terminal interaction (future feature)
+      case 'item/commandExecution/terminalInteraction':
+        this.emit('item/commandExecution/terminalInteraction', params as TerminalInteractionNotification);
+        break;
+
+      // Warnings
+      case 'configWarning':
+        this.emit('configWarning', params as ConfigWarningNotification);
+        break;
+
+      case 'windows/worldWritableWarning':
+        this.emit('windows/worldWritableWarning', params as WindowsWorldWritableWarningNotification);
+        break;
+
+      // Legacy auth notifications (debug only)
+      case 'authStatusChange':
+        this.emit('authStatusChange', params as AuthStatusChangeNotification);
+        break;
+
+      case 'loginChatGptComplete':
+        this.emit('loginChatGptComplete', params as LoginChatGptCompleteNotification);
+        break;
+
+      case 'sessionConfigured':
+        this.emit('sessionConfigured', params as SessionConfiguredNotification);
         break;
 
       default:

@@ -39,7 +39,7 @@ export interface AppShellContextType {
   // from retaining the full messages array and causing memory leaks.
   workspaces: Workspace[]
   activeWorkspaceId: string | null
-  currentModel: string
+  modelDefaults: import('@craft-agent/shared/config/models').ModelDefaults
   /** When set, a custom model overrides the Anthropic model selector (e.g. OpenRouter) */
   customModel: string | null
   /** Current authentication type (determines which backend is active) */
@@ -107,8 +107,8 @@ export interface AppShellContextType {
   onOpenFile: (path: string) => void
   onOpenUrl: (url: string) => void
 
-  // Model
-  onModelChange: (model: string) => void
+  // Model defaults
+  refreshModelDefaults: () => Promise<void>
   /** Re-fetch custom model from billing config (call after API connection changes) */
   refreshCustomModel: () => Promise<void>
 

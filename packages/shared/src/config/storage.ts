@@ -35,7 +35,16 @@ import type { Workspace, AuthType } from '@craft-agent/core/types';
 // Import LLM connection types and constants
 import { DEFAULT_LLM_CONNECTION } from './llm-connections.ts';
 import type { LlmConnection } from './llm-connections.ts';
-import { ANTHROPIC_MODELS, OPENAI_MODELS } from './models.ts';
+import {
+  ANTHROPIC_MODELS,
+  OPENAI_MODELS,
+  type ModelDefaults,
+  type ModelProvider,
+  DEFAULT_MODEL,
+  DEFAULT_CODEX_MODEL,
+  getModelProvider,
+  isCodexModel,
+} from './models.ts';
 
 // Config stored in JSON file (credentials stored in encrypted file, not here)
 export interface StoredConfig {
@@ -47,6 +56,7 @@ export interface StoredConfig {
   activeWorkspaceId: string | null;
   activeSessionId: string | null;  // Currently active session (primary scope)
   model?: string;
+  modelDefaults?: ModelDefaults;
   // Notifications
   notificationsEnabled?: boolean;  // Desktop notifications for task completion (default: true)
   // Appearance
@@ -138,6 +148,13 @@ export function loadStoredConfig(): StoredConfig | null {
       config.activeWorkspaceId = config.workspaces[0]?.id || null;
     }
 
+    // Migrate legacy global model into provider-scoped defaults (in-memory)
+    if (config.model && !config.modelDefaults) {
+      const provider = getModelProvider(config.model) ?? (isCodexModel(config.model) ? 'openai' : 'anthropic');
+      config.modelDefaults = { [provider]: config.model };
+      delete config.model;
+    }
+
     // Ensure workspace folder structure exists for all workspaces
     for (const workspace of config.workspaces) {
       if (!isValidWorkspace(workspace.rootPath)) {
@@ -221,13 +238,56 @@ export async function updateApiKey(newApiKey: string): Promise<boolean> {
 
 export function getModel(): string | null {
   const config = loadStoredConfig();
-  return config?.model ?? null;
+  if (!config) return null;
+  if (config.model) return config.model;
+  if (config.modelDefaults?.anthropic) return config.modelDefaults.anthropic;
+  return null;
 }
 
 export function setModel(model: string): void {
   const config = loadStoredConfig();
   if (!config) return;
   config.model = model;
+  config.modelDefaults = { ...(config.modelDefaults ?? {}), anthropic: model };
+  saveConfig(config);
+}
+
+export function getModelDefaults(): { anthropic: string; openai: string } {
+  const config = loadStoredConfig();
+  const defaults: { anthropic: string; openai: string } = {
+    anthropic: DEFAULT_MODEL,
+    openai: DEFAULT_CODEX_MODEL,
+  };
+
+  if (!config) return defaults;
+
+  if (config.modelDefaults) {
+    return {
+      anthropic: config.modelDefaults.anthropic ?? defaults.anthropic,
+      openai: config.modelDefaults.openai ?? defaults.openai,
+    };
+  }
+
+  if (config.model) {
+    const provider = getModelProvider(config.model) ?? (isCodexModel(config.model) ? 'openai' : 'anthropic');
+    return {
+      anthropic: provider === 'anthropic' ? config.model : defaults.anthropic,
+      openai: provider === 'openai' ? config.model : defaults.openai,
+    };
+  }
+
+  return defaults;
+}
+
+export function setModelDefault(provider: ModelProvider, model: string): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+  const existing = config.modelDefaults ?? {};
+  config.modelDefaults = { ...existing, [provider]: model };
+  // Keep legacy field in sync for anthropic (backward compat)
+  if (provider === 'anthropic') {
+    config.model = model;
+  }
   saveConfig(config);
 }
 

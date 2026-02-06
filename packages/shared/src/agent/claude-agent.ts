@@ -2,7 +2,7 @@ import { query, createSdkMcpServer, tool, AbortError, type Query, type SDKMessag
 import { getDefaultOptions, resetClaudeConfigCheck } from './options.ts';
 import type { ContentBlockParam } from '@anthropic-ai/sdk/resources';
 import { z } from 'zod';
-import { getSystemPrompt, getDateTimeContext, getWorkingDirectoryContext } from '../prompts/system.ts';
+import { getSystemPrompt } from '../prompts/system.ts';
 import { BaseAgent, type MiniAgentConfig, MINI_AGENT_TOOLS, MINI_AGENT_MCP_KEYS } from './base-agent.ts';
 import type { BackendConfig, PermissionRequestType } from './backend/types.ts';
 // Plan types are used by UI components; not needed in craft-agent.ts since Safe Mode is user-controlled
@@ -32,7 +32,6 @@ import {
   cyclePermissionMode,
   initializeModeState,
   cleanupModeState,
-  formatSessionState,
   shouldAllowToolInMode,
   blockWithReason,
   isApiEndpointAllowed,
@@ -1802,25 +1801,8 @@ export class ClaudeAgent extends BaseAgent {
 
   // formatSourceState() and getAuthToolName() are now delegated to this.sourceManager
 
-  /**
-   * Format workspace capabilities for prompt injection.
-   * Informs the agent about what features are available in this workspace.
-   */
-  private formatWorkspaceCapabilities(): string {
-    const capabilities: string[] = [];
-
-    // Check local MCP server capability
-    const localMcpEnabled = isLocalMcpEnabled(this.workspaceRootPath);
-    if (localMcpEnabled) {
-      capabilities.push('local-mcp: enabled (stdio subprocess servers supported)');
-    } else {
-      capabilities.push('local-mcp: disabled (only HTTP/SSE servers)');
-    }
-
-    return `<workspace_capabilities>\n${capabilities.join('\n')}\n</workspace_capabilities>`;
-  }
-
   // buildRecoveryContext() is now inherited from BaseAgent
+  // formatWorkspaceCapabilities() is now in PromptBuilder
 
   /**
    * Build a simple text prompt with embedded text file contents (for text-only messages)
@@ -1830,31 +1812,15 @@ export class ClaudeAgent extends BaseAgent {
   private buildTextPrompt(text: string, attachments?: FileAttachment[]): string {
     const parts: string[] = [];
 
-    // Add date/time context first (moved from system prompt to enable caching)
-    parts.push(getDateTimeContext());
+    // Add context parts using centralized PromptBuilder
+    // This includes: date/time, session state (with plansFolderPath),
+    // workspace capabilities, and working directory context
+    const contextParts = this.promptBuilder.buildContextParts(
+      { plansFolderPath: getSessionPlansPath(this.workspaceRootPath, this.modeSessionId) },
+      this.sourceManager.formatSourceState()
+    );
 
-    // Add session state (always includes all modes with true/false state)
-    // This lightweight format replaces the verbose mode context
-    // Include plans folder path so agent knows where to write plans in safe mode
-    const plansFolderPath = getSessionPlansPath(this.workspaceRootPath, this.modeSessionId);
-    parts.push(formatSessionState(this.modeSessionId, { plansFolderPath }));
-
-    // Add source state (always included to inform agent about available sources)
-    parts.push(this.sourceManager.formatSourceState());
-
-    // Add workspace capabilities (local MCP enabled/disabled, etc.)
-    parts.push(this.formatWorkspaceCapabilities());
-
-    // Add working directory context
-    // Calculate effective working directory (same logic as cwd parameter)
-    const effectiveWorkingDir = this.config.session?.workingDirectory ??
-      (this.modeSessionId ? getSessionPath(this.workspaceRootPath, this.modeSessionId) : undefined);
-    const isSessionRoot = !this.config.session?.workingDirectory && !!this.modeSessionId;
-    // Pass sdkCwd so agent knows if bash runs from a different directory than workingDirectory
-    const workingDirContext = getWorkingDirectoryContext(effectiveWorkingDir, isSessionRoot, this.config.session?.sdkCwd);
-    if (workingDirContext) {
-      parts.push(workingDirContext);
-    }
+    parts.push(...contextParts);
 
     // Add file attachments with stored path info (agent uses Read tool to access content)
     // Text files are NOT embedded inline to prevent context overflow from large files
@@ -1887,30 +1853,16 @@ export class ClaudeAgent extends BaseAgent {
   private buildSDKUserMessage(text: string, attachments?: FileAttachment[]): SDKUserMessage {
     const contentBlocks: ContentBlockParam[] = [];
 
-    // Add date/time context first (moved from system prompt to enable caching)
-    contentBlocks.push({ type: 'text', text: getDateTimeContext() });
+    // Add context parts using centralized PromptBuilder
+    // This includes: date/time, session state (with plansFolderPath),
+    // workspace capabilities, and working directory context
+    const contextParts = this.promptBuilder.buildContextParts(
+      { plansFolderPath: getSessionPlansPath(this.workspaceRootPath, this.modeSessionId) },
+      this.sourceManager.formatSourceState()
+    );
 
-    // Add session state (always includes all modes with true/false state)
-    // This lightweight format replaces the verbose mode context
-    // Include plans folder path so agent knows where to write plans in safe mode
-    const plansFolderPath = getSessionPlansPath(this.workspaceRootPath, this.modeSessionId);
-    contentBlocks.push({ type: 'text', text: formatSessionState(this.modeSessionId, { plansFolderPath }) });
-
-    // Add source state (always included to inform agent about available sources)
-    contentBlocks.push({ type: 'text', text: this.sourceManager.formatSourceState() });
-
-    // Add workspace capabilities (local MCP enabled/disabled, etc.)
-    contentBlocks.push({ type: 'text', text: this.formatWorkspaceCapabilities() });
-
-    // Add working directory context
-    // Calculate effective working directory (same logic as cwd parameter)
-    const effectiveWorkingDirSdk = this.config.session?.workingDirectory ??
-      (this.modeSessionId ? getSessionPath(this.workspaceRootPath, this.modeSessionId) : undefined);
-    const isSessionRootSdk = !this.config.session?.workingDirectory && !!this.modeSessionId;
-    // Pass sdkCwd so agent knows if bash runs from a different directory than workingDirectory
-    const workingDirContextSdk = getWorkingDirectoryContext(effectiveWorkingDirSdk, isSessionRootSdk, this.config.session?.sdkCwd);
-    if (workingDirContextSdk) {
-      contentBlocks.push({ type: 'text', text: workingDirContextSdk });
+    for (const part of contextParts) {
+      contentBlocks.push({ type: 'text', text: part });
     }
 
     // Add attachments - images/PDFs are uploaded inline, text files are path-only

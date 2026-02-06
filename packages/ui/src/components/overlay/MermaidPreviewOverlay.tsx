@@ -41,7 +41,7 @@ const ZOOM_PRESETS = [25, 50, 75, 100, 150, 200, 400]
 function parseSvgDimensions(svgString: string): { width: number; height: number } | null {
   const widthMatch = svgString.match(/width="(\d+(?:\.\d+)?)"/)
   const heightMatch = svgString.match(/height="(\d+(?:\.\d+)?)"/)
-  if (!widthMatch || !heightMatch) return null
+  if (!widthMatch?.[1] || !heightMatch?.[1]) return null
   return { width: parseFloat(widthMatch[1]), height: parseFloat(heightMatch[1]) }
 }
 

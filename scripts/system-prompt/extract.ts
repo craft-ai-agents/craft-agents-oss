@@ -85,7 +85,7 @@ async function main() {
     const q = query({
       prompt: 'Say "test" and stop.',
       options: {
-        model: 'claude-opus-4-5-20251101',
+        model: 'claude-opus-4-6',
         systemPrompt: {
           type: 'preset',
           preset: 'claude_code',

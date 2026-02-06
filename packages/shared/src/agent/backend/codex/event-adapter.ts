@@ -25,6 +25,12 @@ import type {
   ThreadStartedNotification,
   FileUpdateChange,
   CommandAction,
+  // Kept notifications
+  ErrorNotification,
+  ContextCompactedNotification,
+  McpToolCallProgressNotification,
+  ConfigWarningNotification,
+  WindowsWorldWritableWarningNotification,
 } from '@craft-agent/codex-types/v2';
 
 // Simplified notification types for delta events
@@ -187,12 +193,20 @@ export class EventAdapter {
           break;
         }
 
-        // Not a read command - emit as Bash
-        yield this.createToolStart(item.id, 'Bash', {
-          command: item.command,
-          cwd: item.cwd,
-          description: item.description,
-        });
+        // Use LLM-provided displayName from Codex, fall back to commandActions classification
+        const displayName = item.displayName ?? this.getCommandDisplayName(item.commandActions);
+
+        yield this.createToolStart(
+          item.id,
+          'Bash',
+          {
+            command: item.command,
+            cwd: item.cwd,
+            description: item.description,
+          },
+          item.description ?? undefined,  // intent from Codex description (convert null to undefined)
+          displayName ?? undefined,       // displayName from LLM or commandActions
+        );
         break;
       }
 
@@ -372,14 +386,38 @@ export class EventAdapter {
     id: string,
     toolName: string,
     input: Record<string, unknown>,
+    intent?: string,
+    displayName?: string,
   ): AgentEvent {
     return {
       type: 'tool_start',
       toolName,
       toolUseId: id,
       input,
+      intent,
+      displayName,
       turnId: this.currentTurnId || undefined,
     };
+  }
+
+  /**
+   * Derive a semantic display name from Codex commandActions.
+   * Maps command action types to human-readable names.
+   */
+  private getCommandDisplayName(commandActions: CommandAction[]): string | undefined {
+    const firstAction = commandActions[0];
+    if (!firstAction) return undefined;
+
+    switch (firstAction.type) {
+      case 'read':
+        return 'Read File';
+      case 'listFiles':
+        return 'List Files';
+      case 'search':
+        return 'Search';
+      default:
+        return undefined; // Keep as "Bash" for unknown actions
+    }
   }
 
   /**
@@ -438,7 +476,7 @@ export class EventAdapter {
    * Create tool result for MCP tool calls.
    */
   private createMcpResult(item: ThreadItem & { type: 'mcpToolCall' }): AgentEvent {
-    const isError = item.status === 'failed' || item.error !== undefined;
+    const isError = item.status === 'failed' || item.error != null;
     let result: string;
 
     if (item.error) {
@@ -503,6 +541,71 @@ export class EventAdapter {
       text,
       isIntermediate: true,
       turnId: this.currentTurnId || undefined,
+    };
+  }
+
+  // ============================================================
+  // Phase 1: Extended Protocol Coverage (using existing UI patterns)
+  // ============================================================
+
+  /**
+   * Adapt error notification to AgentEvent.
+   * Surfaces Codex server errors to the UI.
+   */
+  *adaptError(notification: ErrorNotification): Generator<AgentEvent> {
+    // ErrorNotification has { error: TurnError, ... } where TurnError has { message: string, ... }
+    const errorMessage = notification.error?.message || 'An error occurred';
+    yield {
+      type: 'error',
+      message: errorMessage,
+    };
+  }
+
+  /**
+   * Adapt context compacted notification.
+   * Shows status message when Codex auto-compacts context.
+   */
+  *adaptContextCompacted(_notification: ContextCompactedNotification): Generator<AgentEvent> {
+    yield {
+      type: 'status',
+      message: 'Context compacted to fit within limits',
+    };
+  }
+
+  /**
+   * Adapt MCP tool call progress notification.
+   * Shows progress for long-running MCP operations.
+   */
+  *adaptMcpToolCallProgress(notification: McpToolCallProgressNotification): Generator<AgentEvent> {
+    if (notification.message) {
+      yield {
+        type: 'status',
+        message: notification.message,
+      };
+    }
+  }
+
+  /**
+   * Adapt config warning notification.
+   * Shows info message about configuration issues.
+   */
+  *adaptConfigWarning(notification: ConfigWarningNotification): Generator<AgentEvent> {
+    yield {
+      type: 'info',
+      message: `Config warning: ${notification.summary || 'Configuration issue'}`,
+    };
+  }
+
+  /**
+   * Adapt Windows world-writable warning notification.
+   * Shows info message about security concerns.
+   */
+  *adaptWindowsWarning(notification: WindowsWorldWritableWarningNotification): Generator<AgentEvent> {
+    const paths = notification.samplePaths.slice(0, 3).join(', ');
+    const extra = notification.extraCount > 0 ? ` (+${notification.extraCount} more)` : '';
+    yield {
+      type: 'info',
+      message: `Security: World-writable paths found: ${paths}${extra}`,
     };
   }
 }
