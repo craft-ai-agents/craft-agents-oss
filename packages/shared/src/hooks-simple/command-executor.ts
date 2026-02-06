@@ -48,9 +48,9 @@ export function clearPermissionsContext(): void {
  * - Commands not matching any pattern are blocked
  */
 export function isCommandAllowed(command: string): { allowed: boolean; reason?: string } {
-  // If no permissions config, allow all (permissive fallback for testing)
+  // If no permissions config, block all (fail-closed)
   if (!permissionsConfig) {
-    return { allowed: true };
+    return { allowed: false, reason: 'Permissions not initialized' };
   }
 
   // Use the global bash permission checker
@@ -106,6 +106,9 @@ export async function executeCommand(
   options: CommandExecutionOptions
 ): Promise<CommandExecutionResult> {
   // Check permissions unless allow-all mode
+  if (options.permissionMode === 'allow-all') {
+    console.warn(`[hooks] WARNING: Executing command in allow-all mode (bypasses security checks): ${command}`);
+  }
   if (options.permissionMode !== 'allow-all') {
     const permission = isCommandAllowed(command);
     if (!permission.allowed) {

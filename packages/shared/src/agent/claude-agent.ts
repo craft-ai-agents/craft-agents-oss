@@ -52,7 +52,7 @@ import { detectConfigFileType, detectAppConfigFileType, validateConfigFileConten
 import { type ThinkingLevel, getThinkingTokens, DEFAULT_THINKING_LEVEL } from './thinking-levels.ts';
 import type { LoadedSource } from '../sources/types.ts';
 import { sourceNeedsAuthentication } from '../sources/credential-manager.ts';
-import { buildSdkHooks, type SdkHookCallbackMatcher } from '../hooks-simple/index.ts';
+import { HookSystem, type SdkHookCallbackMatcher } from '../hooks-simple/index.ts';
 
 // Re-export permission mode functions for application usage
 export {
@@ -950,8 +950,14 @@ export class CraftAgent {
         // Use PreToolUse hook to intercept tool calls (plan mode blocking happens here)
         // User hooks from hooks.json are merged with internal hooks
         hooks: (() => {
-          // Build user-defined hooks from hooks.json for SDK events
-          const userHooks = buildSdkHooks();
+          // Build user-defined hooks from hooks.json for SDK events using HookSystem
+          const hookSystem = new HookSystem({
+            workspaceRootPath: this.workspaceRootPath,
+            workspaceId: this.config.workspace?.id ?? 'default',
+            workingDir: this.config.session?.workingDirectory,
+            activeSourceSlugs: Array.from(this.activeSourceServerNames),
+          });
+          const userHooks = hookSystem.buildSdkHooks();
           if (Object.keys(userHooks).length > 0) {
             debug('[CraftAgent] User SDK hooks loaded:', Object.keys(userHooks).join(', '));
           }

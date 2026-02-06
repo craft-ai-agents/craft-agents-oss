@@ -9,7 +9,7 @@
  */
 
 import type { EventBus, BaseEventPayload } from '../event-bus.ts';
-import type { HookEvent, HooksConfig, HookMatcher, PendingPrompt } from '../index.ts';
+import type { HookEvent, HooksConfig, HookMatcher, PendingPrompt } from '../types.ts';
 
 // ============================================================================
 // Handler Interface

@@ -44,8 +44,6 @@
     "./labels/storage": "./src/labels/storage.ts",
     "./views": "./src/views/index.ts",
     "./views/storage": "./src/views/storage.ts",
-    "./hooks": "./src/hooks/index.ts",
-    "./hooks/types": "./src/hooks/types.ts",
     "./hooks-simple": "./src/hooks-simple/index.ts",
     "./scheduler": "./src/scheduler/index.ts",
     "./validation": "./src/validation/index.ts",

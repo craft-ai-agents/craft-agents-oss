@@ -13,7 +13,7 @@
  */
 
 import { createLogger } from '../utils/debug.ts';
-import type { AppEvent, AgentEvent, HookEvent } from './index.ts';
+import type { AppEvent, AgentEvent, HookEvent } from './types.ts';
 
 const log = createLogger('event-bus');
 

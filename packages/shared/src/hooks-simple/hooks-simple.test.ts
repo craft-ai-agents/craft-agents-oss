@@ -202,10 +202,12 @@ describe('hooks-simple', () => {
   });
 
   describe('command permissions (allowlist-based)', () => {
-    test('isCommandAllowed allows all when no permissions context (permissive fallback)', () => {
-      // Without permissions context set, all commands are allowed
+    test('isCommandAllowed blocks all when no permissions context (fail-closed)', () => {
+      // Without permissions context set, all commands are blocked
       clearHooks(); // This clears permissions context
-      expect(isCommandAllowed('any-command')).toEqual({ allowed: true });
+      const result = isCommandAllowed('any-command');
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toBe('Permissions not initialized');
     });
 
     test('isCommandAllowed uses global permission patterns when context is set', () => {

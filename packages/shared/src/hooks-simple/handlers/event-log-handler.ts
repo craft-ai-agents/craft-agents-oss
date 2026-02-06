@@ -8,7 +8,7 @@
 import { createLogger } from '../../utils/debug.ts';
 import type { EventBus, BaseEventPayload } from '../event-bus.ts';
 import type { HookHandler, EventLogHandlerOptions } from './types.ts';
-import type { HookEvent } from '../index.ts';
+import type { HookEvent } from '../types.ts';
 import { HookEventLogger } from '../event-logger.ts';
 
 const log = createLogger('event-log-handler');

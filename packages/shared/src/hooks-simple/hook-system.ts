@@ -20,26 +20,17 @@ import { join } from 'node:path';
 import { createLogger } from '../utils/debug.ts';
 import { WorkspaceEventBus, type EventPayloadMap } from './event-bus.ts';
 import { CommandHandler, PromptHandler, EventLogHandler, type HooksConfigProvider } from './handlers/index.ts';
-import type { HooksConfig, HookEvent, HookMatcher, PendingPrompt, AppEvent } from './index.ts';
-import { validateHooksConfig } from './index.ts';
+import { AGENT_EVENTS, type HooksConfig, type HookEvent, type HookMatcher, type PendingPrompt, type AppEvent, type AgentEvent, type CommandHookDefinition, type SdkHookInput, type SdkHookCallbackMatcher } from './types.ts';
+import { validateHooksConfig } from './validation.ts';
+import { buildEnvFromSdkInput } from './sdk-bridge.ts';
+import { executeCommand } from './command-executor.ts';
 import { SchedulerService, type SchedulerTickPayload } from '../scheduler/scheduler-service.ts';
 
 const log = createLogger('hook-system');
 
-// ============================================================================
-// Session Metadata Snapshot (for diffing)
-// ============================================================================
-
-/**
- * Lightweight session metadata for diffing.
- * Only includes fields that trigger hooks.
- */
-export interface SessionMetadataSnapshot {
-  permissionMode?: string;
-  labels?: string[];
-  isFlagged?: boolean;
-  todoState?: string;
-}
+// Re-export SessionMetadataSnapshot from types (single source of truth)
+export type { SessionMetadataSnapshot } from './types.ts';
+import type { SessionMetadataSnapshot } from './types.ts';
 
 // ============================================================================
 // HookSystem Options
@@ -406,6 +397,84 @@ export class HookSystem implements HooksConfigProvider {
    */
   async emit<T extends HookEvent>(event: T, payload: EventPayloadMap[T]): Promise<void> {
     await this.eventBus.emit(event, payload);
+  }
+
+  // ============================================================================
+  // SDK Hook Integration
+  // ============================================================================
+
+  /**
+   * Build SDK hooks callbacks from hooks.json definitions.
+   * This is the bridge between hooks.json and the Claude SDK hook system.
+   *
+   * Returns a partial record of event name -> array of hook matchers in SDK format.
+   * The caller should merge these with any internal hooks.
+   */
+  buildSdkHooks(): Partial<Record<AgentEvent, SdkHookCallbackMatcher[]>> {
+    if (!this.config) return {};
+
+    const sdkHooks: Partial<Record<AgentEvent, SdkHookCallbackMatcher[]>> = {};
+
+    for (const event of AGENT_EVENTS) {
+      const matchers = this.config.hooks[event];
+      if (!matchers?.length) continue;
+
+      sdkHooks[event] = matchers.map(matcher => ({
+        matcher: matcher.matcher,
+        timeout: 30,
+        hooks: [async (input: SdkHookInput, _toolUseId: string, options: { signal?: AbortSignal }) => {
+          // Build environment variables from SDK input
+          const env = buildEnvFromSdkInput(event, input);
+
+          // Execute command hooks for this matcher
+          const result = await this.executeHooksForSdkMatcher(matcher, event, env, options.signal);
+
+          return result;
+        }],
+      }));
+    }
+
+    return sdkHooks;
+  }
+
+  /**
+   * Execute command hooks for a matcher and return SDK-compatible result.
+   */
+  private async executeHooksForSdkMatcher(
+    matcher: HookMatcher,
+    event: AgentEvent,
+    env: Record<string, string>,
+    signal?: AbortSignal
+  ): Promise<{ continue: boolean; reason?: string }> {
+    const commandHooks = matcher.hooks.filter((h): h is CommandHookDefinition => h.type === 'command');
+
+    if (commandHooks.length === 0) {
+      return { continue: true };
+    }
+
+    for (const hook of commandHooks) {
+      if (signal?.aborted) {
+        return { continue: false, reason: 'Aborted' };
+      }
+
+      const result = await executeCommand(hook.command, {
+        env,
+        timeout: hook.timeout ?? 60000,
+        cwd: this.options.workingDir,
+        permissionMode: matcher.permissionMode,
+      });
+
+      if (result.blocked) {
+        console.warn(`[HookSystem] Blocked command in ${event}: ${hook.command} - ${result.stderr}`);
+        continue;
+      }
+
+      if (!result.success) {
+        console.warn(`[HookSystem] Command failed in ${event}: ${hook.command}`, result.stderr);
+      }
+    }
+
+    return { continue: true };
   }
 
   // ============================================================================

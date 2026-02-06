@@ -8,7 +8,7 @@
 import { appendFile } from 'fs/promises';
 import { join } from 'path';
 import { randomUUID } from 'crypto';
-import type { HookExecutionResult } from './index.ts';
+import type { HookExecutionResult } from './types.ts';
 
 // ============================================================================
 // Types
