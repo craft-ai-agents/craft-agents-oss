@@ -850,9 +850,12 @@ export class CraftAgent {
           };
       
       // Configure SDK options
-      // Resolve model: use tier name when using custom API (OpenRouter), else specific version
+      // Use the model set on this agent (via setModel or constructor).
+      // When a user explicitly selects a model (custom or Anthropic), the session's
+      // updateSessionModel calls agent.setModel(model) directly with the exact ID.
+      // We only need resolveModelId for initial fallback when no explicit model was set.
       const modelConfig = this.config.model || DEFAULT_MODEL;
-      const model = resolveModelId(modelConfig);
+      const model = this.config.model || resolveModelId(DEFAULT_MODEL);
 
       // Log provider context for diagnostics (custom base URL = third-party provider)
       const activeBaseUrl = getAnthropicBaseUrl();

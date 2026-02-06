@@ -36,6 +36,7 @@ export interface StoredConfig {
   authType?: AuthType;
   anthropicBaseUrl?: string;  // Custom Anthropic API base URL (for third-party compatible APIs)
   customModel?: string;  // Custom model ID override (for third-party APIs like OpenRouter, Ollama)
+  customModels?: string[];  // List of available custom model IDs for third-party APIs (user can switch between these)
   workspaces: Workspace[];
   activeWorkspaceId: string | null;
   activeSessionId: string | null;  // Currently active session (primary scope)
@@ -1156,6 +1157,44 @@ export function setCustomModel(model: string | null): void {
   if (model?.trim()) {
     config.customModel = model.trim();
   } else {
+    delete config.customModel;
+  }
+  saveConfig(config);
+}
+
+/**
+ * Get the list of custom model IDs for third-party APIs.
+ * Returns models the user has configured (e.g. from OpenRouter, Ollama).
+ * Falls back to a single-item array from customModel if customModels is not set.
+ */
+export function getCustomModels(): string[] {
+  const config = loadStoredConfig();
+  if (config?.customModels && config.customModels.length > 0) {
+    return config.customModels;
+  }
+  // Backward compat: if only customModel is set, treat as single-item list
+  const single = config?.customModel?.trim();
+  return single ? [single] : [];
+}
+
+/**
+ * Set the list of custom model IDs for third-party APIs.
+ * Also updates customModel to the first item (active model).
+ * Pass empty array to clear.
+ */
+export function setCustomModels(models: string[]): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+
+  const cleaned = models.map(m => m.trim()).filter(Boolean);
+  if (cleaned.length > 0) {
+    config.customModels = cleaned;
+    // Keep customModel in sync — it's the active model
+    if (!config.customModel || !cleaned.includes(config.customModel)) {
+      config.customModel = cleaned[0];
+    }
+  } else {
+    delete config.customModels;
     delete config.customModel;
   }
   saveConfig(config);

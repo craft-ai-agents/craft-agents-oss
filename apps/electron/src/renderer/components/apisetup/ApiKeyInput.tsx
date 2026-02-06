@@ -2,7 +2,7 @@
  * ApiKeyInput - Reusable API key entry form control
  *
  * Renders a password input for the API key, a preset selector for Base URL,
- * and an optional Model override field.
+ * and an optional multi-model input field (tag/chip input for adding multiple models).
  *
  * Does NOT include layout wrappers or action buttons — the parent
  * controls placement via the form ID ("api-key-form") for submit binding.
@@ -10,7 +10,7 @@
  * Used in: Onboarding CredentialsStep, Settings API dialog
  */
 
-import { useState } from "react"
+import { useState, useRef, useCallback, type KeyboardEvent } from "react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -20,7 +20,7 @@ import {
   StyledDropdownMenuItem,
 } from "@/components/ui/styled-dropdown"
 import { cn } from "@/lib/utils"
-import { Check, ChevronDown, Eye, EyeOff } from "lucide-react"
+import { Check, ChevronDown, Eye, EyeOff, X } from "lucide-react"
 
 export type ApiKeyStatus = 'idle' | 'validating' | 'success' | 'error'
 
@@ -28,6 +28,7 @@ export interface ApiKeySubmitData {
   apiKey: string
   baseUrl?: string
   customModel?: string
+  customModels?: string[]
 }
 
 export interface ApiKeyInputProps {
@@ -75,7 +76,9 @@ export function ApiKeyInput({
   const [showValue, setShowValue] = useState(false)
   const [baseUrl, setBaseUrl] = useState(PRESETS[0].url)
   const [activePreset, setActivePreset] = useState<PresetKey>('anthropic')
-  const [customModel, setCustomModel] = useState('')
+  const [customModels, setCustomModels] = useState<string[]>([])
+  const [modelInput, setModelInput] = useState('')
+  const modelInputRef = useRef<HTMLInputElement>(null)
 
   const isDisabled = disabled || status === 'validating'
 
@@ -87,11 +90,12 @@ export function ApiKeyInput({
       setBaseUrl(preset.url)
     }
     // Pre-fill recommended model for Ollama; clear for all others
-    // (Anthropic hides the field entirely, others default to Claude model IDs when empty)
     if (preset.key === 'ollama') {
-      setCustomModel('qwen3-coder')
+      setCustomModels(['qwen3-coder'])
+      setModelInput('')
     } else {
-      setCustomModel('')
+      setCustomModels([])
+      setModelInput('')
     }
   }
 
@@ -100,16 +104,49 @@ export function ApiKeyInput({
     setActivePreset(getPresetForUrl(value))
   }
 
+  const addModel = useCallback((model: string) => {
+    const trimmed = model.trim()
+    if (trimmed && !customModels.includes(trimmed)) {
+      setCustomModels(prev => [...prev, trimmed])
+    }
+    setModelInput('')
+  }, [customModels])
+
+  const removeModel = useCallback((model: string) => {
+    setCustomModels(prev => prev.filter(m => m !== model))
+  }, [])
+
+  const handleModelKeyDown = useCallback((e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      if (modelInput.trim()) {
+        addModel(modelInput)
+      }
+    } else if (e.key === 'Backspace' && !modelInput && customModels.length > 0) {
+      // Remove last model when backspacing on empty input
+      setCustomModels(prev => prev.slice(0, -1))
+    }
+  }, [modelInput, customModels, addModel])
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    // Always call onSubmit — the hook decides whether an empty key is valid
-    // (custom endpoints like Ollama don't require API keys)
+    // If there's text in the model input, add it as a model before submitting
+    const finalModels = [...customModels]
+    if (modelInput.trim()) {
+      const trimmed = modelInput.trim()
+      if (!finalModels.includes(trimmed)) {
+        finalModels.push(trimmed)
+      }
+    }
+
     const effectiveBaseUrl = baseUrl.trim()
     const isDefault = effectiveBaseUrl === PRESETS[0].url || !effectiveBaseUrl
     onSubmit({
       apiKey: apiKey.trim(),
       baseUrl: isDefault ? undefined : effectiveBaseUrl,
-      customModel: customModel.trim() || undefined,
+      // First model is the default/active model (backward compat)
+      customModel: finalModels[0] || undefined,
+      customModels: finalModels.length > 0 ? finalModels : undefined,
     })
   }
 
@@ -192,22 +229,46 @@ export function ApiKeyInput({
         </div>
       </div>
 
-      {/* Custom Model (optional) — hidden for Anthropic since it uses its own model routing */}
+      {/* Custom Models (optional) — hidden for Anthropic since it uses its own model routing */}
       {activePreset !== 'anthropic' && (
         <div className="space-y-2">
           <Label htmlFor="custom-model" className="text-muted-foreground font-normal">
-            Model <span className="text-foreground/30">· optional</span>
+            Models <span className="text-foreground/30">· optional, press Enter to add</span>
           </Label>
+          {/* Model tags */}
+          {customModels.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {customModels.map((model) => (
+                <span
+                  key={model}
+                  className="inline-flex items-center gap-1 h-6 pl-2 pr-1 rounded-md bg-foreground/8 text-xs font-medium text-foreground/80"
+                >
+                  {model}
+                  <button
+                    type="button"
+                    onClick={() => removeModel(model)}
+                    disabled={isDisabled}
+                    className="inline-flex items-center justify-center size-4 rounded hover:bg-foreground/10 text-foreground/40 hover:text-foreground/70 transition-colors"
+                  >
+                    <X className="size-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          {/* Model input */}
           <div className={cn(
             "rounded-md shadow-minimal transition-colors",
             "bg-foreground-2 focus-within:bg-background"
           )}>
             <Input
+              ref={modelInputRef}
               id="custom-model"
               type="text"
-              value={customModel}
-              onChange={(e) => setCustomModel(e.target.value)}
-              placeholder="e.g. openai/gpt-5, qwen3-coder"
+              value={modelInput}
+              onChange={(e) => setModelInput(e.target.value)}
+              onKeyDown={handleModelKeyDown}
+              placeholder={customModels.length > 0 ? "Add another model..." : "e.g. openai/gpt-5, qwen3-coder"}
               className="border-0 bg-transparent shadow-none"
               disabled={isDisabled}
             />
@@ -215,7 +276,7 @@ export function ApiKeyInput({
           {/* Contextual help links for providers that need model format guidance */}
           {activePreset === 'openrouter' && (
             <p className="text-xs text-foreground/30">
-              Leave empty for Claude models. Only set for non-Claude models.
+              Leave empty for Claude models. Add non-Claude models to switch between them.
               <br />
               Format: <code className="text-foreground/40">provider/model-name</code>.{' '}
               <a href="https://openrouter.ai/models" target="_blank" rel="noopener noreferrer" className="text-foreground/50 underline hover:text-foreground/70">
@@ -225,7 +286,7 @@ export function ApiKeyInput({
           )}
           {activePreset === 'vercel' && (
             <p className="text-xs text-foreground/30">
-              Leave empty for Claude models. Only set for non-Claude models.
+              Leave empty for Claude models. Add non-Claude models to switch between them.
               <br />
               Format: <code className="text-foreground/40">provider/model-name</code>.{' '}
               <a href="https://vercel.com/docs/ai-gateway" target="_blank" rel="noopener noreferrer" className="text-foreground/50 underline hover:text-foreground/70">
@@ -235,7 +296,7 @@ export function ApiKeyInput({
           )}
           {activePreset === 'ollama' && (
             <p className="text-xs text-foreground/30">
-              Use any model pulled via <code className="text-foreground/40">ollama pull</code>. No API key required.
+              Add models pulled via <code className="text-foreground/40">ollama pull</code>. No API key required.
             </p>
           )}
           {(activePreset === 'custom' || !activePreset) && (

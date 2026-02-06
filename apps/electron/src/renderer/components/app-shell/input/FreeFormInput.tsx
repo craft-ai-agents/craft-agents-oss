@@ -242,6 +242,7 @@ export function FreeFormInput({
   // Uses optional variant so playground (no provider) doesn't crash.
   const appShellCtx = useOptionalAppShellContext()
   const customModel = appShellCtx?.customModel ?? null
+  const customModels = appShellCtx?.customModels ?? []
   // Access todoStates and onTodoStateChange from context for the # menu state picker
   const todoStates = appShellCtx?.todoStates ?? []
   const onTodoStateChange = appShellCtx?.onTodoStateChange
@@ -1535,15 +1536,34 @@ export function FreeFormInput({
                   >
                     {/* Show custom model name when a custom API connection is active */}
                     {getModelShortName(customModel || currentModel)}
-                    {!customModel && <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />}
+                    {(!customModel || customModels.length > 1) && <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />}
                   </button>
                 </DropdownMenuTrigger>
               </TooltipTrigger>
               <TooltipContent side="top">Model</TooltipContent>
             </Tooltip>
             <StyledDropdownMenuContent side="top" align="end" sideOffset={8} className="min-w-[240px]">
-              {/* When custom model is active, show it as a static item instead of Anthropic options */}
-              {customModel ? (
+              {/* When custom models are configured, show them as selectable options */}
+              {customModels.length > 1 ? (
+                customModels.map((model) => {
+                  const isSelected = customModel === model
+                  return (
+                    <StyledDropdownMenuItem
+                      key={model}
+                      onSelect={() => onModelChange(model)}
+                      className="flex items-center justify-between px-2 py-2 rounded-lg cursor-pointer"
+                    >
+                      <div className="text-left">
+                        <div className="font-medium text-sm">{getModelShortName(model)}</div>
+                        <div className="text-xs text-muted-foreground">Custom API</div>
+                      </div>
+                      {isSelected && (
+                        <Check className="h-4 w-4 text-foreground shrink-0 ml-3" />
+                      )}
+                    </StyledDropdownMenuItem>
+                  )
+                })
+              ) : customModel ? (
                 <StyledDropdownMenuItem
                   disabled
                   className="flex items-center justify-between px-2 py-2 rounded-lg"

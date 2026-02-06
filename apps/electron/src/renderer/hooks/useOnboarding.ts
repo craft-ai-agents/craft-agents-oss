@@ -112,7 +112,7 @@ export function useOnboarding({
   }, [])
 
   // Save configuration
-  const handleSaveConfig = useCallback(async (credential?: string, options?: { baseUrl?: string; customModel?: string }) => {
+  const handleSaveConfig = useCallback(async (credential?: string, options?: { baseUrl?: string; customModel?: string; customModels?: string[] }) => {
     if (!state.apiSetupMethod) {
       console.log('[Onboarding] No API setup method selected, returning early')
       return
@@ -129,6 +129,7 @@ export function useOnboarding({
         credential,
         anthropicBaseUrl: options?.baseUrl || null,
         customModel: options?.customModel || null,
+        customModels: options?.customModels || null,
       })
 
       if (result.success) {
@@ -246,7 +247,7 @@ export function useOnboarding({
         return
       }
 
-      await handleSaveConfig(data.apiKey, { baseUrl: data.baseUrl, customModel: data.customModel })
+      await handleSaveConfig(data.apiKey, { baseUrl: data.baseUrl, customModel: data.customModel, customModels: data.customModels })
 
       setState(s => ({
         ...s,

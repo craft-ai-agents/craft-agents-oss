@@ -35,6 +35,8 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
   const {
     activeWorkspaceId,
     currentModel,
+    customModels,
+    refreshCustomModel,
     onSendMessage,
     onOpenFile,
     onOpenUrl,
@@ -162,11 +164,23 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
   }, [sessionId, onInputChange])
 
   // Session model change handler - persists per-session model
+  // For custom models, also updates the active customModel in config so resolveModelId picks it up
   const handleModelChange = React.useCallback((model: string) => {
     if (activeWorkspaceId) {
       window.electronAPI.setSessionModel(sessionId, activeWorkspaceId, model)
     }
-  }, [sessionId, activeWorkspaceId])
+    // Also update the global customModel if this is a custom model from the list
+    if (customModels.includes(model)) {
+      window.electronAPI.updateApiSetup(
+        'api_key',      // preserve auth type
+        undefined,       // don't change credential
+        undefined,       // don't change base URL
+        model,           // set as active custom model
+        undefined,       // don't change custom models list
+      )
+      refreshCustomModel()
+    }
+  }, [sessionId, activeWorkspaceId, customModels, refreshCustomModel])
 
   // Effective model for this session (session-specific or global fallback)
   const effectiveModel = session?.model || currentModel

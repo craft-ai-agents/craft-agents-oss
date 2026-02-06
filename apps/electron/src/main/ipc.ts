@@ -11,7 +11,7 @@ import { WindowManager } from './window-manager'
 import { registerOnboardingHandlers } from './onboarding'
 import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type AuthType, type ApiSetupInfo, type SendMessageOptions } from '../shared/types'
 import { readFileAttachment, perf, validateImageForClaudeAPI, IMAGE_LIMITS } from '@craft-agent/shared/utils'
-import { getAuthType, setAuthType, getPreferencesPath, getCustomModel, setCustomModel, getModel, setModel, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, getAnthropicBaseUrl, setAnthropicBaseUrl, loadStoredConfig, saveConfig, resolveModelId, type Workspace, SUMMARIZATION_MODEL } from '@craft-agent/shared/config'
+import { getAuthType, setAuthType, getPreferencesPath, getCustomModel, setCustomModel, getCustomModels, setCustomModels, getModel, setModel, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, getAnthropicBaseUrl, setAnthropicBaseUrl, loadStoredConfig, saveConfig, resolveModelId, type Workspace, SUMMARIZATION_MODEL } from '@craft-agent/shared/config'
 import { getSessionAttachmentsPath, validateSessionId } from '@craft-agent/shared/sessions'
 import { loadWorkspaceSources, getSourcesBySlugs, type LoadedSource } from '@craft-agent/shared/sources'
 import { isValidThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
@@ -1197,11 +1197,14 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     let apiKey: string | undefined
     let anthropicBaseUrl: string | undefined
     let customModel: string | undefined
+    let customModels: string[] | undefined
 
     if (authType === 'api_key') {
       apiKey = await manager.getApiKey() ?? undefined
       anthropicBaseUrl = getAnthropicBaseUrl() ?? undefined
       customModel = getCustomModel() ?? undefined
+      customModels = getCustomModels()
+      if (customModels.length === 0) customModels = undefined
       // Keyless providers (Ollama) are valid when a custom base URL is configured
       hasCredential = !!apiKey || !!anthropicBaseUrl
     } else if (authType === 'oauth_token') {
@@ -1214,11 +1217,12 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       apiKey,
       anthropicBaseUrl,
       customModel,
+      customModels,
     }
   })
 
   // Update API setup and credential
-  ipcMain.handle(IPC_CHANNELS.SETTINGS_UPDATE_API_SETUP, async (_event, authType: AuthType, credential?: string, anthropicBaseUrl?: string | null, customModel?: string | null) => {
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_UPDATE_API_SETUP, async (_event, authType: AuthType, credential?: string, anthropicBaseUrl?: string | null, customModel?: string | null, customModels?: string[] | null) => {
     const manager = getCredentialManager()
 
     // Clear old credentials when switching auth types
@@ -1256,6 +1260,16 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
         ipcLog.info('Custom model set:', customModel)
       } else {
         ipcLog.info('Custom model cleared')
+      }
+    }
+
+    // Update custom models list (null to clear, undefined to keep unchanged)
+    if (customModels !== undefined) {
+      setCustomModels(customModels ?? [])
+      if (customModels && customModels.length > 0) {
+        ipcLog.info('Custom models set:', customModels)
+      } else {
+        ipcLog.info('Custom models cleared')
       }
     }
 

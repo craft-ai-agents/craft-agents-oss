@@ -84,6 +84,7 @@ export function registerOnboardingHandlers(sessionManager: SessionManager): void
     mcpCredentials?: { accessToken: string; clientId?: string }
     anthropicBaseUrl?: string | null
     customModel?: string | null
+    customModels?: string[] | null
   }): Promise<OnboardingSaveResult> => {
     mainLog.info('[Onboarding:Main] ONBOARDING_SAVE_CONFIG received', {
       authType: config.authType,
@@ -156,6 +157,20 @@ export function registerOnboardingHandlers(sessionManager: SessionManager): void
           newConfig.customModel = config.customModel.trim()
         } else {
           delete newConfig.customModel
+        }
+      }
+
+      // 3c. Update customModels if provided
+      if (config.customModels !== undefined) {
+        mainLog.info('[Onboarding:Main] Updating customModels to', config.customModels)
+        if (config.customModels && config.customModels.length > 0) {
+          newConfig.customModels = config.customModels.map(m => m.trim()).filter(Boolean)
+          // Keep customModel in sync with the list
+          if (!newConfig.customModel || !newConfig.customModels.includes(newConfig.customModel)) {
+            newConfig.customModel = newConfig.customModels[0]
+          }
+        } else {
+          delete newConfig.customModels
         }
       }
 

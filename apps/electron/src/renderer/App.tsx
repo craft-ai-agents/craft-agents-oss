@@ -183,6 +183,8 @@ export default function App() {
   // Custom model override from API connection settings (OpenRouter, Ollama, etc.)
   // When set, the Anthropic model selector is hidden and this model is shown instead.
   const [customModel, setCustomModel] = useState<string | null>(null)
+  // List of available custom models for third-party APIs (user can switch between these)
+  const [customModels, setCustomModels] = useState<string[]>([])
   const [menuNewChatTrigger, setMenuNewChatTrigger] = useState(0)
   // Permission requests per session (queue to handle multiple concurrent requests)
   const [pendingPermissions, setPendingPermissions] = useState<Map<string, PermissionRequest[]>>(new Map())
@@ -263,6 +265,7 @@ export default function App() {
   const refreshCustomModel = useCallback(async () => {
     const billing = await window.electronAPI.getApiSetup()
     setCustomModel(billing.customModel || null)
+    setCustomModels(billing.customModels || [])
   }, [])
 
   // Handle onboarding completion
@@ -405,6 +408,7 @@ export default function App() {
     // Load custom model override from API connection settings
     window.electronAPI.getApiSetup().then((billing) => {
       setCustomModel(billing.customModel || null)
+      setCustomModels(billing.customModels || [])
     })
     // Load persisted input drafts into ref (no re-render needed)
     window.electronAPI.getAllDrafts().then((drafts) => {
@@ -889,10 +893,23 @@ export default function App() {
   }, [sessionOptions, updateSessionById, skills, sources, windowWorkspaceId])
 
   const handleModelChange = useCallback((model: string) => {
-    setCurrentModel(model)
-    // Persist to config so it's remembered across launches
-    window.electronAPI.setModel(model)
-  }, [])
+    // Check if this is a custom model (from the customModels list)
+    if (customModels.includes(model)) {
+      // Update the active custom model in config
+      setCustomModel(model)
+      window.electronAPI.updateApiSetup(
+        'api_key',      // preserve auth type
+        undefined,       // don't change credential
+        undefined,       // don't change base URL
+        model,           // set as active custom model
+        undefined,       // don't change custom models list
+      )
+    } else {
+      setCurrentModel(model)
+      // Persist to config so it's remembered across launches
+      window.electronAPI.setModel(model)
+    }
+  }, [customModels])
 
   /**
    * Unified handler for all session option changes.
@@ -1199,6 +1216,7 @@ export default function App() {
     activeWorkspaceSlug: windowWorkspaceSlug,
     currentModel,
     customModel,
+    customModels,
     pendingPermissions,
     pendingCredentials,
     getDraft,
@@ -1242,6 +1260,7 @@ export default function App() {
     windowWorkspaceSlug,
     currentModel,
     customModel,
+    customModels,
     pendingPermissions,
     pendingCredentials,
     getDraft,

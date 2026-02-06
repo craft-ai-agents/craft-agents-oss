@@ -50,6 +50,7 @@ export default function WorkspaceSettingsPage() {
   const activeWorkspaceId = appShellContext.activeWorkspaceId
   const onRefreshWorkspaces = appShellContext.onRefreshWorkspaces
   const customModel = appShellContext.customModel
+  const customModels = appShellContext.customModels
 
   // Workspace settings state
   const [wsName, setWsName] = useState('')
@@ -395,8 +396,20 @@ export default function WorkspaceSettingsPage() {
             {/* Model */}
             <SettingsSection title="Model">
               <SettingsCard>
-                {/* When a custom API connection is active, model is fixed — show info instead of selector */}
-                {customModel ? (
+                {/* When a custom API connection is active with multiple models, show as selector */}
+                {customModels.length > 1 ? (
+                  <SettingsMenuSelectRow
+                    label="Default model"
+                    description="Custom API model for new chats"
+                    value={customModel || customModels[0]}
+                    onValueChange={onModelChange}
+                    options={customModels.map(m => ({
+                      value: m,
+                      label: m,
+                      description: 'Custom API',
+                    }))}
+                  />
+                ) : customModel ? (
                   <SettingsRow
                     label="Default model"
                     description="Set via API connection"

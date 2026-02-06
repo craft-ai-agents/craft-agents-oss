@@ -41,6 +41,8 @@ export interface AppShellContextType {
   currentModel: string
   /** When set, a custom model overrides the Anthropic model selector (e.g. OpenRouter) */
   customModel: string | null
+  /** List of available custom models for third-party APIs (user can switch between these) */
+  customModels: string[]
   pendingPermissions: Map<string, PermissionRequest[]>
   pendingCredentials: Map<string, CredentialRequest[]>
   /** Get draft input text for a session - reads from ref without triggering re-renders */

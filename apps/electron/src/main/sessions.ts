@@ -1552,8 +1552,9 @@ export class SessionManager {
       const config = loadStoredConfig()
       managed.agent = new CraftAgent({
         workspace: managed.workspace,
-        // Session model takes priority, fallback to global config, then resolve with customModel override
-        model: resolveModelId(managed.model || config?.model || DEFAULT_MODEL),
+        // Session model takes priority (may be a custom model set directly).
+        // If session has no model, fall back to global config, then resolve with customModel override.
+        model: managed.model || resolveModelId(config?.model || DEFAULT_MODEL),
         // Initialize thinking level at construction to avoid race conditions
         thinkingLevel: managed.thinkingLevel,
         isHeadless: !AGENT_FLAGS.defaultModesEnabled,
@@ -2380,7 +2381,10 @@ export class SessionManager {
         // Fallback chain: session model > workspace default > global config > DEFAULT_MODEL
         const wsConfig = loadWorkspaceConfig(managed.workspace.rootPath)
         const effectiveModel = model ?? wsConfig?.defaults?.model ?? loadStoredConfig()?.model ?? DEFAULT_MODEL
-        const resolvedModel = resolveModelId(effectiveModel)
+        // When a specific model is passed (e.g. from custom models list), use it directly.
+        // resolveModelId reads customModel from config which may not be updated yet,
+        // so we pass the model through directly when explicitly set.
+        const resolvedModel = model ? model : resolveModelId(effectiveModel)
         managed.agent.setModel(resolvedModel)
       }
       // Notify renderer of the model change

@@ -880,6 +880,7 @@ export interface ElectronAPI {
     mcpCredentials?: { accessToken: string; clientId?: string }  // MCP OAuth credentials
     anthropicBaseUrl?: string | null  // Custom Anthropic API base URL
     customModel?: string | null  // Custom model ID override
+    customModels?: string[] | null  // List of available custom models
   }): Promise<OnboardingSaveResult>
   // Claude OAuth (two-step flow)
   startClaudeOAuth(): Promise<{ success: boolean; authUrl?: string; error?: string }>
@@ -889,7 +890,7 @@ export interface ElectronAPI {
 
   // Settings - API Setup
   getApiSetup(): Promise<ApiSetupInfo>
-  updateApiSetup(authType: AuthType, credential?: string, anthropicBaseUrl?: string | null, customModel?: string | null): Promise<void>
+  updateApiSetup(authType: AuthType, credential?: string, anthropicBaseUrl?: string | null, customModel?: string | null, customModels?: string[] | null): Promise<void>
   testApiConnection(apiKey: string, baseUrl?: string, modelName?: string): Promise<{ success: boolean; error?: string; modelCount?: number }>
 
   // Settings - Model (global default)
@@ -1068,6 +1069,7 @@ export interface ApiSetupInfo {
   apiKey?: string  // The stored API key (only returned for api_key auth type)
   anthropicBaseUrl?: string  // Custom Anthropic API base URL (for third-party compatible APIs)
   customModel?: string  // Custom model ID override (for third-party APIs)
+  customModels?: string[]  // List of available custom models (for third-party APIs)
 }
 
 /**

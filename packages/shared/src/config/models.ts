@@ -53,8 +53,9 @@ export function getModelShortName(modelId: string): string {
   if (modelId.includes('/')) {
     return modelId.split('/').pop() || modelId;
   }
-  // Fallback: strip claude- prefix and date suffix
-  return modelId.replace('claude-', '').replace(/-[\d.-]+$/, '');
+  // For custom models, return as-is to preserve version info (e.g. "claude-opus-4.5")
+  // Only strip the full date suffix (YYYYMMDD) from official Anthropic model IDs
+  return modelId.replace(/-\d{8}$/, '');
 }
 
 /** Get known context window size for a model ID (fallback when SDK hasn't reported usage yet) */
