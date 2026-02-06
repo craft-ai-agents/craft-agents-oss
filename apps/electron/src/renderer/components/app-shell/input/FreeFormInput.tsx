@@ -54,7 +54,7 @@ import { cn } from '@/lib/utils'
 import { isMac, PATH_SEP, getPathBasename } from '@/lib/platform'
 import { applySmartTypography } from '@/lib/smart-typography'
 import { AttachmentPreview } from '../AttachmentPreview'
-import { ANTHROPIC_MODELS, getModelShortName, getModelContextWindow, isClaudeModel } from '@config/models'
+import { ANTHROPIC_MODELS, getModelShortName, getModelContextWindow, isClaudeModel, isCodexModel } from '@config/models'
 import { isCompatProvider, getModelsForProviderType, resolveEffectiveConnectionSlug } from '@config/llm-connections'
 import { useOptionalAppShellContext } from '@/context/AppShellContext'
 import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
@@ -1781,16 +1781,7 @@ export function FreeFormInput({
                         {contextStatus.isCompacting && (
                           <Loader2 className="h-3 w-3 animate-spin" />
                         )}
-                        {formatTokenCount(contextStatus.inputTokens)}
-                        {/* Show compaction threshold (~77.5% of context window) as the limit,
-                            since that's when auto-compaction kicks in - not the full context window.
-                            Falls back to known model context window when SDK hasn't reported usage yet. */}
-                        {(() => {
-                          const ctxWindow = contextStatus.contextWindow || getModelContextWindow(customModel || currentModel)
-                          return ctxWindow ? (
-                            <span className="opacity-60">/ {formatTokenCount(Math.round(ctxWindow * 0.775))}</span>
-                          ) : null
-                        })()}
+                        {formatTokenCount(contextStatus.inputTokens)} tokens used
                       </span>
                     </div>
                   </div>
@@ -1814,7 +1805,7 @@ export function FreeFormInput({
               ? Math.min(99, Math.round((contextStatus.inputTokens / compactionThreshold) * 100))
               : null
             // Show badge when >= 80% of compaction threshold AND not currently compacting
-            const showWarning = usagePercent !== null && usagePercent >= 80 && !contextStatus?.isCompacting
+            const showWarning = usagePercent !== null && usagePercent >= 80 && !contextStatus?.isCompacting && !isCodexModel(customModel || currentModel)
 
             if (!showWarning) return null
 
