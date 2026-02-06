@@ -1002,7 +1002,7 @@ export interface ElectronAPI {
   setModel(model: string): Promise<void>
   // Session-specific model (overrides global)
   getSessionModel(sessionId: string, workspaceId: string): Promise<string | null>
-  setSessionModel(sessionId: string, workspaceId: string, model: string | null): Promise<void>
+  setSessionModel(sessionId: string, workspaceId: string, model: string | null, connection?: string): Promise<void>
 
   // Workspace Settings (per-workspace configuration)
   getWorkspaceSettings(workspaceId: string): Promise<WorkspaceSettings | null>

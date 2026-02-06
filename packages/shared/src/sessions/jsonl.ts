@@ -10,6 +10,7 @@ import { open, readFile } from 'fs/promises';
 import type { SessionHeader, StoredSession, StoredMessage, SessionTokenUsage } from './types.ts';
 import { toPortablePath, expandPath } from '../utils/paths.ts';
 import { debug } from '../utils/debug.ts';
+import { pickSessionFields } from './utils.ts';
 
 /**
  * Read only the header (first line) from a session.jsonl file.
@@ -56,30 +57,15 @@ export function readSessionJsonl(sessionFile: string): StoredSession | null {
     const sdkCwd = header.sdkCwd ? expandPath(header.sdkCwd) : workingDir;
 
     return {
-      id: header.id,
+      ...pickSessionFields(header),
+      // Path expansion for portable paths
       workspaceRootPath: expandPath(header.workspaceRootPath),
-      createdAt: header.createdAt,
-      lastUsedAt: header.lastUsedAt,
-      name: header.name,
-      sdkSessionId: header.sdkSessionId,
-      isFlagged: header.isFlagged,
-      todoState: header.todoState,
-      labels: header.labels,
-      permissionMode: header.permissionMode,
-      lastReadMessageId: header.lastReadMessageId,
-      hasUnread: header.hasUnread,  // Explicit unread flag for NEW badge state machine
-      enabledSourceSlugs: header.enabledSourceSlugs,
       workingDirectory: workingDir,
       sdkCwd,
-      sharedUrl: header.sharedUrl,
-      sharedId: header.sharedId,
-      model: header.model,
-      thinkingLevel: header.thinkingLevel,
-      pendingPlanExecution: header.pendingPlanExecution,
+      // Runtime fields
       messages,
       tokenUsage: header.tokenUsage,
-      hidden: header.hidden,
-    };
+    } as StoredSession;
   } catch (error) {
     debug('[jsonl] Failed to read session:', sessionFile, error);
     return null;
@@ -112,39 +98,22 @@ export function writeSessionJsonl(sessionFile: string, session: StoredSession): 
 /**
  * Create a SessionHeader from a StoredSession.
  * Pre-computes messageCount, preview, and lastMessageRole for fast list loading.
+ * Uses pickSessionFields() to ensure all persistent fields are included.
  */
 export function createSessionHeader(session: StoredSession): SessionHeader {
   return {
-    id: session.id,
+    ...pickSessionFields(session),
+    // Path conversion for portability
     workspaceRootPath: toPortablePath(session.workspaceRootPath),
-    createdAt: session.createdAt,
+    // Override lastUsedAt with current timestamp (save time, not original)
     lastUsedAt: Date.now(),
-    lastMessageAt: session.lastMessageAt,  // Actual message time, distinct from lastUsedAt (persist time)
-    name: session.name,
-    sdkSessionId: session.sdkSessionId,
-    isFlagged: session.isFlagged,
-    todoState: session.todoState,
-    labels: session.labels,
-    permissionMode: session.permissionMode,
-    lastReadMessageId: session.lastReadMessageId,
-    hasUnread: session.hasUnread,  // Explicit unread flag for NEW badge state machine
-    enabledSourceSlugs: session.enabledSourceSlugs,
-    workingDirectory: session.workingDirectory,
-    sdkCwd: session.sdkCwd,
-    sharedUrl: session.sharedUrl,
-    sharedId: session.sharedId,
-    model: session.model,
-    thinkingLevel: session.thinkingLevel,
-    pendingPlanExecution: session.pendingPlanExecution,
     // Pre-computed fields
     messageCount: session.messages.length,
     lastMessageRole: extractLastMessageRole(session.messages),
     preview: extractPreview(session.messages),
     tokenUsage: session.tokenUsage,
     lastFinalMessageId: extractLastFinalMessageId(session.messages),
-    // Hidden flag for mini-agent sessions (not shown in session list)
-    hidden: session.hidden,
-  };
+  } as SessionHeader;
 }
 
 /**

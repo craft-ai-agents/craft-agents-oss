@@ -30,7 +30,7 @@ mkdirSync('dist/assets', { recursive: true });
 
 // Shared assets from packages/shared/assets/
 const sharedAssetsRoot = '../../packages/shared/assets';
-for (const dir of ['docs', 'tool-icons']) {
+for (const dir of ['docs', 'tool-icons', 'permissions']) {
   const src = `${sharedAssetsRoot}/${dir}`;
   if (existsSync(src)) {
     cpSync(src, `dist/assets/${dir}`, { recursive: true });
@@ -38,8 +38,8 @@ for (const dir of ['docs', 'tool-icons']) {
 }
 
 // Config assets from resources/ → also copy to dist/assets/
-// (themes and permissions currently live under resources/ alongside Electron icons)
-for (const dir of ['themes', 'permissions']) {
+// (themes currently live under resources/ alongside Electron icons)
+for (const dir of ['themes']) {
   const src = `resources/${dir}`;
   if (existsSync(src)) {
     cpSync(src, `dist/assets/${dir}`, { recursive: true });

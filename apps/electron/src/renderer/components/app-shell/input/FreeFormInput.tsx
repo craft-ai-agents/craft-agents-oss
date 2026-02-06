@@ -120,8 +120,8 @@ export interface FreeFormInputProps {
   inputRef?: React.RefObject<RichTextInputHandle>
   /** Current model ID */
   currentModel: string
-  /** Callback when model changes */
-  onModelChange: (model: string) => void
+  /** Callback when model changes (includes connection slug for proper persistence) */
+  onModelChange: (model: string, connection?: string) => void
   // Thinking level (session-level setting)
   /** Current thinking level ('off', 'think', 'max') */
   thinkingLevel?: ThinkingLevel
@@ -1675,7 +1675,8 @@ export function FreeFormInput({
                                       if (!isCurrentConnection && onConnectionChange) {
                                         onConnectionChange(conn.slug)
                                       }
-                                      onModelChange(modelId)
+                                      // Always pass connection with model for proper persistence
+                                      onModelChange(modelId, conn.slug)
                                     }}
                                     className="flex items-center justify-between px-2 py-2 rounded-lg cursor-pointer"
                                   >
@@ -1714,7 +1715,7 @@ export function FreeFormInput({
                     return (
                       <StyledDropdownMenuItem
                         key={model.id}
-                        onSelect={() => onModelChange(model.id)}
+                        onSelect={() => onModelChange(model.id, effectiveConnection)}
                         className="flex items-center justify-between px-2 py-2 rounded-lg cursor-pointer"
                       >
                         <div className="text-left">

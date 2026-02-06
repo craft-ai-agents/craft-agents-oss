@@ -19,6 +19,7 @@
 
 import { existsSync, readFileSync } from 'fs';
 import { join, basename } from 'path';
+import { parse as shellParse } from 'shell-quote';
 import { encodeIconToDataUrl } from './icon-encoder.ts';
 
 // ============================================
@@ -161,12 +162,17 @@ export function splitCommands(commandStr: string): string[] {
  * Strips env var prefixes, transparent prefix commands (sudo, time, etc.),
  * and path prefixes (/usr/local/bin/node → node).
  *
+ * Also handles shell wrapper patterns like `/bin/zsh -lc 'git status'` by
+ * extracting and recursively parsing the inner command.
+ *
  * Returns the bare command name, or undefined if none found.
  */
 export function extractCommandName(subCommand: string): string | undefined {
-  // Tokenize by splitting on whitespace, but this is a simplified approach.
-  // We don't need full shell parsing — just enough to find the command name.
-  const tokens = subCommand.split(/\s+/).filter(Boolean);
+  // Use shell-quote for proper tokenization (handles quotes, escapes, etc.)
+  const parsed = shellParse(subCommand);
+
+  // Filter to string tokens only (shell-quote can return operator objects)
+  const tokens = parsed.filter((t): t is string => typeof t === 'string');
 
   let idx = 0;
 
@@ -179,18 +185,36 @@ export function extractCommandName(subCommand: string): string | undefined {
   // Also handle cases like `sudo -u root docker ps` by skipping flags after prefix
   while (idx < tokens.length) {
     const token = tokens[idx]!;
-    if (PREFIX_COMMANDS.has(token)) {
+    const cmdName = basename(token);
+
+    if (PREFIX_COMMANDS.has(cmdName)) {
       idx++;
       // Skip any flags that follow the prefix command (e.g. sudo -u root)
       while (idx < tokens.length && tokens[idx]!.startsWith('-')) {
         idx++;
       }
       // For 'timeout' and similar, skip the numeric argument
-      if (token === 'timeout' && idx < tokens.length && /^\d+/.test(tokens[idx]!)) {
+      if (cmdName === 'timeout' && idx < tokens.length && /^\d+/.test(tokens[idx]!)) {
         idx++;
       }
       continue;
     }
+
+    // Check for shell wrapper: bash/zsh/sh with -c flag
+    if (['bash', 'zsh', 'sh'].includes(cmdName)) {
+      // Look for -c or combined flag like -lc in remaining tokens
+      const remaining = tokens.slice(idx + 1);
+      const cFlagIdx = remaining.findIndex(t => t === '-c' || (t.startsWith('-') && t.includes('c')));
+
+      if (cFlagIdx !== -1 && cFlagIdx + 1 < remaining.length) {
+        // The argument after -c/-lc is the inner command - recursively parse it
+        const innerCommand = remaining[cFlagIdx + 1];
+        if (innerCommand) {
+          return extractCommandName(innerCommand);
+        }
+      }
+    }
+
     break;
   }
 

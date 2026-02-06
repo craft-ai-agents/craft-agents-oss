@@ -545,8 +545,8 @@ export class CodexAgent extends BaseAgent {
     this.client.on('thread/tokenUsage/updated', (notification: ThreadTokenUsageUpdatedNotification) => {
       const usage = notification.tokenUsage;
       if (usage) {
-        // total.inputTokens already includes cached tokens (OpenAI convention)
-        const inputTokens = usage.total.inputTokens;
+        // Use latest-turn usage for context size; include cached tokens to match OpenAI convention
+        const inputTokens = usage.last.inputTokens + usage.last.cachedInputTokens;
         this.enqueueEvent({
           type: 'usage_update',
           usage: {

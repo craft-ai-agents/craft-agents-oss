@@ -17,7 +17,11 @@ export type {
   StoredSession,
   SessionMetadata,
   SessionHeader,
+  SessionPersistentField,
 } from './types.ts';
+
+// Field constants
+export { SESSION_PERSISTENT_FIELDS } from './types.ts';
 
 // Storage functions
 export {
@@ -94,6 +98,9 @@ export {
   writeSessionJsonl,
   createSessionHeader,
 } from './jsonl.ts';
+
+// Field utilities
+export { pickSessionFields } from './utils.ts';
 
 // Slug generator utilities
 export {

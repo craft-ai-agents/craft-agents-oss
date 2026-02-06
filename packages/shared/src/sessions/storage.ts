@@ -543,6 +543,7 @@ export async function updateSessionMetadata(
     | 'sharedUrl'
     | 'sharedId'
     | 'model'
+    | 'llmConnection'
     | 'isArchived'
     | 'archivedAt'
   >>
@@ -563,6 +564,7 @@ export async function updateSessionMetadata(
   if ('sharedUrl' in updates) session.sharedUrl = updates.sharedUrl;
   if ('sharedId' in updates) session.sharedId = updates.sharedId;
   if (updates.model !== undefined) session.model = updates.model;
+  if (updates.llmConnection !== undefined) session.llmConnection = updates.llmConnection;
   if (updates.isArchived !== undefined) session.isArchived = updates.isArchived;
   if ('archivedAt' in updates) session.archivedAt = updates.archivedAt;
 

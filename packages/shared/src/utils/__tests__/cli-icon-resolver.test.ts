@@ -162,6 +162,31 @@ describe('extractCommandName', () => {
   test('caffeinate prefix (macOS)', () => {
     expect(extractCommandName('caffeinate npm run build')).toBe('npm');
   });
+
+  // Shell wrapper tests
+  test('zsh -lc wrapper', () => {
+    expect(extractCommandName("/bin/zsh -lc 'git status'")).toBe('git');
+  });
+
+  test('bash -c wrapper', () => {
+    expect(extractCommandName('bash -c "npm install"')).toBe('npm');
+  });
+
+  test('sh -c wrapper', () => {
+    expect(extractCommandName("sh -c 'docker ps'")).toBe('docker');
+  });
+
+  test('nested env vars in shell wrapper', () => {
+    expect(extractCommandName("/bin/bash -c 'NODE_ENV=prod npm run build'")).toBe('npm');
+  });
+
+  test('shell wrapper with path prefix', () => {
+    expect(extractCommandName("/bin/zsh -lc '/usr/local/bin/git status'")).toBe('git');
+  });
+
+  test('shell wrapper with sudo inside', () => {
+    expect(extractCommandName("bash -c 'sudo docker ps'")).toBe('docker');
+  });
 });
 
 // ============================================
@@ -377,5 +402,17 @@ describe('resolveToolIcon', () => {
     expect(result!.displayName).toBe('Git');
     expect(result!.id).toBe('git');
     expect(result!.iconDataUrl).toStartWith('data:image/');
+  });
+
+  test('resolves git from zsh -lc wrapper', () => {
+    const result = resolveToolIcon("/bin/zsh -lc 'git status'", testDir);
+    expect(result).toBeDefined();
+    expect(result!.displayName).toBe('Git');
+  });
+
+  test('resolves npm from bash -c wrapper', () => {
+    const result = resolveToolIcon('bash -c "npm install"', testDir);
+    expect(result).toBeDefined();
+    expect(result!.displayName).toBe('npm');
   });
 });

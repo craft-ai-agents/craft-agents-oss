@@ -98,7 +98,7 @@ interface ChatDisplayProps {
   onOpenUrl: (url: string) => void
   // Model selection
   currentModel: string
-  onModelChange: (model: string) => void
+  onModelChange: (model: string, connection?: string) => void
   // Connection selection (locked after first message)
   /** Callback when LLM connection changes (only works when session is empty) */
   onConnectionChange?: (connectionSlug: string) => void

@@ -1582,10 +1582,10 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     return session?.model ?? null
   })
 
-  // Set session-specific model
-  ipcMain.handle(IPC_CHANNELS.SESSION_SET_MODEL, async (_event, sessionId: string, workspaceId: string, model: string | null) => {
-    await sessionManager.updateSessionModel(sessionId, workspaceId, model)
-    ipcLog.info(`Session ${sessionId} model updated to: ${model}`)
+  // Set session-specific model (and optionally connection)
+  ipcMain.handle(IPC_CHANNELS.SESSION_SET_MODEL, async (_event, sessionId: string, workspaceId: string, model: string | null, connection?: string) => {
+    await sessionManager.updateSessionModel(sessionId, workspaceId, model, connection)
+    ipcLog.info(`Session ${sessionId} model updated to: ${model}${connection ? ` (connection: ${connection})` : ''}`)
   })
 
   // Open native folder dialog for selecting working directory

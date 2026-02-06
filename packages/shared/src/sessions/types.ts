@@ -14,6 +14,41 @@ import type { ThinkingLevel } from '../agent/thinking-levels.ts';
 import type { StoredAttachment, MessageRole, ToolStatus, AuthRequestType, AuthStatus, CredentialInputMode, StoredMessage } from '@craft-agent/core/types';
 
 /**
+ * Session fields that persist to disk.
+ * Add new fields here - they automatically propagate to JSONL read/write
+ * via pickSessionFields() utility.
+ *
+ * IMPORTANT: When adding a new field:
+ * 1. Add it to this array
+ * 2. Add it to SessionConfig interface below
+ * 3. Done - serialization is automatic
+ */
+export const SESSION_PERSISTENT_FIELDS = [
+  // Identity
+  'id', 'workspaceRootPath', 'sdkSessionId', 'sdkCwd',
+  // Timestamps
+  'createdAt', 'lastUsedAt', 'lastMessageAt',
+  // Display
+  'name', 'isFlagged', 'todoState', 'labels', 'hidden',
+  // Read tracking
+  'lastReadMessageId', 'hasUnread',
+  // Config
+  'enabledSourceSlugs', 'permissionMode', 'workingDirectory',
+  // Model/Connection
+  'model', 'llmConnection', 'connectionLocked', 'thinkingLevel',
+  // Sharing
+  'sharedUrl', 'sharedId',
+  // Plan execution
+  'pendingPlanExecution',
+  // Archive
+  'isArchived', 'archivedAt',
+  // Hierarchy
+  'parentSessionId', 'siblingOrder',
+] as const;
+
+export type SessionPersistentField = typeof SESSION_PERSISTENT_FIELDS[number];
+
+/**
  * Todo state for sessions (user-controlled, never automatic)
  *
  * Dynamic status ID referencing workspace status config.

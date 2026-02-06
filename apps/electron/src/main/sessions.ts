@@ -61,6 +61,7 @@ import {
   type StoredMessage,
   type SessionMetadata,
   type TodoState,
+  pickSessionFields,
 } from '@craft-agent/shared/sessions'
 import { loadWorkspaceSources, loadAllSources, getSourcesBySlugs, type LoadedSource, type McpServerConfig, getSourcesNeedingAuth, getSourceCredentialManager, getSourceServerBuilder, type SourceWithCredential, isApiOAuthProvider, SERVER_BUILD_ERRORS } from '@craft-agent/shared/sources'
 import { ConfigWatcher, type ConfigWatcherCallbacks } from '@craft-agent/shared/config'
@@ -456,6 +457,8 @@ interface ManagedSession {
   agent: AgentInstance | null  // Lazy-loaded - null until first message
   messages: Message[]
   isProcessing: boolean
+  /** Set when user requests stop - allows event loop to drain before clearing isProcessing */
+  stopRequested?: boolean
   lastMessageAt: number
   streamingText: string
   // Incremented each time a new message starts processing.
@@ -1516,36 +1519,21 @@ export class SessionManager {
     // Use getSession(id) to load messages for a specific session
     return Array.from(this.sessions.values())
       .map(m => ({
-        id: m.id,
-        workspaceId: m.workspace.id,
-        workspaceName: m.workspace.name,
-        name: m.name,
+        // Persistent fields (auto-included via pickSessionFields)
+        ...pickSessionFields(m),
+        // Pre-computed fields from header
         preview: m.preview,
-        lastMessageAt: m.lastMessageAt,
-        messages: [],  // Never send all messages - use getSession(id) for specific session
-        isProcessing: m.isProcessing,
-        isFlagged: m.isFlagged,
-        isArchived: m.isArchived,
-        archivedAt: m.archivedAt,
-        permissionMode: m.permissionMode,
-        thinkingLevel: m.thinkingLevel,
-        todoState: m.todoState,
-        lastReadMessageId: m.lastReadMessageId,
-        lastFinalMessageId: m.lastFinalMessageId,
-        hasUnread: m.hasUnread,  // Explicit unread flag for NEW badge state machine
-        workingDirectory: m.workingDirectory,
-        model: m.model,
-        enabledSourceSlugs: m.enabledSourceSlugs,
-        labels: m.labels,
-        sharedUrl: m.sharedUrl,
-        sharedId: m.sharedId,
         lastMessageRole: m.lastMessageRole,
         tokenUsage: m.tokenUsage,
-        createdAt: m.createdAt,
         messageCount: m.messageCount,
-        hidden: m.hidden,
-      }))
-      .sort((a, b) => b.lastMessageAt - a.lastMessageAt)
+        lastFinalMessageId: m.lastFinalMessageId,
+        // Runtime-only fields
+        workspaceId: m.workspace.id,
+        workspaceName: m.workspace.name,
+        messages: [],  // Never send all messages - use getSession(id) for specific session
+        isProcessing: m.isProcessing,
+      }) as Session)
+      .sort((a, b) => (b.lastMessageAt ?? 0) - (a.lastMessageAt ?? 0))
   }
 
   /**
@@ -1561,34 +1549,20 @@ export class SessionManager {
     await this.ensureMessagesLoaded(m)
 
     return {
-      id: m.id,
-      workspaceId: m.workspace.id,
-      workspaceName: m.workspace.name,
-      name: m.name,
+      // Persistent fields (auto-included via pickSessionFields)
+      ...pickSessionFields(m),
+      // Pre-computed fields from header
       preview: m.preview,  // Include preview for title fallback consistency with getSessions()
-      lastMessageAt: m.lastMessageAt,
-      messages: m.messages,
-      isProcessing: m.isProcessing,
-      isFlagged: m.isFlagged,
-      isArchived: m.isArchived,
-      archivedAt: m.archivedAt,
-      permissionMode: m.permissionMode,
-      thinkingLevel: m.thinkingLevel,
-      todoState: m.todoState,
-      lastReadMessageId: m.lastReadMessageId,
-      lastFinalMessageId: m.lastFinalMessageId,
-      hasUnread: m.hasUnread,  // Explicit unread flag for NEW badge state machine
-      workingDirectory: m.workingDirectory,
-      model: m.model,
-      sessionFolderPath: getSessionStoragePath(m.workspace.rootPath, m.id),
-      enabledSourceSlugs: m.enabledSourceSlugs,
-      labels: m.labels,
-      sharedUrl: m.sharedUrl,
-      sharedId: m.sharedId,
       lastMessageRole: m.lastMessageRole,
       tokenUsage: m.tokenUsage,
-      hidden: m.hidden,
-    }
+      lastFinalMessageId: m.lastFinalMessageId,
+      // Runtime-only fields
+      workspaceId: m.workspace.id,
+      workspaceName: m.workspace.name,
+      messages: m.messages,
+      isProcessing: m.isProcessing,
+      sessionFolderPath: getSessionStoragePath(m.workspace.rootPath, m.id),
+    } as Session
   }
 
   /**
@@ -1631,6 +1605,13 @@ export class SessionManager {
       managed.sharedId = storedSession.sharedId
       // Sync name from disk - ensures title persistence across lazy loading
       managed.name = storedSession.name
+      // Restore LLM connection state - ensures correct provider on resume
+      if (storedSession.llmConnection) {
+        managed.llmConnection = storedSession.llmConnection
+      }
+      if (storedSession.connectionLocked) {
+        managed.connectionLocked = storedSession.connectionLocked
+      }
       sessionLog.debug(`Lazy-loaded ${managed.messages.length} messages for session ${managed.id}`)
     }
     managed.messagesLoaded = true
@@ -3062,13 +3043,22 @@ export class SessionManager {
   /**
    * Update the model for a session
    * Pass null to clear the session-specific model (will use global config)
+   * @param connection - Optional LLM connection slug (only applied if not already locked)
    */
-  async updateSessionModel(sessionId: string, workspaceId: string, model: string | null): Promise<void> {
+  async updateSessionModel(sessionId: string, workspaceId: string, model: string | null, connection?: string): Promise<void> {
     const managed = this.sessions.get(sessionId)
     if (managed) {
       managed.model = model ?? undefined
-      // Persist to disk
-      await updateSessionMetadata(managed.workspace.rootPath, sessionId, { model: model ?? undefined })
+      // Also update connection if provided and not already locked
+      if (connection && !managed.connectionLocked) {
+        managed.llmConnection = connection
+      }
+      // Persist to disk (include connection if it was updated)
+      const updates: { model?: string; llmConnection?: string } = { model: model ?? undefined }
+      if (connection && !managed.connectionLocked) {
+        updates.llmConnection = connection
+      }
+      await updateSessionMetadata(managed.workspace.rootPath, sessionId, updates)
       // Update agent model if it already exists (takes effect on next query)
       if (managed.agent) {
         // Fallback chain: session model > workspace default > global config > DEFAULT_MODEL
@@ -3446,17 +3436,19 @@ export class SessionManager {
           return  // Exit function, skip finally block (onProcessingStopped handles cleanup)
         }
 
-        // Check if cancelled via cancelProcessing (Stop button)
-        // The SDK will still send a complete event, but we break early here
-        // since cancelProcessing already cleared the state
-        if (!managed.isProcessing) {
-          sessionLog.info('Processing flag cleared, breaking out of event loop')
-          break
-        }
+        // NOTE: We no longer break early on !isProcessing or stopRequested.
+        // After soft interrupt (forceAbort), Codex sets turnComplete=true which causes
+        // the generator to yield remaining queued events and then complete naturally.
+        // This ensures we don't lose in-flight messages.
       }
 
-      // Loop exited without complete event (shouldn't happen normally)
-      sessionLog.info('Chat loop exited unexpectedly')
+      // Loop exited - either via complete event (normal) or generator ended after soft interrupt
+      if (managed.stopRequested) {
+        sessionLog.info('Chat loop completed after stop request - events drained successfully')
+        this.onProcessingStopped(sessionId, 'interrupted')
+      } else {
+        sessionLog.info('Chat loop exited unexpectedly')
+      }
     } catch (error) {
       // Check if this is an abort error (expected when interrupted)
       const isAbortError = error instanceof Error && (
@@ -3524,18 +3516,14 @@ export class SessionManager {
     // Clear queue - user explicitly stopped, don't process queued messages
     managed.messageQueue = []
 
-    // Force-abort via Query.close() - immediately stops processing
+    // Signal intent to stop - let the event loop drain remaining events before clearing isProcessing
+    // This prevents losing in-flight messages from Codex after soft interrupt
+    managed.stopRequested = true
+
+    // Force-abort via Query.close() - sends soft interrupt to Codex
     if (managed.agent) {
       managed.agent.forceAbort(AbortReason.UserStop)
     }
-
-    // Set state immediately - the SDK will send a complete event
-    // but since we cleared isProcessing, onProcessingStopped won't be called again
-    managed.isProcessing = false
-
-    // Notify power manager that processing was cancelled
-    const { onSessionStopped } = await import('./power-manager')
-    onSessionStopped()
 
     // Only show "Response interrupted" message when user explicitly clicked Stop
     // Silent mode is used when redirecting (sending new message while processing)
@@ -3553,11 +3541,17 @@ export class SessionManager {
       this.sendEvent({ type: 'interrupted', sessionId }, managed.workspace.id)
     }
 
-    // Emit complete since we're stopping and queue is cleared (include tokenUsage for real-time updates)
-    this.sendEvent({ type: 'complete', sessionId, tokenUsage: managed.tokenUsage }, managed.workspace.id)
+    // Safety timeout: if event loop doesn't complete within 5 seconds, force cleanup
+    // This handles cases where the generator gets stuck
+    setTimeout(() => {
+      if (managed.stopRequested && managed.isProcessing) {
+        sessionLog.warn('Generator did not complete after stop request, forcing cleanup')
+        this.onProcessingStopped(sessionId, 'timeout')
+      }
+    }, 5000)
 
-    // Persist session
-    this.persistSession(managed)
+    // NOTE: We don't clear isProcessing or send complete event here anymore.
+    // The event loop will drain remaining events and call onProcessingStopped when done.
   }
 
   /**
@@ -3569,7 +3563,7 @@ export class SessionManager {
    */
   private async onProcessingStopped(
     sessionId: string,
-    reason: 'complete' | 'interrupted' | 'error'
+    reason: 'complete' | 'interrupted' | 'error' | 'timeout'
   ): Promise<void> {
     const managed = this.sessions.get(sessionId)
     if (!managed) return
@@ -3578,6 +3572,7 @@ export class SessionManager {
 
     // 1. Cleanup state
     managed.isProcessing = false
+    managed.stopRequested = false  // Reset for next turn
 
     // Notify power manager that a session stopped processing
     // (may allow display sleep if no other sessions are active)

@@ -199,8 +199,8 @@ const api: ElectronAPI = {
   // Session-specific model (overrides global)
   getSessionModel: (sessionId: string, workspaceId: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SESSION_GET_MODEL, sessionId, workspaceId),
-  setSessionModel: (sessionId: string, workspaceId: string, model: string | null) =>
-    ipcRenderer.invoke(IPC_CHANNELS.SESSION_SET_MODEL, sessionId, workspaceId, model),
+  setSessionModel: (sessionId: string, workspaceId: string, model: string | null, connection?: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SESSION_SET_MODEL, sessionId, workspaceId, model, connection),
 
   // Workspace Settings (per-workspace configuration)
   getWorkspaceSettings: (workspaceId: string) =>
