@@ -1666,3 +1666,164 @@ describe('validatePowerShellCommand', () => {
     });
   });
 });
+
+// ============================================================
+// PowerShell Write Target Extraction Tests
+// ============================================================
+
+import { extractPowerShellWriteTarget } from '../src/agent/powershell-validator.ts';
+
+describe('extractPowerShellWriteTarget', () => {
+  // These tests only work when PowerShell is available
+  const psAvailable = isPowerShellAvailable();
+
+  describe('Out-File extraction', () => {
+    it('should extract path from Out-File with -FilePath', () => {
+      if (!psAvailable) return;
+
+      const cmd = `@('# Plan') | Out-File -FilePath 'C:\\Users\\test\\plans\\plan.md' -Encoding utf8`;
+      expect(extractPowerShellWriteTarget(cmd)).toBe('C:\\Users\\test\\plans\\plan.md');
+    });
+
+    it('should extract path from Out-File with -FilePath (double quotes)', () => {
+      if (!psAvailable) return;
+
+      const cmd = `@('# Plan') | Out-File -FilePath "C:\\Users\\test\\plans\\plan.md"`;
+      expect(extractPowerShellWriteTarget(cmd)).toBe('C:\\Users\\test\\plans\\plan.md');
+    });
+
+    it('should extract path from Out-File positional parameter', () => {
+      if (!psAvailable) return;
+
+      const cmd = `"content" | Out-File C:\\temp\\file.txt`;
+      expect(extractPowerShellWriteTarget(cmd)).toBe('C:\\temp\\file.txt');
+    });
+  });
+
+  describe('Set-Content extraction', () => {
+    it('should extract path from Set-Content with -Path', () => {
+      if (!psAvailable) return;
+
+      const cmd = `'content' | Set-Content -Path 'C:\\Users\\test\\plans\\plan.md'`;
+      expect(extractPowerShellWriteTarget(cmd)).toBe('C:\\Users\\test\\plans\\plan.md');
+    });
+  });
+
+  describe('Add-Content extraction', () => {
+    it('should extract path from Add-Content with -Path', () => {
+      if (!psAvailable) return;
+
+      const cmd = `'more content' | Add-Content -Path 'C:\\Users\\test\\plans\\plan.md'`;
+      expect(extractPowerShellWriteTarget(cmd)).toBe('C:\\Users\\test\\plans\\plan.md');
+    });
+  });
+
+  describe('non-write commands', () => {
+    it('should return null for read-only commands', () => {
+      if (!psAvailable) return;
+
+      expect(extractPowerShellWriteTarget('Get-Process')).toBeNull();
+      expect(extractPowerShellWriteTarget('Get-ChildItem')).toBeNull();
+      expect(extractPowerShellWriteTarget('Get-Content file.txt')).toBeNull();
+    });
+
+    it('should return null for non-file-writing pipelines', () => {
+      if (!psAvailable) return;
+
+      expect(extractPowerShellWriteTarget('Get-Process | Select-Object Name')).toBeNull();
+      expect(extractPowerShellWriteTarget('Get-ChildItem | Where-Object { $_.Length -gt 1000 }')).toBeNull();
+    });
+  });
+
+  describe('when PowerShell is unavailable', () => {
+    it('should return null gracefully', () => {
+      // This test runs regardless of PowerShell availability
+      // If PowerShell is not available, the function should return null
+      if (!psAvailable) {
+        const cmd = `@('# Plan') | Out-File -FilePath 'C:\\plans\\plan.md'`;
+        expect(extractPowerShellWriteTarget(cmd)).toBeNull();
+      }
+    });
+  });
+});
+
+// ============================================================
+// PowerShell Plans Folder Exception Tests
+// ============================================================
+
+describe('PowerShell plans folder exception', () => {
+  const psAvailable = isPowerShellAvailable();
+  const plansFolderPath = 'C:\\Users\\test\\.craft-agent\\workspaces\\ws\\sessions\\s1\\plans';
+
+  describe('should allow Out-File to plans folder', () => {
+    it('allows Out-File with -FilePath to plans folder', () => {
+      if (!psAvailable) return;
+
+      const command = `@('# Sample Plan','','## Goal','Test') | Out-File -FilePath '${plansFolderPath}\\sample-plan.md' -Encoding utf8`;
+      const result = shouldAllowToolInMode(
+        'Bash',
+        { command },
+        'safe',
+        { plansFolderPath }
+      );
+      expect(result.allowed).toBe(true);
+    });
+
+    it('allows Set-Content to plans folder', () => {
+      if (!psAvailable) return;
+
+      const command = `'# Plan content' | Set-Content -Path '${plansFolderPath}\\plan.md'`;
+      const result = shouldAllowToolInMode(
+        'Bash',
+        { command },
+        'safe',
+        { plansFolderPath }
+      );
+      expect(result.allowed).toBe(true);
+    });
+  });
+
+  describe('should block Out-File outside plans folder', () => {
+    it('blocks Out-File to temp folder', () => {
+      if (!psAvailable) return;
+
+      const command = `@('data') | Out-File -FilePath 'C:\\temp\\evil.txt' -Encoding utf8`;
+      const result = shouldAllowToolInMode(
+        'Bash',
+        { command },
+        'safe',
+        { plansFolderPath }
+      );
+      expect(result.allowed).toBe(false);
+    });
+
+    it('blocks Set-Content outside plans folder', () => {
+      if (!psAvailable) return;
+
+      const command = `'content' | Set-Content -Path 'C:\\Users\\test\\Desktop\\file.txt'`;
+      const result = shouldAllowToolInMode(
+        'Bash',
+        { command },
+        'safe',
+        { plansFolderPath }
+      );
+      expect(result.allowed).toBe(false);
+    });
+  });
+
+  describe('case-insensitive path matching on Windows', () => {
+    it('allows write when path case differs from plansFolderPath', () => {
+      if (!psAvailable) return;
+
+      // plansFolderPath uses lowercase 'test', command uses 'Test'
+      const command = `@('plan') | Out-File -FilePath 'C:\\Users\\Test\\.craft-agent\\workspaces\\ws\\sessions\\s1\\plans\\plan.md'`;
+      const result = shouldAllowToolInMode(
+        'Bash',
+        { command },
+        'safe',
+        { plansFolderPath }
+      );
+      expect(result.allowed).toBe(true);
+    });
+  });
+});

@@ -25,6 +25,7 @@ import {
   validatePowerShellCommand,
   looksLikePowerShell,
   isPowerShellAvailable,
+  extractPowerShellWriteTarget,
   type PowerShellValidationResult,
   type PowerShellValidationReason,
 } from './powershell-validator.ts';
@@ -1227,6 +1228,39 @@ export function looksLikePotentialWrite(command: string): boolean {
 }
 
 /**
+ * Get a helpful hint based on comparing target path to plans folder path.
+ * Detects common mistakes and provides actionable guidance.
+ */
+export function getPathHint(targetPath: string, plansFolderPath: string): string | null {
+  const normalizedTarget = targetPath.replace(/\\/g, '/').toLowerCase();
+  const normalizedPlans = plansFolderPath.replace(/\\/g, '/').toLowerCase();
+
+  // Case: Writing to session folder but missing /plans/
+  if (normalizedTarget.includes('/sessions/') && !normalizedTarget.includes('/plans/')) {
+    return 'Hint: Write to the /plans/ subfolder, not the session folder directly.';
+  }
+
+  // Case: Wrong session ID
+  const targetSessionMatch = normalizedTarget.match(/sessions\/([^/]+)/);
+  const plansSessionMatch = normalizedPlans.match(/sessions\/([^/]+)/);
+  if (targetSessionMatch && plansSessionMatch && targetSessionMatch[1] !== plansSessionMatch[1]) {
+    return `Hint: Wrong session ID. Current session is "${plansSessionMatch[1]}".`;
+  }
+
+  // Case: Writing to workspace root instead of session
+  if (normalizedTarget.includes('/.craft-agent/workspaces/') && !normalizedTarget.includes('/sessions/')) {
+    return 'Hint: Write to the session plans folder, not the workspace root.';
+  }
+
+  // Case: Writing outside .craft-agent entirely
+  if (!normalizedTarget.includes('/.craft-agent/')) {
+    return 'Hint: Plans must be written to the .craft-agent session plans folder.';
+  }
+
+  return null;
+}
+
+/**
  * Check if an MCP tool is read-only using the given config
  */
 function isReadOnlyMcpToolWithConfig(toolName: string, config: ToolCheckConfig): boolean {
@@ -1367,27 +1401,41 @@ export function shouldAllowToolInMode(
         return { allowed: true };
       }
 
-      // Plans folder exception for bash writes.
-      // Codex uses bash redirects like: /bin/zsh -lc "cat <<'EOF' > /path/to/plans/file.md..."
-      // Allow these if the redirect target is within the plans folder.
+      // Plans folder exception for bash/PowerShell writes.
+      // Bash uses redirects: /bin/zsh -lc "cat <<'EOF' > /path/to/plans/file.md..."
+      // PowerShell uses: @(...) | Out-File -FilePath 'C:\path\to\plans\file.md'
+      // Allow these if the write target is within the plans folder.
       if (options?.plansFolderPath) {
-        const targetPath = extractBashWriteTarget(command);
+        const targetPath = extractBashWriteTarget(command) ?? extractPowerShellWriteTarget(command);
         if (targetPath) {
           const normalizedTarget = targetPath.replace(/\\/g, '/');
           const normalizedPlansDir = options.plansFolderPath.replace(/\\/g, '/');
           // Use case-insensitive comparison for Windows path compatibility
           if (normalizedTarget.toLowerCase().startsWith(normalizedPlansDir.toLowerCase())) {
-            debug(`[Mode] Allowing Bash write to plans folder: ${targetPath}`);
+            debug(`[Mode] Allowing write to plans folder: ${targetPath}`);
             return { allowed: true };
           }
-          // Target path extracted but not in plans folder - give specific error
-          debug(`[Mode] Bash write target "${targetPath}" is not in plans folder "${options.plansFolderPath}"`);
+          // Target path extracted but not in plans folder - give specific error with helpful hint
+          debug(`[Mode] Write target "${targetPath}" is not in plans folder "${options.plansFolderPath}"`);
+          const pathHint = getPathHint(targetPath, options.plansFolderPath);
+          const lines = [
+            `Write blocked (Explore mode) - target not in plans folder:`,
+            ``,
+            `  Target: ${targetPath}`,
+            `  Plans:  ${options.plansFolderPath}`,
+          ];
+          if (pathHint) {
+            lines.push(``, pathHint);
+          }
+          lines.push(
+            ``,
+            `To proceed:`,
+            `• Use the exact plansFolderPath from <session_state>`,
+            `• Or switch to Ask mode (${config.shortcutHint}) to enable writes with approval`
+          );
           return {
             allowed: false,
-            reason: `Bash command writes to "${targetPath}" which is outside the plans folder.\n\n` +
-                    `In Explore mode, you can only write to the plans folder:\n` +
-                    `  ${options.plansFolderPath}\n\n` +
-                    `Switch to Ask or Execute mode (${config.shortcutHint}) to write elsewhere.`,
+            reason: lines.join('\n'),
           };
         }
         // Check if this looks like a write attempt but we couldn't extract the path
@@ -1442,6 +1490,31 @@ export function shouldAllowToolInMode(
           debug(`[Mode] Allowing ${toolName} via allowedWritePaths`);
           return { allowed: true };
         }
+      }
+
+      // Not in plans folder and not in allowedWritePaths - provide detailed rejection
+      if (options?.plansFolderPath) {
+        debug(`[Mode] ${toolName} target "${filePath}" not in plans folder or allowedWritePaths`);
+        const pathHint = getPathHint(filePath, options.plansFolderPath);
+        const lines = [
+          `${toolName} blocked (Explore mode) - target not in plans folder:`,
+          ``,
+          `  Target: ${filePath}`,
+          `  Plans:  ${options.plansFolderPath}`,
+        ];
+        if (pathHint) {
+          lines.push(``, pathHint);
+        }
+        lines.push(
+          ``,
+          `To proceed:`,
+          `• Use the exact plansFolderPath from <session_state>`,
+          `• Or switch to Ask mode (${config.shortcutHint}) to enable writes with approval`
+        );
+        return {
+          allowed: false,
+          reason: lines.join('\n'),
+        };
       }
     }
   }

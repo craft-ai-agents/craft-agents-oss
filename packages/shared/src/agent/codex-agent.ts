@@ -971,6 +971,7 @@ export class CodexAgent extends BaseAgent {
 
         if ('timedOut' in result && result.timedOut) {
           this.debug('PreToolUse: Permission request timed out, blocking');
+          this.adapter.setBlockReason(itemId, 'Permission request timed out. Retry the command or switch to Execute mode.');
           const decision: ToolCallPreExecuteDecision = {
             type: 'userResponse',
             decision: 'timedOut',
@@ -981,6 +982,7 @@ export class CodexAgent extends BaseAgent {
 
         if (!result.allowed) {
           this.debug('PreToolUse: User denied permission');
+          this.adapter.setBlockReason(itemId, 'Permission denied by user.');
           const decision: ToolCallPreExecuteDecision = {
             type: 'userResponse',
             decision: 'denied',
@@ -1008,9 +1010,11 @@ export class CodexAgent extends BaseAgent {
             const activated = await this.onSourceActivationRequest(sourceSlug);
             if (!activated) {
               // Block if activation failed
+              const reason = `Source "${sourceSlug}" is not active and could not be activated. Enable it in Settings → Sources.`;
+              this.adapter.setBlockReason(itemId, reason);
               const decision: ToolCallPreExecuteDecision = {
                 type: 'block',
-                reason: `Source "${sourceSlug}" is not active and could not be activated. Enable it in settings or ask the user to activate it.`,
+                reason,
               };
               await this.safeRespondToPreToolUse(requestId, decision);
               return;
@@ -1024,9 +1028,11 @@ export class CodexAgent extends BaseAgent {
             });
           } catch (err) {
             this.debug(`PreToolUse: Error activating source "${sourceSlug}": ${err}`);
+            const reason = `Failed to activate source "${sourceSlug}": ${err}`;
+            this.adapter.setBlockReason(itemId, reason);
             const decision: ToolCallPreExecuteDecision = {
               type: 'block',
-              reason: `Failed to activate source "${sourceSlug}": ${err}`,
+              reason,
             };
             await this.safeRespondToPreToolUse(requestId, decision);
             return;
@@ -1057,9 +1063,11 @@ export class CodexAgent extends BaseAgent {
       (msg) => this.debug(`PreToolUse: ${msg}`)
     );
     if (!configResult.valid) {
+      const reason = configResult.error ?? 'Config validation failed';
+      this.adapter.setBlockReason(itemId, reason);
       const decision: ToolCallPreExecuteDecision = {
         type: 'block',
-        reason: configResult.error ?? 'Config validation failed',
+        reason,
       };
       await this.safeRespondToPreToolUse(requestId, decision);
       return;
