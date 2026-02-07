@@ -160,9 +160,9 @@ function createComponents(
           const code = String(children).replace(/\n$/, '')
           // Diff code blocks → pierre/diffs for a proper diff viewer
           if (match?.[1] === 'diff') {
-            return <MarkdownDiffBlock code={code} className="my-1" />
+            return <MarkdownDiffBlock code={code} className="my-2" />
           }
-          return <CodeBlock code={code} language={match?.[1]} mode="full" className="my-1" />
+          return <CodeBlock code={code} language={match?.[1]} mode="full" className="my-2" />
         }
 
         // Inline code
@@ -224,9 +224,9 @@ function createComponents(
         const code = String(children).replace(/\n$/, '')
         // Diff code blocks → pierre/diffs for a proper diff viewer
         if (match?.[1] === 'diff') {
-          return <MarkdownDiffBlock code={code} className="my-1" />
+          return <MarkdownDiffBlock code={code} className="my-2" />
         }
-        return <CodeBlock code={code} language={match?.[1]} mode="full" className="my-1" />
+        return <CodeBlock code={code} language={match?.[1]} mode="full" className="my-2" />
       }
 
       return <InlineCode>{children}</InlineCode>
