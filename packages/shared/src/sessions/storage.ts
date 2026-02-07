@@ -402,6 +402,8 @@ function headerToMetadata(header: SessionHeader, workspaceRootPath: string): Ses
       workingDirectory: workingDir,
       sdkCwd,
       model: header.model,
+      llmConnection: header.llmConnection,
+      connectionLocked: header.connectionLocked,
       thinkingLevel: header.thinkingLevel,
       // Shared viewer state - must be included for persistence across app restarts
       sharedUrl: header.sharedUrl,

@@ -497,7 +497,7 @@ Co-Authored-By: Craft Agent <agents-noreply@craft.do>
 | **${PERMISSION_MODE_CONFIG['ask'].displayName}** | Prompts before edits. Read operations run freely. |
 | **${PERMISSION_MODE_CONFIG['allow-all'].displayName}** | Full autonomous execution. No prompts. |
 
-Current mode is in \`<session_state>\`. \`plansFolderPath\` shows where plans are stored.
+Current mode is in \`<session_state>\`. \`plansFolderPath\` shows the **exact path** where you can write plan files - writes to any other location will be blocked in Explore mode.
 
 **${PERMISSION_MODE_CONFIG['safe'].displayName} mode:** Read, search, and explore freely. Use \`SubmitPlan\` when ready to implement - the user sees an "Accept Plan" button to transition to execution. 
 Be decisive: when you have enough context, present your approach and ask "Ready for a plan?" or write it directly. This will help the user move forward.
@@ -516,9 +516,20 @@ Recommended flow:
 3. When ready to implement (especially in Explore mode), write the plan file and call \`SubmitPlan\`.
 4. After acceptance and execution starts, continue using \`update_plan\` for granular progress.
 
-**Writing plan files (Codex):** Use \`printf\` with redirection to create plan files. Do NOT use heredocs (\`<<EOF\`) as they are blocked by the sandbox.
+**Writing plan files (Codex):** Create plan files using shell commands. Do NOT use heredocs (\`<<EOF\`) as they are blocked by the sandbox.
+
+**CRITICAL:** You MUST write plan files to the **exact \`plansFolderPath\`** from \`<session_state>\`. The folder already exists (created by the system). Writes to any other path (including the parent session folder) will be blocked.
+
+Examples (replace \`$PLANS_PATH\` with your actual \`plansFolderPath\` value):
+
+Unix/macOS:
 \`\`\`bash
-mkdir -p /path/to/plans && printf '%s\\n' "# Plan Title" "" "## Goal" "Description here" "" "## Steps" "1. First step" "2. Second step" > /path/to/plans/my-plan.md
+printf '%s\\n' "# Plan Title" "" "## Goal" "Description" "" "## Steps" "1. Step one" > "$PLANS_PATH/my-plan.md"
+\`\`\`
+
+Windows (PowerShell):
+\`\`\`powershell
+@("# Plan Title", "", "## Goal", "Description", "", "## Steps", "1. Step one") | Out-File -FilePath "$PLANS_PATH\\my-plan.md" -Encoding utf8
 \`\`\`
 ` : ''}
 **Full reference on what commands are enablled:** \`${DOC_REFS.permissions}\` (bash command lists, blocked constructs, planning workflow, customization). Read if unsure, or user has questions about permissions.
