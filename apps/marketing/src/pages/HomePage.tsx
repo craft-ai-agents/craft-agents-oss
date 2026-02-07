@@ -88,7 +88,7 @@ const integrationIcons = [
 const article = `
 Craft Agents is a tool we built so we can work effectively with agents. It enables intuitive multitasking, no-fluff connection to any API or Service, and a more document (vs code) centric workflow - in a beautiful and fluid UI.
 
-It uses the [Claude Agent SDK](https://docs.anthropic.com/en/docs/claude-code/sdk) and the Codex app-server side by side — building on what we found great, and improving areas where we've desired improvements.
+It uses the [Claude Agent SDK](https://docs.anthropic.com/en/docs/claude-code/sdk) and the [Codex app-server](https://developers.openai.com/codex/app-server) side by side, building on what we found great, and improving areas where we've desired improvements.
 
 It's built with [Agent Native](https://every.to/guides/agent-native) software principles in mind, and is highly customisable out of the box. One of the first of its kind.
 
@@ -213,12 +213,16 @@ export default function HomePage() {
       <img src={agentsLogo} alt="Craft Agents" className="w-[224px] mb-[48px]" />
 
       {/* Hero header */}
-      <div className="text-center max-w-xl py-2 mb-12">
+      <div className="text-center max-w-2xl py-2 mb-12">
         <h1 className="text-3xl font-extrabold leading-tight mb-4">
           Work with most powerful agents in the world, with the UX they deserve
         </h1>
         <p className="text-[18px] text-foreground/70 leading-relaxed">
-          Connect any API, MCP server, or local filesystem. Multitask naturally. Build your next-gen workflow with agents.
+          Connect any API, MCP server, or local filesystem.
+          <br />
+          Multitask naturally. Build your next-gen workflow with agents.
+          <br />
+          Works with both Anthropic and OpenAI models, including <strong>Claude</strong> and <strong>Codex</strong>.
         </p>
       </div>
 

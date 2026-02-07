@@ -93,6 +93,35 @@ function sanitizeForTitle(content: string): string {
 }
 
 /**
+ * Get the path to the bundled Bun executable.
+ * - Packaged app: returns path to bundled Bun in vendor/bun
+ * - Development: returns undefined (caller should use system 'bun' command)
+ *
+ * Used for:
+ * - Claude SDK subprocess execution (setExecutable)
+ * - Codex session MCP server (nodePath in config.toml)
+ */
+function getBundledBunPath(): string | undefined {
+  if (!app.isPackaged) {
+    return undefined // Use system bun in development
+  }
+
+  const basePath = app.getAppPath()
+  const bunBinary = process.platform === 'win32' ? 'bun.exe' : 'bun'
+  // On Windows, bun.exe is in extraResources (process.resourcesPath) to avoid EBUSY errors.
+  // On macOS/Linux, bun is in the app files (basePath). See electron-builder.yml for details.
+  const bunBasePath = process.platform === 'win32' ? process.resourcesPath : basePath
+  const bunPath = join(bunBasePath, 'vendor', 'bun', bunBinary)
+
+  if (!existsSync(bunPath)) {
+    sessionLog.warn(`Bundled Bun not found at ${bunPath}`)
+    return undefined
+  }
+
+  return bunPath
+}
+
+/**
  * Feature flags for agent behavior
  */
 export const AGENT_FLAGS = {
@@ -333,7 +362,9 @@ async function setupCodexSessionConfig(
     sessionId,
     workspaceRootPath,
     plansFolderPath,
-    nodePath: process.execPath,
+    // Use bundled Bun in packaged app, system 'bun' in development
+    // IMPORTANT: process.execPath returns the Electron binary in packaged apps, which cannot run JS files
+    nodePath: getBundledBunPath() ?? 'bun',
   })
 
   // Write config.toml
@@ -1145,23 +1176,17 @@ export class SessionManager {
     setInterceptorPath(interceptorPath)
 
     // In packaged app: use bundled Bun binary
-    // In development: use system 'bun' command
+    // In development: use system 'bun' command (no need to set executable)
+    const bundledBunPath = getBundledBunPath()
     if (app.isPackaged) {
-      // Use platform-specific binary name (bun.exe on Windows, bun on macOS/Linux)
-      const bunBinary = process.platform === 'win32' ? 'bun.exe' : 'bun'
-      // On Windows, bun.exe is in extraResources (process.resourcesPath) to avoid EBUSY errors.
-      // On macOS/Linux, bun is in the app files (basePath). See electron-builder.yml for details.
-      const bunBasePath = process.platform === 'win32' ? process.resourcesPath : basePath
-      const bunPath = join(bunBasePath, 'vendor', 'bun', bunBinary)
-      if (!existsSync(bunPath)) {
-        const error = `Bundled Bun runtime not found at ${bunPath}. The app package may be corrupted.`
+      if (!bundledBunPath) {
+        const error = 'Bundled Bun runtime not found. The app package may be corrupted.'
         sessionLog.error(error)
         throw new Error(error)
       }
-      sessionLog.info('Setting executable:', bunPath)
-      setExecutable(bunPath)
+      sessionLog.info('Setting executable:', bundledBunPath)
+      setExecutable(bundledBunPath)
     }
-    // In development: use system 'bun' (works on Windows now, supports --preload for interceptor)
 
     // Migrate legacy credentials to LLM connection format (one-time migration)
     // This ensures credentials saved before LLM connections are available via the new system
