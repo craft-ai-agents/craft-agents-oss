@@ -11,6 +11,7 @@
 
 import type { LoadedSource } from '../sources/types.ts';
 import type { SdkMcpServerConfig } from '../agent/backend/types.ts';
+import { isSourceUsable } from '../sources/storage.ts';
 
 // ============================================================
 // Custom Model Provider Configuration
@@ -433,7 +434,7 @@ export function generateCodexConfig(options: CodexConfigGeneratorOptions): Codex
 
   // Process each source
   for (const source of sources) {
-    if (!source.config.enabled) continue;
+    if (!isSourceUsable(source)) continue;
 
     const slug = source.config.slug;
 

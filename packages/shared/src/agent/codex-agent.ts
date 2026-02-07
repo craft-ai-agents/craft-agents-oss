@@ -75,7 +75,7 @@ import { getSystemPrompt } from '../prompts/system.ts';
 import {
   expandToolPaths,
   qualifySkillName,
-  stripMcpMetadata,
+  stripToolMetadata,
   validateConfigWrite,
   BUILT_IN_TOOLS,
 } from './core/pre-tool-use.ts';
@@ -1022,17 +1022,16 @@ export class CodexAgent extends BaseAgent {
     }
 
     // ============================================================
-    // MCP METADATA STRIPPING: Remove _intent/_displayName from MCP tools
+    // TOOL METADATA STRIPPING: Remove _intent/_displayName from ALL tools
+    // (extracted for UI in tool-matching.ts, stripped here before execution)
     // ============================================================
-    if (!BUILT_IN_TOOLS.has(sdkToolName)) {
-      const metadataResult = stripMcpMetadata(
-        sdkToolName,
-        modifiedInput || inputObj,
-        (msg) => this.debug(`PreToolUse: ${msg}`)
-      );
-      if (metadataResult.modified) {
-        modifiedInput = metadataResult.input;
-      }
+    const metadataResult = stripToolMetadata(
+      sdkToolName,
+      modifiedInput || inputObj,
+      (msg) => this.debug(`PreToolUse: ${msg}`)
+    );
+    if (metadataResult.modified) {
+      modifiedInput = metadataResult.input;
     }
 
     // If any modifications were made, return modified decision
@@ -1959,6 +1958,36 @@ export class CodexAgent extends BaseAgent {
     // Resume thread if we had one
     if (threadId) {
       try {
+        // Ensure auth tokens are injected before resuming to avoid 401 loops after interrupts
+        const normalizedAuthType =
+          this.config.authType ??
+          (this.config.legacyAuthType === 'api_key'
+            ? 'api_key'
+            : this.config.legacyAuthType === 'oauth_token'
+              ? 'oauth'
+              : undefined);
+
+        if (normalizedAuthType === 'oauth') {
+          this.debug('Attempting ChatGPT token injection before thread resume...');
+          const injected = await this.tryInjectStoredChatGptTokens();
+          if (!injected) {
+            this.debug('ChatGPT token injection failed after reconnect; skipping thread resume');
+            this.onChatGptAuthRequired?.('Missing or expired ChatGPT tokens after reconnect');
+            return;
+          }
+          this.debug('ChatGPT token injection succeeded before thread resume');
+        } else if (normalizedAuthType === 'api_key' || normalizedAuthType === 'api_key_with_endpoint') {
+          this.debug('Attempting API key injection before thread resume...');
+          const injected = await this.tryInjectStoredApiKey();
+          if (!injected) {
+            this.debug('API key injection failed after reconnect; skipping thread resume');
+            return;
+          }
+          this.debug('API key injection succeeded before thread resume');
+        } else {
+          this.debug(`Auth type ${normalizedAuthType ?? 'unknown'} - skipping explicit auth injection`);
+        }
+
         // Get mini agent config to determine which system prompt to use
         const miniConfig = this.getMiniAgentConfig();
 

@@ -948,6 +948,7 @@ export default function App() {
         ultrathinkEnabled: isUltrathink,
         skillSlugs,
         badges: badges.length > 0 ? badges : undefined,
+        optimisticMessageId: userMessage.id,
       })
 
       // Auto-disable ultrathink after sending (single-shot activation)

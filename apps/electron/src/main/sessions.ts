@@ -63,7 +63,7 @@ import {
   type TodoState,
   pickSessionFields,
 } from '@craft-agent/shared/sessions'
-import { loadWorkspaceSources, loadAllSources, getSourcesBySlugs, type LoadedSource, type McpServerConfig, getSourcesNeedingAuth, getSourceCredentialManager, getSourceServerBuilder, type SourceWithCredential, isApiOAuthProvider, SERVER_BUILD_ERRORS } from '@craft-agent/shared/sources'
+import { loadWorkspaceSources, loadAllSources, getSourcesBySlugs, isSourceUsable, type LoadedSource, type McpServerConfig, getSourcesNeedingAuth, getSourceCredentialManager, getSourceServerBuilder, type SourceWithCredential, isApiOAuthProvider, SERVER_BUILD_ERRORS } from '@craft-agent/shared/sources'
 import { ConfigWatcher, type ConfigWatcherCallbacks } from '@craft-agent/shared/config'
 import { getAuthState } from '@craft-agent/shared/auth'
 import { setAnthropicOptionsEnv, setPathToClaudeCodeExecutable, setInterceptorPath, setExecutable } from '@craft-agent/shared/agent'
@@ -546,6 +546,7 @@ interface ManagedSession {
     storedAttachments?: StoredAttachment[]
     options?: SendMessageOptions
     messageId?: string  // Pre-generated ID for matching with UI
+    optimisticMessageId?: string  // Frontend's ID for reliable event matching
   }>
   // Map of shellId -> command for killing background shells
   backgroundShellCommands: Map<string, string>
@@ -619,6 +620,8 @@ function messageToStored(msg: Message): StoredMessage {
     authError: msg.authError,
     authEmail: msg.authEmail,
     authWorkspace: msg.authWorkspace,
+    // Queue state (for recovery after crash)
+    isQueued: msg.isQueued,
   }
 }
 
@@ -669,6 +672,8 @@ function storedToMessage(stored: StoredMessage): Message {
     authError: stored.authError,
     authEmail: stored.authEmail,
     authWorkspace: stored.authWorkspace,
+    // Queue state (for recovery after crash)
+    isQueued: stored.isQueued,
   }
 }
 
@@ -919,7 +924,7 @@ export class SessionManager {
     // Rebuild MCP and API servers for session's enabled sources
     const enabledSlugs = managed.enabledSourceSlugs || []
     const enabledSources = allSources.filter(s =>
-      enabledSlugs.includes(s.config.slug) && s.config.enabled && s.config.isAuthenticated
+      enabledSlugs.includes(s.config.slug) && isSourceUsable(s)
     )
     // Pass session path so large API responses can be saved to session folder
     const sessionPath = getSessionStoragePath(workspaceRootPath, managed.id)
@@ -1613,6 +1618,30 @@ export class SessionManager {
         managed.connectionLocked = storedSession.connectionLocked
       }
       sessionLog.debug(`Lazy-loaded ${managed.messages.length} messages for session ${managed.id}`)
+
+      // Queue recovery: find orphaned queued messages from crash/restart and re-queue them
+      const orphanedQueued = managed.messages.filter(m =>
+        m.role === 'user' && m.isQueued === true
+      )
+      if (orphanedQueued.length > 0) {
+        sessionLog.info(`Recovering ${orphanedQueued.length} queued message(s) for session ${managed.id}`)
+        for (const msg of orphanedQueued) {
+          managed.messageQueue.push({
+            message: msg.content,
+            messageId: msg.id,
+            attachments: undefined,  // Attachments already stored on disk
+            storedAttachments: msg.attachments,
+            options: msg.ultrathink ? { ultrathinkEnabled: true } : undefined,
+          })
+        }
+        // Process queue when session becomes active (will be triggered by first message or interaction)
+        // Use setImmediate to avoid blocking the load and allow session state to settle
+        if (!managed.isProcessing && managed.messageQueue.length > 0) {
+          setImmediate(() => {
+            this.processNextQueuedMessage(managed.id)
+          })
+        }
+      }
     }
     managed.messagesLoaded = true
   }
@@ -1992,7 +2021,7 @@ export class SessionManager {
         const enabledSlugs = managed.enabledSourceSlugs || []
         const allSources = loadAllSources(managed.workspace.rootPath)
         const enabledSources = allSources.filter(s =>
-          enabledSlugs.includes(s.config.slug) && s.config.enabled && s.config.isAuthenticated
+          enabledSlugs.includes(s.config.slug) && isSourceUsable(s)
         )
         const { mcpServers } = await buildServersFromSources(enabledSources, sessionPath)
         const codexHome = await setupCodexSessionConfig(sessionPath, enabledSources, mcpServers, managed.id, managed.workspace.rootPath)
@@ -2307,15 +2336,9 @@ export class SessionManager {
 
         const source = sources[0]
 
-        // Check if source is enabled at workspace level
-        if (!source.config.enabled) {
-          sessionLog.warn(`Source ${sourceSlug} is disabled at workspace level`)
-          return false
-        }
-
-        // Check if source is authenticated (if it requires auth)
-        if (!source.config.isAuthenticated) {
-          sessionLog.warn(`Source ${sourceSlug} requires authentication`)
+        // Check if source is usable (enabled and authenticated if auth is required)
+        if (!isSourceUsable(source)) {
+          sessionLog.warn(`Source ${sourceSlug} is not usable (disabled or requires authentication)`)
           return false
         }
 
@@ -2354,8 +2377,23 @@ export class SessionManager {
 
         // Apply source servers to the agent
         const intendedSlugs = allEnabledSources
-          .filter(s => s.config.enabled && s.config.isAuthenticated)
+          .filter(isSourceUsable)
           .map(s => s.config.slug)
+
+        // For Codex backend, regenerate config.toml and reconnect to pick up new sources
+        // (Codex reads MCP config from file at startup, unlike Claude which has runtime injection)
+        if (managed.agent instanceof CodexBackend) {
+          await setupCodexSessionConfig(
+            sessionPath,
+            allEnabledSources,
+            mcpServers,
+            managed.id,
+            workspaceRootPath
+          )
+          await managed.agent.reconnect()
+          sessionLog.info(`Codex config regenerated and reconnected for source enable in session ${managed.id}`)
+        }
+
         managed.agent!.setSourceServers(mcpServers, apiServers, intendedSlugs)
 
         sessionLog.info(`Auto-enabled source ${sourceSlug} for session ${managed.id}`)
@@ -2764,7 +2802,7 @@ export class SessionManager {
       managed.agent.setAllSources(allSources)
 
       // Set active source servers (tools are only available from these)
-      const intendedSlugs = sources.filter(s => s.config.enabled && s.config.isAuthenticated).map(s => s.config.slug)
+      const intendedSlugs = sources.filter(isSourceUsable).map(s => s.config.slug)
       managed.agent.setSourceServers(mcpServers, apiServers, intendedSlugs)
 
       // For Codex backend, regenerate config.toml and reconnect to pick up new sources
@@ -3197,14 +3235,15 @@ export class SessionManager {
       managed.messages.push(queuedMessage)
 
       // Queue the message info (with the generated ID for later matching)
-      managed.messageQueue.push({ message, attachments, storedAttachments, options, messageId: queuedMessage.id })
+      managed.messageQueue.push({ message, attachments, storedAttachments, options, messageId: queuedMessage.id, optimisticMessageId: options?.optimisticMessageId })
 
       // Emit user_message event so UI can show queued state
       this.sendEvent({
         type: 'user_message',
         sessionId,
         message: queuedMessage,
-        status: 'queued'
+        status: 'queued',
+        optimisticMessageId: options?.optimisticMessageId
       }, managed.workspace.id)
 
       // Force-abort via Query.close() - immediately stops processing.
@@ -3243,7 +3282,8 @@ export class SessionManager {
         type: 'user_message',
         sessionId,
         message: userMessage,
-        status: 'accepted'
+        status: 'accepted',
+        optimisticMessageId: options?.optimisticMessageId
       }, managed.workspace.id)
 
       // If this is the first user message and no title exists, set one immediately
@@ -3354,7 +3394,7 @@ export class SessionManager {
       const apiCount = Object.keys(apiServers).length
       if (mcpCount > 0 || apiCount > 0 || managed.enabledSourceSlugs.length > 0) {
         // Pass intended slugs so agent shows sources as active even if build failed
-        const intendedSlugs = sources.filter(s => s.config.enabled && s.config.isAuthenticated).map(s => s.config.slug)
+        const intendedSlugs = sources.filter(isSourceUsable).map(s => s.config.slug)
         agent.setSourceServers(mcpServers, apiServers, intendedSlugs)
         sessionLog.info(`Applied ${mcpCount} MCP + ${apiCount} API sources to session ${sessionId} (${allSources.length} total)`)
       }
@@ -3657,11 +3697,16 @@ export class SessionManager {
     if (next.messageId) {
       const existingMessage = managed.messages.find(m => m.id === next.messageId)
       if (existingMessage) {
+        // Clear isQueued flag and persist - prevents re-queueing if crash during processing
+        existingMessage.isQueued = false
+        this.persistSession(managed)
+
         this.sendEvent({
           type: 'user_message',
           sessionId,
           message: existingMessage,
-          status: 'processing'
+          status: 'processing',
+          optimisticMessageId: next.optimisticMessageId
         }, managed.workspace.id)
       }
     }

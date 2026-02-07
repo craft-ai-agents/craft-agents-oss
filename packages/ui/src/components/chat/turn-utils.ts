@@ -510,7 +510,8 @@ export function groupMessagesByTurn(messages: Message[]): Turn[] {
       continue
     }
 
-    // Plan messages are treated as the response of the current turn (like assistant messages)
+    // Plan messages are added as activities to be time-sorted with tool calls
+    // This ensures SubmitPlan tool appears before the plan content chronologically
     if (message.role === 'plan') {
       if (!currentTurn) {
         // Edge case: plan without preceding activities
@@ -525,12 +526,15 @@ export function groupMessagesByTurn(messages: Message[]): Turn[] {
           timestamp: message.timestamp,
         }
       }
-      // Set plan as the response (like a final assistant message)
-      currentTurn.response = {
-        text: message.content,
-        isStreaming: false,
-        isPlan: true,
-      }
+      // Add plan as an activity so it gets time-sorted with other activities
+      currentTurn.activities.push({
+        id: message.id,
+        type: 'plan' as ActivityType,
+        status: 'completed',
+        content: message.content,
+        displayName: 'Plan',
+        timestamp: message.timestamp,
+      })
       currentTurn.isStreaming = false
       currentTurn.isComplete = true
       flushCurrentTurn()

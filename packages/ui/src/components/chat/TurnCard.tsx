@@ -149,8 +149,8 @@ export const SIZE_CONFIG = {
   spinnerSizeSmall: 'text-[8px]',
   /** Activity row height in pixels (approx for calculation) */
   activityRowHeight: 24,
-  /** Max visible activities before scrolling (show ~14 items) */
-  maxVisibleActivities: 14,
+  /** Max visible activities before scrolling (show ~15 items) */
+  maxVisibleActivities: 15,
   /** Number of items before which we apply staggered animation */
   staggeredAnimationLimit: 10,
 } as const
@@ -160,7 +160,7 @@ export const SIZE_CONFIG = {
 // ============================================================================
 
 export type ActivityStatus = 'pending' | 'running' | 'completed' | 'error' | 'backgrounded'
-export type ActivityType = 'tool' | 'thinking' | 'intermediate' | 'status'
+export type ActivityType = 'tool' | 'thinking' | 'intermediate' | 'status' | 'plan'
 
 // ============================================================================
 // Todo Types (for TodoWrite tool visualization)
@@ -567,6 +567,16 @@ function formatToolDisplay(
       const action = extractActionFromDisplayName(iconName, displayName)
       return {
         name: iconName.toLowerCase() === 'terminal' ? action : `${iconName}: ${action}`,
+        icon: toolDisplayMeta.iconDataUrl,
+        description: toolDisplayMeta.description,
+      }
+    }
+
+    // For native tools with LLM-provided displayName: use the LLM's name
+    // This gives semantic names like "Read Config" instead of generic "Read"
+    if (displayName && toolDisplayMeta.category === 'native') {
+      return {
+        name: displayName,
         icon: toolDisplayMeta.iconDataUrl,
         description: toolDisplayMeta.description,
       }
@@ -1750,9 +1760,20 @@ export const TurnCard = React.memo(function TurnCard({
 
   // Sort activities by timestamp for correct chronological order
   // This handles the live streaming case (turn-utils sorts on flush for completed turns)
-  const sortedActivities = useMemo(
+  const allSortedActivities = useMemo(
     () => [...activities].sort((a, b) => a.timestamp - b.timestamp),
     [activities]
+  )
+
+  // Separate plan activities from regular activities
+  // Plans are rendered as full ResponseCards, not in the collapsible activities section
+  const planActivities = useMemo(
+    () => allSortedActivities.filter(a => a.type === 'plan'),
+    [allSortedActivities]
+  )
+  const sortedActivities = useMemo(
+    () => allSortedActivities.filter(a => a.type !== 'plan'),
+    [allSortedActivities]
   )
 
   // Check if we have any Task subagents - if so, use grouped view
@@ -1785,6 +1806,7 @@ export const TurnCard = React.memo(function TurnCard({
   // - All tool activities are errors (nothing completed successfully)
   // - Any intermediate activities have no meaningful content (empty or just whitespace)
   // - No response text to show
+  // - No plan activities
   // The "Response interrupted" info banner alone is sufficient feedback.
   const hasNoMeaningfulWork = activities.length > 0
     && activities.every(a => {
@@ -1792,6 +1814,8 @@ export const TurnCard = React.memo(function TurnCard({
       if (a.type === 'tool') return a.status === 'error'
       // Intermediate activities must have no meaningful content
       if (a.type === 'intermediate') return !a.content?.trim()
+      // Plan activities are meaningful work
+      if (a.type === 'plan') return false
       // Other activity types - consider as no meaningful work
       return true
     })
@@ -1800,7 +1824,8 @@ export const TurnCard = React.memo(function TurnCard({
     return null
   }
 
-  const hasActivities = activities.length > 0
+  // Only count non-plan activities for the collapsible section
+  const hasActivities = sortedActivities.length > 0
 
   // Determine if thinking indicator should show using the phase-based state machine.
   // This properly handles the "gap" state (awaiting) between tool completion and next action,
@@ -1914,7 +1939,7 @@ export const TurnCard = React.memo(function TurnCard({
                               : false
                           }
                           animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: hasUserToggled.current && index < SIZE_CONFIG.staggeredAnimationLimit ? index * 0.03 : 0 }}
+                          transition={{ delay: hasUserToggled.current ? (index < SIZE_CONFIG.staggeredAnimationLimit ? index * 0.03 : SIZE_CONFIG.staggeredAnimationLimit * 0.03) : 0 }}
                         >
                           <ActivityRow
                             activity={item}
@@ -1937,7 +1962,7 @@ export const TurnCard = React.memo(function TurnCard({
                         }
                         animate={{ opacity: 1, x: 0 }}
                         // Only animate on user toggle, not initial mount
-                        transition={{ delay: hasUserToggled.current && index < SIZE_CONFIG.staggeredAnimationLimit ? index * 0.03 : 0 }}
+                        transition={{ delay: hasUserToggled.current ? (index < SIZE_CONFIG.staggeredAnimationLimit ? index * 0.03 : SIZE_CONFIG.staggeredAnimationLimit * 0.03) : 0 }}
                       >
                         <ActivityRow
                           activity={activity}
@@ -1985,6 +2010,24 @@ export const TurnCard = React.memo(function TurnCard({
           <span>{isBuffering ? 'Preparing response...' : 'Thinking...'}</span>
         </div>
       )}
+
+      {/* Plan Activities - rendered as full ResponseCards, time-sorted with other activities */}
+      {planActivities.map((planActivity, index) => (
+        <div key={planActivity.id} className={cn("select-text", (hasActivities || index > 0) && "mt-2")}>
+          <ResponseCard
+            text={planActivity.content || ''}
+            isStreaming={false}
+            onOpenFile={onOpenFile}
+            onOpenUrl={onOpenUrl}
+            onPopOut={onPopOut ? () => onPopOut(planActivity.content || '') : undefined}
+            variant="plan"
+            onAccept={onAcceptPlan}
+            onAcceptWithCompact={onAcceptPlanWithCompact}
+            isLastResponse={isLastResponse && index === planActivities.length - 1}
+            compactMode={compactMode}
+          />
+        </div>
+      ))}
 
       {/* Response Section - only shown when not buffering */}
       {/* Animated version for playground demos */}

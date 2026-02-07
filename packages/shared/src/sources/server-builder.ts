@@ -13,6 +13,7 @@
 
 import type { LoadedSource, ApiConfig } from './types.ts';
 import type { ApiCredential } from './credential-manager.ts';
+import { isSourceUsable } from './storage.ts';
 import { createApiServer } from './api-tools.ts';
 import { createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
 import { debug } from '../utils/debug.ts';
@@ -115,11 +116,12 @@ export class SourceServerBuilder {
     };
 
     // Handle authentication for HTTP/SSE
+    // Note: Direct isAuthenticated check is safe here because we're inside authType !== 'none' block
     if (mcp.authType !== 'none') {
       if (token) {
         (config as { headers?: Record<string, string> }).headers = { Authorization: `Bearer ${token}` };
       } else if (source.config.isAuthenticated) {
-        // Expected token but not provided - needs re-auth
+        // Source claims to be authenticated but token is missing - needs re-auth
         debug(`[SourceServerBuilder] Source ${source.config.slug} needs re-authentication`);
         return null;
       }
@@ -153,6 +155,7 @@ export class SourceServerBuilder {
     const provider = source.config.provider;
 
     // Google APIs - use token getter with auto-refresh
+    // Note: Direct isAuthenticated check is safe - Google OAuth always requires auth
     if (provider === 'google') {
       if (!source.config.isAuthenticated || !getToken) {
         debug(`[SourceServerBuilder] Google API source ${source.config.slug} not authenticated`);
@@ -166,6 +169,7 @@ export class SourceServerBuilder {
     }
 
     // Slack APIs - use token getter with auto-refresh
+    // Note: Direct isAuthenticated check is safe - Slack OAuth always requires auth
     if (provider === 'slack') {
       if (!source.config.isAuthenticated || !getToken) {
         debug(`[SourceServerBuilder] Slack API source ${source.config.slug} not authenticated`);
@@ -248,7 +252,7 @@ export class SourceServerBuilder {
     const errors: BuiltServers['errors'] = [];
 
     for (const { source, token, credential } of sourcesWithCredentials) {
-      if (!source.config.enabled) continue;
+      if (!isSourceUsable(source)) continue;
 
       try {
         if (source.config.type === 'mcp') {

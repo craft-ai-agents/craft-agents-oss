@@ -54,7 +54,7 @@ import { detectConfigFileType, detectAppConfigFileType, validateConfigFileConten
 import {
   expandToolPaths,
   qualifySkillName,
-  stripMcpMetadata,
+  stripToolMetadata,
   validateConfigWrite,
   BUILT_IN_TOOLS,
 } from './core/pre-tool-use.ts';
@@ -1011,16 +1011,15 @@ export class ClaudeAgent extends BaseAgent {
                 }
               }
 
-              // MCP METADATA STRIPPING: Remove _intent/_displayName from non-SDK tools
-              if (!BUILT_IN_TOOLS.has(input.tool_name)) {
-                const metadataResult = stripMcpMetadata(
-                  input.tool_name,
-                  modifiedInput || toolInput,
-                  (msg) => this.onDebug?.(msg)
-                );
-                if (metadataResult.modified) {
-                  modifiedInput = metadataResult.input;
-                }
+              // TOOL METADATA STRIPPING: Remove _intent/_displayName from ALL tools
+              // (extracted for UI in tool-matching.ts, stripped here before SDK execution)
+              const metadataResult = stripToolMetadata(
+                input.tool_name,
+                modifiedInput || toolInput,
+                (msg) => this.onDebug?.(msg)
+              );
+              if (metadataResult.modified) {
+                modifiedInput = metadataResult.input;
               }
 
               // If any modifications were made, return with updated input

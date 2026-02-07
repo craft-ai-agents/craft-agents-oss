@@ -49,6 +49,7 @@ export {
   loadWorkspaceSources,
   loadAllSources,
   getEnabledSources,
+  isSourceUsable,
   getSourcesBySlugs,
   // Create/Delete operations
   generateSourceSlug,

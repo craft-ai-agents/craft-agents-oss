@@ -353,6 +353,26 @@ export function getEnabledSources(workspaceRootPath: string): LoadedSource[] {
 }
 
 /**
+ * Check if a source is ready for use (enabled and authenticated).
+ * Sources with authType: 'none' or undefined are considered authenticated.
+ *
+ * Use this instead of inline `s.config.enabled && s.config.isAuthenticated` checks
+ * to ensure consistent handling of no-auth sources.
+ */
+export function isSourceUsable(source: LoadedSource): boolean {
+  if (!source.config.enabled) return false;
+
+  // Get auth type from MCP or API config
+  const authType = source.config.mcp?.authType || source.config.api?.authType;
+
+  // Sources with no auth requirement are always usable when enabled
+  if (authType === 'none' || authType === undefined) return true;
+
+  // Sources requiring auth must be authenticated
+  return source.config.isAuthenticated === true;
+}
+
+/**
  * Get sources by slugs for a workspace.
  * Includes both user-configured sources from disk and builtin sources
  * (like craft-agents-docs) that don't have filesystem folders.

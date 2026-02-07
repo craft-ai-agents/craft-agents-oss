@@ -136,6 +136,7 @@ export {
   // Functions
   expandToolPaths,
   qualifySkillName,
-  stripMcpMetadata,
+  stripToolMetadata,
+  stripMcpMetadata, // deprecated alias for backwards compatibility
   validateConfigWrite,
 } from './pre-tool-use.ts';

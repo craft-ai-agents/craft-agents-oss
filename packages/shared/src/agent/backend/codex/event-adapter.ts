@@ -171,10 +171,13 @@ export class EventAdapter {
             originalCommand: item.command,
           };
           this.readCommands.set(item.id, readInfo);
-          yield this.createToolStart(item.id, 'Read', {
-            file_path: readAction.path,
-            _command: item.command,
-          });
+          yield this.createToolStart(
+            item.id,
+            'Read',
+            { file_path: readAction.path, _command: item.command },
+            item.description ?? undefined,
+            item.displayName ?? 'Read File',
+          );
           break;
         }
 
@@ -182,14 +185,20 @@ export class EventAdapter {
         const parsedReadInfo = parseReadCommand(item.command);
         if (parsedReadInfo) {
           this.readCommands.set(item.id, parsedReadInfo);
-          yield this.createToolStart(item.id, 'Read', {
-            file_path: parsedReadInfo.filePath,
-            offset: parsedReadInfo.startLine,
-            limit: parsedReadInfo.endLine
-              ? parsedReadInfo.endLine - (parsedReadInfo.startLine || 1) + 1
-              : undefined,
-            _command: parsedReadInfo.originalCommand,
-          });
+          yield this.createToolStart(
+            item.id,
+            'Read',
+            {
+              file_path: parsedReadInfo.filePath,
+              offset: parsedReadInfo.startLine,
+              limit: parsedReadInfo.endLine
+                ? parsedReadInfo.endLine - (parsedReadInfo.startLine || 1) + 1
+                : undefined,
+              _command: parsedReadInfo.originalCommand,
+            },
+            item.description ?? undefined,
+            item.displayName ?? 'Read File',
+          );
           break;
         }
 
@@ -216,24 +225,39 @@ export class EventAdapter {
         });
         break;
 
-      case 'mcpToolCall':
+      case 'mcpToolCall': {
+        // Extract intent/displayName from arguments if available (MCP tools may include these)
+        const args = item.arguments as Record<string, unknown>;
+        const mcpIntent = typeof args?._intent === 'string' ? args._intent : undefined;
+        const mcpDisplayName = typeof args?._displayName === 'string' ? args._displayName : undefined;
         yield this.createToolStart(
           item.id,
           `mcp__${item.server}__${item.tool}`,
-          item.arguments as Record<string, unknown>,
+          args,
+          mcpIntent,
+          mcpDisplayName,
+        );
+        break;
+      }
+
+      case 'webSearch':
+        yield this.createToolStart(
+          item.id,
+          'WebSearch',
+          { query: item.query },
+          `Searching for: ${item.query}`,
+          'Web Search',
         );
         break;
 
-      case 'webSearch':
-        yield this.createToolStart(item.id, 'WebSearch', {
-          query: item.query,
-        });
-        break;
-
       case 'imageView':
-        yield this.createToolStart(item.id, 'ImageView', {
-          path: item.path,
-        });
+        yield this.createToolStart(
+          item.id,
+          'ImageView',
+          { path: item.path },
+          `Viewing image: ${item.path}`,
+          'View Image',
+        );
         break;
 
       case 'collabAgentToolCall':

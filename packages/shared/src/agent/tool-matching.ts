@@ -15,6 +15,10 @@
  */
 
 import type { AgentEvent } from '@craft-agent/core/types';
+import { createLogger } from '../utils/debug.ts';
+import { toolMetadataStore } from '../network-interceptor.ts';
+
+const log = createLogger('tool-matching');
 
 // ============================================================================
 // Tool Index — append-only, order-independent lookup
@@ -159,8 +163,7 @@ export function extractToolStarts(
       const hasNewInput = Object.keys(toolBlock.input).length > 0;
       if (hasNewInput) {
         // Re-emit with complete input (assistant message has full input, stream has {})
-        const intent = extractIntent(toolBlock);
-        const displayName = toolBlock.input._displayName as string | undefined;
+        const { intent, displayName } = extractToolMetadata(toolBlock);
         events.push({
           type: 'tool_start',
           toolName: toolBlock.name,
@@ -177,8 +180,7 @@ export function extractToolStarts(
 
     emittedToolStartIds.add(toolBlock.id);
 
-    const intent = extractIntent(toolBlock);
-    const displayName = toolBlock.input._displayName as string | undefined;
+    const { intent, displayName } = extractToolMetadata(toolBlock);
 
     events.push({
       type: 'tool_start',
@@ -295,15 +297,45 @@ export function extractToolResults(
 // Helpers (pure)
 // ============================================================================
 
-/** Extract intent from a tool_use block's input */
-function extractIntent(toolBlock: ToolUseBlock): string | undefined {
-  const input = toolBlock.input;
-  let intent = input._intent as string | undefined;
-  // For Bash tools, use description field as intent
-  if (!intent && toolBlock.name === 'Bash') {
-    intent = (input as { description?: string }).description;
+/**
+ * Extract intent and displayName from tool metadata store.
+ * Calls get() once (which pops the file) and returns both values.
+ *
+ * Fallbacks:
+ * - intent: input._intent, or Bash description field
+ * - displayName: input._displayName
+ */
+function extractToolMetadata(toolBlock: ToolUseBlock): { intent?: string; displayName?: string } {
+  // Check the metadata store (populated by network interceptor) - single call, pops the file
+  const metadata = toolMetadataStore.get(toolBlock.id);
+
+  // DEBUG: Log store access
+  try {
+    const fs = require('fs');
+    const os = require('os');
+    const path = require('path');
+    const logPath = path.join(os.homedir(), '.craft-agent', 'logs', 'interceptor.log');
+    const line = `${new Date().toISOString()} [tool-matching] extractToolMetadata ${toolBlock.name} (${toolBlock.id}): storeSize=${toolMetadataStore.size}, found=${!!metadata}, intent=${metadata?.intent?.substring(0, 50) ?? 'undefined'}, displayName=${metadata?.displayName ?? 'undefined'}\n`;
+    fs.appendFileSync(logPath, line);
+  } catch { /* ignore */ }
+
+  let intent = metadata?.intent;
+  let displayName = metadata?.displayName;
+
+  // Fallbacks if metadata store didn't have values
+  if (!intent) {
+    intent = toolBlock.input._intent as string | undefined;
+    // For Bash tools, use description field as intent
+    if (!intent && toolBlock.name === 'Bash') {
+      intent = (toolBlock.input as { description?: string }).description;
+    }
   }
-  return intent;
+
+  if (!displayName) {
+    displayName = toolBlock.input._displayName as string | undefined;
+  }
+
+  return { intent, displayName };
 }
 
 /** Serialize a tool result value to string, handling circular references */

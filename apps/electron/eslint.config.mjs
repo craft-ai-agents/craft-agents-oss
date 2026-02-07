@@ -14,6 +14,7 @@ import noLocalStorage from './eslint-rules/no-localstorage.cjs'
 import noDirectPlatformCheck from './eslint-rules/no-direct-platform-check.cjs'
 import noHardcodedPathSeparator from './eslint-rules/no-hardcoded-path-separator.cjs'
 import noDirectFileOpen from './eslint-rules/no-direct-file-open.cjs'
+import noInlineSourceAuthCheck from './eslint-rules/no-inline-source-auth-check.cjs'
 
 export default [
   // Ignore patterns
@@ -69,6 +70,12 @@ export default [
           'no-direct-file-open': noDirectFileOpen,
         },
       },
+      // Custom plugin for source auth checks (shared with packages/shared)
+      'craft-sources': {
+        rules: {
+          'no-inline-source-auth-check': noInlineSourceAuthCheck,
+        },
+      },
     },
     settings: {
       react: {
@@ -92,6 +99,9 @@ export default [
 
       // Custom link interceptor rule — prevents bypassing in-app file preview
       'craft-links/no-direct-file-open': 'error',
+
+      // Custom source auth check rule — use isSourceUsable() instead of inline checks
+      'craft-sources/no-inline-source-auth-check': 'error',
 
       // Enforce centralized action registry for keyboard shortcuts
       'no-restricted-imports': ['error', {

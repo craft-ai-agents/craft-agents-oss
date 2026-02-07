@@ -803,6 +803,13 @@ export class SourceCredentialManager {
  * Check if a single source needs authentication.
  * Returns true if the source requires auth but isn't yet authenticated.
  *
+ * This is the **inverse** of the auth portion of isSourceUsable().
+ * - isSourceUsable() → Is the source ready to use? (enabled AND auth OK)
+ * - sourceNeedsAuthentication() → Does the source need auth to become usable?
+ *
+ * Use this to prompt users for authentication, not for filtering sources.
+ * For filtering sources, use isSourceUsable() from storage.ts.
+ *
  * This correctly handles:
  * - MCP sources with authType: "none" → never needs auth
  * - MCP sources with stdio transport → never needs auth (runs locally)

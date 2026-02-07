@@ -343,6 +343,8 @@ export interface UserMessageEvent {
   sessionId: string
   message: Message
   status: 'accepted' | 'queued' | 'processing'
+  /** Frontend's optimistic message ID for reliable matching */
+  optimisticMessageId?: string
 }
 
 /**

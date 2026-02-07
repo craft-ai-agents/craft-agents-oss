@@ -199,28 +199,24 @@ export function qualifySkillName(
 // ============================================================
 
 /**
- * Strip _intent and _displayName metadata from MCP tool inputs.
+ * Strip _intent and _displayName metadata from tool inputs.
  *
- * These fields are for UI display only and should not be forwarded
- * to MCP servers, which may not recognize them and could error.
+ * These fields are injected into all tool schemas by the network interceptor
+ * so Claude provides semantic intent for UI display. They must be stripped
+ * before execution to avoid SDK validation errors and MCP server rejections.
  *
- * Only strips from non-built-in tools (MCP tools).
+ * The extraction for UI happens in tool-matching.ts BEFORE this stripping.
  *
  * @param toolName - The tool name
  * @param input - The tool input object
  * @param onDebug - Optional debug callback
  * @returns MetadataStrippingResult with modified flag and cleaned input
  */
-export function stripMcpMetadata(
+export function stripToolMetadata(
   toolName: string,
   input: Record<string, unknown>,
   onDebug?: (message: string) => void
 ): MetadataStrippingResult {
-  // Don't strip from built-in SDK tools
-  if (BUILT_IN_TOOLS.has(toolName)) {
-    return { modified: false, input };
-  }
-
   const hasMetadata = '_intent' in input || '_displayName' in input;
 
   if (!hasMetadata) {
@@ -229,13 +225,18 @@ export function stripMcpMetadata(
 
   // Strip the metadata fields
   const { _intent, _displayName, ...cleanInput } = input;
-  onDebug?.(`Stripped MCP metadata from ${toolName}: _intent=${!!_intent}, _displayName=${!!_displayName}`);
+  onDebug?.(`Stripped tool metadata from ${toolName}: _intent=${!!_intent}, _displayName=${!!_displayName}`);
 
   return {
     modified: true,
     input: cleanInput,
   };
 }
+
+/**
+ * @deprecated Use stripToolMetadata instead. This alias is kept for backwards compatibility.
+ */
+export const stripMcpMetadata = stripToolMetadata;
 
 // ============================================================
 // CONFIG FILE VALIDATION

@@ -454,11 +454,11 @@ export function handleUserMessage(
   const { session, streaming } = state
   const { message, status } = event
 
-  // Find existing message by content + timestamp match (for optimistic updates)
-  // or by ID (for queued messages where backend created the ID)
+  // Find existing message by ID match (backend ID, optimistic ID, or content+timestamp fallback)
   const existingIndex = session.messages.findIndex(m =>
     m.role === 'user' && (
       m.id === message.id ||
+      (event.optimisticMessageId && m.id === event.optimisticMessageId) ||
       (m.content === message.content && Math.abs(m.timestamp - message.timestamp) < 5000)
     )
   )
@@ -466,6 +466,15 @@ export function handleUserMessage(
   let updatedMessages: Message[]
 
   if (existingIndex >= 0) {
+    const existingMessage = session.messages[existingIndex]
+
+    // Event sequence protection: don't regress from 'processing' back to 'queued'
+    // This handles out-of-order events (e.g., 'processing' arrives before 'queued')
+    if (status === 'queued' && existingMessage.isQueued === false) {
+      // Already progressed past queued state, ignore this late 'queued' event
+      return { state, effects: [] }
+    }
+
     // Update existing message - remove isPending, add isQueued if status is 'queued'
     updatedMessages = session.messages.map((m, i) => {
       if (i === existingIndex) {

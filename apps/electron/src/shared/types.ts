@@ -462,7 +462,7 @@ export type SessionEvent =
   | { type: 'task_progress'; sessionId: string; toolUseId: string; elapsedSeconds: number; turnId?: string }
   | { type: 'shell_killed'; sessionId: string; shellId: string }
   // User message events (for optimistic UI with backend as source of truth)
-  | { type: 'user_message'; sessionId: string; message: Message; status: 'accepted' | 'queued' | 'processing' }
+  | { type: 'user_message'; sessionId: string; message: Message; status: 'accepted' | 'queued' | 'processing'; optimisticMessageId?: string }
   // Session metadata events (for multi-window sync)
   | { type: 'session_flagged'; sessionId: string }
   | { type: 'session_unflagged'; sessionId: string }
@@ -507,6 +507,8 @@ export interface SendMessageOptions {
   skillSlugs?: string[]
   /** Content badges for inline display (sources, skills with embedded icons) */
   badges?: import('@craft-agent/core').ContentBadge[]
+  /** Frontend's optimistic message ID for reliable event matching */
+  optimisticMessageId?: string
 }
 
 // =============================================================================

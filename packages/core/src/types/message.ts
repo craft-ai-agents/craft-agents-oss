@@ -270,6 +270,8 @@ export interface StoredMessage {
   authError?: string;
   authEmail?: string;
   authWorkspace?: string;
+  // Queued: user message that is waiting to be processed (persisted for recovery)
+  isQueued?: boolean;
 }
 
 /**
