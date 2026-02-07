@@ -7,8 +7,9 @@
  * Features:
  * - Captures API errors for error handler (4xx/5xx responses)
  * - Adds _intent and _displayName metadata to all tool schemas (request)
- * - Strips _intent and _displayName from tool_use responses (response)
- * - Stores extracted metadata in toolMetadataStore for UI consumption
+ *
+ * Note: Metadata (_intent/_displayName) flows through to the SDK in responses.
+ * It's extracted by tool-matching.ts and stripped by pre-tool-use.ts before execution.
  */
 
 import { existsSync, readFileSync, writeFileSync, unlinkSync, appendFileSync, mkdirSync } from 'node:fs';
@@ -107,17 +108,12 @@ export function clearLastApiError(): void {
 }
 
 // ============================================================================
-// TOOL METADATA STORE (File-based for cross-context sharing)
+// TOOL METADATA STORE (DEPRECATED - kept for backwards compatibility)
 // ============================================================================
 
 /**
- * Store for tool metadata extracted from Claude's responses.
- * Keyed by tool_use_id, stores the _intent and _displayName that Claude provided.
- *
- * Uses FILE-BASED storage to share data between the preloaded interceptor
- * and the agent module (which may run in different contexts/isolates).
- *
- * Entries are cleaned up after 5 minutes to prevent stale data.
+ * @deprecated Metadata is no longer stored separately. It flows through in tool input
+ * and is read directly by tool-matching.ts, then stripped by pre-tool-use.ts.
  */
 export interface ToolMetadata {
   intent?: string;
@@ -125,99 +121,28 @@ export interface ToolMetadata {
   timestamp: number;
 }
 
-const METADATA_DIR = join(homedir(), '.craft-agent', 'tool-metadata');
-const METADATA_MAX_AGE_MS = 5 * 60 * 1000; // 5 minutes
-
-// Ensure metadata directory exists
-try {
-  if (!existsSync(METADATA_DIR)) {
-    mkdirSync(METADATA_DIR, { recursive: true });
-  }
-} catch {
-  // Ignore - operations will fail gracefully
-}
-
 /**
- * File-based metadata store that works across process boundaries.
- * Each tool_use_id gets its own file for atomic read/write.
+ * @deprecated No-op stub for backwards compatibility.
+ * Metadata is now read directly from tool input in tool-matching.ts.
  */
 export const toolMetadataStore = {
-  set(toolUseId: string, metadata: ToolMetadata): void {
-    try {
-      const filePath = join(METADATA_DIR, `${toolUseId}.json`);
-      writeFileSync(filePath, JSON.stringify(metadata));
-    } catch {
-      // Silently fail
-    }
+  set(_toolUseId: string, _metadata: ToolMetadata): void {
+    // No-op: metadata flows through in tool input now
   },
 
-  get(toolUseId: string): ToolMetadata | undefined {
-    try {
-      const filePath = join(METADATA_DIR, `${toolUseId}.json`);
-      if (!existsSync(filePath)) return undefined;
-
-      const content = readFileSync(filePath, 'utf-8');
-      const metadata = JSON.parse(content) as ToolMetadata;
-
-      // POP: Delete file after reading (each metadata is only needed once)
-      try { unlinkSync(filePath); } catch { /* ignore */ }
-
-      // Check if expired (safety check)
-      if (Date.now() - metadata.timestamp > METADATA_MAX_AGE_MS) {
-        return undefined;
-      }
-
-      return metadata;
-    } catch {
-      return undefined;
-    }
+  get(_toolUseId: string): ToolMetadata | undefined {
+    // No-op: metadata is read from tool input in tool-matching.ts
+    return undefined;
   },
 
-  delete(toolUseId: string): void {
-    try {
-      const filePath = join(METADATA_DIR, `${toolUseId}.json`);
-      unlinkSync(filePath);
-    } catch {
-      // Silently fail
-    }
+  delete(_toolUseId: string): void {
+    // No-op
   },
 
   get size(): number {
-    try {
-      const files = require('fs').readdirSync(METADATA_DIR);
-      return files.filter((f: string) => f.endsWith('.json')).length;
-    } catch {
-      return 0;
-    }
+    return 0;
   },
 };
-
-// Clean up old metadata files periodically
-function cleanupMetadataFiles(): void {
-  try {
-    const files = require('fs').readdirSync(METADATA_DIR);
-    const now = Date.now();
-
-    for (const file of files) {
-      if (!file.endsWith('.json')) continue;
-      try {
-        const filePath = join(METADATA_DIR, file);
-        const content = readFileSync(filePath, 'utf-8');
-        const metadata = JSON.parse(content) as ToolMetadata;
-        if (now - metadata.timestamp > METADATA_MAX_AGE_MS) {
-          unlinkSync(filePath);
-        }
-      } catch {
-        // Ignore individual file errors
-      }
-    }
-  } catch {
-    // Silently fail
-  }
-}
-
-// Run cleanup every 5 minutes
-setInterval(cleanupMetadataFiles, METADATA_MAX_AGE_MS);
 
 function debugLog(...args: unknown[]) {
   if (!DEBUG) return;
@@ -330,265 +255,11 @@ function addMetadataToAllTools(body: Record<string, unknown>): Record<string, un
 }
 
 /**
- * Extract and strip _intent/_displayName from tool_use blocks in API response.
- * Stores extracted metadata in toolMetadataStore for later retrieval.
- * Returns the modified response body with metadata stripped from tool inputs.
- *
- * This runs BEFORE the SDK sees the response, so the SDK won't reject
- * the "unexpected parameters".
- */
-function stripToolMetadataFromResponse(body: unknown): unknown {
-  if (!body || typeof body !== 'object') return body;
-
-  const response = body as Record<string, unknown>;
-  const content = response.content as Array<{
-    type: string;
-    id?: string;
-    name?: string;
-    input?: Record<string, unknown>;
-  }> | undefined;
-
-  if (!content || !Array.isArray(content)) return body;
-
-  let modifiedCount = 0;
-
-  for (const block of content) {
-    if (block.type === 'tool_use' && block.id && block.input) {
-      const { _intent, _displayName, ...cleanInput } = block.input;
-
-      // Store metadata if we found any
-      if (_intent || _displayName) {
-        toolMetadataStore.set(block.id, {
-          intent: _intent as string | undefined,
-          displayName: _displayName as string | undefined,
-          timestamp: Date.now(),
-        });
-        debugLog(`[Response] Extracted metadata for ${block.name} (${block.id}): intent=${!!_intent}, displayName=${!!_displayName}`);
-
-        // Replace input with cleaned version
-        block.input = cleanInput;
-        modifiedCount++;
-      }
-    }
-  }
-
-  if (modifiedCount > 0) {
-    debugLog(`[Response] Stripped metadata from ${modifiedCount} tool_use blocks`);
-  }
-
-  return body;
-}
-
-/**
  * Check if URL should have API errors captured.
  * Uses the configured base URL so error capture works with any provider.
  */
 function shouldCaptureApiErrors(url: string): boolean {
   return isApiMessagesUrl(url);
-}
-
-/**
- * Create a TransformStream that modifies SSE events to strip tool metadata.
- *
- * SSE events for tool_use come as:
- * 1. content_block_start: {"type":"tool_use","id":"...","name":"...","input":{}}
- * 2. content_block_delta (multiple): {"delta":{"type":"input_json_delta","partial_json":"..."}}
- * 3. content_block_stop: end of block
- *
- * We buffer input_json_delta for tool_use blocks, then emit modified content
- * when the block completes.
- */
-function createSseTransformStream(): TransformStream<Uint8Array, Uint8Array> {
-  const decoder = new TextDecoder();
-  const encoder = new TextEncoder();
-
-  // Buffer for incomplete SSE data
-  let buffer = '';
-
-  // Track tool_use blocks: index -> { id, inputBuffer }
-  const toolBlocks = new Map<number, { id: string; name: string; inputBuffer: string }>();
-
-  return new TransformStream({
-    transform(chunk, controller) {
-      buffer += decoder.decode(chunk, { stream: true });
-
-      // Process complete events (separated by \n\n)
-      const parts = buffer.split('\n\n');
-      buffer = parts.pop() || ''; // Keep incomplete part
-
-      for (const part of parts) {
-        if (!part.trim()) {
-          controller.enqueue(encoder.encode('\n\n'));
-          continue;
-        }
-
-        // Parse SSE event
-        const lines = part.split('\n');
-        let eventType = '';
-        let data = '';
-
-        for (const line of lines) {
-          if (line.startsWith('event:')) {
-            eventType = line.slice(6).trim();
-          } else if (line.startsWith('data:')) {
-            data = line.slice(5).trim();
-          }
-        }
-
-        // Try to process tool_use related events
-        if (data) {
-          try {
-            const parsed = JSON.parse(data);
-
-            // Track content_block_start for tool_use
-            if (parsed.type === 'content_block_start' &&
-                parsed.content_block?.type === 'tool_use') {
-              const block = parsed.content_block;
-              toolBlocks.set(parsed.index, {
-                id: block.id,
-                name: block.name,
-                inputBuffer: '',
-              });
-              debugLog(`[SSE] Tracking tool_use block ${block.id} at index ${parsed.index}`);
-            }
-
-            // Buffer input_json_delta for tool_use blocks
-            if (parsed.type === 'content_block_delta' &&
-                parsed.delta?.type === 'input_json_delta' &&
-                toolBlocks.has(parsed.index)) {
-              const block = toolBlocks.get(parsed.index)!;
-              block.inputBuffer += parsed.delta.partial_json;
-              debugLog(`[SSE] Buffered delta for ${block.name} (${block.id}), buffer length: ${block.inputBuffer.length}`);
-              // Don't emit - we'll emit modified version on content_block_stop
-              continue;
-            }
-
-            // On content_block_stop, emit modified input and clean up
-            if (parsed.type === 'content_block_stop') {
-              debugLog(`[SSE] content_block_stop for index ${parsed.index}, tracked: ${toolBlocks.has(parsed.index)}`);
-            }
-            if (parsed.type === 'content_block_stop' && toolBlocks.has(parsed.index)) {
-              const block = toolBlocks.get(parsed.index)!;
-              toolBlocks.delete(parsed.index);
-
-              try {
-                // Parse the complete input
-                const input = JSON.parse(block.inputBuffer);
-                debugLog(`[SSE] Parsed input for ${block.name} (${block.id}), keys: ${Object.keys(input).join(', ')}`);
-                const { _intent, _displayName, ...cleanInput } = input;
-
-                // Store metadata if we found any
-                if (_intent || _displayName) {
-                  toolMetadataStore.set(block.id, {
-                    intent: _intent,
-                    displayName: _displayName,
-                    timestamp: Date.now(),
-                  });
-                  debugLog(`[SSE] Extracted metadata for ${block.name} (${block.id}): intent=${!!_intent}, displayName=${!!_displayName}`);
-
-                  // Emit modified input as a single delta
-                  const modifiedDelta = {
-                    type: 'content_block_delta',
-                    index: parsed.index,
-                    delta: {
-                      type: 'input_json_delta',
-                      partial_json: JSON.stringify(cleanInput),
-                    },
-                  };
-                  controller.enqueue(encoder.encode(`event: content_block_delta\ndata: ${JSON.stringify(modifiedDelta)}\n\n`));
-                } else {
-                  debugLog(`[SSE] No metadata found in ${block.name} (${block.id}) - _intent: ${!!_intent}, _displayName: ${!!_displayName}`);
-                  // No metadata to strip - emit original buffered content
-                  const originalDelta = {
-                    type: 'content_block_delta',
-                    index: parsed.index,
-                    delta: {
-                      type: 'input_json_delta',
-                      partial_json: block.inputBuffer,
-                    },
-                  };
-                  controller.enqueue(encoder.encode(`event: content_block_delta\ndata: ${JSON.stringify(originalDelta)}\n\n`));
-                }
-              } catch (parseErr) {
-                debugLog(`[SSE] Failed to parse buffered input for ${block.id}:`, parseErr);
-                // Emit original on error
-                const originalDelta = {
-                  type: 'content_block_delta',
-                  index: parsed.index,
-                  delta: {
-                    type: 'input_json_delta',
-                    partial_json: block.inputBuffer,
-                  },
-                };
-                controller.enqueue(encoder.encode(`event: content_block_delta\ndata: ${JSON.stringify(originalDelta)}\n\n`));
-              }
-            }
-          } catch {
-            // Not JSON or parsing failed - pass through
-          }
-        }
-
-        // Emit the original event
-        controller.enqueue(encoder.encode(part + '\n\n'));
-      }
-    },
-
-    flush(controller) {
-      // Emit any remaining buffer
-      if (buffer.trim()) {
-        controller.enqueue(encoder.encode(buffer));
-      }
-    },
-  });
-}
-
-/**
- * Intercept and modify an API response to strip tool metadata.
- * Handles both streaming (SSE) and non-streaming (JSON) responses.
- */
-async function interceptApiResponse(response: Response): Promise<Response> {
-  if (!response.ok) return response;
-
-  const contentType = response.headers.get('content-type') ?? '';
-
-  // Handle SSE streaming responses
-  if (contentType.includes('text/event-stream')) {
-    if (!response.body) return response;
-
-    debugLog('[SSE] Intercepting streaming response');
-    const transformedBody = response.body.pipeThrough(createSseTransformStream());
-
-    return new Response(transformedBody, {
-      status: response.status,
-      statusText: response.statusText,
-      headers: response.headers,
-    });
-  }
-
-  // Handle non-streaming JSON responses
-  try {
-    const clone = response.clone();
-    const text = await clone.text();
-
-    if (!text) return response;
-
-    const parsed = JSON.parse(text);
-    const modified = stripToolMetadataFromResponse(parsed);
-
-    if (modified !== parsed) {
-      const newBody = JSON.stringify(modified);
-      return new Response(newBody, {
-        status: response.status,
-        statusText: response.statusText,
-        headers: response.headers,
-      });
-    }
-
-    return response;
-  } catch (e) {
-    debugLog(`[Response interception failed]:`, e);
-    return response;
-  }
 }
 
 const originalFetch = globalThis.fetch.bind(globalThis);
@@ -765,12 +436,9 @@ async function interceptedFetch(
           body: JSON.stringify(parsed),
         };
 
-        let response = await originalFetch(url, modifiedInit);
-
-        // Strip _intent and _displayName from tool_use blocks (RESPONSE modification)
-        // This runs BEFORE SDK validation, storing metadata in toolMetadataStore
-        response = await interceptApiResponse(response);
-
+        // Response passes through unchanged - metadata (_intent/_displayName) flows
+        // to SDK and is extracted by tool-matching.ts, stripped by pre-tool-use.ts
+        const response = await originalFetch(url, modifiedInit);
         return logResponse(response, url, startTime);
       }
     } catch (e) {

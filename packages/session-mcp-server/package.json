@@ -3,13 +3,13 @@
   "version": "0.3.1",
   "license": "Apache-2.0",
   "description": "MCP server that provides session-scoped tools (SubmitPlan, config_validate, etc.) to Codex via stdio transport",
-  "type": "module",
-  "main": "src/index.ts",
+  "type": "commonjs",
+  "main": "dist/index.js",
   "bin": {
     "session-mcp-server": "./dist/index.js"
   },
   "scripts": {
-    "build": "bun build src/index.ts --outdir=dist --target=node --format=esm",
+    "build": "bun build src/index.ts --outdir=dist --target=node --format=cjs",
     "dev": "bun run src/index.ts"
   },
   "dependencies": {

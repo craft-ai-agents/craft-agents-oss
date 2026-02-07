@@ -402,8 +402,10 @@ export function groupMessagesByTurn(messages: Message[]): Turn[] {
 
       // If no response but we have intermediate text, promote the last one to response
       // Don't do this for interrupted turns - respect user interruptions
+      // Don't do this for turns with plans - the plan is the final output
       // Only promote when turn is complete (processing indicator hidden)
-      if (!interrupted && !currentTurn.response && currentTurn.isComplete && currentTurn.activities.length > 0) {
+      const hasPlan = currentTurn.activities.some(a => a.type === 'plan')
+      if (!interrupted && !hasPlan && !currentTurn.response && currentTurn.isComplete && currentTurn.activities.length > 0) {
         // Find the last intermediate text activity (reverse to get most recent)
         const lastTextActivity = [...currentTurn.activities]
           .reverse()

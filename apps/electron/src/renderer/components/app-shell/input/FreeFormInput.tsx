@@ -1632,7 +1632,7 @@ export function FreeFormInput({
                 </StyledDropdownMenuItem>
               ) : isEmptySession && llmConnections.length > 1 ? (
                 /* Hierarchical view: Provider → Connection → Models (for new sessions with multiple connections) */
-                connectionsByProvider.map(([providerName, connections]) => (
+                connectionsByProvider.map(([providerName, connections], index) => (
                   <React.Fragment key={providerName}>
                     {/* Provider group label */}
                     <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wide select-none">
@@ -1692,7 +1692,9 @@ export function FreeFormInput({
                         </DropdownMenuSub>
                       )
                     })}
-                    <StyledDropdownMenuSeparator className="my-1" />
+                    {index < connectionsByProvider.length - 1 && (
+                      <StyledDropdownMenuSeparator className="my-1" />
+                    )}
                   </React.Fragment>
                 ))
               ) : (

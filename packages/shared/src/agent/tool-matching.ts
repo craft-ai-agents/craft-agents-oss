@@ -16,7 +16,6 @@
 
 import type { AgentEvent } from '@craft-agent/core/types';
 import { createLogger } from '../utils/debug.ts';
-import { toolMetadataStore } from '../network-interceptor.ts';
 
 const log = createLogger('tool-matching');
 
@@ -298,41 +297,24 @@ export function extractToolResults(
 // ============================================================================
 
 /**
- * Extract intent and displayName from tool metadata store.
- * Calls get() once (which pops the file) and returns both values.
+ * Extract intent and displayName from tool input.
  *
- * Fallbacks:
- * - intent: input._intent, or Bash description field
+ * These fields are injected by the network interceptor into tool schemas,
+ * and Claude provides them in the tool_use response. They flow through
+ * unchanged to the SDK, then are stripped by pre-tool-use.ts before execution.
+ *
+ * Sources:
+ * - intent: input._intent, or Bash description field as fallback
  * - displayName: input._displayName
  */
 function extractToolMetadata(toolBlock: ToolUseBlock): { intent?: string; displayName?: string } {
-  // Check the metadata store (populated by network interceptor) - single call, pops the file
-  const metadata = toolMetadataStore.get(toolBlock.id);
+  // Read directly from tool input (metadata flows through from Claude's response)
+  let intent = toolBlock.input._intent as string | undefined;
+  const displayName = toolBlock.input._displayName as string | undefined;
 
-  // DEBUG: Log store access
-  try {
-    const fs = require('fs');
-    const os = require('os');
-    const path = require('path');
-    const logPath = path.join(os.homedir(), '.craft-agent', 'logs', 'interceptor.log');
-    const line = `${new Date().toISOString()} [tool-matching] extractToolMetadata ${toolBlock.name} (${toolBlock.id}): storeSize=${toolMetadataStore.size}, found=${!!metadata}, intent=${metadata?.intent?.substring(0, 50) ?? 'undefined'}, displayName=${metadata?.displayName ?? 'undefined'}\n`;
-    fs.appendFileSync(logPath, line);
-  } catch { /* ignore */ }
-
-  let intent = metadata?.intent;
-  let displayName = metadata?.displayName;
-
-  // Fallbacks if metadata store didn't have values
-  if (!intent) {
-    intent = toolBlock.input._intent as string | undefined;
-    // For Bash tools, use description field as intent
-    if (!intent && toolBlock.name === 'Bash') {
-      intent = (toolBlock.input as { description?: string }).description;
-    }
-  }
-
-  if (!displayName) {
-    displayName = toolBlock.input._displayName as string | undefined;
+  // For Bash tools, use description field as intent fallback
+  if (!intent && toolBlock.name === 'Bash') {
+    intent = (toolBlock.input as { description?: string }).description;
   }
 
   return { intent, displayName };
