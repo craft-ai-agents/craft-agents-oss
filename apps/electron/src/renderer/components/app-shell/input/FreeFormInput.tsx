@@ -433,7 +433,7 @@ export function FreeFormInput({
           window.electronAPI.getSpellCheck(),
         ])
         setAutoCapitalisation(autoCapEnabled)
-        setSendMessageKey(sendKey)
+        setSendMessageKey(sendKey ?? 'enter')
         setSpellCheck(spellCheckEnabled)
       } catch (error) {
         console.error('Failed to load input settings:', error)
