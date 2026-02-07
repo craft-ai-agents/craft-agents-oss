@@ -29,6 +29,9 @@ interface CredentialsStepProps {
   isWaitingForCode?: boolean
   onSubmitAuthCode?: (code: string) => void
   onCancelOAuth?: () => void
+  initialApiKey?: string
+  initialBaseUrl?: string
+  initialCustomModel?: string
 }
 
 export function CredentialsStep({
@@ -41,6 +44,9 @@ export function CredentialsStep({
   isWaitingForCode,
   onSubmitAuthCode,
   onCancelOAuth,
+  initialApiKey,
+  initialBaseUrl,
+  initialCustomModel,
 }: CredentialsStepProps) {
   const isOAuth = apiSetupMethod === 'claude_oauth'
 
@@ -130,6 +136,9 @@ export function CredentialsStep({
         status={status as ApiKeyStatus}
         errorMessage={errorMessage}
         onSubmit={onSubmit}
+        initialApiKey={initialApiKey}
+        initialBaseUrl={initialBaseUrl}
+        initialCustomModel={initialCustomModel}
       />
     </StepFormLayout>
   )

@@ -11,7 +11,7 @@
  * Note: Appearance settings (theme, font) have been moved to AppearanceSettingsPage.
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
@@ -21,7 +21,7 @@ import { X } from 'lucide-react'
 import { Spinner, FullscreenOverlayBase } from '@craft-agent/ui'
 import { useSetAtom } from 'jotai'
 import { fullscreenOverlayOpenAtom } from '@/atoms/overlay'
-import type { AuthType } from '../../../shared/types'
+import type { AuthType, ApiSetupInfo } from '../../../shared/types'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 
 import {
@@ -50,6 +50,7 @@ export default function AppSettingsPage() {
   // API Connection state (read-only display — editing is done via OnboardingWizard overlay)
   const [authType, setAuthType] = useState<AuthType>('api_key')
   const [hasCredential, setHasCredential] = useState(false)
+  const [apiSetupInfo, setApiSetupInfo] = useState<ApiSetupInfo | null>(null)
   const [showApiSetup, setShowApiSetup] = useState(false)
   const setFullscreenOverlayOpen = useSetAtom(fullscreenOverlayOpenAtom)
 
@@ -77,6 +78,7 @@ export default function AppSettingsPage() {
         window.electronAPI.getApiSetup(),
         window.electronAPI.getNotificationsEnabled(),
       ])
+      setApiSetupInfo(billing)
       setAuthType(billing.authType)
       setHasCredential(billing.hasCredential)
       setNotificationsEnabled(notificationsOn)
@@ -87,23 +89,46 @@ export default function AppSettingsPage() {
 
   useEffect(() => {
     loadConnectionInfo()
-  }, [])
+  }, [loadConnectionInfo])
 
   // Helpers to open/close the fullscreen API setup overlay
-  const openApiSetup = useCallback(() => {
+  const openApiSetup = useCallback(async () => {
+    await loadConnectionInfo()
     setShowApiSetup(true)
     setFullscreenOverlayOpen(true)
-  }, [setFullscreenOverlayOpen])
+  }, [loadConnectionInfo, setFullscreenOverlayOpen])
 
   const closeApiSetup = useCallback(() => {
     setShowApiSetup(false)
     setFullscreenOverlayOpen(false)
   }, [setFullscreenOverlayOpen])
 
+  const apiConnectionDescription = useMemo(() => {
+    if (authType === 'oauth_token' && hasCredential) {
+      return 'Claude Pro/Max — using your Claude subscription'
+    }
+
+    if (authType === 'api_key' && hasCredential) {
+      const baseUrl = apiSetupInfo?.anthropicBaseUrl?.trim()
+      const customModel = apiSetupInfo?.customModel?.trim()
+
+      if (baseUrl && customModel) {
+        return `API Key — ${baseUrl} · ${customModel}`
+      }
+      if (baseUrl) {
+        return `API Key — ${baseUrl}`
+      }
+      return 'API Key — Anthropic, OpenRouter, Ollama, or compatible API'
+    }
+
+    return 'Not configured'
+  }, [authType, hasCredential, apiSetupInfo?.anthropicBaseUrl, apiSetupInfo?.customModel])
+
   // OnboardingWizard hook for editing API connection (starts at api-setup step).
   // onConfigSaved fires immediately when billing is persisted, updating the model UI instantly.
   const apiSetupOnboarding = useOnboarding({
     initialStep: 'api-setup',
+    initialApiSetupMethod: authType === 'oauth_token' ? 'claude_oauth' : 'api_key',
     onConfigSaved: refreshCustomModel,
     onComplete: () => {
       closeApiSetup()
@@ -152,13 +177,7 @@ export default function AppSettingsPage() {
               <SettingsCard>
                 <SettingsRow
                   label="Connection type"
-                  description={
-                    authType === 'oauth_token' && hasCredential
-                      ? 'Claude Pro/Max — using your Claude subscription'
-                      : authType === 'api_key' && hasCredential
-                        ? 'API Key — Anthropic, OpenRouter, or compatible API'
-                        : 'Not configured'
-                  }
+                  description={apiConnectionDescription}
                 >
                   <Button
                     variant="outline"
@@ -188,6 +207,9 @@ export default function AppSettingsPage() {
                 isWaitingForCode={apiSetupOnboarding.isWaitingForCode}
                 onSubmitAuthCode={apiSetupOnboarding.handleSubmitAuthCode}
                 onCancelOAuth={apiSetupOnboarding.handleCancelOAuth}
+                initialApiKey={apiSetupInfo?.apiKey}
+                initialBaseUrl={apiSetupInfo?.anthropicBaseUrl}
+                initialCustomModel={apiSetupInfo?.customModel}
                 className="h-full"
               />
               {/* Close button — rendered AFTER the wizard so it paints above its titlebar-drag-region */}

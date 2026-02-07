@@ -32,6 +32,8 @@ interface UseOnboardingOptions {
   /** Called immediately after config is saved to disk (before wizard closes).
    *  Use this to propagate billing/model changes to the UI without waiting for onComplete. */
   onConfigSaved?: () => void
+  /** Optional default API setup method when entering from Settings edit flow */
+  initialApiSetupMethod?: ApiSetupMethod | null
 }
 
 interface UseOnboardingReturn {
@@ -82,6 +84,7 @@ export function useOnboarding({
   initialStep = 'welcome',
   onDismiss,
   onConfigSaved,
+  initialApiSetupMethod = null,
 }: UseOnboardingOptions): UseOnboardingReturn {
   // Main wizard state
   const [state, setState] = useState<OnboardingState>({
@@ -89,7 +92,7 @@ export function useOnboarding({
     loginStatus: 'idle',
     credentialStatus: 'idle',
     completionStatus: 'saving',
-    apiSetupMethod: null,
+    apiSetupMethod: initialApiSetupMethod,
     isExistingUser: initialSetupNeeds?.needsBillingConfig ?? false,
     gitBashStatus: undefined,
     isRecheckingGitBash: false,
@@ -110,6 +113,16 @@ export function useOnboarding({
     }
     checkGitBash()
   }, [])
+
+  // Keep selected method aligned with current saved auth type in settings flow.
+  useEffect(() => {
+    if (!initialApiSetupMethod) return
+    setState(s => (
+      s.apiSetupMethod === initialApiSetupMethod
+        ? s
+        : { ...s, apiSetupMethod: initialApiSetupMethod }
+    ))
+  }, [initialApiSetupMethod])
 
   // Save configuration
   const handleSaveConfig = useCallback(async (credential?: string, options?: { baseUrl?: string; customModel?: string }) => {
@@ -401,12 +414,12 @@ export function useOnboarding({
       loginStatus: 'idle',
       credentialStatus: 'idle',
       completionStatus: 'saving',
-      apiSetupMethod: null,
+      apiSetupMethod: initialApiSetupMethod,
       isExistingUser: false,
       errorMessage: undefined,
     })
     setIsWaitingForCode(false)
-  }, [])
+  }, [initialStep, initialApiSetupMethod])
 
   return {
     state,

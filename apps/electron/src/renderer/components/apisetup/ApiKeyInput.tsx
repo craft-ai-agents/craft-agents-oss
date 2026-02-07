@@ -10,7 +10,7 @@
  * Used in: Onboarding CredentialsStep, Settings API dialog
  */
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -41,6 +41,12 @@ export interface ApiKeyInputProps {
   formId?: string
   /** Disable the input (e.g. during validation) */
   disabled?: boolean
+  /** Optional prefilled API key (used when editing existing settings) */
+  initialApiKey?: string
+  /** Optional prefilled base URL (used when editing existing settings) */
+  initialBaseUrl?: string
+  /** Optional prefilled custom model (used when editing existing settings) */
+  initialCustomModel?: string
 }
 
 type PresetKey = 'anthropic' | 'openrouter' | 'vercel' | 'ollama' | 'custom'
@@ -70,14 +76,26 @@ export function ApiKeyInput({
   onSubmit,
   formId = "api-key-form",
   disabled,
+  initialApiKey,
+  initialBaseUrl,
+  initialCustomModel,
 }: ApiKeyInputProps) {
-  const [apiKey, setApiKey] = useState('')
+  const [apiKey, setApiKey] = useState(initialApiKey ?? '')
   const [showValue, setShowValue] = useState(false)
-  const [baseUrl, setBaseUrl] = useState(PRESETS[0].url)
-  const [activePreset, setActivePreset] = useState<PresetKey>('anthropic')
-  const [customModel, setCustomModel] = useState('')
+  const [baseUrl, setBaseUrl] = useState(initialBaseUrl?.trim() || PRESETS[0].url)
+  const [activePreset, setActivePreset] = useState<PresetKey>(getPresetForUrl(initialBaseUrl?.trim() || PRESETS[0].url))
+  const [customModel, setCustomModel] = useState(initialCustomModel ?? '')
 
   const isDisabled = disabled || status === 'validating'
+
+  // When settings reopen, hydrate the form from the latest saved API setup.
+  useEffect(() => {
+    const hydratedBaseUrl = initialBaseUrl?.trim() || PRESETS[0].url
+    setApiKey(initialApiKey ?? '')
+    setBaseUrl(hydratedBaseUrl)
+    setActivePreset(getPresetForUrl(hydratedBaseUrl))
+    setCustomModel(initialCustomModel ?? '')
+  }, [initialApiKey, initialBaseUrl, initialCustomModel])
 
   const handlePresetSelect = (preset: Preset) => {
     setActivePreset(preset.key)

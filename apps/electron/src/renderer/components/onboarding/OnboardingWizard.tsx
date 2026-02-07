@@ -44,6 +44,9 @@ interface OnboardingWizardProps {
   isWaitingForCode?: boolean
   onSubmitAuthCode?: (code: string) => void
   onCancelOAuth?: () => void
+  initialApiKey?: string
+  initialBaseUrl?: string
+  initialCustomModel?: string
 
   // Git Bash (Windows)
   onBrowseGitBash?: () => Promise<string | null>
@@ -75,6 +78,9 @@ export function OnboardingWizard({
   isWaitingForCode,
   onSubmitAuthCode,
   onCancelOAuth,
+  initialApiKey,
+  initialBaseUrl,
+  initialCustomModel,
   // Git Bash (Windows)
   onBrowseGitBash,
   onUseGitBashPath,
@@ -129,6 +135,9 @@ export function OnboardingWizard({
             isWaitingForCode={isWaitingForCode}
             onSubmitAuthCode={onSubmitAuthCode}
             onCancelOAuth={onCancelOAuth}
+            initialApiKey={initialApiKey}
+            initialBaseUrl={initialBaseUrl}
+            initialCustomModel={initialCustomModel}
           />
         )
 
