@@ -536,7 +536,6 @@ export default function App() {
             break
           }
           case 'permission_mode_changed': {
-            console.log('[App] permission_mode_changed:', effect.sessionId, effect.permissionMode)
             setSessionOptions(prevOpts => {
               const next = new Map(prevOpts)
               const current = next.get(effect.sessionId) ?? defaultSessionOptions
@@ -546,7 +545,6 @@ export default function App() {
             break
           }
           case 'credential_request': {
-            console.log('[App] credential_request:', sessionId, effect.request.mode)
             setPendingCredentials(prevCreds => {
               const next = new Map(prevCreds)
               const existingQueue = next.get(sessionId) || []
@@ -557,7 +555,6 @@ export default function App() {
           }
           case 'auto_retry': {
             // A source was auto-activated, automatically re-send the original message
-            console.log('[App] auto_retry: Source', effect.sourceSlug, 'activated, re-sending message')
             // Add suffix to indicate the source was activated
             const messageWithSuffix = `${effect.originalMessage}\n\n[${effect.sourceSlug} activated]`
             // Use setTimeout to ensure the previous turn has fully completed
@@ -1080,10 +1077,7 @@ export default function App() {
   }, [windowWorkspaceId, handleCreateSession, handleInputChange])
 
   const handleRespondToPermission = useCallback(async (sessionId: string, requestId: string, allowed: boolean, alwaysAllow: boolean) => {
-    console.log('[App] handleRespondToPermission called:', { sessionId, requestId, allowed, alwaysAllow })
-
     const success = await window.electronAPI.respondToPermission(sessionId, requestId, allowed, alwaysAllow)
-    console.log('[App] handleRespondToPermission IPC result:', { success })
 
     if (success) {
       // Remove only the first permission from the queue (the one we just responded to)
@@ -1091,7 +1085,6 @@ export default function App() {
         const next = new Map(prev)
         const queue = next.get(sessionId) || []
         const remainingQueue = queue.slice(1) // Remove first item
-        console.log('[App] handleRespondToPermission: clearing permission from queue, remaining:', remainingQueue.length)
         if (remainingQueue.length === 0) {
           next.delete(sessionId)
         } else {
@@ -1118,10 +1111,7 @@ export default function App() {
   }, [])
 
   const handleRespondToCredential = useCallback(async (sessionId: string, requestId: string, response: CredentialResponse) => {
-    console.log('[App] handleRespondToCredential called:', { sessionId, requestId, cancelled: response.cancelled })
-
     const success = await window.electronAPI.respondToCredential(sessionId, requestId, response)
-    console.log('[App] handleRespondToCredential IPC result:', { success })
 
     if (success) {
       // Remove only the first credential from the queue (the one we just responded to)
@@ -1129,7 +1119,6 @@ export default function App() {
         const next = new Map(prev)
         const queue = next.get(sessionId) || []
         const remainingQueue = queue.slice(1) // Remove first item
-        console.log('[App] handleRespondToCredential: clearing credential from queue, remaining:', remainingQueue.length)
         if (remainingQueue.length === 0) {
           next.delete(sessionId)
         } else {

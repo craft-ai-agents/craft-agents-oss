@@ -160,8 +160,6 @@ export function BayerDitherBackground({
     const container = containerRef.current
     if (!container) return
 
-    console.log('[BayerDither] Initializing WebGL background...')
-
     // Create WebGL2 renderer
     const canvas = document.createElement('canvas')
     const gl = canvas.getContext('webgl2')
@@ -179,7 +177,6 @@ export function BayerDitherBackground({
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     container.appendChild(canvas)
     rendererRef.current = renderer
-    console.log('[BayerDither] Renderer created')
 
     // Initialize uniforms (simplified - removed click ripple for now)
     const uniforms = {
@@ -217,7 +214,6 @@ export function BayerDitherBackground({
 
     // Compile and check for shader errors AFTER adding mesh to scene
     renderer.compile(scene, camera)
-    console.log('[BayerDither] Shader compiled, programs:', renderer.info.programs?.length)
 
     // Check for shader compilation errors in WebGL context
     const programs = renderer.info.programs

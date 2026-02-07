@@ -1,13 +1,7 @@
-// DEBUG: Check env before any imports
-console.log('[DEBUG] VITE_DEV_SERVER_URL at startup:', process.env.VITE_DEV_SERVER_URL)
-
 // Load user's shell environment first (before other imports that may use env)
 // This ensures tools like Homebrew, nvm, etc. are available to the agent
 import { loadShellEnv } from './shell-env'
 loadShellEnv()
-
-// DEBUG: Check env after shell-env
-console.log('[DEBUG] VITE_DEV_SERVER_URL after loadShellEnv:', process.env.VITE_DEV_SERVER_URL)
 
 import { app, BrowserWindow } from 'electron'
 import { createHash } from 'crypto'

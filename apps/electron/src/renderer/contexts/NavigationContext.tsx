@@ -252,13 +252,6 @@ export function NavigationProvider({
           if (parsed.params.systemPrompt) {
             createOptions.systemPromptPreset = parsed.params.systemPrompt as 'default' | 'mini' | string
           }
-          // Log mini agent deep link params
-          if (parsed.params.model || parsed.params.systemPrompt) {
-            console.log('[NavigationContext] 🤖 Mini agent params from deep link:', {
-              model: parsed.params.model,
-              systemPromptPreset: parsed.params.systemPrompt,
-            })
-          }
           const session = await onCreateSession(workspaceId, createOptions)
 
           // Rename session if name provided

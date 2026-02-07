@@ -138,7 +138,6 @@ export function useOnboarding({
   // Save configuration using the new unified LLM connection API
   const handleSaveConfig = useCallback(async (credential?: string, options?: { baseUrl?: string; customModel?: string }) => {
     if (!state.apiSetupMethod) {
-      console.log('[Onboarding] No API setup method selected, returning early')
       return
     }
 
@@ -151,13 +150,10 @@ export function useOnboarding({
         baseUrl: options?.baseUrl,
         customModel: options?.customModel,
       })
-      console.log('[Onboarding] Saving config with connection setup:', setup.slug)
-
       // Use new unified API
       const result = await window.electronAPI.setupLlmConnection(setup)
 
       if (result.success) {
-        console.log('[Onboarding] Save successful')
         setState(s => ({ ...s, completionStatus: 'complete' }))
         // Notify caller immediately so UI can reflect billing/model changes
         onConfigSaved?.()

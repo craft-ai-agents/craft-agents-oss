@@ -274,7 +274,6 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
       const updated = sources.find((s) => s.config.slug === sourceSlug)
 
       if (updated) {
-        console.log('[SourceInfoPage] Source changed, reloading...')
         setSource(updated)
 
         const loadPermissionsConfig = async () => {

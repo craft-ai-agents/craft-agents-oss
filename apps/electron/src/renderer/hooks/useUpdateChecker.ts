@@ -88,7 +88,6 @@ export function useUpdateChecker(): UseUpdateCheckerResult {
       // Check if this version was dismissed
       const dismissedVersion = await window.electronAPI.getDismissedUpdateVersion()
       if (dismissedVersion === info.latestVersion) {
-        console.log('[useUpdateChecker] Update dismissed, skipping toast')
         return
       }
 

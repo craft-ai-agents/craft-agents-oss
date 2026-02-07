@@ -596,7 +596,6 @@ export function FreeFormInput({
       // Compaction completed but we never sent the execution message (page reloaded).
       // Send it now and clear the pending state.
       hasExecuted = true
-      console.log('[FreeFormInput] Resuming pending plan execution after reload:', pending.planPath)
       onSubmit(`Read the plan at ${pending.planPath} and execute it.`, undefined)
 
       await window.electronAPI.sessionCommand(sessionId, {
@@ -914,8 +913,8 @@ export function FreeFormInput({
           try {
             const thumb = await window.electronAPI.generateThumbnail(base64, mimeType)
             if (thumb) thumbnailBase64 = thumb
-          } catch (err) {
-            console.log('[FreeFormInput] Thumbnail generation failed:', err)
+          } catch {
+            // Thumbnail generation is optional, continue without it
           }
         }
 

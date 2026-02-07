@@ -33,10 +33,8 @@ export function HeaderMenu({ route, children, helpFeature }: HeaderMenuProps) {
   const handleOpenInNewWindow = async () => {
     const separator = route.includes('?') ? '&' : '?'
     const url = `craftagents://${route}${separator}window=focused`
-    console.log('[HeaderMenu] Opening in new window:', { route, url })
     try {
       await window.electronAPI?.openUrl(url)
-      console.log('[HeaderMenu] openUrl completed successfully')
     } catch (error) {
       console.error('[HeaderMenu] openUrl failed:', error)
     }

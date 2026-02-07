@@ -1301,7 +1301,6 @@ export function migrateLegacyLlmConnectionsConfig(): void {
       needsSave = true;
     }
     if (needsSave) {
-      console.log('[storage] Cleaned up legacy config fields');
       saveConfig(config);
     }
     return;
@@ -1379,7 +1378,6 @@ export function migrateLegacyLlmConnectionsConfig(): void {
         migrated.defaultModel = legacyCustomModel;
       }
 
-      console.log(`[storage] Migrated legacy authType '${legacyAuthType}' to LLM connection '${migrated.slug}'`);
       config.llmConnections.push(migrated);
       config.defaultLlmConnection = migrated.slug;
     }

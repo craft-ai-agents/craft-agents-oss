@@ -3072,7 +3072,6 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   ipcMain.handle(IPC_CHANNELS.LOGO_GET_URL, async (_event, serviceUrl: string, provider?: string) => {
     const { getLogoUrl } = await import('@craft-agent/shared/utils/logo')
     const result = getLogoUrl(serviceUrl, provider)
-    console.log(`[logo] getLogoUrl("${serviceUrl}", "${provider}") => "${result}"`)
     return result
   })
 
