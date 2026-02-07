@@ -385,11 +385,20 @@ export async function validateStdioMcpConnection(
       client = null;
     }
     if (childProcess && !childProcess.killed) {
-      childProcess.kill('SIGTERM');
+      // Platform-aware process termination (SIGTERM/SIGKILL don't exist on Windows)
+      if (process.platform === 'win32') {
+        childProcess.kill();
+      } else {
+        childProcess.kill('SIGTERM');
+      }
       // Force kill after 1s if still alive
       setTimeout(() => {
         if (childProcess && !childProcess.killed) {
-          childProcess.kill('SIGKILL');
+          if (process.platform === 'win32') {
+            childProcess.kill();
+          } else {
+            childProcess.kill('SIGKILL');
+          }
         }
       }, 1000);
     }

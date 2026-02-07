@@ -21,7 +21,7 @@ import {
   statSync,
   unlinkSync,
 } from 'fs';
-import { join } from 'path';
+import { join, basename } from 'path';
 import { getWorkspaceSessionsPath } from '../workspaces/storage.ts';
 import { generateUniqueSessionId } from './slug-generator.ts';
 import { toPortablePath, expandPath } from '../utils/paths.ts';
@@ -1216,7 +1216,7 @@ export function loadPlanFromPath(filePath: string): Plan | null {
 
   try {
     const content = readFileSync(filePath, 'utf-8');
-    const fileName = filePath.split('/').pop()?.replace('.md', '') || 'unknown';
+    const fileName = basename(filePath).replace('.md', '') || 'unknown';
     return parsePlanFromMarkdown(content, fileName);
   } catch {
     return null;

@@ -28,6 +28,7 @@ import { debug } from '../utils/debug.ts';
 import { DOC_REFS } from '../docs/index.ts';
 import { createLLMTool } from './llm-tool.ts';
 import { createClaudeContext } from './claude-context.ts';
+import { basename } from 'node:path';
 
 // Import handlers from session-tools-core
 import {
@@ -369,7 +370,7 @@ export function getSessionScopedTools(
   const ctx = createClaudeContext({
     sessionId,
     workspacePath: workspaceRootPath,
-    workspaceId: workspaceId || workspaceRootPath.split('/').pop() || '',
+    workspaceId: workspaceId || basename(workspaceRootPath) || '',
     onPlanSubmitted: (planPath: string) => {
       setLastPlanFilePath(sessionId, planPath);
       const callbacks = getSessionScopedToolCallbacks(sessionId);

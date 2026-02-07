@@ -16,6 +16,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
+import { basename } from 'node:path';
 
 // Tool result type - matches what the SDK expects
 type ToolResult = {
@@ -205,7 +206,7 @@ async function processAttachment(
     : input;
 
   const { path: filePath, startLine, endLine } = attachment;
-  const filename = filePath.split('/').pop() || filePath;
+  const filename = basename(filePath) || filePath;
   const safeFilename = escapeXml(filename); // Escape for use in XML-like tags
 
   // --- Validate path exists and is a file ---

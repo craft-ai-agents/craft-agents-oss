@@ -119,6 +119,12 @@ export interface CodexConfigGeneratorOptions {
   sessionServerPath?: string;
 
   /**
+   * Path to Node.js executable for running MCP helper servers.
+   * Defaults to "node" if not provided.
+   */
+  nodePath?: string;
+
+  /**
    * Session ID for the session MCP server.
    * Used to identify callbacks from the session server.
    */
@@ -305,12 +311,13 @@ function generateMcpServerSection(
 function generateBridgeServerSection(
   bridgeServerPath: string,
   bridgeConfigPath: string,
+  nodeCommand: string,
   sessionPath?: string,
   workspaceId?: string
 ): string {
   const lines: string[] = [];
   lines.push('[mcp_servers.api-bridge]');
-  lines.push(`command = "node"`);
+  lines.push(`command = ${formatTomlValue(nodeCommand)}`);
 
   // Build args array
   const args: string[] = [bridgeServerPath];
@@ -341,11 +348,12 @@ function generateSessionServerSection(
   sessionServerPath: string,
   sessionId: string,
   workspaceRootPath: string,
-  plansFolderPath: string
+  plansFolderPath: string,
+  nodeCommand: string
 ): string {
   const lines: string[] = [];
   lines.push('[mcp_servers.session]');
-  lines.push(`command = "node"`);
+  lines.push(`command = ${formatTomlValue(nodeCommand)}`);
 
   // Build args array
   const args: string[] = [sessionServerPath];
@@ -412,6 +420,7 @@ export function generateCodexConfig(options: CodexConfigGeneratorOptions): Codex
     sessionId,
     workspaceRootPath,
     plansFolderPath,
+    nodePath,
   } = options;
 
   const mcpSources: string[] = [];
@@ -484,9 +493,11 @@ export function generateCodexConfig(options: CodexConfigGeneratorOptions): Codex
   }
 
   if (needsBridge) {
+    const nodeCommand = nodePath || 'node';
     sections.push(generateBridgeServerSection(
       bridgeServerPath,
       bridgeConfigPath,
+      nodeCommand,
       sessionPath,
       workspaceId
     ));
@@ -496,12 +507,14 @@ export function generateCodexConfig(options: CodexConfigGeneratorOptions): Codex
   // Add session server for session-scoped tools (SubmitPlan, config_validate, etc.)
   // This is always included when the session server path is provided
   if (sessionServerPath && sessionId && workspaceRootPath && plansFolderPath) {
+    const nodeCommand = nodePath || 'node';
     sections.push('# Session-scoped tools (SubmitPlan, config_validate, mermaid_validate, etc.)');
     sections.push(generateSessionServerSection(
       sessionServerPath,
       sessionId,
       workspaceRootPath,
-      plansFolderPath
+      plansFolderPath,
+      nodeCommand
     ));
     sections.push('');
   }

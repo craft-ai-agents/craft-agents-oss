@@ -461,13 +461,23 @@ export class AppServerClient extends EventEmitter {
     }
 
     // Kill the process gracefully
-    this.process.kill('SIGTERM');
+    // On Windows, SIGTERM/SIGKILL don't exist - use default termination
+    if (process.platform === 'win32') {
+      this.process.kill();
+    } else {
+      this.process.kill('SIGTERM');
+    }
 
     // Wait briefly for graceful shutdown, then force kill
     await new Promise<void>((resolve) => {
       const timeout = setTimeout(() => {
         if (this.process) {
-          this.process.kill('SIGKILL');
+          // Force kill if still running
+          if (process.platform === 'win32') {
+            this.process.kill();
+          } else {
+            this.process.kill('SIGKILL');
+          }
         }
         resolve();
       }, 1000);

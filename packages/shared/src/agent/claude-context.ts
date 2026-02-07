@@ -9,7 +9,7 @@
  */
 
 import { existsSync, readFileSync, writeFileSync, readdirSync, statSync } from 'fs';
-import { join } from 'path';
+import { join, basename } from 'path';
 import type {
   SessionToolContext,
   SessionToolCallbacks,
@@ -231,7 +231,7 @@ export function createClaudeContext(options: ClaudeContextOptions): SessionToolC
             finalContent = content;
           }
 
-          const filename = filePath.split('/').pop() || filePath;
+          const filename = basename(filePath) || filePath;
           messageContent.push({
             type: 'text',
             text: `<file path="${filename}">\n${finalContent}\n</file>`,

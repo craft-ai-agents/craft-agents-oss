@@ -6,7 +6,7 @@
  * connection tests, and auth verification.
  */
 
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import type { SessionToolContext } from '../context.ts';
 import type { ToolResult, SourceConfig, ConnectionStatus } from '../types.ts';
 import { errorResponse } from '../response.ts';
@@ -625,7 +625,7 @@ async function checkAuthStatus(
   if (source.isAuthenticated) {
     // Verify actual token if credential manager available
     if (ctx.credentialManager) {
-      const workspaceId = ctx.workspacePath.split('/').pop() || '';
+      const workspaceId = basename(ctx.workspacePath) || '';
       const loadedSource = {
         config: source,
         guide: null,

@@ -247,7 +247,12 @@ export async function searchSessions(
 
     // Cancel previous search if still running (user typed new query)
     if (currentSearchProcess) {
-      currentSearchProcess.kill('SIGTERM');
+      // Platform-aware termination (SIGTERM doesn't exist on Windows)
+      if (process.platform === 'win32') {
+        currentSearchProcess.kill();
+      } else {
+        currentSearchProcess.kill('SIGTERM');
+      }
       currentSearchProcess = null;
     }
 
@@ -259,7 +264,12 @@ export async function searchSessions(
 
     // Set up timeout
     const timeoutHandle = setTimeout(() => {
-      rg.kill('SIGTERM');
+      // Platform-aware termination (SIGTERM doesn't exist on Windows)
+      if (process.platform === 'win32') {
+        rg.kill();
+      } else {
+        rg.kill('SIGTERM');
+      }
       ipcLog.warn('[search] Search timed out after', timeout, 'ms');
     }, timeout);
 

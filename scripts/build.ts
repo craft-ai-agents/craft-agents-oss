@@ -48,8 +48,10 @@ import {
   verifyLocalCodex,
   copySDK,
   copyInterceptor,
+  buildMcpServers,
   copyBridgeServer,
   copySessionServer,
+  verifyMcpServersExist,
   buildElectronApp,
   createManifest,
   uploadToS3,
@@ -233,9 +235,12 @@ async function main(): Promise<void> {
     console.log('\n[7/10] Copying interceptor...');
     copyInterceptor(config);
 
+    // Build MCP helper servers (bridge + session)
+    console.log('\n[8/11] Building MCP helper servers...');
+    buildMcpServers(config);
+
     // Build Electron app (Windows has special OAuth injection)
-    // This also builds the Bridge and Session MCP Servers as part of electron:build:main
-    console.log('\n[8/10] Building Electron app...');
+    console.log('\n[9/11] Building Electron app...');
     if (platform === 'win32') {
       await buildElectronAppWindows(config);
     } else {
@@ -243,15 +248,18 @@ async function main(): Promise<void> {
     }
 
     // Copy Bridge MCP Server to packaged app resources (after build creates it)
-    console.log('\n[9/10] Copying Bridge MCP Server...');
+    console.log('\n[10/11] Copying Bridge MCP Server...');
     copyBridgeServer(config);
 
     // Copy Session MCP Server to packaged app resources (provides SubmitPlan, etc. for Codex)
-    console.log('\n[9/10] Copying Session MCP Server...');
+    console.log('\n[10/11] Copying Session MCP Server...');
     copySessionServer(config);
 
+    console.log('\n[10/11] Verifying MCP helper servers...');
+    verifyMcpServersExist(config);
+
     // Package for the target platform
-    console.log('\n[10/10] Packaging for platform...');
+    console.log('\n[11/11] Packaging for platform...');
     let artifactPath: string;
     switch (platform) {
       case 'darwin':

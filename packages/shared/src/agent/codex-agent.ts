@@ -68,6 +68,9 @@ import { parseError, type AgentError } from './errors.ts';
 // Session storage for plans folder path
 import { getSessionPlansPath } from '../sessions/storage.ts';
 
+// Path utilities for cross-platform normalization
+import { resolve } from 'node:path';
+
 // System prompt for Craft Agent context
 import { getSystemPrompt } from '../prompts/system.ts';
 
@@ -816,8 +819,13 @@ export class CodexAgent extends BaseAgent {
 
       // Check if file change targets plans folder
       if (plansFolderPath && displayPath) {
-        const normalizedPath = displayPath.replace(/\\/g, '/');
-        const normalizedPlansDir = plansFolderPath.replace(/\\/g, '/');
+        // Normalize paths - resolve to absolute, use forward slashes, and lowercase on Windows
+        const normalizePath = (p: string) => {
+          const normalized = resolve(p).replace(/\\/g, '/');
+          return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+        };
+        const normalizedPath = normalizePath(displayPath);
+        const normalizedPlansDir = normalizePath(plansFolderPath);
 
         if (normalizedPath.startsWith(normalizedPlansDir)) {
           this.debug('Allowing file change to plans folder (explore mode)');

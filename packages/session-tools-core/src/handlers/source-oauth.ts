@@ -18,6 +18,7 @@ import type {
 } from '../types.ts';
 import { successResponse, errorResponse } from '../response.ts';
 import { generateRequestId } from '../source-helpers.ts';
+import { basename } from 'node:path';
 
 // ============================================================
 // MCP OAuth Trigger
@@ -138,7 +139,7 @@ export GOOGLE_OAUTH_CLIENT_SECRET="YOUR_CLIENT_SECRET"
   // Check if already authenticated (with valid token)
   if (source.isAuthenticated && ctx.credentialManager) {
     // Create LoadedSource for credential check
-    const workspaceId = ctx.workspacePath.split('/').pop() || '';
+    const workspaceId = basename(ctx.workspacePath) || '';
     const loadedSource = {
       config: source,
       guide: null,
@@ -225,7 +226,7 @@ export async function handleSlackOAuthTrigger(
 
   // Check if already authenticated (with valid token)
   if (source.isAuthenticated && ctx.credentialManager) {
-    const workspaceId = ctx.workspacePath.split('/').pop() || '';
+    const workspaceId = basename(ctx.workspacePath) || '';
     const loadedSource = {
       config: source,
       guide: null,
@@ -303,7 +304,7 @@ export async function handleMicrosoftOAuthTrigger(
 
   // Check if already authenticated (with valid token)
   if (source.isAuthenticated && ctx.credentialManager) {
-    const workspaceId = ctx.workspacePath.split('/').pop() || '';
+    const workspaceId = basename(ctx.workspacePath) || '';
     const loadedSource = {
       config: source,
       guide: null,

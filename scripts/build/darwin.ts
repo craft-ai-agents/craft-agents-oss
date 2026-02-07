@@ -3,9 +3,36 @@
  */
 
 import { $ } from 'bun';
-import { existsSync } from 'fs';
+import { existsSync, statSync } from 'fs';
 import { join } from 'path';
 import type { BuildConfig } from './common';
+
+/**
+ * Verify SDK is bundled in the packaged macOS app
+ */
+export function verifyPackagedSDK(appPath: string): void {
+  const sdkPath = join(
+    appPath,
+    'Contents',
+    'Resources',
+    'app',
+    'node_modules',
+    '@anthropic-ai',
+    'claude-agent-sdk',
+    'cli.js'
+  );
+
+  if (!existsSync(sdkPath)) {
+    throw new Error(`CRITICAL: SDK not bundled! Expected at: ${sdkPath}`);
+  }
+
+  const stats = statSync(sdkPath);
+  if (stats.size < 1_000_000) {
+    throw new Error(`CRITICAL: SDK cli.js too small (${stats.size} bytes, expected ~11MB)`);
+  }
+
+  console.log(`  SDK bundled: cli.js is ${(stats.size / 1024 / 1024).toFixed(1)} MB`);
+}
 
 /**
  * Package the macOS app with electron-builder
@@ -37,6 +64,12 @@ export async function packageDarwin(config: BuildConfig): Promise<string> {
 
   // Run electron-builder
   await $`cd ${electronDir} && npx electron-builder ${builderArgs}`;
+
+  // Verify SDK is bundled in the .app before checking artifacts
+  const macDir = arch === 'arm64' ? 'mac-arm64' : 'mac';
+  const appPath = join(electronDir, 'release', macDir, 'Craft Agents.app');
+  console.log('Verifying SDK in packaged app...');
+  verifyPackagedSDK(appPath);
 
   // Verify the DMG and ZIP were built (ZIP is used by electron-updater for auto-updates)
   const dmgName = `Craft-Agent-${arch}.dmg`;

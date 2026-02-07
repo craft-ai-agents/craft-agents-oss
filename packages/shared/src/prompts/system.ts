@@ -1,7 +1,7 @@
 import { formatPreferencesForPrompt } from '../config/preferences.ts';
 import { debug } from '../utils/debug.ts';
 import { existsSync, readFileSync, readdirSync } from 'fs';
-import { join, relative } from 'path';
+import { join, relative, basename } from 'path';
 import { DOC_REFS, APP_ROOT } from '../docs/index.ts';
 import { PERMISSION_MODE_CONFIG } from '../agent/mode-types.ts';
 import { APP_VERSION } from '../version/index.ts';
@@ -413,8 +413,7 @@ function getCraftAssistantPrompt(workspaceRootPath?: string, backendName: string
 
   // Extract workspaceId from path (last component of the path)
   // Path format: ~/.craft-agent/workspaces/{workspaceId}
-  const pathParts = workspacePath.split('/');
-  const workspaceId = pathParts[pathParts.length - 1] || '{workspaceId}';
+  const workspaceId = basename(workspacePath) || '{workspaceId}';
 
   // Environment marker for SDK JSONL detection
   const environmentMarker = getCraftAgentEnvironmentMarker();

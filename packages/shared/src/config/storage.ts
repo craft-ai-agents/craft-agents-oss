@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, statSync } from 'fs';
-import { join, dirname } from 'path';
+import { join, dirname, basename } from 'path';
 import { getCredentialManager } from '../credentials/index.ts';
 import { getOrCreateLatestSession, type SessionConfig } from '../sessions/index.ts';
 import {
@@ -471,7 +471,7 @@ export function getWorkspaces(): Workspace[] {
   return workspaces.map(w => {
     // Read name from workspace folder config (single source of truth)
     const wsConfig = loadWorkspaceConfig(w.rootPath);
-    const name = wsConfig?.name || w.rootPath.split('/').pop() || 'Untitled';
+    const name = wsConfig?.name || basename(w.rootPath) || 'Untitled';
 
     // If workspace has a stored iconUrl that's a remote URL, use it
     // Otherwise check for local icon file

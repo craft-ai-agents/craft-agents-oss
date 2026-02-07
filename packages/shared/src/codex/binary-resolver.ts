@@ -5,9 +5,14 @@
  * Supports bundled binaries in packaged apps and development overrides.
  *
  * Resolution order:
- * 1. CODEX_PATH environment variable (explicit override)
+ * 1. CODEX_PATH environment variable (explicit override for production binary)
  * 2. Bundled binary in app resources (vendor/codex/{platform}-{arch}/codex)
- * 3. Local dev fork at ~/Documents/GitHub/craft-agents-codex/codex-rs/target/release/codex
+ * 3. Local dev fork (checks multiple locations):
+ *    - CODEX_DEV_PATH env var (explicit dev override)
+ *    - ~/Documents/GitHub/craft-agents-codex/... (macOS default)
+ *    - ~/code/craft-agents-codex/... (Linux common)
+ *    - ~/projects/craft-agents-codex/... (Linux common)
+ *    - ~/src/craft-agents-codex/... (Linux common)
  * 4. System 'codex' command in PATH (fallback)
  */
 
@@ -120,10 +125,20 @@ export function resolveCodexBinary(): { path: string; source: string } {
   }
 
   // 3. Check local dev fork (development mode)
+  // Check CODEX_DEV_PATH env var first, then common dev locations
   const home = homedir();
-  const devForkPath = join(home, 'Documents', 'GitHub', 'craft-agents-codex', 'codex-rs', 'target', 'release', binaryName);
-  if (existsSync(devForkPath)) {
-    return { path: devForkPath, source: 'local dev fork' };
+  const devPaths = [
+    process.env.CODEX_DEV_PATH, // Explicit override
+    join(home, 'Documents', 'GitHub', 'craft-agents-codex', 'codex-rs', 'target', 'release', binaryName), // macOS default
+    join(home, 'code', 'craft-agents-codex', 'codex-rs', 'target', 'release', binaryName), // Linux common
+    join(home, 'projects', 'craft-agents-codex', 'codex-rs', 'target', 'release', binaryName), // Linux common
+    join(home, 'src', 'craft-agents-codex', 'codex-rs', 'target', 'release', binaryName), // Linux common
+  ].filter(Boolean) as string[];
+
+  for (const devPath of devPaths) {
+    if (existsSync(devPath)) {
+      return { path: devPath, source: 'local dev fork' };
+    }
   }
 
   // 4. Fall back to system codex command

@@ -187,6 +187,10 @@ jobs:
           MICROSOFT_OAUTH_CLIENT_ID: ${{ secrets.MICROSOFT_OAUTH_CLIENT_ID }}
           SENTRY_ELECTRON_INGEST_URL: ${{ secrets.SENTRY_ELECTRON_INGEST_URL }}
 
+      - name: Verify MCP helper servers exist
+        run: |
+          node -e "const fs=require('fs');const path=require('path');const root=process.cwd();const bridge=path.join(root,'apps','electron','resources','bridge-mcp-server','index.js');const session=path.join(root,'apps','electron','resources','session-mcp-server','index.js');if(!fs.existsSync(bridge)) {console.error('Missing bridge MCP server:', bridge); process.exit(1);} if(!fs.existsSync(session)) {console.error('Missing session MCP server:', session); process.exit(1);} console.log('MCP helper servers present');"
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:

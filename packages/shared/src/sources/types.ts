@@ -247,6 +247,7 @@ export interface ApiSourceConfig {
   baseUrl: string;
   authType: ApiAuthType;
   headerName?: string; // For 'header' auth (e.g., "X-API-Key")
+  headerNames?: string[]; // For multi-header auth (e.g., ["DD-API-KEY", "DD-APPLICATION-KEY"])
   queryParam?: string; // For 'query' auth (e.g., "api_key")
   authScheme?: string; // For 'bearer' auth (default: "Bearer", could be "Token")
   defaultHeaders?: Record<string, string>; // Headers to include with every request
@@ -400,6 +401,7 @@ export interface ApiConfig {
   auth?: {
     type: 'none' | 'header' | 'bearer' | 'query' | 'basic';
     headerName?: string;
+    headerNames?: string[]; // For multi-header auth (e.g., ["DD-API-KEY", "DD-APPLICATION-KEY"])
     queryParam?: string;
     authScheme?: string;
     credentialLabel?: string;

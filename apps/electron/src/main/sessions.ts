@@ -1,6 +1,6 @@
 import { app } from 'electron'
 import * as Sentry from '@sentry/electron/main'
-import { join } from 'path'
+import { basename, join } from 'path'
 import { existsSync } from 'fs'
 import { rm, readFile, mkdir, writeFile, rename, open } from 'fs/promises'
 import { CraftAgent, type AgentEvent, setPermissionMode, type PermissionMode, unregisterSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest } from '@craft-agent/shared/agent'
@@ -63,7 +63,7 @@ import {
   type TodoState,
   pickSessionFields,
 } from '@craft-agent/shared/sessions'
-import { loadWorkspaceSources, loadAllSources, getSourcesBySlugs, isSourceUsable, type LoadedSource, type McpServerConfig, getSourcesNeedingAuth, getSourceCredentialManager, getSourceServerBuilder, type SourceWithCredential, isApiOAuthProvider, SERVER_BUILD_ERRORS } from '@craft-agent/shared/sources'
+import { loadWorkspaceSources, loadAllSources, getSourcesBySlugs, isSourceUsable, type LoadedSource, type McpServerConfig, getSourcesNeedingAuth, getSourceCredentialManager, getSourceServerBuilder, type SourceWithCredential, isApiOAuthProvider, SERVER_BUILD_ERRORS, TokenRefreshManager, createTokenGetter } from '@craft-agent/shared/sources'
 import { ConfigWatcher, type ConfigWatcherCallbacks } from '@craft-agent/shared/config'
 import { getAuthState, getValidClaudeOAuthToken } from '@craft-agent/shared/auth'
 import { setAnthropicOptionsEnv, setPathToClaudeCodeExecutable, setInterceptorPath, setExecutable } from '@craft-agent/shared/agent'
@@ -107,8 +107,13 @@ export const AGENT_FLAGS = {
  *
  * @param sources - Sources to build servers for
  * @param sessionPath - Optional path to session folder for saving large API responses
+ * @param tokenRefreshManager - Optional TokenRefreshManager for OAuth token refresh
  */
-async function buildServersFromSources(sources: LoadedSource[], sessionPath?: string) {
+async function buildServersFromSources(
+  sources: LoadedSource[],
+  sessionPath?: string,
+  tokenRefreshManager?: TokenRefreshManager
+) {
   const span = perf.span('sources.buildServers', { count: sources.length })
   const credManager = getSourceCredentialManager()
   const serverBuilder = getSourceServerBuilder()
@@ -124,50 +129,15 @@ async function buildServersFromSources(sources: LoadedSource[], sessionPath?: st
   span.mark('credentials.loaded')
 
   // Build token getter for OAuth sources (Google, Slack, Microsoft use OAuth)
-  // Automatically refreshes expired or expiring tokens before API calls
+  // Uses TokenRefreshManager for unified refresh logic (DRY principle)
   const getTokenForSource = (source: LoadedSource) => {
     const provider = source.config.provider
     if (isApiOAuthProvider(provider)) {
-      return async () => {
-        // Load credential with expiry info
-        const cred = await credManager.load(source)
-
-        // Refresh if expired or expiring soon (within 5 min)
-        if (!cred || credManager.isExpired(cred) || credManager.needsRefresh(cred)) {
-          sessionLog.debug(`[OAuth] Refreshing token for ${source.config.slug}`)
-          try {
-            const token = await credManager.refresh(source)
-            if (token) {
-              // Update credential cache for bridge server (Codex sessions)
-              // This ensures the bridge always has fresh tokens after refresh
-              const refreshedCred = await credManager.load(source)
-              if (refreshedCred) {
-                const cachePath = getCredentialCachePath(source.workspaceRootPath, source.config.slug)
-                const cacheEntry: CredentialCacheEntry = {
-                  value: refreshedCred.value,
-                  expiresAt: refreshedCred.expiresAt,
-                }
-                try {
-                  await writeFileSecure(cachePath, JSON.stringify(cacheEntry), 0o600)
-                  sessionLog.debug(`[OAuth] Updated credential cache for ${source.config.slug}`)
-                } catch (cacheErr) {
-                  // Non-fatal: bridge may use slightly stale token until next session init
-                  sessionLog.warn(`[OAuth] Failed to update credential cache for ${source.config.slug}: ${cacheErr}`)
-                }
-              }
-              return token
-            }
-          } catch (err) {
-            sessionLog.warn(`[OAuth] Refresh failed for ${source.config.slug}: ${err}`)
-          }
-        }
-
-        // Use cached token if still valid
-        if (cred?.value) return cred.value
-
-        // No valid token after refresh attempt
-        throw new Error(`No token for ${source.config.slug}`)
-      }
+      // Use TokenRefreshManager if provided, otherwise create temporary one
+      const manager = tokenRefreshManager ?? new TokenRefreshManager(credManager, {
+        log: (msg) => sessionLog.debug(msg),
+      })
+      return createTokenGetter(manager, source)
     }
     return undefined
   }
@@ -191,6 +161,71 @@ async function buildServersFromSources(sources: LoadedSource[], sessionPath?: st
 
   span.end()
   return result
+}
+
+/**
+ * Result of MCP OAuth token refresh operation.
+ */
+interface McpTokenRefreshResult {
+  /** Whether any tokens were refreshed (configs were updated) */
+  tokensRefreshed: boolean
+  /** Sources that failed to refresh (for warning display) */
+  failedSources: Array<{ slug: string; reason: string }>
+}
+
+/**
+ * Refresh expired MCP OAuth tokens and rebuild server configs.
+ * Uses TokenRefreshManager for unified refresh logic (DRY/SOLID principles).
+ *
+ * This implements "lazy refresh at query time" - tokens are refreshed before
+ * each agent.chat() call, then server configs are rebuilt with fresh headers.
+ *
+ * @param agent - The agent to update server configs on
+ * @param sources - All loaded sources for the session
+ * @param sessionPath - Path to session folder for API response storage
+ * @param tokenRefreshManager - TokenRefreshManager instance for this session
+ */
+async function refreshMcpOAuthTokensIfNeeded(
+  agent: CraftAgent,
+  sources: LoadedSource[],
+  sessionPath: string,
+  tokenRefreshManager: TokenRefreshManager
+): Promise<McpTokenRefreshResult> {
+  sessionLog.debug('[OAuth] Checking if any MCP OAuth tokens need refresh')
+
+  // Use TokenRefreshManager to find sources needing refresh (handles rate limiting)
+  const needRefresh = await tokenRefreshManager.getSourcesNeedingRefresh(sources)
+
+  if (needRefresh.length === 0) {
+    return { tokensRefreshed: false, failedSources: [] }
+  }
+
+  sessionLog.debug(`[OAuth] Found ${needRefresh.length} source(s) needing token refresh: ${needRefresh.map(s => s.config.slug).join(', ')}`)
+
+  // Use TokenRefreshManager to refresh all tokens (handles rate limiting and error tracking)
+  const { refreshed, failed } = await tokenRefreshManager.refreshSources(needRefresh)
+
+  // Convert failed results to the expected format
+  const failedSources = failed.map(({ source, reason }) => ({
+    slug: source.config.slug,
+    reason,
+  }))
+
+  if (refreshed.length > 0) {
+    // Rebuild server configs with fresh tokens
+    sessionLog.debug(`[OAuth] Rebuilding servers after ${refreshed.length} token refresh(es)`)
+    const enabledSources = sources.filter(s => s.config.enabled && s.config.isAuthenticated)
+    const { mcpServers, apiServers } = await buildServersFromSources(
+      enabledSources,
+      sessionPath,
+      tokenRefreshManager
+    )
+    const intendedSlugs = enabledSources.map(s => s.config.slug)
+    agent.setSourceServers(mcpServers, apiServers, intendedSlugs)
+    return { tokensRefreshed: true, failedSources }
+  }
+
+  return { tokensRefreshed: false, failedSources }
 }
 
 /**
@@ -298,6 +333,7 @@ async function setupCodexSessionConfig(
     sessionId,
     workspaceRootPath,
     plansFolderPath,
+    nodePath: process.execPath,
   })
 
   // Write config.toml
@@ -578,6 +614,8 @@ interface ManagedSession {
   // Sub-session hierarchy (1 level max)
   parentSessionId?: string
   siblingOrder?: number
+  // Token refresh manager for OAuth token refresh with rate limiting
+  tokenRefreshManager: TokenRefreshManager
 }
 
 // Convert runtime Message to StoredMessage for persistence
@@ -936,7 +974,7 @@ export class SessionManager {
     )
     // Pass session path so large API responses can be saved to session folder
     const sessionPath = getSessionStoragePath(workspaceRootPath, managed.id)
-    const { mcpServers, apiServers } = await buildServersFromSources(enabledSources, sessionPath)
+    const { mcpServers, apiServers } = await buildServersFromSources(enabledSources, sessionPath, managed.tokenRefreshManager)
     const intendedSlugs = enabledSources.map(s => s.config.slug)
 
     // For Codex backend, regenerate config.toml and reconnect
@@ -1193,6 +1231,10 @@ export class SessionManager {
             sharedUrl: meta.sharedUrl,
             sharedId: meta.sharedId,
             hidden: meta.hidden,
+            // Initialize TokenRefreshManager for this session
+            tokenRefreshManager: new TokenRefreshManager(getSourceCredentialManager(), {
+              log: (msg) => sessionLog.debug(msg),
+            }),
           }
 
           this.sessions.set(meta.id, managed)
@@ -1481,7 +1523,7 @@ export class SessionManager {
       // Store credentials using existing workspace ID extraction pattern
       const credManager = getCredentialManager()
       // Extract workspace ID from root path (last segment of path)
-      const wsId = managed.workspace.rootPath.split('/').pop() || managed.workspace.id
+      const wsId = basename(managed.workspace.rootPath) || managed.workspace.id
 
       if (request.mode === 'basic') {
         // Store value as JSON string {username, password} - credential-manager.ts parses it for basic auth
@@ -1772,6 +1814,10 @@ export class SessionManager {
       backgroundShellCommands: new Map(),
       messagesLoaded: true,  // New sessions don't need to load messages from disk
       hidden: options?.hidden,
+      // Initialize TokenRefreshManager for this session (handles OAuth token refresh with rate limiting)
+      tokenRefreshManager: new TokenRefreshManager(getSourceCredentialManager(), {
+        log: (msg) => sessionLog.debug(msg),
+      }),
     }
 
     this.sessions.set(storedSession.id, managed)
@@ -1847,6 +1893,10 @@ export class SessionManager {
       backgroundShellCommands: new Map(),
       messagesLoaded: true,
       parentSessionId,
+      // Initialize TokenRefreshManager for this session
+      tokenRefreshManager: new TokenRefreshManager(getSourceCredentialManager(), {
+        log: (msg) => sessionLog.debug(msg),
+      }),
     }
 
     this.sessions.set(storedSession.id, managed)
@@ -2050,7 +2100,7 @@ export class SessionManager {
         const enabledSources = allSources.filter(s =>
           enabledSlugs.includes(s.config.slug) && isSourceUsable(s)
         )
-        const { mcpServers } = await buildServersFromSources(enabledSources, sessionPath)
+        const { mcpServers } = await buildServersFromSources(enabledSources, sessionPath, managed.tokenRefreshManager)
         const codexHome = await setupCodexSessionConfig(sessionPath, enabledSources, mcpServers, managed.id, managed.workspace.rootPath)
 
         managed.agent = new CodexBackend({
@@ -2394,7 +2444,7 @@ export class SessionManager {
         const allEnabledSources = getSourcesBySlugs(workspaceRootPath, managed.enabledSourceSlugs || [])
         // Pass session path so large API responses can be saved to session folder
         const sessionPath = getSessionStoragePath(workspaceRootPath, managed.id)
-        const { mcpServers, apiServers, errors } = await buildServersFromSources(allEnabledSources, sessionPath)
+        const { mcpServers, apiServers, errors } = await buildServersFromSources(allEnabledSources, sessionPath, managed.tokenRefreshManager)
 
         if (errors.length > 0) {
           sessionLog.warn(`Source build errors during auto-enable:`, errors)
@@ -2829,7 +2879,7 @@ export class SessionManager {
       const sources = getSourcesBySlugs(workspaceRootPath, sourceSlugs)
       // Pass session path so large API responses can be saved to session folder
       const sessionPath = getSessionStoragePath(workspaceRootPath, sessionId)
-      const { mcpServers, apiServers, errors } = await buildServersFromSources(sources, sessionPath)
+      const { mcpServers, apiServers, errors } = await buildServersFromSources(sources, sessionPath, managed.tokenRefreshManager)
       if (errors.length > 0) {
         sessionLog.warn(`Source build errors:`, errors)
       }
@@ -3421,7 +3471,7 @@ export class SessionManager {
       const sources = getSourcesBySlugs(workspaceRootPath, managed.enabledSourceSlugs)
       // Pass session path so large API responses can be saved to session folder
       const sessionPath = getSessionStoragePath(workspaceRootPath, sessionId)
-      const { mcpServers, apiServers, errors } = await buildServersFromSources(sources, sessionPath)
+      const { mcpServers, apiServers, errors } = await buildServersFromSources(sources, sessionPath, managed.tokenRefreshManager)
       if (errors.length > 0) {
         sessionLog.warn(`Source build errors:`, errors)
       }

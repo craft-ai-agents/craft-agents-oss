@@ -3,7 +3,16 @@
  */
 
 import { $ } from 'bun';
-import { existsSync, mkdirSync, rmSync, copyFileSync, cpSync } from 'fs';
+import { execSync } from 'child_process';
+import {
+  existsSync,
+  mkdirSync,
+  rmSync,
+  copyFileSync,
+  cpSync,
+  lstatSync,
+  statSync,
+} from 'fs';
 import { join, dirname } from 'path';
 import { createHash } from 'crypto';
 
@@ -320,10 +329,22 @@ export function cleanBuildArtifacts(config: BuildConfig): void {
 
 /**
  * Install dependencies
+ * On Windows, uses hoisted linker to avoid .bun symlink directory
  */
 export async function installDependencies(config: BuildConfig): Promise<void> {
-  console.log('Installing dependencies...');
-  await $`cd ${config.rootDir} && bun install`.quiet();
+  const { rootDir, platform } = config;
+
+  if (platform === 'win32') {
+    // Use hoisted linker on Windows - Bun's default isolated mode creates
+    // node_modules/.bun/ with symlinks that esbuild can't traverse on Windows
+    // ("Access is denied" errors with junction points)
+    // Hoisted mode creates flat npm-style node_modules without .bun
+    console.log('Installing dependencies (Windows hoisted mode)...');
+    await $`cd ${rootDir} && bun install --linker=hoisted`.quiet();
+  } else {
+    console.log('Installing dependencies...');
+    await $`cd ${rootDir} && bun install`.quiet();
+  }
 }
 
 /**
@@ -341,7 +362,37 @@ export function copySDK(config: BuildConfig): void {
 
   console.log('Copying SDK...');
   mkdirSync(dirname(sdkDest), { recursive: true });
-  cpSync(sdkSource, sdkDest, { recursive: true });
+  // Remove existing symlink/directory if present (bun uses symlinks)
+  if (existsSync(sdkDest)) {
+    rmSync(sdkDest, { recursive: true, force: true });
+  }
+  // Use dereference to follow symlinks and copy actual files (bun uses symlinked node_modules)
+  cpSync(sdkSource, sdkDest, { recursive: true, dereference: true });
+}
+
+/**
+ * Verify SDK was copied correctly (not as symlinks, with expected size)
+ */
+export function verifySDKCopy(config: BuildConfig): void {
+  const { electronDir } = config;
+  const cliPath = join(electronDir, 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'cli.js');
+
+  if (!existsSync(cliPath)) {
+    throw new Error(`SDK verification failed: cli.js not found at ${cliPath}`);
+  }
+
+  const stats = lstatSync(cliPath);
+  if (stats.isSymbolicLink()) {
+    throw new Error('SDK verification failed: cli.js is a symlink (should be real file)');
+  }
+
+  const size = stats.size;
+  if (size < 1_000_000) {
+    // cli.js should be ~11MB
+    throw new Error(`SDK verification failed: cli.js too small (${size} bytes, expected ~11MB)`);
+  }
+
+  console.log(`  SDK copy verified: cli.js is ${(size / 1024 / 1024).toFixed(1)} MB`);
 }
 
 /**
@@ -400,6 +451,58 @@ export function copySessionServer(config: BuildConfig): void {
   console.log('Copying Session MCP Server...');
   mkdirSync(dirname(sessionDest), { recursive: true });
   copyFileSync(sessionSource, sessionDest);
+}
+
+/**
+ * Build MCP helper servers (bridge + session).
+ * Shared across all platforms to avoid drift.
+ */
+export function buildMcpServers(config: BuildConfig): void {
+  const { rootDir } = config;
+
+  const bridgeDir = join(rootDir, 'packages', 'bridge-mcp-server');
+  const bridgeOut = join(bridgeDir, 'dist', 'index.js');
+  const sessionDir = join(rootDir, 'packages', 'session-mcp-server');
+  const sessionOut = join(sessionDir, 'dist', 'index.js');
+
+  console.log('Building MCP helper servers...');
+
+  mkdirSync(join(bridgeDir, 'dist'), { recursive: true });
+  mkdirSync(join(sessionDir, 'dist'), { recursive: true });
+
+  execSync(
+    `bun build ${join(bridgeDir, 'src', 'index.ts')} --outfile ${bridgeOut} --target node --format cjs`,
+    { cwd: rootDir, stdio: 'inherit', shell: true }
+  );
+
+  execSync(
+    `bun build ${join(sessionDir, 'src', 'index.ts')} --outfile ${sessionOut} --target node --format cjs`,
+    { cwd: rootDir, stdio: 'inherit', shell: true }
+  );
+
+  if (!existsSync(bridgeOut)) {
+    throw new Error(`Bridge MCP server output not found at ${bridgeOut}`);
+  }
+  if (!existsSync(sessionOut)) {
+    throw new Error(`Session MCP server output not found at ${sessionOut}`);
+  }
+}
+
+/**
+ * Verify MCP helper servers are present in packaged resources.
+ */
+export function verifyMcpServersExist(config: BuildConfig): void {
+  const { electronDir } = config;
+
+  const bridgePath = join(electronDir, 'resources', 'bridge-mcp-server', 'index.js');
+  const sessionPath = join(electronDir, 'resources', 'session-mcp-server', 'index.js');
+
+  if (!existsSync(bridgePath)) {
+    throw new Error(`Bridge MCP server not found at ${bridgePath}`);
+  }
+  if (!existsSync(sessionPath)) {
+    throw new Error(`Session MCP server not found at ${sessionPath}`);
+  }
 }
 
 /**
