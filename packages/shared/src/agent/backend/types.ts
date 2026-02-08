@@ -25,9 +25,7 @@ import type { SessionConfig as Session } from '../../sessions/storage.ts';
 import { AbortReason, type RecoveryMessage } from '../core/index.ts';
 export { AbortReason, type RecoveryMessage };
 
-// Import and re-export ModelDefinition from centralized registry
-import type { ModelDefinition, ModelProvider } from '../../config/models.ts';
-export type { ModelDefinition } from '../../config/models.ts';
+import type { ModelProvider } from '../../config/models.ts';
 
 // Import LLM connection types for auth
 import type { LlmAuthType, LlmProviderType } from '../../config/llm-connections.ts';
@@ -39,47 +37,6 @@ export type { LlmAuthType, LlmProviderType } from '../../config/llm-connections.
  */
 export type AgentProvider = ModelProvider;
 
-/**
- * Thinking level definition for extended reasoning.
- * Provider-agnostic representation that maps to provider-specific budgets.
- */
-export interface ThinkingLevelDefinition {
-  /** Thinking level identifier */
-  id: ThinkingLevel;
-  /** Human-readable name */
-  name: string;
-  /** Description of the thinking level */
-  description: string;
-  /**
-   * Provider-specific budget configuration.
-   * - number: Token budget (Anthropic)
-   * - 'low'|'medium'|'high': Effort level (OpenAI)
-   */
-  budget?: number | 'low' | 'medium' | 'high';
-}
-
-/**
- * Capabilities advertised by a backend.
- * Used by UI to adapt model/thinking selectors and feature availability.
- */
-export interface AgentCapabilities {
-  /** Provider identifier */
-  provider: AgentProvider;
-  /** Available models for this backend */
-  models: ModelDefinition[];
-  /** Available thinking levels */
-  thinkingLevels: ThinkingLevelDefinition[];
-  /** Whether backend supports permission request callbacks */
-  supportsPermissionCallbacks: boolean;
-  /** Whether backend supports subagent parent tracking (Task tool nesting) */
-  supportsSubagentParents: boolean;
-  /** Maximum context window tokens across all models */
-  maxContextTokens: number;
-  /** Whether backend supports MCP servers */
-  supportsMcp: boolean;
-  /** Whether backend supports session resume */
-  supportsResume: boolean;
-}
 
 // ============================================================
 // Callback Types
@@ -251,11 +208,8 @@ export interface AgentBackend {
   cyclePermissionMode(): PermissionMode;
 
   // ============================================================
-  // Capabilities & State
+  // State
   // ============================================================
-
-  /** Get backend capabilities for UI adaptation */
-  capabilities(): AgentCapabilities;
 
   /** Get SDK session ID (for resume, null if no session) */
   getSessionId(): string | null;
@@ -401,4 +355,17 @@ export interface BackendConfig {
 
   /** Callback to get recent messages for recovery context */
   getRecoveryMessages?: () => RecoveryMessage[];
+
+  /**
+   * Mini/utility model for summarization, title generation, and mini agent.
+   * Resolved from the connection's miniModel field (last model in models array).
+   */
+  miniModel?: string;
+
+  /**
+   * Connection slug for credential routing.
+   * Set by factory when creating from a connection.
+   * Used to read/write credentials under the correct key.
+   */
+  connectionSlug?: string;
 }

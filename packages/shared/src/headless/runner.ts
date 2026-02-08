@@ -2,7 +2,6 @@ import { ClaudeAgent, type ClaudeAgentConfig, type PermissionMode, type SdkMcpSe
 import { createApiServer } from '../sources/api-tools.ts';
 import { listActiveSessions, getOrCreateSessionById, updateSessionSdkId } from '../sessions/storage.ts';
 import { debug } from '../utils/debug.ts';
-import { DEFAULT_MODEL } from '../config/models.ts';
 import { getCredentialManager } from '../credentials/index.ts';
 import type { CredentialId, CredentialType } from '../credentials/types.ts';
 import type {

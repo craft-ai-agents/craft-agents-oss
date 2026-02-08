@@ -57,10 +57,6 @@ export type { LoadedSkill, SkillMetadata };
 // Import session types from shared (for SessionFamily - different from core SessionMetadata)
 import type { SessionMetadata as SharedSessionMetadata } from '@craft-agent/shared/sessions/types';
 
-// Import backend capabilities type
-import type { AgentCapabilities } from '@craft-agent/shared/agent/backend';
-export type { AgentCapabilities };
-
 // Import LLM connection types
 import type { LlmConnection, LlmConnectionWithStatus, LlmAuthType, LlmProviderType } from '@craft-agent/shared/config';
 export type { LlmConnection, LlmConnectionWithStatus, LlmAuthType, LlmProviderType };
@@ -74,6 +70,7 @@ export interface LlmConnectionSetup {
   credential?: string       // API key or OAuth token (stored in credential manager, not config)
   baseUrl?: string | null   // Custom API endpoint (null to clear)
   defaultModel?: string | null  // Custom model override (null to clear)
+  models?: string[] | null  // Optional model list for compat providers
 }
 
 
@@ -694,9 +691,6 @@ export const IPC_CHANNELS = {
   ONBOARDING_HAS_CLAUDE_OAUTH_STATE: 'onboarding:hasClaudeOAuthState',
   ONBOARDING_CLEAR_CLAUDE_OAUTH_STATE: 'onboarding:clearClaudeOAuthState',
 
-  // Backend capabilities (for capabilities-driven UI)
-  GET_BACKEND_CAPABILITIES: 'backend:getCapabilities',
-
   // LLM Connections (provider configurations)
   LLM_CONNECTION_LIST: 'LLM_Connection:list',
   LLM_CONNECTION_LIST_WITH_STATUS: 'LLM_Connection:listWithStatus',
@@ -714,16 +708,11 @@ export const IPC_CHANNELS = {
   CHATGPT_LOGOUT: 'chatgpt:logout',
 
   // Settings - API Setup
-  SETTINGS_GET_API_SETUP: 'settings:getApiSetup',
   SETUP_LLM_CONNECTION: 'settings:setupLlmConnection',
   SETTINGS_TEST_API_CONNECTION: 'settings:testApiConnection',
   SETTINGS_TEST_OPENAI_CONNECTION: 'settings:testOpenAiConnection',
 
   // Settings - Model
-  SETTINGS_GET_MODEL: 'settings:getModel',
-  SETTINGS_SET_MODEL: 'settings:setModel',
-  SETTINGS_GET_MODEL_DEFAULTS: 'settings:getModelDefaults',
-  SETTINGS_SET_MODEL_DEFAULT: 'settings:setModelDefault',
   SESSION_GET_MODEL: 'session:getModel',
   SESSION_SET_MODEL: 'session:setModel',
 
@@ -984,36 +973,25 @@ export interface ElectronAPI {
   startWorkspaceMcpOAuth(mcpUrl: string): Promise<OAuthResult & { accessToken?: string; clientId?: string }>
   // Claude OAuth (two-step flow)
   startClaudeOAuth(): Promise<{ success: boolean; authUrl?: string; error?: string }>
-  exchangeClaudeCode(code: string): Promise<ClaudeOAuthResult>
+  exchangeClaudeCode(code: string, connectionSlug: string): Promise<ClaudeOAuthResult>
   hasClaudeOAuthState(): Promise<boolean>
   clearClaudeOAuthState(): Promise<{ success: boolean }>
 
   // ChatGPT OAuth (for Codex chatgptAuthTokens mode)
   // Note: startChatGptOAuth opens browser and completes full OAuth flow internally
-  startChatGptOAuth(): Promise<{ success: boolean; error?: string }>
+  startChatGptOAuth(connectionSlug: string): Promise<{ success: boolean; error?: string }>
   cancelChatGptOAuth(): Promise<{ success: boolean }>
-  getChatGptAuthStatus(): Promise<{ authenticated: boolean; expiresAt?: number; hasRefreshToken?: boolean }>
-  chatGptLogout(): Promise<{ success: boolean }>
+  getChatGptAuthStatus(connectionSlug: string): Promise<{ authenticated: boolean; expiresAt?: number; hasRefreshToken?: boolean }>
+  chatGptLogout(connectionSlug: string): Promise<{ success: boolean }>
 
-  // Backend capabilities (models, thinking levels) - returns null if backend not ready
-  getBackendCapabilities(sessionId?: string): Promise<AgentCapabilities | null>
-
-  // Settings - API Setup
-  getApiSetup(): Promise<ApiSetupInfo>
   /** Unified LLM connection setup */
   setupLlmConnection(setup: LlmConnectionSetup): Promise<{ success: boolean; error?: string }>
-  testApiConnection(apiKey: string, baseUrl?: string, modelName?: string): Promise<{ success: boolean; error?: string; modelCount?: number }>
-  testOpenAiConnection(apiKey: string, baseUrl?: string): Promise<{ success: boolean; error?: string }>
+  testApiConnection(apiKey: string, baseUrl?: string, models?: string[]): Promise<{ success: boolean; error?: string; modelCount?: number }>
+  testOpenAiConnection(apiKey: string, baseUrl?: string, models?: string[]): Promise<{ success: boolean; error?: string }>
 
-  // Settings - Model (global default)
-  getModel(): Promise<string | null>
-  setModel(model: string): Promise<void>
   // Session-specific model (overrides global)
   getSessionModel(sessionId: string, workspaceId: string): Promise<string | null>
   setSessionModel(sessionId: string, workspaceId: string, model: string | null, connection?: string): Promise<void>
-  // Model defaults per provider
-  getModelDefaults(): Promise<{ anthropic?: string; openai?: string } | null>
-  setModelDefault(provider: 'anthropic' | 'openai', model: string): Promise<void>
 
   // Workspace Settings (per-workspace configuration)
   getWorkspaceSettings(workspaceId: string): Promise<WorkspaceSettings | null>
@@ -1192,15 +1170,6 @@ export interface ClaudeOAuthResult {
 /**
  * Current API setup info for settings
  */
-export interface ApiSetupInfo {
-  authType: AuthType  // @deprecated - use defaultConnectionSlug instead
-  defaultConnectionSlug?: string  // The slug of the default LLM connection (e.g., 'anthropic-api', 'claude-max')
-  hasCredential: boolean
-  apiKey?: string  // The stored API key (only returned for api_key auth type)
-  anthropicBaseUrl?: string  // Custom Anthropic API base URL (for third-party compatible APIs)
-  customModel?: string  // Custom model ID override (for third-party APIs)
-}
-
 /**
  * Auto-update information
  */

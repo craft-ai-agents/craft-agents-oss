@@ -17,39 +17,6 @@ import type {
 } from './types.ts';
 
 // ============================================================
-// LLM Call Types (for call_llm tool)
-// ============================================================
-
-/**
- * Parameters for calling a secondary LLM
- */
-export interface LlmCallParams {
-  prompt: string;
-  attachments?: Array<string | { path: string; startLine?: number; endLine?: number }>;
-  model?: string;
-  systemPrompt?: string;
-  maxTokens?: number;
-  temperature?: number;
-  thinking?: boolean;
-  thinkingBudget?: number;
-  outputFormat?: 'summary' | 'classification' | 'extraction' | 'analysis' | 'comparison' | 'validation';
-  outputSchema?: {
-    type: 'object';
-    properties: Record<string, unknown>;
-    required?: string[];
-  };
-}
-
-/**
- * Result from LLM call
- */
-export interface LlmCallResult {
-  success: boolean;
-  content?: string;
-  error?: string;
-}
-
-// ============================================================
 // Source Credential Types
 // ============================================================
 
@@ -220,12 +187,6 @@ export interface SessionToolContext {
   // ============================================================
   // Optional Capabilities
   // ============================================================
-
-  /**
-   * Call a secondary LLM for subtasks.
-   * Available in both Claude and Codex (with API key).
-   */
-  callLlm?: (params: LlmCallParams) => Promise<LlmCallResult>;
 
   /**
    * Get credential manager for source authentication checks.

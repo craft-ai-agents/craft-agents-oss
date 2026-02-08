@@ -8,10 +8,10 @@ import type { BackendConfig, PermissionRequestType } from './backend/types.ts';
 // Plan types are used by UI components; not needed in craft-agent.ts since Safe Mode is user-controlled
 import { parseError, type AgentError } from './errors.ts';
 import { runErrorDiagnostics } from './diagnostics.ts';
-import { loadStoredConfig, loadConfigDefaults, resolveModelId, type Workspace, type AuthType, getDefaultLlmConnection, getLlmConnection } from '../config/storage.ts';
+import { loadStoredConfig, loadConfigDefaults, type Workspace, type AuthType, getDefaultLlmConnection, getLlmConnection } from '../config/storage.ts';
 import { isLocalMcpEnabled } from '../workspaces/storage.ts';
 import { loadPlanFromPath, type SessionConfig as Session } from '../sessions/storage.ts';
-import { DEFAULT_MODEL, isClaudeModel, ANTHROPIC_MODELS, type ModelDefinition as RegistryModelDefinition } from '../config/models.ts';
+import { DEFAULT_MODEL, isClaudeModel } from '../config/models.ts';
 import { getCredentialManager } from '../credentials/index.ts';
 import { updatePreferences, loadPreferences, formatPreferencesForPrompt, type UserPreferences } from '../config/preferences.ts';
 import type { FileAttachment } from '../utils/files.ts';
@@ -61,35 +61,15 @@ import {
 import { type ThinkingLevel, getThinkingTokens, DEFAULT_THINKING_LEVEL } from './thinking-levels.ts';
 import type { LoadedSource } from '../sources/types.ts';
 import { sourceNeedsAuthentication } from '../sources/credential-manager.ts';
-import { THINKING_LEVELS } from './thinking-levels.ts';
 import type {
   AgentBackend,
-  AgentCapabilities,
   ChatOptions,
   PermissionCallback,
   PlanCallback,
   AuthCallback,
   SourceChangeCallback,
   SourceActivationCallback,
-  ModelDefinition,
-  ThinkingLevelDefinition,
 } from './backend/types.ts';
-
-// ============================================================
-// Claude Model Definitions (from centralized registry)
-// ============================================================
-
-// Models are imported from the centralized registry in config/models.ts
-// ANTHROPIC_MODELS contains all Claude models with full capability metadata
-
-/**
- * Claude thinking level definitions.
- * Maps to token budgets for extended thinking.
- */
-const CLAUDE_THINKING_LEVELS: ThinkingLevelDefinition[] = THINKING_LEVELS.map(level => ({
-  ...level,
-  budget: level.id === 'off' ? 0 : level.id === 'think' ? 10_000 : 32_000,
-}));
 
 // Re-export permission mode functions for application usage
 export {
@@ -454,8 +434,8 @@ export class ClaudeAgent extends BaseAgent {
   public onUsageUpdate: ((update: { inputTokens: number; contextWindow?: number; cacheHitRate?: number }) => void) | null = null;
 
   constructor(config: ClaudeAgentConfig) {
-    // Resolve model: prioritize session model > config model > DEFAULT_MODEL
-    const model = config.session?.model ?? config.model ?? DEFAULT_MODEL;
+    // Resolve model: prioritize session model > config model (caller must provide via connection)
+    const model = config.session?.model ?? config.model!;
 
     // Build BackendConfig for BaseAgent
     // Context window for Anthropic models is 200k tokens
@@ -703,9 +683,8 @@ export class ClaudeAgent extends BaseAgent {
         : fullMcpServers;
       
       // Configure SDK options
-      // Resolve model: use tier name when using custom API (OpenRouter), else specific version
-      const modelConfig = this.config.model || DEFAULT_MODEL;
-      const model = resolveModelId(modelConfig);
+      // Model is always set by caller via connection config
+      const model = this._model;
 
       // Log provider context for diagnostics (custom base URL = third-party provider)
       const defaultConnSlug = getDefaultLlmConnection();
@@ -718,7 +697,7 @@ export class ClaudeAgent extends BaseAgent {
       // Determine effective thinking level: ultrathink override boosts to max for this message
       // Uses inherited protected fields from BaseAgent
       const effectiveThinkingLevel: ThinkingLevel = this._ultrathinkOverride ? 'max' : this._thinkingLevel;
-      const thinkingTokens = getThinkingTokens(effectiveThinkingLevel, modelConfig);
+      const thinkingTokens = getThinkingTokens(effectiveThinkingLevel, model);
       debug(`[chat] Thinking: level=${this._thinkingLevel}, override=${this._ultrathinkOverride}, effective=${effectiveThinkingLevel}, tokens=${thinkingTokens}`);
 
       // NOTE: Parent-child tracking for subagents is documented below (search for
@@ -2574,7 +2553,7 @@ export class ClaudeAgent extends BaseAgent {
   }
 
   getModel(): string {
-    return this.config.model || DEFAULT_MODEL;
+    return this._model;
   }
 
   /**
@@ -2795,28 +2774,6 @@ export class ClaudeAgent extends BaseAgent {
   // getActiveSourceSlugs() is now inherited from BaseAgent
 
   // ============================================================
-  // Capabilities (for AgentBackend interface compatibility)
-  // ============================================================
-
-  /**
-   * Get backend capabilities for UI adaptation.
-   * Returns information about available models, thinking levels, and features.
-   *
-   * This method enables UI components to adapt based on backend capabilities
-   * without hardcoding provider-specific logic.
-   */
-  capabilities(): AgentCapabilities {
-    return {
-      provider: 'anthropic',
-      models: ANTHROPIC_MODELS,
-      thinkingLevels: CLAUDE_THINKING_LEVELS,
-      supportsPermissionCallbacks: true,
-      supportsSubagentParents: true,
-      maxContextTokens: 200_000,
-      supportsMcp: true,
-      supportsResume: true,
-    };
-  }
 }
 
 // ============================================================

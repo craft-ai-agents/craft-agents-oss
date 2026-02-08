@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useTheme } from '@/hooks/useTheme'
 import type { ThemeOverrides } from '@config/theme'
 import { useSetAtom, useStore, useAtomValue } from 'jotai'
-import type { Session, Workspace, SessionEvent, Message, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, SetupNeeds, TodoState, NewChatActionParams, ContentBadge, AuthType, AgentCapabilities, LlmConnectionWithStatus } from '../shared/types'
+import type { Session, Workspace, SessionEvent, Message, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, SetupNeeds, TodoState, NewChatActionParams, ContentBadge, LlmConnectionWithStatus } from '../shared/types'
 import type { SessionOptions, SessionOptionUpdates } from './hooks/useSessionOptions'
 import { defaultSessionOptions, mergeSessionOptions } from './hooks/useSessionOptions'
 import { generateMessageId } from '../shared/types'
@@ -25,7 +25,6 @@ import { NavigationProvider } from '@/contexts/NavigationContext'
 import { navigate, routes } from './lib/navigate'
 import { stripMarkdown } from './utils/text'
 import { initRendererPerf } from './lib/perf'
-import { DEFAULT_MODEL, DEFAULT_CODEX_MODEL, type ModelDefaults } from '@config/models'
 import {
   initializeSessionsAtom,
   addSessionAtom,
@@ -189,12 +188,6 @@ export default function App() {
     return pathParts[pathParts.length - 1] || windowWorkspaceId
   }, [windowWorkspaceId, workspaces])
 
-  const [modelDefaults, setModelDefaults] = useState<ModelDefaults>({
-    anthropic: DEFAULT_MODEL,
-    openai: DEFAULT_CODEX_MODEL,
-  })
-  // Backend capabilities (models, thinking levels) - adapts UI based on provider
-  const [capabilities, setCapabilities] = useState<AgentCapabilities | null>(null)
   // LLM connections with authentication status (for provider selection)
   const [llmConnections, setLlmConnections] = useState<LlmConnectionWithStatus[]>([])
   // Workspace default LLM connection (for new sessions)
@@ -202,29 +195,11 @@ export default function App() {
   // Global default LLM connection slug (from app config)
   const [defaultLlmConnectionSlug, setDefaultLlmConnectionSlug] = useState<string | undefined>()
 
-  // Derive customModel and authType from the default LLM connection
+  // Derive connection default model override from the default LLM connection
   const defaultConnection = useMemo(() => {
     return llmConnections.find(c => c.slug === defaultLlmConnectionSlug) ?? null
   }, [llmConnections, defaultLlmConnectionSlug])
 
-  // Custom model derived from default connection's defaultModel field
-  const customModel = defaultConnection?.defaultModel ?? null
-
-  // Auth type derived from default connection for backwards compatibility
-  const authType: AuthType | null = useMemo(() => {
-    if (!defaultConnection) return null
-    // Map connection authType to legacy AuthType format
-    if (defaultConnection.authType === 'api_key' || defaultConnection.authType === 'api_key_with_endpoint' || defaultConnection.authType === 'bearer_token') {
-      return 'api_key'
-    } else if (defaultConnection.authType === 'oauth') {
-      // Check provider type to determine specific auth type
-      if (defaultConnection.providerType === 'openai') {
-        return 'codex_oauth'
-      }
-      return 'oauth_token'
-    }
-    return null
-  }, [defaultConnection])
   const [menuNewChatTrigger, setMenuNewChatTrigger] = useState(0)
   // Permission requests per session (queue to handle multiple concurrent requests)
   const [pendingPermissions, setPendingPermissions] = useState<Map<string, PermissionRequest[]>>(new Map())
@@ -290,34 +265,21 @@ export default function App() {
 
   const DRAFT_SAVE_DEBOUNCE_MS = 500
 
-  // Re-fetch LLM connections and default after API connection changes.
-  // Also refreshes backend capabilities since they depend on the connection.
-  // Defined early so it can be passed to useOnboarding's onConfigSaved.
-  const refreshCustomModel = useCallback(async () => {
-    // Refresh LLM connections to pick up new/updated connections
-    const connections = await window.electronAPI.listLlmConnectionsWithStatus()
-    setLlmConnections(connections)
-    // Refresh default connection slug
-    const billing = await window.electronAPI.getApiSetup()
-    setDefaultLlmConnectionSlug(billing.defaultConnectionSlug ?? connections[0]?.slug)
-    // Refresh capabilities in case backend changed
-    const caps = await window.electronAPI.getBackendCapabilities()
-    setCapabilities(caps)
+  const resolveDefaultConnectionSlug = useCallback((connections: LlmConnectionWithStatus[]) => {
+    return connections.find(c => c.isDefault)?.slug ?? connections[0]?.slug
   }, [])
 
   // Refresh LLM connections from config (called on workspace change and after connection updates)
   const refreshLlmConnections = useCallback(async () => {
     const connections = await window.electronAPI.listLlmConnectionsWithStatus()
     setLlmConnections(connections)
+    setDefaultLlmConnectionSlug(resolveDefaultConnectionSlug(connections))
     // Also refresh workspace default
     if (windowWorkspaceId) {
       const settings = await window.electronAPI.getWorkspaceSettings(windowWorkspaceId)
       setWorkspaceDefaultLlmConnection(settings?.defaultLlmConnection)
     }
-    // Also refresh global default connection slug
-    const billing = await window.electronAPI.getApiSetup()
-    setDefaultLlmConnectionSlug(billing.defaultConnectionSlug ?? connections[0]?.slug)
-  }, [windowWorkspaceId])
+  }, [resolveDefaultConnectionSlug, windowWorkspaceId])
 
   // Handle onboarding completion
   const handleOnboardingComplete = useCallback(async () => {
@@ -337,10 +299,10 @@ export default function App() {
   }, [])
 
   // Onboarding hook — onConfigSaved fires immediately when billing is saved,
-  // ensuring customModel context updates before the wizard closes.
+  // ensuring connection state updates before the wizard closes.
   const onboarding = useOnboarding({
     onComplete: handleOnboardingComplete,
-    onConfigSaved: refreshCustomModel,
+    onConfigSaved: refreshLlmConnections,
     initialSetupNeeds: setupNeeds || undefined,
   })
 
@@ -450,26 +412,10 @@ export default function App() {
         }
       }
     })
-    // Load provider-scoped default models
-    window.electronAPI.getModelDefaults?.().then((defaults) => {
-      if (defaults) {
-        setModelDefaults({
-          anthropic: defaults.anthropic ?? DEFAULT_MODEL,
-          openai: defaults.openai ?? DEFAULT_CODEX_MODEL,
-        })
-      }
-    })
-    // Load default LLM connection slug from API setup
-    window.electronAPI.getApiSetup().then((billing) => {
-      setDefaultLlmConnectionSlug(billing.defaultConnectionSlug)
-    })
-    // Load backend capabilities (for capabilities-driven model/thinking selectors)
-    window.electronAPI.getBackendCapabilities(initialSessionId ?? undefined).then((caps) => {
-      setCapabilities(caps)
-    })
     // Load LLM connections with authentication status
     window.electronAPI.listLlmConnectionsWithStatus().then((connections) => {
       setLlmConnections(connections)
+      setDefaultLlmConnectionSlug(resolveDefaultConnectionSlug(connections))
     })
     // Load persisted input drafts into ref (no re-render needed)
     window.electronAPI.getAllDrafts().then((drafts) => {
@@ -479,7 +425,7 @@ export default function App() {
     })
     // Load app-level theme
     window.electronAPI.getAppTheme().then(setAppTheme)
-  }, [appState, initialSessionId, windowWorkspaceId, setSession, initializeSessions])
+  }, [appState, initialSessionId, windowWorkspaceId, setSession, initializeSessions, resolveDefaultConnectionSlug])
 
   // Subscribe to theme change events (live updates when theme.json changes)
   useEffect(() => {
@@ -497,13 +443,6 @@ export default function App() {
       refreshLlmConnections()
     }
   }, [windowWorkspaceId, refreshLlmConnections])
-
-  // Refresh capabilities when selected session changes (different backends have different capabilities)
-  useEffect(() => {
-    if (sessionSelection.selected) {
-      window.electronAPI.getBackendCapabilities(sessionSelection.selected).then(setCapabilities)
-    }
-  }, [sessionSelection.selected])
 
   // Listen for session events - uses centralized event processor for consistent state transitions
   //
@@ -603,11 +542,6 @@ export default function App() {
         window.dispatchEvent(new CustomEvent('craft:compaction-complete', {
           detail: { sessionId }
         }))
-      }
-
-      // Refresh capabilities when LLM connection changes for current session
-      if (event.type === 'connection_changed' && sessionId === sessionSelection.selected) {
-        window.electronAPI.getBackendCapabilities(sessionId).then(setCapabilities)
       }
 
       // Check if session is currently streaming (atom is source of truth)
@@ -982,16 +916,6 @@ export default function App() {
     }
   }, [sessionOptions, updateSessionById, skills, sources, windowWorkspaceId, windowWorkspaceSlug])
 
-  const refreshModelDefaults = useCallback(async () => {
-    if (!window.electronAPI?.getModelDefaults) return
-    const defaults = await window.electronAPI.getModelDefaults()
-    if (!defaults) return
-    setModelDefaults({
-      anthropic: defaults.anthropic ?? DEFAULT_MODEL,
-      openai: defaults.openai ?? DEFAULT_CODEX_MODEL,
-    })
-  }, [])
-
   /**
    * Unified handler for all session option changes.
    * Handles persistence and backend sync for each option type.
@@ -1287,10 +1211,6 @@ export default function App() {
     workspaces,
     activeWorkspaceId: windowWorkspaceId,
     activeWorkspaceSlug: windowWorkspaceSlug,
-    modelDefaults,
-    customModel,
-    authType,
-    capabilities,
     llmConnections,
     workspaceDefaultLlmConnection,
     refreshLlmConnections,
@@ -1316,9 +1236,6 @@ export default function App() {
     // File/URL handlers
     onOpenFile: handleOpenFile,
     onOpenUrl: handleOpenUrl,
-    // Model defaults
-    refreshModelDefaults,
-    refreshCustomModel,
     // Workspace
     onSelectWorkspace: handleSelectWorkspace,
     onRefreshWorkspaces: handleRefreshWorkspaces,
@@ -1337,10 +1254,6 @@ export default function App() {
     workspaces,
     windowWorkspaceId,
     windowWorkspaceSlug,
-    modelDefaults,
-    customModel,
-    authType,
-    capabilities,
     llmConnections,
     workspaceDefaultLlmConnection,
     refreshLlmConnections,
@@ -1364,8 +1277,6 @@ export default function App() {
     handleRespondToCredential,
     handleOpenFile,
     handleOpenUrl,
-    refreshModelDefaults,
-    refreshCustomModel,
     handleSelectWorkspace,
     handleRefreshWorkspaces,
     handleOpenSettings,

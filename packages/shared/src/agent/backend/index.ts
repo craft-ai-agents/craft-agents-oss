@@ -29,11 +29,8 @@
 // Core types
 export type {
   AgentBackend,
-  AgentCapabilities,
   AgentProvider,
   BackendConfig,
-  ModelDefinition,
-  ThinkingLevelDefinition,
   PermissionCallback,
   PlanCallback,
   AuthCallback,
@@ -63,8 +60,6 @@ export {
   createConfigFromConnection,
   createBackendFromConnection,
   providerTypeToAgentProvider,
-  // Static capabilities (for sessions without agents)
-  getStaticCapabilities,
 } from './factory.ts';
 
 // Agent implementations

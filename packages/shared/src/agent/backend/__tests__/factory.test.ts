@@ -83,7 +83,6 @@ describe('createBackend / createAgent', () => {
       const agent = createBackend(config);
 
       expect(agent).toBeInstanceOf(ClaudeAgent);
-      expect(agent.capabilities().provider).toBe('anthropic');
     });
   });
 
@@ -93,7 +92,6 @@ describe('createBackend / createAgent', () => {
       const agent = createBackend(config);
 
       expect(agent).toBeInstanceOf(CodexAgent);
-      expect(agent.capabilities().provider).toBe('openai');
     });
   });
 
@@ -195,34 +193,6 @@ describe('providerTypeToAgentProvider', () => {
     it('should map openai_compat to openai', () => {
       expect(providerTypeToAgentProvider('openai_compat')).toBe('openai');
     });
-  });
-});
-
-describe('Agent capabilities', () => {
-  it('ClaudeAgent should report correct capabilities', () => {
-    const config = createTestConfig({ provider: 'anthropic' });
-    const agent = createBackend(config);
-    const caps = agent.capabilities();
-
-    expect(caps.provider).toBe('anthropic');
-    expect(caps.supportsPermissionCallbacks).toBe(true);
-    expect(caps.supportsMcp).toBe(true);
-    expect(caps.supportsResume).toBe(true);
-    expect(caps.models.length).toBeGreaterThan(0);
-    expect(caps.thinkingLevels.length).toBeGreaterThan(0);
-  });
-
-  it('CodexAgent should report correct capabilities', () => {
-    const config = createTestConfig({ provider: 'openai' });
-    const agent = createBackend(config);
-    const caps = agent.capabilities();
-
-    expect(caps.provider).toBe('openai');
-    expect(caps.supportsPermissionCallbacks).toBe(true);
-    expect(caps.supportsMcp).toBe(true);
-    expect(caps.supportsResume).toBe(true);
-    expect(caps.models.length).toBeGreaterThan(0);
-    expect(caps.thinkingLevels.length).toBeGreaterThan(0);
   });
 });
 

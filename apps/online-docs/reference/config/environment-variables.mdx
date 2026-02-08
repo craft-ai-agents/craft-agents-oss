@@ -143,13 +143,13 @@ For API credentials, the lookup order is:
 For API base URL:
 
 1. `ANTHROPIC_BASE_URL` environment variable
-2. `anthropicBaseUrl` field in `config.json`
+2. Connection base URL (configured in LLM connections)
 3. Default (`https://api.anthropic.com`)
 
 For model selection:
 
-1. `customModel` field in `config.json` (for non-Anthropic providers)
-2. `model` field in `config.json`
+1. LLM connection default model (if set)
+2. App-level model defaults (per provider)
 3. System default (Claude Sonnet)
 
 For configuration directory:

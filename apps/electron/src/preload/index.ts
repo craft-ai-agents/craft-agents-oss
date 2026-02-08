@@ -168,34 +168,24 @@ const api: ElectronAPI = {
   startWorkspaceMcpOAuth: (mcpUrl: string) => ipcRenderer.invoke(IPC_CHANNELS.ONBOARDING_START_MCP_OAUTH, mcpUrl),
   // Claude OAuth (two-step flow)
   startClaudeOAuth: () => ipcRenderer.invoke(IPC_CHANNELS.ONBOARDING_START_CLAUDE_OAUTH),
-  exchangeClaudeCode: (code: string) => ipcRenderer.invoke(IPC_CHANNELS.ONBOARDING_EXCHANGE_CLAUDE_CODE, code),
+  exchangeClaudeCode: (code: string, connectionSlug: string) => ipcRenderer.invoke(IPC_CHANNELS.ONBOARDING_EXCHANGE_CLAUDE_CODE, code, connectionSlug),
   hasClaudeOAuthState: () => ipcRenderer.invoke(IPC_CHANNELS.ONBOARDING_HAS_CLAUDE_OAUTH_STATE),
   clearClaudeOAuthState: () => ipcRenderer.invoke(IPC_CHANNELS.ONBOARDING_CLEAR_CLAUDE_OAUTH_STATE),
 
   // ChatGPT OAuth (for Codex chatgptAuthTokens mode)
-  startChatGptOAuth: () => ipcRenderer.invoke(IPC_CHANNELS.CHATGPT_START_OAUTH),
+  startChatGptOAuth: (connectionSlug: string) => ipcRenderer.invoke(IPC_CHANNELS.CHATGPT_START_OAUTH, connectionSlug),
   cancelChatGptOAuth: () => ipcRenderer.invoke(IPC_CHANNELS.CHATGPT_CANCEL_OAUTH),
-  getChatGptAuthStatus: () => ipcRenderer.invoke(IPC_CHANNELS.CHATGPT_GET_AUTH_STATUS),
-  chatGptLogout: () => ipcRenderer.invoke(IPC_CHANNELS.CHATGPT_LOGOUT),
-
-  // Backend capabilities (models, thinking levels)
-  getBackendCapabilities: (sessionId?: string) => ipcRenderer.invoke(IPC_CHANNELS.GET_BACKEND_CAPABILITIES, sessionId),
+  getChatGptAuthStatus: (connectionSlug: string) => ipcRenderer.invoke(IPC_CHANNELS.CHATGPT_GET_AUTH_STATUS, connectionSlug),
+  chatGptLogout: (connectionSlug: string) => ipcRenderer.invoke(IPC_CHANNELS.CHATGPT_LOGOUT, connectionSlug),
 
   // Settings - API Setup
-  getApiSetup: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET_API_SETUP),
   setupLlmConnection: (setup: LlmConnectionSetup) =>
     ipcRenderer.invoke(IPC_CHANNELS.SETUP_LLM_CONNECTION, setup),
-  testApiConnection: (apiKey: string, baseUrl?: string, modelName?: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_TEST_API_CONNECTION, apiKey, baseUrl, modelName),
-  testOpenAiConnection: (apiKey: string, baseUrl?: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_TEST_OPENAI_CONNECTION, apiKey, baseUrl),
+  testApiConnection: (apiKey: string, baseUrl?: string, models?: string[]) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_TEST_API_CONNECTION, apiKey, baseUrl, models),
+  testOpenAiConnection: (apiKey: string, baseUrl?: string, models?: string[]) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_TEST_OPENAI_CONNECTION, apiKey, baseUrl, models),
 
-  // Settings - Model (global default)
-  getModel: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET_MODEL),
-  setModel: (model: string) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SET_MODEL, model),
-  getModelDefaults: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET_MODEL_DEFAULTS),
-  setModelDefault: (provider: 'anthropic' | 'openai', model: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SET_MODEL_DEFAULT, provider, model),
   // Session-specific model (overrides global)
   getSessionModel: (sessionId: string, workspaceId: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SESSION_GET_MODEL, sessionId, workspaceId),

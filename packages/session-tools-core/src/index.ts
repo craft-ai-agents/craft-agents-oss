@@ -115,8 +115,6 @@ export type {
   FileSystemInterface,
   CredentialManagerInterface,
   ValidatorInterface,
-  LlmCallParams,
-  LlmCallResult,
   LoadedSource,
   // MCP validation types
   StdioMcpConfig,
@@ -147,8 +145,6 @@ export {
   handleMicrosoftOAuthTrigger,
   // Credential Prompt
   handleCredentialPrompt,
-  // Call LLM
-  handleCallLlm,
 } from './handlers/index.ts';
 
 export type {
@@ -162,5 +158,4 @@ export type {
   SlackOAuthTriggerArgs,
   MicrosoftOAuthTriggerArgs,
   CredentialPromptArgs,
-  CallLlmArgs,
 } from './handlers/index.ts';

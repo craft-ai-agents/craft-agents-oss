@@ -11,6 +11,7 @@ import {
   ChevronDown,
   Loader2,
   Lock,
+  AlertCircle,
 } from 'lucide-react'
 import { Icon_Home, Icon_Folder } from '@craft-agent/ui'
 
@@ -54,8 +55,8 @@ import { cn } from '@/lib/utils'
 import { isMac, PATH_SEP, getPathBasename } from '@/lib/platform'
 import { applySmartTypography } from '@/lib/smart-typography'
 import { AttachmentPreview } from '../AttachmentPreview'
-import { ANTHROPIC_MODELS, getModelShortName, getModelContextWindow, isClaudeModel, isCodexModel } from '@config/models'
-import { isCompatProvider, getModelsForProviderType, resolveEffectiveConnectionSlug } from '@config/llm-connections'
+import { ANTHROPIC_MODELS, getModelShortName, getModelContextWindow, isCodexModel } from '@config/models'
+import { resolveEffectiveConnectionSlug, isCompatProvider } from '@config/llm-connections'
 import { useOptionalAppShellContext } from '@/context/AppShellContext'
 import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
 import { SourceAvatar } from '@/components/ui/source-avatar'
@@ -194,6 +195,8 @@ export interface FreeFormInputProps {
   currentConnection?: string
   /** Callback when connection changes (only works when session is empty) */
   onConnectionChange?: (connectionSlug: string) => void
+  /** When true, the session's locked connection has been removed */
+  connectionUnavailable?: boolean
 }
 
 /**
@@ -246,50 +249,45 @@ export function FreeFormInput({
   compactMode = false,
   currentConnection,
   onConnectionChange,
+  connectionUnavailable = false,
 }: FreeFormInputProps) {
-  // Read custom model, capabilities, connections, and workspace info from context.
+  // Read connection default model, connections, and workspace info from context.
   // Uses optional variant so playground (no provider) doesn't crash.
   const appShellCtx = useOptionalAppShellContext()
-  const customModel = appShellCtx?.customModel ?? null
-  const capabilities = appShellCtx?.capabilities ?? null
   const llmConnections = appShellCtx?.llmConnections ?? []
   const workspaceDefaultConnection = appShellCtx?.workspaceDefaultLlmConnection
 
-  // Compute available models based on the effective connection's provider type.
-  // Order of precedence:
-  // 1. Backend capabilities (active session has a running backend)
-  // 2. For *_compat providers: use connection's explicit models array
-  // 3. For standard providers: use registry models based on provider type
+  // Derive connectionDefaultModel per-session from the effective connection.
+  // Only non-null for compat providers (custom endpoints with fixed models).
+  // Standard providers (anthropic, openai, bedrock, vertex) → null → normal model picker.
+  const connectionDefaultModel = React.useMemo(() => {
+    const effectiveSlug = resolveEffectiveConnectionSlug(currentConnection, workspaceDefaultConnection, llmConnections)
+    const conn = llmConnections.find(c => c.slug === effectiveSlug)
+    if (!conn) return null
+    if (!isCompatProvider(conn.providerType)) return null
+    // Allow model switching when connection has multiple models
+    if (conn.models && conn.models.length > 1) return null
+    return conn.defaultModel ?? null
+  }, [currentConnection, workspaceDefaultConnection, llmConnections])
+
+  // Compute available models from the effective connection.
+  // All connections have models populated by backfillAllConnectionModels().
   const availableModels = React.useMemo(() => {
-    // Backend capabilities take precedence (active session)
-    if (capabilities?.models && capabilities.models.length > 0) {
-      return capabilities.models
-    }
+    // Connection removed — don't fall through to another connection's models
+    if (connectionUnavailable) return []
 
     // Determine effective connection using the canonical fallback chain
     const effectiveSlug = resolveEffectiveConnectionSlug(currentConnection, workspaceDefaultConnection, llmConnections)
     const connection = llmConnections.find(c => c.slug === effectiveSlug)
 
     if (!connection) {
-      return ANTHROPIC_MODELS // Safe default
+      return ANTHROPIC_MODELS // Safety net — shouldn't happen
     }
 
-    // For compat providers, use the connection's explicit models
-    if (isCompatProvider(connection.providerType)) {
-      return connection.models || []
-    }
+    return connection.models || ANTHROPIC_MODELS
+  }, [llmConnections, currentConnection, workspaceDefaultConnection, connectionUnavailable])
 
-    // For standard providers, use registry models
-    return getModelsForProviderType(connection.providerType)
-  }, [capabilities?.models, llmConnections, currentConnection, workspaceDefaultConnection])
-
-  // Compute available thinking levels from capabilities, falling back to hardcoded THINKING_LEVELS
-  const availableThinkingLevels = React.useMemo(() => {
-    if (capabilities?.thinkingLevels && capabilities.thinkingLevels.length > 0) {
-      return capabilities.thinkingLevels
-    }
-    return THINKING_LEVELS
-  }, [capabilities?.thinkingLevels])
+  const availableThinkingLevels = THINKING_LEVELS
 
   // Group connections by provider type for hierarchical dropdown
   // Each provider (Anthropic, OpenAI) can have multiple connections (API Key, Claude Max, etc.)
@@ -1606,26 +1604,44 @@ export function FreeFormInput({
                     type="button"
                     className={cn(
                       "inline-flex items-center h-7 px-1.5 gap-0.5 text-[13px] shrink-0 rounded-[6px] hover:bg-foreground/5 transition-colors select-none",
-                      modelDropdownOpen && "bg-foreground/5"
+                      modelDropdownOpen && "bg-foreground/5",
+                      connectionUnavailable && "text-destructive"
                     )}
                   >
-                    {getModelShortName(customModel ?? currentModel)}
-                    {!customModel && <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />}
+                    {connectionUnavailable ? (
+                      <>
+                        <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                        Unavailable
+                      </>
+                    ) : (
+                      <>
+                        {getModelShortName(connectionDefaultModel ?? currentModel)}
+                        {!connectionDefaultModel && <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />}
+                      </>
+                    )}
                   </button>
                 </DropdownMenuTrigger>
               </TooltipTrigger>
               <TooltipContent side="top">Model</TooltipContent>
             </Tooltip>
             <StyledDropdownMenuContent side="top" align="end" sideOffset={8} className="min-w-[260px]">
-              {/* When custom model is active, show it as a static item */}
-              {customModel ? (
+              {/* Connection unavailable message */}
+              {connectionUnavailable ? (
+                <div className="flex flex-col items-center justify-center py-6 px-4 text-center">
+                  <AlertCircle className="h-8 w-8 text-destructive mb-2" />
+                  <div className="font-medium text-sm mb-1">Connection Unavailable</div>
+                  <div className="text-xs text-muted-foreground">
+                    The connection used by this session has been removed. Create a new session to continue.
+                  </div>
+                </div>
+              ) : connectionDefaultModel ? (
                 <StyledDropdownMenuItem
                   disabled
                   className="flex items-center justify-between px-2 py-2 rounded-lg"
                 >
                   <div className="text-left">
-                    <div className="font-medium text-sm">{customModel}</div>
-                    <div className="text-xs text-muted-foreground">Custom API connection</div>
+                    <div className="font-medium text-sm">{connectionDefaultModel}</div>
+                    <div className="text-xs text-muted-foreground">Connection default</div>
                   </div>
                   <Check className="h-4 w-4 text-foreground shrink-0 ml-3" />
                 </StyledDropdownMenuItem>
@@ -1662,7 +1678,7 @@ export function FreeFormInput({
                           {isAuthenticated && (
                             <StyledDropdownMenuSubContent className="min-w-[220px]">
                               {/* Show models for this connection - use provider-specific models as fallback */}
-                              {(conn.models || getModelsForProviderType(conn.providerType || 'anthropic')).map((model) => {
+                              {(conn.models || ANTHROPIC_MODELS).map((model) => {
                                 const modelId = typeof model === 'string' ? model : model.id
                                 const modelName = typeof model === 'string' ? getModelShortName(model) : model.name
                                 const isSelectedModel = isCurrentConnection && currentModel === modelId
@@ -1711,16 +1727,18 @@ export function FreeFormInput({
                   )}
                   {/* Model options based on effective connection's provider type */}
                   {availableModels.map((model) => {
-                    const isSelected = currentModel === model.id
-                    const description = 'description' in model ? (model.description as string) : ''
+                    const modelId = typeof model === 'string' ? model : model.id
+                    const modelName = typeof model === 'string' ? getModelShortName(model) : model.name
+                    const isSelected = currentModel === modelId
+                    const description = typeof model !== 'string' && 'description' in model ? (model.description as string) : ''
                     return (
                       <StyledDropdownMenuItem
-                        key={model.id}
-                        onSelect={() => onModelChange(model.id, effectiveConnection)}
+                        key={modelId}
+                        onSelect={() => onModelChange(modelId, effectiveConnection)}
                         className="flex items-center justify-between px-2 py-2 rounded-lg cursor-pointer"
                       >
                         <div className="text-left">
-                          <div className="font-medium text-sm">{model.name}</div>
+                          <div className="font-medium text-sm">{modelName}</div>
                           {description && (
                             <div className="text-xs text-muted-foreground">{description}</div>
                           )}
@@ -1736,7 +1754,7 @@ export function FreeFormInput({
 
               {/* Thinking level selector — only shown when thinking levels are available
                   (Claude supports extended thinking, OpenAI backends may not) */}
-              {availableThinkingLevels.length > 0 && (!customModel || isClaudeModel(customModel)) && (
+              {availableThinkingLevels.length > 0 && (
                 <>
                   <StyledDropdownMenuSeparator className="my-1" />
 
@@ -1798,7 +1816,7 @@ export function FreeFormInput({
             // not the full context window - this gives users meaningful warnings before compaction kicks in.
             // SDK triggers compaction at ~155k tokens for a 200k context window.
             // Falls back to known per-model context window when SDK hasn't reported usage yet.
-            const effectiveContextWindow = contextStatus?.contextWindow || getModelContextWindow(customModel || currentModel)
+            const effectiveContextWindow = contextStatus?.contextWindow || getModelContextWindow(currentModel)
             const compactionThreshold = effectiveContextWindow
               ? Math.round(effectiveContextWindow * 0.775)
               : null
@@ -1806,7 +1824,7 @@ export function FreeFormInput({
               ? Math.min(99, Math.round((contextStatus.inputTokens / compactionThreshold) * 100))
               : null
             // Show badge when >= 80% of compaction threshold AND not currently compacting
-            const showWarning = usagePercent !== null && usagePercent >= 80 && !contextStatus?.isCompacting && !isCodexModel(customModel || currentModel)
+            const showWarning = usagePercent !== null && usagePercent >= 80 && !contextStatus?.isCompacting && !isCodexModel(currentModel)
 
             if (!showWarning) return null
 

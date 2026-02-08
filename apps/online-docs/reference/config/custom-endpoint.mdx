@@ -121,8 +121,7 @@ This works with self-hosted proxies, enterprise gateways, or any service that im
 
 When you configure a non-default provider, Craft Agents stores:
 - The **API key** in the encrypted credentials file (`~/.craft-agent/credentials.enc`)
-- The **base URL** as `anthropicBaseUrl` in `config.json`
-- The **model override** as `customModel` in `config.json`
+- The **base URL** and **default model** in the LLM connection configuration
 
 At session launch, the base URL is passed via the `ANTHROPIC_BASE_URL` environment variable to the underlying Claude Code SDK.
 
@@ -165,4 +164,4 @@ At session launch, the base URL is passed via the `ANTHROPIC_BASE_URL` environme
 
 Your API key is stored securely in the encrypted credentials file. See [Credentials](/reference/config/credentials) for details on how credentials are protected.
 
-The base URL and model name are stored in `config.json` (not encrypted, as they are not sensitive).
+The base URL and model name are stored in the LLM connection configuration (not encrypted, as they are not sensitive).

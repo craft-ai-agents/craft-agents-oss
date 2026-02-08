@@ -257,7 +257,7 @@ const mockAppShellContext = {
   pendingPermissions: new Map(),
   pendingCredentials: new Map(),
   currentModel: 'haiku',
-  customModel: null,
+  connectionDefaultModel: null,
   sessionOptions: new Map(),
   getDraft: () => '',
   onSelectSession: () => {},
@@ -271,7 +271,6 @@ const mockAppShellContext = {
   onOpenFile: () => {},
   onOpenUrl: () => {},
   onModelChange: () => {},
-  refreshCustomModel: async () => {},
   onRefreshWorkspaces: () => {},
   // Session callbacks required by EditPopover
   onCreateSession: async (workspaceId: string) => ({

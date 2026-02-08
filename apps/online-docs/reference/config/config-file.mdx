@@ -53,53 +53,6 @@ See [LLM Connections](/reference/config/llm-connections) for schema details and 
 
 Slug of the default LLM connection used for new sessions (unless overridden by a workspace). If omitted, the first connection in `llmConnections` is used.
 
-### authType
-
-How you authenticate with the AI provider.
-
-| Value | Description |
-|-------|-------------|
-| `api_key` | Using an API key (Anthropic, OpenRouter, Vercel AI Gateway, Ollama, or custom endpoint) |
-| `oauth_token` | Using OAuth token (Claude Pro/Max subscription) |
-
-<Note>
-`authType`, `anthropicBaseUrl`, `customModel`, and `model` are legacy fields from the single-provider system. New installations use **LLM connections** instead. Existing configs are migrated automatically.
-</Note>
-
-### anthropicBaseUrl
-
-Custom API endpoint URL. Only set when using a non-Anthropic provider. Omitted when using the default Anthropic API.
-
-| Example Values | Provider |
-|-------|-------------|
-| `https://openrouter.ai/api` | OpenRouter |
-| `https://ai-gateway.vercel.sh` | Vercel AI Gateway |
-| `http://localhost:11434` | Ollama (local) |
-
-See [API Providers](/reference/config/custom-endpoint) for setup details.
-
-### customModel
-
-Model name override for non-Anthropic providers. Only set when the provider requires a specific model identifier format.
-
-| Example Values | Provider |
-|-------|-------------|
-| `anthropic/claude-sonnet-4` | OpenRouter / Vercel |
-| `llama3.2` | Ollama |
-| `openai/gpt-4o` | OpenRouter |
-
-When omitted, Craft Agents uses its default model routing (Sonnet, Opus, Haiku).
-
-### model
-
-The default Claude model to use.
-
-| Value | Model |
-|-------|-------|
-| `claude-opus-4-6` | Claude Opus 4.6 |
-| `claude-sonnet-4-5-20250929` | Claude Sonnet 4.5 |
-| `claude-haiku-4-5-20251001` | Claude Haiku 4.5 |
-
 ### workspaces
 
 Array of configured workspaces. Each workspace represents a directory or project context.
@@ -161,57 +114,7 @@ Object containing information about an update ready for auto-install on next lau
 }
 ```
 
-## Example Configurations
-
-**Claude Pro/Max (OAuth):**
-
-```json
-{
-  "authType": "oauth_token",
-  "model": "claude-sonnet-4-5-20250929",
-  "workspaces": [...],
-  "activeWorkspaceId": "ws-personal",
-  "notificationsEnabled": true,
-  "colorTheme": "default"
-}
-```
-
-**Anthropic API Key (default):**
-
-```json
-{
-  "authType": "api_key",
-  "model": "claude-sonnet-4-5-20250929",
-  "workspaces": [...],
-  "activeWorkspaceId": "ws-personal"
-}
-```
-
-**OpenRouter:**
-
-```json
-{
-  "authType": "api_key",
-  "anthropicBaseUrl": "https://openrouter.ai/api",
-  "customModel": "anthropic/claude-sonnet-4",
-  "workspaces": [...],
-  "activeWorkspaceId": "ws-personal"
-}
-```
-
-**Ollama (local):**
-
-```json
-{
-  "authType": "api_key",
-  "anthropicBaseUrl": "http://localhost:11434",
-  "customModel": "llama3.2",
-  "workspaces": [...],
-  "activeWorkspaceId": "ws-personal"
-}
-```
-
-## LLM Connections (Recommended)
+## Example Configuration
 
 For the modern multi-provider setup, use `llmConnections` plus `defaultLlmConnection`. Example:
 

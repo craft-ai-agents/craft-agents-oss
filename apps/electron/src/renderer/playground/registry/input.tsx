@@ -53,7 +53,6 @@ function FreeFormInputPlayground({
   const [ultrathink, setUltrathink] = React.useState(ultrathinkEnabled)
   const [mode, setMode] = React.useState<PermissionMode>(permissionMode)
 
-  React.useEffect(() => setModel(currentModel), [currentModel])
   React.useEffect(() => setUltrathink(ultrathinkEnabled), [ultrathinkEnabled])
   React.useEffect(() => setMode(permissionMode), [permissionMode])
 

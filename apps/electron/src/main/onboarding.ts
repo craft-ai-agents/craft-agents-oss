@@ -47,7 +47,7 @@ export function registerOnboardingHandlers(sessionManager: SessionManager): void
       mainLog.info('[Onboarding:Main] Creating CraftOAuth instance...')
 
       const oauth = new CraftOAuth(
-        { mcpBaseUrl: baseUrl },
+        { mcpUrl: baseUrl },
         {
           onStatus: (msg) => mainLog.info('[Onboarding:Main] MCP OAuth status:', msg),
           onError: (err) => mainLog.error('[Onboarding:Main] MCP OAuth error:', err),
@@ -89,9 +89,9 @@ export function registerOnboardingHandlers(sessionManager: SessionManager): void
   })
 
   // Exchange authorization code for tokens
-  ipcMain.handle(IPC_CHANNELS.ONBOARDING_EXCHANGE_CLAUDE_CODE, async (_event, authorizationCode: string) => {
+  ipcMain.handle(IPC_CHANNELS.ONBOARDING_EXCHANGE_CLAUDE_CODE, async (_event, authorizationCode: string, connectionSlug: string) => {
     try {
-      mainLog.info('[Onboarding] Exchanging Claude authorization code...')
+      mainLog.info(`[Onboarding] Exchanging Claude authorization code for connection: ${connectionSlug}`)
 
       // Check if we have valid state
       if (!hasValidOAuthState()) {
@@ -107,7 +107,7 @@ export function registerOnboardingHandlers(sessionManager: SessionManager): void
       const manager = getCredentialManager()
 
       // Save to new LLM connection system
-      await manager.setLlmOAuth('claude-max', {
+      await manager.setLlmOAuth(connectionSlug, {
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,
         expiresAt: tokens.expiresAt,

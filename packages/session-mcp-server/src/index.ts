@@ -30,16 +30,12 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import Anthropic from '@anthropic-ai/sdk';
-
 // Import from session-tools-core
 import {
   type SessionToolContext,
   type CallbackMessage,
   type AuthRequest,
   type SourceConfig,
-  type LlmCallParams,
-  type LlmCallResult,
   // Handlers
   handleSubmitPlan,
   handleConfigValidate,
@@ -51,7 +47,6 @@ import {
   handleSlackOAuthTrigger,
   handleMicrosoftOAuthTrigger,
   handleCredentialPrompt,
-  handleCallLlm,
   // Helpers
   loadSourceConfig as loadSourceConfigFromHelpers,
   errorResponse,
@@ -125,138 +120,6 @@ function createCodexContext(config: SessionConfig): SessionToolContext {
     },
   };
 
-  // LLM call implementation using Anthropic SDK
-  const callLlm = async (params: LlmCallParams): Promise<LlmCallResult> => {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      return {
-        success: false,
-        error: 'No ANTHROPIC_API_KEY environment variable set. Cannot call secondary LLM.',
-      };
-    }
-
-    try {
-      const client = new Anthropic({ apiKey });
-
-      // Build message content with attachments
-      const messageContent: Anthropic.MessageCreateParams['messages'][0]['content'] = [];
-
-      // Process attachments if any
-      if (params.attachments?.length) {
-        for (const attachment of params.attachments) {
-          const filePath = typeof attachment === 'string' ? attachment : attachment.path;
-          const startLine = typeof attachment === 'object' ? attachment.startLine : undefined;
-          const endLine = typeof attachment === 'object' ? attachment.endLine : undefined;
-
-          if (!existsSync(filePath)) {
-            return { success: false, error: `Attachment not found: ${filePath}` };
-          }
-
-          const content = readFileSync(filePath, 'utf-8');
-          const lines = content.split('\n');
-
-          let finalContent: string;
-          if (startLine !== undefined || endLine !== undefined) {
-            const start = (startLine || 1) - 1;
-            const end = endLine || lines.length;
-            finalContent = lines.slice(start, end).join('\n');
-          } else {
-            finalContent = content;
-          }
-
-          const filename = filePath.split('/').pop() || filePath;
-          messageContent.push({
-            type: 'text',
-            text: `<file path="${filename}">\n${finalContent}\n</file>`,
-          });
-        }
-      }
-
-      // Add the prompt
-      messageContent.push({ type: 'text', text: params.prompt });
-
-      // Build request
-      // Default to Haiku (fastest, most cost-effective)
-      // TODO: Import HAIKU_MODEL_ID from @craft-agent/shared/config/models when dependency is added
-      const model = params.model || 'claude-haiku-4-5-20251001';
-      const maxTokens = params.maxTokens || 4096;
-
-      const request: Anthropic.MessageCreateParams = {
-        model,
-        max_tokens: maxTokens,
-        messages: [{ role: 'user', content: messageContent }],
-        ...(params.systemPrompt ? { system: params.systemPrompt } : {}),
-        ...(params.temperature !== undefined ? { temperature: params.temperature } : {}),
-      };
-
-      // Handle structured output via tool use
-      if (params.outputFormat || params.outputSchema) {
-        const schema = params.outputSchema || getOutputFormatSchema(params.outputFormat!);
-        if (schema) {
-          request.tools = [{
-            name: 'structured_output',
-            description: 'Output structured data matching the required schema',
-            input_schema: schema as Anthropic.Tool['input_schema'],
-          }];
-          request.tool_choice = { type: 'tool', name: 'structured_output' };
-        }
-      }
-
-      // Handle extended thinking
-      if (params.thinking) {
-        const thinkingBudget = params.thinkingBudget || 10000;
-        request.thinking = { type: 'enabled', budget_tokens: thinkingBudget };
-        request.max_tokens = thinkingBudget + maxTokens;
-        request.temperature = 1; // Required for thinking
-      }
-
-      const response = await client.messages.create(request);
-
-      // Extract response
-      if (params.outputFormat || params.outputSchema) {
-        const toolUse = response.content.find(
-          (block): block is Anthropic.ToolUseBlock => block.type === 'tool_use'
-        );
-        if (toolUse) {
-          return { success: true, content: JSON.stringify(toolUse.input, null, 2) };
-        }
-        return { success: false, error: 'Structured output expected but no tool_use block returned' };
-      }
-
-      if (params.thinking) {
-        const thinkingBlock = response.content.find(
-          (block): block is Anthropic.ThinkingBlock => block.type === 'thinking'
-        );
-        const textBlock = response.content.find(
-          (block): block is Anthropic.TextBlock => block.type === 'text'
-        );
-
-        const parts: string[] = [];
-        if (thinkingBlock) {
-          parts.push(`<thinking>\n${thinkingBlock.thinking}\n</thinking>`);
-        }
-        if (textBlock) {
-          parts.push(textBlock.text);
-        }
-
-        return { success: true, content: parts.join('\n\n') || '(Empty response)' };
-      }
-
-      // Standard text response
-      const textContent = response.content
-        .filter((block): block is Anthropic.TextBlock => block.type === 'text')
-        .map(block => block.text)
-        .join('\n');
-
-      return { success: true, content: textContent || '(Empty response)' };
-    } catch (error) {
-      if (error instanceof Anthropic.APIError) {
-        return { success: false, error: `API Error (${error.status}): ${error.message}` };
-      }
-      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
-    }
-  };
-
   // Build context
   return {
     sessionId,
@@ -266,77 +129,12 @@ function createCodexContext(config: SessionConfig): SessionToolContext {
     plansFolderPath,
     callbacks,
     fs,
-    callLlm,
     loadSourceConfig: (sourceSlug: string): SourceConfig | null => {
       return loadSourceConfigFromHelpers(workspaceRootPath, sourceSlug);
     },
     // Note: saveSourceConfig, credentialManager, validators, renderMermaid
     // are not available in Codex context (require Electron internals)
   };
-}
-
-// ============================================================
-// Output Format Schemas
-// ============================================================
-
-function getOutputFormatSchema(format: string): Record<string, unknown> | null {
-  const schemas: Record<string, Record<string, unknown>> = {
-    summary: {
-      type: 'object',
-      properties: {
-        summary: { type: 'string', description: 'Concise summary' },
-        key_points: { type: 'array', items: { type: 'string' }, description: 'Main points' },
-        word_count: { type: 'number', description: 'Approximate word count of source' },
-      },
-      required: ['summary', 'key_points'],
-    },
-    classification: {
-      type: 'object',
-      properties: {
-        category: { type: 'string', description: 'Primary category' },
-        confidence: { type: 'number', description: 'Confidence 0-1' },
-        reasoning: { type: 'string', description: 'Why this classification' },
-      },
-      required: ['category', 'confidence', 'reasoning'],
-    },
-    extraction: {
-      type: 'object',
-      properties: {
-        items: { type: 'array', items: { type: 'object' }, description: 'Extracted items' },
-        count: { type: 'number', description: 'Number of items found' },
-      },
-      required: ['items', 'count'],
-    },
-    analysis: {
-      type: 'object',
-      properties: {
-        findings: { type: 'array', items: { type: 'string' }, description: 'Key findings' },
-        issues: { type: 'array', items: { type: 'string' }, description: 'Problems found' },
-        recommendations: { type: 'array', items: { type: 'string' }, description: 'Suggested actions' },
-      },
-      required: ['findings'],
-    },
-    comparison: {
-      type: 'object',
-      properties: {
-        similarities: { type: 'array', items: { type: 'string' } },
-        differences: { type: 'array', items: { type: 'string' } },
-        verdict: { type: 'string', description: 'Overall comparison result' },
-      },
-      required: ['similarities', 'differences', 'verdict'],
-    },
-    validation: {
-      type: 'object',
-      properties: {
-        valid: { type: 'boolean', description: 'Whether input is valid' },
-        errors: { type: 'array', items: { type: 'string' }, description: 'Validation errors' },
-        warnings: { type: 'array', items: { type: 'string' }, description: 'Warnings' },
-      },
-      required: ['valid', 'errors', 'warnings'],
-    },
-  };
-
-  return schemas[format] || null;
 }
 
 // ============================================================
@@ -562,87 +360,6 @@ Uses @craft-agent/mermaid parser for accurate validation.`,
         required: ['sourceSlug'],
       },
     },
-    {
-      name: 'call_llm',
-      description: `Invoke a secondary Claude model for focused subtasks. Use for:
-- Cost optimization: haiku for simple tasks (summarization, classification)
-- Structured output: guaranteed JSON schema compliance
-- Extended thinking: deep reasoning for specific subtasks
-- Parallel processing: call multiple times in one message - all run simultaneously
-- Context isolation: process content without polluting main context
-
-Pass file paths via 'attachments' - the tool loads content automatically.
-For large files (>2000 lines), use {path, startLine, endLine} to select a portion.`,
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          prompt: {
-            type: 'string',
-            description: 'Instructions for Claude',
-          },
-          attachments: {
-            type: 'array',
-            description: 'File/image paths (max 20). Use {path, startLine, endLine} for large text files.',
-            items: {
-              oneOf: [
-                { type: 'string', description: 'Simple file path' },
-                {
-                  type: 'object',
-                  properties: {
-                    path: { type: 'string', description: 'File path' },
-                    startLine: { type: 'number', description: 'First line to include (1-indexed)' },
-                    endLine: { type: 'number', description: 'Last line to include (1-indexed)' },
-                  },
-                  required: ['path'],
-                },
-              ],
-            },
-          },
-          model: {
-            type: 'string',
-            // TODO: Import from @craft-agent/shared/config/models when dependency is added
-            enum: ['claude-opus-4-6', 'claude-sonnet-4-5-20250929', 'claude-haiku-4-5-20251001'],
-            description: 'Model to use. Defaults to Haiku (fastest, most cost-effective)',
-          },
-          systemPrompt: {
-            type: 'string',
-            description: 'Optional system prompt',
-          },
-          maxTokens: {
-            type: 'number',
-            description: 'Max output tokens (1-64000). Defaults to 4096',
-          },
-          temperature: {
-            type: 'number',
-            description: 'Sampling temperature 0-1. Ignored if thinking=true (forced to 1)',
-          },
-          thinking: {
-            type: 'boolean',
-            description: 'Enable extended thinking. Incompatible with outputFormat/outputSchema',
-          },
-          thinkingBudget: {
-            type: 'number',
-            description: 'Token budget for thinking (1024-100000). Defaults to 10000',
-          },
-          outputFormat: {
-            type: 'string',
-            enum: ['summary', 'classification', 'extraction', 'analysis', 'comparison', 'validation'],
-            description: 'Predefined output format. Incompatible with thinking',
-          },
-          outputSchema: {
-            type: 'object',
-            description: 'Custom JSON Schema. Incompatible with thinking',
-            properties: {
-              type: { type: 'string', const: 'object' },
-              properties: { type: 'object' },
-              required: { type: 'array', items: { type: 'string' } },
-            },
-            required: ['type', 'properties'],
-          },
-        },
-        required: ['prompt'],
-      },
-    },
   ];
 }
 
@@ -760,20 +477,6 @@ async function main() {
 
         case 'source_test':
           return await handleSourceTest(ctx, toolArgs as { sourceSlug: string });
-
-        case 'call_llm':
-          return await handleCallLlm(ctx, toolArgs as {
-            prompt: string;
-            attachments?: Array<string | { path: string; startLine?: number; endLine?: number }>;
-            model?: string;
-            systemPrompt?: string;
-            maxTokens?: number;
-            temperature?: number;
-            thinking?: boolean;
-            thinkingBudget?: number;
-            outputFormat?: 'summary' | 'classification' | 'extraction' | 'analysis' | 'comparison' | 'validation';
-            outputSchema?: { type: 'object'; properties: Record<string, unknown>; required?: string[] };
-          });
 
         default:
           return errorResponse(`Unknown tool: ${name}`);

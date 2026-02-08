@@ -5,7 +5,8 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { getLastApiError } from '../network-interceptor.ts';
-import { getAnthropicApiKey, getClaudeOAuthToken, type AuthType, getDefaultLlmConnection, getLlmConnection } from '../config/storage.ts';
+import { type AuthType, getDefaultLlmConnection, getLlmConnection } from '../config/storage.ts';
+import { getCredentialManager } from '../credentials/index.ts';
 
 export type DiagnosticCode =
   | 'billing_error'         // HTTP 402 from Anthropic API
@@ -242,10 +243,11 @@ async function validateApiKeyWithAnthropic(apiKey: string, baseUrl?: string | nu
 /** Check API key presence and validity */
 async function checkApiKey(): Promise<CheckResult> {
   try {
-    const apiKey = await getAnthropicApiKey();
-    // Get baseUrl from default LLM connection
+    // Resolve API key from the default LLM connection
     const defaultConnSlug = getDefaultLlmConnection();
     const connection = defaultConnSlug ? getLlmConnection(defaultConnSlug) : null;
+    const credManager = getCredentialManager();
+    const apiKey = defaultConnSlug ? await credManager.getLlmApiKey(defaultConnSlug) : null;
     const baseUrl = connection?.baseUrl ?? null;
 
     if (!apiKey) {
@@ -269,7 +271,14 @@ async function checkApiKey(): Promise<CheckResult> {
 /** Check OAuth token presence */
 async function checkOAuthToken(): Promise<CheckResult> {
   try {
-    const token = await getClaudeOAuthToken();
+    // Resolve OAuth token from the default LLM connection
+    const defaultConnSlug = getDefaultLlmConnection();
+    const credManager = getCredentialManager();
+    let token: string | null = null;
+    if (defaultConnSlug) {
+      const oauth = await credManager.getLlmOAuth(defaultConnSlug);
+      token = oauth?.accessToken || null;
+    }
     if (!token) {
       return {
         ok: false,

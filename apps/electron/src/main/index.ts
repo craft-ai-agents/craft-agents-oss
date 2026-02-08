@@ -317,15 +317,13 @@ app.whenReady().then(async () => {
     // Derives values from the default LLM connection instead of legacy config fields.
     try {
       const { getLlmConnection, getDefaultLlmConnection } = await import('@craft-agent/shared/config')
-      const config = loadStoredConfig()
       const workspaces = getWorkspaces()
       const defaultConnSlug = getDefaultLlmConnection()
       const defaultConn = defaultConnSlug ? getLlmConnection(defaultConnSlug) : null
       Sentry.setTag('authType', defaultConn?.authType ?? 'unknown')
       Sentry.setTag('providerType', defaultConn?.providerType ?? 'unknown')
       Sentry.setTag('hasCustomEndpoint', String(!!defaultConn?.baseUrl))
-      Sentry.setTag('model', config?.model ?? 'default')
-      Sentry.setTag('customModel', defaultConn?.defaultModel ?? 'none')
+      Sentry.setTag('model', defaultConn?.defaultModel ?? 'default')
       Sentry.setTag('workspaceCount', String(workspaces.length))
     } catch (err) {
       mainLog.warn('Failed to set Sentry context tags:', err)

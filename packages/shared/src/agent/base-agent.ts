@@ -22,7 +22,6 @@ import type { LoadedSource } from '../sources/types.ts';
 
 import type {
   AgentBackend,
-  AgentCapabilities,
   ChatOptions,
   PermissionCallback,
   PlanCallback,
@@ -632,11 +631,6 @@ Please continue the conversation naturally from where we left off.
    * Check if currently processing a query.
    */
   abstract isProcessing(): boolean;
-
-  /**
-   * Get backend capabilities for UI adaptation.
-   */
-  abstract capabilities(): AgentCapabilities;
 
   /**
    * Respond to a pending permission request.

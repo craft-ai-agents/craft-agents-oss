@@ -17,8 +17,6 @@ import type {
   CredentialManagerInterface,
   ValidatorInterface,
   LoadedSource,
-  LlmCallParams,
-  LlmCallResult,
   StdioMcpConfig,
   StdioValidationResult,
   HttpMcpConfig,
@@ -44,11 +42,10 @@ import {
   validateStdioMcpConnection as validateStdioMcpConnectionImpl,
 } from '../mcp/validation.ts';
 import {
-  getAnthropicApiKey,
-  getClaudeOAuthToken,
   getDefaultLlmConnection,
   getLlmConnection,
 } from '../config/storage.ts';
+import { getCredentialManager } from '../credentials/index.ts';
 import {
   loadSourceConfig as loadSourceConfigImpl,
   saveSourceConfig as saveSourceConfigImpl,
@@ -65,9 +62,7 @@ import {
   type MicrosoftService,
 } from '../sources/types.ts';
 import { isGoogleOAuthConfigured as isGoogleOAuthConfiguredImpl } from '../auth/google-oauth.ts';
-import Anthropic from '@anthropic-ai/sdk';
 import { debug } from '../utils/debug.ts';
-import { HAIKU_MODEL_ID } from '../config/models.ts';
 import { getSessionPlansPath } from '../sessions/storage.ts';
 
 // Re-export types that may be needed by consumers
@@ -93,7 +88,6 @@ export interface ClaudeContextOptions {
  * - Credential manager with keychain access
  * - MCP connection validation
  * - Icon management
- * - LLM calls via Anthropic SDK
  */
 export function createClaudeContext(options: ClaudeContextOptions): SessionToolContext {
   const { sessionId, workspacePath, workspaceId, onPlanSubmitted, onAuthRequest } = options;
@@ -178,122 +172,6 @@ export function createClaudeContext(options: ClaudeContextOptions): SessionToolC
     },
   };
 
-  // LLM call implementation
-  const callLlm = async (params: LlmCallParams): Promise<LlmCallResult> => {
-    const apiKey = await getAnthropicApiKey();
-    const oauthToken = await getClaudeOAuthToken();
-
-    if (!apiKey && !oauthToken) {
-      return {
-        success: false,
-        error: 'No authentication configured. Configure Anthropic API key or Claude OAuth.',
-      };
-    }
-
-    if (!apiKey && oauthToken) {
-      return {
-        success: false,
-        error: 'call_llm requires an Anthropic API key. OAuth tokens cannot be used for secondary API calls.',
-      };
-    }
-
-    try {
-      const defaultConnSlug = getDefaultLlmConnection();
-      const defaultConn = defaultConnSlug ? getLlmConnection(defaultConnSlug) : null;
-      const baseUrl = defaultConn?.baseUrl;
-      const client = new Anthropic({
-        apiKey: apiKey!,
-        ...(baseUrl ? { baseURL: baseUrl } : {}),
-      });
-
-      // Build message content with attachments
-      const messageContent: Anthropic.MessageCreateParams['messages'][0]['content'] = [];
-
-      if (params.attachments?.length) {
-        for (const attachment of params.attachments) {
-          const filePath = typeof attachment === 'string' ? attachment : attachment.path;
-          const startLine = typeof attachment === 'object' ? attachment.startLine : undefined;
-          const endLine = typeof attachment === 'object' ? attachment.endLine : undefined;
-
-          if (!existsSync(filePath)) {
-            return { success: false, error: `Attachment not found: ${filePath}` };
-          }
-
-          const content = readFileSync(filePath, 'utf-8');
-          const lines = content.split('\n');
-
-          let finalContent: string;
-          if (startLine !== undefined || endLine !== undefined) {
-            const start = (startLine || 1) - 1;
-            const end = endLine || lines.length;
-            finalContent = lines.slice(start, end).join('\n');
-          } else {
-            finalContent = content;
-          }
-
-          const filename = basename(filePath) || filePath;
-          messageContent.push({
-            type: 'text',
-            text: `<file path="${filename}">\n${finalContent}\n</file>`,
-          });
-        }
-      }
-
-      messageContent.push({ type: 'text', text: params.prompt });
-
-      const model = params.model || HAIKU_MODEL_ID;
-      const maxTokens = params.maxTokens || 4096;
-
-      const request: Anthropic.MessageCreateParams = {
-        model,
-        max_tokens: maxTokens,
-        messages: [{ role: 'user', content: messageContent }],
-        ...(params.systemPrompt ? { system: params.systemPrompt } : {}),
-        ...(params.temperature !== undefined ? { temperature: params.temperature } : {}),
-      };
-
-      if (params.thinking) {
-        const thinkingBudget = params.thinkingBudget || 10000;
-        request.thinking = { type: 'enabled', budget_tokens: thinkingBudget };
-        request.max_tokens = thinkingBudget + maxTokens;
-        request.temperature = 1;
-      }
-
-      const response = await client.messages.create(request);
-
-      if (params.thinking) {
-        const thinkingBlock = response.content.find(
-          (block): block is Anthropic.ThinkingBlock => block.type === 'thinking'
-        );
-        const textBlock = response.content.find(
-          (block): block is Anthropic.TextBlock => block.type === 'text'
-        );
-
-        const parts: string[] = [];
-        if (thinkingBlock) {
-          parts.push(`<thinking>\n${thinkingBlock.thinking}\n</thinking>`);
-        }
-        if (textBlock) {
-          parts.push(textBlock.text);
-        }
-
-        return { success: true, content: parts.join('\n\n') || '(Empty response)' };
-      }
-
-      const textContent = response.content
-        .filter((block): block is Anthropic.TextBlock => block.type === 'text')
-        .map(block => block.text)
-        .join('\n');
-
-      return { success: true, content: textContent || '(Empty response)' };
-    } catch (error) {
-      if (error instanceof Anthropic.APIError) {
-        return { success: false, error: `API Error (${error.status}): ${error.message}` };
-      }
-      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
-    }
-  };
-
   // MCP validation
   const validateStdioMcpConnection = async (config: StdioMcpConfig): Promise<StdioValidationResult> => {
     try {
@@ -313,8 +191,22 @@ export function createClaudeContext(options: ClaudeContextOptions): SessionToolC
 
   const validateMcpConnection = async (config: HttpMcpConfig): Promise<McpValidationResult> => {
     try {
-      const apiKey = await getAnthropicApiKey();
-      const oauthToken = await getClaudeOAuthToken();
+      // Resolve credentials from the default LLM connection
+      const defaultSlug = getDefaultLlmConnection();
+      const connection = defaultSlug ? getLlmConnection(defaultSlug) : null;
+      const credManager = getCredentialManager();
+
+      let apiKey: string | null = null;
+      let oauthToken: string | null = null;
+
+      if (connection && defaultSlug) {
+        if (connection.authType === 'api_key' || connection.authType === 'api_key_with_endpoint') {
+          apiKey = await credManager.getLlmApiKey(defaultSlug);
+        } else if (connection.authType === 'oauth') {
+          const oauth = await credManager.getLlmOAuth(defaultSlug);
+          oauthToken = oauth?.accessToken || null;
+        }
+      }
 
       if (!apiKey && !oauthToken) {
         return { success: false, error: 'No Claude API key or OAuth token configured' };
@@ -350,8 +242,6 @@ export function createClaudeContext(options: ClaudeContextOptions): SessionToolC
     fs,
     validators,
     credentialManager,
-    callLlm,
-
     // Source management
     loadSourceConfig: (sourceSlug: string): SourceConfig | null => {
       const config = loadSourceConfigImpl(workspacePath, sourceSlug);

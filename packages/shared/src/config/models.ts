@@ -20,17 +20,11 @@
 export type ModelProvider = 'anthropic' | 'openai';
 
 /**
- * Stored default model map (by provider).
- * Keeps app-level defaults scoped to provider.
- */
-export type ModelDefaults = Partial<Record<ModelProvider, string>>;
-
-/**
  * Full model definition with capabilities and costs.
  * Used throughout the application for model selection and display.
  */
 export interface ModelDefinition {
-  /** Model identifier (e.g., 'claude-sonnet-4-5-20250929', 'codex') */
+  /** Model identifier (e.g., 'claude-sonnet-4-5-20250929', 'gpt-5.3-codex') */
   id: string;
   /** Human-readable name (e.g., 'Sonnet 4.5', 'Codex') */
   name: string;
@@ -42,16 +36,6 @@ export interface ModelDefinition {
   provider: ModelProvider;
   /** Maximum context window in tokens */
   contextWindow: number;
-  /** Whether model supports extended thinking/reasoning */
-  supportsThinking: boolean;
-  /** Whether model supports vision/image inputs */
-  supportsVision: boolean;
-  /** Whether model supports tool/function calling */
-  supportsTools: boolean;
-  /** Cost per million input tokens (USD) */
-  inputCostPerM?: number;
-  /** Cost per million output tokens (USD) */
-  outputCostPerM?: number;
 }
 
 // ============================================
@@ -73,11 +57,6 @@ export const MODEL_REGISTRY: ModelDefinition[] = [
     description: 'Most capable for complex work',
     provider: 'anthropic',
     contextWindow: 200_000,
-    supportsThinking: true,
-    supportsVision: true,
-    supportsTools: true,
-    inputCostPerM: 5.0,
-    outputCostPerM: 25.0,
   },
   {
     id: 'claude-sonnet-4-5-20250929',
@@ -86,11 +65,6 @@ export const MODEL_REGISTRY: ModelDefinition[] = [
     description: 'Best for everyday tasks',
     provider: 'anthropic',
     contextWindow: 200_000,
-    supportsThinking: true,
-    supportsVision: true,
-    supportsTools: true,
-    inputCostPerM: 3.0,
-    outputCostPerM: 15.0,
   },
   {
     id: 'claude-haiku-4-5-20251001',
@@ -99,42 +73,27 @@ export const MODEL_REGISTRY: ModelDefinition[] = [
     description: 'Fastest for quick answers',
     provider: 'anthropic',
     contextWindow: 200_000,
-    supportsThinking: false,
-    supportsVision: true,
-    supportsTools: true,
-    inputCostPerM: 1.0,
-    outputCostPerM: 5.0,
   },
 
   // ----------------------------------------
   // OpenAI Codex Models (via ChatGPT Plus)
-  // Model IDs must match actual Codex CLI model identifiers
+  // Model IDs match actual OpenAI model slugs
   // ----------------------------------------
   {
-    id: 'codex',
-    name: 'Codex',
+    id: 'gpt-5.3-codex',
+    name: 'GPT-5.3 Codex',
     shortName: 'Codex',
     description: 'OpenAI reasoning model',
     provider: 'openai',
     contextWindow: 256_000,
-    supportsThinking: true,
-    supportsVision: true,
-    supportsTools: true,
-    inputCostPerM: 2.0,
-    outputCostPerM: 8.0,
   },
   {
-    id: 'codex-mini',
-    name: 'Codex Mini',
+    id: 'gpt-5.1-codex-mini',
+    name: 'GPT-5.1 Codex Mini',
     shortName: 'Codex Mini',
     description: 'Fast OpenAI model',
     provider: 'openai',
     contextWindow: 128_000,
-    supportsThinking: false,
-    supportsVision: true,
-    supportsTools: true,
-    inputCostPerM: 0.5,
-    outputCostPerM: 2.0,
   },
 ];
 
@@ -163,55 +122,47 @@ export const OPENAI_MODELS = getModelsByProvider('openai');
 export const MODELS = ANTHROPIC_MODELS;
 
 // ============================================
-// MODEL ID CONSTANTS (Derived from Registry)
+// MODEL ID HELPERS (Derived from Registry)
 // ============================================
 
-/** Get the first model ID matching a short name */
-function getModelIdByShortName(shortName: string): string {
-  const model = MODEL_REGISTRY.find(m => m.shortName === shortName);
-  if (!model) throw new Error(`Model not found: ${shortName}`);
-  return model.id;
+/** Get the first model ID matching a short name, or undefined if not found */
+function findModelIdByShortName(shortName: string): string | undefined {
+  return MODEL_REGISTRY.find(m => m.shortName === shortName)?.id;
 }
 
-/** Opus model ID - use this instead of hardcoding */
-export const OPUS_MODEL_ID = getModelIdByShortName('Opus');
-
-/** Sonnet model ID - use this instead of hardcoding */
-export const SONNET_MODEL_ID = getModelIdByShortName('Sonnet');
-
-/** Haiku model ID - use this instead of hardcoding */
-export const HAIKU_MODEL_ID = getModelIdByShortName('Haiku');
-
-/** Codex model ID */
-export const CODEX_MODEL_ID = getModelIdByShortName('Codex');
-
-/** Codex Mini model ID */
-export const CODEX_MINI_MODEL_ID = getModelIdByShortName('Codex Mini');
+/** Get the first model ID matching a short name (throws if not found) */
+export function getModelIdByShortName(shortName: string): string {
+  const id = findModelIdByShortName(shortName);
+  if (!id) throw new Error(`Model not found: ${shortName}`);
+  return id;
+}
 
 // ============================================
-// PURPOSE-SPECIFIC DEFAULTS
+// CONNECTION DEFAULTS
+// Used ONLY when writing defaults to LLM connection config (not as runtime fallbacks).
 // ============================================
 
-/** Default model for main chat (user-facing) */
-export const DEFAULT_MODEL = SONNET_MODEL_ID;
+/** Default model for Anthropic connections (used when creating/backfilling connections) */
+export const DEFAULT_MODEL = getModelIdByShortName('Sonnet');
 
-/** Default model for Codex/OpenAI connections */
-export const DEFAULT_CODEX_MODEL = CODEX_MODEL_ID;
+/** Default model for Codex/OpenAI connections (used when creating/backfilling connections) */
+export const DEFAULT_CODEX_MODEL = getModelIdByShortName('Codex');
 
-/** Model for agent definition extraction (always high quality) */
-export const EXTRACTION_MODEL = OPUS_MODEL_ID;
-
-/** Model for API response summarization (cost efficient) */
-export const SUMMARIZATION_MODEL = HAIKU_MODEL_ID;
-
-/** Model for instruction updates (high quality for accurate document editing) */
-export const INSTRUCTION_UPDATE_MODEL = OPUS_MODEL_ID;
+// ============================================
+// UTILITY MODELS
+// ============================================
 
 /**
- * Models allowed for secondary LLM calls (call_llm tool).
- * Derived from the registry to stay in sync.
+ * Get the default summarization model ID (Haiku).
+ * Used as fallback when no connection context is available
+ * (e.g., url-validator, mcp/validation, summarize.ts without modelOverride).
+ *
+ * For connection-aware summarization model resolution, use
+ * getSummarizationModel(connection) from llm-connections.ts instead.
  */
-export const ALLOWED_LLM_TOOL_MODELS = ANTHROPIC_MODELS.map(m => m.id);
+export function getDefaultSummarizationModel(): string {
+  return findModelIdByShortName('Haiku') ?? DEFAULT_MODEL;
+}
 
 // ============================================
 // HELPER FUNCTIONS
@@ -275,7 +226,7 @@ export function isClaudeModel(modelId: string): boolean {
 
 /**
  * Check if a model ID refers to a Codex/OpenAI model.
- * Matches patterns like 'gpt-5.2-codex', 'gpt-5.1-codex-mini', etc.
+ * Matches patterns like 'gpt-5.3-codex', 'gpt-5.1-codex-mini', etc.
  */
 export function isCodexModel(modelId: string): boolean {
   const lower = modelId.toLowerCase();
@@ -289,20 +240,3 @@ export function getModelProvider(modelId: string): ModelProvider | undefined {
   return getModelById(modelId)?.provider;
 }
 
-/**
- * Get the default model ID for a provider.
- */
-export function getDefaultModelForProvider(provider: ModelProvider): string {
-  return provider === 'openai' ? DEFAULT_CODEX_MODEL : DEFAULT_MODEL;
-}
-
-/**
- * Convert registry models to settings dropdown options for a provider.
- */
-export function getModelOptionsForProvider(provider: ModelProvider): Array<{ value: string; label: string; description: string }> {
-  return getModelsByProvider(provider).map(m => ({
-    value: m.id,
-    label: m.name,
-    description: m.description,
-  }));
-}

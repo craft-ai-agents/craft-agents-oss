@@ -5,7 +5,7 @@
  */
 
 import type { AgentEvent } from '@craft-agent/core/types';
-import type { BackendConfig, AgentCapabilities, ChatOptions } from '../backend/types.ts';
+import type { BackendConfig, ChatOptions } from '../backend/types.ts';
 import { AbortReason } from '../backend/types.ts';
 import type { Workspace } from '../../config/storage.ts';
 import type { SessionConfig as Session } from '../../sessions/storage.ts';
@@ -139,35 +139,6 @@ export class TestAgent extends BaseAgent {
 
   isProcessing(): boolean {
     return this._isProcessing;
-  }
-
-  capabilities(): AgentCapabilities {
-    return {
-      provider: 'anthropic',
-      models: [
-        {
-          id: 'test-model',
-          name: 'Test Model',
-          shortName: 'Test',
-          description: 'A test model for unit tests',
-          provider: 'anthropic',
-          contextWindow: 100_000,
-          supportsThinking: true,
-          supportsVision: true,
-          supportsTools: true,
-        },
-      ],
-      thinkingLevels: [
-        { id: 'off', name: 'Off', description: 'No thinking' },
-        { id: 'think', name: 'Think', description: 'Standard thinking' },
-        { id: 'max', name: 'Max', description: 'Maximum thinking' },
-      ],
-      supportsPermissionCallbacks: true,
-      supportsSubagentParents: false,
-      maxContextTokens: 100_000,
-      supportsMcp: true,
-      supportsResume: true,
-    };
   }
 
   respondToPermission(requestId: string, allowed: boolean, alwaysAllow?: boolean): void {

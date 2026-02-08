@@ -20,10 +20,11 @@ export type MessageRole =
  * Credential input modes for different auth types
  */
 export type CredentialInputMode =
-  | 'bearer'      // Single token field (Bearer Token, API Key)
-  | 'basic'       // Username + Password fields
-  | 'header'      // API Key with custom header name
-  | 'query';      // API Key for query parameter
+  | 'bearer'       // Single token field (Bearer Token, API Key)
+  | 'basic'        // Username + Password fields
+  | 'header'       // API Key with custom header name
+  | 'query'        // API Key for query parameter
+  | 'multi-header'; // Multiple header fields
 
 /**
  * Auth request types

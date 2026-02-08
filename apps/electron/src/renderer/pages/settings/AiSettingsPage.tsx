@@ -45,8 +45,38 @@ import { useOnboarding } from '@/hooks/useOnboarding'
 import { useWorkspaceIcon } from '@/hooks/useWorkspaceIcon'
 import { OnboardingWizard } from '@/components/onboarding'
 import { useAppShellContext } from '@/context/AppShellContext'
-import { getDefaultModelForProvider, getModelShortName, getModelOptionsForProvider, DEFAULT_MODEL, DEFAULT_CODEX_MODEL, type ModelDefaults } from '@config/models'
-import type { ModelProvider } from '@config/models'
+import { getModelShortName, type ModelDefinition } from '@config/models'
+import { getModelsForProviderType } from '@config/llm-connections'
+
+/**
+ * Derive model dropdown options from a connection's models array,
+ * falling back to registry models for the connection's provider type.
+ */
+function getModelOptionsForConnection(
+  connection: LlmConnectionWithStatus | undefined,
+): Array<{ value: string; label: string; description: string }> {
+  if (!connection) return []
+
+  // If connection has explicit models, use those
+  if (connection.models && connection.models.length > 0) {
+    return connection.models.map((m) => {
+      if (typeof m === 'string') {
+        return { value: m, label: getModelShortName(m), description: '' }
+      }
+      // ModelDefinition object
+      const def = m as ModelDefinition
+      return { value: def.id, label: def.name, description: def.description }
+    })
+  }
+
+  // Fall back to registry models for this provider type
+  const registryModels = getModelsForProviderType(connection.providerType)
+  return registryModels.map((m) => ({
+    value: m.id,
+    label: m.name,
+    description: m.description,
+  }))
+}
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
@@ -221,11 +251,10 @@ function ConnectionRow({ connection, isLastConnection, onEdit, onDelete, onSetDe
 interface WorkspaceOverrideCardProps {
   workspace: Workspace
   llmConnections: LlmConnectionWithStatus[]
-  customModel: string | null
   onSettingsChange: () => void
 }
 
-function WorkspaceOverrideCard({ workspace, llmConnections, customModel, onSettingsChange }: WorkspaceOverrideCardProps) {
+function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange }: WorkspaceOverrideCardProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const [settings, setSettings] = useState<WorkspaceSettings | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -289,12 +318,10 @@ function WorkspaceOverrideCard({ workspace, llmConnections, customModel, onSetti
   const currentModel = settings?.model || 'global'
   const currentThinking = settings?.thinkingLevel || 'global'
 
-  // Derive model provider from this workspace's connection override (or fall back to default connection)
-  const workspaceModelProvider: ModelProvider = useMemo(() => {
+  // Derive workspace's effective connection (override or default)
+  const workspaceEffectiveConnection = useMemo(() => {
     const connSlug = settings?.defaultLlmConnection
-    const conn = connSlug ? llmConnections.find(c => c.slug === connSlug) : llmConnections.find(c => c.isDefault)
-    const pt = conn?.providerType
-    return (pt === 'openai' || pt === 'openai_compat') ? 'openai' : 'anthropic'
+    return connSlug ? llmConnections.find(c => c.slug === connSlug) : llmConnections.find(c => c.isDefault)
   }, [settings?.defaultLlmConnection, llmConnections])
 
   // Get summary text for collapsed state
@@ -377,19 +404,16 @@ function WorkspaceOverrideCard({ workspace, llmConnections, customModel, onSetti
                   })),
                 ]}
               />
-              {/* Only show model selector if no custom model from connection */}
-              {!customModel && (
-                <SettingsMenuSelectRow
-                  label="Model"
-                  description="AI model for new chats"
-                  value={currentModel}
-                  onValueChange={handleModelChange}
-                  options={[
-                    { value: 'global', label: 'Use default', description: 'Inherit from app settings' },
-                    ...getModelOptionsForProvider(workspaceModelProvider),
-                  ]}
-                />
-              )}
+              <SettingsMenuSelectRow
+                label="Model"
+                description="AI model for new chats"
+                value={currentModel}
+                onValueChange={handleModelChange}
+                options={[
+                  { value: 'global', label: 'Use default', description: 'Inherit from app settings' },
+                  ...getModelOptionsForConnection(workspaceEffectiveConnection),
+                ]}
+              />
               <SettingsMenuSelectRow
                 label="Thinking"
                 description="Reasoning depth for new chats"
@@ -417,7 +441,7 @@ function WorkspaceOverrideCard({ workspace, llmConnections, customModel, onSetti
 // ============================================
 
 export default function AiSettingsPage() {
-  const { refreshCustomModel, refreshModelDefaults, llmConnections, refreshLlmConnections, customModel } = useAppShellContext()
+  const { llmConnections, refreshLlmConnections } = useAppShellContext()
 
   // API Setup overlay state
   const [showApiSetup, setShowApiSetup] = useState(false)
@@ -428,10 +452,6 @@ export default function AiSettingsPage() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
 
   // Default settings state (app-level)
-  const [modelDefaults, setModelDefaults] = useState<ModelDefaults>({
-    anthropic: DEFAULT_MODEL,
-    openai: DEFAULT_CODEX_MODEL,
-  })
   const [defaultThinking, setDefaultThinking] = useState<ThinkingLevel>(DEFAULT_THINKING_LEVEL)
 
   // Validation state per connection
@@ -450,15 +470,6 @@ export default function AiSettingsPage() {
       try {
         const ws = await window.electronAPI.getWorkspaces()
         setWorkspaces(ws)
-
-        // Load provider-scoped default models
-        const defaults = await window.electronAPI.getModelDefaults?.()
-        if (defaults) {
-          setModelDefaults({
-            anthropic: defaults.anthropic ?? DEFAULT_MODEL,
-            openai: defaults.openai ?? DEFAULT_CODEX_MODEL,
-          })
-        }
 
         // Check credential health for potential issues (corruption, machine migration)
         const health = await window.electronAPI.getCredentialHealth()
@@ -488,7 +499,7 @@ export default function AiSettingsPage() {
   // OnboardingWizard hook for editing API connection
   const apiSetupOnboarding = useOnboarding({
     initialStep: 'api-setup',
-    onConfigSaved: refreshCustomModel,
+    onConfigSaved: refreshLlmConnections,
     onComplete: () => {
       closeApiSetup()
       refreshLlmConnections?.()
@@ -609,23 +620,18 @@ export default function AiSettingsPage() {
     return llmConnections.find(c => c.isDefault)
   }, [llmConnections])
 
-  // Derive the model provider from the default connection's provider type
-  const defaultModelProvider: ModelProvider = useMemo(() => {
-    const pt = defaultConnection?.providerType
-    return (pt === 'openai' || pt === 'openai_compat') ? 'openai' : 'anthropic'
-  }, [defaultConnection])
-
-  const defaultModel = useMemo(() => {
-    return modelDefaults[defaultModelProvider] ?? getDefaultModelForProvider(defaultModelProvider)
-  }, [modelDefaults, defaultModelProvider])
+  const defaultModel = defaultConnection?.defaultModel ?? ''
 
   // App-level default handlers
   const handleDefaultModelChange = useCallback(async (model: string) => {
-    if (!window.electronAPI) return
-    await window.electronAPI.setModelDefault?.(defaultModelProvider, model)
-    setModelDefaults(prev => ({ ...prev, [defaultModelProvider]: model }))
-    refreshModelDefaults?.()
-  }, [defaultModelProvider, refreshModelDefaults])
+    if (!window.electronAPI || !defaultConnection) return
+    // Update defaultModel on the connection, then save the full connection
+    const updated = { ...defaultConnection, defaultModel: model }
+    // Remove status fields that aren't part of LlmConnection
+    const { isAuthenticated: _a, authError: _b, isDefault: _c, ...connectionData } = updated
+    await window.electronAPI.saveLlmConnection(connectionData as import('../../../shared/types').LlmConnection)
+    await refreshLlmConnections()
+  }, [defaultConnection, refreshLlmConnections])
 
   const handleDefaultThinkingChange = useCallback(async (level: ThinkingLevel) => {
     setDefaultThinking(level)
@@ -671,23 +677,13 @@ export default function AiSettingsPage() {
                                    conn.providerType || 'Unknown',
                     }))}
                   />
-                  {/* Only show model selector if no custom model from connection */}
-                  {!customModel ? (
-                    <SettingsMenuSelectRow
-                      label="Model"
-                      description="AI model for new chats"
-                      value={defaultModel}
-                      onValueChange={handleDefaultModelChange}
-                      options={getModelOptionsForProvider(defaultModelProvider)}
-                    />
-                  ) : (
-                    <SettingsRow
-                      label="Model"
-                      description="Set via API connection"
-                    >
-                      <span className="text-sm text-muted-foreground">{customModel}</span>
-                    </SettingsRow>
-                  )}
+                  <SettingsMenuSelectRow
+                    label="Model"
+                    description="AI model for new chats"
+                    value={defaultModel}
+                    onValueChange={handleDefaultModelChange}
+                    options={getModelOptionsForConnection(defaultConnection)}
+                  />
                   <SettingsMenuSelectRow
                     label="Thinking"
                     description="Reasoning depth for new chats"
@@ -712,7 +708,6 @@ export default function AiSettingsPage() {
                         key={workspace.id}
                         workspace={workspace}
                         llmConnections={llmConnections}
-                        customModel={customModel}
                         onSettingsChange={handleWorkspaceSettingsChange}
                       />
                     ))}

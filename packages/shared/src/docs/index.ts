@@ -108,7 +108,6 @@ export const DOC_REFS = {
   labels: `${APP_ROOT}/docs/labels.md`,
   toolIcons: `${APP_ROOT}/docs/tool-icons.md`,
   mermaid: `${APP_ROOT}/docs/mermaid.md`,
-  llmTool: `${APP_ROOT}/docs/llm-tool.md`,
   docsDir: `${APP_ROOT}/docs/`,
 } as const;
 

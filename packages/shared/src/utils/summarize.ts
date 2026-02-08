@@ -7,8 +7,8 @@
 
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import { getDefaultOptions } from '../agent/options.ts';
-import { SUMMARIZATION_MODEL } from '../config/models.ts';
-import { resolveModelId } from '../config/storage.ts';
+import { getDefaultSummarizationModel } from '../config/models.ts';
+
 import { debug } from './debug.ts';
 
 // Token limit for summarization trigger (roughly ~60KB of text)
@@ -49,6 +49,8 @@ export interface SummarizationContext {
   modelIntent?: string;
   /** The user's original request (fallback context) */
   userRequest?: string;
+  /** Optional model override (use connection default when available) */
+  modelOverride?: string;
 }
 
 /**
@@ -123,7 +125,7 @@ Provide a concise but comprehensive summary that captures the essential informat
     const defaultOptions = getDefaultOptions();
     const options = {
       ...defaultOptions,
-      model: resolveModelId(SUMMARIZATION_MODEL),
+      model: context.modelOverride ?? getDefaultSummarizationModel(),
       maxTurns: 1,
     };
 

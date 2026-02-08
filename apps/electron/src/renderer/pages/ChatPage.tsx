@@ -21,8 +21,8 @@ import { rendererPerf } from '@/lib/perf'
 import { routes } from '@/lib/navigate'
 import { ensureSessionMessagesLoadedAtom, loadedSessionsAtom, sessionMetaMapAtom } from '@/atoms/sessions'
 import { getSessionTitle } from '@/utils/session'
-import { getDefaultModelForProvider, type ModelProvider } from '@config/models'
-import { getModelsForProviderType, isCompatProvider, isOpenAIProvider, resolveEffectiveConnectionSlug } from '@config/llm-connections'
+// Model resolution: connection.defaultModel (no hardcoded defaults)
+import { resolveEffectiveConnectionSlug, isSessionConnectionUnavailable } from '@config/llm-connections'
 
 export interface ChatPageProps {
   sessionId: string
@@ -36,7 +36,6 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
 
   const {
     activeWorkspaceId,
-    modelDefaults,
     llmConnections,
     workspaceDefaultLlmConnection,
     onSendMessage,
@@ -184,34 +183,26 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     }
   }, [sessionId])
 
+  // Check if session's locked connection has been removed
+  const connectionUnavailable = React.useMemo(() =>
+    isSessionConnectionUnavailable(session?.llmConnection, llmConnections),
+    [session?.llmConnection, llmConnections]
+  )
+
   // Effective model for this session (session-specific or global fallback)
   const effectiveModel = React.useMemo(() => {
+    if (session?.model) return session.model
+
+    // When connection is unavailable, don't resolve through a different connection
+    if (connectionUnavailable) return session?.model ?? ''
+
     const connectionSlug = resolveEffectiveConnectionSlug(
       session?.llmConnection, workspaceDefaultLlmConnection, llmConnections
     )
-
     const connection = connectionSlug ? llmConnections.find(c => c.slug === connectionSlug) : null
-    const providerType = connection?.providerType ?? 'anthropic'
-    const provider: ModelProvider = isOpenAIProvider(providerType) ? 'openai' : 'anthropic'
 
-    const available = (() => {
-      if (!connection) return getModelsForProviderType('anthropic')
-      if (isCompatProvider(providerType)) return connection.models ?? []
-      return getModelsForProviderType(providerType)
-    })()
-
-    const availableIds = Array.isArray(available)
-      ? available.map(m => typeof m === 'string' ? m : m.id)
-      : []
-
-    const providerDefault = (modelDefaults?.[provider] ?? getDefaultModelForProvider(provider))
-    if (session?.model) {
-      if (availableIds.length === 0 || availableIds.includes(session.model)) {
-        return session.model
-      }
-    }
-    return providerDefault
-  }, [session?.id, session?.model, session?.llmConnection, workspaceDefaultLlmConnection, llmConnections, modelDefaults])
+    return connection?.defaultModel ?? ''
+  }, [session?.id, session?.model, session?.llmConnection, workspaceDefaultLlmConnection, llmConnections, connectionUnavailable])
 
   // Working directory for this session
   const workingDirectory = session?.workingDirectory
@@ -539,6 +530,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
                 searchQuery={sessionListSearchQuery}
                 isSearchModeActive={isSearchModeActive}
                 onMatchInfoChange={onChatMatchInfoChange}
+                connectionUnavailable={connectionUnavailable}
               />
             </div>
           </div>
@@ -614,6 +606,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
             searchQuery={sessionListSearchQuery}
             isSearchModeActive={isSearchModeActive}
             onMatchInfoChange={onChatMatchInfoChange}
+            connectionUnavailable={connectionUnavailable}
           />
         </div>
       </div>

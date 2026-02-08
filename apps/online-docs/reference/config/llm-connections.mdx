@@ -49,7 +49,7 @@ Each session locks to a connection after the first message. To change connection
 | `providerType` | Yes | Provider backend (see list below) |
 | `authType` | Yes | Auth mechanism (see list below) |
 | `baseUrl` | No | Custom base URL for compatible providers |
-| `models` | No | Explicit model list (used by compatible providers) |
+| `models` | No | Explicit model list (used by compatible providers). Accepts provider-prefixed IDs like `anthropic/claude-sonnet-4.5`. |
 | `defaultModel` | No | Default model for this connection |
 | `codexPath` | No | Path to Codex binary (OpenAI/Codex only) |
 | `awsRegion` | No | AWS region for Bedrock |
@@ -118,7 +118,29 @@ Each session locks to a connection after the first message. To change connection
   "providerType": "anthropic_compat",
   "authType": "api_key_with_endpoint",
   "baseUrl": "https://openrouter.ai/api",
-  "defaultModel": "anthropic/claude-sonnet-4",
+  "models": [
+    "anthropic/claude-opus-4.6",
+    "anthropic/claude-haiku-4.5"
+  ],
+  "defaultModel": "anthropic/claude-opus-4.6",
+  "createdAt": 1737451800000
+}
+```
+
+### OpenRouter (OpenAI‑compatible)
+
+```json
+{
+  "slug": "openrouter-openai",
+  "name": "OpenRouter (OpenAI‑compat)",
+  "providerType": "openai_compat",
+  "authType": "api_key_with_endpoint",
+  "baseUrl": "https://openrouter.ai/api/v1",
+  "models": [
+    "openai/gpt-5.2-codex",
+    "openai/gpt-5.1-codex-mini"
+  ],
+  "defaultModel": "openai/gpt-5.2-codex",
   "createdAt": 1737451800000
 }
 ```

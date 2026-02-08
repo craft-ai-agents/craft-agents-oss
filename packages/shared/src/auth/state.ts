@@ -87,7 +87,8 @@ let refreshInProgress: Promise<TokenResult> | null = null;
 export async function performTokenRefresh(
   manager: ReturnType<typeof getCredentialManager>,
   refreshToken: string,
-  originalSource: 'native' | 'cli' | undefined
+  originalSource: 'native' | 'cli' | undefined,
+  connectionSlug: string
 ): Promise<TokenResult> {
   try {
     const refreshed = await refreshClaudeToken(refreshToken);
@@ -108,7 +109,7 @@ export async function performTokenRefresh(
 
     // Also save to LLM connection (dual-write for backwards compatibility)
     // This ensures both legacy and modern auth paths have the refreshed token
-    await manager.setLlmOAuth('claude-max', {
+    await manager.setLlmOAuth(connectionSlug, {
       accessToken: refreshed.accessToken,
       refreshToken: refreshed.refreshToken,
       expiresAt: refreshed.expiresAt,
@@ -153,7 +154,7 @@ export async function performTokenRefresh(
       });
 
       // Also clear from LLM connection (dual-clear for consistency)
-      await manager.deleteLlmCredentials('claude-max');
+      await manager.deleteLlmCredentials(connectionSlug);
     }
 
     // Token refresh failed - return null token with optional migration info
@@ -181,7 +182,7 @@ export async function performTokenRefresh(
  * - We NO LONGER import tokens from Claude CLI keychain
  * - Legacy tokens are detected and cleared, prompting re-authentication
  */
-export async function getValidClaudeOAuthToken(): Promise<TokenResult> {
+export async function getValidClaudeOAuthToken(connectionSlug: string): Promise<TokenResult> {
   const manager = getCredentialManager();
 
   // Try to get credentials from our store
@@ -220,7 +221,7 @@ export async function getValidClaudeOAuthToken(): Promise<TokenResult> {
 
       // Start the refresh and set the mutex
       debug('[auth] Starting token refresh (holding mutex)');
-      refreshInProgress = performTokenRefresh(manager, creds.refreshToken, creds.source);
+      refreshInProgress = performTokenRefresh(manager, creds.refreshToken, creds.source, connectionSlug);
 
       try {
         const result = await refreshInProgress;

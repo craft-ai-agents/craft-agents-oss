@@ -885,7 +885,7 @@ The app uses Sentry (`@sentry/electron`) for production error tracking. It captu
 - **Enabled**: Whenever the ingest URL is available — production (CI-baked) and development (via `.env` / 1Password). Filter by `environment` in Sentry dashboard.
 - **User ID**: Anonymous machine hash (SHA-256 of hostname + homedir, truncated to 16 chars). No PII.
 - **Data scrubbing**: `beforeSend` hook redacts authorization headers, cookies, and breadcrumb fields containing token/key/secret/password/credential/auth.
-- **Context tags**: `authType`, `hasCustomEndpoint`, `model`, `customModel`, `workspaceCount` (set after app init)
+- **Context tags**: `authType`, `hasCustomEndpoint`, `model`, `connectionDefaultModel`, `workspaceCount` (set after app init)
 
 ### Source Map Upload — Intentionally Disabled
 

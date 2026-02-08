@@ -120,7 +120,7 @@ export const onboardingComponents: ComponentEntry[] = [
     ],
     mockData: () => ({
       apiSetupMethod: 'api_key',
-      onSubmit: (data: { apiKey: string; baseUrl?: string; customModel?: string }) => console.log('[Playground] Submitted:', data),
+      onSubmit: (data: { apiKey: string; baseUrl?: string; connectionDefaultModel?: string; models?: string[] }) => console.log('[Playground] Submitted:', data),
       onStartOAuth: noopHandler,
       onBack: noopHandler,
     }),
@@ -337,7 +337,7 @@ export const onboardingComponents: ComponentEntry[] = [
       onContinue: noopHandler,
       onBack: noopHandler,
       onSelectApiSetupMethod: (method: string) => console.log('[Playground] Selected method:', method),
-      onSubmitCredential: (data: { apiKey: string; baseUrl?: string; customModel?: string }) => console.log('[Playground] Submitted:', data),
+      onSubmitCredential: (data: { apiKey: string; baseUrl?: string; connectionDefaultModel?: string; models?: string[] }) => console.log('[Playground] Submitted:', data),
       onStartOAuth: noopHandler,
       onFinish: noopHandler,
       onBrowseGitBash: async () => {

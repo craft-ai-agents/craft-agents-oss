@@ -182,6 +182,8 @@ interface ChatDisplayProps {
   placeholder?: string | string[]
   /** Label shown as empty state in compact mode (e.g., "Permission Settings") */
   emptyStateLabel?: string
+  /** When true, the session's locked connection has been removed - disables send and shows unavailable state */
+  connectionUnavailable?: boolean
 }
 
 /**
@@ -424,6 +426,8 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   compactMode = false,
   placeholder,
   emptyStateLabel,
+  // Connection unavailable
+  connectionUnavailable = false,
 }, ref) {
   // Input is only disabled when explicitly disabled (e.g., agent needs activation)
   // User can type during streaming - submitting will stop the stream and send
@@ -1595,7 +1599,8 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
               sessionFolderPath={sessionFolderPath}
               sessionId={session.id}
               currentTodoState={session.todoState || 'todo'}
-              disableSend={disableSend}
+              disableSend={disableSend || connectionUnavailable}
+              connectionUnavailable={connectionUnavailable}
               isEmptySession={session.messages.length === 0}
               currentConnection={session.llmConnection}
               onConnectionChange={onConnectionChange}

@@ -42,7 +42,3 @@ export type {
 // Credential Prompt
 export { handleCredentialPrompt } from './credential-prompt.ts';
 export type { CredentialPromptArgs } from './credential-prompt.ts';
-
-// Call LLM
-export { handleCallLlm } from './call-llm.ts';
-export type { CallLlmArgs } from './call-llm.ts';

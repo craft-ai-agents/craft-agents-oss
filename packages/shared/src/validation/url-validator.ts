@@ -7,8 +7,8 @@
 
 import { query, type Options } from '@anthropic-ai/claude-agent-sdk';
 import { getDefaultOptions } from '../agent/options.ts';
-import { SUMMARIZATION_MODEL } from '../config/models.ts';
-import { resolveModelId } from '../config/storage.ts';
+import { getDefaultSummarizationModel } from '../config/models.ts';
+
 import { debug } from '../utils/debug.ts';
 import { parseError, parseSDKErrorText, type AgentError } from '../agent/errors.ts';
 import { getLastApiError } from '../network-interceptor.ts';
@@ -67,7 +67,7 @@ export async function validateMcpUrl(
   try {
     const options: Options = {
       ...getDefaultOptions(),
-      model: resolveModelId(SUMMARIZATION_MODEL), // Use custom model if set, else Haiku
+      model: getDefaultSummarizationModel(),
       systemPrompt: SYSTEM_PROMPT,
       maxTurns: 1,
       tools: [], // No tools needed - pure text analysis

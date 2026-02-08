@@ -567,7 +567,8 @@ function buildToolDescription(config: ApiConfig): string {
 export function createApiTool(
   config: ApiConfig,
   credential: ApiCredentialSource,
-  sessionPath?: string
+  sessionPath?: string,
+  summarizationModel?: string
 ) {
   const toolName = `api_${config.name}`;
   debug(`[api-tools] Creating flexible tool: ${toolName}`);
@@ -775,6 +776,7 @@ export function createApiTool(
               path,
               input: params,
               modelIntent: _intent,
+              modelOverride: summarizationModel,
             });
 
             // Return file path + summary
@@ -828,11 +830,12 @@ export function createApiTool(
 export function createApiServer(
   config: ApiConfig,
   credential: ApiCredentialSource,
-  sessionPath?: string
+  sessionPath?: string,
+  summarizationModel?: string
 ): ReturnType<typeof createSdkMcpServer> {
   debug(`[api-tools] Creating server for ${config.name}${sessionPath ? ` (session: ${sessionPath})` : ''}`);
 
-  const apiTool = createApiTool(config, credential, sessionPath);
+  const apiTool = createApiTool(config, credential, sessionPath, summarizationModel);
 
   return createSdkMcpServer({
     name: `api_${config.name}`,

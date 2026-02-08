@@ -245,18 +245,6 @@ describe('BaseAgent', () => {
     });
   });
 
-  describe('Capabilities', () => {
-    it('should return capabilities', () => {
-      const caps = agent.capabilities();
-
-      expect(caps.provider).toBe('anthropic');
-      expect(caps.models).toHaveLength(1);
-      expect(caps.thinkingLevels).toHaveLength(3);
-      expect(caps.supportsPermissionCallbacks).toBe(true);
-      expect(caps.supportsMcp).toBe(true);
-    });
-  });
-
   describe('Callbacks', () => {
     it('should support debug callback', () => {
       let message = '';

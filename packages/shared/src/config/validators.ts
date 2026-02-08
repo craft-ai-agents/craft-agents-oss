@@ -18,6 +18,7 @@ import { join } from 'path';
 import { CONFIG_DIR } from './paths.ts';
 import { safeJsonParse, readJsonFileSync } from '../utils/files.ts';
 import { EntityColorSchema } from '../colors/validate.ts';
+import { isValidProviderAuthCombination } from './llm-connections.ts';
 
 // ============================================================
 // Config Directory
@@ -60,18 +61,35 @@ const WorkspaceSchema = z.object({
   iconUrl: z.string().optional(),
 });
 
-const AuthTypeSchema = z.enum(['api_key', 'oauth_token']);
+// --- LLM Connection schema for config validation ---
+
+const LlmProviderTypeSchema = z.enum([
+  'anthropic', 'anthropic_compat', 'openai', 'openai_compat', 'bedrock', 'vertex',
+]);
+
+const LlmAuthTypeSchema = z.enum([
+  'api_key', 'api_key_with_endpoint', 'oauth', 'iam_credentials',
+  'bearer_token', 'service_account_file', 'environment', 'none',
+]);
+
+const LlmConnectionSchema = z.object({
+  slug: z.string().min(1),
+  name: z.string().min(1),
+  providerType: LlmProviderTypeSchema,
+  authType: LlmAuthTypeSchema,
+  baseUrl: z.string().optional(),
+  models: z.array(z.union([z.string(), z.object({ id: z.string() }).passthrough()])).optional(),
+  defaultModel: z.string().optional(),
+  createdAt: z.number(),
+  // Allow additional fields (codexPath, awsRegion, gcpProjectId, etc.)
+}).passthrough();
 
 export const StoredConfigSchema = z.object({
-  authType: AuthTypeSchema.optional(),
   workspaces: z.array(WorkspaceSchema).min(0),
   activeWorkspaceId: z.string().nullable(),
   activeSessionId: z.string().nullable(),
-  model: z.string().optional(),
-  modelDefaults: z.object({
-    anthropic: z.string().optional(),
-    openai: z.string().optional(),
-  }).optional(),
+  llmConnections: z.array(LlmConnectionSchema).optional(),
+  defaultLlmConnection: z.string().optional(),
   // Note: tokenDisplay, showCost, cumulativeUsage, defaultPermissionMode removed
   // Permission mode and cyclable modes are now per-workspace in workspace config.json
 });
@@ -167,6 +185,49 @@ export function validateConfig(): ValidationResult {
           severity: 'error',
           suggestion: 'Set activeWorkspaceId to an existing workspace ID or null',
         });
+      }
+    }
+
+    // Validate LLM connections
+    if (config.llmConnections) {
+      const seenSlugs = new Set<string>();
+      for (const [i, conn] of config.llmConnections.entries()) {
+        // Check for duplicate slugs
+        if (seenSlugs.has(conn.slug)) {
+          errors.push({
+            file: 'config.json',
+            path: `llmConnections[${i}].slug`,
+            message: `Duplicate connection slug '${conn.slug}'`,
+            severity: 'error',
+            suggestion: 'Each connection must have a unique slug',
+          });
+        }
+        seenSlugs.add(conn.slug);
+
+        // Validate provider/auth combination
+        if (!isValidProviderAuthCombination(conn.providerType as any, conn.authType as any)) {
+          warnings.push({
+            file: 'config.json',
+            path: `llmConnections[${i}]`,
+            message: `Invalid provider/auth combination: providerType='${conn.providerType}' with authType='${conn.authType}'`,
+            severity: 'warning',
+            suggestion: 'Check supported auth types for this provider',
+          });
+        }
+      }
+
+      // Validate defaultLlmConnection references an existing connection
+      if (config.defaultLlmConnection) {
+        const exists = config.llmConnections.some(c => c.slug === config.defaultLlmConnection);
+        if (!exists) {
+          warnings.push({
+            file: 'config.json',
+            path: 'defaultLlmConnection',
+            message: `Default LLM connection '${config.defaultLlmConnection}' does not exist in llmConnections array`,
+            severity: 'warning',
+            suggestion: 'Set defaultLlmConnection to an existing connection slug',
+          });
+        }
       }
     }
 

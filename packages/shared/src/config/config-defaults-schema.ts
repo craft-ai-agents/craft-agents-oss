@@ -5,7 +5,6 @@
  * This file only defines types - the actual defaults come from the bundled JSON.
  */
 
-import type { AuthType } from '@craft-agent/core/types';
 import type { PermissionMode } from '../agent/mode-manager.ts';
 import type { ThinkingLevel } from '../agent/thinking-levels.ts';
 
@@ -13,7 +12,6 @@ export interface ConfigDefaults {
   version: string;
   description: string;
   defaults: {
-    authType: AuthType;
     notificationsEnabled: boolean;
     colorTheme: string;
     autoCapitalisation: boolean;

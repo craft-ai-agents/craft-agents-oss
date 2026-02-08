@@ -105,9 +105,6 @@ export {
   type PermissionsContext,
 } from './permissions-config.ts';
 
-// Export LLM tool - secondary Claude calls for subtasks
-export { createLLMTool, type LLMToolOptions } from './llm-tool.ts';
-
 // Export BaseAgent - shared abstract class for all agent backends
 export {
   BaseAgent,
@@ -130,11 +127,8 @@ export {
   CodexAgent as BackendCodexAgent, // Avoid conflict with direct export above
   // Types
   type AgentBackend,
-  type AgentCapabilities,
   type AgentProvider,
   type BackendConfig,
-  type ModelDefinition,
-  type ThinkingLevelDefinition as BackendThinkingLevelDefinition,
   type PermissionCallback,
   type PlanCallback,
   type AuthCallback,

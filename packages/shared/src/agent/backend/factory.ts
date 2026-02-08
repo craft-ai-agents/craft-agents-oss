@@ -14,7 +14,7 @@
  * - authType determines how credentials are retrieved
  */
 
-import type { AgentBackend, BackendConfig, AgentProvider, LlmProviderType, LlmAuthType, AgentCapabilities, ThinkingLevelDefinition } from './types.ts';
+import type { AgentBackend, BackendConfig, AgentProvider, LlmProviderType, LlmAuthType } from './types.ts';
 import { ClaudeAgent } from '../claude-agent.ts';
 import { CodexAgent } from '../codex-agent.ts';
 import {
@@ -26,8 +26,6 @@ import {
 import type { LlmConnectionType } from '../../config/llm-connections.ts';
 // Import validation helpers for provider-auth combinations and codexPath
 import { isValidProviderAuthCombination, validateCodexPath } from '../../config/llm-connections.ts';
-// Import models for static capabilities
-import { ANTHROPIC_MODELS, OPENAI_MODELS } from '../../config/models.ts';
 
 /**
  * Detect provider from stored auth type.
@@ -247,6 +245,7 @@ export function createConfigFromConnection(
     provider,
     providerType,
     authType: connection.authType,
+    connectionSlug: connection.slug,
     // Use connection's default model if no model specified in baseConfig
     model: baseConfig.model || connection.defaultModel,
   };
@@ -289,41 +288,3 @@ export function createBackendFromConnection(
   return createBackend(config);
 }
 
-// ============================================================
-// Static Capabilities (for sessions without agents)
-// ============================================================
-
-/**
- * Static thinking levels without provider-specific budgets.
- * Used for static capabilities before agent is created.
- */
-const STATIC_THINKING_LEVELS: ThinkingLevelDefinition[] = [
-  { id: 'off', name: 'No Thinking', description: 'Fastest responses, no reasoning' },
-  { id: 'think', name: 'Thinking', description: 'Balanced speed and reasoning' },
-  { id: 'max', name: 'Max Thinking', description: 'Deepest reasoning for complex tasks' },
-];
-
-/**
- * Get static capabilities for a provider type.
- * Used when a session exists but agent hasn't been created yet.
- * This allows the UI to show correct models based on the session's
- * configured LLM connection before the first message is sent.
- *
- * @param providerType - The LLM provider type from the connection config
- * @returns Static capabilities for the provider
- */
-export function getStaticCapabilities(providerType: LlmProviderType): AgentCapabilities {
-  const provider = providerTypeToAgentProvider(providerType);
-  const isOpenAI = provider === 'openai';
-
-  return {
-    provider,
-    models: isOpenAI ? OPENAI_MODELS : ANTHROPIC_MODELS,
-    thinkingLevels: STATIC_THINKING_LEVELS,
-    supportsPermissionCallbacks: true,
-    supportsSubagentParents: !isOpenAI,
-    maxContextTokens: isOpenAI ? 256_000 : 200_000,
-    supportsMcp: true,
-    supportsResume: true,
-  };
-}

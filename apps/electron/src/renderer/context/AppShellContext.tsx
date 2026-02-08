@@ -23,10 +23,8 @@ import type {
   LoadedSource,
   LoadedSkill,
   NewChatActionParams,
-  AuthType,
   LlmConnectionWithStatus,
 } from '../../shared/types'
-import type { AgentCapabilities } from '@craft-agent/shared/agent/backend'
 import type { TodoState as TodoStateConfig } from '@/config/todo-states'
 import type { SessionOptions, SessionOptionUpdates } from '../hooks/useSessionOptions'
 import { defaultSessionOptions } from '../hooks/useSessionOptions'
@@ -41,13 +39,6 @@ export interface AppShellContextType {
   activeWorkspaceId: string | null
   /** Workspace slug for SDK skill qualification (derived from workspace path) */
   activeWorkspaceSlug: string | null
-  modelDefaults: import('@craft-agent/shared/config/models').ModelDefaults
-  /** When set, a custom model overrides the Anthropic model selector (e.g. OpenRouter) */
-  customModel: string | null
-  /** Current authentication type (determines which backend is active) */
-  authType: AuthType | null
-  /** Backend capabilities (models, thinking levels) - null until backend ready */
-  capabilities: AgentCapabilities | null
   /** All LLM connections with authentication status */
   llmConnections: LlmConnectionWithStatus[]
   /** Default LLM connection slug for the current workspace */
@@ -108,11 +99,6 @@ export interface AppShellContextType {
   // File/URL handlers - these can open in tabs or external apps
   onOpenFile: (path: string) => void
   onOpenUrl: (url: string) => void
-
-  // Model defaults
-  refreshModelDefaults: () => Promise<void>
-  /** Re-fetch custom model from billing config (call after API connection changes) */
-  refreshCustomModel: () => Promise<void>
 
   // Workspace
   onSelectWorkspace: (id: string, openInNewWindow?: boolean) => void

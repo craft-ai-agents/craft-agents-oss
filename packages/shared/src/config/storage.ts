@@ -36,15 +36,9 @@ export type {
 import type { Workspace, AuthType } from '@craft-agent/core/types';
 
 // Import LLM connection types and constants
-import { DEFAULT_LLM_CONNECTION } from './llm-connections.ts';
 import type { LlmConnection } from './llm-connections.ts';
+import { isValidProviderAuthCombination, getDefaultModelsForConnection, getDefaultModelForConnection } from './llm-connections.ts';
 import {
-  ANTHROPIC_MODELS,
-  OPENAI_MODELS,
-  type ModelDefaults,
-  type ModelProvider,
-  DEFAULT_MODEL,
-  DEFAULT_CODEX_MODEL,
   getModelProvider,
   isCodexModel,
 } from './models.ts';
@@ -58,8 +52,6 @@ export interface StoredConfig {
   workspaces: Workspace[];
   activeWorkspaceId: string | null;
   activeSessionId: string | null;  // Currently active session (primary scope)
-  model?: string;
-  modelDefaults?: ModelDefaults;
   // Notifications
   notificationsEnabled?: boolean;  // Desktop notifications for task completion (default: true)
   // Appearance
@@ -171,13 +163,6 @@ export function loadStoredConfig(): StoredConfig | null {
       config.activeWorkspaceId = config.workspaces[0]?.id || null;
     }
 
-    // Migrate legacy global model into provider-scoped defaults (in-memory)
-    if (config.model && !config.modelDefaults) {
-      const provider = getModelProvider(config.model) ?? (isCodexModel(config.model) ? 'openai' : 'anthropic');
-      config.modelDefaults = { [provider]: config.model };
-      delete config.model;
-    }
-
     // Ensure workspace folder structure exists for all workspaces
     for (const workspace of config.workspaces) {
       if (!isValidWorkspace(workspace.rootPath)) {
@@ -191,26 +176,9 @@ export function loadStoredConfig(): StoredConfig | null {
   }
 }
 
-/**
- * Get the Anthropic API key from credential store.
- * Uses the new LLM connection system.
- */
-export async function getAnthropicApiKey(): Promise<string | null> {
-  const manager = getCredentialManager();
-  return manager.getLlmApiKey('anthropic-api');
-}
-
-/**
- * Get the Claude OAuth token from credential store.
- * Uses the new LLM connection system.
- */
-export async function getClaudeOAuthToken(): Promise<string | null> {
-  const manager = getCredentialManager();
-  const oauth = await manager.getLlmOAuth('claude-max');
-  return oauth?.accessToken || null;
-}
-
-
+// Legacy credential helpers removed - use connection-aware credential lookup instead:
+// - getAnthropicApiKey() → credentialManager.getLlmApiKey(connectionSlug)
+// - getClaudeOAuthToken() → credentialManager.getLlmOAuth(connectionSlug)
 
 export function saveConfig(config: StoredConfig): void {
   ensureConfigDir();
@@ -227,92 +195,12 @@ export function saveConfig(config: StoredConfig): void {
   writeFileSync(CONFIG_FILE, JSON.stringify(storageConfig, null, 2), 'utf-8');
 }
 
-export async function updateApiKey(newApiKey: string): Promise<boolean> {
-  const config = loadStoredConfig();
-  if (!config) return false;
-
-  // Save API key to LLM connection credential store
-  const manager = getCredentialManager();
-  await manager.setLlmApiKey('anthropic-api', newApiKey);
-
-  // Ensure anthropic-api connection exists and is set as default
-  const connectionExists = config.llmConnections?.some(c => c.slug === 'anthropic-api');
-  if (!connectionExists) {
-    if (!config.llmConnections) {
-      config.llmConnections = [];
-    }
-    config.llmConnections.push({
-      slug: 'anthropic-api',
-      name: 'Anthropic (API Key)',
-      providerType: 'anthropic',
-      authType: 'api_key',
-      createdAt: Date.now(),
-    });
-  }
-  config.defaultLlmConnection = 'anthropic-api';
-  saveConfig(config);
-  return true;
-}
+// Legacy updateApiKey() removed - use setupLlmConnection IPC handler instead.
 
 // Legacy getters/setters removed - use LLM connections instead:
 // - getAuthType/setAuthType -> derive from getDefaultLlmConnection()/getLlmConnection()
 // - getAnthropicBaseUrl/setAnthropicBaseUrl -> use connection.baseUrl
 // - getCustomModel/setCustomModel -> use connection.defaultModel
-
-export function getModel(): string | null {
-  const config = loadStoredConfig();
-  if (!config) return null;
-  if (config.model) return config.model;
-  if (config.modelDefaults?.anthropic) return config.modelDefaults.anthropic;
-  return null;
-}
-
-export function setModel(model: string): void {
-  const config = loadStoredConfig();
-  if (!config) return;
-  config.model = model;
-  config.modelDefaults = { ...(config.modelDefaults ?? {}), anthropic: model };
-  saveConfig(config);
-}
-
-export function getModelDefaults(): { anthropic: string; openai: string } {
-  const config = loadStoredConfig();
-  const defaults: { anthropic: string; openai: string } = {
-    anthropic: DEFAULT_MODEL,
-    openai: DEFAULT_CODEX_MODEL,
-  };
-
-  if (!config) return defaults;
-
-  if (config.modelDefaults) {
-    return {
-      anthropic: config.modelDefaults.anthropic ?? defaults.anthropic,
-      openai: config.modelDefaults.openai ?? defaults.openai,
-    };
-  }
-
-  if (config.model) {
-    const provider = getModelProvider(config.model) ?? (isCodexModel(config.model) ? 'openai' : 'anthropic');
-    return {
-      anthropic: provider === 'anthropic' ? config.model : defaults.anthropic,
-      openai: provider === 'openai' ? config.model : defaults.openai,
-    };
-  }
-
-  return defaults;
-}
-
-export function setModelDefault(provider: ModelProvider, model: string): void {
-  const config = loadStoredConfig();
-  if (!config) return;
-  const existing = config.modelDefaults ?? {};
-  config.modelDefaults = { ...existing, [provider]: model };
-  // Keep legacy field in sync for anthropic (backward compat)
-  if (provider === 'anthropic') {
-    config.model = model;
-  }
-  saveConfig(config);
-}
 
 
 /**
@@ -1253,25 +1141,6 @@ export function clearDismissedUpdateVersion(): void {
 }
 
 // ============================================
-// Model Resolution
-// ============================================
-
-/**
- * Resolve model ID based on custom model override from the default LLM connection.
- * When a custom model is configured (for OpenRouter, Ollama, etc.),
- * it overrides ALL model calls (main, summarization, extraction).
- * @param defaultModelId - The default Anthropic model ID
- * @returns The connection's custom model if set, otherwise the default
- */
-export function resolveModelId(defaultModelId: string): string {
-  const defaultConnSlug = getDefaultLlmConnection();
-  const connection = defaultConnSlug ? getLlmConnection(defaultConnSlug) : null;
-  const customModel = connection?.defaultModel?.trim();
-  if (customModel) return customModel;
-  return defaultModelId;
-}
-
-// ============================================
 // LLM Connections
 // ============================================
 
@@ -1284,6 +1153,86 @@ export type {
 } from './llm-connections.ts';
 
 /**
+ * Backfill models and defaultModel on ALL connections.
+ * Ensures built-in connections (anthropic, openai) always have models populated,
+ * not just compat connections.
+ */
+function backfillAllConnectionModels(config: StoredConfig): boolean {
+  if (!config.llmConnections) return false;
+  let changed = false;
+  for (const connection of config.llmConnections) {
+    const defaultModels = getDefaultModelsForConnection(connection.providerType);
+    const defaultModel = getDefaultModelForConnection(connection.providerType);
+
+    if (!connection.models || (Array.isArray(connection.models) && connection.models.length === 0)) {
+      connection.models = defaultModels;
+      changed = true;
+    }
+    if (!connection.defaultModel) {
+      connection.defaultModel = defaultModel;
+      changed = true;
+    }
+
+    // Validate that existing defaultModel is in the models list
+    if (connection.defaultModel && connection.models && Array.isArray(connection.models)) {
+      const modelIds = connection.models.map(m => typeof m === 'string' ? m : m.id);
+      if (!modelIds.includes(connection.defaultModel)) {
+        // Reset to first available model in the list
+        const firstModelId = modelIds[0];
+        if (firstModelId) {
+          connection.defaultModel = firstModelId;
+        }
+        changed = true;
+      }
+    }
+  }
+  return changed;
+}
+
+/**
+ * Migrate modelDefaults onto connection.defaultModel, then delete modelDefaults.
+ * If user had set modelDefaults.anthropic, apply it to the default anthropic connection.
+ * Same for openai. Then remove modelDefaults from config.
+ */
+function migrateModelDefaultsToConnections(config: StoredConfig): boolean {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const configAny = config as any;
+  if (!configAny.modelDefaults || !config.llmConnections) return false;
+  let changed = false;
+
+  // Apply anthropic model default to the default anthropic connection
+  if (configAny.modelDefaults.anthropic) {
+    const defaultSlug = config.defaultLlmConnection;
+    const anthropicConn = config.llmConnections.find(c =>
+      c.slug === defaultSlug && (c.providerType === 'anthropic' || c.providerType === 'anthropic_compat')
+    ) || config.llmConnections.find(c =>
+      c.providerType === 'anthropic' || c.providerType === 'anthropic_compat'
+    );
+    if (anthropicConn) {
+      anthropicConn.defaultModel = configAny.modelDefaults.anthropic;
+      changed = true;
+    }
+  }
+
+  // Apply openai model default to the default openai connection
+  if (configAny.modelDefaults.openai) {
+    const openaiConn = config.llmConnections.find(c =>
+      c.providerType === 'openai' || c.providerType === 'openai_compat'
+    );
+    if (openaiConn) {
+      openaiConn.defaultModel = configAny.modelDefaults.openai;
+      changed = true;
+    }
+  }
+
+  // Delete modelDefaults
+  delete configAny.modelDefaults;
+  changed = true;
+
+  return changed;
+}
+
+/**
  * Migrate legacy auth config to LLM connections.
  * Call this on app startup before any getLlmConnections() calls.
  *
@@ -1291,12 +1240,62 @@ export type {
  * - Legacy authType field → LlmConnection in llmConnections array
  * - Legacy anthropicBaseUrl → LlmConnection.baseUrl
  * - Legacy customModel → LlmConnection.defaultModel
+ * - Legacy model → modelDefaults (per provider)
  *
  * After migration, the legacy fields are deleted since they are no longer used.
  */
 export function migrateLegacyLlmConnectionsConfig(): void {
   const config = loadStoredConfig();
   if (!config) return;
+
+  const normalizeModelList = (models?: Array<{ id: string } | string>): string[] => {
+    if (!models) return [];
+    return models
+      .map(model => (typeof model === 'string' ? model : model.id))
+      .filter(Boolean);
+  };
+
+  const applyCompatDefaults = (target: StoredConfig): boolean => {
+    if (!target.llmConnections) return false;
+    let changed = false;
+    for (const connection of target.llmConnections) {
+      if (connection.providerType !== 'anthropic_compat' && connection.providerType !== 'openai_compat') {
+        continue;
+      }
+      const compatDefaults = getDefaultModelsForConnection(connection.providerType).map(
+        m => typeof m === 'string' ? m : m.id
+      );
+      const normalizedModels = normalizeModelList(connection.models);
+      if (normalizedModels.length === 0) {
+        connection.models = [...compatDefaults];
+        changed = true;
+      } else if (normalizedModels.length !== (connection.models?.length ?? 0)) {
+        connection.models = [...normalizedModels];
+        changed = true;
+      }
+      // Backfill any new default models that are missing from existing connections
+      // (e.g., Sonnet added to compat defaults after user already created connection)
+      let currentModels = normalizeModelList(connection.models);
+      for (const defaultModel of compatDefaults) {
+        if (!currentModels.includes(defaultModel)) {
+          currentModels = [...currentModels, defaultModel];
+          changed = true;
+        }
+      }
+      if (changed) {
+        connection.models = currentModels;
+      }
+      const currentDefault = connection.defaultModel?.trim();
+      if (!currentDefault) {
+        connection.defaultModel = (normalizeModelList(connection.models)[0] ?? compatDefaults[0]);
+        changed = true;
+      } else if (!normalizeModelList(connection.models).includes(currentDefault)) {
+        connection.models = [currentDefault, ...normalizeModelList(connection.models).filter(m => m !== currentDefault)];
+        changed = true;
+      }
+    }
+    return changed;
+  };
 
   // Already migrated - llmConnections array exists
   if (config.llmConnections !== undefined) {
@@ -1316,6 +1315,30 @@ export function migrateLegacyLlmConnectionsConfig(): void {
       delete configAny.customModel;
       needsSave = true;
     }
+    if ('model' in config) {
+      const legacyModel = configAny.model as string | undefined;
+      if (legacyModel) {
+        const provider = getModelProvider(legacyModel) ?? (isCodexModel(legacyModel) ? 'openai' : 'anthropic');
+        configAny.modelDefaults = { ...(configAny.modelDefaults ?? {}), [provider]: legacyModel };
+      }
+      delete configAny.model;
+      needsSave = true;
+    }
+    // Note: applyCompatDefaults() is NOT called here for already-migrated configs.
+    // Compat connections are user-owned after creation — the app should not
+    // silently extend or override the user's model list on every startup.
+    // Compat defaults are only applied during fresh connection creation or
+    // first-time legacy migration (the config.llmConnections === undefined path below).
+
+    // Phase 1b: Backfill models/defaultModel on ALL connections (not just compat)
+    // This ensures built-in connections (anthropic, openai) always have models populated
+    if (backfillAllConnectionModels(config)) {
+      needsSave = true;
+    }
+    // Phase 1c: Migrate modelDefaults onto connection.defaultModel, then delete modelDefaults
+    if (migrateModelDefaultsToConnections(config)) {
+      needsSave = true;
+    }
     if (needsSave) {
       saveConfig(config);
     }
@@ -1331,6 +1354,7 @@ export function migrateLegacyLlmConnectionsConfig(): void {
   const legacyAuthType = configAny.authType as AuthType | undefined;
   const legacyBaseUrl = configAny.anthropicBaseUrl as string | undefined;
   const legacyCustomModel = configAny.customModel as string | undefined;
+  const legacyModel = configAny.model as string | undefined;
 
   if (legacyAuthType) {
     let migrated: LlmConnection | null = null;
@@ -1341,9 +1365,8 @@ export function migrateLegacyLlmConnectionsConfig(): void {
         slug: 'claude-max',
         name: 'Claude Max',
         providerType: 'anthropic',
-        type: 'anthropic', // Legacy field for backwards compatibility
         authType: 'oauth',
-        models: ANTHROPIC_MODELS,
+        models: getDefaultModelsForConnection('anthropic'),
         createdAt: Date.now(),
       };
     } else if (legacyAuthType === 'codex_oauth') {
@@ -1352,50 +1375,58 @@ export function migrateLegacyLlmConnectionsConfig(): void {
         slug: 'codex',
         name: 'Codex (ChatGPT Plus)',
         providerType: 'openai',
-        type: 'openai', // Legacy field for backwards compatibility
         authType: 'oauth',
-        models: OPENAI_MODELS,
+        models: getDefaultModelsForConnection('openai'),
         createdAt: Date.now(),
       };
     } else if (legacyAuthType === 'codex_api_key') {
       // OpenAI API Key via Codex (OpenRouter, Vercel AI Gateway compatible)
       const hasCustomEndpoint = !!legacyBaseUrl;
+      const providerType = hasCustomEndpoint ? 'openai_compat' as const : 'openai' as const;
       migrated = {
         slug: 'codex-api',
         name: hasCustomEndpoint ? 'Codex (Custom Endpoint)' : 'Codex (OpenAI API Key)',
-        providerType: 'openai',
-        type: 'openai', // Legacy field for backwards compatibility
+        providerType,
         authType: hasCustomEndpoint ? 'api_key_with_endpoint' : 'api_key',
-        models: OPENAI_MODELS,
+        models: getDefaultModelsForConnection(providerType),
         createdAt: Date.now(),
       };
     } else if (legacyAuthType === 'api_key') {
       // Anthropic API Key - check if custom endpoint (compat mode)
       const hasCustomEndpoint = !!legacyBaseUrl;
+      const providerType = hasCustomEndpoint ? 'anthropic_compat' as const : 'anthropic' as const;
       migrated = {
         slug: 'anthropic-api',
         name: hasCustomEndpoint ? 'Custom Anthropic-Compatible' : 'Anthropic (API Key)',
-        providerType: hasCustomEndpoint ? 'anthropic_compat' : 'anthropic',
-        type: 'anthropic', // Legacy field for backwards compatibility
+        providerType,
         authType: hasCustomEndpoint ? 'api_key_with_endpoint' : 'api_key',
-        models: ANTHROPIC_MODELS,
+        models: getDefaultModelsForConnection(providerType),
         createdAt: Date.now(),
       };
     }
 
     if (migrated) {
-      // Apply legacy baseUrl if set
-      if (legacyBaseUrl) {
-        migrated.baseUrl = legacyBaseUrl;
-      }
+      // Validate the migrated connection has a valid provider/auth combination
+      if (!isValidProviderAuthCombination(migrated.providerType, migrated.authType)) {
+        console.warn(
+          `[config] Legacy migration created invalid provider/auth combination: ` +
+          `providerType=${migrated.providerType}, authType=${migrated.authType} ` +
+          `(slug: ${migrated.slug}). Skipping migration for this connection.`
+        );
+      } else {
+        // Apply legacy baseUrl if set
+        if (legacyBaseUrl) {
+          migrated.baseUrl = legacyBaseUrl;
+        }
 
-      // Apply legacy customModel if set
-      if (legacyCustomModel) {
-        migrated.defaultModel = legacyCustomModel;
-      }
+        // Apply legacy customModel if set
+        if (legacyCustomModel) {
+          migrated.defaultModel = legacyCustomModel;
+        }
 
-      config.llmConnections.push(migrated);
-      config.defaultLlmConnection = migrated.slug;
+        config.llmConnections.push(migrated);
+        config.defaultLlmConnection = migrated.slug;
+      }
     }
   }
 
@@ -1403,8 +1434,62 @@ export function migrateLegacyLlmConnectionsConfig(): void {
   delete configAny.authType;
   delete configAny.anthropicBaseUrl;
   delete configAny.customModel;
+  delete configAny.model;
+
+  if (legacyModel) {
+    const provider = getModelProvider(legacyModel) ?? (isCodexModel(legacyModel) ? 'openai' : 'anthropic');
+    configAny.modelDefaults = { ...(configAny.modelDefaults ?? {}), [provider]: legacyModel };
+  }
+
+  // Run the same backfill and migration on newly created connections
+  backfillAllConnectionModels(config);
+  migrateModelDefaultsToConnections(config);
 
   saveConfig(config);
+}
+
+/**
+ * Fix defaultLlmConnection references that point to non-existent connections.
+ * This can happen when a connection is removed or was never created
+ * (e.g. "anthropic-api" is set as default but only "claude-max" exists).
+ *
+ * Fixes both the global defaultLlmConnection and per-workspace defaults.
+ * Called on app startup alongside other migrations.
+ */
+export function migrateOrphanedDefaultConnections(): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+  if (!config.llmConnections || config.llmConnections.length === 0) return;
+
+  let changed = false;
+
+  // Fix global default if it points to a non-existent connection
+  if (ensureDefaultLlmConnection(config)) {
+    changed = true;
+  }
+
+  // Fix workspace defaults that point to non-existent connections
+  try {
+    const workspaces = getWorkspaces();
+    for (const ws of workspaces) {
+      const wsConfig = loadWorkspaceConfig(ws.rootPath);
+      if (wsConfig?.defaults?.defaultLlmConnection) {
+        const exists = config.llmConnections.some(
+          c => c.slug === wsConfig.defaults!.defaultLlmConnection
+        );
+        if (!exists) {
+          delete wsConfig.defaults.defaultLlmConnection;
+          saveWorkspaceConfig(ws.rootPath, wsConfig);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Failed to clean up workspace default connection references:', error);
+  }
+
+  if (changed) {
+    saveConfig(config);
+  }
 }
 
 /**

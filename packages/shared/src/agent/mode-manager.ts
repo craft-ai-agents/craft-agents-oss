@@ -1713,7 +1713,6 @@ export function shouldAllowToolInMode(
         'mcp__session__skill_validate',
         'mcp__session__mermaid_validate',
         'mcp__session__source_test',
-        'mcp__session__call_llm', // Invokes secondary Claude model - no side effects
       ];
       if (readOnlySessionTools.includes(toolName)) {
         return { allowed: true };

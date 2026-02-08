@@ -142,7 +142,8 @@ export class SourceServerBuilder {
     source: LoadedSource,
     credential: ApiCredential | null,
     getToken?: () => Promise<string>,
-    sessionPath?: string
+    sessionPath?: string,
+    summarizationModel?: string
   ): Promise<ReturnType<typeof createSdkMcpServer> | null> {
     if (source.config.type !== 'api') return null;
     if (!source.config.api) {
@@ -165,7 +166,7 @@ export class SourceServerBuilder {
       const config = this.buildApiConfig(source);
       // Pass the token getter function - it will be called before each request
       // to get a fresh token (with auto-refresh if expired)
-      return createApiServer(config, getToken, sessionPath);
+      return createApiServer(config, getToken, sessionPath, summarizationModel);
     }
 
     // Slack APIs - use token getter with auto-refresh
@@ -179,14 +180,14 @@ export class SourceServerBuilder {
       const config = this.buildApiConfig(source);
       // Pass the token getter function - it will be called before each request
       // to get a fresh token (with auto-refresh if expired)
-      return createApiServer(config, getToken, sessionPath);
+      return createApiServer(config, getToken, sessionPath, summarizationModel);
     }
 
     // Public APIs (no auth) can be used immediately
     if (authType === 'none') {
       debug(`[SourceServerBuilder] Building public API server for ${source.config.slug}`);
       const config = this.buildApiConfig(source);
-      return createApiServer(config, '', sessionPath);
+      return createApiServer(config, '', sessionPath, summarizationModel);
     }
 
     // API key/bearer/header/query/basic auth - use static credential
@@ -197,7 +198,7 @@ export class SourceServerBuilder {
 
     debug(`[SourceServerBuilder] Building API server for ${source.config.slug} (auth: ${authType})`);
     const config = this.buildApiConfig(source);
-    return createApiServer(config, credential, sessionPath);
+    return createApiServer(config, credential, sessionPath, summarizationModel);
   }
 
   /**
@@ -245,7 +246,8 @@ export class SourceServerBuilder {
   async buildAll(
     sourcesWithCredentials: SourceWithCredential[],
     getTokenForSource?: (source: LoadedSource) => (() => Promise<string>) | undefined,
-    sessionPath?: string
+    sessionPath?: string,
+    summarizationModel?: string
   ): Promise<BuiltServers> {
     const mcpServers: Record<string, McpServerConfig> = {};
     const apiServers: Record<string, ReturnType<typeof createSdkMcpServer>> = {};
@@ -271,7 +273,7 @@ export class SourceServerBuilder {
           }
         } else if (source.config.type === 'api') {
           const getToken = getTokenForSource?.(source);
-          const server = await this.buildApiServer(source, credential ?? null, getToken, sessionPath);
+          const server = await this.buildApiServer(source, credential ?? null, getToken, sessionPath, summarizationModel);
           if (server) {
             apiServers[source.config.slug] = server;
           }

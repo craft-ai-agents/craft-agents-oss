@@ -7,7 +7,11 @@
  */
 
 // Import model types and lists from centralized registry
-import { type ModelDefinition, ANTHROPIC_MODELS, OPENAI_MODELS } from './models';
+import {
+  type ModelDefinition,
+  ANTHROPIC_MODELS,
+  OPENAI_MODELS,
+} from './models';
 
 // ============================================================
 // Types
@@ -94,7 +98,7 @@ export interface LlmConnection {
   authType: LlmAuthType;
 
   /** Override available models (for custom endpoints that don't support model listing) */
-  models?: ModelDefinition[];
+  models?: Array<ModelDefinition | string>;
 
   /** Default model for this connection */
   defaultModel?: string;
@@ -143,14 +147,43 @@ export interface LlmConnectionWithStatus extends LlmConnection {
   isDefault?: boolean;
 }
 
-/**
- * Default connection slug for new installations.
- */
-export const DEFAULT_LLM_CONNECTION = 'anthropic-api';
-
 // ============================================================
 // Helpers
 // ============================================================
+
+/**
+ * Get the mini/utility model ID for a connection.
+ * Convention: last model in connection.models = mini model.
+ * Used for mini agent (Codex).
+ *
+ * Same logic as getSummarizationModel() for now, but separate
+ * so mini agent and summarization models can diverge independently.
+ *
+ * @param connection - LLM connection (or partial with models array)
+ * @returns Model ID string, or undefined if no models available
+ */
+export function getMiniModel(connection: Pick<LlmConnection, 'models'>): string | undefined {
+  if (!connection.models || connection.models.length === 0) return undefined;
+  const last = connection.models[connection.models.length - 1];
+  return last == null ? undefined : typeof last === 'string' ? last : last.id;
+}
+
+/**
+ * Get the summarization model ID for a connection.
+ * Convention: last model in connection.models = summarization model.
+ * Used for response summarization, title generation, and API tool summarization.
+ *
+ * Same logic as getMiniModel() for now, but separate
+ * so summarization and mini agent models can diverge independently.
+ *
+ * @param connection - LLM connection (or partial with models array)
+ * @returns Model ID string, or undefined if no models available
+ */
+export function getSummarizationModel(connection: Pick<LlmConnection, 'models'>): string | undefined {
+  if (!connection.models || connection.models.length === 0) return undefined;
+  const last = connection.models[connection.models.length - 1];
+  return last == null ? undefined : typeof last === 'string' ? last : last.id;
+}
 
 /**
  * Generate a URL-safe slug from a display name.
@@ -298,6 +331,45 @@ export function getModelsForProviderType(providerType: LlmProviderType): ModelDe
 }
 
 /**
+ * Get the default model list for a connection's provider type.
+ * Unlike getModelsForProviderType(), this handles compat providers by returning
+ * the appropriate compat-prefixed model IDs instead of an empty array.
+ *
+ * Use this whenever you need to populate or backfill a connection's models.
+ *
+ * @param providerType - Provider type from the connection
+ * @returns Default model list (ModelDefinition[] for standard, string[] for compat)
+ */
+export function getDefaultModelsForConnection(providerType: LlmProviderType): Array<ModelDefinition | string> {
+  if (providerType === 'openai_compat') return [
+    'openai/gpt-5.2-codex',
+    'openai/gpt-5.1-codex-mini',
+  ];
+  if (providerType === 'openai') return OPENAI_MODELS;
+  if (providerType === 'anthropic_compat') return [
+    'anthropic/claude-opus-4.6',
+    'anthropic/claude-sonnet-4.5',
+    'anthropic/claude-haiku-4.5',
+  ];
+  // anthropic, bedrock, vertex
+  return ANTHROPIC_MODELS;
+}
+
+/**
+ * Get the default model ID for a connection's provider type.
+ * Derived from the first entry in getDefaultModelsForConnection() — single source of truth.
+ *
+ * @param providerType - Provider type from the connection
+ * @returns Default model ID string
+ */
+export function getDefaultModelForConnection(providerType: LlmProviderType): string {
+  const models = getDefaultModelsForConnection(providerType);
+  const first = models[0];
+  if (!first) return ANTHROPIC_MODELS[0]!.id;
+  return typeof first === 'string' ? first : first.id;
+}
+
+/**
  * Resolve the effective LLM connection slug from available fallbacks.
  *
  * Single source of truth for the fallback chain used everywhere in the UI:
@@ -320,6 +392,24 @@ export function resolveEffectiveConnectionSlug(
     ?? workspaceDefault
     ?? connections.find(c => c.isDefault)?.slug
     ?? connections[0]?.slug
+}
+
+/**
+ * Check if a session's locked connection is unavailable (deleted/removed).
+ * Returns true only when a session has an explicit llmConnection that doesn't
+ * match any current connection. Sessions without a stored connection (using
+ * the fallback chain) are never "unavailable".
+ *
+ * @param sessionConnection - Per-session connection slug (session.llmConnection)
+ * @param connections - All available connections
+ * @returns true if the session's connection no longer exists
+ */
+export function isSessionConnectionUnavailable(
+  sessionConnection: string | undefined,
+  connections: Pick<LlmConnectionWithStatus, 'slug'>[],
+): boolean {
+  if (!sessionConnection) return false
+  return !connections.some(c => c.slug === sessionConnection)
 }
 
 /**

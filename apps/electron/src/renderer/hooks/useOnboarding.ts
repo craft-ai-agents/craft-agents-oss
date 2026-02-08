@@ -71,7 +71,7 @@ interface UseOnboardingReturn {
 // Map ApiSetupMethod to LlmConnectionSetup for the new unified connection system
 function apiSetupMethodToConnectionSetup(
   method: ApiSetupMethod,
-  options: { credential?: string; baseUrl?: string; customModel?: string }
+  options: { credential?: string; baseUrl?: string; connectionDefaultModel?: string; models?: string[] }
 ): LlmConnectionSetup {
   switch (method) {
     case 'anthropic_api_key':
@@ -79,7 +79,8 @@ function apiSetupMethodToConnectionSetup(
         slug: 'anthropic-api',
         credential: options.credential,
         baseUrl: options.baseUrl,
-        defaultModel: options.customModel,
+        defaultModel: options.connectionDefaultModel,
+        models: options.models,
       }
     case 'claude_oauth':
       return {
@@ -96,6 +97,8 @@ function apiSetupMethodToConnectionSetup(
         slug: 'codex-api',
         credential: options.credential,
         baseUrl: options.baseUrl,
+        defaultModel: options.connectionDefaultModel,
+        models: options.models,
       }
   }
 }
@@ -136,7 +139,7 @@ export function useOnboarding({
   }, [])
 
   // Save configuration using the new unified LLM connection API
-  const handleSaveConfig = useCallback(async (credential?: string, options?: { baseUrl?: string; customModel?: string }) => {
+  const handleSaveConfig = useCallback(async (credential?: string, options?: { baseUrl?: string; connectionDefaultModel?: string; models?: string[] }) => {
     if (!state.apiSetupMethod) {
       return
     }
@@ -148,7 +151,8 @@ export function useOnboarding({
       const setup = apiSetupMethodToConnectionSetup(state.apiSetupMethod, {
         credential,
         baseUrl: options?.baseUrl,
-        customModel: options?.customModel,
+        connectionDefaultModel: options?.connectionDefaultModel,
+        models: options?.models,
       })
       // Use new unified API
       const result = await window.electronAPI.setupLlmConnection(setup)
@@ -273,13 +277,14 @@ export function useOnboarding({
         testResult = await window.electronAPI.testOpenAiConnection(
           data.apiKey,
           data.baseUrl,
+          data.models,
         )
       } else {
         // Anthropic validation - tests auth, endpoint, model, and tool support
         testResult = await window.electronAPI.testApiConnection(
           data.apiKey,
           data.baseUrl,
-          data.customModel,
+          data.models,
         )
       }
 
@@ -292,7 +297,11 @@ export function useOnboarding({
         return
       }
 
-      await handleSaveConfig(data.apiKey, { baseUrl: data.baseUrl, customModel: data.customModel })
+      await handleSaveConfig(data.apiKey, {
+        baseUrl: data.baseUrl,
+        connectionDefaultModel: data.connectionDefaultModel,
+        models: data.models,
+      })
 
       setState(s => ({
         ...s,
@@ -339,7 +348,8 @@ export function useOnboarding({
     try {
       // ChatGPT OAuth (single-step flow - opens browser, captures tokens automatically)
       if (effectiveMethod === 'chatgpt_oauth') {
-        const result = await window.electronAPI.startChatGptOAuth()
+        const connectionSlug = apiSetupMethodToConnectionSetup(effectiveMethod, {}).slug
+        const result = await window.electronAPI.startChatGptOAuth(connectionSlug)
 
         if (result.success) {
           // Tokens captured automatically, save config and complete
@@ -405,7 +415,9 @@ export function useOnboarding({
     setState(s => ({ ...s, credentialStatus: 'validating', errorMessage: undefined }))
 
     try {
-      const result = await window.electronAPI.exchangeClaudeCode(code.trim())
+      // claude_oauth is the only method that uses the code exchange flow
+      const connectionSlug = apiSetupMethodToConnectionSetup('claude_oauth', {}).slug
+      const result = await window.electronAPI.exchangeClaudeCode(code.trim(), connectionSlug)
 
       if (result.success && result.token) {
         setIsWaitingForCode(false)

@@ -18,7 +18,6 @@
  * - source_slack_oauth_trigger: Start Slack OAuth authentication
  * - source_microsoft_oauth_trigger: Start Microsoft OAuth authentication
  * - source_credential_prompt: Prompt user for API credentials
- * - call_llm: Invoke secondary Claude model for subtasks
  */
 
 import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
@@ -26,7 +25,6 @@ import { z } from 'zod';
 import { getSessionPlansPath } from '../sessions/storage.ts';
 import { debug } from '../utils/debug.ts';
 import { DOC_REFS } from '../docs/index.ts';
-import { createLLMTool } from './llm-tool.ts';
 import { createClaudeContext } from './claude-context.ts';
 import { basename } from 'node:path';
 
@@ -451,8 +449,6 @@ export function getSessionScopedTools(
       return convertResult(result);
     }),
 
-    // call_llm - use the existing LLM tool implementation
-    createLLMTool({ sessionId }),
   ];
 
   // Create MCP server

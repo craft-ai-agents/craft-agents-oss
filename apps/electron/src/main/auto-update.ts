@@ -285,14 +285,14 @@ function checkForExistingDownload(): { exists: boolean; version?: string } {
     const updateInfoFile = files.find(f => f === 'update-info.json')
     if (updateInfoFile) {
       const infoPath = path.join(cacheDir, updateInfoFile)
-      const info = readJsonFileSync(infoPath)
+      const info = readJsonFileSync(infoPath) as Record<string, unknown> | null
       mainLog.info(`[auto-update] update-info.json contents: ${JSON.stringify(info)}`)
 
       // electron-updater uses 'fileName' (not 'path') in update-info.json
-      const fileName = info.fileName || info.path
+      const fileName = (info?.fileName || info?.path) as string | undefined
       if (fileName && fs.existsSync(path.join(cacheDir, fileName))) {
         mainLog.info(`[auto-update] Found existing download via update-info.json: ${fileName}`)
-        return { exists: true, version: info.version }
+        return { exists: true, version: info?.version as string }
       }
     }
 
