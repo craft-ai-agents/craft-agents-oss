@@ -6,8 +6,7 @@
   "private": true,
   "workspaces": [
     "packages/*",
-    "apps/*",
-    "!apps/online-docs"
+    "apps/*"
   ],
   "scripts": {
     "test": "bun test",

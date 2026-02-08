@@ -137,6 +137,15 @@ async function buildMcpServers(): Promise<void> {
   if (!existsSync(sessionDistDir)) mkdirSync(sessionDistDir, { recursive: true });
   if (!existsSync(bridgeDistDir)) mkdirSync(bridgeDistDir, { recursive: true });
 
+  const sessionSrc = join(ROOT_DIR, "packages/session-mcp-server/src/index.ts");
+  const bridgeSrc = join(ROOT_DIR, "packages/bridge-mcp-server/src/index.ts");
+
+  // Skip building if source files don't exist (OSS release without proprietary sources)
+  if (!existsSync(sessionSrc) || !existsSync(bridgeSrc)) {
+    console.log("⏭️  MCP server sources not found, skipping (Codex features unavailable)");
+    return;
+  }
+
   // Build both servers in parallel
   const [sessionResult, bridgeResult] = await Promise.all([
     runEsbuild(
