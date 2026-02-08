@@ -1,14 +1,15 @@
 /**
  * LabelsSettingsPage
  *
- * Displays workspace label configuration in two data tables:
+ * Displays workspace label configuration in three data tables:
  * 1. Label Hierarchy - tree table with expand/collapse showing all labels
  * 2. Auto-Apply Rules - flat table showing all regex rules across labels
+ * 3. Path Rules - path-to-label mappings for automatic labeling based on workingDirectory
  *
  * Each section has an Edit button that opens an EditPopover for AI-assisted editing
- * of the underlying labels/config.json file.
+ * of the underlying configuration files.
  *
- * Data is loaded via the useLabels hook which subscribes to live config changes.
+ * Data is loaded via the useLabels and usePathRules hooks which subscribe to live config changes.
  */
 
 import * as React from 'react'
@@ -20,9 +21,11 @@ import { getDocUrl } from '@craft-agent/shared/docs/doc-links'
 import { Loader2 } from 'lucide-react'
 import { useAppShellContext, useActiveWorkspace } from '@/context/AppShellContext'
 import { useLabels } from '@/hooks/useLabels'
+import { usePathRules } from '@/hooks/usePathRules'
 import {
   LabelsDataTable,
   AutoRulesDataTable,
+  PathRulesDataTable,
 } from '@/components/info'
 import {
   SettingsSection,
@@ -40,16 +43,24 @@ export default function LabelsSettingsPage() {
   const { activeWorkspaceId } = useAppShellContext()
   const activeWorkspace = useActiveWorkspace()
   const { labels, isLoading } = useLabels(activeWorkspaceId)
+  const { rules: pathRules, isLoading: isLoadingPathRules } = usePathRules(activeWorkspaceId)
 
   // Resolve edit configs using the workspace root path
   const rootPath = activeWorkspace?.rootPath || ''
   const labelsEditConfig = getEditConfig('edit-labels', rootPath)
   const autoRulesEditConfig = getEditConfig('edit-auto-rules', rootPath)
+  const pathRulesEditConfig = getEditConfig('edit-path-rules', rootPath)
 
   // Secondary action: open the labels config file directly in system editor
   const editFileAction = rootPath ? {
     label: 'Edit File',
     filePath: `${rootPath}/labels/config.json`,
+  } : undefined
+
+  // Secondary action for path rules
+  const pathRulesEditFileAction = rootPath ? {
+    label: 'Edit File',
+    filePath: `${rootPath}/labels/path-rules.json`,
   } : undefined
 
   return (
@@ -149,6 +160,46 @@ export default function LabelsSettingsPage() {
                         fullscreen
                         fullscreenTitle="Auto-Apply Rules"
                       />
+                    </SettingsCard>
+                  </SettingsSection>
+
+                  {/* Path Rules Section */}
+                  <SettingsSection
+                    title="Path Rules"
+                    description="Automatically apply labels based on the session's working directory. When you start a chat in a specific folder, matching labels are automatically assigned."
+                    action={
+                      <EditPopover
+                        trigger={<EditButton />}
+                        context={pathRulesEditConfig.context}
+                        example={pathRulesEditConfig.example}
+                        model={pathRulesEditConfig.model}
+                        systemPromptPreset={pathRulesEditConfig.systemPromptPreset}
+                        secondaryAction={pathRulesEditFileAction}
+                      />
+                    }
+                  >
+                    <SettingsCard className="p-0">
+                      {isLoadingPathRules ? (
+                        <div className="flex items-center justify-center py-8">
+                          <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                        </div>
+                      ) : pathRules.length > 0 ? (
+                        <PathRulesDataTable
+                          rules={pathRules}
+                          labels={labels}
+                          searchable
+                          maxHeight={350}
+                          fullscreen
+                          fullscreenTitle="Path Rules"
+                        />
+                      ) : (
+                        <div className="p-8 text-center text-muted-foreground">
+                          <p className="text-sm">No path rules configured.</p>
+                          <p className="text-xs mt-1 text-foreground/40">
+                            Path rules can be created by the agent or by editing <code className="bg-foreground/5 px-1 rounded">labels/path-rules.json</code> in your workspace.
+                          </p>
+                        </div>
+                      )}
                     </SettingsCard>
                   </SettingsSection>
                 </>

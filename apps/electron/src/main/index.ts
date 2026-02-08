@@ -3,7 +3,7 @@
 import { loadShellEnv } from './shell-env'
 loadShellEnv()
 
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, powerMonitor } from 'electron'
 import { createHash } from 'crypto'
 import { hostname, homedir } from 'os'
 import * as Sentry from '@sentry/electron/main'
@@ -45,8 +45,8 @@ Sentry.init({
           for (const key of Object.keys(breadcrumb.data)) {
             const lowerKey = key.toLowerCase()
             if (lowerKey.includes('token') || lowerKey.includes('key') ||
-                lowerKey.includes('secret') || lowerKey.includes('password') ||
-                lowerKey.includes('credential') || lowerKey.includes('auth')) {
+              lowerKey.includes('secret') || lowerKey.includes('password') ||
+              lowerKey.includes('credential') || lowerKey.includes('auth')) {
               breadcrumb.data[key] = '[REDACTED]'
             }
           }
@@ -80,7 +80,8 @@ import { registerThumbnailScheme, registerThumbnailHandler } from './thumbnail-p
 import log, { isDebugMode, mainLog, getLogFilePath } from './logger'
 import { setPerfEnabled, enableDebug } from '@craft-agent/shared/utils'
 import { initNotificationService, clearBadgeCount, initBadgeIcon, initInstanceBadge } from './notifications'
-import { checkForUpdatesOnLaunch, setWindowManager as setAutoUpdateWindowManager, isUpdating } from './auto-update'
+import { isUpdating } from './auto-update'
+import { initializeGlobalShortcut, cleanupGlobalShortcut } from './global-shortcut'
 
 // Initialize electron-log for renderer process support
 log.initialize()
@@ -92,21 +93,38 @@ if (isDebugMode) {
   setPerfEnabled(true)
 }
 
-// Custom URL scheme for deeplinks (e.g., craftagents://auth-complete)
-// Supports multi-instance dev: CRAFT_DEEPLINK_SCHEME env var (craftagents1, craftagents2, etc.)
-const DEEPLINK_SCHEME = process.env.CRAFT_DEEPLINK_SCHEME || 'craftagents'
+// Custom URL scheme for deeplinks (e.g., bunnyagents://auth-complete)
+// Supports multi-instance dev: CRAFT_DEEPLINK_SCHEME env var (bunnyagents1, bunnyagents2, etc.)
+const DEEPLINK_SCHEME = process.env.CRAFT_DEEPLINK_SCHEME || 'bunnyagents'
 
 let windowManager: WindowManager | null = null
 let sessionManager: SessionManager | null = null
 
+// Track system interruptions (lock screen, sleep) to distinguish from normal app switching
+// When true, the next window focus should NOT trigger auto-new-chat
+let isSystemInterrupted = false
+
+/**
+ * Consume the system interrupted flag (returns current value and resets to false)
+ * Called by renderer when handling window focus to check if focus was from unlock/resume
+ */
+export function consumeSystemInterrupted(): boolean {
+  const wasInterrupted = isSystemInterrupted
+  isSystemInterrupted = false
+  return wasInterrupted
+}
+
 // Store pending deep link if app not ready yet (cold start)
 let pendingDeepLink: string | null = null
 
+// Store pending folder path if app not ready yet (cold start via 'open -a Bunny /path')
+let pendingFolderPath: string | null = null
+
 // Set app name early (before app.whenReady) to ensure correct macOS menu bar title
 // Supports multi-instance dev: CRAFT_APP_NAME env var (e.g., "Craft Agents [1]")
-app.setName(process.env.CRAFT_APP_NAME || 'Craft Agents')
+app.setName(process.env.CRAFT_APP_NAME || 'Bunny')
 
-// Register as default protocol client for craftagents:// URLs
+// Register as default protocol client for bunnyagents:// URLs
 // This must be done before app.whenReady() on some platforms
 if (process.defaultApp) {
   // Development mode: need to pass the app path
@@ -134,6 +152,36 @@ app.on('open-url', (event, url) => {
   } else {
     // App not ready - store for later
     pendingDeepLink = url
+  }
+})
+
+// Handle folder drop on dock icon or 'open -a Bunny /path' command (macOS)
+app.on('open-file', (event, path) => {
+  event.preventDefault()
+  mainLog.info('Received open-file:', path)
+
+  // Check if path is a directory
+  try {
+    const stat = require('fs').statSync(path)
+    if (!stat.isDirectory()) {
+      mainLog.info('open-file: not a directory, ignoring:', path)
+      return
+    }
+  } catch (err) {
+    mainLog.error('open-file: failed to stat path:', path, err)
+    return
+  }
+
+  if (windowManager) {
+    // App is ready - open new chat with workdir
+    const encodedPath = encodeURIComponent(path)
+    const deepLink = `bunnyagents://action/new-chat?workdir=${encodedPath}`
+    handleDeepLink(deepLink, windowManager).catch(err => {
+      mainLog.error('Failed to handle open-file deep link:', err)
+    })
+  } else {
+    // App not ready - store for later
+    pendingFolderPath = path
   }
 })
 
@@ -287,16 +335,15 @@ app.whenReady().then(async () => {
       mainLog.warn('Failed to set Sentry context tags:', err)
     }
 
-    // Initialize auto-update (check immediately on launch)
-    // Skip in dev mode to avoid replacing /Applications app and launching it instead
-    setAutoUpdateWindowManager(windowManager)
-    if (app.isPackaged) {
-      checkForUpdatesOnLaunch().catch(err => {
-        mainLog.error('[auto-update] Launch check failed:', err)
-      })
-    } else {
-      mainLog.info('[auto-update] Skipping auto-update in dev mode')
-    }
+    // Auto-update disabled - using custom fork, not the original open source version
+    // setAutoUpdateWindowManager(windowManager)
+    // if (app.isPackaged) {
+    //   checkForUpdatesOnLaunch().catch(err => {
+    //     mainLog.error('[auto-update] Launch check failed:', err)
+    //   })
+    // } else {
+    //   mainLog.info('[auto-update] Skipping auto-update in dev mode')
+    // }
 
     // Process pending deep link from cold start
     if (pendingDeepLink) {
@@ -304,6 +351,29 @@ app.whenReady().then(async () => {
       await handleDeepLink(pendingDeepLink, windowManager)
       pendingDeepLink = null
     }
+
+    // Process pending folder path from cold start (via 'open -a Bunny /path')
+    if (pendingFolderPath) {
+      mainLog.info('Processing pending folder path:', pendingFolderPath)
+      const encodedPath = encodeURIComponent(pendingFolderPath)
+      const deepLink = `bunnyagents://action/new-chat?workdir=${encodedPath}`
+      await handleDeepLink(deepLink, windowManager)
+      pendingFolderPath = null
+    }
+
+    // Listen for system interruptions (lock screen, sleep)
+    // These should NOT trigger auto-new-chat when window regains focus
+    powerMonitor.on('lock-screen', () => {
+      mainLog.info('[powerMonitor] Screen locked')
+      isSystemInterrupted = true
+    })
+    powerMonitor.on('suspend', () => {
+      mainLog.info('[powerMonitor] System suspended')
+      isSystemInterrupted = true
+    })
+
+    // Initialize global shortcut (if previously enabled)
+    initializeGlobalShortcut()
 
     mainLog.info('App initialized successfully')
     if (isDebugMode) {
@@ -314,12 +384,15 @@ app.whenReady().then(async () => {
     // Continue anyway - the app will show errors in the UI
   }
 
-  // macOS: Re-create window when dock icon is clicked
+  // macOS: Reveal hidden windows or re-create when dock icon is clicked
   app.on('activate', () => {
-    if (!windowManager?.hasWindows()) {
+    if (!windowManager) return
+
+    const managedWindows = windowManager.getAllWindows()
+    if (managedWindows.length === 0) {
       // Open first workspace or last focused
       const workspaces = getWorkspaces()
-      if (workspaces.length > 0 && windowManager) {
+      if (workspaces.length > 0) {
         const savedState = loadWindowState()
         const wsId = savedState?.lastFocusedWorkspaceId || workspaces[0].id
         // Verify workspace still exists
@@ -329,6 +402,21 @@ app.whenReady().then(async () => {
           windowManager.createWindow({ workspaceId: workspaces[0].id })
         }
       }
+      return
+    }
+
+    const hasVisibleWindow = managedWindows.some(({ window }) => window.isVisible() && !window.isMinimized())
+    if (!hasVisibleWindow) {
+      for (const { window } of managedWindows) {
+        if (window.isMinimized()) {
+          window.restore()
+        }
+        if (!window.isVisible()) {
+          window.show()
+        }
+      }
+      const focusTarget = windowManager.getLastActiveWindow() ?? managedWindows[0].window
+      focusTarget.focus()
     }
   })
 })
@@ -378,6 +466,9 @@ app.on('before-quit', async (event) => {
     }
     // Clean up SessionManager resources (file watchers, timers, etc.)
     sessionManager.cleanup()
+
+    // Clean up global shortcuts
+    cleanupGlobalShortcut()
 
     // If update is in progress, let electron-updater handle the quit flow
     // Force exit breaks the NSIS installer on Windows

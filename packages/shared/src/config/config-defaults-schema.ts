@@ -14,6 +14,10 @@ export interface ConfigDefaults {
     authType: AuthType;
     notificationsEnabled: boolean;
     colorTheme: string;
+    /** Default API base URL for new installations */
+    anthropicBaseUrl?: string;
+    /** Default model for new installations */
+    customModel?: string;
     autoCapitalisation: boolean;
     sendMessageKey: 'enter' | 'cmd-enter';
     spellCheck: boolean;
@@ -29,6 +33,14 @@ export interface ConfigDefaults {
 }
 
 /**
+ * Built-in IDEA (ByteDance) API configuration
+ * Used as default provider for new installations
+ */
+export const IDEA_BASE_URL = 'https://idea.bytedance.net/llm_middleware';
+export const IDEA_API_KEY = 'sk-abcxxx';
+export const IDEA_DEFAULT_MODEL = 'gemini-3-flash-priority';
+
+/**
  * Bundled defaults (shipped with the app)
  * This is the source of truth for default values.
  */
@@ -38,8 +50,10 @@ export const BUNDLED_CONFIG_DEFAULTS: ConfigDefaults = {
   defaults: {
     authType: 'api_key',
     notificationsEnabled: true,
-    colorTheme: 'default',
-    autoCapitalisation: true,
+    colorTheme: 'xcode',
+    anthropicBaseUrl: IDEA_BASE_URL,
+    customModel: IDEA_DEFAULT_MODEL,
+    autoCapitalisation: false,
     sendMessageKey: 'enter',
     spellCheck: false,
   },

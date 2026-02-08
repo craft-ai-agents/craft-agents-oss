@@ -24,12 +24,13 @@ import {
   FolderOpen,
   HelpCircle,
   ExternalLink,
+  Store,
+  PanelRight,
+  PanelLeft,
 } from "lucide-react"
-import { PanelRightRounded } from "../icons/PanelRightRounded"
-import { PanelLeftRounded } from "../icons/PanelLeftRounded"
 // TodoStateIcons no longer used - icons come from dynamic todoStates
 import { SourceAvatar } from "@/components/ui/source-avatar"
-import { AppMenu } from "../AppMenu"
+import { AppMenu, type ViewMode } from "../AppMenu"
 import { SquarePenRounded } from "../icons/SquarePenRounded"
 import { McpIcon } from "../icons/McpIcon"
 import { cn } from "@/lib/utils"
@@ -481,9 +482,43 @@ function AppShellContent({
     openNewChat,
   } = contextValue
 
-  const [isSidebarVisible, setIsSidebarVisible] = React.useState(() => {
-    return storage.get(storage.KEYS.sidebarVisible, !defaultCollapsed)
+  // View mode state - single source of truth for layout visibility
+  // 'full': show all (sidebar + session list + chat)
+  // 'compact': hide sidebar, show session list + chat
+  // 'focus': hide both sidebar and session list, show only chat
+  const [viewMode, setViewMode] = React.useState<ViewMode>(() => {
+    // Migrate from old state if present
+    const oldFocusMode = storage.get(storage.KEYS.focusModeEnabled, false)
+    if (oldFocusMode) return 'focus'
+
+    const oldSidebarVisible = storage.get(storage.KEYS.sidebarVisible, true)
+    if (!oldSidebarVisible) return 'compact'
+
+    return storage.get<ViewMode>(storage.KEYS.viewMode, 'full')
   })
+
+  // Cycle through view modes: full -> compact -> focus -> full
+  const cycleViewMode = React.useCallback(() => {
+    setViewMode(current => {
+      switch (current) {
+        case 'full': return 'compact'
+        case 'compact': return 'focus'
+        case 'focus': return 'full'
+      }
+    })
+  }, [])
+
+  // Toggle sidebar visibility (Cmd+B behavior): toggles between full and compact
+  const toggleSidebar = React.useCallback(() => {
+    setViewMode(current => current === 'full' ? 'compact' : 'full')
+  }, [])
+
+  // Derived states from viewMode (prop-based focus mode overrides)
+  const effectiveFocusMode = isFocusedMode || viewMode === 'focus'
+  const effectiveCompactMode = viewMode === 'compact' || effectiveFocusMode
+  // For backwards compatibility with existing code that uses isSidebarVisible
+  const isSidebarVisible = viewMode === 'full' && !isFocusedMode
+
   const [sidebarWidth, setSidebarWidth] = React.useState(() => {
     return storage.get(storage.KEYS.sidebarWidth, 220)
   })
@@ -500,14 +535,6 @@ function AppShellContent({
     return storage.get(storage.KEYS.rightSidebarWidth, 300)
   })
   const [skipRightSidebarAnimation, setSkipRightSidebarAnimation] = React.useState(false)
-
-  // Focus mode state - hides both sidebars for distraction-free chat
-  // Can be enabled via prop (URL param for new windows) or toggled via Cmd+.
-  const [isFocusModeActive, setIsFocusModeActive] = React.useState(() => {
-    return storage.get(storage.KEYS.focusModeEnabled, false)
-  })
-  // Effective focus mode combines prop-based (immutable) and state-based (toggleable)
-  const effectiveFocusMode = isFocusedMode || isFocusModeActive
 
   // Window width tracking for responsive behavior
   const [windowWidth, setWindowWidth] = React.useState(window.innerWidth)
@@ -559,6 +586,7 @@ function AppShellContent({
       case 'state': return `state:${chatFilter.stateId}`
       case 'label': return `label:${chatFilter.labelId}`
       case 'view': return `view:${chatFilter.viewId}`
+      case 'workingDir': return `workingDir:${chatFilter.workingDir}`
       default: return 'allChats'
     }
   }, [chatFilter])
@@ -715,7 +743,7 @@ function AppShellContent({
   const [collapsedItems, setCollapsedItems] = React.useState<Set<string>>(() => {
     const saved = storage.get<string[] | null>(storage.KEYS.collapsedSidebarItems, null)
     if (saved !== null) return new Set(saved)
-    return new Set(['nav:labels'])
+    return new Set(['nav:labels', 'nav:workingDirs'])
   })
   const isExpanded = React.useCallback((id: string) => !collapsedItems.has(id), [collapsedItems])
   const toggleExpanded = React.useCallback((id: string) => {
@@ -746,8 +774,10 @@ function AppShellContent({
 
   // Enabled permission modes for Shift+Tab cycling (min 2 modes)
   const [enabledModes, setEnabledModes] = React.useState<PermissionMode[]>(['safe', 'ask', 'allow-all'])
+  // Whether session status (todo) feature is enabled
+  const [statusEnabled, setStatusEnabled] = React.useState(false)
 
-  // Load workspace settings (for localMcpEnabled and cyclablePermissionModes) on workspace change
+  // Load workspace settings (for localMcpEnabled, cyclablePermissionModes, statusEnabled) on workspace change
   React.useEffect(() => {
     if (!activeWorkspaceId) return
     window.electronAPI.getWorkspaceSettings(activeWorkspaceId).then((settings) => {
@@ -757,6 +787,8 @@ function AppShellContent({
         if (settings.cyclablePermissionModes && settings.cyclablePermissionModes.length >= 2) {
           setEnabledModes(settings.cyclablePermissionModes)
         }
+        // Load statusEnabled from workspace settings
+        setStatusEnabled(settings.statusEnabled ?? false)
       }
     }).catch((err) => {
       console.error('[Chat] Failed to load workspace settings:', err)
@@ -793,7 +825,7 @@ function AppShellContent({
       setExpandedFolders(new Set(newExpandedFolders))
 
       const newCollapsedItems = storage.get<string[] | null>(storage.KEYS.collapsedSidebarItems, null, activeWorkspaceId)
-      setCollapsedItems(newCollapsedItems !== null ? new Set(newCollapsedItems) : new Set(['nav:labels']))
+      setCollapsedItems(newCollapsedItems !== null ? new Set(newCollapsedItems) : new Set(['nav:labels', 'nav:workingDirs']))
     }
 
     previousWorkspaceRef.current = activeWorkspaceId
@@ -988,23 +1020,25 @@ function AppShellContent({
       // Tab navigation between zones
       { key: 'Tab', action: focusNextZone, when: () => !document.querySelector('[role="dialog"]') },
       // Shift+Tab cycles permission mode through enabled modes (textarea handles its own, this handles when focus is elsewhere)
-      { key: 'Tab', shift: true, action: () => {
-        if (session.selected) {
-          const currentOptions = contextValue.sessionOptions.get(session.selected)
-          const currentMode = currentOptions?.permissionMode ?? 'ask'
-          // Cycle through enabled permission modes
-          const modes = enabledModes.length >= 2 ? enabledModes : ['safe', 'ask', 'allow-all'] as PermissionMode[]
-          const currentIndex = modes.indexOf(currentMode)
-          // If current mode not in enabled list, jump to first enabled mode
-          const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % modes.length
-          const nextMode = modes[nextIndex]
-          contextValue.onSessionOptionsChange(session.selected, { permissionMode: nextMode })
-        }
-      }, when: () => !document.querySelector('[role="dialog"]') && document.activeElement?.tagName !== 'TEXTAREA' },
+      {
+        key: 'Tab', shift: true, action: () => {
+          if (session.selected) {
+            const currentOptions = contextValue.sessionOptions.get(session.selected)
+            const currentMode = currentOptions?.permissionMode ?? 'ask'
+            // Cycle through enabled permission modes
+            const modes = enabledModes.length >= 2 ? enabledModes : ['safe', 'ask', 'allow-all'] as PermissionMode[]
+            const currentIndex = modes.indexOf(currentMode)
+            // If current mode not in enabled list, jump to first enabled mode
+            const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % modes.length
+            const nextMode = modes[nextIndex]
+            contextValue.onSessionOptionsChange(session.selected, { permissionMode: nextMode })
+          }
+        }, when: () => !document.querySelector('[role="dialog"]') && document.activeElement?.tagName !== 'TEXTAREA'
+      },
       // Sidebar toggle (CMD+B)
-      { key: 'b', cmd: true, action: () => setIsSidebarVisible(v => !v) },
-      // Focus mode toggle (CMD+.) - hides both sidebars
-      { key: '.', cmd: true, action: () => setIsFocusModeActive(v => !v) },
+      { key: 'b', cmd: true, action: toggleSidebar },
+      // View mode cycle (CMD+.) - cycles through full -> compact -> focus
+      { key: '.', cmd: true, action: cycleViewMode },
       // New chat
       { key: 'n', cmd: true, action: () => handleNewChat(true) },
       // Settings
@@ -1017,27 +1051,29 @@ function AppShellContent({
       { key: 'g', cmd: true, shift: true, action: () => chatDisplayRef.current?.goToPrevMatch(), when: () => searchActive && (chatMatchInfo.count ?? 0) > 0 },
       // ESC to stop processing - requires double-press within 1 second
       // First press shows warning overlay, second press interrupts
-      { key: 'Escape', action: () => {
-        if (session.selected) {
-          const meta = sessionMetaMap.get(session.selected)
-          if (meta?.isProcessing) {
-            // handleEscapePress returns true on second press (within timeout)
-            const shouldInterrupt = handleEscapePress()
-            if (shouldInterrupt) {
-              window.electronAPI.cancelProcessing(session.selected, false).catch(err => {
-                console.error('[AppShell] Failed to cancel processing:', err)
-              })
+      {
+        key: 'Escape', action: () => {
+          if (session.selected) {
+            const meta = sessionMetaMap.get(session.selected)
+            if (meta?.isProcessing) {
+              // handleEscapePress returns true on second press (within timeout)
+              const shouldInterrupt = handleEscapePress()
+              if (shouldInterrupt) {
+                window.electronAPI.cancelProcessing(session.selected, false).catch(err => {
+                  console.error('[AppShell] Failed to cancel processing:', err)
+                })
+              }
             }
           }
+        }, when: () => {
+          // Only active when no overlay is open and session is processing
+          // Overlays (dialogs, menus, popovers, etc.) should handle their own Escape
+          if (hasOpenOverlay()) return false
+          if (!session.selected) return false
+          const meta = sessionMetaMap.get(session.selected)
+          return meta?.isProcessing ?? false
         }
-      }, when: () => {
-        // Only active when no overlay is open and session is processing
-        // Overlays (dialogs, menus, popovers, etc.) should handle their own Escape
-        if (hasOpenOverlay()) return false
-        if (!session.selected) return false
-        const meta = sessionMetaMap.get(session.selected)
-        return meta?.isProcessing ?? false
-      }},
+      },
       // Theme toggle (CMD+SHIFT+A)
       { key: 'a', cmd: true, shift: true, action: () => setMode(resolvedMode === 'dark' ? 'light' : 'dark') },
     ],
@@ -1226,6 +1262,25 @@ function AppShellContent({
     return counts
   }, [sources])
 
+  // Group sessions by working directory (for sidebar "Working Directory" section)
+  // Returns array of { path, displayName, count } sorted by count descending
+  const workingDirGroups = useMemo(() => {
+    const countMap = new Map<string, number>()
+    for (const s of workspaceSessionMetas) {
+      if (s.workingDirectory) {
+        countMap.set(s.workingDirectory, (countMap.get(s.workingDirectory) || 0) + 1)
+      }
+    }
+    return Array.from(countMap.entries())
+      .map(([path, count]) => ({
+        path,
+        // Display the last folder name (basename) as the title
+        displayName: path.split('/').filter(Boolean).pop() || path,
+        count,
+      }))
+      .sort((a, b) => b.count - a.count)
+  }, [workspaceSessionMetas])
+
   // Filter session metadata based on sidebar mode and chat filter
   const filteredSessionMetas = useMemo(() => {
     // When in sources mode, return empty (no sessions to show)
@@ -1370,10 +1425,10 @@ function AppShellContent({
         style={{ pointerEvents: isRightSidebarVisible ? 'none' : 'auto' }}
       >
         <HeaderIconButton
-          icon={<PanelRightRounded className="h-5 w-6" />}
+          icon={<PanelRight className="h-4 w-4" />}
           onClick={() => setIsRightSidebarVisible(true)}
-          tooltip="Open sidebar"
-          className="text-foreground"
+
+          className="text-foreground/70"
         />
       </motion.div>
     )
@@ -1385,15 +1440,15 @@ function AppShellContent({
 
     return (
       <HeaderIconButton
-        icon={<PanelLeftRounded className="h-5 w-6" />}
+        icon={<PanelLeft className="h-4 w-4" />}
         onClick={() => setIsRightSidebarVisible(false)}
-        tooltip="Close sidebar"
-        className="text-foreground"
+
+        className="text-foreground/70"
       />
     )
   }, [isRightSidebarVisible])
 
-  // Extend context value with local overrides (textareaRef, wrapped onDeleteSession, sources, skills, labels, enabledModes, rightSidebarOpenButton, effectiveTodoStates)
+  // Extend context value with local overrides (textareaRef, wrapped onDeleteSession, sources, skills, labels, enabledModes, rightSidebarOpenButton, effectiveTodoStates, statusEnabled)
   const appShellContextValue = React.useMemo<AppShellContextType>(() => ({
     ...contextValue,
     onDeleteSession: handleDeleteSession,
@@ -1404,6 +1459,7 @@ function AppShellContent({
     onSessionLabelsChange: handleSessionLabelsChange,
     enabledModes,
     todoStates: effectiveTodoStates,
+    statusEnabled,
     onSessionSourcesChange: handleSessionSourcesChange,
     rightSidebarButton: rightSidebarOpenButton,
     // Search state for ChatDisplay highlighting
@@ -1411,7 +1467,7 @@ function AppShellContent({
     isSearchModeActive: searchActive,
     chatDisplayRef,
     onChatMatchInfoChange: handleChatMatchInfoChange,
-  }), [contextValue, handleDeleteSession, sources, skills, labelConfigs, handleSessionLabelsChange, enabledModes, effectiveTodoStates, handleSessionSourcesChange, rightSidebarOpenButton, searchActive, searchQuery, handleChatMatchInfoChange])
+  }), [contextValue, handleDeleteSession, sources, skills, labelConfigs, handleSessionLabelsChange, enabledModes, effectiveTodoStates, statusEnabled, handleSessionSourcesChange, rightSidebarOpenButton, searchActive, searchQuery, handleChatMatchInfoChange])
 
   // Persist expanded folders to localStorage (workspace-scoped)
   React.useEffect(() => {
@@ -1419,36 +1475,31 @@ function AppShellContent({
     storage.set(storage.KEYS.expandedFolders, [...expandedFolders], activeWorkspaceId)
   }, [expandedFolders, activeWorkspaceId])
 
-  // Persist sidebar visibility to localStorage
-  React.useEffect(() => {
-    storage.set(storage.KEYS.sidebarVisible, isSidebarVisible)
-  }, [isSidebarVisible])
-
   // Persist right sidebar visibility to localStorage
   React.useEffect(() => {
     storage.set(storage.KEYS.rightSidebarVisible, isRightSidebarVisible)
   }, [isRightSidebarVisible])
 
-  // Persist focus mode state to localStorage
+  // Persist view mode state to localStorage
   React.useEffect(() => {
-    storage.set(storage.KEYS.focusModeEnabled, isFocusModeActive)
-  }, [isFocusModeActive])
+    storage.set(storage.KEYS.viewMode, viewMode)
+  }, [viewMode])
 
-  // Listen for focus mode toggle from menu (View → Focus Mode)
+  // Listen for focus mode toggle from menu (View → Focus Mode) - now cycles view mode
   React.useEffect(() => {
     const cleanup = window.electronAPI.onMenuToggleFocusMode?.(() => {
-      setIsFocusModeActive(v => !v)
+      cycleViewMode()
     })
     return cleanup
-  }, [])
+  }, [cycleViewMode])
 
   // Listen for sidebar toggle from menu (View → Toggle Sidebar)
   React.useEffect(() => {
     const cleanup = window.electronAPI.onMenuToggleSidebar?.(() => {
-      setIsSidebarVisible(v => !v)
+      toggleSidebar()
     })
     return cleanup
-  }, [])
+  }, [toggleSidebar])
 
   // Persist per-view filter map to localStorage (workspace-scoped)
   React.useEffect(() => {
@@ -1482,6 +1533,11 @@ function AppShellContent({
 
   const handleViewClick = useCallback((viewId: string) => {
     navigate(routes.view.view(viewId))
+  }, [])
+
+  // Handler for working directory filter views
+  const handleWorkingDirClick = useCallback((workingDir: string) => {
+    navigate(routes.view.workingDir(workingDir))
   }, [])
 
   // DnD handler: reorder statuses (flat list drag-and-drop)
@@ -1640,17 +1696,31 @@ function AppShellContent({
   }, [captureContextMenuPosition])
 
   // Create a new chat and select it
+  // When in a workingDir filter view, default the new session to that working directory
   const handleNewChat = useCallback(async (_useCurrentAgent: boolean = true) => {
     if (!activeWorkspace) return
 
-    // Exit search mode and switch to All Chats
+    // Exit search mode
     setSearchActive(false)
     setSearchQuery('')
 
-    const newSession = await onCreateSession(activeWorkspace.id)
-    // Navigate to the new session via central routing
-    navigate(routes.view.allChats(newSession.id))
-  }, [activeWorkspace, onCreateSession])
+    // If currently in a workingDir filter, create session with that working directory
+    const createOptions: import('../../../shared/types').CreateSessionOptions = {}
+    if (chatFilter?.kind === 'workingDir') {
+      createOptions.workingDirectory = chatFilter.workingDir
+    }
+
+    const newSession = await onCreateSession(activeWorkspace.id, createOptions)
+
+    // Navigate to the new session, preserving the workingDir filter context
+    if (chatFilter?.kind === 'workingDir') {
+      navigate(routes.view.workingDir(chatFilter.workingDir, newSession.id))
+    } else {
+      navigate(routes.view.allChats(newSession.id))
+    }
+    // Focus chat input after creating new session
+    requestAnimationFrame(() => focusChatInput())
+  }, [activeWorkspace, onCreateSession, focusChatInput, chatFilter])
 
   // Delete Source - simplified since agents system is removed
   const handleDeleteSource = useCallback(async (sourceSlug: string) => {
@@ -1695,8 +1765,12 @@ function AppShellContent({
   const unifiedSidebarItems = React.useMemo((): SidebarItem[] => {
     const result: SidebarItem[] = []
 
-    // 1. Chats section: All Chats, Flagged, States header, States items
+    // 1. Chats section: All Chats (with working directories as children), Flagged, States header, States items
     result.push({ id: 'nav:allChats', type: 'nav', action: handleAllChatsClick })
+    // Working directories are now children of All Chats
+    for (const dir of workingDirGroups) {
+      result.push({ id: `nav:workingDir:${dir.path}`, type: 'nav', action: () => handleWorkingDirClick(dir.path) })
+    }
     result.push({ id: 'nav:flagged', type: 'nav', action: handleFlaggedClick })
     result.push({ id: 'nav:states', type: 'nav', action: handleAllChatsClick })
     for (const state of effectiveTodoStates) {
@@ -1722,7 +1796,7 @@ function AppShellContent({
     result.push({ id: 'nav:settings', type: 'nav', action: () => handleSettingsClick('app') })
 
     return result
-  }, [handleAllChatsClick, handleFlaggedClick, handleTodoStateClick, effectiveTodoStates, handleLabelClick, labelConfigs, labelTree, viewConfigs, handleViewClick, handleSourcesClick, handleSkillsClick, handleSettingsClick])
+  }, [handleAllChatsClick, handleFlaggedClick, handleTodoStateClick, effectiveTodoStates, handleLabelClick, labelConfigs, labelTree, viewConfigs, handleViewClick, workingDirGroups, handleWorkingDirClick, handleSourcesClick, handleSkillsClick, handleSettingsClick])
 
   // Toggle folder expanded state
   const handleToggleFolder = React.useCallback((path: string) => {
@@ -1858,6 +1932,10 @@ function AppShellContent({
         return chatFilter.labelId === '__all__' ? 'Labels' : getLabelDisplayName(labelConfigs, chatFilter.labelId)
       case 'view':
         return chatFilter.viewId === '__all__' ? 'Views' : viewConfigs.find(v => v.id === chatFilter.viewId)?.name || 'Views'
+      case 'workingDir': {
+        const dirName = chatFilter.workingDir.split('/').filter(Boolean).pop() || chatFilter.workingDir
+        return dirName
+      }
       default:
         return 'All Chats'
     }
@@ -1867,8 +1945,11 @@ function AppShellContent({
   // Each node renders with condensed height (compact: true) since many labels expected.
   // Clicking any label navigates to its filter view; the chevron toggles expand/collapse.
   const buildLabelSidebarItems = useCallback((nodes: LabelTreeNode[]): any[] => {
-    // Sort labels alphabetically by display name at every level (parent + children)
+    // Sort labels by associated session count (descending), then alphabetically as tiebreaker
     const sorted = [...nodes].sort((a, b) => {
+      const countA = labelCounts[a.fullId] || 0
+      const countB = labelCounts[b.fullId] || 0
+      if (countA !== countB) return countB - countA
       const nameA = (a.label?.name || a.segment).toLowerCase()
       const nameB = (b.label?.name || b.segment).toLowerCase()
       return nameA.localeCompare(nameB)
@@ -1925,6 +2006,8 @@ function AppShellContent({
     })
   }, [chatFilter, labelCounts, activeWorkspace?.id, handleLabelClick, isExpanded, toggleExpanded, openConfigureLabels, handleAddLabel, handleDeleteLabel])
 
+  const menuLeftOffset = isMac ? 86 : 12
+
   return (
     <AppShellProvider value={appShellContextValue}>
       <TooltipProvider delayDuration={0}>
@@ -1937,742 +2020,629 @@ function AppShellContent({
         */}
         <div className="titlebar-drag-region fixed top-0 left-0 right-0 h-[50px] z-titlebar" />
 
-      {/* App Menu - fixed position, fades out in focused mode
+        {/* App Menu - fixed position, fades out in compact/focused mode
           On macOS: offset 86px to avoid stoplight controls
           On Windows/Linux: offset 12px (no stoplight controls) */}
-      {(() => {
-        const menuLeftOffset = isMac ? 86 : 12
-        return (
-          <motion.div
-            initial={false}
-            animate={{ opacity: effectiveFocusMode ? 0 : 1 }}
-            transition={springTransition}
-            className={cn(
-              "fixed top-0 h-[50px] z-overlay flex items-center titlebar-no-drag pr-2",
-              effectiveFocusMode && "pointer-events-none"
-            )}
-            style={{ left: menuLeftOffset, width: sidebarWidth - menuLeftOffset }}
-          >
-            <AppMenu
-              onNewChat={() => handleNewChat(true)}
-              onNewWindow={() => window.electronAPI.menuNewWindow()}
-              onOpenSettings={onOpenSettings}
-              onOpenSettingsSubpage={handleSettingsClick}
-              onOpenKeyboardShortcuts={onOpenKeyboardShortcuts}
-              onOpenStoredUserPreferences={onOpenStoredUserPreferences}
-              onBack={goBack}
-              onForward={goForward}
-              canGoBack={canGoBack}
-              canGoForward={canGoForward}
-              onToggleSidebar={() => setIsSidebarVisible(prev => !prev)}
-              onToggleFocusMode={() => setIsFocusModeActive(prev => !prev)}
-            />
-          </motion.div>
-        )
-      })()}
+        <div
+          className="fixed top-0 h-[50px] z-overlay flex items-center titlebar-no-drag pr-2"
+          style={{ left: menuLeftOffset }}
+        >
+          <AppMenu
+            onNewChat={() => handleNewChat(true)}
+            onNewWindow={() => window.electronAPI.menuNewWindow()}
+            onOpenSettings={onOpenSettings}
+            onOpenSettingsSubpage={handleSettingsClick}
+            onOpenKeyboardShortcuts={onOpenKeyboardShortcuts}
+            onOpenStoredUserPreferences={onOpenStoredUserPreferences}
+            onBack={goBack}
+            onForward={goForward}
+            canGoBack={canGoBack}
+            canGoForward={canGoForward}
+            onToggleSidebar={toggleSidebar}
+            onToggleFocusMode={cycleViewMode}
+            onCycleViewMode={cycleViewMode}
+            viewMode={viewMode}
+          />
+        </div>
 
-      {/* === OUTER LAYOUT: Sidebar | Main Content === */}
-      <div className="h-full flex items-stretch relative">
-        {/* === SIDEBAR (Left) ===
+        {/* === OUTER LAYOUT: Sidebar | Main Content === */}
+        <div className="h-full flex items-stretch relative">
+          {/* === SIDEBAR (Left) ===
             Animated width with spring physics for smooth 60-120fps transitions.
             Uses overflow-hidden to clip content during collapse animation.
             Resizable via drag handle on right edge (200-400px range). */}
-        <motion.div
-          initial={false}
-          animate={{
-            width: effectiveFocusMode ? 0 : (isSidebarVisible ? sidebarWidth : 0),
-            opacity: effectiveFocusMode ? 0 : 1,
-          }}
-          transition={isResizing ? { duration: 0 } : springTransition}
-          className="h-full overflow-hidden shrink-0 relative"
-        >
-          <div
-            ref={sidebarRef}
-            style={{ width: sidebarWidth }}
-            className="h-full font-sans relative"
-            data-focus-zone="sidebar"
-            tabIndex={sidebarFocused ? 0 : -1}
-            onKeyDown={handleSidebarKeyDown}
-          >
-            <div className="flex h-full flex-col pt-[50px] select-none">
-              {/* Sidebar Top Section */}
-              <div className="flex-1 flex flex-col min-h-0">
-                {/* New Chat Button - Gmail-style, with context menu for "Open in New Window" */}
-                <div className="px-2 pt-1 pb-2 shrink-0">
-                  <ContextMenu modal={true}>
-                    <ContextMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        onClick={() => handleNewChat(true)}
-                        className="w-full justify-start gap-2 py-[7px] px-2 text-[13px] font-normal rounded-[6px] shadow-minimal bg-background"
-                        data-tutorial="new-chat-button"
-                      >
-                        <SquarePenRounded className="h-3.5 w-3.5 shrink-0" />
-                        New Chat
-                      </Button>
-                    </ContextMenuTrigger>
-                    <StyledContextMenuContent>
-                      <ContextMenuProvider>
-                        <SidebarMenu type="newChat" />
-                      </ContextMenuProvider>
-                    </StyledContextMenuContent>
-                  </ContextMenu>
-                </div>
-                {/* Primary Nav: All Chats, Flagged, States, Labels | Sources, Skills | Settings */}
-                {/* pb-4 provides clearance so the last item scrolls above the mask-fade-bottom gradient */}
-                <div className="flex-1 overflow-y-auto min-h-0 mask-fade-bottom pb-4">
-                <LeftSidebar
-                  isCollapsed={false}
-                  getItemProps={getSidebarItemProps}
-                  focusedItemId={focusedSidebarItemId}
-                  links={[
-                    // --- Chats Section ---
-                    {
-                      id: "nav:allChats",
-                      title: "All Chats",
-                      label: String(workspaceSessionMetas.length),
-                      icon: Inbox,
-                      variant: chatFilter?.kind === 'allChats' ? "default" : "ghost",
-                      onClick: handleAllChatsClick,
-                    },
-                    {
-                      id: "nav:flagged",
-                      title: "Flagged",
-                      label: String(flaggedCount),
-                      icon: <Flag className="h-3.5 w-3.5" />,
-                      variant: chatFilter?.kind === 'flagged' ? "default" : "ghost",
-                      onClick: handleFlaggedClick,
-                    },
-                    // States: expandable section with status sub-items (drag-and-drop reorder)
-                    {
-                      id: "nav:states",
-                      title: "Status",
-                      icon: CheckCircle2,
-                      variant: "ghost",
-                      onClick: () => toggleExpanded('nav:states'),
-                      expandable: true,
-                      expanded: isExpanded('nav:states'),
-                      onToggle: () => toggleExpanded('nav:states'),
-                      contextMenu: {
-                        type: 'allChats',
-                        onConfigureStatuses: openConfigureStatuses,
-                      },
-                      // Enable flat DnD reorder for status items
-                      sortable: { onReorder: handleStatusReorder },
-                      items: effectiveTodoStates.map(state => ({
-                        id: `nav:state:${state.id}`,
-                        title: state.label,
-                        label: String(todoStateCounts[state.id] || 0),
-                        icon: state.icon,
-                        iconColor: state.resolvedColor,
-                        iconColorable: state.iconColorable,
-                        variant: (chatFilter?.kind === 'state' && chatFilter.stateId === state.id ? "default" : "ghost") as "default" | "ghost",
-                        onClick: () => handleTodoStateClick(state.id),
-                        contextMenu: {
-                          type: 'status' as const,
-                          statusId: state.id,
-                          onConfigureStatuses: openConfigureStatuses,
-                        },
-                      })),
-                    },
-                    // Labels: navigable header (shows all labeled sessions) + hierarchical tree (drag-and-drop reorder + re-parent)
-                    {
-                      id: "nav:labels",
-                      title: "Labels",
-                      icon: Tag,
-                      // Only highlighted when "Labels" itself is selected (not sub-labels)
-                      variant: (chatFilter?.kind === 'label' && chatFilter.labelId === '__all__') ? "default" as const : "ghost" as const,
-                      // Clicking navigates to "all labeled sessions" view
-                      onClick: () => handleLabelClick('__all__'),
-                      expandable: true,
-                      expanded: isExpanded('nav:labels'),
-                      onToggle: () => toggleExpanded('nav:labels'),
-                      contextMenu: {
-                        type: 'labels' as const,
-                        onConfigureLabels: openConfigureLabels,
-                        onAddLabel: handleAddLabel,
-                      },
-                      items: buildLabelSidebarItems(labelTree),
-                    },
-                    // --- Separator ---
-                    { id: "separator:chats-sources", type: "separator" },
-                    // --- Sources & Skills Section ---
-                    {
-                      id: "nav:sources",
-                      title: "Sources",
-                      label: String(sources.length),
-                      icon: DatabaseZap,
-                      variant: (isSourcesNavigation(navState) && !sourceFilter) ? "default" : "ghost",
-                      onClick: handleSourcesClick,
-                      dataTutorial: "sources-nav",
-                      expandable: true,
-                      expanded: isExpanded('nav:sources'),
-                      onToggle: () => toggleExpanded('nav:sources'),
-                      contextMenu: {
-                        type: 'sources',
-                        onAddSource: () => openAddSource(),
-                      },
-                      items: [
-                        {
-                          id: "nav:sources:api",
-                          title: "APIs",
-                          label: String(sourceTypeCounts.api),
-                          icon: Globe,
-                          variant: (sourceFilter?.kind === 'type' && sourceFilter.sourceType === 'api') ? "default" : "ghost",
-                          onClick: handleSourcesApiClick,
-                          contextMenu: {
-                            type: 'sources' as const,
-                            onAddSource: () => openAddSource('api'),
-                            sourceType: 'api',
-                          },
-                        },
-                        {
-                          id: "nav:sources:mcp",
-                          title: "MCPs",
-                          label: String(sourceTypeCounts.mcp),
-                          icon: <McpIcon className="h-3.5 w-3.5" />,
-                          variant: (sourceFilter?.kind === 'type' && sourceFilter.sourceType === 'mcp') ? "default" : "ghost",
-                          onClick: handleSourcesMcpClick,
-                          contextMenu: {
-                            type: 'sources' as const,
-                            onAddSource: () => openAddSource('mcp'),
-                            sourceType: 'mcp',
-                          },
-                        },
-                        {
-                          id: "nav:sources:local",
-                          title: "Local Folders",
-                          label: String(sourceTypeCounts.local),
-                          icon: FolderOpen,
-                          variant: (sourceFilter?.kind === 'type' && sourceFilter.sourceType === 'local') ? "default" : "ghost",
-                          onClick: handleSourcesLocalClick,
-                          contextMenu: {
-                            type: 'sources' as const,
-                            onAddSource: () => openAddSource('local'),
-                            sourceType: 'local',
-                          },
-                        },
-                      ],
-                    },
-                    {
-                      id: "nav:skills",
-                      title: "Skills",
-                      label: String(skills.length),
-                      icon: Zap,
-                      variant: isSkillsNavigation(navState) ? "default" : "ghost",
-                      onClick: handleSkillsClick,
-                      contextMenu: {
-                        type: 'skills',
-                        onAddSkill: openAddSkill,
-                      },
-                    },
-                    // --- Separator ---
-                    { id: "separator:skills-settings", type: "separator" },
-                    // --- Settings ---
-                    {
-                      id: "nav:settings",
-                      title: "Settings",
-                      icon: Settings,
-                      variant: isSettingsNavigation(navState) ? "default" : "ghost",
-                      onClick: () => handleSettingsClick('app'),
-                    },
-                  ]}
-                />
-                {/* Agent Tree: Hierarchical list of agents */}
-                {/* Agents section removed */}
-                </div>
-              </div>
-
-              {/* Sidebar Bottom Section: WorkspaceSwitcher + Help icon */}
-              <div className="mt-auto shrink-0 py-2 px-2">
-                <div className="flex items-center gap-1">
-                  {/* Workspace switcher takes available space */}
-                  <div className="flex-1 min-w-0">
-                    <WorkspaceSwitcher
-                      isCollapsed={false}
-                      workspaces={workspaces}
-                      activeWorkspaceId={activeWorkspaceId}
-                      onSelect={onSelectWorkspace}
-                      onWorkspaceCreated={() => onRefreshWorkspaces?.()}
-                    />
-                  </div>
-                  {/* Help button - icon only with tooltip */}
-                  <DropdownMenu>
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <DropdownMenuTrigger asChild>
-                            <button
-                              className="flex items-center justify-center h-7 w-7 rounded-[6px] select-none outline-none hover:bg-foreground/5 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
-                            >
-                              <HelpCircle className="h-4 w-4 text-foreground/60" />
-                            </button>
-                          </DropdownMenuTrigger>
-                        </TooltipTrigger>
-                        <TooltipContent side="top">Help & Documentation</TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                    <StyledDropdownMenuContent align="end" side="top" sideOffset={8}>
-                      <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('sources'))}>
-                        <DatabaseZap className="h-3.5 w-3.5" />
-                        <span className="flex-1">Sources</span>
-                        <ExternalLink className="h-3 w-3 text-muted-foreground" />
-                      </StyledDropdownMenuItem>
-                      <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('skills'))}>
-                        <Zap className="h-3.5 w-3.5" />
-                        <span className="flex-1">Skills</span>
-                        <ExternalLink className="h-3 w-3 text-muted-foreground" />
-                      </StyledDropdownMenuItem>
-                      <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('statuses'))}>
-                        <CheckCircle2 className="h-3.5 w-3.5" />
-                        <span className="flex-1">Statuses</span>
-                        <ExternalLink className="h-3 w-3 text-muted-foreground" />
-                      </StyledDropdownMenuItem>
-                      <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('permissions'))}>
-                        <Settings className="h-3.5 w-3.5" />
-                        <span className="flex-1">Permissions</span>
-                        <ExternalLink className="h-3 w-3 text-muted-foreground" />
-                      </StyledDropdownMenuItem>
-                      <StyledDropdownMenuSeparator />
-                      <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl('https://agents.craft.do/docs')}>
-                        <ExternalLink className="h-3.5 w-3.5" />
-                        <span className="flex-1">All Documentation</span>
-                      </StyledDropdownMenuItem>
-                    </StyledDropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </div>
-            </div>
-          </div>
-        </motion.div>
-
-        {/* Sidebar Resize Handle (hidden in focused mode) */}
-        {!effectiveFocusMode && (
-        <div
-          ref={resizeHandleRef}
-          onMouseDown={(e) => { e.preventDefault(); setIsResizing('sidebar') }}
-          onMouseMove={(e) => {
-            if (resizeHandleRef.current) {
-              const rect = resizeHandleRef.current.getBoundingClientRect()
-              setSidebarHandleY(e.clientY - rect.top)
-            }
-          }}
-          onMouseLeave={() => { if (!isResizing) setSidebarHandleY(null) }}
-          className="absolute top-0 w-3 h-full cursor-col-resize z-panel flex justify-center"
-          style={{
-            left: isSidebarVisible ? sidebarWidth - 6 : -6,
-            transition: isResizing === 'sidebar' ? undefined : 'left 0.15s ease-out',
-          }}
-        >
-          {/* Visual indicator - 2px wide */}
-          <div
-            className="w-0.5 h-full"
-            style={getResizeGradientStyle(sidebarHandleY)}
-          />
-        </div>
-        )}
-
-        {/* === MAIN CONTENT (Right) ===
-            Flex layout: Session List | Chat Display */}
-        <div
-          className="flex-1 overflow-hidden min-w-0 flex h-full"
-          style={{ padding: PANEL_WINDOW_EDGE_SPACING, gap: PANEL_PANEL_SPACING / 2 }}
-        >
-          {/* === SESSION LIST PANEL ===
-              Animated width with spring physics for smooth 60-120fps transitions.
-              Outer motion.div animates width (clipping mask), inner div maintains fixed width
-              so content doesn't reflow during animation - same pattern as left sidebar. */}
           <motion.div
             initial={false}
             animate={{
-              width: effectiveFocusMode ? 0 : sessionListWidth,
-              opacity: effectiveFocusMode ? 0 : 1,
+              width: isSidebarVisible ? sidebarWidth : 0,
+              opacity: isSidebarVisible ? 1 : 0,
             }}
             transition={isResizing ? { duration: 0 } : springTransition}
-            className="h-full shrink-0 overflow-hidden"
+            className="h-full overflow-hidden shrink-0 relative"
           >
             <div
-              style={{ width: sessionListWidth }}
-              className="h-full flex flex-col min-w-0 bg-background shadow-middle rounded-l-[14px] rounded-r-[10px]"
+              ref={sidebarRef}
+              style={{ width: sidebarWidth }}
+              className="h-full font-sans relative"
+              data-focus-zone="sidebar"
+              tabIndex={sidebarFocused ? 0 : -1}
+              onKeyDown={handleSidebarKeyDown}
             >
-            <PanelHeader
-              title={isSidebarVisible ? listTitle : undefined}
-              compensateForStoplight={!isSidebarVisible}
-              actions={
-                <>
-                  {/* Filter dropdown - available in ALL chat views.
+              <div className="flex h-full flex-col pt-[50px] select-none">
+                {/* Sidebar Top Section */}
+                <div className="flex-1 flex flex-col min-h-0">
+                  {/* New Chat Button - Gmail-style, with context menu for "Open in New Window" */}
+                  <div className="px-2 pt-1 pb-2 shrink-0">
+                    <ContextMenu modal={true}>
+                      <ContextMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          onClick={() => handleNewChat(true)}
+                          className="w-full justify-start gap-2 py-[7px] px-2 text-[13px] font-normal rounded-[6px] shadow-minimal bg-background"
+                          data-tutorial="new-chat-button"
+                        >
+                          <SquarePenRounded className="h-3.5 w-3.5 shrink-0" />
+                          New Chat
+                        </Button>
+                      </ContextMenuTrigger>
+                      <StyledContextMenuContent>
+                        <ContextMenuProvider>
+                          <SidebarMenu type="newChat" />
+                        </ContextMenuProvider>
+                      </StyledContextMenuContent>
+                    </ContextMenu>
+                  </div>
+                  {/* Primary Nav: All Chats, Flagged, States, Labels | Sources, Skills | Settings */}
+                  {/* pb-4 provides clearance so the last item scrolls above the mask-fade-bottom gradient */}
+                  <div className="flex-1 overflow-y-auto min-h-0 mask-fade-bottom pb-4">
+                    <LeftSidebar
+                      isCollapsed={false}
+                      getItemProps={getSidebarItemProps}
+                      focusedItemId={focusedSidebarItemId}
+                      links={[
+                        // --- Chats Section ---
+                        // All Chats: expandable section with working directory sub-items
+                        {
+                          id: "nav:allChats",
+                          title: "All Chats",
+                          label: String(workspaceSessionMetas.length),
+                          icon: Inbox,
+                          variant: chatFilter?.kind === 'allChats' ? "default" : "ghost",
+                          onClick: handleAllChatsClick,
+                          // Only show expand/collapse if there are working directories
+                          ...(workingDirGroups.length > 0 ? {
+                            expandable: true,
+                            expanded: isExpanded('nav:allChats'),
+                            onToggle: () => toggleExpanded('nav:allChats'),
+                            items: workingDirGroups.map(dir => ({
+                              id: `nav:workingDir:${dir.path}`,
+                              title: dir.displayName,
+                              label: String(dir.count),
+                              icon: FolderOpen,
+                              compact: true,
+                              variant: (chatFilter?.kind === 'workingDir' && chatFilter.workingDir === dir.path ? "default" : "ghost") as "default" | "ghost",
+                              onClick: () => handleWorkingDirClick(dir.path),
+                            })),
+                          } : {}),
+                        },
+                        {
+                          id: "nav:flagged",
+                          title: "Flagged",
+                          label: String(flaggedCount),
+                          icon: <Flag className="h-3.5 w-3.5" />,
+                          variant: chatFilter?.kind === 'flagged' ? "default" : "ghost",
+                          onClick: handleFlaggedClick,
+                        },
+                        // States: expandable section with status sub-items (drag-and-drop reorder)
+                        // Only show if statusEnabled is true
+                        ...(statusEnabled ? [{
+                          id: "nav:states" as const,
+                          title: "Status",
+                          icon: CheckCircle2,
+                          variant: "ghost" as const,
+                          onClick: () => toggleExpanded('nav:states'),
+                          expandable: true,
+                          expanded: isExpanded('nav:states'),
+                          onToggle: () => toggleExpanded('nav:states'),
+                          contextMenu: {
+                            type: 'allChats' as const,
+                            onConfigureStatuses: openConfigureStatuses,
+                          },
+                          // Enable flat DnD reorder for status items
+                          sortable: { onReorder: handleStatusReorder },
+                          items: effectiveTodoStates.map(state => ({
+                            id: `nav:state:${state.id}`,
+                            title: state.label,
+                            label: String(todoStateCounts[state.id] || 0),
+                            icon: state.icon,
+                            iconColor: state.resolvedColor,
+                            iconColorable: state.iconColorable,
+                            variant: (chatFilter?.kind === 'state' && chatFilter.stateId === state.id ? "default" : "ghost") as "default" | "ghost",
+                            onClick: () => handleTodoStateClick(state.id),
+                            contextMenu: {
+                              type: 'status' as const,
+                              statusId: state.id,
+                              onConfigureStatuses: openConfigureStatuses,
+                            },
+                          })),
+                        }] : []),
+                        // Labels: navigable header (shows all labeled sessions) + hierarchical tree (drag-and-drop reorder + re-parent)
+                        {
+                          id: "nav:labels",
+                          title: "Labels",
+                          icon: Tag,
+                          // Only highlighted when "Labels" itself is selected (not sub-labels)
+                          variant: (chatFilter?.kind === 'label' && chatFilter.labelId === '__all__') ? "default" as const : "ghost" as const,
+                          // Clicking navigates to "all labeled sessions" view
+                          onClick: () => handleLabelClick('__all__'),
+                          expandable: true,
+                          expanded: isExpanded('nav:labels'),
+                          onToggle: () => toggleExpanded('nav:labels'),
+                          contextMenu: {
+                            type: 'labels' as const,
+                            onConfigureLabels: openConfigureLabels,
+                            onAddLabel: handleAddLabel,
+                          },
+                          items: buildLabelSidebarItems(labelTree),
+                        },
+                        // --- Separator ---
+                        { id: "separator:chats-sources", type: "separator" },
+                        // --- Sources & Skills Section ---
+                        {
+                          id: "nav:sources",
+                          title: "Sources",
+                          label: String(sources.length),
+                          icon: DatabaseZap,
+                          variant: (isSourcesNavigation(navState) && !sourceFilter) ? "default" : "ghost",
+                          onClick: handleSourcesClick,
+                          dataTutorial: "sources-nav",
+                          expandable: true,
+                          expanded: isExpanded('nav:sources'),
+                          onToggle: () => toggleExpanded('nav:sources'),
+                          contextMenu: {
+                            type: 'sources',
+                            onAddSource: () => openAddSource(),
+                          },
+                          items: [
+                            {
+                              id: "nav:sources:api",
+                              title: "APIs",
+                              label: String(sourceTypeCounts.api),
+                              icon: Globe,
+                              variant: (sourceFilter?.kind === 'type' && sourceFilter.sourceType === 'api') ? "default" : "ghost",
+                              onClick: handleSourcesApiClick,
+                              contextMenu: {
+                                type: 'sources' as const,
+                                onAddSource: () => openAddSource('api'),
+                                sourceType: 'api',
+                              },
+                            },
+                            {
+                              id: "nav:sources:mcp",
+                              title: "MCPs",
+                              label: String(sourceTypeCounts.mcp),
+                              icon: <McpIcon className="h-3.5 w-3.5" />,
+                              variant: (sourceFilter?.kind === 'type' && sourceFilter.sourceType === 'mcp') ? "default" : "ghost",
+                              onClick: handleSourcesMcpClick,
+                              contextMenu: {
+                                type: 'sources' as const,
+                                onAddSource: () => openAddSource('mcp'),
+                                sourceType: 'mcp',
+                              },
+                            },
+                            {
+                              id: "nav:sources:local",
+                              title: "Local Folders",
+                              label: String(sourceTypeCounts.local),
+                              icon: FolderOpen,
+                              variant: (sourceFilter?.kind === 'type' && sourceFilter.sourceType === 'local') ? "default" : "ghost",
+                              onClick: handleSourcesLocalClick,
+                              contextMenu: {
+                                type: 'sources' as const,
+                                onAddSource: () => openAddSource('local'),
+                                sourceType: 'local',
+                              },
+                            },
+                          ],
+                        },
+                        {
+                          id: "nav:skills",
+                          title: "Skills",
+                          label: String(skills.length),
+                          icon: Zap,
+                          variant: isSkillsNavigation(navState) ? "default" : "ghost",
+                          onClick: handleSkillsClick,
+                          contextMenu: {
+                            type: 'skills',
+                            onAddSkill: openAddSkill,
+                          },
+                        },
+                        // --- Separator ---
+                        { id: "separator:skills-settings", type: "separator" },
+                        // --- Settings ---
+                        {
+                          id: "nav:settings",
+                          title: "Settings",
+                          icon: Settings,
+                          variant: isSettingsNavigation(navState) ? "default" : "ghost",
+                          onClick: () => handleSettingsClick('app'),
+                        },
+                      ]}
+                    />
+                    {/* Agent Tree: Hierarchical list of agents */}
+                    {/* Agents section removed */}
+                  </div>
+                </div>
+
+                {/* Sidebar Bottom Section: WorkspaceSwitcher + Help icon */}
+                <div className="mt-auto shrink-0 py-2 px-2">
+                  <div className="flex items-center gap-1">
+                    {/* Workspace switcher takes available space */}
+                    <div className="flex-1 min-w-0">
+                      <WorkspaceSwitcher
+                        isCollapsed={false}
+                        workspaces={workspaces}
+                        activeWorkspaceId={activeWorkspaceId}
+                        onSelect={onSelectWorkspace}
+                        onWorkspaceCreated={() => onRefreshWorkspaces?.()}
+                      />
+                    </div>
+                    {/* Help button - icon only with tooltip */}
+                    <DropdownMenu>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <DropdownMenuTrigger asChild>
+                              <button
+                                className="flex items-center justify-center h-7 w-7 rounded-[6px] select-none outline-none hover:bg-foreground/5 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
+                              >
+                                <HelpCircle className="h-4 w-4 text-foreground/60" />
+                              </button>
+                            </DropdownMenuTrigger>
+                          </TooltipTrigger>
+                          <TooltipContent side="top">Help & Documentation</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                      <StyledDropdownMenuContent align="end" side="top" sideOffset={8}>
+                        <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('sources'))}>
+                          <DatabaseZap className="h-3.5 w-3.5" />
+                          <span className="flex-1">Sources</span>
+                          <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                        </StyledDropdownMenuItem>
+                        <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('skills'))}>
+                          <Zap className="h-3.5 w-3.5" />
+                          <span className="flex-1">Skills</span>
+                          <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                        </StyledDropdownMenuItem>
+                        <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('statuses'))}>
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                          <span className="flex-1">Statuses</span>
+                          <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                        </StyledDropdownMenuItem>
+                        <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('permissions'))}>
+                          <Settings className="h-3.5 w-3.5" />
+                          <span className="flex-1">Permissions</span>
+                          <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                        </StyledDropdownMenuItem>
+                        <StyledDropdownMenuSeparator />
+                        <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl('https://agents.craft.do/docs')}>
+                          <ExternalLink className="h-3.5 w-3.5" />
+                          <span className="flex-1">All Documentation</span>
+                        </StyledDropdownMenuItem>
+                      </StyledDropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Sidebar Resize Handle (hidden in focused mode) */}
+          {!effectiveFocusMode && (
+            <div
+              ref={resizeHandleRef}
+              onMouseDown={(e) => { e.preventDefault(); setIsResizing('sidebar') }}
+              onMouseMove={(e) => {
+                if (resizeHandleRef.current) {
+                  const rect = resizeHandleRef.current.getBoundingClientRect()
+                  setSidebarHandleY(e.clientY - rect.top)
+                }
+              }}
+              onMouseLeave={() => { if (!isResizing) setSidebarHandleY(null) }}
+              className="absolute top-0 w-3 h-full cursor-col-resize z-panel flex justify-center"
+              style={{
+                left: isSidebarVisible ? sidebarWidth - 6 : -6,
+                transition: isResizing === 'sidebar' ? undefined : 'left 0.15s ease-out',
+              }}
+            >
+              {/* Visual indicator - 2px wide */}
+              <div
+                className="w-0.5 h-full"
+                style={getResizeGradientStyle(sidebarHandleY)}
+              />
+            </div>
+          )}
+
+          {/* === MAIN CONTENT (Right) ===
+            Flex layout: Session List | Chat Display */}
+          <div
+            className="flex-1 overflow-hidden min-w-0 flex h-full"
+            style={{ padding: PANEL_WINDOW_EDGE_SPACING, gap: PANEL_PANEL_SPACING / 2 }}
+          >
+            {/* === SESSION LIST PANEL ===
+              Animated width with spring physics for smooth 60-120fps transitions.
+              Outer motion.div animates width (clipping mask), inner div maintains fixed width
+              so content doesn't reflow during animation - same pattern as left sidebar. */}
+            <motion.div
+              initial={false}
+              animate={{
+                width: effectiveFocusMode ? 0 : sessionListWidth,
+                opacity: effectiveFocusMode ? 0 : 1,
+              }}
+              transition={isResizing ? { duration: 0 } : springTransition}
+              className="h-full shrink-0 overflow-hidden"
+            >
+              <div
+                style={{ width: sessionListWidth }}
+                className="h-full flex flex-col min-w-0 bg-background shadow-middle rounded-l-[14px] rounded-r-[10px]"
+              >
+                <PanelHeader
+                  title={(isSidebarVisible && !effectiveCompactMode) ? listTitle : undefined}
+                  compensateForStoplight={effectiveCompactMode || !isSidebarVisible}
+                  actions={
+                    <>
+                      {/* Filter dropdown - available in ALL chat views.
                       Shows user-added filters (removable) and pinned filters (non-removable, derived from route).
                       Pinned filters: state views pin a status, label views pin a label, flagged pins the flag. */}
-                  {isChatsNavigation(navState) && (
-                    <DropdownMenu onOpenChange={(open) => { if (!open) setFilterDropdownQuery('') }}>
-                      <DropdownMenuTrigger asChild>
-                        <HeaderIconButton
-                          icon={<ListFilter className="h-4 w-4" />}
-                          className={(listFilter.size > 0 || labelFilter.size > 0) ? "bg-accent/5 text-accent rounded-[8px] shadow-tinted" : "rounded-[8px]"}
-                          style={(listFilter.size > 0 || labelFilter.size > 0) ? { '--shadow-color': 'var(--accent-rgb)' } as React.CSSProperties : undefined}
-                        />
-                      </DropdownMenuTrigger>
-                      <StyledDropdownMenuContent
-                        align="end"
-                        light
-                        minWidth="min-w-[200px]"
-                        onKeyDown={(e: React.KeyboardEvent) => {
-                          // When on the first menu item and pressing Up, refocus the search input
-                          if (e.key === 'ArrowUp' && !filterDropdownQuery.trim()) {
-                            const menu = (e.target as HTMLElement).closest('[role="menu"]')
-                            const items = menu?.querySelectorAll('[role="menuitem"]')
-                            if (items && items.length > 0 && document.activeElement === items[0]) {
-                              e.preventDefault()
-                              e.stopPropagation()
-                              filterDropdownInputRef.current?.focus()
-                            }
-                          }
-                        }}
-                      >
-                        {/* Header with title and clear button (only clears user-added filters, never pinned) */}
-                        <div className="flex items-center justify-between px-2 py-1.5">
-                          <span className="text-xs font-medium text-muted-foreground">Filter Chats</span>
-                          {(listFilter.size > 0 || labelFilter.size > 0) && (
-                            <button
-                              onClick={(e) => {
-                                e.preventDefault()
-                                setListFilter(new Map())
-                                setLabelFilter(new Map())
-                              }}
-                              className="text-xs text-muted-foreground hover:text-foreground"
-                            >
-                              Clear
-                            </button>
-                          )}
-                        </div>
-
-                        {/* Search input — typing switches from hierarchical submenus to a flat filtered list.
-                            stopPropagation prevents Radix from intercepting keys. Arrow/Enter handled for navigation. */}
-                        <div className="px-1 pb-3 border-b border-foreground/5">
-                          <div className="bg-background rounded-[6px] shadow-minimal px-2 py-1.5">
-                            <input
-                              ref={filterDropdownInputRef}
-                              type="text"
-                              value={filterDropdownQuery}
-                              onChange={(e) => setFilterDropdownQuery(e.target.value)}
-                              onKeyDown={(e) => {
-                                // When input is empty, let ArrowDown/ArrowUp blur the input
-                                // so Radix's native menu keyboard navigation takes over
-                                if (!filterDropdownQuery.trim() && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+                      {isChatsNavigation(navState) && (
+                        <DropdownMenu onOpenChange={(open) => { if (!open) setFilterDropdownQuery('') }}>
+                          <DropdownMenuTrigger asChild>
+                            <HeaderIconButton
+                              icon={<ListFilter className="h-4 w-4" />}
+                              className={(listFilter.size > 0 || labelFilter.size > 0) ? "bg-accent/5 text-accent rounded-[8px] shadow-tinted" : "rounded-[8px]"}
+                              style={(listFilter.size > 0 || labelFilter.size > 0) ? { '--shadow-color': 'var(--accent-rgb)' } as React.CSSProperties : undefined}
+                            />
+                          </DropdownMenuTrigger>
+                          <StyledDropdownMenuContent
+                            align="end"
+                            light
+                            minWidth="min-w-[200px]"
+                            onKeyDown={(e: React.KeyboardEvent) => {
+                              // When on the first menu item and pressing Up, refocus the search input
+                              if (e.key === 'ArrowUp' && !filterDropdownQuery.trim()) {
+                                const menu = (e.target as HTMLElement).closest('[role="menu"]')
+                                const items = menu?.querySelectorAll('[role="menuitem"]')
+                                if (items && items.length > 0 && document.activeElement === items[0]) {
                                   e.preventDefault()
-                                  ;(e.target as HTMLInputElement).blur()
-                                  // Focus the first menu item so Radix's keyboard navigation activates
-                                  const menu = (e.target as HTMLElement).closest('[role="menu"]')
-                                  const firstItem = menu?.querySelector('[role="menuitem"]') as HTMLElement | null
-                                  firstItem?.focus()
-                                  return
+                                  e.stopPropagation()
+                                  filterDropdownInputRef.current?.focus()
                                 }
-                                e.stopPropagation()
-                                const { states: ms, labels: ml } = filterDropdownResults
-                                const total = ms.length + ml.length
-                                if (total === 0) return
-                                switch (e.key) {
-                                  case 'ArrowDown':
+                              }
+                            }}
+                          >
+                            {/* Header with title and clear button (only clears user-added filters, never pinned) */}
+                            <div className="flex items-center justify-between px-2 py-1.5">
+                              <span className="text-xs font-medium text-muted-foreground">Filter Chats</span>
+                              {(listFilter.size > 0 || labelFilter.size > 0) && (
+                                <button
+                                  onClick={(e) => {
                                     e.preventDefault()
-                                    setFilterDropdownSelectedIdx(prev => (prev < total - 1 ? prev + 1 : 0))
-                                    break
-                                  case 'ArrowUp':
-                                    e.preventDefault()
-                                    setFilterDropdownSelectedIdx(prev => (prev > 0 ? prev - 1 : total - 1))
-                                    break
-                                  case 'Enter': {
-                                    e.preventDefault()
-                                    const idx = filterDropdownSelectedIdx
-                                    if (idx < ms.length) {
-                                      // Toggle a status filter
-                                      const state = ms[idx]
-                                      if (state.id !== pinnedFilters.pinnedStatusId) {
-                                        setListFilter(prev => {
-                                          const next = new Map(prev)
-                                          if (next.has(state.id)) next.delete(state.id)
-                                          else next.set(state.id, 'include')
-                                          return next
-                                        })
-                                      }
-                                    } else {
-                                      // Toggle a label filter
-                                      const item = ml[idx - ms.length]
-                                      if (item && item.id !== pinnedFilters.pinnedLabelId) {
-                                        setLabelFilter(prev => {
-                                          const next = new Map(prev)
-                                          if (next.has(item.id)) next.delete(item.id)
-                                          else next.set(item.id, 'include')
-                                          return next
-                                        })
+                                    setListFilter(new Map())
+                                    setLabelFilter(new Map())
+                                  }}
+                                  className="text-xs text-muted-foreground hover:text-foreground"
+                                >
+                                  Clear
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Search input — typing switches from hierarchical submenus to a flat filtered list.
+                            stopPropagation prevents Radix from intercepting keys. Arrow/Enter handled for navigation. */}
+                            <div className="px-1 pb-3 border-b border-foreground/5">
+                              <div className="bg-background rounded-[6px] shadow-minimal px-2 py-1.5">
+                                <input
+                                  ref={filterDropdownInputRef}
+                                  type="text"
+                                  value={filterDropdownQuery}
+                                  onChange={(e) => setFilterDropdownQuery(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    // When input is empty, let ArrowDown/ArrowUp blur the input
+                                    // so Radix's native menu keyboard navigation takes over
+                                    if (!filterDropdownQuery.trim() && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+                                      e.preventDefault()
+                                        ; (e.target as HTMLInputElement).blur()
+                                      // Focus the first menu item so Radix's keyboard navigation activates
+                                      const menu = (e.target as HTMLElement).closest('[role="menu"]')
+                                      const firstItem = menu?.querySelector('[role="menuitem"]') as HTMLElement | null
+                                      firstItem?.focus()
+                                      return
+                                    }
+                                    e.stopPropagation()
+                                    const { states: ms, labels: ml } = filterDropdownResults
+                                    const total = ms.length + ml.length
+                                    if (total === 0) return
+                                    switch (e.key) {
+                                      case 'ArrowDown':
+                                        e.preventDefault()
+                                        setFilterDropdownSelectedIdx(prev => (prev < total - 1 ? prev + 1 : 0))
+                                        break
+                                      case 'ArrowUp':
+                                        e.preventDefault()
+                                        setFilterDropdownSelectedIdx(prev => (prev > 0 ? prev - 1 : total - 1))
+                                        break
+                                      case 'Enter': {
+                                        e.preventDefault()
+                                        const idx = filterDropdownSelectedIdx
+                                        if (idx < ms.length) {
+                                          // Toggle a status filter
+                                          const state = ms[idx]
+                                          if (state.id !== pinnedFilters.pinnedStatusId) {
+                                            setListFilter(prev => {
+                                              const next = new Map(prev)
+                                              if (next.has(state.id)) next.delete(state.id)
+                                              else next.set(state.id, 'include')
+                                              return next
+                                            })
+                                          }
+                                        } else {
+                                          // Toggle a label filter
+                                          const item = ml[idx - ms.length]
+                                          if (item && item.id !== pinnedFilters.pinnedLabelId) {
+                                            setLabelFilter(prev => {
+                                              const next = new Map(prev)
+                                              if (next.has(item.id)) next.delete(item.id)
+                                              else next.set(item.id, 'include')
+                                              return next
+                                            })
+                                          }
+                                        }
+                                        break
                                       }
                                     }
-                                    break
-                                  }
-                                }
-                              }}
-                              placeholder="Search statuses & labels..."
-                              className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
-                              autoFocus
-                            />
-                          </div>
-                        </div>
+                                  }}
+                                  placeholder="Search statuses & labels..."
+                                  className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
+                                  autoFocus
+                                />
+                              </div>
+                            </div>
 
-                        {/* ── Conditional body: hierarchical (no query) vs flat filtered list (has query) ── */}
-                        {filterDropdownQuery.trim() === '' ? (
-                          <>
-                            {/* === HIERARCHICAL MODE (default) === */}
-
-                            {/* Active filter chips: pinned (non-removable) + user-added (removable) */}
-                            {(pinnedFilters.pinnedFlagged || pinnedFilters.pinnedStatusId || pinnedFilters.pinnedLabelId || listFilter.size > 0 || labelFilter.size > 0) && (
+                            {/* ── Conditional body: hierarchical (no query) vs flat filtered list (has query) ── */}
+                            {filterDropdownQuery.trim() === '' ? (
                               <>
-                                {/* Pinned: flagged */}
-                                {pinnedFilters.pinnedFlagged && (
-                                  <StyledDropdownMenuItem disabled>
-                                    <FilterMenuRow
-                                      icon={<Flag className="h-3.5 w-3.5" />}
-                                      label="Flagged"
-                                      accessory={<Check className="h-3 w-3 text-muted-foreground" />}
-                                    />
-                                  </StyledDropdownMenuItem>
-                                )}
-                                {/* Pinned: status from state view */}
-                                {(() => {
-                                  if (!pinnedFilters.pinnedStatusId) return null
-                                  const state = effectiveTodoStates.find(s => s.id === pinnedFilters.pinnedStatusId)
-                                  if (!state) return null
-                                  return (
-                                    <StyledDropdownMenuItem disabled key={`pinned-status-${state.id}`}>
-                                      <FilterMenuRow
-                                        icon={state.icon}
-                                        label={state.label}
-                                        accessory={<Check className="h-3 w-3 text-muted-foreground" />}
-                                        iconStyle={state.iconColorable ? { color: state.resolvedColor } : undefined}
-                                        noIconContainer
-                                      />
-                                    </StyledDropdownMenuItem>
-                                  )
-                                })()}
-                                {/* Pinned: label from label view */}
-                                {(() => {
-                                  if (!pinnedFilters.pinnedLabelId) return null
-                                  const label = findLabelById(labelConfigs, pinnedFilters.pinnedLabelId)
-                                  if (!label) return null
-                                  return (
-                                    <StyledDropdownMenuItem disabled key={`pinned-label-${label.id}`}>
-                                      <FilterMenuRow
-                                        icon={<LabelIcon label={label} size="sm" />}
-                                        label={label.name}
-                                        accessory={<Check className="h-3 w-3 text-muted-foreground" />}
-                                      />
-                                    </StyledDropdownMenuItem>
-                                  )
-                                })()}
-                                {/* User-added: selected statuses with mode pill (include/exclude) */}
-                                {effectiveTodoStates.filter(s => listFilter.has(s.id)).map(state => {
-                                  const applyColor = state.iconColorable
-                                  const mode = listFilter.get(state.id)!
-                                  return (
-                                    <DropdownMenuSub key={`sel-status-${state.id}`}>
-                                      <StyledDropdownMenuSubTrigger onClick={(e) => { e.preventDefault(); setListFilter(prev => { const next = new Map(prev); next.delete(state.id); return next }) }}>
-                                        <FilterMenuRow
-                                          icon={state.icon}
-                                          label={state.label}
-                                          accessory={<FilterModeBadge mode={mode} />}
-                                          iconStyle={applyColor ? { color: state.resolvedColor } : undefined}
-                                          noIconContainer
-                                        />
-                                      </StyledDropdownMenuSubTrigger>
-                                      <StyledDropdownMenuSubContent minWidth="min-w-[140px]">
-                                        <FilterModeSubMenuItems
-                                          mode={mode}
-                                          onChangeMode={(newMode) => setListFilter(prev => {
-                                            const next = new Map(prev)
-                                            next.set(state.id, newMode)
-                                            return next
-                                          })}
-                                          onRemove={() => setListFilter(prev => {
-                                            const next = new Map(prev)
-                                            next.delete(state.id)
-                                            return next
-                                          })}
-                                        />
-                                      </StyledDropdownMenuSubContent>
-                                    </DropdownMenuSub>
-                                  )
-                                })}
-                                {/* User-added: selected labels with mode pill (include/exclude) */}
-                                {Array.from(labelFilter).map(([labelId, mode]) => {
-                                  const label = findLabelById(labelConfigs, labelId)
-                                  if (!label) return null
-                                  return (
-                                    <DropdownMenuSub key={`sel-label-${labelId}`}>
-                                      <StyledDropdownMenuSubTrigger onClick={(e) => { e.preventDefault(); setLabelFilter(prev => { const next = new Map(prev); next.delete(labelId); return next }) }}>
-                                        <FilterMenuRow
-                                          icon={<LabelIcon label={label} size="sm" />}
-                                          label={label.name}
-                                          accessory={<FilterModeBadge mode={mode} />}
-                                        />
-                                      </StyledDropdownMenuSubTrigger>
-                                      <StyledDropdownMenuSubContent minWidth="min-w-[140px]">
-                                        <FilterModeSubMenuItems
-                                          mode={mode}
-                                          onChangeMode={(newMode) => setLabelFilter(prev => {
-                                            const next = new Map(prev)
-                                            next.set(labelId, newMode)
-                                            return next
-                                          })}
-                                          onRemove={() => setLabelFilter(prev => {
-                                            const next = new Map(prev)
-                                            next.delete(labelId)
-                                            return next
-                                          })}
-                                        />
-                                      </StyledDropdownMenuSubContent>
-                                    </DropdownMenuSub>
-                                  )
-                                })}
-                                <StyledDropdownMenuSeparator />
-                              </>
-                            )}
+                                {/* === HIERARCHICAL MODE (default) === */}
 
-                            {/* Statuses submenu - hierarchical with toggle selection */}
-                            <DropdownMenuSub>
-                              <StyledDropdownMenuSubTrigger>
-                                <Inbox className="h-3.5 w-3.5" />
-                                <span className="flex-1">Statuses</span>
-                              </StyledDropdownMenuSubTrigger>
-                              <StyledDropdownMenuSubContent minWidth="min-w-[180px]">
-                                {effectiveTodoStates.map(state => {
-                                  const applyColor = state.iconColorable
-                                  const isPinned = state.id === pinnedFilters.pinnedStatusId
-                                  const currentMode = listFilter.get(state.id)
-                                  const isActive = !!currentMode && !isPinned
-                                  // Active status → DropdownMenuSub with mode options (Radix safe-triangle hover)
-                                  if (isActive) {
-                                    return (
-                                      <DropdownMenuSub key={state.id}>
-                                        <StyledDropdownMenuSubTrigger onClick={(e) => { e.preventDefault(); setListFilter(prev => { const next = new Map(prev); next.delete(state.id); return next }) }}>
+                                {/* Active filter chips: pinned (non-removable) + user-added (removable) */}
+                                {(pinnedFilters.pinnedFlagged || pinnedFilters.pinnedStatusId || pinnedFilters.pinnedLabelId || listFilter.size > 0 || labelFilter.size > 0) && (
+                                  <>
+                                    {/* Pinned: flagged */}
+                                    {pinnedFilters.pinnedFlagged && (
+                                      <StyledDropdownMenuItem disabled>
+                                        <FilterMenuRow
+                                          icon={<Flag className="h-3.5 w-3.5" />}
+                                          label="Flagged"
+                                          accessory={<Check className="h-3 w-3 text-muted-foreground" />}
+                                        />
+                                      </StyledDropdownMenuItem>
+                                    )}
+                                    {/* Pinned: status from state view */}
+                                    {(() => {
+                                      if (!pinnedFilters.pinnedStatusId) return null
+                                      const state = effectiveTodoStates.find(s => s.id === pinnedFilters.pinnedStatusId)
+                                      if (!state) return null
+                                      return (
+                                        <StyledDropdownMenuItem disabled key={`pinned-status-${state.id}`}>
                                           <FilterMenuRow
                                             icon={state.icon}
                                             label={state.label}
-                                            accessory={<FilterModeBadge mode={currentMode} />}
-                                            iconStyle={applyColor ? { color: state.resolvedColor } : undefined}
+                                            accessory={<Check className="h-3 w-3 text-muted-foreground" />}
+                                            iconStyle={state.iconColorable ? { color: state.resolvedColor } : undefined}
                                             noIconContainer
                                           />
-                                        </StyledDropdownMenuSubTrigger>
-                                        <StyledDropdownMenuSubContent minWidth="min-w-[140px]">
-                                          <FilterModeSubMenuItems
-                                            mode={currentMode}
-                                            onChangeMode={(newMode) => setListFilter(prev => {
-                                              const next = new Map(prev)
-                                              next.set(state.id, newMode)
-                                              return next
-                                            })}
-                                            onRemove={() => setListFilter(prev => {
-                                              const next = new Map(prev)
-                                              next.delete(state.id)
-                                              return next
-                                            })}
+                                        </StyledDropdownMenuItem>
+                                      )
+                                    })()}
+                                    {/* Pinned: label from label view */}
+                                    {(() => {
+                                      if (!pinnedFilters.pinnedLabelId) return null
+                                      const label = findLabelById(labelConfigs, pinnedFilters.pinnedLabelId)
+                                      if (!label) return null
+                                      return (
+                                        <StyledDropdownMenuItem disabled key={`pinned-label-${label.id}`}>
+                                          <FilterMenuRow
+                                            icon={<LabelIcon label={label} size="sm" />}
+                                            label={label.name}
+                                            accessory={<Check className="h-3 w-3 text-muted-foreground" />}
                                           />
-                                        </StyledDropdownMenuSubContent>
-                                      </DropdownMenuSub>
-                                    )
-                                  }
-                                  // Inactive / pinned status → simple toggleable item
-                                  return (
-                                    <StyledDropdownMenuItem
-                                      key={state.id}
-                                      disabled={isPinned}
-                                      onClick={(e) => {
-                                        if (isPinned) return
-                                        e.preventDefault()
-                                        setListFilter(prev => {
-                                          const next = new Map(prev)
-                                          if (next.has(state.id)) next.delete(state.id)
-                                          else next.set(state.id, 'include')
-                                          return next
-                                        })
-                                      }}
-                                    >
-                                      <FilterMenuRow
-                                        icon={state.icon}
-                                        label={state.label}
-                                        accessory={isPinned ? <Check className="h-3 w-3 text-muted-foreground" /> : null}
-                                        iconStyle={applyColor ? { color: state.resolvedColor } : undefined}
-                                        noIconContainer
-                                      />
-                                    </StyledDropdownMenuItem>
-                                  )
-                                })}
-                              </StyledDropdownMenuSubContent>
-                            </DropdownMenuSub>
-
-                            {/* Labels submenu - hierarchical tree with recursive submenus */}
-                            <DropdownMenuSub>
-                              <StyledDropdownMenuSubTrigger>
-                                <Tag className="h-3.5 w-3.5" />
-                                <span className="flex-1">Labels</span>
-                              </StyledDropdownMenuSubTrigger>
-                              <StyledDropdownMenuSubContent minWidth="min-w-[180px]">
-                                {labelConfigs.length === 0 ? (
-                                  <StyledDropdownMenuItem disabled>
-                                    <span className="text-muted-foreground">No labels configured</span>
-                                  </StyledDropdownMenuItem>
-                                ) : (
-                                  <FilterLabelItems
-                                    labels={labelConfigs}
-                                    labelFilter={labelFilter}
-                                    setLabelFilter={setLabelFilter}
-                                    pinnedLabelId={pinnedFilters.pinnedLabelId}
-                                  />
+                                        </StyledDropdownMenuItem>
+                                      )
+                                    })()}
+                                    {/* User-added: selected statuses with mode pill (include/exclude) */}
+                                    {effectiveTodoStates.filter(s => listFilter.has(s.id)).map(state => {
+                                      const applyColor = state.iconColorable
+                                      const mode = listFilter.get(state.id)!
+                                      return (
+                                        <DropdownMenuSub key={`sel-status-${state.id}`}>
+                                          <StyledDropdownMenuSubTrigger onClick={(e) => { e.preventDefault(); setListFilter(prev => { const next = new Map(prev); next.delete(state.id); return next }) }}>
+                                            <FilterMenuRow
+                                              icon={state.icon}
+                                              label={state.label}
+                                              accessory={<FilterModeBadge mode={mode} />}
+                                              iconStyle={applyColor ? { color: state.resolvedColor } : undefined}
+                                              noIconContainer
+                                            />
+                                          </StyledDropdownMenuSubTrigger>
+                                          <StyledDropdownMenuSubContent minWidth="min-w-[140px]">
+                                            <FilterModeSubMenuItems
+                                              mode={mode}
+                                              onChangeMode={(newMode) => setListFilter(prev => {
+                                                const next = new Map(prev)
+                                                next.set(state.id, newMode)
+                                                return next
+                                              })}
+                                              onRemove={() => setListFilter(prev => {
+                                                const next = new Map(prev)
+                                                next.delete(state.id)
+                                                return next
+                                              })}
+                                            />
+                                          </StyledDropdownMenuSubContent>
+                                        </DropdownMenuSub>
+                                      )
+                                    })}
+                                    {/* User-added: selected labels with mode pill (include/exclude) */}
+                                    {Array.from(labelFilter).map(([labelId, mode]) => {
+                                      const label = findLabelById(labelConfigs, labelId)
+                                      if (!label) return null
+                                      return (
+                                        <DropdownMenuSub key={`sel-label-${labelId}`}>
+                                          <StyledDropdownMenuSubTrigger onClick={(e) => { e.preventDefault(); setLabelFilter(prev => { const next = new Map(prev); next.delete(labelId); return next }) }}>
+                                            <FilterMenuRow
+                                              icon={<LabelIcon label={label} size="sm" />}
+                                              label={label.name}
+                                              accessory={<FilterModeBadge mode={mode} />}
+                                            />
+                                          </StyledDropdownMenuSubTrigger>
+                                          <StyledDropdownMenuSubContent minWidth="min-w-[140px]">
+                                            <FilterModeSubMenuItems
+                                              mode={mode}
+                                              onChangeMode={(newMode) => setLabelFilter(prev => {
+                                                const next = new Map(prev)
+                                                next.set(labelId, newMode)
+                                                return next
+                                              })}
+                                              onRemove={() => setLabelFilter(prev => {
+                                                const next = new Map(prev)
+                                                next.delete(labelId)
+                                                return next
+                                              })}
+                                            />
+                                          </StyledDropdownMenuSubContent>
+                                        </DropdownMenuSub>
+                                      )
+                                    })}
+                                    <StyledDropdownMenuSeparator />
+                                  </>
                                 )}
-                              </StyledDropdownMenuSubContent>
-                            </DropdownMenuSub>
 
-                            <StyledDropdownMenuSeparator />
-                            <StyledDropdownMenuItem
-                              onClick={() => {
-                                setSearchActive(true)
-                              }}
-                            >
-                              <Search className="h-3.5 w-3.5" />
-                              <span className="flex-1">Search</span>
-                            </StyledDropdownMenuItem>
-                          </>
-                        ) : (
-                          <>
-                            {/* === FLAT FILTERED MODE (has query) ===
-                                Uses the same filter/score logic as the # inline menu.
-                                Shows matching statuses and labels in a single flat list.
-                                Supports keyboard navigation (ArrowUp/Down/Enter in input). */}
-                            {filterDropdownResults.states.length === 0 && filterDropdownResults.labels.length === 0 ? (
-                              <div className="px-3 py-4 text-center text-xs text-muted-foreground">
-                                No matching statuses or labels
-                              </div>
-                            ) : (
-                              <div ref={filterDropdownListRef} className="max-h-[240px] overflow-y-auto py-1">
-                                {/* Matched statuses */}
-                                {filterDropdownResults.states.length > 0 && (
-                                  <>
-                                    <div className="px-3 pt-1.5 pb-1 text-[11px] font-medium text-muted-foreground/60 uppercase tracking-wider">
-                                      Statuses
-                                    </div>
-                                    {filterDropdownResults.states.map((state, index) => {
+                                {/* Statuses submenu - hierarchical with toggle selection */}
+                                <DropdownMenuSub>
+                                  <StyledDropdownMenuSubTrigger>
+                                    <Inbox className="h-3.5 w-3.5" />
+                                    <span className="flex-1">Statuses</span>
+                                  </StyledDropdownMenuSubTrigger>
+                                  <StyledDropdownMenuSubContent minWidth="min-w-[180px]">
+                                    {effectiveTodoStates.map(state => {
                                       const applyColor = state.iconColorable
                                       const isPinned = state.id === pinnedFilters.pinnedStatusId
                                       const currentMode = listFilter.get(state.id)
-                                      const isHighlighted = index === filterDropdownSelectedIdx
                                       const isActive = !!currentMode && !isPinned
-                                      // Active status → DropdownMenuSub with mode options
+                                      // Active status → DropdownMenuSub with mode options (Radix safe-triangle hover)
                                       if (isActive) {
                                         return (
-                                          <DropdownMenuSub key={`flat-status-${state.id}`}>
-                                            <StyledDropdownMenuSubTrigger
-                                              data-filter-selected={isHighlighted}
-                                              onMouseEnter={() => setFilterDropdownSelectedIdx(index)}
-                                              className={cn("mx-1", isHighlighted && "bg-foreground/5")}
-                                              onClick={(e) => { e.preventDefault(); setListFilter(prev => { const next = new Map(prev); next.delete(state.id); return next }) }}
-                                            >
+                                          <DropdownMenuSub key={state.id}>
+                                            <StyledDropdownMenuSubTrigger onClick={(e) => { e.preventDefault(); setListFilter(prev => { const next = new Map(prev); next.delete(state.id); return next }) }}>
                                               <FilterMenuRow
                                                 icon={state.icon}
                                                 label={state.label}
@@ -2699,12 +2669,11 @@ function AppShellContent({
                                           </DropdownMenuSub>
                                         )
                                       }
-                                      // Inactive / pinned status → plain div with click-to-toggle
+                                      // Inactive / pinned status → simple toggleable item
                                       return (
-                                        <div
-                                          key={`flat-status-${state.id}`}
-                                          data-filter-selected={isHighlighted}
-                                          onMouseEnter={() => setFilterDropdownSelectedIdx(index)}
+                                        <StyledDropdownMenuItem
+                                          key={state.id}
+                                          disabled={isPinned}
                                           onClick={(e) => {
                                             if (isPinned) return
                                             e.preventDefault()
@@ -2715,12 +2684,6 @@ function AppShellContent({
                                               return next
                                             })
                                           }}
-                                          className={cn(
-                                            // SVG sizing matches StyledDropdownMenuSubTrigger so icons render at the same size
-                                            "flex cursor-pointer select-none items-center gap-2 rounded-[4px] mx-1 px-2 py-1.5 text-sm [&_svg:not([class*='size-'])]:size-4 [&_svg]:shrink-0",
-                                            isHighlighted && "bg-foreground/5",
-                                            isPinned && "opacity-50 pointer-events-none",
-                                          )}
                                         >
                                           <FilterMenuRow
                                             icon={state.icon}
@@ -2729,358 +2692,495 @@ function AppShellContent({
                                             iconStyle={applyColor ? { color: state.resolvedColor } : undefined}
                                             noIconContainer
                                           />
-                                        </div>
+                                        </StyledDropdownMenuItem>
                                       )
                                     })}
-                                  </>
-                                )}
-                                {/* Separator between sections */}
-                                {filterDropdownResults.states.length > 0 && filterDropdownResults.labels.length > 0 && (
-                                  <div className="my-1 mx-2 border-t border-border/40" />
-                                )}
-                                {/* Matched labels — flat list with parent breadcrumbs */}
-                                {filterDropdownResults.labels.length > 0 && (
-                                  <>
-                                    <div className="px-3 pt-1.5 pb-1 text-[11px] font-medium text-muted-foreground/60 uppercase tracking-wider">
-                                      Labels
-                                    </div>
-                                    {filterDropdownResults.labels.map((item, index) => {
-                                      // Offset by state count for unified index
-                                      const flatIndex = filterDropdownResults.states.length + index
-                                      const isPinned = item.id === pinnedFilters.pinnedLabelId
-                                      const currentMode = labelFilter.get(item.id)
-                                      const isHighlighted = flatIndex === filterDropdownSelectedIdx
-                                      const isActive = !!currentMode && !isPinned
-                                      const labelDisplay = item.parentPath
-                                        ? <><span className="text-muted-foreground">{item.parentPath}</span>{item.label}</>
-                                        : item.label
-                                      // Active label → DropdownMenuSub with mode options
-                                      if (isActive) {
-                                        return (
-                                          <DropdownMenuSub key={`flat-label-${item.id}`}>
-                                            <StyledDropdownMenuSubTrigger
+                                  </StyledDropdownMenuSubContent>
+                                </DropdownMenuSub>
+
+                                {/* Labels submenu - hierarchical tree with recursive submenus */}
+                                <DropdownMenuSub>
+                                  <StyledDropdownMenuSubTrigger>
+                                    <Tag className="h-3.5 w-3.5" />
+                                    <span className="flex-1">Labels</span>
+                                  </StyledDropdownMenuSubTrigger>
+                                  <StyledDropdownMenuSubContent minWidth="min-w-[180px]">
+                                    {labelConfigs.length === 0 ? (
+                                      <StyledDropdownMenuItem disabled>
+                                        <span className="text-muted-foreground">No labels configured</span>
+                                      </StyledDropdownMenuItem>
+                                    ) : (
+                                      <FilterLabelItems
+                                        labels={labelConfigs}
+                                        labelFilter={labelFilter}
+                                        setLabelFilter={setLabelFilter}
+                                        pinnedLabelId={pinnedFilters.pinnedLabelId}
+                                      />
+                                    )}
+                                  </StyledDropdownMenuSubContent>
+                                </DropdownMenuSub>
+
+                                <StyledDropdownMenuSeparator />
+                                <StyledDropdownMenuItem
+                                  onClick={() => {
+                                    setSearchActive(true)
+                                  }}
+                                >
+                                  <Search className="h-3.5 w-3.5" />
+                                  <span className="flex-1">Search</span>
+                                </StyledDropdownMenuItem>
+                              </>
+                            ) : (
+                              <>
+                                {/* === FLAT FILTERED MODE (has query) ===
+                                Uses the same filter/score logic as the # inline menu.
+                                Shows matching statuses and labels in a single flat list.
+                                Supports keyboard navigation (ArrowUp/Down/Enter in input). */}
+                                {filterDropdownResults.states.length === 0 && filterDropdownResults.labels.length === 0 ? (
+                                  <div className="px-3 py-4 text-center text-xs text-muted-foreground">
+                                    No matching statuses or labels
+                                  </div>
+                                ) : (
+                                  <div ref={filterDropdownListRef} className="max-h-[240px] overflow-y-auto py-1">
+                                    {/* Matched statuses */}
+                                    {filterDropdownResults.states.length > 0 && (
+                                      <>
+                                        <div className="px-3 pt-1.5 pb-1 text-[11px] font-medium text-muted-foreground/60 uppercase tracking-wider">
+                                          Statuses
+                                        </div>
+                                        {filterDropdownResults.states.map((state, index) => {
+                                          const applyColor = state.iconColorable
+                                          const isPinned = state.id === pinnedFilters.pinnedStatusId
+                                          const currentMode = listFilter.get(state.id)
+                                          const isHighlighted = index === filterDropdownSelectedIdx
+                                          const isActive = !!currentMode && !isPinned
+                                          // Active status → DropdownMenuSub with mode options
+                                          if (isActive) {
+                                            return (
+                                              <DropdownMenuSub key={`flat-status-${state.id}`}>
+                                                <StyledDropdownMenuSubTrigger
+                                                  data-filter-selected={isHighlighted}
+                                                  onMouseEnter={() => setFilterDropdownSelectedIdx(index)}
+                                                  className={cn("mx-1", isHighlighted && "bg-foreground/5")}
+                                                  onClick={(e) => { e.preventDefault(); setListFilter(prev => { const next = new Map(prev); next.delete(state.id); return next }) }}
+                                                >
+                                                  <FilterMenuRow
+                                                    icon={state.icon}
+                                                    label={state.label}
+                                                    accessory={<FilterModeBadge mode={currentMode} />}
+                                                    iconStyle={applyColor ? { color: state.resolvedColor } : undefined}
+                                                    noIconContainer
+                                                  />
+                                                </StyledDropdownMenuSubTrigger>
+                                                <StyledDropdownMenuSubContent minWidth="min-w-[140px]">
+                                                  <FilterModeSubMenuItems
+                                                    mode={currentMode}
+                                                    onChangeMode={(newMode) => setListFilter(prev => {
+                                                      const next = new Map(prev)
+                                                      next.set(state.id, newMode)
+                                                      return next
+                                                    })}
+                                                    onRemove={() => setListFilter(prev => {
+                                                      const next = new Map(prev)
+                                                      next.delete(state.id)
+                                                      return next
+                                                    })}
+                                                  />
+                                                </StyledDropdownMenuSubContent>
+                                              </DropdownMenuSub>
+                                            )
+                                          }
+                                          // Inactive / pinned status → plain div with click-to-toggle
+                                          return (
+                                            <div
+                                              key={`flat-status-${state.id}`}
+                                              data-filter-selected={isHighlighted}
+                                              onMouseEnter={() => setFilterDropdownSelectedIdx(index)}
+                                              onClick={(e) => {
+                                                if (isPinned) return
+                                                e.preventDefault()
+                                                setListFilter(prev => {
+                                                  const next = new Map(prev)
+                                                  if (next.has(state.id)) next.delete(state.id)
+                                                  else next.set(state.id, 'include')
+                                                  return next
+                                                })
+                                              }}
+                                              className={cn(
+                                                // SVG sizing matches StyledDropdownMenuSubTrigger so icons render at the same size
+                                                "flex cursor-pointer select-none items-center gap-2 rounded-[4px] mx-1 px-2 py-1.5 text-sm [&_svg:not([class*='size-'])]:size-4 [&_svg]:shrink-0",
+                                                isHighlighted && "bg-foreground/5",
+                                                isPinned && "opacity-50 pointer-events-none",
+                                              )}
+                                            >
+                                              <FilterMenuRow
+                                                icon={state.icon}
+                                                label={state.label}
+                                                accessory={isPinned ? <Check className="h-3 w-3 text-muted-foreground" /> : null}
+                                                iconStyle={applyColor ? { color: state.resolvedColor } : undefined}
+                                                noIconContainer
+                                              />
+                                            </div>
+                                          )
+                                        })}
+                                      </>
+                                    )}
+                                    {/* Separator between sections */}
+                                    {filterDropdownResults.states.length > 0 && filterDropdownResults.labels.length > 0 && (
+                                      <div className="my-1 mx-2 border-t border-border/40" />
+                                    )}
+                                    {/* Matched labels — flat list with parent breadcrumbs */}
+                                    {filterDropdownResults.labels.length > 0 && (
+                                      <>
+                                        <div className="px-3 pt-1.5 pb-1 text-[11px] font-medium text-muted-foreground/60 uppercase tracking-wider">
+                                          Labels
+                                        </div>
+                                        {filterDropdownResults.labels.map((item, index) => {
+                                          // Offset by state count for unified index
+                                          const flatIndex = filterDropdownResults.states.length + index
+                                          const isPinned = item.id === pinnedFilters.pinnedLabelId
+                                          const currentMode = labelFilter.get(item.id)
+                                          const isHighlighted = flatIndex === filterDropdownSelectedIdx
+                                          const isActive = !!currentMode && !isPinned
+                                          const labelDisplay = item.parentPath
+                                            ? <><span className="text-muted-foreground">{item.parentPath}</span>{item.label}</>
+                                            : item.label
+                                          // Active label → DropdownMenuSub with mode options
+                                          if (isActive) {
+                                            return (
+                                              <DropdownMenuSub key={`flat-label-${item.id}`}>
+                                                <StyledDropdownMenuSubTrigger
+                                                  data-filter-selected={isHighlighted}
+                                                  onMouseEnter={() => setFilterDropdownSelectedIdx(flatIndex)}
+                                                  className={cn("mx-1", isHighlighted && "bg-foreground/5")}
+                                                  onClick={(e) => { e.preventDefault(); setLabelFilter(prev => { const next = new Map(prev); next.delete(item.id); return next }) }}
+                                                >
+                                                  <FilterMenuRow
+                                                    icon={<LabelIcon label={item.config} size="sm" />}
+                                                    label={labelDisplay}
+                                                    accessory={<FilterModeBadge mode={currentMode} />}
+                                                  />
+                                                </StyledDropdownMenuSubTrigger>
+                                                <StyledDropdownMenuSubContent minWidth="min-w-[140px]">
+                                                  <FilterModeSubMenuItems
+                                                    mode={currentMode}
+                                                    onChangeMode={(newMode) => setLabelFilter(prev => {
+                                                      const next = new Map(prev)
+                                                      next.set(item.id, newMode)
+                                                      return next
+                                                    })}
+                                                    onRemove={() => setLabelFilter(prev => {
+                                                      const next = new Map(prev)
+                                                      next.delete(item.id)
+                                                      return next
+                                                    })}
+                                                  />
+                                                </StyledDropdownMenuSubContent>
+                                              </DropdownMenuSub>
+                                            )
+                                          }
+                                          // Inactive / pinned label → plain div with click-to-toggle
+                                          return (
+                                            <div
+                                              key={`flat-label-${item.id}`}
                                               data-filter-selected={isHighlighted}
                                               onMouseEnter={() => setFilterDropdownSelectedIdx(flatIndex)}
-                                              className={cn("mx-1", isHighlighted && "bg-foreground/5")}
-                                              onClick={(e) => { e.preventDefault(); setLabelFilter(prev => { const next = new Map(prev); next.delete(item.id); return next }) }}
+                                              onClick={(e) => {
+                                                if (isPinned) return
+                                                e.preventDefault()
+                                                setLabelFilter(prev => {
+                                                  const next = new Map(prev)
+                                                  if (next.has(item.id)) next.delete(item.id)
+                                                  else next.set(item.id, 'include')
+                                                  return next
+                                                })
+                                              }}
+                                              className={cn(
+                                                // SVG sizing matches StyledDropdownMenuSubTrigger so icons render at the same size
+                                                "flex cursor-pointer select-none items-center gap-2 rounded-[4px] mx-1 px-2 py-1.5 text-sm [&_svg:not([class*='size-'])]:size-4 [&_svg]:shrink-0",
+                                                isHighlighted && "bg-foreground/5",
+                                                isPinned && "opacity-50 pointer-events-none",
+                                              )}
                                             >
                                               <FilterMenuRow
                                                 icon={<LabelIcon label={item.config} size="sm" />}
                                                 label={labelDisplay}
-                                                accessory={<FilterModeBadge mode={currentMode} />}
+                                                accessory={isPinned ? <Check className="h-3 w-3 text-muted-foreground" /> : null}
                                               />
-                                            </StyledDropdownMenuSubTrigger>
-                                            <StyledDropdownMenuSubContent minWidth="min-w-[140px]">
-                                              <FilterModeSubMenuItems
-                                                mode={currentMode}
-                                                onChangeMode={(newMode) => setLabelFilter(prev => {
-                                                  const next = new Map(prev)
-                                                  next.set(item.id, newMode)
-                                                  return next
-                                                })}
-                                                onRemove={() => setLabelFilter(prev => {
-                                                  const next = new Map(prev)
-                                                  next.delete(item.id)
-                                                  return next
-                                                })}
-                                              />
-                                            </StyledDropdownMenuSubContent>
-                                          </DropdownMenuSub>
-                                        )
-                                      }
-                                      // Inactive / pinned label → plain div with click-to-toggle
-                                      return (
-                                        <div
-                                          key={`flat-label-${item.id}`}
-                                          data-filter-selected={isHighlighted}
-                                          onMouseEnter={() => setFilterDropdownSelectedIdx(flatIndex)}
-                                          onClick={(e) => {
-                                            if (isPinned) return
-                                            e.preventDefault()
-                                            setLabelFilter(prev => {
-                                              const next = new Map(prev)
-                                              if (next.has(item.id)) next.delete(item.id)
-                                              else next.set(item.id, 'include')
-                                              return next
-                                            })
-                                          }}
-                                          className={cn(
-                                            // SVG sizing matches StyledDropdownMenuSubTrigger so icons render at the same size
-                                            "flex cursor-pointer select-none items-center gap-2 rounded-[4px] mx-1 px-2 py-1.5 text-sm [&_svg:not([class*='size-'])]:size-4 [&_svg]:shrink-0",
-                                            isHighlighted && "bg-foreground/5",
-                                            isPinned && "opacity-50 pointer-events-none",
-                                          )}
-                                        >
-                                          <FilterMenuRow
-                                            icon={<LabelIcon label={item.config} size="sm" />}
-                                            label={labelDisplay}
-                                            accessory={isPinned ? <Check className="h-3 w-3 text-muted-foreground" /> : null}
-                                          />
-                                        </div>
-                                      )
-                                    })}
-                                  </>
+                                            </div>
+                                          )
+                                        })}
+                                      </>
+                                    )}
+                                  </div>
                                 )}
-                              </div>
+                              </>
                             )}
-                          </>
-                        )}
-                      </StyledDropdownMenuContent>
-                    </DropdownMenu>
-                  )}
-                  {/* Add Source button (only for sources mode) - uses filter-aware edit config */}
-                  {isSourcesNavigation(navState) && activeWorkspace && (
-                    <EditPopover
-                      trigger={
-                        <HeaderIconButton
-                          icon={<Plus className="h-4 w-4" />}
-                          tooltip="Add Source"
-                          data-tutorial="add-source-button"
-                        />
-                      }
-                      {...getEditConfig(
-                        sourceFilter?.kind === 'type' ? `add-source-${sourceFilter.sourceType}` as EditContextKey : 'add-source',
-                        activeWorkspace.rootPath
+                          </StyledDropdownMenuContent>
+                        </DropdownMenu>
                       )}
-                    />
-                  )}
-                  {/* Add Skill button (only for skills mode) */}
-                  {isSkillsNavigation(navState) && activeWorkspace && (
-                    <EditPopover
-                      trigger={
-                        <HeaderIconButton
-                          icon={<Plus className="h-4 w-4" />}
-                          tooltip="Add Skill"
-                          data-tutorial="add-skill-button"
+                      {/* Add Source button (only for sources mode) - uses filter-aware edit config */}
+                      {isSourcesNavigation(navState) && activeWorkspace && (
+                        <EditPopover
+                          trigger={
+                            <HeaderIconButton
+                              icon={<Plus className="h-4 w-4" />}
+                              tooltip="Add Source"
+                              data-tutorial="add-source-button"
+                            />
+                          }
+                          {...getEditConfig(
+                            sourceFilter?.kind === 'type' ? `add-source-${sourceFilter.sourceType}` as EditContextKey : 'add-source',
+                            activeWorkspace.rootPath
+                          )}
                         />
-                      }
-                      {...getEditConfig('add-skill', activeWorkspace.rootPath)}
-                    />
-                  )}
-                </>
-              }
-            />
-            {/* Content: SessionList, SourcesListPanel, or SettingsNavigator based on navigation state */}
-            {isSourcesNavigation(navState) && (
-              /* Sources List - filtered by type if sourceFilter is active */
-              <SourcesListPanel
-                sources={sources}
-                sourceFilter={sourceFilter}
-                workspaceRootPath={activeWorkspace?.rootPath}
-                onDeleteSource={handleDeleteSource}
-                onSourceClick={handleSourceSelect}
-                selectedSourceSlug={isSourcesNavigation(navState) && navState.details ? navState.details.sourceSlug : null}
-                localMcpEnabled={localMcpEnabled}
-              />
-            )}
-            {isSkillsNavigation(navState) && activeWorkspaceId && (
-              /* Skills List */
-              <SkillsListPanel
-                skills={skills}
-                workspaceId={activeWorkspaceId}
-                workspaceRootPath={activeWorkspace?.rootPath}
-                onSkillClick={handleSkillSelect}
-                onDeleteSkill={handleDeleteSkill}
-                selectedSkillSlug={isSkillsNavigation(navState) && navState.details?.type === 'skill' ? navState.details.skillSlug : null}
-              />
-            )}
-            {isSettingsNavigation(navState) && (
-              /* Settings Navigator */
-              <SettingsNavigator
-                selectedSubpage={navState.subpage}
-                onSelectSubpage={(subpage) => handleSettingsClick(subpage)}
-              />
-            )}
-            {isChatsNavigation(navState) && (
-              /* Sessions List */
-              <>
-                {/* SessionList: Scrollable list of session cards */}
-                {/* Key on sidebarMode forces full remount when switching views, skipping animations */}
-                <SessionList
-                  key={chatFilter?.kind}
-                  items={searchActive ? workspaceSessionMetas : filteredSessionMetas}
-                  onDelete={handleDeleteSession}
-                  onFlag={onFlagSession}
-                  onUnflag={onUnflagSession}
-                  onMarkUnread={onMarkSessionUnread}
-                  onTodoStateChange={onTodoStateChange}
-                  onRename={onRenameSession}
-                  onFocusChatInput={focusChatInput}
-                  onSessionSelect={(selectedMeta) => {
-                    // Navigate to the session via central routing (with filter context)
-                    if (!chatFilter || chatFilter.kind === 'allChats') {
-                      navigate(routes.view.allChats(selectedMeta.id))
-                    } else if (chatFilter.kind === 'flagged') {
-                      navigate(routes.view.flagged(selectedMeta.id))
-                    } else if (chatFilter.kind === 'state') {
-                      navigate(routes.view.state(chatFilter.stateId, selectedMeta.id))
-                    } else if (chatFilter.kind === 'label') {
-                      navigate(routes.view.label(chatFilter.labelId, selectedMeta.id))
-                    } else if (chatFilter.kind === 'view') {
-                      navigate(routes.view.view(chatFilter.viewId, selectedMeta.id))
-                    }
-                  }}
-                  onOpenInNewWindow={(selectedMeta) => {
-                    if (activeWorkspaceId) {
-                      window.electronAPI.openSessionInNewWindow(activeWorkspaceId, selectedMeta.id)
-                    }
-                  }}
-                  onNavigateToView={(view) => {
-                    if (view === 'allChats') {
-                      navigate(routes.view.allChats())
-                    } else if (view === 'flagged') {
-                      navigate(routes.view.flagged())
-                    }
-                  }}
-                  sessionOptions={sessionOptions}
-                  searchActive={searchActive}
-                  searchQuery={searchQuery}
-                  onSearchChange={setSearchQuery}
-                  onSearchClose={() => {
-                    setSearchActive(false)
-                    setSearchQuery('')
-                  }}
-                  todoStates={effectiveTodoStates}
-                  evaluateViews={evaluateViews}
-                  labels={labelConfigs}
-                  onLabelsChange={handleSessionLabelsChange}
-                  workspaceId={activeWorkspaceId ?? undefined}
-                  statusFilter={listFilter}
-                  labelFilterMap={labelFilter}
+                      )}
+                      {/* Add Skill button (only for skills mode) */}
+                      {isSkillsNavigation(navState) && activeWorkspace && (
+                        <EditPopover
+                          trigger={
+                            <HeaderIconButton
+                              icon={<Plus className="h-4 w-4" />}
+                              tooltip="Add Skill"
+                              data-tutorial="add-skill-button"
+                            />
+                          }
+                          {...getEditConfig('add-skill', activeWorkspace.rootPath)}
+                        />
+                      )}
+                      {/* Skill Market button (only for skills mode) */}
+                      {isSkillsNavigation(navState) && (
+                        <HeaderIconButton
+                          icon={<Store className="h-4 w-4" />}
+                          tooltip="Skill Market"
+                          onClick={() => window.electronAPI.openUrl('https://skillsmp.com/zh')}
+                        />
+                      )}
+                    </>
+                  }
                 />
-              </>
-            )}
-            </div>
-          </motion.div>
-
-          {/* Session List Resize Handle (hidden in focused mode) */}
-          {!effectiveFocusMode && (
-          <div
-            ref={sessionListHandleRef}
-            onMouseDown={(e) => { e.preventDefault(); setIsResizing('session-list') }}
-            onMouseMove={(e) => {
-              if (sessionListHandleRef.current) {
-                const rect = sessionListHandleRef.current.getBoundingClientRect()
-                setSessionListHandleY(e.clientY - rect.top)
-              }
-            }}
-            onMouseLeave={() => { if (isResizing !== 'session-list') setSessionListHandleY(null) }}
-            className="relative w-0 h-full cursor-col-resize flex justify-center shrink-0"
-          >
-            {/* Touch area */}
-            <div className="absolute inset-y-0 -left-1.5 -right-1.5 flex justify-center cursor-col-resize">
-              <div
-                className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-0.5"
-                style={getResizeGradientStyle(sessionListHandleY)}
-              />
-            </div>
-          </div>
-          )}
-
-          {/* === MAIN CONTENT PANEL === */}
-          <div className={cn(
-            "flex-1 overflow-hidden min-w-0 bg-foreground-2 shadow-middle",
-            effectiveFocusMode ? "rounded-l-[14px]" : "rounded-l-[10px]",
-            isRightSidebarVisible ? "rounded-r-[10px]" : "rounded-r-[14px]"
-          )}>
-            <MainContentPanel isFocusedMode={effectiveFocusMode} />
-          </div>
-
-          {/* Right Sidebar - Inline Mode (≥ 920px) */}
-          {!shouldUseOverlay && (
-            <>
-              {/* Resize Handle */}
-              {isRightSidebarVisible && (
-                <div
-                  ref={rightSidebarHandleRef}
-                  onMouseDown={(e) => { e.preventDefault(); setIsResizing('right-sidebar') }}
-                  onMouseMove={(e) => {
-                    if (rightSidebarHandleRef.current) {
-                      const rect = rightSidebarHandleRef.current.getBoundingClientRect()
-                      setRightSidebarHandleY(e.clientY - rect.top)
-                    }
-                  }}
-                  onMouseLeave={() => { if (isResizing !== 'right-sidebar') setRightSidebarHandleY(null) }}
-                  className="relative w-0 h-full cursor-col-resize flex justify-center shrink-0"
-                >
-                  {/* Touch area */}
-                  <div className="absolute inset-y-0 -left-1.5 -right-1.5 flex justify-center cursor-col-resize">
-                    <div
-                      className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-0.5"
-                      style={getResizeGradientStyle(rightSidebarHandleY)}
+                {/* Content: SessionList, SourcesListPanel, or SettingsNavigator based on navigation state */}
+                {isSourcesNavigation(navState) && (
+                  /* Sources List - filtered by type if sourceFilter is active */
+                  <SourcesListPanel
+                    sources={sources}
+                    sourceFilter={sourceFilter}
+                    workspaceRootPath={activeWorkspace?.rootPath}
+                    onDeleteSource={handleDeleteSource}
+                    onSourceClick={handleSourceSelect}
+                    selectedSourceSlug={isSourcesNavigation(navState) && navState.details ? navState.details.sourceSlug : null}
+                    localMcpEnabled={localMcpEnabled}
+                  />
+                )}
+                {isSkillsNavigation(navState) && activeWorkspaceId && (
+                  /* Skills List */
+                  <SkillsListPanel
+                    skills={skills}
+                    workspaceId={activeWorkspaceId}
+                    workspaceRootPath={activeWorkspace?.rootPath}
+                    onSkillClick={handleSkillSelect}
+                    onDeleteSkill={handleDeleteSkill}
+                    selectedSkillSlug={isSkillsNavigation(navState) && navState.details?.type === 'skill' ? navState.details.skillSlug : null}
+                  />
+                )}
+                {isSettingsNavigation(navState) && (
+                  /* Settings Navigator */
+                  <SettingsNavigator
+                    selectedSubpage={navState.subpage}
+                    onSelectSubpage={(subpage) => handleSettingsClick(subpage)}
+                  />
+                )}
+                {isChatsNavigation(navState) && (
+                  /* Sessions List */
+                  <>
+                    {/* SessionList: Scrollable list of session cards */}
+                    {/* Key on sidebarMode forces full remount when switching views, skipping animations */}
+                    <SessionList
+                      key={chatFilter?.kind}
+                      items={searchActive ? workspaceSessionMetas : filteredSessionMetas}
+                      onDelete={handleDeleteSession}
+                      onFlag={onFlagSession}
+                      onUnflag={onUnflagSession}
+                      onMarkUnread={onMarkSessionUnread}
+                      onTodoStateChange={onTodoStateChange}
+                      onRename={onRenameSession}
+                      onFocusChatInput={focusChatInput}
+                      onSessionSelect={(selectedMeta) => {
+                        // Navigate to the session via central routing (with filter context)
+                        if (!chatFilter || chatFilter.kind === 'allChats') {
+                          navigate(routes.view.allChats(selectedMeta.id))
+                        } else if (chatFilter.kind === 'flagged') {
+                          navigate(routes.view.flagged(selectedMeta.id))
+                        } else if (chatFilter.kind === 'state') {
+                          navigate(routes.view.state(chatFilter.stateId, selectedMeta.id))
+                        } else if (chatFilter.kind === 'label') {
+                          navigate(routes.view.label(chatFilter.labelId, selectedMeta.id))
+                        } else if (chatFilter.kind === 'view') {
+                          navigate(routes.view.view(chatFilter.viewId, selectedMeta.id))
+                        }
+                      }}
+                      onOpenInNewWindow={(selectedMeta) => {
+                        if (activeWorkspaceId) {
+                          window.electronAPI.openSessionInNewWindow(activeWorkspaceId, selectedMeta.id)
+                        }
+                      }}
+                      onNavigateToView={(view) => {
+                        if (view === 'allChats') {
+                          navigate(routes.view.allChats())
+                        } else if (view === 'flagged') {
+                          navigate(routes.view.flagged())
+                        }
+                      }}
+                      sessionOptions={sessionOptions}
+                      searchActive={searchActive}
+                      searchQuery={searchQuery}
+                      onSearchChange={setSearchQuery}
+                      onSearchClose={() => {
+                        setSearchActive(false)
+                        setSearchQuery('')
+                      }}
+                      todoStates={effectiveTodoStates}
+                      evaluateViews={evaluateViews}
+                      labels={labelConfigs}
+                      onLabelsChange={handleSessionLabelsChange}
+                      workspaceId={activeWorkspaceId ?? undefined}
+                      statusFilter={listFilter}
+                      labelFilterMap={labelFilter}
+                      statusEnabled={statusEnabled}
                     />
-                  </div>
-                </div>
-              )}
+                  </>
+                )}
+              </div>
+            </motion.div>
 
-              {/* Inline Sidebar */}
-              <motion.div
-                initial={false}
-                animate={{
-                  width: isRightSidebarVisible ? rightSidebarWidth : 0,
-                  marginLeft: isRightSidebarVisible ? 0 : -PANEL_PANEL_SPACING / 2,
+            {/* Session List Resize Handle (hidden in focused mode) */}
+            {!effectiveFocusMode && (
+              <div
+                ref={sessionListHandleRef}
+                onMouseDown={(e) => { e.preventDefault(); setIsResizing('session-list') }}
+                onMouseMove={(e) => {
+                  if (sessionListHandleRef.current) {
+                    const rect = sessionListHandleRef.current.getBoundingClientRect()
+                    setSessionListHandleY(e.clientY - rect.top)
+                  }
                 }}
-                transition={isResizing === 'right-sidebar' || skipRightSidebarAnimation ? { duration: 0 } : springTransition}
-                className="h-full shrink-0 overflow-visible"
+                onMouseLeave={() => { if (isResizing !== 'session-list') setSessionListHandleY(null) }}
+                className="relative w-0 h-full cursor-col-resize flex justify-center shrink-0"
               >
+                {/* Touch area */}
+                <div className="absolute inset-y-0 -left-1.5 -right-1.5 flex justify-center cursor-col-resize">
+                  <div
+                    className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-0.5"
+                    style={getResizeGradientStyle(sessionListHandleY)}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* === MAIN CONTENT PANEL === */}
+            <div className={cn(
+              "flex-1 overflow-hidden min-w-0 bg-foreground-2 shadow-middle",
+              effectiveFocusMode ? "rounded-l-[14px]" : "rounded-l-[10px]",
+              isRightSidebarVisible ? "rounded-r-[10px]" : "rounded-r-[14px]"
+            )}>
+              <MainContentPanel isFocusedMode={effectiveFocusMode} />
+            </div>
+
+            {/* Right Sidebar - Inline Mode (≥ 920px) */}
+            {!shouldUseOverlay && (
+              <>
+                {/* Resize Handle */}
+                {isRightSidebarVisible && (
+                  <div
+                    ref={rightSidebarHandleRef}
+                    onMouseDown={(e) => { e.preventDefault(); setIsResizing('right-sidebar') }}
+                    onMouseMove={(e) => {
+                      if (rightSidebarHandleRef.current) {
+                        const rect = rightSidebarHandleRef.current.getBoundingClientRect()
+                        setRightSidebarHandleY(e.clientY - rect.top)
+                      }
+                    }}
+                    onMouseLeave={() => { if (isResizing !== 'right-sidebar') setRightSidebarHandleY(null) }}
+                    className="relative w-0 h-full cursor-col-resize flex justify-center shrink-0"
+                  >
+                    {/* Touch area */}
+                    <div className="absolute inset-y-0 -left-1.5 -right-1.5 flex justify-center cursor-col-resize">
+                      <div
+                        className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-0.5"
+                        style={getResizeGradientStyle(rightSidebarHandleY)}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Inline Sidebar */}
                 <motion.div
                   initial={false}
                   animate={{
-                    x: isRightSidebarVisible ? 0 : rightSidebarWidth + PANEL_PANEL_SPACING / 2,
-                    opacity: isRightSidebarVisible ? 1 : 0,
+                    width: isRightSidebarVisible ? rightSidebarWidth : 0,
+                    marginLeft: isRightSidebarVisible ? 0 : -PANEL_PANEL_SPACING / 2,
                   }}
                   transition={isResizing === 'right-sidebar' || skipRightSidebarAnimation ? { duration: 0 } : springTransition}
-                  className="h-full bg-foreground-2 shadow-middle rounded-l-[10px] rounded-r-[14px]"
-                  style={{ width: rightSidebarWidth }}
+                  className="h-full shrink-0 overflow-visible"
                 >
-                  <RightSidebar
-                    panel={{ type: 'sessionMetadata' }}
-                    sessionId={isChatsNavigation(navState) && navState.details ? navState.details.sessionId : undefined}
-                    closeButton={rightSidebarCloseButton}
-                  />
-                </motion.div>
-              </motion.div>
-            </>
-          )}
-
-          {/* Right Sidebar - Overlay Mode (< 920px) */}
-          {shouldUseOverlay && (
-            <AnimatePresence>
-              {isRightSidebarVisible && (
-                <>
-                  {/* Backdrop */}
                   <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={skipRightSidebarAnimation ? { duration: 0 } : { duration: 0.2 }}
-                    className="fixed inset-0 bg-black/25 z-overlay"
-                    onClick={() => setIsRightSidebarVisible(false)}
-                  />
-                  {/* Drawer panel */}
-                  <motion.div
-                    initial={{ x: 316 }}
-                    animate={{ x: 0 }}
-                    exit={{ x: 316 }}
-                    transition={skipRightSidebarAnimation ? { duration: 0 } : springTransition}
-                    className="fixed inset-y-0 right-0 w-[316px] h-screen z-overlay p-1.5"
+                    initial={false}
+                    animate={{
+                      x: isRightSidebarVisible ? 0 : rightSidebarWidth + PANEL_PANEL_SPACING / 2,
+                      opacity: isRightSidebarVisible ? 1 : 0,
+                    }}
+                    transition={isResizing === 'right-sidebar' || skipRightSidebarAnimation ? { duration: 0 } : springTransition}
+                    className="h-full bg-foreground-2 shadow-middle rounded-l-[10px] rounded-r-[14px]"
+                    style={{ width: rightSidebarWidth }}
                   >
-                    <div className="h-full bg-foreground-2 overflow-hidden shadow-strong rounded-[12px]">
-                      <RightSidebar
-                        panel={{ type: 'sessionMetadata' }}
-                        sessionId={isChatsNavigation(navState) && navState.details ? navState.details.sessionId : undefined}
-                        closeButton={rightSidebarCloseButton}
-                      />
-                    </div>
+                    <RightSidebar
+                      panel={{ type: 'sessionMetadata' }}
+                      sessionId={isChatsNavigation(navState) && navState.details ? navState.details.sessionId : undefined}
+                      closeButton={rightSidebarCloseButton}
+                    />
                   </motion.div>
-                </>
-              )}
-            </AnimatePresence>
-          )}
-        </div>
-      </div>
+                </motion.div>
+              </>
+            )}
 
-      {/* ============================================================================
+            {/* Right Sidebar - Overlay Mode (< 920px) */}
+            {shouldUseOverlay && (
+              <AnimatePresence>
+                {isRightSidebarVisible && (
+                  <>
+                    {/* Backdrop */}
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={skipRightSidebarAnimation ? { duration: 0 } : { duration: 0.2 }}
+                      className="fixed inset-0 bg-black/25 z-overlay"
+                      onClick={() => setIsRightSidebarVisible(false)}
+                    />
+                    {/* Drawer panel */}
+                    <motion.div
+                      initial={{ x: 316 }}
+                      animate={{ x: 0 }}
+                      exit={{ x: 316 }}
+                      transition={skipRightSidebarAnimation ? { duration: 0 } : springTransition}
+                      className="fixed inset-y-0 right-0 w-[316px] h-screen z-overlay p-1.5"
+                    >
+                      <div className="h-full bg-foreground-2 overflow-hidden shadow-strong rounded-[12px]">
+                        <RightSidebar
+                          panel={{ type: 'sessionMetadata' }}
+                          sessionId={isChatsNavigation(navState) && navState.details ? navState.details.sessionId : undefined}
+                          closeButton={rightSidebarCloseButton}
+                        />
+                      </div>
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
+            )}
+          </div>
+        </div>
+
+        {/* ============================================================================
        * CONTEXT MENU TRIGGERED EDIT POPOVERS
        * ============================================================================
        * These EditPopovers are opened programmatically from sidebar context menus.
@@ -3089,92 +3189,12 @@ function AppShellContent({
        * so the popover appears near the triggering item rather than at a fixed location.
        * modal={true} prevents auto-close when focus shifts after context menu closes.
        */}
-      {activeWorkspace && (
-        <>
-          {/* Configure Statuses EditPopover - anchored near sidebar */}
-          <EditPopover
-            open={editPopoverOpen === 'statuses'}
-            onOpenChange={(isOpen) => setEditPopoverOpen(isOpen ? 'statuses' : null)}
-            modal={true}
-            trigger={
-              <div
-                className="fixed w-0 h-0 pointer-events-none"
-                style={{ left: sidebarWidth + 20, top: editPopoverAnchorY.current }}
-                aria-hidden="true"
-              />
-            }
-            side="bottom"
-            align="start"
-            secondaryAction={{
-              label: 'Edit File',
-              filePath: `${activeWorkspace.rootPath}/statuses/config.json`,
-            }}
-            {...getEditConfig('edit-statuses', activeWorkspace.rootPath)}
-          />
-          {/* Configure Labels EditPopover - anchored near sidebar */}
-          <EditPopover
-            open={editPopoverOpen === 'labels'}
-            onOpenChange={(isOpen) => setEditPopoverOpen(isOpen ? 'labels' : null)}
-            modal={true}
-            trigger={
-              <div
-                className="fixed w-0 h-0 pointer-events-none"
-                style={{ left: sidebarWidth + 20, top: editPopoverAnchorY.current }}
-                aria-hidden="true"
-              />
-            }
-            side="bottom"
-            align="start"
-            secondaryAction={{
-              label: 'Edit File',
-              filePath: `${activeWorkspace.rootPath}/labels/config.json`,
-            }}
-            {...(() => {
-              // Spread base config, override context to include which label was right-clicked
-              const config = getEditConfig('edit-labels', activeWorkspace.rootPath)
-              const targetLabel = editLabelTargetId.current
-                ? findLabelById(labelConfigs, editLabelTargetId.current)
-                : undefined
-              if (!targetLabel) return config
-              return {
-                ...config,
-                context: {
-                  ...config.context,
-                  context: (config.context.context || '') +
-                    ` The user right-clicked on the label "${targetLabel.name}" (id: "${targetLabel.id}"). ` +
-                    'If they refer to "this label" or "this", they mean this specific label.',
-                },
-              }
-            })()}
-          />
-          {/* Edit Views EditPopover - anchored near sidebar */}
-          <EditPopover
-            open={editPopoverOpen === 'views'}
-            onOpenChange={(isOpen) => setEditPopoverOpen(isOpen ? 'views' : null)}
-            modal={true}
-            trigger={
-              <div
-                className="fixed w-0 h-0 pointer-events-none"
-                style={{ left: sidebarWidth + 20, top: editPopoverAnchorY.current }}
-                aria-hidden="true"
-              />
-            }
-            side="bottom"
-            align="start"
-            secondaryAction={{
-              label: 'Edit File',
-              filePath: `${activeWorkspace.rootPath}/views.json`,
-            }}
-            {...getEditConfig('edit-views', activeWorkspace.rootPath)}
-          />
-          {/* Add Source EditPopovers - one for each variant (generic + filter-specific)
-           * editPopoverOpen can be: 'add-source', 'add-source-api', 'add-source-mcp', 'add-source-local'
-           * Each variant uses its corresponding EditContextKey for filter-aware agent context */}
-          {(['add-source', 'add-source-api', 'add-source-mcp', 'add-source-local'] as const).map((variant) => (
+        {activeWorkspace && (
+          <>
+            {/* Configure Statuses EditPopover - anchored near sidebar */}
             <EditPopover
-              key={variant}
-              open={editPopoverOpen === variant}
-              onOpenChange={(isOpen) => setEditPopoverOpen(isOpen ? variant : null)}
+              open={editPopoverOpen === 'statuses'}
+              onOpenChange={(isOpen) => setEditPopoverOpen(isOpen ? 'statuses' : null)}
               modal={true}
               trigger={
                 <div
@@ -3185,63 +3205,143 @@ function AppShellContent({
               }
               side="bottom"
               align="start"
-              {...getEditConfig(variant, activeWorkspace.rootPath)}
+              secondaryAction={{
+                label: 'Edit File',
+                filePath: `${activeWorkspace.rootPath}/statuses/config.json`,
+              }}
+              {...getEditConfig('edit-statuses', activeWorkspace.rootPath)}
             />
-          ))}
-          {/* Add Skill EditPopover */}
-          <EditPopover
-            open={editPopoverOpen === 'add-skill'}
-            onOpenChange={(isOpen) => setEditPopoverOpen(isOpen ? 'add-skill' : null)}
-            modal={true}
-            trigger={
-              <div
-                className="fixed w-0 h-0 pointer-events-none"
-                style={{ left: sidebarWidth + 20, top: editPopoverAnchorY.current }}
-                aria-hidden="true"
-              />
-            }
-            side="bottom"
-            align="start"
-            {...getEditConfig('add-skill', activeWorkspace.rootPath)}
-          />
-          {/* Add Label EditPopover - triggered from "Add New Label" context menu on labels */}
-          <EditPopover
-            open={editPopoverOpen === 'add-label'}
-            onOpenChange={(isOpen) => setEditPopoverOpen(isOpen ? 'add-label' : null)}
-            modal={true}
-            trigger={
-              <div
-                className="fixed w-0 h-0 pointer-events-none"
-                style={{ left: sidebarWidth + 20, top: editPopoverAnchorY.current }}
-                aria-hidden="true"
-              />
-            }
-            side="bottom"
-            align="start"
-            secondaryAction={{
-              label: 'Edit File',
-              filePath: `${activeWorkspace.rootPath}/labels/config.json`,
-            }}
-            {...(() => {
-              // Spread base config, override context to include which label was right-clicked
-              const config = getEditConfig('add-label', activeWorkspace.rootPath)
-              const targetLabel = editLabelTargetId.current
-                ? findLabelById(labelConfigs, editLabelTargetId.current)
-                : undefined
-              if (!targetLabel) return config
-              return {
-                ...config,
-                context: {
-                  ...config.context,
-                  context: (config.context.context || '') +
-                    ` The user right-clicked on the label "${targetLabel.name}" (id: "${targetLabel.id}"). ` +
-                    'The new label should be added as a sibling after this label, or as a child if the user specifies.',
-                },
+            {/* Configure Labels EditPopover - anchored near sidebar */}
+            <EditPopover
+              open={editPopoverOpen === 'labels'}
+              onOpenChange={(isOpen) => setEditPopoverOpen(isOpen ? 'labels' : null)}
+              modal={true}
+              trigger={
+                <div
+                  className="fixed w-0 h-0 pointer-events-none"
+                  style={{ left: sidebarWidth + 20, top: editPopoverAnchorY.current }}
+                  aria-hidden="true"
+                />
               }
-            })()}
-          />
-        </>
-      )}
+              side="bottom"
+              align="start"
+              secondaryAction={{
+                label: 'Edit File',
+                filePath: `${activeWorkspace.rootPath}/labels/config.json`,
+              }}
+              {...(() => {
+                // Spread base config, override context to include which label was right-clicked
+                const config = getEditConfig('edit-labels', activeWorkspace.rootPath)
+                const targetLabel = editLabelTargetId.current
+                  ? findLabelById(labelConfigs, editLabelTargetId.current)
+                  : undefined
+                if (!targetLabel) return config
+                return {
+                  ...config,
+                  context: {
+                    ...config.context,
+                    context: (config.context.context || '') +
+                      ` The user right-clicked on the label "${targetLabel.name}" (id: "${targetLabel.id}"). ` +
+                      'If they refer to "this label" or "this", they mean this specific label.',
+                  },
+                }
+              })()}
+            />
+            {/* Edit Views EditPopover - anchored near sidebar */}
+            <EditPopover
+              open={editPopoverOpen === 'views'}
+              onOpenChange={(isOpen) => setEditPopoverOpen(isOpen ? 'views' : null)}
+              modal={true}
+              trigger={
+                <div
+                  className="fixed w-0 h-0 pointer-events-none"
+                  style={{ left: sidebarWidth + 20, top: editPopoverAnchorY.current }}
+                  aria-hidden="true"
+                />
+              }
+              side="bottom"
+              align="start"
+              secondaryAction={{
+                label: 'Edit File',
+                filePath: `${activeWorkspace.rootPath}/views.json`,
+              }}
+              {...getEditConfig('edit-views', activeWorkspace.rootPath)}
+            />
+            {/* Add Source EditPopovers - one for each variant (generic + filter-specific)
+           * editPopoverOpen can be: 'add-source', 'add-source-api', 'add-source-mcp', 'add-source-local'
+           * Each variant uses its corresponding EditContextKey for filter-aware agent context */}
+            {(['add-source', 'add-source-api', 'add-source-mcp', 'add-source-local'] as const).map((variant) => (
+              <EditPopover
+                key={variant}
+                open={editPopoverOpen === variant}
+                onOpenChange={(isOpen) => setEditPopoverOpen(isOpen ? variant : null)}
+                modal={true}
+                trigger={
+                  <div
+                    className="fixed w-0 h-0 pointer-events-none"
+                    style={{ left: sidebarWidth + 20, top: editPopoverAnchorY.current }}
+                    aria-hidden="true"
+                  />
+                }
+                side="bottom"
+                align="start"
+                {...getEditConfig(variant, activeWorkspace.rootPath)}
+              />
+            ))}
+            {/* Add Skill EditPopover */}
+            <EditPopover
+              open={editPopoverOpen === 'add-skill'}
+              onOpenChange={(isOpen) => setEditPopoverOpen(isOpen ? 'add-skill' : null)}
+              modal={true}
+              trigger={
+                <div
+                  className="fixed w-0 h-0 pointer-events-none"
+                  style={{ left: sidebarWidth + 20, top: editPopoverAnchorY.current }}
+                  aria-hidden="true"
+                />
+              }
+              side="bottom"
+              align="start"
+              {...getEditConfig('add-skill', activeWorkspace.rootPath)}
+            />
+            {/* Add Label EditPopover - triggered from "Add New Label" context menu on labels */}
+            <EditPopover
+              open={editPopoverOpen === 'add-label'}
+              onOpenChange={(isOpen) => setEditPopoverOpen(isOpen ? 'add-label' : null)}
+              modal={true}
+              trigger={
+                <div
+                  className="fixed w-0 h-0 pointer-events-none"
+                  style={{ left: sidebarWidth + 20, top: editPopoverAnchorY.current }}
+                  aria-hidden="true"
+                />
+              }
+              side="bottom"
+              align="start"
+              secondaryAction={{
+                label: 'Edit File',
+                filePath: `${activeWorkspace.rootPath}/labels/config.json`,
+              }}
+              {...(() => {
+                // Spread base config, override context to include which label was right-clicked
+                const config = getEditConfig('add-label', activeWorkspace.rootPath)
+                const targetLabel = editLabelTargetId.current
+                  ? findLabelById(labelConfigs, editLabelTargetId.current)
+                  : undefined
+                if (!targetLabel) return config
+                return {
+                  ...config,
+                  context: {
+                    ...config.context,
+                    context: (config.context.context || '') +
+                      ` The user right-clicked on the label "${targetLabel.name}" (id: "${targetLabel.id}"). ` +
+                      'The new label should be added as a sibling after this label, or as a child if the user specifies.',
+                  },
+                }
+              })()}
+            />
+          </>
+        )}
 
       </TooltipProvider>
     </AppShellProvider>

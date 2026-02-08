@@ -19,6 +19,7 @@ export function Icon_Home({ size, className, ...props }: IconProps) {
       strokeWidth={2}
       strokeLinecap="round"
       strokeLinejoin="round"
+      shapeRendering="geometricPrecision"
       className={className}
       {...sizeProps}
       {...props}

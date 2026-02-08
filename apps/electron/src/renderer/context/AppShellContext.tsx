@@ -41,6 +41,10 @@ export interface AppShellContextType {
   currentModel: string
   /** When set, a custom model overrides the Anthropic model selector (e.g. OpenRouter) */
   customModel: string | null
+  /** Custom API base URL (for detecting provider type like IDEA) */
+  anthropicBaseUrl: string | null
+  /** Callback to update custom model (for IDEA model switching) */
+  onCustomModelChange?: (model: string) => void
   pendingPermissions: Map<string, PermissionRequest[]>
   pendingCredentials: Map<string, CredentialRequest[]>
   /** Get draft input text for a session - reads from ref without triggering re-renders */
@@ -57,6 +61,8 @@ export interface AppShellContextType {
   enabledModes?: PermissionMode[]
   /** Dynamic todo states from workspace config (provided by AppShell, defaults to empty) */
   todoStates?: TodoStateConfig[]
+  /** Whether the session status feature is enabled (hides status UI when false) */
+  statusEnabled?: boolean
 
   // Unified session options (replaces ultrathinkSessions and sessionModes)
   /** All session-scoped options in one map. Use useSessionOptionsFor() hook for easy access. */

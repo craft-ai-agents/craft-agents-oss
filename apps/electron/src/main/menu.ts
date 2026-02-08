@@ -62,9 +62,9 @@ export async function rebuildMenu(): Promise<void> {
   const template: Electron.MenuItemConstructorOptions[] = [
     // App menu (macOS only)
     ...(isMac ? [{
-      label: 'Craft Agents',
+      label: 'Bunny',
       submenu: [
-        { role: 'about' as const, label: 'About Craft Agents' },
+        { role: 'about' as const, label: 'About Bunny' },
         updateMenuItem,
         { type: 'separator' as const },
         {
@@ -73,11 +73,11 @@ export async function rebuildMenu(): Promise<void> {
           click: () => sendToRenderer(IPC_CHANNELS.MENU_OPEN_SETTINGS)
         },
         { type: 'separator' as const },
-        { role: 'hide' as const, label: 'Hide Craft Agents' },
+        { role: 'hide' as const, label: 'Hide Bunny' },
         { role: 'hideOthers' as const },
         { role: 'unhide' as const },
         { type: 'separator' as const },
-        { role: 'quit' as const, label: 'Quit Craft Agents' }
+        { role: 'quit' as const, label: 'Quit Bunny' }
       ]
     }] : []),
 

@@ -1,4 +1,4 @@
-import { BrowserWindow, shell, nativeTheme, Menu, app } from 'electron'
+import { BrowserWindow, shell, nativeTheme, Menu, app, webContents } from 'electron'
 import { windowLog } from './logger'
 import { join } from 'path'
 import { existsSync } from 'fs'
@@ -50,10 +50,75 @@ export interface CreateWindowOptions {
   restoreUrl?: string
 }
 
+type CloseIntent = 'shortcut' | 'unknown'
+
+const CLOSE_SHORTCUT_WINDOW_MS = 1000
+
 export class WindowManager {
   private windows: Map<number, ManagedWindow> = new Map()  // webContents.id → ManagedWindow
   private focusedModeWindows: Set<number> = new Set()  // webContents.id of windows in focused mode
+  private closeShortcutTimestamps: Map<number, number> = new Map()  // webContents.id → last Cmd+W timestamp
+  private pendingCloseIntents: Map<number, CloseIntent> = new Map()  // webContents.id → close intent for current request
   private pendingCloseTimeouts: Map<number, NodeJS.Timeout> = new Map()  // Fallback timeouts for window close
+
+  private async readAlwaysOnTop(window: BrowserWindow, expected: boolean): Promise<boolean> {
+    const immediate = window.isAlwaysOnTop()
+    if (immediate === expected) return immediate
+
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 80)
+    })
+    return window.isAlwaysOnTop()
+  }
+
+  private resolveWindow(webContentsId: number): BrowserWindow | null {
+    const managed = this.windows.get(webContentsId)
+    if (managed && !managed.window.isDestroyed()) {
+      return managed.window
+    }
+
+    const contents = webContents.fromId(webContentsId)
+    if (!contents) return null
+
+    const window = BrowserWindow.fromWebContents(contents)
+    if (window && !window.isDestroyed()) {
+      return window
+    }
+
+    return null
+  }
+
+  private recordCloseShortcut(webContentsId: number): void {
+    this.closeShortcutTimestamps.set(webContentsId, Date.now())
+  }
+
+  private resolveCloseIntent(webContentsId: number): CloseIntent {
+    const lastShortcutAt = this.closeShortcutTimestamps.get(webContentsId)
+    this.closeShortcutTimestamps.delete(webContentsId)
+    if (!lastShortcutAt) return 'unknown'
+    const delta = Date.now() - lastShortcutAt
+    return delta <= CLOSE_SHORTCUT_WINDOW_MS ? 'shortcut' : 'unknown'
+  }
+
+  consumeCloseIntent(webContentsId: number): CloseIntent {
+    const intent = this.pendingCloseIntents.get(webContentsId) ?? 'unknown'
+    this.pendingCloseIntents.delete(webContentsId)
+    return intent
+  }
+
+  isFocusedModeWindow(webContentsId: number): boolean {
+    return this.focusedModeWindows.has(webContentsId)
+  }
+
+  getMainWindowCount(): number {
+    let count = 0
+    for (const managed of this.getAllWindows()) {
+      if (!this.focusedModeWindows.has(managed.window.webContents.id)) {
+        count += 1
+      }
+    }
+    return count
+  }
 
   /**
    * Create a new window for a workspace
@@ -93,7 +158,7 @@ export class WindowManager {
     const window = new BrowserWindow({
       width: windowWidth,
       height: windowHeight,
-      minWidth: 800,
+      minWidth: 600,
       minHeight: 600,
       show: false, // Don't show until ready-to-show event (faster perceived startup)
       title: '',
@@ -253,6 +318,17 @@ export class WindowManager {
       this.focusedModeWindows.add(webContentsId)
     }
 
+    // Track Cmd+W to distinguish shortcut-initiated closes on macOS
+    if (process.platform === 'darwin') {
+      window.webContents.on('before-input-event', (_event, input) => {
+        if (input.type !== 'keyDown') return
+        const key = typeof input.key === 'string' ? input.key.toLowerCase() : ''
+        if (input.meta && !input.control && !input.alt && !input.shift && (key === 'w' || input.code === 'KeyW')) {
+          this.recordCloseShortcut(webContentsId)
+        }
+      })
+    }
+
     // Listen for system theme changes and notify this window's renderer
     const themeHandler = () => {
       // Check mainFrame - it becomes null when render frame is disposed
@@ -280,6 +356,7 @@ export class WindowManager {
       // Check if renderer is ready (mainFrame exists) - if not, allow close directly
       if (!window.webContents.isDestroyed() && window.webContents.mainFrame) {
         event.preventDefault()
+        this.pendingCloseIntents.set(webContentsId, this.resolveCloseIntent(webContentsId))
         // Send close request to renderer - it will either close a modal or confirm close
         window.webContents.send(IPC_CHANNELS.WINDOW_CLOSE_REQUESTED)
 
@@ -309,6 +386,8 @@ export class WindowManager {
       nativeTheme.removeListener('updated', themeHandler)
       this.windows.delete(webContentsId)
       this.focusedModeWindows.delete(webContentsId)
+      this.closeShortcutTimestamps.delete(webContentsId)
+      this.pendingCloseIntents.delete(webContentsId)
       windowLog.info(`Window closed for workspace ${workspaceId}`)
     })
 
@@ -442,6 +521,9 @@ export class WindowManager {
       if (existing.isMinimized()) {
         existing.restore()
       }
+      if (!existing.isVisible()) {
+        existing.show()
+      }
       existing.focus()
       return existing
     }
@@ -537,5 +619,43 @@ export class WindowManager {
         managed.window.setWindowButtonPosition({ x: 18, y: 18 })
       }
     }
+  }
+
+  /**
+   * Set window always on top (pin mode).
+   * When enabled, the window stays above all other windows.
+   */
+  async setAlwaysOnTop(webContentsId: number, enabled: boolean): Promise<boolean> {
+    const window = this.resolveWindow(webContentsId)
+    if (!window) {
+      windowLog.warn(`Cannot set always on top for unknown window ${webContentsId}`)
+      return false
+    }
+
+    if (process.platform === 'darwin') {
+      if (enabled) {
+        window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+      } else {
+        window.setVisibleOnAllWorkspaces(false)
+      }
+      window.setAlwaysOnTop(enabled, 'floating')
+      if (enabled) {
+        window.moveTop()
+      }
+    } else {
+      window.setAlwaysOnTop(enabled)
+    }
+
+    const actual = await this.readAlwaysOnTop(window, enabled)
+    windowLog.info(`Window ${webContentsId} always on top: ${actual}`)
+    return actual
+  }
+
+  /**
+   * Get the current always on top state of a window.
+   */
+  getAlwaysOnTop(webContentsId: number): boolean {
+    const window = this.resolveWindow(webContentsId)
+    return window ? window.isAlwaysOnTop() : false
   }
 }

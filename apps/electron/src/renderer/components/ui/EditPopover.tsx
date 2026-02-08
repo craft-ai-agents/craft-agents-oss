@@ -81,6 +81,7 @@ export type EditContextKey =
   | 'edit-statuses'
   | 'edit-labels'
   | 'edit-auto-rules'
+  | 'edit-path-rules'
   | 'add-label'
   | 'edit-views'
   | 'edit-tool-icons'
@@ -412,6 +413,28 @@ const EDIT_CONFIGS: Record<EditContextKey, (location: string) => EditConfig> = {
         'Confirm clearly when done.',
     },
     example: 'Add a rule to detect GitHub issue URLs',
+    model: 'haiku',               // Use fast model for quick config edits
+    systemPromptPreset: 'mini',   // Use focused mini prompt
+    inlineExecution: true,        // Execute inline in popover
+  }),
+
+  // Path rules context (path-to-label mappings based on workingDirectory)
+  'edit-path-rules': (location) => ({
+    context: {
+      label: 'Path Rules',
+      filePath: `${location}/labels/path-rules.json`,
+      context:
+        'The user wants to edit path rules (automatic labels based on working directory). ' +
+        'Rules are stored in labels/path-rules.json with schema: { version: 1, rules: [...] }. ' +
+        'Each rule has: id (unique string), path (absolute directory path), match ("exact" or "prefix"), ' +
+        'labelId (must exist in labels config), value (optional, for valued labels), enabled (boolean, default true), description (optional). ' +
+        'Prefix match: the working directory is the rule path or any subdirectory. ' +
+        'Exact match: the working directory must exactly equal the rule path. ' +
+        'Labels are applied when a session is created or when working directory changes. Only adds labels, never removes. ' +
+        'The labelId must reference an existing label in labels/config.json. ' +
+        'Confirm clearly when done.',
+    },
+    example: 'Add a rule to label sessions in ~/code/my-project as "my-project"',
     model: 'haiku',               // Use fast model for quick config edits
     systemPromptPreset: 'mini',   // Use focused mini prompt
     inlineExecution: true,        // Execute inline in popover

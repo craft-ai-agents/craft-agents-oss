@@ -6,6 +6,20 @@
 @source "../../../../packages/ui/src/**/*.{tsx,ts,jsx,js}";
 
 /* =============================================================================
+   SVG ANTI-ALIASING
+   
+   Force GPU acceleration and subpixel antialiasing for crisp icon rendering.
+   This eliminates jagged edges on small SVG icons.
+============================================================================= */
+svg {
+  shape-rendering: geometricPrecision;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+/* =============================================================================
    ANIMATABLE CSS CUSTOM PROPERTIES
 
    Register theme color variables as animatable using @property.
@@ -445,10 +459,12 @@ html[data-font="inter"] {
     -moz-osx-font-smoothing: grayscale;
   }
 
-  /* Scrollbar styling */
+  /* Scrollbar styling - hidden by default, visible only while scrolling.
+     The [data-scrolling] attribute is toggled by lib/scrollbar-auto-hide.ts
+     for native scrollable elements, and by the ScrollArea component for Radix viewports. */
   ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 10px;
+    height: 10px;
   }
 
   ::-webkit-scrollbar-track {
@@ -456,12 +472,19 @@ html[data-font="inter"] {
   }
 
   ::-webkit-scrollbar-thumb {
-    background: var(--border);
-    border-radius: 4px;
+    background-color: transparent;
+    border-radius: 10px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+    transition: background-color 0.2s ease;
   }
 
-  ::-webkit-scrollbar-thumb:hover {
-    background: var(--muted-foreground);
+  [data-scrolling]::-webkit-scrollbar-thumb {
+    background-color: var(--border);
+  }
+
+  [data-scrolling]::-webkit-scrollbar-thumb:hover {
+    background-color: var(--muted-foreground);
   }
 
   /* Focus ring styles - override Tailwind ring utilities */
@@ -819,14 +842,12 @@ html.dark[data-scenic] .fullscreen-overlay-background {
    Uses :has() to target adjacent sibling separators.
 ============================================================================= */
 
-/* Hide own separator when item is hovered or selected */
-.session-item:hover > .session-separator,
+/* Hide own separator when item is selected */
 .session-item[data-selected] > .session-separator {
   opacity: 0;
 }
 
-/* Hide next item's separator when current item is hovered or selected */
-.session-item:hover + .session-item > .session-separator,
+/* Hide next item's separator when current item is selected */
 .session-item[data-selected] + .session-item > .session-separator {
   opacity: 0;
 }

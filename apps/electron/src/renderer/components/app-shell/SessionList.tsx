@@ -231,6 +231,9 @@ function sessionMatchesCurrentFilter(
       if (currentFilter.viewId === '__all__') return matched.length > 0
       return matched.some(v => v.id === currentFilter.viewId)
 
+    case 'workingDir':
+      return session.workingDirectory === currentFilter.workingDir
+
     default:
       // Exhaustive check - TypeScript will error if we miss a case
       const _exhaustive: never = currentFilter
@@ -302,6 +305,8 @@ interface SessionItemProps {
   onLabelsChange?: (sessionId: string, labels: string[]) => void
   /** Number of matches in ChatDisplay (only set when session is selected and loaded) */
   chatMatchCount?: number
+  /** Whether the session status feature is enabled (hides status icon when false) */
+  statusEnabled?: boolean
 }
 
 /**
@@ -331,6 +336,7 @@ function SessionItem({
   labels,
   onLabelsChange,
   chatMatchCount,
+  statusEnabled = false,
 }: SessionItemProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [contextMenuOpen, setContextMenuOpen] = useState(false)
@@ -377,15 +383,16 @@ function SessionItem({
     >
       {/* Separator - only show if not first in group */}
       {!isFirstInGroup && (
-        <div className="session-separator pl-12 pr-4">
+        <div className="session-separator px-4">
           <Separator />
         </div>
       )}
       {/* Wrapper for button + dropdown + context menu, group for hover state */}
       <ContextMenu modal={true} onOpenChange={setContextMenuOpen}>
         <ContextMenuTrigger asChild>
-          <div className="session-content relative group select-none pl-2 mr-2">
-        {/* Todo State Icon - positioned absolutely, outside the button */}
+          <div className="session-content relative group select-none px-[9px]">
+        {/* Todo State Icon - positioned absolutely, outside the button (only when statusEnabled) */}
+        {statusEnabled && (
         <Popover modal={true} open={todoMenuOpen} onOpenChange={setTodoMenuOpen}>
           <PopoverTrigger asChild>
             <div className="absolute left-4 top-3.5 z-10">
@@ -427,46 +434,57 @@ function SessionItem({
             />
           </PopoverContent>
         </Popover>
+        )}
         {/* Main content button */}
         <button
           {...itemProps}
           className={cn(
             "flex w-full items-start gap-2 pl-2 pr-4 py-3 text-left text-sm outline-none rounded-[8px]",
-            // Fast hover transition (75ms vs default 150ms), selection is instant
-            "transition-[background-color] duration-75",
-            isSelected
-              ? "bg-foreground/5 hover:bg-foreground/7"
-              : "hover:bg-foreground/2"
+            isSelected && "bg-foreground/5"
           )}
-          onMouseDown={handleClick}
+          onMouseDown={(e) => {
+            if (e.button === 0) handleClick()
+            else if (e.button === 2) e.preventDefault()
+          }}
+          onClick={() => {}}
+          onFocus={itemProps.onFocus}
           onKeyDown={(e) => {
             itemProps.onKeyDown(e)
             onKeyDown(e, item)
           }}
         >
-          {/* Spacer for todo icon */}
-          <div className="w-4 h-5 shrink-0" />
+          {/* Spacer for todo icon (only when statusEnabled) */}
+          {statusEnabled && <div className="w-4 h-5 shrink-0" />}
           {/* Content column */}
           <div className="flex flex-col gap-1.5 min-w-0 flex-1">
             {/* Title - up to 2 lines, with shimmer during async operations (sharing, title regen, etc.) */}
             <div className="flex items-start gap-2 w-full pr-6 min-w-0">
               <div className={cn(
-                "font-medium font-sans line-clamp-2 min-w-0 -mb-[2px]",
+                "font-medium font-sans line-clamp-1 min-w-0 -mb-[2px] break-all",
                 item.isAsyncOperationOngoing && "animate-shimmer-text"
               )}>
                 {searchQuery ? highlightMatch(getSessionTitle(item), searchQuery) : getSessionTitle(item)}
               </div>
             </div>
             {/* Subtitle row — badges scroll horizontally when they overflow */}
-            <div className="flex items-center gap-1.5 text-xs text-foreground/70 w-full -mb-[2px] min-w-0">
+            <div className="flex items-center gap-1.5 text-xs text-foreground/70 w-full -mb-[2px] min-w-0 min-h-[18px]">
               {/* Fixed indicators (Spinner + New) — always visible */}
               {item.isProcessing && (
                 <Spinner className="text-[8px] text-foreground shrink-0" />
               )}
-              {!item.isProcessing && hasUnreadMessages(item) && (
-                <span className="shrink-0 px-1.5 py-0.5 text-[10px] font-medium rounded bg-accent text-white">
-                  New
-                </span>
+
+              {/* Timestamp — placed at the left so it's always visible even without badges */}
+              {item.lastMessageAt && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="shrink-0 text-[11px] text-foreground/40 whitespace-nowrap cursor-default">
+                      {formatDistanceToNowStrict(new Date(item.lastMessageAt), { locale: shortTimeLocale as Locale })}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" sideOffset={4}>
+                    {formatDistanceToNow(new Date(item.lastMessageAt), { addSuffix: true })}
+                  </TooltipContent>
+                </Tooltip>
               )}
 
               {/* Scrollable badges container — horizontal scroll with hidden scrollbar,
@@ -483,18 +501,6 @@ function SessionItem({
                 {item.lastMessageRole === 'plan' && (
                   <span className="shrink-0 h-[18px] px-1.5 text-[10px] font-medium rounded bg-success/10 text-success flex items-center whitespace-nowrap">
                     Plan
-                  </span>
-                )}
-                {permissionMode && (
-                  <span
-                    className={cn(
-                      "shrink-0 h-[18px] px-1.5 text-[10px] font-medium rounded flex items-center whitespace-nowrap",
-                      permissionMode === 'safe' && "bg-foreground/5 text-foreground/60",
-                      permissionMode === 'ask' && "bg-info/10 text-info",
-                      permissionMode === 'allow-all' && "bg-accent/10 text-accent"
-                    )}
-                  >
-                    {PERMISSION_MODE_CONFIG[permissionMode].shortName}
                   </span>
                 )}
                 {/* Label badges — each badge opens its own LabelValuePopover for
@@ -616,20 +622,6 @@ function SessionItem({
                   </DropdownMenu>
                 )}
               </div>
-              {/* Timestamp — outside stacking container so it never overlaps badges.
-                  shrink-0 keeps it fixed-width; the badges container clips instead. */}
-              {item.lastMessageAt && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="shrink-0 text-[11px] text-foreground/40 whitespace-nowrap cursor-default">
-                      {formatDistanceToNowStrict(new Date(item.lastMessageAt), { locale: shortTimeLocale as Locale, roundingMethod: 'floor' })}
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" sideOffset={4}>
-                    {formatDistanceToNow(new Date(item.lastMessageAt), { addSuffix: true })}
-                  </TooltipContent>
-                </Tooltip>
-              )}
             </div>
           </div>
         </button>
@@ -785,6 +777,8 @@ interface SessionListProps {
   statusFilter?: Map<string, FilterMode>
   /** Secondary label filter (label chips) - for search result grouping */
   labelFilterMap?: Map<string, FilterMode>
+  /** Whether the session status feature is enabled (hides status icons when false) */
+  statusEnabled?: boolean
 }
 
 // Re-export TodoStateId for use by parent components
@@ -824,6 +818,7 @@ export function SessionList({
   workspaceId,
   statusFilter,
   labelFilterMap,
+  statusEnabled = false,
 }: SessionListProps) {
   const [session] = useSession()
   const { navigate } = useNavigation()
@@ -1096,6 +1091,8 @@ export function SessionList({
       navigate(routes.view.flagged(item.id))
     } else if (currentFilter.kind === 'state') {
       navigate(routes.view.state(currentFilter.stateId, item.id))
+    } else if (currentFilter.kind === 'workingDir') {
+      navigate(routes.view.workingDir(currentFilter.workingDir, item.id))
     }
     // Scroll the selected item into view
     requestAnimationFrame(() => {
@@ -1258,10 +1255,11 @@ export function SessionList({
         <EmptyContent>
           <button
             onClick={() => {
-              // Create a new session, applying the current filter's status/label if applicable
-              const params: { status?: string; label?: string } = {}
+              // Create a new session, applying the current filter's status/label/workdir if applicable
+              const params: { status?: string; label?: string; workdir?: string } = {}
               if (currentFilter?.kind === 'state') params.status = currentFilter.stateId
               else if (currentFilter?.kind === 'label') params.label = currentFilter.labelId
+              else if (currentFilter?.kind === 'workingDir') params.workdir = currentFilter.workingDir
               navigate(routes.action.newChat(Object.keys(params).length > 0 ? params : undefined))
             }}
             className="inline-flex items-center h-7 px-3 text-xs font-medium rounded-[8px] bg-background shadow-minimal hover:bg-foreground/[0.03] transition-colors"
@@ -1355,6 +1353,8 @@ export function SessionList({
                             navigate(routes.view.flagged(item.id))
                           } else if (currentFilter.kind === 'state') {
                             navigate(routes.view.state(currentFilter.stateId, item.id))
+                          } else if (currentFilter.kind === 'workingDir') {
+                            navigate(routes.view.workingDir(currentFilter.workingDir, item.id))
                           }
                           onSessionSelect?.(item)
                         }}
@@ -1365,7 +1365,8 @@ export function SessionList({
                         flatLabels={flatLabels}
                         labels={labels}
                         onLabelsChange={onLabelsChange}
-                        chatMatchCount={isSearchMode ? contentSearchResults.get(item.id)?.matchCount : undefined}
+                        chatMatchCount={contentSearchResults.get(item.id)?.matchCount}
+                        statusEnabled={statusEnabled}
                       />
                     )
                   })}
@@ -1402,6 +1403,8 @@ export function SessionList({
                             navigate(routes.view.flagged(item.id))
                           } else if (currentFilter.kind === 'state') {
                             navigate(routes.view.state(currentFilter.stateId, item.id))
+                          } else if (currentFilter.kind === 'workingDir') {
+                            navigate(routes.view.workingDir(currentFilter.workingDir, item.id))
                           }
                           onSessionSelect?.(item)
                         }}
@@ -1412,7 +1415,8 @@ export function SessionList({
                         flatLabels={flatLabels}
                         labels={labels}
                         onLabelsChange={onLabelsChange}
-                        chatMatchCount={isSearchMode ? contentSearchResults.get(item.id)?.matchCount : undefined}
+                        chatMatchCount={contentSearchResults.get(item.id)?.matchCount}
+                        statusEnabled={statusEnabled}
                       />
                     )
                   })}
@@ -1450,6 +1454,8 @@ export function SessionList({
                           navigate(routes.view.flagged(item.id))
                         } else if (currentFilter.kind === 'state') {
                           navigate(routes.view.state(currentFilter.stateId, item.id))
+                        } else if (currentFilter.kind === 'workingDir') {
+                          navigate(routes.view.workingDir(currentFilter.workingDir, item.id))
                         }
                         onSessionSelect?.(item)
                       }}
@@ -1461,6 +1467,7 @@ export function SessionList({
                       labels={labels}
                       onLabelsChange={onLabelsChange}
                       chatMatchCount={contentSearchResults.get(item.id)?.matchCount}
+                      statusEnabled={statusEnabled}
                     />
                   )
                 })}

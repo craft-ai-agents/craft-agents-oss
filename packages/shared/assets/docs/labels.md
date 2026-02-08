@@ -367,3 +367,51 @@ Clicking a label filters the session list. Clicking a parent label includes sess
 - **Values via `::` separator**: Simple, flat string storage — no schema changes to session format
 - **Type inference at parse time**: Parser always infers (date → number → string), `valueType` is just a UI hint
 - **Date-only format**: ISO `YYYY-MM-DD` — no time component, avoids timezone complexity
+
+## Path Rules (Smart Labels)
+
+Path rules automatically apply labels based on the session's working directory. When you start a chat in a specific folder, matching labels are automatically assigned.
+
+### Configuration
+
+Path rules are stored in `labels/path-rules.json`:
+
+```json
+{
+  "version": 1,
+  "rules": [
+    {
+      "id": "rule-1",
+      "path": "/Users/alice/code/my-repo",
+      "match": "prefix",
+      "labelId": "project-alpha",
+      "enabled": true,
+      "description": "my-repo project directory"
+    }
+  ]
+}
+```
+
+### PathRule Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `id` | string | Unique rule ID for stable UI keys |
+| `path` | string | Absolute path to match against session workingDirectory |
+| `match` | `'exact' \| 'prefix'` | Match mode. Exact = strict equality, Prefix = path or subdirectory |
+| `labelId` | string | Label ID to apply (must exist in labels config) |
+| `value` | string? | Optional value for valued labels (stored as "labelId::value") |
+| `enabled` | boolean? | Whether this rule is active (defaults to true) |
+| `description` | string? | Human-readable description |
+
+### Match Modes
+
+- **Exact**: The session's working directory must exactly equal the rule path
+- **Prefix**: The session's working directory is the rule path or any subdirectory
+
+### Behavior
+
+- **Trigger**: Rules are evaluated when a session is created or when the working directory changes
+- **Additive**: Labels are only added, never removed (prevents accidental removal of manually-added labels)
+- **Validation**: The `labelId` must reference an existing label in `labels/config.json`
+- **Multiple matches**: If multiple rules match, all their labels are applied (deduplicated)

@@ -11,11 +11,35 @@
  * our native OAuth flow. This is a one-time migration.
  */
 
+import { existsSync } from 'fs';
+import { join } from 'path';
+import { homedir } from 'os';
 import { getCredentialManager } from '../credentials/index.ts';
-import { loadStoredConfig, getActiveWorkspace, type AuthType, type Workspace } from '../config/storage.ts';
+import { loadStoredConfig, loadConfigDefaults, getActiveWorkspace, saveConfig, ensureConfigDir, generateWorkspaceId, type AuthType, type Workspace, type StoredConfig } from '../config/storage.ts';
+import { IDEA_API_KEY } from '../config/config-defaults-schema.ts';
 import { refreshClaudeToken, isTokenExpired } from './claude-token.ts';
 import { debug } from '../utils/debug.ts';
 import type { AuthState, SetupNeeds, MigrationInfo } from './types.ts';
+
+function createDefaultWorkspace(): Workspace {
+  const workspaceId = generateWorkspaceId();
+  const workspaceName = 'My Workspace';
+  const baseDir = join(homedir(), '.craft-agent', 'workspaces');
+  const slugBase = 'my-workspace';
+  let rootPath = join(baseDir, slugBase);
+  let counter = 2;
+  while (existsSync(rootPath)) {
+    rootPath = join(baseDir, `${slugBase}-${counter}`);
+    counter++;
+  }
+
+  return {
+    id: workspaceId,
+    name: workspaceName,
+    rootPath,
+    createdAt: Date.now(),
+  };
+}
 
 // ============================================
 // Types
@@ -182,11 +206,66 @@ export async function getValidClaudeOAuthToken(): Promise<TokenResult> {
 }
 
 /**
+ * Initialize default configuration for new installations.
+ * Uses built-in IDEA (ByteDance) provider as the default.
+ */
+async function initializeDefaultConfig(): Promise<StoredConfig> {
+  debug('[auth] Initializing default config with built-in IDEA provider');
+
+  const defaults = loadConfigDefaults();
+  const manager = getCredentialManager();
+
+  // Create initial config with IDEA defaults
+  ensureConfigDir();
+  const config: StoredConfig = {
+    authType: defaults.defaults.authType,
+    anthropicBaseUrl: defaults.defaults.anthropicBaseUrl,
+    customModel: defaults.defaults.customModel,
+    workspaces: [],
+    activeWorkspaceId: null,
+    activeSessionId: null,
+  };
+
+  // Ensure a default workspace exists.
+  // Onboarding normally creates a workspace, but we skip onboarding for new installs.
+  // Without a workspace, the renderer can't create a chat session.
+  if (config.workspaces.length === 0) {
+    const workspace = createDefaultWorkspace();
+    config.workspaces.push(workspace);
+    config.activeWorkspaceId = workspace.id;
+  }
+
+  // Set the built-in API key
+  await manager.setApiKey(IDEA_API_KEY);
+
+  // Save config
+  saveConfig(config);
+
+  debug('[auth] Default config initialized successfully');
+  return config;
+}
+
+/**
  * Get complete authentication state from all sources (config file + credential store)
  */
 export async function getAuthState(): Promise<AuthState> {
-  const config = loadStoredConfig();
+  let config = loadStoredConfig();
   const manager = getCredentialManager();
+
+  // Auto-initialize config for new installations
+  if (!config) {
+    config = await initializeDefaultConfig();
+  }
+
+  // Migration/repair: early versions of auto-init created config with no workspaces,
+  // which breaks "New Chat". If we detect that state, create a default workspace.
+  if (config.workspaces.length === 0) {
+    debug('[auth] Config has no workspaces; creating a default workspace');
+    const workspace = createDefaultWorkspace();
+    config.workspaces.push(workspace);
+    config.activeWorkspaceId = workspace.id;
+    saveConfig(config);
+  }
 
   const apiKey = await manager.getApiKey();
   const tokenResult = await getValidClaudeOAuthToken();

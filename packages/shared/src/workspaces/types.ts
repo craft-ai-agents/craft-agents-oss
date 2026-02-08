@@ -49,6 +49,13 @@ export interface WorkspaceConfig {
   };
 
   /**
+   * Whether the session status feature is enabled.
+   * When false, hides the Status section in sidebar and disables status-related UI.
+   * Default: true
+   */
+  statusEnabled?: boolean;
+
+  /**
    * Local MCP server configuration.
    * Controls whether stdio-based MCP servers can be spawned in this workspace.
    * Resolution order: ENV (CRAFT_LOCAL_MCP_ENABLED) > workspace config > default (true)

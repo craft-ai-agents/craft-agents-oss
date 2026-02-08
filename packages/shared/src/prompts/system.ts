@@ -5,7 +5,6 @@ import { join, relative } from 'path';
 import { DOC_REFS, APP_ROOT } from '../docs/index.ts';
 import { PERMISSION_MODE_CONFIG } from '../agent/mode-types.ts';
 import { APP_VERSION } from '../version/index.ts';
-import { globSync } from 'glob';
 import os from 'os';
 
 /** Maximum size of CLAUDE.md file to include (10KB) */
@@ -13,6 +12,26 @@ const MAX_CONTEXT_FILE_SIZE = 10 * 1024;
 
 /** Maximum number of context files to discover in monorepo */
 const MAX_CONTEXT_FILES = 30;
+
+/**
+ * Performance guardrails:
+ * Avoid expensive full-repo recursive scans on the main thread.
+ *
+ * We do a bounded discovery that is fast even for very large repos:
+ * - Check the working directory root
+ * - Check immediate children of common monorepo dirs (packages/, apps/, libs/, etc.)
+ * - Optionally check a limited number of top-level directories
+ */
+const MAX_TOP_LEVEL_DIRS_TO_SCAN = 80;
+const MAX_PACKAGE_DIRS_TO_SCAN = 200;
+const COMMON_MONOREPO_DIRS = [
+  'packages',
+  'apps',
+  'libs',
+  'modules',
+  'services',
+  'packages-private',
+] as const;
 
 /**
  * Directories to exclude when searching for context files.
@@ -44,6 +63,20 @@ const CONTEXT_FILE_PATTERNS = ['agents.md', 'claude.md'];
  */
 function findFileCaseInsensitive(directory: string, pattern: string): string | null {
   try {
+    // Fast path: try common casings without listing the directory.
+    // This avoids expensive readdirSync for large folders.
+    const variants = new Set<string>([
+      pattern,
+      pattern.toLowerCase(),
+      pattern.toUpperCase(),
+      pattern.length > 0 ? pattern[0]!.toUpperCase() + pattern.slice(1) : pattern,
+    ]);
+
+    for (const name of variants) {
+      if (existsSync(join(directory, name))) return name;
+    }
+
+    // Fallback: list directory and match case-insensitively (handles arbitrary casing).
     const files = readdirSync(directory);
     const lowerPattern = pattern.toLowerCase();
     return files.find((f) => f.toLowerCase() === lowerPattern) ?? null;
@@ -74,37 +107,87 @@ export function findProjectContextFile(directory: string): string | null {
  * Returns relative paths sorted by depth (root first), capped at MAX_CONTEXT_FILES.
  */
 export function findAllProjectContextFiles(directory: string): string[] {
+  const start = Date.now();
   try {
-    // Build glob ignore patterns from excluded directories
-    const ignorePatterns = EXCLUDED_DIRECTORIES.map((dir) => `**/${dir}/**`);
+    if (!directory || !existsSync(directory)) return [];
 
-    // Search for all context files (case-insensitive via nocase option)
-    const pattern = '**/{agents,claude}.md';
-    const matches = globSync(pattern, {
-      cwd: directory,
-      nocase: true,
-      ignore: ignorePatterns,
-      absolute: false,
-    });
+    const excluded = new Set(EXCLUDED_DIRECTORIES.map((d) => d.toLowerCase()));
 
-    if (matches.length === 0) {
-      return [];
+    const candidates: string[] = [];
+    const addCandidate = (p: string) => {
+      if (!p) return;
+      candidates.push(p);
+    };
+
+    // Always check the root working directory first
+    addCandidate(directory);
+
+    // Enumerate top-level directories once (bounded)
+    let topLevelDirs: string[] = [];
+    try {
+      const entries = readdirSync(directory, { withFileTypes: true });
+      topLevelDirs = entries
+        .filter((e) => e.isDirectory())
+        .map((e) => e.name)
+        .filter((name) => !excluded.has(name.toLowerCase()))
+        .slice(0, MAX_TOP_LEVEL_DIRS_TO_SCAN);
+    } catch {
+      // If we can't read the directory, just fall back to root-only
+      topLevelDirs = [];
     }
 
-    // Sort by depth (fewer slashes = shallower = higher priority), then alphabetically
-    // Root files come first, then nested packages
-    const sorted = matches.sort((a, b) => {
+    // Prefer common monorepo dirs (scan their immediate children)
+    for (const baseDir of COMMON_MONOREPO_DIRS) {
+      if (!topLevelDirs.includes(baseDir)) continue;
+      const basePath = join(directory, baseDir);
+      try {
+        const entries = readdirSync(basePath, { withFileTypes: true });
+        const childDirs = entries
+          .filter((e) => e.isDirectory())
+          .map((e) => e.name)
+          .filter((name) => !excluded.has(name.toLowerCase()))
+          .slice(0, MAX_PACKAGE_DIRS_TO_SCAN);
+        for (const child of childDirs) {
+          addCandidate(join(basePath, child));
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    // Also check a bounded set of top-level directories (useful for non-standard monorepos)
+    for (const dirName of topLevelDirs) {
+      addCandidate(join(directory, dirName));
+    }
+
+    // De-dupe while preserving order
+    const seen = new Set<string>();
+    const uniqueCandidates = candidates.filter((p) => (seen.has(p) ? false : (seen.add(p), true)));
+
+    const found: string[] = [];
+    for (const dirPath of uniqueCandidates) {
+      const filename = findProjectContextFile(dirPath);
+      if (!filename) continue;
+      const abs = join(dirPath, filename);
+      let rel = relative(directory, abs);
+      // Normalize to forward slashes for prompt stability across platforms
+      rel = rel.replace(/\\/g, '/');
+      // relative() can return '' if directory === abs (shouldn't happen), guard it
+      if (!rel) rel = filename;
+      found.push(rel);
+      if (found.length >= MAX_CONTEXT_FILES) break;
+    }
+
+    // Sort by depth then alphabetically for stability
+    const sorted = found.sort((a, b) => {
       const depthA = (a.match(/\//g) || []).length;
       const depthB = (b.match(/\//g) || []).length;
       if (depthA !== depthB) return depthA - depthB;
       return a.localeCompare(b);
     });
 
-    // Cap at max files to avoid overwhelming the prompt
-    const capped = sorted.slice(0, MAX_CONTEXT_FILES);
-
-    debug(`[findAllProjectContextFiles] Found ${matches.length} files, returning ${capped.length}`);
-    return capped;
+    debug(`[findAllProjectContextFiles] scannedDirs=${uniqueCandidates.length} found=${found.length} ms=${Date.now() - start}`);
+    return sorted.slice(0, MAX_CONTEXT_FILES);
   } catch (error) {
     debug(`[findAllProjectContextFiles] Error searching directory:`, error);
     return [];

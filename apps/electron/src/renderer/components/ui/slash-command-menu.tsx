@@ -1,7 +1,6 @@
 import * as React from 'react'
 import { Command as CommandPrimitive } from 'cmdk'
-import { Brain, Check } from 'lucide-react'
-import { Icon_Folder } from '@craft-agent/ui'
+import { Brain, Check, Folder } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { PERMISSION_MODE_CONFIG, PERMISSION_MODE_ORDER, type PermissionMode } from '@craft-agent/shared/agent/modes'
 
@@ -448,7 +447,7 @@ export function InlineSlashCommand({
                     )}
                   >
                     <div className="shrink-0 text-muted-foreground">
-                      <Icon_Folder className={MENU_ICON_SIZE} strokeWidth={1.75} />
+                      <Folder className={MENU_ICON_SIZE} strokeWidth={1.75} />
                     </div>
                     <div className="flex-1 min-w-0 truncate">
                       <span>{item.label}</span>

@@ -18,10 +18,15 @@ export function getHorizontalResizeGradientStyle(mouseX: number | null): React.C
   }
 }
 
+/** Delay (ms) before showing the resize gradient on hover, to avoid flashing on pass-through */
+const HOVER_INTENT_DELAY = 150
+
 /**
  * useHorizontalResizeGradient - Hook for horizontal resize handle gradient that follows cursor
  *
  * Similar to useResizeGradient but tracks X position for horizontal (row) resizing.
+ * Includes hover-intent detection: the gradient only appears after the cursor
+ * has lingered on the handle for HOVER_INTENT_DELAY ms.
  *
  * Returns:
  * - ref: Attach to the touch area element
@@ -34,23 +39,62 @@ export function useHorizontalResizeGradient() {
   const [mouseX, setMouseX] = React.useState<number | null>(null)
   const [isDragging, setIsDragging] = React.useState(false)
   const ref = React.useRef<HTMLDivElement>(null)
+  const hoverTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pendingXRef = React.useRef<number | null>(null)
+  const isActiveRef = React.useRef(false)
+
+  const clearHoverTimer = React.useCallback(() => {
+    if (hoverTimerRef.current !== null) {
+      clearTimeout(hoverTimerRef.current)
+      hoverTimerRef.current = null
+    }
+  }, [])
+
+  // Clean up timer on unmount
+  React.useEffect(() => {
+    return () => clearHoverTimer()
+  }, [clearHoverTimer])
 
   const onMouseMove = React.useCallback((e: React.MouseEvent) => {
     if (ref.current) {
       const rect = ref.current.getBoundingClientRect()
-      setMouseX(e.clientX - rect.left)
+      const x = e.clientX - rect.left
+
+      if (isActiveRef.current) {
+        // Already showing — update position immediately for smooth tracking
+        setMouseX(x)
+      } else {
+        // Not yet showing — track position and start hover-intent delay
+        pendingXRef.current = x
+        if (hoverTimerRef.current === null) {
+          hoverTimerRef.current = setTimeout(() => {
+            hoverTimerRef.current = null
+            isActiveRef.current = true
+            setMouseX(pendingXRef.current)
+          }, HOVER_INTENT_DELAY)
+        }
+      }
     }
   }, [])
 
   const onMouseLeave = React.useCallback(() => {
     if (!isDragging) {
+      clearHoverTimer()
+      pendingXRef.current = null
+      isActiveRef.current = false
       setMouseX(null)
     }
-  }, [isDragging])
+  }, [isDragging, clearHoverTimer])
 
   const onMouseDown = React.useCallback(() => {
+    // Show immediately on click — user clearly intends to resize
+    clearHoverTimer()
+    if (!isActiveRef.current && pendingXRef.current !== null) {
+      isActiveRef.current = true
+      setMouseX(pendingXRef.current)
+    }
     setIsDragging(true)
-  }, [])
+  }, [clearHoverTimer])
 
   // Track mouse position during drag and cleanup on mouseup
   React.useEffect(() => {
@@ -65,6 +109,7 @@ export function useHorizontalResizeGradient() {
 
     const handleMouseUp = () => {
       setIsDragging(false)
+      isActiveRef.current = false
       setMouseX(null)
     }
 

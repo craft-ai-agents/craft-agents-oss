@@ -4,7 +4,7 @@
   "defaults": {
     "authType": "api_key",
     "notificationsEnabled": true,
-    "colorTheme": "default"
+    "colorTheme": "xcode"
   },
   "workspaceDefaults": {
     "thinkingLevel": "think",

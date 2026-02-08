@@ -58,7 +58,7 @@ export interface ParsedCompoundRoute {
  * Known prefixes that indicate a compound route
  */
 const COMPOUND_ROUTE_PREFIXES = [
-  'allChats', 'flagged', 'state', 'label', 'view', 'sources', 'skills', 'settings'
+  'allChats', 'flagged', 'state', 'label', 'view', 'workingDir', 'sources', 'skills', 'settings'
 ]
 
 /**
@@ -185,6 +185,11 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
       chatFilter = { kind: 'view', viewId: decodeURIComponent(segments[1]) }
       detailsStartIndex = 2
       break
+    case 'workingDir':
+      if (!segments[1]) return null
+      chatFilter = { kind: 'workingDir', workingDir: decodeURIComponent(segments[1]) }
+      detailsStartIndex = 2
+      break
     default:
       return null
   }
@@ -253,6 +258,9 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
       break
     case 'view':
       base = `view/${encodeURIComponent(filter.viewId)}`
+      break
+    case 'workingDir':
+      base = `workingDir/${encodeURIComponent(filter.workingDir)}`
       break
     default:
       base = 'allChats'
@@ -358,13 +366,14 @@ function convertCompoundToViewRoute(compound: ParsedCompoundRoute): ParsedRoute 
           ...(filter.kind === 'state' ? { stateId: filter.stateId } : {}),
           ...(filter.kind === 'label' ? { labelId: filter.labelId } : {}),
           ...(filter.kind === 'view' ? { viewId: filter.viewId } : {}),
+          ...(filter.kind === 'workingDir' ? { workingDir: filter.workingDir } : {}),
         },
       }
     }
     return {
       type: 'view',
       name: filter.kind,
-      id: filter.kind === 'state' ? filter.stateId : (filter.kind === 'label' ? filter.labelId : (filter.kind === 'view' ? filter.viewId : undefined)),
+      id: filter.kind === 'state' ? filter.stateId : (filter.kind === 'label' ? filter.labelId : (filter.kind === 'view' ? filter.viewId : (filter.kind === 'workingDir' ? filter.workingDir : undefined))),
       params: {},
     }
   }
@@ -537,6 +546,8 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
           filter = { kind: 'label', labelId: parsed.params.labelId }
         } else if (filterKind === 'view' && parsed.params.viewId) {
           filter = { kind: 'view', viewId: parsed.params.viewId }
+        } else if (filterKind === 'workingDir' && parsed.params.workingDir) {
+          filter = { kind: 'workingDir', workingDir: parsed.params.workingDir }
         } else {
           filter = { kind: filterKind as 'allChats' | 'flagged' }
         }
@@ -582,6 +593,15 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
         return {
           navigator: 'chats',
           filter: { kind: 'view', viewId: parsed.id },
+          details: null,
+        }
+      }
+      return { navigator: 'chats', filter: { kind: 'allChats' }, details: null }
+    case 'workingDir':
+      if (parsed.id) {
+        return {
+          navigator: 'chats',
+          filter: { kind: 'workingDir', workingDir: parsed.id },
           details: null,
         }
       }
@@ -636,6 +656,9 @@ export function buildRouteFromNavigationState(state: NavigationState): string {
       break
     case 'view':
       base = `view/${encodeURIComponent(filter.viewId)}`
+      break
+    case 'workingDir':
+      base = `workingDir/${encodeURIComponent(filter.workingDir)}`
       break
   }
 

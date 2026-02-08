@@ -50,6 +50,8 @@ export interface StoredConfig {
   autoCapitalisation?: boolean;  // Auto-capitalize first letter when typing (default: true)
   sendMessageKey?: 'enter' | 'cmd-enter';  // Key to send messages (default: 'enter')
   spellCheck?: boolean;  // Enable spell check in input (default: false)
+  // App usage tracking for "Open folder in app" sorting (per working directory)
+  appUsageCount?: Record<string, Record<string, number>>;  // Maps directory path -> app ID -> usage count
 }
 
 const CONFIG_FILE = join(CONFIG_DIR, 'config.json');

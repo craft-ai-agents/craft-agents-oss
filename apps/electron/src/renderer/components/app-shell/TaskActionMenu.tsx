@@ -22,7 +22,7 @@ export interface TerminalOverlayData {
 
 /** Format elapsed time in a compact way */
 function formatElapsed(seconds: number): string {
-  if (seconds < 60) return `${seconds}s`
+  if (seconds < 60) return `1m`
   const minutes = Math.floor(seconds / 60)
   const remainingSeconds = seconds % 60
   if (minutes < 60) {
