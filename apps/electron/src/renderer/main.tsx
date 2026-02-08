@@ -8,6 +8,10 @@ import App from './App'
 import { ThemeProvider } from './context/ThemeContext'
 import { Toaster } from '@/components/ui/sonner'
 import './index.css'
+import { initScrollbarAutoHide } from './lib/scrollbar-auto-hide'
+
+// Auto-hide native scrollbars — show only while scrolling, hide after idle
+initScrollbarAutoHide()
 
 // Known-harmless console messages that should NOT be sent to Sentry.
 // These are dev-mode noise or expected warnings that aren't actionable.

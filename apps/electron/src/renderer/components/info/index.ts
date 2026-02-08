@@ -44,3 +44,5 @@ export type { ToolRow, ToolPermission } from './ToolsDataTable'
 export { LabelsDataTable } from './LabelsDataTable'
 
 export { AutoRulesDataTable } from './AutoRulesDataTable'
+
+export { PathRulesDataTable } from './PathRulesDataTable'

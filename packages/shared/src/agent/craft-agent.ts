@@ -3093,9 +3093,10 @@ Please continue the conversation naturally from where we left off.
    * Update the working directory for this agent's session.
    * Called when user changes the working directory in the UI.
    */
-  updateWorkingDirectory(path: string): void {
+  updateWorkingDirectory(path?: string): void {
     if (this.config.session) {
-      this.config.session.workingDirectory = path;
+      const normalized = typeof path === 'string' && path.trim() ? path : undefined
+      this.config.session.workingDirectory = normalized;
     }
   }
 

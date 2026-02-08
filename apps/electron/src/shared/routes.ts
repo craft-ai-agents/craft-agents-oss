@@ -41,8 +41,9 @@ export const routes = {
      * @param send - If true and input is provided, immediately sends the message
      * @param status - Optional status/todo-state ID to apply to the new session
      * @param label - Optional label ID to apply to the new session
+     * @param workdir - Optional working directory path for the new session
      */
-    newChat: (params?: { input?: string; name?: string; send?: boolean; status?: string; label?: string }) =>
+    newChat: (params?: { input?: string; name?: string; send?: boolean; status?: string; label?: string; workdir?: string }) =>
       `action/new-chat${toQueryString(params ? { ...params, send: params.send ? 'true' : undefined } : undefined)}` as const,
 
     /** Rename a session */
@@ -114,6 +115,12 @@ export const routes = {
       sessionId
         ? `view/${encodeURIComponent(viewId)}/chat/${sessionId}` as const
         : `view/${encodeURIComponent(viewId)}` as const,
+
+    /** Working directory filter (chats navigator, workingDir filter — sessions grouped by working directory) */
+    workingDir: (workingDir: string, sessionId?: string) =>
+      sessionId
+        ? `workingDir/${encodeURIComponent(workingDir)}/chat/${sessionId}` as const
+        : `workingDir/${encodeURIComponent(workingDir)}` as const,
 
     /** Sources view (sources navigator) - supports type filtering */
     sources: (params?: { sourceSlug?: string; type?: 'api' | 'mcp' | 'local' }) => {

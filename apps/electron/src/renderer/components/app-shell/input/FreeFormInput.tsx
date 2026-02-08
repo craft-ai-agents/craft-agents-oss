@@ -10,8 +10,11 @@ import {
   DatabaseZap,
   ChevronDown,
   Loader2,
+  Copy,
+  GitBranch,
+  Home,
+  Folder,
 } from 'lucide-react'
-import { Icon_Home, Icon_Folder } from '@craft-agent/ui'
 
 import * as storage from '@/lib/local-storage'
 
@@ -54,6 +57,7 @@ import { isMac, PATH_SEP, getPathBasename } from '@/lib/platform'
 import { applySmartTypography } from '@/lib/smart-typography'
 import { AttachmentPreview } from '../AttachmentPreview'
 import { MODELS, getModelShortName, getModelContextWindow, isClaudeModel } from '@config/models'
+import { IDEA_MODELS, IDEA_BASE_URL } from '@/components/apisetup/ApiKeyInput'
 import { useOptionalAppShellContext } from '@/context/AppShellContext'
 import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
 import { SourceAvatar } from '@/components/ui/source-avatar'
@@ -242,6 +246,8 @@ export function FreeFormInput({
   // Uses optional variant so playground (no provider) doesn't crash.
   const appShellCtx = useOptionalAppShellContext()
   const customModel = appShellCtx?.customModel ?? null
+  const anthropicBaseUrl = appShellCtx?.anthropicBaseUrl ?? null
+  const onCustomModelChange = appShellCtx?.onCustomModelChange
   // Access todoStates and onTodoStateChange from context for the # menu state picker
   const todoStates = appShellCtx?.todoStates ?? []
   const onTodoStateChange = appShellCtx?.onTodoStateChange
@@ -338,6 +344,8 @@ export function FreeFormInput({
   const [isFocused, setIsFocused] = React.useState(false)
   const [inputMaxHeight, setInputMaxHeight] = React.useState(540)
   const [modelDropdownOpen, setModelDropdownOpen] = React.useState(false)
+  const [modelSearchFilter, setModelSearchFilter] = React.useState('')
+  const [modelHighlightIndex, setModelHighlightIndex] = React.useState(0)
 
   // Input settings (loaded from config)
   const [autoCapitalisation, setAutoCapitalisation] = React.useState(true)
@@ -688,7 +696,7 @@ export function FreeFormInput({
     inputRef: richInputRef,
     skills,
     sources,
-    basePath: workingDirectory,
+    basePath: workingDirectory ? normalizeWorkingDirCandidate(workingDirectory) : undefined,
     onSelect: handleMentionSelect,
     // Use workspace slug (not UUID) for SDK skill qualification
     workspaceId: workspaceSlug,
@@ -1327,7 +1335,7 @@ export function FreeFormInput({
           <div className="flex items-center gap-1 min-w-32 shrink overflow-hidden">
           {/* 1. Attach Files Badge */}
           <FreeFormInputContextBadge
-            icon={<Paperclip className="h-4 w-4" />}
+            icon={<Paperclip className="h-4 w-4" strokeWidth={1.5} />}
             // Show count ("1 file" / "X files") instead of filename for cleaner UI
             label={attachments.length > 0
               ? attachments.length === 1
@@ -1350,7 +1358,7 @@ export function FreeFormInput({
                 buttonRef={sourceButtonRef}
                 icon={
                   optimisticSourceSlugs.length === 0 ? (
-                    <DatabaseZap className="h-4 w-4" />
+                    <DatabaseZap className="h-4 w-4" strokeWidth={1.5} />
                   ) : (
                     <div className="flex items-center -ml-0.5">
                       {(() => {
@@ -1512,6 +1520,11 @@ export function FreeFormInput({
               isEmptySession={isEmptySession}
             />
           )}
+
+          {/* 4. Git Branch Badge - shows current git branch */}
+          {workingDirectory && (
+            <GitBranchBadge workingDirectory={workingDirectory} />
+          )}
           </div>
           )}
 
@@ -1534,16 +1547,90 @@ export function FreeFormInput({
                     )}
                   >
                     {/* Show custom model name when a custom API connection is active */}
-                    {getModelShortName(customModel || currentModel)}
-                    {!customModel && <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />}
+                    {customModel
+                      ? (IDEA_MODELS.find(m => m.id === customModel)?.name || getModelShortName(customModel))
+                      : getModelShortName(currentModel)}
+                    {/* Show chevron for Anthropic models or IDEA provider (selectable) */}
+                    {(!customModel || anthropicBaseUrl === IDEA_BASE_URL) && <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />}
                   </button>
                 </DropdownMenuTrigger>
               </TooltipTrigger>
               <TooltipContent side="top">Model</TooltipContent>
             </Tooltip>
-            <StyledDropdownMenuContent side="top" align="end" sideOffset={8} className="min-w-[240px]">
-              {/* When custom model is active, show it as a static item instead of Anthropic options */}
-              {customModel ? (
+            <StyledDropdownMenuContent side="top" align="end" sideOffset={8} className="min-w-[240px] max-h-[400px] overflow-y-auto" onCloseAutoFocus={() => { setModelSearchFilter(''); setModelHighlightIndex(0) }}>
+              {/* IDEA provider: show selectable model list */}
+              {anthropicBaseUrl === IDEA_BASE_URL && customModel ? (
+                (() => {
+                  const filteredModels = IDEA_MODELS.filter((model) => {
+                    if (!modelSearchFilter) return true
+                    const query = modelSearchFilter.toLowerCase()
+                    return model.name.toLowerCase().includes(query) || model.id.toLowerCase().includes(query)
+                  })
+                  return (
+                    <>
+                      {/* Search input */}
+                      <div className="px-2 py-1.5 sticky top-0 bg-popover z-10">
+                        <input
+                          type="text"
+                          placeholder="Search models..."
+                          value={modelSearchFilter}
+                          onChange={(e) => {
+                            setModelSearchFilter(e.target.value)
+                            setModelHighlightIndex(0)
+                          }}
+                          className="w-full px-2 py-1.5 text-sm bg-muted/50 border border-border rounded-md outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === 'ArrowDown') {
+                              e.preventDefault()
+                              setModelHighlightIndex((prev) => Math.min(prev + 1, filteredModels.length - 1))
+                            } else if (e.key === 'ArrowUp') {
+                              e.preventDefault()
+                              setModelHighlightIndex((prev) => Math.max(prev - 1, 0))
+                            } else if (e.key === 'Enter' && filteredModels.length > 0) {
+                              e.preventDefault()
+                              const selectedModel = filteredModels[modelHighlightIndex]
+                              if (selectedModel) {
+                                onCustomModelChange?.(selectedModel.id)
+                                setModelDropdownOpen(false)
+                              }
+                            } else if (e.key !== 'Escape') {
+                              e.stopPropagation()
+                            }
+                          }}
+                        />
+                      </div>
+                      {filteredModels.map((model, index) => {
+                        const isSelected = customModel === model.id
+                        const isHighlighted = index === modelHighlightIndex
+                        return (
+                          <StyledDropdownMenuItem
+                            key={model.id}
+                            onSelect={() => onCustomModelChange?.(model.id)}
+                            className={cn(
+                              "flex items-center justify-between px-2 py-2 rounded-lg cursor-pointer",
+                              isHighlighted && "bg-foreground/[0.03]"
+                            )}
+                            onMouseEnter={() => setModelHighlightIndex(index)}
+                          >
+                            <div className="text-left">
+                              <div className="font-medium text-sm">{model.name}</div>
+                              <div className="text-xs text-muted-foreground">{model.description}</div>
+                            </div>
+                            {isSelected && (
+                              <Check className="h-4 w-4 text-foreground shrink-0 ml-3" />
+                            )}
+                          </StyledDropdownMenuItem>
+                        )
+                      })}
+                      {filteredModels.length === 0 && (
+                        <div className="px-2 py-3 text-sm text-muted-foreground text-center">No models found</div>
+                      )}
+                    </>
+                  )
+                })()
+              ) : customModel ? (
+                /* Other custom providers: show static item */
                 <StyledDropdownMenuItem
                   disabled
                   className="flex items-center justify-between px-2 py-2 rounded-lg"
@@ -1732,22 +1819,58 @@ export function FreeFormInput({
  * Helper functions for recent directories storage
  */
 function getRecentDirs(): string[] {
-  return storage.get<string[]>(storage.KEYS.recentWorkingDirs, [])
+  const raw = storage.get<string[]>(storage.KEYS.recentWorkingDirs, [])
+  // Clean up older stored values that may contain shell-escaped paths or file paths.
+  // This prevents UI from showing `\ ` escapes and avoids treating a file as a working directory.
+  const normalized = raw
+    .map(p => normalizeWorkingDirCandidate(p))
+    .filter((p): p is string => Boolean(p))
+  // De-dupe while preserving order
+  const seen = new Set<string>()
+  const deduped = normalized.filter(p => (seen.has(p) ? false : (seen.add(p), true)))
+  if (deduped.length !== raw.length || deduped.some((p, i) => p !== raw[i])) {
+    storage.set(storage.KEYS.recentWorkingDirs, deduped.slice(0, 25))
+  }
+  return deduped.slice(0, 25)
 }
 
 function addRecentDir(path: string): void {
-  const recent = getRecentDirs().filter(p => p !== path)
-  const updated = [path, ...recent].slice(0, 25)
+  const normalized = normalizeWorkingDirCandidate(path)
+  if (!normalized) return
+  const recent = getRecentDirs().filter(p => p !== normalized)
+  const updated = [normalized, ...recent].slice(0, 25)
   storage.set(storage.KEYS.recentWorkingDirs, updated)
+}
+
+function unescapeShellPath(path: string): string {
+  // Users often paste paths copied from a shell (e.g. `/Users/me/My\\ Documents/file.png`)
+  // where spaces are escaped. We want to display and store the real path.
+  return path
+    .replace(/\\ /g, ' ')
+    .replace(/\\~/g, '~')
+}
+
+function normalizeWorkingDirCandidate(path: string): string {
+  const trimmed = (path ?? '').trim()
+  if (!trimmed) return ''
+  const unescaped = unescapeShellPath(trimmed)
+  // If a file path is accidentally provided, treat its parent folder as the working directory.
+  const lastSep = unescaped.lastIndexOf(PATH_SEP)
+  const base = lastSep >= 0 ? unescaped.slice(lastSep + 1) : unescaped
+  if (/\.[a-zA-Z0-9]{1,10}$/.test(base)) {
+    return lastSep >= 0 ? (unescaped.slice(0, lastSep) || PATH_SEP) : unescaped
+  }
+  return unescaped
 }
 
 /**
  * Format path for display, with home directory shortened
  */
 function formatPathForDisplay(path: string, homeDir: string): string {
-  let displayPath = path
-  if (homeDir && path.startsWith(homeDir)) {
-    const relativePath = path.slice(homeDir.length)
+  const normalized = normalizeWorkingDirCandidate(path)
+  let displayPath = normalized
+  if (homeDir && normalized.startsWith(homeDir)) {
+    const relativePath = normalized.slice(homeDir.length)
     // Remove leading separator if present, show root separator if empty
     displayPath = relativePath.startsWith(PATH_SEP)
       ? relativePath.slice(1)
@@ -1771,6 +1894,12 @@ function WorkingDirectoryBadge({
   sessionFolderPath?: string
   isEmptySession?: boolean
 }) {
+  const normalizedWorkingDirectory = React.useMemo(() => {
+    if (!workingDirectory) return undefined
+    const normalized = normalizeWorkingDirCandidate(workingDirectory)
+    return normalized || undefined
+  }, [workingDirectory])
+
   const [recentDirs, setRecentDirs] = React.useState<string[]>([])
   const [popoverOpen, setPopoverOpen] = React.useState(false)
   const [homeDir, setHomeDir] = React.useState<string>('')
@@ -1788,14 +1917,14 @@ function WorkingDirectoryBadge({
 
   // Fetch git branch when working directory changes
   React.useEffect(() => {
-    if (workingDirectory) {
-      window.electronAPI?.getGitBranch?.(workingDirectory).then((branch: string | null) => {
+    if (normalizedWorkingDirectory) {
+      window.electronAPI?.getGitBranch?.(normalizedWorkingDirectory).then((branch: string | null) => {
         setGitBranch(branch)
       })
     } else {
       setGitBranch(null)
     }
-  }, [workingDirectory])
+  }, [normalizedWorkingDirectory])
 
   // Reset filter and focus input when popover opens
   React.useEffect(() => {
@@ -1816,7 +1945,7 @@ function WorkingDirectoryBadge({
     if (selectedPath) {
       addRecentDir(selectedPath)
       setRecentDirs(getRecentDirs())
-      onWorkingDirectoryChange(selectedPath)
+      onWorkingDirectoryChange(normalizeWorkingDirCandidate(selectedPath))
     }
   }
 
@@ -1836,7 +1965,7 @@ function WorkingDirectoryBadge({
 
   // Filter out current directory from recent list and sort alphabetically by folder name
   const filteredRecent = recentDirs
-    .filter(p => p !== workingDirectory)
+    .filter(p => p !== normalizedWorkingDirectory)
     .sort((a, b) => {
       const nameA = getPathBasename(a).toLowerCase()
       const nameB = getPathBasename(b).toLowerCase()
@@ -1846,11 +1975,11 @@ function WorkingDirectoryBadge({
   const showFilter = filteredRecent.length > 5
 
   // Determine label - "Work in Folder" if not set or at session root, otherwise folder name
-  const hasFolder = !!workingDirectory && workingDirectory !== sessionFolderPath
-  const folderName = hasFolder ? (getPathBasename(workingDirectory) || 'Folder') : 'Work in Folder'
+  const hasFolder = !!normalizedWorkingDirectory && normalizedWorkingDirectory !== sessionFolderPath
+  const folderName = hasFolder ? (getPathBasename(normalizedWorkingDirectory) || 'Folder') : 'Work in Folder'
 
   // Show reset option when a folder is selected and it differs from session folder
-  const showReset = hasFolder && sessionFolderPath && sessionFolderPath !== workingDirectory
+  const showReset = hasFolder && sessionFolderPath && sessionFolderPath !== normalizedWorkingDirectory
 
   // Styles matching todo-filter-menu.tsx for consistency
   const MENU_CONTAINER_STYLE = 'min-w-[200px] max-w-[400px] overflow-hidden rounded-[8px] bg-background text-foreground shadow-modal-small p-0'
@@ -1862,7 +1991,7 @@ function WorkingDirectoryBadge({
       <PopoverTrigger asChild>
         <span className="shrink min-w-0 overflow-hidden">
           <FreeFormInputContextBadge
-            icon={<Icon_Home className="h-4 w-4" />}
+            icon={<Home className="h-4 w-4" strokeWidth={1.5} />}
             label={folderName}
             isExpanded={isEmptySession}
             hasSelection={hasFolder}
@@ -1872,7 +2001,7 @@ function WorkingDirectoryBadge({
               hasFolder ? (
                 <span className="flex flex-col gap-0.5">
                   <span className="font-medium">Working directory</span>
-                  <span className="text-xs opacity-70">{formatPathForDisplay(workingDirectory, homeDir)}</span>
+                  <span className="text-xs opacity-70">{formatPathForDisplay(normalizedWorkingDirectory ?? '', homeDir)}</span>
                   {gitBranch && <span className="text-xs opacity-70">on {gitBranch}</span>}
                 </span>
               ) : "Choose working directory"
@@ -1899,14 +2028,14 @@ function WorkingDirectoryBadge({
             {/* Current Folder Display - shown at top with checkmark */}
             {hasFolder && (
               <CommandPrimitive.Item
-                value={`current-${workingDirectory}`}
+                value={`current-${normalizedWorkingDirectory}`}
                 className={cn(MENU_ITEM_STYLE, 'pointer-events-none bg-foreground/5')}
                 disabled
               >
-                <Icon_Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <Folder className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.5} />
                 <span className="flex-1 min-w-0 truncate">
                   <span>{folderName}</span>
-                  <span className="text-muted-foreground ml-1.5">{formatPathForDisplay(workingDirectory, homeDir)}</span>
+                  <span className="text-muted-foreground ml-1.5">{formatPathForDisplay(normalizedWorkingDirectory ?? '', homeDir)}</span>
                 </span>
                 <Check className="h-4 w-4 shrink-0" />
               </CommandPrimitive.Item>
@@ -1927,7 +2056,7 @@ function WorkingDirectoryBadge({
                   onSelect={() => handleSelectRecent(path)}
                   className={cn(MENU_ITEM_STYLE, 'data-[selected=true]:bg-foreground/5')}
                 >
-                  <Icon_Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <Folder className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.5} />
                   <span className="flex-1 min-w-0 truncate">
                     <span>{recentFolderName}</span>
                     <span className="text-muted-foreground ml-1.5">{formatPathForDisplay(path, homeDir)}</span>
@@ -1966,5 +2095,120 @@ function WorkingDirectoryBadge({
         </CommandPrimitive>
       </PopoverContent>
     </Popover>
+  )
+}
+
+/**
+ * GitBranchBadge - Display current git branch and changes summary
+ */
+function GitBranchBadge({
+  workingDirectory,
+}: {
+  workingDirectory: string
+}) {
+  const [gitBranch, setGitBranch] = React.useState<string | null>(null)
+  const [gitStatus, setGitStatus] = React.useState<{ staged: number; unstaged: number; untracked: number } | null>(null)
+
+  const normalizedWorkingDirectory = React.useMemo(() => {
+    if (!workingDirectory) return undefined
+    const normalized = normalizeWorkingDirCandidate(workingDirectory)
+    return normalized || undefined
+  }, [workingDirectory])
+
+  const refreshGitBranch = React.useCallback(() => {
+    if (!normalizedWorkingDirectory || !window.electronAPI?.getGitBranch) return
+    window.electronAPI.getGitBranch(normalizedWorkingDirectory)
+      .then((branch: string | null) => {
+        setGitBranch(branch)
+      })
+      .catch(() => {
+        setGitBranch(null)
+      })
+  }, [normalizedWorkingDirectory])
+
+  const refreshGitStatus = React.useCallback(() => {
+    if (!normalizedWorkingDirectory || !window.electronAPI?.getGitStatus) return
+    window.electronAPI.getGitStatus(normalizedWorkingDirectory)
+      .then((status) => {
+        setGitStatus(status)
+      })
+      .catch(() => {
+        setGitStatus(null)
+      })
+  }, [normalizedWorkingDirectory])
+
+  React.useEffect(() => {
+    if (normalizedWorkingDirectory) {
+      refreshGitBranch()
+      refreshGitStatus()
+    } else {
+      setGitBranch(null)
+      setGitStatus(null)
+    }
+  }, [normalizedWorkingDirectory, refreshGitBranch, refreshGitStatus])
+
+  React.useEffect(() => {
+    if (!normalizedWorkingDirectory || !window.electronAPI?.getGitStatus) return
+    let cancelled = false
+    let inFlight = false
+
+    const tick = async () => {
+      if (cancelled || inFlight) return
+      inFlight = true
+      try {
+        const [status, branch] = await Promise.all([
+          window.electronAPI.getGitStatus(normalizedWorkingDirectory),
+          window.electronAPI.getGitBranch?.(normalizedWorkingDirectory) ?? Promise.resolve(null),
+        ])
+        if (!cancelled) {
+          setGitStatus(status)
+          setGitBranch(branch)
+        }
+      } catch {
+        if (!cancelled) {
+          setGitStatus(null)
+          setGitBranch(null)
+        }
+      } finally {
+        inFlight = false
+      }
+    }
+
+    const intervalId = window.setInterval(tick, 5000)
+    return () => {
+      cancelled = true
+      window.clearInterval(intervalId)
+    }
+  }, [normalizedWorkingDirectory])
+
+  if (!gitBranch) return null
+
+  const totalChanges = gitStatus ? gitStatus.staged + gitStatus.unstaged + gitStatus.untracked : 0
+  const hasChanges = totalChanges > 0
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className="inline-flex items-center h-7 px-2 gap-1.5 text-[13px] shrink-0 rounded-[6px] text-muted-foreground select-none">
+          <GitBranch className="h-3.5 w-3.5" />
+          <span className="truncate max-w-[120px]">{gitBranch}</span>
+          {gitStatus && (
+            <span className={cn("tabular-nums", hasChanges && "text-orange-500")}>
+              ± {totalChanges}
+            </span>
+          )}
+        </div>
+      </TooltipTrigger>
+      <TooltipContent side="top">
+        <div className="flex flex-col gap-0.5">
+          <span>Branch: {gitBranch}</span>
+          {gitStatus && (
+            <span className="text-xs opacity-70">
+              {gitStatus.staged} staged, {gitStatus.unstaged} modified, {gitStatus.untracked} untracked
+            </span>
+          )}
+        </div>
+      </TooltipContent>
+    </Tooltip>
   )
 }

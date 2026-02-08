@@ -47,6 +47,8 @@ const api: ElectronAPI = {
     return () => ipcRenderer.removeListener(IPC_CHANNELS.WINDOW_CLOSE_REQUESTED, handler)
   },
   setTrafficLightsVisible: (visible: boolean) => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_SET_TRAFFIC_LIGHTS, visible),
+  setAlwaysOnTop: (enabled: boolean) => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_SET_ALWAYS_ON_TOP, enabled),
+  getAlwaysOnTop: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_GET_ALWAYS_ON_TOP),
 
   // Event listeners
   onSessionEvent: (callback: (event: SessionEvent) => void) => {
@@ -116,6 +118,8 @@ const api: ElectronAPI = {
   openUrl: (url: string) => ipcRenderer.invoke(IPC_CHANNELS.OPEN_URL, url),
   openFile: (path: string) => ipcRenderer.invoke(IPC_CHANNELS.OPEN_FILE, path),
   showInFolder: (path: string) => ipcRenderer.invoke(IPC_CHANNELS.SHOW_IN_FOLDER, path),
+  openWithApp: (path: string, appId: string) => ipcRenderer.invoke(IPC_CHANNELS.OPEN_WITH_APP, path, appId),
+  getAvailableApps: (path: string) => ipcRenderer.invoke(IPC_CHANNELS.GET_AVAILABLE_APPS, path),
 
   // Menu event listeners
   onMenuNewChat: (callback: () => void) => {
@@ -144,7 +148,7 @@ const api: ElectronAPI = {
     return () => ipcRenderer.removeListener(IPC_CHANNELS.MENU_TOGGLE_SIDEBAR, handler)
   },
 
-  // Deep link navigation listener (for external craftagents:// URLs)
+  // Deep link navigation listener (for external bunnyagents:// URLs)
   onDeepLinkNavigate: (callback: (nav: import('../shared/types').DeepLinkNavigation) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, nav: import('../shared/types').DeepLinkNavigation) => {
       callback(nav)
@@ -337,6 +341,12 @@ const api: ElectronAPI = {
     }
   },
 
+  // Path rules (automatic labels based on workingDirectory)
+  getPathRules: (workspaceId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PATH_RULES_GET, workspaceId),
+  savePathRules: (workspaceId: string, config: any) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PATH_RULES_SAVE, workspaceId, config),
+
   // Views (dynamic, expression-based filters stored in views.json)
   listViews: (workspaceId: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.VIEWS_LIST, workspaceId),
@@ -440,6 +450,8 @@ const api: ElectronAPI = {
   },
   getWindowFocusState: () =>
     ipcRenderer.invoke(IPC_CHANNELS.WINDOW_GET_FOCUS_STATE),
+  consumeSystemInterrupted: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.SYSTEM_INTERRUPTED_CONSUME) as Promise<boolean>,
   onWindowFocusChange: (callback: (isFocused: boolean) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, isFocused: boolean) => {
       callback(isFocused)
@@ -460,11 +472,22 @@ const api: ElectronAPI = {
   },
   getGitBranch: (dirPath: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.GET_GIT_BRANCH, dirPath),
+  getGitStatus: (dirPath: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.GET_GIT_STATUS, dirPath),
 
   // Git Bash (Windows)
   checkGitBash: () => ipcRenderer.invoke(IPC_CHANNELS.GITBASH_CHECK),
   browseForGitBash: () => ipcRenderer.invoke(IPC_CHANNELS.GITBASH_BROWSE),
   setGitBashPath: (path: string) => ipcRenderer.invoke(IPC_CHANNELS.GITBASH_SET_PATH, path),
+
+  // Global shortcut (activate app)
+  getGlobalShortcut: () => ipcRenderer.invoke(IPC_CHANNELS.GLOBAL_SHORTCUT_GET),
+  setGlobalShortcut: (enabled: boolean, shortcut: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.GLOBAL_SHORTCUT_SET, enabled, shortcut),
+
+  // Auto launch (launch at startup)
+  getAutoLaunch: () => ipcRenderer.invoke(IPC_CHANNELS.AUTO_LAUNCH_GET) as Promise<boolean>,
+  setAutoLaunch: (enabled: boolean) => ipcRenderer.invoke(IPC_CHANNELS.AUTO_LAUNCH_SET, enabled),
 
   // Menu actions (for unified Craft menu)
   menuQuit: () => ipcRenderer.invoke(IPC_CHANNELS.MENU_QUIT),

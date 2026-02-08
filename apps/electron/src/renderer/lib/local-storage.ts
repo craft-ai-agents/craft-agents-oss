@@ -23,6 +23,8 @@ export const KEYS = {
 
   // Focus mode
   focusModeEnabled: 'focus-mode-enabled',
+  // View mode: 'full' | 'compact' | 'focus'
+  viewMode: 'view-mode',
 
   // Right sidebar (chat page)
   rightSidebarVisible: 'right-sidebar-visible',

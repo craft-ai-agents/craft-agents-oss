@@ -349,7 +349,7 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
 
   // Handle opening in new window
   const handleOpenInNewWindow = useCallback(() => {
-    window.electronAPI.openUrl(`craftagents://sources/source/${sourceSlug}?window=focused`)
+    window.electronAPI.openUrl(`bunnyagents://sources/source/${sourceSlug}?window=focused`)
   }, [sourceSlug])
 
   // Get source name for header

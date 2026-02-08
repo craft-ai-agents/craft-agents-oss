@@ -7,7 +7,7 @@
 
 import * as React from 'react'
 import { useAtomValue, useSetAtom } from 'jotai'
-import { AlertCircle, Globe, Copy, RefreshCw, Link2Off, Info } from 'lucide-react'
+import { AlertCircle, Globe, Copy, RefreshCw, Link2Off, Info, ChevronDown, FolderOpen, Pin, Share } from 'lucide-react'
 import { ChatDisplay, type ChatDisplayHandle } from '@/components/app-shell/ChatDisplay'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { SessionMenu } from '@/components/app-shell/SessionMenu'
@@ -16,6 +16,8 @@ import { toast } from 'sonner'
 import { HeaderIconButton } from '@/components/ui/HeaderIconButton'
 import { DropdownMenu, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { StyledDropdownMenuContent, StyledDropdownMenuItem, StyledDropdownMenuSeparator } from '@/components/ui/styled-dropdown'
+import { cn } from '@/lib/utils'
+import type { AvailableApp } from '../../../shared/types'
 import { useAppShellContext, usePendingPermission, usePendingCredential, useSessionOptionsFor, useSession as useSessionData } from '@/context/AppShellContext'
 import { rendererPerf } from '@/lib/perf'
 import { routes } from '@/lib/navigate'
@@ -104,6 +106,48 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     window.electronAPI.getWindowFocusState().then(setIsWindowFocused)
     const cleanup = window.electronAPI.onWindowFocusChange(setIsWindowFocused)
     return cleanup
+  }, [])
+
+  // Track always-on-top (pin) state
+  const [isPinned, setIsPinned] = React.useState(false)
+  const pinRequestIdRef = React.useRef(0)
+  React.useEffect(() => {
+    window.electronAPI.getAlwaysOnTop().then(setIsPinned)
+  }, [])
+
+  const handleTogglePin = React.useCallback(() => {
+    setIsPinned((prev) => {
+      const next = !prev
+      const requestId = ++pinRequestIdRef.current
+      window.electronAPI.setAlwaysOnTop(next)
+        .then((actual) => {
+          if (pinRequestIdRef.current !== requestId) return
+          if (actual === next) {
+            setIsPinned(actual)
+            return
+          }
+          setTimeout(() => {
+            if (pinRequestIdRef.current !== requestId) return
+            window.electronAPI.getAlwaysOnTop()
+              .then((state) => {
+                if (pinRequestIdRef.current === requestId) {
+                  setIsPinned(state)
+                }
+              })
+              .catch(() => {
+                if (pinRequestIdRef.current === requestId) {
+                  setIsPinned(prev)
+                }
+              })
+          }, 120)
+        })
+        .catch(() => {
+          if (pinRequestIdRef.current === requestId) {
+            setIsPinned(prev)
+          }
+        })
+      return next
+    })
   }, [])
 
   // Track which session user is viewing (for unread state machine).
@@ -268,7 +312,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
   const handleOpenInNewWindow = React.useCallback(async () => {
     const route = routes.view.allChats(sessionId)
     const separator = route.includes('?') ? '&' : '?'
-    const url = `craftagents://${route}${separator}window=focused`
+    const url = `bunnyagents://${route}${separator}window=focused`
     try {
       await window.electronAPI?.openUrl(url)
     } catch (error) {
@@ -324,14 +368,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <HeaderIconButton
-          icon={sharedUrl
-            ? <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M11.2383 10.2871C11.6481 10.0391 12.1486 10.0082 12.5811 10.1943L12.7617 10.2871L13.0088 10.4414C14.2231 11.227 15.1393 12.2124 15.8701 13.502C16.1424 13.9824 15.9736 14.5929 15.4932 14.8652C15.0127 15.1375 14.4022 14.9688 14.1299 14.4883C13.8006 13.9073 13.4303 13.417 13 12.9883V21C13 21.5523 12.5523 22 12 22C11.4477 22 11 21.5523 11 21V12.9883C10.5697 13.417 10.1994 13.9073 9.87012 14.4883C9.59781 14.9688 8.98732 15.1375 8.50684 14.8652C8.02643 14.5929 7.8576 13.9824 8.12988 13.502C8.90947 12.1264 9.90002 11.0972 11.2383 10.2871ZM11.5 3C14.2848 3 16.6594 4.75164 17.585 7.21289C20.1294 7.90815 22 10.235 22 13C22 16.3137 19.3137 19 16 19H15V16.9961C15.5021 16.9966 16.0115 16.8707 16.4795 16.6055C17.9209 15.7885 18.4272 13.9571 17.6104 12.5156C16.6661 10.8495 15.4355 9.56805 13.7969 8.57617C12.692 7.90745 11.308 7.90743 10.2031 8.57617C8.56453 9.56806 7.3339 10.8495 6.38965 12.5156C5.57277 13.957 6.07915 15.7885 7.52051 16.6055C7.98851 16.8707 8.49794 16.9966 9 16.9961V19H7C4.23858 19 2 16.7614 2 14C2 11.9489 3.23498 10.1861 5.00195 9.41504C5.04745 5.86435 7.93852 3 11.5 3Z" />
-              </svg>
-            : <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                <path d="M8 8.53809C6.74209 8.60866 5.94798 8.80911 5.37868 9.37841C4.5 10.2571 4.5 11.6713 4.5 14.4997V15.4997C4.5 18.3282 4.5 19.7424 5.37868 20.6211C6.25736 21.4997 7.67157 21.4997 10.5 21.4997H13.5C16.3284 21.4997 17.7426 21.4997 18.6213 20.6211C19.5 19.7424 19.5 18.3282 19.5 15.4997V14.4997C19.5 11.6713 19.5 10.2571 18.6213 9.37841C18.052 8.80911 17.2579 8.60866 16 8.53809M12 14V3.5M9.5 5.5C9.99903 4.50411 10.6483 3.78875 11.5606 3.24093C11.7612 3.12053 11.8614 3.06033 12 3.06033C12.1386 3.06033 12.2388 3.12053 12.4394 3.24093C13.3517 3.78875 14.001 4.50411 14.5 5.5" />
-              </svg>
-          }
+          icon={<Share className={cn("h-4 w-4", sharedUrl && "fill-current")} />}
           className={sharedUrl ? 'text-accent' : 'text-foreground'}
         />
       </DropdownMenuTrigger>
@@ -379,6 +416,30 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
       </StyledDropdownMenuContent>
     </DropdownMenu>
   ), [sharedUrl, handleShare, handleOpenInBrowser, handleCopyLink, handleUpdateShare, handleRevokeShare])
+
+  // Open In button for header - opens working directory in various apps
+  const openInButton = React.useMemo(() => (
+    <OpenInButton workingDirectory={workingDirectory} />
+  ), [workingDirectory])
+
+  // Pin button for always-on-top mode
+  const pinButton = React.useMemo(() => (
+    <HeaderIconButton
+      icon={<Pin className={cn("h-4 w-4", isPinned && "fill-current")} />}
+      onClick={handleTogglePin}
+
+      className={cn('transition-none', isPinned ? 'text-accent hover:text-accent active:text-accent' : 'text-foreground hover:text-foreground')}
+    />
+  ), [isPinned, handleTogglePin])
+
+  // Combine header actions: OpenIn button + Pin button + Share button
+  const headerActions = React.useMemo(() => (
+    <>
+      {openInButton}
+      {pinButton}
+      {shareButton}
+    </>
+  ), [openInButton, pinButton, shareButton])
 
   // Build title menu content for chat sessions using shared SessionMenu
   const sessionLabels = session?.labels ?? []
@@ -445,7 +506,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
       return (
         <>
           <div className="h-full flex flex-col">
-            <PanelHeader  title={displayTitle} titleMenu={titleMenu} actions={shareButton} rightSidebarButton={rightSidebarButton} isRegeneratingTitle={isAsyncOperationOngoing} />
+            <PanelHeader  title={displayTitle} titleMenu={titleMenu} actions={headerActions} rightSidebarButton={rightSidebarButton} isRegeneratingTitle={isAsyncOperationOngoing} />
             <div className="flex-1 flex flex-col min-h-0">
               <ChatDisplay
                 ref={chatDisplayRef}
@@ -512,7 +573,7 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
   return (
     <>
       <div className="h-full flex flex-col">
-        <PanelHeader  title={displayTitle} titleMenu={titleMenu} actions={shareButton} rightSidebarButton={rightSidebarButton} isRegeneratingTitle={isAsyncOperationOngoing} />
+        <PanelHeader  title={displayTitle} titleMenu={titleMenu} actions={headerActions} rightSidebarButton={rightSidebarButton} isRegeneratingTitle={isAsyncOperationOngoing} />
         <div className="flex-1 flex flex-col min-h-0">
           <ChatDisplay
             ref={chatDisplayRef}
@@ -570,5 +631,118 @@ const ChatPage = React.memo(function ChatPage({ sessionId }: ChatPageProps) {
     </>
   )
 })
+
+/**
+ * OpenInButton - Dropdown button to open working directory in various apps
+ */
+function OpenInButton({ workingDirectory }: { workingDirectory?: string }) {
+  const [isOpen, setIsOpen] = React.useState(false)
+  const [availableApps, setAvailableApps] = React.useState<AvailableApp[]>([])
+  const [isLoading, setIsLoading] = React.useState(true)
+
+  // Fetch available apps on mount (cached, don't refetch on every open)
+  React.useEffect(() => {
+    let cancelled = false
+
+    if (!workingDirectory) {
+      setAvailableApps([])
+      setIsLoading(false)
+      return
+    }
+
+    const promise = window.electronAPI?.getAvailableApps?.(workingDirectory)
+    if (!promise) {
+      setAvailableApps([])
+      setIsLoading(false)
+      return
+    }
+
+    setIsLoading(true)
+    promise
+      .then(apps => {
+        if (cancelled) return
+        setAvailableApps(apps || [])
+        setIsLoading(false)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setAvailableApps([])
+        setIsLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [workingDirectory])
+
+  const handleOpenWith = React.useCallback((appId: string) => {
+    if (workingDirectory) {
+      window.electronAPI?.openWithApp?.(workingDirectory, appId)
+      setIsOpen(false)
+    }
+  }, [workingDirectory])
+
+  // Handle keyboard shortcuts (1-9 for quick selection)
+  React.useEffect(() => {
+    if (!isOpen) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const key = e.key
+      if (key >= '1' && key <= '9') {
+        const index = parseInt(key) - 1
+        if (index < availableApps.length) {
+          e.preventDefault()
+          handleOpenWith(availableApps[index].id)
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isOpen, availableApps, handleOpenWith])
+
+  if (!workingDirectory) return null
+
+  return (
+    <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
+      <DropdownMenuTrigger asChild>
+        <HeaderIconButton
+          icon={<FolderOpen className="h-4 w-4" />}
+          className={cn("text-foreground/70", isOpen && "bg-foreground/5")}
+        />
+      </DropdownMenuTrigger>
+      <StyledDropdownMenuContent side="bottom" align="end" sideOffset={8} className="min-w-[200px]">
+        {availableApps.map((app, index) => (
+          <StyledDropdownMenuItem
+            key={app.id}
+            onClick={() => handleOpenWith(app.id)}
+          >
+            <span className="w-5 text-muted-foreground text-[12px] tabular-nums">{index + 1}</span>
+            <span className="flex-1">{app.name}</span>
+          </StyledDropdownMenuItem>
+        ))}
+        {isLoading && (
+          <div className="px-3 py-2 text-sm text-muted-foreground">Loading...</div>
+        )}
+        {!isLoading && availableApps.length === 0 && (
+          <div className="px-3 py-2 text-sm text-muted-foreground">No apps found</div>
+        )}
+        <StyledDropdownMenuSeparator />
+        <StyledDropdownMenuItem
+          onClick={() => {
+            if (workingDirectory) {
+              navigator.clipboard.writeText(workingDirectory)
+              setIsOpen(false)
+            }
+          }}
+        >
+          <Copy className="w-5 h-3.5 text-muted-foreground" />
+          <span className="flex-1">Copy path</span>
+          <span className="text-muted-foreground text-[12px]">⌘⇧C</span>
+        </StyledDropdownMenuItem>
+      </StyledDropdownMenuContent>
+    </DropdownMenu>
+  )
+}
 
 export default ChatPage

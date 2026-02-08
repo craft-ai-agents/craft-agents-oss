@@ -121,6 +121,35 @@ function copyResources(): void {
   }
 }
 
+// Copy bundled config assets to dist/assets
+function copyBundledAssets(): void {
+  const distAssetsDir = join(ELECTRON_DIR, "dist/assets");
+  mkdirSync(distAssetsDir, { recursive: true });
+
+  const sharedAssetsRoot = join(ROOT_DIR, "packages/shared/assets");
+  for (const dir of ["docs", "tool-icons"]) {
+    const src = join(sharedAssetsRoot, dir);
+    if (existsSync(src)) {
+      cpSync(src, join(distAssetsDir, dir), { recursive: true, force: true });
+    }
+  }
+
+  const resourcesRoot = join(ELECTRON_DIR, "resources");
+  for (const dir of ["themes", "permissions"]) {
+    const src = join(resourcesRoot, dir);
+    if (existsSync(src)) {
+      cpSync(src, join(distAssetsDir, dir), { recursive: true, force: true });
+    }
+  }
+
+  const configDefaultsSrc = join(resourcesRoot, "config-defaults.json");
+  if (existsSync(configDefaultsSrc)) {
+    cpSync(configDefaultsSrc, join(distAssetsDir, "config-defaults.json"), { force: true });
+  }
+
+  console.log("📦 Copied bundled assets to dist");
+}
+
 // Get OAuth defines for esbuild API
 function getOAuthDefines(): Record<string, string> {
   const oauthVars = [
@@ -149,7 +178,7 @@ function getElectronEnv(): Record<string, string> {
     VITE_DEV_SERVER_URL: `http://localhost:${vitePort}`,
     CRAFT_CONFIG_DIR: process.env.CRAFT_CONFIG_DIR || "",
     CRAFT_APP_NAME: process.env.CRAFT_APP_NAME || "Craft Agents",
-    CRAFT_DEEPLINK_SCHEME: process.env.CRAFT_DEEPLINK_SCHEME || "craftagents",
+    CRAFT_DEEPLINK_SCHEME: process.env.CRAFT_DEEPLINK_SCHEME || "bunnyagents",
     CRAFT_INSTANCE_NUMBER: process.env.CRAFT_INSTANCE_NUMBER || "",
   };
 }
@@ -249,6 +278,7 @@ async function main(): Promise<void> {
   }
 
   copyResources();
+  copyBundledAssets();
 
   const vitePort = process.env.CRAFT_VITE_PORT || "5173";
   const oauthDefines = getOAuthDefines();

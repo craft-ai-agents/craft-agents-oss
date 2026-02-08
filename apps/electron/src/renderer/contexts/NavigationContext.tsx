@@ -168,6 +168,8 @@ export function NavigationProvider({
             return session.isFlagged === true
           case 'state':
             return session.todoState === filter.stateId
+          case 'workingDir':
+            return session.workingDirectory === filter.workingDir
           default:
             return false
         }
@@ -264,10 +266,11 @@ export function NavigationProvider({
             await window.electronAPI.sessionCommand(session.id, { type: 'setLabels', labels: [parsed.params.label] })
           }
 
-          // Determine navigation filter — preserve status/label context if the new session was created with one
+          // Determine navigation filter — preserve status/label/workdir context if the new session was created with one
           const filter: import('../../shared/types').ChatFilter =
             parsed.params.status ? { kind: 'state', stateId: parsed.params.status } :
             parsed.params.label ? { kind: 'label', labelId: parsed.params.label } :
+            parsed.params.workdir ? { kind: 'workingDir', workingDir: parsed.params.workdir } :
             { kind: 'allChats' }
 
           setSession({ selected: session.id })
@@ -290,22 +293,38 @@ export function NavigationProvider({
           // Handle input: either auto-send (if send=true) or pre-fill
           if (parsed.params.input) {
             const shouldSend = parsed.params.send === 'true'
+            // Resolve input with placeholder replacement (e.g., {{clipboard}})
+            const resolveInput = async (input: string): Promise<string> => {
+              if (input === '{{clipboard}}') {
+                try {
+                  return await navigator.clipboard.readText()
+                } catch (e) {
+                  console.warn('[Navigation] Failed to read clipboard:', e)
+                  return ''
+                }
+              }
+              return input
+            }
             if (shouldSend) {
               // Auto-send the message immediately after session is ready
               // Pass badges in options so they're stored with the message
-              setTimeout(() => {
-                window.electronAPI.sendMessage(
-                  session.id,
-                  parsed.params.input!,
-                  undefined, // attachments
-                  undefined, // storedAttachments
-                  badges ? { badges } : undefined
-                )
+              setTimeout(async () => {
+                const inputText = await resolveInput(parsed.params.input!)
+                if (inputText) {
+                  window.electronAPI.sendMessage(
+                    session.id,
+                    inputText,
+                    undefined, // attachments
+                    undefined, // storedAttachments
+                    badges ? { badges } : undefined
+                  )
+                }
               }, 100)
             } else if (onInputChange) {
               // Pre-fill input box without sending
-              setTimeout(() => {
-                onInputChange(session.id, parsed.params.input!)
+              setTimeout(async () => {
+                const inputText = await resolveInput(parsed.params.input!)
+                onInputChange(session.id, inputText)
               }, 100)
             }
           }

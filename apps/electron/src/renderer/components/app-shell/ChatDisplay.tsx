@@ -252,7 +252,7 @@ const PROCESSING_MESSAGES = [
  * Format elapsed time: "45s" under a minute, "1:02" for 1+ minutes
  */
 function formatElapsed(seconds: number): string {
-  if (seconds < 60) return `${seconds}s`
+  if (seconds < 60) return `1m`
   const minutes = Math.floor(seconds / 60)
   const remainingSeconds = seconds % 60
   return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`
@@ -1219,7 +1219,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
               }}
             >
               <ScrollArea className="h-full min-w-0" viewportRef={scrollViewportRef}>
-              <div className={cn(CHAT_LAYOUT.maxWidth, "mx-auto", CHAT_LAYOUT.containerPadding, CHAT_LAYOUT.messageSpacing, "min-w-0")}>
+              <div className={cn(CHAT_LAYOUT.maxWidth, "mx-auto", CHAT_LAYOUT.containerPadding, "min-w-0")}>
                 {/* Session-level AnimatePresence: Prevents layout jump when switching sessions */}
                 <AnimatePresence mode="wait" initial={false}>
                   <motion.div
@@ -1252,6 +1252,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
                       transition={{ duration: 0.1, ease: 'easeOut' }}
+                      className={CHAT_LAYOUT.messageSpacing}
                     >
                   {/* Scroll to bottom before paint - fires via useLayoutEffect */}
                   {/* Skip when search is active on session switch - scroll to first match instead */}
@@ -1670,7 +1671,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
             isOpen={true}
             onClose={handleCloseOverlay}
             content={overlayState.content}
-            filePath="response.md"
+            title="response.md"
             language="markdown"
             mode="read"
             theme={isDark ? 'dark' : 'light'}

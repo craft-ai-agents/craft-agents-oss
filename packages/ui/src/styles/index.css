@@ -249,7 +249,7 @@ html[data-font="inter"] {
     -moz-osx-font-smoothing: grayscale;
   }
 
-  /* Scrollbar styling */
+  /* Scrollbar styling - hidden by default, visible only while scrolling */
   ::-webkit-scrollbar {
     width: 8px;
     height: 8px;
@@ -260,11 +260,16 @@ html[data-font="inter"] {
   }
 
   ::-webkit-scrollbar-thumb {
-    background: var(--border);
+    background: transparent;
     border-radius: 4px;
+    transition: background-color 0.2s ease;
   }
 
-  ::-webkit-scrollbar-thumb:hover {
+  [data-scrolling]::-webkit-scrollbar-thumb {
+    background: var(--border);
+  }
+
+  [data-scrolling]::-webkit-scrollbar-thumb:hover {
     background: var(--muted-foreground);
   }
 

@@ -82,7 +82,7 @@ export function SidebarMenu({
   // New Chat: only shows "Open in New Window"
   if (type === 'newChat') {
     return (
-      <MenuItem onClick={() => window.electronAPI.openUrl('craftagents://action/new-chat?window=focused')}>
+      <MenuItem onClick={() => window.electronAPI.openUrl('bunnyagents://action/new-chat?window=focused')}>
         <AppWindow className="h-3.5 w-3.5" />
         <span className="flex-1">Open in New Window</span>
       </MenuItem>

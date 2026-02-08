@@ -22,6 +22,7 @@ import { useOnboarding } from '@/hooks/useOnboarding'
 import { useNotifications } from '@/hooks/useNotifications'
 import { useSession } from '@/hooks/useSession'
 import { useUpdateChecker } from '@/hooks/useUpdateChecker'
+import { useAutoNewChat } from '@/hooks/useAutoNewChat'
 import { NavigationProvider } from '@/contexts/NavigationContext'
 import { navigate, routes } from './lib/navigate'
 import { stripMarkdown } from './utils/text'
@@ -183,6 +184,8 @@ export default function App() {
   // Custom model override from API connection settings (OpenRouter, Ollama, etc.)
   // When set, the Anthropic model selector is hidden and this model is shown instead.
   const [customModel, setCustomModel] = useState<string | null>(null)
+  // Custom API base URL (for detecting provider type like IDEA)
+  const [anthropicBaseUrl, setAnthropicBaseUrl] = useState<string | null>(null)
   const [menuNewChatTrigger, setMenuNewChatTrigger] = useState(0)
   // Permission requests per session (queue to handle multiple concurrent requests)
   const [pendingPermissions, setPendingPermissions] = useState<Map<string, PermissionRequest[]>>(new Map())
@@ -258,11 +261,12 @@ export default function App() {
 
   const DRAFT_SAVE_DEBOUNCE_MS = 500
 
-  // Re-fetch custom model from API setup config (called after API connection changes).
+  // Re-fetch custom model and base URL from API setup config (called after API connection changes).
   // Defined early so it can be passed to useOnboarding's onConfigSaved.
   const refreshCustomModel = useCallback(async () => {
     const billing = await window.electronAPI.getApiSetup()
     setCustomModel(billing.customModel || null)
+    setAnthropicBaseUrl(billing.anthropicBaseUrl || null)
   }, [])
 
   // Handle onboarding completion
@@ -402,9 +406,10 @@ export default function App() {
         setCurrentModel(storedModel)
       }
     })
-    // Load custom model override from API connection settings
+    // Load custom model override and base URL from API connection settings
     window.electronAPI.getApiSetup().then((billing) => {
       setCustomModel(billing.customModel || null)
+      setAnthropicBaseUrl(billing.anthropicBaseUrl || null)
     })
     // Load persisted input drafts into ref (no re-render needed)
     window.electronAPI.getAllDrafts().then((drafts) => {
@@ -1182,10 +1187,25 @@ export default function App() {
     window.electronAPI.getWorkspaces().then(setWorkspaces)
   }, [])
 
+  // Handle custom model change (for IDEA model switching in chat)
+  const handleCustomModelChange = useCallback(async (model: string) => {
+    setCustomModel(model)
+    // Also persist to settings so it survives app restart
+    await window.electronAPI.updateApiSetup('api_key', undefined, undefined, model)
+  }, [])
+
   // Handle cancel during onboarding
   const handleOnboardingCancel = useCallback(() => {
     onboarding.handleCancel()
   }, [onboarding])
+
+  // Auto new chat when app comes to foreground after idle
+  // This is opt-in feature configured in preferences
+  useAutoNewChat({
+    enabled: appState === 'ready',
+    workspaceId: windowWorkspaceId,
+    openNewChat,
+  })
 
   // Build context value for AppShell component
   // This is memoized to prevent unnecessary re-renders
@@ -1199,6 +1219,8 @@ export default function App() {
     activeWorkspaceSlug: windowWorkspaceSlug,
     currentModel,
     customModel,
+    anthropicBaseUrl,
+    onCustomModelChange: handleCustomModelChange,
     pendingPermissions,
     pendingCredentials,
     getDraft,
@@ -1242,6 +1264,8 @@ export default function App() {
     windowWorkspaceSlug,
     currentModel,
     customModel,
+    anthropicBaseUrl,
+    handleCustomModelChange,
     pendingPermissions,
     pendingCredentials,
     getDraft,

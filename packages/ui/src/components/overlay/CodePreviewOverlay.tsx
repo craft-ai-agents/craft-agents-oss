@@ -18,8 +18,10 @@ export interface CodePreviewOverlayProps {
   onClose: () => void
   /** The code content to display */
   content: string
-  /** File path for language detection and display */
-  filePath: string
+  /** File path for language detection and display — provides "Open" / "Reveal in Finder" menu */
+  filePath?: string
+  /** Title — displayed as badge. Use when no real file path exists (e.g., virtual content). */
+  title?: string
   /** Language for syntax highlighting (auto-detected if not provided) */
   language?: string
   /** Mode: 'read' or 'write' */
@@ -43,6 +45,7 @@ export function CodePreviewOverlay({
   onClose,
   content,
   filePath,
+  title,
   language,
   mode = 'read',
   startLine = 1,
@@ -69,6 +72,7 @@ export function CodePreviewOverlay({
         variant: mode === 'write' ? 'amber' : 'blue',
       }}
       filePath={filePath}
+      title={title}
       subtitle={subtitle}
       error={error ? { label: mode === 'write' ? 'Write Failed' : 'Read Failed', message: error } : undefined}
       embedded={embedded}
@@ -78,7 +82,7 @@ export function CodePreviewOverlay({
         <div>
           <ShikiCodeViewer
             code={content}
-            filePath={filePath}
+            filePath={filePath ?? title}
             language={language}
             startLine={startLine}
             theme={theme}

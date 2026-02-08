@@ -1,12 +1,12 @@
 {
   "lockfileVersion": 1,
-  "configVersion": 1,
   "workspaces": {
     "": {
       "name": "craft-agent",
       "dependencies": {
         "@anthropic-ai/claude-agent-sdk": "^0.2.34",
         "@anthropic-ai/sdk": "^0.71.1",
+        "@leeoniya/ufuzzy": "^1.0.19",
         "@modelcontextprotocol/sdk": "^1.24.3",
         "@radix-ui/react-avatar": "^1.1.11",
         "@radix-ui/react-collapsible": "^1.1.12",

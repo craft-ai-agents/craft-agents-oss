@@ -84,6 +84,16 @@ export interface FileSearchResult {
   relativePath: string  // Path relative to search base
 }
 
+/**
+ * Available app for "Open in" functionality
+ */
+export interface AvailableApp {
+  id: string          // Unique identifier (e.g., 'finder', 'vscode', 'cursor')
+  name: string        // Display name (e.g., 'Finder', 'VS Code', 'Cursor')
+  icon?: string       // Base64 encoded icon or app bundle identifier
+  shortcut?: string   // Keyboard shortcut hint (e.g., '⌘1')
+}
+
 // Import auth request types for unified auth flow
 import type { AuthRequest as SharedAuthRequest, CredentialInputMode as SharedCredentialInputMode, CredentialAuthRequest as SharedCredentialAuthRequest } from '@craft-agent/shared/agent';
 export type { SharedAuthRequest as AuthRequest };
@@ -244,6 +254,15 @@ export interface GitBashStatus {
   found: boolean
   path: string | null
   platform: 'win32' | 'darwin' | 'linux'
+}
+
+/**
+ * Git repository status (changed files count)
+ */
+export interface GitStatus {
+  staged: number
+  unstaged: number
+  untracked: number
 }
 
 /**
@@ -540,6 +559,9 @@ export const IPC_CHANNELS = {
   WINDOW_CONFIRM_CLOSE: 'window:confirmClose',
   // Traffic light visibility (macOS only - hide when fullscreen overlays are open)
   WINDOW_SET_TRAFFIC_LIGHTS: 'window:setTrafficLights',
+  // Always on top (pin window)
+  WINDOW_SET_ALWAYS_ON_TOP: 'window:setAlwaysOnTop',
+  WINDOW_GET_ALWAYS_ON_TOP: 'window:getAlwaysOnTop',
 
   // Events from main to renderer
   SESSION_EVENT: 'session:event',
@@ -588,6 +610,8 @@ export const IPC_CHANNELS = {
   OPEN_URL: 'shell:openUrl',
   OPEN_FILE: 'shell:openFile',
   SHOW_IN_FOLDER: 'shell:showInFolder',
+  OPEN_WITH_APP: 'shell:openWithApp',
+  GET_AVAILABLE_APPS: 'shell:getAvailableApps',
 
   // Menu actions (main → renderer)
   MENU_NEW_CHAT: 'menu:newChat',
@@ -596,7 +620,7 @@ export const IPC_CHANNELS = {
   MENU_KEYBOARD_SHORTCUTS: 'menu:keyboardShortcuts',
   MENU_TOGGLE_FOCUS_MODE: 'menu:toggleFocusMode',
   MENU_TOGGLE_SIDEBAR: 'menu:toggleSidebar',
-  // Deep link navigation (main → renderer, for external craftagents:// URLs)
+  // Deep link navigation (main → renderer, for external bunnyagents:// URLs)
   DEEP_LINK_NAVIGATE: 'deeplink:navigate',
 
   // Auth
@@ -680,6 +704,10 @@ export const IPC_CHANNELS = {
   LABELS_DELETE: 'labels:delete',
   LABELS_CHANGED: 'labels:changed',  // Broadcast event
 
+  // Path rules (automatic labels based on workingDirectory)
+  PATH_RULES_GET: 'pathRules:get',
+  PATH_RULES_SAVE: 'pathRules:save',
+
   // Views management (workspace-scoped, stored in views.json)
   VIEWS_LIST: 'views:list',
   VIEWS_SAVE: 'views:save',
@@ -735,11 +763,13 @@ export const IPC_CHANNELS = {
   BADGE_CLEAR: 'badge:clear',
   BADGE_SET_ICON: 'badge:setIcon',
   BADGE_DRAW: 'badge:draw',  // Broadcast: { count: number, iconDataUrl: string }
-  WINDOW_FOCUS_STATE: 'window:focusState',  // Broadcast: boolean (isFocused)
+  WINDOW_FOCUS_STATE: 'window:focusState',  // Broadcast: WindowFocusEvent
   WINDOW_GET_FOCUS_STATE: 'window:getFocusState',
+  SYSTEM_INTERRUPTED_CONSUME: 'system:interruptedConsume',  // Consume system interrupted flag (returns boolean)
 
   // Git operations
   GET_GIT_BRANCH: 'git:getBranch',
+  GET_GIT_STATUS: 'git:getStatus',
 
   // Git Bash (Windows)
   GITBASH_CHECK: 'gitbash:check',
@@ -760,6 +790,14 @@ export const IPC_CHANNELS = {
   MENU_COPY: 'menu:copy',
   MENU_PASTE: 'menu:paste',
   MENU_SELECT_ALL: 'menu:selectAll',
+
+  // Global shortcut (activate app)
+  GLOBAL_SHORTCUT_GET: 'globalShortcut:get',
+  GLOBAL_SHORTCUT_SET: 'globalShortcut:set',
+
+  // Auto launch (launch at startup)
+  AUTO_LAUNCH_GET: 'autoLaunch:get',
+  AUTO_LAUNCH_SET: 'autoLaunch:set',
 } as const
 
 // Re-import types for ElectronAPI
@@ -811,6 +849,10 @@ export interface ElectronAPI {
   onCloseRequested(callback: () => void): () => void
   /** Show/hide macOS traffic light buttons (for fullscreen overlays) */
   setTrafficLightsVisible(visible: boolean): Promise<void>
+  /** Set window always on top (pin mode) */
+  setAlwaysOnTop(enabled: boolean): Promise<boolean>
+  /** Get current always on top state */
+  getAlwaysOnTop(): Promise<boolean>
 
   // Event listeners
   onSessionEvent(callback: (event: SessionEvent) => void): () => void
@@ -853,6 +895,8 @@ export interface ElectronAPI {
   openUrl(url: string): Promise<void>
   openFile(path: string): Promise<void>
   showInFolder(path: string): Promise<void>
+  openWithApp(path: string, appId: string): Promise<void>
+  getAvailableApps(path: string): Promise<AvailableApp[]>
 
   // Menu event listeners
   onMenuNewChat(callback: () => void): () => void
@@ -861,7 +905,7 @@ export interface ElectronAPI {
   onMenuToggleFocusMode(callback: () => void): () => void
   onMenuToggleSidebar(callback: () => void): () => void
 
-  // Deep link navigation listener (for external craftagents:// URLs)
+  // Deep link navigation listener (for external bunnyagents:// URLs)
   onDeepLinkNavigate(callback: (nav: DeepLinkNavigation) => void): () => void
 
   // Auth
@@ -967,6 +1011,10 @@ export interface ElectronAPI {
   // Labels change listener (live updates when labels config changes)
   onLabelsChanged(callback: (workspaceId: string) => void): () => void
 
+  // Path rules (automatic labels based on workingDirectory)
+  getPathRules(workspaceId: string): Promise<import('@craft-agent/shared/labels/path-rules').PathRulesConfig>
+  savePathRules(workspaceId: string, config: import('@craft-agent/shared/labels/path-rules').PathRulesConfig): Promise<void>
+
   // Views (workspace-scoped, stored in views.json)
   listViews(workspaceId: string): Promise<import('@craft-agent/shared/views').ViewConfig[]>
   saveViews(workspaceId: string, views: import('@craft-agent/shared/views').ViewConfig[]): Promise<void>
@@ -1014,6 +1062,7 @@ export interface ElectronAPI {
   setDockIconWithBadge(dataUrl: string): Promise<void>
   onBadgeDraw(callback: (data: { count: number; iconDataUrl: string }) => void): () => void
   getWindowFocusState(): Promise<boolean>
+  consumeSystemInterrupted(): Promise<boolean>
   onWindowFocusChange(callback: (isFocused: boolean) => void): () => void
   onNotificationNavigate(callback: (data: { workspaceId: string; sessionId: string }) => void): () => void
 
@@ -1027,6 +1076,7 @@ export interface ElectronAPI {
 
   // Git operations
   getGitBranch(dirPath: string): Promise<string | null>
+  getGitStatus(dirPath: string): Promise<GitStatus | null>
 
   // Git Bash (Windows)
   checkGitBash(): Promise<GitBashStatus>
@@ -1048,6 +1098,14 @@ export interface ElectronAPI {
   menuCopy(): Promise<void>
   menuPaste(): Promise<void>
   menuSelectAll(): Promise<void>
+
+  // Global shortcut (activate app)
+  getGlobalShortcut(): Promise<{ enabled: boolean; shortcut: string }>
+  setGlobalShortcut(enabled: boolean, shortcut: string): Promise<{ success: boolean; error?: string }>
+
+  // Auto launch (launch at startup)
+  getAutoLaunch(): Promise<boolean>
+  setAutoLaunch(enabled: boolean): Promise<void>
 }
 
 /**
@@ -1102,6 +1160,8 @@ export interface WorkspaceSettings {
   workingDirectory?: string
   /** Whether local (stdio) MCP servers are enabled */
   localMcpEnabled?: boolean
+  /** Whether the session status feature is enabled. Defaults to false. */
+  statusEnabled?: boolean
 }
 
 /**
@@ -1137,6 +1197,8 @@ export type RightSidebarPanel =
  * - 'flagged': Only flagged sessions
  * - 'state': Sessions with specific status ID
  * - 'label': Sessions with specific label (includes descendants via tree hierarchy)
+ * - 'view': Sessions matching a saved view
+ * - 'workingDir': Sessions associated with a specific working directory
  */
 export type ChatFilter =
   | { kind: 'allChats' }
@@ -1144,6 +1206,7 @@ export type ChatFilter =
   | { kind: 'state'; stateId: string }
   | { kind: 'label'; labelId: string }
   | { kind: 'view'; viewId: string }
+  | { kind: 'workingDir'; workingDir: string }
 
 /**
  * Settings subpage options
@@ -1281,6 +1344,7 @@ export const getNavigationStateKey = (state: NavigationState): string => {
   if (f.kind === 'state') base = `state:${f.stateId}`
   else if (f.kind === 'label') base = `label:${f.labelId}`
   else if (f.kind === 'view') base = `view:${f.viewId}`
+  else if (f.kind === 'workingDir') base = `workingDir:${f.workingDir}`
   else base = f.kind
   if (state.details) {
     return `${base}/chat/${state.details.sessionId}`
@@ -1339,6 +1403,10 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
       const viewId = filterKey.slice(5)
       if (!viewId) return null
       filter = { kind: 'view', viewId }
+    } else if (filterKey.startsWith('workingDir:')) {
+      const workingDir = filterKey.slice(11)
+      if (!workingDir) return null
+      filter = { kind: 'workingDir', workingDir }
     } else {
       return null
     }

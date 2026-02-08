@@ -4,14 +4,15 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { normalize, isAbsolute, join, basename, dirname, resolve, relative, sep } from 'path'
 import { homedir, tmpdir } from 'os'
 import { randomUUID } from 'crypto'
-import { execSync } from 'child_process'
+import { execSync, spawn } from 'child_process'
 import { SessionManager } from './sessions'
 import { ipcLog, windowLog, searchLog } from './logger'
 import { WindowManager } from './window-manager'
 import { registerOnboardingHandlers } from './onboarding'
-import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type AuthType, type ApiSetupInfo, type SendMessageOptions } from '../shared/types'
+import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type AuthType, type ApiSetupInfo, type SendMessageOptions, type AvailableApp } from '../shared/types'
 import { readFileAttachment, perf, validateImageForClaudeAPI, IMAGE_LIMITS } from '@craft-agent/shared/utils'
-import { getAuthType, setAuthType, getPreferencesPath, getCustomModel, setCustomModel, getModel, setModel, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, getAnthropicBaseUrl, setAnthropicBaseUrl, loadStoredConfig, saveConfig, resolveModelId, type Workspace, SUMMARIZATION_MODEL } from '@craft-agent/shared/config'
+import { getAuthState } from '@craft-agent/shared/auth'
+import { getAuthType, setAuthType, getPreferencesPath, getCustomModel, setCustomModel, getModel, setModel, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, getActiveWorkspace, addWorkspace, setActiveWorkspace, getAnthropicBaseUrl, setAnthropicBaseUrl, loadStoredConfig, saveConfig, resolveModelId, type Workspace, SUMMARIZATION_MODEL } from '@craft-agent/shared/config'
 import { getSessionAttachmentsPath, validateSessionId } from '@craft-agent/shared/sessions'
 import { loadWorkspaceSources, getSourcesBySlugs, type LoadedSource } from '@craft-agent/shared/sources'
 import { isValidThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
@@ -161,11 +162,39 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // ============================================================
 
   // Get workspace ID for the calling window
-  ipcMain.handle(IPC_CHANNELS.GET_WINDOW_WORKSPACE, (event) => {
-    const workspaceId = windowManager.getWorkspaceForWindow(event.sender.id)
+  ipcMain.handle(IPC_CHANNELS.GET_WINDOW_WORKSPACE, async (event) => {
+    let workspaceId = windowManager.getWorkspaceForWindow(event.sender.id)
+    let workspace = workspaceId ? getWorkspaceByNameOrId(workspaceId) : null
+
+    if (!workspace) {
+      let activeWorkspace = getActiveWorkspace()
+      if (!activeWorkspace) {
+        try {
+          await getAuthState()
+        } catch (error) {
+          ipcLog.warn('[ipc.getWindowWorkspace] Failed to initialize auth state:', error)
+        }
+        activeWorkspace = getActiveWorkspace()
+      }
+
+      if (activeWorkspace) {
+        const updated = windowManager.updateWindowWorkspace(event.sender.id, activeWorkspace.id)
+        if (!updated) {
+          const win = BrowserWindow.fromWebContents(event.sender)
+          if (win) {
+            windowManager.registerWindow(win, activeWorkspace.id)
+          }
+        }
+        workspaceId = activeWorkspace.id
+        workspace = activeWorkspace
+      }
+    }
+
     // Set up ConfigWatcher for live updates (labels, statuses, sources, themes)
     if (workspaceId) {
-      const workspace = getWorkspaceByNameOrId(workspaceId)
+      if (!workspace) {
+        workspace = getWorkspaceByNameOrId(workspaceId)
+      }
       if (workspace) {
         sessionManager.setupConfigWatcher(workspace.rootPath, workspaceId)
       }
@@ -181,7 +210,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // Open a session in a new window
   ipcMain.handle(IPC_CHANNELS.OPEN_SESSION_IN_NEW_WINDOW, async (_event, workspaceId: string, sessionId: string) => {
     // Build deep link for session navigation
-    const deepLink = `craftagents://allChats/chat/${sessionId}`
+    const deepLink = `bunnyagents://allChats/chat/${sessionId}`
     windowManager.createWindow({
       workspaceId,
       focused: true,
@@ -199,15 +228,38 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     windowManager.closeWindow(event.sender.id)
   })
 
-  // Confirm close - force close the window (bypasses interception).
+  // Confirm close - on macOS, hide the app when closing the last main window
+  // so the X button and Cmd+W behave consistently. Otherwise force close.
   // Called by renderer when it has no modals to close and wants to proceed.
   ipcMain.handle(IPC_CHANNELS.WINDOW_CONFIRM_CLOSE, (event) => {
-    windowManager.forceCloseWindow(event.sender.id)
+    const webContentsId = event.sender.id
+    if (process.platform === 'darwin') {
+      windowManager.consumeCloseIntent(webContentsId)
+      const isMainWindow = !windowManager.isFocusedModeWindow(webContentsId)
+      const isLastMainWindow = isMainWindow && windowManager.getMainWindowCount() <= 1
+      if (isLastMainWindow) {
+        app.hide()
+        return
+      }
+      windowManager.forceCloseWindow(webContentsId)
+      return
+    }
+    windowManager.forceCloseWindow(webContentsId)
   })
 
   // Show/hide macOS traffic light buttons (for fullscreen overlays)
   ipcMain.handle(IPC_CHANNELS.WINDOW_SET_TRAFFIC_LIGHTS, (event, visible: boolean) => {
     windowManager.setTrafficLightsVisible(event.sender.id, visible)
+  })
+
+  // Set window always on top (pin mode)
+  ipcMain.handle(IPC_CHANNELS.WINDOW_SET_ALWAYS_ON_TOP, (event, enabled: boolean) => {
+    return windowManager.setAlwaysOnTop(event.sender.id, enabled)
+  })
+
+  // Get window always on top state
+  ipcMain.handle(IPC_CHANNELS.WINDOW_GET_ALWAYS_ON_TOP, (event) => {
+    return windowManager.getAlwaysOnTop(event.sender.id)
   })
 
   // Switch workspace in current window (in-window switching)
@@ -501,7 +553,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       try {
         const thumbnail = await nativeImage.createThumbnailFromPath(safePath, { width: 200, height: 200 })
         if (!thumbnail.isEmpty()) {
-          ;(attachment as { thumbnailBase64?: string }).thumbnailBase64 = thumbnail.toPNG().toString('base64')
+          ; (attachment as { thumbnailBase64?: string }).thumbnailBase64 = thumbnail.toPNG().toString('base64')
         }
       } catch (thumbError) {
         // Thumbnail generation failed - this is ok, we'll show an icon fallback
@@ -532,7 +584,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       const thumbnail = await nativeImage.createThumbnailFromPath(tempPath, { width: 200, height: 200 })
 
       // Clean up temp file
-      await unlink(tempPath).catch(() => {})
+      await unlink(tempPath).catch(() => { })
 
       if (!thumbnail.isEmpty()) {
         return thumbnail.toPNG().toString('base64')
@@ -540,7 +592,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       return null
     } catch (error) {
       // Clean up temp file on error
-      await unlink(tempPath).catch(() => {})
+      await unlink(tempPath).catch(() => { })
       ipcLog.info('generateThumbnail failed:', error instanceof Error ? error.message : error)
       return null
     }
@@ -742,7 +794,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       // Clean up any files we've written before the error
       if (filesToCleanup.length > 0) {
         ipcLog.info(`Cleaning up ${filesToCleanup.length} orphaned file(s) after storage error`)
-        await Promise.all(filesToCleanup.map(f => unlink(f).catch(() => {})))
+        await Promise.all(filesToCleanup.map(f => unlink(f).catch(() => { })))
       }
 
       const message = error instanceof Error ? error.message : 'Unknown error'
@@ -780,6 +832,77 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       // Not a git repo, git not installed, or other error
       return null
     }
+  })
+
+  // Get git status (staged, unstaged, untracked file counts)
+  ipcMain.handle(IPC_CHANNELS.GET_GIT_STATUS, async (_event, dirPath: string) => {
+    const result = await new Promise<{ staged: number; unstaged: number; untracked: number } | null>((resolve) => {
+      let settled = false
+      let buffer = ''
+      let staged = 0
+      let unstaged = 0
+      let untracked = 0
+      let timeoutId: NodeJS.Timeout | undefined
+
+      const finalize = (value: { staged: number; unstaged: number; untracked: number } | null) => {
+        if (settled) return
+        settled = true
+        if (timeoutId) clearTimeout(timeoutId)
+        resolve(value)
+      }
+
+      const processLine = (rawLine: string) => {
+        const line = rawLine.replace(/\r$/, '')
+        if (!line || line.length < 2) return
+        const indexStatus = line[0]
+        const workTreeStatus = line[1]
+
+        if (indexStatus === '?' && workTreeStatus === '?') {
+          untracked++
+          return
+        }
+        if (indexStatus !== ' ' && indexStatus !== '?') {
+          staged++
+        }
+        if (workTreeStatus !== ' ' && workTreeStatus !== '?') {
+          unstaged++
+        }
+      }
+
+      const child = spawn('git', ['status', '--porcelain'], {
+        cwd: dirPath,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        windowsHide: true,
+      })
+
+      child.stdout.on('data', (chunk) => {
+        buffer += chunk.toString('utf-8')
+        let newlineIndex = buffer.indexOf('\n')
+        while (newlineIndex >= 0) {
+          const line = buffer.slice(0, newlineIndex)
+          buffer = buffer.slice(newlineIndex + 1)
+          processLine(line)
+          newlineIndex = buffer.indexOf('\n')
+        }
+      })
+
+      child.once('error', () => finalize(null))
+      child.once('close', (code) => {
+        if (buffer) processLine(buffer)
+        if (code === 0) {
+          finalize({ staged, unstaged, untracked })
+        } else {
+          finalize(null)
+        }
+      })
+
+      timeoutId = setTimeout(() => {
+        child.kill()
+        finalize(null)
+      }, 5000)
+    })
+
+    return result
   })
 
   // Git Bash detection and configuration (Windows only)
@@ -983,16 +1106,16 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     return getDismissedUpdateVersion()
   })
 
-  // Shell operations - open URL in external browser (or handle craftagents:// internally)
+  // Shell operations - open URL in external browser (or handle bunnyagents:// internally)
   ipcMain.handle(IPC_CHANNELS.OPEN_URL, async (_event, url: string) => {
     ipcLog.info('[OPEN_URL] Received request:', url)
     try {
       // Validate URL format
       const parsed = new URL(url)
 
-      // Handle craftagents:// URLs internally via deep link handler
+      // Handle bunnyagents:// URLs internally via deep link handler
       // This ensures ?window= params work correctly for "Open in New Window"
-      if (parsed.protocol === 'craftagents:') {
+      if (parsed.protocol === 'bunnyagents:') {
         ipcLog.info('[OPEN_URL] Handling as deep link')
         const { handleDeepLink } = await import('./deep-link')
         const result = await handleDeepLink(url, windowManager)
@@ -1044,6 +1167,101 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       const message = error instanceof Error ? error.message : 'Unknown error'
       ipcLog.error('showInFolder error:', message)
       throw new Error(`Failed to show in folder: ${message}`)
+    }
+  })
+
+  // Get available apps for "Open in" functionality (macOS only for now)
+  ipcMain.handle(IPC_CHANNELS.GET_AVAILABLE_APPS, async (_event, _path: string): Promise<AvailableApp[]> => {
+    if (process.platform !== 'darwin') {
+      // Return basic apps for non-macOS platforms
+      return [
+        { id: 'finder', name: 'File Explorer', shortcut: '1' },
+        { id: 'terminal', name: 'Terminal', shortcut: '2' },
+      ]
+    }
+
+    // macOS: Check for common development apps by checking /Applications directly
+    const apps: AvailableApp[] = []
+    const appChecks = [
+      { id: 'warp', name: 'Warp', appPath: '/Applications/Warp.app' },
+      { id: 'antigravity', name: 'Antigravity', appPath: '/Applications/Antigravity.app' },
+      { id: 'xcode', name: 'Xcode', appPath: '/System/Volumes/Data/Applications/Xcode-16.0.0.app' },
+      { id: 'sublime-merge', name: 'Sublime Merge', appPath: '/Applications/Sublime Merge.app' },
+      { id: 'finder', name: 'Finder', appPath: null }, // Finder is always available
+      { id: 'vscode', name: 'VS Code', appPath: '/Applications/Visual Studio Code.app' },
+      { id: 'androidstudio', name: 'Android Studio', appPath: '/Applications/Android Studio.app' },
+      { id: 'fork', name: 'Fork', appPath: '/Applications/Fork.app' },
+      { id: 'trae-cn', name: 'Trae CN', appPath: '/Applications/Trae CN.app' },
+    ]
+
+    for (const appDef of appChecks) {
+      // Finder and Terminal are always available on macOS
+      if (appDef.appPath === null || existsSync(appDef.appPath)) {
+        apps.push({
+          id: appDef.id,
+          name: appDef.name,
+        })
+      }
+    }
+
+    // Sort by usage count for this directory (descending), then assign shortcuts
+    const config = loadStoredConfig()
+    const dirUsageCount = config?.appUsageCount?.[_path] || {}
+    apps.sort((a, b) => (dirUsageCount[b.id] || 0) - (dirUsageCount[a.id] || 0))
+
+    // Assign shortcuts after sorting
+    apps.forEach((app, index) => {
+      app.shortcut = index < 9 ? `${index + 1}` : undefined
+    })
+
+    return apps
+  })
+
+  // Open path with specific app
+  ipcMain.handle(IPC_CHANNELS.OPEN_WITH_APP, async (_event, path: string, appId: string) => {
+    try {
+      const absolutePath = resolve(path)
+      const safePath = await validateFilePath(absolutePath)
+
+      if (process.platform === 'darwin') {
+        // macOS: Use 'open' command with -a flag for specific apps
+        const appCommands: Record<string, string[]> = {
+          'finder': ['open', safePath],
+          'vscode': ['open', '-a', 'Visual Studio Code', safePath],
+          'androidstudio': ['open', '-a', 'Android Studio', safePath],
+          'warp': ['open', '-a', 'Warp', safePath],
+          'fork': ['open', '-a', 'Fork', safePath],
+          'xcode': ['open', '-a', 'BitSkyXcode-16.0.app', safePath],
+          'antigravity': ['open', '-a', 'Antigravity', safePath],
+          'sublime-merge': ['open', '-a', 'Sublime Merge', safePath],
+          'trae-cn': ['open', '-a', 'Trae CN', safePath],
+        }
+
+        const cmd = appCommands[appId]
+        if (!cmd) {
+          throw new Error(`Unknown app: ${appId}`)
+        }
+
+        const [command, ...args] = cmd
+        spawn(command, args, { detached: true, stdio: 'ignore' }).unref()
+      } else {
+        // Non-macOS: Just open with default app
+        await shell.openPath(safePath)
+      }
+
+      // Update app usage count for this directory
+      const config = loadStoredConfig()
+      if (config) {
+        const allUsageCount = config.appUsageCount || {}
+        const dirUsageCount = allUsageCount[path] || {}
+        dirUsageCount[appId] = (dirUsageCount[appId] || 0) + 1
+        allUsageCount[path] = dirUsageCount
+        saveConfig({ ...config, appUsageCount: allUsageCount })
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      ipcLog.error('openWithApp error:', message)
+      throw new Error(`Failed to open with app: ${message}`)
     }
   })
 
@@ -1475,6 +1693,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       thinkingLevel: config?.defaults?.thinkingLevel,
       workingDirectory: config?.defaults?.workingDirectory,
       localMcpEnabled: config?.localMcpServers?.enabled ?? true,
+      statusEnabled: config?.statusEnabled ?? false,
     }
   })
 
@@ -1484,7 +1703,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     const workspace = getWorkspaceOrThrow(workspaceId)
 
     // Validate key is a known workspace setting
-    const validKeys = ['name', 'model', 'enabledSourceSlugs', 'permissionMode', 'cyclablePermissionModes', 'thinkingLevel', 'workingDirectory', 'localMcpEnabled']
+    const validKeys = ['name', 'model', 'enabledSourceSlugs', 'permissionMode', 'cyclablePermissionModes', 'thinkingLevel', 'workingDirectory', 'localMcpEnabled', 'statusEnabled']
     if (!validKeys.includes(key)) {
       throw new Error(`Invalid workspace setting key: ${key}. Valid keys: ${validKeys.join(', ')}`)
     }
@@ -1502,10 +1721,13 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       // Store in localMcpServers.enabled (top-level, not in defaults)
       config.localMcpServers = config.localMcpServers || { enabled: true }
       config.localMcpServers.enabled = Boolean(value)
+    } else if (key === 'statusEnabled') {
+      // Store as top-level config property
+      config.statusEnabled = Boolean(value)
     } else {
       // Update the setting in defaults
       config.defaults = config.defaults || {}
-      ;(config.defaults as Record<string, unknown>)[key] = value
+        ; (config.defaults as Record<string, unknown>)[key] = value
     }
 
     // Save the config
@@ -2192,6 +2414,30 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     return result
   })
 
+  // ============================================================
+  // Path Rules (Automatic labels based on workingDirectory)
+  // ============================================================
+
+  // Get path rules for a workspace
+  ipcMain.handle(IPC_CHANNELS.PATH_RULES_GET, async (_event, workspaceId: string) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const { loadPathRulesConfig } = await import('@craft-agent/shared/labels/path-rules')
+    return loadPathRulesConfig(workspace.rootPath)
+  })
+
+  // Save path rules for a workspace
+  ipcMain.handle(IPC_CHANNELS.PATH_RULES_SAVE, async (_event, workspaceId: string, config: import('@craft-agent/shared/labels/path-rules').PathRulesConfig) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+
+    const { savePathRulesConfig } = await import('@craft-agent/shared/labels/path-rules')
+    savePathRulesConfig(workspace.rootPath, config)
+    // Broadcast labels changed since path rules affect label assignment
+    windowManager.broadcastToAll(IPC_CHANNELS.LABELS_CHANGED, workspaceId)
+  })
+
   // List views for a workspace (dynamic expression-based filters stored in views.json)
   ipcMain.handle(IPC_CHANNELS.VIEWS_LIST, async (_event, workspaceId: string) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
@@ -2379,9 +2625,9 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     // Broadcast to all windows except the sender
     for (const managed of windowManager.getAllWindows()) {
       if (!managed.window.isDestroyed() &&
-          !managed.window.webContents.isDestroyed() &&
-          managed.window.webContents.mainFrame &&
-          managed.window.webContents.id !== senderId) {
+        !managed.window.webContents.isDestroyed() &&
+        managed.window.webContents.mainFrame &&
+        managed.window.webContents.id !== senderId) {
         managed.window.webContents.send(IPC_CHANNELS.THEME_PREFERENCES_CHANGED, preferences)
       }
     }
@@ -2554,7 +2800,37 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     return isAnyWindowFocused()
   })
 
+  // Consume system interrupted flag (lock screen, sleep)
+  // Returns true if system was interrupted (and clears the flag)
+  ipcMain.handle(IPC_CHANNELS.SYSTEM_INTERRUPTED_CONSUME, () => {
+    const { consumeSystemInterrupted } = require('./index')
+    return consumeSystemInterrupted()
+  })
+
   // Note: Permission mode cycling settings (cyclablePermissionModes) are now workspace-level
   // and managed via WORKSPACE_SETTINGS_GET/UPDATE channels
+
+  // Get global shortcut settings
+  ipcMain.handle(IPC_CHANNELS.GLOBAL_SHORTCUT_GET, async () => {
+    const { getGlobalShortcutSettings } = await import('./global-shortcut')
+    return getGlobalShortcutSettings()
+  })
+
+  // Set global shortcut settings
+  ipcMain.handle(IPC_CHANNELS.GLOBAL_SHORTCUT_SET, async (_event, enabled: boolean, shortcut: string) => {
+    const { setGlobalShortcutSettings } = await import('./global-shortcut')
+    return setGlobalShortcutSettings(enabled, shortcut)
+  })
+
+  // Get auto launch (launch at startup) setting
+  ipcMain.handle(IPC_CHANNELS.AUTO_LAUNCH_GET, () => {
+    const settings = app.getLoginItemSettings()
+    return settings.openAtLogin
+  })
+
+  // Set auto launch (launch at startup) setting
+  ipcMain.handle(IPC_CHANNELS.AUTO_LAUNCH_SET, (_event, enabled: boolean) => {
+    app.setLoginItemSettings({ openAtLogin: enabled })
+  })
 
 }

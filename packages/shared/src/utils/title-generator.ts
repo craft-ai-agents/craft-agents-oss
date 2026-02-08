@@ -8,6 +8,13 @@ import { getDefaultOptions } from '../agent/options.ts';
 import { SUMMARIZATION_MODEL } from '../config/models.ts';
 import { resolveModelId } from '../config/storage.ts';
 
+function cleanTitle(raw: string): string {
+  let t = raw.trim();
+  t = t.replace(/^["']+|["']+$/g, '');
+  t = t.replace(/[.!?]+$/, '');
+  return t.trim();
+}
+
 /**
  * Generate a task-focused title (2-5 words) from the user's first message.
  * Extracts what the user is trying to accomplish, framing conversations as tasks.
@@ -23,9 +30,10 @@ export async function generateSessionTitle(
     const userSnippet = userMessage.slice(0, 500);
 
     const prompt = [
-      'What is the user trying to do? Reply with ONLY a short task description (2-5 words).',
-      'Start with a verb. Use plain text only - no markdown.',
-      'Examples: "Fix authentication bug", "Add dark mode", "Refactor API layer", "Explain codebase structure"',
+      'What is the user trying to do? Reply with ONLY a short task title (2-5 words, max 50 characters).',
+      'Start with a verb. Use plain text only - no markdown, no quotes, no punctuation at the end.',
+      'Do NOT write a sentence or explanation. Do NOT repeat the user message.',
+      'Examples: "Fix authentication bug", "Add dark mode", "Refactor API layer", "Create cheatsheet"',
       '',
       'User: ' + userSnippet,
       '',
@@ -51,11 +59,10 @@ export async function generateSessionTitle(
       }
     }
 
-    const trimmed = title.trim();
+    const cleaned = cleanTitle(title);
 
-    // Validate: reasonable length, not empty
-    if (trimmed && trimmed.length > 0 && trimmed.length < 100) {
-      return trimmed;
+    if (cleaned && cleaned.length > 0 && cleaned.length <= 50) {
+      return cleaned;
     }
 
     return null;
@@ -76,7 +83,8 @@ export async function generateSessionTitle(
  */
 export async function regenerateSessionTitle(
   recentUserMessages: string[],
-  lastAssistantResponse: string
+  lastAssistantResponse: string,
+  toolSummary?: string
 ): Promise<string | null> {
   try {
     // Combine recent user messages, taking up to 300 chars from each
@@ -85,20 +93,26 @@ export async function regenerateSessionTitle(
       .join('\n\n');
     const assistantSnippet = lastAssistantResponse.slice(0, 500);
 
-    const prompt = [
+    const parts = [
       'Based on these recent messages, what is the current focus of this conversation?',
-      'Reply with ONLY a short task description (2-5 words).',
-      'Start with a verb. Use plain text only - no markdown.',
-      'Examples: "Fix authentication bug", "Add dark mode", "Refactor API layer", "Explain codebase structure"',
+      'Reply with ONLY a short task title (2-5 words, max 50 characters).',
+      'Start with a verb. Use plain text only - no markdown, no quotes, no punctuation at the end.',
+      'Do NOT write a sentence or explanation. Do NOT repeat any message content.',
+      'Examples: "Fix authentication bug", "Add dark mode", "Refactor API layer", "Create cheatsheet"',
       '',
       'Recent user messages:',
       userContext,
       '',
       'Latest assistant response:',
       assistantSnippet,
-      '',
-      'Current focus:',
-    ].join('\n');
+    ];
+
+    if (toolSummary) {
+      parts.push('', 'Tools used by assistant:', toolSummary);
+    }
+
+    parts.push('', 'Current focus:');
+    const prompt = parts.join('\n');
 
     const defaultOptions = getDefaultOptions();
     const options = {
@@ -119,10 +133,10 @@ export async function regenerateSessionTitle(
       }
     }
 
-    const trimmed = title.trim();
+    const cleaned = cleanTitle(title);
 
-    if (trimmed && trimmed.length > 0 && trimmed.length < 100) {
-      return trimmed;
+    if (cleaned && cleaned.length > 0 && cleaned.length <= 50) {
+      return cleaned;
     }
 
     return null;

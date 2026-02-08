@@ -34,7 +34,8 @@
     "fresh-start:token": "bun run scripts/fresh-start.ts --token-only",
     "print:system-prompt": "bun run packages/shared/src/prompts/print-system-prompt.ts",
     "electron:dist": "bun run electron:build && electron-builder --config electron-builder.yml --project apps/electron",
-    "electron:dist:mac": "bun run electron:build && electron-builder --config electron-builder.yml --project apps/electron --mac",
+    "electron:dist:mac": "bun run electron:build && electron-builder --config electron-builder.yml --project apps/electron --mac && echo '\n📦 Build artifacts:' && ls -1 apps/electron/release/*.{dmg,zip} 2>/dev/null | xargs -I {} echo '  {}'",
+    "electron:dist:mac:dir": "bun run electron:build && electron-builder --config electron-builder.yml --project apps/electron --mac --dir && echo '\n📦 Build artifacts:' && find apps/electron/release -name '*.app' -type d | xargs -I {} echo '  {}'",
     "electron:dist:win": "bun run electron:build && electron-builder --config electron-builder.yml --project apps/electron --win",
     "electron:dist:linux": "bun run electron:build && electron-builder --config electron-builder.yml --project apps/electron --linux",
     "viewer:dev": "lsof -ti:5174 | xargs kill -9 2>/dev/null; vite dev --config apps/viewer/vite.config.ts --open /s/tz5-13I84pwK_he",
@@ -87,6 +88,7 @@
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.34",
     "@anthropic-ai/sdk": "^0.71.1",
+    "@leeoniya/ufuzzy": "^1.0.19",
     "@modelcontextprotocol/sdk": "^1.24.3",
     "@radix-ui/react-avatar": "^1.1.11",
     "@radix-ui/react-collapsible": "^1.1.12",

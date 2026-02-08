@@ -1,4 +1,4 @@
-export { ApiKeyInput, type ApiKeyInputProps, type ApiKeyStatus, type ApiKeySubmitData } from './ApiKeyInput'
+export { ApiKeyInput, type ApiKeyInputProps, type ApiKeyStatus, type ApiKeySubmitData, IDEA_API_KEY } from './ApiKeyInput'
 export {
   OAuthConnect,
   type OAuthConnectProps,

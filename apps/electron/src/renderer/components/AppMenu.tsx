@@ -12,6 +12,7 @@ import {
   StyledDropdownMenuSubContent,
 } from "@/components/ui/styled-dropdown"
 import * as Icons from "lucide-react"
+import { LayoutGrid, PanelLeft, Maximize2 } from "lucide-react"
 import { CraftAgentsSymbol } from "./icons/CraftAgentsSymbol"
 import { SquarePenRounded } from "./icons/SquarePenRounded"
 import { TopBarButton } from "./ui/TopBarButton"
@@ -22,6 +23,14 @@ import {
   SETTINGS_ITEMS,
   getShortcutDisplay,
 } from "../../shared/menu-schema"
+
+/**
+ * View mode for the app layout:
+ * - 'full': Show all panels (left sidebar + session list + chat)
+ * - 'compact': Hide left sidebar (session list + chat only)
+ * - 'focus': Focus mode (chat only)
+ */
+export type ViewMode = 'full' | 'compact' | 'focus'
 import type { MenuItem, MenuSection, SettingsMenuItem } from "../../shared/menu-schema"
 import { SETTINGS_ICONS } from "./icons/SettingsIcons"
 
@@ -138,6 +147,10 @@ interface AppMenuProps {
   canGoForward?: boolean
   onToggleSidebar?: () => void
   onToggleFocusMode?: () => void
+  /** Callback to cycle view mode */
+  onCycleViewMode?: () => void
+  /** Current view mode for icon state */
+  viewMode?: ViewMode
 }
 
 /**
@@ -169,6 +182,8 @@ export function AppMenu({
   canGoForward = true,
   onToggleSidebar,
   onToggleFocusMode,
+  onCycleViewMode,
+  viewMode,
 }: AppMenuProps) {
   const [isDebugMode, setIsDebugMode] = useState(false)
   const modKey = isMac ? '⌘' : 'Ctrl+'
@@ -183,8 +198,14 @@ export function AppMenu({
     toggleSidebar: onToggleSidebar,
   }
 
+  const ViewModeIcon = viewMode === 'compact'
+    ? PanelLeft
+    : viewMode === 'focus'
+      ? Maximize2
+      : LayoutGrid
+
   return (
-    <div className="flex items-center gap-[5px] w-full">
+    <div className="flex items-center gap-[5px]">
       {/* Craft Logo Menu */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -305,8 +326,12 @@ export function AppMenu({
         </StyledDropdownMenuContent>
       </DropdownMenu>
 
-      {/* Spacer to push nav buttons right */}
-      <div className="flex-1" />
+      {/* View Mode Toggle - cycles through full → compact → focus */}
+      {onCycleViewMode && (
+        <TopBarButton onClick={onCycleViewMode} aria-label="Toggle view mode">
+          <ViewModeIcon className="h-4 w-4 text-foreground/70" />
+        </TopBarButton>
+      )}
 
       {/* Back Navigation */}
       <TopBarButton
@@ -314,7 +339,7 @@ export function AppMenu({
         disabled={!canGoBack}
         aria-label="Go back"
       >
-        <Icons.ChevronLeft className="h-[22px] w-[22px] text-foreground/70" strokeWidth={1.5} />
+        <Icons.ChevronLeft className="h-5 w-5 text-foreground/70" strokeWidth={1.5} />
       </TopBarButton>
 
       {/* Forward Navigation */}
@@ -323,7 +348,7 @@ export function AppMenu({
         disabled={!canGoForward}
         aria-label="Go forward"
       >
-        <Icons.ChevronRight className="h-[22px] w-[22px] text-foreground/70" strokeWidth={1.5} />
+        <Icons.ChevronRight className="h-5 w-5 text-foreground/70" strokeWidth={1.5} />
       </TopBarButton>
     </div>
   )

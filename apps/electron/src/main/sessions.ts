@@ -1,7 +1,7 @@
 import { app } from 'electron'
 import * as Sentry from '@sentry/electron/main'
-import { join } from 'path'
-import { existsSync } from 'fs'
+import { join, dirname } from 'path'
+import { existsSync, statSync } from 'fs'
 import { rm, readFile } from 'fs/promises'
 import { CraftAgent, type AgentEvent, setPermissionMode, type PermissionMode, unregisterSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest } from '@craft-agent/shared/agent'
 import { sessionLog, isDebugMode, getLogFilePath } from './logger'
@@ -52,6 +52,7 @@ import { type ThinkingLevel, DEFAULT_THINKING_LEVEL } from '@craft-agent/shared/
 import { evaluateAutoLabels } from '@craft-agent/shared/labels/auto'
 import { listLabels } from '@craft-agent/shared/labels/storage'
 import { extractLabelId } from '@craft-agent/shared/labels'
+import { loadPathRulesConfig, evaluatePathRules, applyPathRuleMatches } from '@craft-agent/shared/labels/path-rules'
 
 /**
  * Sanitize message content for use as session title.
@@ -67,6 +68,52 @@ function sanitizeForTitle(content: string): string {
     .replace(/\[folder:[^\]]+\]/g, '')                // Strip [folder:...] mentions
     .replace(/\s+/g, ' ')        // Collapse whitespace
     .trim()
+}
+
+/**
+ * Normalize user-provided working directory input.
+ *
+ * Goals:
+ * - Handle shell-escaped paths copied from terminals (e.g. `My\\ Documents`)
+ * - Treat accidental file paths as "use the parent directory"
+ * - Expand `~/` to an absolute path
+ */
+function normalizeWorkingDirectoryInput(raw?: string | null): string | undefined {
+  if (!raw) return undefined
+  let p = String(raw).trim()
+  if (!p) return undefined
+
+  // Strip simple surrounding quotes
+  if ((p.startsWith('"') && p.endsWith('"')) || (p.startsWith("'") && p.endsWith("'"))) {
+    p = p.slice(1, -1).trim()
+    if (!p) return undefined
+  }
+
+  // Unescape common shell escapes
+  p = p.replace(/\\ /g, ' ').replace(/\\~/g, '~')
+
+  // Expand ~/ to home
+  if (p.startsWith('~/')) {
+    p = join(app.getPath('home'), p.slice(2))
+  }
+
+  // If it looks like a file path, use its parent directory
+  const base = p.split('/').pop() || p
+  if (/\.[a-zA-Z0-9]{1,10}$/.test(base)) {
+    p = dirname(p)
+  }
+
+  // If the path exists and is a file, use its parent directory
+  try {
+    const st = statSync(p)
+    if (st.isFile()) {
+      p = dirname(p)
+    }
+  } catch {
+    // ignore (non-existent path, permission, etc.)
+  }
+
+  return p
 }
 
 /**
@@ -390,6 +437,8 @@ interface ManagedSession {
   // Whether an async operation is ongoing (sharing, updating share, revoking, title regeneration)
   // Used for shimmer effect on session title
   isAsyncOperationOngoing?: boolean
+  // Monotonic counter for title generation - prevents stale async title results from overwriting newer ones
+  titleGenSeq: number
   // Preview of first user message (for sidebar display fallback)
   preview?: string
   // When the session was first created (ms timestamp from JSONL header)
@@ -942,11 +991,12 @@ export class SessionManager {
             hasUnread: meta.hasUnread,  // Explicit unread flag for NEW badge state machine
             enabledSourceSlugs: undefined,  // Loaded with messages
             labels: meta.labels,
-            workingDirectory: meta.workingDirectory ?? wsDefaultWorkingDir,
+            workingDirectory: normalizeWorkingDirectoryInput(meta.workingDirectory ?? wsDefaultWorkingDir),
             sdkCwd: meta.sdkCwd,
             model: meta.model,
             thinkingLevel: meta.thinkingLevel,
             lastMessageRole: meta.lastMessageRole,
+            titleGenSeq: 0,
             messageQueue: [],
             backgroundShellCommands: new Map(),
             messagesLoaded: false,  // Mark as not loaded
@@ -1473,6 +1523,7 @@ export class SessionManager {
     } else {
       resolvedWorkingDir = options.workingDirectory
     }
+    resolvedWorkingDir = normalizeWorkingDirectoryInput(resolvedWorkingDir)
 
     // Use storage layer to create and persist the session
     const storedSession = await createStoredSession(workspaceRootPath, {
@@ -1512,6 +1563,7 @@ export class SessionManager {
       thinkingLevel: defaultThinkingLevel,
       // System prompt preset for mini agents
       systemPromptPreset: options?.systemPromptPreset,
+      titleGenSeq: 0,
       messageQueue: [],
       backgroundShellCommands: new Map(),
       messagesLoaded: true,  // New sessions don't need to load messages from disk
@@ -1520,6 +1572,21 @@ export class SessionManager {
       tokenRefreshManager: new TokenRefreshManager(getSourceCredentialManager(), {
         log: (msg) => sessionLog.debug(msg),
       }),
+    }
+
+    // Apply path-based labels if workingDirectory is set
+    if (resolvedWorkingDir) {
+      const pathRulesConfig = loadPathRulesConfig(workspaceRootPath)
+      if (pathRulesConfig.rules.length > 0) {
+        const labelTree = listLabels(workspaceRootPath)
+        const matches = evaluatePathRules(resolvedWorkingDir, pathRulesConfig, labelTree)
+        const newLabels = applyPathRuleMatches(managed.labels, matches)
+        if (newLabels && newLabels !== managed.labels) {
+          managed.labels = newLabels
+          this.persistSession(managed)
+          sessionLog.info(`Applied path-based labels to session ${managed.id}:`, newLabels)
+        }
+      }
     }
 
     this.sessions.set(storedSession.id, managed)
@@ -1534,7 +1601,7 @@ export class SessionManager {
       isFlagged: options?.isFlagged ?? false,
       permissionMode: defaultPermissionMode,
       todoState: options?.todoState,
-      labels: options?.labels,
+      labels: managed.labels,  // Include path-based labels
       workingDirectory: resolvedWorkingDir,
       model: managed.model,
       thinkingLevel: defaultThinkingLevel,
@@ -2294,9 +2361,14 @@ export class SessionManager {
       return { success: false, error: 'Session not found' }
     }
 
+    const mySeq = ++managed.titleGenSeq
+
     // Get recent user messages (last 3) for context
+    // Exclude queued user messages (optimistic UI) to avoid generating a title from messages
+    // that haven't actually been processed yet.
+    const queuedUserMessageIds = new Set(managed.messageQueue.map((q) => q.messageId).filter(Boolean))
     const userMessages = managed.messages
-      .filter((m) => m.role === 'user')
+      .filter((m) => m.role === 'user' && !queuedUserMessageIds.has(m.id))
       .slice(-3)
       .map((m) => m.content)
 
@@ -2313,6 +2385,28 @@ export class SessionManager {
       .slice(-1)[0]
 
     const assistantResponse = lastAssistantMsg?.content ?? ''
+
+    // Extract tool call summaries for better context
+    // The AI's understanding comes from tool use (reading files, running commands)
+    const toolSummaries = managed.messages
+      .filter((m) => m.role === 'tool' && m.toolName && m.toolStatus === 'completed')
+      .slice(-10)
+      .map((m) => {
+        const name = m.toolName || 'unknown'
+        // Extract key info based on tool type - only safe, non-secret fields
+        const input = m.toolInput || {}
+        if (name === 'read_file' || name === 'Read') return `${name}: ${input.path || ''}`
+        if (name === 'grep' || name === 'Grep') return `${name}: "${input.pattern || ''}" in ${input.path || ''}`
+        if (name === 'edit_file') return `${name}: ${input.path || ''}`
+        if (name === 'create_file') return `${name}: ${input.path || ''}`
+        if (name === 'list_directory') return `${name}: ${input.path || ''}`
+        if (name === 'run_command' || name === 'Bash') return `${name}: ${(String(input.command || input.cmd || '')).slice(0, 60)}`
+        return name
+      })
+      .filter((s, i, arr) => arr.indexOf(s) === i) // dedupe
+      .slice(0, 8) // cap at 8
+    const toolSummary = toolSummaries.length > 0 ? toolSummaries.join('\n') : undefined
+
     sessionLog.info(`refreshTitle: Calling regenerateSessionTitle...`)
 
     // Notify renderer that title regeneration has started (for shimmer effect)
@@ -2322,8 +2416,12 @@ export class SessionManager {
     this.sendEvent({ type: 'title_regenerating', sessionId, isRegenerating: true }, managed.workspace.id)
 
     try {
-      const title = await regenerateSessionTitle(userMessages, assistantResponse)
+      const title = await regenerateSessionTitle(userMessages, assistantResponse, toolSummary)
       sessionLog.info(`refreshTitle: regenerateSessionTitle returned: ${title ? `"${title}"` : 'null'}`)
+      if (mySeq !== managed.titleGenSeq) {
+        sessionLog.info(`refreshTitle (seq=${mySeq}) superseded by seq=${managed.titleGenSeq}, discarding`)
+        return { success: false, error: 'Superseded by newer title generation' }
+      }
       if (title) {
         managed.name = title
         this.persistSession(managed)
@@ -2354,14 +2452,31 @@ export class SessionManager {
   updateWorkingDirectory(sessionId: string, path: string): void {
     const managed = this.sessions.get(sessionId)
     if (managed) {
-      managed.workingDirectory = path
+      managed.workingDirectory = normalizeWorkingDirectoryInput(path)
       // Also update the agent's session config if agent exists
       if (managed.agent) {
-        managed.agent.updateWorkingDirectory(path)
+        managed.agent.updateWorkingDirectory(managed.workingDirectory)
       }
+
+      // Apply path-based labels for the new working directory
+      if (managed.workingDirectory) {
+        const pathRulesConfig = loadPathRulesConfig(managed.workspace.rootPath)
+        if (pathRulesConfig.rules.length > 0) {
+          const labelTree = listLabels(managed.workspace.rootPath)
+          const matches = evaluatePathRules(managed.workingDirectory, pathRulesConfig, labelTree)
+          const newLabels = applyPathRuleMatches(managed.labels, matches)
+          if (newLabels && newLabels !== managed.labels) {
+            managed.labels = newLabels
+            // Notify renderer of label changes
+            this.sendEvent({ type: 'labels_changed', sessionId, labels: newLabels }, managed.workspace.id)
+            sessionLog.info(`Applied path-based labels on workdir change for session ${managed.id}:`, newLabels)
+          }
+        }
+      }
+
       this.persistSession(managed)
       // Notify renderer of the working directory change
-      this.sendEvent({ type: 'working_directory_changed', sessionId, workingDirectory: path }, managed.workspace.id)
+      this.sendEvent({ type: 'working_directory_changed', sessionId, workingDirectory: managed.workingDirectory }, managed.workspace.id)
     }
   }
 
@@ -2941,6 +3056,27 @@ export class SessionManager {
       await this.setTodoState(sessionId, 'done')
     }
 
+    // 3.5. Auto-regenerate title after first AI response completes
+    //      The initial title is generated from user message only, but after AI responds
+    //      we have better context (AI has read attachments/references). Regenerate once.
+    if (reason === 'complete' && hasFinalMessage) {
+      // IMPORTANT:
+      // A single assistant "turn" can emit multiple final `text_complete` events (multi-block output),
+      // so counting final assistant messages is not a reliable "first response" detector.
+      // Instead, regenerate only after the first user turn completes (excluding queued user messages).
+      const queuedUserMessageIds = new Set(managed.messageQueue.map((q) => q.messageId).filter(Boolean))
+      const nonQueuedUserMessagesCount = managed.messages.filter(
+        (m) => m.role === 'user' && !queuedUserMessageIds.has(m.id)
+      ).length
+
+      if (nonQueuedUserMessagesCount === 1) {
+        sessionLog.info(`First AI response complete, auto-regenerating title for session ${sessionId}`)
+        this.refreshTitle(sessionId).catch((err) => {
+          sessionLog.warn(`Auto title regeneration failed for session ${sessionId}:`, err)
+        })
+      }
+    }
+
     // 4. Check queue and process or complete
     if (managed.messageQueue.length > 0) {
       // Has queued messages - process next
@@ -3223,9 +3359,14 @@ To view this task's output:
    * Called asynchronously when the first user message is received.
    */
   private async generateTitle(managed: ManagedSession, userMessage: string): Promise<void> {
-    sessionLog.info(`Starting title generation for session ${managed.id}`)
+    const mySeq = ++managed.titleGenSeq
+    sessionLog.info(`Starting title generation for session ${managed.id} (seq=${mySeq})`)
     try {
       const title = await generateSessionTitle(userMessage)
+      if (mySeq !== managed.titleGenSeq) {
+        sessionLog.info(`Title generation (seq=${mySeq}) superseded by seq=${managed.titleGenSeq}, discarding`)
+        return
+      }
       if (title) {
         managed.name = title
         this.persistSession(managed)

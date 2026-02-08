@@ -15,6 +15,7 @@ import { useDynamicStack } from '@/hooks/useDynamicStack'
 import type { TodoState } from '@/config/todo-states'
 import { getState } from '@/config/todo-states'
 import { TodoStateMenu } from '@/components/ui/todo-filter-menu'
+import { useOptionalAppShellContext } from '@/context/AppShellContext'
 
 // ============================================================================
 // Permission Mode Icon Component
@@ -75,6 +76,8 @@ export interface ActiveOptionBadgesProps {
   onTodoStateChange?: (stateId: string) => void
   /** Additional CSS classes */
   className?: string
+  /** Whether the session status feature is enabled (hides state badge when false) */
+  statusEnabled?: boolean
 }
 
 /** Resolved label entry: config + parsed value + original index in sessionLabels */
@@ -103,7 +106,12 @@ export function ActiveOptionBadges({
   currentTodoState,
   onTodoStateChange,
   className,
+  statusEnabled: statusEnabledProp,
 }: ActiveOptionBadgesProps) {
+  // Get statusEnabled from context if not provided as prop
+  const appShellCtx = useOptionalAppShellContext()
+  const statusEnabled = statusEnabledProp ?? appShellCtx?.statusEnabled ?? false
+
   // Resolve session label entries to their config objects + parsed values.
   // Entries may be bare IDs ("bug") or valued ("priority::3").
   // Preserves the raw value and original index for editing/removal.
@@ -126,9 +134,10 @@ export function ActiveOptionBadges({
   // Resolve the current state from todoStates for the badge display.
   // Every session always has a state — fall back to the default state (or 'todo')
   // when currentTodoState isn't explicitly set, matching SessionList's behavior.
+  // Only show state badge when statusEnabled is true.
   const effectiveStateId = currentTodoState || 'todo'
   const resolvedState = todoStates.length > 0 ? getState(effectiveStateId, todoStates) : undefined
-  const hasState = !!resolvedState
+  const hasState = statusEnabled && !!resolvedState
 
   // Show the stacking container when there are labels or a state badge
   const hasStackContent = hasLabels || hasState

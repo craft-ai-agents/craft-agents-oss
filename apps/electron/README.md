@@ -248,14 +248,14 @@ navigate(routes.sidebar.flagged())        // Show flagged
 
 ### Deep Links
 
-External apps can navigate using `craftagents://` URLs:
+External apps can navigate using `bunnyagents://` URLs:
 
 ```
-craftagents://settings
-craftagents://allChats/chat/session123
-craftagents://sources/source/github
-craftagents://action/new-chat
-craftagents://workspace/{id}/allChats/chat/abc123
+bunnyagents://settings
+bunnyagents://allChats/chat/session123
+bunnyagents://sources/source/github
+bunnyagents://action/new-chat
+bunnyagents://workspace/{id}/allChats/chat/abc123
 ```
 
 See `CLAUDE.md` for complete route reference.

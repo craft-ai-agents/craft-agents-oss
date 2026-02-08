@@ -1,13 +1,8 @@
 /**
  * Cross-platform assets copy script
  *
- * Copies shared documentation files (packages/shared/assets/docs/)
- * into the Electron dist directory so they are bundled with the app.
- * At runtime, packages/shared/src/docs/index.ts reads these files
- * and installs them to ~/.craft-agent/docs/.
- *
- * Without this step, the packaged app falls back to placeholder content.
- * See: https://github.com/lukilabs/craft-agents-oss/issues/71
+ * Copies bundled config assets into the Electron dist directory so they are
+ * available at runtime via getBundledAssetsDir().
  */
 
 import { existsSync, cpSync, mkdirSync } from "fs";
@@ -15,14 +10,32 @@ import { join } from "path";
 
 const ROOT_DIR = join(import.meta.dir, "..");
 const ELECTRON_DIR = join(ROOT_DIR, "apps/electron");
+const DIST_ASSETS_DIR = join(ELECTRON_DIR, "dist/assets");
 
-const srcDir = join(ROOT_DIR, "packages/shared/assets/docs");
-const destDir = join(ELECTRON_DIR, "dist/assets/docs");
+mkdirSync(DIST_ASSETS_DIR, { recursive: true });
 
-if (existsSync(srcDir)) {
-  mkdirSync(join(ELECTRON_DIR, "dist/assets"), { recursive: true });
-  cpSync(srcDir, destDir, { recursive: true, force: true });
-  console.log("📦 Copied doc assets to dist");
-} else {
-  console.log("⚠️ No shared assets/docs directory found");
+// Shared assets from packages/shared/assets/
+const sharedAssetsRoot = join(ROOT_DIR, "packages/shared/assets");
+for (const dir of ["docs", "tool-icons"]) {
+  const src = join(sharedAssetsRoot, dir);
+  if (existsSync(src)) {
+    cpSync(src, join(DIST_ASSETS_DIR, dir), { recursive: true, force: true });
+  }
 }
+
+// Config assets from apps/electron/resources/
+const resourcesRoot = join(ELECTRON_DIR, "resources");
+for (const dir of ["themes", "permissions"]) {
+  const src = join(resourcesRoot, dir);
+  if (existsSync(src)) {
+    cpSync(src, join(DIST_ASSETS_DIR, dir), { recursive: true, force: true });
+  }
+}
+
+// Config defaults file (single JSON, not a directory)
+const configDefaultsSrc = join(resourcesRoot, "config-defaults.json");
+if (existsSync(configDefaultsSrc)) {
+  cpSync(configDefaultsSrc, join(DIST_ASSETS_DIR, "config-defaults.json"), { force: true });
+}
+
+console.log("📦 Copied bundled assets to dist");

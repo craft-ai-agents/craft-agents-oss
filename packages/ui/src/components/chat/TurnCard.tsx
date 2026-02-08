@@ -1202,7 +1202,7 @@ export interface ResponseCardProps {
   compactMode?: boolean
 }
 
-const MAX_HEIGHT = 540
+
 
 /**
  * ResponseCard - Unified card component for AI responses and plans
@@ -1241,21 +1241,6 @@ export function ResponseCard({
   const [copied, setCopied] = useState(false)
   // Fullscreen state
   const [isFullscreen, setIsFullscreen] = useState(false)
-  // Dark mode detection - scroll fade only shown in dark mode
-  const [isDarkMode, setIsDarkMode] = useState(false)
-
-  // Detect dark mode from document class and listen for changes
-  useEffect(() => {
-    const checkDarkMode = () => {
-      setIsDarkMode(document.documentElement.classList.contains('dark'))
-    }
-    checkDarkMode()
-
-    // Observe class changes on documentElement for theme switches
-    const observer = new MutationObserver(checkDarkMode)
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
-    return () => observer.disconnect()
-  }, [])
 
   const handleCopy = useCallback(async () => {
     try {
@@ -1341,17 +1326,9 @@ export function ResponseCard({
             </div>
           )}
 
-          {/* Scrollable content area with subtle fade at edges (dark mode only) */}
+          {/* Content area */}
           <div
-            className="pl-[22px] pr-[16px] py-3 text-sm overflow-y-auto"
-            style={{
-              maxHeight: MAX_HEIGHT,
-              // Subtle fade at top and bottom edges (16px) - only in dark mode for better contrast
-              ...(isDarkMode && {
-                maskImage: 'linear-gradient(to bottom, transparent 0%, black 16px, black calc(100% - 16px), transparent 100%)',
-                WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 16px, black calc(100% - 16px), transparent 100%)',
-              }),
-            }}
+            className="pl-[22px] pr-[16px] py-3 text-sm"
           >
             <Markdown
               mode="minimal"
@@ -1400,7 +1377,7 @@ export function ResponseCard({
                     )}
                   >
                     <ExternalLink className={SIZE_CONFIG.iconSize} />
-                    <span>View as Markdown</span>
+                    <span>View</span>
                   </button>
                 )}
               </div>
@@ -1445,17 +1422,8 @@ export function ResponseCard({
   return (
     <div className="bg-background shadow-minimal rounded-[8px] overflow-hidden">
       {/* Content area - uses displayedText (throttled) for performance */}
-      {/* Subtle fade at top and bottom edges (dark mode only) */}
       <div
-        className="pl-[22px] pr-4 py-3 text-sm overflow-y-auto"
-        style={{
-          maxHeight: MAX_HEIGHT,
-          // Subtle fade at top and bottom edges (16px) - only in dark mode for better contrast
-          ...(isDarkMode && {
-            maskImage: 'linear-gradient(to bottom, transparent 0%, black 16px, black calc(100% - 16px), transparent 100%)',
-            WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 16px, black calc(100% - 16px), transparent 100%)',
-          }),
-        }}
+        className="pl-[22px] pr-4 py-3 text-sm"
       >
         <Markdown
           mode="minimal"

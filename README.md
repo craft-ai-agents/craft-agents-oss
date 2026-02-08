@@ -347,14 +347,14 @@ Tool responses exceeding ~60KB are automatically summarized using Claude Haiku w
 
 ### Deep Linking
 
-External apps can navigate using `craftagents://` URLs:
+External apps can navigate using `bunnyagents://` URLs:
 
 ```
-craftagents://allChats                    # All chats view
-craftagents://allChats/chat/session123    # Specific chat
-craftagents://settings                    # Settings
-craftagents://sources/source/github       # Source info
-craftagents://action/new-chat             # Create new chat
+bunnyagents://allChats                    # All chats view
+bunnyagents://allChats/chat/session123    # Specific chat
+bunnyagents://settings                    # Settings
+bunnyagents://sources/source/github       # Source info
+bunnyagents://action/new-chat             # Create new chat
 ```
 
 ## Tech Stack
