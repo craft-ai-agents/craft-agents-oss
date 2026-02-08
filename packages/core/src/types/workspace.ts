@@ -19,7 +19,7 @@ export interface Workspace {
   mcpAuthType?: McpAuthType;
 }
 
-export type AuthType = 'api_key' | 'oauth_token';
+export type AuthType = 'api_key' | 'oauth_token' | 'bedrock';
 
 /**
  * OAuth credentials from a fresh authentication flow.

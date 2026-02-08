@@ -185,6 +185,23 @@ export async function getValidClaudeOAuthToken(): Promise<TokenResult> {
  * Get complete authentication state from all sources (config file + credential store)
  */
 export async function getAuthState(): Promise<AuthState> {
+  // Bedrock auth is configured entirely via environment variables — no config file or credentials needed
+  if (process.env.CLAUDE_CODE_USE_BEDROCK === '1') {
+    const activeWorkspace = getActiveWorkspace();
+    return {
+      billing: {
+        type: 'bedrock',
+        hasCredentials: true,
+        apiKey: null,
+        claudeOAuthToken: null,
+      },
+      workspace: {
+        hasWorkspace: !!activeWorkspace,
+        active: activeWorkspace,
+      },
+    };
+  }
+
   const config = loadStoredConfig();
   const manager = getCredentialManager();
 

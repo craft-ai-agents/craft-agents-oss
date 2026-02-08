@@ -8,6 +8,7 @@
  */
 import { describe, it, expect, beforeEach, mock } from 'bun:test';
 import {
+  getAuthState,
   getSetupNeeds,
   performTokenRefresh,
   _resetRefreshMutex,
@@ -177,6 +178,26 @@ describe('getSetupNeeds', () => {
       expect(needs.isFullyConfigured).toBe(true);
       expect(needs.needsBillingConfig).toBe(false);
       expect(needs.needsCredentials).toBe(false);
+    });
+
+    it('should be fully configured when CLAUDE_CODE_USE_BEDROCK=1 is set', async () => {
+      const original = process.env.CLAUDE_CODE_USE_BEDROCK;
+      try {
+        process.env.CLAUDE_CODE_USE_BEDROCK = '1';
+        const authState = await getAuthState();
+
+        expect(authState.billing.type).toBe('bedrock');
+        expect(authState.billing.hasCredentials).toBe(true);
+
+        const needs = getSetupNeeds(authState);
+        expect(needs.isFullyConfigured).toBe(true);
+      } finally {
+        if (original === undefined) {
+          delete process.env.CLAUDE_CODE_USE_BEDROCK;
+        } else {
+          process.env.CLAUDE_CODE_USE_BEDROCK = original;
+        }
+      }
     });
   });
 });

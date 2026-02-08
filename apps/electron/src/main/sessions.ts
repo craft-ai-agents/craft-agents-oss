@@ -40,6 +40,7 @@ import {
 import { loadWorkspaceSources, loadAllSources, getSourcesBySlugs, type LoadedSource, type McpServerConfig, getSourcesNeedingAuth, getSourceCredentialManager, getSourceServerBuilder, type SourceWithCredential, isApiOAuthProvider, SERVER_BUILD_ERRORS, TokenRefreshManager, createTokenGetter } from '@craft-agent/shared/sources'
 import { ConfigWatcher, type ConfigWatcherCallbacks } from '@craft-agent/shared/config'
 import { getAuthState } from '@craft-agent/shared/auth'
+import { resolveAuthEnv } from '@craft-agent/shared/auth/resolve-auth-env'
 import { setAnthropicOptionsEnv, setPathToClaudeCodeExecutable, setInterceptorPath, setExecutable } from '@craft-agent/shared/agent'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { CraftMcpClient } from '@craft-agent/shared/mcp'
@@ -790,39 +791,25 @@ export class SessionManager {
   async reinitializeAuth(): Promise<void> {
     try {
       const authState = await getAuthState()
-      const { billing } = authState
       const customBaseUrl = getAnthropicBaseUrl()
 
-      sessionLog.info('Reinitializing auth with billing type:', billing.type, customBaseUrl ? `(custom base URL: ${customBaseUrl})` : '')
+      sessionLog.info('Reinitializing auth with billing type:', authState.billing.type, customBaseUrl ? `(custom base URL: ${customBaseUrl})` : '')
 
-      // Priority 1: Custom base URL (Ollama, OpenRouter, etc.)
-      // Third-party endpoints require API key auth — OAuth tokens won't work
-      if (customBaseUrl) {
-        process.env.ANTHROPIC_BASE_URL = customBaseUrl
-        delete process.env.CLAUDE_CODE_OAUTH_TOKEN
+      const result = resolveAuthEnv({
+        billing: authState.billing,
+        customBaseUrl,
+      })
 
-        if (billing.apiKey) {
-          process.env.ANTHROPIC_API_KEY = billing.apiKey
-          sessionLog.info(`Using custom provider at ${customBaseUrl}`)
-        } else {
-          // Set a placeholder key for providers like Ollama that don't validate keys
-          process.env.ANTHROPIC_API_KEY = 'not-needed'
-          sessionLog.warn('Custom base URL configured but no API key set. Using placeholder key (works for Ollama, will fail for OpenRouter).')
-        }
-      } else if (billing.type === 'oauth_token' && billing.claudeOAuthToken) {
-        // Priority 2: Claude Max subscription via OAuth token (direct Anthropic only)
-        process.env.CLAUDE_CODE_OAUTH_TOKEN = billing.claudeOAuthToken
-        delete process.env.ANTHROPIC_API_KEY
-        delete process.env.ANTHROPIC_BASE_URL
-        sessionLog.info('Set Claude Max OAuth Token')
-      } else if (billing.apiKey) {
-        // Priority 3: API key with default Anthropic endpoint
-        process.env.ANTHROPIC_API_KEY = billing.apiKey
-        delete process.env.CLAUDE_CODE_OAUTH_TOKEN
-        delete process.env.ANTHROPIC_BASE_URL
-        sessionLog.info('Set Anthropic API Key')
-      } else {
-        sessionLog.error('No authentication configured!')
+      // Apply env var changes
+      for (const [key, value] of Object.entries(result.set)) {
+        process.env[key] = value
+      }
+      for (const key of result.delete) {
+        delete process.env[key]
+      }
+
+      if (result.error) {
+        sessionLog.error(result.error)
       }
 
       // Reset cached summarization client so it picks up new credentials/base URL
