@@ -2,8 +2,8 @@ import { useState, useEffect, useCallback } from "react"
 import { ArrowLeft } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { slugify } from "@/lib/slugify"
+import { useLocale } from "@/context/LocaleContext"
 import { Input } from "../ui/input"
-import { Button } from "../ui/button"
 import { AddWorkspaceContainer, AddWorkspaceStepHeader, AddWorkspaceSecondaryButton, AddWorkspacePrimaryButton } from "./primitives"
 import { AddWorkspace_RadioOption } from "./AddWorkspace_RadioOption"
 
@@ -27,6 +27,7 @@ export function AddWorkspaceStep_CreateNew({
   onCreate,
   isCreating
 }: AddWorkspaceStep_CreateNewProps) {
+  const { t } = useLocale()
   const [name, setName] = useState('')
   const [locationOption, setLocationOption] = useState<LocationOption>('default')
   const [customPath, setCustomPath] = useState<string | null>(null)
@@ -59,7 +60,7 @@ export function AddWorkspaceStep_CreateNew({
       try {
         const result = await window.electronAPI.checkWorkspaceSlug(slug)
         if (result.exists) {
-          setError(`A workspace named "${slug}" already exists`)
+          setError(t('workspace.create.slugExists', { slug }))
         } else {
           setError(null)
         }
@@ -102,25 +103,25 @@ export function AddWorkspaceStep_CreateNew({
         )}
       >
         <ArrowLeft className="h-4 w-4" />
-        Back
+        {t('workspace.create.back')}
       </button>
 
       <AddWorkspaceStepHeader
-        title="Create workspace"
-        description="Enter a name and choose where to store your workspace."
+        title={t('workspace.create.title')}
+        description={t('workspace.create.description')}
       />
 
       <div className="mt-6 w-full space-y-6">
         {/* Workspace name */}
         <div className="space-y-2">
           <label className="block text-sm font-medium text-foreground mb-2.5">
-            Workspace name
+            {t('workspace.create.nameLabel')}
           </label>
           <div className="bg-background shadow-minimal rounded-lg">
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="My Workspace"
+              placeholder={t('workspace.create.namePlaceholder')}
               disabled={isCreating}
               autoFocus
               className="border-0 bg-transparent shadow-none"
@@ -134,7 +135,7 @@ export function AddWorkspaceStep_CreateNew({
         {/* Location selection */}
         <div className="space-y-3">
           <label className="block text-sm font-medium text-foreground mb-2.5">
-            Location
+            {t('workspace.create.locationLabel')}
           </label>
 
           {/* Default location option */}
@@ -143,8 +144,8 @@ export function AddWorkspaceStep_CreateNew({
             checked={locationOption === 'default'}
             onChange={() => setLocationOption('default')}
             disabled={isCreating}
-            title="Default location"
-            subtitle="under .g4os folder"
+            title={t('workspace.create.defaultLocation')}
+            subtitle={t('workspace.create.defaultLocationSub')}
           />
 
           {/* Custom location option */}
@@ -153,8 +154,8 @@ export function AddWorkspaceStep_CreateNew({
             checked={locationOption === 'custom'}
             onChange={() => setLocationOption('custom')}
             disabled={isCreating}
-            title="Choose a location"
-            subtitle={customPath || "Pick a place to put your new workspace."}
+            title={t('workspace.create.customLocation')}
+            subtitle={customPath || t('workspace.create.customLocationSub')}
             action={locationOption === 'custom' ? (
               <AddWorkspaceSecondaryButton
                 onClick={(e) => {
@@ -163,7 +164,7 @@ export function AddWorkspaceStep_CreateNew({
                 }}
                 disabled={isCreating}
               >
-                Browse
+                {t('workspace.create.browse')}
               </AddWorkspaceSecondaryButton>
             ) : undefined}
           />
@@ -174,9 +175,9 @@ export function AddWorkspaceStep_CreateNew({
           onClick={handleCreate}
           disabled={!canCreate}
           loading={isCreating}
-          loadingText="Creating..."
+          loadingText={t('workspace.create.creating')}
         >
-          Create
+          {t('workspace.create.submit')}
         </AddWorkspacePrimaryButton>
       </div>
     </AddWorkspaceContainer>

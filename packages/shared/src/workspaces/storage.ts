@@ -14,11 +14,12 @@ import {
   readdirSync,
   rmSync,
   statSync,
+  cpSync,
 } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import { randomUUID } from 'crypto';
-import { expandPath, toPortablePath } from '../utils/paths.ts';
+import { expandPath, toPortablePath, getBundledAssetsDir } from '../utils/paths.ts';
 import { atomicWriteFileSync, readJsonFileSync } from '../utils/files.ts';
 import { getDefaultStatusConfig, saveStatusConfig, ensureDefaultIconFiles } from '../statuses/storage.ts';
 import { getDefaultLabelConfig, saveLabelConfig } from '../labels/storage.ts';
@@ -258,6 +259,66 @@ export function generateUniqueWorkspacePath(name: string, baseDir: string): stri
 }
 
 /**
+ * Copy bundled default workspace resources (skills, sources) into a new workspace.
+ * Skips any skill/source subdirectory that already exists at the target.
+ *
+ * @param rootPath - Absolute path to the workspace root folder
+ */
+function copyBundledWorkspaceDefaults(rootPath: string): void {
+  const bundledDir = getBundledAssetsDir('default-workspace');
+  if (!bundledDir) return; // No bundled defaults available (e.g., running in test)
+
+  const skillsSrc = join(bundledDir, 'skills');
+  const sourcesSrc = join(bundledDir, 'sources');
+  const skillsDst = getWorkspaceSkillsPath(rootPath);
+  const sourcesDst = getWorkspaceSourcesPath(rootPath);
+
+  // Copy skills (each subdirectory is one skill)
+  if (existsSync(skillsSrc)) {
+    try {
+      const skillDirs = readdirSync(skillsSrc, { withFileTypes: true }).filter(d => d.isDirectory());
+      for (const dir of skillDirs) {
+        const target = join(skillsDst, dir.name);
+        if (existsSync(target)) continue; // Don't overwrite existing skills
+        cpSync(join(skillsSrc, dir.name), target, { recursive: true });
+      }
+    } catch {
+      // Non-fatal: workspace works without bundled skills
+    }
+  }
+
+  // Copy sources (each subdirectory is one source)
+  if (existsSync(sourcesSrc)) {
+    try {
+      const sourceDirs = readdirSync(sourcesSrc, { withFileTypes: true }).filter(d => d.isDirectory());
+      for (const dir of sourceDirs) {
+        const target = join(sourcesDst, dir.name);
+        if (existsSync(target)) continue; // Don't overwrite existing sources
+
+        cpSync(join(sourcesSrc, dir.name), target, { recursive: true });
+
+        // Regenerate unique ID and timestamps in copied config.json
+        const configPath = join(target, 'config.json');
+        if (existsSync(configPath)) {
+          try {
+            const sourceConfig = JSON.parse(readFileSync(configPath, 'utf-8'));
+            const now = Date.now();
+            sourceConfig.id = `${dir.name}_${randomUUID().slice(0, 8)}`;
+            sourceConfig.createdAt = now;
+            sourceConfig.updatedAt = now;
+            writeFileSync(configPath, JSON.stringify(sourceConfig, null, 2));
+          } catch {
+            // Non-fatal: source config stays as template
+          }
+        }
+      }
+    } catch {
+      // Non-fatal: workspace works without bundled sources
+    }
+  }
+}
+
+/**
  * Create workspace folder structure at a given path
  * @param rootPath - Absolute path where workspace folder will be created
  * @param name - Display name for the workspace
@@ -317,6 +378,13 @@ export function createWorkspaceAtPath(
 
   // Initialize plugin manifest for SDK integration (enables skills, commands, agents)
   ensurePluginManifest(rootPath, name);
+
+  // Copy bundled default skills and sources into the new workspace
+  copyBundledWorkspaceDefaults(rootPath);
+
+  // Mark setup as pending so the /setup skill auto-triggers on first use
+  config.defaults = { ...config.defaults, setupCompleted: false };
+  saveWorkspaceConfig(rootPath, config);
 
   return config;
 }

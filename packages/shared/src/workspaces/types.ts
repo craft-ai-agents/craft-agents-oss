@@ -48,6 +48,8 @@ export interface WorkspaceConfig {
     workingDirectory?: string;
     thinkingLevel?: ThinkingLevel; // Default thinking level ('off', 'think', 'max') - default: 'think'
     colorTheme?: string; // Color theme override for this workspace (preset ID). Undefined = inherit from app default.
+    /** Whether the initial workspace setup skill has been run. false = pending, true = done, undefined = not applicable (existing workspace). */
+    setupCompleted?: boolean;
   };
 
   /**

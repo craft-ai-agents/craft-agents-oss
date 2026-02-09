@@ -1,0 +1,23 @@
+{
+  "id": "notion_default",
+  "name": "Notion",
+  "slug": "notion",
+  "enabled": false,
+  "provider": "notion",
+  "type": "mcp",
+  "icon": "https://upload.wikimedia.org/wikipedia/commons/4/45/Notion_app_logo.png",
+  "tagline": "Access your Notion workspace — pages, databases, and more",
+  "mcp": {
+    "transport": "stdio",
+    "command": "npx",
+    "args": ["-y", "@notionhq/notion-mcp-server"],
+    "env": {
+      "OPENAPI_MCP_HEADERS": "{\"Authorization\": \"Bearer \", \"Notion-Version\": \"2022-06-28\"}"
+    },
+    "authType": "none"
+  },
+  "isAuthenticated": false,
+  "connectionStatus": "needs_auth",
+  "createdAt": 0,
+  "updatedAt": 0
+}

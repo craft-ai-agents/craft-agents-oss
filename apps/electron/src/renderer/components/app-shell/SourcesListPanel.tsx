@@ -13,7 +13,9 @@ import { SourceAvatar } from '@/components/ui/source-avatar'
 import { deriveConnectionStatus } from '@/components/ui/source-status-indicator'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from '@/components/ui/empty'
-import { getDocUrl } from '@g4os/shared/docs/doc-links'
+import { useSetAtom } from 'jotai'
+import { helpDialogAtom } from '@/atoms/help'
+import type { DocFeature } from '@g4os/shared/docs/doc-links'
 import { Separator } from '@/components/ui/separator'
 import {
   DropdownMenu,
@@ -71,6 +73,13 @@ export function SourcesListPanel({
   localMcpEnabled = true,
   className,
 }: SourcesListPanelProps) {
+  const setHelp = useSetAtom(helpDialogAtom)
+
+  // Determine which feature to show based on source filter
+  const helpFeature: DocFeature = sourceFilter?.kind === 'type'
+    ? `sources-${sourceFilter.sourceType}` as DocFeature
+    : 'sources'
+
   // Filter sources based on type filter if active
   const filteredSources = React.useMemo(() => {
     if (!sourceFilter) {
@@ -103,7 +112,7 @@ export function SourcesListPanel({
         </EmptyHeader>
         <EmptyContent>
           <button
-            onClick={() => window.electronAPI.openUrl(getDocUrl('sources'))}
+            onClick={() => setHelp({ open: true, feature: helpFeature })}
             className="inline-flex items-center h-7 px-3 text-xs font-medium rounded-[8px] bg-foreground/[0.02] shadow-minimal hover:bg-foreground/[0.05] transition-colors"
           >
             Learn more

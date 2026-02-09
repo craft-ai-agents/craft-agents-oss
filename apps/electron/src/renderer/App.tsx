@@ -12,6 +12,7 @@ import { AppShell } from '@/components/app-shell/AppShell'
 import type { AppShellContextType } from '@/context/AppShellContext'
 import { OnboardingWizard, ReauthScreen } from '@/components/onboarding'
 import { ResetConfirmationDialog } from '@/components/ResetConfirmationDialog'
+import { HelpDialog } from '@/components/HelpDialog'
 import { SplashScreen } from '@/components/SplashScreen'
 import { TooltipProvider } from '@g4os/ui'
 import { FocusProvider } from '@/context/FocusContext'
@@ -420,7 +421,7 @@ export default function App() {
 
     window.electronAPI.getWorkspaces().then(setWorkspaces)
     window.electronAPI.getNotificationsEnabled().then(setNotificationsEnabled)
-    window.electronAPI.getSessions().then((loadedSessions) => {
+    window.electronAPI.getSessions().then(async (loadedSessions) => {
       // Initialize per-session atoms and metadata map
       // NOTE: No sessionsAtom used - sessions are only in per-session atoms
       initializeSessions(loadedSessions)
@@ -447,6 +448,31 @@ export default function App() {
         const session = loadedSessions.find(s => s.id === initialSessionId)
         if (session) {
           navigate(routes.view.allSessions(session.id))
+        }
+      }
+
+      // Auto-trigger /setup for new workspaces that haven't completed setup yet
+      // Only triggers when: setupCompleted is explicitly false (not undefined) AND no sessions exist yet
+      if (windowWorkspaceId && loadedSessions.length === 0) {
+        try {
+          const ws = await window.electronAPI.getWorkspaces()
+          const currentWs = ws.find(w => w.id === windowWorkspaceId)
+          if (currentWs?.setupCompleted === false) {
+            // Create a setup session with allow-all permissions so the skill can write files
+            const setupSession = await window.electronAPI.createSession(windowWorkspaceId, {
+              name: 'Workspace Setup',
+              permissionMode: 'allow-all',
+            })
+            addSession(setupSession)
+            navigate(routes.view.allSessions(setupSession.id))
+
+            // Send /setup after a short delay to ensure session is fully initialized
+            setTimeout(() => {
+              window.electronAPI.sendMessage(setupSession.id, '/setup')
+            }, 500)
+          }
+        } catch (error) {
+          console.error('[App] Failed to auto-trigger /setup:', error)
         }
       }
     })
@@ -1490,6 +1516,7 @@ export default function App() {
               onConfirm={executeReset}
               onCancel={() => setShowResetDialog(false)}
             />
+            <HelpDialog />
           </div>
 
           {/* File preview overlay — rendered by the link interceptor when a previewable file is clicked */}

@@ -17,6 +17,8 @@ export interface Workspace {
   iconUrl?: string;
   mcpUrl?: string;
   mcpAuthType?: McpAuthType;
+  /** Whether initial workspace setup has been completed (false = pending, true = done, undefined = N/A) */
+  setupCompleted?: boolean;
 }
 
 /**

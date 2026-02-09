@@ -105,8 +105,8 @@ export function WorkspaceCreationScreen({
     const isDark = root.classList.contains('dark')
     // Transparent back, accent-tinted front
     return isDark
-      ? { back: '#00000000', front: '#9b7bb8' }  // lighter accent for dark mode
-      : { back: '#00000000', front: '#684e85' }  // accent color
+      ? { back: '#00000000', front: '#D1BEA4' }  // lightened gold for dark mode
+      : { back: '#00000000', front: '#B9915B' }  // royal gold accent
   }, [])
 
   // FullscreenOverlayBase handles portal, traffic lights, and ESC key

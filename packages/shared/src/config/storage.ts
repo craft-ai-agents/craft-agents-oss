@@ -554,7 +554,10 @@ export function getWorkspaces(): Workspace[] {
       }
     }
 
-    return { ...w, name, iconUrl };
+    // Propagate setupCompleted from workspace config to renderer
+    const setupCompleted = wsConfig?.defaults?.setupCompleted;
+
+    return { ...w, name, iconUrl, setupCompleted };
   });
 }
 

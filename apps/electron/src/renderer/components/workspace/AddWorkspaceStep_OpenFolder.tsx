@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react"
 import { ArrowLeft } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useLocale } from "@/context/LocaleContext"
 import { Input } from "../ui/input"
 import { AddWorkspaceContainer, AddWorkspaceStepHeader, AddWorkspaceSecondaryButton, AddWorkspacePrimaryButton } from "./primitives"
 
@@ -18,6 +19,7 @@ export function AddWorkspaceStep_OpenFolder({
   onCreate,
   isCreating
 }: AddWorkspaceStep_OpenFolderProps) {
+  const { t } = useLocale()
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
   const [workspaceName, setWorkspaceName] = useState('')
 
@@ -51,12 +53,12 @@ export function AddWorkspaceStep_OpenFolder({
         )}
       >
         <ArrowLeft className="h-4 w-4" />
-        Back
+        {t('workspace.open.back')}
       </button>
 
       <AddWorkspaceStepHeader
-        title="Choose existing folder"
-        description="Choose any folder to use as workspace."
+        title={t('workspace.open.title')}
+        description={t('workspace.open.description')}
       />
 
       <div className="mt-6 w-full space-y-6">
@@ -71,14 +73,14 @@ export function AddWorkspaceStep_OpenFolder({
             {selectedPath ? (
               <p className="text-sm text-foreground truncate">{selectedPath}</p>
             ) : (
-              <p className="text-sm text-muted-foreground">No folder selected</p>
+              <p className="text-sm text-muted-foreground">{t('workspace.open.noFolder')}</p>
             )}
           </div>
           <AddWorkspaceSecondaryButton
             onClick={handleBrowse}
             disabled={isCreating}
           >
-            Browse
+            {t('workspace.open.browse')}
           </AddWorkspaceSecondaryButton>
         </div>
 
@@ -86,12 +88,12 @@ export function AddWorkspaceStep_OpenFolder({
         {selectedPath && (
           <div className="space-y-2">
             <label className="text-sm font-medium text-foreground">
-              Workspace name
+              {t('workspace.open.nameLabel')}
             </label>
             <Input
               value={workspaceName}
               onChange={(e) => setWorkspaceName(e.target.value)}
-              placeholder="My Workspace"
+              placeholder={t('workspace.open.namePlaceholder')}
               disabled={isCreating}
             />
           </div>
@@ -102,9 +104,9 @@ export function AddWorkspaceStep_OpenFolder({
           onClick={handleOpen}
           disabled={!canOpen || isCreating}
           loading={isCreating}
-          loadingText="Opening..."
+          loadingText={t('workspace.open.opening')}
         >
-          Open
+          {t('workspace.open.submit')}
         </AddWorkspacePrimaryButton>
       </div>
     </AddWorkspaceContainer>

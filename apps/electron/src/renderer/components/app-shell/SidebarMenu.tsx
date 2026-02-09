@@ -21,10 +21,12 @@ import {
   Settings2,
   Plus,
   Trash2,
-  ExternalLink,
+  BookOpen,
 } from 'lucide-react'
+import { useSetAtom } from 'jotai'
 import { useMenuComponents } from '@/components/ui/menu-context'
-import { getDocUrl, type DocFeature } from '@g4os/shared/docs/doc-links'
+import { type DocFeature } from '@g4os/shared/docs/doc-links'
+import { helpDialogAtom } from '@/atoms/help'
 import { useLocale } from '@/context/LocaleContext'
 
 export type SidebarMenuType = 'allSessions' | 'flagged' | 'status' | 'sources' | 'skills' | 'labels' | 'views' | 'newSession'
@@ -78,6 +80,7 @@ export function SidebarMenu({
   onDeleteView,
 }: SidebarMenuProps) {
   const { t } = useLocale()
+  const setHelp = useSetAtom(helpDialogAtom)
 
   // Get menu components from context (works with both DropdownMenu and ContextMenu)
   const { MenuItem, Separator } = useMenuComponents()
@@ -181,8 +184,8 @@ export function SidebarMenu({
           </MenuItem>
         )}
         <Separator />
-        <MenuItem onClick={() => window.electronAPI.openUrl(getDocUrl(docFeature))}>
-          <ExternalLink className="h-3.5 w-3.5" />
+        <MenuItem onClick={() => setHelp({ open: true, feature: docFeature })}>
+          <BookOpen className="h-3.5 w-3.5" />
           <span className="flex-1">{learnMoreLabel}</span>
         </MenuItem>
       </>

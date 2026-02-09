@@ -25,6 +25,7 @@ import {
   FolderOpen,
   HelpCircle,
   ExternalLink,
+  BookOpen,
 } from "lucide-react"
 import { PanelRightRounded } from "../icons/PanelRightRounded"
 import { PanelLeftRounded } from "../icons/PanelLeftRounded"
@@ -113,6 +114,7 @@ import { SkillsListPanel } from "./SkillsListPanel"
 import { PanelHeader } from "./PanelHeader"
 import { EditPopover, getEditConfig, type EditContextKey } from "@/components/ui/EditPopover"
 import { getDocUrl } from "@g4os/shared/docs/doc-links"
+import { helpDialogAtom } from "@/atoms/help"
 import SettingsNavigator from "@/pages/settings/SettingsNavigator"
 import { RightSidebar } from "./RightSidebar"
 import type { RichTextInputHandle } from "@/components/ui/rich-text-input"
@@ -730,6 +732,7 @@ function AppShellContent({
   const [sources, setSources] = React.useState<LoadedSource[]>([])
   // Sync sources to atom for NavigationContext auto-selection
   const setSourcesAtom = useSetAtom(sourcesAtom)
+  const setHelp = useSetAtom(helpDialogAtom)
   React.useEffect(() => {
     setSourcesAtom(sources)
   }, [sources, setSourcesAtom])
@@ -2272,15 +2275,15 @@ function AppShellContent({
                       <TooltipContent side="top">{t('sidebar.help.docs')}</TooltipContent>
                     </Tooltip>
                     <StyledDropdownMenuContent align="end" side="top" sideOffset={8}>
-                      <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('sources'))}>
+                      <StyledDropdownMenuItem onClick={() => setHelp({ open: true, feature: 'sources' })}>
                         <DatabaseZap className="h-3.5 w-3.5" />
                         <span className="flex-1">{t('sidebar.help.sources')}</span>
-                        <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                        <BookOpen className="h-3 w-3 text-muted-foreground" />
                       </StyledDropdownMenuItem>
-                      <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('skills'))}>
+                      <StyledDropdownMenuItem onClick={() => setHelp({ open: true, feature: 'skills' })}>
                         <Zap className="h-3.5 w-3.5" />
                         <span className="flex-1">{t('sidebar.help.skills_feature')}</span>
-                        <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                        <BookOpen className="h-3 w-3 text-muted-foreground" />
                       </StyledDropdownMenuItem>
                       <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('statuses'))}>
                         <CheckCircle2 className="h-3.5 w-3.5" />
