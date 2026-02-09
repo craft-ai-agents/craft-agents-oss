@@ -24,7 +24,7 @@ Read the following files to build the brief:
 2. **Monthly tracker**: `goals/[current-month]-[current-year].md` (e.g., `goals/february-2026.md`) — check bets, decisions, action items
 3. **Recent 1:1s**: Scan `people/*/1-1s/` for files from the last 3 days
 4. **Session log**: Read `last-session.md` for the previous session's context
-5. **Git activity**: Run `git log --oneline --since="3 days ago"` to check for unlogged commits
+5. **Recent activity**: Read `activity-log.md` for entries from the last 3 days
 6. **Calendar**: If a calendar source is active, fetch today's events using the user's timezone
 
 ### Step 2: Identify Alerts

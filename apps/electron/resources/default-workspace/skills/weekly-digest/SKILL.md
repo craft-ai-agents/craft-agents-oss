@@ -1,6 +1,6 @@
 ---
 name: "Weekly Digest"
-description: "Summarizes the week's activity — 1:1 outcomes, commits, priority changes, and items for the weekly team meeting."
+description: "Summarizes the week's activity — 1:1 outcomes, activities, priority changes, and items for the weekly team meeting."
 ---
 
 # Weekly Digest Skill
@@ -20,7 +20,7 @@ Aggregates the full week's activity into a digestible summary, typically for Mon
 ### Step 1: Gather Weekly Data
 
 1. **1:1 Notes**: Glob `people/*/1-1s/YYYY-MM-DD*.md` for files from the last 7 days. Extract key topics, action items, and concerns per person.
-2. **Git activity**: Run `git log --oneline --since="7 days ago"` for all commits this week.
+2. **Weekly activities**: Read `activity-log.md` for entries from the last 7 days.
 3. **Monthly tracker**: Read `goals/[current-month]-[current-year].md` for status changes.
 4. **Current priorities**: Read `goals/current.md` for priority or blocker changes.
 5. **Session log**: Read `session-log.md` for captured decisions during the week.

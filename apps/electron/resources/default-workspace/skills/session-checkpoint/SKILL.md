@@ -1,6 +1,6 @@
 ---
 name: "Session Checkpoint"
-description: "Save daily progress before ending — captures commits, context, and next steps for session continuity."
+description: "Save daily progress before ending — captures activities, context, and next steps for session continuity."
 ---
 
 # Session Checkpoint Skill
@@ -19,7 +19,7 @@ Captures the day's progress so the next session can pick up seamlessly.
 
 ### Step 1: Gather Today's Activity
 
-1. **Git commits**: Run `git log --oneline --since="midnight"` (use the user's timezone)
+1. **Recent activities**: Read `activity-log.md` for today's entries
 2. **Session log**: Read `session-log.md` to check for existing entry today
 3. **Conversation context**: Extract key decisions, discussions, and blockers from the current conversation
 
@@ -30,13 +30,10 @@ Structure the daily entry:
 ```markdown
 ### [YYYY-MM-DD] — [Day of Week]
 
-**Commits:**
-- [commit hash] [commit message]
-- [commit hash] [commit message]
-
-**Key Activities:**
+**Activities:**
 - [What was worked on]
 - [Meetings held / people spoken to]
+- [Files updated]
 
 **Decisions Made:**
 - [Decision and brief rationale]

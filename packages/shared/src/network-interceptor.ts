@@ -22,6 +22,7 @@ type HeadersInitType = Headers | Record<string, string> | string[][];
 // Feature flags
 const TOOL_METADATA_FOR_ALL_TOOLS = false; // When false, only add metadata to MCP tools
 const INTERCEPTOR_LOGGING_ENABLED = false; // When false, disable all debug logging
+const CACHE_OPTIMIZATION_ENABLED = process.env.G4OS_DISABLE_CACHE_OPTIMIZATION !== '1';
 
 const DEBUG = INTERCEPTOR_LOGGING_ENABLED &&
   (process.argv.includes('--debug') || process.env.G4OS_DEBUG === '1');
@@ -420,6 +421,146 @@ function injectMetadataIntoHistory(body: Record<string, unknown>): Record<string
   if (injectedCount > 0) {
     debugLog(`[History Inject] Re-injected metadata into ${injectedCount} tool_use blocks`);
   }
+
+  return body;
+}
+
+/**
+ * Optimize cache_control markers in the API request body.
+ *
+ * The Claude Agent SDK (v0.2.19) can place cache_control on too many blocks,
+ * exceeding the API's 4-marker limit or fragmenting the cache prefix into
+ * too many breakpoints (leading to poor cache hit rates).
+ *
+ * This function normalizes markers to at most 4, placed strategically:
+ * - 1 slot: last system block (caches entire system prompt as one prefix)
+ * - 1 slot: last tool with a marker (tools are static per session)
+ * - 2-3 slots: last N message content blocks (recent conversation turns)
+ *
+ * Key rules:
+ * - Never ADDS markers — only removes excess ones the SDK placed
+ * - Never removes ALL markers — at least 1 remains if SDK placed any
+ * - Deletes the cache_control key entirely (format-agnostic)
+ * - Handles string system/content (no-op), missing arrays gracefully
+ */
+function optimizeCacheControl(body: Record<string, unknown>): Record<string, unknown> {
+  const MAX_MARKERS = 4;
+
+  // --- Count existing markers ---
+
+  const system = body.system as Array<Record<string, unknown>> | string | undefined;
+  const tools = body.tools as Array<Record<string, unknown>> | undefined;
+  const messages = body.messages as Array<{
+    role?: string;
+    content?: string | Array<Record<string, unknown>>;
+  }> | undefined;
+
+  // Track indices of blocks that have cache_control, so we can selectively remove
+  const systemIndices: number[] = [];
+  const toolIndices: number[] = [];
+  // For messages: store [messageIndex, contentBlockIndex]
+  const messageIndices: [number, number][] = [];
+
+  if (Array.isArray(system)) {
+    for (let i = 0; i < system.length; i++) {
+      const block = system[i];
+      if (block && typeof block === 'object' && 'cache_control' in block) {
+        systemIndices.push(i);
+      }
+    }
+  }
+
+  if (Array.isArray(tools)) {
+    for (let i = 0; i < tools.length; i++) {
+      const tool = tools[i];
+      if (tool && typeof tool === 'object' && 'cache_control' in tool) {
+        toolIndices.push(i);
+      }
+    }
+  }
+
+  if (Array.isArray(messages)) {
+    for (let mi = 0; mi < messages.length; mi++) {
+      const msg = messages[mi];
+      if (!msg || typeof msg.content === 'string' || !Array.isArray(msg.content)) continue;
+      for (let ci = 0; ci < msg.content.length; ci++) {
+        const block = msg.content[ci];
+        if (block && typeof block === 'object' && 'cache_control' in block) {
+          messageIndices.push([mi, ci]);
+        }
+      }
+    }
+  }
+
+  const totalMarkers = systemIndices.length + toolIndices.length + messageIndices.length;
+
+  // Fast path: already within budget
+  if (totalMarkers <= MAX_MARKERS) {
+    debugLog(`[Cache] ${totalMarkers} markers — within budget, no optimization needed`);
+    return body;
+  }
+
+  debugLog(`[Cache] ${totalMarkers} markers (system=${systemIndices.length}, tools=${toolIndices.length}, messages=${messageIndices.length}) — optimizing to ${MAX_MARKERS}`);
+
+  // --- Budget allocation ---
+  // Keep at most 1 system marker (the last one)
+  const systemKeep = systemIndices.length > 0 ? 1 : 0;
+  // Keep at most 1 tool marker (the last one)
+  const toolKeep = toolIndices.length > 0 ? 1 : 0;
+  // Remaining budget goes to messages (last N)
+  const messageKeep = Math.max(0, MAX_MARKERS - systemKeep - toolKeep);
+
+  // --- Remove excess system markers (keep only the last) ---
+  if (Array.isArray(system) && systemIndices.length > 1) {
+    // Remove all except the last
+    for (let i = 0; i < systemIndices.length - 1; i++) {
+      const idx = systemIndices[i]!;
+      delete system[idx]!.cache_control;
+    }
+  }
+
+  // --- Remove excess tool markers (keep only the last) ---
+  if (Array.isArray(tools) && toolIndices.length > 1) {
+    for (let i = 0; i < toolIndices.length - 1; i++) {
+      const idx = toolIndices[i]!;
+      delete tools[idx]!.cache_control;
+    }
+  }
+
+  // --- Remove excess message markers (keep only the last N) ---
+  if (Array.isArray(messages) && messageIndices.length > messageKeep) {
+    const removeCount = messageIndices.length - messageKeep;
+    for (let i = 0; i < removeCount; i++) {
+      const [mi, ci] = messageIndices[i]!;
+      const msg = messages[mi]!;
+      if (Array.isArray(msg.content)) {
+        delete (msg.content[ci] as Record<string, unknown>).cache_control;
+      }
+    }
+  }
+
+  // Verify final count
+  let finalCount = 0;
+  if (Array.isArray(system)) {
+    for (const block of system) {
+      if (block && typeof block === 'object' && 'cache_control' in block) finalCount++;
+    }
+  }
+  if (Array.isArray(tools)) {
+    for (const tool of tools) {
+      if (tool && typeof tool === 'object' && 'cache_control' in tool) finalCount++;
+    }
+  }
+  if (Array.isArray(messages)) {
+    for (const msg of messages) {
+      if (!msg || typeof msg.content === 'string' || !Array.isArray(msg.content)) continue;
+      for (const block of msg.content) {
+        if (block && typeof block === 'object' && 'cache_control' in block) finalCount++;
+      }
+    }
+  }
+
+  debugLog(`[Cache] After optimization: ${finalCount} markers`);
 
   return body;
 }
@@ -869,6 +1010,10 @@ async function interceptedFetch(
         parsed = addMetadataToAllTools(parsed);
         // Re-inject stored metadata into tool_use history so Claude keeps including fields
         parsed = injectMetadataIntoHistory(parsed);
+        // Normalize cache_control markers to at most 4 (API limit)
+        if (CACHE_OPTIMIZATION_ENABLED) {
+          parsed = optimizeCacheControl(parsed);
+        }
 
         const modifiedInit = {
           ...init,
