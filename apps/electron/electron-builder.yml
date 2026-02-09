@@ -1,6 +1,6 @@
 appId: com.g4educacao.g4os
 productName: G4 OS
-copyright: Copyright © 2025 G4 Educacao
+copyright: Copyright © 2026 G4 Educacao
 
 electronVersion: "39.2.7"
 
@@ -55,9 +55,11 @@ mac:
     - target: dmg
       arch:
         - arm64
+        - x64
     - target: zip
       arch:
         - arm64
+        - x64
   hardenedRuntime: true
   gatekeeperAssess: false
   entitlements: build/entitlements.mac.plist

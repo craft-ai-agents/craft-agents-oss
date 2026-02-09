@@ -71,6 +71,7 @@ export const ptBR: Record<TranslationKey, TranslationEntry> = {
   'settings.app.about.installUpdate': 'Instalar atualização',
   'settings.app.about.restartToUpdate': 'Reiniciar para atualizar',
   'settings.app.about.updateToVersion': 'Atualizar para {{version}}',
+  'settings.app.about.downloading': 'Baixando... {{progress}}%',
   'settings.app.section.language': 'Idioma',
   'settings.app.language.label': 'Idioma do app',
   'settings.app.language.description': 'Escolha o idioma usado na interface do app.',

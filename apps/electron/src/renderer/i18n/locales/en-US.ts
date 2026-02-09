@@ -70,6 +70,7 @@ export const enUS = {
   'settings.app.about.installUpdate': 'Install update',
   'settings.app.about.restartToUpdate': 'Restart to Update',
   'settings.app.about.updateToVersion': 'Update to {{version}}',
+  'settings.app.about.downloading': 'Downloading... {{progress}}%',
   'settings.app.section.language': 'Language',
   'settings.app.language.label': 'App language',
   'settings.app.language.description': 'Choose the language used in the app interface.',

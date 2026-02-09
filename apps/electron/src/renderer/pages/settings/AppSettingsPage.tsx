@@ -146,13 +146,19 @@ export default function AppSettingsPage() {
                         {updateChecker.updateInfo?.currentVersion ?? t('settings.app.about.loading')}
                       </span>
                       {updateChecker.updateAvailable && updateChecker.updateInfo?.latestVersion && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={updateChecker.installUpdate}
-                        >
-                          {t('settings.app.about.updateToVersion', { version: updateChecker.updateInfo.latestVersion })}
-                        </Button>
+                        updateChecker.isReadyToInstall ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={updateChecker.installUpdate}
+                          >
+                            {t('settings.app.about.updateToVersion', { version: updateChecker.updateInfo.latestVersion })}
+                          </Button>
+                        ) : updateChecker.isDownloading ? (
+                          <span className="text-xs text-muted-foreground">
+                            {t('settings.app.about.downloading', { progress: updateChecker.downloadProgress })}
+                          </span>
+                        ) : null
                       )}
                     </div>
                   </SettingsRow>

@@ -41,16 +41,18 @@ ARCH="arm64"
 UPLOAD=false
 UPLOAD_LATEST=false
 UPLOAD_SCRIPT=false
+CLEAN=false
 
 show_help() {
     cat << EOF
-Usage: build-dmg.sh [arm64|x64] [--upload] [--latest] [--script]
+Usage: build-dmg.sh [arm64|x64] [--upload] [--latest] [--script] [--clean]
 
 Arguments:
   arm64|x64    Target architecture (default: arm64)
   --upload     Upload DMG to S3 after building
   --latest     Also update electron/latest (requires --upload)
   --script     Also upload install-app.sh (requires --upload)
+  --clean      Full clean rebuild (delete cached Bun binary and SDK)
 
 Environment variables (from .env or environment):
   APPLE_SIGNING_IDENTITY    - Code signing identity
@@ -68,6 +70,7 @@ while [[ $# -gt 0 ]]; do
         --upload)      UPLOAD=true; shift ;;
         --latest)      UPLOAD_LATEST=true; shift ;;
         --script)      UPLOAD_SCRIPT=true; shift ;;
+        --clean)       CLEAN=true; shift ;;
         -h|--help)     show_help ;;
         *)
             echo "Unknown option: $1"
@@ -85,11 +88,14 @@ if [ "$UPLOAD" = true ]; then
     echo "Will upload to S3 after build"
 fi
 
-# 1. Clean previous build artifacts
+# 1. Clean previous build artifacts (keep cached vendor/bun and SDK unless --clean)
 echo "Cleaning previous builds..."
-rm -rf "$ELECTRON_DIR/vendor"
-rm -rf "$ELECTRON_DIR/node_modules/@anthropic-ai"
-rm -rf "$ELECTRON_DIR/packages"
+if [ "$CLEAN" = true ]; then
+    echo "Full clean requested (--clean)"
+    rm -rf "$ELECTRON_DIR/vendor"
+    rm -rf "$ELECTRON_DIR/node_modules/@anthropic-ai"
+    rm -rf "$ELECTRON_DIR/packages"
+fi
 rm -rf "$ELECTRON_DIR/release"
 
 # 2. Install dependencies
@@ -97,45 +103,67 @@ echo "Installing dependencies..."
 cd "$ROOT_DIR"
 bun install
 
-# 3. Download Bun binary with checksum verification
-echo "Downloading Bun ${BUN_VERSION} for darwin-${ARCH}..."
-mkdir -p "$ELECTRON_DIR/vendor/bun"
-BUN_DOWNLOAD="bun-darwin-$([ "$ARCH" = "arm64" ] && echo "aarch64" || echo "x64")"
+# 3. Download Bun binary (skip if already cached and matches target arch)
+# Check if cached bun matches target architecture
+if [ -x "$ELECTRON_DIR/vendor/bun/bun" ]; then
+    CACHED_ARCH=$(file "$ELECTRON_DIR/vendor/bun/bun" | grep -o 'arm64\|x86_64')
+    TARGET_CHECK=$([ "$ARCH" = "arm64" ] && echo "arm64" || echo "x86_64")
+    if [ "$CACHED_ARCH" != "$TARGET_CHECK" ]; then
+        echo "Cached Bun is $CACHED_ARCH but target is $ARCH, re-downloading..."
+        rm -f "$ELECTRON_DIR/vendor/bun/bun"
+    fi
+fi
 
-# Create temp directory to avoid race conditions
-TEMP_DIR=$(mktemp -d)
-trap "rm -rf $TEMP_DIR" EXIT
+if [ -x "$ELECTRON_DIR/vendor/bun/bun" ]; then
+    echo "Bun binary already cached, skipping download"
+else
+    echo "Downloading Bun ${BUN_VERSION} for darwin-${ARCH}..."
+    mkdir -p "$ELECTRON_DIR/vendor/bun"
+    BUN_DOWNLOAD="bun-darwin-$([ "$ARCH" = "arm64" ] && echo "aarch64" || echo "x64")"
 
-# Download binary and checksums
-curl -fSL "https://github.com/oven-sh/bun/releases/download/${BUN_VERSION}/${BUN_DOWNLOAD}.zip" -o "$TEMP_DIR/${BUN_DOWNLOAD}.zip"
-curl -fSL "https://github.com/oven-sh/bun/releases/download/${BUN_VERSION}/SHASUMS256.txt" -o "$TEMP_DIR/SHASUMS256.txt"
+    # Create temp directory to avoid race conditions
+    TEMP_DIR=$(mktemp -d)
+    trap "rm -rf $TEMP_DIR" EXIT
 
-# Verify checksum
-echo "Verifying checksum..."
-cd "$TEMP_DIR"
-grep "${BUN_DOWNLOAD}.zip" SHASUMS256.txt | shasum -a 256 -c -
-cd - > /dev/null
+    # Download binary and checksums
+    curl -fSL "https://github.com/oven-sh/bun/releases/download/${BUN_VERSION}/${BUN_DOWNLOAD}.zip" -o "$TEMP_DIR/${BUN_DOWNLOAD}.zip"
+    curl -fSL "https://github.com/oven-sh/bun/releases/download/${BUN_VERSION}/SHASUMS256.txt" -o "$TEMP_DIR/SHASUMS256.txt"
 
-# Extract and install
-unzip -o "$TEMP_DIR/${BUN_DOWNLOAD}.zip" -d "$TEMP_DIR"
-cp "$TEMP_DIR/${BUN_DOWNLOAD}/bun" "$ELECTRON_DIR/vendor/bun/"
-chmod +x "$ELECTRON_DIR/vendor/bun/bun"
+    # Verify checksum
+    echo "Verifying checksum..."
+    cd "$TEMP_DIR"
+    grep "${BUN_DOWNLOAD}.zip" SHASUMS256.txt | shasum -a 256 -c -
+    cd - > /dev/null
+
+    # Extract and install
+    unzip -o "$TEMP_DIR/${BUN_DOWNLOAD}.zip" -d "$TEMP_DIR"
+    cp "$TEMP_DIR/${BUN_DOWNLOAD}/bun" "$ELECTRON_DIR/vendor/bun/"
+    chmod +x "$ELECTRON_DIR/vendor/bun/bun"
+fi
 
 # 4. Copy SDK from root node_modules (monorepo hoisting)
 # Note: The SDK is hoisted to root node_modules by the package manager.
 # We copy it here because electron-builder only sees apps/electron/.
 SDK_SOURCE="$ROOT_DIR/node_modules/@anthropic-ai/claude-agent-sdk"
 require_path "$SDK_SOURCE" "SDK" "Run 'bun install' from the repository root first."
-echo "Copying SDK..."
-mkdir -p "$ELECTRON_DIR/node_modules/@anthropic-ai"
-cp -r "$SDK_SOURCE" "$ELECTRON_DIR/node_modules/@anthropic-ai/"
+if [ -d "$ELECTRON_DIR/node_modules/@anthropic-ai/claude-agent-sdk" ]; then
+    echo "SDK already present, skipping copy"
+else
+    echo "Copying SDK..."
+    mkdir -p "$ELECTRON_DIR/node_modules/@anthropic-ai"
+    cp -r "$SDK_SOURCE" "$ELECTRON_DIR/node_modules/@anthropic-ai/"
+fi
 
 # 5. Copy interceptor
 INTERCEPTOR_SOURCE="$ROOT_DIR/packages/shared/src/network-interceptor.ts"
 require_path "$INTERCEPTOR_SOURCE" "Interceptor" "Ensure packages/shared/src/network-interceptor.ts exists."
-echo "Copying interceptor..."
-mkdir -p "$ELECTRON_DIR/packages/shared/src"
-cp "$INTERCEPTOR_SOURCE" "$ELECTRON_DIR/packages/shared/src/"
+if [ -f "$ELECTRON_DIR/packages/shared/src/network-interceptor.ts" ]; then
+    echo "Interceptor already present, skipping copy"
+else
+    echo "Copying interceptor..."
+    mkdir -p "$ELECTRON_DIR/packages/shared/src"
+    cp "$INTERCEPTOR_SOURCE" "$ELECTRON_DIR/packages/shared/src/"
+fi
 
 # 6. Build Electron app
 echo "Building Electron app..."
