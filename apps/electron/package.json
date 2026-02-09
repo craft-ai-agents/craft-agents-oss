@@ -52,7 +52,7 @@
     "chrono-node": "^2.9.0",
     "cmdk": "^1.1.1",
     "electron-log": "^5.4.3",
-    "electron-updater": "^6.7.3",
+    "electron-updater": "^6.8.0",
     "jotai-family": "^1.0.1",
     "motion": "^12.23.26",
     "next-themes": "^0.4.6",
