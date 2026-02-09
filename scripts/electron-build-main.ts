@@ -279,6 +279,17 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  // Verify no unwanted external requires (catches builds with packages: "external")
+  const content = readFileSync(OUTPUT_FILE, "utf-8");
+  const unwantedExternals = ["electron-log", "electron-updater", "zod", "@sentry/electron"];
+  for (const pkg of unwantedExternals) {
+    if (content.includes(`require("${pkg}`)) {
+      console.error(`❌ Build error: "${pkg}" is external but should be bundled`);
+      console.error("   This usually means --packages=external was used. Use production build config.");
+      process.exit(1);
+    }
+  }
+
   console.log("✅ Build complete and verified");
   process.exit(0);
 }
