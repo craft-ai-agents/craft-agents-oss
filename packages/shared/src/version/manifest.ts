@@ -1,6 +1,7 @@
 import { debug } from "../utils/debug";
+import { RELEASES_URL } from '../branding';
 
-const VERSIONS_URL = 'https://g4educacao.com/electron';
+const VERSIONS_URL = RELEASES_URL;
 
 export async function getLatestVersion(): Promise<string | null> {
     try {

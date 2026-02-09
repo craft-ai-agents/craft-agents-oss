@@ -1,9 +1,9 @@
 # G4 OS Windows Installer
-# Usage: irm https://g4educacao.com/install-app.ps1 | iex
+# Usage: irm https://g4os-viewer.pages.dev/electron/install-app.ps1 | iex
 
 $ErrorActionPreference = "Stop"
 
-$VERSIONS_URL = "https://g4educacao.com/electron"
+$VERSIONS_URL = "https://g4os-viewer.pages.dev/electron"
 $DOWNLOAD_DIR = "$env:TEMP\g4os-install"
 $APP_NAME = "G4 OS"
 
@@ -71,7 +71,7 @@ if (-not $filename) {
 
 # Use default URL if not in manifest
 if (-not $installerUrl) {
-    $installerUrl = "$VERSIONS_URL/$version/$filename"
+    $installerUrl = "$VERSIONS_URL/$filename"
 }
 
 Write-Info "Expected checksum: $($checksum.Substring(0, 16))..."

@@ -39,7 +39,7 @@ extraMetadata:
 # Auto-update: electron-updater fetches from this URL for update manifests (.yml files)
 publish:
   provider: generic
-  url: https://g4educacao.com/electron/latest
+  url: https://g4os-viewer.pages.dev/electron
 
 # Disable ASAR to avoid decompression overhead and click delays
 asar: false
@@ -55,11 +55,9 @@ mac:
     - target: dmg
       arch:
         - arm64
-        - x64
     - target: zip
       arch:
         - arm64
-        - x64
   hardenedRuntime: true
   gatekeeperAssess: false
   entitlements: build/entitlements.mac.plist

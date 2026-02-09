@@ -2,7 +2,7 @@
 
 set -e
 
-VERSIONS_URL="https://g4educacao.com/electron"
+VERSIONS_URL="https://g4os-viewer.pages.dev/electron"
 DOWNLOAD_DIR="$HOME/.g4os/downloads"
 
 # Colors for output
@@ -205,7 +205,7 @@ info "Latest version: $version"
 
 # Download YAML manifest and extract checksum
 info "Fetching release info..."
-manifest_yaml=$(download_file "$VERSIONS_URL/$version/$yml_file")
+manifest_yaml=$(download_file "$VERSIONS_URL/$yml_file")
 
 if [ -z "$manifest_yaml" ]; then
     error "Failed to fetch release info from $yml_file"
@@ -233,7 +233,7 @@ fi
 info "Expected sha512: ${checksum:0:20}..."
 
 # Download installer
-installer_url="$VERSIONS_URL/$version/$filename"
+installer_url="$VERSIONS_URL/$filename"
 installer_path="$DOWNLOAD_DIR/$filename"
 
 info "Downloading $filename..."
@@ -377,7 +377,7 @@ ELECTRON_CACHE_ALT="$HOME/.cache/@g4os"
 # Verify AppImage exists
 if [ ! -f "$APPIMAGE_PATH" ]; then
     echo "Error: G4 OS not found at $APPIMAGE_PATH"
-    echo "Reinstall: curl -fsSL https://g4educacao.com/install-app.sh | bash"
+    echo "Reinstall: curl -fsSL https://g4os-viewer.pages.dev/electron/install-app.sh | bash"
     exit 1
 fi
 

@@ -1,5 +1,6 @@
 interface Env {
   SESSIONS_BUCKET: R2Bucket;
+  RELEASES_BUCKET: R2Bucket;
 }
 
 const MAX_BODY_SIZE = 25 * 1024 * 1024; // 25 MB

@@ -5,3 +5,7 @@ pages_build_output_dir = "dist"
 [[r2_buckets]]
 binding = "SESSIONS_BUCKET"
 bucket_name = "g4os-shared-sessions"
+
+[[r2_buckets]]
+binding = "RELEASES_BUCKET"
+bucket_name = "g4os-releases"

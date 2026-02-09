@@ -64,12 +64,12 @@ Yes. That's the core idea behind agent-native software. You describe what you wa
 
 **macOS / Linux:**
 ```bash
-curl -fsSL https://g4educacao.com/install-app.sh | bash
+curl -fsSL https://g4os-viewer.pages.dev/electron/install-app.sh | bash
 ```
 
 **Windows (PowerShell):**
 ```powershell
-irm https://g4educacao.com/install-app.ps1 | iex
+irm https://g4os-viewer.pages.dev/electron/install-app.ps1 | iex
 ```
 
 ### Build from Source
