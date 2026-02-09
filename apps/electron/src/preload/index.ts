@@ -513,6 +513,29 @@ const api: ElectronAPI = {
   menuPaste: () => ipcRenderer.invoke(IPC_CHANNELS.MENU_PASTE),
   menuSelectAll: () => ipcRenderer.invoke(IPC_CHANNELS.MENU_SELECT_ALL),
 
+  // Cloud Sync
+  getSyncStatus: (workspaceId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SYNC_GET_STATUS, workspaceId),
+  generateSyncToken: (workspaceId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SYNC_GENERATE_TOKEN, workspaceId),
+  setSyncToken: (workspaceId: string, token: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SYNC_SET_TOKEN, workspaceId, token),
+  disconnectSync: (workspaceId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SYNC_DISCONNECT, workspaceId),
+  pushSync: (workspaceId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SYNC_PUSH, workspaceId),
+  getPullPreview: (workspaceId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SYNC_PULL_PREVIEW, workspaceId),
+  pullSync: (workspaceId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SYNC_PULL, workspaceId),
+  onSyncProgress: (callback: (progress: import('@g4os/shared/cloud-sync').SyncProgress) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, progress: import('@g4os/shared/cloud-sync').SyncProgress) => {
+      callback(progress)
+    }
+    ipcRenderer.on(IPC_CHANNELS.SYNC_PROGRESS, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.SYNC_PROGRESS, handler)
+  },
+
   // LLM Connections (provider configurations)
   listLlmConnections: () => ipcRenderer.invoke(IPC_CHANNELS.LLM_CONNECTION_LIST),
   listLlmConnectionsWithStatus: () => ipcRenderer.invoke(IPC_CHANNELS.LLM_CONNECTION_LIST_WITH_STATUS),

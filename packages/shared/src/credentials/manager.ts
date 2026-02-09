@@ -270,6 +270,26 @@ export class CredentialManager {
   // Note: OpenAI API key methods removed - Codex uses native ChatGPT OAuth flow
 
   // ============================================================
+  // Cloud Sync Token
+  // ============================================================
+
+  /** Get sync token for a workspace */
+  async getSyncToken(workspaceId: string): Promise<string | null> {
+    const cred = await this.get({ type: 'sync_token', workspaceId });
+    return cred?.value || null;
+  }
+
+  /** Set sync token for a workspace */
+  async setSyncToken(workspaceId: string, token: string): Promise<void> {
+    await this.set({ type: 'sync_token', workspaceId }, { value: token });
+  }
+
+  /** Delete sync token for a workspace */
+  async deleteSyncToken(workspaceId: string): Promise<boolean> {
+    return this.delete({ type: 'sync_token', workspaceId });
+  }
+
+  // ============================================================
   // LLM Connection Credentials
   // ============================================================
 

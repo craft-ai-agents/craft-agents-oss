@@ -31,7 +31,9 @@ export type CredentialType =
   | 'source_oauth'       // OAuth tokens for MCP/API sources
   | 'source_bearer'      // Bearer tokens
   | 'source_apikey'      // API keys
-  | 'source_basic';      // Basic auth (base64 encoded user:pass)
+  | 'source_basic'       // Basic auth (base64 encoded user:pass)
+  // Cloud sync credentials
+  | 'sync_token';        // Workspace sync token (g4sync_ prefixed)
 
 /** Valid credential types for validation */
 const VALID_CREDENTIAL_TYPES: readonly CredentialType[] = [
@@ -46,6 +48,7 @@ const VALID_CREDENTIAL_TYPES: readonly CredentialType[] = [
   'source_bearer',
   'source_apikey',
   'source_basic',
+  'sync_token',
 ] as const;
 
 /** Check if a string is a valid CredentialType */
@@ -168,7 +171,8 @@ export function credentialIdToAccount(id: CredentialId): string {
 
   // Workspace-scoped format (no source):
   // workspace_oauth::{workspaceId}
-  if (id.type === 'workspace_oauth' && id.workspaceId) {
+  // sync_token::{workspaceId}
+  if ((id.type === 'workspace_oauth' || id.type === 'sync_token') && id.workspaceId) {
     parts.push(id.workspaceId);
     return parts.join(CREDENTIAL_DELIMITER);
   }
@@ -233,7 +237,8 @@ export function accountToCredentialId(account: string): CredentialId | null {
 
   // Workspace-scoped format (no source):
   // workspace_oauth::{workspaceId}
-  if (type === 'workspace_oauth' && parts.length === 2) {
+  // sync_token::{workspaceId}
+  if ((type === 'workspace_oauth' || type === 'sync_token') && parts.length === 2) {
     return { type, workspaceId: parts[1] };
   }
 

@@ -141,6 +141,24 @@ export const ShortcutsIcon = ({ className }: IconProps) => (
   </svg>
 )
 
+/** Cloud sync icon */
+export const CloudSyncIcon = ({ className }: IconProps) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+  >
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M6.5 20C4.01472 20 2 17.9853 2 15.5C2 13.2138 3.71776 11.3237 5.92602 11.0495C6.32855 8.22422 8.78742 6.07143 11.7143 6.07143C12.4773 6.07143 13.2065 6.2147 13.8757 6.47714C14.6753 4.39742 16.6987 2.92857 19.0714 2.92857C22.0953 2.92857 24.5714 5.40472 24.5714 8.42857C24.5714 8.5866 24.5645 8.74305 24.5508 8.89773C25.9685 9.8498 26.8571 11.4497 26.8571 13.2857C26.8571 16.0471 24.6185 18.2857 21.8571 18.2857H19V20H6.5ZM12 10L8 14H11V18H13V14H16L12 10Z"
+      fill="currentColor"
+      transform="scale(0.88) translate(0.5, 1.5)"
+    />
+  </svg>
+)
+
 /** User icon for preferences */
 export const PreferencesIcon = ({ className }: IconProps) => (
   <svg
@@ -170,6 +188,7 @@ export const SETTINGS_ICONS: Record<SettingsSubpage, React.ComponentType<IconPro
   workspace: WorkspaceIcon,
   permissions: PermissionsIcon,
   labels: LabelsIcon,
+  sync: CloudSyncIcon,
   shortcuts: ShortcutsIcon,
   preferences: PreferencesIcon,
 }

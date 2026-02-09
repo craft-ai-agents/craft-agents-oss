@@ -1,6 +1,6 @@
 {
   "name": "@g4os/shared",
-  "version": "0.4.4",
+  "version": "0.5.0",
   "codexVersion": "craft-v0.4.0",
   "license": "Apache-2.0",
   "description": "Shared business logic for G4 OS - agent, auth, config, credentials, MCP integration",
@@ -24,6 +24,7 @@
     "./docs": "./src/docs/index.ts",
     "./docs/doc-links": "./src/docs/doc-links.ts",
     "./config/types": "./src/config/types.ts",
+    "./cloud-sync": "./src/cloud-sync/index.ts",
     "./credentials": "./src/credentials/index.ts",
     "./headless": "./src/headless/index.ts",
     "./mcp": "./src/mcp/index.ts",

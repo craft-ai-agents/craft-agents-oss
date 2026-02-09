@@ -856,6 +856,16 @@ export const IPC_CHANNELS = {
   GITBASH_BROWSE: 'gitbash:browse',
   GITBASH_SET_PATH: 'gitbash:setPath',
 
+  // Cloud Sync
+  SYNC_GET_STATUS: 'sync:getStatus',
+  SYNC_GENERATE_TOKEN: 'sync:generateToken',
+  SYNC_SET_TOKEN: 'sync:setToken',
+  SYNC_DISCONNECT: 'sync:disconnect',
+  SYNC_PUSH: 'sync:push',
+  SYNC_PULL_PREVIEW: 'sync:pullPreview',
+  SYNC_PULL: 'sync:pull',
+  SYNC_PROGRESS: 'sync:progress',        // main → renderer broadcast
+
   // Menu actions (renderer → main for window/app control)
   MENU_QUIT: 'menu:quit',
   MENU_MINIMIZE: 'menu:minimize',
@@ -1178,6 +1188,16 @@ export interface ElectronAPI {
   menuCopy(): Promise<void>
   menuPaste(): Promise<void>
   menuSelectAll(): Promise<void>
+
+  // Cloud Sync
+  getSyncStatus(workspaceId: string): Promise<import('@g4os/shared/cloud-sync').SyncStatus>
+  generateSyncToken(workspaceId: string): Promise<string>
+  setSyncToken(workspaceId: string, token: string): Promise<{ success: boolean; error?: string }>
+  disconnectSync(workspaceId: string): Promise<void>
+  pushSync(workspaceId: string): Promise<import('@g4os/shared/cloud-sync').SyncResult>
+  getPullPreview(workspaceId: string): Promise<import('@g4os/shared/cloud-sync').PullPreview>
+  pullSync(workspaceId: string): Promise<import('@g4os/shared/cloud-sync').SyncResult>
+  onSyncProgress(callback: (progress: import('@g4os/shared/cloud-sync').SyncProgress) => void): () => void
 
   // LLM Connections (provider configurations)
   listLlmConnections(): Promise<LlmConnection[]>

@@ -3201,4 +3201,160 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // Note: Permission mode cycling settings (cyclablePermissionModes) are now workspace-level
   // and managed via WORKSPACE_SETTINGS_GET/UPDATE channels
 
+  // ============================================================
+  // Cloud Sync
+  // ============================================================
+
+  // Get sync status for a workspace
+  ipcMain.handle(IPC_CHANNELS.SYNC_GET_STATUS, async (_event, workspaceId: string) => {
+    const credManager = getCredentialManager()
+    const token = await credManager.getSyncToken(workspaceId)
+
+    const workspace = getWorkspaceOrThrow(workspaceId)
+    const { loadWorkspaceConfig } = await import('@g4os/shared/workspaces')
+    const config = loadWorkspaceConfig(workspace.rootPath)
+
+    return {
+      connected: !!token,
+      lastPushedAt: (config as unknown as Record<string, unknown>)?.syncLastPushedAt as number | null ?? null,
+      lastPulledAt: (config as unknown as Record<string, unknown>)?.syncLastPulledAt as number | null ?? null,
+    }
+  })
+
+  // Generate a new sync token for a workspace
+  ipcMain.handle(IPC_CHANNELS.SYNC_GENERATE_TOKEN, async (_event, workspaceId: string) => {
+    const { generateSyncToken } = await import('@g4os/shared/cloud-sync')
+    const token = generateSyncToken()
+
+    const credManager = getCredentialManager()
+    await credManager.setSyncToken(workspaceId, token.raw)
+
+    return token.raw
+  })
+
+  // Import/set an existing sync token
+  ipcMain.handle(IPC_CHANNELS.SYNC_SET_TOKEN, async (_event, workspaceId: string, token: string) => {
+    const { isValidSyncToken } = await import('@g4os/shared/cloud-sync')
+    if (!isValidSyncToken(token)) {
+      return { success: false, error: 'Invalid token format. Expected g4sync_ followed by 32 hex characters.' }
+    }
+
+    const credManager = getCredentialManager()
+    await credManager.setSyncToken(workspaceId, token)
+    return { success: true }
+  })
+
+  // Disconnect sync (delete token and optionally remote data)
+  ipcMain.handle(IPC_CHANNELS.SYNC_DISCONNECT, async (_event, workspaceId: string) => {
+    const credManager = getCredentialManager()
+    await credManager.deleteSyncToken(workspaceId)
+  })
+
+  // Push workspace to cloud
+  ipcMain.handle(IPC_CHANNELS.SYNC_PUSH, async (event, workspaceId: string) => {
+    const workspace = getWorkspaceOrThrow(workspaceId)
+    const credManager = getCredentialManager()
+    const token = await credManager.getSyncToken(workspaceId)
+
+    if (!token) {
+      return { success: false, error: 'No sync token configured', filesTransferred: 0, filesDeleted: 0, bytesTransferred: 0, durationMs: 0 }
+    }
+
+    const { SyncEngine } = await import('@g4os/shared/cloud-sync')
+    const engine = new SyncEngine({
+      token,
+      workspacePath: workspace.rootPath,
+      workspaceId,
+      workspaceName: workspace.name,
+      onProgress: (progress) => {
+        // Broadcast progress to all windows
+        const { BrowserWindow } = require('electron') as typeof import('electron')
+        for (const win of BrowserWindow.getAllWindows()) {
+          win.webContents.send(IPC_CHANNELS.SYNC_PROGRESS, progress)
+        }
+      },
+    })
+
+    const result = await engine.push()
+
+    // Update workspace config with timestamp
+    if (result.success) {
+      const { loadWorkspaceConfig, saveWorkspaceConfig } = await import('@g4os/shared/workspaces')
+      const config = loadWorkspaceConfig(workspace.rootPath)
+      if (config) {
+        ;(config as unknown as Record<string, unknown>).syncLastPushedAt = Date.now()
+        saveWorkspaceConfig(workspace.rootPath, config)
+      }
+    }
+
+    return result
+  })
+
+  // Get pull preview (diff summary)
+  ipcMain.handle(IPC_CHANNELS.SYNC_PULL_PREVIEW, async (_event, workspaceId: string) => {
+    const workspace = getWorkspaceOrThrow(workspaceId)
+    const credManager = getCredentialManager()
+    const token = await credManager.getSyncToken(workspaceId)
+
+    if (!token) {
+      throw new Error('No sync token configured')
+    }
+
+    const { SyncEngine } = await import('@g4os/shared/cloud-sync')
+    const engine = new SyncEngine({
+      token,
+      workspacePath: workspace.rootPath,
+      workspaceId,
+      workspaceName: workspace.name,
+    })
+
+    return engine.getPullPreview()
+  })
+
+  // Pull workspace from cloud
+  ipcMain.handle(IPC_CHANNELS.SYNC_PULL, async (event, workspaceId: string) => {
+    const workspace = getWorkspaceOrThrow(workspaceId)
+    const credManager = getCredentialManager()
+    const token = await credManager.getSyncToken(workspaceId)
+
+    if (!token) {
+      return { success: false, error: 'No sync token configured', filesTransferred: 0, filesDeleted: 0, bytesTransferred: 0, durationMs: 0 }
+    }
+
+    const { SyncEngine } = await import('@g4os/shared/cloud-sync')
+    const engine = new SyncEngine({
+      token,
+      workspacePath: workspace.rootPath,
+      workspaceId,
+      workspaceName: workspace.name,
+      onProgress: (progress) => {
+        const { BrowserWindow } = require('electron') as typeof import('electron')
+        for (const win of BrowserWindow.getAllWindows()) {
+          win.webContents.send(IPC_CHANNELS.SYNC_PROGRESS, progress)
+        }
+      },
+    })
+
+    const result = await engine.pull()
+
+    // Update workspace config with timestamp and reload sources/sessions
+    if (result.success) {
+      const { loadWorkspaceConfig, saveWorkspaceConfig } = await import('@g4os/shared/workspaces')
+      const config = loadWorkspaceConfig(workspace.rootPath)
+      if (config) {
+        ;(config as unknown as Record<string, unknown>).syncLastPulledAt = Date.now()
+        saveWorkspaceConfig(workspace.rootPath, config)
+      }
+
+      // Notify renderer about changes so sources and sessions reload
+      const { BrowserWindow } = require('electron') as typeof import('electron')
+      const sources = await loadWorkspaceSources(workspace.rootPath)
+      for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send(IPC_CHANNELS.SOURCES_CHANGED, sources)
+      }
+    }
+
+    return result
+  })
+
 }
