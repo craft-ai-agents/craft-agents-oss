@@ -70,11 +70,10 @@ import { registerIpcHandlers } from './ipc'
 import { createApplicationMenu } from './menu'
 import { WindowManager } from './window-manager'
 import { loadWindowState, saveWindowState } from './window-state'
-import { getWorkspaces, loadStoredConfig, addWorkspace, saveConfig, loadConfigDefaults } from '@g4os/shared/config'
+import { getWorkspaces, loadStoredConfig, addWorkspace, saveConfig, loadConfigDefaults, ensureConfigDir, getGitBashPath, setGitBashPath } from '@g4os/shared/config'
 import { getDefaultWorkspacesDir } from '@g4os/shared/workspaces'
-import { initializeDocs } from '@g4os/shared/docs'
 import { ensureDefaultPermissions } from '@g4os/shared/agent/permissions-config'
-import { ensureToolIcons, ensurePresetThemes } from '@g4os/shared/config'
+import { ensurePresetThemes } from '@g4os/shared/config'
 import { setBundledAssetsRoot } from '@g4os/shared/utils'
 import { setVendorRoot } from '@g4os/shared/codex'
 import { setPowerShellValidatorRoot } from '@g4os/shared/agent'
@@ -230,6 +229,11 @@ app.whenReady().then(async () => {
   // (docs, permissions, themes, tool-icons resolve via getBundledAssetsDir)
   setBundledAssetsRoot(__dirname)
 
+  // Ensure ~/.g4os/ exists and config-defaults.json is synced from bundled assets.
+  // Must happen before createInitialWindows() which calls loadConfigDefaults().
+  // Also initializes bundled docs and tool icons internally.
+  ensureConfigDir()
+
   // Register vendor root so the Codex binary resolver can find bundled binaries
   // (Codex binary resolves via resolveCodexBinary() which checks vendor/codex/)
   setVendorRoot(__dirname)
@@ -238,17 +242,45 @@ app.whenReady().then(async () => {
   // (Windows only: validates PowerShell commands in Explore mode using AST analysis)
   setPowerShellValidatorRoot(join(__dirname, 'resources'))
 
-  // Initialize bundled docs
-  initializeDocs()
-
   // Ensure default permissions file exists (copies bundled default.json on first run)
   ensureDefaultPermissions()
 
-  // Seed tool icons to ~/.g4os/tool-icons/ (copies bundled SVGs on first run)
-  ensureToolIcons()
-
   // Seed preset themes to ~/.g4os/themes/ (copies bundled theme JSONs on first run)
   ensurePresetThemes()
+
+  // On Windows, set CLAUDE_CODE_GIT_BASH_PATH so SDK subprocess can find bash.exe
+  // If a path is already persisted, use it. Otherwise auto-detect (handles first
+  // launch after update for users who completed onboarding before this fix).
+  if (process.platform === 'win32') {
+    let gitBashPath = getGitBashPath()
+    if (!gitBashPath) {
+      const { execSync } = await import('child_process')
+      const commonPaths = [
+        'C:\\Program Files\\Git\\bin\\bash.exe',
+        'C:\\Program Files (x86)\\Git\\bin\\bash.exe',
+        join(process.env.LOCALAPPDATA || '', 'Programs', 'Git', 'bin', 'bash.exe'),
+        join(process.env.PROGRAMFILES || '', 'Git', 'bin', 'bash.exe'),
+      ]
+      for (const p of commonPaths) {
+        if (existsSync(p)) { gitBashPath = p; break }
+      }
+      if (!gitBashPath) {
+        try {
+          const result = execSync('where bash', { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'], timeout: 5000 }).trim()
+          const first = result.split('\n')[0]?.trim()
+          if (first && first.toLowerCase().includes('git')) gitBashPath = first
+        } catch { /* where command failed */ }
+      }
+      if (gitBashPath) {
+        setGitBashPath(gitBashPath)
+        mainLog.info('Auto-detected and persisted Git Bash path:', gitBashPath)
+      }
+    }
+    if (gitBashPath) {
+      process.env.CLAUDE_CODE_GIT_BASH_PATH = gitBashPath
+      mainLog.info('Set CLAUDE_CODE_GIT_BASH_PATH:', gitBashPath)
+    }
+  }
 
   // Register thumbnail:// protocol handler (scheme was registered earlier, before app.whenReady)
   registerThumbnailHandler()

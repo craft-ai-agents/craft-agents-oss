@@ -517,6 +517,14 @@ export default function App() {
     }
   }, [])
 
+  // Subscribe to sessions refreshed events (after cloud sync pull)
+  useEffect(() => {
+    const cleanup = window.electronAPI.onSessionsRefreshed((sessions) => {
+      initializeSessions(sessions)
+    })
+    return cleanup
+  }, [initializeSessions])
+
   // Refresh LLM connections and workspace default when workspace changes
   useEffect(() => {
     if (windowWorkspaceId) {

@@ -95,6 +95,8 @@ export interface StoredConfig {
   keepAwakeWhileRunning?: boolean;  // Prevent screen sleep while sessions are running (default: false)
   // UI locale for frontend translations
   uiLocale?: UiLocale;
+  // Git Bash path for Windows (CLAUDE_CODE_GIT_BASH_PATH)
+  gitBashPath?: string;
 }
 
 const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
@@ -468,6 +470,26 @@ export function setUiLocale(locale: UiLocale): void {
   const config = loadStoredConfig();
   if (!config) return;
   config.uiLocale = locale;
+  saveConfig(config);
+}
+
+/**
+ * Get the persisted Git Bash path (Windows only).
+ * Used to set CLAUDE_CODE_GIT_BASH_PATH for the SDK subprocess.
+ */
+export function getGitBashPath(): string | null {
+  const config = loadStoredConfig();
+  return config?.gitBashPath ?? null;
+}
+
+/**
+ * Set the Git Bash path (Windows only).
+ * Persists to config so it survives app restarts.
+ */
+export function setGitBashPath(bashPath: string): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+  config.gitBashPath = bashPath;
   saveConfig(config);
 }
 

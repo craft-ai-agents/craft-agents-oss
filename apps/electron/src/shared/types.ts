@@ -865,6 +865,7 @@ export const IPC_CHANNELS = {
   SYNC_PULL_PREVIEW: 'sync:pullPreview',
   SYNC_PULL: 'sync:pull',
   SYNC_PROGRESS: 'sync:progress',        // main → renderer broadcast
+  SYNC_SESSIONS_REFRESHED: 'sync:sessionsRefreshed',  // main → renderer: sessions reloaded after pull
 
   // Menu actions (renderer → main for window/app control)
   MENU_QUIT: 'menu:quit',
@@ -1198,6 +1199,7 @@ export interface ElectronAPI {
   getPullPreview(workspaceId: string): Promise<import('@g4os/shared/cloud-sync').PullPreview>
   pullSync(workspaceId: string): Promise<import('@g4os/shared/cloud-sync').SyncResult>
   onSyncProgress(callback: (progress: import('@g4os/shared/cloud-sync').SyncProgress) => void): () => void
+  onSessionsRefreshed(callback: (sessions: Session[]) => void): () => void
 
   // LLM Connections (provider configurations)
   listLlmConnections(): Promise<LlmConnection[]>

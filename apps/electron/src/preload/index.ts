@@ -535,6 +535,13 @@ const api: ElectronAPI = {
     ipcRenderer.on(IPC_CHANNELS.SYNC_PROGRESS, handler)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.SYNC_PROGRESS, handler)
   },
+  onSessionsRefreshed: (callback: (sessions: import('../shared/types').Session[]) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, sessions: import('../shared/types').Session[]) => {
+      callback(sessions)
+    }
+    ipcRenderer.on(IPC_CHANNELS.SYNC_SESSIONS_REFRESHED, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.SYNC_SESSIONS_REFRESHED, handler)
+  },
 
   // LLM Connections (provider configurations)
   listLlmConnections: () => ipcRenderer.invoke(IPC_CHANNELS.LLM_CONNECTION_LIST),

@@ -872,6 +872,9 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     for (const bashPath of commonPaths) {
       try {
         await stat(bashPath)
+        const { setGitBashPath: persistGitBashPath } = await import('@g4os/shared/config/storage')
+        persistGitBashPath(bashPath)
+        process.env.CLAUDE_CODE_GIT_BASH_PATH = bashPath
         return { found: true, path: bashPath, platform }
       } catch {
         // Path doesn't exist, try next
@@ -887,6 +890,9 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       }).trim()
       const firstPath = result.split('\n')[0]?.trim()
       if (firstPath && firstPath.toLowerCase().includes('git')) {
+        const { setGitBashPath: persistGitBashPath } = await import('@g4os/shared/config/storage')
+        persistGitBashPath(firstPath)
+        process.env.CLAUDE_CODE_GIT_BASH_PATH = firstPath
         return { found: true, path: firstPath, platform }
       }
     } catch {
@@ -924,8 +930,10 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
         return { success: false, error: 'Path must be an executable (.exe) file' }
       }
 
-      // TODO: Persist this path to config if needed
-      // For now, we just validate it exists
+      // Persist to config and set env for SDK subprocess
+      const { setGitBashPath: persistGitBashPath } = await import('@g4os/shared/config/storage')
+      persistGitBashPath(bashPath)
+      process.env.CLAUDE_CODE_GIT_BASH_PATH = bashPath
       return { success: true }
     } catch {
       return { success: false, error: 'File does not exist at the specified path' }
@@ -3346,11 +3354,18 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
         saveWorkspaceConfig(workspace.rootPath, config)
       }
 
-      // Notify renderer about changes so sources and sessions reload
+      // Notify renderer about changes so sources reload
       const { BrowserWindow } = require('electron') as typeof import('electron')
       const sources = await loadWorkspaceSources(workspace.rootPath)
       for (const win of BrowserWindow.getAllWindows()) {
         win.webContents.send(IPC_CHANNELS.SOURCES_CHANGED, sources)
+      }
+
+      // Reload sessions from disk (pull may have added/modified session files)
+      sessionManager.reloadSessions()
+      const sessions = sessionManager.getSessions()
+      for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send(IPC_CHANNELS.SYNC_SESSIONS_REFRESHED, sessions)
       }
     }
 
