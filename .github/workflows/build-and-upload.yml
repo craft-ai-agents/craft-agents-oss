@@ -294,7 +294,8 @@ jobs:
             SIZE=$(stat -c%s "$SDK_PATH")
             echo "✓ Windows: SDK found ($SIZE bytes)"
           else
-            echo "⚠️ Windows: Could not extract installer for verification"
+            echo "::error::Windows: Could not extract installer for verification"
+            exit 1
           fi
 
   summary:

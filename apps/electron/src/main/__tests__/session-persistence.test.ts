@@ -9,6 +9,7 @@ import { DEFAULT_MODEL, DEFAULT_CODEX_MODEL, isCodexModel } from '@craft-agent/s
 
 // ============================================================================
 // createdAt preservation during persistence
+// Mirrors: sessions.ts persistSession() — the StoredSession builder
 // ============================================================================
 
 describe('createdAt preservation', () => {
@@ -40,6 +41,7 @@ describe('createdAt preservation', () => {
 
 // ============================================================================
 // Safe model resolution when connection is null
+// Mirrors: sessions.ts sendMessage() model resolution (~line 3345)
 // ============================================================================
 
 describe('model resolution with null connection', () => {
@@ -118,6 +120,7 @@ describe('model resolution with null connection', () => {
 
 // ============================================================================
 // Orphaned llmConnection detection
+// Mirrors: sessions.ts restoreSession() orphaned connection cleanup
 // ============================================================================
 
 describe('orphaned llmConnection detection', () => {

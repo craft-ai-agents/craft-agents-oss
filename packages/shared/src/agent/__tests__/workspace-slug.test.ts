@@ -1,32 +1,17 @@
 /**
- * Tests for workspace slug extraction and qualifySkillName
+ * Tests for extractWorkspaceSlug utility and qualifySkillName
  *
- * The workspace slug extraction logic is used in both ClaudeAgent and CodexAgent
- * to derive the workspace slug from rootPath for skill qualification:
- *
- *   const pathParts = rootPath.split('/').filter(Boolean);
- *   const workspaceSlug = pathParts[pathParts.length - 1] || fallback;
+ * extractWorkspaceSlug (packages/shared/src/utils/workspace.ts) is used in
+ * ClaudeAgent, CodexAgent, and renderer components to derive the workspace
+ * slug from rootPath for skill qualification.
  *
  * This file tests:
- * 1. The slug extraction pattern directly
+ * 1. The extractWorkspaceSlug utility directly
  * 2. qualifySkillName which consumes the slug
  */
 import { describe, it, expect } from 'bun:test'
 import { qualifySkillName } from '../core/index.ts'
-
-// ============================================================================
-// Workspace slug extraction (inline logic from claude-agent.ts / codex-agent.ts)
-// ============================================================================
-
-/**
- * Mirrors the slug extraction logic from:
- * - claude-agent.ts line ~981
- * - codex-agent.ts line ~1094
- */
-function extractWorkspaceSlug(rootPath: string, fallbackId: string): string {
-  const pathParts = rootPath.split('/').filter(Boolean)
-  return pathParts[pathParts.length - 1] || fallbackId
-}
+import { extractWorkspaceSlug } from '../../utils/workspace.ts'
 
 describe('workspace slug extraction', () => {
   const fallback = 'fallback-id'

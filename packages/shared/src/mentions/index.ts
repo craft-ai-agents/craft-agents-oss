@@ -17,7 +17,7 @@
 
 // Workspace ID character class for regex: word chars, spaces (NOT newlines), hyphens, dots
 // Using literal space instead of \s to avoid matching newlines which would break parsing
-const WS_ID_CHARS = '[\\w .-]'
+export const WS_ID_CHARS = '[\\w .-]'
 
 // ============================================================================
 // Types

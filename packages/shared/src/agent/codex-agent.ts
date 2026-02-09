@@ -16,6 +16,7 @@
 
 import type { AgentEvent } from '@craft-agent/core/types';
 import type { FileAttachment } from '../utils/files.ts';
+import { extractWorkspaceSlug } from '../utils/workspace.ts';
 import type { ThinkingLevel } from './thinking-levels.ts';
 import type { AuthRequest } from '@craft-agent/session-tools-core';
 import { type PermissionMode, shouldAllowToolInMode } from './mode-manager.ts';
@@ -1111,8 +1112,7 @@ export class CodexAgent extends BaseAgent {
     // ============================================================
     if (sdkToolName === 'Skill') {
       const rootPath = this.config.workspace.rootPath ?? this.workingDirectory;
-      const pathParts = rootPath.split('/').filter(Boolean);
-      const workspaceSlug = pathParts[pathParts.length - 1] || this.config.workspace.id;
+      const workspaceSlug = extractWorkspaceSlug(rootPath, this.config.workspace.id);
       const skillResult = qualifySkillName(
         modifiedInput || inputObj,
         workspaceSlug,
@@ -1647,6 +1647,11 @@ export class CodexAgent extends BaseAgent {
         }
       };
       const onProcessError = (err: Error) => {
+        // If a main chat turn is active, this error likely belongs to it — not to title gen
+        if (this.currentTurnId) {
+          this.debug(`[generateTitle] Ignoring process error during active turn: ${err.message}`);
+          return;
+        }
         clearTimeout(timeout);
         cleanup();
         reject(err);
@@ -2030,13 +2035,12 @@ export class CodexAgent extends BaseAgent {
     for (const slug of parsed.skills) {
       const skill = skills.find(s => s.slug === slug);
       if (skill) {
-        const skillPath = join(skill.path, 'SKILL.md');
-        if (existsSync(skillPath)) {
-          const content = readFileSync(skillPath, 'utf-8');
-          this.debug(`[buildUserInput] Loaded skill ${skill.slug} (${content.length} chars) from ${skillPath}`);
+        const content = this.getSkillContent(skill.path);
+        if (content) {
+          this.debug(`[buildUserInput] Loaded skill ${skill.slug} (${content.length} chars) from ${skill.path}`);
           skillContents.push(`<skill name="${skill.slug}">\n${content}\n</skill>`);
         } else {
-          this.debug(`[buildUserInput] SKILL.md not found: ${skillPath}`);
+          this.debug(`[buildUserInput] SKILL.md not found: ${skill.path}`);
         }
       }
     }

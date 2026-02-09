@@ -30,15 +30,11 @@ files:
   # Exclude everything from node_modules (will use extraResources for SDK)
   - "!node_modules/**/*"
 
-# Include SDK as extraResources to bypass node_modules auto-exclusion
-# Since electron-builder v20.15.2, directories named "node_modules" are automatically excluded
-# Using extraResources with explicit from/to paths works around this limitation
+# SDK is included as per-platform extraResources (below) to bypass node_modules auto-exclusion
+# and to apply platform-specific ripgrep binary filtering.
+# Since electron-builder v20.15.2, directories named "node_modules" are automatically excluded.
+# Using extraResources with explicit from/to paths works around this limitation.
 # See: https://github.com/electron-userland/electron-builder/issues/3104
-extraResources:
-  - from: node_modules/@anthropic-ai/claude-agent-sdk
-    to: app/node_modules/@anthropic-ai/claude-agent-sdk
-    filter:
-      - "**/*"
 
 extraMetadata:
   main: dist/main.cjs
@@ -71,11 +67,16 @@ mac:
   gatekeeperAssess: false
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
+  extraResources:
+    - from: node_modules/@anthropic-ai/claude-agent-sdk
+      to: app/node_modules/@anthropic-ai/claude-agent-sdk
+      filter:
+        - "**/*"
+        - "!vendor/ripgrep/arm64-linux/**"
+        - "!vendor/ripgrep/x64-linux/**"
+        - "!vendor/ripgrep/x64-win32/**"
   # Exclude binaries for other platforms
   files:
-    - "!node_modules/@anthropic-ai/claude-agent-sdk/vendor/ripgrep/arm64-linux"
-    - "!node_modules/@anthropic-ai/claude-agent-sdk/vendor/ripgrep/x64-linux"
-    - "!node_modules/@anthropic-ai/claude-agent-sdk/vendor/ripgrep/x64-win32"
     - "!**/vendor/codex/linux-*/**"
     - "!**/vendor/codex/win32-*/**"
   # Use predictable naming for macOS packages (applies to zip; dmg uses its own config below)
@@ -115,10 +116,6 @@ win:
   artifactName: "Craft-Agent-${arch}.${ext}"
   files:
     # Exclude binaries for other platforms
-    - "!node_modules/@anthropic-ai/claude-agent-sdk/vendor/ripgrep/arm64-linux"
-    - "!node_modules/@anthropic-ai/claude-agent-sdk/vendor/ripgrep/x64-linux"
-    - "!node_modules/@anthropic-ai/claude-agent-sdk/vendor/ripgrep/arm64-darwin"
-    - "!node_modules/@anthropic-ai/claude-agent-sdk/vendor/ripgrep/x64-darwin"
     - "!**/vendor/codex/darwin-*/**"
     - "!**/vendor/codex/linux-*/**"
     # WORKAROUND: Exclude bun and codex from regular files on Windows.
@@ -130,6 +127,14 @@ win:
     - "!vendor/codex/**/*"
   # Copy executables as extraResources to avoid EBUSY file locking (see comment above)
   extraResources:
+    - from: node_modules/@anthropic-ai/claude-agent-sdk
+      to: app/node_modules/@anthropic-ai/claude-agent-sdk
+      filter:
+        - "**/*"
+        - "!vendor/ripgrep/arm64-darwin/**"
+        - "!vendor/ripgrep/x64-darwin/**"
+        - "!vendor/ripgrep/arm64-linux/**"
+        - "!vendor/ripgrep/x64-linux/**"
     - from: vendor/bun/bun.exe
       to: vendor/bun/bun.exe
     - from: vendor/codex/win32-x64
@@ -151,11 +156,15 @@ linux:
       arch:
         - x64
   artifactName: "Craft-Agent-${arch}.${ext}"
+  extraResources:
+    - from: node_modules/@anthropic-ai/claude-agent-sdk
+      to: app/node_modules/@anthropic-ai/claude-agent-sdk
+      filter:
+        - "**/*"
+        - "!vendor/ripgrep/arm64-darwin/**"
+        - "!vendor/ripgrep/x64-darwin/**"
+        - "!vendor/ripgrep/x64-win32/**"
   # Exclude binaries for other platforms
   files:
-    - "!node_modules/@anthropic-ai/claude-agent-sdk/vendor/ripgrep/arm64-darwin"
-    - "!node_modules/@anthropic-ai/claude-agent-sdk/vendor/ripgrep/x64-darwin"
-    - "!node_modules/@anthropic-ai/claude-agent-sdk/vendor/ripgrep/x64-win32"
-    - "!node_modules/@anthropic-ai/claude-agent-sdk/vendor/ripgrep/arm64-linux"
     - "!**/vendor/codex/darwin-*/**"
     - "!**/vendor/codex/win32-*/**"

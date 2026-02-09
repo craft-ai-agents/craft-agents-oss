@@ -24,6 +24,7 @@ import { useUpdateChecker } from '@/hooks/useUpdateChecker'
 import { NavigationProvider } from '@/contexts/NavigationContext'
 import { navigate, routes } from './lib/navigate'
 import { stripMarkdown } from './utils/text'
+import { extractWorkspaceSlug } from '@craft-agent/shared/utils'
 import { initRendererPerf } from './lib/perf'
 import {
   initializeSessionsAtom,
@@ -185,8 +186,7 @@ export default function App() {
     if (!windowWorkspaceId) return null
     const workspace = workspaces.find(w => w.id === windowWorkspaceId)
     if (!workspace?.rootPath) return windowWorkspaceId // Fallback to ID
-    const pathParts = workspace.rootPath.split('/').filter(Boolean)
-    return pathParts[pathParts.length - 1] || windowWorkspaceId
+    return extractWorkspaceSlug(workspace.rootPath, windowWorkspaceId)
   }, [windowWorkspaceId, workspaces])
 
   // LLM connections with authentication status (for provider selection)

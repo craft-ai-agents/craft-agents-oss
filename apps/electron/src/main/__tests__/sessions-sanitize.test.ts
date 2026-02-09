@@ -1,30 +1,11 @@
 /**
- * Tests for sanitizeForTitle logic from sessions.ts
+ * Tests for sanitizeForTitle from sessions.ts
  *
- * sanitizeForTitle is a private function in sessions.ts. These tests replicate
- * the exact regex pipeline to validate bracket-mention stripping, XML removal,
- * and whitespace normalization used for session title generation.
- *
- * If the regexes in sanitizeForTitle change, these tests must be updated.
+ * Tests the exported sanitizeForTitle function which strips bracket-mentions,
+ * XML, and normalizes whitespace for session title generation.
  */
 import { describe, it, expect } from 'bun:test'
-
-/**
- * Mirrors the sanitizeForTitle function from sessions.ts (lines 88-98).
- * This is the exact same logic — kept here so we can unit-test it without
- * exporting it from the production module.
- */
-function sanitizeForTitle(content: string): string {
-  return content
-    .replace(/<edit_request>[\s\S]*?<\/edit_request>/g, '')
-    .replace(/<[^>]+>/g, '')
-    .replace(/\[skill:(?:[\w-]+:)?[\w-]+\]/g, '')
-    .replace(/\[source:[\w-]+\]/g, '')
-    .replace(/\[file:[^\]]+\]/g, '')
-    .replace(/\[folder:[^\]]+\]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
+import { sanitizeForTitle } from '../title-sanitizer'
 
 // ============================================================================
 // sanitizeForTitle — bracket mention stripping
@@ -50,6 +31,14 @@ describe('sanitizeForTitle', () => {
 
     it('strips skill with hyphen in workspace and slug', () => {
       expect(sanitizeForTitle('[skill:my-ws:my-skill] hello')).toBe('hello')
+    })
+
+    it('strips skill with dotted workspace ID', () => {
+      expect(sanitizeForTitle('[skill:my.workspace:commit] fix the bug')).toBe('fix the bug')
+    })
+
+    it('strips skill with space in workspace ID', () => {
+      expect(sanitizeForTitle('[skill:My Workspace:commit] fix the bug')).toBe('fix the bug')
     })
   })
 

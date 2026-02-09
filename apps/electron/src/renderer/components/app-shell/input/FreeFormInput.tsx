@@ -16,6 +16,7 @@ import {
 import { Icon_Home, Icon_Folder } from '@craft-agent/ui'
 
 import * as storage from '@/lib/local-storage'
+import { extractWorkspaceSlug } from '@craft-agent/shared/utils'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -357,8 +358,7 @@ export function FreeFormInput({
   // SDK expects "workspaceSlug:skillSlug" format, NOT UUID
   const workspaceSlug = React.useMemo(() => {
     if (!workspaceRootPath) return workspaceId // Fallback to ID if no path
-    const pathParts = workspaceRootPath.split('/').filter(Boolean)
-    return pathParts[pathParts.length - 1] || workspaceId
+    return extractWorkspaceSlug(workspaceRootPath, workspaceId)
   }, [workspaceRootPath, workspaceId])
 
   // Shuffle placeholder order once per mount so each session feels fresh

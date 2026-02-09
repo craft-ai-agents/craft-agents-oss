@@ -81,21 +81,8 @@ import { evaluateAutoLabels } from '@craft-agent/shared/labels/auto'
 import { listLabels } from '@craft-agent/shared/labels/storage'
 import { extractLabelId } from '@craft-agent/shared/labels'
 
-/**
- * Sanitize message content for use as session title.
- * Strips XML blocks (e.g. <edit_request>) and normalizes whitespace.
- */
-function sanitizeForTitle(content: string): string {
-  return content
-    .replace(/<edit_request>[\s\S]*?<\/edit_request>/g, '') // Strip entire edit_request blocks
-    .replace(/<[^>]+>/g, '')     // Strip remaining XML/HTML tags
-    .replace(/\[skill:(?:[\w-]+:)?[\w-]+\]/g, '')   // Strip [skill:...] mentions
-    .replace(/\[source:[\w-]+\]/g, '')                // Strip [source:...] mentions
-    .replace(/\[file:[^\]]+\]/g, '')                  // Strip [file:...] mentions
-    .replace(/\[folder:[^\]]+\]/g, '')                // Strip [folder:...] mentions
-    .replace(/\s+/g, ' ')        // Collapse whitespace
-    .trim()
-}
+// Re-export for use in this module (extracted to avoid Electron dependency in tests)
+export { sanitizeForTitle } from './title-sanitizer'
 
 /**
  * Get the path to the bundled Bun executable.
@@ -653,6 +640,9 @@ interface ManagedSession {
   siblingOrder?: number
   // Token refresh manager for OAuth token refresh with rate limiting
   tokenRefreshManager: TokenRefreshManager
+  // Promise that resolves when the agent instance is ready (for title gen to await)
+  agentReady?: Promise<void>
+  agentReadyResolve?: () => void
 }
 
 // Convert runtime Message to StoredMessage for persistence
@@ -2112,6 +2102,9 @@ export class SessionManager {
       process.env.CRAFT_SESSION_DIR = sessionDirForMetadata
       toolMetadataStore.setSessionDir(sessionDirForMetadata)
 
+      // Set up agentReady promise so title generation can await agent creation
+      managed.agentReady = new Promise<void>(r => { managed.agentReadyResolve = r })
+
       // Create the appropriate backend based on provider
       if (provider === 'openai') {
         // Codex backend - uses app-server protocol
@@ -2306,6 +2299,9 @@ export class SessionManager {
         })
         sessionLog.info(`Created Claude agent for session ${managed.id}${managed.sdkSessionId ? ' (resuming)' : ''}`)
       }
+
+      // Signal that the agent instance is ready (unblocks title generation)
+      managed.agentReadyResolve?.()
 
       // Set up permission handler to forward requests to renderer
       managed.agent.onPermissionRequest = (request: { requestId: string; toolName: string; command?: string; description: string; type?: 'bash' | 'file_write' | 'mcp_mutation' | 'api_mutation' }) => {
@@ -3152,28 +3148,12 @@ export class SessionManager {
           'Current focus:',
         ].join('\n')
 
-        try {
-          const title = await managed.agent.generateTitle(titlePrompt)
-          if (title) {
-            managed.name = title
-            this.persistSession(managed)
-            this.sendEvent({ type: 'title_generated', sessionId, title }, managed.workspace.id)
-            sessionLog.info(`Refreshed title via Codex for session ${sessionId}: "${title}"`)
-            return { success: true, title }
-          }
-          sessionLog.warn(`Codex title regeneration returned null for session ${sessionId}, falling back to Claude`)
-        } catch (codexErr) {
-          sessionLog.warn(`Codex title regeneration failed for session ${sessionId}, falling back to Claude:`, codexErr)
-        }
-
-        // Fall back to Claude (no options = default Anthropic path)
-        const title = await regenerateSessionTitle(userMessages, assistantResponse)
-        sessionLog.info(`refreshTitle: Claude fallback returned: ${title ? `"${title}"` : 'null'}`)
+        const title = await this.generateTitleViaCodex(
+          managed,
+          titlePrompt,
+          () => regenerateSessionTitle(userMessages, assistantResponse),
+        )
         if (title) {
-          managed.name = title
-          this.persistSession(managed)
-          this.sendEvent({ type: 'title_generated', sessionId, title }, managed.workspace.id)
-          sessionLog.info(`Refreshed title via Claude fallback for session ${sessionId}: "${title}"`)
           return { success: true, title }
         }
         this.sendEvent({ type: 'title_regenerating', sessionId, isRegenerating: false }, managed.workspace.id)
@@ -4201,6 +4181,44 @@ To view this task's output:
   }
 
   /**
+   * Attempt title generation via Codex app-server, falling back to Claude.
+   * Shared by generateTitle() and refreshTitle() to avoid duplication.
+   */
+  private async generateTitleViaCodex(
+    managed: ManagedSession,
+    titlePrompt: string,
+    claudeFallback: () => Promise<string | null>,
+  ): Promise<string | null> {
+    try {
+      const title = await (managed.agent as CodexBackend).generateTitle(titlePrompt)
+      if (title) {
+        managed.name = title
+        this.persistSession(managed)
+        await this.flushSession(managed.id)
+        this.sendEvent({ type: 'title_generated', sessionId: managed.id, title }, managed.workspace.id)
+        sessionLog.info(`Generated title via Codex for session ${managed.id}: "${title}"`)
+        return title
+      }
+      sessionLog.warn(`Codex title generation returned null for session ${managed.id}, falling back to Claude`)
+    } catch (codexErr) {
+      sessionLog.warn(`Codex title generation failed for session ${managed.id}, falling back to Claude:`, codexErr)
+    }
+
+    // Fall back to Claude
+    const title = await claudeFallback()
+    if (title) {
+      managed.name = title
+      this.persistSession(managed)
+      await this.flushSession(managed.id)
+      this.sendEvent({ type: 'title_generated', sessionId: managed.id, title }, managed.workspace.id)
+      sessionLog.info(`Generated title via Claude fallback for session ${managed.id}: "${title}"`)
+    } else {
+      sessionLog.warn(`Title generation returned null (Claude fallback) for session ${managed.id}`)
+    }
+    return title
+  }
+
+  /**
    * Generate an AI title for a session from the user's first message.
    * Called asynchronously when the first user message is received.
    */
@@ -4217,12 +4235,9 @@ To view this task's output:
 
       if (isCodexOAuth) {
         // Wait for the agent to be created (fires concurrently, usually within ~50ms)
-        if (!(managed.agent instanceof CodexBackend)) {
+        if (!(managed.agent instanceof CodexBackend) && managed.agentReady) {
           sessionLog.info(`[generateTitle] Codex OAuth session — waiting for agent to be ready for session ${managed.id}`)
-          for (let i = 0; i < 30; i++) {
-            await new Promise(r => setTimeout(r, 200))
-            if (managed.agent instanceof CodexBackend) break
-          }
+          await Promise.race([managed.agentReady, new Promise<void>(r => setTimeout(r, 6000))])
         }
 
         if (managed.agent instanceof CodexBackend) {
@@ -4237,34 +4252,20 @@ To view this task's output:
             'Task:',
           ].join('\n')
 
-          try {
-            const title = await managed.agent.generateTitle(titlePrompt)
-            if (title) {
-              managed.name = title
-              this.persistSession(managed)
-              await this.flushSession(managed.id)
-              this.sendEvent({ type: 'title_generated', sessionId: managed.id, title }, managed.workspace.id)
-              sessionLog.info(`Generated title via Codex for session ${managed.id}: "${title}"`)
-              return
-            }
-            sessionLog.warn(`Codex title generation returned null for session ${managed.id}, falling back to Claude`)
-          } catch (codexErr) {
-            sessionLog.warn(`Codex title generation failed for session ${managed.id}, falling back to Claude:`, codexErr)
-          }
+          await this.generateTitleViaCodex(managed, titlePrompt, () => generateSessionTitle(userMessage))
         } else {
           sessionLog.warn(`[generateTitle] Codex agent not ready after 6s for session ${managed.id} — falling back to Claude`)
-        }
-
-        // Fall back to Claude (no options = default Anthropic path)
-        const title = await generateSessionTitle(userMessage)
-        if (title) {
-          managed.name = title
-          this.persistSession(managed)
-          await this.flushSession(managed.id)
-          this.sendEvent({ type: 'title_generated', sessionId: managed.id, title }, managed.workspace.id)
-          sessionLog.info(`Generated title via Claude fallback for session ${managed.id}: "${title}"`)
-        } else {
-          sessionLog.warn(`Title generation returned null (Claude fallback) for session ${managed.id}`)
+          // Fall back to Claude (no options = default Anthropic path)
+          const title = await generateSessionTitle(userMessage)
+          if (title) {
+            managed.name = title
+            this.persistSession(managed)
+            await this.flushSession(managed.id)
+            this.sendEvent({ type: 'title_generated', sessionId: managed.id, title }, managed.workspace.id)
+            sessionLog.info(`Generated title via Claude fallback for session ${managed.id}: "${title}"`)
+          } else {
+            sessionLog.warn(`Title generation returned null (Claude fallback) for session ${managed.id}`)
+          }
         }
         return
       }
