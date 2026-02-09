@@ -20,8 +20,8 @@
  */
 
 import { useState, useEffect, useMemo } from 'react'
-import { isEmoji } from '@craft-agent/shared/utils/icon-constants'
-import type { ResolvedEntityIcon } from '@craft-agent/shared/icons'
+import { isEmoji } from '@g4os/shared/utils/icon-constants'
+import type { ResolvedEntityIcon } from '@g4os/shared/icons'
 
 // ============================================================================
 // Types

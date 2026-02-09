@@ -1,7 +1,7 @@
 {
-  "name": "craft-agent",
+  "name": "g4os",
   "version": "0.4.0",
-  "description": "Claude Code-like agent for Craft documents",
+  "description": "G4 OS - Multi-session AI agent management desktop app",
   "type": "module",
   "private": true,
   "workspaces": [
@@ -27,7 +27,7 @@
     "electron:dev": "bun run scripts/electron-dev.ts",
     "electron:dev:terminal": "bun run scripts/electron-dev.ts --terminal",
     "electron:dev:menu": "bash scripts/electron-dev.sh",
-    "electron:dev:logs": "pgrep -f 'tail -f.*Craft Agents/main.log' > /dev/null || osascript -e \"tell application \\\"Terminal\\\" to do script \\\"$PWD/scripts/tail-electron-logs.sh\\\"\"",
+    "electron:dev:logs": "pgrep -f 'tail -f.*G4 OS/main.log' > /dev/null || osascript -e \"tell application \\\"Terminal\\\" to do script \\\"$PWD/scripts/tail-electron-logs.sh\\\"\"",
     "sync-secrets": "bash scripts/sync-secrets.sh",
     "fresh-start": "bun run scripts/fresh-start.ts",
     "fresh-start:token": "bun run scripts/fresh-start.ts --token-only",

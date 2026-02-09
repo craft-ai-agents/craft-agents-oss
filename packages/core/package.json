@@ -1,8 +1,8 @@
 {
-  "name": "@craft-agent/core",
+  "name": "@g4os/core",
   "version": "0.4.0",
   "license": "Apache-2.0",
-  "description": "Core types, storage, and agent logic for Craft Agents",
+  "description": "Core types, storage, and agent logic for G4 OS",
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",

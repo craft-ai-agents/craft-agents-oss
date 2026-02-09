@@ -19,7 +19,7 @@ export { routes }
 export type { Route }
 
 // Event name for internal navigation
-export const NAVIGATE_EVENT = 'craft-agent-navigate'
+export const NAVIGATE_EVENT = 'g4os-navigate'
 
 /**
  * Navigate to a route

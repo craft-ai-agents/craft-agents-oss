@@ -1,9 +1,9 @@
 {
-  "name": "@craft-agent/shared",
+  "name": "@g4os/shared",
   "version": "0.4.0",
   "codexVersion": "craft-v0.4.0",
   "license": "Apache-2.0",
-  "description": "Shared business logic for Craft Agents - agent, auth, config, credentials, MCP integration",
+  "description": "Shared business logic for G4 OS - agent, auth, config, credentials, MCP integration",
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",
@@ -54,9 +54,9 @@
     "./codex": "./src/codex/index.ts"
   },
   "dependencies": {
-    "@craft-agent/codex-types": "workspace:*",
-    "@craft-agent/core": "workspace:*",
-    "@craft-agent/session-tools-core": "workspace:*",
+    "@g4os/codex-types": "workspace:*",
+    "@g4os/core": "workspace:*",
+    "@g4os/session-tools-core": "workspace:*",
     "@isaacs/ttlcache": "^2.1.4",
     "@leeoniya/ufuzzy": "^1.0.19",
     "bash-parser": "^0.5.0",

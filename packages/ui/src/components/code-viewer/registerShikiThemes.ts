@@ -6,7 +6,7 @@ const GLOBAL_THEME_KEY = '__craftShikiThemesRegistered__'
  * Register craft-dark / craft-light Shiki themes once per runtime.
  * Prevents duplicate registration warnings during HMR or StrictMode re-mounts.
  */
-export function registerCraftShikiThemes() {
+export function registerG4OSShikiThemes() {
   if (typeof globalThis === 'undefined') return
   const globalRef = globalThis as typeof globalThis & { [GLOBAL_THEME_KEY]?: boolean }
   if (globalRef[GLOBAL_THEME_KEY]) return

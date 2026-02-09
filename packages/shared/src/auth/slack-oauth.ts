@@ -278,8 +278,8 @@ export async function startSlackOAuth(options: SlackOAuthOptions = {}): Promise<
     const port = localUrl.port;
 
     // Use Cloudflare Worker relay for Slack OAuth (Slack requires HTTPS)
-    // The relay redirects: https://agents.craft.do/auth/slack/callback → http://localhost:{port}/callback
-    const redirectUri = `https://agents.craft.do/auth/slack/callback?port=${port}`;
+    // The relay redirects: https://g4educacao.com/auth/slack/callback → http://localhost:{port}/callback
+    const redirectUri = `https://g4educacao.com/auth/slack/callback?port=${port}`;
 
     // Build authorization URL
     // Use user_scope (not scope) to get a user token instead of bot token

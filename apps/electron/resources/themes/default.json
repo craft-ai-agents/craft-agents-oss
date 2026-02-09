@@ -1,7 +1,7 @@
 {
   "name": "Default",
-  "description": "Clean purple-tinted neutral theme",
-  "author": "Craft Agent",
+  "description": "Clean blue-tinted neutral theme",
+  "author": "G4 OS",
   "license": "MIT",
   "supportedModes": ["light", "dark"],
   "shikiTheme": {
@@ -10,14 +10,14 @@
   },
   "background": "#faf9fb",
   "foreground": "#1a1625",
-  "accent": "#8b5cf6",
+  "accent": "#184560",
   "info": "#d97706",
   "success": "#16a34a",
   "destructive": "#dc2626",
   "dark": {
     "background": "#1e1d21",
     "foreground": "#f5f5f7",
-    "accent": "#a78bfa",
+    "accent": "#3D8AB5",
     "info": "#fbbf24",
     "success": "#22c55e",
     "destructive": "#ef4444"

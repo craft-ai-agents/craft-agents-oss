@@ -6,7 +6,7 @@ import { generateCallbackPage } from './callback-page.ts';
 import { type OAuthSessionContext, buildOAuthDeeplinkUrl } from './types.ts';
 
 export interface OAuthConfig {
-  mcpUrl: string; // Full MCP URL including path (e.g., https://mcp.craft.do/my/mcp)
+  mcpUrl: string; // Full MCP URL including path (e.g., https://mcp.g4educacao.com/my/mcp)
 }
 
 export interface OAuthTokens {
@@ -25,7 +25,7 @@ export interface OAuthCallbacks {
 const CALLBACK_PORT_START = 8914;
 const CALLBACK_PORT_END = 8924;
 const CALLBACK_PATH = '/oauth/callback';
-const CLIENT_NAME = 'Craft Agent';
+const CLIENT_NAME = 'G4 OS';
 
 // Generate PKCE code verifier and challenge
 function generatePKCE(): { verifier: string; challenge: string } {
@@ -39,7 +39,7 @@ function generateState(): string {
   return randomBytes(16).toString('hex');
 }
 
-export class CraftOAuth {
+export class G4OSOAuth {
   private config: OAuthConfig;
   private server: Server | null = null;
   private callbacks: OAuthCallbacks;

@@ -4,7 +4,7 @@
  * in both the callback server and the playground preview.
  */
 
-import { CRAFT_LOGO_HTML } from '../branding.ts';
+import { G4OS_LOGO_HTML } from '../branding.ts';
 
 export type AppType = 'terminal' | 'electron';
 
@@ -43,7 +43,7 @@ export function generateCallbackPage(options: {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Craft - ${title}</title>
+  <title>G4 OS - ${title}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -170,12 +170,12 @@ export function generateCallbackPage(options: {
 </head>
 <body>
   <div class="content">
-    <pre class="logo">${CRAFT_LOGO_HTML}</pre>
+    <pre class="logo">${G4OS_LOGO_HTML}</pre>
     <div class="card">
       <div class="status">${statusMessage}</div>
     </div>
     <div class="hint">${isSuccess ? 'You can now return to the application.' : 'Please close this window and try again.'}</div>
-    ${deeplinkUrl ? `<a href="${deeplinkUrl}" class="return-link">Return to Craft Agents</a>` : ''}
+    ${deeplinkUrl ? `<a href="${deeplinkUrl}" class="return-link">Return to G4 OS</a>` : ''}
   </div>
   <script>${autoCloseScript}</script>
 </body>

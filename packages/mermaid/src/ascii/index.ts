@@ -1,5 +1,5 @@
 // ============================================================================
-// @craft-agent/mermaid — ASCII renderer public API
+// @g4os/mermaid — ASCII renderer public API
 //
 // Renders Mermaid diagrams to ASCII or Unicode box-drawing art.
 // No external dependencies — pure TypeScript.
@@ -12,7 +12,7 @@
 //   - ER diagrams (erDiagram) — grid layout with crow's foot notation
 //
 // Usage:
-//   import { renderMermaidAscii } from '@craft-agent/mermaid'
+//   import { renderMermaidAscii } from '@g4os/mermaid'
 //   const ascii = renderMermaidAscii('graph LR\n  A --> B')
 // ============================================================================
 

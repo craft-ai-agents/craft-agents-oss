@@ -2,7 +2,7 @@
  * Source Guides System
  *
  * Provides parsing utilities for source guides.
- * Guides are now served exclusively via the craft-agents-docs MCP server.
+ * Guides are now served exclusively via the g4os-docs MCP server.
  *
  * The agent should search the MCP docs for setup guidance when creating sources.
  */
@@ -189,9 +189,9 @@ export function extractDomainFromSource(source: {
 
 /**
  * @deprecated Bundled guides have been removed.
- * Use the craft-agents-docs MCP server to search for setup guides.
+ * Use the g4os-docs MCP server to search for setup guides.
  *
- * Example: mcp__craft-agents-docs__SearchCraftAgents({ query: "github source setup guide" })
+ * Example: mcp__g4os-docs__SearchG4OS({ query: "github source setup guide" })
  */
 export function getSourceGuideForDomain(_domain: string): ParsedSourceGuide | null {
   // Bundled guides removed - guides now come from MCP docs server
@@ -200,7 +200,7 @@ export function getSourceGuideForDomain(_domain: string): ParsedSourceGuide | nu
 
 /**
  * @deprecated Bundled guides have been removed.
- * Use the craft-agents-docs MCP server to search for setup guides.
+ * Use the g4os-docs MCP server to search for setup guides.
  */
 export function getSourceGuide(_source: {
   type?: string;
@@ -214,7 +214,7 @@ export function getSourceGuide(_source: {
 
 /**
  * @deprecated Bundled guides have been removed.
- * Use the craft-agents-docs MCP server to search for setup guides.
+ * Use the g4os-docs MCP server to search for setup guides.
  */
 export function getSourceKnowledge(_source: {
   type?: string;

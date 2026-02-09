@@ -10,7 +10,7 @@ import * as React from 'react'
 import { useState } from 'react'
 import { Maximize2 } from 'lucide-react'
 import { Markdown } from '@/components/markdown'
-import { DocumentFormattedMarkdownOverlay } from '@craft-agent/ui'
+import { DocumentFormattedMarkdownOverlay } from '@g4os/ui'
 import { cn } from '@/lib/utils'
 
 export interface Info_MarkdownProps {

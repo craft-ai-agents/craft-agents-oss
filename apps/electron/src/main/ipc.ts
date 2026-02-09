@@ -10,13 +10,13 @@ import { ipcLog, windowLog, searchLog } from './logger'
 import { WindowManager } from './window-manager'
 import { registerOnboardingHandlers } from './onboarding'
 import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type AuthType, type ApiSetupInfo, type SendMessageOptions, type LlmConnectionSetup } from '../shared/types'
-import { readFileAttachment, perf, validateImageForClaudeAPI, IMAGE_LIMITS } from '@craft-agent/shared/utils'
-import { safeJsonParse } from '@craft-agent/shared/utils/files'
-import { getPreferencesPath, getModel, setModel, getModelDefaults, setModelDefault, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, loadStoredConfig, saveConfig, type Workspace, DEFAULT_MODEL, SUMMARIZATION_MODEL, getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, type LlmConnection, type LlmConnectionWithStatus } from '@craft-agent/shared/config'
-import { getSessionAttachmentsPath, validateSessionId } from '@craft-agent/shared/sessions'
-import { loadWorkspaceSources, getSourcesBySlugs, type LoadedSource } from '@craft-agent/shared/sources'
-import { isValidThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
-import { getCredentialManager } from '@craft-agent/shared/credentials'
+import { readFileAttachment, perf, validateImageForClaudeAPI, IMAGE_LIMITS } from '@g4os/shared/utils'
+import { safeJsonParse } from '@g4os/shared/utils/files'
+import { getPreferencesPath, getModel, setModel, getModelDefaults, setModelDefault, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, loadStoredConfig, saveConfig, type Workspace, DEFAULT_MODEL, SUMMARIZATION_MODEL, getLlmConnections, getLlmConnection, addLlmConnection, updateLlmConnection, deleteLlmConnection, getDefaultLlmConnection, setDefaultLlmConnection, touchLlmConnection, type LlmConnection, type LlmConnectionWithStatus } from '@g4os/shared/config'
+import { getSessionAttachmentsPath, validateSessionId } from '@g4os/shared/sessions'
+import { loadWorkspaceSources, getSourcesBySlugs, type LoadedSource } from '@g4os/shared/sources'
+import { isValidThinkingLevel } from '@g4os/shared/agent/thinking-levels'
+import { getCredentialManager } from '@g4os/shared/credentials'
 import { MarkItDown } from 'markitdown-js'
 
 /**
@@ -196,7 +196,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
   // Check if a workspace slug already exists (for validation before creation)
   ipcMain.handle(IPC_CHANNELS.CHECK_WORKSPACE_SLUG, async (_event, slug: string) => {
-    const defaultWorkspacesDir = join(homedir(), '.craft-agent', 'workspaces')
+    const defaultWorkspacesDir = join(homedir(), '.g4os', 'workspaces')
     const workspacePath = join(defaultWorkspacesDir, slug)
     const exists = existsSync(workspacePath)
     return { exists, path: workspacePath }
@@ -227,7 +227,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // Open a session in a new window
   ipcMain.handle(IPC_CHANNELS.OPEN_SESSION_IN_NEW_WINDOW, async (_event, workspaceId: string, sessionId: string) => {
     // Build deep link for session navigation
-    const deepLink = `craftagents://allSessions/session/${sessionId}`
+    const deepLink = `g4os://allSessions/session/${sessionId}`
     windowManager.createWindow({
       workspaceId,
       focused: true,
@@ -592,7 +592,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     // Save to temp file, generate thumbnail, clean up
     const tempDir = tmpdir()
     const ext = mimeType.split('/')[1] || 'bin'
-    const tempPath = join(tempDir, `craft-thumb-${randomUUID()}.${ext}`)
+    const tempPath = join(tempDir, `g4os-thumb-${randomUUID()}.${ext}`)
 
     try {
       // Write base64 to temp file
@@ -1043,26 +1043,26 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
   // Dismiss update for this version (persists across restarts)
   ipcMain.handle(IPC_CHANNELS.UPDATE_DISMISS, async (_event, version: string) => {
-    const { setDismissedUpdateVersion } = await import('@craft-agent/shared/config')
+    const { setDismissedUpdateVersion } = await import('@g4os/shared/config')
     setDismissedUpdateVersion(version)
   })
 
   // Get dismissed version
   ipcMain.handle(IPC_CHANNELS.UPDATE_GET_DISMISSED, async () => {
-    const { getDismissedUpdateVersion } = await import('@craft-agent/shared/config')
+    const { getDismissedUpdateVersion } = await import('@g4os/shared/config')
     return getDismissedUpdateVersion()
   })
 
-  // Shell operations - open URL in external browser (or handle craftagents:// internally)
+  // Shell operations - open URL in external browser (or handle g4os:// internally)
   ipcMain.handle(IPC_CHANNELS.OPEN_URL, async (_event, url: string) => {
     ipcLog.info('[OPEN_URL] Received request:', url)
     try {
       // Validate URL format
       const parsed = new URL(url)
 
-      // Handle craftagents:// URLs internally via deep link handler
+      // Handle g4os:// URLs internally via deep link handler
       // This ensures ?window= params work correctly for "Open in New Window"
-      if (parsed.protocol === 'craftagents:') {
+      if (parsed.protocol === 'g4os:') {
         ipcLog.info('[OPEN_URL] Handling as deep link')
         const { handleDeepLink } = await import('./deep-link')
         const result = await handleDeepLink(url, windowManager)
@@ -1117,7 +1117,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     }
   })
 
-  // Menu actions from renderer (for unified Craft menu)
+  // Menu actions from renderer (for unified G4 OS menu)
   ipcMain.handle(IPC_CHANNELS.MENU_QUIT, () => {
     app.quit()
   })
@@ -1242,7 +1242,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       }
 
       // Delete the config file
-      const configPath = join(homedir(), '.craft-agent', 'config.json')
+      const configPath = join(homedir(), '.g4os', 'config.json')
       await unlink(configPath).catch(() => {
         // Ignore if file doesn't exist
       })
@@ -1472,7 +1472,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
         (lowerMsg.includes('tool') && lowerMsg.includes('not') && lowerMsg.includes('support'))
       if (isToolSupportError) {
         const displayModel = modelName?.trim() || DEFAULT_MODEL
-        return { success: false, error: `Model "${displayModel}" does not support tool/function calling. Craft Agent requires a model with tool support (e.g. Claude, GPT-4, Gemini).` }
+        return { success: false, error: `Model "${displayModel}" does not support tool/function calling. G4 OS requires a model with tool support (e.g. Claude, GPT-4, Gemini).` }
       }
 
       // Model not found — always a failure. Since onboarding is the only place
@@ -1631,7 +1631,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     }
 
     // Load workspace config
-    const { loadWorkspaceConfig } = await import('@craft-agent/shared/workspaces')
+    const { loadWorkspaceConfig } = await import('@g4os/shared/workspaces')
     const config = loadWorkspaceConfig(workspace.rootPath)
 
     return {
@@ -1659,13 +1659,13 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
     // Validate defaultLlmConnection exists before saving
     if (key === 'defaultLlmConnection' && value !== undefined && value !== null) {
-      const { getLlmConnection } = await import('@craft-agent/shared/config/storage')
+      const { getLlmConnection } = await import('@g4os/shared/config/storage')
       if (!getLlmConnection(value as string)) {
         throw new Error(`LLM connection "${value}" not found`)
       }
     }
 
-    const { loadWorkspaceConfig, saveWorkspaceConfig } = await import('@craft-agent/shared/workspaces')
+    const { loadWorkspaceConfig, saveWorkspaceConfig } = await import('@g4os/shared/workspaces')
     const config = loadWorkspaceConfig(workspace.rootPath)
     if (!config) {
       throw new Error(`Failed to load workspace config: ${workspaceId}`)
@@ -1848,7 +1848,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
         // Validate by attempting to refresh tokens
         try {
-          const { refreshChatGptTokens } = await import('@craft-agent/shared/auth/chatgpt-oauth')
+          const { refreshChatGptTokens } = await import('@g4os/shared/auth/chatgpt-oauth')
           const refreshed = await refreshChatGptTokens(oauth.refreshToken)
 
           // Store the refreshed tokens
@@ -1877,7 +1877,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       // refreshed successfully, without making an API call.
       const isAnthropicProvider = connection.providerType === 'anthropic' || connection.providerType === 'anthropic_compat'
       if (isAnthropicProvider && connection.authType === 'oauth') {
-        const { getValidClaudeOAuthToken } = await import('@craft-agent/shared/auth/state')
+        const { getValidClaudeOAuthToken } = await import('@g4os/shared/auth/state')
         const tokenResult = await getValidClaudeOAuthToken()
 
         if (!tokenResult.accessToken) {
@@ -2046,7 +2046,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
         }
       }
 
-      const { loadWorkspaceConfig, saveWorkspaceConfig } = await import('@craft-agent/shared/workspaces')
+      const { loadWorkspaceConfig, saveWorkspaceConfig } = await import('@g4os/shared/workspaces')
       const config = loadWorkspaceConfig(workspace.rootPath)
       if (!config) {
         return { success: false, error: 'Failed to load workspace config' }
@@ -2080,7 +2080,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     error?: string
   }> => {
     try {
-      const { startChatGptOAuth, exchangeChatGptCode } = await import('@craft-agent/shared/auth')
+      const { startChatGptOAuth, exchangeChatGptCode } = await import('@g4os/shared/auth')
       const credentialManager = getCredentialManager()
 
       ipcLog.info('Starting ChatGPT OAuth flow...')
@@ -2118,7 +2118,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // Cancel ongoing ChatGPT OAuth flow
   ipcMain.handle(IPC_CHANNELS.CHATGPT_CANCEL_OAUTH, async (): Promise<{ success: boolean }> => {
     try {
-      const { cancelChatGptOAuth } = await import('@craft-agent/shared/auth')
+      const { cancelChatGptOAuth } = await import('@g4os/shared/auth')
       cancelChatGptOAuth()
       ipcLog.info('ChatGPT OAuth cancelled')
       return { success: true }
@@ -2340,10 +2340,10 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   })
 
   // Create a new source
-  ipcMain.handle(IPC_CHANNELS.SOURCES_CREATE, async (_event, workspaceId: string, config: Partial<import('@craft-agent/shared/sources').CreateSourceInput>) => {
+  ipcMain.handle(IPC_CHANNELS.SOURCES_CREATE, async (_event, workspaceId: string, config: Partial<import('@g4os/shared/sources').CreateSourceInput>) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
-    const { createSource } = await import('@craft-agent/shared/sources')
+    const { createSource } = await import('@g4os/shared/sources')
     return createSource(workspace.rootPath, {
       name: config.name || 'New Source',
       provider: config.provider || 'custom',
@@ -2359,7 +2359,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   ipcMain.handle(IPC_CHANNELS.SOURCES_DELETE, async (_event, workspaceId: string, sourceSlug: string) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
-    const { deleteSource } = await import('@craft-agent/shared/sources')
+    const { deleteSource } = await import('@g4os/shared/sources')
     deleteSource(workspace.rootPath, sourceSlug)
   })
 
@@ -2370,7 +2370,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       if (!workspace) {
         return { success: false, error: `Workspace not found: ${workspaceId}` }
       }
-      const { loadSource, getSourceCredentialManager } = await import('@craft-agent/shared/sources')
+      const { loadSource, getSourceCredentialManager } = await import('@g4os/shared/sources')
 
       const source = loadSource(workspace.rootPath, sourceSlug)
       if (!source || source.config.type !== 'mcp' || !source.config.mcp?.url) {
@@ -2405,7 +2405,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   ipcMain.handle(IPC_CHANNELS.SOURCES_SAVE_CREDENTIALS, async (_event, workspaceId: string, sourceSlug: string, credential: string) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
-    const { loadSource, getSourceCredentialManager } = await import('@craft-agent/shared/sources')
+    const { loadSource, getSourceCredentialManager } = await import('@g4os/shared/sources')
 
     const source = loadSource(workspace.rootPath, sourceSlug)
     if (!source) {
@@ -2426,7 +2426,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
     // Load raw JSON file (not normalized) for UI display
     const { existsSync, readFileSync } = await import('fs')
-    const { getSourcePermissionsPath } = await import('@craft-agent/shared/agent')
+    const { getSourcePermissionsPath } = await import('@g4os/shared/agent')
     const path = getSourcePermissionsPath(workspace.rootPath, sourceSlug)
 
     if (!existsSync(path)) return null
@@ -2447,7 +2447,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
     // Load raw JSON file (not normalized) for UI display
     const { existsSync, readFileSync } = await import('fs')
-    const { getWorkspacePermissionsPath } = await import('@craft-agent/shared/agent')
+    const { getWorkspacePermissionsPath } = await import('@g4os/shared/agent')
     const path = getWorkspacePermissionsPath(workspace.rootPath)
 
     if (!existsSync(path)) return null
@@ -2461,11 +2461,11 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     }
   })
 
-  // Get default permissions from ~/.craft-agent/permissions/default.json
+  // Get default permissions from ~/.g4os/permissions/default.json
   // Returns raw JSON for UI display (patterns with comments), plus the file path
   ipcMain.handle(IPC_CHANNELS.DEFAULT_PERMISSIONS_GET, async () => {
     const { existsSync, readFileSync } = await import('fs')
-    const { getAppPermissionsDir } = await import('@craft-agent/shared/agent')
+    const { getAppPermissionsDir } = await import('@g4os/shared/agent')
     const { join } = await import('path')
 
     const defaultPath = join(getAppPermissionsDir(), 'default.json')
@@ -2505,8 +2505,8 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       }
 
       // Create unified MCP client for both stdio and HTTP transports
-      const { CraftMcpClient } = await import('@craft-agent/shared/mcp')
-      let client: InstanceType<typeof CraftMcpClient>
+      const { G4OSMcpClient } = await import('@g4os/shared/mcp')
+      let client: InstanceType<typeof G4OSMcpClient>
 
       if (source.config.mcp.transport === 'stdio') {
         // Stdio transport - spawn local MCP server process
@@ -2514,7 +2514,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
           return { success: false, error: 'Stdio MCP source is missing required "command" field' }
         }
         ipcLog.info(`Fetching MCP tools via stdio: ${source.config.mcp.command}`)
-        client = new CraftMcpClient({
+        client = new G4OSMcpClient({
           transport: 'stdio',
           command: source.config.mcp.command,
           args: source.config.mcp.args,
@@ -2537,7 +2537,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
         }
 
         ipcLog.info(`Fetching MCP tools from ${source.config.mcp.url}`)
-        client = new CraftMcpClient({
+        client = new G4OSMcpClient({
           transport: 'http',
           url: source.config.mcp.url,
           headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
@@ -2549,7 +2549,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       await client.close()
 
       // Load permissions patterns
-      const { loadSourcePermissionsConfig, permissionsConfigCache } = await import('@craft-agent/shared/agent')
+      const { loadSourcePermissionsConfig, permissionsConfigCache } = await import('@g4os/shared/agent')
       const permissionsConfig = loadSourcePermissionsConfig(workspace.rootPath, sourceSlug)
 
       // Get merged permissions config
@@ -2600,7 +2600,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     }
 
     const { searchSessions } = await import('./search')
-    const { getWorkspaceSessionsPath } = await import('@craft-agent/shared/workspaces')
+    const { getWorkspaceSessionsPath } = await import('@g4os/shared/workspaces')
 
     const sessionsDir = getWorkspaceSessionsPath(workspace.rootPath)
     ipcLog.debug(`SEARCH_SESSIONS: Searching "${query}" in ${sessionsDir}`)
@@ -2634,7 +2634,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       ipcLog.error(`SKILLS_GET: Workspace not found: ${workspaceId}`)
       return []
     }
-    const { loadWorkspaceSkills } = await import('@craft-agent/shared/skills')
+    const { loadWorkspaceSkills } = await import('@g4os/shared/skills')
     const skills = loadWorkspaceSkills(workspace.rootPath)
     return skills
   })
@@ -2649,7 +2649,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
     const { join } = await import('path')
     const { readdirSync, statSync } = await import('fs')
-    const { getWorkspaceSkillsPath } = await import('@craft-agent/shared/workspaces')
+    const { getWorkspaceSkillsPath } = await import('@g4os/shared/workspaces')
 
     const skillsDir = getWorkspaceSkillsPath(workspace.rootPath)
     const skillDir = join(skillsDir, skillSlug)
@@ -2702,7 +2702,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
 
-    const { deleteSkill } = await import('@craft-agent/shared/skills')
+    const { deleteSkill } = await import('@g4os/shared/skills')
     deleteSkill(workspace.rootPath, skillSlug)
     ipcLog.info(`Deleted skill: ${skillSlug}`)
   })
@@ -2714,7 +2714,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
     const { join } = await import('path')
     const { shell } = await import('electron')
-    const { getWorkspaceSkillsPath } = await import('@craft-agent/shared/workspaces')
+    const { getWorkspaceSkillsPath } = await import('@g4os/shared/workspaces')
 
     const skillsDir = getWorkspaceSkillsPath(workspace.rootPath)
     const skillFile = join(skillsDir, skillSlug, 'SKILL.md')
@@ -2728,7 +2728,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
     const { join } = await import('path')
     const { shell } = await import('electron')
-    const { getWorkspaceSkillsPath } = await import('@craft-agent/shared/workspaces')
+    const { getWorkspaceSkillsPath } = await import('@g4os/shared/workspaces')
 
     const skillsDir = getWorkspaceSkillsPath(workspace.rootPath)
     const skillDir = join(skillsDir, skillSlug)
@@ -2744,7 +2744,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
 
-    const { listStatuses } = await import('@craft-agent/shared/statuses')
+    const { listStatuses } = await import('@g4os/shared/statuses')
     return listStatuses(workspace.rootPath)
   })
 
@@ -2754,7 +2754,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
 
-    const { reorderStatuses } = await import('@craft-agent/shared/statuses')
+    const { reorderStatuses } = await import('@g4os/shared/statuses')
     reorderStatuses(workspace.rootPath, orderedIds)
   })
 
@@ -2767,16 +2767,16 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
 
-    const { listLabels } = await import('@craft-agent/shared/labels/storage')
+    const { listLabels } = await import('@g4os/shared/labels/storage')
     return listLabels(workspace.rootPath)
   })
 
   // Create a new label in a workspace
-  ipcMain.handle(IPC_CHANNELS.LABELS_CREATE, async (_event, workspaceId: string, input: import('@craft-agent/shared/labels').CreateLabelInput) => {
+  ipcMain.handle(IPC_CHANNELS.LABELS_CREATE, async (_event, workspaceId: string, input: import('@g4os/shared/labels').CreateLabelInput) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
 
-    const { createLabel } = await import('@craft-agent/shared/labels/crud')
+    const { createLabel } = await import('@g4os/shared/labels/crud')
     const label = createLabel(workspace.rootPath, input)
     windowManager.broadcastToAll(IPC_CHANNELS.LABELS_CHANGED, workspaceId)
     return label
@@ -2787,7 +2787,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
 
-    const { deleteLabel } = await import('@craft-agent/shared/labels/crud')
+    const { deleteLabel } = await import('@g4os/shared/labels/crud')
     const result = deleteLabel(workspace.rootPath, labelId)
     windowManager.broadcastToAll(IPC_CHANNELS.LABELS_CHANGED, workspaceId)
     return result
@@ -2798,16 +2798,16 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
 
-    const { listViews } = await import('@craft-agent/shared/views/storage')
+    const { listViews } = await import('@g4os/shared/views/storage')
     return listViews(workspace.rootPath)
   })
 
   // Save views (replaces full array)
-  ipcMain.handle(IPC_CHANNELS.VIEWS_SAVE, async (_event, workspaceId: string, views: import('@craft-agent/shared/views').ViewConfig[]) => {
+  ipcMain.handle(IPC_CHANNELS.VIEWS_SAVE, async (_event, workspaceId: string, views: import('@g4os/shared/views').ViewConfig[]) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
 
-    const { saveViews } = await import('@craft-agent/shared/views/storage')
+    const { saveViews } = await import('@g4os/shared/views/storage')
     saveViews(workspace.rootPath, views)
     // Broadcast labels changed since views are used alongside labels in sidebar
     windowManager.broadcastToAll(IPC_CHANNELS.LABELS_CHANGED, workspaceId)
@@ -2959,28 +2959,28 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // ============================================================
 
   ipcMain.handle(IPC_CHANNELS.THEME_GET_APP, async () => {
-    const { loadAppTheme } = await import('@craft-agent/shared/config/storage')
+    const { loadAppTheme } = await import('@g4os/shared/config/storage')
     return loadAppTheme()
   })
 
   // Preset themes (app-level)
   ipcMain.handle(IPC_CHANNELS.THEME_GET_PRESETS, async () => {
-    const { loadPresetThemes } = await import('@craft-agent/shared/config/storage')
+    const { loadPresetThemes } = await import('@g4os/shared/config/storage')
     return loadPresetThemes()
   })
 
   ipcMain.handle(IPC_CHANNELS.THEME_LOAD_PRESET, async (_event, themeId: string) => {
-    const { loadPresetTheme } = await import('@craft-agent/shared/config/storage')
+    const { loadPresetTheme } = await import('@g4os/shared/config/storage')
     return loadPresetTheme(themeId)
   })
 
   ipcMain.handle(IPC_CHANNELS.THEME_GET_COLOR_THEME, async () => {
-    const { getColorTheme } = await import('@craft-agent/shared/config/storage')
+    const { getColorTheme } = await import('@g4os/shared/config/storage')
     return getColorTheme()
   })
 
   ipcMain.handle(IPC_CHANNELS.THEME_SET_COLOR_THEME, async (_event, themeId: string) => {
-    const { setColorTheme } = await import('@craft-agent/shared/config/storage')
+    const { setColorTheme } = await import('@g4os/shared/config/storage')
     setColorTheme(themeId)
   })
 
@@ -3000,8 +3000,8 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
   // Workspace-level theme overrides
   ipcMain.handle(IPC_CHANNELS.THEME_GET_WORKSPACE_COLOR_THEME, async (_event, workspaceId: string) => {
-    const { getWorkspaces } = await import('@craft-agent/shared/config/storage')
-    const { getWorkspaceColorTheme } = await import('@craft-agent/shared/workspaces/storage')
+    const { getWorkspaces } = await import('@g4os/shared/config/storage')
+    const { getWorkspaceColorTheme } = await import('@g4os/shared/workspaces/storage')
     const workspaces = getWorkspaces()
     const workspace = workspaces.find(w => w.id === workspaceId)
     if (!workspace) return null
@@ -3009,8 +3009,8 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   })
 
   ipcMain.handle(IPC_CHANNELS.THEME_SET_WORKSPACE_COLOR_THEME, async (_event, workspaceId: string, themeId: string | null) => {
-    const { getWorkspaces } = await import('@craft-agent/shared/config/storage')
-    const { setWorkspaceColorTheme } = await import('@craft-agent/shared/workspaces/storage')
+    const { getWorkspaces } = await import('@g4os/shared/config/storage')
+    const { setWorkspaceColorTheme } = await import('@g4os/shared/workspaces/storage')
     const workspaces = getWorkspaces()
     const workspace = workspaces.find(w => w.id === workspaceId)
     if (!workspace) return
@@ -3018,8 +3018,8 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   })
 
   ipcMain.handle(IPC_CHANNELS.THEME_GET_ALL_WORKSPACE_THEMES, async () => {
-    const { getWorkspaces } = await import('@craft-agent/shared/config/storage')
-    const { getWorkspaceColorTheme } = await import('@craft-agent/shared/workspaces/storage')
+    const { getWorkspaces } = await import('@g4os/shared/config/storage')
+    const { getWorkspaceColorTheme } = await import('@g4os/shared/workspaces/storage')
     const workspaces = getWorkspaces()
     const themes: Record<string, string | undefined> = {}
     for (const ws of workspaces) {
@@ -3045,9 +3045,9 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // Tool icon mappings — loads tool-icons.json and resolves each entry's icon to a data URL
   // for display in the Appearance settings page
   ipcMain.handle(IPC_CHANNELS.TOOL_ICONS_GET_MAPPINGS, async () => {
-    const { getToolIconsDir } = await import('@craft-agent/shared/config/storage')
-    const { loadToolIconConfig } = await import('@craft-agent/shared/utils/cli-icon-resolver')
-    const { encodeIconToDataUrl } = await import('@craft-agent/shared/utils/icon-encoder')
+    const { getToolIconsDir } = await import('@g4os/shared/config/storage')
+    const { loadToolIconConfig } = await import('@g4os/shared/utils/cli-icon-resolver')
+    const { encodeIconToDataUrl } = await import('@g4os/shared/utils/icon-encoder')
     const { join } = await import('path')
 
     const toolIconsDir = getToolIconsDir()
@@ -3071,7 +3071,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
   // Logo URL resolution (uses Node.js filesystem cache for provider domains)
   ipcMain.handle(IPC_CHANNELS.LOGO_GET_URL, async (_event, serviceUrl: string, provider?: string) => {
-    const { getLogoUrl } = await import('@craft-agent/shared/utils/logo')
+    const { getLogoUrl } = await import('@g4os/shared/utils/logo')
     const result = getLogoUrl(serviceUrl, provider)
     return result
   })
@@ -3088,13 +3088,13 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
   // Get notifications enabled setting
   ipcMain.handle(IPC_CHANNELS.NOTIFICATION_GET_ENABLED, async () => {
-    const { getNotificationsEnabled } = await import('@craft-agent/shared/config/storage')
+    const { getNotificationsEnabled } = await import('@g4os/shared/config/storage')
     return getNotificationsEnabled()
   })
 
   // Set notifications enabled setting (also triggers permission request if enabling)
   ipcMain.handle(IPC_CHANNELS.NOTIFICATION_SET_ENABLED, async (_event, enabled: boolean) => {
-    const { setNotificationsEnabled } = await import('@craft-agent/shared/config/storage')
+    const { setNotificationsEnabled } = await import('@g4os/shared/config/storage')
     setNotificationsEnabled(enabled)
 
     // If enabling, trigger a notification to request macOS permission
@@ -3106,49 +3106,49 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
   // Get auto-capitalisation setting
   ipcMain.handle(IPC_CHANNELS.INPUT_GET_AUTO_CAPITALISATION, async () => {
-    const { getAutoCapitalisation } = await import('@craft-agent/shared/config/storage')
+    const { getAutoCapitalisation } = await import('@g4os/shared/config/storage')
     return getAutoCapitalisation()
   })
 
   // Set auto-capitalisation setting
   ipcMain.handle(IPC_CHANNELS.INPUT_SET_AUTO_CAPITALISATION, async (_event, enabled: boolean) => {
-    const { setAutoCapitalisation } = await import('@craft-agent/shared/config/storage')
+    const { setAutoCapitalisation } = await import('@g4os/shared/config/storage')
     setAutoCapitalisation(enabled)
   })
 
   // Get send message key setting
   ipcMain.handle(IPC_CHANNELS.INPUT_GET_SEND_MESSAGE_KEY, async () => {
-    const { getSendMessageKey } = await import('@craft-agent/shared/config/storage')
+    const { getSendMessageKey } = await import('@g4os/shared/config/storage')
     return getSendMessageKey()
   })
 
   // Set send message key setting
   ipcMain.handle(IPC_CHANNELS.INPUT_SET_SEND_MESSAGE_KEY, async (_event, key: 'enter' | 'cmd-enter') => {
-    const { setSendMessageKey } = await import('@craft-agent/shared/config/storage')
+    const { setSendMessageKey } = await import('@g4os/shared/config/storage')
     setSendMessageKey(key)
   })
 
   // Get spell check setting
   ipcMain.handle(IPC_CHANNELS.INPUT_GET_SPELL_CHECK, async () => {
-    const { getSpellCheck } = await import('@craft-agent/shared/config/storage')
+    const { getSpellCheck } = await import('@g4os/shared/config/storage')
     return getSpellCheck()
   })
 
   // Set spell check setting
   ipcMain.handle(IPC_CHANNELS.INPUT_SET_SPELL_CHECK, async (_event, enabled: boolean) => {
-    const { setSpellCheck } = await import('@craft-agent/shared/config/storage')
+    const { setSpellCheck } = await import('@g4os/shared/config/storage')
     setSpellCheck(enabled)
   })
 
   // Get keep awake while running setting
   ipcMain.handle(IPC_CHANNELS.POWER_GET_KEEP_AWAKE, async () => {
-    const { getKeepAwakeWhileRunning } = await import('@craft-agent/shared/config/storage')
+    const { getKeepAwakeWhileRunning } = await import('@g4os/shared/config/storage')
     return getKeepAwakeWhileRunning()
   })
 
   // Set keep awake while running setting
   ipcMain.handle(IPC_CHANNELS.POWER_SET_KEEP_AWAKE, async (_event, enabled: boolean) => {
-    const { setKeepAwakeWhileRunning } = await import('@craft-agent/shared/config/storage')
+    const { setKeepAwakeWhileRunning } = await import('@g4os/shared/config/storage')
     const { setKeepAwakeSetting } = await import('./power-manager')
     // Save to config
     setKeepAwakeWhileRunning(enabled)

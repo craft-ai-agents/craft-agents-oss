@@ -1,6 +1,6 @@
 import * as React from 'react'
 import type { ComponentEntry } from './types'
-import { generateCallbackPage, type AppType } from '@craft-agent/shared/auth/callback-page'
+import { generateCallbackPage, type AppType } from '@g4os/shared/auth/callback-page'
 
 /**
  * Preview component that renders OAuth callback HTML in a sandboxed iframe.

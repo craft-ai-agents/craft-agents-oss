@@ -13,7 +13,7 @@
  * Provider-specific behavior (chat, abort, capabilities) is implemented in subclasses.
  */
 
-import type { AgentEvent } from '@craft-agent/core/types';
+import type { AgentEvent } from '@g4os/core/types';
 import type { FileAttachment } from '../utils/files.ts';
 import type { ThinkingLevel } from './thinking-levels.ts';
 import { DEFAULT_THINKING_LEVEL } from './thinking-levels.ts';
@@ -69,7 +69,7 @@ export interface MiniAgentConfig {
 export const MINI_AGENT_TOOLS = ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash'] as const;
 
 /** MCP servers for mini agents - minimal set */
-export const MINI_AGENT_MCP_KEYS = ['session', 'craft-agents-docs'] as const;
+export const MINI_AGENT_MCP_KEYS = ['session', 'g4os-docs'] as const;
 
 // ============================================================
 // BaseAgent Abstract Class

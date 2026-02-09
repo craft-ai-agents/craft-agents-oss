@@ -3,7 +3,7 @@ import { Check } from 'lucide-react'
 import type { MenuComponents } from '@/components/ui/menu-context'
 import type { TodoStateId } from '@/config/todo-states'
 import type { TodoState } from '@/config/todo-states'
-import type { LabelConfig } from '@craft-agent/shared/labels'
+import type { LabelConfig } from '@g4os/shared/labels'
 import { LabelIcon } from '@/components/ui/label-icon'
 
 export interface StatusMenuItemsProps {

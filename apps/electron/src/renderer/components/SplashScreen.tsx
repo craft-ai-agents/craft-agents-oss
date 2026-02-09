@@ -1,5 +1,5 @@
 import { motion } from 'motion/react'
-import { CraftAgentsSymbol } from './icons/CraftAgentsSymbol'
+import { G4OSSymbol } from './icons/G4OSSymbol'
 
 interface SplashScreenProps {
   isExiting: boolean
@@ -7,7 +7,7 @@ interface SplashScreenProps {
 }
 
 /**
- * SplashScreen - Shows Craft symbol during app initialization
+ * SplashScreen - Shows G4 OS symbol during app initialization
  *
  * Displays centered symbol on app background, fades out when app is fully ready.
  * On exit, the symbol scales up and fades out quickly while the background fades slower.
@@ -36,7 +36,7 @@ export function SplashScreen({ isExiting, onExitComplete }: SplashScreenProps) {
           ease: [0.16, 1, 0.3, 1] // Exponential out curve
         }}
       >
-        <CraftAgentsSymbol className="h-8 text-accent" />
+        <G4OSSymbol className="h-8 text-accent" />
       </motion.div>
     </motion.div>
   )

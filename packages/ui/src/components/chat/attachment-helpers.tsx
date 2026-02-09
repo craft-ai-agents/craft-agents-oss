@@ -7,7 +7,7 @@
 
 import { File, Image as ImageIcon } from 'lucide-react'
 import { cn } from '../../lib/utils'
-import type { AttachmentType } from '@craft-agent/core'
+import type { AttachmentType } from '@g4os/core'
 
 // Comprehensive MIME type to human-friendly label mapping
 const MIME_TYPE_LABELS: Record<string, string> = {

@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { getSystemPrompt } from '../prompts/system.ts';
 import { BaseAgent, type MiniAgentConfig, MINI_AGENT_TOOLS, MINI_AGENT_MCP_KEYS } from './base-agent.ts';
 import type { BackendConfig, PermissionRequestType } from './backend/types.ts';
-// Plan types are used by UI components; not needed in craft-agent.ts since Safe Mode is user-controlled
+// Plan types are used by UI components; not needed in claude-agent.ts since Safe Mode is user-controlled
 import { parseError, type AgentError } from './errors.ts';
 import { runErrorDiagnostics } from './diagnostics.ts';
 import { loadStoredConfig, loadConfigDefaults, resolveModelId, type Workspace, type AuthType, getDefaultLlmConnection, getLlmConnection } from '../config/storage.ts';
@@ -102,10 +102,10 @@ export {
   PERMISSION_MODE_ORDER,
   PERMISSION_MODE_CONFIG,
 } from './mode-manager.ts';
-// Documentation is served via local files at ~/.craft-agent/docs/
+// Documentation is served via local files at ~/.g4os/docs/
 
 // Import and re-export AgentEvent from core (single source of truth)
-import type { AgentEvent } from '@craft-agent/core/types';
+import type { AgentEvent } from '@g4os/core/types';
 export type { AgentEvent };
 
 // Stateless tool matching — pure functions for SDK message → AgentEvent conversion
@@ -684,14 +684,14 @@ export class ClaudeAgent extends BaseAgent {
         preferences: getPreferencesServer(false),
         // Session-scoped tools (SubmitPlan, source_test, etc.)
         session: getSessionScopedTools(sessionId, this.workspaceRootPath),
-        // Craft Agents documentation - always available for searching setup guides
+        // G4 OS documentation - always available for searching setup guides
         // This is a public Mintlify MCP server, no auth needed
-        'craft-agents-docs': {
+        'g4os-docs': {
           type: 'http',
-          url: 'https://agents.craft.do/docs/mcp',
+          url: 'https://g4educacao.com/docs/mcp',
         },
         // Add user-defined source servers (MCP and API, filtered by local MCP setting)
-        // Note: Craft MCP server is now added via sources system
+        // Note: G4 OS MCP server is now added via sources system
         ...sourceMcpResult.servers,
         ...this.sourceApiServers,
       };
@@ -896,8 +896,8 @@ export class ClaudeAgent extends BaseAgent {
                   // Built-in MCP servers that are always available (not user sources)
                   // - preferences: user preferences storage
                   // - session: session-scoped tools (SubmitPlan, source_test, etc.)
-                  // - craft-agents-docs: always-available documentation search
-                  const builtInMcpServers = new Set(['preferences', 'session', 'craft-agents-docs']);
+                  // - g4os-docs: always-available documentation search
+                  const builtInMcpServers = new Set(['preferences', 'session', 'g4os-docs']);
 
                   // Check if this is a source server (not built-in)
                   if (!builtInMcpServers.has(serverName)) {
@@ -2822,11 +2822,11 @@ export class ClaudeAgent extends BaseAgent {
 // ============================================================
 // Backward Compatibility Exports
 // ============================================================
-// These aliases allow gradual migration from CraftAgent to ClaudeAgent.
+// These aliases allow gradual migration from G4Agent to ClaudeAgent.
 // Once all consumers are updated, these can be removed.
 
 /** @deprecated Use ClaudeAgent instead */
-export { ClaudeAgent as CraftAgent };
+export { ClaudeAgent as G4Agent };
 
 /** @deprecated Use ClaudeAgentConfig instead */
-export type { ClaudeAgentConfig as CraftAgentConfig };
+export type { ClaudeAgentConfig as G4AgentConfig };

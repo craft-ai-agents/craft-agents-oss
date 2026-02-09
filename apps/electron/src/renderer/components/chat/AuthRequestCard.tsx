@@ -1,13 +1,13 @@
 import * as React from 'react'
 import { useState, useCallback } from 'react'
 import { Key, User, Lock, Eye, EyeOff, CheckCircle2, XCircle, type LucideIcon } from 'lucide-react'
-import { Spinner } from '@craft-agent/ui'
+import { Spinner } from '@g4os/ui'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 import type { Message, CredentialResponse } from '../../../shared/types'
-import type { AuthRequestType, AuthStatus } from '@craft-agent/core/types'
+import type { AuthRequestType, AuthStatus } from '@g4os/core/types'
 import { validateBasicAuthCredentials, getPasswordValue, getPasswordLabel, getPasswordPlaceholder } from '@/utils/auth-validation'
 
 // ============================================================================

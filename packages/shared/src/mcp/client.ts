@@ -39,7 +39,7 @@ export type McpClientConfig = HttpMcpClientConfig | StdioMcpClientConfig;
  * and shouldn't have access to.
  */
 const BLOCKED_ENV_VARS = [
-  // Craft Agent auth (set by the app itself)
+  // G4 OS auth (set by the app itself)
   'ANTHROPIC_API_KEY',
   'CLAUDE_CODE_OAUTH_TOKEN',
 
@@ -57,7 +57,7 @@ const BLOCKED_ENV_VARS = [
   'NPM_TOKEN',
 ];
 
-export class CraftMcpClient {
+export class G4OSMcpClient {
   private client: Client;
   private transport: Transport;
   private connected = false;

@@ -1,5 +1,5 @@
 {
-  "name": "@craft-agent/session-tools-core",
+  "name": "@g4os/session-tools-core",
   "version": "0.4.0",
   "description": "Shared utilities for session-scoped tools (Claude and Codex)",
   "type": "module",
@@ -12,7 +12,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@craft-agent/mermaid": "workspace:*",
+    "@g4os/mermaid": "workspace:*",
     "zod": "^3.23.0",
     "gray-matter": "^4.0.3"
   },

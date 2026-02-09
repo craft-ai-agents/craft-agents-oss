@@ -2,7 +2,7 @@
  * Config Types (Browser-safe)
  *
  * Pure type definitions for configuration.
- * Re-exports from @craft-agent/core for compatibility.
+ * Re-exports from @g4os/core for compatibility.
  */
 
 // Re-export all config types from core (single source of truth)
@@ -11,4 +11,4 @@ export type {
   McpAuthType,
   AuthType,
   OAuthCredentials,
-} from '@craft-agent/core/types';
+} from '@g4os/core/types';

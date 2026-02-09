@@ -1,6 +1,6 @@
 # Mermaid Diagram Syntax Reference
 
-Craft Agent renders Mermaid diagrams natively as beautiful themed SVGs. Use this reference for syntax details.
+G4 OS renders Mermaid diagrams natively as beautiful themed SVGs. Use this reference for syntax details.
 
 ## Flowcharts
 

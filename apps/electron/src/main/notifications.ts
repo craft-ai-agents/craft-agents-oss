@@ -247,7 +247,7 @@ export function isAnyWindowFocused(): boolean {
 /**
  * Initialize instance badge for multi-instance development.
  *
- * When running from a numbered folder (e.g., craft-tui-agent-1), this shows
+ * When running from a numbered folder (e.g., g4os-1), this shows
  * a permanent badge on the dock icon to distinguish between instances.
  * Uses macOS dock.setBadge() for text-based badge display.
  *

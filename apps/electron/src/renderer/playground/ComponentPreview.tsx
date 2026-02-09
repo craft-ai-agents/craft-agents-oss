@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { cn } from '@/lib/utils'
 import type { ComponentEntry } from './registry'
-import { TooltipProvider } from '@craft-agent/ui'
+import { TooltipProvider } from '@g4os/ui'
 
 type BackgroundStyle = 'default' | 'light' | 'dark' | 'checkered'
 

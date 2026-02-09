@@ -13,7 +13,7 @@ import {
   type ResponseContent,
   type TodoItem,
   type FileChange,
-} from '@craft-agent/ui'
+} from '@g4os/ui'
 
 /** Wrapper with padding for playground preview */
 function PaddedWrapper({ children }: { children: ReactNode }) {

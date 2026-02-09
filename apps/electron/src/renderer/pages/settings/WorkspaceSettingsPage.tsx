@@ -20,10 +20,10 @@ import { HeaderMenu } from '@/components/ui/HeaderMenu'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { cn } from '@/lib/utils'
 import { routes } from '@/lib/navigate'
-import { Spinner } from '@craft-agent/ui'
+import { Spinner } from '@g4os/ui'
 import { RenameDialog } from '@/components/ui/rename-dialog'
 import type { PermissionMode, WorkspaceSettings } from '../../../shared/types'
-import { PERMISSION_MODE_CONFIG } from '@craft-agent/shared/agent/mode-types'
+import { PERMISSION_MODE_CONFIG } from '@g4os/shared/agent/mode-types'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 
 import {

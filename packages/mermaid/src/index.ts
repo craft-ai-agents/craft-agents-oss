@@ -1,5 +1,5 @@
 // ============================================================================
-// @craft-agent/mermaid — public API
+// @g4os/mermaid — public API
 //
 // Renders Mermaid diagrams to styled SVG strings.
 // Framework-agnostic, no DOM required. Pure TypeScript.
@@ -15,7 +15,7 @@
 // See src/theme.ts for the full variable system.
 //
 // Usage:
-//   import { renderMermaid } from '@craft-agent/mermaid'
+//   import { renderMermaid } from '@g4os/mermaid'
 //   const svg = await renderMermaid('graph TD\n  A --> B')
 //   const svg = await renderMermaid('graph TD\n  A --> B', { bg: '#1a1b26', fg: '#a9b1d6' })
 // ============================================================================

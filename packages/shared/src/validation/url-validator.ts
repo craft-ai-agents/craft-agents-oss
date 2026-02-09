@@ -2,7 +2,7 @@
  * AI-powered URL validation using Claude Agent SDK
  *
  * Uses Claude Haiku for lightweight, cost-efficient URL validation
- * with contextual understanding of valid Craft MCP URL patterns.
+ * with contextual understanding of valid G4 OS MCP URL patterns.
  */
 
 import { query, type Options } from '@anthropic-ai/claude-agent-sdk';
@@ -21,25 +21,25 @@ export interface UrlValidationResult {
   typedError?: AgentError;
 }
 
-const SYSTEM_PROMPT = `You are a URL validator for Craft MCP servers. Your ONLY job is to validate if a URL is a valid Craft MCP URL.
+const SYSTEM_PROMPT = `You are a URL validator for G4 OS MCP servers. Your ONLY job is to validate if a URL is a valid G4 OS MCP URL.
 
 VALID URL EXAMPLES:
-- https://mcp.craft.do/links/DSdsfdsjkf34235/mcp
-- https://mcp.craft.do/links/ABC123/mcp
-- https://mcp.craft.do/links/xY9-abc_123/mcp
+- https://mcp.g4educacao.com/links/DSdsfdsjkf34235/mcp
+- https://mcp.g4educacao.com/links/ABC123/mcp
+- https://mcp.g4educacao.com/links/xY9-abc_123/mcp
 
 INVALID URL EXAMPLES AND WHY:
-- mcp.craft.do/links/abc/mcp → Missing https:// protocol
-- http://mcp.craft.do/links/abc/mcp → Must use https://, not http://
-- https://evil.com/mcp.craft.do/links/abc → Wrong domain (must be exactly mcp.craft.do)
-- https://mcp.craft.do.evil.com/links/abc → Wrong domain (subdomain attack)
-- https://user:pass@mcp.craft.do/links/abc → Credentials in URL not allowed
-- https://mcp.craft.do → Missing /links/ path
+- mcp.g4educacao.com/links/abc/mcp → Missing https:// protocol
+- http://mcp.g4educacao.com/links/abc/mcp → Must use https://, not http://
+- https://evil.com/mcp.g4educacao.com/links/abc → Wrong domain (must be exactly mcp.g4educacao.com)
+- https://mcp.g4educacao.com.evil.com/links/abc → Wrong domain (subdomain attack)
+- https://user:pass@mcp.g4educacao.com/links/abc → Credentials in URL not allowed
+- https://mcp.g4educacao.com → Missing /links/ path
 - https://google.com → Completely wrong domain
 
 VALIDATION RULES:
 1. Protocol must be https://
-2. Hostname must be exactly "mcp.craft.do" (no subdomains, no other domains)
+2. Hostname must be exactly "mcp.g4educacao.com" (no subdomains, no other domains)
 3. Path should start with /links/
 4. No credentials (user:pass@) in the URL
 5. Must be a syntactically valid URL

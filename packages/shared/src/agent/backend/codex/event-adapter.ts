@@ -1,14 +1,14 @@
 /**
  * Event Adapter (App-Server v2 Protocol)
  *
- * Maps Codex app-server v2 notifications to Craft Agent's AgentEvent format.
+ * Maps Codex app-server v2 notifications to G4 OS's AgentEvent format.
  * This enables the CodexBackend to emit events compatible with the existing UI.
  *
  * The v2 protocol uses ServerNotification types with structured item/turn events,
  * which provide more granular control than the previous ThreadEvent format.
  */
 
-import type { AgentEvent, AgentEventUsage } from '@craft-agent/core/types';
+import type { AgentEvent, AgentEventUsage } from '@g4os/core/types';
 import { createLogger } from '../../../utils/debug.ts';
 
 import { parseReadCommand, type ReadCommandInfo } from './read-patterns';
@@ -32,7 +32,7 @@ import type {
   McpToolCallProgressNotification,
   ConfigWarningNotification,
   WindowsWorldWritableWarningNotification,
-} from '@craft-agent/codex-types/v2';
+} from '@g4os/codex-types/v2';
 
 // Simplified notification types for delta events
 interface OutputDeltaNotification {

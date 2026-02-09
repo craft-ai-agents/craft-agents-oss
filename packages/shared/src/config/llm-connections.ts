@@ -103,7 +103,7 @@ export interface LlmConnection {
    * Path to the Codex binary (for 'openai' provider connections).
    * If not set, defaults to 'codex' in PATH.
    *
-   * For Craft Agents fork with PreToolUse support, download from:
+   * For G4 OS fork with PreToolUse support, download from:
    * https://github.com/lukilabs/craft-agents-codex/releases
    */
   codexPath?: string;

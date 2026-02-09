@@ -8,8 +8,8 @@
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import type { LabelConfig } from '@craft-agent/shared/labels'
-import { flattenLabels } from '@craft-agent/shared/labels'
+import type { LabelConfig } from '@g4os/shared/labels'
+import { flattenLabels } from '@g4os/shared/labels'
 
 export interface UseLabelsResult {
   /** Label tree (root-level nodes with nested children) */

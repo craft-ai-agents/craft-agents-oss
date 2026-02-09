@@ -28,7 +28,7 @@
 @property --accent {
   syntax: "<color>";
   inherits: true;
-  initial-value: oklch(0.62 0.13 293);
+  initial-value: #184560;
 }
 
 @property --info {
@@ -73,8 +73,8 @@
   --background: oklch(0.98 0.003 265);
   --foreground: oklch(0.185 0.01 270);
   --foreground-rgb: 38, 36, 42;             /* RGB for shadow borders */
-  --accent: oklch(0.62 0.13 293);           /* purple - brand, Auto mode */
-  --accent-rgb: 104, 78, 133;               /* darkened RGB for shadow-tinted (70% of accent) */
+  --accent: #184560;                         /* Scaling Blue - brand, Auto mode */
+  --accent-rgb: 17, 48, 67;                 /* darkened RGB for shadow-tinted (70% of accent) */
   --info: oklch(0.75 0.16 70);              /* amber - warnings, Ask mode */
   --info-rgb: 180, 120, 40;                 /* RGB for shadow-tinted */
   --success: oklch(0.55 0.17 145);          /* green - connected, checkmarks */
@@ -211,8 +211,8 @@
   --background: oklch(0.2 0.005 270);
   --foreground: oklch(0.92 0.005 270);
   --foreground-rgb: 227, 226, 229;           /* RGB for shadow borders */
-  --accent: oklch(0.68 0.13 293);            /* brighter purple in dark */
-  --accent-rgb: 118, 92, 147;                /* darkened RGB for shadow-tinted (70% of accent) */
+  --accent: #3D8AB5;                          /* lighter Scaling Blue in dark */
+  --accent-rgb: 43, 97, 127;                 /* darkened RGB for shadow-tinted (70% of accent) */
   --info: oklch(0.70 0.16 70);               /* amber */
   --info-rgb: 200, 140, 60;                  /* RGB for shadow-tinted */
   --success: oklch(0.60 0.17 145);           /* green */

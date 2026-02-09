@@ -1,6 +1,6 @@
 # Bundled Resources
 
-This folder contains assets that are bundled with the Electron app and synced to the user's `~/.craft-agent/` directory on every launch.
+This folder contains assets that are bundled with the Electron app and synced to the user's `~/.g4os/` directory on every launch.
 
 ## How It Works
 
@@ -13,11 +13,11 @@ This folder contains assets that are bundled with the Electron app and synced to
 
 | Folder/File | Synced To | Sync Behavior |
 |-------------|-----------|---------------|
-| `docs/` | `~/.craft-agent/docs/` | Always overwrite on launch |
-| `themes/` | `~/.craft-agent/themes/` | Always overwrite on launch |
-| `permissions/` | `~/.craft-agent/permissions/` | Always overwrite on launch |
-| `tool-icons/` | `~/.craft-agent/tool-icons/` | Always overwrite on launch |
-| `config-defaults.json` | `~/.craft-agent/config-defaults.json` | Always overwrite on launch |
+| `docs/` | `~/.g4os/docs/` | Always overwrite on launch |
+| `themes/` | `~/.g4os/themes/` | Always overwrite on launch |
+| `permissions/` | `~/.g4os/permissions/` | Always overwrite on launch |
+| `tool-icons/` | `~/.g4os/tool-icons/` | Always overwrite on launch |
+| `config-defaults.json` | `~/.g4os/config-defaults.json` | Always overwrite on launch |
 
 ## Why Sync on Every Launch?
 
@@ -34,7 +34,7 @@ These files are used by electron-builder or the app directly, not synced to user
 | `icon.*` | App icons (icns, ico, png, svg) |
 | `Assets.car` | macOS compiled asset catalog |
 | `dmg-background.*` | DMG installer background |
-| `craft-logos/` | Branding assets |
+| `g4os-logos/` | Branding assets |
 | `source.png` | Default source icon |
 | `generate-icons.sh` | Icon generation script |
 | `bridge-mcp-server/` | Bundled MCP server for Codex bridge |

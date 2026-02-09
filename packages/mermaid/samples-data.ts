@@ -1,5 +1,5 @@
 /**
- * Sample definitions for the @craft-agent/mermaid visual test suite.
+ * Sample definitions for the @g4os/mermaid visual test suite.
  *
  * Shared by:
  *   - index.ts     — generates the HTML visual test page

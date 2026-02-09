@@ -11,8 +11,8 @@
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import type { ViewConfig, CompiledView, ViewEvaluationContext } from '@craft-agent/shared/views'
-import { compileAllViews, evaluateViews, buildViewContext } from '@craft-agent/shared/views'
+import type { ViewConfig, CompiledView, ViewEvaluationContext } from '@g4os/shared/views'
+import { compileAllViews, evaluateViews, buildViewContext } from '@g4os/shared/views'
 import type { SessionMeta } from '../atoms/sessions'
 
 export interface UseViewsResult {

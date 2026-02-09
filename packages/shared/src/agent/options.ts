@@ -4,7 +4,7 @@ import { homedir } from "os";
 import { existsSync, readFileSync, writeFileSync, unlinkSync, readdirSync } from "fs";
 import { debug } from "../utils/debug";
 
-declare const CRAFT_AGENT_CLI_VERSION: string | undefined;
+declare const G4OS_CLI_VERSION: string | undefined;
 
 let optionsEnv: Record<string, string> = {};
 let customPathToClaudeCodeExecutable: string | null = null;
@@ -188,7 +188,7 @@ export function getDefaultOptions(): Partial<Options> {
     // Without this, Bun loads .env from the subprocess cwd (user's working directory),
     // which can inject ANTHROPIC_API_KEY and override our OAuth auth — silently charging
     // the user's API key instead of their Max subscription.
-    // See: https://github.com/lukilabs/craft-agents-oss/issues/39
+    // See: https://github.com/g4educacao/g4os/issues/39
     // Use platform-appropriate null device (NUL on Windows, /dev/null on Unix)
     const nullDevice = process.platform === 'win32' ? 'NUL' : '/dev/null';
     const envFileFlag = `--env-file=${nullDevice}`;
@@ -209,13 +209,13 @@ export function getDefaultOptions(): Partial<Options> {
                 ...process.env,
                 ... optionsEnv,
                 // Propagate debug mode from argv flag OR existing env var
-                CRAFT_DEBUG: (process.argv.includes('--debug') || process.env.CRAFT_DEBUG === '1') ? '1' : '0',
+                G4OS_DEBUG: (process.argv.includes('--debug') || process.env.G4OS_DEBUG === '1') ? '1' : '0',
             }
         };
     }
 
-    if (typeof CRAFT_AGENT_CLI_VERSION !== 'undefined' && CRAFT_AGENT_CLI_VERSION != null) {
-        const baseDir = join(homedir(), '.local', 'share', 'craft', 'versions', CRAFT_AGENT_CLI_VERSION);
+    if (typeof G4OS_CLI_VERSION !== 'undefined' && G4OS_CLI_VERSION != null) {
+        const baseDir = join(homedir(), '.local', 'share', 'craft', 'versions', G4OS_CLI_VERSION);
         return {
             pathToClaudeCodeExecutable: join(baseDir, 'claude-agent-sdk', 'cli.js'),
             // Use the compiled binary itself as the runtime via BUN_BE_BUN=1
@@ -229,7 +229,7 @@ export function getDefaultOptions(): Partial<Options> {
                 BUN_BE_BUN: '1',
                 ... optionsEnv,
                 // Propagate debug mode from argv flag OR existing env var
-                CRAFT_DEBUG: (process.argv.includes('--debug') || process.env.CRAFT_DEBUG === '1') ? '1' : '0',
+                G4OS_DEBUG: (process.argv.includes('--debug') || process.env.G4OS_DEBUG === '1') ? '1' : '0',
             }
         }
     }
@@ -239,7 +239,7 @@ export function getDefaultOptions(): Partial<Options> {
             ... process.env,
             ... optionsEnv,
             // Propagate debug mode from argv flag OR existing env var
-            CRAFT_DEBUG: (process.argv.includes('--debug') || process.env.CRAFT_DEBUG === '1') ? '1' : '0',
+            G4OS_DEBUG: (process.argv.includes('--debug') || process.env.G4OS_DEBUG === '1') ? '1' : '0',
         }
     };
 }

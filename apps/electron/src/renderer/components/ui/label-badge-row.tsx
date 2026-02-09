@@ -15,8 +15,8 @@
 import * as React from 'react'
 import { LabelBadge } from './label-badge'
 import { LabelValuePopover } from './label-value-popover'
-import { parseLabelEntry, formatLabelEntry, extractLabelId } from '@craft-agent/shared/labels'
-import type { LabelConfig } from '@craft-agent/shared/labels'
+import { parseLabelEntry, formatLabelEntry, extractLabelId } from '@g4os/shared/labels'
+import type { LabelConfig } from '@g4os/shared/labels'
 import { cn } from '@/lib/utils'
 
 export interface LabelBadgeRowProps {

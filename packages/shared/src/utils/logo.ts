@@ -12,8 +12,8 @@ import { existsSync } from 'fs';
 import { readJsonFileSync } from './files.ts';
 
 // Cache path for persisted provider domains
-const CRAFT_AGENT_DIR = join(homedir(), '.craft-agent');
-const PROVIDER_DOMAINS_CACHE_PATH = join(CRAFT_AGENT_DIR, 'provider-domains.json');
+const G4OS_DIR = join(homedir(), '.g4os');
+const PROVIDER_DOMAINS_CACHE_PATH = join(G4OS_DIR, 'provider-domains.json');
 
 // Google Favicon V2 API - free, reliable, no API key needed
 // Updated URL: Google migrated from /s2/favicons to faviconV2

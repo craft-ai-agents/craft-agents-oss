@@ -1,6 +1,6 @@
-# Craft Agents Electron App
+# G4 OS Electron App
 
-The primary desktop interface for Craft Agents, built with Electron + React. Provides a multi-session inbox with chat interface for interacting with Claude via Craft workspaces.
+The primary desktop interface for G4 OS, built with Electron + React. Provides a multi-session inbox with chat interface for interacting with Claude via Craft workspaces.
 
 ## Quick Start
 
@@ -19,7 +19,7 @@ apps/electron/
 │   │   ├── index.ts       # Window creation, app lifecycle
 │   │   ├── ipc.ts         # IPC handler registration
 │   │   ├── menu.ts        # Application menu (File, Edit, View, Help)
-│   │   ├── sessions.ts    # Session management, CraftAgent integration
+│   │   ├── sessions.ts    # Session management, G4Agent integration
 │   │   ├── deep-link.ts   # Deep link URL parsing and handling
 │   │   ├── agent-service.ts # Agent listing, caching, auth checking
 │   │   └── sources-service.ts # Source and authentication service
@@ -88,7 +88,7 @@ if (billing.type === 'oauth_token' && billing.claudeOAuthToken) {
 
 ### 3. AgentEvent Type Mismatches
 
-The `AgentEvent` types from `CraftAgent` use different property names than you might expect:
+The `AgentEvent` types from `G4Agent` use different property names than you might expect:
 
 | Event Type | Wrong | Correct |
 |------------|-------|---------|
@@ -111,16 +111,16 @@ const toolName = managed.pendingTools.get(event.toolUseId) || 'unknown'
 managed.pendingTools.delete(event.toolUseId)
 ```
 
-### 4. CraftAgent Constructor
+### 4. G4Agent Constructor
 
-`CraftAgent` expects the full `Workspace` object, not just the ID:
+`G4Agent` expects the full `Workspace` object, not just the ID:
 
 ```typescript
 // Wrong:
-new CraftAgent({ workspaceId: workspace.id, model })
+new G4Agent({ workspaceId: workspace.id, model })
 
 // Correct:
-new CraftAgent({ workspace, model })
+new G4Agent({ workspace, model })
 ```
 
 ### 5. esbuild Configuration
@@ -248,14 +248,14 @@ navigate(routes.sidebar.flagged())        // Show flagged
 
 ### Deep Links
 
-External apps can navigate using `craftagents://` URLs:
+External apps can navigate using `g4os://` URLs:
 
 ```
-craftagents://settings
-craftagents://allSessions/session/session123
-craftagents://sources/source/github
-craftagents://action/new-chat
-craftagents://workspace/{id}/allSessions/session/abc123
+g4os://settings
+g4os://allSessions/session/session123
+g4os://sources/source/github
+g4os://action/new-chat
+g4os://workspace/{id}/allSessions/session/abc123
 ```
 
 See `CLAUDE.md` for complete route reference.
@@ -265,7 +265,7 @@ See `CLAUDE.md` for complete route reference.
 | File | Purpose |
 |------|---------|
 | `main/index.ts` | App entry, window creation |
-| `main/sessions.ts` | CraftAgent wrapper, event processing, source integration |
+| `main/sessions.ts` | G4Agent wrapper, event processing, source integration |
 | `main/ipc.ts` | IPC channel handlers (sessions, files, shell) |
 | `main/menu.ts` | Application menu (File, Edit, View, Help) |
 | `main/deep-link.ts` | Deep link URL parsing and handling |

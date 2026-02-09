@@ -13,8 +13,8 @@ import {
   StyledDropdownMenuSubContent,
 } from "@/components/ui/styled-dropdown"
 import * as Icons from "lucide-react"
-import { Tooltip, TooltipTrigger, TooltipContent } from "@craft-agent/ui"
-import { CraftAgentsSymbol } from "./icons/CraftAgentsSymbol"
+import { Tooltip, TooltipTrigger, TooltipContent } from "@g4os/ui"
+import { G4OSSymbol } from "./icons/G4OSSymbol"
 import { SquarePenRounded } from "./icons/SquarePenRounded"
 import { TopBarButton } from "./ui/TopBarButton"
 import {
@@ -145,7 +145,7 @@ interface AppMenuProps {
 /**
  * AppMenu - Main application dropdown menu and top bar navigation
  *
- * Contains the Craft logo dropdown with all menu functionality:
+ * Contains the G4 OS logo dropdown with all menu functionality:
  * - File actions (New Chat, New Window)
  * - Edit submenu (Undo, Redo, Cut, Copy, Paste, Select All)
  * - View submenu (Zoom In/Out, Reset)
@@ -195,11 +195,11 @@ export function AppMenu({
 
   return (
     <div className="flex items-center gap-[5px] w-full">
-      {/* Craft Logo Menu */}
+      {/* G4 OS Logo Menu */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <TopBarButton aria-label="Craft menu">
-            <CraftAgentsSymbol className="h-4 text-accent" />
+          <TopBarButton aria-label="G4 OS menu">
+            <G4OSSymbol className="h-4 text-accent" />
           </TopBarButton>
         </DropdownMenuTrigger>
         <StyledDropdownMenuContent align="start" minWidth="min-w-48">
@@ -263,7 +263,7 @@ export function AppMenu({
               Help
             </StyledDropdownMenuSubTrigger>
             <StyledDropdownMenuSubContent>
-              <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl('https://agents.craft.do/docs')}>
+              <StyledDropdownMenuItem onClick={() => window.electronAPI.openUrl('https://g4educacao.com/docs')}>
                 <Icons.HelpCircle className="h-3.5 w-3.5" />
                 Help & Documentation
                 <Icons.ExternalLink className="h-3 w-3 ml-auto text-muted-foreground" />
@@ -309,7 +309,7 @@ export function AppMenu({
           {/* Quit */}
           <StyledDropdownMenuItem onClick={() => window.electronAPI.menuQuit()}>
             <Icons.LogOut className="h-3.5 w-3.5" />
-            Quit Craft Agents
+            Quit G4 OS
             {quitHotkey && <DropdownMenuShortcut className="pl-6">{quitHotkey}</DropdownMenuShortcut>}
           </StyledDropdownMenuItem>
         </StyledDropdownMenuContent>

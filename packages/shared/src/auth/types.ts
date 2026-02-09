@@ -60,7 +60,7 @@ export interface SetupNeeds {
 export interface OAuthSessionContext {
   /** The session ID to return to after OAuth completes */
   sessionId?: string;
-  /** The app's deeplink scheme (e.g., 'craftagents') */
+  /** The app's deeplink scheme (e.g., 'g4os') */
   deeplinkScheme?: string;
 }
 

@@ -1,5 +1,5 @@
 {
-  "name": "@craft-agent/mermaid",
+  "name": "@g4os/mermaid",
   "version": "0.4.0",
   "license": "Apache-2.0",
   "description": "Mermaid flowchart to styled SVG renderer with zinc monochrome palette",
@@ -15,7 +15,7 @@
     "dev": "bun run dev.ts",
     "bench": "bun run bench.ts",
     "build": "bun run index.ts && mkdir -p dist && mv index.html dist/ && cp -r public/* dist/",
-    "deploy": "bun run build && wrangler pages deploy dist --project-name craft-agents-mermaid"
+    "deploy": "bun run build && wrangler pages deploy dist --project-name g4os-mermaid"
   },
   "dependencies": {
     "@dagrejs/dagre": "^1.1.8"

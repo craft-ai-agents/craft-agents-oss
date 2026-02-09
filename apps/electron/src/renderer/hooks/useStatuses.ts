@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react'
-import type { StatusConfig } from '@craft-agent/shared/statuses'
+import type { StatusConfig } from '@g4os/shared/statuses'
 import { clearIconCache } from '@/config/todo-states'
 
 export interface UseStatusesResult {

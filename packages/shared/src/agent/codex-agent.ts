@@ -14,10 +14,10 @@
  * for UI events and server requests for approval prompts.
  */
 
-import type { AgentEvent } from '@craft-agent/core/types';
+import type { AgentEvent } from '@g4os/core/types';
 import type { FileAttachment } from '../utils/files.ts';
 import type { ThinkingLevel } from './thinking-levels.ts';
-import type { AuthRequest } from '@craft-agent/session-tools-core';
+import type { AuthRequest } from '@g4os/session-tools-core';
 import { type PermissionMode, shouldAllowToolInMode } from './mode-manager.ts';
 import type { LoadedSource } from '../sources/types.ts';
 
@@ -71,7 +71,7 @@ import { getSessionPlansPath } from '../sessions/storage.ts';
 // Path utilities for cross-platform normalization
 import { resolve } from 'node:path';
 
-// System prompt for Craft Agent context
+// System prompt for G4 OS context
 import { getSystemPrompt } from '../prompts/system.ts';
 
 // PreToolUse utilities
@@ -87,7 +87,7 @@ import {
 import type {
   RequestId,
   ReasoningEffort,
-} from '@craft-agent/codex-types';
+} from '@g4os/codex-types';
 import type {
   AskForApproval,
   SandboxMode,
@@ -95,7 +95,7 @@ import type {
   CommandExecutionApprovalDecision,
   FileChangeApprovalDecision,
   ThreadTokenUsageUpdatedNotification,
-} from '@craft-agent/codex-types/v2';
+} from '@g4os/codex-types/v2';
 
 // ============================================================
 // Constants
@@ -1164,7 +1164,7 @@ export class CodexAgent extends BaseAgent {
   private static readonly BUILT_IN_MCP_SERVERS = new Set([
     'preferences',
     'session',
-    'craft-agents-docs',
+    'g4os-docs',
     'api-bridge',
   ]);
 
@@ -1574,7 +1574,7 @@ export class CodexAgent extends BaseAgent {
             approvalPolicy: null,
             sandbox: null,
             config: null,
-            // Inject Craft Agent system prompt on resume (mini or full)
+            // Inject G4 OS system prompt on resume (mini or full)
             baseInstructions: miniConfig.enabled
               ? this.getMiniSystemPrompt()
               : getSystemPrompt(
@@ -1611,7 +1611,7 @@ export class CodexAgent extends BaseAgent {
             cwd: this.workingDirectory,
             approvalPolicy: this.getApprovalPolicy(permissionMode),
             sandbox: this.getSandboxMode(permissionMode),
-            // Inject Craft Agent system prompt (mini or full)
+            // Inject G4 OS system prompt (mini or full)
             baseInstructions: miniConfig.enabled
               ? this.getMiniSystemPrompt()
               : getSystemPrompt(
@@ -1634,7 +1634,7 @@ export class CodexAgent extends BaseAgent {
           cwd: this.workingDirectory,
           approvalPolicy: this.getApprovalPolicy(permissionMode),
           sandbox: this.getSandboxMode(permissionMode),
-          // Inject Craft Agent system prompt (mini or full)
+          // Inject G4 OS system prompt (mini or full)
           baseInstructions: miniConfig.enabled
             ? this.getMiniSystemPrompt()
             : getSystemPrompt(
@@ -2093,7 +2093,7 @@ export class CodexAgent extends BaseAgent {
           approvalPolicy: null,
           sandbox: null,
           config: null,
-          // Re-inject Craft Agent system prompt after reconnect
+          // Re-inject G4 OS system prompt after reconnect
           baseInstructions: miniConfig.enabled
             ? this.getMiniSystemPrompt()
             : getSystemPrompt(

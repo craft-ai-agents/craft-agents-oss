@@ -10,7 +10,7 @@ import { useTheme as useThemeContext } from '@/context/ThemeContext'
 
 interface UseThemeOptions {
   /**
-   * App-level theme override (from ~/.craft-agent/theme.json)
+   * App-level theme override (from ~/.g4os/theme.json)
    * When provided, merges with the preset theme from context.
    */
   appTheme?: ThemeOverrides | null

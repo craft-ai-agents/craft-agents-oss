@@ -1,18 +1,18 @@
 /**
- * Centralized branding assets for Craft Agent
+ * Centralized branding assets for G4 OS
  * Used by OAuth callback pages
  */
 
-export const CRAFT_LOGO = [
-  '  ████████ █████████    ██████   ██████████ ██████████',
-  '██████████ ██████████ ██████████ █████████  ██████████',
-  '██████     ██████████ ██████████ ████████   ██████████',
-  '██████████ ████████   ██████████ ███████      ██████  ',
-  '  ████████ ████  ████ ████  ████ █████        ██████  ',
+export const G4OS_LOGO = [
+  '  ██████  ██   ██       ██████  ███████',
+  ' ██       ██   ██      ██    ██ ██     ',
+  ' ██   ███ ███████      ██    ██ ███████',
+  ' ██    ██      ██      ██    ██      ██',
+  '  ██████       ██       ██████  ███████',
 ] as const;
 
 /** Logo as a single string for HTML templates */
-export const CRAFT_LOGO_HTML = CRAFT_LOGO.map((line) => line.trimEnd()).join('\n');
+export const G4OS_LOGO_HTML = G4OS_LOGO.map((line) => line.trimEnd()).join('\n');
 
 /** Session viewer base URL */
-export const VIEWER_URL = 'https://agents.craft.do';
+export const VIEWER_URL = 'https://g4educacao.com';

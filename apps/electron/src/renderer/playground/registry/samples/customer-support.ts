@@ -3,7 +3,7 @@
  * Cross-platform support flow demonstrating service integration
  */
 
-import type { ActivityItem, ResponseContent } from '@craft-agent/ui'
+import type { ActivityItem, ResponseContent } from '@g4os/ui'
 import { nativeToolIcons, sourceIcons } from '../sample-icons'
 
 const now = Date.now()

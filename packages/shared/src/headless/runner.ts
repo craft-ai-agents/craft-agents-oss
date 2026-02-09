@@ -40,7 +40,7 @@ const SAFE_COMMANDS = new Set([
  * HeadlessRunner executes queries in non-interactive mode.
  *
  * Reuses existing components:
- * - CraftMcpClient for MCP connections
+ * - G4OSMcpClient for MCP connections
  * - ClaudeAgent for query execution
  *
  * Handles interactions automatically:
@@ -85,7 +85,7 @@ export class HeadlessRunner {
       yield { type: 'status', message: 'Connecting to workspace...' };
       this.workspaceRootPath = this.config.workspace.rootPath;
 
-      // 2. Create CraftAgent with headless callbacks
+      // 2. Create G4Agent with headless callbacks
       await this.createAgent();
 
       // 3. Execute query

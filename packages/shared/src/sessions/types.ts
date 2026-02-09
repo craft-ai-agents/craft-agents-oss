@@ -11,7 +11,7 @@
 
 import type { PermissionMode } from '../agent/mode-manager.ts';
 import type { ThinkingLevel } from '../agent/thinking-levels.ts';
-import type { StoredAttachment, MessageRole, ToolStatus, AuthRequestType, AuthStatus, CredentialInputMode, StoredMessage } from '@craft-agent/core/types';
+import type { StoredAttachment, MessageRole, ToolStatus, AuthRequestType, AuthStatus, CredentialInputMode, StoredMessage } from '@g4os/core/types';
 
 /**
  * Session fields that persist to disk.
@@ -80,9 +80,9 @@ export interface SessionTokenUsage {
 
 /**
  * Stored message format (simplified for persistence)
- * Re-exported from @craft-agent/core for convenience
+ * Re-exported from @g4os/core for convenience
  */
-export type { StoredMessage } from '@craft-agent/core/types';
+export type { StoredMessage } from '@g4os/core/types';
 
 /**
  * Session configuration (persisted metadata)
@@ -176,7 +176,7 @@ export interface SessionHeader {
   id: string;
   /** SDK session ID (captured after first message) */
   sdkSessionId?: string;
-  /** Workspace root path (stored as portable path, e.g., ~/.craft-agent/...) */
+  /** Workspace root path (stored as portable path, e.g., ~/.g4os/...) */
   workspaceRootPath: string;
   /** Optional user-defined name */
   name?: string;

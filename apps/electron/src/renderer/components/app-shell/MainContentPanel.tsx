@@ -31,7 +31,7 @@ import {
   isSkillsNavigation,
 } from '@/contexts/NavigationContext'
 import { useSessionSelection, useIsMultiSelectActive, useSelectedIds, useSelectionCount } from '@/hooks/useSession'
-import { extractLabelId } from '@craft-agent/shared/labels'
+import { extractLabelId } from '@g4os/shared/labels'
 import type { TodoStateId } from '@/config/todo-states'
 import { SourceInfoPage, ChatPage } from '@/pages'
 import SkillInfoPage from '@/pages/SkillInfoPage'

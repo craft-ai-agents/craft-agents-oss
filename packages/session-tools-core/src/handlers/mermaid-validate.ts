@@ -1,13 +1,13 @@
 /**
  * Mermaid Validate Handler
  *
- * Validates Mermaid diagram syntax using @craft-agent/mermaid parser.
+ * Validates Mermaid diagram syntax using @g4os/mermaid parser.
  * No DOM required - works identically in Claude and Codex.
  */
 
 import type { SessionToolContext } from '../context.ts';
 import type { ToolResult } from '../types.ts';
-import { parseMermaid } from '@craft-agent/mermaid';
+import { parseMermaid } from '@g4os/mermaid';
 
 export interface MermaidValidateArgs {
   code: string;
@@ -16,7 +16,7 @@ export interface MermaidValidateArgs {
 /**
  * Handle the mermaid_validate tool call.
  *
- * Uses parseMermaid from @craft-agent/mermaid to validate syntax.
+ * Uses parseMermaid from @g4os/mermaid to validate syntax.
  * If parsing succeeds, the diagram is valid.
  * If parsing throws, returns the error message.
  */
@@ -48,7 +48,7 @@ export async function handleMermaidValidate(
         text: JSON.stringify({
           valid: false,
           error: errorMessage,
-          suggestion: 'Check the syntax against ~/.craft-agent/docs/mermaid.md',
+          suggestion: 'Check the syntax against ~/.g4os/docs/mermaid.md',
         }, null, 2),
       }],
       isError: true,

@@ -1,6 +1,6 @@
-appId: com.lukilabs.craft-agent
-productName: Craft Agents
-copyright: Copyright © 2025 Craft Docs Ltd.
+appId: com.g4educacao.g4os
+productName: G4 OS
+copyright: Copyright © 2025 G4 Educacao
 
 electronVersion: "39.2.7"
 
@@ -39,7 +39,7 @@ extraMetadata:
 # Auto-update: electron-updater fetches from this URL for update manifests (.yml files)
 publish:
   provider: generic
-  url: https://agents.craft.do/electron/latest
+  url: https://g4educacao.com/electron/latest
 
 # Disable ASAR to avoid decompression overhead and click delays
 asar: false
@@ -72,21 +72,21 @@ mac:
     - "!**/vendor/codex/linux-*/**"
     - "!**/vendor/codex/win32-*/**"
   # Use predictable naming for macOS packages (applies to zip; dmg uses its own config below)
-  artifactName: "Craft-Agent-${arch}.${ext}"
+  artifactName: "G4OS-${arch}.${ext}"
   # Code signing & notarization (disabled by default for local builds)
   # To enable: set CSC_LINK, APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID
   # notarize:
   #   teamId: ${APPLE_TEAM_ID}
 
 dmg:
-  # Use predictable naming: Craft-Agent-arm64.dmg, Craft-Agent-x64.dmg
-  artifactName: "Craft-Agent-${arch}.dmg"
+  # Use predictable naming: G4OS-arm64.dmg, G4OS-x64.dmg
+  artifactName: "G4OS-${arch}.dmg"
   # Custom background (multi-resolution TIFF with 1x+2x for retina support)
   background: resources/dmg-background.tiff
   # Use app icon as the mounted volume icon in Finder
   icon: resources/icon.icns
   iconSize: 80
-  title: "Craft Agents"
+  title: "G4 OS"
   contents:
     - x: 130
       y: 200
@@ -104,8 +104,8 @@ win:
     - target: nsis
       arch:
         - x64
-  # Use predictable naming: Craft-Agent-x64.exe
-  artifactName: "Craft-Agent-${arch}.${ext}"
+  # Use predictable naming: G4OS-x64.exe
+  artifactName: "G4OS-${arch}.${ext}"
   files:
     # Exclude binaries for other platforms
     - "!node_modules/@anthropic-ai/claude-agent-sdk/vendor/ripgrep/arm64-linux"
@@ -135,12 +135,12 @@ nsis:
 linux:
   icon: resources/icon.png
   category: Utility
-  maintainer: "Craft Docs Ltd. <support@craft.do>"
+  maintainer: "G4 Educacao <g4os@g4educacao.com>"
   target:
     - target: AppImage
       arch:
         - x64
-  artifactName: "Craft-Agent-${arch}.${ext}"
+  artifactName: "G4OS-${arch}.${ext}"
   # Exclude binaries for other platforms
   files:
     - "!node_modules/@anthropic-ai/claude-agent-sdk/vendor/ripgrep/arm64-darwin"

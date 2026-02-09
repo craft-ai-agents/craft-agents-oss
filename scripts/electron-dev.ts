@@ -192,7 +192,7 @@ function getOAuthDefines(): Record<string, string> {
 
 // Get environment variables for electron process
 function getElectronEnv(): Record<string, string> {
-  const vitePort = process.env.CRAFT_VITE_PORT || "5173";
+  const vitePort = process.env.G4OS_VITE_PORT || "5173";
 
   // Codex binary path is resolved at runtime by the binary-resolver module.
   // It checks: CODEX_PATH env var > bundled binary > local dev fork > system PATH.
@@ -201,10 +201,10 @@ function getElectronEnv(): Record<string, string> {
   return {
     ...process.env as Record<string, string>,
     VITE_DEV_SERVER_URL: `http://localhost:${vitePort}`,
-    CRAFT_CONFIG_DIR: process.env.CRAFT_CONFIG_DIR || "",
-    CRAFT_APP_NAME: process.env.CRAFT_APP_NAME || "Craft Agents",
-    CRAFT_DEEPLINK_SCHEME: process.env.CRAFT_DEEPLINK_SCHEME || "craftagents",
-    CRAFT_INSTANCE_NUMBER: process.env.CRAFT_INSTANCE_NUMBER || "",
+    G4OS_CONFIG_DIR: process.env.G4OS_CONFIG_DIR || "",
+    G4OS_APP_NAME: process.env.G4OS_APP_NAME || "G4 OS",
+    G4OS_DEEPLINK_SCHEME: process.env.G4OS_DEEPLINK_SCHEME || "g4os",
+    G4OS_INSTANCE_NUMBER: process.env.G4OS_INSTANCE_NUMBER || "",
   };
 }
 
@@ -298,7 +298,7 @@ async function main(): Promise<void> {
   // Build MCP servers for Codex sessions
   await buildMcpServers();
 
-  const vitePort = process.env.CRAFT_VITE_PORT || "5173";
+  const vitePort = process.env.G4OS_VITE_PORT || "5173";
   const oauthDefines = getOAuthDefines();
 
   // Kill any existing process on the Vite port

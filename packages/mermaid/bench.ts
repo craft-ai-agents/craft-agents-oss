@@ -1,5 +1,5 @@
 /**
- * Performance benchmark for @craft-agent/mermaid.
+ * Performance benchmark for @g4os/mermaid.
  *
  * Runs all sample definitions through both renderers (SVG + ASCII) in Bun
  * and prints a table with per-sample timing and aggregate stats.
@@ -46,7 +46,7 @@ function fmtMs(ms: number): string {
 const results: Result[] = []
 const totalStart = performance.now()
 
-console.log(`\n@craft-agent/mermaid — Benchmark (${samples.length} samples)`)
+console.log(`\n@g4os/mermaid — Benchmark (${samples.length} samples)`)
 console.log('═'.repeat(90))
 console.log(
   `${col('#', 4, 'right')}  ${col('Title', 38)}  ${col('Category', 15)}  ${col('SVG (ms)', 10, 'right')}  ${col('ASCII (ms)', 10, 'right')}  ${col('Total', 10, 'right')}`,

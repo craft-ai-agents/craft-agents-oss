@@ -23,10 +23,10 @@
     "noPropertyAccessFromIndexSignature": false,
     "baseUrl": ".",
     "paths": {
-      "@craft-agent/core": ["../core/src/index.ts"],
-      "@craft-agent/core/*": ["../core/src/*"],
-      "@craft-agent/shared": ["./src/index.ts"],
-      "@craft-agent/shared/*": ["./src/*"]
+      "@g4os/core": ["../core/src/index.ts"],
+      "@g4os/core/*": ["../core/src/*"],
+      "@g4os/shared": ["./src/index.ts"],
+      "@g4os/shared/*": ["./src/*"]
     }
   },
   "include": ["src/**/*"],

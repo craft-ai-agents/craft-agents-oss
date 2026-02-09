@@ -14,7 +14,7 @@ import { FileDiff, type FileDiffMetadata, type FileDiffProps } from '@pierre/dif
 import { parseDiffFromFile, DIFFS_TAG_NAME, type FileContents } from '@pierre/diffs'
 import { cn } from '../../lib/utils'
 import { LANGUAGE_MAP } from './language-map'
-import { registerCraftShikiThemes } from './registerShikiThemes'
+import { registerG4OSShikiThemes } from './registerShikiThemes'
 
 // Register the diffs-container custom element if not already registered
 // This is necessary because the React component renders a custom element
@@ -30,7 +30,7 @@ if (typeof HTMLElement !== 'undefined' && !customElements.get(DIFFS_TAG_NAME)) {
 }
 
 // Register custom themes once per runtime.
-registerCraftShikiThemes()
+registerG4OSShikiThemes()
 
 export interface ShikiDiffViewerProps {
   /** Original (before) content */

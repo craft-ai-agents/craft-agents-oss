@@ -1,5 +1,5 @@
 /**
- * Re-export all types from @craft-agent/core
+ * Re-export all types from @g4os/core
  */
 
 // Workspace and config types

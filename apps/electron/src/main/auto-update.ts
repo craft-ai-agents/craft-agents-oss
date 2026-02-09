@@ -2,7 +2,7 @@
  * Auto-update module using electron-updater
  *
  * Handles checking for updates, downloading, and installing via the standard
- * electron-updater library. Updates are served from https://agents.craft.do/electron/latest
+ * electron-updater library. Updates are served from https://g4educacao.com/electron/latest
  * using the generic provider (YAML manifests + binaries on R2/S3).
  *
  * Platform behavior:
@@ -20,12 +20,12 @@ import { platform } from 'os'
 import * as path from 'path'
 import * as fs from 'fs'
 import { mainLog } from './logger'
-import { getAppVersion } from '@craft-agent/shared/version'
+import { getAppVersion } from '@g4os/shared/version'
 import {
   getDismissedUpdateVersion,
   clearDismissedUpdateVersion,
-} from '@craft-agent/shared/config'
-import { readJsonFileSync } from '@craft-agent/shared/utils/files'
+} from '@g4os/shared/config'
+import { readJsonFileSync } from '@g4os/shared/utils/files'
 import type { UpdateInfo } from '../shared/types'
 import type { WindowManager } from './window-manager'
 

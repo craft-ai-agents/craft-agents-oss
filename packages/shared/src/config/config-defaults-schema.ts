@@ -5,7 +5,7 @@
  * This file only defines types - the actual defaults come from the bundled JSON.
  */
 
-import type { AuthType } from '@craft-agent/core/types';
+import type { AuthType } from '@g4os/core/types';
 import type { PermissionMode } from '../agent/mode-manager.ts';
 import type { ThinkingLevel } from '../agent/thinking-levels.ts';
 

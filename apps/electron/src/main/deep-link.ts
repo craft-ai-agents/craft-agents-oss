@@ -1,20 +1,20 @@
 /**
  * Deep Link Handler
  *
- * Parses craftagents:// URLs and routes to appropriate actions.
+ * Parses g4os:// URLs and routes to appropriate actions.
  *
  * URL Formats (workspace is optional - uses active window if omitted):
  *
  * Compound format (hierarchical navigation):
- *   craftagents://allSessions[/session/{sessionId}]            - Session list (all sessions)
- *   craftagents://flagged[/session/{sessionId}]             - Session list (flagged filter)
- *   craftagents://state/{stateId}[/session/{sessionId}]     - Session list (state filter)
- *   craftagents://sources[/source/{sourceSlug}]          - Sources list
- *   craftagents://settings[/{subpage}]                   - Settings (general, shortcuts, preferences)
+ *   g4os://allSessions[/session/{sessionId}]            - Session list (all sessions)
+ *   g4os://flagged[/session/{sessionId}]             - Session list (flagged filter)
+ *   g4os://state/{stateId}[/session/{sessionId}]     - Session list (state filter)
+ *   g4os://sources[/source/{sourceSlug}]          - Sources list
+ *   g4os://settings[/{subpage}]                   - Settings (general, shortcuts, preferences)
  *
  * Action format:
- *   craftagents://action/{actionName}[/{id}][?params]
- *   craftagents://workspace/{workspaceId}/action/{actionName}[?params]
+ *   g4os://action/{actionName}[/{id}][?params]
+ *   g4os://workspace/{workspaceId}/action/{actionName}[?params]
  *
  * Actions:
  *   new-chat                  - Create new chat, optional ?input=text&name=name&send=true
@@ -25,13 +25,13 @@
  *   unflag-session/{id}       - Unflag session
  *
  * Examples:
- *   craftagents://allSessions                               (all sessions view)
- *   craftagents://allSessions/session/abc123                (specific session)
- *   craftagents://settings/shortcuts                     (shortcuts page)
- *   craftagents://sources/source/github                  (github source info)
- *   craftagents://action/new-chat                        (uses active window)
- *   craftagents://action/resume-sdk-session/{sdkId}      (resume Claude Code session)
- *   craftagents://workspace/ws123/allSessions/session/abc123   (targets specific workspace)
+ *   g4os://allSessions                               (all sessions view)
+ *   g4os://allSessions/session/abc123                (specific session)
+ *   g4os://settings/shortcuts                     (shortcuts page)
+ *   g4os://sources/source/github                  (github source info)
+ *   g4os://action/new-chat                        (uses active window)
+ *   g4os://action/resume-sdk-session/{sdkId}      (resume Claude Code session)
+ *   g4os://workspace/ws123/allSessions/session/abc123   (targets specific workspace)
  */
 
 import type { BrowserWindow } from 'electron'
@@ -95,19 +95,19 @@ export function parseDeepLink(url: string): DeepLinkTarget | null {
   try {
     const parsed = new URL(url)
 
-    if (parsed.protocol !== 'craftagents:') {
+    if (parsed.protocol !== 'g4os:') {
       return null
     }
 
     // For custom protocols, the hostname contains the first path segment
-    // e.g., craftagents://workspace/ws123 → hostname='workspace', pathname='/ws123'
-    // e.g., craftagents://allSessions/chat/abc → hostname='allSessions', pathname='/chat/abc'
+    // e.g., g4os://workspace/ws123 → hostname='workspace', pathname='/ws123'
+    // e.g., g4os://allSessions/chat/abc → hostname='allSessions', pathname='/chat/abc'
     const host = parsed.hostname
     const pathParts = parsed.pathname.split('/').filter(Boolean)
     const windowMode = parseWindowMode(parsed)
     const rightSidebar = parseRightSidebar(parsed)
 
-    // craftagents://auth-callback?... (OAuth callbacks - return null to let existing handler process)
+    // g4os://auth-callback?... (OAuth callbacks - return null to let existing handler process)
     if (host === 'auth-callback') {
       return null
     }
@@ -117,7 +117,7 @@ export function parseDeepLink(url: string): DeepLinkTarget | null {
       'allSessions', 'flagged', 'state', 'sources', 'settings', 'skills'
     ]
 
-    // craftagents://allSessions/..., craftagents://settings/..., etc. (compound routes)
+    // g4os://allSessions/..., g4os://settings/..., etc. (compound routes)
     if (COMPOUND_ROUTE_PREFIXES.includes(host)) {
       // Reconstruct the full compound route from host + pathname
       const viewRoute = pathParts.length > 0 ? `${host}/${pathParts.join('/')}` : host
@@ -129,7 +129,7 @@ export function parseDeepLink(url: string): DeepLinkTarget | null {
       }
     }
 
-    // craftagents://workspace/{workspaceId}/... (with workspace targeting)
+    // g4os://workspace/{workspaceId}/... (with workspace targeting)
     if (host === 'workspace') {
       const workspaceId = pathParts[0]
       if (!workspaceId) return null
@@ -167,7 +167,7 @@ export function parseDeepLink(url: string): DeepLinkTarget | null {
       return result
     }
 
-    // craftagents://action/... (no workspace - uses active window)
+    // g4os://action/... (no workspace - uses active window)
     if (host === 'action') {
       const result: DeepLinkTarget = {
         workspaceId: undefined,

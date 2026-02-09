@@ -3,7 +3,7 @@
  * A complete production incident response flow demonstrating cross-service orchestration
  */
 
-import type { ActivityItem, ResponseContent } from '@craft-agent/ui'
+import type { ActivityItem, ResponseContent } from '@g4os/ui'
 import { nativeToolIcons, sourceIcons, internalIcons } from '../sample-icons'
 
 const now = Date.now()

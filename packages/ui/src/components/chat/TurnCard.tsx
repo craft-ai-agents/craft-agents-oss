@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { useMemo, useEffect, useRef, useCallback, useState } from 'react'
-import type { ToolDisplayMeta } from '@craft-agent/core'
-import { normalizePath, pathStartsWith, stripPathPrefix } from '@craft-agent/core/utils'
+import type { ToolDisplayMeta } from '@g4os/core'
+import { normalizePath, pathStartsWith, stripPathPrefix } from '@g4os/core/utils'
 import { motion, AnimatePresence } from 'motion/react'
 import {
   ChevronRight,

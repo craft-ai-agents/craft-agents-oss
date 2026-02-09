@@ -187,7 +187,7 @@ class ModeManager {
 
     debug(`[Mode] Set permission mode to ${mode} for session ${sessionId}`);
 
-    // Notify callbacks (for CraftAgent internal sync)
+    // Notify callbacks (for G4Agent internal sync)
     const callbacks = this.callbacks.get(sessionId);
     if (callbacks?.onStateChange) {
       callbacks.onStateChange(newState);
@@ -1413,13 +1413,13 @@ export function getPathHint(targetPath: string, plansFolderPath: string): string
   }
 
   // Case: Writing to workspace root instead of session
-  if (normalizedTarget.includes('/.craft-agent/workspaces/') && !normalizedTarget.includes('/sessions/')) {
+  if (normalizedTarget.includes('/.g4os/workspaces/') && !normalizedTarget.includes('/sessions/')) {
     return 'Hint: Write to the session plans folder, not the workspace root.';
   }
 
-  // Case: Writing outside .craft-agent entirely
-  if (!normalizedTarget.includes('/.craft-agent/')) {
-    return 'Hint: Plans must be written to the .craft-agent session plans folder.';
+  // Case: Writing outside .g4os entirely
+  if (!normalizedTarget.includes('/.g4os/')) {
+    return 'Hint: Plans must be written to the .g4os session plans folder.';
   }
 
   return null;
@@ -1699,7 +1699,7 @@ export function shouldAllowToolInMode(
   // Handle MCP tools - allow read-only, block write operations
   if (toolName.startsWith('mcp__')) {
     // Always allow preferences and documentation tools (read-only, always available)
-    if (toolName.startsWith('mcp__preferences__') || toolName.startsWith('mcp__craft-agents-docs__')) {
+    if (toolName.startsWith('mcp__preferences__') || toolName.startsWith('mcp__g4os-docs__')) {
       return { allowed: true };
     }
 

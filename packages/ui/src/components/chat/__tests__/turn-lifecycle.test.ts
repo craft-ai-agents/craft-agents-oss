@@ -8,7 +8,7 @@
 
 import { describe, it, expect } from 'bun:test'
 import { deriveTurnPhase, groupMessagesByTurn, type AssistantTurn } from '../turn-utils'
-import type { Message } from '@craft-agent/core'
+import type { Message } from '@g4os/core'
 
 // ============================================================================
 // Test Helpers

@@ -53,7 +53,7 @@ describe('SourceServerBuilder.buildApiConfig', () => {
 
   it('preserves empty string authScheme for APIs without Bearer prefix', () => {
     // This is the critical case that was broken before the fix
-    // APIs like Craft Admin expect raw JWT tokens without any prefix
+    // APIs like G4 OS Admin expect raw JWT tokens without any prefix
     const source = createMockSource('bearer', '');
     const config = builder.buildApiConfig(source);
 

@@ -1,5 +1,5 @@
 {
-  "name": "@craft-agent/codex-types",
+  "name": "@g4os/codex-types",
   "version": "0.4.0",
   "description": "Generated TypeScript types for Codex app-server protocol",
   "type": "module",

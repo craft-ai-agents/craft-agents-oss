@@ -4,7 +4,7 @@
  * Implements browser-based OAuth using PKCE (Proof Key for Code Exchange)
  * for authenticating with ChatGPT Plus accounts via Codex app-server.
  *
- * This enables the `chatgptAuthTokens` mode where Craft Agent owns the
+ * This enables the `chatgptAuthTokens` mode where G4 OS owns the
  * OAuth flow and injects tokens into Codex, providing a better UX than
  * the default Codex-managed `chatgpt` mode.
  *

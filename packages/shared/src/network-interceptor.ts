@@ -24,10 +24,10 @@ const TOOL_METADATA_FOR_ALL_TOOLS = false; // When false, only add metadata to M
 const INTERCEPTOR_LOGGING_ENABLED = false; // When false, disable all debug logging
 
 const DEBUG = INTERCEPTOR_LOGGING_ENABLED &&
-  (process.argv.includes('--debug') || process.env.CRAFT_DEBUG === '1');
+  (process.argv.includes('--debug') || process.env.G4OS_DEBUG === '1');
 
 // Log file for debug output (avoids console spam)
-const LOG_DIR = join(homedir(), '.craft-agent', 'logs');
+const LOG_DIR = join(homedir(), '.g4os', 'logs');
 const LOG_FILE = join(LOG_DIR, 'interceptor.log');
 
 // Ensure log directory exists at module load
@@ -70,7 +70,7 @@ export interface LastApiError {
 }
 
 // File-based storage for cross-process sharing
-const ERROR_FILE = join(homedir(), '.craft-agent', 'api-error.json');
+const ERROR_FILE = join(homedir(), '.g4os', 'api-error.json');
 const MAX_ERROR_AGE_MS = 5 * 60 * 1000; // 5 minutes
 
 function getStoredError(): LastApiError | null {
@@ -154,12 +154,12 @@ export interface ToolMetadata {
  * - Survives subprocess restarts (session resume) via file persistence
  *
  * The session directory is determined by:
- * - SDK subprocess: CRAFT_SESSION_DIR env var (set by main process before spawn)
+ * - SDK subprocess: G4OS_SESSION_DIR env var (set by main process before spawn)
  * - Main process: toolMetadataStore.setSessionDir(path) called during agent creation
  */
 
 // Session directory — set by env var (subprocess) or setSessionDir() (main process)
-let _sessionDir: string | null = process.env.CRAFT_SESSION_DIR || null;
+let _sessionDir: string | null = process.env.G4OS_SESSION_DIR || null;
 
 function getMetadataFilePath(): string | null {
   return _sessionDir ? join(_sessionDir, 'tool-metadata.json') : null;

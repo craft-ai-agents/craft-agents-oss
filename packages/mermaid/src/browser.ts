@@ -1,5 +1,5 @@
 // ============================================================================
-// Browser entry point for @craft-agent/mermaid
+// Browser entry point for @g4os/mermaid
 //
 // Exposes renderMermaid and renderMermaidAscii on window.__mermaid so they
 // can be called from inline <script> tags in samples.html.

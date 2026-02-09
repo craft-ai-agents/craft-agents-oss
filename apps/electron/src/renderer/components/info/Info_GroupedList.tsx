@@ -7,7 +7,7 @@
 
 import * as React from 'react'
 import { cva } from 'class-variance-authority'
-import { Spinner } from '@craft-agent/ui'
+import { Spinner } from '@g4os/ui'
 import { cn } from '@/lib/utils'
 
 const groupHeaderVariants = cva(

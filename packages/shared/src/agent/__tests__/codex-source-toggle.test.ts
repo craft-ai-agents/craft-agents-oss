@@ -192,7 +192,7 @@ describe('Codex Source Toggle Flow', () => {
     // Pattern: mcp__api-bridge__api_{slug} → slug
 
     function extractSourceSlug(mcpServer: string, mcpTool?: string): string | null {
-      const BUILT_IN = new Set(['preferences', 'session', 'craft-agents-docs', 'api-bridge']);
+      const BUILT_IN = new Set(['preferences', 'session', 'g4os-docs', 'api-bridge']);
       if (!mcpServer) return null;
       if (mcpServer === 'api-bridge') {
         if (mcpTool?.startsWith('api_')) return mcpTool.slice(4);
@@ -217,7 +217,7 @@ describe('Codex Source Toggle Flow', () => {
     it('should return null for built-in MCP servers', () => {
       expect(extractSourceSlug('session')).toBeNull();
       expect(extractSourceSlug('preferences')).toBeNull();
-      expect(extractSourceSlug('craft-agents-docs')).toBeNull();
+      expect(extractSourceSlug('g4os-docs')).toBeNull();
     });
 
     it('should return the server name for user sources', () => {

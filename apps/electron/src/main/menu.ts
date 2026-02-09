@@ -10,7 +10,7 @@ let cachedWindowManager: WindowManager | null = null
 
 /**
  * Creates and sets the application menu for macOS.
- * Includes only relevant items for the Craft Agents app.
+ * Includes only relevant items for the G4 OS app.
  *
  * Call rebuildMenu() when update state changes to refresh the menu.
  */
@@ -23,7 +23,7 @@ export function createApplicationMenu(windowManager: WindowManager): void {
  * Rebuilds the application menu with current update state.
  * Call this when update availability changes.
  *
- * On Windows/Linux: Menu is hidden - all functionality is in the Craft logo menu.
+ * On Windows/Linux: Menu is hidden - all functionality is in the G4 OS logo menu.
  * On macOS: Native menu is required by Apple guidelines, so we keep it synced.
  */
 export async function rebuildMenu(): Promise<void> {
@@ -33,7 +33,7 @@ export async function rebuildMenu(): Promise<void> {
   const isMac = process.platform === 'darwin'
 
   // On Windows/Linux, hide the native menu entirely
-  // Users access menu via the Craft logo dropdown in the app
+  // Users access menu via the G4 OS logo dropdown in the app
   if (!isMac) {
     Menu.setApplicationMenu(null)
     return
@@ -62,9 +62,9 @@ export async function rebuildMenu(): Promise<void> {
   const template: Electron.MenuItemConstructorOptions[] = [
     // App menu (macOS only)
     ...(isMac ? [{
-      label: 'Craft Agents',
+      label: 'G4 OS',
       submenu: [
-        { role: 'about' as const, label: 'About Craft Agents' },
+        { role: 'about' as const, label: 'About G4 OS' },
         updateMenuItem,
         { type: 'separator' as const },
         {
@@ -73,11 +73,11 @@ export async function rebuildMenu(): Promise<void> {
           click: () => sendToRenderer(IPC_CHANNELS.MENU_OPEN_SETTINGS)
         },
         { type: 'separator' as const },
-        { role: 'hide' as const, label: 'Hide Craft Agents' },
+        { role: 'hide' as const, label: 'Hide G4 OS' },
         { role: 'hideOthers' as const },
         { role: 'unhide' as const },
         { type: 'separator' as const },
-        { role: 'quit' as const, label: 'Quit Craft Agents' }
+        { role: 'quit' as const, label: 'Quit G4 OS' }
       ]
     }] : []),
 
@@ -173,7 +173,7 @@ export async function rebuildMenu(): Promise<void> {
             await dialog.showMessageBox({
               type: 'info',
               message: 'Reset to Defaults',
-              detail: 'To reset Craft Agent to defaults, quit the app and run:\n\nbun run fresh-start\n\nThis will delete all configuration, credentials, workspaces, and sessions.',
+              detail: 'To reset G4 OS to defaults, quit the app and run:\n\nbun run fresh-start\n\nThis will delete all configuration, credentials, workspaces, and sessions.',
               buttons: ['OK']
             })
           }
@@ -187,7 +187,7 @@ export async function rebuildMenu(): Promise<void> {
       submenu: [
         {
           label: 'Help & Documentation',
-          click: () => shell.openExternal('https://agents.craft.do/docs')
+          click: () => shell.openExternal('https://g4educacao.com/docs')
         },
         {
           label: 'Keyboard Shortcuts',

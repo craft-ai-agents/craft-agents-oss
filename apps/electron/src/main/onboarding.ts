@@ -5,10 +5,10 @@
  */
 import { ipcMain } from 'electron'
 import { mainLog } from './logger'
-import { getAuthState, getSetupNeeds } from '@craft-agent/shared/auth'
-import { getCredentialManager } from '@craft-agent/shared/credentials'
-import { CraftOAuth, getMcpBaseUrl, startClaudeOAuth, exchangeClaudeCode, hasValidOAuthState, clearOAuthState } from '@craft-agent/shared/auth'
-import { validateMcpConnection } from '@craft-agent/shared/mcp'
+import { getAuthState, getSetupNeeds } from '@g4os/shared/auth'
+import { getCredentialManager } from '@g4os/shared/credentials'
+import { G4OSOAuth, getMcpBaseUrl, startClaudeOAuth, exchangeClaudeCode, hasValidOAuthState, clearOAuthState } from '@g4os/shared/auth'
+import { validateMcpConnection } from '@g4os/shared/mcp'
 import { IPC_CHANNELS } from '../shared/types'
 import type { SessionManager } from './sessions'
 
@@ -44,9 +44,9 @@ export function registerOnboardingHandlers(sessionManager: SessionManager): void
     try {
       const baseUrl = getMcpBaseUrl(mcpUrl)
       mainLog.info('[Onboarding:Main] MCP OAuth baseUrl:', baseUrl)
-      mainLog.info('[Onboarding:Main] Creating CraftOAuth instance...')
+      mainLog.info('[Onboarding:Main] Creating G4OSOAuth instance...')
 
-      const oauth = new CraftOAuth(
+      const oauth = new G4OSOAuth(
         { mcpBaseUrl: baseUrl },
         {
           onStatus: (msg) => mainLog.info('[Onboarding:Main] MCP OAuth status:', msg),

@@ -61,7 +61,7 @@ export function GitBashWarning({
   return (
     <StepFormLayout
       title="Git Bash Required"
-      description="Craft Agent needs Git Bash to run shell commands on Windows. It was not found on your system."
+      description="G4 OS needs Git Bash to run shell commands on Windows. It was not found on your system."
     >
       <div className="space-y-4">
         {/* Primary action: Download Git */}

@@ -65,7 +65,7 @@ done
 # Configuration
 BUN_VERSION="bun-v1.3.5"  # Pinned version for reproducible builds
 
-echo "=== Building Craft Agents AppImage (${ARCH}) using electron-builder ==="
+echo "=== Building G4 OS AppImage (${ARCH}) using electron-builder ==="
 if [ "$UPLOAD" = true ]; then
     echo "Will upload to S3 after build"
 fi
@@ -150,8 +150,8 @@ else
     LINUX_ARCH="aarch64"
 fi
 
-# electron-builder outputs: Craft-Agent-x86_64.AppImage or Craft-Agent-aarch64.AppImage
-BUILT_APPIMAGE_NAME="Craft-Agent-${LINUX_ARCH}.AppImage"
+# electron-builder outputs: G4OS-x86_64.AppImage or G4OS-aarch64.AppImage
+BUILT_APPIMAGE_NAME="G4OS-${LINUX_ARCH}.AppImage"
 BUILT_APPIMAGE_PATH="$ELECTRON_DIR/release/$BUILT_APPIMAGE_NAME"
 
 if [ ! -f "$BUILT_APPIMAGE_PATH" ]; then
@@ -161,8 +161,8 @@ if [ ! -f "$BUILT_APPIMAGE_PATH" ]; then
     exit 1
 fi
 
-# Rename to our standard naming convention: Craft-Agent-x64.AppImage, Craft-Agent-arm64.AppImage
-APPIMAGE_NAME="Craft-Agent-${ARCH}.AppImage"
+# Rename to our standard naming convention: G4OS-x64.AppImage, G4OS-arm64.AppImage
+APPIMAGE_NAME="G4OS-${ARCH}.AppImage"
 APPIMAGE_PATH="$ELECTRON_DIR/release/$APPIMAGE_NAME"
 mv "$BUILT_APPIMAGE_PATH" "$APPIMAGE_PATH"
 echo "Renamed $BUILT_APPIMAGE_NAME -> $APPIMAGE_NAME"

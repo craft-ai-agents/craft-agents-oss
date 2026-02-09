@@ -3,7 +3,7 @@ import * as Sentry from '@sentry/electron/main'
 import { basename, join } from 'path'
 import { existsSync } from 'fs'
 import { rm, readFile, mkdir, writeFile, rename, open } from 'fs/promises'
-import { CraftAgent, type AgentEvent, setPermissionMode, type PermissionMode, unregisterSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest } from '@craft-agent/shared/agent'
+import { G4Agent, type AgentEvent, setPermissionMode, type PermissionMode, unregisterSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest } from '@g4os/shared/agent'
 import {
   CodexBackend,
   CodexAgent,
@@ -13,14 +13,14 @@ import {
   connectionAuthTypeToBackendAuthType,
   getStaticCapabilities,
   type LlmAuthType,
-} from '@craft-agent/shared/agent/backend'
+} from '@g4os/shared/agent/backend'
 import {
   generateCodexConfig,
   generateBridgeConfig,
   getCredentialCachePath,
   type CredentialCacheEntry,
-} from '@craft-agent/shared/codex'
-import { getLlmConnection, getDefaultLlmConnection } from '@craft-agent/shared/config'
+} from '@g4os/shared/codex'
+import { getLlmConnection, getDefaultLlmConnection } from '@g4os/shared/config'
 import { sessionLog, isDebugMode, getLogFilePath } from './logger'
 import { createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk'
 import type { WindowManager } from './window-manager'
@@ -32,8 +32,8 @@ import {
   resolveModelId,
   migrateLegacyCredentials,
   type Workspace,
-} from '@craft-agent/shared/config'
-import { loadWorkspaceConfig } from '@craft-agent/shared/workspaces'
+} from '@g4os/shared/config'
+import { loadWorkspaceConfig } from '@g4os/shared/workspaces'
 import {
   // Session persistence functions
   listSessions as listStoredSessions,
@@ -62,23 +62,23 @@ import {
   type SessionMetadata,
   type TodoState,
   pickSessionFields,
-} from '@craft-agent/shared/sessions'
-import { loadWorkspaceSources, loadAllSources, getSourcesBySlugs, isSourceUsable, type LoadedSource, type McpServerConfig, getSourcesNeedingAuth, getSourceCredentialManager, getSourceServerBuilder, type SourceWithCredential, isApiOAuthProvider, SERVER_BUILD_ERRORS, TokenRefreshManager, createTokenGetter } from '@craft-agent/shared/sources'
-import { ConfigWatcher, type ConfigWatcherCallbacks } from '@craft-agent/shared/config'
-import { getAuthState, getValidClaudeOAuthToken } from '@craft-agent/shared/auth'
-import { setAnthropicOptionsEnv, setPathToClaudeCodeExecutable, setInterceptorPath, setExecutable } from '@craft-agent/shared/agent'
-import { toolMetadataStore } from '@craft-agent/shared/network-interceptor'
-import { getCredentialManager } from '@craft-agent/shared/credentials'
-import { CraftMcpClient } from '@craft-agent/shared/mcp'
+} from '@g4os/shared/sessions'
+import { loadWorkspaceSources, loadAllSources, getSourcesBySlugs, isSourceUsable, type LoadedSource, type McpServerConfig, getSourcesNeedingAuth, getSourceCredentialManager, getSourceServerBuilder, type SourceWithCredential, isApiOAuthProvider, SERVER_BUILD_ERRORS, TokenRefreshManager, createTokenGetter } from '@g4os/shared/sources'
+import { ConfigWatcher, type ConfigWatcherCallbacks } from '@g4os/shared/config'
+import { getAuthState, getValidClaudeOAuthToken } from '@g4os/shared/auth'
+import { setAnthropicOptionsEnv, setPathToClaudeCodeExecutable, setInterceptorPath, setExecutable } from '@g4os/shared/agent'
+import { toolMetadataStore } from '@g4os/shared/network-interceptor'
+import { getCredentialManager } from '@g4os/shared/credentials'
+import { G4OSMcpClient } from '@g4os/shared/mcp'
 import { type Session, type Message, type SessionEvent, type FileAttachment, type StoredAttachment, type SendMessageOptions, IPC_CHANNELS, generateMessageId } from '../shared/types'
-import { generateSessionTitle, regenerateSessionTitle, formatPathsToRelative, formatToolInputPaths, perf, encodeIconToDataUrl, getEmojiIcon, resetSummarizationClient, resolveToolIcon, type TitleGeneratorOptions } from '@craft-agent/shared/utils'
-import { loadWorkspaceSkills, type LoadedSkill } from '@craft-agent/shared/skills'
-import type { ToolDisplayMeta } from '@craft-agent/core/types'
-import { DEFAULT_MODEL, DEFAULT_CODEX_MODEL, getToolIconsDir, isCodexModel } from '@craft-agent/shared/config'
-import { type ThinkingLevel, DEFAULT_THINKING_LEVEL } from '@craft-agent/shared/agent/thinking-levels'
-import { evaluateAutoLabels } from '@craft-agent/shared/labels/auto'
-import { listLabels } from '@craft-agent/shared/labels/storage'
-import { extractLabelId } from '@craft-agent/shared/labels'
+import { generateSessionTitle, regenerateSessionTitle, formatPathsToRelative, formatToolInputPaths, perf, encodeIconToDataUrl, getEmojiIcon, resetSummarizationClient, resolveToolIcon, type TitleGeneratorOptions } from '@g4os/shared/utils'
+import { loadWorkspaceSkills, type LoadedSkill } from '@g4os/shared/skills'
+import type { ToolDisplayMeta } from '@g4os/core/types'
+import { DEFAULT_MODEL, DEFAULT_CODEX_MODEL, getToolIconsDir, isCodexModel } from '@g4os/shared/config'
+import { type ThinkingLevel, DEFAULT_THINKING_LEVEL } from '@g4os/shared/agent/thinking-levels'
+import { evaluateAutoLabels } from '@g4os/shared/labels/auto'
+import { listLabels } from '@g4os/shared/labels/storage'
+import { extractLabelId } from '@g4os/shared/labels'
 
 /**
  * Sanitize message content for use as session title.
@@ -215,7 +215,7 @@ interface McpTokenRefreshResult {
  * @param tokenRefreshManager - TokenRefreshManager instance for this session
  */
 async function refreshMcpOAuthTokensIfNeeded(
-  agent: CraftAgent,
+  agent: G4Agent,
   sources: LoadedSource[],
   sessionPath: string,
   tokenRefreshManager: TokenRefreshManager
@@ -300,7 +300,7 @@ async function writeFileSecure(targetPath: string, content: string, mode: number
 async function setupCodexSessionConfig(
   sessionPath: string,
   sources: LoadedSource[],
-  mcpServerConfigs: Record<string, import('@craft-agent/shared/agent/backend').SdkMcpServerConfig>,
+  mcpServerConfigs: Record<string, import('@g4os/shared/agent/backend').SdkMcpServerConfig>,
   sessionId?: string,
   workspaceRootPath?: string
 ): Promise<string> {
@@ -480,7 +480,7 @@ function resolveToolDisplayMeta(
 
   // CLI tool icon resolution for Bash commands
   // Parses the command string to detect known tools (git, npm, docker, etc.)
-  // and resolves their brand icon from ~/.craft-agent/tool-icons/
+  // and resolves their brand icon from ~/.g4os/tool-icons/
   if (toolName === 'Bash' && toolInput?.command) {
     const toolIconsDir = getToolIconsDir()
     const match = resolveToolIcon(String(toolInput.command), toolIconsDir)
@@ -523,8 +523,8 @@ function resolveToolDisplayMeta(
   return undefined
 }
 
-/** Agent type - CraftAgent for Claude, CodexBackend for Codex */
-type AgentInstance = CraftAgent | CodexBackend
+/** Agent type - G4Agent for Claude, CodexBackend for Codex */
+type AgentInstance = G4Agent | CodexBackend
 
 interface ManagedSession {
   id: string
@@ -540,7 +540,7 @@ interface ManagedSession {
   // Used to detect if a follow-up message has superseded the current one (stale-request guard).
   processingGeneration: number
   // NOTE: Parent-child tracking state (pendingTools, parentToolStack, toolToParentMap,
-  // pendingTextParent) has been removed. CraftAgent now provides parentToolUseId
+  // pendingTextParent) has been removed. G4Agent now provides parentToolUseId
   // directly on all events using the SDK's authoritative parent_tool_use_id field.
   // See: packages/shared/src/agent/tool-matching.ts
   // Session name (user-defined or AI-generated)
@@ -867,7 +867,7 @@ export class SessionManager {
       onSkillChange: async (slug, skill) => {
         sessionLog.info(`Skill '${slug}' changed:`, skill ? 'updated' : 'deleted')
         // Broadcast updated list to UI
-        const { loadWorkspaceSkills } = await import('@craft-agent/shared/skills')
+        const { loadWorkspaceSkills } = await import('@g4os/shared/skills')
         const skills = loadWorkspaceSkills(workspaceRootPath)
         this.broadcastSkillsChanged(skills)
       },
@@ -958,7 +958,7 @@ export class SessionManager {
   /**
    * Broadcast app theme changed event to all windows
    */
-  private broadcastAppThemeChanged(theme: import('@craft-agent/shared/config').ThemeOverrides | null): void {
+  private broadcastAppThemeChanged(theme: import('@g4os/shared/config').ThemeOverrides | null): void {
     if (!this.windowManager) return
     sessionLog.info(`Broadcasting app theme changed`)
     this.windowManager.broadcastToAll(IPC_CHANNELS.THEME_APP_CHANGED, theme)
@@ -967,7 +967,7 @@ export class SessionManager {
   /**
    * Broadcast skills changed event to all windows
    */
-  private broadcastSkillsChanged(skills: import('@craft-agent/shared/skills').LoadedSkill[]): void {
+  private broadcastSkillsChanged(skills: import('@g4os/shared/skills').LoadedSkill[]): void {
     if (!this.windowManager) return
     sessionLog.info(`Broadcasting skills changed (${skills.length} skills)`)
     this.windowManager.broadcastToAll(IPC_CHANNELS.SKILLS_CHANGED, skills)
@@ -975,7 +975,7 @@ export class SessionManager {
 
   /**
    * Broadcast default permissions changed event to all windows
-   * Triggered when ~/.craft-agent/permissions/default.json changes
+   * Triggered when ~/.g4os/permissions/default.json changes
    */
   private broadcastDefaultPermissionsChanged(): void {
     if (!this.windowManager) return
@@ -994,7 +994,7 @@ export class SessionManager {
     const workspaceRootPath = managed.workspace.rootPath
     sessionLog.info(`Reloading sources for session ${managed.id}`)
 
-    // Reload all sources from disk (craft-agents-docs is always available as MCP server)
+    // Reload all sources from disk (g4os-docs is always available as MCP server)
     const allSources = loadAllSources(workspaceRootPath)
     managed.agent.setAllSources(allSources)
 
@@ -1029,7 +1029,7 @@ export class SessionManager {
    * Bun's automatic .env loading is disabled in the subprocess (--env-file=/dev/null)
    * to prevent a user's project .env from injecting ANTHROPIC_API_KEY and overriding
    * OAuth auth — Claude Code prioritizes API key over OAuth token when both are set.
-   * See: https://github.com/lukilabs/craft-agents-oss/issues/39
+   * See: https://github.com/g4educacao/g4os/issues/39
    */
   /**
    * Reinitialize authentication environment variables.
@@ -1570,7 +1570,7 @@ export class SessionManager {
       }
 
       // Update source config to mark as authenticated
-      const { markSourceAuthenticated } = await import('@craft-agent/shared/sources')
+      const { markSourceAuthenticated } = await import('@g4os/shared/sources')
       markSourceAuthenticated(managed.workspace.rootPath, request.sourceSlug)
 
       // Mark source as unseen so fresh guide is injected on next message
@@ -2041,7 +2041,7 @@ export class SessionManager {
 
   /**
    * Get or create agent for a session (lazy loading)
-   * Creates CraftAgent for Claude or CodexBackend for Codex based on LLM connection.
+   * Creates G4Agent for Claude or CodexBackend for Codex based on LLM connection.
    *
    * Provider resolution order:
    * 1. session.llmConnection (locked after first message)
@@ -2103,10 +2103,10 @@ export class SessionManager {
       }
 
       // Set session directory for tool metadata cross-process sharing.
-      // The SDK subprocess reads CRAFT_SESSION_DIR to write tool-metadata.json;
+      // The SDK subprocess reads G4OS_SESSION_DIR to write tool-metadata.json;
       // the main process reads it via toolMetadataStore.setSessionDir().
       const sessionDirForMetadata = getSessionStoragePath(managed.workspace.rootPath, managed.id)
-      process.env.CRAFT_SESSION_DIR = sessionDirForMetadata
+      process.env.G4OS_SESSION_DIR = sessionDirForMetadata
       toolMetadataStore.setSessionDir(sessionDirForMetadata)
 
       // Create the appropriate backend based on provider
@@ -2221,7 +2221,7 @@ export class SessionManager {
         const claudeModel = resolveModelId(
           managed.model || connection?.defaultModel || config?.model || DEFAULT_MODEL
         )
-        managed.agent = new CraftAgent({
+        managed.agent = new G4Agent({
           workspace: managed.workspace,
           model: claudeModel,
           // Initialize thinking level at construction to avoid race conditions
@@ -2296,7 +2296,7 @@ export class SessionManager {
       }
 
       // Note: Credential requests now flow through onAuthRequest (unified auth flow)
-      // The legacy onCredentialRequest callback has been removed from CraftAgent
+      // The legacy onCredentialRequest callback has been removed from G4Agent
       // Auth refresh for mid-session token expiry is handled by the error handler in sendMessage
       // which destroys/recreates the agent to get fresh credentials
 
@@ -2619,7 +2619,7 @@ export class SessionManager {
     }
 
     // Validate connection exists
-    const { getLlmConnection } = await import('@craft-agent/shared/config/storage')
+    const { getLlmConnection } = await import('@g4os/shared/config/storage')
     const connection = getLlmConnection(connectionSlug)
     if (!connection) {
       sessionLog.warn(`setSessionConnection: connection "${connectionSlug}" not found`)
@@ -2718,7 +2718,7 @@ export class SessionManager {
         return { success: false, error: 'Session file not found' }
       }
 
-      const { VIEWER_URL } = await import('@craft-agent/shared/branding')
+      const { VIEWER_URL } = await import('@g4os/shared/branding')
       const response = await fetch(`${VIEWER_URL}/s/api`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2782,7 +2782,7 @@ export class SessionManager {
         return { success: false, error: 'Session file not found' }
       }
 
-      const { VIEWER_URL } = await import('@craft-agent/shared/branding')
+      const { VIEWER_URL } = await import('@g4os/shared/branding')
       const response = await fetch(`${VIEWER_URL}/s/api/${managed.sharedId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -2827,7 +2827,7 @@ export class SessionManager {
     this.sendEvent({ type: 'async_operation', sessionId, isOngoing: true }, managed.workspace.id)
 
     try {
-      const { VIEWER_URL } = await import('@craft-agent/shared/branding')
+      const { VIEWER_URL } = await import('@g4os/shared/branding')
       const response = await fetch(
         `${VIEWER_URL}/s/api/${managed.sharedId}`,
         { method: 'DELETE' }
@@ -3535,7 +3535,7 @@ export class SessionManager {
 
       // Skills mentioned via @mentions are handled by the SDK's Skill tool.
       // The UI layer (extractBadges in mentions.ts) injects fully-qualified names
-      // in the rawText, and canUseTool in craft-agent.ts provides a fallback
+      // in the rawText, and canUseTool in claude-agent.ts provides a fallback
       // to qualify short names. No transformation needed here.
 
       // Ensure main process reads tool metadata from the correct session directory.
@@ -4153,7 +4153,7 @@ To view this task's output:
         const existingStartMsg = managed.messages.find(m => m.toolUseId === event.toolUseId)
         const isDuplicateEvent = !!existingStartMsg
 
-        // Use parentToolUseId directly from the event — CraftAgent resolves this
+        // Use parentToolUseId directly from the event — G4Agent resolves this
         // from SDK's parent_tool_use_id (authoritative, handles parallel Tasks correctly).
         // No stack or map needed; the event carries the correct parent from the start.
         const parentToolUseId = event.parentToolUseId
@@ -4230,7 +4230,7 @@ To view this task's output:
       }
 
       case 'tool_result': {
-        // toolName comes directly from CraftAgent (resolved via ToolIndex)
+        // toolName comes directly from G4Agent (resolved via ToolIndex)
         const toolName = event.toolName || 'unknown'
 
         // Format absolute paths to relative paths for better readability
@@ -4243,7 +4243,7 @@ To view this task's output:
 
         sessionLog.info(`RESULT MATCH: toolUseId=${event.toolUseId}, found=${!!existingToolMsg}, toolName=${existingToolMsg?.toolName || toolName}, wasComplete=${wasAlreadyComplete}`)
 
-        // parentToolUseId comes from CraftAgent (SDK-authoritative) or existing message
+        // parentToolUseId comes from G4Agent (SDK-authoritative) or existing message
         const parentToolUseId = existingToolMsg?.parentToolUseId || event.parentToolUseId
 
         if (existingToolMsg) {
@@ -4579,7 +4579,7 @@ To view this task's output:
         break
 
       case 'complete':
-        // Complete event from CraftAgent - accumulate usage from this turn
+        // Complete event from G4Agent - accumulate usage from this turn
         // Actual 'complete' sent to renderer comes from the finally block in sendMessage
         if (event.usage) {
           // Initialize tokenUsage if not set
@@ -4734,7 +4734,7 @@ To view this task's output:
    * The capabilities include available models, thinking levels, and feature support.
    * UI uses this to adapt model/thinking selectors based on the current backend.
    */
-  getCapabilities(sessionId?: string): ReturnType<CraftAgent['capabilities']> | ReturnType<CodexBackend['capabilities']> | null {
+  getCapabilities(sessionId?: string): ReturnType<G4Agent['capabilities']> | ReturnType<CodexBackend['capabilities']> | null {
     // If sessionId provided, return capabilities for that specific session
     if (sessionId) {
       const managed = this.sessions.get(sessionId)

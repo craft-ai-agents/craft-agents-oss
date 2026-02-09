@@ -1,7 +1,7 @@
 /**
  * Colors module - re-exports all color types, resolution, and validation.
  *
- * Import via: `import { EntityColor, resolveEntityColor } from '@craft-agent/shared/colors'`
+ * Import via: `import { EntityColor, resolveEntityColor } from '@g4os/shared/colors'`
  */
 export {
   type SystemColorName,

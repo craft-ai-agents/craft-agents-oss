@@ -9,8 +9,8 @@
     "moduleResolution": "bundler",
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "paths": {
-      "@craft-agent/core": ["../core/src/index.ts"],
-      "@craft-agent/core/*": ["../core/src/*"]
+      "@g4os/core": ["../core/src/index.ts"],
+      "@g4os/core/*": ["../core/src/*"]
     }
   },
   "include": ["src/**/*"],

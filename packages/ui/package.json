@@ -1,8 +1,8 @@
 {
-  "name": "@craft-agent/ui",
+  "name": "@g4os/ui",
   "version": "0.4.0",
   "license": "Apache-2.0",
-  "description": "Shared React UI components for Craft Agents - session viewer, chat display, markdown rendering",
+  "description": "Shared React UI components for G4 OS - session viewer, chat display, markdown rendering",
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",
@@ -17,8 +17,8 @@
     "./styles": "./src/styles/index.css"
   },
   "dependencies": {
-    "@craft-agent/core": "workspace:*",
-    "@craft-agent/mermaid": "workspace:*",
+    "@g4os/core": "workspace:*",
+    "@g4os/mermaid": "workspace:*",
     "@types/mdast": "^4.0.0",
     "@uiw/react-json-view": "^2.0.0-alpha.40",
     "unified": "^11.0.0",

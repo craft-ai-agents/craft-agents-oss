@@ -1,16 +1,16 @@
 import type { ComponentEntry } from './types'
-import { CraftAgentsLogo } from '@/components/icons/CraftAgentsLogo'
-import { CraftAgentsSymbol } from '@/components/icons/CraftAgentsSymbol'
+import { G4OSLogo } from '@/components/icons/G4OSLogo'
+import { G4OSSymbol } from '@/components/icons/G4OSSymbol'
 import { PanelLeftRounded } from '@/components/icons/PanelLeftRounded'
 import { SquarePenRounded } from '@/components/icons/SquarePenRounded'
 
 export const iconComponents: ComponentEntry[] = [
   {
     id: 'craft-agents-logo',
-    name: 'CraftAgentsLogo',
+    name: 'G4OSLogo',
     category: 'Icons',
-    description: 'Full Craft Agents branding logo with text',
-    component: CraftAgentsLogo,
+    description: 'Full G4 OS branding logo with text',
+    component: G4OSLogo,
     props: [
       {
         name: 'className',
@@ -27,10 +27,10 @@ export const iconComponents: ComponentEntry[] = [
   },
   {
     id: 'craft-agents-symbol',
-    name: 'CraftAgentsSymbol',
+    name: 'G4OSSymbol',
     category: 'Icons',
-    description: 'Craft Agents "E" pixel art symbol icon (brand color: #9570BE)',
-    component: CraftAgentsSymbol,
+    description: 'G4 OS "E" pixel art symbol icon (brand color: #9570BE)',
+    component: G4OSSymbol,
     props: [
       {
         name: 'className',

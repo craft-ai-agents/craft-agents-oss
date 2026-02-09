@@ -1,19 +1,19 @@
-# @craft-agent/core
+# @g4os/core
 
-Shared TypeScript types and utilities for Craft Agent applications.
+Shared TypeScript types and utilities for G4 OS applications.
 
 ## Installation
 
 ```bash
 # In a workspace package
-bun add @craft-agent/core
+bun add @g4os/core
 ```
 
 Or add to `package.json`:
 ```json
 {
   "dependencies": {
-    "@craft-agent/core": "workspace:*"
+    "@g4os/core": "workspace:*"
   }
 }
 ```
@@ -28,10 +28,10 @@ import type {
   Message,
   TokenUsage,
   AgentEvent,
-} from '@craft-agent/core';
+} from '@g4os/core';
 
 // Import utilities
-import { generateMessageId, debug } from '@craft-agent/core';
+import { generateMessageId, debug } from '@g4os/core';
 ```
 
 ## Exported Types
@@ -54,7 +54,7 @@ import { generateMessageId, debug } from '@craft-agent/core';
 - `MessageRole` - Message type enum
 - `ToolStatus` - Tool execution state
 - `TokenUsage` - Token counts and cost
-- `AgentEvent` - Events from CraftAgent
+- `AgentEvent` - Events from G4Agent
 - `TypedError` - Structured error info
 - `Question` - AskUserQuestion format
 

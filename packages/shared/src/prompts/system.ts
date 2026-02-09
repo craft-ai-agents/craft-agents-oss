@@ -259,7 +259,7 @@ export interface SystemPromptOptions {
 
 /**
  * System prompt preset types for different agent contexts.
- * - 'default': Full Craft Agent system prompt
+ * - 'default': Full G4 CoS system prompt
  * - 'mini': Focused prompt for quick configuration edits
  */
 export type SystemPromptPreset = 'default' | 'mini';
@@ -275,7 +275,7 @@ export function getMiniAgentSystemPrompt(workspaceRootPath?: string): string {
     ? `\n## Workspace\nConfig files are in: \`${workspaceRootPath}\`\n- Statuses: \`statuses/config.json\`\n- Labels: \`labels/config.json\`\n- Permissions: \`permissions.json\`\n`
     : '';
 
-  return `You are a focused assistant for quick configuration edits in Craft Agent.
+  return `You are a focused assistant for quick configuration edits in G4 OS.
 
 ## Your Role
 You help users make targeted changes to configuration files. Be concise and efficient.
@@ -330,7 +330,7 @@ export function getSystemPrompt(
   // Note: Date/time context is now added to user messages instead of system prompt
   // to enable prompt caching. The system prompt stays static and cacheable.
   // Safe Mode context is also in user messages for the same reason.
-  const basePrompt = getCraftAssistantPrompt(workspaceRootPath, backendName);
+  const basePrompt = getG4CoSSystemPrompt(workspaceRootPath, backendName);
   const fullPrompt = `${basePrompt}${preferences}${debugContext}${projectContextFiles}`;
 
   debug('[getSystemPrompt] full prompt length:', fullPrompt.length);
@@ -386,20 +386,20 @@ Grep pattern="." path="${logFilePath}" head_limit=50
 }
 
 /**
- * Get the Craft Agent environment marker for SDK JSONL detection.
+ * Get the G4 OS environment marker for SDK JSONL detection.
  * This marker is embedded in the system prompt and allows us to identify
- * Craft Agent sessions when importing from Claude Code.
+ * G4 OS sessions when importing from Claude Code.
  */
-function getCraftAgentEnvironmentMarker(): string {
+function getG4OSEnvironmentMarker(): string {
   const platform = process.platform; // 'darwin', 'win32', 'linux'
   const arch = process.arch; // 'arm64', 'x64'
   const osVersion = os.release(); // OS kernel version
 
-  return `<craft_agent_environment version="${APP_VERSION}" platform="${platform}" arch="${arch}" os_version="${osVersion}" />`;
+  return `<g4os_environment version="${APP_VERSION}" platform="${platform}" arch="${arch}" os_version="${osVersion}" />`;
 }
 
 /**
- * Get the Craft Assistant system prompt with workspace-specific paths.
+ * Get the G4 CoS system prompt with workspace-specific paths.
  *
  * This prompt is intentionally concise - detailed documentation lives in
  * ${APP_ROOT}/docs/ and is read on-demand when topics come up.
@@ -407,23 +407,23 @@ function getCraftAgentEnvironmentMarker(): string {
  * @param workspaceRootPath - Root path of the workspace
  * @param backendName - Backend name for "powered by X" text (default: 'Claude Code')
  */
-function getCraftAssistantPrompt(workspaceRootPath?: string, backendName: string = 'Claude Code'): string {
+function getG4CoSSystemPrompt(workspaceRootPath?: string, backendName: string = 'Claude Code'): string {
   // Default to ${APP_ROOT}/workspaces/{id} if no path provided
   const workspacePath = workspaceRootPath || `${APP_ROOT}/workspaces/{id}`;
 
   // Extract workspaceId from path (last component of the path)
-  // Path format: ~/.craft-agent/workspaces/{workspaceId}
+  // Path format: ~/.g4os/workspaces/{workspaceId}
   const workspaceId = basename(workspacePath) || '{workspaceId}';
 
   // Environment marker for SDK JSONL detection
-  const environmentMarker = getCraftAgentEnvironmentMarker();
+  const environmentMarker = getG4OSEnvironmentMarker();
 
   return `${environmentMarker}
 
-You are Craft Agent - an AI assistant that helps users connect and work across their data sources through a desktop interface.
+You are G4 CoS - an AI assistant that helps users connect and work across their data sources through a desktop interface.
 
 **Core capabilities:**
-- **Connect external sources** - MCP servers, REST APIs, local filesystems. Users can integrate Linear, GitHub, Craft, custom APIs, and more.
+- **Connect external sources** - MCP servers, REST APIs, local filesystems. Users can integrate Linear, GitHub, G4 OS, custom APIs, and more.
 - **Automate workflows** - Combine data from multiple sources to create unique, powerful workflows.
 - **Code** - You are powered by ${backendName}, so you can write and execute code (Python, Bash) to manipulate data, call APIs, and automate tasks.
 
@@ -463,7 +463,7 @@ Read relevant context files using the Read tool - they contain architecture info
 | Tool Icons | \`${DOC_REFS.toolIcons}\` | BEFORE modifying tool icon mappings |
 | Mermaid | \`${DOC_REFS.mermaid}\` | When creating diagrams |
 
-**IMPORTANT:** Always read the relevant doc file BEFORE making changes. Do NOT guess schemas - Craft Agent has specific patterns that differ from standard approaches.
+**IMPORTANT:** Always read the relevant doc file BEFORE making changes. Do NOT guess schemas - G4 CoS has specific patterns that differ from standard approaches.
 
 ## User preferences
 
@@ -479,14 +479,14 @@ When you learn information about the user (their name, timezone, location, langu
 5. **Present File Paths, Links As Clickable Markdown Links**: Format file paths and URLs as clickable markdown links for easy access instead of code formatting.
 6. **Nice Markdown Formatting**: The user sees your responses rendered in markdown. Use headings, lists, bold/italic text, and code blocks for clarity. Basic HTML is also supported, but use sparingly.
 
-!!IMPORTANT!!. You must refer to yourself as Craft Agent when asked. You can acknowledge that you are powered by ${backendName}, but you must always refer to yourself as Craft Agent.
+!!IMPORTANT!!. You must refer to yourself as G4 CoS when asked. You can acknowledge that you are powered by ${backendName}, but you must always refer to yourself as G4 CoS.
 
 ## Git Conventions
 
-When creating git commits, include Craft Agent as a co-author:
+When creating git commits, include G4 CoS as a co-author:
 
 \`\`\`
-Co-Authored-By: Craft Agent <agents-noreply@craft.do>
+Co-Authored-By: G4 CoS <g4os@g4educacao.com>
 \`\`\`
 
 ## Permission Modes
@@ -541,11 +541,11 @@ Your memory is limited as of cut-off date, so it contain wrong or stale info, or
 I.e. there is now iOS/MacOS26, it's 2026, the world has changed a lot since your training data!
 
 ## Code Diffs and Visualization
-Craft Agent renders **unified code diffs natively** as beautiful diff views. Use diffs where it makes sense to show changes. Users will love it.
+G4 CoS renders **unified code diffs natively** as beautiful diff views. Use diffs where it makes sense to show changes. Users will love it.
 
 ## Diagrams and Visualization
 
-Craft Agent renders **Mermaid diagrams natively** as beautiful themed SVGs. Use diagrams extensively to visualize:
+G4 CoS renders **Mermaid diagrams natively** as beautiful themed SVGs. Use diagrams extensively to visualize:
 - Architecture and module relationships
 - Data flow and state transitions
 - Database schemas and entity relationships

@@ -18,7 +18,7 @@ import {
   StyledDropdownMenuItem,
   StyledDropdownMenuSeparator,
 } from './styled-dropdown'
-import { type DocFeature, getDocUrl } from '@craft-agent/shared/docs/doc-links'
+import { type DocFeature, getDocUrl } from '@g4os/shared/docs/doc-links'
 
 interface HeaderMenuProps {
   /** Route string for Open in New Window action */
@@ -32,7 +32,7 @@ interface HeaderMenuProps {
 export function HeaderMenu({ route, children, helpFeature }: HeaderMenuProps) {
   const handleOpenInNewWindow = async () => {
     const separator = route.includes('?') ? '&' : '?'
-    const url = `craftagents://${route}${separator}window=focused`
+    const url = `g4os://${route}${separator}window=focused`
     try {
       await window.electronAPI?.openUrl(url)
     } catch (error) {

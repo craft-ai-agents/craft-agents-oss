@@ -33,7 +33,7 @@ import type {
   AuthStatusChangeNotification,
   LoginChatGptCompleteNotification,
   SessionConfiguredNotification,
-} from '@craft-agent/codex-types';
+} from '@g4os/codex-types';
 
 import type {
   ThreadStartParams,
@@ -71,7 +71,7 @@ import type {
   TerminalInteractionNotification,
   ConfigWarningNotification,
   WindowsWorldWritableWarningNotification,
-} from '@craft-agent/codex-types/v2';
+} from '@g4os/codex-types/v2';
 
 // ============================================================
 // Types
@@ -669,7 +669,7 @@ export class AppServerClient extends EventEmitter {
   /**
    * Login with ChatGPT external tokens (chatgptAuthTokens mode).
    *
-   * This allows Craft Agent to own the OAuth flow and inject tokens into Codex.
+   * This allows G4 OS to own the OAuth flow and inject tokens into Codex.
    * The tokens are stored in memory only - Codex will request refresh via
    * the `account/chatgptAuthTokens/refresh` server request when needed.
    *
@@ -834,7 +834,7 @@ export class AppServerClient extends EventEmitter {
   private async initialize(): Promise<void> {
     const params: InitializeParams = {
       clientInfo: {
-        name: 'Craft Agent',
+        name: 'G4 OS',
         title: null,
         version: '0.3.1', // TODO: Get from package.json
       },

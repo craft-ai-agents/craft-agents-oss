@@ -9,7 +9,7 @@
 
 import * as React from 'react'
 import { useState, useCallback, useRef, useEffect } from 'react'
-import type { StoredSession } from '@craft-agent/core'
+import type { StoredSession } from '@g4os/core'
 import { Upload, FileJson, AlertCircle } from 'lucide-react'
 
 interface SessionUploadProps {

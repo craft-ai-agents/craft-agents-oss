@@ -11,7 +11,7 @@
 
 import * as React from 'react'
 import type { ComponentEntry } from './types'
-import type { LabelConfig } from '@craft-agent/shared/labels'
+import type { LabelConfig } from '@g4os/shared/labels'
 import { LabelBadgeRow } from '@/components/ui/label-badge-row'
 
 // ============================================================================

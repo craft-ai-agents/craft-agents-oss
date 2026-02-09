@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils"
 import { Check, CreditCard, Key, Cpu } from "lucide-react"
 import { StepFormLayout, BackButton, ContinueButton } from "./primitives"
-import type { LlmAuthType, LlmProviderType } from "@craft-agent/shared/config/llm-connections"
+import type { LlmAuthType, LlmProviderType } from "@g4os/shared/config/llm-connections"
 
 /**
  * API setup method for onboarding.

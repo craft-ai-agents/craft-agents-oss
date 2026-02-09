@@ -25,7 +25,7 @@ import type {
   McpValidationResult,
   ApiTestResult,
   SourceConfig,
-} from '@craft-agent/session-tools-core';
+} from '@g4os/session-tools-core';
 import {
   validateConfig,
   validateSource,
@@ -71,7 +71,7 @@ import { HAIKU_MODEL_ID } from '../config/models.ts';
 import { getSessionPlansPath } from '../sessions/storage.ts';
 
 // Re-export types that may be needed by consumers
-export type { SessionToolContext, SessionToolCallbacks } from '@craft-agent/session-tools-core';
+export type { SessionToolContext, SessionToolCallbacks } from '@g4os/session-tools-core';
 
 /**
  * Options for creating a Claude context

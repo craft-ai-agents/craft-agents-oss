@@ -16,7 +16,7 @@ import { cn } from '@/lib/utils'
 import { isMac } from '@/lib/platform'
 import { DropdownMenu, DropdownMenuTrigger, StyledDropdownMenuContent, StyledDropdownMenuItem, StyledDropdownMenuSeparator, StyledDropdownMenuSubContent, StyledDropdownMenuSubTrigger, DropdownMenuSub } from '@/components/ui/styled-dropdown'
 import type { TodoStateId, TodoState } from '@/config/todo-states'
-import type { LabelConfig } from '@craft-agent/shared/labels'
+import type { LabelConfig } from '@g4os/shared/labels'
 import { LabelMenuItems, StatusMenuItems } from './SessionMenuParts'
 
 export interface MultiSelectPanelProps {

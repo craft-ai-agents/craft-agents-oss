@@ -314,7 +314,7 @@ async function checkMcpConnectivity(mcpUrl: string): Promise<CheckResult> {
           detail: '✗ MCP server: Timeout',
           failCode: 'mcp_unreachable',
           failTitle: 'MCP Server Unreachable',
-          failMessage: 'Cannot connect to the Craft MCP server (timeout). Check your network connection.',
+          failMessage: 'Cannot connect to the G4 OS MCP server (timeout). Check your network connection.',
         };
       }
       const msg = fetchError instanceof Error ? fetchError.message : String(fetchError);
@@ -325,7 +325,7 @@ async function checkMcpConnectivity(mcpUrl: string): Promise<CheckResult> {
           detail: `✗ MCP server: Unreachable (${msg})`,
           failCode: 'mcp_unreachable',
           failTitle: 'MCP Server Unreachable',
-          failMessage: 'Cannot connect to the Craft MCP server. Check your network connection.',
+          failMessage: 'Cannot connect to the G4 OS MCP server. Check your network connection.',
         };
       }
       return { ok: true, detail: `✓ MCP server: Unknown (${msg})` };

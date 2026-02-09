@@ -15,13 +15,13 @@ import type { ColumnDef } from '@tanstack/react-table'
 import { Maximize2 } from 'lucide-react'
 import { Info_DataTable, SortableHeader } from './Info_DataTable'
 import { Info_Badge } from './Info_Badge'
-import { Tooltip, TooltipTrigger, TooltipContent } from '@craft-agent/ui'
-import { DataTableOverlay } from '@craft-agent/ui'
+import { Tooltip, TooltipTrigger, TooltipContent } from '@g4os/ui'
+import { DataTableOverlay } from '@g4os/ui'
 import { LabelIcon } from '@/components/ui/label-icon'
 import { cn } from '@/lib/utils'
 import { useTheme } from '@/hooks/useTheme'
 import { toast } from 'sonner'
-import type { LabelConfig, AutoLabelRule } from '@craft-agent/shared/labels'
+import type { LabelConfig, AutoLabelRule } from '@g4os/shared/labels'
 
 /**
  * Flattened auto-rule row: associates a rule with its parent label

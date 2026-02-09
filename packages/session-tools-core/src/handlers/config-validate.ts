@@ -1,7 +1,7 @@
 /**
  * Config Validate Handler
  *
- * Validates Craft Agent configuration files.
+ * Validates G4 OS configuration files.
  * Uses full validators if available (Claude), otherwise basic validation (Codex).
  */
 
@@ -33,7 +33,7 @@ export async function handleConfigValidate(
   args: ConfigValidateArgs
 ): Promise<ToolResult> {
   const { target, sourceSlug } = args;
-  const craftAgentRoot = join(homedir(), '.craft-agent');
+  const craftAgentRoot = join(homedir(), '.g4os');
 
   // If full validators available (Claude), use them
   if (ctx.validators) {
