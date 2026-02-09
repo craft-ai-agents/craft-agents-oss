@@ -32,7 +32,7 @@ export default defineConfig({
     proxy: {
       // Proxy API requests to production R2 during local dev
       '/s/api': {
-        target: 'https://g4educacao.com',
+        target: 'https://g4os-viewer.pages.dev',
         changeOrigin: true,
         secure: true,
       },

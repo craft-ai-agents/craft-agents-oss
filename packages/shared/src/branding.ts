@@ -15,4 +15,4 @@ export const G4OS_LOGO = [
 export const G4OS_LOGO_HTML = G4OS_LOGO.map((line) => line.trimEnd()).join('\n');
 
 /** Session viewer base URL */
-export const VIEWER_URL = 'https://g4educacao.com';
+export const VIEWER_URL = 'https://g4os-viewer.pages.dev';
