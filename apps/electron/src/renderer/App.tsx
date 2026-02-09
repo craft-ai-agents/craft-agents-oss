@@ -830,9 +830,9 @@ export default function App() {
       // Step 4: Extract badges from mentions (sources/skills) with embedded icons
       // Badges are self-contained for display in UserMessageBubble and viewer
       // Merge with any externally provided badges (e.g., from EditPopover context badges)
-      // Use windowWorkspaceId (not slug) to match the cache key used by icon preloading
-      const mentionBadges: ContentBadge[] = windowWorkspaceId
-        ? extractBadges(message, skills, sources, windowWorkspaceId)
+      // Use workspace slug (not UUID) for skill qualification - SDK expects "workspaceSlug:skillSlug"
+      const mentionBadges: ContentBadge[] = windowWorkspaceSlug
+        ? extractBadges(message, skills, sources, windowWorkspaceSlug)
         : []
       const badges: ContentBadge[] = [...(externalBadges || []), ...mentionBadges]
 

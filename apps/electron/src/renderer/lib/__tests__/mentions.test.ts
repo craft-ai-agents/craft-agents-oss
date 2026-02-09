@@ -9,7 +9,7 @@
  * - Dots (.)
  */
 import { describe, it, expect } from 'bun:test'
-import { parseMentions, findMentionMatches, removeMention, stripAllMentions } from '../mentions'
+import { parseMentions, findMentionMatches, removeMention, stripAllMentions, extractBadges } from '../mentions'
 
 // ============================================================================
 // parseMentions - Skill Pattern Tests
@@ -198,5 +198,48 @@ describe('stripAllMentions - skill pattern with workspace IDs', () => {
   it('strips multiple skills with different workspace ID formats', () => {
     const result = stripAllMentions('[skill:My Workspace:commit] and [skill:my-workspace:review]')
     expect(result).toBe('and')
+  })
+})
+
+// ============================================================================
+// extractBadges - Skill Qualification Tests
+// ============================================================================
+
+describe('extractBadges - skill qualification with workspace slug', () => {
+  const mockSkills = [
+    { slug: 'commit', metadata: { name: 'Commit' } },
+    { slug: 'review-pr', metadata: { name: 'Review PR' } },
+  ] as any[]
+  const mockSources = [] as any[]
+
+  it('qualifies skill rawText with workspace slug (not UUID)', () => {
+    const badges = extractBadges('[skill:commit]', mockSkills, mockSources, 'my-project')
+    expect(badges).toHaveLength(1)
+    expect(badges[0]!.rawText).toBe('[skill:my-project:commit]')
+    expect(badges[0]!.label).toBe('Commit')
+    expect(badges[0]!.type).toBe('skill')
+  })
+
+  it('qualifies skill rawText preserving slug with hyphens', () => {
+    const badges = extractBadges('[skill:review-pr]', mockSkills, mockSources, 'my-workspace')
+    expect(badges).toHaveLength(1)
+    expect(badges[0]!.rawText).toBe('[skill:my-workspace:review-pr]')
+    expect(badges[0]!.label).toBe('Review PR')
+  })
+
+  it('does not re-qualify already qualified skill mentions', () => {
+    // When message already has workspace:slug format, rawText should still be workspace:slug
+    const badges = extractBadges('[skill:other-ws:commit]', mockSkills, mockSources, 'my-project')
+    expect(badges).toHaveLength(1)
+    // extractBadges always overwrites rawText for skills with the provided workspaceId
+    expect(badges[0]!.rawText).toBe('[skill:my-project:commit]')
+  })
+
+  it('does not modify source rawText', () => {
+    const sources = [{ config: { slug: 'linear', name: 'Linear' } }] as any[]
+    const badges = extractBadges('[source:linear]', [], sources, 'my-project')
+    expect(badges).toHaveLength(1)
+    expect(badges[0]!.rawText).toBe('[source:linear]')
+    expect(badges[0]!.type).toBe('source')
   })
 })

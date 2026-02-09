@@ -21,17 +21,24 @@ files:
   - resources/session-mcp-server/**/*
   # Note: Bundled assets (docs, themes, permissions, tool-icons) are in resources/
   # and copied to dist/resources/ by build:copy. They're included via dist/**/* above.
-  # Include SDK for subprocess execution
-  - node_modules/@anthropic-ai/claude-agent-sdk/**/*
   # Include network interceptor for API error capture and MCP schema injection
   - packages/shared/src/network-interceptor.ts
   # Include bundled Bun runtime (platform-specific, set by build script)
   - vendor/bun/**/*
   # Include bundled Codex binary (platform-specific, downloaded by build script)
   - vendor/codex/**/*
-  # Exclude everything else from node_modules
+  # Exclude everything from node_modules (will use extraResources for SDK)
   - "!node_modules/**/*"
-  - node_modules/@anthropic-ai/**/*
+
+# Include SDK as extraResources to bypass node_modules auto-exclusion
+# Since electron-builder v20.15.2, directories named "node_modules" are automatically excluded
+# Using extraResources with explicit from/to paths works around this limitation
+# See: https://github.com/electron-userland/electron-builder/issues/3104
+extraResources:
+  - from: node_modules/@anthropic-ai/claude-agent-sdk
+    to: app/node_modules/@anthropic-ai/claude-agent-sdk
+    filter:
+      - "**/*"
 
 extraMetadata:
   main: dist/main.cjs

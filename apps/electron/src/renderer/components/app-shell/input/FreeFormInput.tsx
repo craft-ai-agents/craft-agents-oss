@@ -353,6 +353,14 @@ export function FreeFormInput({
     return appShellCtx.workspaces.find(w => w.id === workspaceId)?.rootPath ?? null
   }, [appShellCtx, workspaceId])
 
+  // Compute workspace slug from rootPath for SDK skill qualification
+  // SDK expects "workspaceSlug:skillSlug" format, NOT UUID
+  const workspaceSlug = React.useMemo(() => {
+    if (!workspaceRootPath) return workspaceId // Fallback to ID if no path
+    const pathParts = workspaceRootPath.split('/').filter(Boolean)
+    return pathParts[pathParts.length - 1] || workspaceId
+  }, [workspaceRootPath, workspaceId])
+
   // Shuffle placeholder order once per mount so each session feels fresh
   const shuffledPlaceholder = React.useMemo(
     () => Array.isArray(placeholder) ? shuffleArray(placeholder) : placeholder,
@@ -783,7 +791,8 @@ export function FreeFormInput({
     sources,
     basePath: workingDirectory,
     onSelect: handleMentionSelect,
-    workspaceId,
+    // Use workspace slug (not UUID) for SDK skill qualification
+    workspaceId: workspaceSlug,
   })
 
   // Inline label menu hook (for #labels)
@@ -1399,7 +1408,7 @@ export function FreeFormInput({
           disabled={disabled}
           skills={skills}
           sources={sources}
-          workspaceId={workspaceId}
+          workspaceId={workspaceSlug}
           className="pl-5 pr-4 pt-4 pb-3 overflow-y-auto min-h-[88px]"
           style={{ maxHeight: inputMaxHeight }}
           data-tutorial="chat-input"

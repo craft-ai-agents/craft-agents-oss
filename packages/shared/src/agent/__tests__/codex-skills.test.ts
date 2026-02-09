@@ -31,6 +31,7 @@ function createMockSkill(slug: string, path?: string): LoadedSkill {
     },
     content: `# ${slug}\n\nDo the thing.`,
     path: path ?? `/test/workspace/skills/${slug}`,
+    source: 'workspace',
   };
 }
 

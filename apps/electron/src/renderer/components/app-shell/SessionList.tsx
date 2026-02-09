@@ -701,7 +701,7 @@ function SessionItem({
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span className="shrink-0 text-[11px] text-foreground/40 whitespace-nowrap cursor-default">
-                      {formatDistanceToNowStrict(new Date(item.lastMessageAt), { locale: shortTimeLocale as Locale })}
+                      {formatDistanceToNowStrict(new Date(item.lastMessageAt), { locale: shortTimeLocale as Locale, roundingMethod: 'floor' })}
                     </span>
                   </TooltipTrigger>
                   <TooltipContent side="bottom" sideOffset={4}>

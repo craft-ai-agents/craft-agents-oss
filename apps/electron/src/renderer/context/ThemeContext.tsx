@@ -62,6 +62,8 @@ interface StoredTheme {
   mode: ThemeMode
   colorTheme: string
   font?: FontFamily
+  /** True when user explicitly changed theme in UI (not auto-saved on startup) */
+  isUserOverride?: boolean
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined)
@@ -102,7 +104,13 @@ export function ThemeProvider({
 
   // === Preference state (persisted at app level) ===
   const [mode, setModeState] = useState<ThemeMode>(stored?.mode ?? defaultMode)
-  const [colorTheme, setColorThemeState] = useState<string>(stored?.colorTheme ?? defaultColorTheme)
+  // Only use localStorage colorTheme if user explicitly set it via UI
+  const [colorTheme, setColorThemeState] = useState<string>(() => {
+    if (stored?.isUserOverride && stored.colorTheme) {
+      return stored.colorTheme
+    }
+    return defaultColorTheme // Will be updated by config.json effect
+  })
   const [font, setFontState] = useState<FontFamily>(stored?.font ?? defaultFont)
   const [systemPreference, setSystemPreference] = useState<'light' | 'dark'>(getSystemPreference)
   const [previewColorTheme, setPreviewColorTheme] = useState<string | null>(null)
@@ -112,6 +120,21 @@ export function ThemeProvider({
 
   // Track if we're receiving an external update to prevent echo broadcasts
   const isExternalUpdate = useRef(false)
+
+  // Load app-level colorTheme from config.json on mount (only if user hasn't overridden)
+  useEffect(() => {
+    // Skip if user has explicitly set a theme via UI
+    if (stored?.isUserOverride) return
+
+    window.electronAPI?.getColorTheme?.().then((configTheme) => {
+      if (configTheme && configTheme !== 'default') {
+        setColorThemeState(configTheme)
+      }
+    }).catch(() => {
+      // Keep default on error
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Only run on mount
 
   // === Preset theme state (singleton) ===
   const [presetTheme, setPresetTheme] = useState<ThemeFile | null>(null)
@@ -324,10 +347,12 @@ export function ThemeProvider({
       setModeState(preferences.mode as ThemeMode)
       setColorThemeState(preferences.colorTheme)
       setFontState(preferences.font as FontFamily)
+      // When syncing from another window, mark as user override since user explicitly changed theme
       saveTheme({
         mode: preferences.mode as ThemeMode,
         colorTheme: preferences.colorTheme,
-        font: preferences.font as FontFamily
+        font: preferences.font as FontFamily,
+        isUserOverride: true
       })
       setTimeout(() => {
         isExternalUpdate.current = false
@@ -340,7 +365,9 @@ export function ThemeProvider({
   // === Setters with persistence and broadcast ===
   const setMode = useCallback((newMode: ThemeMode) => {
     setModeState(newMode)
-    saveTheme({ mode: newMode, colorTheme, font })
+    // Preserve existing isUserOverride flag
+    const existing = loadStoredTheme()
+    saveTheme({ mode: newMode, colorTheme, font, isUserOverride: existing?.isUserOverride })
     if (!isExternalUpdate.current && window.electronAPI?.broadcastThemePreferences) {
       window.electronAPI.broadcastThemePreferences({ mode: newMode, colorTheme, font })
     }
@@ -348,7 +375,8 @@ export function ThemeProvider({
 
   const setColorTheme = useCallback((newTheme: string) => {
     setColorThemeState(newTheme)
-    saveTheme({ mode, colorTheme: newTheme, font })
+    // Mark as user override - user explicitly changed theme via UI
+    saveTheme({ mode, colorTheme: newTheme, font, isUserOverride: true })
     if (!isExternalUpdate.current && window.electronAPI?.broadcastThemePreferences) {
       window.electronAPI.broadcastThemePreferences({ mode, colorTheme: newTheme, font })
     }
@@ -356,7 +384,9 @@ export function ThemeProvider({
 
   const setFont = useCallback((newFont: FontFamily) => {
     setFontState(newFont)
-    saveTheme({ mode, colorTheme, font: newFont })
+    // Preserve existing isUserOverride flag
+    const existing = loadStoredTheme()
+    saveTheme({ mode, colorTheme, font: newFont, isUserOverride: existing?.isUserOverride })
     if (!isExternalUpdate.current && window.electronAPI?.broadcastThemePreferences) {
       window.electronAPI.broadcastThemePreferences({ mode, colorTheme, font: newFont })
     }

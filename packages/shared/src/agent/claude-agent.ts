@@ -975,10 +975,13 @@ export class ClaudeAgent extends BaseAgent {
               }
 
               // SKILL QUALIFICATION: Ensure skill names are fully-qualified
+              // SDK expects "workspaceSlug:skillSlug" format, NOT UUID
               if (input.tool_name === 'Skill') {
+                const pathParts = this.workspaceRootPath.split('/').filter(Boolean);
+                const workspaceSlug = pathParts[pathParts.length - 1] || this.config.workspace.id;
                 const skillResult = qualifySkillName(
                   modifiedInput || toolInput,
-                  this.config.workspace.id,
+                  workspaceSlug,
                   (msg) => this.onDebug?.(msg)
                 );
                 if (skillResult.modified) {

@@ -1086,11 +1086,15 @@ export class CodexAgent extends BaseAgent {
 
     // ============================================================
     // SKILL QUALIFICATION: Ensure skill names are fully-qualified
+    // SDK expects "workspaceSlug:skillSlug" format, NOT UUID
     // ============================================================
     if (sdkToolName === 'Skill') {
+      const rootPath = this.config.workspace.rootPath ?? this.workingDirectory;
+      const pathParts = rootPath.split('/').filter(Boolean);
+      const workspaceSlug = pathParts[pathParts.length - 1] || this.config.workspace.id;
       const skillResult = qualifySkillName(
         modifiedInput || inputObj,
-        this.config.workspace.id,
+        workspaceSlug,
         (msg) => this.debug(`PreToolUse: ${msg}`)
       );
       if (skillResult.modified) {

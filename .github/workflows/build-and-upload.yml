@@ -111,10 +111,16 @@ jobs:
           path: |
             ~/.bun/install/cache
             node_modules
-          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          # v2: Windows now uses --linker=hoisted (flat node_modules, no .bun)
+          key: ${{ runner.os }}-bun-v2-${{ hashFiles('bun.lock') }}
 
-      - name: Install dependencies
+      - name: Install dependencies (Unix)
+        if: matrix.platform != 'win32'
         run: bun install
+
+      - name: Install dependencies (Windows)
+        if: matrix.platform == 'win32'
+        run: bun install --linker=hoisted
 
       # macOS code signing
       - name: Import Code Signing Certificate (macOS)
@@ -143,8 +149,7 @@ jobs:
         if: matrix.platform == 'darwin'
         run: bun run scripts/build.ts --codex-version=${{ env.CODEX_VERSION }} --platform=darwin --arch=${{ matrix.arch }}
         env:
-          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
-          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          # Note: Google OAuth credentials not included - users provide their own via source config
           SLACK_OAUTH_CLIENT_ID: ${{ secrets.SLACK_OAUTH_CLIENT_ID }}
           SLACK_OAUTH_CLIENT_SECRET: ${{ secrets.SLACK_OAUTH_CLIENT_SECRET }}
           MICROSOFT_OAUTH_CLIENT_ID: ${{ secrets.MICROSOFT_OAUTH_CLIENT_ID }}
@@ -165,8 +170,7 @@ jobs:
         if: matrix.platform == 'win32'
         run: bun run scripts/build.ts --codex-version=${{ env.CODEX_VERSION }} --platform=win32 --arch=${{ matrix.arch }}
         env:
-          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
-          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          # Note: Google OAuth credentials not included - users provide their own via source config
           SLACK_OAUTH_CLIENT_ID: ${{ secrets.SLACK_OAUTH_CLIENT_ID }}
           SLACK_OAUTH_CLIENT_SECRET: ${{ secrets.SLACK_OAUTH_CLIENT_SECRET }}
           MICROSOFT_OAUTH_CLIENT_ID: ${{ secrets.MICROSOFT_OAUTH_CLIENT_ID }}
@@ -199,8 +203,7 @@ jobs:
         if: matrix.platform == 'linux'
         run: bun run scripts/build.ts --codex-version=${{ env.CODEX_VERSION }} --platform=linux --arch=${{ matrix.arch }}
         env:
-          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
-          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          # Note: Google OAuth credentials not included - users provide their own via source config
           SLACK_OAUTH_CLIENT_ID: ${{ secrets.SLACK_OAUTH_CLIENT_ID }}
           SLACK_OAUTH_CLIENT_SECRET: ${{ secrets.SLACK_OAUTH_CLIENT_SECRET }}
           MICROSOFT_OAUTH_CLIENT_ID: ${{ secrets.MICROSOFT_OAUTH_CLIENT_ID }}
@@ -219,8 +222,83 @@ jobs:
             apps/electron/release/Craft-Agent-${{ matrix.arch }}.zip
           retention-days: 7
 
-  summary:
+  # Verify SDK is bundled in all artifacts
+  verify-bundles:
+    name: Verify SDK Bundling
     needs: [prepare, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: build-*
+          path: artifacts
+          merge-multiple: false
+
+      - name: Verify macOS ARM64
+        if: contains(inputs.targets, 'macos-arm64') || inputs.targets == 'all' || inputs.targets == ''
+        run: |
+          cd artifacts/build-darwin-arm64
+          unzip -q Craft-Agent-arm64.zip -d verify
+          SDK="verify/Craft Agents.app/Contents/Resources/app/node_modules/@anthropic-ai/claude-agent-sdk/cli.js"
+          if [ ! -f "$SDK" ]; then
+            echo "::error::SDK missing in macOS ARM64 bundle"
+            ls -la "verify/Craft Agents.app/Contents/Resources/app/" || true
+            ls -la "verify/Craft Agents.app/Contents/Resources/app/node_modules/" || true
+            exit 1
+          fi
+          SIZE=$(stat -c%s "$SDK")
+          echo "✓ macOS ARM64: SDK found ($SIZE bytes)"
+
+      - name: Verify macOS x64
+        if: contains(inputs.targets, 'macos-x64') || inputs.targets == 'all' || inputs.targets == ''
+        run: |
+          cd artifacts/build-darwin-x64
+          unzip -q Craft-Agent-x64.zip -d verify
+          SDK="verify/Craft Agents.app/Contents/Resources/app/node_modules/@anthropic-ai/claude-agent-sdk/cli.js"
+          if [ ! -f "$SDK" ]; then
+            echo "::error::SDK missing in macOS x64 bundle"
+            exit 1
+          fi
+          SIZE=$(stat -c%s "$SDK")
+          echo "✓ macOS x64: SDK found ($SIZE bytes)"
+
+      - name: Verify Linux
+        if: contains(inputs.targets, 'linux') || inputs.targets == 'all' || inputs.targets == ''
+        run: |
+          cd artifacts/build-linux-x64
+          chmod +x Craft-Agent-x64.AppImage
+          ./Craft-Agent-x64.AppImage --appimage-extract >/dev/null 2>&1
+          SDK="squashfs-root/resources/app/node_modules/@anthropic-ai/claude-agent-sdk/cli.js"
+          if [ ! -f "$SDK" ]; then
+            echo "::error::SDK missing in Linux bundle"
+            exit 1
+          fi
+          SIZE=$(stat -c%s "$SDK")
+          echo "✓ Linux: SDK found ($SIZE bytes)"
+
+      - name: Verify Windows
+        if: contains(inputs.targets, 'windows') || inputs.targets == 'all' || inputs.targets == ''
+        run: |
+          cd artifacts/build-win32-x64
+          sudo apt-get install -qq p7zip-full
+          7z x -y Craft-Agent-x64.exe -oextracted >/dev/null
+          SDK="extracted/\$PLUGINSDIR/app-64.7z"
+          if [ -f "$SDK" ]; then
+            7z x -y "$SDK" -oapp >/dev/null
+            SDK_PATH="app/resources/app/node_modules/@anthropic-ai/claude-agent-sdk/cli.js"
+            if [ ! -f "$SDK_PATH" ]; then
+              echo "::error::SDK missing in Windows bundle"
+              exit 1
+            fi
+            SIZE=$(stat -c%s "$SDK_PATH")
+            echo "✓ Windows: SDK found ($SIZE bytes)"
+          else
+            echo "⚠️ Windows: Could not extract installer for verification"
+          fi
+
+  summary:
+    needs: [prepare, build, verify-bundles]
     runs-on: ubuntu-latest
     steps:
       - name: Print artifact links
