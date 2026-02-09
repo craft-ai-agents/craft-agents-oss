@@ -43,6 +43,7 @@ import { type PermissionsContext, permissionsConfigCache } from './permissions-c
 import { getSessionPlansPath, getSessionPath } from '../sessions/storage.ts';
 import { readFileSync } from 'fs';
 import { expandPath } from '../utils/paths.ts';
+import { extractWorkspaceSlug } from '../utils/workspace.ts';
 import {
   ConfigWatcher,
   createConfigWatcher,
@@ -975,10 +976,12 @@ export class ClaudeAgent extends BaseAgent {
               }
 
               // SKILL QUALIFICATION: Ensure skill names are fully-qualified
+              // SDK expects "workspaceSlug:skillSlug" format, NOT UUID
               if (input.tool_name === 'Skill') {
+                const workspaceSlug = extractWorkspaceSlug(this.workspaceRootPath, this.config.workspace.id);
                 const skillResult = qualifySkillName(
                   modifiedInput || toolInput,
-                  this.config.workspace.id,
+                  workspaceSlug,
                   (msg) => this.onDebug?.(msg)
                 );
                 if (skillResult.modified) {

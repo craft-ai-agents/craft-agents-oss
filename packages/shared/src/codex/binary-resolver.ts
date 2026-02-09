@@ -116,11 +116,19 @@ export function resolveCodexBinary(): { path: string; source: string } {
   }
 
   // 2. Check bundled binary in app vendor directory (packaged app)
+  // In packaged Electron apps, __dirname is resources/app/dist/ (where main.cjs lives)
+  // but vendor/ is at resources/app/vendor/ (one level up from dist/).
+  // Try both the direct path and the parent directory.
   if (_vendorRoot) {
     const platformArch = getPlatformArch();
-    const bundledPath = join(_vendorRoot, 'vendor', 'codex', platformArch, binaryName);
-    if (existsSync(bundledPath)) {
-      return { path: bundledPath, source: 'bundled binary' };
+    const candidates = [
+      join(_vendorRoot, 'vendor', 'codex', platformArch, binaryName),
+      join(_vendorRoot, '..', 'vendor', 'codex', platformArch, binaryName),
+    ];
+    for (const bundledPath of candidates) {
+      if (existsSync(bundledPath)) {
+        return { path: bundledPath, source: 'bundled binary' };
+      }
     }
   }
 

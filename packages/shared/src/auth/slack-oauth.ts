@@ -16,6 +16,7 @@ import { randomBytes } from 'crypto';
 import { openUrl } from '../utils/open-url.ts';
 import { createCallbackServer, type AppType } from './callback-server.ts';
 import type { SlackService } from '../sources/types.ts';
+import { type OAuthSessionContext, buildOAuthDeeplinkUrl } from './types.ts';
 
 // Re-export for convenience
 export type { SlackService } from '../sources/types.ts';
@@ -70,6 +71,8 @@ export interface SlackOAuthOptions {
   userScopes?: string[];
   /** App type for callback server styling */
   appType?: AppType;
+  /** Session context for building deeplink back to chat after OAuth */
+  sessionContext?: OAuthSessionContext;
 }
 
 /**
@@ -269,9 +272,10 @@ export async function startSlackOAuth(options: SlackOAuthOptions = {}): Promise<
     // Generate state for CSRF protection
     const state = generateState();
 
-    // Start local HTTP callback server
+    // Start local HTTP callback server with deeplink for returning to chat session
     const appType = options.appType || 'electron';
-    const callbackServer = await createCallbackServer({ appType });
+    const deeplinkUrl = buildOAuthDeeplinkUrl(options.sessionContext);
+    const callbackServer = await createCallbackServer({ appType, deeplinkUrl });
 
     // Extract port from local callback URL
     const localUrl = new URL(callbackServer.url);

@@ -5,21 +5,16 @@
 import { $ } from 'bun';
 import { existsSync, renameSync, statSync } from 'fs';
 import { join } from 'path';
-import type { BuildConfig } from './common';
+import type { Arch, BuildConfig } from './common';
 
 /**
- * Verify SDK is bundled in the packaged Linux app
+ * Verify SDK and Codex binary are bundled in the packaged Linux app
  */
-export function verifyPackagedSDK(unpackedPath: string): void {
-  const sdkPath = join(
-    unpackedPath,
-    'resources',
-    'app',
-    'node_modules',
-    '@anthropic-ai',
-    'claude-agent-sdk',
-    'cli.js'
-  );
+export function verifyPackagedSDK(unpackedPath: string, arch: Arch): void {
+  const appPath = join(unpackedPath, 'resources', 'app');
+
+  // Verify SDK
+  const sdkPath = join(appPath, 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'cli.js');
 
   if (!existsSync(sdkPath)) {
     throw new Error(`CRITICAL: SDK not bundled! Expected at: ${sdkPath}`);
@@ -31,6 +26,15 @@ export function verifyPackagedSDK(unpackedPath: string): void {
   }
 
   console.log(`  SDK bundled: cli.js is ${(stats.size / 1024 / 1024).toFixed(1)} MB`);
+
+  // Verify Codex binary
+  const codexPath = join(appPath, 'vendor', 'codex', `linux-${arch}`, 'codex');
+  if (!existsSync(codexPath)) {
+    throw new Error(`CRITICAL: Codex binary not bundled! Expected at: ${codexPath}`);
+  }
+
+  const codexStats = statSync(codexPath);
+  console.log(`  Codex bundled: ${(codexStats.size / 1024 / 1024).toFixed(1)} MB`);
 }
 
 /**
@@ -47,8 +51,8 @@ export async function packageLinux(config: BuildConfig): Promise<string> {
   // Verify SDK is bundled in the unpacked app before checking artifacts
   const unpackedPath = join(electronDir, 'release', 'linux-unpacked');
   if (existsSync(unpackedPath)) {
-    console.log('Verifying SDK in packaged app...');
-    verifyPackagedSDK(unpackedPath);
+    console.log('Verifying SDK and Codex in packaged app...');
+    verifyPackagedSDK(unpackedPath, arch);
   } else {
     console.warn('  linux-unpacked not found, skipping SDK verification');
   }

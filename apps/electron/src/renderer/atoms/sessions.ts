@@ -566,3 +566,9 @@ export const backgroundTasksAtomFamily = atomFamily(
   (a, b) => a === b
 )
 
+/**
+ * Window's current workspace ID — shared between Root (ThemeProvider) and App.
+ * Written by App on workspace switch, read by Root to keep the theme in sync.
+ */
+export const windowWorkspaceIdAtom = atom<string | null>(null)
+

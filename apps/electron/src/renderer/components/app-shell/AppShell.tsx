@@ -819,16 +819,6 @@ function AppShellContent({
     return cleanup
   }, [])
 
-  // Load skills from backend on mount
-  React.useEffect(() => {
-    if (!activeWorkspaceId) return
-    window.electronAPI.getSkills(activeWorkspaceId).then((loaded) => {
-      setSkills(loaded || [])
-    }).catch(err => {
-      console.error('[Chat] Failed to load skills:', err)
-    })
-  }, [activeWorkspaceId])
-
   // Subscribe to live skill updates (when skills are added/removed dynamically)
   React.useEffect(() => {
     const cleanup = window.electronAPI.onSkillsChanged?.((updatedSkills) => {
@@ -1184,6 +1174,20 @@ function AppShellContent({
   // Use session metadata from Jotai atom (lightweight, no messages)
   // This prevents closures from retaining full message arrays
   const sessionMetaMap = useAtomValue(sessionMetaMapAtom)
+
+  // Reload skills when active session's workingDirectory changes (for project-level skills)
+  // Skills are loaded from: global (~/.agents/skills/), workspace, and project ({workingDirectory}/.agents/skills/)
+  const activeSessionWorkingDirectory = session.selected
+    ? sessionMetaMap.get(session.selected)?.workingDirectory
+    : undefined
+  React.useEffect(() => {
+    if (!activeWorkspaceId) return
+    window.electronAPI.getSkills(activeWorkspaceId, activeSessionWorkingDirectory).then((loaded) => {
+      setSkills(loaded || [])
+    }).catch(err => {
+      console.error('[Chat] Failed to load skills:', err)
+    })
+  }, [activeWorkspaceId, activeSessionWorkingDirectory])
 
   // Filter session metadata by active workspace
   // Also exclude hidden sessions (mini-agent sessions) from all counts and lists

@@ -37,6 +37,7 @@ import type {
 } from './types.ts';
 import type { Plan } from '../agent/plan-types.ts';
 import { validateSessionStatus } from '../statuses/validation.ts';
+import { debug } from '../utils/debug.ts';
 import { getStatusCategory } from '../statuses/storage.ts';
 import { readSessionHeader, readSessionJsonl } from './jsonl.ts';
 import { sessionPersistenceQueue } from './persistence-queue.ts';
@@ -424,7 +425,8 @@ function headerToMetadata(header: SessionHeader, workspaceRootPath: string): Ses
       parentSessionId: header.parentSessionId,
       siblingOrder: header.siblingOrder,
     };
-  } catch {
+  } catch (error) {
+    debug(`[sessions] Failed to convert header to metadata for session "${header?.id}" in ${workspaceRootPath}:`, error);
     return null;
   }
 }

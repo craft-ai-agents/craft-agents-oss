@@ -8,3 +8,4 @@ export * from './perf.ts';
 export * from './summarize.ts';
 export * from './title-generator.ts';
 export * from './toolNames.ts';
+export * from './workspace.ts';

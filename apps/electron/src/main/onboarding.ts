@@ -7,7 +7,7 @@ import { ipcMain } from 'electron'
 import { mainLog } from './logger'
 import { getAuthState, getSetupNeeds } from '@craft-agent/shared/auth'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
-import { CraftOAuth, getMcpBaseUrl, startClaudeOAuth, exchangeClaudeCode, hasValidOAuthState, clearOAuthState } from '@craft-agent/shared/auth'
+import { CraftOAuth, startClaudeOAuth, exchangeClaudeCode, hasValidOAuthState, clearOAuthState } from '@craft-agent/shared/auth'
 import { validateMcpConnection } from '@craft-agent/shared/mcp'
 import { IPC_CHANNELS } from '../shared/types'
 import type { SessionManager } from './sessions'
@@ -42,12 +42,11 @@ export function registerOnboardingHandlers(sessionManager: SessionManager): void
   ipcMain.handle(IPC_CHANNELS.ONBOARDING_START_MCP_OAUTH, async (_event, mcpUrl: string) => {
     mainLog.info('[Onboarding:Main] ONBOARDING_START_MCP_OAUTH received', { mcpUrl })
     try {
-      const baseUrl = getMcpBaseUrl(mcpUrl)
-      mainLog.info('[Onboarding:Main] MCP OAuth baseUrl:', baseUrl)
+      mainLog.info('[Onboarding:Main] MCP OAuth mcpUrl:', mcpUrl)
       mainLog.info('[Onboarding:Main] Creating CraftOAuth instance...')
 
       const oauth = new CraftOAuth(
-        { mcpUrl: baseUrl },
+        { mcpUrl },
         {
           onStatus: (msg) => mainLog.info('[Onboarding:Main] MCP OAuth status:', msg),
           onError: (err) => mainLog.error('[Onboarding:Main] MCP OAuth error:', err),

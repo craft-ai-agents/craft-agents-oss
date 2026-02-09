@@ -43,43 +43,81 @@ if (-not $version) {
 
 Write-Info "Latest version: $version"
 
-# Download manifest and extract checksum
-Write-Info "Fetching manifest..."
+# Download YAML manifest and extract checksum
+Write-Info "Fetching release info..."
 try {
-    $manifest = Invoke-RestMethod -Uri "$VERSIONS_URL/$version/manifest.json" -UseBasicParsing
-    # Use Select-Object for property names with hyphens (dot notation doesn't work with variable)
-    $binaryInfo = $manifest.binaries | Select-Object -ExpandProperty $platform -ErrorAction SilentlyContinue
-    if (-not $binaryInfo) {
-        Write-Err "Platform $platform not found in manifest"
-    }
-    $checksum = $binaryInfo.sha256
-    $filename = $binaryInfo.filename
-    $installerUrl = $binaryInfo.url
+    $yamlContent = (Invoke-WebRequest -Uri "$VERSIONS_URL/$version/latest.yml" -UseBasicParsing).Content
 } catch {
-    Write-Err "Failed to fetch manifest: $_"
+    Write-Err "Failed to fetch release info: $_"
 }
 
-# Validate checksum format
-if (-not $checksum -or $checksum.Length -ne 64) {
+if (-not $yamlContent) {
+    Write-Err "Failed to fetch release info from latest.yml"
+}
+
+# Parse YAML to extract sha512, url (filename), and size for our architecture
+# YAML format:
+#   files:
+#     - url: Craft-Agent-x64.exe
+#       sha512: <base64>
+#       size: 123456789
+#       arch: x64
+function Get-YamlEntryForArch {
+    param([string]$yaml, [string]$targetArch)
+    $lines = $yaml -split "`n"
+    $currentUrl = $null
+    $currentSha512 = $null
+    $currentSize = $null
+
+    foreach ($line in $lines) {
+        if ($line -match '^\s*-\s*url:\s*(.+)') {
+            $currentUrl = $Matches[1].Trim()
+            $currentSha512 = $null
+            $currentSize = $null
+        }
+        if ($line -match '^\s*sha512:\s*(.+)') {
+            $currentSha512 = $Matches[1].Trim()
+        }
+        if ($line -match '^\s*size:\s*(\d+)') {
+            $currentSize = [long]$Matches[1]
+        }
+        if ($line -match '^\s*arch:\s*(.+)') {
+            $entryArch = $Matches[1].Trim()
+            if ($entryArch -eq $targetArch -and $currentSha512 -and $currentUrl) {
+                return @{ url = $currentUrl; sha512 = $currentSha512; size = $currentSize }
+            }
+        }
+    }
+    return $null
+}
+
+$entry = Get-YamlEntryForArch -yaml $yamlContent -targetArch $arch
+
+if (-not $entry) {
+    Write-Err "Architecture $arch not found in latest.yml"
+}
+
+$checksum = $entry.sha512
+$filename = $entry.url
+$fileSize = $entry.size
+
+# Validate checksum format (SHA-512 base64 = 88 characters)
+if (-not $checksum -or $checksum.Length -lt 80) {
     Write-Err "Invalid checksum in manifest"
 }
 
-# Use default filename if not in manifest
+# Use default filename if not found
 if (-not $filename) {
     $filename = "Craft-Agent-$arch.exe"
 }
 
-# Use default URL if not in manifest
-if (-not $installerUrl) {
-    $installerUrl = "$VERSIONS_URL/$version/$filename"
-}
+$installerUrl = "$VERSIONS_URL/$version/$filename"
 
-Write-Info "Expected checksum: $($checksum.Substring(0, 16))..."
+Write-Info "Expected sha512: $($checksum.Substring(0, 20))..."
 
 # Download installer with progress
 $installerPath = Join-Path $DOWNLOAD_DIR $filename
-$fileSize = $binaryInfo.size
-$fileSizeMB = [math]::Round($fileSize / 1MB, 1)
+$fileSizeMB = if ($fileSize -gt 0) { [math]::Round($fileSize / 1MB, 1) } else { 0 }
 
 # Clean up any partial download from previous attempts
 Remove-Item -Path $installerPath -Force -ErrorAction SilentlyContinue
@@ -137,9 +175,14 @@ if (-not (Test-Path $installerPath)) {
     Write-Err "Download failed: file not found"
 }
 
-# Verify checksum
+# Verify checksum (SHA-512, base64 encoded — matches electron-builder YAML manifest)
 Write-Info "Verifying checksum..."
-$actualHash = (Get-FileHash -Path $installerPath -Algorithm SHA256).Hash.ToLower()
+$sha512 = [System.Security.Cryptography.SHA512]::Create()
+$stream = [System.IO.File]::OpenRead($installerPath)
+$hashBytes = $sha512.ComputeHash($stream)
+$stream.Close()
+$sha512.Dispose()
+$actualHash = [Convert]::ToBase64String($hashBytes)
 
 if ($actualHash -ne $checksum) {
     Remove-Item -Path $installerPath -Force -ErrorAction SilentlyContinue

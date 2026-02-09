@@ -518,8 +518,14 @@ export class AppServerClient extends EventEmitter {
     const id = String(this.nextRequestId++);
 
     // Set up timeout and tracking first
+    // On timeout, reject the promise so callers aren't left hanging forever
+    // (e.g., when the app-server process is stuck due to API quota errors)
     const timeoutId = setTimeout(() => {
-      this.pendingRequests.delete(id);
+      const pending = this.pendingRequests.get(id);
+      if (pending) {
+        this.pendingRequests.delete(id);
+        pending.reject(new Error(`Request timeout: ${method} (${id}) did not receive a response within ${this.options.requestTimeout}ms`));
+      }
     }, this.options.requestTimeout);
 
     const resultPromise = new Promise<T>((resolve, reject) => {

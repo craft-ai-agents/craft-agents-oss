@@ -13,6 +13,9 @@
  * Provider-specific behavior (chat, abort, capabilities) is implemented in subclasses.
  */
 
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import type { AgentEvent } from '@craft-agent/core/types';
 import type { FileAttachment } from '../utils/files.ts';
 import type { ThinkingLevel } from './thinking-levels.ts';
@@ -678,6 +681,21 @@ Please continue the conversation naturally from where we left off.
     this.sourceManager.resetSeenSources();
     this.usageTracker.reset();
     this.debug('Base agent destroyed');
+  }
+
+  // ============================================================
+  // Skill Content (shared across backends)
+  // ============================================================
+
+  /**
+   * SKILL INJECTION STRATEGY
+   * ClaudeAgent: Uses the SDK's built-in Skill tool for native discovery.
+   * CodexAgent: Reads SKILL.md and injects content as <skill> XML blocks,
+   *   because Codex app-server only discovers skills from its own paths.
+   */
+  protected getSkillContent(skillPath: string): string | null {
+    const filePath = join(skillPath, 'SKILL.md')
+    return existsSync(filePath) ? readFileSync(filePath, 'utf-8') : null
   }
 
   // ============================================================

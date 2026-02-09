@@ -25,6 +25,7 @@ import {
 import type { CredentialId, StoredCredential } from '../credentials/types.ts';
 import { getCredentialManager } from '../credentials/index.ts';
 import { CraftOAuth, getMcpBaseUrl, type OAuthCallbacks, type OAuthTokens } from '../auth/oauth.ts';
+import { type OAuthSessionContext } from '../auth/types.ts';
 import {
   startGoogleOAuth,
   refreshGoogleToken,
@@ -352,7 +353,8 @@ export class SourceCredentialManager {
    */
   async authenticate(
     source: LoadedSource,
-    callbacks?: OAuthCallbacks
+    callbacks?: OAuthCallbacks,
+    sessionContext?: OAuthSessionContext
   ): Promise<AuthResult> {
     const defaultCallbacks: OAuthCallbacks = {
       onStatus: (msg) => debug(`[SourceCredentialManager] ${msg}`),
@@ -362,22 +364,22 @@ export class SourceCredentialManager {
 
     // Google APIs use Google OAuth
     if (source.config.provider === 'google') {
-      return this.authenticateGoogle(source, cb);
+      return this.authenticateGoogle(source, cb, sessionContext);
     }
 
     // Slack APIs use Slack OAuth
     if (source.config.provider === 'slack') {
-      return this.authenticateSlack(source, cb);
+      return this.authenticateSlack(source, cb, sessionContext);
     }
 
     // Microsoft APIs use Microsoft OAuth
     if (source.config.provider === 'microsoft') {
-      return this.authenticateMicrosoft(source, cb);
+      return this.authenticateMicrosoft(source, cb, sessionContext);
     }
 
     // MCP OAuth flow
     if (source.config.type === 'mcp' && source.config.mcp?.authType === 'oauth') {
-      return this.authenticateMcp(source, cb);
+      return this.authenticateMcp(source, cb, sessionContext);
     }
 
     return {
@@ -391,7 +393,8 @@ export class SourceCredentialManager {
    */
   private async authenticateMcp(
     source: LoadedSource,
-    callbacks: OAuthCallbacks
+    callbacks: OAuthCallbacks,
+    sessionContext?: OAuthSessionContext
   ): Promise<AuthResult> {
     if (!source.config.mcp?.url) {
       return { success: false, error: 'MCP URL not configured' };
@@ -400,7 +403,8 @@ export class SourceCredentialManager {
     try {
       const oauth = new CraftOAuth(
         { mcpUrl: source.config.mcp.url },
-        callbacks
+        callbacks,
+        sessionContext
       );
 
       const { tokens, clientId } = await oauth.authenticate();
@@ -435,7 +439,8 @@ export class SourceCredentialManager {
    */
   private async authenticateGoogle(
     source: LoadedSource,
-    callbacks: OAuthCallbacks
+    callbacks: OAuthCallbacks,
+    sessionContext?: OAuthSessionContext
   ): Promise<AuthResult> {
     try {
       // Determine service/scopes from config
@@ -470,6 +475,7 @@ export class SourceCredentialManager {
         // Pass user-provided OAuth credentials from source config (if available)
         clientId: api?.googleOAuthClientId,
         clientSecret: api?.googleOAuthClientSecret,
+        sessionContext,
       };
 
       const result: GoogleOAuthResult = await startGoogleOAuth(options);
@@ -509,7 +515,8 @@ export class SourceCredentialManager {
    */
   private async authenticateSlack(
     source: LoadedSource,
-    callbacks: OAuthCallbacks
+    callbacks: OAuthCallbacks,
+    sessionContext?: OAuthSessionContext
   ): Promise<AuthResult> {
     try {
       // Determine service/scopes from config
@@ -535,6 +542,7 @@ export class SourceCredentialManager {
         service,
         userScopes,
         appType: 'electron',
+        sessionContext,
       };
 
       const result: SlackOAuthResult = await startSlackOAuth(options);
@@ -573,7 +581,8 @@ export class SourceCredentialManager {
    */
   private async authenticateMicrosoft(
     source: LoadedSource,
-    callbacks: OAuthCallbacks
+    callbacks: OAuthCallbacks,
+    sessionContext?: OAuthSessionContext
   ): Promise<AuthResult> {
     try {
       // Determine service/scopes from config
@@ -605,6 +614,7 @@ export class SourceCredentialManager {
         service,
         scopes,
         appType: 'electron',
+        sessionContext,
       };
 
       const result: MicrosoftOAuthResult = await startMicrosoftOAuth(options);

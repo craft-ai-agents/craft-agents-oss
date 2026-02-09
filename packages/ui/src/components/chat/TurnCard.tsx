@@ -1715,6 +1715,9 @@ export const TurnCard = React.memo(function TurnCard({
   // Track if user has toggled expansion (skip animation on initial mount)
   const hasUserToggled = useRef(false)
 
+  // Ref for scrollable activities container (to scroll to bottom on expand)
+  const activitiesContainerRef = useRef<HTMLDivElement>(null)
+
   // Track if component has mounted (enable fade-in for new activities after mount)
   const hasMounted = useRef(false)
   useEffect(() => {
@@ -1738,6 +1741,21 @@ export const TurnCard = React.memo(function TurnCard({
       })
     }
   }, [turnId, isExpanded, onExpandedChange])
+
+  // Scroll to bottom of activities list when user manually expands
+  // This shows the most recent step instead of the oldest
+  useEffect(() => {
+    if (isExpanded && hasUserToggled.current && activitiesContainerRef.current) {
+      // Wait for expansion animation to complete (250ms) before scrolling
+      const timer = setTimeout(() => {
+        activitiesContainerRef.current?.scrollTo({
+          top: activitiesContainerRef.current.scrollHeight,
+          behavior: 'smooth'
+        })
+      }, 260)
+      return () => clearTimeout(timer)
+    }
+  }, [isExpanded])
 
   // Use local state for activity groups if no controlled state provided
   const [localExpandedActivityGroups, setLocalExpandedActivityGroups] = useState<Set<string>>(new Set())
@@ -1905,6 +1923,7 @@ export const TurnCard = React.memo(function TurnCard({
                 {/* Scrollable container when many activities - subtle background for scroll context */}
                 {/* ml-[15px] positions the border-l under the chevron */}
                 <div
+                  ref={activitiesContainerRef}
                   className={cn(
                     "pl-4 pr-2 py-0 space-y-0.5 border-l-2 border-muted ml-[13px]",
                     sortedActivities.length > SIZE_CONFIG.maxVisibleActivities && "rounded-r-md overflow-y-auto py-1.5"

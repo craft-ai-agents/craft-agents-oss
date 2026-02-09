@@ -5,22 +5,16 @@
 import { $ } from 'bun';
 import { existsSync, statSync } from 'fs';
 import { join } from 'path';
-import type { BuildConfig } from './common';
+import type { Arch, BuildConfig } from './common';
 
 /**
- * Verify SDK is bundled in the packaged macOS app
+ * Verify SDK and Codex binary are bundled in the packaged macOS app
  */
-export function verifyPackagedSDK(appPath: string): void {
-  const sdkPath = join(
-    appPath,
-    'Contents',
-    'Resources',
-    'app',
-    'node_modules',
-    '@anthropic-ai',
-    'claude-agent-sdk',
-    'cli.js'
-  );
+export function verifyPackagedSDK(appPath: string, arch: Arch): void {
+  const appResourcesPath = join(appPath, 'Contents', 'Resources', 'app');
+
+  // Verify SDK
+  const sdkPath = join(appResourcesPath, 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'cli.js');
 
   if (!existsSync(sdkPath)) {
     throw new Error(`CRITICAL: SDK not bundled! Expected at: ${sdkPath}`);
@@ -32,6 +26,15 @@ export function verifyPackagedSDK(appPath: string): void {
   }
 
   console.log(`  SDK bundled: cli.js is ${(stats.size / 1024 / 1024).toFixed(1)} MB`);
+
+  // Verify Codex binary
+  const codexPath = join(appResourcesPath, 'vendor', 'codex', `darwin-${arch}`, 'codex');
+  if (!existsSync(codexPath)) {
+    throw new Error(`CRITICAL: Codex binary not bundled! Expected at: ${codexPath}`);
+  }
+
+  const codexStats = statSync(codexPath);
+  console.log(`  Codex bundled: ${(codexStats.size / 1024 / 1024).toFixed(1)} MB`);
 }
 
 /**
@@ -68,8 +71,8 @@ export async function packageDarwin(config: BuildConfig): Promise<string> {
   // Verify SDK is bundled in the .app before checking artifacts
   const macDir = arch === 'arm64' ? 'mac-arm64' : 'mac';
   const appPath = join(electronDir, 'release', macDir, 'Craft Agents.app');
-  console.log('Verifying SDK in packaged app...');
-  verifyPackagedSDK(appPath);
+  console.log('Verifying SDK and Codex in packaged app...');
+  verifyPackagedSDK(appPath, arch);
 
   // Verify the DMG and ZIP were built (ZIP is used by electron-updater for auto-updates)
   const dmgName = `Craft-Agent-${arch}.dmg`;

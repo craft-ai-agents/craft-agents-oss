@@ -16,6 +16,7 @@ import {
 import { Icon_Home, Icon_Folder } from '@craft-agent/ui'
 
 import * as storage from '@/lib/local-storage'
+import { extractWorkspaceSlug } from '@craft-agent/shared/utils'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -56,7 +57,7 @@ import { isMac, PATH_SEP, getPathBasename } from '@/lib/platform'
 import { applySmartTypography } from '@/lib/smart-typography'
 import { AttachmentPreview } from '../AttachmentPreview'
 import { ANTHROPIC_MODELS, getModelShortName, getModelContextWindow, isCodexModel, isCopilotModel } from '@config/models'
-import { resolveEffectiveConnectionSlug, isCompatProvider } from '@config/llm-connections'
+import { resolveEffectiveConnectionSlug, isCompatProvider, isAnthropicProvider } from '@config/llm-connections'
 import { useOptionalAppShellContext } from '@/context/AppShellContext'
 import { EditPopover, getEditConfig } from '@/components/ui/EditPopover'
 import { SourceAvatar } from '@/components/ui/source-avatar'
@@ -291,8 +292,8 @@ export function FreeFormInput({
 
   // Disable thinking selector when the current model explicitly doesn't support it
   const thinkingDisabled = React.useMemo(() => {
-    const model = availableModels.find(m => m.id === currentModel)
-    return model?.supportsThinking === false
+    const model = availableModels.find(m => typeof m !== 'string' && m.id === currentModel)
+    return typeof model !== 'string' && model?.supportsThinking === false
   }, [availableModels, currentModel])
 
   // Group connections by provider type for hierarchical dropdown
@@ -335,6 +336,24 @@ export function FreeFormInput({
     return llmConnections.find(c => c.slug === effectiveConnection) ?? null
   }, [llmConnections, effectiveConnection])
 
+  // Detect provider mismatch: session is locked to one provider (e.g. Anthropic)
+  // but the current default connection is a different provider (e.g. OpenAI).
+  // This warns the user that switching the default doesn't affect this session.
+  const providerMismatch = React.useMemo(() => {
+    if (!currentConnection || isEmptySession || !currentConnectionDetails) return false
+    // Find what the default connection would be (ignoring session lock)
+    const defaultSlug = workspaceDefaultConnection
+      ?? llmConnections.find(c => c.isDefault)?.slug
+      ?? llmConnections[0]?.slug
+    if (!defaultSlug || defaultSlug === currentConnection) return false
+    const defaultConn = llmConnections.find(c => c.slug === defaultSlug)
+    if (!defaultConn) return false
+    // Compare provider families (anthropic/bedrock/vertex vs openai)
+    const lockedIsAnthropic = isAnthropicProvider(currentConnectionDetails.providerType)
+    const defaultIsAnthropic = isAnthropicProvider(defaultConn.providerType)
+    return lockedIsAnthropic !== defaultIsAnthropic
+  }, [currentConnection, isEmptySession, currentConnectionDetails, workspaceDefaultConnection, llmConnections])
+
   // Access todoStates and onTodoStateChange from context for the # menu state picker
   const todoStates = appShellCtx?.todoStates ?? []
   const onTodoStateChange = appShellCtx?.onTodoStateChange
@@ -343,6 +362,13 @@ export function FreeFormInput({
     if (!appShellCtx || !workspaceId) return null
     return appShellCtx.workspaces.find(w => w.id === workspaceId)?.rootPath ?? null
   }, [appShellCtx, workspaceId])
+
+  // Compute workspace slug from rootPath for SDK skill qualification
+  // SDK expects "workspaceSlug:skillSlug" format, NOT UUID
+  const workspaceSlug = React.useMemo(() => {
+    if (!workspaceRootPath) return workspaceId // Fallback to ID if no path
+    return extractWorkspaceSlug(workspaceRootPath, workspaceId ?? '')
+  }, [workspaceRootPath, workspaceId])
 
   // Shuffle placeholder order once per mount so each session feels fresh
   const shuffledPlaceholder = React.useMemo(
@@ -774,7 +800,8 @@ export function FreeFormInput({
     sources,
     basePath: workingDirectory,
     onSelect: handleMentionSelect,
-    workspaceId,
+    // Use workspace slug (not UUID) for SDK skill qualification
+    workspaceId: workspaceSlug,
   })
 
   // Inline label menu hook (for #labels)
@@ -1390,7 +1417,7 @@ export function FreeFormInput({
           disabled={disabled}
           skills={skills}
           sources={sources}
-          workspaceId={workspaceId}
+          workspaceId={workspaceSlug}
           className="pl-5 pr-4 pt-4 pb-3 overflow-y-auto min-h-[88px]"
           style={{ maxHeight: inputMaxHeight }}
           data-tutorial="chat-input"
@@ -1614,7 +1641,8 @@ export function FreeFormInput({
                     className={cn(
                       "inline-flex items-center h-7 px-1.5 gap-0.5 text-[13px] shrink-0 rounded-[6px] hover:bg-foreground/5 transition-colors select-none",
                       modelDropdownOpen && "bg-foreground/5",
-                      connectionUnavailable && "text-destructive"
+                      connectionUnavailable && "text-destructive",
+                      providerMismatch && "text-amber-500"
                     )}
                   >
                     {connectionUnavailable ? (
@@ -1624,6 +1652,7 @@ export function FreeFormInput({
                       </>
                     ) : (
                       <>
+                        {providerMismatch && <Lock className="h-3 w-3 shrink-0" />}
                         {getModelShortName(connectionDefaultModel ?? currentModel)}
                         {!connectionDefaultModel && <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />}
                       </>
@@ -1631,7 +1660,11 @@ export function FreeFormInput({
                   </button>
                 </DropdownMenuTrigger>
               </TooltipTrigger>
-              <TooltipContent side="top">Model</TooltipContent>
+              <TooltipContent side="top">
+                {providerMismatch
+                  ? `Locked to ${currentConnectionDetails?.name ?? 'this connection'} — changing the default provider won't affect this session`
+                  : 'Model'}
+              </TooltipContent>
             </Tooltip>
             <StyledDropdownMenuContent side="top" align="end" sideOffset={8} className="min-w-[260px]">
               {/* Connection unavailable message */}
@@ -1727,9 +1760,16 @@ export function FreeFormInput({
                   {/* Lock indicator showing which connection is being used */}
                   {!isEmptySession && currentConnectionDetails && llmConnections.length > 1 && (
                     <>
-                      <div className="flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground select-none">
+                      <div className={cn(
+                        "flex items-center gap-2 px-2 py-1.5 text-xs select-none",
+                        providerMismatch ? "text-amber-500" : "text-muted-foreground"
+                      )}>
                         <Lock className="h-3 w-3" />
-                        <span>Using {currentConnectionDetails.name}</span>
+                        <span>
+                          {providerMismatch
+                            ? `Locked to ${currentConnectionDetails.name} — default provider changed`
+                            : `Using ${currentConnectionDetails.name}`}
+                        </span>
                       </div>
                       <StyledDropdownMenuSeparator className="my-1" />
                     </>
@@ -1845,36 +1885,28 @@ export function FreeFormInput({
             }
 
             return (
-              <DropdownMenu>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        type="button"
-                        disabled={isProcessing}
-                        className="inline-flex items-center h-6 px-2 text-[12px] font-medium bg-info/10 rounded-[6px] shadow-tinted select-none cursor-pointer hover:bg-info/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        style={{
-                          '--shadow-color': 'var(--info-rgb)',
-                          color: 'color-mix(in oklab, var(--info) 30%, var(--foreground))',
-                        } as React.CSSProperties}
-                      >
-                        {usagePercent}%
-                      </button>
-                    </DropdownMenuTrigger>
-                  </TooltipTrigger>
-                  <TooltipContent side="top">
-                    {usagePercent}% context used
-                  </TooltipContent>
-                </Tooltip>
-                <StyledDropdownMenuContent align="center" side="top" sideOffset={8}>
-                  <StyledDropdownMenuItem
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
                     onClick={handleCompactClick}
                     disabled={isProcessing}
+                    className="inline-flex items-center h-6 px-2 text-[12px] font-medium bg-info/10 rounded-[6px] shadow-tinted select-none cursor-pointer hover:bg-info/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{
+                      '--shadow-color': 'var(--info-rgb)',
+                      color: 'color-mix(in oklab, var(--info) 30%, var(--foreground))',
+                    } as React.CSSProperties}
                   >
-                    Compact
-                  </StyledDropdownMenuItem>
-                </StyledDropdownMenuContent>
-              </DropdownMenu>
+                    {usagePercent}%
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  {isProcessing
+                    ? `${usagePercent}% context used — wait for current operation`
+                    : `${usagePercent}% context used — click to compact`
+                  }
+                </TooltipContent>
+              </Tooltip>
             )
           })()}
 

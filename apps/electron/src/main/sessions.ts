@@ -77,23 +77,15 @@ import { type Session, type Message, type SessionEvent, type FileAttachment, typ
 import { formatPathsToRelative, formatToolInputPaths, perf, encodeIconToDataUrl, getEmojiIcon, resetSummarizationClient, resolveToolIcon } from '@craft-agent/shared/utils'
 import { loadWorkspaceSkills, type LoadedSkill } from '@craft-agent/shared/skills'
 import type { ToolDisplayMeta } from '@craft-agent/core/types'
-import { getToolIconsDir, isCodexModel, getMiniModel, getSummarizationModel } from '@craft-agent/shared/config'
+import { getToolIconsDir, isCodexModel, getMiniModel, getSummarizationModel, DEFAULT_MODEL, DEFAULT_CODEX_MODEL } from '@craft-agent/shared/config'
 import { type ThinkingLevel, DEFAULT_THINKING_LEVEL } from '@craft-agent/shared/agent/thinking-levels'
 import { evaluateAutoLabels } from '@craft-agent/shared/labels/auto'
 import { listLabels } from '@craft-agent/shared/labels/storage'
 import { extractLabelId } from '@craft-agent/shared/labels'
 
-/**
- * Sanitize message content for use as session title.
- * Strips XML blocks (e.g. <edit_request>) and normalizes whitespace.
- */
-function sanitizeForTitle(content: string): string {
-  return content
-    .replace(/<edit_request>[\s\S]*?<\/edit_request>/g, '') // Strip entire edit_request blocks
-    .replace(/<[^>]+>/g, '')     // Strip remaining XML/HTML tags
-    .replace(/\s+/g, ' ')        // Collapse whitespace
-    .trim()
-}
+// Import and re-export (extracted to avoid Electron dependency in tests)
+import { sanitizeForTitle } from './title-sanitizer'
+export { sanitizeForTitle }
 
 /**
  * Get the path to the bundled Bun executable.
@@ -706,6 +698,9 @@ interface ManagedSession {
   siblingOrder?: number
   // Token refresh manager for OAuth token refresh with rate limiting
   tokenRefreshManager: TokenRefreshManager
+  // Promise that resolves when the agent instance is ready (for title gen to await)
+  agentReady?: Promise<void>
+  agentReadyResolve?: () => void
 }
 
 // Convert runtime Message to StoredMessage for persistence
@@ -1339,6 +1334,16 @@ export class SessionManager {
             }),
           }
 
+          // Migration: clear orphaned llmConnection references (e.g., after connection was deleted)
+          if (managed.llmConnection) {
+            const conn = resolveSessionConnection(managed.llmConnection, undefined)
+            if (!conn) {
+              sessionLog.warn(`Session ${meta.id} has orphaned llmConnection "${managed.llmConnection}", clearing`)
+              managed.llmConnection = undefined
+              managed.connectionLocked = false
+            }
+          }
+
           this.sessions.set(meta.id, managed)
           totalSessions++
         }
@@ -1364,7 +1369,7 @@ export class SessionManager {
         id: managed.id,
         workspaceRootPath,
         name: managed.name,
-        createdAt: managed.lastMessageAt,  // Approximate, will be overwritten if already exists
+        createdAt: managed.createdAt ?? Date.now(),
         lastUsedAt: Date.now(),
         lastMessageAt: managed.lastMessageAt,  // Preserve actual message time (not persist time)
         sdkSessionId: managed.sdkSessionId,
@@ -1481,6 +1486,9 @@ export class SessionManager {
       const result = await credManager.authenticate(source, {
         onStatus: (msg) => sessionLog.info(`[OAuth ${request.sourceSlug}] ${msg}`),
         onError: (err) => sessionLog.error(`[OAuth ${request.sourceSlug}] ${err}`),
+      }, {
+        sessionId: managed.id,
+        deeplinkScheme: process.env.CRAFT_DEEPLINK_SCHEME || 'craftagents',
       })
 
       if (result.success) {
@@ -2192,13 +2200,16 @@ export class SessionManager {
       process.env.CRAFT_SESSION_DIR = sessionDirForMetadata
       toolMetadataStore.setSessionDir(sessionDirForMetadata)
 
+      // Set up agentReady promise so title generation can await agent creation
+      managed.agentReady = new Promise<void>(r => { managed.agentReadyResolve = r })
+
       // Create the appropriate backend based on provider
       if (provider === 'openai') {
         // Codex backend - uses app-server protocol
         // Model from session > connection default (connection always has defaultModel via backfill)
         // Safety: ensure the resolved model is actually a Codex model (not a Claude model from stale session data)
-        const rawCodexModel = managed.model || connection?.defaultModel!
-        const codexModel = isCodexModel(rawCodexModel) ? rawCodexModel : connection?.defaultModel!
+        const rawCodexModel = managed.model || connection?.defaultModel
+        const codexModel = (rawCodexModel && isCodexModel(rawCodexModel)) ? rawCodexModel : (connection?.defaultModel || DEFAULT_CODEX_MODEL)
 
         // Set up per-session Codex configuration (MCP servers, etc.)
         // This creates .codex-home/config.toml in the session folder
@@ -2263,6 +2274,7 @@ export class SessionManager {
         // CRITICAL: Inject stored credentials into Codex app-server
         // Without this, the app-server spawns but has no authentication, causing silent failures
         const codexAgent = managed.agent as CodexAgent
+        codexAgent.onDebug = (msg: string) => sessionLog.info(msg)
         const codexAuthType = connection?.authType || authType
 
         // Determine auth method based on connection authType
@@ -2277,6 +2289,13 @@ export class SessionManager {
             sessionLog.info(`OpenAI API key injected for Codex session ${managed.id}`)
           } else {
             sessionLog.warn(`No OpenAI API key available for Codex session ${managed.id} - user may need to configure API key`)
+            // Surface immediately so user doesn't wait 30s for a timeout
+            this.sendEvent({
+              type: 'info',
+              sessionId: managed.id,
+              message: 'No OpenAI API key available. Please configure your API key in Settings → AI.',
+              level: 'error',
+            }, managed.workspace.id)
           }
         } else {
           // Wire up auth callback to notify UI when re-authentication is needed (OAuth only)
@@ -2297,6 +2316,13 @@ export class SessionManager {
             sessionLog.info(`ChatGPT tokens injected for Codex session ${managed.id}`)
           } else {
             sessionLog.warn(`No ChatGPT tokens available for Codex session ${managed.id} - user may need to authenticate`)
+            // Surface immediately so user doesn't wait 30s for a timeout
+            this.sendEvent({
+              type: 'info',
+              sessionId: managed.id,
+              message: 'No ChatGPT tokens available. Please check your Codex login in Settings → AI.',
+              level: 'error',
+            }, managed.workspace.id)
           }
         }
       } else if (provider === 'copilot') {
@@ -2419,7 +2445,7 @@ export class SessionManager {
         }
 
         // Model resolution: session > connection default (connection always has defaultModel via backfill)
-        const resolvedModel = managed.model || connection?.defaultModel!
+        const resolvedModel = managed.model || connection?.defaultModel || DEFAULT_MODEL
         managed.agent = new CraftAgent({
           workspace: managed.workspace,
           model: resolvedModel,
@@ -2480,6 +2506,9 @@ export class SessionManager {
         })
         sessionLog.info(`Created Claude agent for session ${managed.id}${managed.sdkSessionId ? ' (resuming)' : ''}`)
       }
+
+      // Signal that the agent instance is ready (unblocks title generation)
+      managed.agentReadyResolve?.()
 
       // Set up permission handler to forward requests to renderer
       managed.agent.onPermissionRequest = (request: { requestId: string; toolName: string; command?: string; description: string; type?: 'bash' | 'file_write' | 'mcp_mutation' | 'api_mutation' }) => {
@@ -3347,6 +3376,7 @@ export class SessionManager {
 
     sessionLog.info(`refreshTitle: Calling agent.regenerateTitle...`)
 
+
     // Notify renderer that title regeneration has started (for shimmer effect)
     managed.isAsyncOperationOngoing = true
     this.sendEvent({ type: 'async_operation', sessionId, isOngoing: true }, managed.workspace.id)
@@ -3620,8 +3650,18 @@ export class SessionManager {
       // AI generation will enhance it later, but we always have a title from the start
       const isFirstUserMessage = managed.messages.filter(m => m.role === 'user').length === 1
       if (isFirstUserMessage && !managed.name) {
-        // Sanitize message to remove XML blocks (e.g. <edit_request>) before using as title
-        const sanitized = sanitizeForTitle(message)
+        // Replace bracket mentions with their display labels (e.g. [skill:ws:commit] -> "Commit")
+        // so titles show human-readable names instead of raw IDs
+        let titleSource = message
+        if (options?.badges) {
+          for (const badge of options.badges) {
+            if (badge.rawText && badge.label) {
+              titleSource = titleSource.replace(badge.rawText, badge.label)
+            }
+          }
+        }
+        // Sanitize: strip any remaining bracket mentions, XML blocks, tags
+        const sanitized = sanitizeForTitle(titleSource)
         const initialTitle = sanitized.slice(0, 50) + (sanitized.length > 50 ? '…' : '')
         managed.name = initialTitle
         this.persistSession(managed)
@@ -4308,88 +4348,6 @@ To view this task's output:
   }
 
   /**
-   * Build title generation options based on a session's LLM connection.
-   * Resolves provider type, credentials, and model override from the connection config.
-   */
-  private async buildTitleOptions(llmConnection: string | undefined): Promise<(TitleGeneratorOptions & { modelOverride?: string }) | undefined> {
-    if (!llmConnection) {
-      sessionLog.info(`[buildTitleOptions] No connection specified, skipping`)
-      return undefined
-    }
-
-    const connection = getLlmConnection(llmConnection)
-    if (!connection) {
-      sessionLog.info(`[buildTitleOptions] Connection '${llmConnection}' not found`)
-      return undefined
-    }
-
-    if (connection.providerType === 'openai' || connection.providerType === 'openai_compat') {
-      const credentialManager = getCredentialManager()
-      let apiKey: string | undefined
-      let accessToken: string | undefined
-
-      if (connection.authType === 'api_key' || connection.authType === 'api_key_with_endpoint' || connection.authType === 'bearer_token') {
-        apiKey = await credentialManager.getLlmApiKey(llmConnection) ?? undefined
-      } else if (connection.authType === 'oauth') {
-        const oauth = await credentialManager.getLlmOAuth(llmConnection)
-        if (oauth?.accessToken) {
-          // Check if token is expired and refresh if needed (ChatGPT Plus tokens expire after ~1h)
-          const isExpired = oauth.expiresAt
-            ? Date.now() > oauth.expiresAt - 5 * 60 * 1000
-            : !!oauth.refreshToken
-
-          if (isExpired && oauth.refreshToken) {
-            try {
-              const { refreshChatGptTokens } = await import('@craft-agent/shared/auth/chatgpt-oauth')
-              const refreshed = await refreshChatGptTokens(oauth.refreshToken)
-              await credentialManager.setLlmOAuth(llmConnection, {
-                accessToken: refreshed.accessToken,
-                refreshToken: refreshed.refreshToken,
-                expiresAt: refreshed.expiresAt,
-                idToken: refreshed.idToken,
-              })
-              accessToken = refreshed.accessToken
-              sessionLog.info(`[buildTitleOptions] Refreshed ChatGPT Plus OAuth token for title generation`)
-            } catch (error) {
-              sessionLog.warn(`[buildTitleOptions] Failed to refresh ChatGPT Plus token:`, error)
-              accessToken = oauth.accessToken
-            }
-          } else {
-            accessToken = oauth.accessToken
-          }
-        }
-      }
-
-      if (apiKey || accessToken) {
-        const model = getSummarizationModel(connection)
-        sessionLog.info(`[buildTitleOptions] OpenAI provider ready: model=${model}, authType=${apiKey ? 'api_key' : 'oauth'}, baseUrl=${connection.baseUrl ?? '(default)'}`)
-        return {
-          provider: 'openai',
-          credentials: { apiKey, accessToken },
-          summarizationModel: model,
-          baseUrl: connection.baseUrl,
-        }
-      }
-      sessionLog.info(`[buildTitleOptions] No credentials found for OpenAI connection '${llmConnection}'`)
-      return undefined
-    }
-
-    // Copilot connections: title generation not directly supported via Copilot SDK
-    // Fall through to Anthropic default (if available) for title generation
-    if (connection.providerType === 'copilot') {
-      sessionLog.info(`[buildTitleOptions] Copilot connection - title generation not supported, skipping`)
-      return undefined
-    }
-
-    sessionLog.info(`[buildTitleOptions] Anthropic provider ready: model=${connection.defaultModel ?? '(default)'}, summarizationModel=${getSummarizationModel(connection)}`)
-    return {
-      provider: 'anthropic',
-      modelOverride: connection.defaultModel ?? undefined,
-      summarizationModel: getSummarizationModel(connection),
-    }
-  }
-
-  /**
    * Generate an AI title for a session from the user's first message.
    * Uses the agent's generateTitle() method which handles provider-specific SDK calls.
    * If no agent exists, creates a temporary one using the session's connection.
@@ -4457,6 +4415,22 @@ To view this task's output:
       }
     } catch (error) {
       sessionLog.error(`Failed to generate title for session ${managed.id}:`, error)
+
+      // Surface quota/auth errors to the user — these indicate the main chat call will also fail
+      const errorMsg = error instanceof Error ? error.message : String(error)
+      if (errorMsg.includes('quota') || errorMsg.includes('429') || errorMsg.includes('401') || errorMsg.includes('insufficient')) {
+        this.sendEvent({
+          type: 'typed_error',
+          sessionId: managed.id,
+          error: {
+            code: 'provider_error',
+            title: 'API Error',
+            message: `API error: ${errorMsg.slice(0, 200)}`,
+            actions: [{ key: 'r', label: 'Retry', action: 'retry' }],
+            canRetry: true,
+          }
+        }, managed.workspace.id)
+      }
     } finally {
       // Clean up temporary agent
       if (isTemporary && agent) {
